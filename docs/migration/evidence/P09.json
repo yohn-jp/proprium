@@ -16,9 +16,10 @@
     "implementationCommits": [
       "2bf9603589b8ad008c3ece07fc45c6920da8cfd6",
       "6c112e1a8e6f313aa51f8e9cff3a48058570a4bd",
-      "433db234bb8eb4807cf6b2b3b20a681cae9ad932"
+      "433db234bb8eb4807cf6b2b3b20a681cae9ad932",
+      "91931347b04870a60221b4d7c1d0b2b18776c2b2"
     ],
-    "validationHead": "4dd7cc87bef856787b36dc681006c79bae06b0f6"
+    "validationHead": "91931347b04870a60221b4d7c1d0b2b18776c2b2"
   },
   "dataClassification": [
     {
@@ -85,14 +86,14 @@
   "implementedBehavior": [
     "A lazy semantic.embedding capability provides supervised worker indexing, nearest search over a pinned snapshot, shared E5 embeddings for consumers, contradiction-pair scoring, status, and reranking. The worker is created only on a capability lease and disposed with its final lease.",
     "Snapshot-pinned corpus indexing and reusable local vectors; source passage segmentation and E5 passage prefix; hybrid lexical/vector search with source known-term expansion, field weighting, short-token fallback and reciprocal-rank fusion; scene, sentence and expression modes.",
-    "Optional pinned BGE cross-encoder reranking on CPU, bounded to the top 30 candidates, with source-style RRF-order fallback and a warning when the model is unavailable.",
-    "Source string/reading term clustering and opt-in embedding-only edges; source scene-state ownership/location rules and mid-band mention-pair candidates; current dismissal filtering and revision-guarded author dismissal proposals.",
-    "Public semantic index/search/expression/term-cluster/contradiction/settings/task actions and dock/review/settings browser contributions, including progress, cancellation, privacy text and author-proposed reranker settings."
+    "Optional pinned BGE cross-encoder reranking on CPU, bounded to the top 30 candidates, with source-style RRF-order fallback and a visible warning when the model is unavailable.",
+    "Source string/reading term clustering and opt-in embedding-only edges; source scene-state ownership/location rules and mid-band mention-pair candidates; current dismissal filtering and author dismissal proposals guarded by actual Bible and plot snapshot scopes.",
+    "Public semantic index/search/expression/term-cluster/contradiction/settings/task actions and dock/review/settings browser contributions, including progress, cancellation, privacy text, provider-safe search limits, visible reranker warnings and author-proposed reranker settings."
   ],
   "proofs": [
     {
       "id": "P09-SEMANTIC-CPU-AND-PUBLIC-ACTIONS",
-      "kind": "source-derived semantic tests with real CPU model artifacts",
+      "kind": "source-derived semantic actions through default ModuleRuntime with real CPU model artifacts",
       "status": "passed",
       "targetFiles": [
         "modules/semantic/src/worker.ts",
@@ -100,9 +101,9 @@
         "modules/semantic/src/actions.ts",
         "modules/semantic/src/semantic.test.ts"
       ],
-      "command": "pnpm --filter @scriptorium/module-nlp build && pnpm --filter @scriptorium/module-semantic typecheck && pnpm --filter @scriptorium/module-semantic build && SCRIPTORIUM_SEMANTIC_MODEL_CACHE=/tmp/scriptorium-model-runtime-edc033c/home/.arcadia/models pnpm --filter @scriptorium/module-semantic test",
-      "result": "11 passed, 0 failed, 0 skipped on validation HEAD 4dd7cc87bef856787b36dc681006c79bae06b0f6. The supervised CPU worker loaded the pinned 384-dimensional E5 model, indexed a synthetic canonical corpus through semantic.index.rebuild, returned expected semantic.search ordering and snapshot/model identity, reused unchanged vectors, kept two pinned snapshot texts/metadata isolated, ran the pinned BGE reranker with finite correctly ordered scores, detected deleted derived cache state, and rebuilt it. No model weights or private corpus were copied into Git.",
-      "scope": "focused module and actual model acceptance",
+      "command": "pnpm --filter @scriptorium/module-semantic typecheck && pnpm --filter @scriptorium/module-semantic build && SCRIPTORIUM_SEMANTIC_MODEL_CACHE=/tmp/scriptorium-model-runtime-edc033c/home/.arcadia/models pnpm --filter @scriptorium/module-semantic test",
+      "result": "13 passed, 0 failed, 0 skipped on validation HEAD 91931347b04870a60221b4d7c1d0b2b18776c2b2. The test constructs ModuleRuntime from the actual package scriptoriumModule manifests and leaves WorkerSupervisor options at production defaults. Enabled-idle semantic starts no worker; actual semantic.index.status, semantic.index.rebuild and semantic.search succeed through the composed runtime with the 15-minute supervisor bound. The worker loaded the pinned 384-dimensional E5 model and pinned BGE reranker from the explicit private cache, returned the expected nearest scene ordering and rerank scores, reused unchanged vectors across snapshots while preserving each snapshot's content and metadata, and rebuilt the derived cache after deletion. No model weights or private corpus were copied into Git.",
+      "scope": "focused module and default production ModuleRuntime acceptance",
       "testPath": "modules/semantic/src/semantic.test.ts",
       "engineModelIdentity": {
         "engine": "@huggingface/transformers",
@@ -134,13 +135,38 @@
         "modules/semantic/src/contradictions.ts"
       ],
       "command": "pnpm --filter @scriptorium/module-semantic typecheck && pnpm --filter @scriptorium/module-semantic build && pnpm --filter @scriptorium/module-semantic test",
-      "result": "The module typecheck and build passed; the pure semantic and migration assertions passed in the 11-test run above. These focused tests cover canonical source passage inputs, source query expansion and lexical fields/RRF, setting proposal revision preconditions, source term-clustering and contradiction rules, byte-exact semantic reactivation and conflict safety.",
+      "result": "The cache-free focused run passed 12 tests with zero failures and skipped only the opt-in real-model test, which is covered by the 13/13 run above. Assertions cover canonical source passage inputs, source query expansion and lexical fields/RRF, provider-safe 100-hit overfetch at accepted search limits, setting proposal revision preconditions, Bible/plot scope binding for dismissal proposals, source term-clustering and contradiction rules, and byte-exact semantic reactivation with conflict safety.",
       "scope": "focused source-derived producer tests"
+    },
+    {
+      "id": "P09-CORE-DISMISSAL-SCOPE-CONFLICT",
+      "kind": "real CoreStore proposal and checkpoint scope-conflict acceptance",
+      "status": "passed",
+      "targetFiles": [
+        "modules/semantic/src/actions.ts",
+        "modules/semantic/tests/core-scope-conflict.acceptance.mjs",
+        "packages/core/src/index.ts"
+      ],
+      "command": "pnpm --filter @scriptorium/contracts build && pnpm --filter @scriptorium/module-runtime build && pnpm --filter @scriptorium/core build && node modules/semantic/tests/core-scope-conflict.acceptance.mjs",
+      "result": "The production semantic.contradictions.dismiss action created a CoreStore proposal with its current Bible and plot scope revisions. After that proposal was approved, a synthetic remote commit changed a character alias; Core rejected checkpoint with scope_precondition_conflict. This verifies source freshness beyond the dismissal log and two evidence scene files.",
+      "scope": "focused compiled ModuleRuntime and CoreStore integration over a temporary synthetic Git repository"
+    },
+    {
+      "id": "P09-CHROMIUM-BROWSER-CONTRIBUTIONS",
+      "kind": "Chromium browser contribution acceptance",
+      "status": "passed",
+      "targetFiles": [
+        "modules/semantic/src/browser.ts",
+        "modules/semantic/tests/browser-workflow.acceptance.mjs"
+      ],
+      "command": "nix shell nixpkgs#chromium --command bash -c 'SCRIPTORIUM_E2E_CHROMIUM=$(command -v chromium); export SCRIPTORIUM_E2E_CHROMIUM; node modules/semantic/tests/browser-workflow.acceptance.mjs'",
+      "result": "Headless Chromium mounted the actual semantic browserModule and verified search, expression, contradiction dismissal, index settings, progress and cancellation. The search response carried semantic_reranker_unavailable and the browser rendered that fallback warning in its live status output.",
+      "scope": "focused browser contribution acceptance with the registered action bridge stubbed"
     }
   ],
   "compositionLimits": [
-    "The semantic server and browser contributions have not yet been exercised through the final composed API, browser bundle, or real author review/checkpoint path. Run the documented browser acceptance after all modules are integrated.",
-    "The semantic dismissal reactivation producer has focused exact-byte and conflict tests, but its composition with the generic importer, P12 review flow, push and data-root-loss/reclone round trip is pending.",
+    "The semantic server contribution has passed default ModuleRuntime acceptance and the browser contribution has passed focused Chromium acceptance; the final composed API, profile browser bundle, and full product E2E acceptance remain pending.",
+    "Dismissal scope freshness passed an actual synthetic CoreStore checkpoint conflict. Composition with the generic importer, P12 review/push flow, and data-root-loss/reclone round trip remains pending.",
     "P06's corpus-neighbor consumer uses semantic.embedding, but its provider-consumer acceptance and the full P05/P06/P09 composition remain to be run with the integrated host.",
     "The source external LLM verdict enrichment for contradiction candidates is not claimed here; P09 supplies local rule and embedding candidates and preserves author dismissal decisions."
   ]
