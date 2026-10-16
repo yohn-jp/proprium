@@ -1,7 +1,7 @@
 import { useState } from "react";
 import type { ChangeOperation, ProposalStatus, RepositoryIdentity } from "@scriptorium/contracts";
 import { api } from "../api";
-import { BrowserJournal, proposalOperationEntry, type JournalEntry, type JournalProposal } from "../storage/journal";
+import { BrowserJournal, proposalOperationEntry, stableJson, type JournalEntry, type JournalProposal } from "../storage/journal";
 
 function operationKey(operation: ChangeOperation): string {
   return operation.id + "\u0000" + operation.generation;
@@ -37,7 +37,24 @@ export function ProposalReview({
     setError("");
     try {
       const pending = await journal.getRepository(repository, authorScope);
-      const status = record.status;
+      let status = record.status;
+      if (status?.payloadComplete === false) {
+        const originalIds = status.operationIds ?? [];
+        const localIds = record.proposal.operations.map((operation) => operation.id);
+        if (JSON.stringify(localIds) !== JSON.stringify(originalIds)) {
+          throw new Error("Core には承認済み操作だけが残っています。未承認の元提案はこのブラウザーにないため、回復できません。");
+        }
+        const restored = await api.propose(projectId, record.proposal);
+        if (stableJson(restored) !== stableJson(record.proposal)) {
+          throw new Error("Core に保存された元の提案がブラウザー回復記録と一致しません。");
+        }
+        const latest = (await api.proposalStatuses(projectId)).proposals.find((item) => item.proposal.id === record.proposal.id);
+        if (!latest || latest.payloadComplete === false || stableJson(latest.proposal) !== stableJson(record.proposal)) {
+          throw new Error("元の提案を Core に復元できませんでした。提案はブラウザー回復記録に保持しています。");
+        }
+        await journal.putProposal(repository, authorScope, record.proposal, latest);
+        status = latest;
+      }
       const published = new Set(status?.publishedOperationIds ?? []);
       const alreadyApproved = new Set(status?.approvedOperationIds ?? []);
       const entries: JournalEntry[] = [];
@@ -121,8 +138,12 @@ export function ProposalReview({
           const pendingOperations = record.proposal.operations.filter((operation) =>
             !published.has(operation.id) && !checkpointFor(status, operation),
           );
+          const originalIds = status?.operationIds ?? record.proposal.operations.map((operation) => operation.id);
+          const fullOriginalAvailable = status?.payloadComplete !== false ||
+            JSON.stringify(record.proposal.operations.map((operation) => operation.id)) === JSON.stringify(originalIds);
+          const unacceptedPayloadMissing = status?.payloadComplete === false && !fullOriginalAvailable;
           const needsApproval = pendingOperations.some((operation) => !status?.approvedOperationIds.includes(operation.id));
-          const completed = pendingOperations.length === 0;
+          const completed = pendingOperations.length === 0 && !unacceptedPayloadMissing;
           return (
             <li key={record.proposal.id}>
               <article className="proposal-card">
@@ -132,6 +153,11 @@ export function ProposalReview({
                 </header>
                 <p>提案 ID: <code>{record.proposal.id}</code> · 作者スコープ: <code>{record.authorScope ?? "未割り当て"}</code></p>
                 {status?.stale && <p className="status" data-kind="error" role="status">提案の基準リモートが現在の HEAD より古くなっています。Checkpoint 時に Core が競合を確認します。</p>}
+                {unacceptedPayloadMissing
+                  ? <p className="status" data-kind="error" role="alert">Core の Git 記録には承認済み操作だけがあり、未承認の元提案はこのブラウザーで見つかりません。未承認分を表示・承認できません。</p>
+                  : status?.payloadComplete === false
+                    ? <p className="status" data-kind="error" role="status">Core の Git 記録は承認済み操作のみです。承認前にブラウザーの元提案を照合して復元します。</p>
+                    : null}
                 {record.proposal.operations.map((operation) => {
                   const isPublished = published.has(operation.id);
                   const receipt = checkpointFor(status, operation);
@@ -161,10 +187,10 @@ export function ProposalReview({
                   </details>
                 ) : null}
                 <div className="proposal-actions">
-                  <button type="button" onClick={() => void approve(record)} disabled={Boolean(busyId) || completed}>
-                    {busyId === record.proposal.id ? "承認内容を保存中…" : completed ? "Checkpoint 完了" : needsApproval ? "承認して Checkpoint" : "承認済みを Checkpoint"}
+                  <button type="button" onClick={() => void approve(record)} disabled={Boolean(busyId) || completed || unacceptedPayloadMissing}>
+                    {busyId === record.proposal.id ? "承認内容を保存中…" : unacceptedPayloadMissing ? "未承認分を回復できません" : completed ? "Checkpoint 完了" : needsApproval ? status?.payloadComplete === false ? "元の提案を照合して承認" : "承認して Checkpoint" : "承認済みを Checkpoint"}
                   </button>
-                  <button type="button" className="quiet-button" onClick={() => void dismiss(record)} disabled={Boolean(busyId) || (status?.approvedOperationIds.length ?? 0) > 0 || (status?.checkpoints.length ?? 0) > 0}>
+                  <button type="button" className="quiet-button" onClick={() => void dismiss(record)} disabled={Boolean(busyId) || unacceptedPayloadMissing || (status?.approvedOperationIds.length ?? 0) > 0 || (status?.checkpoints.length ?? 0) > 0}>
                     この提案を隠す
                   </button>
                 </div>
