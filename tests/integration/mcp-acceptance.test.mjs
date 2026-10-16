@@ -466,6 +466,12 @@ test("spawned stdio and production HTTP MCP preserve Core review boundaries thro
     name: "get_diagnostics", arguments: { project_id: projectId, scene_id: "sc-1" },
   });
   assert.equal(errorCode(fullDiagnostics, "get_diagnostics"), "ACTION_UNAVAILABLE");
+  for (const [tool, args] of [
+    ["suggest_rewrite", { project_id: projectId, scene_id: "sc-1", sentence_index: 0 }],
+    ["format_manuscript", { project_id: projectId, scene_id: "sc-1" }],
+  ]) {
+    assert.equal(errorCode(await stdio.client.callTool({ name: tool, arguments: args }), tool), "MODULE_UNAVAILABLE");
+  }
 
   await verifyCancellation(stdio, host, projectId, "spawned stdio");
   await verifyCancellation(http, host, projectId, "Streamable HTTP");
@@ -608,7 +614,7 @@ test("spawned stdio and production HTTP MCP preserve Core review boundaries thro
     "The recovered remote status contains an unapproved operation payload");
   const listedIncomplete = success(await stdio.client.callTool({
     name: "list_change_sets", arguments: { project_id: projectId },
-  }), "reconstructed list_change_sets").incomplete_payloads?.find((item) => item.sourceChangeSetId === changeSetId);
+  }), "reconstructed list_change_sets").incomplete_payloads?.find((item) => item.coreProposalId === changeSetId);
   assert.ok(listedIncomplete, "Source list_change_sets must report incomplete Core recovery metadata");
   assert.equal(listedIncomplete.payloadComplete, false);
   assert.deepEqual(listedIncomplete.operationIds, [selectedCoreOperationId, unselectedCoreOperationId]);
