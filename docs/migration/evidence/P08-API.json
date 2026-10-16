@@ -6,8 +6,8 @@
   },
   "target": {
     "branch": "branchwork/7-p08",
-    "implementationCommit": "8aa6a57cbfa10a899f10fc705c01c895084f1912",
-    "testedHead": "8aa6a57cbfa10a899f10fc705c01c895084f1912"
+    "implementationCommit": "8ce909af9632f99032c4546ac27a02c7cf84d135",
+    "testedHead": "cecad48ee56dd388cd8e205bf540b084fea608b3"
   },
   "ledger": {
     "R01": {
@@ -56,7 +56,7 @@
     },
     "R40": {
       "target": ["packages/api/src/server.ts", "packages/api/src/server.test.ts"],
-      "proofs": ["P08-project-registration"]
+      "proofs": ["P08-project-lifecycle"]
     },
     "R42": {
       "target": ["packages/api/src/server.ts", "packages/api/src/server.test.ts"],
@@ -80,7 +80,7 @@
     "P08-api-profile-metadata": "The version route reports this Scriptorium API and contracts version, selected profile, cookie-owner/bearer-read-compute-propose auth modes, runtime metadata, and current module availability; it does not return legacy Loom metadata.",
     "P08-core-snapshot-actions": "The HTTP boundary test verifies pinned tree/scene, manuscript snapshot list and historical body routes, bounded search and writing-stat envelopes, and composed Core action descriptors/results with input schema errors. Reads retain the selected Core snapshot identity.",
     "P08-author-mutation-boundary": "The HTTP boundary test verifies the host replaces request-supplied proposal provenance with `mcp` for bearer requests and MCP module contributions, allows declared compute under runtime effect limits, denies bearer approval, accepts same-origin owner-session approval with host-assigned owner scope, and exposes proposal review/status reads. Legacy direct scene PUT is retired with HTTP 410 so persistent scene changes use proposal, approval, and checkpoint routes.",
-    "P08-project-registration": "Owner-scoped GET /api/projects and POST /api/projects expose CoreStore.listProjects/registerProject. The Core migration ledger records these as the P08 R40 slice; source rebind, detach, auto-merge, and project-event operations have no corresponding safe Core surface in this slice.",
+    "P08-project-lifecycle": "Owner-scoped project list, detail, and registration use CoreStore. PUT re-registration accepts only the stored canonical URL and the verified current default branch, then delegates reconstruction to Core; mismatched remotes and credentials/settings are rejected before Core runs. DELETE delegates to Core's guarded detach. A real local-bare-Git HTTP test confirms URL mismatch leaves both the clone and registry unchanged, Core reconstruction preserves the project, dirty-tree detach is refused, and clean detach removes the registration. PATCH returns a typed retirement response for legacy auto-merge settings. The owner event stream emits only actual started/completed/failed manual sync outcomes, with correlated sync and observation data, and closes on server shutdown.",
     "P08-provider-none": "The provider feature endpoint requires authentication and returns `providerKind: none` without preventing project, read, proposal, or review paths from operating.",
     "P08-scratch-core-operation": "The HTTP boundary test checks scratch text and bounded binary attachments are represented as Core change operations and sent through proposal/approval/checkpoint methods; no API-side project file writer is used.",
     "P08-module-http-composition": "The actual `ModuleRuntime` and Fastify-backed HTTP server test activate a lazy fixture module, dispatch its relative contribution path with a fresh remote reader, and enforce owner-only access on its owner route. Public contribution dispatch is covered with an in-memory registered remote reader.",
@@ -89,7 +89,7 @@
   "validation": [
     {
       "command": "pnpm install --frozen-lockfile",
-      "result": "passed on the isolated P08 API worktree"
+      "result": "passed on the tested integration tree"
     },
     {
       "command": "pnpm --filter @scriptorium/contracts build && pnpm --filter @scriptorium/module-runtime build && pnpm --filter @scriptorium/core build",
@@ -97,21 +97,53 @@
     },
     {
       "command": "pnpm --filter @scriptorium/api typecheck",
-      "result": "passed against tested head 8aa6a57"
+      "result": "passed; covered again by the full pnpm typecheck on the tested integration tree"
     },
     {
       "command": "pnpm --filter @scriptorium/api test",
-      "result": "passed, 10 of 10 tests against tested head 8aa6a57; the test script builds the API before running the HTTP tests"
+      "result": "passed, 13 of 13 tests; included again in the full pnpm test run on the tested integration tree"
+    },
+    {
+      "command": "pnpm --filter @scriptorium/core build",
+      "result": "passed with guarded project detach/reconstruction methods available to the API"
+    },
+    {
+      "command": "pnpm --filter @scriptorium/core test",
+      "result": "passed, 50 of 50 tests against the Core lifecycle implementation used by P08"
+    },
+    {
+      "command": "pnpm typecheck",
+      "result": "passed for all workspace packages on tested head cecad48"
+    },
+    {
+      "command": "pnpm test",
+      "result": "passed across all workspace packages on tested head cecad48, including the API 13/13 and Core 50/50 tests"
+    },
+    {
+      "command": "pnpm build",
+      "result": "passed for the Core profile and compiled API/browser app; Vite reported the existing advisory for the 599.47 kB main chunk"
+    },
+    {
+      "command": "pnpm audit:core",
+      "result": "passed; 69 production dependency versions scanned"
+    },
+    {
+      "command": "nix shell nixpkgs#chromium --command bash -c 'chromium_bin=$(command -v chromium); SCRIPTORIUM_E2E_CHROMIUM=\"$chromium_bin\" pnpm test:e2e --trace off'",
+      "result": "passed, all 6 local-Git Chromium browser acceptance tests on tested head cecad48"
+    },
+    {
+      "command": "nix shell nixpkgs#podman -c bash scripts/verify-oci.sh",
+      "result": "passed with the documented temporary image-signature policy: Core OCI image, HTTP probes and assets, UID 1000, writable /data, and SIGTERM API drain; image was not published"
     },
     {
       "command": "git diff --check",
-      "result": "passed after the API route removal and test update"
+      "result": "passed after the project lifecycle routes, tests, and evidence update"
     }
   ],
   "compositionLimits": [
     "The source `/api/reload` rebuilt a derived SQLite projection. The target reads pinned Core snapshots and has no equivalent persistent author-data index to reload, so P08 does not expose a misleading reload endpoint; the final ledger still needs to record that projection maintenance disposition.",
     "P08 API exposes generic module action and HTTP contribution adapters. MCP-specific HTTP/stdio tools, enabled-module domain actions, and the full browser review flow are owned by their module/UI tasks and require composed integration checks.",
-    "This evidence does not certify `start()` inside Core/full OCI profiles, real GitHub checkpoint/publish recovery, or container shutdown under a live streamed request. Those remain P13/P12 integration acceptance. The P08 API tests use in-memory Core/runtime fixtures for the endpoint boundaries; the separate P13 publishing acceptance must run against the composed real Core/Fastify/runtime and authorized GitHub fixture.",
-    "R40 only exposes Core-backed project list and registration. Safe project rebind/detach and a Core-owned project event source are absent; the source PATCH auto-merge behavior is excluded by the fixed snapshot/approval architecture."
+    "This evidence does not certify `start()` inside Core/full OCI profiles, real GitHub checkpoint/publish recovery, or container shutdown under a live streamed request. Those remain P13/P12 integration acceptance. The P08 API tests use in-memory runtime fixtures for several host boundaries and a real local bare-Git Core instance for project registration, reconstruction, and detach; the separate P13 publishing acceptance must run against the composed real Core/Fastify/runtime and authorized GitHub fixture.",
+    "The owner event stream reports manual sync requests handled by this API instance. It is not a cross-process/Core-wide event bus. Legacy auto-merge settings are explicitly retired by the fixed approval and publication workflow."
   ]
 }
