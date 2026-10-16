@@ -16,6 +16,7 @@ import { createStoryActions } from "./actions.js";
 
 const SERIES_PATH = "meta/scriptorium/modules/story/v1/series.json";
 const STATE_PROPOSALS_PATH = "meta/scriptorium/modules/story/state-proposals.jsonl";
+const ZUKAN_SUGGESTIONS_PATH = "meta/scriptorium/modules/story/zukan-suggestions.jsonl";
 
 function revision(content: string): string {
   return createHash("sha256").update(content).digest("hex");
@@ -138,6 +139,110 @@ test("entity updates validate source revisions and return a reviewable Core prop
   assert.equal(proposals.length, 1);
 });
 
+test("entity relationship proposals pin referenced entity revisions and participate in thread lifecycle reads", async () => {
+  const files = fixtureFiles({
+    "plot/threads/thread-promise.yaml": yaml({ id: "thread-promise", name: "Promise", type: "thread", keywords: ["promise"], relations: [] }),
+  });
+  const reader = makeReader(files);
+  const proposals: Array<{ id: string; operations: ChangeOperation[] }> = [];
+  const context = makeActionContext(reader, { proposals });
+  const thread = (await invoke<{ revision: string }>("story.entities.get", { id: "thread-promise" }, context)).data;
+  const planted = await invoke("story.entities.update", {
+    id: "thread-promise", patch: { relations: [{ target: "sc-1", kind: "planted" }] },
+    base_revision: thread.revision, operation_id: "plant-promise",
+  }, context);
+  const plantOperation = planted.proposals![0]!.operations[0]!;
+  const scenePath = "plot/volumes/vol-main/chapters/ch-main-1/scenes/sc-1.yaml";
+  assert.ok(plantOperation.reads.some((item) => item.path === scenePath && item.revision === revision(files.get(scenePath)!)));
+  files.set(plantOperation.writes[0]!.path, plantOperation.writes[0]!.content!);
+
+  const scene = (await invoke<{ revision: string }>("story.entities.get", { id: "sc-2" }, makeActionContext(makeReader(files)))).data;
+  const advanced = await invoke("story.entities.update", {
+    id: "sc-2", patch: { relations: [{ target: "thread-promise", kind: "advances" }] },
+    base_revision: scene.revision, operation_id: "advance-promise",
+  }, makeActionContext(makeReader(files), { proposals }));
+  const advanceOperation = advanced.proposals![0]!.operations[0]!;
+  const threadPath = "plot/threads/thread-promise.yaml";
+  assert.ok(advanceOperation.reads.some((item) => item.path === threadPath && item.revision === revision(files.get(threadPath)!)));
+  files.set(advanceOperation.writes[0]!.path, advanceOperation.writes[0]!.content!);
+
+  const lifecycle = await invoke<{ snapshots: Array<{ threadId: string; state: string; plantedSceneId?: string; recalledSceneIds: string[] }> }>(
+    "story.threads.lifecycle", { threadId: "thread-promise" }, makeActionContext(makeReader(files)),
+  );
+  assert.equal(lifecycle.data.snapshots[0]?.state, "recalled");
+  assert.equal(lifecycle.data.snapshots[0]?.plantedSceneId, "sc-1");
+  assert.deepEqual(lifecycle.data.snapshots[0]?.recalledSceneIds, ["sc-2"]);
+
+  const unsupported = await actionById("story.entities.update").invoke({
+    id: "thread-promise", patch: { relations: [{ target: "sc-1", kind: "advances" }] }, operation_id: "bad-thread-direction",
+  }, makeActionContext(makeReader(files), { proposals }));
+  assert.equal(unsupported.ok, false);
+  if (!unsupported.ok) assert.equal(unsupported.error.code, "invalid_input");
+  const unsupportedScene = await actionById("story.entities.update").invoke({
+    id: "sc-2", patch: { relations: [{ target: "thread-promise", kind: "planted" }] }, operation_id: "bad-scene-direction",
+  }, makeActionContext(makeReader(files), { proposals }));
+  assert.equal(unsupportedScene.ok, false);
+  if (!unsupportedScene.ok) assert.equal(unsupportedScene.error.code, "invalid_input");
+});
+
+function zukanRow(overrides: Record<string, unknown> = {}): Record<string, unknown> {
+  return {
+    id: "suggestion-1", entity_id: "char-uma", block_path: "lead.0", proposed_text: "A newly approved fact.",
+    evidence_json: JSON.stringify([{ quote: "verified in the story", sceneId: "sc-1" }]), status: "pending",
+    source: "manuscript", kind: "fact", source_session_id: null, source_turn_range_json: null,
+    confidence: "high", created_at: "2026-01-01T00:00:00.000Z", updated_at: "2026-01-02T00:00:00.000Z",
+    future_field: { preserve: true }, migrationSource: { databaseSources: [{ databaseId: "project-arcadia", table: "zukan_suggestions" }] },
+    ...overrides,
+  };
+}
+
+test("Zukan suggestions list by status and approve/reject as snapshot-bound proposals", async () => {
+  const profilePath = "bible/characters/char-uma/profile.yaml";
+  const original = YAML.parse(fixtureFiles().get(profilePath)!);
+  original.notes = {
+    lead: [{ type: "paragraph", text: "Existing lead." }],
+    sections: [{ heading: "History", body: [{ type: "paragraph", text: "Earlier detail." }], children: [{ heading: "Family", body: [], children: [] }] }],
+  };
+  const suggestionsPath = ZUKAN_SUGGESTIONS_PATH;
+  const rows = [zukanRow(), zukanRow({ id: "suggestion-2", status: "rejected" })];
+  const files = fixtureFiles({
+    [profilePath]: yaml(original),
+    [suggestionsPath]: rows.map((row) => JSON.stringify(row)).join("\n") + "\n",
+  });
+  const proposals: Array<{ id: string; operations: ChangeOperation[] }> = [];
+  const context = makeActionContext(makeReader(files), { proposals });
+  const listed = await invoke<{ pendingCount: number; suggestions: Array<ZukanSuggestion> }>("story.zukan-suggestions.list", {}, context);
+  assert.equal(listed.data.pendingCount, 1);
+  assert.deepEqual(listed.data.suggestions.map((item) => item.id), ["suggestion-1"]);
+  assert.equal(listed.data.suggestions[0]?.entityRevision?.length, 73);
+
+  const approved = await invoke<{ suggestion: ZukanSuggestion; entityRevision: string }>("story.zukan-suggestions.approve", {
+    id: "suggestion-1", entityRevision: listed.data.suggestions[0]!.entityRevision, operation_id: "approve-suggestion-1",
+  }, context);
+  const approval = approved.proposals![0]!.operations[0]!;
+  assert.deepEqual(approval.writes.map((write) => write.path).sort(), [profilePath, suggestionsPath].sort());
+  assert.ok(approval.reads.some((item) => item.path === profilePath && item.revision === revision(files.get(profilePath)!)));
+  assert.ok(approval.reads.some((item) => item.path === suggestionsPath && item.revision === revision(files.get(suggestionsPath)!)));
+  const updatedEntity = YAML.parse(approval.writes.find((write) => write.path === profilePath)!.content!);
+  assert.equal(updatedEntity.notes.lead[0].text, "Existing lead.\nA newly approved fact.");
+  assert.equal(updatedEntity.notes.sections[0].body[0].text, "Earlier detail.");
+  assert.equal(updatedEntity.notes.sections[0].children[0].heading, "Family");
+  const approvedRow = JSON.parse(approval.writes.find((write) => write.path === suggestionsPath)!.content!.split("\n")[0]!) as Record<string, unknown>;
+  assert.equal(approvedRow.status, "approved");
+  assert.equal(approvedRow.updated_at, "2026-01-02T00:00:00.001Z");
+  assert.deepEqual(approvedRow.future_field, { preserve: true });
+  assert.deepEqual(approvedRow.migrationSource, zukanRow().migrationSource);
+  assert.equal(YAML.parse(files.get(profilePath)!).notes.lead[0].text, "Existing lead.", "proposing does not mutate the selected snapshot");
+
+  const rejected = await invoke<{ suggestion: ZukanSuggestion }>("story.zukan-suggestions.reject", {
+    id: "suggestion-1", operation_id: "reject-suggestion-1",
+  }, context);
+  const rejection = rejected.proposals![0]!.operations[0]!;
+  assert.deepEqual(rejection.writes.map((write) => write.path), [suggestionsPath]);
+  const rejectedRow = JSON.parse(rejection.writes[0]!.content!.split("\n")[0]!) as Record<string, unknown>;
+  assert.equal(rejectedRow.status, "rejected");
+});
+
 test("scene creation inserts by position in one proposal and includes every changed file precondition", async () => {
   const files = fixtureFiles();
   const reader = makeReader(files);
@@ -163,6 +268,8 @@ test("scene creation inserts by position in one proposal and includes every chan
   assert.deepEqual(newScene.relations, [{ target: "char-uma", kind: "appears" }]);
   assert.equal(shiftedSibling.order, 3);
   assert.ok(operation.reads.some((item) => item.path.endsWith("sc-2.yaml") && item.revision === revision(files.get("plot/volumes/vol-main/chapters/ch-main-1/scenes/sc-2.yaml")!)));
+  assert.deepEqual(operation.readScopes?.map((scope) => scope.prefix).sort(), ["bible", "plot"]);
+  assert.ok(operation.readScopes?.every((scope) => /^[a-f0-9]{64}$/.test(scope.revision)));
   assert.equal(proposals.length, 1);
 });
 
@@ -174,15 +281,20 @@ test("series bindings use stable repository identity and preserve unknown settin
     futureRootField: { keep: true },
   };
   const reader = makeReader(fixtureFiles({ [SERIES_PATH]: JSON.stringify(settings) + "\n" }));
-  const linkedReader = makeReader(fixtureFiles(), "repo-bible");
+  const linkedReader = makeReader(fixtureFiles({
+    "bible/characters/char-uma/profile.yaml": yaml({ id: "char-uma", name: "Bible Uma", type: "character", aliases: ["Bible-U"], notes: { lead: [{ type: "paragraph", text: "Bible source record." }], sections: [] } }),
+  }), "repo-bible");
   const linkedIds: string[] = [];
   const context = makeActionContext(reader, { linkedReader: async (id) => { linkedIds.push(id); return linkedReader; } });
   const binding = await invoke<{ bibleRepositoryId: string; requiresAuthorReview: boolean }>("story.series.binding.get", {}, context);
   assert.equal(binding.data.bibleRepositoryId, "repo-bible");
   assert.equal(binding.data.requiresAuthorReview, false);
-  const overlay = await invoke<{ workSnapshot: SnapshotId; bibleSnapshot: SnapshotId }>("story.series.overlay", {}, context);
+  const overlay = await invoke<{ workSnapshot: SnapshotId; bibleSnapshot: SnapshotId; workEntities: Array<{ id: string; name: string }>; bibleEntities: Array<{ id: string; name: string; raw: Record<string, unknown> }> }>("story.series.overlay", {}, context);
   assert.equal(overlay.data.workSnapshot.repository.repositoryId, "repo-work");
   assert.equal(overlay.data.bibleSnapshot.repository.repositoryId, "repo-bible");
+  assert.equal(overlay.data.workEntities.find((entity) => entity.id === "char-uma")?.name, "Uma");
+  assert.equal(overlay.data.bibleEntities.find((entity) => entity.id === "char-uma")?.name, "Bible Uma", "the browser can inspect the actual Bible record even when a work record has the same ID");
+  assert.equal((overlay.data.bibleEntities.find((entity) => entity.id === "char-uma")?.raw.aliases as string[])[0], "Bible-U");
   assert.deepEqual(linkedIds, ["repo-bible"]);
 
   const proposals: Array<{ id: string; operations: ChangeOperation[] }> = [];
@@ -295,6 +407,7 @@ test("NarrativeChangeSet preserves all nine source operation kinds in one identi
     sourceFingerprint: string;
   };
   assert.equal(Object.keys(data.operationMap).length, 9);
+  assert.deepEqual(data.dependencies["create-scene"], ["create-location"], "a later create depends on earlier Story writes represented by its virtual scope revision");
   assert.deepEqual(data.dependencies["insert-scene"], ["create-scene"]);
   assert.equal(data.resultIds["link-reference"], JSON.stringify(["loc-cafe", "loc-new", "related"]));
   const coreProposal = result.proposals![0]!;
@@ -313,6 +426,13 @@ test("NarrativeChangeSet preserves all nine source operation kinds in one identi
   assert.equal(data.resultRevisions["create-scene"]?.startsWith('"sha256-'), true);
   assert.deepEqual(data.affectedEntities["insert-scene"]?.map((item) => item.id), ["sc-1", "sc-2", "sc-new"]);
   assert.deepEqual(coreProposal.operations.map((operation) => operation.id), Object.values(data.operationMap));
+  const createLocation = coreProposal.operations[0]!;
+  const createScene = coreProposal.operations[1]!;
+  assert.deepEqual(createLocation.readScopes?.map((scope) => scope.prefix).sort(), ["bible", "plot"]);
+  assert.deepEqual(createScene.readScopes?.map((scope) => scope.prefix).sort(), ["bible", "plot"]);
+  const bibleScope = (operation: ChangeOperation) => operation.readScopes?.find((scope) => scope.prefix === "bible")?.revision;
+  assert.notEqual(bibleScope(createScene), bibleScope(createLocation), "later source operations include earlier planned Story creates in their membership guard");
+  assert.equal(createScene.readScopes?.find((scope) => scope.prefix === "plot")?.revision, createLocation.readScopes?.find((scope) => scope.prefix === "plot")?.revision);
   const stateCoreOperation = coreProposal.operations.find((operation) => operation.id === data.operationMap["append-state"]);
   assert.ok(stateCoreOperation?.reads.some((read) => read.path === STATE_PROPOSALS_PATH && read.revision === revision(stateProposalContent)));
   assert.equal(coreProposal.operations[0]?.writes[0]?.path, "bible/locations/loc-new.yaml");

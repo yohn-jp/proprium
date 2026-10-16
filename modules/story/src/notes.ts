@@ -4,6 +4,51 @@ export type NotesBlock =
 export interface NotesSection { heading: string; body: NotesBlock[]; children: NotesSection[] }
 export interface StructuredNotes { lead: NotesBlock[]; sections: NotesSection[] }
 
+function appendToParagraph(block: NotesBlock | undefined, text: string): NotesBlock {
+  const trimmed = text.trim();
+  if (block?.type !== "paragraph") return { type: "paragraph", text: trimmed };
+  const base = block.text.trimEnd();
+  return { type: "paragraph", text: base ? `${base}\n${trimmed}` : trimmed };
+}
+
+function ensureSection(notes: StructuredNotes, sectionIndex: number): NotesSection {
+  while (notes.sections.length <= sectionIndex) notes.sections.push({ heading: "", body: [], children: [] });
+  return notes.sections[sectionIndex]!;
+}
+
+/** Source-compatible approval behavior for a Zukan suggestion's note block. */
+export function appendProposedTextToNotes(
+  notes: StructuredNotes | null | undefined,
+  blockPath: string,
+  proposedText: string,
+): StructuredNotes {
+  const next: StructuredNotes = notes
+    ? { lead: notes.lead.map((block) => structuredClone(block)), sections: notes.sections.map((section) => structuredClone(section)) }
+    : { lead: [], sections: [] };
+  const text = proposedText.trim();
+  if (!text) return next;
+  const lead = /^lead\.(\d+)$/.exec(blockPath);
+  const section = /^sections\.(\d+)\.body\.(\d+)$/.exec(blockPath);
+  if (lead) {
+    const index = Number(lead[1]);
+    while (next.lead.length < index) next.lead.push({ type: "paragraph", text: "" });
+    if (next.lead.length === index) next.lead.push({ type: "paragraph", text });
+    else next.lead[index] = appendToParagraph(next.lead[index], text);
+    return next;
+  }
+  if (section) {
+    const sectionIndex = Number(section[1]);
+    const bodyIndex = Number(section[2]);
+    const target = ensureSection(next, sectionIndex);
+    while (target.body.length < bodyIndex) target.body.push({ type: "paragraph", text: "" });
+    if (target.body.length === bodyIndex) target.body.push({ type: "paragraph", text });
+    else target.body[bodyIndex] = appendToParagraph(target.body[bodyIndex], text);
+    return next;
+  }
+  next.lead.push({ type: "paragraph", text });
+  return next;
+}
+
 function isRecord(value: unknown): value is Record<string, unknown> {
   return value !== null && typeof value === "object" && !Array.isArray(value);
 }

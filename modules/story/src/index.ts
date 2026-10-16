@@ -24,6 +24,7 @@ export function createModule(context: ModuleContext): ModuleDefinition {
       { id: "story.inspector", module: "story", slot: "inspection", title: "Story inspector", action: "story.entities.get" },
       { id: "story.continuity", module: "story", slot: "review", title: "Continuity", action: "story.threads.lifecycle" },
       { id: "story.world-state", module: "story", slot: "review", title: "World state", action: "story.world-state.workbench" },
+      { id: "story.zukan-review", module: "story", slot: "review", title: "Zukan suggestions", action: "story.zukan-suggestions.list" },
       { id: "story.series", module: "story", slot: "settings", title: "Series", action: "story.series.list" },
     ],
     async dispose() {},

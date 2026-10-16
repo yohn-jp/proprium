@@ -1,6 +1,6 @@
-import React, { useEffect, useMemo, useState } from "react";
+import React, { useEffect, useMemo, useRef, useState } from "react";
 import { createRoot, type Root } from "react-dom/client";
-import type { ActionResult, BrowserModuleContext, BrowserModuleDefinition } from "@scriptorium/contracts";
+import type { ActionResult, BrowserModuleContext, BrowserModuleDefinition, SnapshotId } from "@scriptorium/contracts";
 import { normalizeNotes, type NotesBlock, type NotesSection, type StructuredNotes } from "./notes.js";
 
 type DataResult = Extract<ActionResult, { ok: true }>;
@@ -15,6 +15,7 @@ type Entity = {
   revision?: string;
   filePath?: string;
 };
+type SeriesOverlay = { entities: Entity[]; workEntities: Entity[]; bibleEntities: Entity[]; workSnapshot: SnapshotId; bibleSnapshot: SnapshotId };
 type SceneContext = {
   scene: Entity;
   sceneRevision?: string;
@@ -52,6 +53,18 @@ type WorldStateWorkbench = {
   events: Array<{ sceneId: string; order: number; kind: string; subject: string; object?: string | null; payload?: Record<string, unknown> }>;
   proposals: Array<{ id: string; status: string; event: Record<string, unknown>; history?: Array<Record<string, unknown>> }>;
 };
+type ZukanSuggestion = {
+  id: string;
+  entityId: string;
+  entityName?: string;
+  entityRevision?: string;
+  blockPath: string;
+  proposedText: string;
+  evidence: Array<{ quote: string; sceneId?: string }>;
+  source: string;
+  kind: string | null;
+  createdAt: string;
+};
 
 const panelStyle: React.CSSProperties = { display: "grid", gap: "0.75rem", padding: "0.9rem", color: "var(--story-fg, #222)" };
 const rowStyle: React.CSSProperties = { display: "flex", gap: "0.5rem", alignItems: "center", flexWrap: "wrap" };
@@ -59,6 +72,22 @@ const mutedStyle: React.CSSProperties = { opacity: 0.72, fontSize: "0.9em" };
 const buttonStyle: React.CSSProperties = { minHeight: "2.25rem", padding: "0.35rem 0.65rem" };
 
 type EditableField = { key: string; label: string; kind?: "text" | "textarea" | "list" | "number" };
+type RelationChoice = { kind: string; targetType?: string };
+function relationChoicesFor(entityType: string): RelationChoice[] {
+  if (entityType === "scene") return [
+    { kind: "plants", targetType: "thread" },
+    { kind: "advances", targetType: "thread" },
+    { kind: "payoff", targetType: "thread" },
+    { kind: "related" },
+  ];
+  if (entityType === "thread") return [
+    { kind: "planted", targetType: "scene" },
+    { kind: "payoff", targetType: "scene" },
+    { kind: "related" },
+  ];
+  if (entityType === "character" || entityType === "faction") return [{ kind: "related" }, { kind: "affiliated" }];
+  return [{ kind: "related" }];
+}
 const EDITABLE_FIELDS: Record<string, EditableField[]> = {
   character: [{ key: "aliases", label: "Aliases", kind: "list" }, { key: "status", label: "Status" }, { key: "folder", label: "Folder" }],
   location: [{ key: "region", label: "Region" }, { key: "description", label: "Description", kind: "textarea" }, { key: "tags", label: "Tags", kind: "list" }],
@@ -121,6 +150,24 @@ function operationId(): string {
   return `story-ui-${globalThis.crypto.randomUUID()}`;
 }
 
+function matchesEntitySearch(entity: Entity, query: string): boolean {
+  const aliases = Array.isArray(entity.raw.aliases) ? entity.raw.aliases.filter((value): value is string => typeof value === "string") : [];
+  const tags = Array.isArray(entity.raw.tags) ? entity.raw.tags.filter((value): value is string => typeof value === "string") : [];
+  const haystack = [entity.id, entity.type, entity.name, ...aliases, ...tags].join(" ").toLocaleLowerCase();
+  return haystack.includes(query.trim().toLocaleLowerCase());
+}
+
+function ReadOnlyNotes({ value }: { value: StructuredNotes | null }) {
+  if (!value) return <p style={mutedStyle}>No structured notes.</p>;
+  const renderBlocks = (blocks: NotesBlock[]) => <ul>{blocks.map((block, index) => <li key={index}>
+    {block.type === "paragraph" ? block.text : <ul>{block.items.map((item, itemIndex) => <li key={itemIndex}>{item.term ? <><strong>{item.term}: </strong>{item.description}</> : item.description}</li>)}</ul>}
+  </li>)}</ul>;
+  const renderSections = (sections: NotesSection[]) => sections.map((section, index) => <section key={`${section.heading}-${index}`}>
+    {section.heading && <h5>{section.heading}</h5>}{renderBlocks(section.body)}{renderSections(section.children)}
+  </section>);
+  return <div aria-label="Bible entity notes">{renderBlocks(value.lead)}{renderSections(value.sections)}</div>;
+}
+
 function useAction(context: BrowserModuleContext) {
   const [busy, setBusy] = useState(false);
   const [message, setMessage] = useState("");
@@ -154,7 +201,7 @@ function StoryNavigator({ context }: { context: BrowserModuleContext }) {
     setTree(result.tree);
     setTreeRevision(result.revision);
   };
-  useEffect(() => { void refresh().catch(() => undefined); }, [context.snapshot.remoteCommit]);
+  useEffect(() => { void refresh().catch(() => undefined); }, [context.snapshot.repository.repositoryId, context.snapshot.remoteCommit, context.snapshot.overlayCommit]);
   const selectScene = async (id: string) => {
     setSceneId(id);
     try {
@@ -243,6 +290,12 @@ function StoryInspector({ context }: { context: BrowserModuleContext }) {
   const [relationTarget, setRelationTarget] = useState("");
   const [relationKind, setRelationKind] = useState("related");
   const [availableEntities, setAvailableEntities] = useState<Entity[]>([]);
+  const [seriesOverlay, setSeriesOverlay] = useState<SeriesOverlay | null>(null);
+  const [selectedBibleEntityId, setSelectedBibleEntityId] = useState("");
+  const [workSearch, setWorkSearch] = useState("");
+  const [workTypeFilter, setWorkTypeFilter] = useState("");
+  const [bibleSearch, setBibleSearch] = useState("");
+  const [bibleTypeFilter, setBibleTypeFilter] = useState("");
   const [showCreate, setShowCreate] = useState(false);
   const [createType, setCreateType] = useState("character");
   const [createId, setCreateId] = useState("");
@@ -257,10 +310,10 @@ function StoryInspector({ context }: { context: BrowserModuleContext }) {
   const [appearances, setAppearances] = useState<Array<{ scene: Entity; kinds: string[] }>>([]);
   useEffect(() => {
     void invoke<Entity[]>("story.entities.list", {}).then(setAvailableEntities).catch(() => setAvailableEntities([]));
-  }, [context.snapshot.remoteCommit]);
-  const open = async (event?: React.FormEvent) => {
-    event?.preventDefault();
-    const found = await invoke<Entity | null>("story.entities.get", { id: id.trim() });
+    void invoke<SeriesOverlay | null>("story.series.overlay", {}).then(setSeriesOverlay).catch(() => setSeriesOverlay(null));
+  }, [context.snapshot.repository.repositoryId, context.snapshot.remoteCommit, context.snapshot.overlayCommit]);
+  const openEntity = async (entityId: string) => {
+    const found = await invoke<Entity | null>("story.entities.get", { id: entityId.trim() });
     setEntity(found);
     if (!found) { setBacklinks([]); setAppearances([]); setNotes(null); return; }
     setName(found?.name ?? String(found?.raw.title ?? ""));
@@ -272,12 +325,17 @@ function StoryInspector({ context }: { context: BrowserModuleContext }) {
     setNotes(normalizeNotes(found.raw.notes));
     setNotesDirty(false);
     setRelations(Array.isArray(found.raw.relations) ? found.raw.relations.filter((item): item is Record<string, unknown> => !!item && typeof item === "object" && !Array.isArray(item)).map((item) => ({ ...item })) : []);
+    setRelationKind(relationChoicesFor(found.type)[0]?.kind ?? "related");
     const [links, scenes] = await Promise.all([
       invoke<typeof backlinks>("story.entities.backlinks", { id: found.id }),
       invoke<typeof appearances>("story.entities.appearances", { id: found.id }),
     ]);
     setBacklinks(links);
     setAppearances(scenes);
+  };
+  const open = async (event?: React.FormEvent) => {
+    event?.preventDefault();
+    await openEntity(id);
   };
   const save = async (event: React.FormEvent) => {
     event.preventDefault();
@@ -335,6 +393,16 @@ function StoryInspector({ context }: { context: BrowserModuleContext }) {
   const createFieldsForType = EDITABLE_FIELDS[createType] ?? [];
   const volumes = availableEntities.filter((item) => item.type === "volume");
   const chapters = availableEntities.filter((item) => item.type === "chapter" && item.raw.volume === createVolume);
+  const relationChoices = entity ? relationChoicesFor(entity.type) : [];
+  const selectedRelation = relationChoices.find((choice) => choice.kind === relationKind) ?? relationChoices[0];
+  const relationTargets = availableEntities.filter((item) => item.id !== entity?.id && (!selectedRelation?.targetType || item.type === selectedRelation.targetType));
+  const bibleEntities = seriesOverlay?.bibleEntities ?? [];
+  const workTypes = [...new Set(availableEntities.map((item) => item.type))].sort();
+  const bibleTypes = [...new Set(bibleEntities.map((item) => item.type))].sort();
+  const visibleWorkEntities = availableEntities.filter((item) => (!workTypeFilter || item.type === workTypeFilter) && matchesEntitySearch(item, workSearch));
+  const visibleBibleEntities = bibleEntities.filter((item) => (!bibleTypeFilter || item.type === bibleTypeFilter) && matchesEntitySearch(item, bibleSearch));
+  const selectedBibleEntity = bibleEntities.find((item) => item.id === selectedBibleEntityId);
+  const workEntityIds = new Set(availableEntities.map((item) => item.id));
   return <section style={panelStyle} aria-label="Story entity inspector">
     <h2>Entity inspector</h2>
     <button type="button" style={buttonStyle} aria-expanded={showCreate} onClick={() => setShowCreate((value) => !value)}>{showCreate ? "Close create form" : "Create Story entity"}</button>
@@ -360,6 +428,30 @@ function StoryInspector({ context }: { context: BrowserModuleContext }) {
       <label>Entity ID <input value={id} onChange={(event) => setId(event.target.value)} /></label>
       <button style={buttonStyle} disabled={busy || !id.trim()}>Open</button>
     </form>
+    <label>Find a work entity <input type="search" value={workSearch} onChange={(event) => setWorkSearch(event.target.value)} placeholder="Name, alias, tag, or ID" /></label>
+    <label>Work entity type <select value={workTypeFilter} onChange={(event) => setWorkTypeFilter(event.target.value)}><option value="">All types</option>{workTypes.map((type) => <option key={type} value={type}>{type}</option>)}</select></label>
+    <label>Browse work entities <select value={entity && workEntityIds.has(entity.id) && visibleWorkEntities.some((item) => item.id === entity.id) ? entity.id : ""} onChange={(event) => { const selectedId = event.target.value; setId(selectedId); if (selectedId) void openEntity(selectedId); }}>
+      <option value="">Choose a work entity by name</option>{workTypes.map((type) => <optgroup key={type} label={type}>{visibleWorkEntities.filter((item) => item.type === type).map((item) => <option key={item.id} value={item.id}>{item.name ?? String(item.raw.title ?? item.id)} · {item.id}</option>)}</optgroup>)}
+    </select></label>
+    <section aria-label="Read-only linked Bible overlay">
+      <h3>Linked Bible reference (read-only)</h3>
+      {seriesOverlay ? <>
+        <p style={mutedStyle}>Work snapshot {seriesOverlay.workSnapshot.repository.repositoryId}@{seriesOverlay.workSnapshot.remoteCommit}; Bible snapshot {seriesOverlay.bibleSnapshot.repository.repositoryId}@{seriesOverlay.bibleSnapshot.remoteCommit}.</p>
+        <label>Find a Bible entity <input type="search" value={bibleSearch} onChange={(event) => setBibleSearch(event.target.value)} placeholder="Name, alias, tag, or ID" /></label>
+        <label>Bible entity type <select value={bibleTypeFilter} onChange={(event) => setBibleTypeFilter(event.target.value)}><option value="">All types</option>{bibleTypes.map((type) => <option key={type} value={type}>{type}</option>)}</select></label>
+        <label>Bible entity <select value={visibleBibleEntities.some((item) => item.id === selectedBibleEntityId) ? selectedBibleEntityId : ""} onChange={(event) => setSelectedBibleEntityId(event.target.value)}>
+          <option value="">Choose a linked Bible entity</option>{bibleTypes.map((type) => <optgroup key={type} label={type}>{visibleBibleEntities.filter((item) => item.type === type).map((item) => <option key={item.id} value={item.id}>{item.name ?? String(item.raw.title ?? item.id)} · {item.id}</option>)}</optgroup>)}
+        </select></label>
+        {selectedBibleEntity ? <article aria-label="Linked Bible entity details">
+          <strong>{selectedBibleEntity.name ?? String(selectedBibleEntity.raw.title ?? selectedBibleEntity.id)}</strong>
+          <p>{selectedBibleEntity.type} · {selectedBibleEntity.id} · {selectedBibleEntity.filePath} · revision {selectedBibleEntity.revision}</p>
+          {Array.isArray(selectedBibleEntity.raw.aliases) && selectedBibleEntity.raw.aliases.length > 0 && <p>Aliases: {selectedBibleEntity.raw.aliases.filter((value): value is string => typeof value === "string").join(", ")}</p>}
+          {Array.isArray(selectedBibleEntity.raw.tags) && selectedBibleEntity.raw.tags.length > 0 && <p>Tags: {selectedBibleEntity.raw.tags.filter((value): value is string => typeof value === "string").join(", ")}</p>}
+          <ReadOnlyNotes value={normalizeNotes(selectedBibleEntity.raw.notes)} />
+          {workEntityIds.has(selectedBibleEntity.id) && <p style={mutedStyle}>A work entity has this ID and takes precedence in the combined overlay. The linked Bible record remains unchanged and read-only here.</p>}
+        </article> : <p style={mutedStyle}>No Bible entity matches the current search and type filters.</p>}
+      </> : <p style={mutedStyle}>No linked Bible overlay is available for this series binding.</p>}
+    </section>
     {entity && <>
       <p style={mutedStyle}>{entity.type} · {entity.filePath} · {entity.status ?? "no status"}</p>
       <form style={panelStyle} onSubmit={(event) => void save(event)}>
@@ -376,8 +468,8 @@ function StoryInspector({ context }: { context: BrowserModuleContext }) {
             <button type="button" style={buttonStyle} aria-label={`Remove ${String(relation.kind)} reference`} onClick={() => setRelations((items) => items.filter((_, itemIndex) => itemIndex !== index))}>Remove</button>
           </li>)}</ul>
           <div style={rowStyle}>
-            <label>Target <select value={relationTarget} onChange={(event) => setRelationTarget(event.target.value)}><option value="">Choose an entity</option>{availableEntities.filter((item) => item.id !== entity.id).map((item) => <option key={item.id} value={item.id}>{item.name ?? item.id} ({item.type})</option>)}</select></label>
-            <label>Relation <select value={relationKind} onChange={(event) => setRelationKind(event.target.value)}>{["related", "affiliated", "mentions", "appears", "plants", "advances", "payoff"].map((kind) => <option key={kind} value={kind}>{kind}</option>)}</select></label>
+            <label>Target <select value={relationTarget} onChange={(event) => setRelationTarget(event.target.value)}><option value="">Choose an entity</option>{relationTargets.map((item) => <option key={item.id} value={item.id}>{item.name ?? item.id} ({item.type})</option>)}</select></label>
+            <label>Relation <select value={selectedRelation?.kind ?? "related"} onChange={(event) => { setRelationKind(event.target.value); setRelationTarget(""); }}>{relationChoices.map(({ kind }) => <option key={kind} value={kind}>{kind}</option>)}</select></label>
             <button type="button" style={buttonStyle} disabled={!relationTarget} onClick={() => { setRelations((items) => [...items, { target: relationTarget, kind: relationKind }]); setRelationTarget(""); }}>Add reference</button>
           </div>
         </fieldset>
@@ -416,7 +508,7 @@ function ContinuityPanel({ context }: { context: BrowserModuleContext }) {
     void invoke<StoryMap>("story.map.query", {}).then(setMap).catch(() => setMap(null));
     void invoke<typeof graph>("story.graph.query", { types: ["character"] }).then(setGraph).catch(() => setGraph(null));
     setReaderModel(null);
-  }, [context.snapshot.remoteCommit]);
+  }, [context.snapshot.repository.repositoryId, context.snapshot.remoteCommit, context.snapshot.overlayCommit]);
   useEffect(() => {
     if (!showCooccurrence) { setCooccurrence(null); return; }
     let cancelled = false;
@@ -424,7 +516,7 @@ function ContinuityPanel({ context }: { context: BrowserModuleContext }) {
       if (!cancelled) setCooccurrence(data);
     }).catch(() => { if (!cancelled) setCooccurrence(null); });
     return () => { cancelled = true; };
-  }, [showCooccurrence, context.snapshot.remoteCommit]);
+  }, [showCooccurrence, context.snapshot.repository.repositoryId, context.snapshot.remoteCommit, context.snapshot.overlayCommit]);
   const openThread = async (threadId: string) => {
     setSelected(threadId);
     try { setLifecycle(await invoke("story.threads.lifecycle", { threadId })); } catch { setLifecycle(null); }
@@ -553,7 +645,7 @@ function WorldStatePanel({ context }: { context: BrowserModuleContext }) {
     setWorkbench(nextWorkbench);
     setEntities(nextEntities);
   };
-  useEffect(() => { void refresh().catch(() => undefined); }, [context.snapshot.remoteCommit]);
+  useEffect(() => { void refresh().catch(() => undefined); }, [context.snapshot.repository.repositoryId, context.snapshot.remoteCommit, context.snapshot.overlayCommit]);
   const act = async (action: "approve" | "reject", id: string) => {
     try {
       await invoke(`story.state-proposals.${action}`, { id, operation_id: operationId() });
@@ -606,6 +698,47 @@ function WorldStatePanel({ context }: { context: BrowserModuleContext }) {
   </section>;
 }
 
+function ZukanReviewPanel({ context }: { context: BrowserModuleContext }) {
+  const { invoke, busy, status, setMessage } = useAction(context);
+  const [suggestions, setSuggestions] = useState<ZukanSuggestion[]>([]);
+  const [pendingCount, setPendingCount] = useState(0);
+  const submitted = useRef(new Set<string>());
+  const refresh = async () => {
+    const result = await invoke<{ pendingCount: number; suggestions: ZukanSuggestion[] }>("story.zukan-suggestions.list", { status: "pending" });
+    setPendingCount(result.pendingCount);
+    setSuggestions(result.suggestions.filter((item) => !submitted.current.has(item.id)));
+  };
+  useEffect(() => { submitted.current.clear(); void refresh().catch(() => undefined); }, [context.snapshot.repository.repositoryId, context.snapshot.remoteCommit, context.snapshot.overlayCommit]);
+  const decide = async (decision: "approve" | "reject", item: ZukanSuggestion) => {
+    try {
+      await invoke(`story.zukan-suggestions.${decision}`, {
+        id: item.id,
+        ...(decision === "approve" && item.entityRevision ? { entityRevision: item.entityRevision } : {}),
+        operation_id: operationId(),
+      });
+      submitted.current.add(item.id);
+      setSuggestions((previous) => previous.filter((candidate) => candidate.id !== item.id));
+      setPendingCount((previous) => Math.max(0, previous - 1));
+      setMessage(`Proposed ${decision} for Zukan suggestion ${item.id}. Review the proposal before checkpointing.`);
+    } catch { /* The panel displays the machine error. */ }
+  };
+  return <section style={panelStyle} aria-label="Zukan suggestion review">
+    <h2>Zukan suggestions</h2>
+    <p>{pendingCount} pending suggestion(s)</p>
+    <button type="button" style={buttonStyle} disabled={busy} onClick={() => void refresh().catch(() => undefined)}>Refresh suggestions</button>
+    {suggestions.length ? <ul>{suggestions.map((item) => <li key={item.id}>
+      <strong>{item.entityName ?? item.entityId}</strong> · {item.kind ?? "note"} · {item.source} · {item.blockPath}
+      <p>{item.proposedText}</p>
+      {item.evidence.length > 0 && <details><summary>Evidence ({item.evidence.length})</summary><ul>{item.evidence.map((evidence, index) => <li key={`${evidence.sceneId ?? "quote"}-${index}`}>{evidence.sceneId ? `${evidence.sceneId}: ` : ""}{evidence.quote}</li>)}</ul></details>}
+      <div style={rowStyle}>
+        <button type="button" style={buttonStyle} disabled={busy || !item.entityRevision} onClick={() => void decide("approve", item)}>Propose approval</button>
+        <button type="button" style={buttonStyle} disabled={busy} onClick={() => void decide("reject", item)}>Propose rejection</button>
+      </div>
+    </li>)}</ul> : <p style={mutedStyle}>No pending suggestions are available in this snapshot.</p>}
+    {status}
+  </section>;
+}
+
 function SeriesSettingsPanel({ context }: { context: BrowserModuleContext }) {
   const { invoke, busy, status, setMessage } = useAction(context);
   const [series, setSeries] = useState<Array<{ id: string; name: string; bibleRepositoryId?: string; bibleProjectId?: string }>>([]);
@@ -624,7 +757,7 @@ function SeriesSettingsPanel({ context }: { context: BrowserModuleContext }) {
     setRepositories(repoList.repositories);
     setBinding(currentBinding);
   };
-  useEffect(() => { void refresh().catch(() => undefined); }, [context.snapshot.remoteCommit]);
+  useEffect(() => { void refresh().catch(() => undefined); }, [context.snapshot.repository.repositoryId, context.snapshot.remoteCommit, context.snapshot.overlayCommit]);
   const create = async (event: React.FormEvent) => {
     event.preventDefault();
     try {
@@ -669,6 +802,7 @@ const components: Record<string, React.ComponentType<{ context: BrowserModuleCon
   "story.inspector": StoryInspector,
   "story.continuity": ContinuityPanel,
   "story.world-state": WorldStatePanel,
+  "story.zukan-review": ZukanReviewPanel,
   "story.series": SeriesSettingsPanel,
 };
 

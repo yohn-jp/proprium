@@ -1,10 +1,11 @@
 import { createHash } from "node:crypto";
 import YAML from "yaml";
-import type {
-  ChangeOperation,
-  ModuleActionContext,
-  ProposalEvidence,
-  SnapshotReader,
+import {
+  snapshotScopeRevision,
+  type ChangeOperation,
+  type ModuleActionContext,
+  type ProposalEvidence,
+  type SnapshotReader,
 } from "@scriptorium/contracts";
 import { readStorySnapshot, type LoadedStorySnapshot } from "./snapshot.js";
 import { listRuleStateEvents } from "./domain/index.js";
@@ -379,17 +380,61 @@ function collectionRevision(entities: Map<string, WorkEntity>): string {
   const rows = [...entities.values()].map((entity) => [entity.id, entityRevision(entity)]).sort(([a], [b]) => String(a).localeCompare(String(b)));
   return `\"sha256-${createHash("sha256").update(JSON.stringify(canonical(rows))).digest("hex")}\"`;
 }
+function entityReferenceIds(raw: ObjectValue): string[] {
+  const ids = new Set<string>();
+  const fields = ["appears", "mentions", "plants", "advances", "related", "pov", "affiliated", "target", "first_appears", "planted", "payoff"];
+  const add = (value: unknown) => {
+    for (const item of Array.isArray(value) ? value : [value]) {
+      if (typeof item === "string" && item) ids.add(item);
+      else if (isRecord(item)) {
+        const id = item.target ?? item.to ?? item.scene ?? item.id;
+        if (typeof id === "string" && id) ids.add(id);
+      }
+    }
+  };
+  for (const key of ["volume", "chapter", "pov", "location", "resolution", ...fields]) add(raw[key]);
+  if (Array.isArray(raw.relations)) add(raw.relations);
+  if (isRecord(raw.entities)) for (const key of fields) add(raw.entities[key]);
+  if (isRecord(raw.threads)) { add(raw.threads.plants); add(raw.threads.advances); }
+  return [...ids].sort((a, b) => a.localeCompare(b));
+}
 function entityReferences(entities: Map<string, WorkEntity>, raw: ObjectValue, omit?: string): void {
   const require = (value: unknown, label: string, type?: string) => {
     if (typeof value !== "string" || !entities.has(value) || value === omit) fail(`${label} must reference an existing entity`, "operation_precondition_conflict");
     if (type && entities.get(value)!.type !== type) fail(`${label} must reference a ${type}`, "operation_precondition_conflict");
   };
+  for (const id of entityReferenceIds(raw)) require(id, "Story reference");
   for (const [key, type] of [["volume", "volume"], ["chapter", "chapter"], ["pov", "character"], ["location", "location"], ["resolution", "scene"]] as const) if (raw[key] !== undefined && raw[key] !== null) require(raw[key], key, type);
   for (const field of ["appears", "mentions", "plants", "advances", "related", "pov", "affiliated", "target", "first_appears", "planted", "payoff"]) {
     const value = raw[field], refs = Array.isArray(value) ? value : typeof value === "string" ? [value] : [];
     for (const ref of refs) if (typeof ref === "string") require(ref, field); else if (isRecord(ref)) require(ref.target ?? ref.scene ?? ref.id, field);
   }
   if (Array.isArray(raw.relations)) for (const relation of raw.relations) if (isRecord(relation) && relation.target !== undefined) require(relation.target, "relations.target");
+}
+function relationSignature(value: unknown): string | null {
+  if (!isRecord(value)) return null;
+  const target = value.target ?? value.to ?? value.scene ?? value.id;
+  if (typeof target !== "string" || typeof value.kind !== "string") return null;
+  return `${target}\0${value.kind}`;
+}
+function relationDirectionAllowed(from: WorkEntity, to: WorkEntity, kind: string): boolean {
+  if (!["plants", "planted", "advances", "payoff"].includes(kind)) return true;
+  if (from.type === "thread") return to.type === "scene" && (kind === "planted" || kind === "payoff");
+  if (from.type === "scene") return to.type === "thread" && (kind === "plants" || kind === "advances" || kind === "payoff");
+  return false;
+}
+function validateNewRelationDirections(before: unknown, after: unknown, from: WorkEntity, entities: Map<string, WorkEntity>): void {
+  const prior = new Set(Array.isArray(before) ? before.map(relationSignature).filter((value): value is string => value !== null) : []);
+  if (!Array.isArray(after)) return;
+  for (const relation of after) {
+    const signature = relationSignature(relation);
+    if (!signature || prior.has(signature) || !isRecord(relation)) continue;
+    const targetId = relation.target ?? relation.to ?? relation.scene ?? relation.id;
+    const target = typeof targetId === "string" ? entities.get(targetId) : undefined;
+    if (!target || !relationDirectionAllowed(from, target, String(relation.kind))) {
+      fail(`The ${String(relation.kind)} thread relation must point between a scene and a thread in the supported direction`, "operation_precondition_conflict");
+    }
+  }
 }
 function containsLink(entity: WorkEntity, to: string, kind: string): boolean {
   if (Array.isArray(entity.raw.relations) && entity.raw.relations.some((relation) => isRecord(relation) && relation.to === to && relation.kind === kind)) return true;
@@ -441,7 +486,7 @@ function evidenceIdMap(changeSet: NarrativeChangeSet): Map<string, string> {
   return new Map(changeSet.evidence.map((source) => [String(source.id), `story-evidence-${safeHash(`${changeSet.id}\0${source.id}`)}`]));
 }
 function linkedEvidenceIds(op: NarrativeOperation, ids: Map<string, string>): string[] { return op.evidenceIds.map((id) => ids.get(id)!).filter(Boolean); }
-function makeOperation(context: ModuleActionContext, changeSetId: string, source: NarrativeOperation, reads: Map<string, string | null>, writes: Map<string, { revision: string | null; content: string | null }>, evidenceIds: string[]): ChangeOperation {
+function makeOperation(context: ModuleActionContext, changeSetId: string, source: NarrativeOperation, reads: Map<string, string | null>, writes: Map<string, { revision: string | null; content: string | null }>, evidenceIds: string[], readScopes?: Awaited<ReturnType<typeof storyEntityScopes>>): ChangeOperation {
   const operationId = `story-cs-${safeHash(`${context.projectId}\0${changeSetId}\0${source.id}`)}`;
   const effect: ChangeOperation["effect"] = source.kind === "manuscript.replace-range" ? "manuscript" :
     source.kind === "scene.create" || source.kind === "scene.insert" || source.kind === "entity.create" ? "structure" : "metadata";
@@ -452,10 +497,30 @@ function makeOperation(context: ModuleActionContext, changeSetId: string, source
     baseRemoteCommit: context.reader.snapshot.remoteCommit,
     effect,
     reads: [...reads].map(([path, revision]) => ({ path, revision })),
+    ...(readScopes ? { readScopes } : {}),
     writes: [...writes].map(([path, write]) => ({ path, revision: write.revision, content: write.content })),
     message: `Story change set ${source.id}: ${source.kind}`,
     evidenceIds,
   };
+}
+async function storyEntityScopes(context: ModuleActionContext, files: Map<string, VirtualFile>) {
+  const reader: SnapshotReader = {
+    snapshot: context.reader.snapshot,
+    async read(path) {
+      const virtual = files.get(path);
+      if (virtual) return { content: virtual.content, revision: virtual.revision ?? revisionOf(virtual.content) };
+      return context.reader.read(path);
+    },
+    async list(prefix) {
+      const base = await context.reader.list(prefix);
+      const virtual = [...files.keys()].filter((path) => path === prefix || path.startsWith(`${prefix}/`));
+      return [...new Set([...base, ...virtual])].sort((a, b) => a.localeCompare(b));
+    },
+  };
+  return Promise.all(["bible", "plot"].map(async (prefix) => ({
+    prefix,
+    revision: await snapshotScopeRevision(reader, prefix),
+  })));
 }
 function setFileWrite(files: Map<string, VirtualFile>, reads: Map<string, string | null>, writes: Map<string, { revision: string | null; content: string | null }>, path: string, content: string): void {
   const prior = files.get(path);
@@ -523,6 +588,9 @@ export async function buildNarrativeChangeProposal(context: ModuleActionContext,
   const operations: ChangeOperation[] = [], operationMap: Record<string, string> = {}, dependencies: Record<string, string[]> = {}, resultIds: Record<string, string> = {}, resultPaths: Record<string, string[]> = {}, resultRevisions: Record<string, string> = {}, affectedEntities: Record<string, Array<{ id: string; revision: string }>> = {};
   const createdScenes = new Map<string, string>();
   for (const [index, op] of changeSet.operations.entries()) {
+    const readScopes = op.kind === "entity.create" || op.kind === "scene.create"
+      ? await storyEntityScopes(context, files)
+      : undefined;
     const target = op.target as ObjectValue;
     const condition = op.precondition as ObjectValue;
     const reads = new Map<string, string | null>(), writes = new Map<string, { revision: string | null; content: string | null }>();
@@ -536,11 +604,19 @@ export async function buildNarrativeChangeProposal(context: ModuleActionContext,
     const addEntityRead = (entity: WorkEntity): void => {
       const file = files.get(entity.filePath); reads.set(entity.filePath, file?.revision ?? null);
     };
+    const addReferenceReads = (raw: ObjectValue): void => {
+      for (const id of entityReferenceIds(raw)) {
+        if (id === raw.id) continue;
+        const referenced = requireTarget(id, "Referenced entity");
+        if (story.duplicateIds.has(id)) fail(`Ambiguous duplicate entity ID in Story snapshot: ${id}`, "operation_precondition_conflict");
+        addEntityRead(referenced);
+      }
+    };
     if (op.kind === "manuscript.replace-range") {
       const manuscript = requireTarget(String(target.manuscriptId), "Manuscript");
       const scene = requireTarget(String(target.sceneId), "Scene");
       if (manuscript.type !== "manuscript" || scene.type !== "scene" || scene.raw.manuscript !== manuscript.filePath || manuscript.body === undefined) fail("Manuscript and scene do not match", "operation_precondition_conflict");
-      assertPrecondition(manuscript, condition, `Manuscript ${manuscript.id}`); addEntityRead(manuscript);
+      assertPrecondition(manuscript, condition, `Manuscript ${manuscript.id}`); addEntityRead(manuscript); addEntityRead(scene);
       const manuscriptFile = files.get(manuscript.filePath); if (!manuscriptFile) fail(`Manuscript file not found: ${manuscript.filePath}`);
       const doc = parsedMarkdown(manuscriptFile.content), replacementRange = op.range as ObjectValue;
       const start = Number(replacementRange.start), end = Number(replacementRange.end);
@@ -556,8 +632,10 @@ export async function buildNarrativeChangeProposal(context: ModuleActionContext,
       if (op.kind === "entity.create" && !CREATE_TYPES.has(type)) fail(`Entity creation type is unsupported: ${type}`);
       const existing = findUnique(id); assertPrecondition(existing, condition, `Entity ${id}`);
       const raw = validateEntityValues(type, id, op.values as ObjectValue, entities);
+      addReferenceReads(raw);
       const path = pathForEntity(type, id, raw);
       if (files.has(path)) fail(`Entity file already exists: ${path}`, "operation_precondition_conflict");
+      validateNewRelationDirections([], raw.relations, { id, type: type as StoryEntityType, filePath: path, raw }, entities);
       if (op.kind === "scene.create" && op.collectionRevision !== undefined) {
         if (collectionRevision(entities) !== op.collectionRevision) fail("Scene creation collection revision is stale", "operation_precondition_conflict");
         for (const entity of entities.values()) addEntityRead(entity);
@@ -596,6 +674,8 @@ export async function buildNarrativeChangeProposal(context: ModuleActionContext,
       const nextRaw: ObjectValue = { ...entity.raw, ...changes, id: entity.id, type: entity.type };
       for (const [key, value] of Object.entries(changes)) if (value === null) delete nextRaw[key];
       entityReferences(entities, nextRaw, entity.id);
+      validateNewRelationDirections(entity.raw.relations, nextRaw.relations, entity, entities);
+      addReferenceReads(nextRaw);
       entity.raw = nextRaw; writeEntity(entity, outputYaml(nextRaw), files, reads, writes);
     } else if (op.kind === "scene.insert") {
       const sceneId = String(target.sceneId), chapterId = String(target.chapterId), chapter = requireTarget(chapterId, "Chapter"), scene = requireTarget(sceneId, "Scene");
@@ -661,6 +741,7 @@ export async function buildNarrativeChangeProposal(context: ModuleActionContext,
       }
       const subject = requireTarget(String(event.subject), "State event subject");
       const object = event.object === null ? undefined : requireTarget(String(event.object), "State event object");
+      addEntityRead(subject); if (object) addEntityRead(object);
       if (event.kind === "location" && (subject.type !== "character" || object?.type !== "location")) fail("Location event references have invalid entity types", "operation_precondition_conflict");
       if (event.kind === "ownership" && subject.type !== "item") fail("Ownership event subject must be an item", "operation_precondition_conflict");
       const nextRaw = { ...scene.raw, state_events: [...events, event] }; scene.raw = nextRaw; writeEntity(scene, outputYaml(nextRaw), files, reads, writes);
@@ -668,23 +749,35 @@ export async function buildNarrativeChangeProposal(context: ModuleActionContext,
       const thread = requireTarget(String(target.threadId), "Thread"), scene = requireTarget(String(target.sceneId), "Scene");
       if (thread.type !== "thread" || scene.type !== "scene") fail("Thread and scene references have invalid types", "operation_precondition_conflict");
       if (op.relation === "advanced") fail("Source apply does not support advanced thread links", "feature_unsupported");
-      assertPrecondition(thread, condition, `Thread ${thread.id}`); addEntityRead(thread);
+      assertPrecondition(thread, condition, `Thread ${thread.id}`); addEntityRead(thread); addEntityRead(scene);
       if (containsLink(thread, scene.id, String(op.relation))) fail("Thread already has this scene relation", "operation_precondition_conflict");
       const relation: ObjectValue = { to: scene.id, kind: op.relation, ...(typeof op.note === "string" ? { note: op.note } : {}) };
+      if (!relationDirectionAllowed(thread, scene, String(op.relation))) fail("The thread relation direction is unsupported", "operation_precondition_conflict");
       const nextRaw = { ...thread.raw, relations: [...(Array.isArray(thread.raw.relations) ? thread.raw.relations as unknown[] : []), relation] };
       thread.raw = nextRaw; writeEntity(thread, outputYaml(nextRaw), files, reads, writes);
     } else {
       const from = requireTarget(String(target.from), "Reference source"), to = requireTarget(String(target.to), "Reference target");
-      assertPrecondition(from, condition, `Entity ${from.id}`); addEntityRead(from);
+      assertPrecondition(from, condition, `Entity ${from.id}`); addEntityRead(from); addEntityRead(to);
+      if (!relationDirectionAllowed(from, to, String(target.kind))) fail("The thread relation direction is unsupported", "operation_precondition_conflict");
       if (containsLink(from, to.id, String(target.kind))) fail("Reference already exists", "operation_precondition_conflict");
       const relation: ObjectValue = { to: to.id, kind: target.kind, ...(typeof op.note === "string" ? { note: op.note } : {}) };
       const nextRaw = { ...from.raw, relations: [...(Array.isArray(from.raw.relations) ? from.raw.relations as unknown[] : []), relation] };
       from.raw = nextRaw; writeEntity(from, outputYaml(nextRaw), files, reads, writes);
     }
     if (reads.size > 512 || writes.size > 256) fail(`Operation ${op.id} exceeds Core file operation limits`);
-    const operation = makeOperation(context, changeSet.id, op, reads, writes, linkedEvidenceIds(op, evidenceIds));
+    const operation = makeOperation(context, changeSet.id, op, reads, writes, linkedEvidenceIds(op, evidenceIds), readScopes);
     if (!operation.writes.length) fail(`Operation ${op.id} does not produce a Story write`);
     operationMap[op.id] = operation.id;
+    if (readScopes) {
+      const prefixes = readScopes.map((scope) => scope.prefix);
+      const priorWriters = operations.filter((prior) => prior.writes.some((write) =>
+        prefixes.some((prefix) => write.path === prefix || write.path.startsWith(`${prefix}/`)),
+      ));
+      const sourceDependencies = priorWriters.map((prior) =>
+        Object.entries(operationMap).find(([, operationId]) => operationId === prior.id)?.[0],
+      ).filter((sourceId): sourceId is string => sourceId !== undefined);
+      if (sourceDependencies.length) dependencies[op.id] = [...new Set([...(dependencies[op.id] ?? []), ...sourceDependencies])];
+    }
     resultIds[op.id] = resultIdentity(op);
     resultPaths[op.id] = operation.writes.map((write) => write.path);
     const targetEntityId = resultEntityId(op);

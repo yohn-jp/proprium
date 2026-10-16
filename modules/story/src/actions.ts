@@ -1,15 +1,16 @@
 import { createHash, randomUUID } from "node:crypto";
 import YAML from "yaml";
-import type {
-  ActionResult,
-  ChangeProposal,
-  ChangeOperation,
-  FileRevision,
-  ModuleAction,
-  ModuleActionContext,
-  ModuleContext,
-  SnapshotId,
-  ValueSchema,
+import {
+  snapshotScopeRevision,
+  type ActionResult,
+  type ChangeProposal,
+  type ChangeOperation,
+  type FileRevision,
+  type ModuleAction,
+  type ModuleActionContext,
+  type ModuleContext,
+  type SnapshotId,
+  type ValueSchema,
 } from "@scriptorium/contracts";
 import {
   analyzeThreadLifecycles,
@@ -40,7 +41,7 @@ import {
   type StoryEntityType,
 } from "./domain/index.js";
 import { readStorySnapshot, type LoadedStorySnapshot } from "./snapshot.js";
-import { collectNotesPlainTexts, normalizeNotes } from "./notes.js";
+import { appendProposedTextToNotes, collectNotesPlainTexts, normalizeNotes } from "./notes.js";
 import { buildNarrativeChangeProposal, identifyNarrativeChangeSet } from "./narrativeChangeSet.js";
 import {
   buildOperation,
@@ -55,6 +56,7 @@ import {
 const STORY_STATE_ROOT = "meta/scriptorium/modules/story";
 const SERIES_SETTINGS_PATH = `${STORY_STATE_ROOT}/v1/series.json`;
 const STATE_PROPOSALS_PATH = `${STORY_STATE_ROOT}/state-proposals.jsonl`;
+const ZUKAN_SUGGESTIONS_PATH = `${STORY_STATE_ROOT}/zukan-suggestions.jsonl`;
 const SAFE_ID = /^[A-Za-z0-9_-]+$/;
 const ENTITY_TYPES = new Set<StoryEntityType>([
   "character", "location", "item", "faction", "event", "thread", "scene", "chapter",
@@ -106,6 +108,21 @@ type StateProposal = {
   conflictEventIds: string[];
   duplicateOfProposalId: string | null;
   history: Array<Record<string, unknown>>;
+  createdAt: string;
+  updatedAt: string;
+};
+type StoredZukanSuggestion = ObjectValue & {
+  id: string;
+  entityId: string;
+  blockPath: string;
+  proposedText: string;
+  evidence: Array<{ quote: string; sceneId?: string }>;
+  status: "pending" | "approved" | "rejected" | "stale";
+  source: "manuscript" | "sandbox";
+  kind: "fact" | "dynamic" | "habit" | null;
+  sourceSessionId: string | null;
+  sourceTurnRange: { start: number; end: number } | null;
+  confidence: "high" | "low" | "none" | null;
   createdAt: string;
   updatedAt: string;
 };
@@ -215,6 +232,86 @@ async function readStateProposals(context: ModuleActionContext): Promise<{
   return { rows, revision: file.revision };
 }
 
+function parseOptionalJson(value: unknown, label: string): unknown {
+  if (typeof value !== "string") return value;
+  try { return JSON.parse(value) as unknown; }
+  catch { throw new TypeError(`${label} contains malformed JSON`); }
+}
+
+function normalizeZukanSuggestion(value: ObjectValue): StoredZukanSuggestion {
+  const id = value.id;
+  const entityId = value.entityId ?? value.entity_id;
+  const blockPath = value.blockPath ?? value.block_path;
+  const proposedText = value.proposedText ?? value.proposed_text;
+  const evidenceValue = parseOptionalJson(value.evidence ?? value.evidence_json, "Zukan evidence");
+  const evidence = Array.isArray(evidenceValue) && evidenceValue.every((item) =>
+    isRecord(item) && typeof item.quote === "string" && item.quote.length > 0 &&
+    (item.sceneId === undefined || typeof item.sceneId === "string"),
+  ) ? evidenceValue as StoredZukanSuggestion["evidence"] : null;
+  const status = value.status;
+  const source = value.source;
+  const kind = value.kind ?? null;
+  const sourceSessionId = value.sourceSessionId ?? value.source_session_id ?? null;
+  const turnRangeValue = parseOptionalJson(value.sourceTurnRange ?? value.source_turn_range_json, "Zukan turn range");
+  const sourceTurnRange = turnRangeValue === null ? null : isRecord(turnRangeValue) &&
+    Number.isInteger(turnRangeValue.start) && Number.isInteger(turnRangeValue.end) &&
+    Number(turnRangeValue.start) >= 0 && Number(turnRangeValue.end) >= Number(turnRangeValue.start)
+    ? { start: Number(turnRangeValue.start), end: Number(turnRangeValue.end) } : undefined;
+  const confidence = value.confidence ?? null;
+  const createdAt = value.createdAt ?? value.created_at;
+  const updatedAt = value.updatedAt ?? value.updated_at;
+  if (typeof id !== "string" || !id || typeof entityId !== "string" || !entityId ||
+      typeof blockPath !== "string" || !blockPath || typeof proposedText !== "string" || !proposedText ||
+      !evidence || !new Set(["pending", "approved", "rejected", "stale"]).has(String(status)) ||
+      !new Set(["manuscript", "sandbox"]).has(String(source)) ||
+      (kind !== null && !new Set(["fact", "dynamic", "habit"]).has(String(kind))) ||
+      (sourceSessionId !== null && typeof sourceSessionId !== "string") || sourceTurnRange === undefined ||
+      (confidence !== null && !new Set(["high", "low", "none"]).has(String(confidence))) ||
+      typeof createdAt !== "string" || typeof updatedAt !== "string") {
+    throw new TypeError("Story zukan-suggestions JSONL contains a malformed suggestion row");
+  }
+  return {
+    ...value,
+    id, entityId, blockPath, proposedText, evidence,
+    status: status as StoredZukanSuggestion["status"],
+    source: source as StoredZukanSuggestion["source"],
+    kind: kind as StoredZukanSuggestion["kind"],
+    sourceSessionId: sourceSessionId as string | null,
+    sourceTurnRange,
+    confidence: confidence as StoredZukanSuggestion["confidence"],
+    createdAt, updatedAt,
+  };
+}
+
+async function readZukanSuggestions(context: ModuleActionContext): Promise<{
+  rows: StoredZukanSuggestion[];
+  revision: string | null;
+}> {
+  const file = await readTextFile(context.reader, ZUKAN_SUGGESTIONS_PATH);
+  const rows = file.content.split(/\r?\n/).filter((line) => line.trim()).map((line) => {
+    const value: unknown = JSON.parse(line);
+    if (!isRecord(value)) throw new TypeError("Story zukan-suggestions JSONL contains a non-object row");
+    return normalizeZukanSuggestion(value);
+  });
+  if (new Set(rows.map((row) => row.id)).size !== rows.length) throw new TypeError("Story zukan suggestion IDs are duplicated");
+  return { rows, revision: file.revision };
+}
+
+function suggestionTimestampAfter(previous: string): string {
+  const prior = Date.parse(previous);
+  if (!Number.isFinite(prior)) throw new TypeError("Zukan suggestion updatedAt must be a valid timestamp");
+  return new Date(prior + 1).toISOString();
+}
+
+function suggestionForWrite(row: StoredZukanSuggestion, status: StoredZukanSuggestion["status"]): StoredZukanSuggestion {
+  const updatedAt = suggestionTimestampAfter(row.updatedAt);
+  return { ...row, status, updatedAt, updated_at: updatedAt };
+}
+
+function zukanSuggestionFile(rows: readonly StoredZukanSuggestion[]): string {
+  return rows.map((row) => JSON.stringify(row)).join("\n") + (rows.length ? "\n" : "");
+}
+
 function normalizeStoredProposal(row: StoredStateProposal): StateProposal {
   const event = typeof row.event_json === "string" ? JSON.parse(row.event_json) : row.event_json;
   const history = typeof row.history_json === "string" ? JSON.parse(row.history_json) : row.history_json;
@@ -318,6 +415,12 @@ function canonical(value: unknown): unknown {
 function contentRevision(value: unknown): string {
   return `\"sha256-${createHash("sha256").update(JSON.stringify(canonical(value))).digest("hex")}\"`;
 }
+async function storyEntityScopes(reader: ModuleActionContext["reader"]) {
+  return Promise.all(["bible", "plot"].map(async (prefix) => ({
+    prefix,
+    revision: await snapshotScopeRevision(reader, prefix),
+  })));
+}
 function sourceEntityRevision(entity: StoryEntity): string {
   return contentRevision({ raw: entity.raw, body: entity.body ?? null });
 }
@@ -394,31 +497,66 @@ function sanitizeScalar(value: unknown): unknown {
 function validateReferences(raw: ObjectValue, story: LoadedStorySnapshot, omitId?: string): void {
   const requireEntity = (id: unknown, label: string) => {
     if (typeof id !== "string" || !story.entities.has(id) || id === omitId) throw new TypeError(`${label} must reference an existing entity`);
+    if (story.duplicateIds.has(id)) throw Object.assign(new Error(`${label} references an ambiguous duplicate entity ID`), { code: "operation_precondition_conflict" });
   };
   const requireType = (id: unknown, type: StoryEntityType, label: string) => {
     requireEntity(id, label);
     if (story.entities.get(id as string)?.type !== type) throw new TypeError(`${label} must reference a ${type}`);
   };
+  for (const id of referencedEntityIds(raw)) requireEntity(id, "Story reference");
   if (raw.volume !== undefined && raw.volume !== null) requireType(raw.volume, "volume", "volume");
   if (raw.chapter !== undefined && raw.chapter !== null) requireType(raw.chapter, "chapter", "chapter");
   if (raw.pov !== undefined && raw.pov !== null) requireType(raw.pov, "character", "pov");
   if (raw.location !== undefined && raw.location !== null) requireType(raw.location, "location", "location");
   if (raw.resolution !== undefined && raw.resolution !== null) requireType(raw.resolution, "scene", "resolution");
-  const relationValues = new Set(["appears", "mentions", "plants", "advances", "related", "pov", "affiliated", "target", "first_appears", "planted", "payoff"]);
-  for (const field of relationValues) {
-    const value = raw[field];
-    const references = Array.isArray(value) ? value : typeof value === "string" ? [value] : [];
-    for (const ref of references) {
-      if (typeof ref === "string") requireEntity(ref, field);
-      else if (isRecord(ref)) {
-        const target = ref.target ?? ref.scene ?? ref.id;
-        if (target !== undefined) requireEntity(target, field);
-      }
+}
+
+function relationSignature(value: unknown): string | null {
+  if (!isRecord(value)) return null;
+  const target = value.target ?? value.to ?? value.scene ?? value.id;
+  if (typeof target !== "string" || typeof value.kind !== "string") return null;
+  return `${target}\0${value.kind}`;
+}
+
+function relationDirectionAllowed(from: StoryEntity, to: StoryEntity, kind: string): boolean {
+  if (!["plants", "planted", "advances", "payoff"].includes(kind)) return true;
+  if (from.type === "thread") return to.type === "scene" && (kind === "planted" || kind === "payoff");
+  if (from.type === "scene") return to.type === "thread" && (kind === "plants" || kind === "advances" || kind === "payoff");
+  return false;
+}
+
+function validateNewRelationDirections(before: unknown, after: unknown, from: StoryEntity, story: LoadedStorySnapshot): void {
+  const prior = new Set(Array.isArray(before) ? before.map(relationSignature).filter((value): value is string => value !== null) : []);
+  if (!Array.isArray(after)) return;
+  for (const relation of after) {
+    const signature = relationSignature(relation);
+    if (!signature || prior.has(signature) || !isRecord(relation)) continue;
+    const targetId = relation.target ?? relation.to ?? relation.scene ?? relation.id;
+    const target = typeof targetId === "string" ? story.entities.get(targetId) : undefined;
+    if (!target || !relationDirectionAllowed(from, target, String(relation.kind))) {
+      throw new TypeError(`The ${String(relation.kind)} thread relation must point between a scene and a thread in the supported direction`);
     }
   }
-  if (Array.isArray(raw.relations)) for (const relation of raw.relations) {
-    if (isRecord(relation) && relation.target !== undefined) requireEntity(relation.target, "relations.target");
-  }
+}
+
+function referencedEntityIds(raw: ObjectValue): string[] {
+  const ids = new Set<string>();
+  const relationFields = ["appears", "mentions", "plants", "advances", "related", "pov", "affiliated", "target", "first_appears", "planted", "payoff"];
+  const add = (value: unknown) => {
+    const values = Array.isArray(value) ? value : [value];
+    for (const item of values) {
+      if (typeof item === "string" && item) ids.add(item);
+      else if (isRecord(item)) {
+        const target = item.target ?? item.to ?? item.scene ?? item.id;
+        if (typeof target === "string" && target) ids.add(target);
+      }
+    }
+  };
+  for (const key of ["volume", "chapter", "pov", "location", "resolution", ...relationFields]) add(raw[key]);
+  if (Array.isArray(raw.relations)) add(raw.relations);
+  if (isRecord(raw.entities)) for (const key of relationFields) add(raw.entities[key]);
+  if (isRecord(raw.threads)) { add(raw.threads.plants); add(raw.threads.advances); }
+  return [...ids];
 }
 
 function yamlContent(value: ObjectValue): string {
@@ -432,7 +570,7 @@ async function readForWrite(context: ModuleActionContext, path: string): Promise
 
 async function prepareEntityUpdate(
   input: { story: LoadedStorySnapshot; context: ModuleActionContext; id: string; patch: ObjectValue; effect?: "structure" | "metadata" },
-): Promise<{ entity: StoryEntity; content: string; path: string; revision: string }> {
+): Promise<{ entity: StoryEntity; raw: ObjectValue; content: string; path: string; revision: string; reads: FileRevision[] }> {
   const entity = input.story.entities.get(input.id);
   if (!entity) throw new TypeError(`Entity not found: ${input.id}`);
   if (typeof input.patch.type === "string" && input.patch.type !== entity.type) throw new TypeError("Cannot change an entity's `type`");
@@ -455,10 +593,20 @@ async function prepareEntityUpdate(
     const normalized = normalizeNotes(next.notes);
     if (normalized) next.notes = normalized;
   }
+  validateNewRelationDirections(entity.raw.relations, next.relations, entity, input.story);
   validateReferences(next, input.story, entity.id);
   const file = await readForWrite(input.context, entity.filePath);
   if (file.revision === null) throw new TypeError(`Entity file is missing: ${entity.filePath}`);
-  return { entity, content: yamlContent(next), path: entity.filePath, revision: file.revision };
+  const reads: FileRevision[] = [{ path: entity.filePath, revision: file.revision }];
+  for (const id of referencedEntityIds(next)) {
+    if (id === entity.id) continue;
+    const referenced = input.story.entities.get(id);
+    if (!referenced) throw new TypeError(`Story reference is missing: ${id}`);
+    const revision = input.story.revisions.get(referenced.filePath);
+    if (!revision) throw new TypeError(`Referenced entity file is missing: ${referenced.filePath}`);
+    if (!reads.some((entry) => entry.path === referenced.filePath)) reads.push({ path: referenced.filePath, revision });
+  }
+  return { entity, raw: next, content: yamlContent(next), path: entity.filePath, revision: file.revision, reads };
 }
 
 function sceneTextInputs(story: LoadedStorySnapshot): SceneTextForDisclosure[] {
@@ -737,7 +885,7 @@ function makeActions(moduleContext: StoryCapabilityContext): ModuleAction[] {
       const slugId = type === "scene" && typeof data.slug === "string" ? (data.slug.startsWith("sc-") ? data.slug : `sc-${data.slug}`) : undefined;
       const id = typeof data.id === "string" && data.id ? data.id : slugId ?? allocateEntityId(type, story.entities, hint);
       delete data.slug;
-      if (story.entities.has(id)) throw Object.assign(new Error(`Entity with id "${id}" already exists`), { code: "entity_conflict" });
+      if (story.entities.has(id) || story.duplicateIds.has(id)) throw Object.assign(new Error(`Entity with id "${id}" already exists or is duplicated`), { code: "entity_conflict" });
       data.id = id;
       data.type = type;
       if (type === "scene" && Array.isArray(data.characters)) {
@@ -772,6 +920,14 @@ function makeActions(moduleContext: StoryCapabilityContext): ModuleAction[] {
         if (data.location !== undefined && story.entities.get(String(data.location))?.type !== "location") throw new TypeError("location must reference an existing location");
       }
       validateReferences(data, story);
+      const referenceReads: FileRevision[] = [];
+      for (const referenceId of referencedEntityIds(data)) {
+        const referenced = story.entities.get(referenceId);
+        if (!referenced || story.duplicateIds.has(referenceId)) throw Object.assign(new Error(`Story reference is missing or ambiguous: ${referenceId}`), { code: "operation_precondition_conflict" });
+        const referenceRevision = story.revisions.get(referenced.filePath);
+        if (!referenceRevision) throw new TypeError(`Referenced entity file is missing: ${referenced.filePath}`);
+        if (!referenceReads.some((entry) => entry.path === referenced.filePath)) referenceReads.push({ path: referenced.filePath, revision: referenceRevision });
+      }
       const path = pathForEntity(type, id, data);
       const current = await readForWrite(context, path);
       if (current.revision !== null) throw Object.assign(new Error(`File already exists: ${path}`), { code: "entity_conflict" });
@@ -816,7 +972,8 @@ function makeActions(moduleContext: StoryCapabilityContext): ModuleAction[] {
         }
       }
       for (const filePath of readPaths) if (!reads.some((entry) => entry.path === filePath)) reads.push({ path: filePath, revision: null });
-      const operation = buildOperation({ reader: context.reader, reads, writes: filesToWrite, message: `Create Story ${type} ${id}`, effect: type === "scene" || type === "chapter" || type === "volume" ? "structure" : "metadata", operationId: requestedOperationId(input) });
+      const completeReads = [...new Map([...reads, ...referenceReads].map((entry) => [entry.path, entry])).values()];
+      const operation = buildOperation({ reader: context.reader, reads: completeReads, readScopes: await storyEntityScopes(context.reader), writes: filesToWrite, message: `Create Story ${type} ${id}`, effect: type === "scene" || type === "chapter" || type === "volume" ? "structure" : "metadata", operationId: requestedOperationId(input) });
       await context.propose([operation]);
       return { id, type, name: typeof data.name === "string" ? data.name : undefined, tags: data.tags, filePath: path, raw: data };
     }),
@@ -827,9 +984,9 @@ function makeActions(moduleContext: StoryCapabilityContext): ModuleAction[] {
       if (!current) throw new TypeError(`Entity not found: ${String(input.id)}`);
       assertSourceRevision(input, sourceEntityRevision(current));
       const update = await prepareEntityUpdate({ story, context, id: current.id, patch });
-      const operation = buildOperation({ reader: context.reader, operationId: requestedOperationId(input), reads: [{ path: update.path, revision: update.revision }], writes: [{ path: update.path, revision: update.revision, content: update.content }], message: `Update Story entity ${input.id}`, effect: "metadata" });
+      const operation = buildOperation({ reader: context.reader, operationId: requestedOperationId(input), reads: update.reads, writes: [{ path: update.path, revision: update.revision, content: update.content }], message: `Update Story entity ${input.id}`, effect: "metadata" });
       await context.propose([operation]);
-      return { ...update.entity, raw: { ...update.entity.raw, ...patch, id: update.entity.id, type: update.entity.type } };
+      return { ...update.entity, raw: update.raw, revision: sourceEntityRevision({ ...update.entity, raw: update.raw }) };
     }),
     action("story.scene.metadata.update", propose, fieldSchema(["sceneId", "patch"]), async (input, context) => {
       const story = await readStorySnapshot(context.reader);
@@ -837,9 +994,9 @@ function makeActions(moduleContext: StoryCapabilityContext): ModuleAction[] {
       if (scene?.type !== "scene") throw new TypeError("Scene not found");
       assertSourceRevision(input, sourceEntityRevision(scene));
       const update = await prepareEntityUpdate({ story, context, id: scene.id, patch: parseRecord(input.patch, "patch"), effect: "metadata" });
-      const operation = buildOperation({ reader: context.reader, operationId: requestedOperationId(input), reads: [{ path: update.path, revision: update.revision }], writes: [{ path: update.path, revision: update.revision, content: update.content }], message: `Update Story scene metadata ${scene.id}`, effect: "metadata" });
+      const operation = buildOperation({ reader: context.reader, operationId: requestedOperationId(input), reads: update.reads, writes: [{ path: update.path, revision: update.revision, content: update.content }], message: `Update Story scene metadata ${scene.id}`, effect: "metadata" });
       await context.propose([operation]);
-      return { ...scene, raw: { ...scene.raw, ...parseRecord(input.patch, "patch") } };
+      return { ...scene, raw: update.raw, revision: sourceEntityRevision({ ...scene, raw: update.raw }) };
     }),
     action("story.entities.reorder", propose, fieldSchema(["type", "parentId", "orderedIds"]), async (input, context) => {
       if (input.type !== "chapter" && input.type !== "scene") throw new TypeError("type must be chapter or scene");
@@ -1072,6 +1229,76 @@ function makeActions(moduleContext: StoryCapabilityContext): ModuleAction[] {
       await context.propose([operation]);
       return changed;
     }),
+    action("story.zukan-suggestions.list", read, fieldSchema([], ["entityId", "status"]), async (input, context) => {
+      const { rows } = await readZukanSuggestions(context);
+      const story = await readStorySnapshot(context.reader);
+      const entityId = typeof input.entityId === "string" ? input.entityId : undefined;
+      const status = typeof input.status === "string" ? input.status : "pending";
+      if (!new Set(["pending", "approved", "rejected", "stale", "all"]).has(status)) throw new TypeError("status must be pending, approved, rejected, stale, or all");
+      const matching = rows.filter((row) => !entityId || row.entityId === entityId);
+      const suggestions = matching.filter((row) => status === "all" || row.status === status).sort((a, b) =>
+        a.createdAt.localeCompare(b.createdAt) || a.id.localeCompare(b.id),
+      ).map((row) => {
+        const entity = story.entities.get(row.entityId);
+        return {
+          ...row,
+          ...(entity?.name ? { entityName: entity.name } : {}),
+          ...(entity ? { entityRevision: sourceEntityRevision(entity) } : {}),
+        };
+      });
+      return { pendingCount: matching.filter((row) => row.status === "pending").length, suggestions };
+    }),
+    action("story.zukan-suggestions.approve", propose, fieldSchema(["id"], ["id", "entityRevision", "entity_revision", "operationId", "operation_id"]), async (input, context) => {
+      const story = await readStorySnapshot(context.reader);
+      const { rows, revision } = await readZukanSuggestions(context);
+      const index = rows.findIndex((row) => row.id === input.id);
+      if (index < 0) throw new TypeError(`Zukan suggestion not found: ${String(input.id)}`);
+      const prior = rows[index]!;
+      if (prior.status !== "pending") throw new TypeError(`Zukan suggestion is not pending: ${prior.id}`);
+      const entity = story.entities.get(prior.entityId);
+      if (!entity || story.duplicateIds.has(prior.entityId)) throw new TypeError(`Zukan entity is missing or ambiguous: ${prior.entityId}`);
+      const expectedEntityRevision = input.entityRevision ?? input.entity_revision;
+      if (expectedEntityRevision !== undefined && expectedEntityRevision !== sourceEntityRevision(entity)) {
+        throw Object.assign(new Error("The Zukan entity changed after this suggestion was selected"), { code: "operation_precondition_conflict" });
+      }
+      const notes = appendProposedTextToNotes(normalizeNotes(entity.raw.notes), prior.blockPath, prior.proposedText);
+      const update = await prepareEntityUpdate({ story, context, id: entity.id, patch: { notes }, effect: "metadata" });
+      const updated = suggestionForWrite(prior, "approved");
+      rows[index] = updated;
+      const operation = buildOperation({
+        reader: context.reader,
+        reads: [...update.reads, { path: ZUKAN_SUGGESTIONS_PATH, revision }],
+        writes: [
+          { path: update.path, revision: update.revision, content: update.content },
+          { path: ZUKAN_SUGGESTIONS_PATH, revision, content: zukanSuggestionFile(rows) },
+        ],
+        message: `Approve Zukan suggestion ${prior.id}`,
+        effect: "metadata",
+        operationId: requestedOperationId(input),
+      });
+      await context.propose([operation]);
+      const nextEntity = { ...entity, raw: update.raw };
+      return { suggestion: { ...updated, ...(entity.name ? { entityName: entity.name } : {}) }, entityRevision: sourceEntityRevision(nextEntity) };
+    }),
+    action("story.zukan-suggestions.reject", propose, fieldSchema(["id"], ["id", "operationId", "operation_id"]), async (input, context) => {
+      const { rows, revision } = await readZukanSuggestions(context);
+      const index = rows.findIndex((row) => row.id === input.id);
+      if (index < 0) throw new TypeError(`Zukan suggestion not found: ${String(input.id)}`);
+      const prior = rows[index]!;
+      if (prior.status !== "pending") throw new TypeError(`Zukan suggestion is not pending: ${prior.id}`);
+      const updated = suggestionForWrite(prior, "rejected");
+      rows[index] = updated;
+      const operation = buildOperation({
+        reader: context.reader,
+        reads: [{ path: ZUKAN_SUGGESTIONS_PATH, revision }],
+        writes: [{ path: ZUKAN_SUGGESTIONS_PATH, revision, content: zukanSuggestionFile(rows) }],
+        message: `Reject Zukan suggestion ${prior.id}`,
+        effect: "metadata",
+        operationId: requestedOperationId(input),
+      });
+      await context.propose([operation]);
+      return { suggestion: updated };
+    }),
     action("story.reader-model.build", compute, fieldSchema(["chapterId"], ["chapterId"]), async (input, context) => {
       const story = await readStorySnapshot(context.reader, { includeManuscripts: true });
       const chapterId = stringValue(input.chapterId, "chapterId");
@@ -1189,7 +1416,16 @@ function makeActions(moduleContext: StoryCapabilityContext): ModuleAction[] {
       const work = await readStorySnapshot(context.reader);
       const bible = await readStorySnapshot(linked);
       const merged = mergeSeriesOverlay({ snapshot: context.reader.snapshot, workEntities: work.entities, workLinks: work.links, bibleEntities: bible.entities, bibleLinks: bible.links }).data;
-      return { entities: [...merged.entities.values()], links: merged.links, workSnapshot: context.reader.snapshot, bibleSnapshot: linked.snapshot, binding, series };
+      return {
+        entities: [...merged.entities.values()],
+        workEntities: [...work.entities.values()],
+        bibleEntities: [...bible.entities.values()],
+        links: merged.links,
+        workSnapshot: context.reader.snapshot,
+        bibleSnapshot: linked.snapshot,
+        binding,
+        series,
+      };
     }),
   ];
 }

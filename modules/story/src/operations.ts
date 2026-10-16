@@ -5,6 +5,7 @@ import type {
   FileRevision,
   ModuleActionContext,
   SnapshotReader,
+  ScopeRevision,
   ValueSchema,
 } from "@scriptorium/contracts";
 
@@ -46,6 +47,7 @@ export function buildOperation(input: {
   reader: SnapshotReader;
   reads: FileRevision[];
   writes: ProposedWrite[];
+  readScopes?: ScopeRevision[];
   message: string;
   effect: ChangeOperation["effect"];
   operationId?: string;
@@ -60,6 +62,7 @@ export function buildOperation(input: {
     baseRemoteCommit: input.reader.snapshot.remoteCommit,
     effect: input.effect,
     reads: input.reads,
+    ...(input.readScopes ? { readScopes: input.readScopes } : {}),
     writes: input.writes.map((write): FileChange => ({
       path: write.path,
       revision: write.revision,
