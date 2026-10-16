@@ -11,4 +11,4 @@ Read [Core Architecture](docs/architecture/CORE.md) for product ownership and de
 Work on issue-scoped isolated branches; never commit implementation directly to `main`. Inari agent usage is currently suspended by organization policy. Do not migrate unrelated Arcadia features or publish private project data.
 
 ## Validation
-Run only the focused checks defined by each accepted Issue. No runtime validation command exists until the initial Core workspace has been implemented.
+Use `pnpm install --frozen-lockfile`, `pnpm typecheck`, `pnpm test`, `pnpm build`, and `pnpm audit:core`. Run the browser and OCI acceptance checks described in the verification documentation when changing their production paths. Never run or synchronize GitHub Actions, CI workflows, or organization templates for this initial Core recovery.
