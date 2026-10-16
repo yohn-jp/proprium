@@ -600,10 +600,9 @@ export class ModuleRuntime {
       return actionFailure(host.reader.snapshot, machineError("action_not_found", `Namespaced action ${actionId} is unavailable`));
     }
     const owner = actionId.slice(0, separator);
-    const localActionId = actionId.slice(separator + 1);
     if (owner === "core") return this.invokeCoreAction(actionId, input, host, signal, depth, inheritedEffect);
     if (!isModuleId(owner)) return actionFailure(host.reader.snapshot, machineError("action_not_found", `Namespaced action ${actionId} is unavailable`));
-    return this.invokeModuleAction(owner, localActionId, input, host, signal, depth, inheritedEffect);
+    return this.invokeModuleAction(owner, actionId, input, host, signal, depth, inheritedEffect);
   }
 
   private effectAllowed(parent: ModuleAction["effect"], child: ModuleAction["effect"]): boolean {

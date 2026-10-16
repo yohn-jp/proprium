@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import { fileURLToPath } from "node:url";
 import { test } from "node:test";
 import type { ActionResult, ChangeOperation, ChangeProposal, JobRequest, ModuleAction, ModuleActionContext, ModuleDefinition, ModuleId, ModuleManifest, SnapshotId, ValueSchema, WorkerService } from "@scriptorium/contracts";
+import { createStoryActions } from "../../../modules/story/src/actions.js";
 import { ModuleRuntime, ModuleRuntimeError, resolveModulePlan, SharedCapabilityPool } from "./index.js";
 
 const snapshot: SnapshotId = {
@@ -369,31 +370,50 @@ test("disabling a consumer cancels its provider-owned job and keeps the shared c
 
 test("a per-call abort cancels a real nested worker while its outer action remains active", async () => {
   const nlp = manifest("nlp", { provides: ["nlp.tokenizer"], workerEntry: "worker-service.mjs" });
-  const story = manifest("story", { dependencies: ["nlp"], requires: ["nlp.tokenizer"] });
+  const story = manifest("story", {
+    optionalRequires: ["nlp.tokenizer"],
+    statePaths: ["bible", "plot", "manuscript", "meta/scriptorium/modules/story"],
+    serverEntry: "./dist/index.js",
+    browserEntry: "./dist/browser.js",
+  });
+  const speaker = manifest("speaker", { dependencies: ["story"] });
   const perCall = new AbortController();
   let finishOuter: (() => void) | undefined;
   let markNestedFinished!: (value: { result: ActionResult; outerAborted: boolean }) => void;
   const nestedFinished = new Promise<{ result: ActionResult; outerAborted: boolean }>((resolve) => { markNestedFinished = resolve; });
   const runtime = new ModuleRuntime({
-    manifests: [nlp, story], enabled: ["nlp", "story"], cacheDirectory: "/tmp/scriptorium-runtime-test",
+    manifests: [nlp, story, speaker], enabled: ["nlp", "story", "speaker"], cacheDirectory: "/tmp/scriptorium-runtime-test",
     workerEntries: { nlp: fileURLToPath(new URL("./fixtures/worker-service.mjs", import.meta.url)) },
     loaders: {
-      nlp: async (context) => ({
+      nlp: async () => ({
         manifest: nlp, actions: [], ui: [],
         capabilities: [{
           id: "nlp.tokenizer", version: "1.0.0",
-          async create(providerContext) { return providerContext.createWorkerService(); },
-          async dispose(service) { await service.dispose(); },
+          async create(providerContext) {
+            const service = await providerContext.createWorkerService();
+            return {
+              service,
+              async analyze(_text: string, selectedSnapshot: SnapshotId, signal: AbortSignal) {
+                const outcome = await service.request(jobRequest("nlp", {
+                  task: "hold", snapshot: selectedSnapshot, moduleVersion: nlp.version, deadline: Date.now() + 60_000,
+                }), signal);
+                if (!outcome.ok) throw Object.assign(new Error(outcome.error.message), { code: outcome.error.code });
+                return { tokens: [] };
+              },
+            };
+          },
+          async dispose(tokenizer) { await tokenizer.service.dispose(); },
         }],
         async dispose() {},
       }),
-      story: async (context) => ({
-        manifest: story,
+      story: async (context) => ({ manifest: story, actions: createStoryActions(context), ui: [], async dispose() {} }),
+      speaker: async () => ({
+        manifest: speaker,
         actions: [
           {
-            id: "outer", effect: "compute", inputSchema: schema, outputSchema: schema,
+            id: "speaker.attribute", effect: "compute", inputSchema: schema, outputSchema: schema,
             async invoke(_input: unknown, action: ModuleActionContext) {
-              const result = await action.invoke("story.nested", {}, perCall.signal);
+              const result = await action.invoke("story.entities.suggested-tags", { id: "char-1" }, perCall.signal);
               const hold = new Promise<void>((resolve) => { finishOuter = resolve; });
               markNestedFinished({ result, outerAborted: action.signal.aborted });
               await hold;
@@ -401,14 +421,12 @@ test("a per-call abort cancels a real nested worker while its outer action remai
             },
           },
           {
-            id: "nested", effect: "compute", inputSchema: schema, outputSchema: schema,
+            id: "speaker.read-only", effect: "read", inputSchema: schema, outputSchema: schema,
             async invoke(_input: unknown, action: ModuleActionContext) {
-              const lease = await context.acquireCapability<WorkerService>("nlp.tokenizer");
-              const outcome = await lease.value.request(jobRequest("nlp", {
-                task: "hold", moduleVersion: nlp.version, deadline: Date.now() + 60_000,
-              }), action.signal);
-              if (!outcome.ok) return { ok: false, snapshot: action.reader.snapshot, error: outcome.error };
-              return { ok: true, snapshot: action.reader.snapshot, data: outcome.result.output };
+              const result = await action.invoke("story.entities.suggested-tags", { id: "char-1" });
+              return { ok: true, snapshot: action.reader.snapshot, data: {
+                nestedError: result.ok ? null : result.error.code,
+              } };
             },
           },
         ],
@@ -417,7 +435,20 @@ test("a per-call abort cancels a real nested worker while its outer action remai
     },
   });
 
-  const invocation = runtime.invokeAction("story", "story.outer", {}, readContext());
+  const reader = {
+    snapshot,
+    async list(prefix: string) {
+      return prefix === "bible" ? ["bible/characters/char-1/profile.yaml"] : [];
+    },
+    async read(path: string) {
+      if (path === "bible/characters/char-1/profile.yaml") {
+        return { content: "id: char-1\nname: Character\nnotes: A character with enough text to request local tokenization.\n", revision: "r1" };
+      }
+      return null;
+    },
+  };
+  const host = { ...readContext(), reader };
+  const invocation = runtime.invokeAction("speaker", "speaker.attribute", { id: "char-1" }, host);
   await new Promise<void>((resolve, reject) => {
     let attempts = 0;
     const check = () => {
@@ -436,12 +467,16 @@ test("a per-call abort cancels a real nested worker while its outer action remai
   assert.equal(nested.result.ok, false);
   if (!nested.result.ok) assert.equal(nested.result.error.code, "action_cancelled");
   assert.equal(runtime.workerSupervisor.activeJobCountFor("nlp"), 0, "the worker has settled its cancelled job");
-  assert.equal(runtime.status("story").availability, "active", "the outer action remains in flight");
-  assert.doesNotThrow(() => process.kill(pid!, 0), "the provider service remains alive for the outer action's module session");
+  assert.equal(runtime.status("speaker").availability, "active", "the outer action remains in flight");
+  assert.throws(() => process.kill(pid!, 0), (error: unknown) => (error as NodeJS.ErrnoException).code === "ESRCH", "the canceled Story capability releases its actual child while the speaker action remains active");
 
   finishOuter?.();
   const result = await invocation;
   assert.equal(result.ok, true, JSON.stringify(result));
+  const readOnly = await runtime.invokeAction("speaker", "speaker.read-only", {}, readContext());
+  assert.equal(readOnly.ok, true, JSON.stringify(readOnly));
+  if (readOnly.ok) assert.deepEqual(readOnly.data, { nestedError: "action_effect_denied" });
+  await runtime.disable("speaker");
   await runtime.disable("story");
   await runtime.disable("nlp");
   assert.throws(() => process.kill(pid!, 0), (error: unknown) => (error as NodeJS.ErrnoException).code === "ESRCH");
