@@ -560,6 +560,40 @@ test("author proposal review exposes defensive copies and durable checkpoint sta
   }
 });
 
+test("proposal status counts approved and checkpointed operations only once", async () => {
+  const fixture = await remoteFixture();
+  try {
+    const store = new CoreStore({ dataDir: path.join(fixture.root, "state"), allowLocalRemotes: true });
+    const project = await store.registerProject({ url: fixture.remote });
+    const snapshot = (await store.observe(project.id)).snapshot;
+    const first = operation(snapshot, "manuscript/status-first.md", "First operation.\n", null, "status_union_first");
+    const second = operation(snapshot, "manuscript/status-second.md", "Second operation.\n", null, "status_union_second");
+    const proposal = await store.propose(project.id, {
+      id: "status_union_proposal",
+      snapshot,
+      operations: [first, second],
+      source: "module",
+    });
+
+    await store.approve(project.id, { proposalId: proposal.id, operationIds: [first.id], authorScope: "owner" });
+    await store.checkpoint(project.id, first);
+    let status = await store.getProposal(project.id, proposal.id);
+    assert.equal(status?.state, "partially_approved");
+    assert.deepEqual(status?.approvedOperationIds, [first.id]);
+    assert.deepEqual(status?.checkpoints.map((receipt) => receipt.operationId), [first.id]);
+
+    await store.approve(project.id, { proposalId: proposal.id, operationIds: [first.id, second.id], authorScope: "owner" });
+    status = await store.getProposal(project.id, proposal.id);
+    assert.equal(status?.state, "approved");
+    await store.checkpoint(project.id, second);
+    status = await store.getProposal(project.id, proposal.id);
+    assert.equal(status?.state, "checkpointed");
+    assert.deepEqual(status?.checkpoints.map((receipt) => receipt.operationId), [first.id, second.id]);
+  } finally {
+    await fs.rm(fixture.root, { recursive: true, force: true });
+  }
+});
+
 test("approval is rejected when the proposal's remote snapshot has changed", async () => {
   const fixture = await remoteFixture();
   try {
