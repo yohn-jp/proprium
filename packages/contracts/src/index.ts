@@ -75,9 +75,15 @@ export interface ChangeProposal {
   source: "author" | "module" | "mcp";
   evidence?: ProposalEvidence[];
 }
-/** Author review state, including the complete recoverable proposal payload. */
+/** Author review state. Unaccepted payload remains in private/browser recovery. */
 export interface ProposalStatus {
   proposal: ChangeProposal;
+  /** False when Git recovery contains only accepted operations, without provisional evidence. */
+  payloadComplete?: boolean;
+  /** Digest binding of the original complete normalized proposal, including provisional data. */
+  originalDigest?: string;
+  /** Original proposal operation IDs in order, including privately retained operations. */
+  operationIds?: string[];
   state: "proposed" | "partially_approved" | "approved" | "checkpointed";
   approvedOperationIds: string[];
   checkpoints: CheckpointReceipt[];
