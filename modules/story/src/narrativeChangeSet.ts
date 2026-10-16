@@ -524,8 +524,9 @@ async function storyEntityScopes(context: ModuleActionContext, files: Map<string
 }
 function setFileWrite(files: Map<string, VirtualFile>, reads: Map<string, string | null>, writes: Map<string, { revision: string | null; content: string | null }>, path: string, content: string): void {
   const prior = files.get(path);
-  if (!reads.has(path)) reads.set(path, prior?.revision ?? null);
-  writes.set(path, { revision: prior?.revision ?? null, content });
+  const revision = reads.has(path) ? reads.get(path) ?? null : prior?.revision ?? null;
+  reads.set(path, revision);
+  writes.set(path, { revision, content });
   files.set(path, { content, revision: revisionOf(content) });
 }
 function writeEntity(entity: WorkEntity, content: string, files: Map<string, VirtualFile>, reads: Map<string, string | null>, writes: Map<string, { revision: string | null; content: string | null }>): void {

@@ -476,6 +476,10 @@ test("NarrativeChangeSet preserves all nine source operation kinds in one identi
   assert.deepEqual(coreProposal.operations.map((operation) => operation.id), Object.values(data.operationMap));
   const createLocation = coreProposal.operations[0]!;
   const createScene = coreProposal.operations[1]!;
+  const createdScenePath = "plot/volumes/vol-main/chapters/ch-main-1/scenes/sc-new.yaml";
+  assert.equal(createScene.reads.find((read) => read.path === createdScenePath)?.revision, null);
+  assert.equal(createScene.writes.find((write) => write.path === createdScenePath)?.revision, null,
+    "rewriting a virtual scene within one source operation keeps its original Core absence precondition");
   assert.deepEqual(createLocation.readScopes?.map((scope) => scope.prefix).sort(), ["bible", "plot"]);
   assert.deepEqual(createScene.readScopes?.map((scope) => scope.prefix).sort(), ["bible", "plot"]);
   const bibleScope = (operation: ChangeOperation) => operation.readScopes?.find((scope) => scope.prefix === "bible")?.revision;
