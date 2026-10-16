@@ -169,6 +169,9 @@ importers:
       '@playwright/test':
         specifier: ^1.64.1
         version: 1.64.1
+      '@scriptorium/api':
+        specifier: workspace:*
+        version: link:packages/api
       '@scriptorium/module-assistant':
         specifier: workspace:*
         version: link:modules/assistant

@@ -30,6 +30,7 @@
     "@scriptorium/module-speaker": "workspace:*",
     "@scriptorium/module-assistant": "workspace:*",
     "@scriptorium/module-publishing": "workspace:*",
-    "@scriptorium/module-mcp": "workspace:*"
+    "@scriptorium/module-mcp": "workspace:*",
+    "@scriptorium/api": "workspace:*"
   }
 }
