@@ -26,6 +26,10 @@ test('Core audit distinguishes installed optional modules from its actual produc
     const dependency = run();
     assert.notEqual(dependency.status, 0);
     assert.match(dependency.stderr, /runtime dependency @scriptorium\/module-story/);
+    await manifest('packages/core', { name: '@scriptorium/core', version: '1.0.0', peerDependencies: { '@scriptorium/module-story': '1.0.0' } });
+    assert.notEqual(run().status, 0, 'peer-only runtime dependency must enter Core closure');
+    await manifest('packages/core', { name: '@scriptorium/core', version: '1.0.0', peerDependencies: { 'absent-optional-peer': '1.0.0' }, peerDependenciesMeta: { 'absent-optional-peer': { optional: true } } });
+    assert.equal(run().status, 0, 'missing optional peer does not enter closure');
     await manifest('packages/core', { name: '@scriptorium/core', version: '1.0.0' });
     await mkdir(path.join(root, 'compiled'), { recursive: true });
     await writeFile(path.join(root, 'compiled/index.js'), 'import "@scriptorium/module-story";');

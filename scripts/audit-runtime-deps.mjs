@@ -99,6 +99,14 @@ async function productionClosure(roots) {
     for (const dependency of Object.keys(manifest.dependencies ?? {})) {
       await visit(await resolveDependency(resolved, dependency));
     }
+    for (const dependency of Object.keys(manifest.peerDependencies ?? {})) {
+      const optional = manifest.peerDependenciesMeta?.[dependency]?.optional === true;
+      const location = await resolveDependency(resolved, dependency).catch(error => {
+        if (!optional) throw error;
+        return null;
+      });
+      if (location) await visit(location);
+    }
     for (const dependency of Object.keys(manifest.optionalDependencies ?? {})) {
       const location = await resolveDependency(resolved, dependency).catch(() => null);
       if (location) await visit(location);
