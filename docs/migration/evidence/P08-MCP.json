@@ -6,7 +6,8 @@
   },
   "target": {
     "branch": "work/7-p08-mcp",
-    "implementationCommit": "b7d11ad933d2d6c4df4ce4cc8bc1cf609e9c9be6"
+    "implementationCommit": "7b9b1a246842acfc4be33cbf97039112cb382515",
+    "testedHead": "eb9e44fab07e67150d8e26db9b6ea9c2fe49c5b0"
   },
   "ledger": {
     "R48": {
@@ -45,7 +46,7 @@
     "P08-sdk-http-component": "The real @modelcontextprotocol/sdk WebStandard Streamable HTTP server and client complete initialization, tool discovery, and action invocation against a ModuleActionContext test host. The transport uses Web Standard Request/Response APIs and binds each request to its authenticated project action context.",
     "P08-bearer-stdio-client": "The stdio API client sends owner bearer authentication to the namespaced project action/proposal API, validates project discovery responses, can bind a selected owner project, and submits proposal IDs without caller-controlled source. These are API-client tests; a spawned stdio process against a running composed API is not yet verified.",
     "P08-mutation-boundary": "All persistent MCP mutations are routed to canonical proposal actions. create_scene invokes story.entities.create, update_entity invokes story.entities.update, lint_manuscript fix invokes diagnostics.proposeLintFix, and submit_change_set passes the complete validated source NarrativeChangeSet v1 payload to story.changes.propose. The MCP surface exposes no author approval, apply, checkpoint, reconciliation, or publication operation; generic action invocation rejects those operation names.",
-    "P08-source-tools-registered": "The SDK test confirms all 27 source tool names remain registered, alongside project/action discovery and status/history/observation tools. Tools whose owning producer action is absent return typed MODULE_UNAVAILABLE or ACTION_UNAVAILABLE results instead of performing a substitute mutation. Current partial mappings include literal Core search (source search also has semantic behavior), text-only diagnostics (source get_diagnostics also composes speaker checks), and Core proposal status (source ChangeSet result/readback shaping remains pending).",
+    "P08-source-tools-registered": "The SDK test confirms all 27 source tool names remain registered, alongside project/action discovery and status/history/observation tools. Tools whose owning producer action is absent return typed MODULE_UNAVAILABLE or ACTION_UNAVAILABLE results instead of performing a substitute action. The hybrid search tool and full get_diagnostics tool now fail closed until their exact semantic and speaker-composed actions are available. Core proposal status is available, while source ChangeSet result/readback shaping remains pending.",
     "P08-context-manifest-parity": "The context-manifest tests verify source-compatible FNV-1a selection identity, Unicode character bounds and title truncation, the 50,000-character manuscript cap, 5,000-character selection limit, source revisions, manifest-only omission, and provenance fields.",
     "P08-proposal-only-mutations": "Source HTTP create_scene and lint-fix direct-write paths and source stdio lint persistence are replaced by proposal actions. No MCP handler writes project files or commits directly."
   },
@@ -64,7 +65,7 @@
     },
     {
       "command": "pnpm --filter @scriptorium/module-mcp test",
-      "result": "passed, 8 of 8 component tests; SDK protocol and action clients are exercised with test host/fetch implementations, not the integrated runtime"
+      "result": "passed, 9 of 9 component tests; SDK protocol and action clients are exercised with test host/fetch implementations, not the integrated runtime"
     },
     {
       "command": "pnpm --filter @scriptorium/module-mcp build",
@@ -77,7 +78,7 @@
   ],
   "compositionLimits": [
     "The module returns no model, embedding, or NLP service requirements, but provider-none behavior has not yet been exercised through the final composed runtime.",
-    "The source search tool currently maps to literal Core search and does not preserve semantic search. The source get_diagnostics tool currently maps to text diagnostics and does not include speaker attribution/voice/style checks. Source ChangeSet get/list still expose Core proposal status rather than the source envelope with operation-level result identities, partial results, and resulting revisions.",
+    "The source hybrid search and full get_diagnostics tools remain unavailable until their exact semantic and speaker-composed producer actions are integrated. Source ChangeSet get/list still expose Core proposal status rather than the source envelope with operation-level result identities, partial results, and resulting revisions.",
     "Several source tools are registered but return typed availability errors until their owning Story, Diagnostics, Speaker, Semantic, or Assistant action producers are integrated. These include rewrite/format, reload, speaker-dependent diagnostics/dialogue, consistency/continuity, and co-occurrence.",
     "The test suite has not yet exercised a spawned stdio process, composed P08 API route, real Runtime/Core action context, or end-to-end proposal approval/checkpoint lifecycle."
   ]
