@@ -1,6 +1,6 @@
 # Scriptorium — Full migration architecture
 
-Status: proposed execution contract for Epic #7; this document does not claim implementation or runtime verification. The existing Core remains the shipped MVP until this campaign changes it. The latest explicit owner instructions take precedence.
+Status: accepted execution contract for Epic #7 by the owner’s 2026-10-17 campaign dispatch. Implementation and acceptance progress are tracked separately in `docs/migration/CAMPAIGN.json`; this architecture alone claims no runtime verification. The latest explicit owner instructions take precedence.
 
 Companion: [execution and coverage plan](../migration/FULL-MIGRATION-PLAN.md).
 
