@@ -648,8 +648,17 @@ export function registerMcpTools(server: McpServer, baseClient: McpActionClient)
       scene_id: z.string().describe("Saved scene ID"),
       text: z.string().optional().describe("Optional caller-supplied text; defaults to saved manuscript"),
     },
-    guarded(async ({ project_id }) =>
-      unavailableModuleAction(scopedClient(baseClient, project_id), "diagnostics", "get_diagnostics")),
+    guarded(async ({ project_id, scene_id, text }) => {
+      const client = scopedClient(baseClient, project_id);
+      const actions = await client.listActions();
+      if (!actions.some((action) => action.id === "diagnostics.scene")) {
+        return unavailableModuleAction(client, "diagnostics", "get_diagnostics");
+      }
+      return invoke(client, "diagnostics.scene", {
+        sceneId: scene_id,
+        ...(text === undefined ? {} : { text }),
+      });
+    }),
   );
 
   server.tool(
@@ -715,11 +724,14 @@ export function registerMcpTools(server: McpServer, baseClient: McpActionClient)
       if (!proposalResult.ok) return actionResult(proposalResult);
       const data = isRecord(proposalResult.data) ? proposalResult.data : {};
       const coreProposalId = coreProposalIdForChangeSet(change_set.id);
+      const returnedProposalId = proposalResult.proposals?.[0]?.id;
+      const replayed = data.replayed === true;
       if (
         data.changeSetId !== change_set.id ||
         data.coreProposalId !== coreProposalId ||
         data.proposalId !== coreProposalId ||
-        proposalResult.proposals?.[0]?.id !== coreProposalId
+        (returnedProposalId !== undefined && returnedProposalId !== coreProposalId) ||
+        (returnedProposalId === undefined && !replayed)
       ) {
         return errorResult("INVALID_RESPONSE", "Story proposal did not preserve the source ChangeSet identity mapping");
       }
@@ -1100,7 +1112,38 @@ export function registerMcpTools(server: McpServer, baseClient: McpActionClient)
     "format_manuscript",
     "Propose source-compatible formatting for a saved scene manuscript",
     { project_id: projectIdSchema, scene_id: sceneIdSchema.describe("Saved scene ID") },
-    guarded(async ({ project_id }) =>
-      unavailableModuleAction(scopedClient(baseClient, project_id), "assistant", "format_manuscript")),
+    guarded(async ({ project_id, scene_id }) => {
+      const client = scopedClient(baseClient, project_id);
+      const actions = await client.listActions();
+      if (!actions.some((action) => action.id === "diagnostics.formatManuscript")) {
+        return unavailableModuleAction(client, "diagnostics", "format_manuscript");
+      }
+      const result = await client.invoke("diagnostics.formatManuscript", {
+        sceneId: scene_id,
+        registerProposal: false,
+      });
+      if (!result.ok) return actionResult(result);
+      if (!isRecord(result.data) ||
+          result.data.actionId !== "format-manuscript" ||
+          typeof result.data.resultId !== "string" ||
+          !(result.data.proposalId === null || typeof result.data.proposalId === "string") ||
+          !(result.data.sourceProposal === null || isRecord(result.data.sourceProposal))) {
+        return errorResult("INVALID_RESPONSE", "Formatter action did not return its source-compatible result identity");
+      }
+      const proposal = result.data.sourceProposal;
+      const proposalId = result.data.proposalId;
+      if (proposal !== null && (!isRecord(proposal) || typeof proposal.id !== "string" || proposalId !== proposal.id)) {
+        return errorResult("INVALID_RESPONSE", "Formatter proposal identity does not match its source result");
+      }
+      if (proposal === null && proposalId !== null) {
+        return errorResult("INVALID_RESPONSE", "Formatter returned a proposal ID without a proposal");
+      }
+      return outputResult({
+        action_id: "format-manuscript",
+        result_id: result.data.resultId,
+        proposal_id: proposalId,
+        proposal,
+      }, result.snapshot);
+    }),
   );
 }

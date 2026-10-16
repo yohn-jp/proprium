@@ -38,7 +38,7 @@ const ACCESS_TOKEN = randomBytes(32).toString("base64url");
 const INITIAL_NAME = "Uma";
 const UPDATED_NAME = "Uma Reviewed";
 const SECOND_NAME = "Haru";
-const MANUSCRIPT = "# Scene One\n\nUma enters the cafe at dusk.\n\n星野は灯りを見た。『俺が行く。』\n";
+const MANUSCRIPT = "# Scene One\n\nUma enters the cafe at dusk.\n\n　星野は灯りを見た。『俺が行く。』\n";
 
 function fixtureFiles() {
   return {
@@ -365,6 +365,10 @@ test("spawned stdio and production HTTP MCP preserve Core review boundaries thro
     assert.ok(actionIds.has(action), `Composed runtime omitted ${action}`);
   }
   if (READY_MODULES.includes("semantic")) assert.ok(actionIds.has("semantic.search"));
+  if (READY_MODULES.includes("diagnostics")) {
+    assert.ok(actionIds.has("diagnostics.formatManuscript"));
+    assert.ok(actionIds.has("diagnostics.scene"));
+  }
   if (READY_MODULES.includes("speaker")) {
     assert.ok(actionIds.has("speaker.dialogue.list"));
     assert.ok(actionIds.has("speaker.voice.check"));
@@ -462,16 +466,132 @@ test("spawned stdio and production HTTP MCP preserve Core review boundaries thro
       assert.equal(errorCode(unavailable, tool), "MODULE_UNAVAILABLE");
     }
   }
-  const fullDiagnostics = await http.client.callTool({
-    name: "get_diagnostics", arguments: { project_id: projectId, scene_id: "sc-1" },
-  });
-  assert.equal(errorCode(fullDiagnostics, "get_diagnostics"), "ACTION_UNAVAILABLE");
-  for (const [tool, args] of [
-    ["suggest_rewrite", { project_id: projectId, scene_id: "sc-1", sentence_index: 0 }],
-    ["format_manuscript", { project_id: projectId, scene_id: "sc-1" }],
-  ]) {
-    assert.equal(errorCode(await stdio.client.callTool({ name: tool, arguments: args }), tool), "MODULE_UNAVAILABLE");
+  if (READY_MODULES.includes("diagnostics") && READY_MODULES.includes("speaker")) {
+    const httpDiagnostics = success(await http.client.callTool({
+      name: "get_diagnostics", arguments: { project_id: projectId, scene_id: "sc-1" },
+    }), "HTTP full get_diagnostics");
+    const stdioDiagnostics = success(await stdio.client.callTool({
+      name: "get_diagnostics", arguments: { project_id: projectId, scene_id: "sc-1" },
+    }), "stdio full get_diagnostics");
+    for (const [name, diagnostics] of [["HTTP", httpDiagnostics], ["stdio", stdioDiagnostics]]) {
+      assert.ok(diagnostics.snapshot?.remoteCommit, `${name} full diagnostics omitted its pinned snapshot`);
+      assert.equal(diagnostics.data.tier, "full", `${name} diagnostics silently degraded from the source full tier`);
+      assert.match(diagnostics.data.textHash, /^[a-f0-9]{8}$/u);
+      assert.ok(diagnostics.data.analysis);
+      assert.deepEqual(diagnostics.data.analysis, analysis.data.analysis,
+        `${name} full diagnostics did not preserve the canonical text-analysis DTO`);
+      assert.ok(Array.isArray(diagnostics.data.speakerAttributions));
+      assert.ok(Array.isArray(diagnostics.data.clusterTrails));
+      assert.ok(Array.isArray(diagnostics.data.voiceWarnings));
+      assert.ok(Array.isArray(diagnostics.data.styleDeviations));
+      assert.ok(Array.isArray(diagnostics.data.stylometricDeviations));
+      assert.ok(Array.isArray(diagnostics.data.plotSemanticWarnings));
+      assert.ok(diagnostics.data.proseBalance);
+      assert.ok(Array.isArray(diagnostics.data.synonymSuggestions));
+      assert.ok(Array.isArray(diagnostics.data.issues));
+      assert.equal(new Set(diagnostics.data.issues.map((issue) => issue.id)).size, diagnostics.data.issues.length,
+        `${name} source diagnostic issue IDs must be unique after normalization`);
+      for (const issue of diagnostics.data.issues) {
+        assert.equal(typeof issue.id, "string");
+        assert.equal(typeof issue.kind, "string");
+        assert.ok(["info", "medium", "critical"].includes(issue.severity));
+      }
+    }
+    assert.deepEqual(httpDiagnostics.snapshot, stdioDiagnostics.snapshot,
+      "HTTP and stdio full diagnostics must use the same selected Core snapshot");
+  } else if (READY_MODULES.includes("diagnostics")) {
+    const unavailable = await http.client.callTool({
+      name: "get_diagnostics", arguments: { project_id: projectId, scene_id: "sc-1" },
+    });
+    assert.equal(errorCode(unavailable, "get_diagnostics without speaker module"), "component_unavailable");
+  } else {
+    assert.equal(errorCode(await http.client.callTool({
+      name: "get_diagnostics", arguments: { project_id: projectId, scene_id: "sc-1" },
+    }), "get_diagnostics without diagnostics module"), "MODULE_UNAVAILABLE");
   }
+
+  if (READY_MODULES.includes("diagnostics")) {
+    const beforeFormat = await readRemoteFile(fixture.remote, "manuscript/vol-main/ch-main-1/sc-1.md");
+    const formatStdio = success(await stdio.client.callTool({
+      name: "format_manuscript", arguments: { project_id: projectId, scene_id: "sc-1" },
+    }), "stdio format_manuscript");
+    const formatHttp = success(await http.client.callTool({
+      name: "format_manuscript", arguments: { project_id: projectId, scene_id: "sc-1" },
+    }), "HTTP format_manuscript");
+    for (const [name, formatted] of [["stdio", formatStdio], ["HTTP", formatHttp]]) {
+      assert.ok(formatted.snapshot?.remoteCommit, `${name} formatter omitted its pinned snapshot`);
+      assert.equal(formatted.data.action_id, "format-manuscript");
+      assert.match(formatted.data.result_id, /^na-[a-f0-9]{64}$/u);
+      assert.equal(formatted.data.proposal_id, formatted.data.proposal?.id);
+      assert.equal(formatted.data.proposal.schemaVersion, 1);
+      assert.equal(formatted.data.proposal.status, "proposed");
+      assert.equal(formatted.data.proposal.operations.length, 1);
+      assert.equal(formatted.data.proposal.operations[0].kind, "manuscript.replace-range");
+      assert.equal("proposals" in formatted, false,
+        `${name} formatter must return the source NarrativeChangeSet without registering a Core proposal`);
+    }
+    assert.equal(formatStdio.data.result_id, formatHttp.data.result_id,
+      "The source formatter result identity must be stable across transports");
+    assert.equal(formatStdio.data.proposal_id, formatHttp.data.proposal_id,
+      "The source formatter proposal identity must be stable across transports");
+    assert.equal(await readRemoteFile(fixture.remote, "manuscript/vol-main/ch-main-1/sc-1.md"), beforeFormat,
+      "format_manuscript wrote persistent project content instead of proposing a change");
+
+    let proposalsBeforeSubmit = await ownerJson(host, cookie, `/api/projects/${encodeURIComponent(projectId)}/proposals`);
+    assert.equal(proposalsBeforeSubmit.proposals.some((item) => item.proposal?.id === formatStdio.data.proposal_id), false,
+      "format_manuscript must return a source proposal without registering Core state before submit_change_set");
+    const formatChangeSet = formatStdio.data.proposal;
+    const formattedSubmission = success(await stdio.client.callTool({
+      name: "submit_change_set", arguments: { project_id: projectId, change_set: formatChangeSet },
+    }), "submit formatted source ChangeSet");
+    assert.equal(formattedSubmission.changeSet.id, formatChangeSet.id);
+    assert.equal(formattedSubmission.status, "proposed");
+    const formattedReplay = success(await http.client.callTool({
+      name: "submit_change_set", arguments: { project_id: projectId, change_set: formatChangeSet },
+    }), "replay formatted source ChangeSet");
+    assert.equal(formattedReplay.changeSet.id, formatChangeSet.id);
+    assert.equal(formattedReplay.status, "proposed");
+    const formattedPending = success(await http.client.callTool({
+      name: "get_change_set", arguments: { project_id: projectId, change_set_id: formatChangeSet.id },
+    }), "formatted source ChangeSet readback");
+    assert.deepEqual(formattedPending.changeSet, formatChangeSet,
+      "get_change_set must preserve the complete source formatter NarrativeChangeSet");
+    assert.equal(formattedPending.status, "proposed");
+    proposalsBeforeSubmit = await ownerJson(host, cookie, `/api/projects/${encodeURIComponent(projectId)}/proposals`);
+    const formatCoreStatus = proposalsBeforeSubmit.proposals.find((item) => item.proposal?.id === formatChangeSet.id);
+    assert.ok(formatCoreStatus, "Story did not register the submitted formatter NarrativeChangeSet");
+    assert.equal(formatCoreStatus.proposal.operations.length, 1);
+    const formatOperationId = formatCoreStatus.proposal.evidence
+      .find((item) => item.kind === "source.narrative-change-set.v1")
+      ?.details?.operationMap?.[formatChangeSet.operations[0].id];
+    assert.equal(typeof formatOperationId, "string", "Story omitted the formatter source operation mapping");
+    await ownerJson(host, cookie, `/api/projects/${encodeURIComponent(projectId)}/approvals`, {
+      method: "POST", status: 204, body: { proposalId: formatChangeSet.id, operationIds: [formatOperationId] },
+    });
+    const formatOperation = formatCoreStatus.proposal.operations.find((operation) => operation.id === formatOperationId);
+    assert.ok(formatOperation, "Formatter Core proposal omitted its mapped operation");
+    await ownerJson(host, cookie, `/api/projects/${encodeURIComponent(projectId)}/checkpoints`, {
+      method: "POST", status: 201, body: formatOperation,
+    });
+    const formattedApplied = success(await stdio.client.callTool({
+      name: "get_change_set", arguments: { project_id: projectId, change_set_id: formatChangeSet.id },
+    }), "checkpointed formatted source ChangeSet readback");
+    assert.equal(formattedApplied.status, "applied");
+    assert.deepEqual(formattedApplied.approvedOperationIds, [formatChangeSet.operations[0].id]);
+    assert.equal(formattedApplied.result.operations.length, 1);
+    assert.equal(await readRemoteFile(fixture.remote, "manuscript/vol-main/ch-main-1/sc-1.md"), beforeFormat,
+      "Formatter checkpoint changed the remote before publication");
+  } else {
+    assert.equal(errorCode(await stdio.client.callTool({
+      name: "format_manuscript", arguments: { project_id: projectId, scene_id: "sc-1" },
+    }), "format_manuscript without diagnostics module"), "MODULE_UNAVAILABLE");
+  }
+
+  const rewrite = await stdio.client.callTool({
+    name: "suggest_rewrite", arguments: { project_id: projectId, scene_id: "sc-1", sentence_index: 0 },
+  });
+  assert.equal(errorCode(rewrite, "provider-backed suggest_rewrite"),
+    READY_MODULES.includes("assistant") ? "ACTION_UNAVAILABLE" : "MODULE_UNAVAILABLE");
 
   await verifyCancellation(stdio, host, projectId, "spawned stdio");
   await verifyCancellation(http, host, projectId, "Streamable HTTP");
@@ -574,6 +694,25 @@ test("spawned stdio and production HTTP MCP preserve Core review boundaries thro
   const publishedHaru = await readRemoteFile(fixture.remote, "bible/characters/char-haru/profile.yaml");
   assert.match(publishedUma, /name: Uma Reviewed/u);
   assert.equal(publishedHaru, beforeHaru, "An unapproved source operation was included in publication");
+  const formattedManuscript = await readRemoteFile(fixture.remote, "manuscript/vol-main/ch-main-1/sc-1.md");
+  assert.doesNotMatch(formattedManuscript, /\n　星野/u, "Owner publication did not apply the reviewed formatter operation");
+  if (READY_MODULES.includes("diagnostics")) {
+    const proposalCountBeforeNoOp = (await ownerJson(host, cookie, `/api/projects/${encodeURIComponent(projectId)}/proposals`)).proposals.length;
+    const noOpStdio = success(await stdio.client.callTool({
+      name: "format_manuscript", arguments: { project_id: projectId, scene_id: "sc-1" },
+    }), "stdio no-op format_manuscript after publication");
+    const noOpHttp = success(await http.client.callTool({
+      name: "format_manuscript", arguments: { project_id: projectId, scene_id: "sc-1" },
+    }), "HTTP no-op format_manuscript after publication");
+    assert.equal(noOpStdio.data.proposal, null, "Already formatted source text must not create a proposal");
+    assert.equal(noOpStdio.data.proposal_id, null);
+    assert.equal(noOpStdio.data.result_id, noOpHttp.data.result_id,
+      "The unchanged formatter result identity must be stable across transports");
+    assert.equal(noOpHttp.data.proposal, null);
+    const proposalCountAfterNoOp = (await ownerJson(host, cookie, `/api/projects/${encodeURIComponent(projectId)}/proposals`)).proposals.length;
+    assert.equal(proposalCountAfterNoOp, proposalCountBeforeNoOp,
+      "A no-op formatting request must not register another Core proposal");
+  }
   assert.equal(await remoteContainsString(fixture.remote, "Haru Unapproved"), false,
     "The unapproved source operation leaked into published Git history");
   assert.equal(await remoteContainsString(fixture.remote, "Haru MCP Proposed"), false,

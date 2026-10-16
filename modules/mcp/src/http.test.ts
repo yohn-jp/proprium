@@ -757,12 +757,40 @@ test("source tools fail with a module availability error when their producer is 
   }
 });
 
-test("hybrid search and full diagnostics fail closed instead of returning partial substitutes", async () => {
+test("hybrid search stays unavailable while full diagnostics invoke the canonical scene aggregate", async () => {
   const calls: string[] = [];
   const host = actionContext(calls, [
     { id: "core.search", module: "core", effect: "read" },
     { id: "diagnostics.analyze", module: "diagnostics", effect: "compute" },
+    { id: "diagnostics.scene", module: "diagnostics", effect: "compute" },
   ]);
+  const originalInvoke = host.invoke;
+  host.invoke = async (actionId: string, input: unknown, signal?: AbortSignal): Promise<ActionResult> => {
+    if (actionId === "diagnostics.scene") {
+      calls.push(actionId);
+      assert.deepEqual(input, { sceneId: "scene-one", text: "draft" });
+      return {
+        ok: true,
+        snapshot,
+        data: {
+          tier: "full",
+          textHash: "12345678",
+          analysis: {},
+          speakerAttributions: [],
+          estimatedN: 0,
+          clusterTrails: [],
+          voiceWarnings: [],
+          styleDeviations: [],
+          stylometricDeviations: [],
+          plotSemanticWarnings: [],
+          proseBalance: {},
+          synonymSuggestions: [],
+          issues: [{ id: "lint-1", kind: "lint", severity: "medium", message: "source issue" }],
+        },
+      };
+    }
+    return originalInvoke(actionId, input, signal);
+  };
   const contribution = createMcpHttpContribution(new Map());
   const fetch: FetchLike = async (url, init) => contribution.handle(new Request(url, init), host);
   const transport = new StreamableHTTPClientTransport(
@@ -784,9 +812,13 @@ test("hybrid search and full diagnostics fail closed instead of returning partia
       name: "get_diagnostics",
       arguments: { project_id: "project-one", scene_id: "scene-one", text: "draft" },
     });
-    assert.equal(diagnostics.isError, true);
-    assert.equal((diagnostics.structuredContent as { error: { code: string } }).error.code, "ACTION_UNAVAILABLE");
-    assert.deepEqual(calls, []);
+    assert.equal(diagnostics.isError, undefined);
+    assert.equal((diagnostics.structuredContent as { data: { tier: string } }).data.tier, "full");
+    assert.deepEqual(
+      (diagnostics.structuredContent as { data: { issues: unknown[] } }).data.issues,
+      [{ id: "lint-1", kind: "lint", severity: "medium", message: "source issue" }],
+    );
+    assert.deepEqual(calls, ["diagnostics.scene"]);
   } finally {
     await transport.terminateSession().catch(() => undefined);
     await client.close().catch(() => undefined);
