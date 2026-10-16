@@ -20,6 +20,11 @@ export interface Project {
   branch: string;
 }
 
+export interface ProjectDetails {
+  project: Project;
+  observation: RemoteObservation;
+}
+
 export interface Tree {
   title: string;
   volumes: Array<{
@@ -172,9 +177,16 @@ export const api = {
   session: () => request<Session>("/api/session"),
   logout: () => request<{ authenticated: false }>("/api/logout", { method: "POST", body: "{}" }),
   projects: () => request<Project[]>("/api/projects"),
+  projectDetails: (projectId: string) => request<ProjectDetails>(`/api/projects/${encodeURIComponent(projectId)}`),
   registerProject: (url: string, branch?: string) => request<Project>("/api/projects", {
     method: "POST",
     body: JSON.stringify({ url, ...(branch ? { branch } : {}) }),
+  }),
+  reconstructProject: (projectId: string) => request<{ project: Project }>(`/api/projects/${encodeURIComponent(projectId)}`, {
+    method: "PUT",
+  }),
+  detachProject: (projectId: string) => request<void>(`/api/projects/${encodeURIComponent(projectId)}`, {
+    method: "DELETE",
   }),
   tree: (projectId: string) => request<Tree>(projectPath(projectId, "tree")),
   readTree: (projectId: string, view: "remote" | "checkpoint" = "remote", pinned?: SnapshotId) =>

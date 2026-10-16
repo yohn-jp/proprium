@@ -267,6 +267,7 @@ export function App() {
   const [work, setWork] = useState<WorkState | null>(null);
   const [status, setStatus] = useState<{ message: string; kind: "normal" | "error" | "success" }>({ message: "", kind: "normal" });
   const [globalError, setGlobalError] = useState("");
+  const [projectActionError, setProjectActionError] = useState<{ projectId: string; code?: string; message: string } | null>(null);
   const [entries, setEntries] = useState<JournalEntry[]>([]);
   const [proposals, setProposals] = useState<JournalProposal[]>([]);
   const [isolatedRecoveryCount, setIsolatedRecoveryCount] = useState(0);
@@ -628,37 +629,40 @@ export function App() {
   const activateProject = useCallback(async (project: Project, persistSelection = true, scopeOverride?: string) => {
     const nav = ++navigationRef.current;
     setBusy("project");
+    setProjectActionError(null);
     setStatus({ message: "リモートの状態を確認しています…", kind: "normal" });
     try {
       await flushDraft();
       if (navigationRef.current !== nav) return;
       updateWork(() => null);
       setGlobalError("");
-      const observed = await api.observation(project.id);
+      const details = await api.projectDetails(project.id);
       if (navigationRef.current !== nav) return;
+      const activeProject = details.project;
+      const observed = details.observation;
       const scope = scopeOverride ?? authorScopeRef.current;
-      await reconcileProject(project.id, observed.snapshot.repository, scope, nav);
+      await reconcileProject(activeProject.id, observed.snapshot.repository, scope, nav);
       if (navigationRef.current !== nav) return;
-      if (journalRef.current) recoveredProjectsRef.current.add(`${project.id}:${repositoryKey(observed.snapshot.repository)}`);
-      const tree = await api.readTree(project.id, "remote", observed.snapshot);
+      if (journalRef.current) recoveredProjectsRef.current.add(`${activeProject.id}:${repositoryKey(observed.snapshot.repository)}`);
+      const tree = await api.readTree(activeProject.id, "remote", observed.snapshot);
       if (navigationRef.current !== nav) return;
       if (snapshotKey(tree.snapshot) !== snapshotKey(observed.snapshot)) throw new Error("作品構成が別のリモートスナップショットから返されました。");
-      const next: WorkState = { project, observation: observed, tree, selectedSceneId: "", editor: null, loadingScene: false };
+      const next: WorkState = { project: activeProject, observation: observed, tree, selectedSceneId: "", editor: null, loadingScene: false };
       const [nextModules, nextContributions] = await Promise.all([
-        api.modules(project.id).catch(() => []),
-        api.contributions(project.id).catch(() => []),
+        api.modules(activeProject.id).catch(() => []),
+        api.contributions(activeProject.id).catch(() => []),
       ]);
       if (navigationRef.current !== nav) return;
       workRef.current = next;
       setWork(next);
       setModules(nextModules);
       setContributions(nextContributions);
-      await importRemoteProposals(project.id, observed.snapshot.repository, scope, nav);
+      await importRemoteProposals(activeProject.id, observed.snapshot.repository, scope, nav);
       if (navigationRef.current !== nav) return;
       await reloadJournalForWork(observed.snapshot.repository, nav);
       if (navigationRef.current !== nav) return;
-      if (persistSelection) localStorageIfAvailable()?.setItem(ACTIVE_PROJECT_KEY, project.id);
-      setProjects((current) => current.map((item) => item.id === project.id ? project : item));
+      if (persistSelection) localStorageIfAvailable()?.setItem(ACTIVE_PROJECT_KEY, activeProject.id);
+      setProjects((current) => current.map((item) => item.id === activeProject.id ? activeProject : item));
       setStatus({
         message: `リモート ${observed.snapshot.remoteCommit.slice(0, 12)} · ${new Date(observed.observedAt).toLocaleTimeString("ja-JP")} に確認`,
         kind: observed.state === "fresh" ? "success" : "error",
@@ -813,6 +817,69 @@ export function App() {
       await activateProject(project);
     } catch (error) {
       if (navigationRef.current === nav) setGlobalError(messageOf(error));
+    } finally {
+      if (navigationRef.current === nav) setBusy("");
+    }
+  }
+
+  function projectFailure(error: unknown): { code?: string; message: string } {
+    return error instanceof ApiError
+      ? { code: error.code, message: error.message }
+      : { message: messageOf(error) };
+  }
+
+  async function reconstructActiveProject(): Promise<void> {
+    const current = workRef.current;
+    if (!current) return;
+    const projectId = current.project.id;
+    const repository = current.observation.snapshot.repository;
+    const nav = navigationRef.current;
+    if (!window.confirm(`「${projectLabel(current.project)}」のローカル作業領域を、リポジトリの現在の既定ブランチから再構築します。未保存のローカル変更や公開前のチェックポイントがある場合は Core が処理を拒否します。続けますか？`)) return;
+    setProjectActionError(null);
+    setBusy("reconstruct");
+    try {
+      await flushDraft();
+      if (!isCurrentProject(nav, projectId, repository)) return;
+      const { project } = await api.reconstructProject(projectId);
+      setProjects((registered) => registered.map((item) => item.id === project.id ? project : item));
+      if (isCurrentProject(nav, projectId, repository)) await activateProject(project, false);
+    } catch (error) {
+      if (navigationRef.current === nav && workRef.current?.project.id === projectId) {
+        setProjectActionError({ projectId, ...projectFailure(error) });
+      }
+    } finally {
+      if (navigationRef.current === nav) setBusy("");
+    }
+  }
+
+  async function detachActiveProject(): Promise<void> {
+    const current = workRef.current;
+    if (!current) return;
+    const projectId = current.project.id;
+    const repository = current.observation.snapshot.repository;
+    const nav = navigationRef.current;
+    if (!window.confirm(`「${projectLabel(current.project)}」の登録とローカルクローンを解除します。GitHub 上のリポジトリは変更しません。下書きはブラウザーの回復記録に残します。続けますか？`)) return;
+    setProjectActionError(null);
+    setBusy("detach");
+    try {
+      await flushDraft();
+      if (!isCurrentProject(nav, projectId, repository)) return;
+      await api.detachProject(projectId);
+      setProjects((registered) => registered.filter((item) => item.id !== projectId));
+      if (isCurrentProject(nav, projectId, repository)) {
+        const nextNavigation = ++navigationRef.current;
+        updateWork(() => null);
+        setModules([]);
+        setContributions([]);
+        setBusy("");
+        localStorageIfAvailable()?.removeItem(ACTIVE_PROJECT_KEY);
+        setStatus({ message: "ローカルの登録とクローンを解除しました。GitHub とブラウザーの回復記録は保持されています。", kind: "success" });
+        await refreshJournal(undefined, nextNavigation);
+      }
+    } catch (error) {
+      if (navigationRef.current === nav && workRef.current?.project.id === projectId) {
+        setProjectActionError({ projectId, ...projectFailure(error) });
+      }
     } finally {
       if (navigationRef.current === nav) setBusy("");
     }
@@ -1272,6 +1339,32 @@ export function App() {
               {projects.length === 0 && <li className="muted-list-item">登録された作品はありません</li>}
             </ul>
           </section>
+          {work && (
+            <section className="project-management" aria-labelledby="project-management-title">
+              <h2 id="project-management-title">選択中のリポジトリ</h2>
+              <dl className="project-facts">
+                <div><dt>URL</dt><dd><code>{work.project.url}</code></dd></div>
+                <div><dt>リポジトリ ID</dt><dd><code>{work.observation.snapshot.repository.provider}:{work.observation.snapshot.repository.repositoryId}</code></dd></div>
+                <div><dt>既定ブランチ</dt><dd><code>{work.observation.snapshot.repository.defaultBranch}</code></dd></div>
+                <div><dt>登録ブランチ</dt><dd><code>{work.project.branch}</code></dd></div>
+                <div><dt>確認したリモート</dt><dd><code>{work.observation.snapshot.remoteCommit.slice(0, 12)}</code></dd></div>
+              </dl>
+              <p className="project-management-help">再構築と解除はローカル作業領域だけに適用されます。未公開の変更がある場合は Core が拒否し、回復記録は保持します。</p>
+              <div className="project-management-actions">
+                <button type="button" className="compact-button" disabled={Boolean(busy)} onClick={() => void reconstructActiveProject()}>
+                  {busy === "reconstruct" ? "再構築中…" : "ローカルクローンを再構築"}
+                </button>
+                <button type="button" className="compact-button danger-button" disabled={Boolean(busy)} onClick={() => void detachActiveProject()}>
+                  {busy === "detach" ? "解除中…" : "作品の登録を解除"}
+                </button>
+              </div>
+              {projectActionError?.projectId === work.project.id && (
+                <p className="status" data-kind="error" data-code={projectActionError.code} role="alert">
+                  {projectActionError.message}{projectActionError.code ? ` (${projectActionError.code})` : ""}
+                </p>
+              )}
+            </section>
+          )}
           {tree && <TreeNav tree={tree} selectedSceneId={work?.selectedSceneId ?? ""} disabled={Boolean(busy)} onSelect={(sceneId) => work && void loadScene(work.project.id, sceneId, work.tree, work.observation.snapshot.repository)} />}
           {legacyDrafts.length > 0 && <LegacyRecoveryPanel drafts={legacyDrafts} selectedSceneId={work && !work.loadingScene && work.editor?.read.scene.id === work.selectedSceneId ? work.selectedSceneId : ""} onExport={exportLegacyDrafts} onMap={(draft) => void mapLegacyDraft(draft)} />}
           {!work && recoverableEntries.length > 0 && (
