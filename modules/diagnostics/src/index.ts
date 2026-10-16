@@ -16,6 +16,7 @@ import type { StylometricMetrics, StylometricProfile } from "./stylometry/types.
 import { removeDialogueBrackets, type StyleAttribution, type StyleFingerprint } from "./voiceStyle.js";
 import { suggestSynonyms, type SynonymsConfig } from "./synonymSuggestions.js";
 import { checkProjectConsistency, checkProjectContinuity } from "./projectDiagnostics.js";
+import { checkDeclaredVoiceConsistency, type DeclaredVoiceAttribution } from "./declaredVoice.js";
 
 export * from "./analysis.js";
 export { createDiagnosticsMigrationProducer } from "./migration.js";
@@ -31,6 +32,7 @@ export * from "./stylometry/metrics.js";
 export * from "./stylometry/profile.js";
 export * from "./stylometry/deviationDetector.js";
 export * from "./textHash.js";
+export * from "./declaredVoice.js";
 
 const manifest: ModuleManifest = {
   id: "diagnostics", version: DIAGNOSTICS_MODULE_VERSION, contractVersion: 1,
@@ -60,6 +62,29 @@ function parseInspectionScope(value: unknown): { scope?: string } {
   const input = record(value, "input");
   if (input.scope !== undefined && typeof input.scope !== "string") throw new TypeError("scope must be a string when provided");
   return typeof input.scope === "string" ? { scope: input.scope } : {};
+}
+function parseDeclaredVoice(value: unknown): { attributions: DeclaredVoiceAttribution[]; speakerDefinitions: Record<string, RecordValue>; sceneMetadata?: RecordValue } {
+  const input = record(value, "input");
+  if (!Array.isArray(input.attributions) || input.attributions.length > MAX_VOICE_ATTRIBUTIONS) throw new TypeError(`attributions must contain at most ${MAX_VOICE_ATTRIBUTIONS} utterances`);
+  const attributions = input.attributions.map((value, index): DeclaredVoiceAttribution => {
+    const attribution = record(value, `attribution ${index + 1}`);
+    if (!(attribution.speakerEntityId === null || (typeof attribution.speakerEntityId === "string" && attribution.speakerEntityId.length <= 256)) ||
+        !["high", "low", "none"].includes(String(attribution.confidence)) || typeof attribution.text !== "string" || attribution.text.length > MAX_DIALOGUE_TEXT_LENGTH ||
+        !Number.isSafeInteger(attribution.sentenceIndex) || (attribution.sentenceIndex as number) < 1) {
+      throw new TypeError(`attribution ${index + 1} has invalid speaker, confidence, text, or sentenceIndex`);
+    }
+    return { speakerEntityId: attribution.speakerEntityId as string | null, confidence: attribution.confidence as DeclaredVoiceAttribution["confidence"], text: attribution.text, sentenceIndex: attribution.sentenceIndex as number };
+  });
+  if (!input.speakerDefinitions || typeof input.speakerDefinitions !== "object" || Array.isArray(input.speakerDefinitions)) throw new TypeError("speakerDefinitions must map entity IDs to canonical voice definition objects");
+  const speakerDefinitions: Record<string, RecordValue> = {};
+  const entries = Object.entries(input.speakerDefinitions as Record<string, unknown>);
+  if (entries.length > MAX_DIALOGUES) throw new TypeError("speakerDefinitions must contain at most 500 entries");
+  for (const [id, definition] of entries) {
+    if (!id || id.length > 256) throw new TypeError("speakerDefinitions contain an invalid entity ID");
+    speakerDefinitions[id] = record(definition, `speakerDefinitions.${id}`);
+  }
+  const sceneMetadata = input.sceneMetadata === undefined ? undefined : record(input.sceneMetadata, "sceneMetadata");
+  return { attributions, speakerDefinitions, ...(sceneMetadata ? { sceneMetadata } : {}) };
 }
 function parseObjectOutput(value: unknown): unknown { return record(value, "output"); }
 const outputSchema: ValueSchema = { parse: parseObjectOutput };
@@ -374,6 +399,12 @@ function makeActions(moduleContext: ModuleContext): ModuleAction[] {
       const { scope } = value as ReturnType<typeof parseInspectionScope>;
       const warnings = await checkProjectContinuity(context.reader, context.signal, scope);
       return { ok: true, snapshot: context.reader.snapshot, data: { scope: scope?.trim() || null, warnings } };
+    }),
+    action("diagnostics.voiceConsistency", "read", { parse: parseDeclaredVoice }, async (value, context) => {
+      if (context.signal.aborted) throw Object.assign(new Error("Voice consistency check was cancelled"), { code: "job_cancelled" });
+      const input = value as ReturnType<typeof parseDeclaredVoice>;
+      const warnings = checkDeclaredVoiceConsistency(input.attributions, input.speakerDefinitions, input.sceneMetadata);
+      return { ok: true, snapshot: context.reader.snapshot, data: { warnings } };
     }),
     action("diagnostics.analyze", "compute", analyzeInput, (value, context) => analyzeAction(value, context, moduleContext)),
     action("diagnostics.checkPlotSemantics", "compute", { parse: parsePlotSemantics }, (value, context) => checkPlotSemanticsAction(value, context, moduleContext)),

@@ -246,7 +246,9 @@ function makeActions(moduleContext: ModuleContext): ModuleAction[] {
         catch (error) { throw new TypeError(`NLP feature settings are invalid JSON: ${error instanceof Error ? error.message : "parse error"}`); }
       }
       const enabled = record(settings.externalEnabled ?? {}, "externalEnabled");
-      const features = featureRegistry.map((feature) => ({ ...feature, enabled: feature.locality === "local" || enabled[feature.id] !== false }));
+      // Missing consent is denied. This differs from the source default-on
+      // behavior because the migration contract requires explicit allowance.
+      const features = featureRegistry.map((feature) => ({ ...feature, enabled: feature.locality === "local" || enabled[feature.id] === true }));
       return { ok: true, snapshot: context.reader.snapshot, data: { features, settings: { ...settings, externalEnabled: enabled } } } as ActionResult;
     }),
     action("nlp.updateExternalConsent", "propose", { parse: (value) => {

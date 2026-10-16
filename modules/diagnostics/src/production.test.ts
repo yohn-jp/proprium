@@ -163,8 +163,12 @@ test("public actions read namespaced dictionaries/settings and lint changes rema
     const features = await runtime.invokeAction("nlp", "nlp.features", {}, host);
     assert.equal(features.ok, true, JSON.stringify(features));
     if (features.ok) {
-      const settings = (features.data as { settings: { externalEnabled: Record<string, boolean> } }).settings;
+      const featureData = features.data as { features: Array<{ id: string; locality: "local" | "external"; enabled: boolean }>; settings: { externalEnabled: Record<string, boolean> } };
+      const settings = featureData.settings;
       assert.equal(settings.externalEnabled["setting-qa"], false);
+      assert.equal(featureData.features.find((feature) => feature.id === "setting-qa")?.enabled, false);
+      assert.equal(featureData.features.find((feature) => feature.id === "rewrite")?.enabled, false, "missing external consent is opt-in denied");
+      assert.equal(featureData.features.find((feature) => feature.id === "embedding")?.enabled, true, "local features do not require external-send consent");
     }
 
     const lint = await runtime.invokeAction("diagnostics", "diagnostics.proposeLintFix", {
@@ -182,6 +186,12 @@ test("public actions read namespaced dictionaries/settings and lint changes rema
     assert.equal(consent.ok, true, JSON.stringify(consent));
     assert.equal(proposals.length, 2);
     assert.equal(proposals[1].operations[0].writes[0].path, "meta/scriptorium/modules/nlp/feature-settings.json");
+    const consentBeforeApproval = await runtime.invokeAction("nlp", "nlp.features", {}, host);
+    assert.equal(consentBeforeApproval.ok, true, JSON.stringify(consentBeforeApproval));
+    if (consentBeforeApproval.ok) {
+      const feature = (consentBeforeApproval.data as { features: Array<{ id: string; enabled: boolean }> }).features.find((item) => item.id === "setting-qa");
+      assert.equal(feature?.enabled, false, "proposing consent does not activate it before Core approval changes the selected snapshot");
+    }
 
     const consistency = await runtime.invokeAction("diagnostics", "diagnostics.checkConsistency", {}, host);
     assert.equal(consistency.ok, true, JSON.stringify(consistency));
@@ -215,6 +225,28 @@ test("public actions read namespaced dictionaries/settings and lint changes rema
       const result = scopedContinuity.data as { scope: string; warnings: Array<{ sceneId: string; previousSceneId: string }> };
       assert.equal(result.scope, "sc-scene-1");
       assert.ok(result.warnings.some((warning) => warning.sceneId === "sc-scene-2"), "continuity scope includes its adjacent scene as the source route does");
+    }
+    const voice = await runtime.invokeAction("diagnostics", "diagnostics.voiceConsistency", {
+      attributions: [
+        { speakerEntityId: "char-hero", confidence: "low", text: "『俺は行く』", sentenceIndex: 1 },
+        { speakerEntityId: "char-companion", confidence: "high", text: "『俺は行く』", sentenceIndex: 2 },
+      ],
+      speakerDefinitions: {
+        "char-hero": { voicePatterns: { firstPerson: ["僕"] } },
+        "char-companion": { voice_profiles: [
+          { id: "formal", context_trigger: { type: "match_metadata", key: "situation", value: "formal" }, firstPerson: ["私"] },
+          { id: "default", firstPerson: ["僕"] },
+        ] },
+      },
+      sceneMetadata: { situation: "formal" },
+    }, host);
+    assert.equal(voice.ok, true, JSON.stringify(voice));
+    assert.deepEqual(voice.snapshot, snapshot);
+    if (voice.ok) {
+      const warnings = (voice.data as { warnings: Array<{ issue: string; speakerEntityId: string; expected: string[]; basis: string }> }).warnings;
+      assert.equal(warnings.length, 2, "low-confidence attributions and declared context profiles retain source checks");
+      assert.ok(warnings.every((warning) => warning.issue === "unexpected-first-person" && warning.basis === "profile"));
+      assert.deepEqual(warnings.map((warning) => warning.expected), [["僕"], ["私"]]);
     }
     assert.deepEqual(runtime.workerSupervisor.activeWorkerPids, [], "project rule checks stay local and do not start NLP workers");
   } finally {
