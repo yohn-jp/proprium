@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { execFileSync, spawnSync } from "node:child_process";
 import { randomBytes, randomUUID } from "node:crypto";
-import { mkdtemp, rm } from "node:fs/promises";
+import { mkdir, mkdtemp, rename, rm, stat, writeFile } from "node:fs/promises";
 import { createServer } from "node:net";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -9,6 +9,7 @@ import { chromium, expect } from "@playwright/test";
 
 const repositoryUrl = process.env.SCRIPTORIUM_E2E_REPOSITORY_URL ?? "";
 const chromiumPath = process.env.SCRIPTORIUM_E2E_CHROMIUM;
+const keepFailureArtifacts = process.env.SCRIPTORIUM_KEEP_FAILURE_ARTIFACTS === "1";
 const appToken = randomBytes(32).toString("hex");
 const runtimeSourcePaths = [
   "Dockerfile", "LICENSE", "package.json", "pnpm-lock.yaml", "pnpm-workspace.yaml", "tsconfig.base.json",
@@ -535,14 +536,11 @@ async function reportConflictDiagnostics(page, diagnostics, project, expectedHea
     readJournal(page).catch((error) => [{ error: String(error.message).slice(0, 300) }]),
     readDocumentJournal(page, authorDraftEntry.documentKey, authorDraftEntry.authorScope, expectedAuthorText).catch((error) => ({ unavailable: String(error.message).slice(0, 300) })),
   ]);
-  const screenshotPath = `/tmp/scriptorium-p13-conflict-${randomBytes(5).toString("hex")}.png`;
-  await page.screenshot({ path: screenshotPath, fullPage: true }).catch(() => undefined);
   console.error(JSON.stringify({
     phase: "same-file conflict browser diagnostic",
     expectedRemoteHead: expectedHead,
     coreObservedHead,
     ui,
-    screenshotPath,
     journalStore: "scriptorium-recovery.operations",
     expectedOperationId: authorDraftEntry.operationId,
     expectedGeneration: authorDraftEntry.generation,
@@ -587,7 +585,14 @@ async function main() {
   const branch = branchOverride || repository.default_branch;
   if (branch !== repository.default_branch) throw new Error("The P13 recovery check writes only to the synthetic repository's default branch.");
   const initialHead = await assertSyntheticFixture(github, branch);
-  const diagnosticSecrets = [appToken, githubCredential];
+  const diagnosticSecrets = [
+    appToken,
+    githubCredential,
+    repositoryUrl,
+    `${owner}/${name}`,
+    `https://github.com/${owner}/${name}`,
+    `https://api.github.com/repos/${owner}/${name}`,
+  ];
   const sourceHead = assertImageInputsMatchHead();
   const engine = requiredEngine();
   const tempRoot = await mkdtemp(join(tmpdir(), "scriptorium-p13-recovery-"));
@@ -601,6 +606,8 @@ async function main() {
   let volumeCreated = false;
   let context;
   let diagnostics;
+  let failureArtifactPath;
+  let profileCookiesCleared = false;
   const chromiumOptions = { headless: true, ...(chromiumPath ? { executablePath: chromiumPath } : {}) };
   let result;
 
@@ -771,13 +778,52 @@ async function main() {
       finalRemoteCommit: await github.branchHead(branch),
     };
   } finally {
+    if (context && keepFailureArtifacts && !result) {
+      try {
+        await context.clearCookies();
+        profileCookiesCleared = true;
+      } catch { /* Do not retain a profile unless its session cookie can be cleared. */ }
+    }
     await context?.close().catch(() => undefined);
+    context = undefined;
     try { run(engine, ["stop", "--time", "30", container], { capture: true }); } catch { /* The container may not have started. */ }
     try { run(engine, ["rm", "--force", container], { capture: true }); } catch { /* The container may already be removed. */ }
     if (volumeCreated) {
       try { run(engine, ["volume", "rm", volume], { capture: true }); } catch { /* The temporary volume may already be absent. */ }
     }
-    await rm(tempRoot, { recursive: true, force: true });
+    if (keepFailureArtifacts && !result) {
+      const profileExists = await stat(profileDir).then(() => true, () => false);
+      if (profileExists) {
+        const artifactDirectory = join(tmpdir(), `scriptorium-p13-failure-${suffix}`);
+        try {
+          if (!profileCookiesCleared) {
+            const scrubContext = await chromium.launchPersistentContext(profileDir, chromiumOptions);
+            try {
+              await scrubContext.clearCookies();
+              profileCookiesCleared = true;
+            } finally {
+              await scrubContext.close().catch(() => undefined);
+            }
+          }
+          if (!profileCookiesCleared) throw new Error("Could not clear the synthetic session cookie.");
+          await mkdir(artifactDirectory, { mode: 0o700 });
+          failureArtifactPath = artifactDirectory;
+          await rename(profileDir, join(artifactDirectory, "browser-profile"));
+          const networkDiagnostics = diagnostics?.() ?? { requests: [], pending: [], consoleErrors: [] };
+          await writeFile(join(artifactDirectory, "network-diagnostics.json"), JSON.stringify(networkDiagnostics, null, 2), { encoding: "utf8", mode: 0o600 });
+          await rm(tempRoot, { recursive: true, force: true });
+        } catch {
+          await rm(artifactDirectory, { recursive: true, force: true }).catch(() => undefined);
+          failureArtifactPath = undefined;
+          await rm(tempRoot, { recursive: true, force: true });
+        }
+      } else {
+        await rm(tempRoot, { recursive: true, force: true });
+      }
+    } else {
+      await rm(tempRoot, { recursive: true, force: true });
+    }
+    if (failureArtifactPath) console.error(`Sanitized browser failure artifacts retained at ${failureArtifactPath}`);
   }
   console.log(JSON.stringify(result, null, 2));
 }
