@@ -1,36 +1,59 @@
 # Scriptorium
 
-A Git-backed writing workspace for long-form manuscripts.
+A lightweight Git-backed writing workspace, extracted from Arcadia Loom. Git-controlled YAML and Markdown remain the source of truth. Core runs without NLP, model downloads, or an embedded LLM.
 
-> **Status: foundation only.** The minimal writing application is not yet implemented in this repository.
+Connect a GitHub work repository, browse volumes, chapters and scenes, edit Markdown, save with revision checks, inspect Git commits, and explicitly synchronize with GitHub. The editor keeps unsaved drafts in this browser and offers Japanese vertical preview. One server instance serves one trusted owner; all registered projects belong to that owner.
 
-Scriptorium is being extracted and hardened from the private Arcadia Loom project. The goal is a lean editor and project workspace that works without NLP, embedding, model downloads, or an embedded LLM.
+## Run locally
 
-## Target Core
+Requires Node.js 24+, Git, and pnpm 12.10.1.
 
-- Open and manage a GitHub-hosted work repository.
-- Browse volumes, chapters, and scenes.
-- Edit manuscripts stored as Markdown with YAML metadata.
-- Safely save with revision conflict detection and inspect Git history.
-- Synchronize with GitHub from a persistent server-side workspace.
-- Build the TypeScript/pnpm application as one OCI image.
+```sh
+pnpm install --frozen-lockfile
+pnpm build
+export SCRIPTORIUM_AUTH_TOKEN="$(openssl rand -hex 32)"
+# Set SCRIPTORIUM_GITHUB_TOKEN separately for private repositories and push access.
+pnpm start
+```
 
-Individual works live in separate user-owned Git repositories; they are **not** stored in this product's source tree.
+Open `http://127.0.0.1:3000` and sign in with `SCRIPTORIUM_AUTH_TOKEN`. Public repository reads need no GitHub token. For private repositories and synchronization, provide a GitHub token with access only to the intended work repositories. Credentials stay on the server; do not put them in a repository URL. See [.env.example](.env.example) for configuration names; environment files are not automatically loaded.
 
-## Status and scope
+The work repository must use the existing Arcadia layout:
 
-The canonical target is [Core Architecture](docs/architecture/CORE.md). Track the initial migration under [Epic #1](https://github.com/yohn-jp/scriptorium/issues/1).
+```text
+plot/volumes/<volume>/volume.yaml
+plot/volumes/<volume>/chapters/<chapter>/chapter.yaml
+plot/volumes/<volume>/chapters/<chapter>/scenes/<scene>.yaml
+manuscript/<volume>/<chapter>/<scene>.md
+```
 
-Advanced narrative modeling, diagnostics, speaker attribution, NLP, semantic search, and embedded LLM execution are outside the initial Core. They may return as optional modules but must not be required to write.
+Scene YAML identifies its Markdown file with `manuscript: manuscript/.../scene.md`. Unsupported metadata and files are preserved. An empty repository can be connected; create its work structure in Git before writing. The Core does not create a complete novel structure or port Arcadia's advanced analysis features.
 
-## Development
+Each save checks the revision read by the editor and creates a local Git commit. A stale save reports a conflict and retains the draft. Sync fetches, integrates only fast-forward changes, and pushes local commits; divergent histories require reconciliation outside the application. Browser drafts are local recovery copies: use the same browser and origin, and save important work before clearing browser storage.
 
-The runtime/build commands will be documented once the first functional Core packages are migrated. This initial repository foundation does not yet provide a runnable application.
+## Single OCI image
 
-## Security and contributions
+```sh
+docker build -t ghcr.io/yohn-jp/scriptorium:local .
+docker run --rm -p 127.0.0.1:3000:3000 \
+  --env SCRIPTORIUM_AUTH_TOKEN --env SCRIPTORIUM_GITHUB_TOKEN \
+  --mount type=volume,src=scriptorium-data,dst=/data \
+  ghcr.io/yohn-jp/scriptorium:local
+```
 
-See [SECURITY.md](SECURITY.md) and [CONTRIBUTING.md](CONTRIBUTING.md).
+Keep `/data` persistent. Use HTTPS through a trusted reverse proxy when accessing the instance beyond localhost. Do not run multiple containers against one workspace volume. This is a single-owner application, not a multi-tenant hosting service.
 
-## License
+## Development and verification
 
-MIT; see [LICENSE](LICENSE).
+```sh
+pnpm typecheck
+pnpm test
+pnpm build
+pnpm audit:core
+```
+
+Browser and image acceptance evidence is recorded under [docs/verification](docs/verification). CI and GitHub Actions are intentionally outside this initial recovery; local results do not imply remote CI success.
+
+The [Core architecture](docs/architecture/CORE.md) defines ownership and dependency direction. NLP, embeddings, rerankers, speaker inference, and LLM execution are excluded. Future add-ons must be independent workspace packages; Core must not depend on them.
+
+See [CONTRIBUTING.md](CONTRIBUTING.md), [SECURITY.md](SECURITY.md), and the [MIT license](LICENSE). [Epic #1](https://github.com/yohn-jp/scriptorium/issues/1) tracks the initial recovery.

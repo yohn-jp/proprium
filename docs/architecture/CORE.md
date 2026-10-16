@@ -1,13 +1,13 @@
 # Scriptorium Core — Target Architecture
 
-**Status:** Target contract; implementation not yet complete.
+**Status:** Core implementation contract. See `docs/verification` for executed acceptance evidence.
 **Authority:** Epic #1 and accepted child Issues take precedence when they explicitly change this design.
 
 ## Product promise
 
 Scriptorium is a lightweight Git-backed writing workspace. Its baseline product must work with only the Core: connect a GitHub repository, navigate a work's volume/chapter/scene hierarchy, author text, save safely, inspect revisions and synchronize with GitHub.
 
-A work repository—not Scriptorium's SQLite indexes or deployment container—is the durable source of truth. Reuse the existing Arcadia Loom YAML/Markdown format where appropriate rather than inventing a new incompatible document schema.
+A work repository is the durable source of truth; the deployment container and browser drafts are recovery and execution state. Core has no SQLite or model index dependency. Reuse the existing Arcadia Loom YAML/Markdown format where appropriate rather than inventing a new incompatible document schema.
 
 ## Ownership
 
@@ -74,9 +74,23 @@ Import only source for which public release rights and provenance are establishe
 - GitHub repository connection, work navigation, draft editing, safe save, history view and remote sync are demonstrable.
 - No NLP/LLM runtime imports in the built Core application.
 - `pnpm` is the workspace/build tool; TypeScript remains the product implementation language.
-- Release is built from one Dockerfile into `ghcr.io/yohn-jp/scriptorium` (target; not yet published).
+- Release is built from one Dockerfile; `ghcr.io/yohn-jp/scriptorium` is the image name. Local verification does not imply registry publication.
 - Public source, security documentation, development and contribution path are complete and accurate.
 
 ## Out of scope until accepted separately
 
 No feature parity claim for Arcadia Loom's extensive Narrative IDE, no module container fleet, and no assumptions that existing incomplete MCP-first migrations have already been certified.
+
+## Implemented package boundary
+
+- `packages/core`: repository registry, project-owned clones, canonical YAML hierarchy and Markdown persistence, revision checks, filesystem writer coordination, local Git commits/history and explicit sync.
+- `packages/api`: single-owner authentication, HTTP validation and error mapping, Core service calls, static application delivery and health.
+- `app`: browser navigation, Markdown editor, unsaved draft recovery, conflict feedback, history/sync controls and Japanese vertical preview.
+
+The registry and clones live below `SCRIPTORIUM_DATA_DIR`. A GitHub token is supplied to the server, never embedded in clone URLs, browser assets, or an image. Repository metadata cannot choose arbitrary filesystem roots. The selected single-instance runtime has one trusted owner; every authenticated session has access to that owner's registered projects. It does not provide separate user tenants or per-user project ACLs.
+
+The editor changes manuscript bodies and preserves YAML frontmatter and unrelated repository files. Connecting an empty compatible repository is supported; creating a complete work hierarchy is performed in Git. Sync reports divergence instead of automatically merging conflicting histories. Optional analysis files may exist in work repositories without being loaded or required by Core.
+
+## Initial recovery authorization
+
+The current recovery instruction explicitly permits the coordinator to commit and push directly to `main`, overriding the original Issue branch/PR sequencing only for this construction. Independent worker worktrees remain isolated. No CI, GitHub Actions, organization templates, image publication, or Arcadia Loom changes are part of this delivery.
