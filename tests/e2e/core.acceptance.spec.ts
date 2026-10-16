@@ -12,6 +12,8 @@ interface JournalSummary {
   generation: number;
   text: string;
   authorScope: string | null;
+  attachmentWrites: number;
+  writes: Array<{ path: string; content: string | null }>;
 }
 
 interface PublicationReceiptSummary {
@@ -70,9 +72,9 @@ async function readJournal(page: Page): Promise<JournalSummary[]> {
       const records = await new Promise<Array<{
         documentPath: string;
         state: string;
-        operation: { id: string; generation: number };
         text: string;
         authorScope?: string | null;
+        operation: { id: string; generation: number; writes: Array<{ path: string; content: string | null; encoding?: string }> };
       }>>((resolve, reject) => {
         const request = transaction.objectStore("operations").getAll();
         request.onsuccess = () => resolve(request.result);
@@ -85,6 +87,8 @@ async function readJournal(page: Page): Promise<JournalSummary[]> {
         generation: entry.operation.generation,
         text: entry.text,
         authorScope: entry.authorScope ?? null,
+        attachmentWrites: entry.operation.writes.filter((write) => write.encoding === "base64").length,
+        writes: entry.operation.writes.map((write) => ({ path: write.path, content: write.content })),
       }));
     } finally {
       database.close();
@@ -157,6 +161,10 @@ test("writing UI recovers multi-document drafts and separates Draft, Checkpoint,
 
   await page.getByRole("button", { name: "文字を大きく" }).click();
   await expect(page.locator('output[aria-label="文字サイズ"]')).toHaveText("18px");
+  await page.getByLabel("組版プリセット").selectOption("bunko");
+  await expect(page.getByLabel("組版プリセット")).toHaveValue("bunko");
+  await expect.poll(() => page.locator(".manuscript-preview").evaluate((element) => getComputedStyle(element).getPropertyValue("--reader-line-height"))).toBe("1.7");
+  await expect.poll(() => page.locator(".manuscript-preview").evaluate((element) => getComputedStyle(element).getPropertyValue("--reader-max-width"))).toBe("560px");
   await page.setViewportSize({ width: 390, height: 844 });
   await editor.fill("物語");
   await editor.press("Control+a");
@@ -164,54 +172,92 @@ test("writing UI recovers multi-document drafts and separates Draft, Checkpoint,
   await expect(editor).toHaveText("「物語」");
 
   await page.locator(".scratch-panel summary").click();
-  await page.getByLabel("本文に含まれないメモ").fill("本文に入れない台詞候補");
+  const scratchText = "本文に入れない台詞候補";
+  await page.getByLabel("本文に含まれないメモ").fill(scratchText);
+  await page.getByLabel("スクラッチ画像を添付").setInputFiles({
+    name: "mood-board.png",
+    mimeType: "image/png",
+    buffer: Buffer.from([137, 80, 78, 71, 13, 10, 26, 10]),
+  });
   await editor.click();
-  await expect(page.locator(".scratch-panel summary")).toContainText("保存済み");
+  await expect(page.locator(".scratch-panel summary")).toContainText("Draft を保護済み");
+  await expect.poll(async () => (await readJournal(page)).some((entry) => entry.documentPath.startsWith("meta/scratch/") && entry.text === scratchText && entry.attachmentWrites === 1)).toBe(true);
 
-  const sceneOneDraft = "Scene One draft restored from IndexedDB.";
-  await editor.fill(sceneOneDraft);
-  // Move within the debounce window; navigation must flush Scene One before Scene Two can type.
+  const longReadingDraft = Array.from({ length: 240 }, () => "物語の続きを書く。読書ページを移動します。").join("\n");
+  await editor.fill(longReadingDraft);
+  await page.getByRole("button", { name: "読書モード" }).click();
+  const pager = page.locator(".reading-pager");
+  await expect.poll(async () => Number(await pager.getAttribute("data-page-count"))).toBeGreaterThan(1);
+  await page.getByRole("button", { name: "次のページ" }).click();
+  await expect(pager).toHaveAttribute("data-page-index", "1");
+  await page.getByRole("button", { name: "編集に戻る" }).click();
+
+  const sceneTwoDraft = "A separate Scene Two browser draft.";
   await page.getByRole("button", { name: "Chapter One: Scene Two" }).click();
   await expect(page.getByRole("heading", { name: "Scene Two" })).toBeVisible();
-  const sceneTwoDraft = "A separate Scene Two browser draft.";
   await page.locator(".cm-content").fill(sceneTwoDraft);
   await expect.poll(async () => {
     const entries = await readJournal(page);
-    return entries.some((entry) => entry.state === "draft" && entry.text === sceneOneDraft) &&
+    return entries.some((entry) => entry.state === "draft" && entry.text === longReadingDraft) &&
       entries.some((entry) => entry.state === "draft" && entry.text === sceneTwoDraft);
   }).toBe(true);
-  await waitForJournalCount(page, 2);
+  await waitForJournalCount(page, 3);
   await page.getByRole("button", { name: "Chapter One: Scene One" }).click();
-  await expect(page.locator(".cm-content")).toHaveText(sceneOneDraft);
+  await expect(page.locator(".cm-content")).toHaveText(longReadingDraft);
 
   await page.reload();
   await openFixtureProject(page);
   await expect(page.locator('output[aria-label="文字サイズ"]')).toHaveText("18px");
-  await expect(page.locator(".cm-content")).toHaveText(sceneOneDraft);
+  await expect(page.locator(".cm-content")).toHaveText(longReadingDraft);
+  await page.getByRole("button", { name: "読書モード" }).click();
+  await expect(page.locator(".reading-pager")).toHaveAttribute("data-page-index", "1");
+  await page.getByRole("button", { name: "編集に戻る" }).click();
   await page.locator(".scratch-panel summary").click();
-  await expect(page.getByLabel("本文に含まれないメモ")).toHaveValue("本文に入れない台詞候補");
+  await page.locator(".scratch-panel").getByRole("button", { name: "続ける" }).click();
+  await expect(page.getByLabel("本文に含まれないメモ")).toHaveValue(scratchText);
+  await page.locator(".scratch-panel").getByRole("button", { name: "Checkpoint", exact: true }).click();
+  await expect.poll(async () => (await readJournal(page)).some((entry) => entry.documentPath.startsWith("meta/scratch/") && entry.state === "checkpointed")).toBe(true);
+  const sceneOneDraft = "Scene One draft restored from IndexedDB.";
+  await editor.fill(sceneOneDraft);
+  // Move within the debounce window; navigation must flush Scene One before Scene Two can type.
   await page.getByRole("button", { name: "Chapter One: Scene Two" }).click();
   await expect(page.locator(".cm-content")).toHaveText(sceneTwoDraft);
   await page.locator(".cm-content").press("Control+z");
   await expect(page.locator(".cm-content")).toHaveText(sceneTwoDraft);
   await page.getByRole("button", { name: "Chapter One: Scene One" }).click();
+  await expect(page.locator(".cm-content")).toHaveText(sceneOneDraft);
 
   await page.getByRole("button", { name: "Checkpoint" }).click();
   await expect(page.locator(".durability-message")).toContainText("ローカルチェックポイント");
   await expect(page.getByRole("button", { name: "Save to GitHub" })).toBeEnabled();
   const checkpointed = await readJournal(page);
-  expect(checkpointed).toHaveLength(2);
+  expect(checkpointed).toHaveLength(3);
   expect(checkpointed.find((entry) => entry.text === sceneOneDraft)?.state).toBe("checkpointed");
   const checkpointBatchId = checkpointed.find((entry) => entry.text === sceneOneDraft)?.operationId;
+  const scratchBatchId = checkpointed.find((entry) => entry.documentPath.startsWith("meta/scratch/"))?.operationId;
   await page.getByRole("button", { name: "Save to GitHub" }).click();
   await expect(page.locator(".topbar-status")).toContainText("GitHub への保存を確認しました。");
   await expect(page.getByText("Saved to GitHub", { exact: true })).toBeVisible();
   await expect.poll(async () => (await readJournal(page)).map((entry) => `${entry.documentPath}:${entry.state}`)).toEqual([
     "manuscript/vol-1/ch-1/scene-2.md:draft",
   ]);
-  expect((await readPublicationReceipts(page)).some((receipt) => receipt.state === "confirmed" && receipt.acknowledged.some((item) => item.operationId === checkpointBatchId))).toBe(true);
+  expect((await readPublicationReceipts(page)).some((receipt) => receipt.state === "confirmed" &&
+    receipt.acknowledged.some((item) => item.operationId === checkpointBatchId) &&
+    receipt.acknowledged.some((item) => item.operationId === scratchBatchId))).toBe(true);
+  const laterDraft = "A later draft compared with the published version.";
+  await editor.fill(laterDraft);
+  await expect.poll(async () => (await readJournal(page)).some((entry) => entry.text === laterDraft && entry.state === "draft")).toBe(true);
   await page.getByRole("button", { name: "履歴" }).click();
-  await expect(page.getByRole("heading", { name: "Git 履歴" })).toBeVisible();
+  await expect(page.getByRole("heading", { name: "改稿の履歴" })).toBeVisible();
+  const versions = page.getByRole("list", { name: "原稿の各バージョン" });
+  await expect(versions.locator("li")).toHaveCount(1);
+  await expect(page.getByRole("button", { name: "この版を下書きとして開く" })).toBeVisible();
+  await page.getByRole("button", { name: "この版を下書きとして開く" }).click();
+  await expect(page.locator(".cm-content")).toHaveText(sceneOneDraft);
+  const restoredHistoryDraft = (await readJournal(page)).find((entry) => entry.documentPath === "manuscript/vol-1/ch-1/scene-1.md");
+  expect(restoredHistoryDraft?.state).toBe("draft");
+  expect(restoredHistoryDraft?.text).toBe(sceneOneDraft);
+  expect(restoredHistoryDraft?.writes.find((write) => write.path.endsWith("scene-1.md"))?.content).toContain(sceneOneDraft);
   expect(cspErrors).toEqual([]);
 });
 
@@ -250,7 +296,7 @@ test("new typing survives an older in-flight checkpoint and exact publication ac
   expect(newerDraft?.operationId).not.toBe(pendingCheckpoint?.operationId);
 
   releaseCheckpoint();
-  await expect(page.locator(".durability-message")).toContainText("ローカルチェックポイント");
+  await expect(page.locator(".topbar-status")).toContainText("ローカルチェックポイント");
   await expect(page.locator(".cm-content")).toHaveText(newerGeneration);
   await expect(page.locator(".conflict")).toHaveCount(0);
   const afterCheckpoint = await readJournal(page);
@@ -275,7 +321,7 @@ test("browser recovery is author-scoped and foreign records remain untouched", a
   await expect.poll(async () => (await readJournal(page)).some((entry) => entry.text === ownerDraft)).toBe(true);
 
   const foreignText = "FOREIGN AUTHOR RECOVERY MUST NOT OPEN";
-  await page.evaluate((text) => new Promise<void>((resolve, reject) => {
+  await page.evaluate(({ ownerText, foreignText }) => new Promise<void>((resolve, reject) => {
     const request = indexedDB.open("scriptorium-recovery", 3);
     request.onerror = () => reject(request.error ?? new Error("IndexedDB open failed"));
     request.onsuccess = () => {
@@ -285,7 +331,7 @@ test("browser recovery is author-scoped and foreign records remain untouched", a
       const get = store.getAll();
       get.onerror = () => reject(get.error ?? new Error("IndexedDB journal read failed"));
       get.onsuccess = () => {
-        const seed = get.result.find((entry: { authorScope: string | null; text: string }) => entry.authorScope === "owner" && entry.text === text);
+        const seed = get.result.find((entry: { authorScope: string | null; text: string }) => entry.authorScope === "owner" && entry.text === ownerText);
         if (!seed) {
           reject(new Error("Owner journal seed is missing"));
           return;
@@ -297,7 +343,7 @@ test("browser recovery is author-scoped and foreign records remain untouched", a
         operation.id = crypto.randomUUID();
         operation.generation = 999;
         operation.reads = operation.reads.map((item: { path: string; revision: string | null }) => ({ ...item, path: documentPath }));
-        operation.writes = operation.writes.map((item: { path: string; revision: string | null; content: string | null }) => ({ ...item, path: documentPath, content: text }));
+        operation.writes = operation.writes.map((item: { path: string; revision: string | null; content: string | null }) => ({ ...item, path: documentPath, content: foreignText }));
         store.put({
           ...seed,
           key: JSON.stringify([documentKey, "different-author", operation.id, operation.generation]),
@@ -307,13 +353,13 @@ test("browser recovery is author-scoped and foreign records remain untouched", a
           sceneId: "scene-2",
           authorScope: "different-author",
           operation,
-          text,
+          text: foreignText,
         });
       };
       transaction.oncomplete = () => { database.close(); resolve(); };
       transaction.onerror = () => reject(transaction.error ?? new Error("IndexedDB write failed"));
     };
-  }), foreignText);
+  }), { ownerText: ownerDraft, foreignText });
 
   await page.getByRole("button", { name: "Chapter One: Scene Two" }).click();
   await expect(page.getByRole("heading", { name: "Scene Two" })).toBeVisible();
@@ -337,7 +383,8 @@ test("one malformed legacy key does not hide later recoverable drafts", async ({
   });
   await signIn(page);
   await openFixtureProject(page);
-  await expect(page.getByText("Legacy recovery after malformed item.")).toBeVisible();
+  await expect(page.getByRole("heading", { name: "旧ブラウザー下書き" })).toBeVisible();
+  await expect(page.getByText("シーン removed-scene-id")).toBeVisible();
 });
 
 test("IndexedDB quota failures remain visible and block checkpointing", async ({ page }) => {

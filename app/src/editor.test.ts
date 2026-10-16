@@ -6,6 +6,8 @@ import { normalizeEllipsisInsert } from "./editor/cm/ellipsisNormalize";
 import { documentBody, parseRubySegments, replaceDocumentBody } from "./editor/ruby";
 import { planWritingSymbol } from "./editor/writingSymbols";
 import { normalizeTypographySettings } from "./editor/typography";
+import { typographyPresetValues } from "./editor/typography";
+import { clampPageIndex, measureColumnPageCount, pageTranslateX, tapZoneAtX } from "./editor/readingMetrics";
 
 test("writing input retains Japanese bracket pairing and skips an existing closer", () => {
   const empty = Text.of([""]);
@@ -50,12 +52,28 @@ test("typography preferences retain source ranges and reject invalid values", ()
     fontSize: 16,
     lineHeight: 1.8,
     letterSpacing: 0.08,
+    maxWidth: 960,
     fontFamily: "mincho",
   });
   assert.deepEqual(normalizeTypographySettings(null), {
     fontSize: 16,
     lineHeight: 1.8,
     letterSpacing: 0,
+    maxWidth: 960,
     fontFamily: "gothic",
   });
+  assert.deepEqual(typographyPresetValues("bunko"), { fontFamily: "mincho", lineHeight: 1.7, maxWidth: 560, letterSpacing: 0.02 });
+  assert.equal(normalizeTypographySettings({ maxWidth: 100 }).maxWidth, 960);
+});
+
+test("mobile reading pagination clamps pages, measures columns, and follows writing direction", () => {
+  assert.equal(measureColumnPageCount(901, 300), 4);
+  assert.equal(measureColumnPageCount(0, 300), 1);
+  assert.equal(clampPageIndex(8, 4), 3);
+  assert.equal(clampPageIndex(Number.NaN, 4), 0);
+  assert.equal(pageTranslateX(2, 320, "ltr"), -640);
+  assert.equal(pageTranslateX(2, 320, "rtl"), 640);
+  assert.equal(tapZoneAtX(10, 0, 400), "left");
+  assert.equal(tapZoneAtX(390, 0, 400), "right");
+  assert.equal(tapZoneAtX(200, 0, 400), "center");
 });

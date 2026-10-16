@@ -45,7 +45,7 @@ export default defineConfig({
   webServer: externalServer
     ? undefined
     : {
-        command: "pnpm exec tsx tests/e2e/test-server.ts",
+        command: "node --import tsx/esm tests/e2e/test-server.ts",
         cwd: resolve("."),
         url: `${baseURL}/api/health`,
         reuseExistingServer: false,

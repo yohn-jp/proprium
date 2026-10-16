@@ -72,6 +72,42 @@ export interface Commit {
   message: string;
 }
 
+export interface ManuscriptSnapshotMeta {
+  id: string;
+  sceneId: string;
+  manuscriptId: string;
+  createdAt: number;
+  charCount: number;
+  source: "git";
+  branch?: string;
+  label?: string;
+  trigger?: "manual" | "submit" | "idle";
+}
+
+export interface ManuscriptSnapshot {
+  id: string;
+  sceneId: string;
+  manuscriptId: string;
+  createdAt: number;
+  charCount: number;
+  source: "git";
+  branch?: string;
+  label?: string;
+  trigger?: "manual" | "submit" | "idle";
+  body: string;
+  document: FileDocument;
+}
+
+export interface ManuscriptSnapshotList {
+  snapshot: SnapshotId;
+  snapshots: ManuscriptSnapshotMeta[];
+}
+
+export interface ManuscriptSnapshotRead {
+  snapshot: SnapshotId;
+  manuscript: ManuscriptSnapshot;
+}
+
 export interface SyncStatus {
   branch: string;
   head: string;
@@ -148,6 +184,16 @@ export const api = {
   snapshot: (projectId: string, view: "remote" | "checkpoint" = "remote", pinned?: SnapshotId) =>
     request<SnapshotRead>(projectPath(projectId, `snapshot${pinnedQuery(view, pinned)}`)),
   history: (projectId: string) => request<Commit[]>(projectPath(projectId, "history")),
+  manuscriptSnapshots: (projectId: string, manuscriptId: string, sceneId: string, pinned: SnapshotId) => {
+    const query = new URLSearchParams({ sceneId, view: "remote", snapshot: pinned.remoteCommit });
+    return request<ManuscriptSnapshotList>(projectPath(projectId,
+      `manuscripts/${encodeURIComponent(manuscriptId)}/snapshots?${query.toString()}`));
+  },
+  manuscriptSnapshot: (projectId: string, manuscriptId: string, snapshotId: string, pinned: SnapshotId) => {
+    const query = new URLSearchParams({ view: "remote", snapshot: pinned.remoteCommit });
+    return request<ManuscriptSnapshotRead>(projectPath(projectId,
+      `manuscripts/${encodeURIComponent(manuscriptId)}/snapshots/${encodeURIComponent(snapshotId)}?${query.toString()}`));
+  },
   status: (projectId: string) => request<SyncStatus>(projectPath(projectId, "status")),
   observation: (projectId: string) => request<RemoteObservation>(projectPath(projectId, "observation")),
   propose: (projectId: string, proposal: ChangeProposal) => request<ChangeProposal>(projectPath(projectId, "proposals"), {

@@ -11,10 +11,10 @@ import {
   type SnapshotId,
   type UiContribution,
 } from "@scriptorium/contracts";
-import { ApiError, api, type Commit, type Project, type SceneRead, type Tree, type TreeRead } from "./api";
+import { ApiError, api, type Project, type SceneRead, type Tree, type TreeRead } from "./api";
 import { ContributionHost } from "./contributions/ContributionHost";
 import { ProposalReview } from "./contributions/ProposalReview";
-import { SceneEditor } from "./editor/SceneEditor";
+import { SceneEditor, type ScratchDraftPayload } from "./editor/SceneEditor";
 import { replaceDocumentBody } from "./editor/ruby";
 import { clearDraft, loadDraft } from "./drafts";
 import {
@@ -166,7 +166,7 @@ function buildOperation(
     effect: "manuscript",
     reads,
     writes,
-    message: `Write scene: ${read.scene.title.replace(/[\r\n]+/gu, " ").slice(0, 120)}`,
+    message: "loom(scene): " + read.scene.id + "\n\nLoom-Manuscript: " + read.scene.id + "\nLoom-File: " + documentPath + "\nLoom-Char-Count: " + text.length,
   };
   assertChangeOperation(operation);
   return operation;
@@ -185,8 +185,9 @@ function makeEntry(
   baseText: string,
   operation: ChangeOperation,
   state: JournalEntry["state"],
+  documentPath = read.document.path,
 ): JournalEntry {
-  const key = documentKey(repository, read.document.path);
+  const key = documentKey(repository, documentPath);
   const entry: JournalEntry = {
     version: 1,
     key: "",
@@ -194,7 +195,7 @@ function makeEntry(
     documentKey: key,
     authorScope,
     repository,
-    documentPath: read.document.path,
+    documentPath,
     sceneId,
     snapshot: read.snapshot,
     text,
@@ -205,6 +206,52 @@ function makeEntry(
   };
   entry.key = journalEntryKey(entry);
   return entry;
+}
+
+function safeScratchFilename(filename: string): string {
+  const basename = filename.split(/[\\/]/u).at(-1) ?? "capture.jpg";
+  const safe = basename.replace(/[^A-Za-z0-9._-]+/gu, "_").replace(/^\.+/u, "").slice(0, 100);
+  return safe || "capture.jpg";
+}
+
+function buildScratchOperation(read: SceneRead, draft: ScratchDraftPayload): { operation: ChangeOperation; path: string } {
+  const path = `meta/scratch/${draft.id}.md`;
+  assertProjectPath(path);
+  const attachments = draft.attachments.map((attachment, index) => {
+    const filename = safeScratchFilename(attachment.filename);
+    const attachmentPath = attachment.path ?? `meta/scratch/assets/${draft.id}/${index + 1}-${filename}`;
+    assertProjectPath(attachmentPath);
+    return { ...attachment, filename, path: attachmentPath };
+  });
+  const content = [
+    "---",
+    `id: ${JSON.stringify(draft.id)}`,
+    `sceneId: ${JSON.stringify(read.scene.id)}`,
+    `createdAt: ${JSON.stringify(new Date().toISOString())}`,
+    "attachments:",
+    ...attachments.map((attachment) => `  - path: ${JSON.stringify(attachment.path)}\n    filename: ${JSON.stringify(attachment.filename)}\n    mimeType: ${JSON.stringify(attachment.mimeType)}`),
+    "---",
+    "",
+    draft.text || (attachments.length > 0 ? "カメラ取り込み" : ""),
+    ...(attachments.length > 0 ? ["", "Attachments:", ...attachments.map((attachment) => `- [${attachment.filename}](assets/${draft.id}/${attachment.path.split("/").at(-1)})`)] : []),
+    "",
+  ].join("\n");
+  const writes: ChangeOperation["writes"] = [{ path, revision: null, content }];
+  for (const attachment of attachments) {
+    writes.push({ path: attachment.path, revision: null, content: attachment.dataBase64, encoding: "base64" });
+  }
+  const operation: ChangeOperation = {
+    id: draft.id,
+    generation: draft.generation,
+    repository: read.snapshot.repository,
+    baseRemoteCommit: read.snapshot.remoteCommit,
+    effect: "metadata",
+    reads: writes.map((write) => ({ path: write.path, revision: null })),
+    writes,
+    message: `Write scratch: ${read.scene.title.replace(/[\r\n]+/gu, " ").slice(0, 120)}`,
+  };
+  assertChangeOperation(operation);
+  return { operation, path };
 }
 
 export function App() {
@@ -225,13 +272,13 @@ export function App() {
   const [legacyDrafts, setLegacyDrafts] = useState<LegacyDraftRecord[]>([]);
   const [modules, setModules] = useState<ModuleStatus[]>([]);
   const [contributions, setContributions] = useState<UiContribution[]>([]);
-  const [history, setHistory] = useState<Commit[]>([]);
   const [historyOpen, setHistoryOpen] = useState(false);
   const [busy, setBusy] = useState("");
   const navigationRef = useRef(0);
   const workRef = useRef<WorkState | null>(null);
   const journalRef = useRef<BrowserJournal | null>(null);
   const draftQueueRef = useRef<Promise<void>>(Promise.resolve());
+  const scratchFlushRef = useRef<() => Promise<JournalEntry | null>>(async () => null);
   const draftTimersRef = useRef(new Map<string, number>());
   const pendingDraftsRef = useRef(new Map<string, JournalEntry>());
   const generationRef = useRef(0);
@@ -240,11 +287,27 @@ export function App() {
   const sceneLoadRef = useRef(0);
   const recoveredProjectsRef = useRef(new Set<string>());
 
+  const registerScratchFlush = useCallback((flush: (() => Promise<JournalEntry | null>) | null) => {
+    scratchFlushRef.current = flush ?? (async () => null);
+  }, []);
+
   const updateWork = useCallback((updater: (current: WorkState | null) => WorkState | null) => {
     const next = updater(workRef.current);
     workRef.current = next;
     setWork(next);
   }, []);
+
+  function isCurrentProject(nav: number, projectId: string, repository: RepositoryIdentity): boolean {
+    const current = workRef.current;
+    return navigationRef.current === nav && current?.project.id === projectId &&
+      sameRepository(current.observation.snapshot.repository, repository);
+  }
+
+  function isCurrentEditor(nav: number, projectId: string, repository: RepositoryIdentity, documentPath: string, sceneId: string): boolean {
+    const current = workRef.current;
+    return isCurrentProject(nav, projectId, repository) && current?.editor?.read.document.path === documentPath &&
+      current.editor.read.scene.id === sceneId && current.selectedSceneId === sceneId && !current.loadingScene;
+  }
 
   const refreshJournal = useCallback(async (repository?: RepositoryIdentity, expectedNavigation?: number) => {
     const currentJournal = journalRef.current;
@@ -642,21 +705,25 @@ export function App() {
 
   async function registerProject(event: FormEvent<HTMLFormElement>): Promise<void> {
     event.preventDefault();
-    const form = new FormData(event.currentTarget);
+    const formElement = event.currentTarget;
+    const nav = navigationRef.current;
+    const form = new FormData(formElement);
     const url = String(form.get("url") ?? "").trim();
     const branch = String(form.get("branch") ?? "").trim();
     setBusy("register");
     setGlobalError("");
     try {
       const project = await api.registerProject(url, branch || undefined);
+      if (navigationRef.current !== nav) return;
+      formElement.reset();
       const nextProjects = await api.projects();
+      if (navigationRef.current !== nav) return;
       setProjects(nextProjects);
       await activateProject(project);
-      event.currentTarget.reset();
     } catch (error) {
-      setGlobalError(messageOf(error));
+      if (navigationRef.current === nav) setGlobalError(messageOf(error));
     } finally {
-      setBusy("");
+      if (navigationRef.current === nav) setBusy("");
     }
   }
 
@@ -698,6 +765,21 @@ export function App() {
     return queued;
   }
 
+  async function persistScratchDraft(draft: ScratchDraftPayload): Promise<JournalEntry | null> {
+    const current = workRef.current;
+    const currentJournal = journalRef.current;
+    if (!current || !current.editor || !currentJournal) throw new Error("作品またはブラウザー回復ストレージを利用できません。");
+    if (!draft.text.trim() && draft.attachments.length === 0) return null;
+    const read = current.editor.read;
+    const nav = navigationRef.current;
+    const { operation, path } = buildScratchOperation(read, draft);
+    const entry = makeEntry(read.snapshot.repository, authorScopeRef.current, read.scene.id, read, draft.text, "", operation, "draft", path);
+    const stored = await currentJournal.putLatestDraft(entry);
+    if (!stored) return null;
+    await refreshJournal(read.snapshot.repository, nav);
+    return entry;
+  }
+
   function editText(nextText: string): void {
     const current = workRef.current;
     const editor = current?.editor;
@@ -736,6 +818,7 @@ export function App() {
   }
 
   async function flushDraft(): Promise<JournalEntry | null> {
+    await scratchFlushRef.current();
     for (let attempt = 0; attempt < 8; attempt++) {
       const editor = workRef.current?.editor;
       if (!editor?.entry || editor.entry.state !== "draft") return editor?.entry ?? null;
@@ -763,53 +846,117 @@ export function App() {
     throw new Error("下書きの入力が続いているため、移動前に保存できませんでした。入力を止めてもう一度お試しください。");
   }
 
+  async function checkpointEntry(
+    projectId: string,
+    entry: JournalEntry,
+    onCheckpointing?: (entry: JournalEntry) => void,
+    expectedNavigation?: number,
+  ): Promise<JournalEntry> {
+    const currentJournal = journalRef.current;
+    if (!currentJournal) throw new Error("ブラウザー回復ストレージを開けません。");
+    if (entry.authorScope !== authorScopeRef.current) throw new Error("別の作者スコープの記録はチェックポイントできません。");
+    const operation = entry.operation;
+    const proposalId = entry.proposalId ?? proposalIdFor(operation);
+    const checkpointing = await currentJournal.updateState({
+      ...entry,
+      proposalId,
+      authorizedAt: entry.authorizedAt ?? Date.now(),
+    }, "checkpointing");
+    if (checkpointing.state === "conflict") throw new Error("競合した回復記録はチェックポイントできません。");
+    await refreshJournal(checkpointing.repository, expectedNavigation);
+    onCheckpointing?.(checkpointing);
+    const proposal = await api.propose(projectId, {
+      id: proposalId,
+      snapshot: checkpointing.snapshot,
+      operations: [operation],
+      source: "author",
+    });
+    await currentJournal.putProposal(checkpointing.repository, authorScopeRef.current, proposal);
+    await currentJournal.updateState({ ...checkpointing, proposalId: proposal.id }, "checkpointing");
+    await api.approve(projectId, { proposalId: proposal.id, operationIds: [operation.id], authorScope: authorScopeRef.current });
+    const receipt = await api.checkpoint(projectId, operation);
+    const saved = await currentJournal.updateState({ ...checkpointing, proposalId: proposal.id }, "checkpointed", receipt);
+    await currentJournal.removeProposal(checkpointing.repository, authorScopeRef.current, proposal.id).catch(() => undefined);
+    return saved;
+  }
+
   async function checkpointCurrent(): Promise<void> {
     const current = workRef.current;
     const editor = current?.editor;
     const currentJournal = journalRef.current;
-    if (!current || !editor || !currentJournal || !editor.entry || busy) return;
+    if (!current || current.loadingScene || current.selectedSceneId !== editor?.read.scene.id || !editor || !currentJournal || !editor.entry || busy) return;
+    const nav = navigationRef.current;
+    const projectId = current.project.id;
+    const repository = current.observation.snapshot.repository;
+    const documentPath = editor.read.document.path;
+    const sceneId = editor.read.scene.id;
+    let submittedEntry = editor.entry;
     setBusy("checkpoint");
     try {
       await flushDraft();
+      if (!isCurrentEditor(nav, projectId, repository, documentPath, sceneId)) return;
       const latest = workRef.current?.editor;
       if (!latest?.entry || latest.conflict) throw new Error("競合を確認してからチェックポイントを作成してください。");
       const operation = latest.entry.operation;
-      const proposalId = latest.entry.proposalId ?? proposalIdFor(operation);
-      const checkpointing = await currentJournal.updateState({
-        ...latest.entry,
-        proposalId,
-        authorizedAt: Date.now(),
-      }, "checkpointing");
-      updateWork((state) => state?.editor?.entry?.operation.generation === operation.generation
+      const checkpointingEntry = latest.entry;
+      submittedEntry = checkpointingEntry;
+      const saved = await checkpointEntry(projectId, checkpointingEntry, (checkpointing) => {
+        if (!isCurrentEditor(nav, projectId, repository, documentPath, sceneId)) return;
+        updateWork((state) => state?.editor?.entry?.operation.id === operation.id && state.editor.entry.operation.generation === operation.generation
         ? { ...state, editor: { ...state.editor, entry: checkpointing } }
         : state);
-      const proposal = await api.propose(current.project.id, {
-        id: proposalId,
-        snapshot: checkpointing.snapshot,
-        operations: [operation],
-        source: "author",
-      });
-      await currentJournal.putProposal(checkpointing.repository, authorScopeRef.current, proposal);
-      await currentJournal.updateState({ ...checkpointing, proposalId: proposal.id }, "checkpointing");
-      await api.approve(current.project.id, { proposalId: proposal.id, operationIds: [operation.id], authorScope });
-      const receipt = await api.checkpoint(current.project.id, operation);
-      const saved = await currentJournal.updateState({ ...checkpointing, proposalId: proposal.id }, "checkpointed", receipt);
-      await currentJournal.removeProposal(checkpointing.repository, authorScopeRef.current, proposal.id).catch(() => undefined);
+      }, nav);
+      if (!isCurrentProject(nav, projectId, repository)) return;
       updateWork((state) => state?.editor?.entry?.operation.id === operation.id && state.editor.entry.operation.generation === operation.generation
         ? { ...state, editor: { ...state.editor, entry: saved } }
         : state);
-      await refreshJournal(checkpointing.repository);
+      await refreshJournal(saved.repository, nav);
+      if (!isCurrentEditor(nav, projectId, repository, documentPath, sceneId)) return;
       setStatus({ message: "ローカルチェックポイントを作成しました。GitHub へ保存するまでブラウザーの回復記録を保持します。", kind: "success" });
       await refreshRemote();
     } catch (error) {
-      const currentEditor = workRef.current?.editor;
-      if (currentEditor?.entry && currentEditor.entry.state === "checkpointing" && (error instanceof ApiError && (error.status === 409 || error.status === 412))) {
-        await currentJournal.updateState(currentEditor.entry, "conflict").catch(() => undefined);
-        updateWork((state) => state?.editor ? { ...state, editor: { ...state.editor, conflict: state.editor.remote } } : state);
+      if (error instanceof ApiError && (error.status === 409 || error.status === 412)) {
+        await currentJournal.updateState(submittedEntry, "conflict").catch(() => undefined);
+        if (isCurrentEditor(nav, projectId, repository, documentPath, sceneId)) {
+          updateWork((state) => state?.editor ? { ...state, editor: { ...state.editor, conflict: state.editor.remote } } : state);
+        }
       }
-      setStatus({ message: messageOf(error), kind: "error" });
+      if (isCurrentEditor(nav, projectId, repository, documentPath, sceneId)) setStatus({ message: messageOf(error), kind: "error" });
     } finally {
-      setBusy("");
+      if (navigationRef.current === nav) setBusy("");
+    }
+  }
+
+  async function checkpointScratchEntry(entry: JournalEntry): Promise<void> {
+    const current = workRef.current;
+    const currentJournal = journalRef.current;
+    if (!current || !currentJournal) throw new Error("作品またはブラウザー回復ストレージを利用できません。");
+    if (busy) throw new Error("別の保存処理が進行中です。");
+    const nav = navigationRef.current;
+    const projectId = current.project.id;
+    const repository = current.observation.snapshot.repository;
+    setBusy("checkpoint");
+    try {
+      await scratchFlushRef.current();
+      if (!isCurrentProject(nav, projectId, repository)) throw new Error("作品を切り替えたため、スクラッチの保存表示を更新できませんでした。");
+      const candidates = await currentJournal.getDocument(entry.repository, entry.documentPath, authorScopeRef.current);
+      const latest = [...candidates].reverse().find((candidate) => candidate.operation.id === entry.operation.id);
+      if (!latest || latest.state !== "draft") throw new Error("このスクラッチは Draft 状態ではなくなりました。回復一覧を更新してください。");
+      const saved = await checkpointEntry(projectId, latest, undefined, nav);
+      if (!isCurrentProject(nav, projectId, repository)) return;
+      await refreshJournal(saved.repository, nav);
+      if (!isCurrentProject(nav, projectId, repository)) return;
+      setStatus({ message: "スクラッチのローカルチェックポイントを作成しました。Save to GitHub で公開できます。", kind: "success" });
+      await refreshRemote();
+    } catch (error) {
+      if (error instanceof ApiError && (error.status === 409 || error.status === 412)) {
+        await currentJournal.updateState(entry, "conflict").catch(() => undefined);
+      }
+      await refreshJournal(entry.repository, nav);
+      if (isCurrentProject(nav, projectId, repository)) setStatus({ message: messageOf(error), kind: "error" });
+      throw error;
+    } finally {
+      if (navigationRef.current === nav) setBusy("");
     }
   }
 
@@ -817,11 +964,18 @@ export function App() {
     const current = workRef.current;
     const currentJournal = journalRef.current;
     if (!current || !currentJournal || busy) return;
+    const nav = navigationRef.current;
+    const projectId = current.project.id;
+    const initialRepository = current.observation.snapshot.repository;
     setBusy("publish");
     try {
-      const observed = await api.observation(current.project.id);
-      await api.reconcile(current.project.id);
+      await scratchFlushRef.current();
+      if (!isCurrentProject(nav, projectId, initialRepository)) return;
+      const observed = await api.observation(projectId);
       const repository = observed.snapshot.repository;
+      if (!isCurrentProject(nav, projectId, initialRepository) || !sameRepository(repository, initialRepository)) return;
+      await api.reconcile(projectId);
+      if (!isCurrentProject(nav, projectId, initialRepository)) return;
       const local = await currentJournal.getRepository(repository, authorScopeRef.current);
       const eligible = local.filter((entry) => entry.state === "checkpointed" || entry.state === "publication_unknown");
       if (eligible.length === 0) throw new Error("GitHub へ保存するチェックポイントがありません。");
@@ -835,25 +989,26 @@ export function App() {
       for (const [existingBatch, group] of groups) {
         const batchId = existingBatch || crypto.randomUUID();
         for (const entry of group) await currentJournal.updateState({ ...entry, publicationBatchId: batchId }, "publication_unknown");
-        const receipt = await api.publish(current.project.id, batchId);
+        const receipt = await api.publish(projectId, batchId);
         if (receipt.state === "confirmed") {
           await currentJournal.acknowledge(repository, authorScopeRef.current, receipt);
         } else if (receipt.state === "conflict") {
           for (const entry of group) await currentJournal.updateState(entry, "conflict");
           throw new Error("GitHub に別の更新がありました。チェックポイントは保持し、競合を確認してください。");
         } else {
-          setStatus({ message: "GitHub への保存結果を確認できませんでした。同じバッチ ID を保持して再確認します。", kind: "error" });
-          await refreshJournal(repository);
+          if (isCurrentProject(nav, projectId, repository)) setStatus({ message: "GitHub への保存結果を確認できませんでした。同じバッチ ID を保持して再確認します。", kind: "error" });
+          await refreshJournal(repository, nav);
           return;
         }
       }
-      await refreshJournal(repository);
+      await refreshJournal(repository, nav);
+      if (!isCurrentProject(nav, projectId, repository)) return;
       await refreshRemote();
-      setStatus({ message: "GitHub への保存を確認しました。確認済みの操作だけ回復記録から削除しました。", kind: "success" });
+      if (isCurrentProject(nav, projectId, repository)) setStatus({ message: "GitHub への保存を確認しました。確認済みの操作だけ回復記録から削除しました。", kind: "success" });
     } catch (error) {
-      setStatus({ message: messageOf(error), kind: "error" });
+      if (isCurrentProject(nav, projectId, initialRepository)) setStatus({ message: messageOf(error), kind: "error" });
     } finally {
-      setBusy("");
+      if (navigationRef.current === nav) setBusy("");
     }
   }
 
@@ -893,17 +1048,23 @@ export function App() {
       return;
     }
     if (!window.confirm("未チェックポイントの下書きを削除して、現在の GitHub 版に戻しますか？")) return;
+    const nav = navigationRef.current;
+    const projectId = current.project.id;
+    const repository = editor.read.snapshot.repository;
+    const documentPath = editor.read.document.path;
+    const sceneId = editor.read.scene.id;
     try {
-      await currentJournal.removeDrafts(editor.read.snapshot.repository, editor.read.document.path, authorScopeRef.current);
+      await currentJournal.removeDrafts(repository, documentPath, authorScopeRef.current);
+      if (!isCurrentEditor(nav, projectId, repository, documentPath, sceneId)) return;
       const remote = editor.conflict;
       updateWork((state) => state?.editor ? {
         ...state,
         editor: { ...state.editor, read: remote, remote, text: remote.scene.text, baseText: remote.scene.text, entry: null, conflict: null, draftStored: true, journalError: "" },
       } : state);
-      await refreshJournal(editor.read.snapshot.repository);
-      setStatus({ message: "保護対象外の下書きを削除して、GitHub 版に戻しました。", kind: "success" });
+      await refreshJournal(repository, nav);
+      if (isCurrentEditor(nav, projectId, repository, documentPath, sceneId)) setStatus({ message: "保護対象外の下書きを削除して、GitHub 版に戻しました。", kind: "success" });
     } catch (error) {
-      setStatus({ message: messageOf(error), kind: "error" });
+      if (isCurrentEditor(nav, projectId, repository, documentPath, sceneId)) setStatus({ message: messageOf(error), kind: "error" });
     }
   }
 
@@ -916,25 +1077,30 @@ export function App() {
       `この古い記録を現在選択中の作品「${projectLabel(current.project)}」の「${editor.read.scene.title}」へ下書きとして移しますか？本文は Git に送信されません。`,
     );
     if (!accepted) return;
+    const nav = navigationRef.current;
+    const projectId = current.project.id;
+    const repository = current.observation.snapshot.repository;
+    const documentPath = editor.read.document.path;
+    const sceneId = editor.read.scene.id;
     try {
-      const prior = await currentJournal.getDocument(current.observation.snapshot.repository, editor.read.document.path, authorScopeRef.current);
+      const prior = await currentJournal.getDocument(repository, documentPath, authorScopeRef.current);
       const existing = prior.at(-1);
       const id = existing?.state === "draft" ? existing.operation.id : crypto.randomUUID();
       const generation = Math.max(generationRef.current, existing?.operation.generation ?? 0) + 1;
       const operation = buildOperation(editor.read, record.text, id, generation);
-      const entry = makeEntry(current.observation.snapshot.repository, authorScopeRef.current, editor.read.scene.id, editor.read, record.text, editor.read.scene.text, operation, "draft");
+      const entry = makeEntry(repository, authorScopeRef.current, sceneId, editor.read, record.text, editor.read.scene.text, operation, "draft");
       if (!await currentJournal.putLatestDraft(entry)) throw new Error("新しい回復記録があるため、この古い下書きは移しませんでした。");
       localStorageIfAvailable()?.removeItem(record.key);
       generationRef.current = generation;
       setLegacyDrafts(readLegacyDrafts());
-      updateWork((state) => state?.editor ? {
+      if (isCurrentEditor(nav, projectId, repository, documentPath, sceneId)) updateWork((state) => state?.editor ? {
         ...state,
         editor: { ...state.editor, text: record.text, baseText: editor.read.scene.text, entry, conflict: null, draftStored: true, journalError: "" },
       } : state);
-      await refreshJournal(current.observation.snapshot.repository);
-      setStatus({ message: "古い下書きをこの作品の IndexedDB 回復記録へ移しました。Git への変更はありません。", kind: "success" });
+      await refreshJournal(repository, nav);
+      if (isCurrentEditor(nav, projectId, repository, documentPath, sceneId)) setStatus({ message: "古い下書きをこの作品の IndexedDB 回復記録へ移しました。Git への変更はありません。", kind: "success" });
     } catch (error) {
-      setStatus({ message: `古い下書きを移せませんでした。元の記録は残しています。${messageOf(error)}`, kind: "error" });
+      if (isCurrentEditor(nav, projectId, repository, documentPath, sceneId)) setStatus({ message: `古い下書きを移せませんでした。元の記録は残しています。${messageOf(error)}`, kind: "error" });
     }
   }
 
@@ -947,26 +1113,19 @@ export function App() {
     window.setTimeout(() => URL.revokeObjectURL(link.href), 0);
   }
 
-  async function toggleHistory(): Promise<void> {
-    const current = workRef.current;
-    if (!current) return;
-    if (!historyOpen) {
-      try {
-        setHistory(await api.history(current.project.id));
-      } catch (error) {
-        setStatus({ message: messageOf(error), kind: "error" });
-      }
-    }
+  function toggleHistory(): void {
     setHistoryOpen((open) => !open);
   }
 
   const currentRepoEntries = useMemo(() => work ? entries.filter((entry) => sameRepository(entry.repository, work.observation.snapshot.repository)) : [], [entries, work]);
+  const currentRepoProposals = useMemo(() => work ? proposals.filter((proposal) => sameRepository(proposal.repository, work.observation.snapshot.repository)) : [], [proposals, work]);
+  const renderedNavigation = navigationRef.current;
   const pendingCount = currentRepoEntries.filter((entry) => entry.state !== "draft").length;
   const recoverableEntries = useMemo(() => entries.filter((entry) => entry.state === "draft" || entry.state === "checkpointing" || entry.state === "checkpointed" || entry.state === "publication_unknown" || entry.state === "conflict"), [entries]);
   const tree = work?.tree.tree ?? null;
   const scene = work?.editor?.read.scene ?? null;
   const editor = work?.editor ?? null;
-  const canCheckpoint = Boolean(editor?.entry && (editor.entry.state === "draft" || editor.entry.state === "checkpointing") && editor.draftStored && !editor.conflict && editor.text !== editor.read.scene.text && !busy);
+  const canCheckpoint = Boolean(editor?.entry && work && !work.loadingScene && work.selectedSceneId === editor.read.scene.id && (editor.entry.state === "draft" || editor.entry.state === "checkpointing") && editor.draftStored && !editor.conflict && editor.text !== editor.read.scene.text && !busy);
   const canResolveDraft = Boolean(editor?.conflict && (!editor.entry || editor.entry.state === "draft"));
   const canPublish = pendingCount > 0 && currentRepoEntries.some((entry) => entry.state === "checkpointed" || entry.state === "publication_unknown") && !busy;
 
@@ -1033,15 +1192,18 @@ export function App() {
           {globalError && <p className="status" data-kind="error" role="alert">{globalError}</p>}
           {journalOpenError && <p className="status" data-kind="error" role="alert">{journalOpenError}</p>}
           {isolatedRecoveryCount > 0 && <p className="status" role="status">別の作者スコープまたは未割り当ての回復記録 {isolatedRecoveryCount} 件を保持しています。現在のセッションには復元しません。</p>}
-          {journal && proposals.length > 0 && work && (
+          {journal && currentRepoProposals.length > 0 && work && (
             <ProposalReview
+              key={repositoryKey(work.observation.snapshot.repository)}
               projectId={work.project.id}
               repository={work.observation.snapshot.repository}
               authorScope={authorScope}
               journal={journal}
-              proposals={proposals}
-              onChange={() => void refreshJournal(work.observation.snapshot.repository)}
-              onStatus={setStatusMessage}
+              proposals={currentRepoProposals}
+              onChange={() => void refreshJournal(work.observation.snapshot.repository, renderedNavigation)}
+              onStatus={(message, kind) => {
+                if (isCurrentProject(renderedNavigation, work.project.id, work.observation.snapshot.repository)) setStatusMessage(message, kind);
+              }}
             />
           )}
           {!work && (
@@ -1063,6 +1225,8 @@ export function App() {
                   <SceneEditor
                     key={JSON.stringify([repositoryKey(editor.read.snapshot.repository), editor.read.document.path])}
                     projectId={work.project.id}
+                    repositoryKey={repositoryKey(editor.read.snapshot.repository)}
+                    snapshot={editor.read.snapshot}
                     scene={scene}
                     path={editor.read.document.path}
                     breadcrumb={breadcrumbFor(tree, scene.id)}
@@ -1083,12 +1247,14 @@ export function App() {
                     onPublish={() => void publishPending()}
                     onHistory={() => void toggleHistory()}
                     historyOpen={historyOpen}
-                    journal={journal}
-                    repository={work.observation.snapshot.repository}
-                    onJournalError={(message) => setStatus({ message, kind: "error" })}
+                    onRestoreHistoryBody={editText}
+                    scratchEntries={currentRepoEntries.filter((entry) => entry.documentPath.startsWith("meta/scratch/"))}
+                    onDraftScratch={persistScratchDraft}
+                    onCheckpointScratch={checkpointScratchEntry}
+                    registerScratchFlush={registerScratchFlush}
+                    scratchBusy={Boolean(busy)}
                     pendingCount={pendingCount}
                   />
-                  {historyOpen && <HistoryPanel commits={history} />}
                     <ContributionHost projectId={work.project.id} authorScope={authorScope} slot="editor" contributions={contributions} modules={modules} snapshot={work.tree.snapshot} refresh={refreshContributionContext} journal={journal} onProposalStored={refreshProposals} />
                   <div className="contribution-dock">
                     {(["dock", "inspection", "review", "settings"] as const).map((slot) => (
@@ -1188,15 +1354,6 @@ function LegacyRecoveryPanel({
         ))}
       </ul>
       <button type="button" className="quiet-button" onClick={onExport}>回復 JSON をダウンロード</button>
-    </section>
-  );
-}
-
-function HistoryPanel({ commits }: { commits: Commit[] }) {
-  return (
-    <section className="history-panel" aria-labelledby="history-title">
-      <h2 id="history-title">Git 履歴</h2>
-      {commits.length ? <ol>{commits.map((commit) => <li key={commit.hash}><strong>{commit.message}</strong><span>{commit.hash.slice(0, 12)} · {new Date(commit.date).toLocaleString("ja-JP")}</span></li>)}</ol> : <p>履歴はありません。</p>}
     </section>
   );
 }
