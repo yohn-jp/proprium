@@ -970,7 +970,11 @@ function makeActions(moduleContext: StoryCapabilityContext): ModuleAction[] {
       const source = identifyNarrativeChangeSet(context, input);
       const existingResult = await context.invoke("core.proposals.get", { proposalId: source.coreProposalId });
       if (existingResult.ok) {
-        const status = (existingResult.data as { proposal?: { proposal?: unknown } }).proposal;
+        const envelope = (existingResult.data as { proposal?: { payloadComplete?: boolean; proposal?: unknown } }).proposal;
+        if (envelope?.payloadComplete === false) {
+          throw Object.assign(new Error("The complete original Story change proposal payload is unavailable; it cannot be reconstructed from the accepted subset"), { code: "PROPOSAL_PAYLOAD_UNAVAILABLE" });
+        }
+        const status = envelope;
         const prior = status?.proposal;
         if (!isRecord(prior) || !Array.isArray(prior.evidence)) {
           throw Object.assign(new Error("Existing Core proposal has no Story source identity evidence"), { code: "change_set_identity_conflict" });

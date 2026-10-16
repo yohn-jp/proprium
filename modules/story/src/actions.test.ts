@@ -705,6 +705,36 @@ test("NarrativeChangeSet retries return the stored proposal and reject changed s
   assert.equal(proposals.length, 1, "an exact retry does not reset Core approvals by proposing again");
 });
 
+test("NarrativeChangeSet refuses to reconstruct an incomplete recovered Core proposal", async () => {
+  const reader = makeReader(fixtureFiles());
+  const proposals: ChangeProposal[] = [];
+  const context = makeActionContext(reader, { proposals });
+  let recovered: unknown;
+  context.invoke = async () => recovered
+    ? { ok: true, snapshot: reader.snapshot, data: { proposal: recovered } }
+    : { ok: false, snapshot: reader.snapshot, error: { code: "proposal_not_found", message: "missing", retryable: false } };
+  const current = (await invoke<{ revision: string }>("story.entities.get", { id: "char-uma" }, context)).data;
+  const changeSet = {
+    schemaVersion: 1, id: "ncs-incomplete-recovery", projectId: context.projectId, goal: "Update a name", status: "proposed",
+    assessment: { confidence: 0.8, risk: "low" },
+    operations: [{ id: "update-uma", kind: "entity.update", precondition: { kind: "revision", value: current.revision }, target: { entityId: "char-uma" }, changes: { name: "Uma Recovery" }, evidenceIds: [], assessment: { confidence: 0.8, risk: "low" } }],
+    evidence: [], diagnostics: { before: null, after: null },
+  };
+  const first = await actionById("story.changes.propose").invoke(changeSet, context);
+  assert.equal(first.ok, true, first.ok ? undefined : first.error.message);
+  if (!first.ok) return;
+  const fullProposal = first.proposals![0]!;
+  recovered = {
+    proposal: { ...fullProposal, evidence: undefined },
+    payloadComplete: false,
+    operationIds: fullProposal.operations.map((operation) => operation.id),
+  };
+  const retry = await actionById("story.changes.propose").invoke(changeSet, context);
+  assert.equal(retry.ok, false);
+  if (!retry.ok) assert.equal(retry.error.code, "PROPOSAL_PAYLOAD_UNAVAILABLE");
+  assert.equal(proposals.length, 1, "Story does not fabricate a full source proposal from Core's accepted subset");
+});
+
 test("NarrativeChangeSet preserves unrestricted source IDs and maps unsafe IDs to Core-safe proposal IDs", async () => {
   const reader = makeReader(fixtureFiles());
   const proposals: ChangeProposal[] = [];
