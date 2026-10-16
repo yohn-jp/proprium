@@ -1,13 +1,23 @@
 import { randomBytes, timingSafeEqual } from "node:crypto";
 import { createServer as createHttpServer, type IncomingMessage, type Server, type ServerResponse } from "node:http";
-import { readFile } from "node:fs/promises";
-import { resolve } from "node:path";
-import { fileURLToPath } from "node:url";
+import { Readable } from "node:stream";
+import { pipeline } from "node:stream/promises";
+import { lstat, readFile, realpath } from "node:fs/promises";
+import { extname, resolve, sep } from "node:path";
+import { fileURLToPath, pathToFileURL } from "node:url";
+import Fastify, { type FastifyInstance, type FastifyRequest } from "fastify";
+import { CONTRACT_VERSION, snapshotKey, type ActionDescriptor, type ActionResult, type ChangeOperation, type ChangeProposal, type HttpContribution, type ModuleAction, type ModuleActionContext, type ModuleId, type ModuleStatus, type ProposalEvidence, type SnapshotId, type ValueSchema } from "@scriptorium/contracts";
 import type { CoreStore } from "@scriptorium/core";
+import { ModuleRuntime, type ActionHostContext, type ModuleLoader, type ModuleRuntimeOptions } from "@scriptorium/module-runtime";
 
 const SESSION_COOKIE = "scriptorium_session";
 const SESSION_TTL_MS = 8 * 60 * 60 * 1000;
-const MAX_JSON_BYTES = 8 * 1024 * 1024;
+const MAX_JSON_BYTES = 12 * 1024 * 1024;
+const MAX_SNAPSHOT_FILES = 1000;
+const MAX_SNAPSHOT_BYTES = 8 * 1024 * 1024;
+const MAX_SCRATCH_ATTACHMENT_BYTES = 8 * 1024 * 1024;
+const API_VERSION = "0.1.0";
+const STYLE_NONCES = new WeakMap<IncomingMessage, string>();
 
 interface Session {
   expiresAt: number;
@@ -20,6 +30,11 @@ export interface ApiServerOptions {
   staticDir?: string;
   /** Trust X-Forwarded-Proto when TLS terminates at a reverse proxy. */
   trustProxy?: boolean;
+  /** A deployment-selected, metadata-first runtime. Omitted modules are never imported. */
+  runtime?: ModuleRuntime;
+  /** Trusted profile composition; loaders remain lazy until their module is activated. */
+  runtimeOptions?: Omit<ModuleRuntimeOptions, "cacheDirectory"> & { cacheDirectory?: string };
+  profile?: string;
 }
 
 interface HttpFailure {
@@ -96,11 +111,12 @@ function sendJson(response: ServerResponse, status: number, value: unknown): voi
   response.end(JSON.stringify(value));
 }
 
-async function readJson(request: IncomingMessage): Promise<unknown> {
+async function readJson(request: IncomingMessage, parsedBody?: unknown): Promise<unknown> {
   const contentType = request.headers["content-type"]?.split(";", 1)[0]?.trim().toLowerCase();
   if (contentType !== "application/json") {
     throw httpFailure(415, "JSON_REQUIRED", "Send a JSON request body");
   }
+  if (parsedBody !== undefined) return parsedBody;
   const chunks: Buffer[] = [];
   let size = 0;
   for await (const chunk of request) {
@@ -174,20 +190,111 @@ async function serveStatic(
     "/drafts.js": { filename: "drafts.js", contentType: "text/javascript; charset=utf-8" },
     "/styles.css": { filename: "styles.css", contentType: "text/css; charset=utf-8" },
   };
-  const file = files[path];
+  let file = files[path];
+  if (!file && path.startsWith("/assets/")) {
+    const name = path.slice("/assets/".length);
+    if (!name || name.includes("/") || name.includes("\\") || name === "." || name === "..") return false;
+    const extension = extname(name).toLowerCase();
+    const contentTypes: Record<string, string> = {
+      ".js": "text/javascript; charset=utf-8", ".css": "text/css; charset=utf-8", ".svg": "image/svg+xml",
+      ".png": "image/png", ".jpg": "image/jpeg", ".jpeg": "image/jpeg", ".webp": "image/webp",
+      ".avif": "image/avif", ".gif": "image/gif", ".woff": "font/woff", ".woff2": "font/woff2",
+      ".ttf": "font/ttf", ".otf": "font/otf", ".ico": "image/x-icon",
+    };
+    if (!contentTypes[extension] || !/^[A-Za-z0-9._-]{1,180}$/u.test(name)) return false;
+    file = { filename: resolve(staticDir, "assets", name), contentType: contentTypes[extension] };
+  }
   if (!file) return false;
   try {
-    const original = await readFile(resolve(staticDir, file.filename));
-    const content = file.filename === "index.html"
+    const target = file.filename.startsWith(sep) ? file.filename : resolve(staticDir, file.filename);
+    const root = await realpath(staticDir);
+    const assetsDirectory = path.startsWith("/assets/") ? resolve(staticDir, "assets") : undefined;
+    if (assetsDirectory && (await lstat(assetsDirectory)).isSymbolicLink()) {
+      sendJson(response, 404, { error: "Page not found", code: "NOT_FOUND" });
+      return true;
+    }
+    const originalStat = await lstat(target);
+    if (!originalStat.isFile() || originalStat.isSymbolicLink()) {
+      sendJson(response, 404, { error: "Page not found", code: "NOT_FOUND" });
+      return true;
+    }
+    const resolvedTarget = await realpath(target);
+    if (resolvedTarget !== root && !resolvedTarget.startsWith(`${root}${sep}`)) {
+      sendJson(response, 404, { error: "Page not found", code: "NOT_FOUND" });
+      return true;
+    }
+    const original = await readFile(resolvedTarget);
+    const content = path === "/" || resolvedTarget === resolve(staticDir, "index.html")
       ? Buffer.from(original.toString("utf8").replaceAll("__SCRIPTORIUM_STYLE_NONCE__", styleNonce))
       : original;
     response.writeHead(200, { "Content-Type": file.contentType, "Content-Length": content.length });
     response.end(request.method === "HEAD" ? undefined : content);
-  } catch {
-    sendJson(response, 503, { error: "Writing application is not built", code: "APP_NOT_BUILT" });
+  } catch (error) {
+    const code = (error as NodeJS.ErrnoException).code;
+    if (path.startsWith("/assets/") && (code === "ENOENT" || code === "ENOTDIR")) {
+      sendJson(response, 404, { error: "Page not found", code: "NOT_FOUND" });
+    } else {
+      sendJson(response, 503, { error: "Writing application is not built", code: "APP_NOT_BUILT" });
+    }
   }
   return true;
 }
+
+function queryOf(request: IncomingMessage): URLSearchParams {
+  return new URL(request.url ?? "/", `http://${request.headers.host ?? "localhost"}`).searchParams;
+}
+
+function projectPathId(value: string): string { return parseProjectId(value); }
+
+function optionalSnapshot(query: URLSearchParams): { view: "remote" | "checkpoint"; pinned?: string } {
+  const rawView = query.get("view");
+  const view = rawView === null ? "remote" : rawView;
+  if (view !== "remote" && view !== "checkpoint") throw httpFailure(400, "INVALID_VIEW", "Snapshot view must be remote or checkpoint");
+  const pinned = query.get("snapshot") ?? undefined;
+  if (pinned !== undefined && !/^(?:[a-f0-9]{40}|[a-f0-9]{64})$/u.test(pinned)) {
+    throw httpFailure(400, "INVALID_SNAPSHOT", "Snapshot must be a full Git commit ID");
+  }
+  return { view, ...(pinned ? { pinned } : {}) };
+}
+
+function boundedInt(value: string | null, fallback: number, min: number, max: number): number {
+  if (value === null || value === "") return fallback;
+  if (!/^\d+$/u.test(value)) throw httpFailure(400, "INVALID_LIMIT", "Limit must be a positive integer");
+  const parsed = Number(value);
+  if (!Number.isSafeInteger(parsed) || parsed < min || parsed > max) throw httpFailure(400, "INVALID_LIMIT", `Limit must be from ${min} to ${max}`);
+  return parsed;
+}
+
+type ProposalStatus = {
+  proposal: ChangeProposal;
+  state: "proposed" | "partially_approved" | "approved" | "checkpointed";
+  approvedOperationIds: string[];
+  checkpoints: import("@scriptorium/contracts").CheckpointReceipt[];
+  stale: boolean;
+};
+
+type CoreStoreApi = CoreStore & {
+  listManuscriptSnapshots?: (projectId: string, manuscriptId: string, sceneId?: string, view?: "remote" | "checkpoint", pinned?: SnapshotId | string) => Promise<{ snapshot: SnapshotId; snapshots: unknown[] }>;
+  readManuscriptSnapshot?: (projectId: string, manuscriptId: string, snapshotId: string, view?: "remote" | "checkpoint", pinned?: SnapshotId | string) => Promise<{ snapshot: SnapshotId; manuscript: unknown } | null>;
+  listProposals?: (projectId: string) => Promise<ProposalStatus[]>;
+  getProposal?: (projectId: string, proposalId: string) => Promise<ProposalStatus | null>;
+  searchSnapshot?: (projectId: string, query: string, limit?: number, view?: "remote" | "checkpoint", pinned?: SnapshotId | string) => Promise<{ snapshot: SnapshotId; results: unknown[] }>;
+  writingStatsSnapshot?: (projectId: string, view?: "remote" | "checkpoint", pinned?: SnapshotId | string) => Promise<{ snapshot: SnapshotId; stats: unknown }>;
+};
+
+type RuntimeHttpHost = ModuleRuntime & {
+  metadata?: () => unknown;
+  httpContributions?: (id: string) => readonly Omit<HttpContribution, "handle">[];
+  invokeHttp?: (id: string, contributionId: string, request: Request, host: ActionHostContext) => Promise<Response>;
+};
+
+type HttpContributionDescriptor = Omit<HttpContribution, "handle">;
+
+type ApiActionHost = ActionHostContext & {
+  actions?: readonly { module: ModuleId | "core"; action: ModuleAction }[];
+  linkedReader?: (repositoryId: string) => Promise<ModuleActionContext["reader"]>;
+  access?: "owner" | "public";
+};
 
 export function createServer(options: ApiServerOptions): Server {
   if (options.authToken.length < 32 || options.authToken.trim() !== options.authToken) {
@@ -196,142 +303,775 @@ export function createServer(options: ApiServerOptions): Server {
   const staticDir = options.staticDir ?? resolve(process.cwd(), "app/dist");
   const trustProxy = options.trustProxy ?? false;
   const sessions = new Map<string, Session>();
+  const coreStore = options.store as CoreStoreApi;
+  const runtime: RuntimeHttpHost = options.runtime ?? new ModuleRuntime({
+    manifests: options.runtimeOptions?.manifests ?? [],
+    enabled: options.runtimeOptions?.enabled ?? [],
+    ...(options.runtimeOptions ?? {}),
+    cacheDirectory: options.runtimeOptions?.cacheDirectory ?? resolve(process.cwd(), "data/module-cache"),
+  });
+  const profile = options.profile ?? process.env.SCRIPTORIUM_PROFILE ?? "core";
+  if (profile === "full" && !options.runtime && !options.runtimeOptions) {
+    throw new Error("The full profile requires trusted runtime manifests and lazy loaders");
+  }
+  const app: FastifyInstance = Fastify({ logger: false, trustProxy });
+  let shuttingDown = false;
+  let activeRequests = 0;
+  let started = false;
+  let lastPendingLocalCheckpoints: number | null = null;
+  let closed = false;
 
-  const handle = async (request: IncomingMessage, response: ServerResponse): Promise<void> => {
-    const styleNonce = randomBytes(18).toString("base64");
-    setSecurityHeaders(response, styleNonce);
-    const path = requestPath(request);
+  app.addContentTypeParser("application/json", { parseAs: "string", bodyLimit: MAX_JSON_BYTES }, (_request, body, done) => {
+    try { done(null, JSON.parse(body as string) as unknown); }
+    catch {
+      const error = new Error("Request body must be valid JSON") as Error & { status: number; code: string };
+      error.status = 400;
+      error.code = "INVALID_JSON";
+      done(error);
+    }
+  });
+  app.addHook("onRequest", (request, reply, done) => {
+    const nonce = randomBytes(18).toString("base64");
+    STYLE_NONCES.set(request.raw, nonce);
+    setSecurityHeaders(reply.raw, nonce);
+    done();
+  });
+  app.setErrorHandler((error, _request, reply) => {
+    const status = (error as Error & { statusCode?: number }).statusCode;
+    if (status === 413) sendJson(reply.raw, 413, { error: "Request body is too large", code: "BODY_TOO_LARGE" });
+    else if (status === 415) sendJson(reply.raw, 415, { error: "Send a JSON request body", code: "JSON_REQUIRED" });
+    else sendError(reply.raw, error);
+  });
+  app.addHook("onClose", async () => {
+    await runtime.shutdown();
+  });
 
-    if (path === "/api/health" && request.method === "GET") {
-      sendJson(response, 200, { status: "ok" });
+  const fail = (response: ServerResponse, status: number, code: string, message: string): void => {
+    sendJson(response, status, { error: message, code });
+  };
+  const abortSignalFor = (request: IncomingMessage, response: ServerResponse): AbortSignal => {
+    const controller = new AbortController();
+    const abort = () => controller.abort(new Error("HTTP request was cancelled"));
+    request.once("aborted", abort);
+    response.once("close", () => { if (!response.writableEnded) abort(); });
+    return controller.signal;
+  };
+  const freshReader = async (projectId: string, view: "remote" | "checkpoint" = "remote", pinned?: string) => {
+    return options.store.reader(projectId, view, pinned);
+  };
+  const searchSnapshot = async (projectId: string, term: string, limit: number, selected: ReturnType<typeof optionalSnapshot>) => {
+    if (!coreStore.searchSnapshot) throw httpFailure(503, "SEARCH_UNAVAILABLE", "Snapshot search is not available in this Core version");
+    const result = await coreStore.searchSnapshot(projectId, term, limit, selected.view, selected.pinned);
+    return { snapshot: result.snapshot, query: term, results: result.results };
+  };
+  const writingStatsSnapshot = async (projectId: string, selected: ReturnType<typeof optionalSnapshot>) => {
+    if (!coreStore.writingStatsSnapshot) throw httpFailure(503, "WRITING_STATS_UNAVAILABLE", "Snapshot writing statistics are not available in this Core version");
+    return coreStore.writingStatsSnapshot(projectId, selected.view, selected.pinned);
+  };
+  const buildCoreActions = (projectId: string): Array<{ module: "core"; action: ModuleAction }> => {
+    const jsonSchema: ValueSchema = {
+      parse(value: unknown): unknown {
+        let encoded: string;
+        try { encoded = JSON.stringify(value); } catch { throw new Error("Core result is not JSON serializable"); }
+        if (Buffer.byteLength(encoded ?? "", "utf8") > MAX_SNAPSHOT_BYTES) throw new Error("Core result exceeds the allowed size");
+        return value;
+      },
+    };
+    const emptyInput: ValueSchema = { parse(value: unknown) {
+      if (value === undefined) return {};
+      if (!isRecord(value) || Object.keys(value).length !== 0) throw new Error("This action accepts an empty object");
+      return {};
+    } };
+    const proposalInput: ValueSchema = { parse(value: unknown) {
+      if (!isRecord(value) || typeof value.proposalId !== "string" || value.proposalId.length < 1 || value.proposalId.length > 128) throw new Error("proposalId is required");
+      return { proposalId: value.proposalId };
+    } };
+    const sceneInput: ValueSchema = { parse(value: unknown) {
+      if (!isRecord(value) || typeof value.sceneId !== "string" || value.sceneId.length < 1 || value.sceneId.length > 256) throw new Error("sceneId is required");
+      return { sceneId: value.sceneId };
+    } };
+    const manuscriptSnapshotsInput: ValueSchema = { parse(value: unknown) {
+      if (!isRecord(value) || typeof value.manuscriptId !== "string" || !value.manuscriptId || value.manuscriptId.length > 256 ||
+          (value.sceneId !== undefined && (typeof value.sceneId !== "string" || !value.sceneId || value.sceneId.length > 256))) {
+        throw new Error("manuscriptId and an optional sceneId are required");
+      }
+      return { manuscriptId: value.manuscriptId, ...(typeof value.sceneId === "string" ? { sceneId: value.sceneId } : {}) };
+    } };
+    const manuscriptSnapshotInput: ValueSchema = { parse(value: unknown) {
+      if (!isRecord(value) || typeof value.manuscriptId !== "string" || !value.manuscriptId || value.manuscriptId.length > 256 ||
+          typeof value.snapshotId !== "string" || !/^(?:[a-f0-9]{40}|[a-f0-9]{64})$/u.test(value.snapshotId)) {
+        throw new Error("manuscriptId and a full snapshotId are required");
+      }
+      return { manuscriptId: value.manuscriptId, snapshotId: value.snapshotId };
+    } };
+    const searchInput: ValueSchema = { parse(value: unknown) {
+      if (!isRecord(value) || typeof value.query !== "string" || !value.query.trim() || value.query.length > 512) throw new Error("query must contain 1 to 512 characters");
+      const limit = value.limit === undefined ? 20 : value.limit;
+      if (typeof limit !== "number" || !Number.isInteger(limit) || limit < 1 || limit > 100) throw new Error("limit must be an integer from 1 to 100");
+      return { query: value.query, limit };
+    } };
+    const search = async (reader: Awaited<ReturnType<typeof freshReader>>, term: string, limit: number) => {
+      if (!coreStore.searchSnapshot) throw httpFailure(503, "SEARCH_UNAVAILABLE", "Snapshot search is not available in this Core version");
+      const result = await coreStore.searchSnapshot(projectId, term, limit, "remote", reader.snapshot.remoteCommit);
+      return { query: term, results: result.results };
+    };
+    const make = (id: string, inputSchema: ValueSchema, read: (context: ModuleActionContext, input: unknown) => Promise<unknown>): ModuleAction => ({
+      id,
+      effect: "read",
+      inputSchema,
+      outputSchema: jsonSchema,
+      async invoke(input, context) {
+        try {
+          const before = await options.store.observe(projectId);
+          if (context.signal.aborted) return { ok: false, snapshot: context.reader.snapshot, error: { code: "action_cancelled", message: "Action was cancelled", retryable: false } };
+          if (snapshotKey(before.snapshot) !== snapshotKey(context.reader.snapshot)) {
+            return { ok: false, snapshot: context.reader.snapshot, error: { code: "snapshot_changed", message: "The repository changed before this read completed", retryable: true } };
+          }
+          const data = await read(context, input);
+          if (context.signal.aborted) return { ok: false, snapshot: context.reader.snapshot, error: { code: "action_cancelled", message: "Action was cancelled", retryable: false } };
+          const after = await options.store.observe(projectId);
+          if (snapshotKey(after.snapshot) !== snapshotKey(context.reader.snapshot)) {
+            return { ok: false, snapshot: context.reader.snapshot, error: { code: "snapshot_changed", message: "The repository changed during this read", retryable: true } };
+          }
+          return { ok: true, snapshot: context.reader.snapshot, data };
+        } catch (error) {
+          const candidate = error as { code?: unknown; message?: unknown; retryable?: unknown; status?: unknown };
+          return { ok: false, snapshot: context.reader.snapshot, error: {
+            code: typeof candidate?.code === "string" ? candidate.code : "core_read_failed",
+            message: typeof candidate?.message === "string" ? candidate.message.slice(0, 512) : "Core read failed",
+            retryable: candidate?.retryable === true || candidate?.status === 502,
+          } };
+        }
+      },
+    });
+    return [
+      { module: "core", action: make("core.status", emptyInput, async () => options.store.status(projectId)) },
+      { module: "core", action: make("core.history", emptyInput, async () => options.store.history(projectId)) },
+      { module: "core", action: make("core.observation", emptyInput, async () => options.store.observe(projectId)) },
+      { module: "core", action: make("core.tree", emptyInput, async (context) => options.store.readTreeSnapshot(projectId, "remote", context.reader.snapshot.remoteCommit)) },
+      { module: "core", action: make("core.scene.context", sceneInput, async (context, input) => options.store.readSceneSnapshot(projectId, (input as { sceneId: string }).sceneId, "remote", context.reader.snapshot.remoteCommit)) },
+      { module: "core", action: make("core.manuscript-snapshots", manuscriptSnapshotsInput, async (context, input) => {
+        if (!coreStore.listManuscriptSnapshots) throw httpFailure(503, "SNAPSHOT_HISTORY_UNAVAILABLE", "Manuscript snapshot history is not available in this Core version");
+        const parsed = input as { manuscriptId: string; sceneId?: string };
+        return coreStore.listManuscriptSnapshots(projectId, parsed.manuscriptId, parsed.sceneId, "remote", context.reader.snapshot.remoteCommit);
+      }) },
+      { module: "core", action: make("core.manuscript-snapshot", manuscriptSnapshotInput, async (context, input) => {
+        if (!coreStore.readManuscriptSnapshot) throw httpFailure(503, "SNAPSHOT_HISTORY_UNAVAILABLE", "Manuscript snapshot history is not available in this Core version");
+        const parsed = input as { manuscriptId: string; snapshotId: string };
+        const result = await coreStore.readManuscriptSnapshot(projectId, parsed.manuscriptId, parsed.snapshotId, "remote", context.reader.snapshot.remoteCommit);
+        if (!result) throw httpFailure(404, "MANUSCRIPT_SNAPSHOT_NOT_FOUND", "Manuscript snapshot is not reachable from the selected commit");
+        return result;
+      }) },
+      { module: "core", action: make("core.proposals.list", emptyInput, async () => {
+        if (!coreStore.listProposals) throw httpFailure(503, "PROPOSAL_STATUS_UNAVAILABLE", "Proposal review is not available in this Core version");
+        const proposals = await coreStore.listProposals(projectId);
+        return { proposals: proposals.slice(0, 1000) };
+      }) },
+      { module: "core", action: make("core.proposals.get", proposalInput, async (_context, input) => {
+        if (!coreStore.getProposal) throw httpFailure(503, "PROPOSAL_STATUS_UNAVAILABLE", "Proposal review is not available in this Core version");
+        const status = await coreStore.getProposal(projectId, (input as { proposalId: string }).proposalId);
+        if (!status) throw httpFailure(404, "PROPOSAL_NOT_FOUND", "Proposal not found");
+        return { proposal: status };
+      }) },
+      { module: "core", action: make("core.search", searchInput, async (context, input) => {
+        const parsed = input as { query: string; limit: number };
+        return search(context.reader, parsed.query, parsed.limit);
+      }) },
+      { module: "core", action: make("core.writing-stats", emptyInput, async (context) => {
+        if (!coreStore.writingStatsSnapshot) throw httpFailure(503, "WRITING_STATS_UNAVAILABLE", "Snapshot writing statistics are not available in this Core version");
+        const result = await coreStore.writingStatsSnapshot(projectId, "remote", context.reader.snapshot.remoteCommit);
+        return result.stats;
+      }) },
+      { module: "core", action: make("core.repositories.list", emptyInput, async () => {
+        const repositories = [];
+        for (const project of await options.store.listProjects()) {
+          const observation = await options.store.observe(project.id);
+          repositories.push({ projectId: project.id, repository: observation.snapshot.repository, snapshot: observation.snapshot });
+        }
+        return { repositories };
+      }) },
+    ];
+  };
+
+  const enabledStatuses = async (): Promise<ModuleStatus[]> => runtime.statuses();
+  const activateEnabled = async (): Promise<void> => {
+    for (const status of await enabledStatuses()) {
+      if (status.availability === "enabled-idle" || status.availability === "active") await runtime.activate(status.id);
+    }
+  };
+  const listActionDescriptors = async (projectId: string, signal: AbortSignal): Promise<ActionDescriptor[]> => {
+    const reader = await freshReader(projectId);
+    return runtime.listActions(actionHost(projectId, reader, signal, "author"));
+  };
+  const proposeAs = async (
+    projectId: string,
+    snapshot: SnapshotId,
+    operations: ChangeOperation[],
+    source: ChangeProposal["source"],
+    evidence?: ProposalEvidence[],
+    requestedId?: string,
+  ): Promise<ChangeProposal> => options.store.propose(projectId, {
+    id: requestedId ?? randomBytes(16).toString("hex"), snapshot, operations, source,
+    ...(evidence?.length ? { evidence } : {}),
+  });
+  const actionHost = (
+    projectId: string,
+    reader: Awaited<ReturnType<typeof freshReader>>,
+    signal: AbortSignal,
+    source: ChangeProposal["source"],
+    access: "owner" | "public" = "owner",
+  ): ApiActionHost => ({
+    projectId,
+    reader,
+    signal,
+    actions: buildCoreActions(projectId),
+    propose: (operations: ChangeOperation[], evidence?: ProposalEvidence[], proposalId?: string) => {
+      if (proposalId !== undefined && !/^[A-Za-z0-9_-]{1,128}$/u.test(proposalId)) throw httpFailure(400, "INVALID_PROPOSAL_ID", "Proposal ID must contain 1 to 128 letters, numbers, underscores, or hyphens");
+      return proposeAs(projectId, reader.snapshot, operations, source, evidence, proposalId);
+    },
+    linkedReader: async (repositoryId: string) => {
+      for (const project of await options.store.listProjects()) {
+        const observation = await options.store.observe(project.id);
+        if (observation.snapshot.repository.repositoryId === repositoryId) return freshReader(project.id, "remote", observation.snapshot.remoteCommit);
+      }
+      throw httpFailure(404, "REPOSITORY_NOT_FOUND", "Linked repository is not registered to this owner");
+    },
+    access,
+  });
+
+  const serveModuleResponse = async (response: Response, raw: ServerResponse, signal: AbortSignal): Promise<void> => {
+    if (response.body === null) {
+      raw.statusCode = response.status;
+      raw.end();
       return;
     }
+    if (response.status < 200 || response.status > 599) throw httpFailure(502, "MODULE_HTTP_INVALID_RESPONSE", "Module returned an invalid HTTP response");
+    const forbiddenHeaders = new Set(["set-cookie", "content-security-policy", "x-frame-options", "x-content-type-options", "referrer-policy", "cache-control", "connection", "keep-alive", "content-length", "trailer", "transfer-encoding", "upgrade"]);
+    response.headers.forEach((value, key) => {
+      if (!forbiddenHeaders.has(key.toLowerCase()) && !key.toLowerCase().startsWith("access-control-")) raw.setHeader(key, value);
+    });
+    raw.statusCode = response.status;
+    await pipeline(Readable.fromWeb(response.body as never), raw, { signal });
+  };
+  const makeWebRequest = (request: IncomingMessage, body: unknown, signal: AbortSignal, relativePath?: string): Request => {
+    const method = request.method ?? "GET";
+    const host = request.headers.host ?? "localhost";
+    const originalUrl = new URL(request.url ?? "/", `${requestProtocol(request, trustProxy)}//${host}`);
+    if (relativePath !== undefined) originalUrl.pathname = `/${relativePath.replace(/^\/+/, "")}`;
+    const url = originalUrl.href;
+    const headers = new Headers();
+    for (const [name, value] of Object.entries(request.headers)) {
+      if (value === undefined || name.toLowerCase() === "host" || name.toLowerCase() === "connection") continue;
+      for (const item of Array.isArray(value) ? value : [value]) headers.append(name, item);
+    }
+    const init: RequestInit = { method, headers, signal };
+    if (body !== undefined && !["GET", "HEAD"].includes(method)) init.body = JSON.stringify(body);
+    return new Request(url, init);
+  };
+  const matchTemplate = (template: string, relative: string): boolean => {
+    const expected = template.replace(/^\/+|\/+$/gu, "").split("/").filter(Boolean);
+    const actual = relative.replace(/^\/+|\/+$/gu, "").split("/").filter(Boolean);
+    if (expected.length !== actual.length) return false;
+    return expected.every((part, index) => {
+      const value = actual[index]!;
+      try {
+        const decoded = decodeURIComponent(value);
+        if (!decoded || decoded.includes("/") || decoded.includes("\\") || decoded === "." || decoded === "..") return false;
+      } catch { return false; }
+      if (part.startsWith(":")) return /^[A-Za-z0-9._~-]{1,256}$/u.test(decodeURIComponent(value));
+      return part === value;
+    });
+  };
+  const contributionFor = async (moduleId: string, relative: string, method: string): Promise<HttpContributionDescriptor | undefined> => {
+    try { await runtime.activate(moduleId); }
+    catch (error) {
+      const candidate = error as { code?: unknown; message?: unknown };
+      if (candidate?.code === "module_disabled" || candidate?.code === "redeployment_required" || candidate?.code === "unknown_module_id") return undefined;
+      throw error;
+    }
+    const contributions: readonly HttpContributionDescriptor[] = runtime.httpContributions?.(moduleId) ?? [];
+    return contributions.find((contribution) => contribution.methods.includes(method as HttpContribution["methods"][number]) && matchTemplate(contribution.path, relative));
+  };
 
-    if (request.method === "OPTIONS") {
-      response.writeHead(204, { "Allow": "GET, HEAD, POST, PUT, OPTIONS" });
+  const createScratch = async (projectId: string, value: unknown, isCookie: boolean, response: ServerResponse): Promise<void> => {
+    if (!isCookie) throw httpFailure(403, "AUTHOR_SESSION_REQUIRED", "Scratch checkpoints require an owner session");
+    if (!isRecord(value) || typeof value.text !== "string" || value.text.length > 100_000 ||
+        (value.source !== undefined && !["voice", "camera", "text"].includes(String(value.source))) ||
+        (value.sceneId !== undefined && (typeof value.sceneId !== "string" || !value.sceneId || value.sceneId.length > 256)) ||
+        (value.attachments !== undefined && (!Array.isArray(value.attachments) || value.attachments.length > 8))) {
+      throw httpFailure(400, "INVALID_SCRATCH", "Scratch text, source, scene, or attachment fields are invalid");
+    }
+    const text = value.text;
+    const source = typeof value.source === "string" ? value.source : undefined;
+    const sceneId = typeof value.sceneId === "string" ? value.sceneId : undefined;
+    const inputs = (value.attachments ?? []) as unknown[];
+    const createdAt = new Date().toISOString();
+    const id = `scratch-${createdAt.slice(0, 10).replaceAll("-", "")}-${randomBytes(6).toString("hex")}`;
+    const attachments: Array<{ filename: string; path: string; mimeType: string; content: Buffer }> = [];
+    let totalBytes = 0;
+    for (const item of inputs) {
+      if (!isRecord(item) || typeof item.filename !== "string" || !item.filename.trim() || item.filename.length > 256 ||
+          typeof item.mimeType !== "string" || !/^[A-Za-z0-9!#$&^_.+-]{1,128}\/[A-Za-z0-9!#$&^_.+-]{1,128}$/u.test(item.mimeType) ||
+          typeof item.dataBase64 !== "string" || !item.dataBase64 || item.dataBase64.length > Math.ceil(MAX_SCRATCH_ATTACHMENT_BYTES * 4 / 3) + 4 ||
+          !/^(?:[A-Za-z0-9+/]{4})*(?:[A-Za-z0-9+/]{2}==|[A-Za-z0-9+/]{3}=)?$/u.test(item.dataBase64)) {
+        throw httpFailure(400, "INVALID_SCRATCH_ATTACHMENT", "Scratch attachment fields are invalid");
+      }
+      const content = Buffer.from(item.dataBase64, "base64");
+      if (content.length === 0) throw httpFailure(400, "EMPTY_SCRATCH_ATTACHMENT", "Scratch attachments cannot be empty");
+      if (content.toString("base64") !== item.dataBase64) throw httpFailure(400, "INVALID_SCRATCH_ATTACHMENT", "Scratch attachment base64 is not canonical");
+      totalBytes += content.length;
+      if (content.length > MAX_SCRATCH_ATTACHMENT_BYTES || totalBytes > MAX_SCRATCH_ATTACHMENT_BYTES) {
+        throw httpFailure(413, "SCRATCH_ATTACHMENT_TOO_LARGE", "Scratch attachments exceed the 8 MiB total limit");
+      }
+      const baseName = item.filename.split(/[\\/]/u).at(-1) ?? "";
+      const filename = baseName.replace(/[^\w.\-()\u3040-\u30ff\u4e00-\u9fff]+/gu, "_").slice(0, 120) || "attachment.bin";
+      attachments.push({ filename, path: `meta/scratch/files/${id}-${filename}`, mimeType: item.mimeType, content });
+    }
+    if (!text.trim() && attachments.length === 0) throw httpFailure(400, "INVALID_SCRATCH", "Scratch text or at least one attachment is required");
+    const filePath = `meta/scratch/${id}.md`;
+    const reader = await freshReader(projectId, "remote");
+    const old = await reader.read(filePath);
+    const markdownLines = ["---", `id: ${JSON.stringify(id)}`, `createdAt: ${JSON.stringify(createdAt)}`,
+      ...(source ? [`source: ${JSON.stringify(source)}`] : []), ...(sceneId ? [`sceneId: ${JSON.stringify(sceneId)}`] : [])];
+    if (attachments.length) {
+      markdownLines.push("attachments:");
+      for (const attachment of attachments) markdownLines.push(`  - filename: ${JSON.stringify(attachment.filename)}`, `    path: ${JSON.stringify(attachment.path)}`, `    mimeType: ${JSON.stringify(attachment.mimeType)}`);
+    }
+    markdownLines.push("---", "", ...(text.trimEnd() ? [text.trimEnd(), ""] : []));
+    for (const attachment of attachments) markdownLines.push(`${attachment.mimeType.startsWith("image/") ? "!" : ""}[${attachment.filename}](${attachment.path})`, "");
+    const markdown = markdownLines.join("\n");
+    const writes: ChangeOperation["writes"] = [{ path: filePath, revision: old?.revision ?? null, content: markdown }];
+    for (const attachment of attachments) {
+      const previous = await reader.read(attachment.path, "base64");
+      writes.push({ path: attachment.path, revision: previous?.revision ?? null, content: attachment.content.toString("base64"), encoding: "base64" });
+    }
+    const operation: ChangeOperation = {
+      id: randomBytes(16).toString("hex"), generation: 0, repository: reader.snapshot.repository, baseRemoteCommit: reader.snapshot.remoteCommit,
+      effect: "metadata", reads: writes.map(({ path, revision }) => ({ path, revision })), writes, message: `scratch: ${id}`,
+    };
+    const proposal = await options.store.propose(projectId, { id: randomBytes(16).toString("hex"), snapshot: reader.snapshot, operations: [operation], source: "author" });
+    await options.store.approve(projectId, { proposalId: proposal.id, operationIds: [operation.id], authorScope: "owner" });
+    const receipt = await options.store.checkpoint(projectId, operation);
+    sendJson(response, 201, {
+      id, path: filePath, createdAt, ...(source ? { source } : {}), sceneId: sceneId ?? null,
+      attachments: attachments.map(({ filename, path, mimeType }) => ({ filename, path, mimeType })), proposal, receipt,
+    });
+  };
+
+  const handle = async (request: IncomingMessage, response: ServerResponse, parsedBody?: unknown): Promise<void> => {
+    const styleNonce = STYLE_NONCES.get(request) ?? randomBytes(18).toString("base64");
+    if (!response.headersSent) setSecurityHeaders(response, styleNonce);
+    const routePath = requestPath(request);
+    const method = request.method ?? "GET";
+    const query = queryOf(request);
+    const isRead = method === "GET" || method === "HEAD";
+    const publicRead = isRead && ["/api/health", "/api/ready", "/api/version", "/health/live", "/health/ready", "/health/startup"].includes(routePath);
+    const publicModuleRoute = routePath.startsWith("/api/public/repos/") && routePath.includes("/modules/");
+
+    if (method === "OPTIONS") {
+      response.writeHead(204, { Allow: "GET, HEAD, POST, PUT, PATCH, DELETE, OPTIONS" });
       response.end();
       return;
     }
+    if (routePath === "/api/health" && isRead) { sendJson(response, 200, { status: "ok" }); return; }
+    if (routePath === "/api/ready" && isRead) { sendJson(response, shuttingDown ? 503 : 200, { ok: !shuttingDown, pendingRequests: activeRequests, pendingLocalCheckpoints: lastPendingLocalCheckpoints }); return; }
+    if (routePath === "/health/live" && isRead) { sendJson(response, 200, { ok: true }); return; }
+    if (routePath === "/health/startup" && isRead) { sendJson(response, started && !closed ? 200 : 503, { ok: started && !closed, started }); return; }
+    if (routePath === "/health/ready" && isRead) { sendJson(response, shuttingDown ? 503 : 200, { ok: !shuttingDown, pendingRequests: activeRequests, pendingLocalCheckpoints: lastPendingLocalCheckpoints }); return; }
 
-    if (path.startsWith("/api/") && !["GET", "HEAD"].includes(request.method ?? "")) {
-      if (!sameOrigin(request, trustProxy)) {
-        sendJson(response, 403, { error: "Request origin must match this application", code: "CROSS_ORIGIN_REQUEST" });
-        return;
-      }
-    }
-
-    if (path === "/api/login" && request.method === "POST") {
-      const body = await readJson(request);
+    if (routePath === "/api/login" && method === "POST") {
+      if (!sameOrigin(request, trustProxy)) { fail(response, 403, "CROSS_ORIGIN_REQUEST", "Request origin must match this application"); return; }
+      const body = await readJson(request, parsedBody);
       const token = isRecord(body) && typeof body.token === "string" ? body.token : "";
-      if (!constantTimeEqual(token, options.authToken)) {
-        sendJson(response, 401, { error: "Invalid access token", code: "UNAUTHORIZED" });
-        return;
-      }
-      for (const [id, session] of sessions) {
-        if (session.expiresAt <= Date.now()) sessions.delete(id);
-      }
+      if (!constantTimeEqual(token, options.authToken)) { fail(response, 401, "UNAUTHORIZED", "Invalid access token"); return; }
+      for (const [id, session] of sessions) if (session.expiresAt <= Date.now()) sessions.delete(id);
       const sessionId = randomBytes(32).toString("base64url");
       sessions.set(sessionId, { expiresAt: Date.now() + SESSION_TTL_MS });
       response.setHeader("Set-Cookie", cookieHeader(request, sessionId, trustProxy));
       sendJson(response, 200, { authenticated: true });
       return;
     }
-
-    if (path.startsWith("/api/")) {
-      const sessionId = cookieValue(request, SESSION_COOKIE);
-      const session = sessionId ? sessions.get(sessionId) : undefined;
-      if (!session || session.expiresAt <= Date.now()) {
-        if (sessionId) sessions.delete(sessionId);
-        response.setHeader("WWW-Authenticate", 'Cookie realm="scriptorium"');
-        sendJson(response, 401, { error: "Authentication required", code: "UNAUTHORIZED" });
-        return;
-      }
-      session.expiresAt = Date.now() + SESSION_TTL_MS;
-
-      if (path === "/api/session" && request.method === "GET") {
-        sendJson(response, 200, { authenticated: true });
-        return;
-      }
-      if (path === "/api/logout" && request.method === "POST") {
-        if (sessionId) sessions.delete(sessionId);
-        response.setHeader("Set-Cookie", clearCookie(request, trustProxy));
-        sendJson(response, 200, { authenticated: false });
-        return;
-      }
-      if (path === "/api/projects" && request.method === "GET") {
-        sendJson(response, 200, await options.store.listProjects());
-        return;
-      }
-      if (path === "/api/projects" && request.method === "POST") {
-        const body = await readJson(request);
-        if (!isRecord(body) || typeof body.url !== "string" || !body.url.trim()) {
-          throw httpFailure(400, "INVALID_PROJECT", "Repository URL is required");
-        }
-        if (body.branch !== undefined && typeof body.branch !== "string") {
-          throw httpFailure(400, "INVALID_PROJECT", "Branch must be a string");
-        }
-        const project = await options.store.registerProject({
-          url: body.url.trim(),
-          ...(typeof body.branch === "string" && body.branch.trim() ? { branch: body.branch.trim() } : {}),
-        });
-        sendJson(response, 201, project);
-        return;
-      }
-
-      const treeMatch = path.match(/^\/api\/projects\/([^/]+)\/tree$/);
-      if (treeMatch && request.method === "GET") {
-        sendJson(response, 200, await options.store.tree(parseProjectId(treeMatch[1]!)));
-        return;
-      }
-      const sceneMatch = path.match(/^\/api\/projects\/([^/]+)\/scenes\/([^/]+)$/);
-      if (sceneMatch && request.method === "GET") {
-        sendJson(response, 200, await options.store.readScene(parseProjectId(sceneMatch[1]!), parseSceneId(sceneMatch[2]!)));
-        return;
-      }
-      if (sceneMatch && request.method === "PUT") {
-        const body = await readJson(request);
-        if (!isRecord(body) || typeof body.text !== "string" || typeof body.revision !== "string" || !body.revision) {
-          throw httpFailure(400, "INVALID_SCENE", "Scene text and its revision are required");
-        }
-        const scene = await options.store.saveScene(parseProjectId(sceneMatch[1]!), parseSceneId(sceneMatch[2]!), {
-          text: body.text,
-          revision: body.revision,
-        });
-        sendJson(response, 200, scene);
-        return;
-      }
-      const historyMatch = path.match(/^\/api\/projects\/([^/]+)\/history$/);
-      if (historyMatch && request.method === "GET") {
-        sendJson(response, 200, await options.store.history(parseProjectId(historyMatch[1]!)));
-        return;
-      }
-      const statusMatch = path.match(/^\/api\/projects\/([^/]+)\/status$/);
-      if (statusMatch && request.method === "GET") {
-        sendJson(response, 200, await options.store.status(parseProjectId(statusMatch[1]!)));
-        return;
-      }
-      const syncMatch = path.match(/^\/api\/projects\/([^/]+)\/sync$/);
-      if (syncMatch && request.method === "POST") {
-        sendJson(response, 200, await options.store.sync(parseProjectId(syncMatch[1]!)));
-        return;
-      }
-      if (path.startsWith("/api/")) {
-        sendJson(response, 404, { error: "API route not found", code: "NOT_FOUND" });
-        return;
-      }
-    }
-
-    if (path.startsWith("/api/")) {
-      sendJson(response, 404, { error: "API route not found", code: "NOT_FOUND" });
+    if (routePath === "/api/version" && isRead) {
+      sendJson(response, 200, {
+        name: "scriptorium", version: API_VERSION, contractVersion: CONTRACT_VERSION,
+        profile, auth: ["cookie-owner", "bearer-read-propose"], runtime: { name: "@scriptorium/module-runtime", contractVersion: CONTRACT_VERSION, ...(runtime.metadata ? { metadata: runtime.metadata() } : {}) },
+        modules: await enabledStatuses(),
+      });
       return;
     }
+    if (routePath === "/api/nlp/features" && method === "GET") {
+      const modules = await enabledStatuses();
+      const nlpModules = modules.filter((module) => ["nlp", "semantic", "speaker", "assistant"].includes(module.id));
+      sendJson(response, 200, {
+        providerKind: "none",
+        features: nlpModules.map((module) => ({
+          id: module.id,
+          label: module.id,
+          locality: module.id === "assistant" ? "external" : "local",
+          ...(module.id === "assistant" ? { enabled: false } : {}),
+        })),
+        settings: { externalEnabled: {} },
+        modules: nlpModules,
+      });
+      return;
+    }
+
+    const sessionId = cookieValue(request, SESSION_COOKIE);
+    const session = sessionId ? sessions.get(sessionId) : undefined;
+    const isCookie = Boolean(session && session.expiresAt > Date.now());
+    if (sessionId && !isCookie) sessions.delete(sessionId);
+    const authHeader = request.headers.authorization;
+    const bearer = typeof authHeader === "string" && authHeader.startsWith("Bearer ") ? authHeader.slice(7) : "";
+    const isBearer = !isCookie && bearer.length > 0 && constantTimeEqual(bearer, options.authToken);
+    const hasAuth = isCookie || isBearer;
+    if (routePath.startsWith("/api/") && !publicRead && !publicModuleRoute && !hasAuth) {
+      response.setHeader("WWW-Authenticate", 'Bearer realm="scriptorium", Cookie realm="scriptorium"');
+      fail(response, 401, "UNAUTHORIZED", "Authentication required");
+      return;
+    }
+    if (isCookie) session!.expiresAt = Date.now() + SESSION_TTL_MS;
+    if (isCookie && !isRead && routePath.startsWith("/api/") && !sameOrigin(request, trustProxy)) {
+      fail(response, 403, "CROSS_ORIGIN_REQUEST", "Request origin must match this application");
+      return;
+    }
+    if (shuttingDown && routePath.startsWith("/api/") && !isRead) {
+      fail(response, 503, "SHUTTING_DOWN", "The server is draining and is not accepting new mutations");
+      return;
+    }
+
+    const signal = abortSignalFor(request, response);
+    if (routePath === "/api/session" && method === "GET") {
+      sendJson(response, 200, { authenticated: true, authorScope: isCookie ? "owner" : "" });
+      return;
+    }
+    if (routePath === "/api/logout" && method === "POST") {
+      if (!isCookie) { fail(response, 403, "AUTHOR_SESSION_REQUIRED", "Only an owner session can log out"); return; }
+      if (sessionId) sessions.delete(sessionId);
+      response.setHeader("Set-Cookie", clearCookie(request, trustProxy));
+      sendJson(response, 200, { authenticated: false });
+      return;
+    }
+    if (routePath === "/api/projects" && method === "GET") { sendJson(response, 200, await options.store.listProjects()); return; }
+    if (routePath === "/api/projects" && method === "POST") {
+      if (!isCookie) { fail(response, 403, "AUTHOR_SESSION_REQUIRED", "Repository registration requires an owner session"); return; }
+      const body = await readJson(request, parsedBody);
+      if (!isRecord(body) || typeof body.url !== "string" || !body.url.trim()) throw httpFailure(400, "INVALID_PROJECT", "Repository URL is required");
+      if (body.branch !== undefined && typeof body.branch !== "string") throw httpFailure(400, "INVALID_PROJECT", "Branch must be a string");
+      const project = await options.store.registerProject({ url: body.url.trim(), ...(typeof body.branch === "string" && body.branch.trim() ? { branch: body.branch.trim() } : {}) });
+      sendJson(response, 201, project); return;
+    }
+    if (routePath === "/api/review-queue" && method === "GET") {
+      if (!coreStore.listProposals) throw httpFailure(503, "PROPOSAL_STATUS_UNAVAILABLE", "Proposal review is not available in this Core version");
+      const items: Array<{ projectId: string; proposal: ProposalStatus }> = [];
+      for (const project of await options.store.listProjects()) {
+        for (const proposal of await coreStore.listProposals(project.id)) {
+          if (proposal.state !== "checkpointed") items.push({ projectId: project.id, proposal });
+        }
+      }
+      sendJson(response, 200, { unresolvedCount: items.length, items: items.slice(0, 1000) });
+      return;
+    }
+
+    const projectRoot = routePath.match(/^\/api\/projects\/([^/]+)(?:\/(.*))?$/u);
+    if (projectRoot) {
+      const projectId = projectPathId(projectRoot[1]!);
+      const suffix = projectRoot[2] ?? "";
+      if (suffix === "modules" && method === "GET") { sendJson(response, 200, await enabledStatuses()); return; }
+      if (suffix === "contributions" && method === "GET") {
+        await activateEnabled();
+        const contributions = (await enabledStatuses())
+          .filter((status) => status.availability === "enabled-idle" || status.availability === "active")
+          .flatMap((status) => runtime.contributions(status.id));
+        sendJson(response, 200, contributions); return;
+      }
+      if (suffix === "tree" && method === "GET") {
+        if (query.has("view") || query.has("snapshot")) {
+          const selected = optionalSnapshot(query);
+          sendJson(response, 200, await options.store.readTreeSnapshot(projectId, selected.view, selected.pinned));
+        } else sendJson(response, 200, await options.store.tree(projectId));
+        return;
+      }
+      const sceneMatch = suffix.match(/^scenes\/([^/]+)$/u);
+      if (sceneMatch && method === "GET") {
+        const sceneId = parseSceneId(sceneMatch[1]!);
+        if (query.has("view") || query.has("snapshot")) {
+          const selected = optionalSnapshot(query);
+          sendJson(response, 200, await options.store.readSceneSnapshot(projectId, sceneId, selected.view, selected.pinned));
+        } else sendJson(response, 200, await options.store.readScene(projectId, sceneId));
+        return;
+      }
+      if (sceneMatch && method === "PUT") {
+        if (!isCookie) { fail(response, 403, "AUTHOR_SESSION_REQUIRED", "Scene saves require an owner session"); return; }
+        const body = await readJson(request, parsedBody);
+        if (!isRecord(body) || typeof body.text !== "string" || typeof body.revision !== "string" || !body.revision) throw httpFailure(400, "INVALID_SCENE", "Scene text and its revision are required");
+        sendJson(response, 200, await options.store.saveScene(projectId, parseSceneId(sceneMatch[1]!), { text: body.text, revision: body.revision }));
+        return;
+      }
+      if (suffix === "snapshot" && method === "GET") {
+        const selected = optionalSnapshot(query);
+        const reader = await freshReader(projectId, selected.view, selected.pinned);
+        const paths = await reader.list("");
+        if (paths.length > MAX_SNAPSHOT_FILES) throw httpFailure(413, "SNAPSHOT_TOO_LARGE", `Snapshot contains more than ${MAX_SNAPSHOT_FILES} files`);
+        let total = 0;
+        const files = [];
+        for (const filePath of paths) {
+          const file = await reader.read(filePath);
+          if (!file) continue;
+          total += Buffer.byteLength(file.content, "utf8");
+          if (total > MAX_SNAPSHOT_BYTES) throw httpFailure(413, "SNAPSHOT_TOO_LARGE", "Snapshot exceeds the allowed response size");
+          files.push({ path: filePath, content: file.content, revision: file.revision });
+        }
+        sendJson(response, 200, { snapshot: reader.snapshot, files });
+        return;
+      }
+      if (suffix === "history" && method === "GET") { sendJson(response, 200, await options.store.history(projectId)); return; }
+      if (suffix === "status" && method === "GET") { sendJson(response, 200, await options.store.status(projectId)); return; }
+      if (suffix === "observation" && method === "GET") { sendJson(response, 200, await options.store.observe(projectId)); return; }
+      if (suffix === "sync" && method === "POST") {
+        if (!isCookie) { fail(response, 403, "AUTHOR_SESSION_REQUIRED", "Workspace synchronization requires an owner session"); return; }
+        sendJson(response, 200, await options.store.sync(projectId)); return;
+      }
+      if (suffix === "reconcile" && method === "POST") {
+        if (!isCookie) { fail(response, 403, "AUTHOR_SESSION_REQUIRED", "Checkpoint reconciliation requires an owner session"); return; }
+        sendJson(response, 200, await options.store.reconcile(projectId)); return;
+      }
+      if (suffix === "publish" && method === "POST") {
+        if (!isCookie) { fail(response, 403, "AUTHOR_SESSION_REQUIRED", "Publishing requires an owner session"); return; }
+        const body = await readJson(request, parsedBody);
+        if (!isRecord(body) || typeof body.batchId !== "string" || !body.batchId) throw httpFailure(400, "INVALID_BATCH", "A publish batch ID is required");
+        sendJson(response, 200, await options.store.publish(projectId, body.batchId)); return;
+      }
+      if (suffix === "proposals" && method === "POST") {
+        const body = await readJson(request, parsedBody);
+        if (!isRecord(body) || !isRecord(body.snapshot) || !Array.isArray(body.operations) || !body.operations.length) throw httpFailure(400, "INVALID_PROPOSAL", "A proposal snapshot and at least one operation are required");
+        const requestedId = typeof body.id === "string" ? body.id : typeof body.proposalId === "string" ? body.proposalId : undefined;
+        const proposal: ChangeProposal = {
+          id: requestedId || randomBytes(16).toString("hex"),
+          snapshot: body.snapshot as unknown as SnapshotId,
+          operations: body.operations as ChangeOperation[],
+          source: isBearer ? "mcp" : "author",
+          ...(Array.isArray(body.evidence) ? { evidence: body.evidence as ProposalEvidence[] } : {}),
+        };
+        sendJson(response, 201, await options.store.propose(projectId, proposal)); return;
+      }
+      if (suffix === "proposals" && method === "GET") {
+        if (!coreStore.listProposals) throw httpFailure(503, "PROPOSAL_STATUS_UNAVAILABLE", "Proposal review is not available in this Core version");
+        sendJson(response, 200, { proposals: (await coreStore.listProposals(projectId)).slice(0, 1000) }); return;
+      }
+      const proposalMatch = suffix.match(/^proposals\/([^/]+)$/u);
+      if (proposalMatch && method === "GET") {
+        if (!coreStore.getProposal) throw httpFailure(503, "PROPOSAL_STATUS_UNAVAILABLE", "Proposal review is not available in this Core version");
+        const proposal = await coreStore.getProposal(projectId, parseProjectId(proposalMatch[1]!));
+        if (!proposal) throw httpFailure(404, "PROPOSAL_NOT_FOUND", "Proposal not found");
+        sendJson(response, 200, proposal); return;
+      }
+      if (suffix === "approvals" && method === "POST") {
+        if (!isCookie) { fail(response, 403, "AUTHOR_SESSION_REQUIRED", "Proposal approval requires an owner session"); return; }
+        const body = await readJson(request, parsedBody);
+        if (!isRecord(body) || typeof body.proposalId !== "string" || !body.proposalId || !Array.isArray(body.operationIds) || !body.operationIds.every((id) => typeof id === "string")) throw httpFailure(400, "INVALID_APPROVAL", "Proposal and operation IDs are required");
+        await options.store.approve(projectId, { proposalId: body.proposalId, operationIds: body.operationIds as string[], authorScope: "owner" });
+        response.writeHead(204); response.end(); return;
+      }
+      if (suffix === "checkpoints" && method === "POST") {
+        if (!isCookie) { fail(response, 403, "AUTHOR_SESSION_REQUIRED", "Checkpoint creation requires an owner session"); return; }
+        const body = await readJson(request, parsedBody);
+        sendJson(response, 201, await options.store.checkpoint(projectId, body as ChangeOperation)); return;
+      }
+      if (suffix === "actions" && method === "GET") {
+        sendJson(response, 200, { actions: await listActionDescriptors(projectId, signal) }); return;
+      }
+      const actionMatch = suffix.match(/^actions\/([^/]+)$/u);
+      if (actionMatch && method === "POST") {
+        const body = await readJson(request, parsedBody);
+        if (!isRecord(body) || !("input" in body)) throw httpFailure(400, "INVALID_ACTION", "Action input is required");
+        const actionId = parseProjectId(actionMatch[1]!);
+        const descriptors = await listActionDescriptors(projectId, signal);
+        const descriptor = descriptors.find((item) => item.id === actionId);
+        if (!descriptor) throw httpFailure(404, "ACTION_NOT_FOUND", `Action ${actionId} is unavailable`);
+        if (isBearer && !["read", "propose"].includes(descriptor.effect)) throw httpFailure(403, "BEARER_EFFECT_DENIED", "Bearer credentials may only invoke read and propose actions");
+        const reader = await freshReader(projectId, "remote");
+        const host = actionHost(projectId, reader, signal, descriptor.module === "core" ? (isBearer ? "mcp" : "author") : isBearer ? "mcp" : "module");
+        if (descriptor.module === "core") {
+          const coreAction = host.actions?.find(({ action }) => action.id === descriptor.id)?.action;
+          if (!coreAction) throw httpFailure(404, "ACTION_NOT_FOUND", `Action ${actionId} is unavailable`);
+          const moduleContext: ModuleActionContext = {
+            projectId, reader, signal,
+            invoke: async () => ({ ok: false, snapshot: reader.snapshot, error: { code: "ACTION_UNAVAILABLE", message: "Core host actions cannot dispatch module actions", retryable: false } }),
+            listActions: async () => descriptors,
+            linkedReader: async (repositoryId: string) => host.linkedReader!(repositoryId),
+            propose: async () => { throw httpFailure(403, "ACTION_EFFECT_DENIED", "Read-only Core actions cannot propose changes"); },
+            runJob: async (request) => ({ ok: false, id: request.id, snapshot: reader.snapshot, error: { code: "ACTION_EFFECT_DENIED", message: "Core host actions cannot run jobs", retryable: false } }),
+          };
+          let input: unknown;
+          try { input = coreAction.inputSchema.parse(body.input); }
+          catch (error) {
+            sendJson(response, 200, { ok: false, snapshot: reader.snapshot, error: { code: "invalid_action_input", message: error instanceof Error ? error.message.slice(0, 512) : "Action input is invalid", retryable: false } } satisfies ActionResult);
+            return;
+          }
+          let result = await coreAction.invoke(input, moduleContext);
+          if (result.ok) {
+            try { result = { ...result, data: coreAction.outputSchema.parse(result.data) }; }
+            catch (error) {
+              result = { ok: false, snapshot: reader.snapshot, error: { code: "invalid_action_result", message: error instanceof Error ? error.message.slice(0, 512) : "Action result is invalid", retryable: false } };
+            }
+          }
+          sendJson(response, 200, result); return;
+        }
+        const result = await runtime.invokeAction(descriptor.module, actionId, body.input, host);
+        sendJson(response, 200, result); return;
+      }
+      if (suffix === "manuscripts" && method === "GET") { sendJson(response, 200, { manuscripts: [] }); return; }
+      const snapshotsMatch = suffix.match(/^manuscripts\/([^/]+)\/snapshots$/u);
+      if (snapshotsMatch && method === "GET") {
+        if (!coreStore.listManuscriptSnapshots) throw httpFailure(503, "SNAPSHOT_HISTORY_UNAVAILABLE", "Manuscript snapshot history is not available in this Core version");
+        const selected = optionalSnapshot(query);
+        const sceneId = query.get("sceneId") ?? undefined;
+        if (sceneId !== undefined && (!sceneId || sceneId.length > 256)) throw httpFailure(400, "INVALID_ID", "Scene identifier is invalid");
+        sendJson(response, 200, await coreStore.listManuscriptSnapshots(projectId, parseProjectId(snapshotsMatch[1]!), sceneId, selected.view, selected.pinned));
+        return;
+      }
+      const snapshotMatch = suffix.match(/^manuscripts\/([^/]+)\/snapshots\/([^/]+)$/u);
+      if (snapshotMatch && method === "GET") {
+        if (!coreStore.readManuscriptSnapshot) throw httpFailure(503, "SNAPSHOT_HISTORY_UNAVAILABLE", "Manuscript snapshot history is not available in this Core version");
+        const selected = optionalSnapshot(query);
+        const snapshotId = parseProjectId(snapshotMatch[2]!);
+        if (!/^(?:[a-f0-9]{40}|[a-f0-9]{64})$/u.test(snapshotId)) throw httpFailure(400, "INVALID_SNAPSHOT", "Manuscript snapshot ID must be a full Git commit ID");
+        const result = await coreStore.readManuscriptSnapshot(projectId, parseProjectId(snapshotMatch[1]!), snapshotId, selected.view, selected.pinned);
+        if (!result) throw httpFailure(404, "MANUSCRIPT_SNAPSHOT_NOT_FOUND", "Manuscript snapshot is not reachable from the selected commit");
+        if (Buffer.byteLength(JSON.stringify(result), "utf8") > MAX_SNAPSHOT_BYTES) throw httpFailure(413, "SNAPSHOT_TOO_LARGE", "Manuscript snapshot exceeds the response size limit");
+        sendJson(response, 200, result); return;
+      }
+
+      const moduleRoute = suffix.match(/^modules\/([^/]+)(?:\/(.*))?$/u);
+      if (moduleRoute) {
+        const moduleId = parseProjectId(moduleRoute[1]!);
+        const contribution = await contributionFor(moduleId, moduleRoute[2] ?? "", method);
+        if (!contribution || contribution.access !== "owner") throw httpFailure(404, "MODULE_ROUTE_UNAVAILABLE", "Module route is unavailable");
+        if (isBearer && !["read", "propose"].includes(contribution.effect)) throw httpFailure(403, "BEARER_EFFECT_DENIED", "Bearer credentials may only use read and propose module routes");
+        if (!runtime.invokeHttp) throw httpFailure(503, "MODULE_HTTP_UNAVAILABLE", "The runtime does not support HTTP module contributions");
+        if (contribution.effect === "read" && method !== "GET" && method !== "HEAD") throw httpFailure(405, "MODULE_HTTP_METHOD_DENIED", "Read-only module routes must use GET or HEAD");
+        const reader = await freshReader(projectId, "remote");
+        const host = actionHost(projectId, reader, signal, isBearer ? "mcp" : "module");
+        const webRequest = makeWebRequest(request, parsedBody, signal, moduleRoute[2] ?? "");
+        const moduleResponse = await runtime.invokeHttp(moduleId, contribution.id, webRequest, host);
+        await serveModuleResponse(moduleResponse, response, signal);
+        return;
+      }
+
+      const searchMatch = suffix.match(/^search$/u);
+      if (searchMatch && method === "GET") {
+        const term = query.get("q") ?? "";
+        if (!term.trim() || term.length > 512) throw httpFailure(400, "INVALID_QUERY", "A search query from 1 to 512 characters is required");
+        const limit = boundedInt(query.get("limit"), 20, 1, 100);
+        const selected = optionalSnapshot(query);
+        sendJson(response, 200, await searchSnapshot(projectId, term, limit, selected)); return;
+      }
+      const statsMatch = suffix.match(/^writing-stats$/u);
+      if (statsMatch && method === "GET") {
+        const selected = optionalSnapshot(query);
+        sendJson(response, 200, await writingStatsSnapshot(projectId, selected)); return;
+      }
+      if (suffix === "scratch" && method === "POST") {
+        await createScratch(projectId, await readJson(request, parsedBody), isCookie, response); return;
+      }
+      if (suffix === "review-queue" && method === "GET") {
+        if (!coreStore.listProposals) throw httpFailure(503, "PROPOSAL_STATUS_UNAVAILABLE", "Proposal review is not available in this Core version");
+        const proposals = await coreStore.listProposals(projectId);
+        sendJson(response, 200, { snapshot: (await options.store.observe(projectId)).snapshot, proposals: proposals.slice(0, 1000) }); return;
+      }
+
+      if (suffix.startsWith("modules/") || suffix.startsWith("actions/")) throw httpFailure(404, "NOT_FOUND", "API route not found");
+    }
+
+    if (routePath === "/api/search" && method === "GET") {
+      const projectId = query.get("projectId");
+      if (!projectId) throw httpFailure(400, "PROJECT_REQUIRED", "projectId is required");
+      const term = query.get("q") ?? "";
+      if (!term.trim() || term.length > 512) throw httpFailure(400, "INVALID_QUERY", "A search query from 1 to 512 characters is required");
+      const limit = boundedInt(query.get("limit"), 20, 1, 100);
+      sendJson(response, 200, await searchSnapshot(projectId, term, limit, optionalSnapshot(query)));
+      return;
+    }
+    if (routePath === "/api/writing-stats" && method === "GET") {
+      const projectId = query.get("projectId");
+      if (!projectId) throw httpFailure(400, "PROJECT_REQUIRED", "projectId is required");
+      sendJson(response, 200, await writingStatsSnapshot(projectId, optionalSnapshot(query)));
+      return;
+    }
+    if (routePath === "/api/scratch" && method === "POST") {
+      const projectId = query.get("projectId");
+      if (!projectId) throw httpFailure(400, "PROJECT_REQUIRED", "projectId is required");
+      await createScratch(projectId, await readJson(request, parsedBody), isCookie, response);
+      return;
+    }
+    if (routePath.startsWith("/api/public/repos/") && routePath.includes("/modules/")) {
+      const publicMatch = routePath.match(/^\/api\/public\/repos\/([^/]+)\/modules\/([^/]+)(?:\/(.*))?$/u);
+      if (!publicMatch) throw httpFailure(404, "NOT_FOUND", "Public module route not found");
+      const repositoryId = parseProjectId(publicMatch[1]!);
+      if (!/^\d{1,32}$/u.test(repositoryId)) throw httpFailure(404, "REPOSITORY_NOT_FOUND", "Public repository was not found");
+      const moduleId = parseProjectId(publicMatch[2]!);
+      const projectList = await options.store.listProjects();
+      let projectId: string | undefined;
+      let snapshot: SnapshotId | undefined;
+      for (const project of projectList) {
+        const observed = await options.store.observe(project.id);
+        if (observed.snapshot.repository.repositoryId === repositoryId) { projectId = project.id; snapshot = observed.snapshot; break; }
+      }
+      if (!projectId || !snapshot) throw httpFailure(404, "REPOSITORY_NOT_FOUND", "Public repository was not found");
+      const contribution = await contributionFor(moduleId, publicMatch[3] ?? "", method);
+      if (!contribution || contribution.access !== "public" || contribution.effect !== "read") throw httpFailure(404, "MODULE_ROUTE_UNAVAILABLE", "Public module route is unavailable");
+      if (!isRead) throw httpFailure(405, "PUBLIC_MODULE_READ_ONLY", "Public module routes are read-only");
+      if (!runtime.invokeHttp) throw httpFailure(503, "MODULE_HTTP_UNAVAILABLE", "The runtime does not support HTTP module contributions");
+      const reader = await freshReader(projectId, "remote", snapshot.remoteCommit);
+      const host = actionHost(projectId, reader, signal, "module", "public");
+      const moduleResponse = await runtime.invokeHttp(moduleId, contribution.id, makeWebRequest(request, parsedBody, signal, publicMatch[3] ?? ""), host);
+      await serveModuleResponse(moduleResponse, response, signal); return;
+    }
+
+    if (routePath.startsWith("/api/")) { fail(response, 404, "NOT_FOUND", "API route not found"); return; }
     if (await serveStatic(request, response, staticDir, styleNonce)) return;
-    sendJson(response, 404, { error: "Page not found", code: "NOT_FOUND" });
+    fail(response, 404, "NOT_FOUND", "Page not found");
   };
 
-  return createHttpServer((request, response) => {
-    void handle(request, response).catch((error: unknown) => sendError(response, error));
+  const routeHandler = async (request: FastifyRequest, reply: import("fastify").FastifyReply): Promise<void> => {
+    reply.hijack();
+    activeRequests += 1;
+    try { await handle(request.raw, reply.raw, request.body); }
+    catch (error) { if (!reply.raw.headersSent) sendError(reply.raw, error); else reply.raw.destroy(error instanceof Error ? error : undefined); }
+    finally { activeRequests = Math.max(0, activeRequests - 1); }
+  };
+  const methods = ["GET", "HEAD", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"] as const;
+  app.route({ method: [...methods], url: "/", handler: routeHandler });
+  app.route({ method: [...methods], url: "/*", handler: routeHandler });
+
+  // Keep the historical synchronous Node server factory while routing every request through Fastify.
+  const server = createHttpServer((request, response) => {
+    void Promise.resolve(app.ready()).then(() => { app.server.emit("request", request, response); }).catch((error: unknown) => sendError(response, error));
   });
+  server.once("listening", () => { started = true; });
+  const nodeClose = server.close.bind(server);
+  server.close = ((callback?: (error?: Error) => void): Server => {
+    if (closed) return server;
+    closed = true;
+    shuttingDown = true;
+    nodeClose((error?: Error) => {
+      void (async () => {
+        let pending = 0;
+        let unknown = false;
+        for (const project of await options.store.listProjects().catch(() => [])) {
+          try { pending += (await options.store.observe(project.id)).pending.length; }
+          catch { unknown = true; }
+        }
+        lastPendingLocalCheckpoints = unknown ? null : pending;
+        if (pending > 0) console.info(`Scriptorium is shutting down with ${pending} local checkpoint(s) pending; no publish was attempted.`);
+        await app.close();
+        callback?.(error);
+      })().catch((closeError: unknown) => callback?.(closeError instanceof Error ? closeError : new Error("API shutdown failed")));
+    });
+    return server;
+  }) as Server["close"];
+  Object.defineProperty(server, "scriptorium", { value: { fastify: app, runtime, profile }, enumerable: false });
+  return server;
 }
 
 function parsePositivePort(value: string | undefined): number {
@@ -341,21 +1081,65 @@ function parsePositivePort(value: string | undefined): number {
   return port;
 }
 
-export async function start(): Promise<Server> {
+export async function start(options?: ApiServerOptions): Promise<Server> {
+  if (options) return startServer(options);
   const authToken = process.env.SCRIPTORIUM_AUTH_TOKEN?.trim();
-  if (!authToken || authToken.length < 32) {
-    throw new Error("SCRIPTORIUM_AUTH_TOKEN is required and must contain at least 32 characters");
-  }
+  if (!authToken || authToken.length < 32) throw new Error("SCRIPTORIUM_AUTH_TOKEN is required and must contain at least 32 characters");
   const { CoreStore } = await import("@scriptorium/core");
+  const profile = process.env.SCRIPTORIUM_PROFILE ?? "core";
+  const cacheDirectory = resolve(process.env.SCRIPTORIUM_MODULE_CACHE_DIR ?? "./data/module-cache");
+  const runtimeOptions = await loadProfileRuntimeOptions(profile, cacheDirectory);
   const store = new CoreStore({
     dataDir: process.env.SCRIPTORIUM_DATA_DIR ?? "./data",
     ...(process.env.SCRIPTORIUM_GITHUB_TOKEN ? { githubToken: process.env.SCRIPTORIUM_GITHUB_TOKEN } : {}),
   });
-  const server = createServer({
+  return startServer({
     store,
     authToken,
     trustProxy: process.env.SCRIPTORIUM_TRUST_PROXY === "1",
+    runtimeOptions,
+    profile,
   });
+}
+
+async function loadProfileRuntimeOptions(
+  profile: string,
+  cacheDirectory: string,
+): Promise<Omit<ModuleRuntimeOptions, "cacheDirectory"> & { cacheDirectory: string }> {
+  if (!/^[a-z][a-z0-9-]{0,31}$/u.test(profile)) throw new Error("SCRIPTORIUM_PROFILE must be a valid profile name");
+  const generated = process.env.SCRIPTORIUM_MODULE_PROFILE_PATH ?? resolve(process.cwd(), "profiles", profile, "generated/server.mjs");
+  let composition: {
+    profile?: unknown;
+    moduleManifests?: ModuleRuntimeOptions["manifests"];
+    moduleLoaders?: ModuleRuntimeOptions["loaders"];
+    moduleDirectories?: ModuleRuntimeOptions["moduleDirectories"];
+    moduleWorkerEntries?: ModuleRuntimeOptions["workerEntries"];
+  } | undefined;
+  try {
+    composition = await import(pathToFileURL(generated).href) as typeof composition;
+  } catch (error) {
+    if (profile === "core" && (error as NodeJS.ErrnoException).code === "ERR_MODULE_NOT_FOUND") {
+      return { manifests: [], enabled: [], cacheDirectory };
+    }
+    throw new Error(`Unable to load trusted ${profile} module composition from ${generated}: ${error instanceof Error ? error.message : String(error)}`);
+  }
+  if (composition?.profile !== profile || !Array.isArray(composition.moduleManifests)) throw new Error(`Generated composition does not match profile ${profile}`);
+  const enabledByEnvironment = process.env.SCRIPTORIUM_ENABLED_MODULES;
+  const enabled = enabledByEnvironment === undefined
+    ? composition.moduleManifests.map((manifest) => manifest.id)
+    : enabledByEnvironment.split(",").map((id) => id.trim()).filter(Boolean);
+  return {
+    manifests: composition.moduleManifests,
+    enabled,
+    loaders: composition.moduleLoaders,
+    moduleDirectories: composition.moduleDirectories,
+    workerEntries: composition.moduleWorkerEntries,
+    cacheDirectory,
+  };
+}
+
+async function startServer(options: ApiServerOptions): Promise<Server> {
+  const server = createServer(options);
   const host = process.env.HOST ?? "127.0.0.1";
   const port = parsePositivePort(process.env.PORT);
   await new Promise<void>((resolveListen, reject) => {
