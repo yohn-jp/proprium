@@ -9,7 +9,7 @@ Companion: [execution and coverage plan](../migration/FULL-MIGRATION-PLAN.md).
 Inspected target: `01403182e9f73dec29d04954e3091c235cd1aac0`.
 Inspected source: `yohn-jp/arcadia-loom@edc033c2c9466274a334299dadfa426661d957d9`.
 
-The target currently has a compact TypeScript Core, Node HTTP API and vanilla browser app. `saveManuscript` creates a local commit; `syncProject` fetches and pushes separately. The browser removes its draft after the local save. Its periodic status request reads cached Git upstream state, not a fresh fetch. These were MVP semantics, not proof of the new durability/freshness contract.
+The target currently has a compact TypeScript Core, Node HTTP API and vanilla browser app. `saveScene` creates a local commit; `sync` fetches and pushes separately. `status`/`statusUnlocked` use cached remote-tracking refs rather than fetching. The browser removes an acknowledged draft after local saving while preserving newer typing. These are MVP semantics, not proof of the new durability/freshness contract.
 
 The source already contains React UI, resource routers, story models, local NLP, ONNX inference, TypeScript speaker training, export and two MCP transports. Its latest merge explicitly records incomplete MCP mutation migration and later planned UI work. A source declaration, menu, placeholder or old passing test is not proof of a functioning capability.
 
