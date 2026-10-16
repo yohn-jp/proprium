@@ -1,5 +1,8 @@
 /** Public, transport-neutral campaign contract v1. No platform or domain dependencies. */
 export const CONTRACT_VERSION = 1 as const;
+export const MAX_JOB_INPUT_BYTES = 8 * 1024 * 1024;
+export const MAX_JOB_OUTPUT_BYTES = 8 * 1024 * 1024;
+export const MAX_PROPOSAL_EVIDENCE_BYTES = 1024 * 1024;
 export type ModuleId = "story" | "diagnostics" | "nlp" | "semantic" | "speaker" | "assistant" | "publishing" | "mcp";
 export interface RepositoryIdentity {
   provider: "github" | "local";
@@ -26,6 +29,7 @@ export interface ChangeOperation {
   reads: FileRevision[];
   writes: FileChange[];
   message: string;
+  evidenceIds?: string[];
 }
 export interface CheckpointReceipt {
   operationId: string;
@@ -52,11 +56,21 @@ export interface SnapshotReader {
   read(path: string): Promise<{ content: string; revision: string } | null>;
   list(prefix: string): Promise<string[]>;
 }
+export interface ProposalEvidence {
+  id: string;
+  snapshot: SnapshotId;
+  module: ModuleId;
+  kind: string;
+  paths: FileRevision[];
+  /** Bounded module-owned JSON, never credentials or executable code. */
+  details: unknown;
+}
 export interface ChangeProposal {
   id: string;
   snapshot: SnapshotId;
   operations: ChangeOperation[];
   source: "author" | "module" | "mcp";
+  evidence?: ProposalEvidence[];
 }
 export interface Approval { proposalId: string; operationIds: string[]; authorScope: string }
 /** Port shared by module and external callers: no author authority. */
@@ -108,7 +122,7 @@ export interface ModuleActionContext {
   reader: SnapshotReader;
   signal: AbortSignal;
   /** Only proposes; approval remains an authenticated author action. */
-  propose(operations: ChangeOperation[]): Promise<ChangeProposal>;
+  propose(operations: ChangeOperation[], evidence?: ProposalEvidence[]): Promise<ChangeProposal>;
   runJob<T = unknown>(request: JobRequest, signal?: AbortSignal): Promise<JobOutcome<T>>;
 }
 export interface ModuleAction {
