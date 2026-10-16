@@ -1,7 +1,7 @@
 # Scriptorium Core — Target Architecture
 
 **Status:** Core implementation contract. See `docs/verification` for executed acceptance evidence.
-**Authority:** Epic #1 and accepted child Issues take precedence when they explicitly change this design.
+**Authority:** This document describes the Core MVP baseline. Epic #7 and [FULL-MIGRATION](FULL-MIGRATION.md) supersede the Core-only scope, transport, recovery and synchronization details for the full migration campaign. Core domain ownership and optional dependency direction remain binding.
 
 ## Product promise
 
