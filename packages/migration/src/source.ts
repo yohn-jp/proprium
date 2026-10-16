@@ -246,9 +246,9 @@ async function inspectGit(root: string): Promise<GitWorktreeInspection> {
       let filePath = item.slice(3);
       state.workingTreePaths.push(filePath);
       if (code === "??") state.untrackedPaths.push(filePath);
-      if (code.includes("M") || code.includes("D") || code.includes("R") || code.includes("C")) {
-        if (code[0] !== " ") state.stagedPaths.push(filePath);
-      }
+      // The index status column includes additions and type changes as well as
+      // modifications/deletions. `??` is an untracked worktree entry, not staged.
+      if (code[0] !== " " && code[0] !== "?") state.stagedPaths.push(filePath);
       // Porcelain v1 -z emits a second NUL field for the old name of a rename/copy.
       if (code.includes("R") || code.includes("C")) {
         const previous = status[index + 1];
@@ -305,6 +305,10 @@ async function readGitPendingFiles(
   const result: GitPendingFile[] = [];
   for (const relativePath of [...pending].sort((a, b) => a.localeCompare(b))) {
     if (MIGRATION_MANAGED_PATHS.has(relativePath) || relativePath.startsWith(".arcadia/")) continue;
+    if (isSecretLegacyPath(relativePath)) {
+      result.push({ path: relativePath, bytes: null, excluded: "secret" });
+      continue;
+    }
     const absolutePath = path.resolve(root, relativePath);
     const rootPath = path.resolve(root);
     if (absolutePath !== rootPath && !absolutePath.startsWith(`${rootPath}${path.sep}`)) {
@@ -317,10 +321,6 @@ async function readGitPendingFiles(
     }
     const info = await fs.lstat(source);
     if (!info.isFile()) throw new Error(`Git pending path is not a regular file: ${relativePath}`);
-    if (isSecretLegacyPath(relativePath)) {
-      result.push({ path: relativePath, bytes: null, excluded: "secret" });
-      continue;
-    }
     result.push({ path: relativePath, bytes: await fs.readFile(source) });
   }
   return result;

@@ -8,7 +8,7 @@ import { test } from "node:test";
 import { DatabaseSync } from "node:sqlite";
 import type { ChangeOperation, RepositoryIdentity, SnapshotId, SnapshotReader } from "@scriptorium/contracts";
 import { assertChangeOperation } from "@scriptorium/contracts";
-import { inspectLegacyProject, proposeMigrationImport } from "./index.js";
+import { createLegacySourceReader, inspectLegacyProject, isSecretLegacyPath, proposeMigrationImport } from "./index.js";
 
 const repository: RepositoryIdentity = {
   provider: "local",
@@ -229,9 +229,13 @@ async function seedGitHistory(sourceRoot: string): Promise<void> {
   const remote = path.join(base, "remote.git");
   await fs.mkdir(path.join(seed, "story"), { recursive: true });
   await fs.mkdir(path.join(seed, "notes"), { recursive: true });
+  await fs.mkdir(path.join(seed, "docs"), { recursive: true });
   await fs.writeFile(path.join(seed, "story", "scene.md"), "remote scene\n");
   await fs.writeFile(path.join(seed, "story", "delete-me.md"), "remote file to delete locally\n");
   await fs.writeFile(path.join(seed, "notes", "reading.md"), "remote reading note\n");
+  await fs.writeFile(path.join(seed, "docs", "typechange.md.target"), "symlink target\n");
+  await fs.symlink("typechange.md.target", path.join(seed, "docs", "typechange.md"));
+  await fs.writeFile(path.join(seed, ".npmrc"), "//registry.npmjs.org/:_authToken=old-synthetic-token\n");
   execFileSync("git", ["init", "-b", "main", seed], { stdio: "ignore" });
   runGit(seed, ["config", "user.email", "migration-test@example.invalid"]);
   runGit(seed, ["config", "user.name", "Migration Test"]);
@@ -243,14 +247,31 @@ async function seedGitHistory(sourceRoot: string): Promise<void> {
   runGit(sourceRoot, ["config", "user.name", "Migration Test"]);
 
   await fs.writeFile(path.join(sourceRoot, "story", "scene.md"), "local committed scene\n");
-  await fs.writeFile(path.join(sourceRoot, "notes", "research.md"), "historical local research note\n");
+  await fs.writeFile(path.join(sourceRoot, "notes", "research.md"), "historical note: the secret token is a story clue\n");
   runGit(sourceRoot, ["add", "story/scene.md", "notes/research.md"]);
   runGit(sourceRoot, ["commit", "-m", "local pending commit"]);
   await fs.writeFile(path.join(sourceRoot, "story", "scene.md"), "staged user override\n");
   runGit(sourceRoot, ["add", "story/scene.md"]);
+  await fs.unlink(path.join(sourceRoot, "docs", "typechange.md"));
+  await fs.writeFile(path.join(sourceRoot, "docs", "typechange.md"), "staged type change\n");
+  await fs.writeFile(path.join(sourceRoot, "notes", "staged-added.md"), "staged addition\n");
+  runGit(sourceRoot, ["add", "docs/typechange.md", "notes/staged-added.md"]);
   await fs.unlink(path.join(sourceRoot, "story", "delete-me.md"));
+  await fs.writeFile(path.join(sourceRoot, ".npmrc"), "//registry.npmjs.org/:_authToken=DO_NOT_EXPORT_NPM_SECRET_SENTINEL\n");
   await writeFile(sourceRoot, "scratch/attachment.bin", Buffer.from([0, 255, 1, 2, 10]));
   await writeFile(sourceRoot, ".env", "DO_NOT_EXPORT_GIT_SECRET_SENTINEL=secret\n");
+  await writeFile(sourceRoot, ".ssh/id_ed25519", "DO_NOT_EXPORT_SSH_PRIVATE_KEY_SENTINEL\n");
+  await writeFile(sourceRoot, ".ssh/id_rsa", "DO_NOT_EXPORT_SSH_RSA_SECRET_SENTINEL\n");
+  await writeFile(sourceRoot, ".git-credentials", "https://user:DO_NOT_EXPORT_GIT_CREDENTIAL_SENTINEL@example.invalid\n");
+  await writeFile(sourceRoot, ".config/git/credentials", "https://user:DO_NOT_EXPORT_GIT_STORE_SENTINEL@example.invalid\n");
+  await writeFile(sourceRoot, ".config/gh/hosts.yml", "github.com:\n    oauth_token: DO_NOT_EXPORT_GH_SECRET_SENTINEL\n");
+  await writeFile(sourceRoot, "gcloud/credentials.db", "DO_NOT_EXPORT_GCLOUD_SECRET_SENTINEL\n");
+  await writeFile(sourceRoot, ".config/gcloud/legacy_credentials/user/adc.json", "DO_NOT_EXPORT_GCLOUD_ADC_SENTINEL\n");
+  await writeFile(sourceRoot, ".aws/credentials", "DO_NOT_EXPORT_AWS_SECRET_SENTINEL\n");
+  await writeFile(sourceRoot, ".azure/accessTokens.json", "DO_NOT_EXPORT_AZURE_SECRET_SENTINEL\n");
+  await writeFile(sourceRoot, ".docker/config.json", '{"auths":{"registry.invalid":"DO_NOT_EXPORT_DOCKER_SECRET_SENTINEL"}}\n');
+  await writeFile(sourceRoot, ".kube/config", "token: DO_NOT_EXPORT_KUBE_SECRET_SENTINEL\n");
+  runGit(sourceRoot, ["add", "-f", ".ssh/id_ed25519", ".ssh/id_rsa", ".git-credentials", ".config/git/credentials", ".config/gh/hosts.yml", "gcloud/credentials.db", ".config/gcloud/legacy_credentials/user/adc.json", ".aws/credentials", ".azure/accessTokens.json", ".docker/config.json", ".kube/config"]);
 }
 
 async function createProjectStores(sourceRoot: string, workspaceRoot: string): Promise<void> {
@@ -292,6 +313,9 @@ function operationContent(files: TargetFiles, target: string): string {
 }
 
 test("legacy inspection preserves scoped data, both SQLite stores, and pending Git work without source writes", async (t) => {
+  assert.equal(isSecretLegacyPath(".ssh/id_ed25519"), true);
+  assert.equal(isSecretLegacyPath(".ssh/id_ed25519.pub"), false, "public SSH keys are not private credential files");
+  assert.equal(isSecretLegacyPath("story/secret-ritual.md"), false, "ordinary manuscript paths are not scanned by body text");
   const temporary = await fs.mkdtemp(path.join(os.tmpdir(), "scriptorium-p04-test-"));
   const sourceRoot = path.join(temporary, "project");
   const workspaceRoot = path.join(temporary, "data");
@@ -329,12 +353,25 @@ test("legacy inspection preserves scoped data, both SQLite stores, and pending G
   assert.deepEqual(await sourceTreeState(workspaceRoot), beforeWorkspace, "workspace files and external SQLite files must remain unchanged");
   assert.equal(inspection.pendingWorkspace.pendingCommitCount, 1);
   assert.ok(inspection.pendingWorkspace.stagedPaths.includes("story/scene.md"));
+  assert.ok(inspection.pendingWorkspace.stagedPaths.includes("notes/staged-added.md"), "staged additions must be listed");
+  assert.ok(inspection.pendingWorkspace.stagedPaths.includes("docs/typechange.md"), "staged type changes must be listed");
   assert.ok(inspection.pendingWorkspace.workingTreePaths.includes("story/delete-me.md"));
+  const excludedGitCredentialPaths = [".npmrc", ".ssh/id_ed25519", ".ssh/id_rsa", ".git-credentials", ".config/git/credentials", ".config/gh/hosts.yml", "gcloud/credentials.db", ".config/gcloud/legacy_credentials/user/adc.json", ".aws/credentials", ".azure/accessTokens.json", ".docker/config.json", ".kube/config"];
+  const pendingGitFiles = await createLegacySourceReader(sourceRoot).readGitPendingFiles(inspection.pendingWorkspace);
+  for (const pathName of excludedGitCredentialPaths) {
+    const file = pendingGitFiles.find(({ path: filePath }) => filePath === pathName);
+    assert.equal(file?.excluded, "secret", `${pathName} should be classified by path before reading content`);
+    assert.equal(file?.bytes, null, `${pathName} contents must not be read`);
+    assert.ok(inspection.entries.some((entry) => entry.source === pathName && entry.category === "secret" && entry.disposition === "excluded"));
+  }
+  assert.deepEqual(await sourceTreeState(sourceRoot), beforeProject, "Git pending-file inspection must also leave the source tree unchanged");
+  assert.deepEqual(await sourceTreeState(workspaceRoot), beforeWorkspace);
 
   const categories = new Set(inspection.entries.map(({ category }) => category));
   for (const category of ["authoritative", "provisional", "secret", "derived", "relocated"]) assert.ok(categories.has(category), `missing ${category} category`);
   const writes = inspection.operations.flatMap((operation) => operation.writes);
   const writePaths = new Set(writes.map(({ path: writePath }) => writePath));
+  for (const pathName of excludedGitCredentialPaths) assert.ok(!writePaths.has(pathName), `${pathName} must not become a migration operation`);
   for (const expected of [
     "meta/scriptorium/modules/speaker/corrections.jsonl",
     "meta/scriptorium/modules/speaker/adopted-model.json",
@@ -353,7 +390,9 @@ test("legacy inspection preserves scoped data, both SQLite stores, and pending G
     "meta/scriptorium/modules/publishing/share-grants.jsonl",
     "story/scene.md",
     "story/delete-me.md",
+    "docs/typechange.md",
     "notes/research.md",
+    "notes/staged-added.md",
     "scratch/attachment.bin",
   ]) assert.ok(writePaths.has(expected), `missing planned import ${expected}`);
 
@@ -386,6 +425,7 @@ test("legacy inspection preserves scoped data, both SQLite stores, and pending G
   assert.equal(writes.find(({ path: writePath }) => writePath.endsWith("assistant/model-settings.json"))?.content,
     '{"defaultPresetId":"selected-small-model","presets":[{"id":"selected-small-model","model":"local/model","label":"selected"}],"featurePresetIds":{"state":"selected-small-model"},"privateExtension":{"retain":7}}\n');
   assert.equal(writes.find(({ path: writePath }) => writePath === "story/scene.md")?.content, "staged user override\n");
+  assert.equal(writes.find(({ path: writePath }) => writePath === "notes/research.md")?.content, "historical note: the secret token is a story clue\n");
   const grantWrite = writes.find(({ path: writePath }) => writePath.endsWith("share-grants.jsonl"))!;
   assert.ok(grantWrite.content?.includes("tokenHash"));
   assert.ok(!grantWrite.content?.includes("owner-private"));
@@ -394,6 +434,9 @@ test("legacy inspection preserves scoped data, both SQLite stores, and pending G
   assert.ok(!allInspectionData.includes("DO_NOT_EXPORT_TOKEN_SENTINEL"));
   assert.ok(!allInspectionData.includes("DO_NOT_EXPORT_USER_SECRET_SENTINEL"));
   assert.ok(!allInspectionData.includes("DO_NOT_EXPORT_GIT_SECRET_SENTINEL"));
+  for (const secret of ["NPM_SECRET", "SSH_PRIVATE_KEY", "SSH_RSA_SECRET", "GIT_CREDENTIAL", "GIT_STORE", "GH_SECRET", "GCLOUD_SECRET", "GCLOUD_ADC", "AWS_SECRET", "AZURE_SECRET", "DOCKER_SECRET", "KUBE_SECRET"]) {
+    assert.ok(!allInspectionData.includes(`DO_NOT_EXPORT_${secret}_SENTINEL`), `secret marker ${secret} leaked into the report`);
+  }
   assert.ok(!allInspectionData.includes("DO_NOT_EXPORT_SQLITE_SECRET_SENTINEL"));
   assert.ok(!allInspectionData.includes('"subject":"left"'));
   assert.ok(!allInspectionData.includes('"subject":"right"'));

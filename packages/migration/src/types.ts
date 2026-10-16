@@ -90,7 +90,7 @@ export interface GitWorktreeInspection {
 
 export interface GitPendingFile {
   path: string;
-  /** Final source checkout content, including uncommitted edits; null represents a deletion. */
+  /** Final source checkout content, including uncommitted edits; null without `excluded` represents a deletion. */
   bytes: Buffer | null;
   /** Secret-like path: it was detected by name and its contents were not read. */
   excluded?: "secret";
