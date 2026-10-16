@@ -699,23 +699,6 @@ export function createServer(options: ApiServerOptions): Server {
       });
       return;
     }
-    if (routePath === "/api/nlp/features" && method === "GET") {
-      const modules = await enabledStatuses();
-      const nlpModules = modules.filter((module) => ["nlp", "semantic", "speaker", "assistant"].includes(module.id));
-      sendJson(response, 200, {
-        providerKind: "none",
-        features: nlpModules.map((module) => ({
-          id: module.id,
-          label: module.id,
-          locality: module.id === "assistant" ? "external" : "local",
-          ...(module.id === "assistant" ? { enabled: false } : {}),
-        })),
-        settings: { externalEnabled: {} },
-        modules: nlpModules,
-      });
-      return;
-    }
-
     const sessionId = cookieValue(request, SESSION_COOKIE);
     const session = sessionId ? sessions.get(sessionId) : undefined;
     const isCookie = Boolean(session && session.expiresAt > Date.now());
@@ -740,6 +723,22 @@ export function createServer(options: ApiServerOptions): Server {
     }
 
     const signal = abortSignalFor(request, response);
+    if (routePath === "/api/nlp/features" && method === "GET") {
+      const modules = await enabledStatuses();
+      const nlpModules = modules.filter((module) => ["nlp", "semantic", "speaker", "assistant"].includes(module.id));
+      sendJson(response, 200, {
+        providerKind: "none",
+        features: nlpModules.map((module) => ({
+          id: module.id,
+          label: module.id,
+          locality: module.id === "assistant" ? "external" : "local",
+          ...(module.id === "assistant" ? { enabled: false } : {}),
+        })),
+        settings: { externalEnabled: {} },
+        modules: nlpModules,
+      });
+      return;
+    }
     if (routePath === "/api/session" && method === "GET") {
       sendJson(response, 200, { authenticated: true, authorScope: isCookie ? "owner" : "" });
       return;

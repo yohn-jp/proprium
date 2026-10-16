@@ -289,6 +289,9 @@ describe("Scriptorium HTTP boundary", () => {
 
     const projects = await fetch(`${apiServer.base}/api/projects`, { headers: auth });
     assert.deepEqual(await projects.json(), [{ id: "project-1", url: "https://github.com/owner/work.git", branch: "main" }]);
+    assert.equal((await fetch(`${apiServer.base}/api/nlp/features`)).status, 401);
+    const providerNone = await fetch(`${apiServer.base}/api/nlp/features`, { headers: auth });
+    assert.equal((await providerNone.json() as { providerKind: string }).providerKind, "none");
     const modules = await fetch(`${apiServer.base}/api/projects/project-1/modules`, { headers: auth });
     assert.equal(modules.status, 200);
     assert.ok((await modules.json() as Array<{ id: string; availability: string }>).some(({ id, availability }) => id === "mcp" && availability === "not-included"));
@@ -313,6 +316,11 @@ describe("Scriptorium HTTP boundary", () => {
       data: { query: "harbor", results: [{ id: "scene-one", type: "scene", name: "Opening", snippet: "A harbor at night.", filePath: "manuscript/ms-one/scene-one.md", score: 1, field: "body", offset: 2, length: 6 }] },
     });
     assert.ok(fixture.pinnedReads.includes(SNAPSHOT.remoteCommit));
+    const invalidAction = await fetch(`${apiServer.base}/api/projects/project-1/actions/core.search`, {
+      method: "POST", headers: { ...auth, "Content-Type": "application/json" },
+      body: JSON.stringify({ input: { query: "" } }),
+    });
+    assert.equal((await invalidAction.json() as { error: { code: string } }).error.code, "invalid_action_input");
 
     const pinned = "b".repeat(40);
     const snapshots = await fetch(`${apiServer.base}/api/projects/project-1/manuscripts/ms-one/snapshots?sceneId=scene-one&snapshot=${pinned}`, { headers: auth });
