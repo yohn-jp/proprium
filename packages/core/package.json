@@ -17,6 +17,7 @@
     "test": "node --import tsx --test src/*.test.ts"
   },
   "dependencies": {
-    "yaml": "^2.8.1"
+    "yaml": "^2.8.1",
+    "@scriptorium/contracts": "workspace:*"
   }
 }

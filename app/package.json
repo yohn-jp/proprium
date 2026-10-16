@@ -4,8 +4,19 @@
   "version": "0.1.0",
   "type": "module",
   "scripts": {
-    "build": "tsc -p tsconfig.json && node scripts/copy-assets.mjs",
+    "build": "vite build",
     "typecheck": "tsc -p tsconfig.json --noEmit",
-    "test": "pnpm run build && node --test dist/drafts.test.js"
+    "test": "node --import tsx --test src/*.test.ts"
+  },
+  "dependencies": {
+    "@scriptorium/contracts": "workspace:*",
+    "react": "^19.1.0",
+    "react-dom": "^19.1.0"
+  },
+  "devDependencies": {
+    "vite": "^6.3.4",
+    "@vitejs/plugin-react": "^4.4.1",
+    "@types/react": "^19.1.2",
+    "@types/react-dom": "^19.1.2"
   }
 }
