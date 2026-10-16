@@ -10,8 +10,10 @@ import { promisify } from "node:util";
 import test from "node:test";
 
 import { CoreStore } from "../../packages/core/dist/index.js";
+import { MODEL_USAGE_CAPABILITY } from "../../packages/contracts/dist/index.js";
 import { ModuleRuntime } from "../../packages/module-runtime/dist/index.js";
 import { createServer } from "../../packages/api/dist/server.js";
+import { HistoricalModelUsageStore } from "../../packages/api/dist/historical-store.js";
 
 const execFile = promisify(execFileCallback);
 const root = resolve(dirname(fileURLToPath(import.meta.url)), "../..");
@@ -49,6 +51,7 @@ function fixtureFiles() {
       "id: char-haru", "name: Haru", "type: character", "aliases: []", "tags: []", "relations: []", "",
     ].join("\n"),
     "bible/locations/loc-cafe.yaml": "id: loc-cafe\nname: Cafe\ntype: location\n",
+    "meta/scriptorium/modules/nlp/feature-settings.json": JSON.stringify({ externalEnabled: { rewrite: true } }) + "\n",
     "plot/volumes/vol-main/volume.yaml": "id: vol-main\ntitle: Main\ntype: volume\norder: 1\n",
     "plot/volumes/vol-main/chapters/ch-main-1/chapter.yaml": "id: ch-main-1\nvolume: vol-main\ntitle: Opening\ntype: chapter\norder: 1\n",
     "plot/volumes/vol-main/chapters/ch-main-1/scenes/sc-1.yaml": [
@@ -95,7 +98,7 @@ async function createSyntheticRemote(rootDir) {
   return { remote, url: `file://${remote}` };
 }
 
-async function runtimeOptions(cacheDirectory) {
+async function runtimeOptions(cacheDirectory, usageDirectory) {
   const manifests = [];
   const loaders = {};
   const moduleDirectories = {};
@@ -120,18 +123,24 @@ async function runtimeOptions(cacheDirectory) {
     loaders,
     moduleDirectories,
     workerEntries,
+    hostCapabilities: [MODEL_USAGE_CAPABILITY],
+    capabilityProviders: {
+      [MODEL_USAGE_CAPABILITY]: { create: () => new HistoricalModelUsageStore(usageDirectory) },
+    },
     cacheDirectory,
   });
 }
 
 async function startHost({ dataDirectory, cacheDirectory, store: suppliedStore }) {
-  const runtime = await runtimeOptions(cacheDirectory);
+  const usageDirectory = resolve(dataDirectory, "host-history");
+  const runtime = await runtimeOptions(cacheDirectory, usageDirectory);
   const store = suppliedStore ?? new CoreStore({ dataDir: dataDirectory, allowLocalRemotes: true });
   const server = createServer({
     store,
     authToken: ACCESS_TOKEN,
     staticDir: resolve(root, "app/dist"),
     runtime,
+    usageDirectory,
     profile: "mcp-acceptance",
   });
   await new Promise((resolveListen, reject) => {
@@ -587,11 +596,56 @@ test("spawned stdio and production HTTP MCP preserve Core review boundaries thro
     }), "format_manuscript without diagnostics module"), "MODULE_UNAVAILABLE");
   }
 
-  const rewrite = await stdio.client.callTool({
-    name: "suggest_rewrite", arguments: { project_id: projectId, scene_id: "sc-1", sentence_index: 0 },
-  });
-  assert.equal(errorCode(rewrite, "provider-backed suggest_rewrite"),
-    READY_MODULES.includes("assistant") ? "ACTION_UNAVAILABLE" : "MODULE_UNAVAILABLE");
+  const rewriteProvider = process.env.SCRIPTORIUM_MCP_ACCEPTANCE_REWRITE_PROVIDER;
+  if (rewriteProvider === "qwen-local") {
+    assert.ok(READY_MODULES.includes("assistant"), "Qwen rewrite acceptance requires the real Assistant module");
+    assert.equal(process.env.ARCADIA_LLM_PROVIDER, "openai-compatible");
+    assert.match(process.env.ARCADIA_LLM_BASE_URL ?? "", /^http:\/\/127\.0\.0\.1:\d+\/v1$/u,
+      "Qwen acceptance must use an OpenAI-compatible loopback endpoint");
+    assert.match(process.env.ARCADIA_LLM_MODEL ?? "", /Qwen3/u,
+      "Qwen acceptance must select the pinned local Qwen model");
+    const proposalsBeforeRewrite = await ownerJson(host, cookie,
+      `/api/projects/${encodeURIComponent(projectId)}/proposals`);
+    const manuscriptBeforeRewrite = await readRemoteFile(fixture.remote,
+      "manuscript/vol-main/ch-main-1/sc-1.md");
+    const rewrites = [];
+    for (const [name, connection] of [["stdio", stdio], ["HTTP", http]]) {
+      const result = success(await connection.client.callTool({
+        name: "suggest_rewrite",
+        arguments: { project_id: projectId, scene_id: "sc-1", sentence_index: 1 },
+      }), `${name} Qwen suggest_rewrite`);
+      assert.equal(result.data.sceneId, "sc-1");
+      assert.equal(result.data.sentenceIndex, 1);
+      assert.equal(result.data.originalSentence, "Uma enters the cafe at dusk.");
+      assert.equal(typeof result.data.prompt, "string");
+      assert.ok(result.data.prompt.length > 0);
+      assert.ok(result.data.context && typeof result.data.context === "object");
+      assert.equal(result.data.suggestions.length, 3, "Qwen must return the source-required three rewrite candidates");
+      assert.ok(result.data.suggestions.every((item) => typeof item.text === "string" && item.text.trim()));
+      assert.equal(result.data.model, process.env.ARCADIA_LLM_MODEL);
+      assert.equal(result.data.provider, "openai-compatible");
+      assert.equal(result.snapshot.remoteCommit, status.snapshot.remoteCommit,
+        `${name} rewrite must remain bound to the selected remote snapshot`);
+      assert.equal(result.proposals, undefined, "suggest_rewrite computes choices and must never propose or approve them");
+      rewrites.push(result.data);
+    }
+    assert.notDeepEqual(rewrites[0].suggestions, [], "The real Qwen provider returned no candidates");
+    const proposalsAfterRewrite = await ownerJson(host, cookie,
+      `/api/projects/${encodeURIComponent(projectId)}/proposals`);
+    assert.deepEqual(proposalsAfterRewrite.proposals.map((item) => item.proposal?.id).sort(),
+      proposalsBeforeRewrite.proposals.map((item) => item.proposal?.id).sort(),
+      "Rewrite computation created a persistent Core proposal");
+    assert.equal(await readRemoteFile(fixture.remote, "manuscript/vol-main/ch-main-1/sc-1.md"), manuscriptBeforeRewrite,
+      "Rewrite computation changed persistent manuscript data");
+  } else {
+    assert.ok(!process.env.ARCADIA_LLM_PROVIDER || process.env.ARCADIA_LLM_PROVIDER === "none",
+      "Set SCRIPTORIUM_MCP_ACCEPTANCE_REWRITE_PROVIDER=qwen-local to opt in to the local provider acceptance");
+    const rewrite = await stdio.client.callTool({
+      name: "suggest_rewrite", arguments: { project_id: projectId, scene_id: "sc-1", sentence_index: 1 },
+    });
+    assert.equal(errorCode(rewrite, "suggest_rewrite without a model provider"),
+      READY_MODULES.includes("assistant") ? "assistant_provider_unavailable" : "MODULE_UNAVAILABLE");
+  }
 
   await verifyCancellation(stdio, host, projectId, "spawned stdio");
   await verifyCancellation(http, host, projectId, "Streamable HTTP");

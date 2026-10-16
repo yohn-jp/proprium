@@ -967,8 +967,82 @@ export function registerMcpTools(server: McpServer, baseClient: McpActionClient)
       scene_id: z.string().describe("Scene ID"),
       sentence_index: z.number().int().nonnegative().describe("Zero-based sentence index"),
     },
-    guarded(async ({ project_id }) =>
-      unavailableModuleAction(scopedClient(baseClient, project_id), "assistant", "suggest_rewrite")),
+    guarded(async ({ project_id, scene_id, sentence_index }) => {
+      const client = scopedClient(baseClient, project_id);
+      const actions = await client.listActions();
+      if (!actions.some((action) => action.id === "assistant.rewrite")) {
+        return unavailableModuleAction(client, "assistant", "suggest_rewrite");
+      }
+      if (!actions.some((action) => action.id === "nlp.analyze")) {
+        return unavailableModuleAction(client, "nlp", "sentence segmentation for suggest_rewrite");
+      }
+
+      const { result: scene, context } = await savedScene(client, scene_id);
+      const manuscriptBody = context.manuscriptBody;
+      if (manuscriptBody === undefined) return errorResult("NOT_FOUND", `Scene manuscript not found: ${scene_id}`);
+      const segmentation = await client.invoke("nlp.analyze", { text: manuscriptBody });
+      if (!segmentation.ok) return actionResult(segmentation);
+      requireSameSnapshot(scene.snapshot, segmentation.snapshot);
+      if (!isRecord(segmentation.data) || !isRecord(segmentation.data.analysis) ||
+          !Array.isArray(segmentation.data.analysis.sentences)) {
+        return errorResult("INVALID_RESPONSE", "NLP sentence segmentation response is invalid");
+      }
+      const sentences: string[] = [];
+      for (const span of segmentation.data.analysis.sentences) {
+        if (!isRecord(span) || typeof span.text !== "string" ||
+            !Number.isSafeInteger(span.start) || !Number.isSafeInteger(span.end) ||
+            (span.start as number) < 0 || (span.end as number) < (span.start as number) ||
+            (span.end as number) > manuscriptBody.length ||
+            manuscriptBody.slice(span.start as number, span.end as number) !== span.text) {
+          return errorResult("INVALID_RESPONSE", "NLP sentence segmentation response is invalid");
+        }
+        const sentence = span.text.trim();
+        if (sentence) sentences.push(sentence);
+      }
+      if (sentence_index >= sentences.length) {
+        return errorResult(
+          "INVALID_INPUT",
+          `Sentence index out of range: ${sentence_index} (scene has ${sentences.length} sentences)`,
+        );
+      }
+
+      const originalSentence = sentences[sentence_index];
+      const rewritten = await client.invoke("assistant.rewrite", {
+        sceneId: scene_id,
+        selectedText: originalSentence,
+        sentenceIndex: sentence_index,
+      });
+      if (!rewritten.ok) return actionResult(rewritten);
+      requireSameSnapshot(scene.snapshot, rewritten.snapshot);
+      if (!isRecord(rewritten.data) || rewritten.data.sceneId !== scene_id ||
+          rewritten.data.sentenceIndex !== sentence_index ||
+          rewritten.data.originalSentence !== originalSentence ||
+          !Array.isArray(rewritten.data.suggestions) ||
+          rewritten.data.suggestions.length !== 3 ||
+          rewritten.data.suggestions.some((suggestion) => !isRecord(suggestion) ||
+            typeof suggestion.text !== "string" ||
+            !["concise", "contextual", "voice"].includes(String(suggestion.strategy)) ||
+            typeof suggestion.rationale !== "string") ||
+          !isRecord(rewritten.data.context) || typeof rewritten.data.prompt !== "string") {
+        return errorResult("INVALID_RESPONSE", "Assistant rewrite response omitted source-compatible context or prompt");
+      }
+      const response = {
+        sceneId: rewritten.data.sceneId,
+        sentenceIndex: rewritten.data.sentenceIndex,
+        originalSentence: rewritten.data.originalSentence,
+        suggestions: rewritten.data.suggestions,
+        prompt: rewritten.data.prompt,
+        context: rewritten.data.context,
+        ...(rewritten.data.sentenceSplit === undefined ? {} : { sentenceSplit: rewritten.data.sentenceSplit }),
+        ...(rewritten.data.tellToShow === undefined ? {} : { tellToShow: rewritten.data.tellToShow }),
+        ...(rewritten.data.model === undefined ? {} : { model: rewritten.data.model }),
+        ...(rewritten.data.provider === undefined ? {} : { provider: rewritten.data.provider }),
+        ...(rewritten.data.promptVersion === undefined ? {} : { promptVersion: rewritten.data.promptVersion }),
+        ...(rewritten.data.citations === undefined ? {} : { citations: rewritten.data.citations }),
+        ...(rewritten.data.provenance === undefined ? {} : { provenance: rewritten.data.provenance }),
+      };
+      return outputResult(response, rewritten.snapshot);
+    }),
   );
 
   server.tool(

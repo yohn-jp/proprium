@@ -20,7 +20,7 @@ The test also cancels real in-flight NLP work over stdio and HTTP and waits for 
 
 After publication, the test reconstructs the same Core project from the remote into a fresh data directory without the private proposal journal. MCP returns `PROPOSAL_PAYLOAD_UNAVAILABLE` with the safe digest, ordered operation identities, and actual review/checkpoint/publication IDs instead of synthesizing the original source record. The test restores the exact original Core proposal from a retained private browser record through the owner API, then verifies source-level partial status resumes without duplicating the accepted operation or checkpoint.
 
-The Assistant-backed `suggest_rewrite` tool remains unavailable until its source-equivalent action is published. When the Assistant module is enabled without that action, it returns a typed action-unavailable result. `reload` also remains unavailable pending a source-equivalent derived-refresh action. Both remain registered among the 27 source tools. The local formatter and full Diagnostics aggregate are available without an external model provider.
+When the Assistant module publishes `assistant.rewrite`, `suggest_rewrite` maps the source zero-based index through the pinned `nlp.analyze` sentence spans, verifies their UTF-16 offsets against the saved scene body, and invokes the compute-only rewrite action at that same snapshot. It forwards the action's actual composed prompt, context, three candidates, citations, and provenance; it does not propose, approve, or write. Without the Assistant action, it returns a typed action/module availability error. With the test fixture's explicit external-model consent enabled, an absent provider returns the Assistant's typed provider-unavailable error. `reload` remains unavailable pending a source-equivalent derived-refresh action.
 
 The module set can be changed for composition checks, for example:
 
@@ -30,3 +30,17 @@ SCRIPTORIUM_MCP_ACCEPTANCE_MODULES=story,nlp,diagnostics,semantic,speaker,assist
 ```
 
 Each selected module must have a compiled package manifest and server entry. The acceptance uses synthetic story content and local worker implementations only; it does not certify external model quality or downloaded model behavior.
+
+The local provider path has a separate opt-in acceptance against the P13-pinned Qwen model and production Assistant action. Start the local llama.cpp endpoint as documented in `docs/verification/P13-PROVIDER-PREFLIGHT.md`, then run:
+
+```sh
+SCRIPTORIUM_MCP_ACCEPTANCE_MODULES=story,nlp,diagnostics,semantic,speaker,assistant,publishing,mcp \
+SCRIPTORIUM_MCP_ACCEPTANCE_REWRITE_PROVIDER=qwen-local \
+ARCADIA_LLM_PROVIDER=openai-compatible \
+ARCADIA_LLM_BASE_URL=http://127.0.0.1:18088/v1 \
+ARCADIA_LLM_MODEL=Qwen3-0.6B-Q4_K_M \
+ARCADIA_LLM_API_KEY=local-only-placeholder \
+node --test tests/integration/mcp-acceptance.test.mjs
+```
+
+That mode requires loopback Qwen configuration and explicit synthetic-fixture consent. It calls the real action through both spawned stdio and SDK Streamable HTTP transports, checks the source response fields and three candidates, and verifies that computation creates no proposal or repository write.
