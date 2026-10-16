@@ -12,7 +12,8 @@
   "target": {
     "repository": "yohn-jp/scriptorium",
     "baseCommit": "97b96bee11bd3b6202ac17cdc26a6a0beb95f38d",
-    "branch": "work/7-p05"
+    "branch": "work/7-p05",
+    "implementationCommit": "61745b5b74aad31b7d587413981aed7cdf8d415d"
   },
   "sourceClassification": [
     {
@@ -63,27 +64,59 @@
     },
     {
       "source": ["<dataDir>/app-state/series.json"],
-      "category": "relocated",
-      "target": "host-owned series/project binding configuration",
+      "category": "authoritative author settings",
+      "target": "meta/scriptorium/modules/story/v1/series.json",
       "sourceProof": [
         "packages/workspace/src/projects/seriesRegistry.ts",
         "packages/api/src/projectContext.ts"
       ],
-      "targetProof": ["packages/migration/src/producers/workspace.ts"],
-      "preservation": "Series registry and work bindings remain host configuration; Story does not copy them into work metadata."
+      "targetProof": [
+        "modules/story/src/migration/producer.ts",
+        "modules/story/src/actions.ts",
+        "modules/story/src/actions.test.ts"
+      ],
+      "preservation": "Story owns a versioned series registry. The migration hook maps legacy project IDs only through explicit host-verified RepositoryIdentity mappings, retains original IDs and unknown fields, and marks unresolved bindings for author review. Binding and overlay actions use stable repository IDs; the linked Bible reader is read-only and both snapshots are returned explicitly."
     }
+  ],
+  "implementedBehavior": [
+    "Snapshot-bound entity list/get/create/update/reorder, entity-specific reference validation, source-compatible entity revisions, tags, nested notes, backlinks, appearances and optional tokenizer-backed tag suggestions.",
+    "Volume/chapter/scene tree and scene context, including manuscript and scene revisions; scene creation with optional sibling insertion uses one atomic proposal and captures sibling preconditions.",
+    "One-proposal Story bridge for all nine supported NarrativeChangeSet operation kinds, retaining the full source object, operation mapping, dependencies, source result identities/revisions, submittedAt and original source ID in bounded Core evidence.",
+    "Thread lifecycle/status, relationship graph, location map, chronology and source-derived character co-occurrence projections.",
+    "World-state proposal lifecycle, confirmed event folding, reader disclosures, character-reader knowledge gaps and thread forget-risk computation.",
+    "React contribution panels for entity-specific editing and structured nested notes, references/tags/backlinks/appearances, scene metadata, thread lifecycle, relationship overlay, chronology, location links, reader knowledge, world state and series binding."
   ],
   "proofs": [
     {
-      "id": "P05-STORY-MIGRATION-UNIT",
-      "kind": "focused source-derived unit test",
-      "status": "pending-run",
+      "id": "P05-STORY-PRODUCER-UNIT",
+      "kind": "focused source-derived producer tests",
+      "status": "passed",
       "targetFiles": [
+        "modules/story/src/actions.ts",
+        "modules/story/src/actions.test.ts",
+        "modules/story/src/domain/**/*.test.ts",
         "modules/story/src/migration/producer.ts",
         "modules/story/src/migration/producer.test.ts"
       ],
-      "command": "node --import tsx --test modules/story/src/migration/producer.test.ts",
-      "scope": "Exact-byte canonical YAML/Markdown import, unknown-field and stable-ID preservation, conflict reporting, disabled opaque preservation, and re-enable restoration."
+      "command": "node --import tsx --test modules/story/src/actions.test.ts modules/story/src/domain/*.test.ts modules/story/src/migration/*.test.ts",
+      "result": "40 passed, 0 failed on implementation commit 61745b5b74aad31b7d587413981aed7cdf8d415d.",
+      "scope": "Entity and scene proposals, source revision and reference validation, optional NLP absence, all nine source ChangeSet kinds and retry identity, source-to-Core ID mapping, series bindings, co-occurrence, domain graph/chronology/thread/world/knowledge algorithms, exact-byte migration, and explicit series repository mapping."
+    },
+    {
+      "id": "P05-STORY-BUILD",
+      "kind": "module typecheck and production build",
+      "status": "passed",
+      "targetFiles": ["modules/story/src/**/*.ts", "modules/story/src/**/*.tsx"],
+      "command": "pnpm --filter @scriptorium/module-story typecheck && pnpm --filter @scriptorium/module-story build",
+      "result": "Both commands passed on implementation commit 61745b5b74aad31b7d587413981aed7cdf8d415d.",
+      "scope": "Compiles the server action producer, migration producer and React browser entry."
+    },
+    {
+      "id": "P05-INTEGRATED-BROWSER-ACTIONS",
+      "kind": "P02/P03/P08 composed Story runtime and browser acceptance",
+      "status": "pending",
+      "targetFiles": ["modules/story/src/index.ts", "modules/story/src/browser.tsx", "packages/module-runtime/src/", "packages/api/src/"],
+      "scope": "The Story server and React contribution entries compile, but final composed runtime mounting, real browser interactions, proposal review/checkpoint, and full action registry verification remain to be run on the integrated host."
     },
     {
       "id": "P05-INTEGRATED-MIGRATION",
