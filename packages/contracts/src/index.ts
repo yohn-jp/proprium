@@ -72,6 +72,14 @@ export interface ChangeProposal {
   source: "author" | "module" | "mcp";
   evidence?: ProposalEvidence[];
 }
+/** Author review state, including the complete recoverable proposal payload. */
+export interface ProposalStatus {
+  proposal: ChangeProposal;
+  state: "proposed" | "partially_approved" | "approved" | "checkpointed";
+  approvedOperationIds: string[];
+  checkpoints: CheckpointReceipt[];
+  stale: boolean;
+}
 export interface Approval { proposalId: string; operationIds: string[]; authorScope: string }
 /** Port shared by module and external callers: no author authority. */
 export interface ProposalCoordinator {

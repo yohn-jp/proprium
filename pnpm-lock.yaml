@@ -356,6 +356,33 @@ importers:
         specifier: workspace:*
         version: link:../contracts
 
+  profiles/core:
+    dependencies:
+      '@scriptorium/api':
+        specifier: workspace:*
+        version: link:../../packages/api
+
+  profiles/full:
+    dependencies:
+      '@scriptorium/api':
+        specifier: workspace:*
+        version: link:../../packages/api
+      '@scriptorium/module-diagnostics':
+        specifier: workspace:*
+        version: link:../../modules/diagnostics
+      '@scriptorium/module-mcp':
+        specifier: workspace:*
+        version: link:../../modules/mcp
+      '@scriptorium/module-nlp':
+        specifier: workspace:*
+        version: link:../../modules/nlp
+      '@scriptorium/module-publishing':
+        specifier: workspace:*
+        version: link:../../modules/publishing
+      '@scriptorium/module-story':
+        specifier: workspace:*
+        version: link:../../modules/story
+
 packages:
 
   '@babel/code-frame@7.29.7':

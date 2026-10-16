@@ -15,8 +15,8 @@
       "import": "./dist/browser.js"
     },
     "./migration": {
-      "types": "./dist/migration.d.ts",
-      "import": "./dist/migration.js"
+      "types": "./dist/migration/index.d.ts",
+      "import": "./dist/migration/index.js"
     }
   },
   "files": [
@@ -25,7 +25,7 @@
   "scripts": {
     "build": "tsc -p tsconfig.json",
     "typecheck": "tsc -p tsconfig.json --noEmit",
-    "test": "node --import tsx --test src/*.test.ts"
+    "test": "node --import tsx --test src/*.test.ts src/domain/*.test.ts src/migration/*.test.ts"
   },
   "dependencies": {
     "@scriptorium/contracts": "workspace:*",
