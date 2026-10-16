@@ -888,7 +888,6 @@ test("project details, reconstruction, and guarded removal preserve browser reco
   expect((await readJournal(page)).some((entry) => entry.text === recoverableText && entry.state === "draft")).toBe(true);
 });
 
-
 test("a pending scratch image read is flushed to its captured scene before navigation", async ({ page }) => {
   expect(authToken.length).toBeGreaterThanOrEqual(32);
   expect(repositoryUrl).not.toBe("");
@@ -916,4 +915,24 @@ test("a pending scratch image read is flushed to its captured scene before navig
   const scratch = (await readJournal(page)).find((entry) => entry.documentPath.startsWith("meta/scratch/"));
   expect(scratch?.sceneId).toBe("scene-1");
   expect(scratch?.text).toBe("Attachment belongs to Scene One.");
+});
+
+test("public publishing route mounts its source reader without an owner session", async ({ page }) => {
+  test.skip(process.env.SCRIPTORIUM_PROFILE !== "full", "The publishing browser module is selected by the full profile.");
+  const ownerSessionRequests: string[] = [];
+  const publicReadRequests: string[] = [];
+  page.on("request", (request) => {
+    const pathname = new URL(request.url()).pathname;
+    if (pathname === "/api/session") ownerSessionRequests.push(pathname);
+    if (pathname.startsWith("/api/public/repos/")) publicReadRequests.push(pathname);
+  });
+
+  await page.goto("/r/publishing/123/e2e-invalid-token");
+  await expect(page.getByRole("heading", { name: "共有された原稿" })).toBeVisible();
+  await expect(page.getByRole("alert")).toContainText("共有リンクは無効か、期限切れです。");
+  await expect(page.getByRole("heading", { name: "ログイン" })).toHaveCount(0);
+  expect(ownerSessionRequests).toEqual([]);
+  expect(publicReadRequests).toEqual([
+    "/api/public/repos/123/modules/publishing/share/e2e-invalid-token",
+  ]);
 });

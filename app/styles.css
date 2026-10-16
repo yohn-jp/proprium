@@ -41,6 +41,11 @@ textarea { padding: 0.9rem; }
 .login-panel h1 { margin: 0.35rem 0; font-size: 2rem; }
 .login-panel form, .project-form { display: grid; gap: 0.7rem; }
 .login-panel form { margin-top: 1.5rem; }
+.public-module-shell { min-height: 100vh; color: var(--ink); background: var(--paper); }
+.public-module-header { display: flex; justify-content: space-between; gap: 1rem; padding: 0.8rem 1rem; border-bottom: 1px solid var(--line); color: var(--muted); font-size: 0.85rem; }
+.public-module-header span:first-child { color: var(--accent-strong); font-weight: 750; }
+.public-module-status { width: min(52rem, calc(100% - 2rem)); margin: 2rem auto; color: var(--muted); text-align: center; }
+.public-module-status[data-kind="error"] { color: var(--error); }
 
 .workspace { min-height: 100vh; }
 .topbar { position: sticky; z-index: 3; top: 0; display: flex; align-items: center; gap: 1rem; min-height: 3.8rem; padding: 0.5rem 1rem; border-bottom: 1px solid var(--line); background: var(--paper); }
