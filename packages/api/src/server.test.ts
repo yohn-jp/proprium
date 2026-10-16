@@ -68,7 +68,7 @@ describe("Scriptorium HTTP boundary", () => {
   it("keeps health public, protects project data, and serves the app shell", async (t) => {
     const staticDir = await mkdtemp(resolve(tmpdir(), "scriptorium-api-"));
     tempDirs.push(staticDir);
-    await writeFile(resolve(staticDir, "index.html"), "<h1>Scriptorium</h1>");
+    await writeFile(resolve(staticDir, "index.html"), '<meta name="scriptorium-style-nonce" content="__SCRIPTORIUM_STYLE_NONCE__"><h1>Scriptorium</h1>');
     await Promise.all(["main.js", "api.js", "drafts.js", "styles.css"].map((name) => writeFile(resolve(staticDir, name), name)));
     await writeFile(resolve(staticDir, "server.test.js"), "private test file");
     const apiServer = await startApi(staticDir);
@@ -86,7 +86,14 @@ describe("Scriptorium HTTP boundary", () => {
 
     const shell = await fetch(`${apiServer.base}/`);
     assert.equal(shell.status, 200);
-    assert.match(await shell.text(), /Scriptorium/u);
+    const html = await shell.text();
+    assert.match(html, /Scriptorium/u);
+    const nonce = /name="scriptorium-style-nonce" content="([^"]+)"/u.exec(html)?.[1];
+    assert.ok(nonce && nonce !== "__SCRIPTORIUM_STYLE_NONCE__");
+    assert.ok(shell.headers.get("content-security-policy")?.includes(`style-src 'self' 'nonce-${nonce}'`));
+    assert.ok(!shell.headers.get("content-security-policy")?.includes("unsafe-inline"));
+    const nextShell = await fetch(`${apiServer.base}/`);
+    assert.notEqual(nextShell.headers.get("content-security-policy"), shell.headers.get("content-security-policy"));
     for (const name of ["main.js", "api.js", "drafts.js", "styles.css"]) {
       assert.equal((await fetch(`${apiServer.base}/${name}`)).status, 200);
     }

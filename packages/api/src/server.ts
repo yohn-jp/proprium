@@ -83,11 +83,11 @@ function sameOrigin(request: IncomingMessage, trustProxy: boolean): boolean {
   }
 }
 
-function setSecurityHeaders(response: ServerResponse): void {
+function setSecurityHeaders(response: ServerResponse, styleNonce: string): void {
   response.setHeader("X-Content-Type-Options", "nosniff");
   response.setHeader("Referrer-Policy", "same-origin");
   response.setHeader("X-Frame-Options", "DENY");
-  response.setHeader("Content-Security-Policy", "default-src 'self'; object-src 'none'; base-uri 'none'; frame-ancestors 'none'; form-action 'self'");
+  response.setHeader("Content-Security-Policy", `default-src 'self'; style-src 'self' 'nonce-${styleNonce}'; object-src 'none'; base-uri 'none'; frame-ancestors 'none'; form-action 'self'`);
   response.setHeader("Cache-Control", "no-store");
 }
 
@@ -163,6 +163,7 @@ async function serveStatic(
   request: IncomingMessage,
   response: ServerResponse,
   staticDir: string,
+  styleNonce: string,
 ): Promise<boolean> {
   if (request.method !== "GET" && request.method !== "HEAD") return false;
   const path = requestPath(request);
@@ -176,7 +177,10 @@ async function serveStatic(
   const file = files[path];
   if (!file) return false;
   try {
-    const content = await readFile(resolve(staticDir, file.filename));
+    const original = await readFile(resolve(staticDir, file.filename));
+    const content = file.filename === "index.html"
+      ? Buffer.from(original.toString("utf8").replaceAll("__SCRIPTORIUM_STYLE_NONCE__", styleNonce))
+      : original;
     response.writeHead(200, { "Content-Type": file.contentType, "Content-Length": content.length });
     response.end(request.method === "HEAD" ? undefined : content);
   } catch {
@@ -194,7 +198,8 @@ export function createServer(options: ApiServerOptions): Server {
   const sessions = new Map<string, Session>();
 
   const handle = async (request: IncomingMessage, response: ServerResponse): Promise<void> => {
-    setSecurityHeaders(response);
+    const styleNonce = randomBytes(18).toString("base64");
+    setSecurityHeaders(response, styleNonce);
     const path = requestPath(request);
 
     if (path === "/api/health" && request.method === "GET") {
@@ -320,7 +325,7 @@ export function createServer(options: ApiServerOptions): Server {
       sendJson(response, 404, { error: "API route not found", code: "NOT_FOUND" });
       return;
     }
-    if (await serveStatic(request, response, staticDir)) return;
+    if (await serveStatic(request, response, staticDir, styleNonce)) return;
     sendJson(response, 404, { error: "Page not found", code: "NOT_FOUND" });
   };
 
