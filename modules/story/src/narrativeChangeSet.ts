@@ -7,8 +7,9 @@ import type {
   SnapshotReader,
 } from "@scriptorium/contracts";
 import { readStorySnapshot, type LoadedStorySnapshot } from "./snapshot.js";
+import { listRuleStateEvents } from "./domain/index.js";
 import type { StoryEntity, StoryEntityType } from "./domain/types.js";
-import { isRecord, type ObjectValue } from "./operations.js";
+import { isRecord, readTextFile, type ObjectValue } from "./operations.js";
 
 type NarrativeOperation = ObjectValue & { id: string; kind: string; evidenceIds: string[]; assessment: ObjectValue };
 type NarrativeChangeSet = {
@@ -44,6 +45,7 @@ const ENTITY_PREFIX: Partial<Record<StoryEntityType, string>> = {
   event: "bible/timeline/events", lore: "bible/lore", thread: "plot/threads", arc: "plot/arcs",
   dialogue_sketch: "bible/dialogue_sketches",
 };
+const STATE_PROPOSALS_PATH = "meta/scriptorium/modules/story/state-proposals.jsonl";
 
 function fail(message: string, code = "invalid_input"): never {
   throw Object.assign(new TypeError(message), { code });
@@ -300,6 +302,34 @@ function textHash(value: string): string {
   let hash = 0x811c9dc5;
   for (let index = 0; index < value.length; index++) { hash ^= value.charCodeAt(index); hash = Math.imul(hash, 0x01000193); }
   return (hash >>> 0).toString(16).padStart(8, "0");
+}
+function parseStateProposalFile(content: string): ObjectValue[] {
+  const rows: ObjectValue[] = [];
+  const ids = new Set<string>();
+  for (const [index, line] of content.split(/\r?\n/).entries()) {
+    if (!line.trim()) continue;
+    let value: unknown;
+    try {
+      value = JSON.parse(line);
+    } catch {
+      fail(`Malformed Story state proposal JSONL row ${index + 1}`, "operation_precondition_conflict");
+    }
+    if (!isRecord(value) || typeof value.id !== "string" || !value.id) {
+      fail(`Malformed Story state proposal JSONL row ${index + 1}`, "operation_precondition_conflict");
+    }
+    if (ids.has(value.id)) fail(`Duplicate Story state proposal ID: ${value.id}`, "operation_precondition_conflict");
+    ids.add(value.id);
+    rows.push(value);
+  }
+  return rows;
+}
+function parseProposalJsonField(value: unknown, label: string): unknown {
+  if (typeof value !== "string") return value;
+  try {
+    return JSON.parse(value) as unknown;
+  } catch {
+    fail(`Malformed Story state proposal ${label}`, "operation_precondition_conflict");
+  }
 }
 function revisionOf(value: string): string { return createHash("sha256").update(value, "utf8").digest("hex"); }
 function pathForEntity(type: string, id: string, raw: ObjectValue): string {
@@ -592,6 +622,43 @@ export async function buildNarrativeChangeProposal(context: ModuleActionContext,
       if (event.sceneId !== scene.id || event.eventId !== target.eventId) fail("State event target mismatch");
       const events = Array.isArray(scene.raw.state_events) ? scene.raw.state_events as unknown[] : [];
       if (events.some((item) => isRecord(item) && item.eventId === event.eventId)) fail(`State event already exists: ${String(event.eventId)}`, "operation_precondition_conflict");
+      if (listRuleStateEvents(story).data.some((prior) =>
+        prior.kind === event.kind && prior.subject === event.subject && prior.object !== event.object)) {
+        fail("State event conflicts with an existing rule event", "operation_precondition_conflict");
+      }
+      if (op.sourceProposal !== undefined) {
+        const sourceProposal = op.sourceProposal as ObjectValue;
+        const proposalFile = await readTextFile(context.reader, STATE_PROPOSALS_PATH);
+        const proposal = parseStateProposalFile(proposalFile.content).find((row) => row.id === sourceProposal.id);
+        if (!proposal) fail(`State proposal not found: ${String(sourceProposal.id)}`, "operation_precondition_conflict");
+        const proposalEvent = parseProposalJsonField(proposal.event_json, "event_json");
+        const conflicts = parseProposalJsonField(proposal.conflict_event_ids_json, "conflict_event_ids_json");
+        if (!isRecord(proposalEvent) || !Array.isArray(conflicts)) fail("Malformed Story state proposal", "operation_precondition_conflict");
+        const sourceScene = story.entities.get(scene.id);
+        const manuscriptPath = sourceScene?.type === "scene" && typeof sourceScene.raw.manuscript === "string"
+          ? sourceScene.raw.manuscript
+          : undefined;
+        const manuscript = manuscriptPath
+          ? [...story.entities.values()].find((entity) => entity.type === "manuscript" && entity.filePath === manuscriptPath)
+          : undefined;
+        const manuscriptHash = manuscript?.body === undefined ? undefined : textHash(manuscript.body);
+        if (
+          proposal.status !== "proposed" ||
+          conflicts.length > 0 ||
+          Boolean(proposal.duplicate_of_proposal_id) ||
+          proposal.manuscript_hash !== sourceProposal.manuscriptHash ||
+          proposalEvent.sceneId !== event.sceneId ||
+          proposalEvent.order !== event.order ||
+          proposalEvent.kind !== event.kind ||
+          proposalEvent.subject !== event.subject ||
+          proposalEvent.object !== event.object ||
+          JSON.stringify(proposalEvent.payload) !== JSON.stringify(event.payload) ||
+          manuscriptHash !== proposal.manuscript_hash
+        ) {
+          fail("State proposal is stale or does not match the appended event", "operation_precondition_conflict");
+        }
+        reads.set(STATE_PROPOSALS_PATH, proposalFile.revision);
+      }
       const subject = requireTarget(String(event.subject), "State event subject");
       const object = event.object === null ? undefined : requireTarget(String(event.object), "State event object");
       if (event.kind === "location" && (subject.type !== "character" || object?.type !== "location")) fail("Location event references have invalid entity types", "operation_precondition_conflict");

@@ -15,6 +15,7 @@ import type {
 import { createStoryActions } from "./actions.js";
 
 const SERIES_PATH = "meta/scriptorium/modules/story/v1/series.json";
+const STATE_PROPOSALS_PATH = "meta/scriptorium/modules/story/state-proposals.jsonl";
 
 function revision(content: string): string {
   return createHash("sha256").update(content).digest("hex");
@@ -217,8 +218,23 @@ function sourceHash(text: string): string {
 }
 
 test("NarrativeChangeSet preserves all nine source operation kinds in one identity-bound Core proposal", async () => {
+  const body = "Uma enters the cafe.";
+  const stateProposal = {
+    id: "proposal-arrival",
+    scene_id: "sc-1",
+    event_json: JSON.stringify({ sceneId: "sc-1", order: 1, kind: "location", subject: "char-uma", object: "loc-cafe", payload: {}, source: "llm-draft", eventId: "draft-arrival", status: "proposed" }),
+    manuscript_hash: sourceHash(body),
+    status: "proposed",
+    conflict_event_ids_json: "[]",
+    duplicate_of_proposal_id: null,
+    history_json: "[]",
+    created_at: "2026-01-01T00:00:00.000Z",
+    updated_at: "2026-01-01T00:00:00.000Z",
+  };
+  const stateProposalContent = `${JSON.stringify(stateProposal)}\n`;
   const files = fixtureFiles({
     "plot/threads/thread-main.yaml": yaml({ id: "thread-main", name: "A promise", type: "thread", relations: [] }),
+    [STATE_PROPOSALS_PATH]: stateProposalContent,
   });
   const reader = makeReader(files);
   const proposals: Array<{ id: string; operations: ChangeOperation[] }> = [];
@@ -228,7 +244,6 @@ test("NarrativeChangeSet preserves all nine source operation kinds in one identi
     : { ok: false, snapshot: reader.snapshot, error: { code: "missing_action", message: "not wired", retryable: false } };
   const entities = (await invoke<Array<{ id: string; revision: string; filePath: string }>>("story.entities.list", {}, context)).data;
   const rev = (id: string) => entities.find((entity) => entity.id === id)!.revision;
-  const body = "Uma enters the cafe.";
   const changeSet = {
     schemaVersion: 1,
     id: "ncs-story-001",
@@ -242,7 +257,7 @@ test("NarrativeChangeSet preserves all nine source operation kinds in one identi
       { id: "insert-scene", kind: "scene.insert", precondition: { kind: "revision", value: rev("ch-main-1") }, target: { sceneId: "sc-new", chapterId: "ch-main-1" }, position: 3, expectedSiblings: [{ id: "sc-1", revision: rev("sc-1") }, { id: "sc-2", revision: rev("sc-2") }], evidenceIds: ["evidence-one"], assessment: { confidence: 0.9, risk: "medium" } },
       { id: "update-entity", kind: "entity.update", precondition: { kind: "revision", value: rev("char-uma") }, target: { entityId: "char-uma" }, changes: { name: "Uma Kato" }, evidenceIds: ["evidence-one"], assessment: { confidence: 0.9, risk: "low" } },
       { id: "update-scene", kind: "scene.update", precondition: { kind: "revision", value: rev("sc-2") }, target: { sceneId: "sc-2" }, changes: { title: "The table" }, evidenceIds: ["evidence-one"], assessment: { confidence: 0.8, risk: "medium" } },
-      { id: "append-state", kind: "state.append-event", precondition: { kind: "revision", value: rev("sc-1") }, target: { sceneId: "sc-1", eventId: "event-arrival" }, event: { sceneId: "sc-1", order: 1, kind: "location", subject: "char-uma", object: "loc-cafe", payload: {}, source: "manual", eventId: "event-arrival", evidence: [{ sceneId: "sc-1", excerpt: "enters the cafe" }], confidence: 0.9, createdAt: "2026-01-01T00:00:00.000Z", status: "confirmed" }, evidenceIds: ["evidence-one"], assessment: { confidence: 0.9, risk: "medium" } },
+      { id: "append-state", kind: "state.append-event", precondition: { kind: "revision", value: rev("sc-1") }, target: { sceneId: "sc-1", eventId: "event-arrival" }, event: { sceneId: "sc-1", order: 1, kind: "location", subject: "char-uma", object: "loc-cafe", payload: {}, source: "manual", eventId: "event-arrival", evidence: [{ sceneId: "sc-1", excerpt: "enters the cafe" }], confidence: 0.9, createdAt: "2026-01-01T00:00:00.000Z", status: "confirmed" }, sourceProposal: { id: stateProposal.id, manuscriptHash: stateProposal.manuscript_hash }, evidenceIds: ["evidence-one"], assessment: { confidence: 0.9, risk: "medium" } },
       { id: "link-thread", kind: "thread.link-scene", precondition: { kind: "revision", value: rev("thread-main") }, target: { threadId: "thread-main", sceneId: "sc-1" }, relation: "planted", note: "Promise introduced", evidenceIds: ["evidence-one"], assessment: { confidence: 0.8, risk: "low" } },
       { id: "link-reference", kind: "reference.link", precondition: { kind: "revision", value: rev("loc-cafe") }, target: { from: "loc-cafe", to: "loc-new", kind: "related" }, note: "Nearby places", evidenceIds: ["evidence-one"], assessment: { confidence: 0.8, risk: "low" } },
       { id: "replace-manuscript", kind: "manuscript.replace-range", precondition: { kind: "content-hash", value: sourceHash(body) }, target: { manuscriptId: "ms-vol-main-ch-main-1-sc-1", sceneId: "sc-1" }, range: { start: 0, end: 3 }, replacement: "She", evidenceIds: ["evidence-one"], assessment: { confidence: 0.8, risk: "medium" } },
@@ -284,9 +299,71 @@ test("NarrativeChangeSet preserves all nine source operation kinds in one identi
   assert.equal(data.resultRevisions["create-scene"]?.startsWith('"sha256-'), true);
   assert.deepEqual(data.affectedEntities["insert-scene"]?.map((item) => item.id), ["sc-1", "sc-2", "sc-new"]);
   assert.deepEqual(coreProposal.operations.map((operation) => operation.id), Object.values(data.operationMap));
+  const stateCoreOperation = coreProposal.operations.find((operation) => operation.id === data.operationMap["append-state"]);
+  assert.ok(stateCoreOperation?.reads.some((read) => read.path === STATE_PROPOSALS_PATH && read.revision === revision(stateProposalContent)));
   assert.equal(coreProposal.operations[0]?.writes[0]?.path, "bible/locations/loc-new.yaml");
   assert.equal(files.get("bible/locations/loc-new.yaml"), undefined, "proposal conversion does not write to the snapshot");
   assert.equal(proposals.length, 1);
+});
+
+test("state.append-event rejects stale or mismatched source proposals", async () => {
+  const body = "Uma enters the cafe.";
+  const manuscriptHash = sourceHash(body);
+  const row = {
+    id: "proposal-arrival",
+    scene_id: "sc-1",
+    event_json: JSON.stringify({ sceneId: "sc-1", order: 1, kind: "location", subject: "char-uma", object: "loc-cafe", payload: {}, source: "llm-draft", eventId: "draft-arrival", status: "proposed" }),
+    manuscript_hash: manuscriptHash,
+    status: "proposed",
+    conflict_event_ids_json: "[]",
+    duplicate_of_proposal_id: null,
+    history_json: "[]",
+    created_at: "2026-01-01T00:00:00.000Z",
+    updated_at: "2026-01-01T00:00:00.000Z",
+  };
+  const submit = async (label: string, proposalRow: typeof row | null, operationHash = manuscriptHash) => {
+    const files = fixtureFiles({
+      [STATE_PROPOSALS_PATH]: proposalRow ? `${JSON.stringify(proposalRow)}\n` : "",
+    });
+    const reader = makeReader(files);
+    const context = makeActionContext(reader);
+    context.invoke = async () => ({
+      ok: false,
+      snapshot: reader.snapshot,
+      error: { code: "PROPOSAL_NOT_FOUND", message: "missing", retryable: false },
+    });
+    const scene = (await invoke<{ revision: string }>("story.entities.get", { id: "sc-1" }, context)).data;
+    const changeSet = {
+      schemaVersion: 1,
+      id: `ncs-state-${label}`,
+      projectId: context.projectId,
+      goal: "Append a proposed state event",
+      status: "proposed",
+      assessment: { confidence: 0.9, risk: "medium" },
+      operations: [{
+        id: "append-state",
+        kind: "state.append-event",
+        precondition: { kind: "revision", value: scene.revision },
+        target: { sceneId: "sc-1", eventId: "event-arrival" },
+        event: { sceneId: "sc-1", order: 1, kind: "location", subject: "char-uma", object: "loc-cafe", payload: {}, source: "manual", eventId: "event-arrival", status: "confirmed" },
+        sourceProposal: { id: row.id, manuscriptHash: operationHash },
+        evidenceIds: [],
+        assessment: { confidence: 0.9, risk: "medium" },
+      }],
+      evidence: [],
+      diagnostics: { before: null, after: null },
+    };
+    const result = await actionById("story.changes.propose").invoke(changeSet, context);
+    assert.equal(result.ok, false, `${label} should not be proposed`);
+    if (!result.ok) assert.equal(result.error.code, "operation_precondition_conflict", label);
+  };
+
+  await submit("missing", null);
+  await submit("status", { ...row, status: "stale" });
+  await submit("conflicts", { ...row, conflict_event_ids_json: '["old-event"]' });
+  await submit("duplicate", { ...row, duplicate_of_proposal_id: "proposal-other" });
+  await submit("event", { ...row, event_json: JSON.stringify({ sceneId: "sc-1", order: 1, kind: "location", subject: "char-uma", object: "loc-cafe", payload: { reason: "changed" }, source: "llm-draft", status: "proposed" }) });
+  await submit("manuscript", { ...row, manuscript_hash: "deadbeef" }, "deadbeef");
 });
 
 test("co-occurrence action returns source Jaccard/PMI and accepts scene scope", async () => {
