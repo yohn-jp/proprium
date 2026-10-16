@@ -1587,6 +1587,17 @@ async function buildDialogueTopicsPrompt(context: ModuleActionContext, input: { 
   }
   for (const link of story.links) {
     if (link.kind !== "related") continue;
+    const source = story.entities.get(link.from);
+    const cameFromAutomaticRelation = source?.type === "character" && Array.isArray(source.raw.relations)
+      && source.raw.relations.some((value) => {
+        if (value === null || typeof value !== "object" || Array.isArray(value)) return false;
+        const relation = value as Record<string, unknown>;
+        return relation.auto === true
+          && relation.target === link.to
+          && (typeof relation.kind === "string" ? relation.kind : "related") === link.kind
+          && relation.note === link.note;
+      });
+    if (cameFromAutomaticRelation) continue;
     addPairRelation(link.from, link.to, "related", link.note);
   }
   const pairLines = pairs.length ? pairs.map((item) => `- ${nameById[item.a]} ↔ ${nameById[item.b]}: ${item.label}`).join("\n") : "（関係ラベル未登録 — 参加者の対比・緊張を想像してよい）";
@@ -2239,7 +2250,7 @@ async function previewQaPrompt(context: ModuleActionContext, sceneId?: string) {
   let manuscriptBody = "";
   if (sceneId) {
     const story = await readStorySnapshot(context.reader, { includeManuscripts: true });
-    manuscriptBody = sceneContext(story, sceneId).body;
+    if (story.entities.get(sceneId)?.type === "scene") manuscriptBody = sceneContext(story, sceneId).body;
   }
   return { prompt: (await buildQaSystemPrompt(manuscriptBody)).system };
 }

@@ -14,6 +14,16 @@ const repository = {
   url: "file:///synthetic/assistant-browser-fixture",
 };
 const snapshot = { repository, remoteCommit: "a".repeat(40) };
+const editorDraft = {
+  sceneId: "sc-1",
+  documentPath: "manuscript/vol-main/ch-1/sc-1.md",
+  documentRevision: "editor-document-rev",
+  sceneRevision: "editor-scene-rev",
+  text: "一文目。二文目。三文目。四文目。五文目。六文目。七文目。八文目。九文目。十文目。十一文目。十二文目。",
+  snapshot: { ...snapshot, overlayCommit: "d".repeat(40) },
+  baseSnapshot: snapshot,
+  baseSceneRevision: "b".repeat(64),
+};
 const calls = [];
 let streamMode = "success";
 let qaStreamMode = "error";
@@ -39,8 +49,13 @@ const actionData = {
   "assistant.usage.read": { month: "2026-10", total: 12 },
   "assistant.summary.scene": { summary: "駅で二人が再会する。", proposal: { id: "proposal-scene-summary" } },
   "assistant.summary.chapter": { summary: "二人が再会し、旅に出る。", proposal: { id: "proposal-chapter-summary" } },
+  "assistant.summary.scene.preview": { prompt: "実際のシーン要約プロンプト" },
+  "assistant.summary.chapter.preview": { prompt: "実際の章要約プロンプト" },
+  "assistant.qa.preview": { prompt: "実際のQAシステムプロンプト" },
   "assistant.continuation": { options: ["列車が動き出した。", "彼女は切符を握りしめた。"] },
+  "assistant.continuation.preview": { prompt: "実際の続きプロンプト" },
   "assistant.aspect.review": { findings: [{ aspect: "tempo", aspectLabel: "テンポ", finding: "間を少し短くできます。" }] },
+  "assistant.aspect.review.preview": { prompt: "ローカルのレビュー骨組み" },
   "story.entities.list": [{
     id: "ds-1",
     name: "駅の対話スケッチ",
@@ -57,12 +72,18 @@ const actionData = {
     },
   }],
   "assistant.dialogue.topics": { topics: [{ title: "雨宿り", situation: "駅の軒下で雨を待つ" }] },
+  "assistant.dialogue.topics.preview": { prompt: "実際のお題プロンプト" },
   "assistant.dialogue.turns": { lines: [{ speakerEntityId: "char-a", text: "傘、持ってる？" }] },
+  "assistant.dialogue.turn.preview": { prompt: "実際の1ターンプロンプト" },
+  "assistant.dialogue.turns.preview": { prompt: "実際の複数ターンプロンプト" },
   "assistant.reader.reaction": { questions: ["二人はどこへ向かうのだろう？"], expectations: ["旅の始まり"], confusions: [] },
+  "assistant.reader.reaction.preview": { prompt: "実際の初読プロンプト" },
   "assistant.zukan.suggestions": { proposal: { id: "proposal-zukan" }, suggestion: "人物の変更案" },
   "assistant.synonyms.suggestions": {
     suggestions: [{ term: "静か", candidates: ["静かに", "そっと"] }],
   },
+  "assistant.synonyms.preview": { prompt: "実際の同義語プロンプト" },
+  "assistant.zukan.sandbox.preview": { prompt: "実際のsandbox図鑑プロンプト" },
   "assistant.contradictions.assist": { findings: [] },
   "assistant.stateEvents.draft": { proposal: { id: "proposal-state" }, events: [] },
   "assistant.speaker.attribute": { attributions: [] },
@@ -168,13 +189,15 @@ try {
     });
   });
 
-  await page.evaluate(async ({ origin, snapshot }) => {
+  await page.evaluate(async ({ origin, snapshot, editorDraft }) => {
     const { browserModule } = await import(`${origin}/src/browser.ts`);
+    window.assistantEditorDraft = editorDraft;
     const context = {
       projectId: "assistant-browser-fixture",
       snapshot,
       signal: new AbortController().signal,
       invoke: (actionId, input) => window.assistantInvoke(actionId, input),
+      readCurrentEditor: () => structuredClone(editorDraft),
       propose: async () => { throw new Error("assistant UI must not approve or bypass the proposal queue"); },
       refresh: async () => {},
     };
@@ -184,7 +207,7 @@ try {
       window.assistantUnmount?.();
       window.assistantUnmount = await browserModule.mount(contributionId, document.getElementById("assistant-root"), context);
     };
-  }, { origin, snapshot });
+  }, { origin, snapshot, editorDraft });
 
   await page.evaluate(() => window.assistantMount("assistant.settings"));
   await page.getByRole("button", { name: "接続状態を確認" }).click();
@@ -241,13 +264,23 @@ try {
 
   await page.evaluate(() => window.assistantMount("assistant.summaries"));
   await page.getByLabel("シーン ID").fill("sc-1");
+  await page.getByRole("button", { name: "シーン要約プロンプトを確認" }).click();
+  await page.getByText("実際のシーン要約プロンプト", { exact: false }).waitFor();
+  assert.deepEqual(calls.find((call) => call.actionId === "assistant.summary.scene.preview").input, { sceneId: "sc-1" });
   await page.getByRole("button", { name: "シーン要約を作る" }).click();
   await page.getByText("駅で二人が再会する。", { exact: true }).waitFor();
   await page.getByLabel("章 ID").fill("ch-1");
+  await page.getByRole("button", { name: "章要約プロンプトを確認" }).click();
+  await page.getByText("実際の章要約プロンプト", { exact: false }).waitFor();
+  assert.deepEqual(calls.find((call) => call.actionId === "assistant.summary.chapter.preview").input, { chapterId: "ch-1" });
   await page.getByRole("button", { name: "章要約を作る" }).click();
   await page.getByText("二人が再会し、旅に出る。", { exact: true }).waitFor();
 
   await page.evaluate(() => window.assistantMount("assistant.qa"));
+  await page.getByLabel("関連シーン（任意）").fill("sc-1");
+  await page.getByRole("button", { name: "QAシステムプロンプトを確認" }).click();
+  await page.getByText("実際のQAシステムプロンプト", { exact: false }).waitFor();
+  assert.deepEqual(calls.find((call) => call.actionId === "assistant.qa.preview").input, { sceneId: "sc-1" });
   await page.getByLabel("質問").fill("この章で二人はどこで会った？");
   await page.getByRole("button", { name: "設定に質問する" }).click();
   await page.getByText("一時的なプロバイダーエラー", { exact: true }).waitFor();
@@ -256,7 +289,7 @@ try {
   await page.getByText("<img src=x onerror=alert(1)> 回答", { exact: true }).waitFor();
   await page.getByText("[scene:sc-1] 駅で会った。 (scenes/sc-1.md · r1)", { exact: true }).waitFor();
   assert.equal(await page.locator("img").count(), 0, "model text is rendered as text, never executable markup");
-  assert.deepEqual(qaRequests[0], { messages: [{ role: "user", content: "この章で二人はどこで会った？" }] });
+  assert.deepEqual(qaRequests[0], { sceneId: "sc-1", messages: [{ role: "user", content: "この章で二人はどこで会った？" }] });
 
   qaStreamMode = "hang";
   await page.getByLabel("質問").fill("会話に追加される前にキャンセルする質問");
@@ -273,6 +306,7 @@ try {
   await page.getByRole("button", { name: "回答を再試行" }).click();
   await page.getByText("再試行後の回答", { exact: true }).waitFor();
   assert.deepEqual(qaRequests[3], {
+    sceneId: "sc-1",
     messages: [
       { role: "user", content: "この章で二人はどこで会った？" },
       { role: "assistant", content: "<img src=x onerror=alert(1)> 回答" },
@@ -282,19 +316,40 @@ try {
 
   await page.evaluate(() => window.assistantMount("assistant.continuation"));
   await page.getByLabel("シーン ID").fill("sc-1");
+  await page.getByRole("button", { name: "続きを考えるプロンプトを確認" }).click();
+  await page.getByText("実際の続きプロンプト", { exact: false }).waitFor();
+  assert.deepEqual(calls.find((call) => call.actionId === "assistant.continuation.preview").input, { editorText: editorDraft.text });
+  const continuationCallsBeforeLostEditor = calls.filter((call) => call.actionId === "assistant.continuation.preview").length;
+  await page.evaluate(() => { window.assistantContext.readCurrentEditor = () => null; });
+  await page.getByRole("button", { name: "続きを考えるプロンプトを確認" }).click();
+  await page.getByText("選択シーンの編集本文を確認できません", { exact: false }).waitFor();
+  assert.equal(calls.filter((call) => call.actionId === "assistant.continuation.preview").length, continuationCallsBeforeLostEditor, "a missing live draft does not silently preview saved-scene context");
+  await page.evaluate(() => { window.assistantContext.readCurrentEditor = () => structuredClone(window.assistantEditorDraft); });
   await page.getByRole("button", { name: "続きの候補を作る" }).click();
   await page.getByText("列車が動き出した。", { exact: true }).waitFor();
+  assert.deepEqual(calls.find((call) => call.actionId === "assistant.continuation").input, { sceneId: "sc-1", editorDraft, k: 8 });
 
   await page.evaluate(() => window.assistantMount("assistant.aspect-review"));
   await page.getByLabel("章 ID").fill("ch-1");
+  await page.getByRole("button", { name: "レビュー用プロンプト骨組みを確認" }).click();
+  await page.getByText("ローカルのレビュー骨組み", { exact: false }).waitFor();
+  assert.deepEqual(calls.find((call) => call.actionId === "assistant.aspect.review.preview").input, { chapterId: "ch-1", aspects: ["tempo", "pov-shift", "over-explain"] });
   await page.getByRole("button", { name: "章をレビューする" }).click();
   await page.getByText("テンポ: 間を少し短くできます。", { exact: true }).waitFor();
 
   await page.evaluate(() => window.assistantMount("assistant.dialogue"));
   await page.getByRole("button", { name: "保存済みスケッチを読み込む" }).click();
   await page.getByLabel("保存済みスケッチ").selectOption("ds-1");
+  await page.getByRole("button", { name: "お題プロンプトを確認" }).click();
+  await page.getByText("実際のお題プロンプト", { exact: false }).waitFor();
+  assert.deepEqual(calls.find((call) => call.actionId === "assistant.dialogue.topics.preview").input, { participantEntityIds: ["char-a", "char-b"] });
   await page.getByRole("button", { name: "お題を提案" }).click();
   await page.getByText("雨宿り — 駅の軒下で雨を待つ", { exact: true }).waitFor();
+  await page.getByRole("button", { name: "ターン生成プロンプトを確認" }).click();
+  await page.getByText("実際の1ターンプロンプト", { exact: false }).waitFor();
+  const singleTurnPreview = calls.find((call) => call.actionId === "assistant.dialogue.turn.preview");
+  assert.equal(singleTurnPreview.input.speakerEntityId, "char-a");
+  assert.equal(singleTurnPreview.input.sketchId, "ds-1");
   await page.getByRole("button", { name: "次のターンを提案" }).click();
   await page.getByText("char-a: 傘、持ってる？", { exact: true }).waitFor();
   const dialogueTopicsCall = calls.find((call) => call.actionId === "assistant.dialogue.topics");
@@ -314,6 +369,11 @@ try {
   });
   await page.getByLabel("生成モード").selectOption("bulk");
   await page.getByLabel("生成ターン数").fill("2");
+  await page.getByRole("button", { name: "ターン生成プロンプトを確認" }).click();
+  await page.getByText("実際の複数ターンプロンプト", { exact: false }).waitFor();
+  const bulkTurnPreview = calls.find((call) => call.actionId === "assistant.dialogue.turns.preview");
+  assert.equal(bulkTurnPreview.input.lineCount, 2);
+  assert.equal(bulkTurnPreview.input.sketchId, "ds-1");
   await page.getByRole("button", { name: "次のターンを提案" }).click();
   const bulkDialogueCall = calls.filter((call) => call.actionId === "assistant.dialogue.turns")[1];
   assert.deepEqual(bulkDialogueCall.input, {
@@ -331,6 +391,9 @@ try {
 
   await page.evaluate(() => window.assistantMount("assistant.reader-reaction"));
   await page.getByLabel("章 ID").fill("ch-1");
+  await page.getByRole("button", { name: "初読プロンプトを確認" }).click();
+  await page.getByText("実際の初読プロンプト", { exact: false }).waitFor();
+  assert.deepEqual(calls.find((call) => call.actionId === "assistant.reader.reaction.preview").input, { chapterId: "ch-1" });
   await page.getByRole("button", { name: "初読の反応を作る" }).click();
   await page.getByText("二人はどこへ向かうのだろう？", { exact: true }).waitFor();
 
@@ -343,6 +406,11 @@ try {
   await page.getByLabel("語句").fill("静か");
   await page.getByLabel("原文の一文").fill("彼女は静かに窓辺へ歩いた。");
   await page.getByLabel("診断理由（任意）").fill("副詞の重複を避ける");
+  await page.getByRole("button", { name: "同義語プロンプトを確認" }).click();
+  await page.getByText("実際の同義語プロンプト", { exact: false }).waitFor();
+  assert.deepEqual(calls.find((call) => call.actionId === "assistant.synonyms.preview").input, {
+    original: "静か", sentence: "彼女は静かに窓辺へ歩いた。", reason: "副詞の重複を避ける",
+  });
   await page.getByRole("button", { name: "候補をレビュー案にする" }).click();
   await page.getByText("静かに", { exact: true }).waitFor();
   await page.getByText("そっと", { exact: true }).waitFor();
@@ -355,12 +423,15 @@ try {
   await page.getByLabel("sandbox 対話スケッチ").selectOption("ds-1");
   await page.getByLabel("開始ターン").fill("2");
   await page.getByLabel("終了ターン").fill("3");
+  await page.getByRole("button", { name: "sandbox 図鑑分析プロンプトを確認" }).click();
+  await page.getByText("実際のsandbox図鑑プロンプト", { exact: false }).waitFor();
+  assert.deepEqual(calls.find((call) => call.actionId === "assistant.zukan.sandbox.preview").input, { sketchId: "ds-1", turnRange: { start: 1, end: 2 } });
   await page.getByRole("button", { name: "図鑑の変更案を作る" }).click();
   await page.getByText("sandbox の変更案", { exact: true }).waitFor();
   assert.deepEqual(calls.filter((call) => call.actionId === "assistant.zukan.suggestions")[1].input, {
     source: "sandbox",
     sourceSessionId: "ds-1",
-    turnRange: { start: 2, end: 3 },
+    turnRange: { start: 1, end: 2 },
   });
   await page.getByLabel("記述").fill("主人公は雪の村で寒がりだと言った。");
   await page.getByRole("button", { name: "矛盾を確認する" }).click();
@@ -377,6 +448,8 @@ try {
     "assistant.rewrite", "assistant.summary.scene", "assistant.summary.chapter", "assistant.continuation", "assistant.aspect.review",
     "assistant.rewrite.propose", "story.entities.list", "assistant.dialogue.topics", "assistant.dialogue.turns", "assistant.reader.reaction", "assistant.zukan.suggestions",
     "assistant.synonyms.suggestions", "assistant.contradictions.assist", "assistant.stateEvents.draft", "assistant.speaker.attribute",
+    "assistant.summary.scene.preview", "assistant.summary.chapter.preview", "assistant.qa.preview", "assistant.continuation.preview", "assistant.aspect.review.preview",
+    "assistant.dialogue.topics.preview", "assistant.dialogue.turn.preview", "assistant.dialogue.turns.preview", "assistant.reader.reaction.preview", "assistant.synonyms.preview", "assistant.zukan.sandbox.preview",
   ]);
   assert.ok(calls.length > 0);
   assert.ok(calls.every((call) => allowedActions.has(call.actionId)), "browser invokes only the approved assistant action IDs");

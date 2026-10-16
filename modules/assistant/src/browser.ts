@@ -1,4 +1,4 @@
-import type { BrowserModuleContext, BrowserModuleDefinition } from "@scriptorium/contracts";
+import type { BrowserEditorDocument, BrowserModuleContext, BrowserModuleDefinition } from "@scriptorium/contracts";
 
 type Data = Record<string, unknown>;
 type ActionCall = { data: unknown; proposals: unknown[] };
@@ -25,6 +25,17 @@ const ACTIONS = [
   "assistant.contradictions.assist",
   "assistant.stateEvents.draft",
   "assistant.speaker.attribute",
+  "assistant.summary.scene.preview",
+  "assistant.summary.chapter.preview",
+  "assistant.qa.preview",
+  "assistant.continuation.preview",
+  "assistant.aspect.review.preview",
+  "assistant.dialogue.topics.preview",
+  "assistant.dialogue.turn.preview",
+  "assistant.dialogue.turns.preview",
+  "assistant.reader.reaction.preview",
+  "assistant.synonyms.preview",
+  "assistant.zukan.sandbox.preview",
 ] as const;
 type AssistantAction = (typeof ACTIONS)[number];
 const STORY_ACTIONS = ["story.entities.list"] as const;
@@ -284,6 +295,21 @@ function bindAction(
       options.done ?? "結果を読み込みました。",
     );
   }, cleanup);
+}
+
+function bindPreviewAction(
+  buttonNode: HTMLButtonElement,
+  buildInput: () => unknown,
+  context: BrowserModuleContext,
+  actionId: AssistantAction,
+  status: HTMLOutputElement,
+  resultNode: HTMLElement,
+  cleanup: Cleanup,
+): void {
+  bindAction(buttonNode, buildInput, context, actionId, status, resultNode, cleanup, {
+    loading: "送信前のプロンプトを組み立てています…",
+    done: "実際の送信内容をプレビューしています。",
+  });
 }
 
 function renderSettingsForm(
@@ -693,7 +719,8 @@ function displayRewriteFinal(
   for (const item of suggestions) {
     const suggestion = asRecord(item);
     const strategy = typeof suggestion.strategy === "string" ? suggestion.strategy : "言い換え案";
-    createCandidate(strategyLabels[strategy] ?? strategy, suggestion.text, suggestion.rationale);
+    const sourceLabel = suggestion.source === "source-heuristic" ? "（ローカル定型候補）" : "";
+    createCandidate(`${strategyLabels[strategy] ?? strategy}${sourceLabel}`, suggestion.text, suggestion.rationale);
   }
   const sentenceSplit = asRecord(response.sentenceSplit);
   if (typeof sentenceSplit.text === "string") createCandidate("文分割案", sentenceSplit.text, sentenceSplit.rationale);
@@ -727,15 +754,23 @@ function mountSummaries(root: HTMLElement, context: BrowserModuleContext, cleanu
   const sceneStatus = statusNode();
   const sceneResult = el("div");
   const sceneRun = button("シーン要約を作る");
+  const scenePreviewStatus = statusNode();
+  const scenePreviewResult = el("div");
+  const scenePreview = button("シーン要約プロンプトを確認");
   bindAction(sceneRun, () => ({ sceneId: sceneId.value.trim() }), context, "assistant.summary.scene", sceneStatus, sceneResult, cleanup, { loading: "シーン要約を生成しています…", done: "シーン要約を受け取りました。" });
+  bindPreviewAction(scenePreview, () => ({ sceneId: sceneId.value.trim() }), context, "assistant.summary.scene.preview", scenePreviewStatus, scenePreviewResult, cleanup);
   const chapterStatus = statusNode();
   const chapterResult = el("div");
   const chapterRun = button("章要約を作る");
+  const chapterPreviewStatus = statusNode();
+  const chapterPreviewResult = el("div");
+  const chapterPreview = button("章要約プロンプトを確認");
   bindAction(chapterRun, () => ({ chapterId: chapterId.value.trim() }), context, "assistant.summary.chapter", chapterStatus, chapterResult, cleanup, { loading: "章要約を生成しています…", done: "章要約を受け取りました。" });
+  bindPreviewAction(chapterPreview, () => ({ chapterId: chapterId.value.trim() }), context, "assistant.summary.chapter.preview", chapterPreviewStatus, chapterPreviewResult, cleanup);
   const sceneSection = section("シーン要約");
-  sceneSection.append(field("シーン ID", sceneId), sceneRun, sceneStatus, sceneResult);
+  sceneSection.append(field("シーン ID", sceneId), scenePreview, scenePreviewStatus, scenePreviewResult, sceneRun, sceneStatus, sceneResult);
   const chapterSection = section("章要約");
-  chapterSection.append(field("章 ID", chapterId), chapterRun, chapterStatus, chapterResult);
+  chapterSection.append(field("章 ID", chapterId), chapterPreview, chapterPreviewStatus, chapterPreviewResult, chapterRun, chapterStatus, chapterResult);
   root.append(intro, sceneSection, chapterSection);
 }
 
@@ -750,6 +785,9 @@ function mountQa(root: HTMLElement, context: BrowserModuleContext, cleanup: Clea
   const cancel = button("回答生成をキャンセル");
   cancel.hidden = true;
   const clear = button("会話をクリア");
+  const promptPreview = button("QAシステムプロンプトを確認");
+  const promptPreviewStatus = statusNode();
+  const promptPreviewResult = el("div");
   const status = statusNode();
   const conversation = el("div");
   const preview = el("div");
@@ -937,17 +975,80 @@ function mountQa(root: HTMLElement, context: BrowserModuleContext, cleanup: Clea
   };
   on(run, "click", () => { void ask(); }, cleanup);
   on(retry, "click", () => { void ask(); }, cleanup);
-  root.append(intro, field("質問", question), field("関連シーン（任意）", sceneId), run, retry, cancel, clear, status, preview, conversation);
+  bindPreviewAction(promptPreview, () => sceneId.value.trim() ? { sceneId: sceneId.value.trim() } : {}, context, "assistant.qa.preview", promptPreviewStatus, promptPreviewResult, cleanup);
+  root.append(intro, field("質問", question), field("関連シーン（任意）", sceneId), promptPreview, promptPreviewStatus, promptPreviewResult, run, retry, cancel, clear, status, preview, conversation);
 }
 
 function mountContinuation(root: HTMLElement, context: BrowserModuleContext, cleanup: Cleanup): void {
-  const intro = el("p", "シーンの続きを複数案で提案します。結果は候補として表示され、原稿には書き込みません。");
+  const intro = el("p", "シーンの続きを複数案で提案します。保存済みシーンに対応する現在の編集本文があれば、明示的に選んで続きを考えられます。結果は候補として表示され、原稿には書き込みません。");
   const sceneId = input("scene ID");
+  const chapterId = input("chapter ID（任意）");
+  const useEditorDraft = el("input");
+  useEditorDraft.type = "checkbox";
+  const initialDraft = context.readCurrentEditor?.() ?? null;
+  useEditorDraft.checked = Boolean(initialDraft);
+  if (initialDraft) sceneId.value = initialDraft.sceneId;
+  const useEditorDraftLabel = el("label", "選択シーンと一致する現在の編集本文を使う");
+  useEditorDraftLabel.prepend(useEditorDraft);
+  const loadEditorScene = button("現在の編集シーンを選ぶ");
+  const editorStatus = statusNode();
+  on(loadEditorScene, "click", () => {
+    const draft = context.readCurrentEditor?.();
+    if (!draft) {
+      editorStatus.textContent = "現在の編集シーンを読み取れません。保存済み本文または直近の文を指定してください。";
+      return;
+    }
+    sceneId.value = draft.sceneId;
+    useEditorDraft.checked = true;
+    editorStatus.textContent = `編集中の本文から末尾12文を使います (${draft.documentPath})。保存済み本文の代わりに現在の編集本文を参照します。`;
+  }, cleanup);
+  const recentSentences = textarea(5, "直近の文を1文ずつ入力（空欄ならシーン本文を使います）");
+  const k = el("input");
+  k.type = "number";
+  k.min = "0";
+  k.max = "40";
+  k.step = "1";
+  k.value = "8";
   const run = button("続きの候補を作る");
   const status = statusNode();
   const result = el("div");
-  bindAction(run, () => ({ sceneId: sceneId.value.trim() }), context, "assistant.continuation", status, result, cleanup, { loading: "続きを考えています…", done: "続きの候補を受け取りました。" });
-  root.append(intro, field("シーン ID", sceneId), run, status, result);
+  const promptPreview = button("続きを考えるプロンプトを確認");
+  const promptPreviewStatus = statusNode();
+  const promptPreviewResult = el("div");
+  const selectedEditorDraft = () => {
+    if (!useEditorDraft.checked) return undefined;
+    const current = context.readCurrentEditor?.() ?? null;
+    return current?.sceneId === sceneId.value.trim() ? current : undefined;
+  };
+  const requestInput = (editorDraft: BrowserEditorDocument | undefined) => {
+    return {
+      ...(sceneId.value.trim() ? { sceneId: sceneId.value.trim() } : {}),
+      ...(chapterId.value.trim() ? { chapterId: chapterId.value.trim() } : {}),
+      ...(editorDraft ? { editorDraft } : recentSentences.value.trim() ? { recentSentences: recentSentences.value.split(/\r?\n/u).map((line) => line.trim()).filter(Boolean) } : {}),
+      k: Number(k.value),
+    };
+  };
+  const editorDraftRequiredMessage = "現在の編集本文を使う設定ですが、選択シーンの編集本文を確認できません。編集シーンを選び直すか、この設定を解除してください。";
+  on(run, "click", () => {
+    const editorDraft = selectedEditorDraft();
+    if (useEditorDraft.checked && !editorDraft) {
+      status.textContent = editorDraftRequiredMessage;
+      return;
+    }
+    void runAction(context, "assistant.continuation", requestInput(editorDraft), run, status, result, "続きを考えています…", "続きの候補を受け取りました。");
+  }, cleanup);
+  on(promptPreview, "click", () => {
+    const editorDraft = selectedEditorDraft();
+    if (useEditorDraft.checked && !editorDraft) {
+      promptPreviewStatus.textContent = editorDraftRequiredMessage;
+      return;
+    }
+    const inputValue = editorDraft
+      ? { editorText: editorDraft.text }
+      : { recentSentences: recentSentences.value.split(/\r?\n/u).map((line) => line.trim()).filter(Boolean) };
+    void runAction(context, "assistant.continuation.preview", inputValue, promptPreview, promptPreviewStatus, promptPreviewResult, "送信前のプロンプトを組み立てています…", "実際の送信内容をプレビューしています。");
+  }, cleanup);
+  root.append(intro, field("シーン ID（任意）", sceneId), loadEditorScene, useEditorDraftLabel, editorStatus, field("章 ID（任意）", chapterId), field("直近の文（各行を1文として扱います。編集本文を使う場合は直近12文を自動選択）", recentSentences), field("使用する直近文数 k（0〜40）", k), promptPreview, promptPreviewStatus, promptPreviewResult, run, status, result);
 }
 
 function mountAspectReview(root: HTMLElement, context: BrowserModuleContext, cleanup: Cleanup): void {
@@ -966,15 +1067,20 @@ function mountAspectReview(root: HTMLElement, context: BrowserModuleContext, cle
     return field(label, checkbox);
   });
   const run = button("章をレビューする");
+  const promptPreview = button("レビュー用プロンプト骨組みを確認");
+  const promptPreviewStatus = statusNode();
+  const promptPreviewResult = el("div");
   const status = statusNode();
   const result = el("div");
-  bindAction(run, () => ({ chapterId: chapterId.value.trim(), aspects: checks.flatMap((item, index) => {
+  const buildInput = () => ({ chapterId: chapterId.value.trim(), aspects: checks.flatMap((item, index) => {
     const checkbox = item.querySelector("input");
     return checkbox?.checked ? [aspectChoices[index]![0]] : [];
-  }) }), context, "assistant.aspect.review", status, result, cleanup, { loading: "章をレビューしています…", done: "レビュー結果を受け取りました。" });
+  }) });
+  bindAction(run, buildInput, context, "assistant.aspect.review", status, result, cleanup, { loading: "章をレビューしています…", done: "レビュー結果を受け取りました。" });
+  bindPreviewAction(promptPreview, buildInput, context, "assistant.aspect.review.preview", promptPreviewStatus, promptPreviewResult, cleanup);
   const aspectSection = section("確認する観点");
   for (const choice of checks) aspectSection.append(choice);
-  root.append(intro, field("章 ID", chapterId), aspectSection, run, status, result);
+  root.append(intro, field("章 ID", chapterId), aspectSection, promptPreview, promptPreviewStatus, promptPreviewResult, run, status, result);
 }
 
 function parseList(value: string): string[] {
@@ -1094,18 +1200,27 @@ function mountDialogue(root: HTMLElement, context: BrowserModuleContext, cleanup
   const topics = button("お題を提案");
   const topicStatus = statusNode();
   const topicResult = el("div");
-  bindAction(topics, () => ({ participantEntityIds: parseList(participants.value) }), context, "assistant.dialogue.topics", topicStatus, topicResult, cleanup, { loading: "対話のお題を考えています…", done: "お題候補を受け取りました。" });
+  const topicPreview = button("お題プロンプトを確認");
+  const topicPreviewStatus = statusNode();
+  const topicPreviewResult = el("div");
+  const topicInput = () => ({ participantEntityIds: parseList(participants.value) });
+  bindAction(topics, topicInput, context, "assistant.dialogue.topics", topicStatus, topicResult, cleanup, { loading: "対話のお題を考えています…", done: "お題候補を受け取りました。" });
+  bindPreviewAction(topicPreview, topicInput, context, "assistant.dialogue.topics.preview", topicPreviewStatus, topicPreviewResult, cleanup);
   const turns = button("次のターンを提案");
+  const turnPreview = button("ターン生成プロンプトを確認");
   const turnStatus = statusNode();
   const turnResult = el("div");
-  on(turns, "click", () => {
+  const turnPreviewStatus = statusNode();
+  const turnPreviewResult = el("div");
+  const buildTurnInput = (): Data | undefined => {
     const participantEntityIds = parseList(participants.value);
     let precedingLines: Array<{ speakerEntityId: string; text: string }>;
     try {
       precedingLines = parseDialogueLines(preceding.value);
     } catch (error) {
       turnStatus.textContent = error instanceof Error ? error.message : String(error);
-      return;
+      turnPreviewStatus.textContent = turnStatus.textContent;
+      return undefined;
     }
     const inputValue: Data = {
       participantEntityIds,
@@ -1117,30 +1232,47 @@ function mountDialogue(root: HTMLElement, context: BrowserModuleContext, cleanup
     if (turnMode.value === "single") {
       if (!speaker.value) {
         turnStatus.textContent = "次のターンの話者を選んでください。";
-        return;
+        turnPreviewStatus.textContent = turnStatus.textContent;
+        return undefined;
       }
       inputValue.speakerEntityId = speaker.value;
     } else {
       const count = Number(lineCount.value);
       if (!Number.isInteger(count) || count < 1 || count > 30) {
         turnStatus.textContent = "ターン数は 1〜30 の整数で指定してください。";
-        return;
+        turnPreviewStatus.textContent = turnStatus.textContent;
+        return undefined;
       }
       inputValue.lineCount = count;
     }
+    return inputValue;
+  };
+  on(turns, "click", () => {
+    const inputValue = buildTurnInput();
+    if (!inputValue) return;
     void runAction(context, "assistant.dialogue.turns", inputValue, turns, turnStatus, turnResult, "対話の続き方を考えています…", "ターン候補を受け取りました。");
   }, cleanup);
-  root.append(intro, field("保存済みスケッチ", sketchPicker), loadSketches, sketchStatus, field("参加者", participants), field("お題", topic), field("状況", situation), field("これまでの発話（話者 ID + タブ + 本文）", preceding), topics, topicStatus, topicResult, field("生成モード", turnMode), speakerField, lineCountField, turns, turnStatus, turnResult);
+  on(turnPreview, "click", () => {
+    const inputValue = buildTurnInput();
+    if (!inputValue) return;
+    const actionId = turnMode.value === "single" ? "assistant.dialogue.turn.preview" : "assistant.dialogue.turns.preview";
+    void runAction(context, actionId, inputValue, turnPreview, turnPreviewStatus, turnPreviewResult, "プロンプトを組み立てています…", "モデルへ送るプロンプトを表示しました。");
+  }, cleanup);
+  root.append(intro, field("保存済みスケッチ", sketchPicker), loadSketches, sketchStatus, field("参加者", participants), field("お題", topic), field("状況", situation), field("これまでの発話（話者 ID + タブ + 本文）", preceding), topicPreview, topicPreviewStatus, topicPreviewResult, topics, topicStatus, topicResult, field("生成モード", turnMode), speakerField, lineCountField, turnPreview, turnPreviewStatus, turnPreviewResult, turns, turnStatus, turnResult);
 }
 
 function mountReaderReaction(root: HTMLElement, context: BrowserModuleContext, cleanup: Cleanup): void {
   const intro = el("p", "指定した章までの読者として、疑問、期待、混乱の候補を作ります。");
   const chapterId = input("chapter ID");
+  const preview = button("初読プロンプトを確認");
+  const previewStatus = statusNode();
+  const previewResult = el("div");
   const run = button("初読の反応を作る");
   const status = statusNode();
   const result = el("div");
+  bindPreviewAction(preview, () => ({ chapterId: chapterId.value.trim() }), context, "assistant.reader.reaction.preview", previewStatus, previewResult, cleanup);
   bindAction(run, () => ({ chapterId: chapterId.value.trim() }), context, "assistant.reader.reaction", status, result, cleanup, { loading: "初読レポートを作っています…", done: "初読レポートを受け取りました。" });
-  root.append(intro, field("章 ID", chapterId), run, status, result);
+  root.append(intro, field("章 ID", chapterId), preview, previewStatus, previewResult, run, status, result);
 }
 
 function mountProposals(root: HTMLElement, context: BrowserModuleContext, cleanup: Cleanup): void {
@@ -1176,6 +1308,9 @@ function mountProposals(root: HTMLElement, context: BrowserModuleContext, cleanu
   rangeEnd.step = "1";
   rangeEnd.value = "1";
   rangeEnd.setAttribute("aria-label", "終了ターン");
+  const sandboxPreview = button("sandbox 図鑑分析プロンプトを確認");
+  const sandboxPreviewStatus = statusNode();
+  const sandboxPreviewResult = el("div");
   on(loadSandboxSketches, "click", async () => {
     loadSandboxSketches.disabled = true;
     sandboxSketchStatus.textContent = "sandbox のスケッチを読み込んでいます…";
@@ -1213,8 +1348,12 @@ function mountProposals(root: HTMLElement, context: BrowserModuleContext, cleanu
     const sandbox = zukanSource.value === "sandbox";
     manuscriptControls.hidden = sandbox;
     sandboxControls.hidden = !sandbox;
+    sandboxPreview.hidden = !sandbox;
+    sandboxPreviewStatus.hidden = !sandbox;
+    sandboxPreviewResult.hidden = !sandbox;
   };
   on(zukanSource, "change", syncZukanSource, cleanup);
+  syncZukanSource();
   const zukanRun = button("図鑑の変更案を作る");
   const zukanStatus = statusNode();
   const zukanResult = el("div");
@@ -1235,7 +1374,7 @@ function mountProposals(root: HTMLElement, context: BrowserModuleContext, cleanu
       void runAction(context, "assistant.zukan.suggestions", {
         source: "sandbox",
         sourceSessionId: String(sketch.id),
-        turnRange: { start, end },
+        turnRange: { start: start - 1, end: end - 1 },
       }, zukanRun, zukanStatus, zukanResult, "sandbox の変更案を作っています…", "sandbox の図鑑変更案を作成しました。");
       return;
     }
@@ -1249,21 +1388,39 @@ function mountProposals(root: HTMLElement, context: BrowserModuleContext, cleanu
       ...(zukanPrompt.value.trim() ? { prompt: zukanPrompt.value.trim() } : {}),
     }, zukanRun, zukanStatus, zukanResult, "図鑑の変更案を作っています…", "図鑑の変更案を作成しました。");
   }, cleanup);
-  zukanSection.append(field("提案対象", zukanSource), manuscriptControls, sandboxControls, zukanRun, zukanStatus, zukanResult);
+  on(sandboxPreview, "click", () => {
+    const sketch = savedSketches.find((item) => item.id === sandboxSketch.value);
+    const lines = Array.isArray(asRecord(sketch?.raw).lines) ? asRecord(sketch?.raw).lines as unknown[] : [];
+    const start = Number(rangeStart.value);
+    const end = Number(rangeEnd.value);
+    if (!sketch || lines.length === 0 || !Number.isInteger(start) || !Number.isInteger(end) || start < 1 || end < start || end > lines.length) {
+      sandboxPreviewStatus.textContent = "ターン範囲は保存済みスケッチ内の発話から指定してください。";
+      return;
+    }
+    void runAction(context, "assistant.zukan.sandbox.preview", {
+      sketchId: String(sketch.id), turnRange: { start: start - 1, end: end - 1 },
+    }, sandboxPreview, sandboxPreviewStatus, sandboxPreviewResult, "sandbox の実際のプロンプトを組み立てています…", "モデルへ送るプロンプトを表示しました。");
+  }, cleanup);
+  zukanSection.append(field("提案対象", zukanSource), manuscriptControls, sandboxControls, sandboxPreview, sandboxPreviewStatus, sandboxPreviewResult, zukanRun, zukanStatus, zukanResult);
 
   const synonymsSection = section("同義語・言い換え候補");
   const original = input("診断対象の語句");
   const sentence = textarea(3, "診断対象を含む原文の一文");
   const reason = input("診断理由（任意）");
   const synonymsRun = button("候補をレビュー案にする");
+  const synonymsPreview = button("同義語プロンプトを確認");
   const synonymsStatus = statusNode();
   const synonymsResult = el("div");
-  bindAction(synonymsRun, () => ({ suggestions: [{
+  const synonymInput = () => ({
     original: original.value.trim(),
     sentence: sentence.value,
     ...(reason.value.trim() ? { reason: reason.value.trim() } : {}),
-  }] }), context, "assistant.synonyms.suggestions", synonymsStatus, synonymsResult, cleanup, { loading: "同義語候補を作っています…", done: "同義語候補を作成しました。" });
-  synonymsSection.append(field("語句", original), field("原文の一文", sentence), field("診断理由（任意）", reason), synonymsRun, synonymsStatus, synonymsResult);
+  });
+  const synonymsPreviewStatus = statusNode();
+  const synonymsPreviewResult = el("div");
+  bindAction(synonymsRun, () => ({ suggestions: [synonymInput()] }), context, "assistant.synonyms.suggestions", synonymsStatus, synonymsResult, cleanup, { loading: "同義語候補を作っています…", done: "同義語候補を作成しました。" });
+  bindPreviewAction(synonymsPreview, synonymInput, context, "assistant.synonyms.preview", synonymsPreviewStatus, synonymsPreviewResult, cleanup);
+  synonymsSection.append(field("語句", original), field("原文の一文", sentence), field("診断理由（任意）", reason), synonymsPreview, synonymsPreviewStatus, synonymsPreviewResult, synonymsRun, synonymsStatus, synonymsResult);
 
   const contradictionSection = section("設定の矛盾候補");
   const candidate = textarea(4, "確認する設定の記述");
@@ -1283,11 +1440,39 @@ function mountProposals(root: HTMLElement, context: BrowserModuleContext, cleanu
 
   const speakerSection = section("話者の帰属候補");
   const speakerSceneId = input("scene ID");
+  const useEditorDraft = el("input");
+  useEditorDraft.type = "checkbox";
+  useEditorDraft.checked = Boolean(context.readCurrentEditor?.());
+  const useEditorDraftLabel = el("label", "編集中の本文を使う");
+  useEditorDraftLabel.prepend(useEditorDraft);
+  const loadEditorScene = button("現在の編集シーンを選ぶ");
   const speakerRun = button("話者候補を確認する");
   const speakerStatus = statusNode();
   const speakerResult = el("div");
-  bindAction(speakerRun, () => ({ sceneId: speakerSceneId.value.trim() }), context, "assistant.speaker.attribute", speakerStatus, speakerResult, cleanup, { loading: "話者候補を推定しています…", done: "話者候補を受け取りました。" });
-  speakerSection.append(field("シーン ID", speakerSceneId), speakerRun, speakerStatus, speakerResult);
+  on(loadEditorScene, "click", () => {
+    const draft = context.readCurrentEditor?.();
+    if (!draft) {
+      speakerStatus.textContent = "現在の編集シーンを読み取れません。保存済み本文を使うか、シーン ID を入力してください。";
+      return;
+    }
+    speakerSceneId.value = draft.sceneId;
+    useEditorDraft.checked = true;
+    speakerStatus.textContent = `編集中の本文を使用します (${draft.documentPath})。結果には編集画面とリモート基準点を別々に記録します。`;
+  }, cleanup);
+  on(speakerRun, "click", () => {
+    const sceneId = speakerSceneId.value.trim();
+    if (!sceneId) {
+      speakerStatus.textContent = "シーン ID を入力するか、現在の編集シーンを選んでください。";
+      return;
+    }
+    const draft = useEditorDraft.checked ? context.readCurrentEditor?.() ?? null : null;
+    if (useEditorDraft.checked && (!draft || draft.sceneId !== sceneId)) {
+      speakerStatus.textContent = "選択したシーンの現在の編集本文を確認できません。編集シーンを再選択するか、保存済み本文を使ってください。";
+      return;
+    }
+    void runAction(context, "assistant.speaker.attribute", { sceneId, ...(draft ? { editorDraft: draft } : {}) }, speakerRun, speakerStatus, speakerResult, "話者候補を推定しています…", "話者候補を受け取りました。");
+  }, cleanup);
+  speakerSection.append(field("シーン ID", speakerSceneId), loadEditorScene, useEditorDraftLabel, speakerRun, speakerStatus, speakerResult);
 
   root.append(intro, zukanSection, synonymsSection, contradictionSection, stateSection, speakerSection);
 }

@@ -651,6 +651,7 @@ test("implemented prompt previews return their actual prompts locally without co
       ["assistant.summary.scene.preview", { sceneId: "sc-preview" }],
       ["assistant.summary.chapter.preview", { chapterId: "ch-preview" }],
       ["assistant.qa.preview", { sceneId: "sc-preview" }],
+      ["assistant.qa.preview", { sceneId: "missing-scene" }],
       ["assistant.continuation.preview", { recentSentences: ["彼女は駅へ来た。"] }],
       ["assistant.aspect.review.preview", { chapterId: "ch-preview", aspects: ["tempo", "pov-shift"] }],
       ["assistant.dialogue.topics.preview", { participantEntityIds: ["char-one", "char-two"] }],
@@ -672,6 +673,41 @@ test("implemented prompt previews return their actual prompts locally without co
     if (previous === undefined) delete process.env.ARCADIA_LLM_PROVIDER;
     else process.env.ARCADIA_LLM_PROVIDER = previous;
   }
+});
+
+test("dialogue topic seeds retain manual relations and related links while excluding automatic and non-related links", async () => {
+  const action = getAction(createAssistantActions(moduleContext()), "assistant.dialogue.topics.preview");
+  const result = await action.invoke({ participantEntityIds: ["char-one", "char-two"] }, context({
+    files: {
+      "bible/characters/char-one/profile.yaml": [
+        "id: char-one",
+        "type: character",
+        "name: One",
+        "relations:",
+        "  - target: char-two",
+        "    kind: ally",
+        "    note: trusted",
+        "  - target: char-two",
+        "    kind: related",
+        "    note: automatic tie",
+        "    auto: true",
+        "affiliated: [char-two]",
+        "related:",
+        "  - target: char-two",
+        "    note: linked note",
+        "",
+      ].join("\n"),
+      "bible/characters/char-two/profile.yaml": "id: char-two\ntype: character\nname: Two\n",
+    },
+  }));
+
+  assert.equal(result.ok, true);
+  if (!result.ok) return;
+  const prompt = (result.data as Record<string, unknown>).prompt as string;
+  assert.match(prompt, /One ↔ Two: ally: trusted/u);
+  assert.match(prompt, /One ↔ Two: related: linked note/u);
+  assert.doesNotMatch(prompt, /automatic tie/u);
+  assert.doesNotMatch(prompt, /affiliated/u);
 });
 
 test("rewrite proposal preserves all candidates until the author chooses one and pins the manuscript selection", async () => {
