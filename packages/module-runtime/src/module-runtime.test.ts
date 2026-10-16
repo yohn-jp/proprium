@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { fileURLToPath } from "node:url";
 import { test } from "node:test";
-import type { ActionResult, ChangeOperation, ChangeProposal, JobRequest, ModuleAction, ModuleActionContext, ModuleDefinition, ModuleId, ModuleManifest, SnapshotId, ValueSchema, WorkerService } from "@scriptorium/contracts";
+import type { ActionDescriptor, ActionResult, ChangeOperation, ChangeProposal, JobRequest, ModuleAction, ModuleActionContext, ModuleDefinition, ModuleId, ModuleManifest, SnapshotId, ValueSchema, WorkerService } from "@scriptorium/contracts";
 import { createStoryActions } from "../../../modules/story/src/actions.js";
 import { ModuleRuntime, ModuleRuntimeError, resolveModulePlan, SharedCapabilityPool, type WorkerJobLifecycleSnapshot } from "./index.js";
 
@@ -99,6 +99,235 @@ test("disabled modules are not imported; enabling an absent module reports redep
   assert.throws(() => runtime.enable("nlp"), (error: unknown) => error instanceof ModuleRuntimeError && error.code === "redeployment_required");
   assert.equal(imports, 0);
   await runtime.shutdown();
+});
+
+test("authenticated action catalogs expose only a cloned module domain job descriptor", async () => {
+  const metadata = manifest("speaker");
+  const declaration = { type: "speaker-eval", privateExtra: "must not escape" };
+  const action: ModuleAction = {
+    id: "evaluate", effect: "compute", job: declaration as ModuleAction["job"],
+    inputSchema: schema, outputSchema: schema,
+    async invoke(_input, context) { return { ok: true, snapshot: context.reader.snapshot, data: { accepted: true } }; },
+  };
+  const runtime = new ModuleRuntime({
+    manifests: [metadata], enabled: ["speaker"], cacheDirectory: "/tmp/scriptorium-runtime-test",
+    loaders: { speaker: async () => definition(metadata, action) },
+  });
+  try {
+    const host = { ...readContext(), access: "owner" as const };
+    const first = await runtime.listActions(host);
+    const descriptor = first.find(({ id }) => id === "speaker.evaluate");
+    assert.deepEqual(descriptor, {
+      id: "speaker.evaluate", module: "speaker", effect: "compute", job: { type: "speaker-eval" },
+    });
+    assert.notEqual(descriptor?.job, declaration);
+    assert.equal("privateExtra" in (descriptor?.job ?? {}), false);
+    descriptor!.job!.type = "mutated";
+    const second = await runtime.listActions(host);
+    assert.equal(second.find(({ id }) => id === "speaker.evaluate")?.job?.type, "speaker-eval");
+    assert.equal(declaration.type, "speaker-eval");
+  } finally {
+    await runtime.shutdown();
+  }
+});
+
+test("module job descriptors reject read actions and malformed ASCII types", async () => {
+  const cases: Array<{ effect: ModuleAction["effect"]; type: string }> = [
+    { effect: "read", type: "speaker-eval" },
+    { effect: "compute", type: "speaker eval" },
+    { effect: "propose", type: "A".repeat(65) },
+  ];
+  for (const [index, item] of cases.entries()) {
+    const metadata = manifest("speaker");
+    const runtime = new ModuleRuntime({
+      manifests: [metadata], enabled: ["speaker"], cacheDirectory: "/tmp/scriptorium-runtime-test",
+      loaders: { speaker: async () => definition(metadata, {
+        id: `invalid-job-${index}`, effect: item.effect, job: { type: item.type },
+        inputSchema: schema, outputSchema: schema,
+        async invoke(_input, context) { return { ok: true, snapshot: context.reader.snapshot, data: null }; },
+      }) },
+    });
+    try {
+      await assert.rejects(runtime.activate("speaker"), (error: unknown) =>
+        error instanceof ModuleRuntimeError && error.code === "invalid_module_definition");
+    } finally {
+      await runtime.shutdown();
+    }
+  }
+});
+
+test("declared module jobs pass the exact validated action result and proposals to the host once", async () => {
+  const metadata = manifest("story");
+  const operation = proposalOperation();
+  let executions = 0;
+  let tracks = 0;
+  let observed: { descriptor: ActionDescriptor; snapshot: SnapshotId; signal: AbortSignal } | undefined;
+  const runtime = new ModuleRuntime({
+    manifests: [metadata], enabled: ["story"], cacheDirectory: "/tmp/scriptorium-runtime-test",
+    loaders: { story: async () => definition(metadata, {
+      id: "refresh-summary", effect: "propose", job: { type: "summary-refresh" },
+      inputSchema: schema, outputSchema: schema,
+      async invoke(_input, context) {
+        executions += 1;
+        await context.propose([operation], undefined, "summary-refresh-proposal");
+        return { ok: true, snapshot: context.reader.snapshot, data: { refreshed: true } };
+      },
+    }) },
+  });
+  const host = {
+    ...readContext(), access: "owner" as const,
+    async propose(operations: ChangeOperation[], _evidence: unknown, proposalId?: string): Promise<ChangeProposal> {
+      return { id: proposalId ?? "proposal-1", snapshot, operations, source: "module" };
+    },
+    async trackDomainJob(
+      descriptor: ActionDescriptor & { job: NonNullable<ActionDescriptor["job"]> },
+      actionSnapshot: SnapshotId,
+      signal: AbortSignal,
+      execute: () => Promise<ActionResult>,
+    ): Promise<ActionResult> {
+      tracks += 1;
+      observed = { descriptor, snapshot: actionSnapshot, signal };
+      assert.equal(executions, 0, "the host can persist a queued record before invoking the action");
+      const [first, second] = await Promise.all([execute(), execute()]);
+      assert.strictEqual(first, second, "a host retry must reuse the same action execution");
+      return first;
+    },
+  };
+  try {
+    const result = await runtime.invokeAction("story", "story.refresh-summary", {}, host);
+    assert.equal(tracks, 1);
+    assert.equal(executions, 1);
+    assert.deepEqual(observed?.descriptor, {
+      id: "story.refresh-summary", module: "story", effect: "propose", job: { type: "summary-refresh" },
+    });
+    assert.equal(observed?.snapshot, snapshot);
+    assert.equal(observed?.signal.aborted, false);
+    assert.deepEqual(result, {
+      ok: true, snapshot, data: { refreshed: true },
+      proposals: [{ id: "summary-refresh-proposal", snapshot, operations: [operation], source: "module" }],
+    });
+  } finally {
+    await runtime.shutdown();
+  }
+});
+
+test("nested module invocation retains the host tracker and suppresses duplicate job wrappers", async () => {
+  const metadata = manifest("speaker");
+  const plainOuter: ModuleAction = {
+    id: "wrapper", effect: "compute", inputSchema: schema, outputSchema: schema,
+    async invoke(_input, context) {
+      const child = await context.invoke("speaker.inner", {});
+      return { ok: true, snapshot: context.reader.snapshot, data: { child } };
+    },
+  };
+  const jobOuter: ModuleAction = {
+    id: "outer-job", effect: "compute", job: { type: "speaker-eval" }, inputSchema: schema, outputSchema: schema,
+    async invoke(_input, context) {
+      const child = await context.invoke("speaker.inner", {});
+      return { ok: true, snapshot: context.reader.snapshot, data: { child } };
+    },
+  };
+  const jobInner: ModuleAction = {
+    id: "inner", effect: "compute", job: { type: "retrain" }, inputSchema: schema, outputSchema: schema,
+    async invoke(_input, context) { return { ok: true, snapshot: context.reader.snapshot, data: { trained: true } }; },
+  };
+  const runtime = new ModuleRuntime({
+    manifests: [metadata], enabled: ["speaker"], cacheDirectory: "/tmp/scriptorium-runtime-test",
+    loaders: { speaker: async () => ({ manifest: metadata, actions: [plainOuter, jobOuter, jobInner], ui: [], async dispose() {} }) },
+  });
+  const tracked: string[] = [];
+  const host = {
+    ...readContext(), access: "owner" as const,
+    async trackDomainJob(descriptor: ActionDescriptor & { job: NonNullable<ActionDescriptor["job"]> }, _actionSnapshot: SnapshotId, _signal: AbortSignal, execute: () => Promise<ActionResult>): Promise<ActionResult> {
+      tracked.push(`${descriptor.id}:${descriptor.job.type}`);
+      return execute();
+    },
+  };
+  try {
+    const plainResult = await runtime.invokeAction("speaker", "speaker.wrapper", {}, host);
+    assert.equal(plainResult.ok, true, JSON.stringify(plainResult));
+    assert.deepEqual(tracked, ["speaker.inner:retrain"], "a nested job under an untracked action is recorded");
+    const outerResult = await runtime.invokeAction("speaker", "speaker.outer-job", {}, host);
+    assert.equal(outerResult.ok, true, JSON.stringify(outerResult));
+    assert.deepEqual(tracked, ["speaker.inner:retrain", "speaker.outer-job:speaker-eval"], "a nested job under a tracked action does not get a second wrapper");
+  } finally {
+    await runtime.shutdown();
+  }
+});
+
+test("tracked module action receives abort cancellation and returns the cancelled result", async () => {
+  const metadata = manifest("speaker");
+  const controller = new AbortController();
+  let started!: () => void;
+  const began = new Promise<void>((resolve) => { started = resolve; });
+  let trackedSignal: AbortSignal | undefined;
+  const runtime = new ModuleRuntime({
+    manifests: [metadata], enabled: ["speaker"], cacheDirectory: "/tmp/scriptorium-runtime-test",
+    loaders: { speaker: async () => definition(metadata, {
+      id: "evaluate", effect: "compute", job: { type: "speaker-eval" }, inputSchema: schema, outputSchema: schema,
+      async invoke(_input, context) {
+        started();
+        await new Promise<void>((resolve) => context.signal.addEventListener("abort", () => resolve(), { once: true }));
+        return { ok: true, snapshot: context.reader.snapshot, data: { evaluated: true } };
+      },
+    }) },
+  });
+  const host = {
+    ...readContext(controller.signal), access: "owner" as const,
+    async trackDomainJob(_descriptor: ActionDescriptor & { job: NonNullable<ActionDescriptor["job"]> }, _actionSnapshot: SnapshotId, signal: AbortSignal, execute: () => Promise<ActionResult>): Promise<ActionResult> {
+      trackedSignal = signal;
+      return execute();
+    },
+  };
+  try {
+    const invocation = runtime.invokeAction("speaker", "speaker.evaluate", {}, host);
+    await began;
+    controller.abort();
+    const result = await invocation;
+    assert.equal(trackedSignal?.aborted, true);
+    assert.equal(result.ok, false);
+    if (!result.ok) assert.equal(result.error.code, "action_cancelled");
+  } finally {
+    await runtime.shutdown();
+  }
+});
+
+test("abort while the host creates a queued record prevents the module action from starting", async () => {
+  const metadata = manifest("speaker");
+  const controller = new AbortController();
+  let announceQueued!: () => void;
+  const queued = new Promise<void>((resolve) => { announceQueued = resolve; });
+  let executions = 0;
+  const runtime = new ModuleRuntime({
+    manifests: [metadata], enabled: ["speaker"], cacheDirectory: "/tmp/scriptorium-runtime-test",
+    loaders: { speaker: async () => definition(metadata, {
+      id: "evaluate", effect: "compute", job: { type: "speaker-eval" }, inputSchema: schema, outputSchema: schema,
+      async invoke(_input, context) {
+        executions += 1;
+        return { ok: true, snapshot: context.reader.snapshot, data: { evaluated: true } };
+      },
+    }) },
+  });
+  const host = {
+    ...readContext(controller.signal), access: "owner" as const,
+    async trackDomainJob(_descriptor: ActionDescriptor & { job: NonNullable<ActionDescriptor["job"]> }, _actionSnapshot: SnapshotId, signal: AbortSignal, execute: () => Promise<ActionResult>): Promise<ActionResult> {
+      const aborted = new Promise<void>((resolve) => signal.addEventListener("abort", () => resolve(), { once: true }));
+      announceQueued();
+      await aborted;
+      return execute();
+    },
+  };
+  try {
+    const invocation = runtime.invokeAction("speaker", "speaker.evaluate", {}, host);
+    await queued;
+    controller.abort();
+    const result = await invocation;
+    assert.equal(executions, 0);
+    assert.equal(result.ok, false);
+    if (!result.ok) assert.equal(result.error.code, "action_cancelled");
+  } finally {
+    await runtime.shutdown();
+  }
 });
 
 test("enabled idle modules import no heavy capability; proposals are host-issued and attached to success", async () => {

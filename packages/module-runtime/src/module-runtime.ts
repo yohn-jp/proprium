@@ -34,6 +34,13 @@ export interface ActionHostContext {
   linkedReader?(repositoryId: string): Promise<ModuleActionContext["reader"]>;
   /** Authentication level of the current HTTP caller. Omission grants no owner access. */
   access?: "owner" | "public";
+  /** Host-owned durable tracking around a declared module action. `execute` is safe to call once. */
+  trackDomainJob?(
+    descriptor: ActionDescriptor & { job: NonNullable<ActionDescriptor["job"]> },
+    snapshot: SnapshotId,
+    signal: AbortSignal,
+    execute: () => Promise<ActionResult>,
+  ): Promise<ActionResult>;
   propose(
     operations: ChangeOperation[],
     evidence?: Parameters<ModuleActionContext["propose"]>[1],
@@ -131,6 +138,22 @@ function invalidAction(action: ModuleAction): void {
       typeof action.outputSchema?.parse !== "function" || typeof action.invoke !== "function") {
     throw new ModuleRuntimeError("invalid_module_definition", "Module declares an invalid action");
   }
+  copyActionJobDescriptor(action);
+}
+
+function copyActionJobDescriptor(action: ModuleAction): ModuleAction["job"] {
+  if (action.job === undefined) return undefined;
+  const job = action.job as unknown;
+  const typeProperty = job && typeof job === "object" && !Array.isArray(job)
+    ? Object.getOwnPropertyDescriptor(job, "type")
+    : undefined;
+  if (action.effect === "read" || !typeProperty || !("value" in typeProperty) ||
+      typeof typeProperty.value !== "string" || !/^[a-z][a-z0-9-]{0,63}$/.test(typeProperty.value)) {
+    throw new ModuleRuntimeError("invalid_module_definition", "Module declares an invalid domain job action");
+  }
+  // Treat ModuleAction as package-owned input: copy only the contract field and
+  // never expose any undeclared properties attached by the module.
+  return { type: typeProperty.value };
 }
 
 function validateDefinition(expected: ModuleManifest, definition: ModuleDefinition): void {
@@ -387,7 +410,15 @@ export class ModuleRuntime {
     for (const id of this.plan.order) {
       try { await this.activate(id); } catch { continue; }
       const definition = this.sessions.get(id)?.definition;
-      for (const action of definition?.actions ?? []) actions.push({ id: actionIdFor(id, action), module: id, effect: action.effect });
+      for (const action of definition?.actions ?? []) {
+        const job = copyActionJobDescriptor(action);
+        actions.push({
+          id: actionIdFor(id, action),
+          module: id,
+          effect: action.effect,
+          ...(job ? { job } : {}),
+        });
+      }
     }
     for (const entry of host?.actions ?? []) {
       if (entry.module !== "core") throw new ModuleRuntimeError("invalid_host_action", "Host action registry may contain only core-owned actions");
@@ -441,7 +472,7 @@ export class ModuleRuntime {
     const signal = AbortSignal.any([session.controller.signal, host.signal, request.signal, requestController.signal]);
     const proposals: ChangeProposal[] = [];
     try {
-      const context = this.createActionContext(manifest.id, contribution.effect, contribution.effect, host, signal, proposals, 0);
+      const context = this.createActionContext(manifest.id, contribution.effect, contribution.effect, host, signal, proposals, 0, false);
       const response = await contribution.handle(request, context);
       if (signal.aborted) return httpFailure(499, "request_cancelled", "HTTP request was cancelled");
       if (!(response instanceof Response)) return httpFailure(502, "invalid_http_response", "HTTP contribution returned an invalid response");
@@ -510,6 +541,7 @@ export class ModuleRuntime {
     parentSignal: AbortSignal,
     depth: number,
     inheritedEffect?: ModuleAction["effect"],
+    domainJobTracked = false,
   ): Promise<ActionResult> {
     const snapshot = host?.reader?.snapshot;
     let session: ModuleSession | undefined;
@@ -533,12 +565,45 @@ export class ModuleRuntime {
       const actionSignal = AbortSignal.any([session.controller.signal, host.signal, parentSignal]);
       if (actionSignal.aborted) throw new ModuleRuntimeError("action_cancelled", "Action was cancelled");
       const proposals: ChangeProposal[] = [];
-      const context = this.createActionContext(manifest.id, action.effect, policy, host, actionSignal, proposals, depth);
-      const result = await action.invoke(parsed, context);
-      if (actionSignal.aborted) throw new ModuleRuntimeError("action_cancelled", "Action was cancelled");
-      const validated = this.validateActionResult(action, result, host.reader.snapshot);
-      if (validated.ok && proposals.length > 0) return { ...validated, proposals };
-      return validated;
+      const job = copyActionJobDescriptor(action);
+      const track = job && !domainJobTracked ? host.trackDomainJob : undefined;
+      const trackingActive = domainJobTracked || track !== undefined;
+      const context = this.createActionContext(manifest.id, action.effect, policy, host, actionSignal, proposals, depth, trackingActive);
+      const executeAction = async (): Promise<ActionResult> => {
+        try {
+          if (actionSignal.aborted) throw new ModuleRuntimeError("action_cancelled", "Action was cancelled");
+          const result = await action.invoke(parsed, context);
+          if (actionSignal.aborted) throw new ModuleRuntimeError("action_cancelled", "Action was cancelled");
+          const validated = this.validateActionResult(action, result, host.reader.snapshot);
+          if (validated.ok && proposals.length > 0) return { ...validated, proposals };
+          return validated;
+        } catch (error) {
+          return actionFailure(host.reader.snapshot, toMachineError(error));
+        }
+      };
+      if (track && job) {
+        const descriptor: ActionDescriptor & { job: NonNullable<ActionDescriptor["job"]> } = {
+          id: actionIdFor(manifest.id, action), module: manifest.id, effect: action.effect, job,
+        };
+        let execution: Promise<ActionResult> | undefined;
+        let trackerSettled = false;
+        const execute = () => {
+          if (trackerSettled && !execution) return Promise.reject(new ModuleRuntimeError("action_tracking_closed", "Domain job tracking ended before action execution started"));
+          return execution ??= executeAction();
+        };
+        try {
+          const trackedResult = await track(descriptor, host.reader.snapshot, actionSignal, execute);
+          trackerSettled = true;
+          // Keep the module call counted through an execution the host started in the background.
+          if (execution) await execution;
+          return trackedResult;
+        } finally {
+          trackerSettled = true;
+          // Preserve module drain accounting if a tracking callback fails after starting the action.
+          if (execution) await execution.catch(() => {});
+        }
+      }
+      return await executeAction();
     } catch (error) {
       if (!snapshot) throw error;
       return actionFailure(snapshot, toMachineError(error));
@@ -561,6 +626,7 @@ export class ModuleRuntime {
     parentSignal: AbortSignal,
     depth: number,
     inheritedEffect?: ModuleAction["effect"],
+    domainJobTracked = false,
   ): Promise<ActionResult> {
     const snapshot = host.reader.snapshot;
     try {
@@ -581,7 +647,7 @@ export class ModuleRuntime {
       const parsed = action.inputSchema.parse(input);
       const signal = AbortSignal.any([host.signal, parentSignal]);
       const proposals: ChangeProposal[] = [];
-      const context = this.createActionContext("core", action.effect, policy, host, signal, proposals, depth);
+      const context = this.createActionContext("core", action.effect, policy, host, signal, proposals, depth, domainJobTracked);
       const result = await action.invoke(parsed, context);
       if (signal.aborted) throw new ModuleRuntimeError("action_cancelled", "Action was cancelled");
       const validated = this.validateActionResult(action, result, snapshot);
@@ -599,15 +665,16 @@ export class ModuleRuntime {
     signal: AbortSignal,
     depth: number,
     inheritedEffect: ModuleAction["effect"],
+    domainJobTracked: boolean,
   ): Promise<ActionResult> {
     const separator = actionId.indexOf(".");
     if (separator < 1 || separator === actionId.length - 1) {
       return actionFailure(host.reader.snapshot, machineError("action_not_found", `Namespaced action ${actionId} is unavailable`));
     }
     const owner = actionId.slice(0, separator);
-    if (owner === "core") return this.invokeCoreAction(actionId, input, host, signal, depth, inheritedEffect);
+    if (owner === "core") return this.invokeCoreAction(actionId, input, host, signal, depth, inheritedEffect, domainJobTracked);
     if (!isModuleId(owner)) return actionFailure(host.reader.snapshot, machineError("action_not_found", `Namespaced action ${actionId} is unavailable`));
-    return this.invokeModuleAction(owner, actionId, input, host, signal, depth, inheritedEffect);
+    return this.invokeModuleAction(owner, actionId, input, host, signal, depth, inheritedEffect, domainJobTracked);
   }
 
   private effectAllowed(parent: ModuleAction["effect"], child: ModuleAction["effect"]): boolean {
@@ -624,6 +691,7 @@ export class ModuleRuntime {
     signal: AbortSignal,
     proposals: ChangeProposal[],
     depth: number,
+    domainJobTracked: boolean,
   ): ModuleActionContext {
     return {
       projectId: host.projectId,
@@ -633,7 +701,7 @@ export class ModuleRuntime {
         const invocationSignal = callSignal ? AbortSignal.any([signal, callSignal]) : signal;
         if (invocationSignal.aborted) return actionFailure(host.reader.snapshot, machineError("action_cancelled", "Action was cancelled"));
         if (host.access === "public") return actionFailure(host.reader.snapshot, machineError("public_action_unavailable", "Public routes cannot invoke composed actions"));
-        const result = await this.invokeComposedAction(actionId, input, host, invocationSignal, depth + 1, inheritedEffect);
+        const result = await this.invokeComposedAction(actionId, input, host, invocationSignal, depth + 1, inheritedEffect, domainJobTracked);
         if (invocationSignal.aborted) return actionFailure(host.reader.snapshot, machineError("action_cancelled", "Action was cancelled"));
         if (result.ok && result.proposals?.length) proposals.push(...result.proposals);
         return result;
