@@ -11,6 +11,7 @@ const ACTIONS = [
   "assistant.settings.propose",
   "assistant.usage.read",
   "assistant.rewrite",
+  "assistant.rewrite.propose",
   "assistant.summary.scene",
   "assistant.summary.chapter",
   "assistant.qa",
@@ -26,6 +27,8 @@ const ACTIONS = [
   "assistant.speaker.attribute",
 ] as const;
 type AssistantAction = (typeof ACTIONS)[number];
+const STORY_ACTIONS = ["story.entities.list"] as const;
+type BrowserAction = AssistantAction | (typeof STORY_ACTIONS)[number];
 
 function el<K extends keyof HTMLElementTagNameMap>(tag: K, text?: string): HTMLElementTagNameMap[K] {
   const node = document.createElement(tag);
@@ -110,7 +113,7 @@ function resultItemText(value: unknown): string {
   if (value === null || typeof value !== "object") return String(value);
   const row = asRecord(value);
   if (typeof row.title === "string" && typeof row.situation === "string") return `${row.title} — ${row.situation}`;
-  if (typeof row.speaker === "string" && typeof row.text === "string") return `${row.speaker}: ${row.text}`;
+  if (typeof row.speakerEntityId === "string" && typeof row.text === "string") return `${row.speakerEntityId}: ${row.text}`;
   if (typeof row.aspectLabel === "string" && typeof row.finding === "string") return `${row.aspectLabel}: ${row.finding}`;
   if (typeof row.kind === "string" && typeof row.id === "string" && typeof row.quote === "string") return `[${row.kind}:${row.id}] ${row.quote}`;
   for (const key of ["title", "text", "direction", "finding", "summary", "question", "expectation", "confusion", "quote", "name", "id"]) {
@@ -138,6 +141,7 @@ function appendReadableResult(target: HTMLElement, label: string, value: unknown
   } else {
     const record = asRecord(value);
     let nested = false;
+    if (Array.isArray(record.suggestions)) nested = appendSynonymSuggestions(block, record.suggestions) || nested;
     const nestedFields: Array<[string, string]> = [
       ["answer", "回答"], ["summary", "要約"], ["summaryLines", "要約"], ["text", "候補"],
       ["questions", "疑問"], ["expectations", "期待"], ["confusions", "混乱"], ["citations", "根拠"],
@@ -148,6 +152,29 @@ function appendReadableResult(target: HTMLElement, label: string, value: unknown
     if (!nested) block.append(el("p", resultItemText(value)));
   }
   target.append(block);
+  return true;
+}
+
+function appendSynonymSuggestions(target: HTMLElement, value: unknown): boolean {
+  if (!Array.isArray(value)) return false;
+  const list = el("ul");
+  for (const item of value) {
+    const suggestion = asRecord(item);
+    const row = el("li");
+    if (typeof suggestion.term === "string") row.append(el("strong", suggestion.term));
+    const candidates = suggestion.candidates;
+    if (Array.isArray(candidates)) {
+      const candidateList = el("ul");
+      for (const candidate of candidates) candidateList.append(el("li", resultItemText(candidate)));
+      row.append(candidateList);
+    } else if (candidates !== undefined) {
+      row.append(el("p", resultItemText(candidates)));
+    }
+    if (!row.hasChildNodes()) row.textContent = resultItemText(item);
+    list.append(row);
+  }
+  if (value.length === 0) target.append(el("p", "候補はありませんでした。"));
+  else target.append(list);
   return true;
 }
 
@@ -169,6 +196,11 @@ function displayAssistantResult(target: HTMLElement, value: unknown): void {
   let rendered = false;
   for (const [key, label] of labels) {
     if (Object.hasOwn(data, key)) rendered = appendReadableResult(content, label, data[key]) || rendered;
+  }
+  if (Object.hasOwn(data, "suggestions")) {
+    const block = section("同義語候補");
+    rendered = appendSynonymSuggestions(block, data.suggestions) || rendered;
+    if (block.childNodes.length > 1) content.append(block);
   }
   if (!rendered) {
     displayJson(target, value);
@@ -198,10 +230,10 @@ function proposalStatus(result: ActionCall, fallback: string): string {
     : fallback;
 }
 
-async function invoke(context: BrowserModuleContext, actionId: AssistantAction, inputValue: unknown): Promise<ActionCall> {
+async function invoke(context: BrowserModuleContext, actionId: BrowserAction, inputValue: unknown): Promise<ActionCall> {
   const result = await context.invoke(actionId, inputValue);
   if (!result.ok) throw Object.assign(new Error(result.error.message), { code: result.error.code });
-  if (!ACTIONS.includes(actionId)) throw new Error("Unknown assistant action");
+  if (![...ACTIONS, ...STORY_ACTIONS].includes(actionId)) throw new Error("Unknown assistant action");
   return { data: result.data, proposals: result.proposals ?? [] };
 }
 
@@ -450,7 +482,7 @@ function mountSettings(root: HTMLElement, context: BrowserModuleContext, cleanup
 }
 
 function mountRewrite(root: HTMLElement, context: BrowserModuleContext, cleanup: Cleanup): void {
-  const intro = el("p", "対象文と言い換えの希望を指定します。生成結果は変更案として送られ、承認前に原稿へ反映されません。");
+  const intro = el("p", "対象文を指定して言い換え候補を生成します。使う候補を選ぶと変更案がレビューキューに送られ、承認前に原稿へ反映されません。");
   const sceneId = input("scene ID");
   sceneId.setAttribute("aria-label", "シーン ID");
   const selectedText = textarea(4, "言い換える文");
@@ -469,7 +501,7 @@ function mountRewrite(root: HTMLElement, context: BrowserModuleContext, cleanup:
     userCancelled = true;
     controller.abort();
     cancel.hidden = true;
-    status.textContent = "生成をキャンセルしました。レビューキューに変更案がないか確認してください。";
+    status.textContent = "生成をキャンセルしました。変更案は作成されていません。";
   };
   on(cancel, "click", cancelRun, cleanup);
   const abortFromHost = () => controller?.abort(context.signal.reason);
@@ -477,8 +509,9 @@ function mountRewrite(root: HTMLElement, context: BrowserModuleContext, cleanup:
   cleanup.push(() => context.signal.removeEventListener("abort", abortFromHost));
 
   const onRun = async () => {
-    const source = selectedText.value.trim();
-    if (!sceneId.value.trim() || !source) {
+    const source = selectedText.value;
+    const sourceSceneId = sceneId.value.trim();
+    if (!sourceSceneId || !source.trim()) {
       status.textContent = "シーン ID と対象文を入力してください。";
       return;
     }
@@ -496,7 +529,7 @@ function mountRewrite(root: HTMLElement, context: BrowserModuleContext, cleanup:
         method: "POST",
         credentials: "same-origin",
         headers: { "Content-Type": "application/json", Accept: "text/event-stream" },
-        body: JSON.stringify({ sceneId: sceneId.value.trim(), selectedText: source, ...(instruction.value.trim() ? { instruction: instruction.value.trim() } : {}) }),
+        body: JSON.stringify({ sceneId: sourceSceneId, selectedText: source, ...(instruction.value.trim() ? { instruction: instruction.value.trim() } : {}) }),
         signal: controller.signal,
       });
       if (!response.ok) {
@@ -528,9 +561,8 @@ function mountRewrite(root: HTMLElement, context: BrowserModuleContext, cleanup:
           }
         } else if (eventName === "final") {
           finalReceived = true;
-          const text = typeof data.text === "string" ? data.text : chunks.join("");
-          displayRewriteFinal(result, text, payload);
-          status.textContent = proposalStatus({ data: payload, proposals: Array.isArray(data.proposals) ? data.proposals : [] }, "言い換え候補を受け取りました。");
+          displayRewriteFinal(result, data, source, sourceSceneId, sceneId, selectedText, context, status);
+          status.textContent = "候補を受け取りました。使う候補を選んで変更案を作成してください。";
         } else if (eventName === "error" || eventName === "cancelled") {
           const message = typeof data.message === "string" ? data.message : typeof payload === "string" ? payload : eventName;
           throw Object.assign(new Error(message), { streamEvent: eventName });
@@ -554,11 +586,11 @@ function mountRewrite(root: HTMLElement, context: BrowserModuleContext, cleanup:
     } catch (error) {
       const streamEvent = asRecord(error).streamEvent;
       if (userCancelled || controller.signal.aborted) {
-        if (!context.signal.aborted && userCancelled) status.textContent = "生成をキャンセルしました。レビューキューに変更案がないか確認してください。";
+        if (!context.signal.aborted && userCancelled) status.textContent = "生成をキャンセルしました。変更案は作成されていません。";
       } else if (!context.signal.aborted) {
         status.textContent = error instanceof Error ? error.message : String(error);
       }
-      if (streamEvent === "cancelled" && !context.signal.aborted) status.textContent = "生成をキャンセルしました。レビューキューに変更案がないか確認してください。";
+      if (streamEvent === "cancelled" && !context.signal.aborted) status.textContent = "生成をキャンセルしました。変更案は作成されていません。";
     } finally {
       if (controller && !context.signal.aborted) {
         cancel.hidden = true;
@@ -578,18 +610,109 @@ function displayRewriteText(target: HTMLElement, text: string): void {
   target.replaceChildren(next);
 }
 
-function displayRewriteFinal(target: HTMLElement, text: string, response: unknown): void {
-  const candidate = el("p", text);
-  candidate.style.whiteSpace = "pre-wrap";
+function displayRewriteFinal(
+  target: HTMLElement,
+  response: Data,
+  sourceText: string,
+  sourceSceneId: string,
+  sceneIdInput: HTMLInputElement,
+  selectedTextInput: HTMLTextAreaElement,
+  context: BrowserModuleContext,
+  status: HTMLOutputElement,
+): void {
+  const next = el("div");
+  const choices = el("div");
+  choices.style.display = "grid";
+  choices.style.gap = "0.65rem";
+  let busy = false;
+  let proposalCreated = false;
+  const proposalButtons: HTMLButtonElement[] = [];
+
+  const createCandidate = (label: string, candidateText: unknown, rationale?: unknown): void => {
+    if (typeof candidateText !== "string" || !candidateText.trim()) return;
+    const card = el("article");
+    card.style.border = "1px solid currentColor";
+    card.style.borderRadius = "0.35rem";
+    card.style.padding = "0.6rem";
+    card.style.display = "grid";
+    card.style.gap = "0.4rem";
+    card.append(el("h5", label));
+    const text = el("p", candidateText);
+    text.style.whiteSpace = "pre-wrap";
+    card.append(text);
+    if (typeof rationale === "string" && rationale.trim()) {
+      const reason = el("p", rationale);
+      reason.style.whiteSpace = "pre-wrap";
+      card.append(reason);
+    }
+    const propose = button(`${label}を変更案にする`);
+    proposalButtons.push(propose);
+    propose.addEventListener("click", async () => {
+      if (busy || proposalCreated) return;
+      if (context.signal.aborted) return;
+      if (sceneIdInput.value.trim() !== sourceSceneId || selectedTextInput.value !== sourceText) {
+        status.textContent = "シーンまたは対象文が変更されています。候補を再生成してください。";
+        return;
+      }
+      busy = true;
+      for (const candidateButton of proposalButtons) candidateButton.disabled = true;
+      status.textContent = "選んだ言い換えを変更案にしています…";
+      try {
+        const created = await invoke(context, "assistant.rewrite.propose", {
+          sceneId: sourceSceneId,
+          selectedText: sourceText,
+          replacementText: candidateText,
+        });
+        if (context.signal.aborted) return;
+        proposalCreated = true;
+        status.textContent = proposalStatus(created, "選んだ候補を変更案として送りました。レビューキューで確認できます。");
+        for (const candidateButton of proposalButtons) candidateButton.disabled = true;
+      } catch (error) {
+        if (!context.signal.aborted) status.textContent = error instanceof Error ? error.message : String(error);
+      } finally {
+        busy = false;
+        if (!context.signal.aborted) {
+          for (const candidateButton of proposalButtons) candidateButton.disabled = proposalCreated;
+        }
+      }
+    });
+    card.append(propose);
+    choices.append(card);
+  };
+
+  const suggestions = Array.isArray(response.suggestions) ? response.suggestions : [];
+  const strategyLabels: Record<string, string> = {
+    concise: "簡潔案",
+    contextual: "文脈案",
+    voice: "口調案",
+  };
+  for (const item of suggestions) {
+    const suggestion = asRecord(item);
+    const strategy = typeof suggestion.strategy === "string" ? suggestion.strategy : "言い換え案";
+    createCandidate(strategyLabels[strategy] ?? strategy, suggestion.text, suggestion.rationale);
+  }
+  const sentenceSplit = asRecord(response.sentenceSplit);
+  if (typeof sentenceSplit.text === "string") createCandidate("文分割案", sentenceSplit.text, sentenceSplit.rationale);
+  const tellToShow = asRecord(response.tellToShow);
+  if (typeof tellToShow.text === "string") {
+    const source = tellToShow.source === "corpus" ? "コーパス" : "ヒューリスティック";
+    createCandidate(`tell→show（${source}）`, tellToShow.text, tellToShow.rationale);
+  }
+
+  const knownMetadata: Data = {};
+  for (const key of ["model", "provider", "promptVersion", "citations", "provenance"]) {
+    if (Object.hasOwn(response, key)) knownMetadata[key] = response[key];
+  }
   const details = el("details");
-  const summary = el("summary", "モデル・根拠・レビュー案の情報");
-  details.append(summary);
+  details.append(el("summary", "モデル・根拠情報"));
   const meta = el("pre");
   meta.style.whiteSpace = "pre-wrap";
-  meta.textContent = JSON.stringify(response, null, 2) ?? String(response);
+  meta.style.overflowWrap = "anywhere";
+  meta.textContent = JSON.stringify(knownMetadata, null, 2) ?? String(knownMetadata);
   details.append(meta);
-  const next = el("div");
-  next.append(el("h4", "言い換え候補"), candidate, details);
+  if (choices.childNodes.length === 0) next.append(el("p", "利用できる候補がありませんでした。"));
+  else next.append(el("h4", "言い換え候補を選択"), choices);
+  next.append(details);
   target.replaceChildren(next);
 }
 
@@ -665,22 +788,156 @@ function parseList(value: string): string[] {
   return value.split(/[\n,、]/u).map((item) => item.trim()).filter(Boolean);
 }
 
+function savedDialogueLineText(value: unknown): string {
+  if (!Array.isArray(value)) return "";
+  return value.flatMap((item) => {
+    const line = asRecord(item);
+    return typeof line.speakerEntityId === "string" && typeof line.text === "string"
+      ? [`${line.speakerEntityId}\t${line.text}`]
+      : [];
+  }).join("\n");
+}
+
+function parseDialogueLines(value: string): Array<{ speakerEntityId: string; text: string }> {
+  return value.split(/\r?\n/u).filter((line) => line.trim().length > 0).map((line) => {
+    const separator = line.indexOf("\t");
+    const text = line.slice(separator + 1);
+    if (separator <= 0 || !text.trim()) {
+      throw new Error("発話は「話者エンティティ ID、タブ、本文」の形式で入力してください。");
+    }
+    return { speakerEntityId: line.slice(0, separator).trim(), text };
+  });
+}
+
+async function loadDialogueSketches(context: BrowserModuleContext): Promise<Data[]> {
+  const response = await invoke(context, "story.entities.list", { type: "dialogue_sketch" });
+  if (!Array.isArray(response.data)) throw new Error("対話スケッチ一覧を読み取れませんでした。");
+  return response.data.map(asRecord).filter((item) => typeof item.id === "string" && item.type === "dialogue_sketch");
+}
+
+function dialogueSketchLabel(sketch: Data): string {
+  const raw = asRecord(sketch.raw);
+  return typeof raw.title === "string" && raw.title.trim()
+    ? raw.title
+    : typeof sketch.name === "string" && sketch.name.trim()
+      ? sketch.name
+      : String(sketch.id ?? "対話スケッチ");
+}
+
 function mountDialogue(root: HTMLElement, context: BrowserModuleContext, cleanup: Cleanup): void {
-  const intro = el("p", "対話スケッチ向けのお題とターン候補を作ります。参加者、シーン、既存の発話を指定し、必要な行だけ候補を追加してください。");
-  const sceneId = input("scene ID");
+  const intro = el("p", "保存済み対話スケッチを読み込むか、参加者と発話を入力して、お題やターン候補を作ります。生成結果は確認用の候補です。");
+  const sketchPicker = el("select");
+  sketchPicker.setAttribute("aria-label", "保存済みスケッチ");
+  sketchPicker.append(new Option("手動入力", ""));
+  const loadSketches = button("保存済みスケッチを読み込む");
+  const sketchStatus = statusNode();
+  let savedSketches: Data[] = [];
   const participants = textarea(2, "参加するキャラクター ID（改行または読点区切り）");
   participants.setAttribute("aria-label", "対話の参加者");
   const topic = input("対話のお題");
-  const preceding = textarea(5, "既存の発話（1行ずつ）");
+  const situation = textarea(2, "状況（任意）");
+  const preceding = textarea(5, "話者 ID、タブ、本文を1行ずつ入力");
+  preceding.setAttribute("aria-label", "これまでの発話");
+  const speaker = el("select");
+  speaker.setAttribute("aria-label", "次のターンの話者");
+  const syncSpeakers = () => {
+    const current = speaker.value;
+    speaker.replaceChildren(new Option("話者を選択", ""));
+    for (const id of parseList(participants.value)) speaker.append(new Option(id, id));
+    speaker.value = parseList(participants.value).includes(current) ? current : parseList(participants.value)[0] ?? "";
+  };
+  on(participants, "input", syncSpeakers, cleanup);
+  const turnMode = el("select");
+  turnMode.setAttribute("aria-label", "生成モード");
+  turnMode.append(new Option("1人の次のターン", "single"), new Option("複数ターン", "bulk"));
+  const lineCount = el("input");
+  lineCount.type = "number";
+  lineCount.min = "1";
+  lineCount.max = "30";
+  lineCount.step = "1";
+  lineCount.value = "6";
+  lineCount.setAttribute("aria-label", "生成ターン数");
+  const speakerField = field("次の話者", speaker);
+  const lineCountField = field("生成ターン数", lineCount);
+  const updateTurnMode = () => {
+    const single = turnMode.value === "single";
+    speakerField.hidden = !single;
+    lineCountField.hidden = single;
+  };
+  on(turnMode, "change", updateTurnMode, cleanup);
+  syncSpeakers();
+  updateTurnMode();
+
+  on(loadSketches, "click", async () => {
+    loadSketches.disabled = true;
+    sketchStatus.textContent = "保存済みスケッチを読み込んでいます…";
+    try {
+      savedSketches = await loadDialogueSketches(context);
+      if (context.signal.aborted) return;
+      const selected = sketchPicker.value;
+      sketchPicker.replaceChildren(new Option("手動入力", ""));
+      for (const sketch of savedSketches) sketchPicker.append(new Option(dialogueSketchLabel(sketch), String(sketch.id)));
+      sketchPicker.value = savedSketches.some((sketch) => sketch.id === selected) ? selected : "";
+      sketchStatus.textContent = `${savedSketches.length} 件の対話スケッチを読み込みました。`;
+    } catch (error) {
+      if (!context.signal.aborted) sketchStatus.textContent = error instanceof Error ? error.message : String(error);
+    } finally {
+      if (!context.signal.aborted) loadSketches.disabled = false;
+    }
+  }, cleanup);
+  on(sketchPicker, "change", () => {
+    const sketch = savedSketches.find((item) => item.id === sketchPicker.value);
+    if (!sketch) return;
+    const raw = asRecord(sketch.raw);
+    participants.value = Array.isArray(raw.participantEntityIds)
+      ? raw.participantEntityIds.filter((id): id is string => typeof id === "string").join("、")
+      : "";
+    topic.value = typeof raw.title === "string" ? raw.title : "";
+    situation.value = typeof raw.situation === "string" ? raw.situation : "";
+    preceding.value = savedDialogueLineText(raw.lines);
+    syncSpeakers();
+  }, cleanup);
+
   const topics = button("お題を提案");
   const topicStatus = statusNode();
   const topicResult = el("div");
-  bindAction(topics, () => ({ sceneId: sceneId.value.trim() }), context, "assistant.dialogue.topics", topicStatus, topicResult, cleanup, { loading: "対話のお題を考えています…", done: "お題候補を受け取りました。" });
+  bindAction(topics, () => ({ participantEntityIds: parseList(participants.value) }), context, "assistant.dialogue.topics", topicStatus, topicResult, cleanup, { loading: "対話のお題を考えています…", done: "お題候補を受け取りました。" });
   const turns = button("次のターンを提案");
   const turnStatus = statusNode();
   const turnResult = el("div");
-  bindAction(turns, () => ({ sceneId: sceneId.value.trim(), topic: topic.value.trim(), participants: parseList(participants.value), ...(preceding.value.trim() ? { precedingLines: preceding.value.split(/\r?\n/u).map((line) => line.trim()).filter(Boolean) } : {}) }), context, "assistant.dialogue.turns", turnStatus, turnResult, cleanup, { loading: "対話の続き方を考えています…", done: "ターン候補を受け取りました。" });
-  root.append(intro, field("シーン ID", sceneId), field("参加者", participants), field("お題", topic), field("これまでの発話", preceding), topics, topicStatus, topicResult, turns, turnStatus, turnResult);
+  on(turns, "click", () => {
+    const participantEntityIds = parseList(participants.value);
+    let precedingLines: Array<{ speakerEntityId: string; text: string }>;
+    try {
+      precedingLines = parseDialogueLines(preceding.value);
+    } catch (error) {
+      turnStatus.textContent = error instanceof Error ? error.message : String(error);
+      return;
+    }
+    const inputValue: Data = {
+      participantEntityIds,
+      precedingLines,
+      ...(sketchPicker.value ? { sketchId: sketchPicker.value } : {}),
+      ...(topic.value.trim() ? { topic: topic.value.trim() } : {}),
+      ...(situation.value.trim() ? { situation: situation.value.trim() } : {}),
+    };
+    if (turnMode.value === "single") {
+      if (!speaker.value) {
+        turnStatus.textContent = "次のターンの話者を選んでください。";
+        return;
+      }
+      inputValue.speakerEntityId = speaker.value;
+    } else {
+      const count = Number(lineCount.value);
+      if (!Number.isInteger(count) || count < 1 || count > 30) {
+        turnStatus.textContent = "ターン数は 1〜30 の整数で指定してください。";
+        return;
+      }
+      inputValue.lineCount = count;
+    }
+    void runAction(context, "assistant.dialogue.turns", inputValue, turns, turnStatus, turnResult, "対話の続き方を考えています…", "ターン候補を受け取りました。");
+  }, cleanup);
+  root.append(intro, field("保存済みスケッチ", sketchPicker), loadSketches, sketchStatus, field("参加者", participants), field("お題", topic), field("状況", situation), field("これまでの発話（話者 ID + タブ + 本文）", preceding), topics, topicStatus, topicResult, field("生成モード", turnMode), speakerField, lineCountField, turns, turnStatus, turnResult);
 }
 
 function mountReaderReaction(root: HTMLElement, context: BrowserModuleContext, cleanup: Cleanup): void {
@@ -697,24 +954,123 @@ function mountProposals(root: HTMLElement, context: BrowserModuleContext, cleanu
   const intro = el("p", "各支援機能はレビュー用の変更案を作成します。案の確認と承認は執筆者がレビューキューで行います。");
 
   const zukanSection = section("図鑑の記述案");
+  const zukanSource = el("select");
+  zukanSource.setAttribute("aria-label", "提案対象");
+  zukanSource.append(new Option("原稿・図鑑", "manuscript"), new Option("対話スケッチ（sandbox）", "sandbox"));
   const entityId = input("キャラクター / エンティティ ID");
   const blockPath = input("対象ブロック（任意）");
   const zukanPrompt = textarea(3, "提案の方向（任意）");
+  const manuscriptControls = el("div");
+  manuscriptControls.append(field("エンティティ ID", entityId), field("対象ブロック", blockPath), field("指示", zukanPrompt));
+
+  const sandboxControls = el("div");
+  sandboxControls.hidden = true;
+  const sandboxSketch = el("select");
+  sandboxSketch.setAttribute("aria-label", "sandbox 対話スケッチ");
+  sandboxSketch.append(new Option("対話スケッチを選択", ""));
+  const loadSandboxSketches = button("sandbox のスケッチ一覧を読み込む");
+  const sandboxSketchStatus = statusNode();
+  let savedSketches: Data[] = [];
+  const rangeStart = el("input");
+  rangeStart.type = "number";
+  rangeStart.min = "1";
+  rangeStart.step = "1";
+  rangeStart.value = "1";
+  rangeStart.setAttribute("aria-label", "開始ターン");
+  const rangeEnd = el("input");
+  rangeEnd.type = "number";
+  rangeEnd.min = "1";
+  rangeEnd.step = "1";
+  rangeEnd.value = "1";
+  rangeEnd.setAttribute("aria-label", "終了ターン");
+  on(loadSandboxSketches, "click", async () => {
+    loadSandboxSketches.disabled = true;
+    sandboxSketchStatus.textContent = "sandbox のスケッチを読み込んでいます…";
+    try {
+      savedSketches = await loadDialogueSketches(context);
+      if (context.signal.aborted) return;
+      const previous = sandboxSketch.value;
+      sandboxSketch.replaceChildren(new Option("対話スケッチを選択", ""));
+      for (const sketch of savedSketches) sandboxSketch.append(new Option(dialogueSketchLabel(sketch), String(sketch.id)));
+      sandboxSketch.value = savedSketches.some((sketch) => sketch.id === previous) ? previous : "";
+      sandboxSketchStatus.textContent = `${savedSketches.length} 件のsandboxスケッチを読み込みました。`;
+    } catch (error) {
+      if (!context.signal.aborted) sandboxSketchStatus.textContent = error instanceof Error ? error.message : String(error);
+    } finally {
+      if (!context.signal.aborted) loadSandboxSketches.disabled = false;
+    }
+  }, cleanup);
+  on(sandboxSketch, "change", () => {
+    const sketch = savedSketches.find((item) => item.id === sandboxSketch.value);
+    const lines = Array.isArray(asRecord(sketch?.raw).lines) ? asRecord(sketch?.raw).lines as unknown[] : [];
+    const max = Math.max(lines.length, 1);
+    rangeStart.max = String(max);
+    rangeEnd.max = String(max);
+    rangeStart.value = "1";
+    rangeEnd.value = String(max);
+  }, cleanup);
+  sandboxControls.append(
+    field("保存済み対話スケッチ", sandboxSketch),
+    loadSandboxSketches,
+    sandboxSketchStatus,
+    field("開始ターン", rangeStart),
+    field("終了ターン", rangeEnd),
+  );
+  const syncZukanSource = () => {
+    const sandbox = zukanSource.value === "sandbox";
+    manuscriptControls.hidden = sandbox;
+    sandboxControls.hidden = !sandbox;
+  };
+  on(zukanSource, "change", syncZukanSource, cleanup);
   const zukanRun = button("図鑑の変更案を作る");
   const zukanStatus = statusNode();
   const zukanResult = el("div");
-  bindAction(zukanRun, () => ({ entityId: entityId.value.trim(), ...(blockPath.value.trim() ? { blockPath: blockPath.value.trim() } : {}), ...(zukanPrompt.value.trim() ? { prompt: zukanPrompt.value.trim() } : {}) }), context, "assistant.zukan.suggestions", zukanStatus, zukanResult, cleanup, { loading: "図鑑の変更案を作っています…", done: "図鑑の変更案を作成しました。" });
-  zukanSection.append(field("エンティティ ID", entityId), field("対象ブロック", blockPath), field("指示", zukanPrompt), zukanRun, zukanStatus, zukanResult);
+  on(zukanRun, "click", () => {
+    if (zukanSource.value === "sandbox") {
+      const sketch = savedSketches.find((item) => item.id === sandboxSketch.value);
+      const lines = Array.isArray(asRecord(sketch?.raw).lines) ? asRecord(sketch?.raw).lines as unknown[] : [];
+      const start = Number(rangeStart.value);
+      const end = Number(rangeEnd.value);
+      if (!sketch) {
+        zukanStatus.textContent = "sandbox の対話スケッチを選択してください。";
+        return;
+      }
+      if (lines.length === 0 || !Number.isInteger(start) || !Number.isInteger(end) || start < 1 || end < start || end > lines.length) {
+        zukanStatus.textContent = "ターン範囲はスケッチ内の発話から指定してください。";
+        return;
+      }
+      void runAction(context, "assistant.zukan.suggestions", {
+        source: "sandbox",
+        sourceSessionId: String(sketch.id),
+        turnRange: { start, end },
+      }, zukanRun, zukanStatus, zukanResult, "sandbox の変更案を作っています…", "sandbox の図鑑変更案を作成しました。");
+      return;
+    }
+    if (!entityId.value.trim()) {
+      zukanStatus.textContent = "エンティティ ID を入力してください。";
+      return;
+    }
+    void runAction(context, "assistant.zukan.suggestions", {
+      entityId: entityId.value.trim(),
+      ...(blockPath.value.trim() ? { blockPath: blockPath.value.trim() } : {}),
+      ...(zukanPrompt.value.trim() ? { prompt: zukanPrompt.value.trim() } : {}),
+    }, zukanRun, zukanStatus, zukanResult, "図鑑の変更案を作っています…", "図鑑の変更案を作成しました。");
+  }, cleanup);
+  zukanSection.append(field("提案対象", zukanSource), manuscriptControls, sandboxControls, zukanRun, zukanStatus, zukanResult);
 
   const synonymsSection = section("同義語・言い換え候補");
-  const terms = input("比較する語句を読点またはカンマで入力");
-  const contextSelect = el("select");
-  contextSelect.append(new Option("文脈を指定しない", ""), new Option("緊迫した文脈", "negative"), new Option("高揚した文脈", "positive"));
+  const original = input("診断対象の語句");
+  const sentence = textarea(3, "診断対象を含む原文の一文");
+  const reason = input("診断理由（任意）");
   const synonymsRun = button("候補をレビュー案にする");
   const synonymsStatus = statusNode();
   const synonymsResult = el("div");
-  bindAction(synonymsRun, () => ({ terms: parseList(terms.value), ...(contextSelect.value ? { context: contextSelect.value } : {}) }), context, "assistant.synonyms.suggestions", synonymsStatus, synonymsResult, cleanup, { loading: "同義語候補を作っています…", done: "同義語候補を作成しました。" });
-  synonymsSection.append(field("語句", terms), field("文脈", contextSelect), synonymsRun, synonymsStatus, synonymsResult);
+  bindAction(synonymsRun, () => ({ suggestions: [{
+    original: original.value.trim(),
+    sentence: sentence.value,
+    ...(reason.value.trim() ? { reason: reason.value.trim() } : {}),
+  }] }), context, "assistant.synonyms.suggestions", synonymsStatus, synonymsResult, cleanup, { loading: "同義語候補を作っています…", done: "同義語候補を作成しました。" });
+  synonymsSection.append(field("語句", original), field("原文の一文", sentence), field("診断理由（任意）", reason), synonymsRun, synonymsStatus, synonymsResult);
 
   const contradictionSection = section("設定の矛盾候補");
   const candidate = textarea(4, "確認する設定の記述");

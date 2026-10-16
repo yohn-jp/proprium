@@ -40,11 +40,29 @@ const actionData = {
   "assistant.qa": { answer: "<img src=x onerror=alert(1)> 回答", citations: [{ kind: "scene", id: "sc-1", quote: "駅で会った。" }] },
   "assistant.continuation": { options: ["列車が動き出した。", "彼女は切符を握りしめた。"] },
   "assistant.aspect.review": { findings: [{ aspect: "tempo", finding: "間を少し短くできます。" }], proposal: { id: "proposal-aspect" } },
+  "story.entities.list": [{
+    id: "ds-1",
+    name: "駅の対話スケッチ",
+    type: "dialogue_sketch",
+    raw: {
+      title: "雨宿り",
+      situation: "駅の軒下で雨を待つ",
+      participantEntityIds: ["char-a", "char-b"],
+      lines: [
+        { speakerEntityId: "char-a", text: "傘、持ってる？" },
+        { speakerEntityId: "char-b", text: "今日は持ってないの。" },
+        { speakerEntityId: "char-a", text: "じゃあ、ここで待とう。" },
+      ],
+    },
+  }],
   "assistant.dialogue.topics": { topics: [{ title: "雨宿り", situation: "駅の軒下で雨を待つ" }] },
-  "assistant.dialogue.turns": { lines: [{ speaker: "char-a", text: "傘、持ってる？" }] },
+  "assistant.dialogue.turns": { lines: [{ speakerEntityId: "char-a", text: "傘、持ってる？" }] },
   "assistant.reader.reaction": { questions: ["二人はどこへ向かうのだろう？"], expectations: ["旅の始まり"], confusions: [] },
   "assistant.zukan.suggestions": { proposal: { id: "proposal-zukan" }, suggestion: "人物の変更案" },
-  "assistant.synonyms.suggestions": { proposal: { id: "proposal-synonyms" }, candidates: ["静かに", "そっと"] },
+  "assistant.synonyms.suggestions": {
+    proposal: { id: "proposal-synonyms" },
+    suggestions: [{ term: "静か", candidates: ["静かに", "そっと"] }],
+  },
   "assistant.contradictions.assist": { proposal: { id: "proposal-contradiction" }, findings: [] },
   "assistant.stateEvents.draft": { proposal: { id: "proposal-state" }, events: [] },
   "assistant.speaker.attribute": { proposal: { id: "proposal-speaker" }, attributions: [] },
@@ -93,6 +111,14 @@ try {
       return { ok: false, snapshot, error: { code: "provider_unavailable", message: "一時的なプロバイダーエラー", retryable: true } };
     }
     if (actionId === "assistant.qa" && delayQa) await new Promise((resolvePromise) => setTimeout(resolvePromise, 120));
+    if (actionId === "assistant.rewrite.propose") {
+      const proposal = { id: "proposal-rewrite-choice" };
+      return { ok: true, snapshot, data: { proposal }, proposals: [proposal] };
+    }
+    if (actionId === "assistant.zukan.suggestions" && input?.source === "sandbox") {
+      const data = { proposal: { id: "proposal-zukan-sandbox" }, suggestion: "sandbox の変更案" };
+      return { ok: true, snapshot, data, proposals: [data.proposal] };
+    }
     const data = actionData[actionId];
     assert.ok(data, `unexpected assistant action: ${actionId}`);
     return { ok: true, snapshot, data, ...(data.proposal ? { proposals: [data.proposal] } : {}) };
@@ -105,7 +131,7 @@ try {
       await route.fulfill({
         status: 200,
         contentType: "text/event-stream",
-        body: 'event: delta\ndata: {"delta":"夜の駅で"}\n\nevent: delta\ndata: {"delta":"彼を見つけた。"}\n\nevent: final\ndata: {"text":"夜の駅で彼を見つけた。","model":"test-model","promptVersion":"1","citations":[],"proposal":{"id":"proposal-rewrite"}}\n\n',
+        body: 'event: delta\ndata: {"delta":"夜の駅で"}\n\nevent: delta\ndata: {"delta":"彼を見つけた。"}\n\nevent: final\ndata: {"text":"夜の駅で彼を見つけた。","suggestions":[{"text":"暗い駅で彼を見つけた。","strategy":"concise","rationale":"短くする"},{"text":"夜の駅のホームで彼を見つけた。","strategy":"contextual","rationale":"場所を補う"},{"text":"夜の駅で彼を見つけたんだ。","strategy":"voice","rationale":"口調を調整する"}],"sentenceSplit":{"text":"夜の駅で彼を見つけた。胸が高鳴る。","rationale":"二文に分ける"},"tellToShow":{"text":"足音が止まった。彼がいた。","rationale":"動作で示す","source":"corpus"},"model":"test-model","provider":"test-provider","promptVersion":"1","citations":[],"provenance":{}}\n\n',
       });
       return;
     }
@@ -151,15 +177,32 @@ try {
   await page.getByLabel("言い換える文").fill("夜の駅で彼を見つけた。");
   await page.getByLabel("指示（任意）").fill("簡潔に");
   await page.getByRole("button", { name: "ストリーミングで言い換え案を作る" }).click();
-  await page.getByText("言い換え候補を受け取りました", { exact: false }).waitFor();
-  await page.getByText("夜の駅で彼を見つけた。", { exact: true }).waitFor();
+  await page.getByText("候補を受け取りました。使う候補を選んで変更案を作成してください。", { exact: true }).waitFor();
+  await page.getByText("簡潔案", { exact: true }).waitFor();
+  await page.getByText("文脈案", { exact: true }).waitFor();
+  await page.getByText("口調案", { exact: true }).waitFor();
+  await page.getByText("文分割案", { exact: true }).waitFor();
+  await page.getByText("tell→show（コーパス）", { exact: true }).waitFor();
+  await page.getByLabel("言い換える文").fill("別の対象文");
+  await page.getByRole("button", { name: "簡潔案を変更案にする" }).click();
+  await page.getByText("シーンまたは対象文が変更されています。候補を再生成してください。", { exact: true }).waitFor();
+  assert.equal(calls.some((call) => call.actionId === "assistant.rewrite.propose"), false, "stale rewrite choices cannot create a proposal");
+  await page.getByLabel("言い換える文").fill("夜の駅で彼を見つけた。");
+  await page.getByRole("button", { name: "口調案を変更案にする" }).click();
+  await page.getByText("変更案をレビューキューに送りました", { exact: false }).waitFor();
+  assert.deepEqual(calls.find((call) => call.actionId === "assistant.rewrite.propose").input, {
+    sceneId: "sc-1",
+    selectedText: "夜の駅で彼を見つけた。",
+    replacementText: "夜の駅で彼を見つけたんだ。",
+  });
+  assert.equal(await page.getByRole("button", { name: "簡潔案を変更案にする" }).isDisabled(), true, "one selected rewrite candidate is proposed at a time");
   assert.equal(calls.some((call) => call.actionId === "assistant.rewrite"), false, "streamed candidate is not regenerated through the action API");
 
   streamMode = "hang";
   await page.getByRole("button", { name: "ストリーミングで言い換え案を作る" }).click();
   await page.getByText("途中の候補", { exact: true }).waitFor();
   await page.getByRole("button", { name: "生成をキャンセル" }).click();
-  await page.getByText("生成をキャンセルしました。レビューキューに変更案がないか確認してください。", { exact: true }).waitFor();
+  await page.getByText("生成をキャンセルしました。変更案は作成されていません。", { exact: true }).waitFor();
   await Promise.race([
     streamClosed,
     new Promise((_, reject) => setTimeout(() => reject(new Error("stream request was not cancelled")), 3000)),
@@ -194,17 +237,43 @@ try {
   await page.getByText("テンポ: 間を少し短くできます。", { exact: true }).waitFor();
 
   await page.evaluate(() => window.assistantMount("assistant.dialogue"));
-  await page.getByLabel("シーン ID").fill("sc-1");
-  await page.getByLabel("対話の参加者").fill("char-a、char-b");
-  await page.getByLabel("お題").fill("雨宿り");
-  await page.getByLabel("これまでの発話").fill("char-a: 傘、持ってる？");
+  await page.getByRole("button", { name: "保存済みスケッチを読み込む" }).click();
+  await page.getByLabel("保存済みスケッチ").selectOption("ds-1");
   await page.getByRole("button", { name: "お題を提案" }).click();
   await page.getByText("雨宿り — 駅の軒下で雨を待つ", { exact: true }).waitFor();
   await page.getByRole("button", { name: "次のターンを提案" }).click();
   await page.getByText("char-a: 傘、持ってる？", { exact: true }).waitFor();
+  const dialogueTopicsCall = calls.find((call) => call.actionId === "assistant.dialogue.topics");
+  assert.deepEqual(dialogueTopicsCall.input, { participantEntityIds: ["char-a", "char-b"] });
   const dialogueCall = calls.find((call) => call.actionId === "assistant.dialogue.turns");
-  assert.deepEqual(dialogueCall.input.participants, ["char-a", "char-b"]);
-  assert.deepEqual(dialogueCall.input.precedingLines, ["char-a: 傘、持ってる？"]);
+  assert.deepEqual(dialogueCall.input, {
+    sketchId: "ds-1",
+    participantEntityIds: ["char-a", "char-b"],
+    speakerEntityId: "char-a",
+    topic: "雨宿り",
+    situation: "駅の軒下で雨を待つ",
+    precedingLines: [
+      { speakerEntityId: "char-a", text: "傘、持ってる？" },
+      { speakerEntityId: "char-b", text: "今日は持ってないの。" },
+      { speakerEntityId: "char-a", text: "じゃあ、ここで待とう。" },
+    ],
+  });
+  await page.getByLabel("生成モード").selectOption("bulk");
+  await page.getByLabel("生成ターン数").fill("2");
+  await page.getByRole("button", { name: "次のターンを提案" }).click();
+  const bulkDialogueCall = calls.filter((call) => call.actionId === "assistant.dialogue.turns")[1];
+  assert.deepEqual(bulkDialogueCall.input, {
+    sketchId: "ds-1",
+    participantEntityIds: ["char-a", "char-b"],
+    topic: "雨宿り",
+    situation: "駅の軒下で雨を待つ",
+    precedingLines: [
+      { speakerEntityId: "char-a", text: "傘、持ってる？" },
+      { speakerEntityId: "char-b", text: "今日は持ってないの。" },
+      { speakerEntityId: "char-a", text: "じゃあ、ここで待とう。" },
+    ],
+    lineCount: 2,
+  });
 
   await page.evaluate(() => window.assistantMount("assistant.reader-reaction"));
   await page.getByLabel("章 ID").fill("ch-1");
@@ -217,10 +286,28 @@ try {
   await page.getByRole("button", { name: "図鑑の変更案を作る" }).click();
   await page.getByText("変更案をレビューキューに送りました", { exact: false }).first().waitFor();
   await page.getByText("人物の変更案", { exact: true }).waitFor();
-  await page.getByLabel("語句").fill("静か,穏やか");
-  await page.getByLabel("文脈").selectOption("positive");
+  await page.getByLabel("語句").fill("静か");
+  await page.getByLabel("原文の一文").fill("彼女は静かに窓辺へ歩いた。");
+  await page.getByLabel("診断理由（任意）").fill("副詞の重複を避ける");
   await page.getByRole("button", { name: "候補をレビュー案にする" }).click();
   await page.getByText("静かに", { exact: true }).waitFor();
+  await page.getByText("そっと", { exact: true }).waitFor();
+  assert.equal(await page.getByLabel("文脈").count(), 0, "synonym suggestions do not use polarity as a context selector");
+  assert.deepEqual(calls.find((call) => call.actionId === "assistant.synonyms.suggestions").input, {
+    suggestions: [{ original: "静か", sentence: "彼女は静かに窓辺へ歩いた。", reason: "副詞の重複を避ける" }],
+  });
+  await page.getByLabel("提案対象").selectOption("sandbox");
+  await page.getByRole("button", { name: "sandbox のスケッチ一覧を読み込む" }).click();
+  await page.getByLabel("sandbox 対話スケッチ").selectOption("ds-1");
+  await page.getByLabel("開始ターン").fill("2");
+  await page.getByLabel("終了ターン").fill("3");
+  await page.getByRole("button", { name: "図鑑の変更案を作る" }).click();
+  await page.getByText("sandbox の変更案", { exact: true }).waitFor();
+  assert.deepEqual(calls.filter((call) => call.actionId === "assistant.zukan.suggestions")[1].input, {
+    source: "sandbox",
+    sourceSessionId: "ds-1",
+    turnRange: { start: 2, end: 3 },
+  });
   await page.getByLabel("記述").fill("主人公は雪の村で寒がりだと言った。");
   await page.getByRole("button", { name: "矛盾を確認する" }).click();
   await page.getByText("矛盾候補を確認しました", { exact: false }).waitFor();
@@ -234,7 +321,7 @@ try {
   const allowedActions = new Set([
     "assistant.health", "assistant.queue.status", "assistant.settings.read", "assistant.settings.propose", "assistant.usage.read",
     "assistant.rewrite", "assistant.summary.scene", "assistant.summary.chapter", "assistant.qa", "assistant.continuation", "assistant.aspect.review",
-    "assistant.dialogue.topics", "assistant.dialogue.turns", "assistant.reader.reaction", "assistant.zukan.suggestions",
+    "assistant.rewrite.propose", "story.entities.list", "assistant.dialogue.topics", "assistant.dialogue.turns", "assistant.reader.reaction", "assistant.zukan.suggestions",
     "assistant.synonyms.suggestions", "assistant.contradictions.assist", "assistant.stateEvents.draft", "assistant.speaker.attribute",
   ]);
   assert.ok(calls.length > 0);
