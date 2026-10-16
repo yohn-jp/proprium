@@ -553,6 +553,163 @@ test("fresh status detects a changed repository default branch before mutation",
   }
 });
 
+test("detach removes only a clean project clone and leaves GitHub untouched", async () => {
+  const fixture = await remoteFixture();
+  try {
+    const dataDir = path.join(fixture.root, "state");
+    const store = new CoreStore({ dataDir, allowLocalRemotes: true });
+    const project = await store.registerProject({ url: fixture.remote });
+    const remoteHead = await git(fixture.root, "--git-dir", fixture.remote, "rev-parse", "refs/heads/main");
+    const clonePath = path.join(dataDir, "projects", project.id);
+
+    await store.detachProject(project.id);
+
+    assert.deepEqual(await store.listProjects(), []);
+    await assert.rejects(fs.access(clonePath), (error: NodeJS.ErrnoException) => error.code === "ENOENT");
+    assert.equal(await git(fixture.root, "--git-dir", fixture.remote, "rev-parse", "refs/heads/main"), remoteHead);
+  } finally {
+    await fs.rm(fixture.root, { recursive: true, force: true });
+  }
+});
+
+test("detach preserves staged, untracked, pending checkpoint, and local proposal data", async () => {
+  const fixture = await remoteFixture();
+  try {
+    const dataDir = path.join(fixture.root, "state");
+    const store = new CoreStore({ dataDir, allowLocalRemotes: true });
+    const project = await store.registerProject({ url: fixture.remote });
+    const clonePath = path.join(dataDir, "projects", project.id);
+    const initialHead = await git(fixture.root, "--git-dir", fixture.remote, "rev-parse", "refs/heads/main");
+    await fs.writeFile(path.join(clonePath, "README.md"), "Staged local edit.\n");
+    await git(clonePath, "add", "README.md");
+    await fs.writeFile(path.join(clonePath, "unknown-local.txt"), "Keep this untracked file.\n");
+    await assert.rejects(store.detachProject(project.id), (error: unknown) => error instanceof CoreError && error.code === "working_tree_dirty");
+    assert.equal(await fs.readFile(path.join(clonePath, "unknown-local.txt"), "utf8"), "Keep this untracked file.\n");
+    assert.equal(await git(fixture.root, "--git-dir", fixture.remote, "rev-parse", "refs/heads/main"), initialHead);
+
+    await git(clonePath, "reset", "--hard");
+    await fs.rm(path.join(clonePath, "unknown-local.txt"));
+    const observed = await store.observe(project.id);
+    const op = operation(observed.snapshot, "manuscript/pending.md", "Pending.", null, "detach_pending_operation");
+    await approveAndCheckpoint(store, project.id, observed.snapshot, op);
+    await assert.rejects(store.detachProject(project.id), (error: unknown) => error instanceof CoreError && error.code === "pending_checkpoints");
+    assert.equal(await fs.readFile(path.join(clonePath, "manuscript/pending.md"), "utf8"), "Pending.");
+    assert.equal(await git(fixture.root, "--git-dir", fixture.remote, "rev-parse", "refs/heads/main"), initialHead);
+  } finally {
+    await fs.rm(fixture.root, { recursive: true, force: true });
+  }
+});
+
+test("detach refuses a clean local-only Git commit without removing it", async () => {
+  const fixture = await remoteFixture();
+  try {
+    const dataDir = path.join(fixture.root, "state");
+    const store = new CoreStore({ dataDir, allowLocalRemotes: true });
+    const project = await store.registerProject({ url: fixture.remote });
+    const clonePath = path.join(dataDir, "projects", project.id);
+    await fs.writeFile(path.join(clonePath, "local-only.txt"), "Unpushed commit.\n");
+    await git(clonePath, "add", "local-only.txt");
+    await git(clonePath, "commit", "-m", "Local-only commit");
+    const localCommit = await git(clonePath, "rev-parse", "HEAD");
+    const remoteHead = await git(fixture.root, "--git-dir", fixture.remote, "rev-parse", "refs/heads/main");
+
+    await assert.rejects(store.detachProject(project.id), (error: unknown) => error instanceof CoreError && error.code === "local_only_commits");
+
+    assert.equal(await git(clonePath, "rev-parse", "HEAD"), localCommit);
+    assert.equal(await fs.readFile(path.join(clonePath, "local-only.txt"), "utf8"), "Unpushed commit.\n");
+    assert.equal(await git(fixture.root, "--git-dir", fixture.remote, "rev-parse", "refs/heads/main"), remoteHead);
+    assert.equal((await store.listProjects())[0]?.id, project.id);
+  } finally {
+    await fs.rm(fixture.root, { recursive: true, force: true });
+  }
+});
+
+test("detach refuses proposals that remain only in local recovery state", async () => {
+  const fixture = await remoteFixture();
+  try {
+    const dataDir = path.join(fixture.root, "state");
+    const store = new CoreStore({ dataDir, allowLocalRemotes: true });
+    const project = await store.registerProject({ url: fixture.remote });
+    const snapshot = (await store.observe(project.id)).snapshot;
+    const op = operation(snapshot, "manuscript/unapproved.md", "Unapproved.", null, "detach_proposal_operation");
+    const proposal = await store.propose(project.id, { id: "detach_local_proposal", snapshot, operations: [op], source: "mcp" });
+    const clonePath = path.join(dataDir, "projects", project.id);
+    const remoteHead = await git(fixture.root, "--git-dir", fixture.remote, "rev-parse", "refs/heads/main");
+
+    await assert.rejects(store.detachProject(project.id), (error: unknown) => error instanceof CoreError && error.code === "local_proposals_present");
+
+    assert.equal((await store.getProposal(project.id, proposal.id))?.state, "proposed");
+    assert.equal((await store.listProjects()).length, 1);
+    assert.equal(await fs.stat(clonePath).then((stat) => stat.isDirectory()), true);
+    assert.equal(await git(fixture.root, "--git-dir", fixture.remote, "rev-parse", "refs/heads/main"), remoteHead);
+  } finally {
+    await fs.rm(fixture.root, { recursive: true, force: true });
+  }
+});
+
+test("reconstruction verifies the repository default branch before replacing a clean clone", async () => {
+  const fixture = await remoteFixture();
+  try {
+    const dataDir = path.join(fixture.root, "state");
+    const store = new CoreStore({ dataDir, allowLocalRemotes: true });
+    const project = await store.registerProject({ url: fixture.remote });
+    const clonePath = path.join(dataDir, "projects", project.id);
+    await git(fixture.seed, "checkout", "-b", "next-default");
+    await fs.writeFile(path.join(fixture.seed, "next.txt"), "Default branch content.\n");
+    await git(fixture.seed, "add", "next.txt");
+    await git(fixture.seed, "commit", "-m", "New default branch");
+    await git(fixture.seed, "push", "origin", "next-default");
+    const remoteOffline = `${fixture.remote}.offline`;
+    await fs.rename(fixture.remote, remoteOffline);
+    try {
+      await assert.rejects(store.reconstructProject(project.id), (error: unknown) => error instanceof CoreError);
+      assert.equal(await fs.readFile(path.join(clonePath, "README.md"), "utf8"), "Initial.\n");
+      assert.equal((await store.listProjects())[0]?.branch, "main");
+    } finally {
+      await fs.rename(remoteOffline, fixture.remote);
+    }
+
+    const mainHead = await git(fixture.root, "--git-dir", fixture.remote, "rev-parse", "refs/heads/main");
+    await git(fixture.root, "--git-dir", fixture.remote, "symbolic-ref", "HEAD", "refs/heads/next-default");
+    await git(fixture.root, "--git-dir", fixture.remote, "update-ref", "-d", "refs/heads/main", mainHead);
+    await assert.rejects(store.observe(project.id), (error: unknown) => error instanceof CoreError && error.code === "default_branch_changed");
+    const rebuilt = await store.reconstructProject(project.id);
+
+    assert.deepEqual(rebuilt, { ...project, branch: "next-default" });
+    assert.deepEqual(await store.listProjects(), [rebuilt]);
+    assert.equal((await store.observe(project.id)).snapshot.repository.defaultBranch, "next-default");
+    assert.equal(await fs.readFile(path.join(clonePath, "next.txt"), "utf8"), "Default branch content.\n");
+    await assert.rejects(git(fixture.root, "--git-dir", fixture.remote, "rev-parse", "refs/heads/main"));
+  } finally {
+    await fs.rm(fixture.root, { recursive: true, force: true });
+  }
+});
+
+test("reconstruction can recover a lost clean clone but refuses a local proposal journal", async () => {
+  const fixture = await remoteFixture();
+  try {
+    const dataDir = path.join(fixture.root, "state");
+    const store = new CoreStore({ dataDir, allowLocalRemotes: true });
+    const project = await store.registerProject({ url: fixture.remote });
+    const clonePath = path.join(dataDir, "projects", project.id);
+    await fs.rm(clonePath, { recursive: true, force: true });
+
+    const rebuilt = await store.reconstructProject(project.id);
+    assert.equal(rebuilt.id, project.id);
+    assert.equal(await fs.readFile(path.join(clonePath, "README.md"), "utf8"), "Initial.\n");
+
+    const snapshot = (await store.observe(project.id)).snapshot;
+    const op = operation(snapshot, "manuscript/local-proposal.md", "Pending proposal.", null, "reconstruct_proposal_operation");
+    await store.propose(project.id, { id: "reconstruct_local_proposal", snapshot, operations: [op], source: "author" });
+    await fs.rm(clonePath, { recursive: true, force: true });
+    await assert.rejects(store.reconstructProject(project.id), (error: unknown) => error instanceof CoreError && error.code === "local_proposals_present");
+    await assert.rejects(fs.access(clonePath), (error: NodeJS.ErrnoException) => error.code === "ENOENT");
+    assert.equal((await store.listProjects())[0]?.id, project.id);
+  } finally {
+    await fs.rm(fixture.root, { recursive: true, force: true });
+  }
+});
+
 test("a non-fast-forward push race retries from the new remote head", async () => {
   const fixture = await remoteFixture();
   try {

@@ -1119,6 +1119,88 @@ export class CoreStore implements MutationCoordinator {
     await atomicWrite(journalPath, content);
   }
 
+  private async registeredProject(projectId: string): Promise<ProjectRecord> {
+    validateProjectId(projectId);
+    const record = (await this.readRegistry()).find((item) => item.id === projectId);
+    if (!record) throw coreError(404, "project_not_found", "Project not found");
+    return record;
+  }
+
+  private async discoverRepositoryIdentity(record: ProjectRecord, askpass: string): Promise<RepositoryIdentity> {
+    if (/^https:\/\//i.test(record.url) || record.identity?.provider === "github") {
+      const identity = await githubIdentity(record.url, this.token, this.fetcher);
+      if (record.identity && (record.identity.provider !== identity.provider || record.identity.repositoryId !== identity.repositoryId)) {
+        throw coreError(409, "repository_replaced", "The registered repository identity changed; mutations are paused");
+      }
+      return identity;
+    }
+    const headInfo = await git(this.dataDir, ["ls-remote", "--symref", record.url, "HEAD"], { token: this.token, askpass });
+    const defaultBranch = headInfo.match(/^ref: refs\/heads\/(.+)\tHEAD$/m)?.[1] ?? record.identity?.defaultBranch ?? record.branch;
+    const identity = localIdentity(record.url, branchName(defaultBranch));
+    if (record.identity && (record.identity.provider !== identity.provider || record.identity.repositoryId !== identity.repositoryId)) {
+      throw coreError(409, "repository_replaced", "The registered repository identity changed; mutations are paused");
+    }
+    return identity;
+  }
+
+  private async remoteBranchCommit(cwd: string, remote: string, branch: string, askpass: string): Promise<string> {
+    const ref = `refs/heads/${branch}`;
+    const output = await git(cwd, ["ls-remote", "--heads", remote, ref], { token: this.token, askpass });
+    const line = output.split(/\r?\n/).find((item) => item.endsWith(`\t${ref}`));
+    const commit = line?.split(/\s+/, 1)[0] ?? "";
+    return /^(?:[a-f0-9]{40}|[a-f0-9]{64})$/.test(commit) ? commit : "";
+  }
+
+  private async verifyProposalJournalPublished(record: ProjectRecord, root: string, remoteCommit: string): Promise<void> {
+    const proposals = await this.readProposalJournal(record);
+    for (const proposal of this.proposals.get(record.id)?.values() ?? []) this.mergeProposal(proposals, proposal);
+    if (!proposals.size) return;
+    const remote = await this.readDurableProposals(root, [remoteCommit]);
+    const pending = new Map<string, ChangeProposal>();
+    for (const [id, proposal] of proposals) {
+      const published = remote.get(id);
+      if (!published || canonicalJson(published) !== canonicalJson(proposal)) {
+        throw coreError(409, "local_proposals_present", "Local proposal or checkpoint recovery data must be published or preserved before replacing the project workspace");
+      }
+    }
+    await this.writeProposalJournal(record, pending);
+  }
+
+  private async assertNoLocalWorkspaceChanges(root: string, record: ProjectRecord, remoteCommit: string): Promise<void> {
+    const branch = (await git(root, ["branch", "--show-current"])).trim();
+    if (!branch || branch !== record.branch) throw coreError(409, "branch_changed", "The project is no longer on its registered branch");
+    const changes = await git(root, ["status", "--porcelain", "--untracked-files=all", "--ignored=matching"]);
+    if (changes.length) throw coreError(409, "working_tree_dirty", "Staged, modified, untracked, and ignored workspace files must be preserved before replacing the project workspace");
+
+    const head = await this.getRef(root, "HEAD");
+    const localOperations = await this.readLocalOperationRecords(root);
+    const remoteOperations = remoteCommit ? await this.readOperationRecords(root, remoteCommit) : [];
+    const remoteById = new Map(remoteOperations.map((item) => [item.operation.id, item]));
+    for (const local of localOperations) {
+      const remote = remoteById.get(local.operation.id);
+      if (!remote) throw coreError(409, "pending_checkpoints", "Unpublished checkpoints must be published or preserved before replacing the project workspace");
+      if (remote.digest !== local.digest) throw coreError(409, "operation_id_reused", "An operation ID is bound to different repository history");
+    }
+    if (head && (!remoteCommit || !(await this.isAncestor(root, head, remoteCommit)))) {
+      throw coreError(409, "local_only_commits", "Local-only commits must be preserved before replacing the project workspace");
+    }
+
+    const proposals = new Map<string, StoredOperation>();
+    for (const item of [...localOperations, ...remoteOperations]) proposals.set(item.operation.id, item);
+    const observation: RemoteObservation = {
+      snapshot: { repository: record.identity!, remoteCommit },
+      checkpointHead: head,
+      observedAt: new Date().toISOString(),
+      state: "fresh",
+      pending: [],
+    };
+    await this.loadProjectProposals(record, root, observation, {
+      records: proposals,
+      publishedOperationIds: new Set(remoteOperations.map((item) => item.operation.id)),
+    });
+    await this.verifyProposalJournalPublished(record, root, remoteCommit);
+  }
+
   private async getProject(projectId: string): Promise<{ record: ProjectRecord; root: string }> {
     validateProjectId(projectId);
     const records = await this.readRegistry();
@@ -3114,6 +3196,202 @@ export class CoreStore implements MutationCoordinator {
       throw error;
     }
     return { id, url, branch };
+  }
+
+  async detachProject(projectId: string): Promise<void> {
+    return this.withProjectLock(projectId, async () => {
+      const { record, root } = await this.getProject(projectId);
+      const observation = await this.requireObservation(projectId);
+      if (observation.pending.length) {
+        throw coreError(409, "pending_checkpoints", "Unpublished checkpoints must be published or preserved before detaching the project");
+      }
+      await this.assertNoLocalWorkspaceChanges(root, record, observation.snapshot.remoteCommit);
+
+      const detachedRoot = path.join(this.projectsDir, `.detached-${projectId}-${randomUUID()}`);
+      const journalPath = this.proposalJournalPath(projectId);
+      const detachedJournal = path.join(this.proposalsDir, `.detached-${projectId}-${randomUUID()}.json`);
+      let movedWorkspace = false;
+      let movedJournal = false;
+      let detached = false;
+      await this.withRegistryLock(async () => {
+        const records = await this.readRegistry();
+        const current = records.find((item) => item.id === projectId);
+        if (!current) throw coreError(404, "project_not_found", "Project not found");
+        if (current.url !== record.url || current.branch !== record.branch) {
+          throw coreError(409, "project_changed", "The project registration changed; retry the detach operation");
+        }
+        await fs.rename(root, detachedRoot);
+        movedWorkspace = true;
+        try {
+          const journalStat = await fs.lstat(journalPath).catch((error: NodeJS.ErrnoException) => {
+            if (error.code === "ENOENT") return null;
+            throw error;
+          });
+          if (journalStat) {
+            if (journalStat.isSymbolicLink() || !journalStat.isFile()) {
+              throw coreError(500, "proposal_journal_invalid", "The local proposal journal is unsafe");
+            }
+            await fs.rename(journalPath, detachedJournal);
+            movedJournal = true;
+          }
+          await this.writeRegistry(records.filter((item) => item.id !== projectId));
+          detached = true;
+        } catch (error) {
+          if (movedJournal) await fs.rename(detachedJournal, journalPath).catch(() => undefined);
+          if (movedWorkspace) await fs.rename(detachedRoot, root).catch(() => undefined);
+          movedWorkspace = false;
+          movedJournal = false;
+          throw error;
+        }
+      });
+      this.proposals.delete(projectId);
+      this.durableProposalIds.delete(projectId);
+      this.approvals.delete(projectId);
+      if (detached) {
+        await fs.rm(detachedRoot, { recursive: true, force: true }).catch(() => undefined);
+        if (movedJournal) await fs.rm(detachedJournal, { force: true }).catch(() => undefined);
+      }
+    });
+  }
+
+  async reconstructProject(projectId: string): Promise<Project> {
+    return this.withProjectLock(projectId, async () => {
+      const record = await this.registeredProject(projectId);
+      const root = path.join(this.projectsDir, record.directory);
+      const workspaceStat = await fs.lstat(root).catch((error: NodeJS.ErrnoException) => {
+        if (error.code === "ENOENT") return null;
+        throw error;
+      });
+      if (workspaceStat && (!workspaceStat.isDirectory() || workspaceStat.isSymbolicLink())) {
+        throw coreError(500, "project_workspace_invalid", "The project workspace is unsafe");
+      }
+
+      const askpassDir = path.join(this.dataDir, `.askpass-reconstruct-${projectId}-${randomUUID()}`);
+      const candidateRoot = path.join(this.projectsDir, `.reconstruct-${projectId}-${randomUUID()}`);
+      const backupRoot = path.join(this.projectsDir, `.replaced-${projectId}-${randomUUID()}`);
+      await fs.mkdir(askpassDir, { mode: 0o700 });
+      let installed = false;
+      let backedUp = false;
+      let registered = false;
+      try {
+        const askpass = await makeAskpassScript(askpassDir);
+        const identity = await this.discoverRepositoryIdentity(record, askpass);
+        const branch = identity.defaultBranch;
+        const targetHead = await this.remoteBranchCommit(this.dataDir, record.url, branch, askpass);
+        const allHeads = await git(this.dataDir, ["ls-remote", "--heads", record.url], { token: this.token, askpass });
+        if (!targetHead && allHeads.trim()) {
+          throw coreError(409, "default_branch_missing", "The current default branch is missing from the repository");
+        }
+
+        if (workspaceStat) {
+          let guardBranch = record.branch;
+          let guardHead = await this.remoteBranchCommit(this.dataDir, record.url, guardBranch, askpass);
+          if (!guardHead) {
+            guardBranch = branch;
+            guardHead = targetHead;
+          }
+          if (guardHead) await git(root, ["fetch", "--no-tags", record.url, guardBranch], { token: this.token, askpass });
+          const fetchedHead = guardHead ? await this.getRef(root, "FETCH_HEAD") : "";
+          if (guardHead && (!fetchedHead || !(await this.isAncestor(root, fetchedHead, await this.remoteBranchCommit(this.dataDir, record.url, guardBranch, askpass))))) {
+            throw coreError(409, "repository_changed_during_reconstruction", "The repository branch changed while the workspace was being verified; retry reconstruction");
+          }
+          record.identity ??= identity;
+          await this.assertNoLocalWorkspaceChanges(root, record, fetchedHead || guardHead);
+        }
+
+        if (targetHead) {
+          await git(this.dataDir, [
+            "clone", "--no-recurse-submodules", "--branch", branch, "--single-branch", "--", record.url, candidateRoot,
+          ], { token: this.token, askpass });
+        } else {
+          await git(this.dataDir, ["clone", "--no-recurse-submodules", "--", record.url, candidateRoot], { token: this.token, askpass });
+          await git(candidateRoot, ["symbolic-ref", "HEAD", `refs/heads/${branch}`]);
+        }
+        const secondIdentity = await this.discoverRepositoryIdentity(record, askpass);
+        if (secondIdentity.repositoryId !== identity.repositoryId || secondIdentity.provider !== identity.provider ||
+            secondIdentity.defaultBranch !== branch) {
+          throw coreError(409, "default_branch_changed", "The repository identity or default branch changed while reconstruction was in progress");
+        }
+        const currentTargetHead = await this.remoteBranchCommit(this.dataDir, record.url, branch, askpass);
+        if (currentTargetHead !== targetHead) {
+          throw coreError(409, "repository_changed_during_reconstruction", "The repository branch changed while the replacement workspace was being cloned; retry reconstruction");
+        }
+        if (targetHead) {
+          await git(candidateRoot, ["fetch", "--no-tags", "origin", branch], { token: this.token, askpass });
+          const clonedHead = await this.getRef(candidateRoot, "HEAD");
+          const fetchedTarget = await this.getRef(candidateRoot, `refs/remotes/origin/${branch}`);
+          if (!fetchedTarget || (clonedHead !== fetchedTarget && !(await this.isAncestor(candidateRoot, clonedHead, fetchedTarget)))) {
+            throw coreError(409, "repository_changed_during_reconstruction", "The replacement clone did not match the verified remote branch");
+          }
+          if (clonedHead !== fetchedTarget) await git(candidateRoot, ["merge", "--ff-only", fetchedTarget]);
+          if ((await this.getRef(candidateRoot, "HEAD")) !== currentTargetHead) {
+            throw coreError(409, "repository_changed_during_reconstruction", "The replacement clone is not at the current remote commit");
+          }
+        }
+
+        if (!workspaceStat) {
+          await this.verifyProposalJournalPublished(record, candidateRoot, currentTargetHead);
+        } else {
+          const latestIdentity = await this.discoverRepositoryIdentity(record, askpass);
+          if (latestIdentity.repositoryId !== identity.repositoryId || latestIdentity.defaultBranch !== branch) {
+            throw coreError(409, "default_branch_changed", "The repository identity or default branch changed while reconstruction was in progress");
+          }
+          const registeredBranchHead = await this.remoteBranchCommit(this.dataDir, record.url, record.branch, askpass);
+          const latestGuardBranch = registeredBranchHead ? record.branch : branch;
+          const latestGuardHead = registeredBranchHead || currentTargetHead;
+          if (workspaceStat && latestGuardHead) await git(root, ["fetch", "--no-tags", record.url, latestGuardBranch], { token: this.token, askpass });
+          const fetchedGuardHead = latestGuardHead ? await this.getRef(root, "FETCH_HEAD") : "";
+          if (latestGuardHead && fetchedGuardHead !== latestGuardHead) {
+            throw coreError(409, "repository_changed_during_reconstruction", "The registered branch changed while reconstruction was in progress; retry reconstruction");
+          }
+          await this.assertNoLocalWorkspaceChanges(root, record, fetchedGuardHead || latestGuardHead);
+        }
+
+        const updated: ProjectRecord = { ...record, branch, identity, emptyRemote: !currentTargetHead };
+        await this.withRegistryLock(async () => {
+          const records = await this.readRegistry();
+          const index = records.findIndex((item) => item.id === projectId);
+          if (index < 0) throw coreError(404, "project_not_found", "Project not found");
+          const current = records[index]!;
+          if (current.url !== record.url || current.branch !== record.branch) {
+            throw coreError(409, "project_changed", "The project registration changed; retry reconstruction");
+          }
+          if (records.some((item) => item.id !== projectId && item.url === updated.url && item.branch === updated.branch)) {
+            throw coreError(409, "project_already_registered", "The repository default branch is already registered as another project");
+          }
+          if (workspaceStat) {
+            await fs.rename(root, backupRoot);
+            backedUp = true;
+          }
+          try {
+            await fs.rename(candidateRoot, root);
+            installed = true;
+            await this.writeRegistry(records.map((item, index) => index === records.findIndex((entry) => entry.id === projectId) ? updated : item));
+            registered = true;
+          } catch (error) {
+            if (installed) await fs.rename(root, candidateRoot).catch(() => undefined);
+            installed = false;
+            if (backedUp) await fs.rename(backupRoot, root).catch(() => undefined);
+            backedUp = false;
+            throw error;
+          }
+        });
+        this.approvals.delete(projectId);
+        this.proposals.delete(projectId);
+        this.durableProposalIds.delete(projectId);
+        if (backedUp) await fs.rm(backupRoot, { recursive: true, force: true }).catch(() => undefined);
+        return { id: projectId, url: updated.url, branch: updated.branch };
+      } catch (error) {
+        if (!registered) {
+          if (installed) await fs.rm(root, { recursive: true, force: true }).catch(() => undefined);
+          if (backedUp) await fs.rename(backupRoot, root).catch(() => undefined);
+        }
+        throw error;
+      } finally {
+        await fs.rm(candidateRoot, { recursive: true, force: true }).catch(() => undefined);
+        await fs.rm(askpassDir, { recursive: true, force: true }).catch(() => undefined);
+      }
+    });
   }
 
   private async normalizeRemote(input: string): Promise<string> {
