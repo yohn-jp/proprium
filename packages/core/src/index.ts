@@ -307,6 +307,10 @@ const PROPOSAL_COMPLETE_DIRECTORY = "meta/scriptorium/proposals/v2/complete";
 const MAX_PROPOSAL_BYTES = 8 * 1024 * 1024;
 const MAX_PROPOSAL_JOURNAL_BYTES = 8 * 1024 * 1024;
 const MAX_PUSH_ATTEMPTS = 3;
+const HISTORICAL_METADATA_CACHE_MAX_BYTES = 64 * 1024 * 1024;
+const HISTORICAL_METADATA_CACHE_MAX_ENTRIES = 64;
+const GIT_BATCH_CONTENT_MAX_BYTES = 24 * 1024 * 1024;
+const GIT_BATCH_MAX_OBJECTS = 4096;
 
 function coreError(status: number, code: string, message: string): CoreError {
   return new CoreError(status, code, message);
@@ -848,6 +852,15 @@ async function gitInput(
   input: Buffer | string,
   options: { token?: string; askpass?: string; timeout?: number; env?: NodeJS.ProcessEnv } = {},
 ): Promise<string> {
+  return (await gitInputBuffer(cwd, args, input, options)).toString("utf8");
+}
+
+async function gitInputBuffer(
+  cwd: string,
+  args: string[],
+  input: Buffer | string,
+  options: { token?: string; askpass?: string; timeout?: number; env?: NodeJS.ProcessEnv } = {},
+): Promise<Buffer> {
   const baseArgs = [
     "--literal-pathspecs",
     "-c", "core.hooksPath=/dev/null",
@@ -860,10 +873,11 @@ async function gitInput(
     env.GIT_ASKPASS = options.askpass;
     env.GIT_ASKPASS_REQUIRE = "force";
   }
-  return await new Promise<string>((resolve, reject) => {
+  return await new Promise<Buffer>((resolve, reject) => {
     const child = execFileCallback("git", baseArgs, {
       cwd,
       env,
+      encoding: "buffer",
       timeout: options.timeout ?? GIT_TIMEOUT_MS,
       maxBuffer: 32 * 1024 * 1024,
       windowsHide: true,
@@ -874,7 +888,7 @@ async function gitInput(
         reject(coreError(502, "git_operation_failed", `Git operation failed: ${redacted}`));
         return;
       }
-      resolve(stdout);
+      resolve(Buffer.isBuffer(stdout) ? stdout : Buffer.from(stdout));
     });
     child.stdin?.end(input);
   });
@@ -1025,6 +1039,8 @@ export class CoreStore implements MutationCoordinator {
   private readonly maxPushAttempts: number;
   private readonly queueTails = new Map<string, Promise<void>>();
   private readonly readObservations = new Map<string, RemoteObservation>();
+  private readonly historicalMetadataCache = new Map<string, { records: Array<{ path: string; commit: string; content: string }>; bytes: number }>();
+  private historicalMetadataCacheBytes = 0;
   private readonly proposals = new Map<string, Map<string, ChangeProposal>>();
   private readonly durableProposalIds = new Map<string, Set<string>>();
   private readonly approvals = new Map<string, Map<string, {
@@ -1547,6 +1563,13 @@ export class CoreStore implements MutationCoordinator {
     commit: string,
     directory: string,
   ): Promise<Array<{ path: string; commit: string; content: string }>> {
+    const cacheKey = `${path.resolve(root)}\0${commit}\0${directory}`;
+    const cached = this.historicalMetadataCache.get(cacheKey);
+    if (cached) {
+      this.historicalMetadataCache.delete(cacheKey);
+      this.historicalMetadataCache.set(cacheKey, cached);
+      return cached.records.map((record) => ({ ...record }));
+    }
     const history = await git(root, ["log", "--full-history", "--format=%H", "--name-only", commit, "--", directory]);
     const paths = new Map<string, string[]>();
     let currentCommit = "";
@@ -1560,19 +1583,98 @@ export class CoreStore implements MutationCoordinator {
         paths.set(line, commits);
       }
     }
-    const records: Array<{ path: string; commit: string; content: string }> = [];
-    for (const [filePath, versions] of paths) {
-      for (const versionCommit of versions) {
-        try {
-          const content = await git(root, ["show", `${versionCommit}:${filePath}`]);
-          records.push({ path: filePath, commit: versionCommit, content });
-        } catch (error) {
-          if (!(error instanceof CoreError) || error.code !== "git_operation_failed") throw error;
-          /* A deletion commit has no blob at its tip; earlier versions remain in the path history. */
-        }
+    const versionRefs: Array<{ path: string; commit: string; objectExpression: string }> = [];
+    for (const [filePath, commitsForPath] of paths) {
+      for (const versionCommit of commitsForPath) {
+        versionRefs.push({ path: filePath, commit: versionCommit, objectExpression: `${versionCommit}:${filePath}` });
       }
     }
+    if (!versionRefs.length) {
+      this.cacheHistoricalMetadata(cacheKey, []);
+      return [];
+    }
+
+    // Resolve every historical path first, then read the existing blobs in bounded
+    // batches. This preserves deleted-version history without launching one Git
+    // process for every commit/path pair.
+    const checkOutput = await gitInput(root, ["cat-file", "--batch-check=%(objectname) %(objecttype) %(objectsize)"],
+      `${versionRefs.map((version) => version.objectExpression).join("\n")}\n`);
+    const checkLines = checkOutput.split(/\r?\n/).filter((line) => line.length > 0);
+    if (checkLines.length !== versionRefs.length) {
+      throw coreError(502, "git_operation_failed", "Git returned an incomplete historical metadata index");
+    }
+    const blobs: Array<{ path: string; commit: string; objectExpression: string; objectId: string; size: number }> = [];
+    for (let index = 0; index < versionRefs.length; index += 1) {
+      const result = checkLines[index]!;
+      if (result.endsWith(" missing")) continue;
+      const [objectId, type, sizeText] = result.split(" ");
+      const size = Number(sizeText);
+      if (!objectId || !/^(?:[a-f0-9]{40}|[a-f0-9]{64})$/.test(objectId) || type !== "blob" ||
+          !Number.isSafeInteger(size) || size < 0) {
+        throw coreError(502, "git_operation_failed", "Git returned invalid historical metadata object details");
+      }
+      const version = versionRefs[index]!;
+      blobs.push({ path: version.path, commit: version.commit, objectExpression: version.objectExpression, objectId, size });
+    }
+
+    const records: Array<{ path: string; commit: string; content: string }> = [];
+    let batch: typeof blobs = [];
+    let batchBytes = 0;
+    const flushBatch = async (): Promise<void> => {
+      if (!batch.length) return;
+      const output = await gitInputBuffer(root, ["cat-file", "--batch"], `${batch.map((blob) => blob.objectId).join("\n")}\n`);
+      let offset = 0;
+      for (const blob of batch) {
+        const headerEnd = output.indexOf(0x0a, offset);
+        if (headerEnd < 0) throw coreError(502, "git_operation_failed", "Git returned a truncated historical metadata batch");
+        const [objectId, type, sizeText] = output.toString("ascii", offset, headerEnd).split(" ");
+        const size = Number(sizeText);
+        const contentStart = headerEnd + 1;
+        const contentEnd = contentStart + size;
+        if (objectId !== blob.objectId || type !== "blob" || size !== blob.size || contentEnd >= output.length || output[contentEnd] !== 0x0a) {
+          throw coreError(502, "git_operation_failed", "Git returned an invalid historical metadata batch");
+        }
+        records.push({ path: blob.path, commit: blob.commit, content: output.toString("utf8", contentStart, contentEnd) });
+        offset = contentEnd + 1;
+      }
+      if (offset !== output.length) throw coreError(502, "git_operation_failed", "Git returned trailing historical metadata batch data");
+      batch = [];
+      batchBytes = 0;
+    };
+
+    for (const blob of blobs) {
+      if (blob.size > GIT_BATCH_CONTENT_MAX_BYTES) {
+        await flushBatch();
+        // A single larger blob retains the old per-object Git output bound and
+        // behavior; valid Core manifests are much smaller than this threshold.
+        records.push({ path: blob.path, commit: blob.commit, content: await git(root, ["show", blob.objectExpression]) });
+        continue;
+      }
+      if (batch.length && batchBytes + blob.size > GIT_BATCH_CONTENT_MAX_BYTES) await flushBatch();
+      batch.push(blob);
+      batchBytes += blob.size;
+      if (batch.length >= GIT_BATCH_MAX_OBJECTS) await flushBatch();
+    }
+    await flushBatch();
+    this.cacheHistoricalMetadata(cacheKey, records);
     return records;
+  }
+
+  private cacheHistoricalMetadata(key: string, records: Array<{ path: string; commit: string; content: string }>): void {
+    const bytes = records.reduce((total, record) => total + Buffer.byteLength(record.content, "utf8") + record.path.length + record.commit.length + 128, 0);
+    if (bytes > HISTORICAL_METADATA_CACHE_MAX_BYTES) return;
+    const cached = { records: records.map((record) => ({ ...record })), bytes };
+    while (this.historicalMetadataCache.size >= HISTORICAL_METADATA_CACHE_MAX_ENTRIES ||
+           this.historicalMetadataCacheBytes + bytes > HISTORICAL_METADATA_CACHE_MAX_BYTES) {
+      const oldest = this.historicalMetadataCache.entries().next().value as
+        | [string, { records: Array<{ path: string; commit: string; content: string }>; bytes: number }]
+        | undefined;
+      if (!oldest) break;
+      this.historicalMetadataCache.delete(oldest[0]);
+      this.historicalMetadataCacheBytes -= oldest[1].bytes;
+    }
+    this.historicalMetadataCache.set(key, cached);
+    this.historicalMetadataCacheBytes += bytes;
   }
 
   private mergeProposal(proposals: Map<string, ChangeProposal>, proposal: ChangeProposal): void {

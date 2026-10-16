@@ -1363,6 +1363,80 @@ test("pending proposals survive a CoreStore process restart through the local jo
   }
 });
 
+test("historical metadata scans batch immutable blobs and reuse their bounded commit cache", async (t) => {
+  if (process.platform === "win32") return t.skip("the test uses a temporary POSIX Git wrapper");
+  const fixture = await remoteFixture();
+  const originalPath = process.env.PATH;
+  const originalGit = process.env.SCRIPTORIUM_TEST_REAL_GIT;
+  const originalLog = process.env.SCRIPTORIUM_TEST_GIT_LOG;
+  try {
+    const dataDir = path.join(fixture.root, "state");
+    const store = new CoreStore({ dataDir, allowLocalRemotes: true });
+    const project = await store.registerProject({ url: fixture.remote });
+    const snapshot = (await store.observe(project.id)).snapshot;
+    const op = operation(snapshot, "manuscript/history-cache.md", "Cached historical metadata.\n", null, "history_cache_operation");
+    const proposal = await store.propose(project.id, { id: "history_cache_proposal", snapshot, operations: [op], source: "author" });
+    await store.approve(project.id, { proposalId: proposal.id, operationIds: [op.id], authorScope: "owner" });
+    await store.checkpoint(project.id, op);
+    assert.equal((await store.publish(project.id, "history_cache_publication")).state, "confirmed");
+
+    await git(fixture.seed, "fetch", "origin", "main");
+    await git(fixture.seed, "reset", "--hard", "origin/main");
+    const metadataPath = `meta/scriptorium/operations/v1/${op.id}.json`;
+    const metadata = JSON.parse(await git(fixture.seed, "show", `HEAD:${metadataPath}`)) as unknown;
+    for (let version = 0; version < 18; version += 1) {
+      const indentation = version % 2 === 0 ? 2 : 4;
+      await fs.writeFile(path.join(fixture.seed, metadataPath), `${JSON.stringify(metadata, null, indentation)}${" ".repeat(version + 1)}\n`);
+      await git(fixture.seed, "add", metadataPath);
+      await git(fixture.seed, "commit", "-m", `Retain immutable operation metadata revision ${version}`);
+      await git(fixture.seed, "push", "origin", "main");
+    }
+
+    const wrapperDir = path.join(fixture.root, "git-wrapper");
+    await fs.mkdir(wrapperDir);
+    const gitLog = path.join(fixture.root, "git-wrapper.log");
+    const realGit = (await execFile("which", ["git"])).stdout.trim();
+    const wrapper = `#!/bin/sh
+command=""
+batch=""
+for argument in "$@"; do
+  if [ -z "$command" ] && { [ "$argument" = "show" ] || [ "$argument" = "cat-file" ]; }; then command="$argument"; fi
+  if [ "$command" = "cat-file" ] && [ "$argument" = "--batch" ]; then batch="yes"; fi
+done
+if [ "$command" = "show" ]; then printf '%s\\n' show >> "$SCRIPTORIUM_TEST_GIT_LOG"; fi
+if [ "$command" = "cat-file" ] && [ "$batch" = "yes" ]; then printf '%s\\n' cat-file-batch >> "$SCRIPTORIUM_TEST_GIT_LOG"; fi
+exec "$SCRIPTORIUM_TEST_REAL_GIT" "$@"
+`;
+    const wrapperPath = path.join(wrapperDir, "git");
+    await fs.writeFile(wrapperPath, wrapper, { mode: 0o700 });
+    process.env.PATH = `${wrapperDir}${path.delimiter}${originalPath ?? ""}`;
+    process.env.SCRIPTORIUM_TEST_REAL_GIT = realGit;
+    process.env.SCRIPTORIUM_TEST_GIT_LOG = gitLog;
+
+    const restarted = new CoreStore({ dataDir, allowLocalRemotes: true });
+    const recovered = await restarted.getProposal(project.id, proposal.id);
+    assert.equal(recovered?.state, "checkpointed");
+    assert.deepEqual(recovered?.publishedOperationIds, [op.id]);
+    const firstReadCommands = (await fs.readFile(gitLog, "utf8")).trim().split(/\r?\n/).filter(Boolean);
+    assert.ok(firstReadCommands.includes("cat-file-batch"), "historical metadata content is retrieved in a batch");
+    assert.equal(firstReadCommands.includes("show"), false, "a long metadata history does not launch one git show per revision");
+
+    await fs.writeFile(gitLog, "");
+    const repeated = await restarted.getProposal(project.id, proposal.id);
+    assert.deepEqual(repeated, recovered);
+    const repeatedReadCommands = (await fs.readFile(gitLog, "utf8")).trim().split(/\r?\n/).filter(Boolean);
+    assert.deepEqual(repeatedReadCommands, [], "the same immutable commit/directory history is served from the bounded cache");
+  } finally {
+    if (originalPath === undefined) delete process.env.PATH;
+    else process.env.PATH = originalPath;
+    if (originalGit === undefined) delete process.env.SCRIPTORIUM_TEST_REAL_GIT;
+    else process.env.SCRIPTORIUM_TEST_REAL_GIT = originalGit;
+    if (originalLog === undefined) delete process.env.SCRIPTORIUM_TEST_GIT_LOG;
+    else process.env.SCRIPTORIUM_TEST_GIT_LOG = originalLog;
+    await fs.rm(fixture.root, { recursive: true, force: true });
+  }
+});
+
 test("partial proposal checkpoints persist only accepted payload and reconstruct its safe binding", async () => {
   const fixture = await remoteFixture();
   try {
