@@ -152,13 +152,28 @@ export interface ModuleManifest {
   statePaths: string[];
   locality: "local" | "optional-external";
 }
+export interface WorkerService {
+  request<T = unknown>(request: JobRequest, signal?: AbortSignal): Promise<JobOutcome<T>>;
+  cancel(jobId: string): boolean;
+  dispose(): Promise<void>;
+}
+export interface CapabilityDefinition<T = unknown> {
+  id: string;
+  version: string;
+  /** Called only on first lease; registering a factory allocates no heavy resource. */
+  create(context: ModuleContext): Promise<T>;
+  dispose?(value: T): Promise<void>;
+}
 export interface ModuleContext {
   cacheDirectory: string;
   signal: AbortSignal;
   acquireCapability<T>(id: string): Promise<{ value: T; release(): Promise<void> }>;
+  /** Resolves this installed module's declared worker, with bounded supervised IPC. */
+  createWorkerService(): Promise<WorkerService>;
 }
 export interface ModuleDefinition {
   manifest: ModuleManifest;
+  capabilities?: CapabilityDefinition[];
   actions: ModuleAction[];
   ui: UiContribution[];
   dispose(): Promise<void>;
