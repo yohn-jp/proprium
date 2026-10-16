@@ -1031,7 +1031,7 @@ test("pending proposals survive a CoreStore process restart through the local jo
   }
 });
 
-test("accepted proposal evidence and publication state reconstruct after full Core data loss", async () => {
+test("partial proposal checkpoints persist only accepted payload and reconstruct its safe binding", async () => {
   const fixture = await remoteFixture();
   try {
     const dataDir = path.join(fixture.root, "state");
@@ -1066,14 +1066,25 @@ test("accepted proposal evidence and publication state reconstruct after full Co
     const published = await originalStore.publish(project.id, "proposal_manifest_publish");
     assert.equal(published.state, "confirmed");
     assert.equal((await originalStore.getProposal(project.id, proposal.id))?.publishedOperationIds.includes(selected.id), true);
-    await assert.rejects(fs.access(proposalJournal), (error: NodeJS.ErrnoException) => error.code === "ENOENT");
+    assert.deepEqual(JSON.parse(await fs.readFile(proposalJournal, "utf8")).proposals[0], proposal);
     assert.equal(await git(fixture.root, "--git-dir", fixture.remote, "show", `${published.remoteCommit}:manuscript/selected.md`), "Selected effect.");
     assert.equal(await git(fixture.root, "--git-dir", fixture.remote, "show", `${published.remoteCommit}:remote-note.txt`), "Upstream disjoint change.");
     await assert.rejects(git(fixture.root, "--git-dir", fixture.remote, "show", `${published.remoteCommit}:manuscript/unselected.md`));
+    const bindingText = await git(fixture.root, "--git-dir", fixture.remote, "show", `${published.remoteCommit}:meta/scriptorium/proposals/v2/bindings/${proposal.id}.json`);
+    const binding = JSON.parse(bindingText) as Record<string, unknown>;
+    assert.equal(binding.version, 2);
+    assert.equal(binding.digest !== undefined, true);
+    assert.deepEqual(binding.operationIds, [selected.id, unselected.id]);
+    assert.equal("proposal" in binding, false);
+    assert.equal(bindingText.includes("source_ncs_map"), false);
+    assert.equal(bindingText.includes("Unselected workflow data"), false);
+    assert.equal(bindingText.includes("pendingGoal"), false);
+    await assert.rejects(git(fixture.root, "--git-dir", fixture.remote, "grep", "-n", "source_ncs_map", published.remoteCommit, "--", "meta/scriptorium"));
+    await assert.rejects(git(fixture.root, "--git-dir", fixture.remote, "grep", "-n", "Unselected workflow data", published.remoteCommit, "--", "meta/scriptorium"));
 
     await git(fixture.seed, "fetch", "origin", "main");
     await git(fixture.seed, "reset", "--hard", "origin/main");
-    await git(fixture.seed, "rm", `meta/scriptorium/proposals/v1/${proposal.id}.json`);
+    await git(fixture.seed, "rm", `meta/scriptorium/proposals/v2/bindings/${proposal.id}.json`);
     await git(fixture.seed, "commit", "-m", "Remove visible accepted proposal metadata");
     await git(fixture.seed, "push", "origin", "main");
     await fs.rm(dataDir, { recursive: true, force: true });
@@ -1081,12 +1092,23 @@ test("accepted proposal evidence and publication state reconstruct after full Co
     const recoveredProject = await recoveredStore.registerProject({ url: fixture.remote });
     const recovered = await recoveredStore.getProposal(recoveredProject.id, proposal.id);
     assert.equal(recovered?.state, "partially_approved");
-    assert.deepEqual(recovered?.proposal, proposal);
+    assert.equal(recovered?.payloadComplete, false);
+    assert.equal(/^[a-f0-9]{64}$/.test(recovered?.originalDigest ?? ""), true);
+    assert.deepEqual(recovered?.operationIds, [selected.id, unselected.id]);
+    assert.deepEqual(recovered?.proposal.operations, [selected]);
+    assert.deepEqual(recovered?.proposal.evidence, undefined);
     assert.deepEqual(recovered?.approvedOperationIds, [selected.id]);
     assert.deepEqual(recovered?.checkpoints.map((receipt) => receipt.operationId), [selected.id]);
     assert.deepEqual(recovered?.publishedOperationIds, [selected.id]);
     assert.equal(recovered?.checkpoints[0]?.operationId, checkpoint.operationId);
     assert.deepEqual((await recoveredStore.listProposals(recoveredProject.id)).map((item) => item.proposal.id), [proposal.id]);
+
+    assert.deepEqual(await recoveredStore.propose(recoveredProject.id, proposal), proposal);
+    const restored = await recoveredStore.getProposal(recoveredProject.id, proposal.id);
+    assert.equal(restored?.payloadComplete, true);
+    assert.deepEqual(restored?.proposal, proposal);
+    assert.deepEqual(restored?.approvedOperationIds, [selected.id]);
+    assert.deepEqual(JSON.parse(await fs.readFile(path.join(dataDir, "proposal-journal", `${recoveredProject.id}.json`), "utf8")).proposals[0], proposal);
 
     const rebound = {
       ...proposal,
@@ -1096,6 +1118,57 @@ test("accepted proposal evidence and publication state reconstruct after full Co
       error instanceof CoreError && error.code === "proposal_id_reused");
     assert.deepEqual((await recoveredStore.observe(recoveredProject.id)).pending, []);
     assert.equal(await recoveredStore.reader(recoveredProject.id, "remote").then((reader) => reader.read("manuscript/unselected.md")), null);
+  } finally {
+    await fs.rm(fixture.root, { recursive: true, force: true });
+  }
+});
+
+test("a complete accepted proposal payload is persisted only after every operation is checkpointed", async () => {
+  const fixture = await remoteFixture();
+  try {
+    const dataDir = path.join(fixture.root, "state");
+    const store = new CoreStore({ dataDir, allowLocalRemotes: true });
+    const project = await store.registerProject({ url: fixture.remote });
+    const snapshot = (await store.observe(project.id)).snapshot;
+    const first = operation(snapshot, "manuscript/accepted-first.md", "Accepted first.\n", null, "accepted_complete_first");
+    const second = operation(snapshot, "manuscript/accepted-second.md", "Accepted second.\n", null, "accepted_complete_second");
+    const proposal = {
+      id: "complete_mcp_proposal_manifest",
+      snapshot,
+      operations: [first, second],
+      source: "mcp" as const,
+      evidence: [{
+        id: "complete_source_evidence",
+        snapshot,
+        module: "mcp" as const,
+        kind: "approved_source_mapping",
+        paths: [],
+        details: { sourceChangeSetId: "ncs-approved-all" },
+      }],
+    };
+    await store.propose(project.id, proposal);
+    await store.approve(project.id, { proposalId: proposal.id, operationIds: [first.id, second.id], authorScope: "owner" });
+    await store.checkpoint(project.id, first);
+    assert.equal(await (await store.reader(project.id, "checkpoint")).read(`meta/scriptorium/proposals/v2/complete/${proposal.id}.json`), null);
+    await store.checkpoint(project.id, second);
+    const checkpointManifest = await (await store.reader(project.id, "checkpoint")).read(`meta/scriptorium/proposals/v2/complete/${proposal.id}.json`);
+    assert.ok(checkpointManifest);
+    assert.equal(checkpointManifest.content.includes("complete_source_evidence"), true);
+
+    const published = await store.publish(project.id, "complete_proposal_publish");
+    assert.equal(published.state, "confirmed");
+    assert.equal((await store.getProposal(project.id, proposal.id))?.publishedOperationIds.length, 2);
+    await assert.rejects(fs.access(path.join(dataDir, "proposal-journal", `${project.id}.json`)),
+      (error: NodeJS.ErrnoException) => error.code === "ENOENT");
+    await fs.rm(dataDir, { recursive: true, force: true });
+    const recoveredStore = new CoreStore({ dataDir, allowLocalRemotes: true });
+    const recoveredProject = await recoveredStore.registerProject({ url: fixture.remote });
+    const recovered = await recoveredStore.getProposal(recoveredProject.id, proposal.id);
+    assert.equal(recovered?.payloadComplete, true);
+    assert.deepEqual(recovered?.operationIds, [first.id, second.id]);
+    assert.deepEqual(recovered?.proposal, proposal);
+    assert.deepEqual(recovered?.approvedOperationIds, [first.id, second.id]);
+    assert.deepEqual(recovered?.publishedOperationIds, [first.id, second.id]);
   } finally {
     await fs.rm(fixture.root, { recursive: true, force: true });
   }

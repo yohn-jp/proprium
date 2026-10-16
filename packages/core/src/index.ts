@@ -92,6 +92,9 @@ export interface ManuscriptSnapshot extends ManuscriptSnapshotMeta {
 
 export interface ProposalStatus {
   proposal: ChangeProposal;
+  payloadComplete?: boolean;
+  originalDigest?: string;
+  operationIds?: string[];
   state: "proposed" | "partially_approved" | "approved" | "checkpointed";
   approvedOperationIds: string[];
   checkpoints: CheckpointReceipt[];
@@ -259,11 +262,27 @@ interface PublicationMetadata {
   operations: Array<{ operationId: string; generation: number; digest: string; receipt: CheckpointReceipt }>;
 }
 
-interface ProposalMetadata {
-  version: 1;
+interface ProposalBindingMetadata {
+  version: 2;
+  proposalId: string;
+  digest: string;
+  snapshot: SnapshotId;
+  source: ChangeProposal["source"];
+  operationIds: string[];
+}
+
+interface CompleteProposalMetadata {
+  version: 2;
   proposalId: string;
   digest: string;
   proposal: ChangeProposal;
+}
+
+interface DurableProposal {
+  proposal: ChangeProposal;
+  payloadComplete: boolean;
+  originalDigest: string;
+  operationIds: string[];
 }
 
 interface ProposalJournal {
@@ -280,7 +299,9 @@ interface StoredOperation extends OperationMetadata {
 
 const OPERATION_DIRECTORY = "meta/scriptorium/operations/v1";
 const PUBLICATION_DIRECTORY = "meta/scriptorium/publications/v1";
-const PROPOSAL_DIRECTORY = "meta/scriptorium/proposals/v1";
+const PROPOSAL_V1_DIRECTORY = "meta/scriptorium/proposals/v1";
+const PROPOSAL_BINDING_DIRECTORY = "meta/scriptorium/proposals/v2/bindings";
+const PROPOSAL_COMPLETE_DIRECTORY = "meta/scriptorium/proposals/v2/complete";
 const MAX_PROPOSAL_BYTES = 8 * 1024 * 1024;
 const MAX_PROPOSAL_JOURNAL_BYTES = 8 * 1024 * 1024;
 const MAX_PUSH_ATTEMPTS = 3;
@@ -593,7 +614,29 @@ function publicationMetadataPath(batchId: string): string {
 }
 
 function proposalMetadataPath(proposalId: string): string {
-  return `${PROPOSAL_DIRECTORY}/${proposalId}.json`;
+  return `${PROPOSAL_BINDING_DIRECTORY}/${proposalId}.json`;
+}
+
+function completeProposalMetadataPath(proposalId: string): string {
+  return `${PROPOSAL_COMPLETE_DIRECTORY}/${proposalId}.json`;
+}
+
+function legacyProposalMetadataPath(proposalId: string): string {
+  return `${PROPOSAL_V1_DIRECTORY}/${proposalId}.json`;
+}
+
+function proposalOperationIds(proposal: ChangeProposal): string[] {
+  return proposal.operations.map((operation) => operation.id);
+}
+
+function completeProposalRecord(proposal: ChangeProposal): DurableProposal {
+  const normalized = normalizedProposal(proposal);
+  return {
+    proposal: normalized,
+    payloadComplete: true,
+    originalDigest: proposalDigest(normalized),
+    operationIds: proposalOperationIds(normalized),
+  };
 }
 
 function parseOperationMetadata(text: string, metadataPath: string): OperationMetadata {
@@ -1163,10 +1206,15 @@ export class CoreStore implements MutationCoordinator {
     for (const proposal of this.proposals.get(record.id)?.values() ?? []) this.mergeProposal(proposals, proposal);
     if (!proposals.size) return;
     const remote = await this.readDurableProposals(root, [remoteCommit]);
+    const remoteOperations = remoteCommit ? await this.readOperationRecords(root, remoteCommit) : [];
+    const publishedOperationIds = new Set(remoteOperations.map((stored) => stored.operation.id));
     const pending = new Map<string, ChangeProposal>();
     for (const [id, proposal] of proposals) {
       const published = remote.get(id);
-      if (!published || canonicalJson(published) !== canonicalJson(proposal)) {
+      const operationIds = proposalOperationIds(proposal);
+      if (!published || !published.payloadComplete || published.originalDigest !== proposalDigest(proposal) ||
+          canonicalJson(published.operationIds) !== canonicalJson(operationIds) ||
+          operationIds.some((operationId) => !publishedOperationIds.has(operationId))) {
         throw coreError(409, "local_proposals_present", "Local proposal or checkpoint recovery data must be published or preserved before replacing the project workspace");
       }
     }
@@ -1470,43 +1518,189 @@ export class CoreStore implements MutationCoordinator {
     if (!existing) proposals.set(proposal.id, structuredClone(proposal));
   }
 
-  private async readProposalRecords(root: string, commit: string): Promise<Map<string, ChangeProposal>> {
-    const proposalVersions = await this.readHistoricalMetadataFiles(root, commit, PROPOSAL_DIRECTORY);
-    const proposals = new Map<string, ChangeProposal>();
-    const digests = new Map<string, string>();
-    for (const version of proposalVersions) {
+  private mergeDurableProposal(proposals: Map<string, DurableProposal>, proposal: DurableProposal): void {
+    const existing = proposals.get(proposal.proposal.id);
+    if (!existing) {
+      proposals.set(proposal.proposal.id, structuredClone(proposal));
+      return;
+    }
+    if (existing.originalDigest !== proposal.originalDigest ||
+        canonicalJson(existing.operationIds) !== canonicalJson(proposal.operationIds) ||
+        snapshotKey(existing.proposal.snapshot) !== snapshotKey(proposal.proposal.snapshot) ||
+        existing.proposal.source !== proposal.proposal.source) {
+      throw coreError(409, "proposal_id_reused", "A proposal ID's immutable repository binding changed in Git history");
+    }
+    if (existing.payloadComplete && proposal.payloadComplete) {
+      if (canonicalJson(existing.proposal) !== canonicalJson(proposal.proposal)) {
+        throw coreError(409, "proposal_id_reused", "A proposal ID's complete payload changed in Git history");
+      }
+      return;
+    }
+    if (proposal.payloadComplete) {
+      proposals.set(proposal.proposal.id, structuredClone(proposal));
+      return;
+    }
+    if (existing.payloadComplete) return;
+    const operations = new Map(existing.proposal.operations.map((operation) => [operation.id, operation]));
+    for (const operation of proposal.proposal.operations) {
+      const previous = operations.get(operation.id);
+      if (previous && operationDigest(previous) !== operationDigest(operation)) {
+        throw coreError(409, "proposal_id_reused", "An accepted proposal operation changed in Git history");
+      }
+      operations.set(operation.id, structuredClone(operation));
+    }
+    const accepted = proposal.operationIds.flatMap((id) => {
+      const operation = operations.get(id);
+      return operation ? [operation] : [];
+    });
+    proposals.set(proposal.proposal.id, {
+      proposal: {
+        id: proposal.proposal.id,
+        snapshot: structuredClone(proposal.proposal.snapshot),
+        source: proposal.proposal.source,
+        operations: accepted,
+      },
+      payloadComplete: false,
+      originalDigest: proposal.originalDigest,
+      operationIds: [...proposal.operationIds],
+    });
+  }
+
+  private async readProposalRecords(root: string, commit: string): Promise<Map<string, DurableProposal>> {
+    const [legacyVersions, bindingVersions, completeVersions] = await Promise.all([
+      this.readHistoricalMetadataFiles(root, commit, PROPOSAL_V1_DIRECTORY),
+      this.readHistoricalMetadataFiles(root, commit, PROPOSAL_BINDING_DIRECTORY),
+      this.readHistoricalMetadataFiles(root, commit, PROPOSAL_COMPLETE_DIRECTORY),
+    ]);
+    const proposals = new Map<string, DurableProposal>();
+    const bindings = new Map<string, ProposalBindingMetadata>();
+    const complete = new Map<string, CompleteProposalMetadata>();
+    for (const version of legacyVersions) {
       if (Buffer.byteLength(version.content, "utf8") > MAX_PROPOSAL_BYTES) {
-        throw coreError(409, "proposal_metadata_invalid", "The repository contains an oversized proposal manifest");
+        throw coreError(409, "proposal_metadata_invalid", "The repository contains an oversized legacy proposal manifest");
       }
       let metadata: Record<string, unknown> | null;
       try { metadata = asRecord(JSON.parse(version.content)); }
-      catch { throw coreError(409, "proposal_metadata_invalid", "The repository contains an invalid proposal manifest"); }
+      catch { throw coreError(409, "proposal_metadata_invalid", "The repository contains an invalid legacy proposal manifest"); }
       if (!metadata || metadata.version !== 1 || typeof metadata.proposalId !== "string" ||
-          !/^[A-Za-z0-9_-]{1,128}$/.test(metadata.proposalId) || version.path !== proposalMetadataPath(metadata.proposalId) ||
+          !/^[A-Za-z0-9_-]{1,128}$/.test(metadata.proposalId) || version.path !== legacyProposalMetadataPath(metadata.proposalId) ||
           typeof metadata.digest !== "string" || !/^[a-f0-9]{64}$/.test(metadata.digest)) {
-        throw coreError(409, "proposal_metadata_invalid", "The repository contains an invalid proposal manifest");
+        throw coreError(409, "proposal_metadata_invalid", "The repository contains an invalid legacy proposal manifest");
       }
       try { assertPersistedProposal(metadata.proposal); }
-      catch { throw coreError(409, "proposal_metadata_invalid", "The repository contains invalid proposal data"); }
+      catch { throw coreError(409, "proposal_metadata_invalid", "The repository contains invalid legacy proposal data"); }
       const proposal = normalizedProposal(metadata.proposal);
       if (proposal.id !== metadata.proposalId || proposalDigest(proposal) !== metadata.digest) {
-        throw coreError(409, "proposal_metadata_invalid", "The proposal manifest does not match its immutable digest");
+        throw coreError(409, "proposal_metadata_invalid", "The legacy proposal manifest does not match its immutable digest");
       }
-      const existingDigest = digests.get(proposal.id);
-      if (existingDigest && existingDigest !== metadata.digest) {
+      const record = completeProposalRecord(proposal);
+      this.mergeDurableProposal(proposals, record);
+    }
+    for (const version of bindingVersions) {
+      if (Buffer.byteLength(version.content, "utf8") > 64 * 1024) {
+        throw coreError(409, "proposal_metadata_invalid", "The repository contains an oversized proposal identity manifest");
+      }
+      let raw: Record<string, unknown> | null;
+      try { raw = asRecord(JSON.parse(version.content)); }
+      catch { throw coreError(409, "proposal_metadata_invalid", "The repository contains an invalid proposal identity manifest"); }
+      if (!raw || raw.version !== 2 || typeof raw.proposalId !== "string" ||
+          !/^[A-Za-z0-9_-]{1,128}$/.test(raw.proposalId) || version.path !== proposalMetadataPath(raw.proposalId) ||
+          typeof raw.digest !== "string" || !/^[a-f0-9]{64}$/.test(raw.digest) || !isSnapshotId(raw.snapshot) ||
+          !["author", "module", "mcp"].includes(raw.source as string) || !Array.isArray(raw.operationIds) ||
+          raw.operationIds.length < 1 || raw.operationIds.length > 256 ||
+          raw.operationIds.some((id) => typeof id !== "string" || !/^[A-Za-z0-9_-]{1,128}$/.test(id)) ||
+          new Set(raw.operationIds).size !== raw.operationIds.length) {
+        throw coreError(409, "proposal_metadata_invalid", "The repository contains an invalid proposal identity manifest");
+      }
+      const binding = raw as unknown as ProposalBindingMetadata;
+      const existing = bindings.get(binding.proposalId);
+      if (existing && (existing.digest !== binding.digest ||
+          canonicalJson(existing.operationIds) !== canonicalJson(binding.operationIds) ||
+          snapshotKey(existing.snapshot) !== snapshotKey(binding.snapshot) || existing.source !== binding.source)) {
         throw coreError(409, "proposal_id_reused", "A proposal ID's immutable repository binding changed in Git history");
       }
-      digests.set(proposal.id, metadata.digest);
-      this.mergeProposal(proposals, proposal);
+      bindings.set(binding.proposalId, binding);
+    }
+    for (const version of completeVersions) {
+      if (Buffer.byteLength(version.content, "utf8") > MAX_PROPOSAL_BYTES) {
+        throw coreError(409, "proposal_metadata_invalid", "The repository contains an oversized approved proposal payload");
+      }
+      let raw: Record<string, unknown> | null;
+      try { raw = asRecord(JSON.parse(version.content)); }
+      catch { throw coreError(409, "proposal_metadata_invalid", "The repository contains an invalid approved proposal payload"); }
+      if (!raw || raw.version !== 2 || typeof raw.proposalId !== "string" ||
+          !/^[A-Za-z0-9_-]{1,128}$/.test(raw.proposalId) || version.path !== completeProposalMetadataPath(raw.proposalId) ||
+          typeof raw.digest !== "string" || !/^[a-f0-9]{64}$/.test(raw.digest)) {
+        throw coreError(409, "proposal_metadata_invalid", "The repository contains an invalid approved proposal payload");
+      }
+      try { assertPersistedProposal(raw.proposal); }
+      catch { throw coreError(409, "proposal_metadata_invalid", "The repository contains invalid approved proposal data"); }
+      const proposal = normalizedProposal(raw.proposal);
+      if (proposal.id !== raw.proposalId || proposalDigest(proposal) !== raw.digest ||
+          canonicalJson(proposalOperationIds(proposal)) !== canonicalJson(this.bindingOperationIds(bindings.get(proposal.id), proposal))) {
+        throw coreError(409, "proposal_metadata_invalid", "The approved proposal does not match its immutable identity");
+      }
+      const completeRecord: CompleteProposalMetadata = { version: 2, proposalId: proposal.id, digest: raw.digest, proposal };
+      const prior = complete.get(proposal.id);
+      if (prior && (prior.digest !== completeRecord.digest || canonicalJson(prior.proposal) !== canonicalJson(proposal))) {
+        throw coreError(409, "proposal_id_reused", "A proposal ID's complete payload changed in Git history");
+      }
+      complete.set(proposal.id, completeRecord);
+    }
+
+    const operations = await this.readOperationRecords(root, commit);
+    for (const [proposalId, binding] of bindings) {
+      const accepted = operations.filter((stored) => stored.proposalId === proposalId &&
+        binding.operationIds.includes(stored.operation.id) && !!stored.authorScope);
+      const full = complete.get(proposalId);
+      let record: DurableProposal;
+      if (full) {
+        if (accepted.length !== binding.operationIds.length ||
+            binding.operationIds.some((id) => !accepted.some((stored) => stored.operation.id === id &&
+              full.proposal.operations.some((operation) => operation.id === id && operationDigest(operation) === stored.digest)))) {
+          throw coreError(409, "proposal_metadata_invalid", "The complete proposal is not fully bound to accepted operation metadata");
+        }
+        record = completeProposalRecord(full.proposal);
+        if (record.originalDigest !== binding.digest) {
+          throw coreError(409, "proposal_metadata_invalid", "The complete proposal does not match its immutable identity digest");
+        }
+      } else {
+        const acceptedById = new Map(accepted.map((stored) => [stored.operation.id, stored.operation]));
+        record = {
+          proposal: {
+            id: binding.proposalId,
+            snapshot: structuredClone(binding.snapshot),
+            source: binding.source,
+            operations: binding.operationIds.flatMap((id) => {
+              const operation = acceptedById.get(id);
+              return operation ? [structuredClone(operation)] : [];
+            }),
+          },
+          payloadComplete: false,
+          originalDigest: binding.digest,
+          operationIds: [...binding.operationIds],
+        };
+      }
+      this.mergeDurableProposal(proposals, record);
+    }
+    for (const [proposalId, full] of complete) {
+      if (!bindings.has(proposalId)) {
+        throw coreError(409, "proposal_metadata_invalid", "An approved proposal has no immutable identity binding");
+      }
+      void full;
     }
     return proposals;
   }
 
-  private async readDurableProposals(root: string, commits: string[]): Promise<Map<string, ChangeProposal>> {
-    const proposals = new Map<string, ChangeProposal>();
+  private bindingOperationIds(binding: ProposalBindingMetadata | undefined, proposal: ChangeProposal): string[] {
+    return binding?.operationIds ?? proposalOperationIds(proposal);
+  }
+
+  private async readDurableProposals(root: string, commits: string[]): Promise<Map<string, DurableProposal>> {
+    const proposals = new Map<string, DurableProposal>();
     for (const commit of [...new Set(commits.filter(Boolean))]) {
       const found = await this.readProposalRecords(root, commit);
-      for (const proposal of found.values()) this.mergeProposal(proposals, proposal);
+      for (const proposal of found.values()) this.mergeDurableProposal(proposals, proposal);
     }
     return proposals;
   }
@@ -2377,26 +2571,30 @@ export class CoreStore implements MutationCoordinator {
 
   private buildProposalStatus(
     projectId: string,
-    proposal: ChangeProposal,
+    durable: DurableProposal,
     observation: RemoteObservation,
     storedOperations: Map<string, StoredOperation>,
     publishedOperationIds: Set<string>,
   ): ProposalStatus {
+    const proposal = durable.proposal;
     const approval = this.approvals.get(projectId)?.get(proposal.id);
     const approvedOperationIds: string[] = [];
     const checkpoints: CheckpointReceipt[] = [];
     const published: string[] = [];
-    for (const operation of proposal.operations) {
-      const digest = operationDigest(operation);
-      const stored = storedOperations.get(operation.id);
-      const matches = stored && stored.digest === digest && stored.operation.generation === operation.generation && receiptMatchesOperation(stored.receipt, operation);
-      if (approval?.operationDigests.get(operation.id) === digest || (matches && !!stored.authorScope)) {
-        approvedOperationIds.push(operation.id);
+    for (const operationId of durable.operationIds) {
+      const operation = proposal.operations.find((item) => item.id === operationId);
+      const digest = operation ? operationDigest(operation) : undefined;
+      const stored = storedOperations.get(operationId);
+      const matches = stored && stored.proposalId === proposal.id &&
+        (!digest || stored.digest === digest) && stored.operation.generation === (operation?.generation ?? stored.operation.generation) &&
+        receiptMatchesOperation(stored.receipt, stored.operation);
+      if ((digest && approval?.operationDigests.get(operationId) === digest) || (matches && !!stored.authorScope)) {
+        approvedOperationIds.push(operationId);
       }
       if (matches) checkpoints.push(structuredClone(stored.receipt));
-      if (matches && publishedOperationIds.has(operation.id)) published.push(operation.id);
+      if (matches && publishedOperationIds.has(operationId)) published.push(operationId);
     }
-    const total = proposal.operations.length;
+    const total = durable.operationIds.length;
     const checkpointedCount = checkpoints.length;
     const coveredOperationIds = new Set([
       ...approvedOperationIds,
@@ -2411,6 +2609,9 @@ export class CoreStore implements MutationCoordinator {
           : "proposed";
     return {
       proposal: structuredClone(proposal),
+      payloadComplete: durable.payloadComplete,
+      originalDigest: durable.originalDigest,
+      operationIds: [...durable.operationIds],
       state,
       approvedOperationIds,
       checkpoints,
@@ -2437,31 +2638,44 @@ export class CoreStore implements MutationCoordinator {
     root: string,
     observation: RemoteObservation,
     operations?: { records: Map<string, StoredOperation>; publishedOperationIds: Set<string> },
-  ): Promise<Map<string, ChangeProposal>> {
+  ): Promise<Map<string, DurableProposal>> {
     const storedOperations = operations ?? await this.proposalOperationRecords(root, observation);
-    const proposals = new Map<string, ChangeProposal>();
-    for (const proposal of this.proposals.get(record.id)?.values() ?? []) this.mergeProposal(proposals, proposal);
-    for (const proposal of (await this.readProposalJournal(record)).values()) this.mergeProposal(proposals, proposal);
-    const remoteProposalRecords = await this.readDurableProposals(root, [observation.snapshot.remoteCommit]);
-    const remoteProposalIds = new Set(remoteProposalRecords.keys());
+    const fullProposals = new Map<string, ChangeProposal>();
+    for (const proposal of this.proposals.get(record.id)?.values() ?? []) this.mergeProposal(fullProposals, proposal);
+    for (const proposal of (await this.readProposalJournal(record)).values()) this.mergeProposal(fullProposals, proposal);
     const commits = [...new Set([
       observation.snapshot.remoteCommit,
       ...[...storedOperations.records.values()].map((item) => item.commit),
     ])];
     const durable = await this.readDurableProposals(root, commits);
     for (const proposal of durable.values()) {
-      if (record.identity && snapshotKey({ repository: proposal.snapshot.repository, remoteCommit: "" }) !==
+      if (record.identity && snapshotKey({ repository: proposal.proposal.snapshot.repository, remoteCommit: "" }) !==
           snapshotKey({ repository: record.identity, remoteCommit: "" })) {
         throw coreError(409, "proposal_repository_mismatch", "A durable proposal belongs to a different repository identity");
       }
-      this.mergeProposal(proposals, proposal);
+      if (proposal.payloadComplete) this.mergeProposal(fullProposals, proposal.proposal);
     }
-    // A checkpoint may be durable only in this local clone. Keep its proposal in
-    // the independent journal until the manifest is present in the remote history.
-    const recoverable = new Map([...proposals].filter(([id]) => !remoteProposalIds.has(id)));
+    const proposals = new Map<string, DurableProposal>();
+    for (const proposal of durable.values()) this.mergeDurableProposal(proposals, proposal);
+    for (const proposal of fullProposals.values()) this.mergeDurableProposal(proposals, completeProposalRecord(proposal));
+
+    // Keep full unaccepted/private data until every original operation is both
+    // accepted and present in the remote history. A partial binding alone never
+    // releases the browser/Core recovery payload.
+    const recoverable = new Map<string, ChangeProposal>();
+    const fullyPublishedIds = new Set<string>();
+    for (const [id, proposal] of fullProposals) {
+      const durableProposal = proposals.get(id);
+      if (durableProposal?.payloadComplete && durableProposal.operationIds.every((operationId) =>
+        storedOperations.publishedOperationIds.has(operationId))) {
+        fullyPublishedIds.add(id);
+      } else {
+        recoverable.set(id, proposal);
+      }
+    }
     await this.writeProposalJournal(record, recoverable);
-    this.durableProposalIds.set(record.id, remoteProposalIds);
-    this.proposals.set(record.id, proposals);
+    this.durableProposalIds.set(record.id, fullyPublishedIds);
+    this.proposals.set(record.id, fullProposals);
     return proposals;
   }
 
@@ -2569,13 +2783,20 @@ export class CoreStore implements MutationCoordinator {
       const proposals = await this.loadProjectProposals(record, root, observation, storedOperations);
       const existing = proposals.get(copied.id);
       if (existing) {
-        if (canonicalJson(existing) !== canonicalJson(copied)) {
+        const digest = proposalDigest(copied);
+        if (existing.originalDigest !== digest || canonicalJson(existing.operationIds) !== canonicalJson(proposalOperationIds(copied))) {
           throw coreError(409, "proposal_id_reused", "The proposal ID is already bound to a different payload");
         }
-        return structuredClone(existing);
+        if (existing.payloadComplete) return structuredClone(existing.proposal);
+        const fullProposals = new Map(this.proposals.get(record.id) ?? []);
+        fullProposals.set(copied.id, copied);
+        const durableIds = this.durableProposalIds.get(record.id) ?? new Set<string>();
+        await this.writeProposalJournal(record, new Map([...fullProposals].filter(([id]) => !durableIds.has(id))));
+        this.proposals.set(record.id, fullProposals);
+        return structuredClone(copied);
       }
       if (snapshotKey(proposalBase) !== snapshotKey(observation.snapshot)) throw coreError(409, "proposal_snapshot_stale", "The proposal was based on a stale repository snapshot");
-      const updated = new Map(proposals);
+      const updated = new Map(this.proposals.get(record.id) ?? []);
       updated.set(copied.id, copied);
       const durableIds = this.durableProposalIds.get(record.id) ?? new Set<string>();
       await this.writeProposalJournal(record, new Map([...updated].filter(([id]) => !durableIds.has(id))));
@@ -2593,8 +2814,10 @@ export class CoreStore implements MutationCoordinator {
       const { record, root } = await this.getProject(projectId);
       const storedOperations = await this.proposalOperationRecords(root, observation);
       const proposals = await this.loadProjectProposals(record, root, observation, storedOperations);
-      const proposal = proposals.get(approval.proposalId);
-      if (!proposal) throw coreError(404, "proposal_not_found", "The proposal is no longer available for approval");
+      const durableProposal = proposals.get(approval.proposalId);
+      if (!durableProposal) throw coreError(404, "proposal_not_found", "The proposal is no longer available for approval");
+      if (!durableProposal.payloadComplete) throw coreError(409, "proposal_payload_incomplete", "The original proposal payload must be restored before approving additional operations");
+      const proposal = durableProposal.proposal;
       if (snapshotKey({ repository: proposal.snapshot.repository, remoteCommit: proposal.snapshot.remoteCommit }) !== snapshotKey(observation.snapshot)) {
         throw coreError(409, "proposal_snapshot_stale", "The repository changed after this proposal was created; review a fresh proposal before approving it");
       }
@@ -2646,7 +2869,8 @@ export class CoreStore implements MutationCoordinator {
     const digest = operationDigest(operation);
     const remoteOperations = observation.snapshot.remoteCommit ? await this.readOperationRecords(root, observation.snapshot.remoteCommit) : [];
     const localOperations = await this.readLocalOperationRecords(root);
-    let proposalManifest: { path: string; content: string } | undefined;
+    let proposalBinding: { path: string; content: string } | undefined;
+    let completeProposalManifest: { path: string; content: string } | undefined;
     let proposalId: string | undefined;
     if (acceptedProposal) {
       try { assertPersistedProposal(acceptedProposal); }
@@ -2655,20 +2879,52 @@ export class CoreStore implements MutationCoordinator {
       if (!proposal.operations.some((item) => item.id === operation.id && operationDigest(item) === digest)) {
         throw coreError(409, "proposal_operation_mismatch", "The approved proposal does not contain this exact operation");
       }
-      const serialized = JSON.stringify({ version: 1, proposalId: proposal.id, digest: proposalDigest(proposal), proposal }, null, 2) + "\n";
-      if (Buffer.byteLength(serialized, "utf8") > MAX_PROPOSAL_BYTES) {
-        throw coreError(413, "proposal_too_large", "The complete proposal exceeds the recovery size limit");
-      }
       const proposalPath = proposalMetadataPath(proposal.id);
       const knownProposals = await this.readDurableProposals(root, [
         observation.snapshot.remoteCommit,
         ...localOperations.map((item) => item.commit),
       ]);
       const boundProposal = knownProposals.get(proposal.id);
-      if (boundProposal && canonicalJson(boundProposal) !== canonicalJson(proposal)) {
+      const originalDigest = proposalDigest(proposal);
+      const operationIds = proposalOperationIds(proposal);
+      if (boundProposal && (boundProposal.originalDigest !== originalDigest ||
+          canonicalJson(boundProposal.operationIds) !== canonicalJson(operationIds))) {
         throw coreError(409, "proposal_id_reused", "The proposal ID is already bound to a different payload");
       }
-      proposalManifest = { path: proposalPath, content: serialized };
+      if (!boundProposal) {
+        const binding: ProposalBindingMetadata = {
+          version: 2,
+          proposalId: proposal.id,
+          digest: originalDigest,
+          snapshot: structuredClone(proposal.snapshot),
+          source: proposal.source,
+          operationIds,
+        };
+        const serialized = `${JSON.stringify(binding, null, 2)}\n`;
+        if (Buffer.byteLength(serialized, "utf8") > 64 * 1024) {
+          throw coreError(413, "proposal_too_large", "The proposal identity manifest exceeds its recovery size limit");
+        }
+        proposalBinding = { path: proposalPath, content: serialized };
+      }
+      const acceptedIds = new Set([...remoteOperations, ...localOperations]
+        .filter((stored) => stored.proposalId === proposal.id && !!stored.authorScope)
+        .map((stored) => stored.operation.id));
+      for (const operationOfProposal of proposal.operations) {
+        const stored = [...remoteOperations, ...localOperations].find((item) => item.operation.id === operationOfProposal.id);
+        if (stored && stored.proposalId === proposal.id && stored.digest !== operationDigest(operationOfProposal)) {
+          throw coreError(409, "proposal_id_reused", "An accepted operation differs from the original proposal payload");
+        }
+      }
+      if (authorScope) acceptedIds.add(operation.id);
+      if (operationIds.every((id) => acceptedIds.has(id))) {
+        const completePath = completeProposalMetadataPath(proposal.id);
+        const completeContent = `${JSON.stringify({ version: 2, proposalId: proposal.id, digest: originalDigest, proposal }, null, 2)}\n`;
+        if (Buffer.byteLength(completeContent, "utf8") > MAX_PROPOSAL_BYTES) {
+          throw coreError(413, "proposal_too_large", "The fully approved proposal exceeds its recovery size limit");
+        }
+        const existingComplete = boundProposal?.payloadComplete ? proposal : undefined;
+        if (!existingComplete) completeProposalManifest = { path: completePath, content: completeContent };
+      }
       proposalId = proposal.id;
     }
     const prior = [...remoteOperations, ...localOperations].find((item) => item.operation.id === operation.id);
@@ -2681,17 +2937,31 @@ export class CoreStore implements MutationCoordinator {
     const canAdvanceToRemote = !!observation.snapshot.remoteCommit &&
       (!trackedHead || await this.isAncestor(root, trackedHead, observation.snapshot.remoteCommit));
     const parent = !pendingLocal && canAdvanceToRemote ? observation.snapshot.remoteCommit : trackedHead;
-    if (acceptedProposal && proposalManifest) {
-      const existingFile = parent ? await this.snapshotFile(root, parent, proposalManifest.path) : null;
+    if (acceptedProposal && proposalBinding) {
+      const existingFile = parent ? await this.snapshotFile(root, parent, proposalBinding.path) : null;
       if (existingFile) {
         let existingMetadata: Record<string, unknown> | null;
         try { existingMetadata = asRecord(JSON.parse(existingFile.content)); }
         catch { throw coreError(409, "proposal_metadata_invalid", "The repository contains an invalid proposal manifest"); }
-        if (!existingMetadata || existingMetadata.version !== 1 || existingMetadata.proposalId !== acceptedProposal.id ||
-            existingMetadata.digest !== proposalDigest(acceptedProposal)) {
+        if (!existingMetadata || existingMetadata.version !== 2 || existingMetadata.proposalId !== acceptedProposal.id ||
+            existingMetadata.digest !== proposalDigest(acceptedProposal) ||
+            canonicalJson(existingMetadata.operationIds) !== canonicalJson(proposalOperationIds(acceptedProposal))) {
           throw coreError(409, "proposal_id_reused", "The proposal ID is already bound to a different repository payload");
         }
-        proposalManifest = undefined;
+        proposalBinding = undefined;
+      }
+    }
+    if (acceptedProposal && completeProposalManifest) {
+      const existingFile = parent ? await this.snapshotFile(root, parent, completeProposalManifest.path) : null;
+      if (existingFile) {
+        let existingMetadata: Record<string, unknown> | null;
+        try { existingMetadata = asRecord(JSON.parse(existingFile.content)); }
+        catch { throw coreError(409, "proposal_metadata_invalid", "The complete proposal manifest is invalid"); }
+        if (!existingMetadata || existingMetadata.version !== 2 || existingMetadata.proposalId !== acceptedProposal.id ||
+            existingMetadata.digest !== proposalDigest(acceptedProposal)) {
+          throw coreError(409, "proposal_id_reused", "The complete proposal payload differs from its immutable binding");
+        }
+        completeProposalManifest = undefined;
       }
     }
     const readScopeSnapshot: SnapshotId = {
@@ -2720,16 +2990,12 @@ export class CoreStore implements MutationCoordinator {
       }
     }
     const metadataPath = operationMetadataPath(operation.id);
-    const proposalPath = acceptedProposal ? proposalMetadataPath(acceptedProposal.id) : undefined;
     const metadataFiles = [
       { path: metadataPath, content: "" },
-      ...(proposalManifest ? [proposalManifest] : []),
+      ...(proposalBinding ? [proposalBinding] : []),
+      ...(completeProposalManifest ? [completeProposalManifest] : []),
     ];
-    const touched = [...new Set([
-      ...operation.writes.map((write) => write.path),
-      ...metadataFiles.map((item) => item.path),
-      ...(proposalPath ? [proposalPath] : []),
-    ])];
+    const touched = [...new Set([...operation.writes.map((write) => write.path), ...metadataFiles.map((item) => item.path)])];
     if (parent && (await git(root, ["status", "--porcelain", "--untracked-files=all", "--", ...touched])).trim()) {
       throw coreError(409, "working_tree_path_dirty", "A changed file has uncommitted workspace edits");
     }
@@ -2744,7 +3010,6 @@ export class CoreStore implements MutationCoordinator {
       ...(proposalId ? { proposalId } : {}),
     };
     metadataFiles[0]!.content = `${JSON.stringify(metadata, null, 2)}\n`;
-    if (proposalManifest) metadataFiles[1] = proposalManifest;
     const commit = await this.createCommit(root, parent, operation.writes, metadataFiles, operation.message);
     const receipt: CheckpointReceipt = {
       operationId: operation.id,
@@ -2799,8 +3064,9 @@ export class CoreStore implements MutationCoordinator {
         .filter(([, item]) => item.operationDigests.get(operation.id) === digest);
       if (!approvals.length) throw coreError(403, "author_approval_required", "An authenticated author must approve this operation before checkpointing");
       const [proposalId, approval] = approvals.at(-1)!;
-      const acceptedProposal = proposals.get(proposalId);
-      if (!acceptedProposal) throw coreError(404, "proposal_not_found", "The approved proposal is no longer available for checkpointing");
+      const proposalRecord = proposals.get(proposalId);
+      if (!proposalRecord?.payloadComplete) throw coreError(404, "proposal_not_found", "The approved proposal is no longer available for checkpointing");
+      const acceptedProposal = proposalRecord.proposal;
       const hierarchyRevisions = [...new Set(approvals.flatMap(([, item]) => {
         const revision = item.hierarchyRevisions.get(operation.id);
         return revision ? [revision] : [];
@@ -3021,20 +3287,31 @@ export class CoreStore implements MutationCoordinator {
           if (existing.digest !== stored.digest || existing.hierarchyRevision !== stored.hierarchyRevision || existing.proposalId !== stored.proposalId) conflicts.push(metaPath);
         } catch { conflicts.push(metaPath); }
       }
-      let boundProposal: ChangeProposal | undefined;
+      let boundProposal: DurableProposal | undefined;
       let boundProposalPath: string | undefined;
+      let completeProposalPath: string | undefined;
       if (stored.proposalId) {
         boundProposalPath = proposalMetadataPath(stored.proposalId);
         const storedProposals = await this.readProposalRecords(root, stored.commit);
         boundProposal = storedProposals.get(stored.proposalId);
         const storedManifest = await this.snapshotFile(root, stored.commit, boundProposalPath);
-        if (!boundProposal || !storedManifest) conflicts.push(boundProposalPath);
+        const legacyManifest = storedManifest ? null : await this.snapshotFile(root, stored.commit, legacyProposalMetadataPath(stored.proposalId));
+        if (!boundProposal || (!storedManifest && !legacyManifest) ||
+            !boundProposal.operationIds.includes(operation.id) ||
+            !boundProposal.proposal.operations.some((item) => item.id === operation.id && operationDigest(item) === stored.digest)) {
+          conflicts.push(boundProposalPath);
+        }
         else {
           try {
-            const parsed = asRecord(JSON.parse(storedManifest.content));
-            if (!parsed || parsed.proposalId !== stored.proposalId || parsed.digest !== proposalDigest(boundProposal)) conflicts.push(boundProposalPath);
+            const parsed = asRecord(JSON.parse((storedManifest ?? legacyManifest)!.content));
+            if (!parsed || parsed.proposalId !== stored.proposalId || parsed.digest !== boundProposal.originalDigest) conflicts.push(boundProposalPath);
           } catch { conflicts.push(boundProposalPath); }
         }
+        if (boundProposal?.payloadComplete && boundProposal.operationIds.every((id) => {
+          const accepted = [...localOperations, ...remoteOperations].find((item) =>
+            item.operation.id === id && item.proposalId === stored.proposalId);
+          return !!accepted?.authorScope;
+        })) completeProposalPath = completeProposalMetadataPath(stored.proposalId);
       }
       if (conflicts.length) {
         outcomes.push({ operationId: operation.id, state: "conflict", receipt: stored.receipt, paths: [...new Set(conflicts)] });
@@ -3062,7 +3339,8 @@ export class CoreStore implements MutationCoordinator {
         if (replayManifest) {
           try {
             const parsed = asRecord(JSON.parse(replayManifest.content));
-            if (!parsed || parsed.proposalId !== boundProposal.id || parsed.digest !== proposalDigest(boundProposal)) {
+            if (!parsed || parsed.proposalId !== boundProposal.proposal.id || parsed.digest !== boundProposal.originalDigest ||
+                canonicalJson(parsed.operationIds) !== canonicalJson(boundProposal.operationIds)) {
               outcomes.push({ operationId: operation.id, state: "conflict", receipt: stored.receipt, paths: [...paths, boundProposalPath] });
               continue;
             }
@@ -3073,8 +3351,40 @@ export class CoreStore implements MutationCoordinator {
         } else {
           metadataFiles.push({
             path: boundProposalPath,
-            content: `${JSON.stringify({ version: 1, proposalId: boundProposal.id, digest: proposalDigest(boundProposal), proposal: boundProposal }, null, 2)}\n`,
+            content: `${JSON.stringify({
+              version: 2,
+              proposalId: boundProposal.proposal.id,
+              digest: boundProposal.originalDigest,
+              snapshot: boundProposal.proposal.snapshot,
+              source: boundProposal.proposal.source,
+              operationIds: boundProposal.operationIds,
+            }, null, 2)}\n`,
           });
+        }
+        if (completeProposalPath && boundProposal.payloadComplete) {
+          const completeManifest = replayHead ? await this.snapshotFile(root, replayHead, completeProposalPath) : null;
+          if (completeManifest) {
+            try {
+              const parsed = asRecord(JSON.parse(completeManifest.content));
+              if (!parsed || parsed.proposalId !== boundProposal.proposal.id || parsed.digest !== boundProposal.originalDigest) {
+                outcomes.push({ operationId: operation.id, state: "conflict", receipt: stored.receipt, paths: [...paths, completeProposalPath] });
+                continue;
+              }
+            } catch {
+              outcomes.push({ operationId: operation.id, state: "conflict", receipt: stored.receipt, paths: [...paths, completeProposalPath] });
+              continue;
+            }
+          } else {
+            metadataFiles.push({
+              path: completeProposalPath,
+              content: `${JSON.stringify({
+                version: 2,
+                proposalId: boundProposal.proposal.id,
+                digest: boundProposal.originalDigest,
+                proposal: boundProposal.proposal,
+              }, null, 2)}\n`,
+            });
+          }
         }
       }
       const replayCommit = await this.createCommit(root, replayHead, operation.writes, metadataFiles, operation.message);
