@@ -199,7 +199,7 @@ function makeActions(moduleContext: ModuleContext): ModuleAction[] {
     }),
     action("nlp.saveSynonymGroup", "propose", { parse: (value) => {
       const input = record(value, "input");
-      if (!Array.isArray(input.words) || input.words.length < 2 || input.words.some((word) => typeof word !== "string" || !word.trim() || word.length > 128)) throw new TypeError("words must contain at least two non-empty strings");
+      if (!Array.isArray(input.words) || input.words.length < 1 || input.words.some((word) => typeof word !== "string" || !word.trim() || word.length > 128)) throw new TypeError("words must contain at least one non-empty string");
       if (input.context !== undefined && input.context !== "negative" && input.context !== "positive") throw new TypeError("context must be negative or positive");
       if (input.mergeGroupIndex !== undefined && (!Number.isSafeInteger(input.mergeGroupIndex) || (input.mergeGroupIndex as number) < 0)) throw new TypeError("mergeGroupIndex must be a non-negative integer");
       return { words: [...new Set((input.words as string[]).map((word) => word.trim()))], context: input.context as "negative" | "positive" | undefined, mergeGroupIndex: input.mergeGroupIndex as number | undefined };
