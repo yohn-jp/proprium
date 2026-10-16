@@ -14,7 +14,7 @@ const SNAPSHOT: SnapshotId = {
   remoteCommit: "a".repeat(40),
 };
 
-function makeStore(): CoreStore {
+function makeStore(onSaveScene: () => void = () => undefined): CoreStore {
   const project = { id: "project-1", url: "https://github.com/owner/work.git", branch: "main" };
   const scene = { id: "scene-1", title: "Opening", text: "canonical draft", revision: "revision-1" };
   return {
@@ -30,6 +30,7 @@ function makeStore(): CoreStore {
     }),
     readScene: async () => scene,
     saveScene: async (_projectId: string, _sceneId: string, input: { text: string; revision: string }) => {
+      onSaveScene();
       if (input.revision !== scene.revision) {
         throw { status: 412, code: "STALE_REVISION", message: "Scene changed since it was read" };
       }
@@ -45,6 +46,7 @@ function makeSnapshotStore() {
   const proposed: ChangeProposal[] = [];
   const approvals: Array<{ proposalId: string; operationIds: string[]; authorScope: string }> = [];
   const pinnedReads: Array<string | undefined> = [];
+  const snapshotReads: Array<{ kind: "tree" | "scene"; view?: string; pinned?: string }> = [];
   const document = { path: "manuscript/ms-one/scene-one.md", content: "---\nid: scene-one\n---\n\nA harbor at night.\n", revision: "body-revision" };
   const store = Object.assign(makeStore(), {
     async reader(_projectId: string, _view = "remote", pinned?: string) {
@@ -60,11 +62,13 @@ function makeSnapshotStore() {
       };
     },
     async observe() { return { snapshot: SNAPSHOT, checkpointHead: SNAPSHOT.remoteCommit, observedAt: "2026-10-17T00:00:00.000Z", state: "fresh" as const, pending: [] }; },
-    async readTreeSnapshot(_projectId: string, _view?: "remote" | "checkpoint", pinned?: string) {
+    async readTreeSnapshot(_projectId: string, view?: "remote" | "checkpoint", pinned?: string) {
+      snapshotReads.push({ kind: "tree", view, pinned });
       const snapshot = { ...SNAPSHOT, ...(pinned ? { remoteCommit: pinned } : {}) };
       return { snapshot, tree: { title: "A Work", volumes: [] } };
     },
-    async readSceneSnapshot(_projectId: string, sceneId: string, _view?: "remote" | "checkpoint", pinned?: string) {
+    async readSceneSnapshot(_projectId: string, sceneId: string, view?: "remote" | "checkpoint", pinned?: string) {
+      snapshotReads.push({ kind: "scene", view, pinned });
       return {
         snapshot: { ...SNAPSHOT, ...(pinned ? { remoteCommit: pinned } : {}) },
         scene: { id: sceneId, title: "Opening", text: "A harbor at night.", revision: "scene-revision" },
@@ -92,10 +96,18 @@ function makeSnapshotStore() {
     async approve(_projectId: string, approval: { proposalId: string; operationIds: string[]; authorScope: string }) { approvals.push(approval); },
     async checkpoint(_projectId: string, operation: ChangeOperation) { return { operationId: operation.id, generation: operation.generation, localCommit: "c".repeat(40), remoteBase: SNAPSHOT.remoteCommit, revisions: operation.writes.map(({ path, revision }) => ({ path, revision })) }; },
   }) as unknown as CoreStore;
-  return { store, proposed, approvals, pinnedReads };
+  return { store, proposed, approvals, pinnedReads, snapshotReads };
 }
 
-function publishingRuntime(cacheDirectory: string, seenPaths: string[]): ModuleRuntime {
+interface PublishingObservations {
+  paths: string[];
+  forwardedHeaders?: { authorization: string | null; cookie: string | null; proxyAuthorization: string | null; mcpSessionId: string | null };
+  publicCoreActions?: ActionResult;
+  publicActionIds?: string[];
+  linkedReaderError?: string;
+}
+
+function publishingRuntime(cacheDirectory: string, observed: PublishingObservations): ModuleRuntime {
   const manifest: ModuleManifest = {
     id: "publishing", version: "0.1.0", contractVersion: 1,
     dependencies: [], provides: [], requires: [], statePaths: [], locality: "local",
@@ -112,14 +124,76 @@ function publishingRuntime(cacheDirectory: string, seenPaths: string[]): ModuleR
     http: [{
       id: "share", path: "share/:token", methods: ["GET"], access: "public", effect: "read",
       async handle(request, context) {
-        seenPaths.push(new URL(request.url).pathname);
-        const status = await context.invoke("core.status", {});
-        return Response.json({ path: new URL(request.url).pathname, access: context.projectId, snapshot: context.reader.snapshot.remoteCommit, status });
+        observed.paths.push(new URL(request.url).pathname);
+        observed.forwardedHeaders = {
+          authorization: request.headers.get("authorization"),
+          cookie: request.headers.get("cookie"),
+          proxyAuthorization: request.headers.get("proxy-authorization"),
+          mcpSessionId: request.headers.get("mcp-session-id"),
+        };
+        observed.publicCoreActions = await context.invoke("core.proposals.list", {});
+        observed.publicActionIds = (await context.listActions()).map(({ id }) => id);
+        try { await context.linkedReader("123"); }
+        catch (error) { observed.linkedReaderError = typeof error === "object" && error !== null && "code" in error ? String(error.code) : "unavailable"; }
+        return Response.json({ path: new URL(request.url).pathname, access: context.projectId, snapshot: context.reader.snapshot.remoteCommit }, {
+          headers: {
+            "Cache-Control": "no-store",
+            "Referrer-Policy": "no-referrer",
+            "X-Robots-Tag": "noindex, nofollow",
+          },
+        });
       },
     }],
     async dispose() {},
   };
   return new ModuleRuntime({ manifests: [manifest], enabled: ["publishing"], loaders: { publishing: async () => definition }, cacheDirectory });
+}
+
+function actionBoundaryRuntime(cacheDirectory: string): ModuleRuntime {
+  const schema: ValueSchema = { parse(value) { return value; } };
+  const mcpManifest: ModuleManifest = {
+    id: "mcp", version: "0.1.0", contractVersion: 1,
+    dependencies: [], provides: [], requires: [], statePaths: [], locality: "local",
+  };
+  const nlpManifest: ModuleManifest = {
+    id: "nlp", version: "0.1.0", contractVersion: 1,
+    dependencies: [], provides: [], requires: [], statePaths: [], locality: "local",
+  };
+  const mcpDefinition: ModuleDefinition = {
+    manifest: mcpManifest,
+    actions: [{
+      id: "propose", effect: "propose", inputSchema: schema, outputSchema: schema,
+      async invoke(input, context): Promise<ActionResult> {
+        const proposal = await context.propose([input as ChangeOperation]);
+        return { ok: true, snapshot: context.reader.snapshot, data: { proposal } };
+      },
+    }],
+    ui: [],
+    http: [{
+      id: "propose", path: "propose", methods: ["POST"], access: "owner", effect: "propose",
+      async handle(request, context) {
+        const proposal = await context.propose([await request.json() as ChangeOperation]);
+        return Response.json({ source: proposal.source });
+      },
+    }],
+    async dispose() {},
+  };
+  const nlpDefinition: ModuleDefinition = {
+    manifest: nlpManifest,
+    actions: [{
+      id: "analyze", effect: "compute", inputSchema: schema, outputSchema: schema,
+      async invoke(_input, context): Promise<ActionResult> {
+        const nested = await context.invoke("core.hierarchy.create", { kind: "volume", id: "blocked", title: "Blocked" });
+        return { ok: true, snapshot: context.reader.snapshot, data: { nested } };
+      },
+    }],
+    ui: [],
+    async dispose() {},
+  };
+  return new ModuleRuntime({
+    manifests: [mcpManifest, nlpManifest], enabled: ["mcp", "nlp"], cacheDirectory,
+    loaders: { mcp: async () => mcpDefinition, nlp: async () => nlpDefinition },
+  });
 }
 
 async function startCustomApi(store: CoreStore, staticDir: string, options: { trustProxy?: boolean; runtime?: ModuleRuntime } = {}) {
@@ -201,7 +275,8 @@ describe("Scriptorium HTTP boundary", () => {
   it("uses an HttpOnly same-site session and enforces same-origin writes", async (t) => {
     const staticDir = await mkdtemp(resolve(tmpdir(), "scriptorium-api-"));
     tempDirs.push(staticDir);
-    const apiServer = await startApi(staticDir);
+    let directSaveCalls = 0;
+    const apiServer = await startCustomApi(makeStore(() => { directSaveCalls += 1; }), staticDir);
     t.after(apiServer.close);
 
     const crossOrigin = await fetch(`${apiServer.base}/api/login`, {
@@ -236,16 +311,17 @@ describe("Scriptorium HTTP boundary", () => {
       headers: { Cookie: cookie, "Content-Type": "application/json", Origin: apiServer.base },
       body: JSON.stringify({ text: "new draft", revision: "revision-1" }),
     });
-    assert.equal(mutation.status, 200);
-    assert.equal((await mutation.json() as { text: string }).text, "new draft");
+    assert.equal(mutation.status, 410);
+    assert.equal((await mutation.json() as { code: string }).code, "SCENE_PROPOSAL_REQUIRED");
+    assert.equal(directSaveCalls, 0);
 
     const stale = await fetch(`${apiServer.base}/api/projects/project-1/scenes/scene-1`, {
       method: "PUT",
       headers: { Cookie: cookie, "Content-Type": "application/json", Origin: apiServer.base },
       body: JSON.stringify({ text: "must not overwrite", revision: "revision-old" }),
     });
-    assert.equal(stale.status, 412);
-    assert.equal((await stale.json() as { code: string }).code, "STALE_REVISION");
+    assert.equal(stale.status, 410);
+    assert.equal(directSaveCalls, 0);
 
     const logout = await fetch(`${apiServer.base}/api/logout`, {
       method: "POST",
@@ -289,6 +365,17 @@ describe("Scriptorium HTTP boundary", () => {
 
     const projects = await fetch(`${apiServer.base}/api/projects`, { headers: auth });
     assert.deepEqual(await projects.json(), [{ id: "project-1", url: "https://github.com/owner/work.git", branch: "main" }]);
+    assert.equal((await fetch(`${apiServer.base}/api/projects/project-1/manuscripts`, { headers: auth })).status, 404);
+    const defaultTree = await fetch(`${apiServer.base}/api/projects/project-1/tree`, { headers: auth });
+    assert.equal((await defaultTree.json() as { snapshot: SnapshotId }).snapshot.remoteCommit, SNAPSHOT.remoteCommit);
+    assert.deepEqual(fixture.snapshotReads.at(-1), { kind: "tree", view: "remote", pinned: undefined });
+    const defaultScene = await fetch(`${apiServer.base}/api/projects/project-1/scenes/scene-one`, { headers: auth });
+    assert.equal((await defaultScene.json() as { snapshot: SnapshotId }).snapshot.remoteCommit, SNAPSHOT.remoteCommit);
+    assert.deepEqual(fixture.snapshotReads.at(-1), { kind: "scene", view: "remote", pinned: undefined });
+    const checkpointId = "c".repeat(40);
+    const checkpointTree = await fetch(`${apiServer.base}/api/projects/project-1/tree?view=checkpoint&snapshot=${checkpointId}`, { headers: auth });
+    assert.equal(checkpointTree.status, 200);
+    assert.deepEqual(fixture.snapshotReads.at(-1), { kind: "tree", view: "checkpoint", pinned: checkpointId });
     assert.equal((await fetch(`${apiServer.base}/api/nlp/features`)).status, 401);
     const providerNone = await fetch(`${apiServer.base}/api/nlp/features`, { headers: auth });
     assert.equal((await providerNone.json() as { providerKind: string }).providerKind, "none");
@@ -371,12 +458,56 @@ describe("Scriptorium HTTP boundary", () => {
     assert.deepEqual(fixture.approvals, [{ proposalId: "mcp-batch-1", operationIds: [operation.id], authorScope: "owner" }]);
   });
 
+  it("allows bearer compute under runtime effect limits and host-assigns MCP proposal source", async (t) => {
+    const staticDir = await mkdtemp(resolve(tmpdir(), "scriptorium-api-effects-"));
+    const cacheDir = await mkdtemp(resolve(tmpdir(), "scriptorium-api-effects-cache-"));
+    tempDirs.push(staticDir, cacheDir);
+    const fixture = makeSnapshotStore();
+    const apiServer = await startCustomApi(fixture.store, staticDir, { runtime: actionBoundaryRuntime(cacheDir) });
+    t.after(apiServer.close);
+    const bearer = { Authorization: `Bearer ${ACCESS_TOKEN}`, "Content-Type": "application/json" };
+
+    const version = await fetch(`${apiServer.base}/api/version`);
+    assert.deepEqual((await version.json() as { auth: string[] }).auth, ["cookie-owner", "bearer-read-compute-propose"]);
+    const computed = await fetch(`${apiServer.base}/api/projects/project-1/actions/nlp.analyze`, {
+      method: "POST", headers: bearer, body: JSON.stringify({ input: {} }),
+    });
+    const computeResult = await computed.json() as ActionResult<{ nested: ActionResult }>;
+    assert.equal(computeResult.ok, true);
+    assert.equal(computeResult.ok && computeResult.data.nested.ok, false);
+    assert.equal(computeResult.ok && !computeResult.data.nested.ok && computeResult.data.nested.error.code, "action_effect_denied");
+    assert.equal(fixture.proposed.length, 0, "compute must not reach a host proposal port");
+
+    const operation: ChangeOperation = {
+      id: "mcp-cookie-operation", generation: 0, repository: SNAPSHOT.repository, baseRemoteCommit: SNAPSHOT.remoteCommit,
+      effect: "metadata", reads: [], writes: [], message: "MCP contribution proposal",
+    };
+    const owner = await login(apiServer.base);
+    const actionProposal = await fetch(`${apiServer.base}/api/projects/project-1/actions/mcp.propose`, {
+      method: "POST",
+      headers: { Cookie: owner.cookie, "Content-Type": "application/json", Origin: apiServer.base },
+      body: JSON.stringify({ input: operation }),
+    });
+    assert.equal(actionProposal.status, 200);
+    assert.equal((await actionProposal.json() as ActionResult<{ proposal: ChangeProposal }>).ok, true);
+    assert.equal(fixture.proposed[0]?.source, "mcp");
+
+    const httpProposal = await fetch(`${apiServer.base}/api/projects/project-1/modules/mcp/propose`, {
+      method: "POST",
+      headers: { Cookie: owner.cookie, "Content-Type": "application/json", Origin: apiServer.base },
+      body: JSON.stringify(operation),
+    });
+    assert.equal(httpProposal.status, 200);
+    assert.deepEqual(await httpProposal.json(), { source: "mcp" });
+    assert.equal(fixture.proposed[1]?.source, "mcp");
+  });
+
   it("passes public module requests through the registered relative route with a fresh remote reader", async (t) => {
     const staticDir = await mkdtemp(resolve(tmpdir(), "scriptorium-api-module-"));
     const cacheDir = await mkdtemp(resolve(tmpdir(), "scriptorium-api-module-cache-"));
     tempDirs.push(staticDir, cacheDir);
-    const seenPaths: string[] = [];
-    const runtime = publishingRuntime(cacheDir, seenPaths);
+    const observed: PublishingObservations = { paths: [] };
+    const runtime = publishingRuntime(cacheDir, observed);
     const apiServer = await startCustomApi(makeSnapshotStore().store, staticDir, { runtime });
     t.after(apiServer.close);
 
@@ -390,14 +521,71 @@ describe("Scriptorium HTTP boundary", () => {
 
     const ownerRoute = await fetch(`${apiServer.base}/api/projects/project-1/modules/publishing/share/secret`);
     assert.equal(ownerRoute.status, 401);
-    const publicResponse = await fetch(`${apiServer.base}/api/public/repos/123/modules/publishing/share/secret?lang=en`);
+    const owner = await login(apiServer.base);
+    const publicResponse = await fetch(`${apiServer.base}/api/public/repos/123/modules/publishing/share/secret?lang=en`, {
+      headers: {
+        Authorization: `Bearer ${ACCESS_TOKEN}`,
+        Cookie: owner.cookie,
+        "Proxy-Authorization": "Basic ambient-proxy-secret",
+        "Mcp-Session-Id": "mcp-session-123",
+      },
+    });
     assert.equal(publicResponse.status, 200);
     const publicBody = await publicResponse.json() as { path: string; access: string; snapshot: string };
     assert.equal(publicBody.path, "/share/secret");
     assert.equal(publicBody.access, "project-1");
     assert.equal(publicBody.snapshot, SNAPSHOT.remoteCommit);
-    assert.deepEqual(seenPaths, ["/share/secret"]);
+    assert.deepEqual(observed.paths, ["/share/secret"]);
     assert.equal(publicResponse.headers.get("cache-control"), "no-store");
+    assert.equal(publicResponse.headers.get("referrer-policy"), "no-referrer");
+    assert.equal(publicResponse.headers.get("x-robots-tag"), "noindex, nofollow");
+    assert.deepEqual(observed.forwardedHeaders, {
+      authorization: null,
+      cookie: null,
+      proxyAuthorization: null,
+      mcpSessionId: "mcp-session-123",
+    });
+    assert.equal(observed.publicCoreActions?.ok, false);
+    assert.equal(observed.publicCoreActions?.ok === false && observed.publicCoreActions.error.code, "public_action_unavailable");
+    assert.equal(observed.publicActionIds?.some((id) => id.startsWith("core.")), false);
+    assert.equal(observed.linkedReaderError, "public_access_restricted");
+  });
+
+  it("bounds shutdown when an in-flight module handler ignores cancellation", async (t) => {
+    const staticDir = await mkdtemp(resolve(tmpdir(), "scriptorium-api-drain-"));
+    const cacheDir = await mkdtemp(resolve(tmpdir(), "scriptorium-api-drain-cache-"));
+    tempDirs.push(staticDir, cacheDir);
+    const manifest: ModuleManifest = {
+      id: "mcp", version: "0.1.0", contractVersion: 1,
+      dependencies: [], provides: [], requires: [], statePaths: [], locality: "local",
+    };
+    let markEntered!: () => void;
+    const entered = new Promise<void>((resolveEntered) => { markEntered = resolveEntered; });
+    const definition: ModuleDefinition = {
+      manifest, actions: [], ui: [],
+      http: [{
+        id: "hang", path: "hang", methods: ["GET"], access: "owner", effect: "read",
+        async handle() { markEntered(); return await new Promise<Response>(() => undefined); },
+      }],
+      async dispose() {},
+    };
+    const runtime = new ModuleRuntime({
+      manifests: [manifest], enabled: ["mcp"], cacheDirectory: cacheDir, moduleDrainTimeoutMs: 50,
+      loaders: { mcp: async () => definition },
+    });
+    const apiServer = await startCustomApi(makeSnapshotStore().store, staticDir, { runtime });
+    let closeCalled = false;
+    t.after(async () => { if (!closeCalled) await apiServer.close().catch(() => undefined); });
+    const request = fetch(`${apiServer.base}/api/projects/project-1/modules/mcp/hang`, {
+      headers: { Authorization: `Bearer ${ACCESS_TOKEN}` },
+    }).catch((error: unknown) => error);
+    await entered;
+    const startedAt = Date.now();
+    closeCalled = true;
+    const closeError = await apiServer.close().then(() => undefined, (error: unknown) => error);
+    assert.ok(Date.now() - startedAt < 7_000, "server.close must finish after the bounded drain deadline");
+    assert.equal((closeError as { code?: string } | undefined)?.code, "module_drain_timeout");
+    assert.ok(await request instanceof Error, "the forcibly closed in-flight request must terminate");
   });
 
   it("stores scratch text and bounded attachments only through Core proposal/checkpoint operations", async (t) => {

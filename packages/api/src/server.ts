@@ -7,7 +7,7 @@ import { extname, resolve, sep } from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
 import Fastify, { type FastifyInstance, type FastifyRequest } from "fastify";
 import { CONTRACT_VERSION, snapshotKey, type ActionDescriptor, type ActionResult, type ChangeOperation, type ChangeProposal, type HttpContribution, type ModuleAction, type ModuleActionContext, type ModuleId, type ModuleStatus, type ProposalEvidence, type SnapshotId, type ValueSchema } from "@scriptorium/contracts";
-import type { CoreStore } from "@scriptorium/core";
+import type { CoreStore, CreateHierarchyInput, HierarchyTarget, ReorderHierarchyInput } from "@scriptorium/core";
 import { ModuleRuntime, type ActionHostContext, type ModuleLoader, type ModuleRuntimeOptions } from "@scriptorium/module-runtime";
 
 const SESSION_COOKIE = "scriptorium_session";
@@ -16,6 +16,7 @@ const MAX_JSON_BYTES = 12 * 1024 * 1024;
 const MAX_SNAPSHOT_FILES = 1000;
 const MAX_SNAPSHOT_BYTES = 8 * 1024 * 1024;
 const MAX_SCRATCH_ATTACHMENT_BYTES = 8 * 1024 * 1024;
+const API_DRAIN_TIMEOUT_MS = 5_000;
 const API_VERSION = "0.1.0";
 const STYLE_NONCES = new WeakMap<IncomingMessage, string>();
 
@@ -290,10 +291,11 @@ type RuntimeHttpHost = ModuleRuntime & {
 
 type HttpContributionDescriptor = Omit<HttpContribution, "handle">;
 
-type ApiActionHost = ActionHostContext & {
+type ApiActionHost = Omit<ActionHostContext, "propose"> & {
   actions?: readonly { module: ModuleId | "core"; action: ModuleAction }[];
   linkedReader?: (repositoryId: string) => Promise<ModuleActionContext["reader"]>;
   access?: "owner" | "public";
+  propose(operations: ChangeOperation[], evidence?: ProposalEvidence[], proposalId?: string, signal?: AbortSignal): Promise<ChangeProposal>;
 };
 
 export function createServer(options: ApiServerOptions): Server {
@@ -303,6 +305,7 @@ export function createServer(options: ApiServerOptions): Server {
   const staticDir = options.staticDir ?? resolve(process.cwd(), "app/dist");
   const trustProxy = options.trustProxy ?? false;
   const sessions = new Map<string, Session>();
+  const requestControllers = new Set<AbortController>();
   const coreStore = options.store as CoreStoreApi;
   const runtime: RuntimeHttpHost = options.runtime ?? new ModuleRuntime({
     manifests: options.runtimeOptions?.manifests ?? [],
@@ -320,6 +323,11 @@ export function createServer(options: ApiServerOptions): Server {
   let started = false;
   let lastPendingLocalCheckpoints: number | null = null;
   let closed = false;
+  let runtimeShutdownPromise: Promise<void> | undefined;
+  const shutdownRuntime = (): Promise<void> => {
+    runtimeShutdownPromise ??= Promise.resolve().then(() => runtime.shutdown());
+    return runtimeShutdownPromise;
+  };
 
   app.addContentTypeParser("application/json", { parseAs: "string", bodyLimit: MAX_JSON_BYTES }, (_request, body, done) => {
     try { done(null, JSON.parse(body as string) as unknown); }
@@ -343,7 +351,7 @@ export function createServer(options: ApiServerOptions): Server {
     else sendError(reply.raw, error);
   });
   app.addHook("onClose", async () => {
-    await runtime.shutdown();
+    if (!closed) await shutdownRuntime();
   });
 
   const fail = (response: ServerResponse, status: number, code: string, message: string): void => {
@@ -351,9 +359,12 @@ export function createServer(options: ApiServerOptions): Server {
   };
   const abortSignalFor = (request: IncomingMessage, response: ServerResponse): AbortSignal => {
     const controller = new AbortController();
+    requestControllers.add(controller);
     const abort = () => controller.abort(new Error("HTTP request was cancelled"));
-    request.once("aborted", abort);
-    response.once("close", () => { if (!response.writableEnded) abort(); });
+    const cleanup = () => requestControllers.delete(controller);
+    request.once("aborted", () => { abort(); cleanup(); });
+    response.once("close", () => { if (!response.writableEnded) abort(); cleanup(); });
+    response.once("finish", cleanup);
     return controller.signal;
   };
   const freshReader = async (projectId: string, view: "remote" | "checkpoint" = "remote", pinned?: string) => {
@@ -410,6 +421,53 @@ export function createServer(options: ApiServerOptions): Server {
       if (typeof limit !== "number" || !Number.isInteger(limit) || limit < 1 || limit > 100) throw new Error("limit must be an integer from 1 to 100");
       return { query: value.query, limit };
     } };
+    const optionalProposalId = (value: Record<string, unknown>): string | undefined => {
+      if (value.proposalId === undefined) return undefined;
+      if (typeof value.proposalId !== "string" || !/^[A-Za-z0-9_-]{1,128}$/u.test(value.proposalId)) throw new Error("proposalId must contain 1 to 128 letters, numbers, underscores, or hyphens");
+      return value.proposalId;
+    };
+    const hierarchyCreateInput: ValueSchema = { parse(value: unknown) {
+      if (!isRecord(value) || typeof value.kind !== "string" || !["volume", "chapter", "scene"].includes(value.kind) ||
+          typeof value.id !== "string" || typeof value.title !== "string") throw new Error("kind, id, and title are required for hierarchy creation");
+      const proposalId = optionalProposalId(value);
+      if (value.kind === "volume") return { kind: value.kind, id: value.id, title: value.title, ...(proposalId ? { proposalId } : {}) };
+      if (typeof value.volumeId !== "string") throw new Error("volumeId is required for chapter or scene creation");
+      if (value.kind === "chapter") return { kind: value.kind, id: value.id, title: value.title, volumeId: value.volumeId, ...(proposalId ? { proposalId } : {}) };
+      if (typeof value.chapterId !== "string" || (value.manuscriptBody !== undefined && typeof value.manuscriptBody !== "string")) {
+        throw new Error("chapterId and an optional string manuscriptBody are required for scene creation");
+      }
+      return { kind: value.kind, id: value.id, title: value.title, volumeId: value.volumeId, chapterId: value.chapterId,
+        ...(typeof value.manuscriptBody === "string" ? { manuscriptBody: value.manuscriptBody } : {}), ...(proposalId ? { proposalId } : {}) };
+    } };
+    const hierarchyDeleteInput: ValueSchema = { parse(value: unknown) {
+      if (!isRecord(value) || !isRecord(value.target) || typeof value.target.kind !== "string" ||
+          !["volume", "chapter", "scene"].includes(value.target.kind) || typeof value.target.id !== "string") {
+        throw new Error("A volume, chapter, or scene target is required for hierarchy deletion");
+      }
+      const proposalId = optionalProposalId(value);
+      if (value.target.kind === "volume") return { target: { kind: value.target.kind, id: value.target.id }, ...(proposalId ? { proposalId } : {}) };
+      if (typeof value.target.volumeId !== "string") throw new Error("volumeId is required for chapter or scene deletion");
+      if (value.target.kind === "chapter") return { target: { kind: value.target.kind, id: value.target.id, volumeId: value.target.volumeId }, ...(proposalId ? { proposalId } : {}) };
+      if (typeof value.target.chapterId !== "string") throw new Error("chapterId is required for scene deletion");
+      return { target: { kind: value.target.kind, id: value.target.id, volumeId: value.target.volumeId, chapterId: value.target.chapterId }, ...(proposalId ? { proposalId } : {}) };
+    } };
+    const hierarchyReorderInput: ValueSchema = { parse(value: unknown) {
+      if (!isRecord(value) || typeof value.kind !== "string" || !["volume", "chapter", "scene"].includes(value.kind) ||
+          !Array.isArray(value.orderedIds) || !value.orderedIds.every((id) => typeof id === "string")) {
+        throw new Error("kind and an ordered sibling ID list are required for hierarchy reorder");
+      }
+      const proposalId = optionalProposalId(value);
+      if (value.kind === "volume") return { kind: value.kind, orderedIds: value.orderedIds, ...(proposalId ? { proposalId } : {}) };
+      if (typeof value.volumeId !== "string") throw new Error("volumeId is required for chapter or scene reorder");
+      if (value.kind === "chapter") return { kind: value.kind, volumeId: value.volumeId, orderedIds: value.orderedIds, ...(proposalId ? { proposalId } : {}) };
+      if (typeof value.chapterId !== "string") throw new Error("chapterId is required for scene reorder");
+      return { kind: value.kind, volumeId: value.volumeId, chapterId: value.chapterId, orderedIds: value.orderedIds, ...(proposalId ? { proposalId } : {}) };
+    } };
+    const restoreInput: ValueSchema = { parse(value: unknown) {
+      if (!isRecord(value) || typeof value.operationId !== "string" || !value.operationId || value.operationId.length > 128) throw new Error("operationId is required for restore");
+      const proposalId = optionalProposalId(value);
+      return { operationId: value.operationId, ...(proposalId ? { proposalId } : {}) };
+    } };
     const search = async (reader: Awaited<ReturnType<typeof freshReader>>, term: string, limit: number) => {
       if (!coreStore.searchSnapshot) throw httpFailure(503, "SEARCH_UNAVAILABLE", "Snapshot search is not available in this Core version");
       const result = await coreStore.searchSnapshot(projectId, term, limit, "remote", reader.snapshot.remoteCommit);
@@ -444,7 +502,48 @@ export function createServer(options: ApiServerOptions): Server {
         }
       },
     });
+    const makeProposal = (
+      id: string,
+      inputSchema: ValueSchema,
+      build: (context: ModuleActionContext, input: unknown) => Promise<{ snapshot: SnapshotId; operation: ChangeOperation }>,
+    ): ModuleAction => ({
+      id,
+      effect: "propose",
+      inputSchema,
+      outputSchema: jsonSchema,
+      async invoke(input, context) {
+        const failAction = (code: string, message: string, retryable = false): ActionResult => ({
+          ok: false, snapshot: context.reader.snapshot, error: { code, message: message.slice(0, 512), retryable },
+        });
+        try {
+          if (context.signal.aborted) return failAction("action_cancelled", "Action was cancelled");
+          const built = await build(context, input);
+          if (context.signal.aborted) return failAction("action_cancelled", "Action was cancelled");
+          if (snapshotKey(built.snapshot) !== snapshotKey(context.reader.snapshot)) {
+            return failAction("snapshot_changed", "The proposed operation was built from a different snapshot", true);
+          }
+          const proposalId = isRecord(input) && typeof input.proposalId === "string" ? input.proposalId : undefined;
+          const proposal = await context.propose([built.operation], undefined, proposalId);
+          return { ok: true, snapshot: context.reader.snapshot, data: { proposal } };
+        } catch (error) {
+          const candidate = error as { code?: unknown; message?: unknown; retryable?: unknown; status?: unknown };
+          return failAction(
+            typeof candidate?.code === "string" ? candidate.code : "core_proposal_failed",
+            typeof candidate?.message === "string" ? candidate.message : "Core could not build the requested proposal",
+            candidate?.retryable === true || candidate?.status === 502,
+          );
+        }
+      },
+    });
     return [
+      { module: "core", action: makeProposal("core.hierarchy.create", hierarchyCreateInput, (context, input) =>
+        options.store.buildCreateHierarchyOperation(projectId, input as CreateHierarchyInput, "remote", context.reader.snapshot.remoteCommit)) },
+      { module: "core", action: makeProposal("core.hierarchy.delete", hierarchyDeleteInput, (context, input) =>
+        options.store.buildDeleteHierarchyOperation(projectId, (input as { target: HierarchyTarget }).target, "remote", context.reader.snapshot.remoteCommit)) },
+      { module: "core", action: makeProposal("core.hierarchy.reorder", hierarchyReorderInput, (context, input) =>
+        options.store.buildReorderHierarchyOperation(projectId, input as ReorderHierarchyInput, "remote", context.reader.snapshot.remoteCommit)) },
+      { module: "core", action: makeProposal("core.operation.restore", restoreInput, (context, input) =>
+        options.store.buildRestoreOperation(projectId, (input as { operationId: string }).operationId, "remote", context.reader.snapshot.remoteCommit)) },
       { module: "core", action: make("core.status", emptyInput, async () => options.store.status(projectId)) },
       { module: "core", action: make("core.history", emptyInput, async () => options.store.history(projectId)) },
       { module: "core", action: make("core.observation", emptyInput, async () => options.store.observe(projectId)) },
@@ -520,37 +619,50 @@ export function createServer(options: ApiServerOptions): Server {
     signal: AbortSignal,
     source: ChangeProposal["source"],
     access: "owner" | "public" = "owner",
-  ): ApiActionHost => ({
-    projectId,
-    reader,
-    signal,
-    actions: buildCoreActions(projectId),
-    propose: (operations: ChangeOperation[], evidence?: ProposalEvidence[], proposalId?: string) => {
-      if (proposalId !== undefined && !/^[A-Za-z0-9_-]{1,128}$/u.test(proposalId)) throw httpFailure(400, "INVALID_PROPOSAL_ID", "Proposal ID must contain 1 to 128 letters, numbers, underscores, or hyphens");
-      return proposeAs(projectId, reader.snapshot, operations, source, evidence, proposalId);
-    },
-    linkedReader: async (repositoryId: string) => {
-      for (const project of await options.store.listProjects()) {
-        const observation = await options.store.observe(project.id);
-        if (observation.snapshot.repository.repositoryId === repositoryId) return freshReader(project.id, "remote", observation.snapshot.remoteCommit);
-      }
-      throw httpFailure(404, "REPOSITORY_NOT_FOUND", "Linked repository is not registered to this owner");
-    },
-    access,
-  });
-
-  const serveModuleResponse = async (response: Response, raw: ServerResponse, signal: AbortSignal): Promise<void> => {
-    if (response.body === null) {
-      raw.statusCode = response.status;
-      raw.end();
-      return;
+  ): ApiActionHost => {
+    const host: ApiActionHost = {
+      projectId,
+      reader,
+      signal,
+      actions: access === "public" ? [] : buildCoreActions(projectId),
+      propose: async (operations: ChangeOperation[], evidence?: ProposalEvidence[], proposalId?: string, proposalSignal?: AbortSignal) => {
+        if (access === "public") throw httpFailure(403, "PUBLIC_PROPOSAL_DENIED", "Public module requests cannot propose changes");
+        if (proposalId !== undefined && !/^[A-Za-z0-9_-]{1,128}$/u.test(proposalId)) throw httpFailure(400, "INVALID_PROPOSAL_ID", "Proposal ID must contain 1 to 128 letters, numbers, underscores, or hyphens");
+        const requestSignal = proposalSignal ?? signal;
+        if (signal.aborted || requestSignal.aborted) throw httpFailure(499, "ACTION_CANCELLED", "Proposal request was cancelled");
+        const proposal = await proposeAs(projectId, reader.snapshot, operations, source, evidence, proposalId);
+        if (signal.aborted || requestSignal.aborted) throw httpFailure(499, "ACTION_CANCELLED", "Proposal request was cancelled");
+        return proposal;
+      },
+      access,
+    };
+    if (access !== "public") {
+      host.linkedReader = async (repositoryId: string) => {
+        for (const project of await options.store.listProjects()) {
+          const observation = await options.store.observe(project.id);
+          if (observation.snapshot.repository.repositoryId === repositoryId) return freshReader(project.id, "remote", observation.snapshot.remoteCommit);
+        }
+        throw httpFailure(404, "REPOSITORY_NOT_FOUND", "Linked repository is not registered to this owner");
+      };
     }
+    return host;
+  };
+
+  const serveModuleResponse = async (response: Response, raw: ServerResponse, signal: AbortSignal, publicResponse = false): Promise<void> => {
     if (response.status < 200 || response.status > 599) throw httpFailure(502, "MODULE_HTTP_INVALID_RESPONSE", "Module returned an invalid HTTP response");
     const forbiddenHeaders = new Set(["set-cookie", "content-security-policy", "x-frame-options", "x-content-type-options", "referrer-policy", "cache-control", "connection", "keep-alive", "content-length", "trailer", "transfer-encoding", "upgrade"]);
     response.headers.forEach((value, key) => {
+      if (publicResponse && key.toLowerCase() === "referrer-policy" && value.trim().toLowerCase() === "no-referrer") {
+        raw.setHeader(key, "no-referrer");
+        return;
+      }
       if (!forbiddenHeaders.has(key.toLowerCase()) && !key.toLowerCase().startsWith("access-control-")) raw.setHeader(key, value);
     });
     raw.statusCode = response.status;
+    if (response.body === null) {
+      raw.end();
+      return;
+    }
     await pipeline(Readable.fromWeb(response.body as never), raw, { signal });
   };
   const makeWebRequest = (request: IncomingMessage, body: unknown, signal: AbortSignal, relativePath?: string): Request => {
@@ -561,7 +673,7 @@ export function createServer(options: ApiServerOptions): Server {
     const url = originalUrl.href;
     const headers = new Headers();
     for (const [name, value] of Object.entries(request.headers)) {
-      if (value === undefined || name.toLowerCase() === "host" || name.toLowerCase() === "connection") continue;
+      if (value === undefined || ["host", "connection", "cookie", "authorization", "proxy-authorization"].includes(name.toLowerCase())) continue;
       for (const item of Array.isArray(value) ? value : [value]) headers.append(name, item);
     }
     const init: RequestInit = { method, headers, signal };
@@ -694,7 +806,7 @@ export function createServer(options: ApiServerOptions): Server {
     if (routePath === "/api/version" && isRead) {
       sendJson(response, 200, {
         name: "scriptorium", version: API_VERSION, contractVersion: CONTRACT_VERSION,
-        profile, auth: ["cookie-owner", "bearer-read-propose"], runtime: { name: "@scriptorium/module-runtime", contractVersion: CONTRACT_VERSION, ...(runtime.metadata ? { metadata: runtime.metadata() } : {}) },
+        profile, auth: ["cookie-owner", "bearer-read-compute-propose"], runtime: { name: "@scriptorium/module-runtime", contractVersion: CONTRACT_VERSION, ...(runtime.metadata ? { metadata: runtime.metadata() } : {}) },
         modules: await enabledStatuses(),
       });
       return;
@@ -784,27 +896,19 @@ export function createServer(options: ApiServerOptions): Server {
         sendJson(response, 200, contributions); return;
       }
       if (suffix === "tree" && method === "GET") {
-        if (query.has("view") || query.has("snapshot")) {
-          const selected = optionalSnapshot(query);
-          sendJson(response, 200, await options.store.readTreeSnapshot(projectId, selected.view, selected.pinned));
-        } else sendJson(response, 200, await options.store.tree(projectId));
+        const selected = optionalSnapshot(query);
+        sendJson(response, 200, await options.store.readTreeSnapshot(projectId, selected.view, selected.pinned));
         return;
       }
       const sceneMatch = suffix.match(/^scenes\/([^/]+)$/u);
       if (sceneMatch && method === "GET") {
         const sceneId = parseSceneId(sceneMatch[1]!);
-        if (query.has("view") || query.has("snapshot")) {
-          const selected = optionalSnapshot(query);
-          sendJson(response, 200, await options.store.readSceneSnapshot(projectId, sceneId, selected.view, selected.pinned));
-        } else sendJson(response, 200, await options.store.readScene(projectId, sceneId));
+        const selected = optionalSnapshot(query);
+        sendJson(response, 200, await options.store.readSceneSnapshot(projectId, sceneId, selected.view, selected.pinned));
         return;
       }
       if (sceneMatch && method === "PUT") {
-        if (!isCookie) { fail(response, 403, "AUTHOR_SESSION_REQUIRED", "Scene saves require an owner session"); return; }
-        const body = await readJson(request, parsedBody);
-        if (!isRecord(body) || typeof body.text !== "string" || typeof body.revision !== "string" || !body.revision) throw httpFailure(400, "INVALID_SCENE", "Scene text and its revision are required");
-        sendJson(response, 200, await options.store.saveScene(projectId, parseSceneId(sceneMatch[1]!), { text: body.text, revision: body.revision }));
-        return;
+        throw httpFailure(410, "SCENE_PROPOSAL_REQUIRED", "Direct scene saves are retired. Submit a revision-bound proposal, then approve and checkpoint it.");
       }
       if (suffix === "snapshot" && method === "GET") {
         const selected = optionalSnapshot(query);
@@ -843,6 +947,7 @@ export function createServer(options: ApiServerOptions): Server {
       if (suffix === "proposals" && method === "POST") {
         const body = await readJson(request, parsedBody);
         if (!isRecord(body) || !isRecord(body.snapshot) || !Array.isArray(body.operations) || !body.operations.length) throw httpFailure(400, "INVALID_PROPOSAL", "A proposal snapshot and at least one operation are required");
+        if (signal.aborted) throw httpFailure(499, "ACTION_CANCELLED", "Proposal request was cancelled");
         const requestedId = typeof body.id === "string" ? body.id : typeof body.proposalId === "string" ? body.proposalId : undefined;
         const proposal: ChangeProposal = {
           id: requestedId || randomBytes(16).toString("hex"),
@@ -851,7 +956,9 @@ export function createServer(options: ApiServerOptions): Server {
           source: isBearer ? "mcp" : "author",
           ...(Array.isArray(body.evidence) ? { evidence: body.evidence as ProposalEvidence[] } : {}),
         };
-        sendJson(response, 201, await options.store.propose(projectId, proposal)); return;
+        const stored = await options.store.propose(projectId, proposal);
+        if (signal.aborted) throw httpFailure(499, "ACTION_CANCELLED", "Proposal request was cancelled");
+        sendJson(response, 201, stored); return;
       }
       if (suffix === "proposals" && method === "GET") {
         if (!coreStore.listProposals) throw httpFailure(503, "PROPOSAL_STATUS_UNAVAILABLE", "Proposal review is not available in this Core version");
@@ -887,9 +994,12 @@ export function createServer(options: ApiServerOptions): Server {
         const descriptors = await listActionDescriptors(projectId, signal);
         const descriptor = descriptors.find((item) => item.id === actionId);
         if (!descriptor) throw httpFailure(404, "ACTION_NOT_FOUND", `Action ${actionId} is unavailable`);
-        if (isBearer && !["read", "propose"].includes(descriptor.effect)) throw httpFailure(403, "BEARER_EFFECT_DENIED", "Bearer credentials may only invoke read and propose actions");
+        if (isBearer && !["read", "compute", "propose"].includes(descriptor.effect)) throw httpFailure(403, "BEARER_EFFECT_DENIED", "Bearer credentials may only invoke read, compute, and propose actions");
         const reader = await freshReader(projectId, "remote");
-        const host = actionHost(projectId, reader, signal, descriptor.module === "core" ? (isBearer ? "mcp" : "author") : isBearer ? "mcp" : "module");
+        const source = descriptor.module === "core"
+          ? isBearer ? "mcp" : "author"
+          : isBearer || descriptor.module === "mcp" ? "mcp" : "module";
+        const host = actionHost(projectId, reader, signal, source);
         if (descriptor.module === "core") {
           const coreAction = host.actions?.find(({ action }) => action.id === descriptor.id)?.action;
           if (!coreAction) throw httpFailure(404, "ACTION_NOT_FOUND", `Action ${actionId} is unavailable`);
@@ -898,7 +1008,10 @@ export function createServer(options: ApiServerOptions): Server {
             invoke: async () => ({ ok: false, snapshot: reader.snapshot, error: { code: "ACTION_UNAVAILABLE", message: "Core host actions cannot dispatch module actions", retryable: false } }),
             listActions: async () => descriptors,
             linkedReader: async (repositoryId: string) => host.linkedReader!(repositoryId),
-            propose: async () => { throw httpFailure(403, "ACTION_EFFECT_DENIED", "Read-only Core actions cannot propose changes"); },
+            propose: async (operations, evidence, proposalId) => {
+              if (coreAction.effect !== "propose") throw httpFailure(403, "ACTION_EFFECT_DENIED", "Read-only Core actions cannot propose changes");
+              return host.propose(operations, evidence, proposalId, signal);
+            },
             runJob: async (request) => ({ ok: false, id: request.id, snapshot: reader.snapshot, error: { code: "ACTION_EFFECT_DENIED", message: "Core host actions cannot run jobs", retryable: false } }),
           };
           let input: unknown;
@@ -950,7 +1063,7 @@ export function createServer(options: ApiServerOptions): Server {
         if (!runtime.invokeHttp) throw httpFailure(503, "MODULE_HTTP_UNAVAILABLE", "The runtime does not support HTTP module contributions");
         if (contribution.effect === "read" && method !== "GET" && method !== "HEAD") throw httpFailure(405, "MODULE_HTTP_METHOD_DENIED", "Read-only module routes must use GET or HEAD");
         const reader = await freshReader(projectId, "remote");
-        const host = actionHost(projectId, reader, signal, isBearer ? "mcp" : "module");
+        const host = actionHost(projectId, reader, signal, isBearer || moduleId === "mcp" ? "mcp" : "module");
         const webRequest = makeWebRequest(request, parsedBody, signal, moduleRoute[2] ?? "");
         const moduleResponse = await runtime.invokeHttp(moduleId, contribution.id, webRequest, host);
         await serveModuleResponse(moduleResponse, response, signal);
@@ -1024,7 +1137,7 @@ export function createServer(options: ApiServerOptions): Server {
       const reader = await freshReader(projectId, "remote", snapshot.remoteCommit);
       const host = actionHost(projectId, reader, signal, "module", "public");
       const moduleResponse = await runtime.invokeHttp(moduleId, contribution.id, makeWebRequest(request, parsedBody, signal, publicMatch[3] ?? ""), host);
-      await serveModuleResponse(moduleResponse, response, signal); return;
+      await serveModuleResponse(moduleResponse, response, signal, true); return;
     }
 
     if (routePath.startsWith("/api/")) { fail(response, 404, "NOT_FOUND", "API route not found"); return; }
@@ -1049,24 +1162,75 @@ export function createServer(options: ApiServerOptions): Server {
   });
   server.once("listening", () => { started = true; });
   const nodeClose = server.close.bind(server);
+  let closePromise: Promise<Error | undefined> | undefined;
   server.close = ((callback?: (error?: Error) => void): Server => {
-    if (closed) return server;
-    closed = true;
-    shuttingDown = true;
-    nodeClose((error?: Error) => {
-      void (async () => {
+    if (!closePromise) {
+      closed = true;
+      shuttingDown = true;
+      const beganAt = Date.now();
+      let deadlineExpired = false;
+      let drainTimer: NodeJS.Timeout | undefined;
+      let resolveDeadline!: () => void;
+      const deadline = new Promise<void>((resolveDeadlinePromise) => { resolveDeadline = resolveDeadlinePromise; });
+      const forceClose = () => {
+        if (deadlineExpired) return;
+        deadlineExpired = true;
+        for (const controller of requestControllers) controller.abort(new Error("The API drain deadline expired"));
+        server.closeAllConnections();
+        resolveDeadline();
+      };
+      for (const controller of requestControllers) controller.abort(new Error("The API server is shutting down"));
+      const nodeDrain = new Promise<Error | undefined>((resolveNode) => nodeClose((error?: Error) => resolveNode(error)));
+      const runtimeDrain = shutdownRuntime().then(
+        () => undefined,
+        (error: unknown) => {
+          const failure = error instanceof Error ? error : new Error("Module runtime shutdown failed");
+          console.error("Scriptorium module runtime shutdown failed", error);
+          return failure;
+        },
+      );
+      drainTimer = setTimeout(forceClose, API_DRAIN_TIMEOUT_MS);
+      drainTimer.unref();
+      closePromise = (async () => {
+        let closeError: Error | undefined;
+        const nodeOutcome = await Promise.race([nodeDrain.then((error) => ({ error })), deadline.then(() => ({ timedOut: true as const }))]);
+        if ("error" in nodeOutcome) closeError ??= nodeOutcome.error;
+        const runtimeOutcome = await Promise.race([runtimeDrain.then((error) => ({ error })), deadline.then(() => ({ timedOut: true as const }))]);
+        if ("error" in runtimeOutcome) closeError ??= runtimeOutcome.error;
+        if (deadlineExpired || "timedOut" in nodeOutcome || "timedOut" in runtimeOutcome) {
+          forceClose();
+          console.warn(`Scriptorium API shutdown exceeded ${API_DRAIN_TIMEOUT_MS} ms; remaining HTTP connections were closed.`);
+        }
+
         let pending = 0;
-        let unknown = false;
-        for (const project of await options.store.listProjects().catch(() => [])) {
-          try { pending += (await options.store.observe(project.id)).pending.length; }
-          catch { unknown = true; }
+        let unknown = deadlineExpired;
+        const checkPending = async (): Promise<void> => {
+          const projects = await options.store.listProjects();
+          for (const project of projects) pending += (await options.store.observe(project.id)).pending.length;
+        };
+        if (!deadlineExpired) {
+          const checked = await Promise.race([checkPending().then(() => true, () => false), deadline.then(() => false)]);
+          unknown = !checked;
         }
         lastPendingLocalCheckpoints = unknown ? null : pending;
-        if (pending > 0) console.info(`Scriptorium is shutting down with ${pending} local checkpoint(s) pending; no publish was attempted.`);
-        await app.close();
-        callback?.(error);
-      })().catch((closeError: unknown) => callback?.(closeError instanceof Error ? closeError : new Error("API shutdown failed")));
-    });
+        if (pending > 0 && !unknown) console.info(`Scriptorium is shutting down with ${pending} local checkpoint(s) pending; no publish was attempted.`);
+        if (unknown) console.warn("Scriptorium could not determine whether local checkpoints remain pending during shutdown.");
+
+        const appClose = app.close().then(() => undefined, (error: unknown) => {
+          closeError ??= error instanceof Error ? error : new Error("Fastify shutdown failed");
+        });
+        if (!deadlineExpired) {
+          const appClosed = await Promise.race([appClose.then(() => true), deadline.then(() => false)]);
+          if (!appClosed) {
+            forceClose();
+            closeError ??= new Error("API shutdown deadline expired");
+          }
+        }
+        if (drainTimer) clearTimeout(drainTimer);
+        return closeError;
+      })().catch((error: unknown) => error instanceof Error ? error : new Error("API shutdown failed"));
+    }
+    if (callback) void closePromise.then((error) => callback(error));
     return server;
   }) as Server["close"];
   Object.defineProperty(server, "scriptorium", { value: { fastify: app, runtime, profile }, enumerable: false });
