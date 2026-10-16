@@ -117,7 +117,7 @@ export interface MachineError { code: string; message: string; retryable: boolea
 export type JobOutcome<T = unknown> = { ok: true; result: JobResult<T> } | { ok: false; id: string; snapshot: SnapshotId; error: MachineError };
 export interface ValueSchema<T = unknown> { parse(value: unknown): T }
 export type ActionResult<T = unknown> = { ok: true; snapshot: SnapshotId; data: T; proposals?: ChangeProposal[] } | { ok: false; snapshot: SnapshotId; error: MachineError };
-export interface ActionDescriptor { id: string; module: ModuleId; effect: "read" | "propose" | "compute" }
+export interface ActionDescriptor { id: string; module: ModuleId | "core"; effect: "read" | "propose" | "compute" }
 export interface ModuleActionContext {
   projectId: string;
   reader: SnapshotReader;
@@ -161,7 +161,7 @@ export interface ModuleManifest {
   locality: "local" | "optional-external";
 }
 export interface WorkerService {
-  request<T = unknown>(request: JobRequest, signal?: AbortSignal): Promise<JobOutcome<T>>;
+  request<T = unknown>(request: JobRequest, signal: AbortSignal): Promise<JobOutcome<T>>;
   cancel(jobId: string): boolean;
   dispose(): Promise<void>;
 }
