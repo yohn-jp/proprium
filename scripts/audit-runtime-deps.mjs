@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 
-import { lstat, readdir, readFile } from 'node:fs/promises';
+import { lstat, readdir, readFile, realpath } from 'node:fs/promises';
 import path from 'node:path';
 import process from 'node:process';
 
@@ -73,9 +73,47 @@ if (installed.size === 0) {
   throw new Error(`no installed packages found in pnpm virtual store: ${virtualStore}`);
 }
 
+// A development workspace may contain optional modules without putting them in
+// Core's production closure. Walk the actual installed dependency graph from
+// the Core application roots; production mode still audits the entire image.
+async function resolveDependency(directory, name) {
+  let current = directory;
+  while (true) {
+    const candidate = path.join(current, 'node_modules', name);
+    const resolved = await realpath(candidate).catch(() => null);
+    if (resolved) return resolved;
+    const parent = path.dirname(current);
+    if (parent === current) throw new Error(`missing runtime dependency ${name} from ${directory}`);
+    current = parent;
+  }
+}
+async function productionClosure(roots) {
+  const closure = new Map();
+  const seen = new Set();
+  async function visit(directory) {
+    const resolved = await realpath(directory);
+    if (seen.has(resolved)) return;
+    seen.add(resolved);
+    const manifest = JSON.parse(await readFile(path.join(resolved, 'package.json'), 'utf8'));
+    closure.set(`${manifest.name}@${manifest.version}`, manifest.name);
+    for (const dependency of Object.keys(manifest.dependencies ?? {})) {
+      await visit(await resolveDependency(resolved, dependency));
+    }
+    for (const dependency of Object.keys(manifest.optionalDependencies ?? {})) {
+      const location = await resolveDependency(resolved, dependency).catch(() => null);
+      if (location) await visit(location);
+    }
+  }
+  for (const root of roots) await visit(root);
+  return closure;
+}
+const checkedPackages = production ? installed : await productionClosure([
+  path.resolve('packages/core'), path.resolve('packages/api'), path.resolve('app'),
+]);
+const forbidden = name => deniedCorePackage.test(name) || /^@scriptorium\/module-(?!runtime$)/.test(name);
 const violations = [];
-for (const [id, name] of installed) {
-  if (deniedCorePackage.test(name) || (production && deniedBuildPackage.test(name))) {
+for (const [id, name] of checkedPackages) {
+  if (forbidden(name) || (production && deniedBuildPackage.test(name))) {
     violations.push(`runtime dependency ${id}`);
   }
 }
@@ -98,7 +136,7 @@ async function scanDist(current) {
         const name = specifier.startsWith('@')
           ? specifier.split('/').slice(0, 2).join('/')
           : specifier.split('/')[0];
-        if (deniedCorePackage.test(name) || (production && deniedBuildPackage.test(name))) {
+        if (forbidden(name) || (production && deniedBuildPackage.test(name))) {
           violations.push(`compiled import ${specifier} in ${filePath}`);
         }
       }
@@ -114,5 +152,5 @@ if (violations.length > 0) {
   process.exit(1);
 }
 
-console.log(`${production ? 'Production runtime' : 'Core'} dependency audit passed: ${installed.size} installed package versions scanned.`);
-console.log(`Packages: ${[...installed.keys()].sort().join(', ')}`);
+console.log(`${production ? 'Production runtime' : 'Core'} dependency audit passed: ${checkedPackages.size} production dependency versions scanned.`);
+console.log(`Packages: ${[...checkedPackages.keys()].sort().join(', ')}`);
