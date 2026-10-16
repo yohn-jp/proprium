@@ -9,8 +9,10 @@ import {
   type ModuleAction,
   type ModuleActionContext,
   type ModuleContext,
+  type ProposalStatus,
   type SnapshotId,
   type ValueSchema,
+  snapshotKey,
 } from "@scriptorium/contracts";
 import {
   analyzeThreadLifecycles,
@@ -458,7 +460,7 @@ async function existingZukanCreateProposal(
   context: ModuleActionContext,
   proposalId: string,
   identityHash: string,
-): Promise<{ suggestion: StoredZukanSuggestion } | null> {
+): Promise<{ suggestion: StoredZukanSuggestion; proposalStatus: ProposalStatus } | null> {
   const available = await context.listActions();
   if (!available.some((candidate) => candidate.id === "core.proposals.get")) return null;
   const result = await context.invoke("core.proposals.get", { proposalId });
@@ -466,10 +468,7 @@ async function existingZukanCreateProposal(
     if (new Set(["PROPOSAL_NOT_FOUND", "proposal_not_found"]).has(result.error.code)) return null;
     throw Object.assign(new Error(result.error.message), { code: result.error.code });
   }
-  const data = result.data as { proposal: {
-    proposal: ChangeProposal;
-    payloadComplete?: boolean;
-  } };
+  const data = result.data as { proposal: ProposalStatus };
   const status = data.proposal;
   if (status.payloadComplete === false) {
     throw Object.assign(new Error("The original complete Zukan proposal payload is unavailable for recovery"), { code: "proposal_payload_unavailable" });
@@ -480,8 +479,10 @@ async function existingZukanCreateProposal(
     throw Object.assign(new Error("The stable Zukan proposal ID is already bound to different evidence"), { code: "suggestion_identity_conflict" });
   }
   const suggestion = normalizeZukanSuggestion(details.suggestion);
-  await context.propose(status.proposal.operations, status.proposal.evidence, status.proposal.id);
-  return { suggestion };
+  if (snapshotKey(status.proposal.snapshot) === snapshotKey(context.reader.snapshot)) {
+    await context.propose(status.proposal.operations, status.proposal.evidence, status.proposal.id);
+  }
+  return { suggestion, proposalStatus: status };
 }
 
 function normalizeStoredProposal(row: StoredStateProposal): StateProposal {
@@ -1524,17 +1525,40 @@ function makeActions(moduleContext: StoryCapabilityContext): ModuleAction[] {
         sourceTurnRange,
         confidence,
       } satisfies Pick<StoredZukanSuggestion, "entityId" | "blockPath" | "proposedText" | "evidence" | "source" | "kind" | "sourceSessionId" | "sourceTurnRange" | "confidence">;
-      const identityHash = zukanDigest({ identity, sourceHash });
+      const requestedId = requestedOperationId(input);
+      const operationDigest = requestedId
+        ? createHash("sha256").update(requestedId).digest("hex")
+        : undefined;
+      const operationId = operationDigest ? `story-zukan-create-${operationDigest}` : undefined;
+      const identityHash = zukanDigest({ identity, sourceHash, ...(requestedId ? { operationId: requestedId } : {}) });
       const id = `zukan-${identityHash}`;
       const { rows, revision } = await readZukanSuggestions(context);
+      const proposalId = operationDigest
+        ? `story-zukan-op-${operationDigest}`
+        : `story-zukan-${identityHash}`;
+      if (requestedId) {
+        const replay = await existingZukanCreateProposal(context, proposalId, identityHash);
+        if (replay) return {
+          suggestion: { ...replay.suggestion, ...(entity.name ? { entityName: entity.name } : {}) },
+          created: false,
+          replayed: true,
+          proposalStatus: replay.proposalStatus,
+        };
+      }
       const duplicate = rows.find((row) => row.id === id ||
         (row.sourceHash === sourceHash && zukanIdentity(row) === zukanIdentity(identity)) ||
         (row.sourceHash === undefined && zukanIdentity(row) === zukanIdentity(identity)));
       if (duplicate) return { suggestion: { ...duplicate, ...(entity.name ? { entityName: entity.name } : {}) }, created: false };
 
-      const proposalId = `story-zukan-${identityHash}`;
-      const replay = await existingZukanCreateProposal(context, proposalId, identityHash);
-      if (replay) return { suggestion: { ...replay.suggestion, ...(entity.name ? { entityName: entity.name } : {}) }, created: true };
+      if (!requestedId) {
+        const replay = await existingZukanCreateProposal(context, proposalId, identityHash);
+        if (replay) return {
+          suggestion: { ...replay.suggestion, ...(entity.name ? { entityName: entity.name } : {}) },
+          created: false,
+          replayed: true,
+          proposalStatus: replay.proposalStatus,
+        };
+      }
 
       const now = new Date().toISOString();
       const suggestion: StoredZukanSuggestion = {
@@ -1578,7 +1602,7 @@ function makeActions(moduleContext: StoryCapabilityContext): ModuleAction[] {
         writes: [{ path: ZUKAN_SUGGESTIONS_PATH, revision, content: zukanSuggestionFile(allRows) }],
         message: `Create pending Zukan suggestion ${id}`,
         effect: "metadata",
-        operationId: requestedOperationId(input) ?? `zukan-create-${id}`,
+        operationId: operationId ?? `zukan-create-${id}`,
       });
       await context.propose([operation], [evidenceRecord], proposalId);
       return { suggestion: { ...suggestion, ...(entity.name ? { entityName: entity.name } : {}) }, created: true, staledPendingCount: staleCount };

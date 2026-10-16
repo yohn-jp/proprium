@@ -8,6 +8,7 @@ import type {
   ChangeProposal,
   ModuleActionContext,
   ModuleContext,
+  ProposalStatus,
   RepositoryIdentity,
   SnapshotId,
   SnapshotReader,
@@ -288,7 +289,7 @@ test("Zukan creation validates manuscript provenance and proposes a stable pendi
   for (const path of [profilePath, scenePath, manuscriptPath, ZUKAN_SUGGESTIONS_PATH]) {
     assert.ok(operation.reads.some((read) => read.path === path && read.revision === (files.has(path) ? revision(files.get(path)!) : null)), `missing current revision for ${path}`);
   }
-  assert.equal(operation.id, "story-zukan-create-uma");
+  assert.equal(operation.id, `story-zukan-create-${createHash("sha256").update("zukan-create-uma").digest("hex")}`);
   const proposedRows = operation.writes[0]!.content!.trim().split("\n").map((line) => JSON.parse(line) as Record<string, unknown>);
   assert.equal(proposedRows[0]?.status, "stale");
   assert.deepEqual(proposedRows[0]?.future_field, { preserve: true });
@@ -302,6 +303,93 @@ test("Zukan creation validates manuscript provenance and proposes a stable pendi
   assert.equal(duplicate.data.suggestion.id, suggestion.id);
   assert.equal(duplicate.proposals, undefined, "an already persisted stable suggestion is not proposed again");
   assert.equal(proposals.length, 1);
+});
+
+test("Zukan retries across an unrelated snapshot return the stored status without rebasing, while a new operation ID gets a new proposal identity", async () => {
+  const files = fixtureFiles();
+  const reader = makeReader(files);
+  const firstProposals: ChangeProposal[] = [];
+  const firstContext = makeActionContext(reader, { proposals: firstProposals });
+  firstContext.listActions = async () => [{ id: "core.proposals.get" } as Awaited<ReturnType<ModuleActionContext["listActions"]>>[number]];
+  let storedStatus: ProposalStatus | undefined;
+  firstContext.invoke = async (_actionId, input) => {
+    const proposalId = (input as { proposalId: string }).proposalId;
+    return storedStatus
+      ? { ok: true, snapshot: reader.snapshot, data: { proposal: storedStatus } }
+      : { ok: false, snapshot: reader.snapshot, error: { code: "PROPOSAL_NOT_FOUND", message: `missing ${proposalId}`, retryable: false } };
+  };
+  const input = {
+    entityId: "char-uma",
+    blockPath: "lead.0",
+    proposedText: "Uma enters the cafe.",
+    evidence: [{ quote: "Uma enters the cafe.", sceneId: "sc-1" }],
+    source: "manuscript",
+    kind: "fact",
+    confidence: "high",
+    operation_id: "logical-zukan-creation-1",
+  };
+  const first = await invoke<{ suggestion: Record<string, unknown>; created: boolean }>(
+    "story.zukan-suggestions.create", input, firstContext,
+  );
+  assert.equal(first.data.created, true);
+  assert.equal(first.proposals?.length, 1);
+  const proposal = first.proposals![0]!;
+  storedStatus = {
+    proposal,
+    payloadComplete: true,
+    state: "proposed",
+    approvedOperationIds: [],
+    checkpoints: [],
+    publishedOperationIds: [],
+    stale: true,
+  };
+
+  const advancedReader: SnapshotReader = {
+    ...makeReader(files),
+    snapshot: { ...reader.snapshot, remoteCommit: "b".repeat(40) },
+  };
+  const advancedProposals: ChangeProposal[] = [];
+  const advancedContext = makeActionContext(advancedReader, { proposals: advancedProposals });
+  advancedContext.listActions = firstContext.listActions;
+  advancedContext.invoke = async (_actionId, inputValue) => {
+    assert.equal((inputValue as { proposalId: string }).proposalId, proposal.id);
+    return { ok: true, snapshot: advancedReader.snapshot, data: { proposal: storedStatus! } };
+  };
+  const retried = await invoke<{
+    suggestion: Record<string, unknown>;
+    created: boolean;
+    replayed: boolean;
+    proposalStatus: ProposalStatus;
+  }>("story.zukan-suggestions.create", input, advancedContext);
+  assert.equal(retried.data.created, false);
+  assert.equal(retried.data.replayed, true);
+  assert.equal(retried.data.proposalStatus.proposal.id, proposal.id);
+  assert.equal(retried.data.proposalStatus.proposal.snapshot.remoteCommit, reader.snapshot.remoteCommit);
+  assert.equal(retried.data.proposalStatus.stale, true);
+  assert.equal(retried.proposals, undefined, "an old-snapshot proposal is read back without proposing it against the newer snapshot");
+  assert.equal(advancedProposals.length, 0);
+
+  const changedMeaning = await actionById("story.zukan-suggestions.create").invoke({
+    ...input, proposedText: "A changed fact under the same operation ID.",
+  }, advancedContext);
+  assert.equal(changedMeaning.ok, false);
+  if (!changedMeaning.ok) assert.equal(changedMeaning.error.code, "suggestion_identity_conflict");
+  assert.equal(advancedProposals.length, 0);
+
+  const newIntentProposals: ChangeProposal[] = [];
+  const newIntentContext = makeActionContext(reader, { proposals: newIntentProposals });
+  newIntentContext.listActions = firstContext.listActions;
+  newIntentContext.invoke = async (_actionId, inputValue) => {
+    assert.notEqual((inputValue as { proposalId: string }).proposalId, proposal.id);
+    return { ok: false, snapshot: reader.snapshot, error: { code: "PROPOSAL_NOT_FOUND", message: "missing", retryable: false } };
+  };
+  const newIntent = await invoke<{ suggestion: Record<string, unknown>; created: boolean }>(
+    "story.zukan-suggestions.create", { ...input, operation_id: "logical-zukan-creation-2" }, newIntentContext,
+  );
+  assert.equal(newIntent.data.created, true);
+  assert.equal(newIntent.proposals?.length, 1);
+  assert.notEqual(newIntent.proposals?.[0]?.id, proposal.id);
+  assert.notEqual(newIntent.data.suggestion.id, first.data.suggestion.id);
 });
 
 test("Zukan creation rejects stale manuscript quotes and validates sandbox source ranges", async () => {

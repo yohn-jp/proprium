@@ -122,8 +122,10 @@ async function restoreDefaultBranch({ root, label, url, files, token, askpass })
   const generatedFiles = [
     "bible/locations/loc-p05-garden.yaml",
     "plot/volumes/vol-main/chapters/ch-main-1/scenes/sc-p05-garden.yaml",
+    "manuscript/vol-main/ch-main-1/sc-p05-garden.md",
     "meta/scriptorium/modules/story/zukan-suggestions.jsonl",
     "meta/scriptorium/modules/story/v1/series.json",
+    "meta/scriptorium/modules/story/p05-acceptance-remote-advance.txt",
   ];
   for (const relative of generatedFiles) {
     if (Object.hasOwn(files, relative)) continue;
@@ -207,6 +209,7 @@ async function startHost({ dataDir, cacheDir, staticDir, githubToken }) {
     server,
     store,
     async close() {
+      server.closeAllConnections();
       await new Promise((resolveClose, rejectClose) => server.close((error) => error ? rejectClose(error) : resolveClose()));
     },
   };
@@ -262,6 +265,23 @@ async function remoteHead(url, branch, token, askpass, cwd) {
   const head = output.split(/\s+/)[0];
   assert.match(head ?? "", /^[a-f0-9]{40,64}$/u, "Synthetic remote branch has no commit");
   return head;
+}
+
+async function pushSyntheticDefaultBranchFile({ directory, branch, relative, content, remove = false, token, askpass, message }) {
+  await git(directory, ["fetch", "origin", branch], { token, askpass });
+  await git(directory, ["reset", "--hard", `origin/${branch}`]);
+  const destination = resolve(directory, relative);
+  if (remove) {
+    await rm(destination, { force: true });
+  } else {
+    await mkdir(resolve(destination, ".."), { recursive: true });
+    await writeFile(destination, content);
+  }
+  await git(directory, ["add", "--all"]);
+  const changes = await git(directory, ["status", "--porcelain", "--untracked-files=all"]);
+  assert.ok(changes, `Expected the synthetic default-branch fixture change at ${relative}`);
+  await git(directory, ["commit", "-m", message]);
+  await git(directory, ["push", "origin", `HEAD:refs/heads/${branch}`], { token, askpass });
 }
 
 function proposalStatusPath(projectId, proposalId) {
@@ -320,23 +340,70 @@ test("Story actions compose with Core over GitHub snapshots, approvals, recovery
     assert.equal(characterRead.ok, true, characterRead.ok ? undefined : characterRead.error.message);
     assert.equal(characterRead.data.revision, workCharacter.revision);
 
-    const zukanCreated = await invoke(host, cookie, projectId, "story.zukan-suggestions.create", {
+    const zukanOperationId = `p05-zukan-create-${randomUUID().replaceAll("-", "")}`;
+    const zukanInput = {
       entityId: "char-uma",
       proposedText: "Uma enters the cafe.",
       evidence: [{ quote: "Uma enters the cafe.", sceneId: "sc-1" }],
       source: "manuscript",
       kind: "fact",
       confidence: "high",
-      operation_id: `p05-zukan-create-${randomUUID().replaceAll("-", "")}`,
-    });
+      operation_id: zukanOperationId,
+    };
+    const zukanCreated = await invoke(host, cookie, projectId, "story.zukan-suggestions.create", zukanInput);
     assert.equal(zukanCreated.ok, true, zukanCreated.ok ? undefined : `${zukanCreated.error.code}: ${zukanCreated.error.message}`);
     assert.equal(zukanCreated.data.created, true);
     assert.equal(zukanCreated.data.suggestion.status, "pending", "assistant-created facts remain pending until a separate author decision");
     assert.equal(zukanCreated.proposals?.length, 1, "Zukan creation must go through a reviewable Core proposal");
-    await publishProposal(host, cookie, projectId, zukanCreated.proposals[0], `p05_zukan_create_${randomUUID().replaceAll("-", "")}`);
+    const originalZukanProposal = zukanCreated.proposals[0];
+    await publishProposal(host, cookie, projectId, originalZukanProposal, `p05_zukan_create_${randomUUID().replaceAll("-", "")}`);
     const persistedZukan = await invoke(host, cookie, projectId, "story.zukan-suggestions.list", { entityId: "char-uma", status: "pending" });
     assert.equal(persistedZukan.ok, true, persistedZukan.ok ? undefined : persistedZukan.error.message);
     assert.ok(persistedZukan.data.suggestions.some((suggestion) => suggestion.id === zukanCreated.data.suggestion.id), "the checkpointed proposal persists the source-validated pending row");
+
+    const remoteAdvancePath = "meta/scriptorium/modules/story/p05-acceptance-remote-advance.txt";
+    await pushSyntheticDefaultBranchFile({
+      directory: workSeed,
+      branch: workBranch,
+      relative: remoteAdvancePath,
+      content: "An unrelated synthetic default-branch advance.\n",
+      token: githubToken,
+      askpass,
+      message: "Add unrelated file for Story Zukan retry acceptance",
+    });
+    await ownerJson(host, cookie, `/api/projects/${encodeURIComponent(projectId)}/observation`);
+    const zukanRetry = await invoke(host, cookie, projectId, "story.zukan-suggestions.create", zukanInput);
+    assert.equal(zukanRetry.ok, true, zukanRetry.ok ? undefined : `${zukanRetry.error.code}: ${zukanRetry.error.message}`);
+    assert.equal(zukanRetry.data.created, false);
+    assert.equal(zukanRetry.data.replayed, true);
+    assert.equal(zukanRetry.data.proposalStatus.proposal.id, originalZukanProposal.id);
+    assert.equal(zukanRetry.data.proposalStatus.proposal.snapshot.remoteCommit, zukanCreated.proposals[0].snapshot.remoteCommit);
+    assert.equal(zukanRetry.proposals, undefined, "the old proposal is read back and never rebased onto the newer snapshot");
+    const changedZukanMeaning = await invoke(host, cookie, projectId, "story.zukan-suggestions.create", {
+      ...zukanInput,
+      proposedText: "Changed meaning under the same logical operation ID.",
+    });
+    assert.equal(changedZukanMeaning.ok, false);
+    assert.equal(changedZukanMeaning.error.code, "suggestion_identity_conflict");
+    await pushSyntheticDefaultBranchFile({
+      directory: workSeed,
+      branch: workBranch,
+      relative: "meta/scriptorium/modules/story/zukan-suggestions.jsonl",
+      remove: true,
+      token: githubToken,
+      askpass,
+      message: "Remove owned synthetic Zukan row for new-intent acceptance",
+    });
+    await ownerJson(host, cookie, `/api/projects/${encodeURIComponent(projectId)}/observation`);
+    const zukanAfterRowRemoval = await invoke(host, cookie, projectId, "story.zukan-suggestions.create", {
+      ...zukanInput,
+      operation_id: `p05-zukan-create-${randomUUID().replaceAll("-", "")}`,
+    });
+    assert.equal(zukanAfterRowRemoval.ok, true, zukanAfterRowRemoval.ok ? undefined : `${zukanAfterRowRemoval.error.code}: ${zukanAfterRowRemoval.error.message}`);
+    assert.equal(zukanAfterRowRemoval.data.created, true);
+    assert.equal(zukanAfterRowRemoval.proposals?.length, 1);
+    assert.notEqual(zukanAfterRowRemoval.proposals[0].id, originalZukanProposal.id, "a distinct logical operation ID never reuses the older published proposal identity");
+    assert.notEqual(zukanAfterRowRemoval.data.suggestion.id, zukanCreated.data.suggestion.id);
 
     const seriesCreated = await invoke(host, cookie, projectId, "story.series.create", {
       name: "Synthetic Story Acceptance",
