@@ -12,6 +12,8 @@
     "@scriptorium/module-mcp": "workspace:*",
     "@scriptorium/module-nlp": "workspace:*",
     "@scriptorium/module-publishing": "workspace:*",
-    "@scriptorium/module-story": "workspace:*"
+    "@scriptorium/module-story": "workspace:*",
+    "@scriptorium/module-semantic": "workspace:*",
+    "@scriptorium/module-speaker": "workspace:*"
   }
 }

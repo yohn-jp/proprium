@@ -1,0 +1,64 @@
+{
+  "name": "@scriptorium/module-semantic",
+  "private": true,
+  "version": "0.1.0",
+  "type": "module",
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js"
+    },
+    "./browser": {
+      "types": "./dist/browser.d.ts",
+      "import": "./dist/browser.js"
+    },
+    "./worker": "./dist/worker.js",
+    "./migration": {
+      "types": "./dist/migration.d.ts",
+      "import": "./dist/migration.js"
+    }
+  },
+  "files": [
+    "dist"
+  ],
+  "scripts": {
+    "build": "tsc -p tsconfig.json",
+    "typecheck": "tsc -p tsconfig.json --noEmit",
+    "test": "node --import tsx --test src/*.test.ts"
+  },
+  "dependencies": {
+    "@scriptorium/contracts": "workspace:*",
+    "@scriptorium/migration": "workspace:*",
+    "@scriptorium/module-runtime": "workspace:*",
+    "@scriptorium/module-story": "workspace:*",
+    "@scriptorium/module-nlp": "workspace:*",
+    "yaml": "^2.8.1",
+    "react": "^19.1.0",
+    "react-dom": "^19.1.0",
+    "@huggingface/transformers": "3.8.1"
+  },
+  "scriptoriumModule": {
+    "id": "semantic",
+    "version": "0.1.0",
+    "contractVersion": 1,
+    "dependencies": [
+      "story",
+      "nlp"
+    ],
+    "provides": [
+      "semantic.embedding"
+    ],
+    "requires": [
+      "nlp.tokenizer"
+    ],
+    "serverEntry": "./dist/index.js",
+    "browserEntry": "./dist/browser.js",
+    "workerEntry": "./dist/worker.js",
+    "statePaths": [
+      "meta/scriptorium/modules/semantic"
+    ],
+    "locality": "local"
+  }
+}
