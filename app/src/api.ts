@@ -1,3 +1,18 @@
+import type {
+  ActionResult,
+  Approval,
+  ChangeOperation,
+  ChangeProposal,
+  CheckpointReceipt,
+  ModuleStatus,
+  PublishReceipt,
+  RemoteObservation,
+  RepositoryIdentity,
+  ReconcileResult,
+  SnapshotId,
+  UiContribution,
+} from "@scriptorium/contracts";
+
 export interface Project {
   id: string;
   url: string;
@@ -21,7 +36,34 @@ export interface Scene {
   id: string;
   title: string;
   text: string;
+  /** Legacy combined YAML + manuscript revision. File preconditions use SceneRead.document.revision. */
   revision: string;
+}
+
+export interface FileDocument {
+  path: string;
+  content: string;
+  /** null distinguishes an absent file from an existing empty file. */
+  revision: string | null;
+}
+
+export interface SceneRead {
+  snapshot: SnapshotId;
+  scene: Scene;
+  /** Full manuscript bytes decoded as UTF-8, including Markdown frontmatter. */
+  document: FileDocument;
+  /** Exact scene YAML, used only when the manuscript link needs to be added. */
+  metadata: FileDocument;
+}
+
+export interface TreeRead {
+  snapshot: SnapshotId;
+  tree: Tree;
+}
+
+export interface SnapshotRead {
+  snapshot: SnapshotId;
+  files: FileDocument[];
 }
 
 export interface Commit {
@@ -36,6 +78,11 @@ export interface SyncStatus {
   ahead: number;
   behind: number;
   dirty: boolean;
+}
+
+export interface Session {
+  authenticated: true;
+  authorScope: string;
 }
 
 export class ApiError extends Error {
@@ -72,24 +119,63 @@ async function request<T>(path: string, init: RequestInit = {}): Promise<T> {
   return body as T;
 }
 
+function projectPath(projectId: string, suffix: string): string {
+  return `/api/projects/${encodeURIComponent(projectId)}/${suffix}`;
+}
+
+function pinnedQuery(view: "remote" | "checkpoint", pinned?: SnapshotId): string {
+  const query = new URLSearchParams({ view });
+  if (pinned) query.set("snapshot", pinned.remoteCommit);
+  return `?${query.toString()}`;
+}
+
+/** The browser talks only to the public HTTP adapter and the shared contracts. */
 export const api = {
   login: (token: string) => request<{ authenticated: true }>("/api/login", { method: "POST", body: JSON.stringify({ token }) }),
-  session: () => request<{ authenticated: true }>("/api/session"),
+  session: () => request<Session>("/api/session"),
   logout: () => request<{ authenticated: false }>("/api/logout", { method: "POST", body: "{}" }),
   projects: () => request<Project[]>("/api/projects"),
   registerProject: (url: string, branch?: string) => request<Project>("/api/projects", {
     method: "POST",
     body: JSON.stringify({ url, ...(branch ? { branch } : {}) }),
   }),
-  tree: (projectId: string) => request<Tree>(`/api/projects/${encodeURIComponent(projectId)}/tree`),
-  scene: (projectId: string, sceneId: string) => request<Scene>(
-    `/api/projects/${encodeURIComponent(projectId)}/scenes/${encodeURIComponent(sceneId)}`,
+  tree: (projectId: string) => request<Tree>(projectPath(projectId, "tree")),
+  readTree: (projectId: string, view: "remote" | "checkpoint" = "remote", pinned?: SnapshotId) =>
+    request<TreeRead>(projectPath(projectId, `tree${pinnedQuery(view, pinned)}`)),
+  scene: (projectId: string, sceneId: string) => request<Scene>(projectPath(projectId, `scenes/${encodeURIComponent(sceneId)}`)),
+  readScene: (projectId: string, sceneId: string, view: "remote" | "checkpoint" = "remote", pinned?: SnapshotId) =>
+    request<SceneRead>(projectPath(projectId, `scenes/${encodeURIComponent(sceneId)}${pinnedQuery(view, pinned)}`)),
+  snapshot: (projectId: string, view: "remote" | "checkpoint" = "remote", pinned?: SnapshotId) =>
+    request<SnapshotRead>(projectPath(projectId, `snapshot${pinnedQuery(view, pinned)}`)),
+  history: (projectId: string) => request<Commit[]>(projectPath(projectId, "history")),
+  status: (projectId: string) => request<SyncStatus>(projectPath(projectId, "status")),
+  observation: (projectId: string) => request<RemoteObservation>(projectPath(projectId, "observation")),
+  propose: (projectId: string, proposal: ChangeProposal) => request<ChangeProposal>(projectPath(projectId, "proposals"), {
+    method: "POST",
+    body: JSON.stringify(proposal),
+  }),
+  approve: (projectId: string, approval: Approval) => request<void>(projectPath(projectId, "approvals"), {
+    method: "POST",
+    body: JSON.stringify(approval),
+  }),
+  checkpoint: (projectId: string, operation: ChangeOperation) => request<CheckpointReceipt>(projectPath(projectId, "checkpoints"), {
+    method: "POST",
+    body: JSON.stringify(operation),
+  }),
+  reconcile: (projectId: string) => request<ReconcileResult>(projectPath(projectId, "reconcile"), {
+    method: "POST",
+    body: "{}",
+  }),
+  publish: (projectId: string, batchId: string) => request<PublishReceipt>(projectPath(projectId, "publish"), {
+    method: "POST",
+    body: JSON.stringify({ batchId }),
+  }),
+  modules: (projectId: string) => request<ModuleStatus[]>(projectPath(projectId, "modules")),
+  contributions: (projectId: string) => request<UiContribution[]>(projectPath(projectId, "contributions")),
+  action: (projectId: string, actionId: string, input: unknown) => request<ActionResult>(
+    projectPath(projectId, `actions/${encodeURIComponent(actionId)}`),
+    { method: "POST", body: JSON.stringify({ input }) },
   ),
-  saveScene: (projectId: string, sceneId: string, text: string, revision: string) => request<Scene>(
-    `/api/projects/${encodeURIComponent(projectId)}/scenes/${encodeURIComponent(sceneId)}`,
-    { method: "PUT", body: JSON.stringify({ text, revision }) },
-  ),
-  history: (projectId: string) => request<Commit[]>(`/api/projects/${encodeURIComponent(projectId)}/history`),
-  status: (projectId: string) => request<SyncStatus>(`/api/projects/${encodeURIComponent(projectId)}/status`),
-  sync: (projectId: string) => request<SyncStatus>(`/api/projects/${encodeURIComponent(projectId)}/sync`, { method: "POST", body: "{}" }),
 };
+
+export type { RepositoryIdentity };
