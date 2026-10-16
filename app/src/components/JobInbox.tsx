@@ -194,15 +194,17 @@ export function JobInbox() {
   const onJobEvent = useCallback((event: JobEvent) => {
     const current = jobsRef.current;
     const existing = current.find((job) => job.id === event.jobId);
+    const terminal = event.type === "job-status" && (event.status === "done" || event.status === "error");
     if (!existing) {
-      if (!unknownJobIdsRef.current.has(event.jobId)) {
+      const firstEventForUnknownJob = !unknownJobIdsRef.current.has(event.jobId);
+      if (firstEventForUnknownJob) {
         unknownJobIdsRef.current.add(event.jobId);
         if (unknownJobIdsRef.current.size > 500) {
           const oldest = unknownJobIdsRef.current.values().next().value;
           if (oldest) unknownJobIdsRef.current.delete(oldest);
         }
-        void refresh();
       }
+      if (firstEventForUnknownJob || terminal) void refresh();
       return;
     }
 
@@ -216,7 +218,7 @@ export function JobInbox() {
     } : job);
     jobsRef.current = next;
     setJobs(next);
-    if (event.type === "job-status" && (event.status === "done" || event.status === "error")) void refresh();
+    if (terminal) void refresh();
   }, [refresh]);
 
   useEffect(() => {

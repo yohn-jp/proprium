@@ -23,6 +23,15 @@ async function assertOwnerCookie(route: Route): Promise<void> {
   expect(headers.cookie).toContain("scriptorium_session=");
 }
 
+async function emitJobEvent(page: Page, event: Record<string, unknown>): Promise<void> {
+  await page.evaluate(async (payload) => {
+    const testWindow = window as Window & { __emitJobInboxEvent?: (event: object) => void };
+    if (!testWindow.__emitJobInboxEvent) throw new Error("The inbox test event stream is not connected");
+    testWindow.__emitJobInboxEvent(payload);
+    await new Promise((resolve) => window.setTimeout(resolve, 0));
+  }, event);
+}
+
 test("authenticated inbox preserves owner job history and updates it from SSE", async ({ page }) => {
   expect(authToken.length).toBeGreaterThanOrEqual(32);
   const jobs = [
@@ -77,6 +86,68 @@ test("authenticated inbox preserves owner job history and updates it from SSE", 
     },
   ];
   const apiRequestsBeforeLogin: string[] = [];
+  let gateNextJobsRead = false;
+  let terminalEventSent = false;
+  let releaseQueuedRead: (() => void) | null = null;
+  let reportQueuedReadStarted: (() => void) | null = null;
+  const queuedReadGate = new Promise<void>((resolve) => { releaseQueuedRead = resolve; });
+  const queuedReadStarted = new Promise<void>((resolve) => { reportQueuedReadStarted = resolve; });
+
+  const raceQueuedJob = fixtureJob({
+    id: "job-race-1",
+    type: "speaker-evaluation-race",
+    status: "queued",
+    progress: 0,
+  });
+  const raceCompletedJob = fixtureJob({
+    id: "job-race-1",
+    type: "speaker-evaluation-race",
+    status: "done",
+    progress: 1,
+    result: { summary: "Completed after queued snapshot" },
+    updatedAt: "2026-10-17T00:03:00.000Z",
+    finishedAt: "2026-10-17T00:03:00.000Z",
+  });
+  const raceCompletionItem = {
+    id: "inbox-race-1",
+    kind: "job-complete",
+    jobId: "job-race-1",
+    jobType: "speaker-evaluation-race",
+    title: "評価が完了しました",
+    body: "Completion after queued snapshot",
+    status: "done",
+    read: false,
+    userId: null,
+    projectKey: "fixture-repository",
+    createdAt: "2026-10-17T00:03:00.000Z",
+  };
+
+  await page.addInitScript(() => {
+    let controller: ReadableStreamDefaultController<Uint8Array> | null = null;
+    const eventStream = new ReadableStream<Uint8Array>({
+      start(nextController) { controller = nextController; },
+      cancel() { controller = null; },
+    });
+    const testWindow = window as Window & { __emitJobInboxEvent?: (event: object) => void };
+    testWindow.__emitJobInboxEvent = (event) => {
+      if (!controller) throw new Error("The inbox event stream is not readable");
+      controller.enqueue(new TextEncoder().encode(`data: ${JSON.stringify(event)}\n\n`));
+    };
+
+    const originalFetch = window.fetch.bind(window);
+    window.fetch = async (input: RequestInfo | URL, init?: RequestInit) => {
+      const inputUrl = input instanceof Request ? input.url : String(input);
+      if (new URL(inputUrl, window.location.href).pathname !== "/api/jobs/events") return originalFetch(input, init);
+      const response = await originalFetch(input, init);
+      if (!response.ok) return response;
+      await response.body?.cancel().catch(() => undefined);
+      init?.signal?.addEventListener("abort", () => {
+        try { controller?.close(); } catch { /* The stream may already be closed. */ }
+      }, { once: true });
+      return new Response(eventStream, { status: response.status, headers: response.headers });
+    };
+  });
+
   page.on("request", (request) => {
     const path = new URL(request.url()).pathname;
     if (path === "/api/jobs" || path === "/api/jobs/events" || path.startsWith("/api/inbox")) {
@@ -91,19 +162,18 @@ test("authenticated inbox preserves owner job history and updates it from SSE", 
     await assertOwnerCookie(route);
     const path = new URL(route.request().url()).pathname;
     if (path === "/api/jobs/events") {
-      const event = {
-        type: "job-progress",
-        jobId: "job-running-1",
-        jobType: "speaker-evaluation",
-        status: "running",
-        progress: 0.37,
-        at: "2026-10-17T00:00:30.000Z",
-      };
-      await route.fulfill({ status: 200, contentType: "text/event-stream", body: `data: ${JSON.stringify(event)}\n\n` });
+      await route.fulfill({ status: 200, contentType: "text/event-stream", body: "" });
       return;
     }
     if (path === "/api/jobs" && route.request().method() === "GET") {
-      await route.fulfill({ json: jobs });
+      if (gateNextJobsRead) {
+        gateNextJobsRead = false;
+        reportQueuedReadStarted?.();
+        await queuedReadGate;
+        await route.fulfill({ json: [...jobs, raceQueuedJob] });
+        return;
+      }
+      await route.fulfill({ json: terminalEventSent ? [...jobs, raceCompletedJob] : jobs });
       return;
     }
     const jobId = path.match(/^\/api\/jobs\/([^/]+)$/u)?.[1];
@@ -116,6 +186,7 @@ test("authenticated inbox preserves owner job history and updates it from SSE", 
     const path = new URL(route.request().url()).pathname;
     if (route.request().method() === "GET") {
       const unreadOnly = new URL(route.request().url()).searchParams.get("unread") === "1";
+      if (terminalEventSent && !inboxItems.some((item) => item.id === raceCompletionItem.id)) inboxItems.push(raceCompletionItem);
       const items = inboxItems.filter((item) => !unreadOnly || !item.read);
       await route.fulfill({ json: { items, unreadCount: inboxItems.filter((item) => !item.read).length } });
       return;
@@ -149,6 +220,15 @@ test("authenticated inbox preserves owner job history and updates it from SSE", 
 
   const dialog = page.getByRole("dialog", { name: "受信箱とジョブ履歴" });
   await expect(dialog).toBeVisible();
+  await expect(dialog.getByRole("button", { name: "更新" })).toBeEnabled();
+  await emitJobEvent(page, {
+    type: "job-progress",
+    jobId: "job-running-1",
+    jobType: "speaker-evaluation",
+    status: "running",
+    progress: 0.37,
+    at: "2026-10-17T00:00:30.000Z",
+  });
   const runningJob = dialog.getByRole("listitem").filter({ hasText: "speaker-evaluation" });
   await expect(runningJob.getByRole("progressbar")).toHaveAttribute("value", "0.37");
   await expect(runningJob).toContainText("37%");
@@ -162,8 +242,35 @@ test("authenticated inbox preserves owner job history and updates it from SSE", 
   const notifications = dialog.getByRole("region", { name: "通知" });
   await expect(notifications).toContainText("Synthetic completion message");
   await expect(notifications).toContainText("Synthetic failure message");
+
+  gateNextJobsRead = true;
+  await emitJobEvent(page, {
+    type: "job-status",
+    jobId: "job-race-1",
+    jobType: "speaker-evaluation-race",
+    status: "queued",
+    progress: 0,
+    at: "2026-10-17T00:02:30.000Z",
+  });
+  await queuedReadStarted;
+  terminalEventSent = true;
+  await emitJobEvent(page, {
+    type: "job-status",
+    jobId: "job-race-1",
+    jobType: "speaker-evaluation-race",
+    status: "done",
+    progress: 1,
+    at: "2026-10-17T00:03:00.000Z",
+  });
+  inboxItems.push(raceCompletionItem);
+  releaseQueuedRead?.();
+  const racedJob = dialog.getByRole("listitem").filter({ hasText: "speaker-evaluation-race" });
+  await expect(racedJob).toContainText("完了");
+  await expect(notifications).toContainText("Completion after queued snapshot");
+  await expect(inboxButton).toContainText("3");
+
   await notifications.getByRole("button", { name: "既読" }).first().click();
-  await expect(notifications).toContainText("未読 1 件");
+  await expect(notifications).toContainText("未読 2 件");
   await dialog.getByRole("button", { name: "すべて既読" }).click();
   await expect(notifications).toContainText("未読 0 件");
   await expect(inboxButton).not.toContainText("2");
