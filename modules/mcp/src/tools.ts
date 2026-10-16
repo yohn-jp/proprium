@@ -276,7 +276,6 @@ function changeSetRecordFromProposalStatus(value: unknown): Record<string, unkno
   if (approvedOperationIds.length > 0 && approvedOperationIds.every((sourceId) => checkpointed.has(details.operationMap[sourceId]!))) {
     const appliedOperations = approvedOperationIds.map((sourceId) => {
       const sourceOperation = sourceOperations.find((item) => item.id === sourceId)!;
-      const coreId = details.operationMap[sourceId]!;
       const affectedEntities = details.affectedEntities[sourceId];
       return {
         operationId: sourceId,
@@ -285,9 +284,8 @@ function changeSetRecordFromProposalStatus(value: unknown): Record<string, unkno
         resultingRevision: details.resultRevisions[sourceId],
         resultId: details.resultIds[sourceId],
         ...(Array.isArray(affectedEntities) && affectedEntities.length ? { affectedEntities } : {}),
-        _coreOperationId: coreId,
       };
-    }).map(({ _coreOperationId: _ignored, ...operation }) => operation);
+    });
     status = approvedOperationIds.length === sourceOperations.length ? "applied" : "partially-applied";
     result = {
       changeSetId: details.sourceChangeSet.id,
@@ -906,29 +904,53 @@ export function registerMcpTools(server: McpServer, baseClient: McpActionClient)
     }),
   );
 
-  const inspectionScope = z.string().optional().describe("Optional source scope: sc-*, ch-*, or vol-*" );
   server.tool(
     "check_consistency",
-    "Validate story links, threads, and manuscript references within an optional scope",
-    { project_id: projectIdSchema, scope: inspectionScope },
-    guarded(async ({ project_id }) =>
-      unavailableModuleAction(scopedClient(baseClient, project_id), "diagnostics", "check_consistency")),
+    "Validate story links, threads, and manuscript references",
+    { project_id: projectIdSchema },
+    guarded(async ({ project_id }) => {
+      const client = scopedClient(baseClient, project_id);
+      if (!(await client.listActions()).some((action) => action.id === "diagnostics.checkConsistency")) {
+        return unavailableModuleAction(client, "diagnostics", "check_consistency");
+      }
+      const result = await client.invoke("diagnostics.checkConsistency", {});
+      if (!result.ok) return actionResult(result);
+      const data = isRecord(result.data) ? result.data : {};
+      if (!Array.isArray(data.issues)) return errorResult("INVALID_RESPONSE", "Diagnostics consistency result is invalid");
+      const issues = data.issues;
+      const errorCount = issues.filter((issue) => isRecord(issue) && issue.severity === "error").length;
+      return outputResult({ ok: errorCount === 0, issue_count: issues.length, issues }, result.snapshot);
+    }),
   );
 
   server.tool(
     "check_continuity",
-    "Detect scene-to-scene location continuity issues within an optional scope",
-    { project_id: projectIdSchema, scope: inspectionScope },
-    guarded(async ({ project_id }) =>
-      unavailableModuleAction(scopedClient(baseClient, project_id), "diagnostics", "check_continuity")),
+    "Detect scene-to-scene location continuity issues",
+    { project_id: projectIdSchema },
+    guarded(async ({ project_id }) => {
+      const client = scopedClient(baseClient, project_id);
+      if (!(await client.listActions()).some((action) => action.id === "diagnostics.checkContinuity")) {
+        return unavailableModuleAction(client, "diagnostics", "check_continuity");
+      }
+      const result = await client.invoke("diagnostics.checkContinuity", {});
+      if (!result.ok) return actionResult(result);
+      const data = isRecord(result.data) ? result.data : {};
+      if (!Array.isArray(data.warnings)) return errorResult("INVALID_RESPONSE", "Diagnostics continuity result is invalid");
+      return outputResult(data.warnings, result.snapshot);
+    }),
   );
 
   server.tool(
     "compute_cooccurrence",
-    "Compute scene-level character co-occurrence within an optional scope",
-    { project_id: projectIdSchema, scope: inspectionScope },
-    guarded(async ({ project_id }) =>
-      unavailableModuleAction(scopedClient(baseClient, project_id), "story", "compute_cooccurrence")),
+    "Compute scene-level character co-occurrence",
+    { project_id: projectIdSchema },
+    guarded(async ({ project_id }) => {
+      const client = scopedClient(baseClient, project_id);
+      if (!(await client.listActions()).some((action) => action.id === "story.cooccurrence")) {
+        return unavailableModuleAction(client, "story", "compute_cooccurrence");
+      }
+      return invoke(client, "story.cooccurrence", {});
+    }),
   );
 
   server.tool(
@@ -936,8 +958,7 @@ export function registerMcpTools(server: McpServer, baseClient: McpActionClient)
     "Check source-compatible character voice consistency in scene dialogue",
     {
       project_id: projectIdSchema,
-      scene_id: z.string().optional().describe("Single scene ID"),
-      scope: inspectionScope,
+      scene_id: z.string().describe("Scene ID"),
     },
     guarded(async ({ project_id }) =>
       unavailableModuleAction(scopedClient(baseClient, project_id), "speaker", "check_voice_consistency")),
@@ -948,8 +969,7 @@ export function registerMcpTools(server: McpServer, baseClient: McpActionClient)
     "Detect dialogue that deviates from the learned character style profile",
     {
       project_id: projectIdSchema,
-      scene_id: z.string().optional().describe("Single scene ID"),
-      scope: inspectionScope,
+      scene_id: z.string().describe("Scene ID"),
     },
     guarded(async ({ project_id }) =>
       unavailableModuleAction(scopedClient(baseClient, project_id), "speaker", "check_style_deviations")),

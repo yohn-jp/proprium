@@ -1,11 +1,13 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import { createHash } from "node:crypto";
+import { createServer } from "node:http";
+import type { AddressInfo } from "node:net";
 import type { ActionDescriptor, ActionResult, ChangeProposal, ModuleActionContext, SnapshotId } from "@scriptorium/contracts";
 import { Client } from "@modelcontextprotocol/sdk/client/index.js";
 import { StreamableHTTPClientTransport } from "@modelcontextprotocol/sdk/client/streamableHttp.js";
 import type { FetchLike } from "@modelcontextprotocol/sdk/shared/transport.js";
-import { createMcpHttpContribution } from "./http.js";
+import { closeMcpSessions, createMcpHttpContribution } from "./http.js";
 
 const snapshot: SnapshotId = {
   repository: {
@@ -18,7 +20,11 @@ const snapshot: SnapshotId = {
   remoteCommit: "a".repeat(40),
 };
 
-function actionContext(calls: string[], extraActions: ActionDescriptor[] = []) {
+function actionContext(
+  calls: string[],
+  extraActions: ActionDescriptor[] = [],
+  onStatusSignal?: (signal: AbortSignal | undefined) => void,
+) {
   const actions: ActionDescriptor[] = [
     { id: "core.status", module: "core", effect: "read" },
     { id: "story.changes.propose", module: "story", effect: "propose" },
@@ -35,9 +41,18 @@ function actionContext(calls: string[], extraActions: ActionDescriptor[] = []) {
     projectId: "project-one",
     reader,
     async listActions() { return actions; },
-    async invoke(actionId: string, input: unknown): Promise<ActionResult> {
+    async invoke(actionId: string, input: unknown, signal?: AbortSignal): Promise<ActionResult> {
       calls.push(actionId);
       if (actionId === "core.status") {
+        if (onStatusSignal) {
+          onStatusSignal(signal);
+          if (signal) {
+            await new Promise<void>((resolve) => {
+              if (signal.aborted) return resolve();
+              signal.addEventListener("abort", () => resolve(), { once: true });
+            });
+          }
+        }
         return { ok: true, snapshot, data: { status: "ready" } };
       }
       if (actionId === "story.changes.propose") {
@@ -113,6 +128,9 @@ function actionContext(calls: string[], extraActions: ActionDescriptor[] = []) {
       }
       if (actionId === "core.proposals.list") {
         return { ok: true, snapshot, data: { proposals: storedProposalStatus ? [storedProposalStatus] : [] } };
+      }
+      if (actionId === "story.cooccurrence") {
+        return { ok: true, snapshot, data: { edges: [], gaps: [] } };
       }
       return { ok: false, snapshot, error: { code: "not_found", message: "Unknown action", retryable: false } };
     },
@@ -195,6 +213,32 @@ test("MCP refuses action names that could approve or publish author changes", as
     });
     assert.equal(result.isError, true);
     assert.deepEqual(calls, []);
+  } finally {
+    await transport.terminateSession().catch(() => undefined);
+    await client.close().catch(() => undefined);
+  }
+});
+
+test("compute_cooccurrence maps to the Story co-occurrence action without extra source arguments", async () => {
+  const calls: string[] = [];
+  const host = actionContext(calls, [{ id: "story.cooccurrence", module: "story", effect: "read" }]);
+  const contribution = createMcpHttpContribution(new Map());
+  const fetch: FetchLike = async (url, init) => contribution.handle(new Request(url, init), host);
+  const transport = new StreamableHTTPClientTransport(
+    new URL("http://scriptorium.test/api/projects/project-one/modules/mcp/streamable"),
+    { fetch },
+  );
+  const client = new Client({ name: "mcp-module-test", version: "1.0.0" });
+
+  try {
+    await client.connect(transport);
+    const { tools } = await client.listTools();
+    const cooccurrence = tools.find((tool) => tool.name === "compute_cooccurrence");
+    assert.ok(cooccurrence);
+    assert.equal("scope" in (cooccurrence.inputSchema.properties ?? {}), false);
+    const result = await client.callTool({ name: "compute_cooccurrence", arguments: { project_id: "project-one" } });
+    assert.deepEqual(result.structuredContent, { snapshot, data: { edges: [], gaps: [] } });
+    assert.deepEqual(calls, ["story.cooccurrence"]);
   } finally {
     await transport.terminateSession().catch(() => undefined);
     await client.close().catch(() => undefined);
@@ -341,6 +385,100 @@ test("HTTP MCP session rejects cross-project tool calls with a machine scope err
   } finally {
     await transport.terminateSession().catch(() => undefined);
     await client.close().catch(() => undefined);
+  }
+});
+
+test("SDK cancellation reaches an in-flight HTTP host action", async () => {
+  const calls: string[] = [];
+  let signalObserved!: (signal: AbortSignal | undefined) => void;
+  const started = new Promise<AbortSignal | undefined>((resolve) => {
+    signalObserved = resolve;
+  });
+  const host = actionContext(calls, [], signalObserved);
+  const sessions = new Map();
+  const contribution = createMcpHttpContribution(sessions);
+  const server = createServer(async (incoming, outgoing) => {
+    const requestController = new AbortController();
+    incoming.once("aborted", () => requestController.abort(new Error("HTTP client disconnected")));
+    outgoing.once("close", () => {
+      if (!outgoing.writableEnded) requestController.abort(new Error("HTTP response closed"));
+    });
+    try {
+      const chunks: Buffer[] = [];
+      for await (const chunk of incoming) chunks.push(Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk));
+      const headers = new Headers();
+      for (const [name, value] of Object.entries(incoming.headers)) {
+        if (Array.isArray(value)) headers.set(name, value.join(", "));
+        else if (value !== undefined) headers.set(name, value);
+      }
+      const init: RequestInit & { duplex?: "half" } = {
+        method: incoming.method,
+        headers,
+        signal: requestController.signal,
+      };
+      if (chunks.length) {
+        init.body = Buffer.concat(chunks);
+        init.duplex = "half";
+      }
+      const response = await contribution.handle(new Request(`http://127.0.0.1${incoming.url}`, init), host);
+      outgoing.statusCode = response.status;
+      response.headers.forEach((value, name) => outgoing.setHeader(name, value));
+      if (!response.body) {
+        outgoing.end();
+        return;
+      }
+      const reader = response.body.getReader();
+      try {
+        while (true) {
+          const chunk = await reader.read();
+          if (chunk.done) break;
+          if (!outgoing.write(Buffer.from(chunk.value))) {
+            await new Promise<void>((resolve) => outgoing.once("drain", resolve));
+          }
+        }
+        outgoing.end();
+      } finally {
+        reader.releaseLock();
+      }
+    } catch {
+      if (!outgoing.headersSent) outgoing.statusCode = 500;
+      outgoing.end();
+    }
+  });
+  await new Promise<void>((resolve) => server.listen(0, "127.0.0.1", resolve));
+  const address = server.address() as AddressInfo;
+  const transport = new StreamableHTTPClientTransport(
+    new URL(`http://127.0.0.1:${address.port}/api/projects/project-one/modules/mcp/streamable`),
+  );
+  const client = new Client({ name: "mcp-cancellation-test", version: "1.0.0" });
+
+  try {
+    await client.connect(transport);
+    const cancellation = new AbortController();
+    const pending = client.callTool(
+      { name: "get_status", arguments: { project_id: "project-one" } },
+      undefined,
+      { signal: cancellation.signal },
+    );
+    const hostSignal = await started;
+    assert.ok(hostSignal);
+    assert.equal(hostSignal.aborted, false);
+    cancellation.abort(new Error("caller cancelled tool"));
+    await assert.rejects(pending);
+    await new Promise<void>((resolve, reject) => {
+      if (hostSignal.aborted) return resolve();
+      const timeout = setTimeout(() => reject(new Error("MCP cancellation did not reach the HTTP host action")), 2_000);
+      hostSignal.addEventListener("abort", () => {
+        clearTimeout(timeout);
+        resolve();
+      }, { once: true });
+    });
+    assert.equal(hostSignal.aborted, true);
+    assert.deepEqual(calls, ["core.status"]);
+  } finally {
+    await client.close().catch(() => undefined);
+    await closeMcpSessions(sessions);
+    await new Promise<void>((resolve, reject) => server.close((error) => error ? reject(error) : resolve()));
   }
 });
 
