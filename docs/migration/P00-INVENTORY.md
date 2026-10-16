@@ -59,8 +59,16 @@ IDs R01–R48 are the fixed IDs in `FULL-MIGRATION-PLAN.md`. The machine-readabl
 
 ## Non-router groups
 
-The fixed 12 groups N01–N12 and their required behavior are in `ledger.json`; caller/UI and authoritative storage expansion remains pending for each.
+The fixed 12 groups N01–N12, source-observed caller/UI references, storage readers/writers, and required behavior are in `ledger.json`. All remain source facts with migration disposition and proof pending.
 
 ## Pending evidence
 
-The first producer freeze does not yet attach caller/UI surfaces, handler call-symbol chains, or authoritative storage readers and writers. Those fields are explicitly `pending` in every route/group record. Every route/group remains `migrationStatus: pending` with no proof IDs. The coordinator reported typecheck, tests, build, `audit:core`, and real Chromium passing; P00 inventory did not rerun those checks, and a frozen install result was not reported.
+Caller/UI modules and direct call sites, registrar/Core/injected-manager symbols, and source storage readers/writers have now been added to R01–R48 and N01–N12 with source-path evidence. They are observations at the pinned source HEAD, not migration claims. Handler helper chains still need owner-level tracing where noted. All R01–R48 / N01–N12 entries remain `migrationStatus: pending` with no proof IDs. R48 records distinct HTTP/stdio tool behavior and exact direct mutation paths: HTTP `create_scene` and `lint_manuscript(fix=true)` mutate through Core; stdio `create_scene` submits a ChangeSet proposal, while scene-scoped `lint_manuscript(fix=true)` delegates to an API handler that mutates through Core. Revision/idempotency guards do not provide the plan-required author approval boundary. The coordinator reported typecheck, tests, build, `audit:core`, and real Chromium passing; P00 inventory did not rerun those checks, and a frozen install result was not reported.
+
+## Source persistence facts
+
+`ledger.json` now records the source storage model and per-registration source readers/writers. `ProjectStore.reload()` reads project YAML/Markdown and rebuilds the configured index at `<dataDir>/index/<project>/index.sqlite` (legacy fallback `<projectRoot>/.arcadia/index.sqlite`). Several source readers and writers omit the configured `indexDir` and call `getIndexPath(rootDir)`/`openIndex(rootDir)`, so they target `<projectRoot>/.arcadia/index.sqlite`; both DB paths can exist with different rows. The SQLite schema mixes rebuildable search/entity projections with decision/history tables for zukan suggestions, state proposals, reader knowledge and scene state events; contradiction dismissals are separately stored in `meta/contradiction-dismissals.jsonl`. Do not classify either DB as disposable from its filename or the entire SQLite schema as derived cache. The ledger lists source evidence and explicitly leaves migration dispositions/proofs pending.
+
+## MCP source mutation paths
+
+The machine-readable R48 row records source line evidence for both transports. HTTP MCP `create_scene` directly creates/reorders scene files and commits them; HTTP MCP `lint_manuscript` with `fix=true` directly rewrites a manuscript. Stdio MCP `create_scene` submits a ChangeSet proposal, but scene-scoped `lint_manuscript` with `fix=true` calls the persistent API lint handler. The latter paths use revision/idempotency guards, which do not establish the plan-required author approval step. These are pending source findings for P08, not statements about target implementation.
