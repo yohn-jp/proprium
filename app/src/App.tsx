@@ -357,7 +357,8 @@ function AuthorWorkspace() {
             entry.documentPath === activeEditor.read.document.path && entry.operation.id === activeEntry.operation.id &&
             entry.operation.generation === activeEntry.operation.generation)
           : undefined;
-        if (conflictEntry && (activeEditor?.entry?.state !== "conflict" || !activeEditor.conflict)) {
+        const editorSnapshotIsCurrent = activeEditor && sameRemoteSnapshot(activeEditor.remote.snapshot, active.observation.snapshot);
+        if (conflictEntry && editorSnapshotIsCurrent && (activeEditor?.entry?.state !== "conflict" || !activeEditor.conflict)) {
           updateWork((current) => current?.editor?.read.document.path === conflictEntry.documentPath &&
               current.editor.entry?.operation.id === conflictEntry.operation.id &&
               current.editor.entry.operation.generation === conflictEntry.operation.generation &&
@@ -1122,6 +1123,73 @@ function AuthorWorkspace() {
     return saved;
   }
 
+  async function reloadConflictSnapshot(
+    nav: number,
+    projectId: string,
+    repository: RepositoryIdentity,
+    sceneId: string,
+    documentPath: string,
+    operationId: string,
+    generation: number,
+  ): Promise<void> {
+    const before = workRef.current;
+    const beforeEditor = before?.editor;
+    if (!isCurrentProject(nav, projectId, repository) || before?.selectedSceneId !== sceneId ||
+        beforeEditor?.read.document.path !== documentPath) return;
+
+    const observed = await api.observation(projectId);
+    if (!isCurrentProject(nav, projectId, repository)) return;
+    if (!sameRepository(observed.snapshot.repository, repository)) {
+      throw new Error("登録済みリポジトリの識別情報が変わったため、競合の最新原稿を読み込めませんでした。");
+    }
+    const remoteChanged = before.observation.snapshot.remoteCommit !== observed.snapshot.remoteCommit;
+    const checkpointChanged = before.observation.checkpointHead !== observed.checkpointHead;
+    if (remoteChanged || checkpointChanged) {
+      await reconcileProject(projectId, repository, authorScopeRef.current, nav);
+      if (!isCurrentProject(nav, projectId, repository)) return;
+    }
+    const tree = await api.readTree(projectId, "remote", observed.snapshot);
+    if (!isCurrentProject(nav, projectId, repository)) return;
+    if (snapshotKey(tree.snapshot) !== snapshotKey(observed.snapshot)) {
+      throw new Error("競合確認中に作品構成と原稿のリモート版が一致しませんでした。");
+    }
+
+    const latest = workRef.current;
+    const editor = latest?.editor;
+    if (latest?.selectedSceneId !== sceneId || editor?.read.document.path !== documentPath) return;
+    const preservedEditor: EditorSession = { ...editor, conflict: null };
+    updateWork((current) => current?.project.id === projectId && current.selectedSceneId === sceneId &&
+        current.editor?.read.document.path === documentPath && sameRepository(current.observation.snapshot.repository, repository)
+      ? {
+        ...current,
+        observation: observed,
+        tree,
+        loadingScene: true,
+        editor: { ...current.editor, conflict: null },
+      }
+      : current);
+    setStatus({ message: "現在のリモート版を取得し、保護された下書きと比較しています…", kind: "normal" });
+    await loadScene(projectId, sceneId, tree, repository);
+    if (!isCurrentProject(nav, projectId, repository)) return;
+    const loaded = workRef.current;
+    if (loaded?.selectedSceneId !== sceneId) return;
+    if (!loaded.editor) {
+      // A failed fresh read must not erase the author copy. Keep recovery visible but
+      // with conflict controls unavailable until a canonical remote scene is loaded.
+      updateWork((current) => current?.project.id === projectId && current.selectedSceneId === sceneId &&
+          current.editor === null && sameRepository(current.observation.snapshot.repository, repository)
+        ? { ...current, loadingScene: false, editor: preservedEditor }
+        : current);
+      return;
+    }
+    if (loaded.editor.entry?.operation.id === operationId && loaded.editor.entry.operation.generation === generation &&
+        loaded.editor.text !== editor.text) {
+      setStatus({ message: "リモート版を読み込みましたが、保護された操作本文が一致しません。ブラウザーの回復記録を保持しています。", kind: "error" });
+      return;
+    }
+    await refreshJournal(repository, nav);
+  }
+
   async function checkpointCurrent(): Promise<void> {
     const current = workRef.current;
     const editor = current?.editor;
@@ -1158,9 +1226,28 @@ function AuthorWorkspace() {
       await refreshRemote();
     } catch (error) {
       if (error instanceof ApiError && (error.status === 409 || error.status === 412)) {
-        await currentJournal.updateState(submittedEntry, "conflict").catch(() => undefined);
-        if (isCurrentEditor(nav, projectId, repository, documentPath, sceneId)) {
-          updateWork((state) => state?.editor ? { ...state, editor: { ...state.editor, conflict: state.editor.remote } } : state);
+        let conflictEntry: JournalEntry | null = null;
+        try {
+          conflictEntry = await currentJournal.updateState(submittedEntry, "conflict");
+        } catch (storageError) {
+          if (isCurrentProject(nav, projectId, repository)) {
+            setStatus({ message: `チェックポイントが競合しましたが、競合状態を回復記録へ保存できませんでした。${messageOf(storageError)}`, kind: "error" });
+          }
+        }
+        if (conflictEntry && isCurrentEditor(nav, projectId, repository, documentPath, sceneId)) {
+          updateWork((state) => state?.editor?.entry?.operation.id === submittedEntry.operation.id &&
+              state.editor.entry.operation.generation === submittedEntry.operation.generation
+            ? { ...state, editor: { ...state.editor, entry: conflictEntry!, text: conflictEntry!.text, conflict: null, draftStored: true } }
+            : state);
+        }
+        if (conflictEntry && isCurrentProject(nav, projectId, repository)) {
+          try {
+            await reloadConflictSnapshot(nav, projectId, repository, sceneId, documentPath, submittedEntry.operation.id, submittedEntry.operation.generation);
+          } catch (refreshError) {
+            if (isCurrentProject(nav, projectId, repository)) {
+              setStatus({ message: `チェックポイントは競合しました。最新のリモート原稿を確認できませんでした。下書きは回復記録に保持しています。${messageOf(refreshError)}`, kind: "error" });
+            }
+          }
         }
       }
       if (isCurrentEditor(nav, projectId, repository, documentPath, sceneId)) setStatus({ message: messageOf(error), kind: "error" });

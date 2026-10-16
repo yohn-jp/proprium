@@ -750,6 +750,13 @@ test("a remote update during author approval keeps the conflicting editor draft 
   const projectId = projects[0]?.id;
   expect(projectId).toBeTruthy();
   const projectPath = "/api/projects/" + encodeURIComponent(projectId!);
+  const appObservationCommits: string[] = [];
+  page.on("response", (response) => {
+    if (!new URL(response.url()).pathname.endsWith("/observation") || response.request().method() !== "GET") return;
+    void response.json().then((body: { snapshot?: { remoteCommit?: string } }) => {
+      if (body.snapshot?.remoteCommit) appObservationCommits.push(body.snapshot.remoteCommit);
+    }).catch(() => undefined);
+  });
   const authorText = "Protected author draft during remote update.";
   await page.locator(".cm-content").fill(authorText);
   await expect.poll(async () => (await readJournal(page)).some((entry) => entry.text === authorText && entry.state === "draft")).toBe(true);
@@ -785,6 +792,7 @@ test("a remote update during author approval keeps the conflicting editor draft 
     execFileSync("git", ["add", "manuscript/vol-1/ch-1/scene-1.md"], { cwd: workingCopy, stdio: "ignore" });
     execFileSync("git", ["commit", "-m", "External conflict fixture update"], { cwd: workingCopy, env: gitEnv, stdio: "ignore" });
     execFileSync("git", ["push", "origin", "HEAD"], { cwd: workingCopy, stdio: "ignore" });
+    const remoteCommit = execFileSync("git", ["rev-parse", "HEAD"], { cwd: workingCopy, encoding: "utf8" }).trim();
 
     const refreshed = await page.request.get(new URL(projectPath + "/observation", origin).toString());
     expect(refreshed.ok()).toBe(true);
@@ -792,7 +800,7 @@ test("a remote update during author approval keeps the conflicting editor draft 
     await checkpointClick;
 
     await expect.poll(async () => (await readJournal(page)).find((entry) => entry.text === authorText)?.state).toBe("conflict");
-    await page.evaluate(() => window.dispatchEvent(new Event("online")));
+    await expect.poll(() => appObservationCommits.includes(remoteCommit), { timeout: 5_000 }).toBe(true);
     await expect(page.locator(".conflict")).toBeVisible();
     await expect(page.locator(".cm-content")).toContainText(authorText);
     await page.locator(".conflict summary").click();
