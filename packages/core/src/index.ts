@@ -393,6 +393,18 @@ function isSnapshotId(value: unknown): value is SnapshotId {
     (snapshot.overlayCommit === undefined || (typeof snapshot.overlayCommit === "string" && /^(?:[a-f0-9]{40}|[a-f0-9]{64})$/.test(snapshot.overlayCommit)));
 }
 
+function canonicalJson(value: unknown): string {
+  const normalize = (item: unknown): unknown => {
+    if (Array.isArray(item)) return item.map(normalize);
+    const record = asRecord(item);
+    if (record) {
+      return Object.fromEntries(Object.keys(record).sort().map((key) => [key, normalize(record[key])]));
+    }
+    return item;
+  };
+  return JSON.stringify(normalize(value));
+}
+
 function isJsonValue(value: unknown, active = new WeakSet<object>(), depth = 0): boolean {
   if (value === null || typeof value === "string" || typeof value === "boolean") return true;
   if (typeof value === "number") return Number.isFinite(value);
@@ -2114,7 +2126,6 @@ export class CoreStore implements MutationCoordinator {
       const observation = await this.requireObservation(projectId);
       const { record, root } = await this.getProject(projectId);
       const proposalBase = { repository: proposal.snapshot.repository, remoteCommit: proposal.snapshot.remoteCommit };
-      if (snapshotKey(proposalBase) !== snapshotKey(observation.snapshot)) throw coreError(409, "proposal_snapshot_stale", "The proposal was based on a stale repository snapshot");
       await this.ensureSnapshot(root, proposal.snapshot, observation.snapshot.repository, observation.snapshot.remoteCommit);
       const ids = new Set<string>();
       for (const operation of proposal.operations) {
@@ -2175,8 +2186,15 @@ export class CoreStore implements MutationCoordinator {
         ...(evidence.length ? { evidence: structuredClone(evidence) } : {}),
       };
       const proposals = this.proposals.get(record.id) ?? new Map<string, ChangeProposal>();
+      const existing = proposals.get(copied.id);
+      if (existing) {
+        if (canonicalJson(existing) !== canonicalJson(copied)) {
+          throw coreError(409, "proposal_id_reused", "The proposal ID is already bound to a different payload");
+        }
+        return structuredClone(existing);
+      }
+      if (snapshotKey(proposalBase) !== snapshotKey(observation.snapshot)) throw coreError(409, "proposal_snapshot_stale", "The proposal was based on a stale repository snapshot");
       proposals.set(copied.id, copied);
-      this.approvals.get(record.id)?.delete(copied.id);
       this.proposals.set(record.id, proposals);
       return structuredClone(copied);
     });

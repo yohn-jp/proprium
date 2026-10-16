@@ -527,8 +527,11 @@ test("author approval binds to the exact operation payload", async () => {
     await store.propose(project.id, { id: "proposal_replacement", snapshot, operations: [replacement], source: "module" });
     await assert.rejects(store.checkpoint(project.id, replacement), (error: unknown) => error instanceof CoreError && error.code === "author_approval_required");
 
-    await store.propose(project.id, { id: proposal.id, snapshot, operations: [replacement], source: "module" });
-    await assert.rejects(store.checkpoint(project.id, replacement), (error: unknown) => error instanceof CoreError && error.code === "author_approval_required");
+    await assert.rejects(
+      store.propose(project.id, { id: proposal.id, snapshot, operations: [replacement], source: "module" }),
+      (error: unknown) => error instanceof CoreError && error.code === "proposal_id_reused",
+    );
+    assert.equal((await store.getProposal(project.id, proposal.id))?.state, "approved");
   } finally {
     await fs.rm(fixture.root, { recursive: true, force: true });
   }
@@ -555,6 +558,56 @@ test("author proposal review exposes defensive copies and durable checkpoint sta
     assert.equal(checkpointed?.state, "checkpointed");
     assert.deepEqual(checkpointed?.checkpoints, [receipt]);
     assert.deepEqual(checkpointed?.approvedOperationIds, [op.id]);
+  } finally {
+    await fs.rm(fixture.root, { recursive: true, force: true });
+  }
+});
+
+test("concurrent proposal ID reuse rejects changed payloads and preserves approval on exact retry", async () => {
+  const fixture = await remoteFixture();
+  try {
+    const store = new CoreStore({ dataDir: path.join(fixture.root, "state"), allowLocalRemotes: true });
+    const project = await store.registerProject({ url: fixture.remote });
+    const snapshot = (await store.observe(project.id)).snapshot;
+    const readme = await (await store.reader(project.id, "remote")).read("README.md");
+    const evidence = {
+      id: "mcp_goal_evidence",
+      snapshot,
+      module: "mcp" as const,
+      kind: "task_context",
+      paths: [{ path: "README.md", revision: readme?.revision ?? null }],
+      details: { goal: "first goal" },
+    };
+    const op = {
+      ...operation(snapshot, "manuscript/proposal-id.md", "Same operation bytes.\n", null, "proposal_id_binding_op"),
+      evidenceIds: [evidence.id],
+    };
+    const firstPayload = {
+      id: "proposal_id_binding",
+      snapshot,
+      operations: [op],
+      source: "mcp" as const,
+      evidence: [evidence],
+    };
+    const changedPayload = {
+      ...firstPayload,
+      evidence: [{ ...evidence, details: { goal: "changed goal" } }],
+    };
+    const outcomes = await Promise.allSettled([
+      store.propose(project.id, firstPayload),
+      store.propose(project.id, changedPayload),
+    ]);
+    const accepted = outcomes.filter((outcome): outcome is PromiseFulfilledResult<typeof firstPayload> => outcome.status === "fulfilled");
+    const rejected = outcomes.filter((outcome): outcome is PromiseRejectedResult => outcome.status === "rejected");
+    assert.equal(accepted.length, 1);
+    assert.equal(rejected.length, 1);
+    assert.ok(rejected[0]?.reason instanceof CoreError);
+    assert.equal((rejected[0]?.reason as CoreError).code, "proposal_id_reused");
+
+    const originalProposal = accepted[0]!.value;
+    await store.approve(project.id, { proposalId: originalProposal.id, operationIds: [op.id], authorScope: "owner" });
+    assert.deepEqual(await store.propose(project.id, originalProposal), originalProposal);
+    assert.equal((await store.getProposal(project.id, originalProposal.id))?.state, "approved");
   } finally {
     await fs.rm(fixture.root, { recursive: true, force: true });
   }
