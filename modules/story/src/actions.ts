@@ -41,7 +41,7 @@ import {
 } from "./domain/index.js";
 import { readStorySnapshot, type LoadedStorySnapshot } from "./snapshot.js";
 import { collectNotesPlainTexts, normalizeNotes } from "./notes.js";
-import { buildNarrativeChangeProposal } from "./narrativeChangeSet.js";
+import { buildNarrativeChangeProposal, identifyNarrativeChangeSet } from "./narrativeChangeSet.js";
 import {
   buildOperation,
   isRecord,
@@ -638,8 +638,8 @@ function makeActions(moduleContext: StoryCapabilityContext): ModuleAction[] {
   const compute = "compute" as const;
   return [
     action("story.changes.propose", propose, passThrough, async (input, context) => {
-      const converted = await buildNarrativeChangeProposal(context, input);
-      const existingResult = await context.invoke("core.proposals.get", { proposalId: converted.proposalId });
+      const source = identifyNarrativeChangeSet(context, input);
+      const existingResult = await context.invoke("core.proposals.get", { proposalId: source.coreProposalId });
       if (existingResult.ok) {
         const status = (existingResult.data as { proposal?: { proposal?: unknown } }).proposal;
         const prior = status?.proposal;
@@ -648,31 +648,40 @@ function makeActions(moduleContext: StoryCapabilityContext): ModuleAction[] {
         }
         const identity = prior.evidence.find((item) => isRecord(item) && item.kind === "source.narrative-change-set.v1");
         const details = isRecord(identity) && isRecord(identity.details) ? identity.details : undefined;
-        if (details?.sourceFingerprint !== converted.sourceFingerprint || JSON.stringify(details.operationMap) !== JSON.stringify(converted.operationMap)) {
+        if (prior.id !== source.coreProposalId || details?.sourceFingerprint !== source.sourceFingerprint || details.coreProposalId !== source.coreProposalId || !isRecord(details.operationMap)) {
           throw Object.assign(new Error("This NarrativeChangeSet ID is already bound to a different source payload"), { code: "change_set_identity_conflict" });
+        }
+        const operationMap = details.operationMap;
+        const sourceOperationIds = source.operationIds;
+        if (Object.keys(operationMap).length !== sourceOperationIds.length || sourceOperationIds.some((id) => typeof operationMap[id] !== "string") || Object.values(operationMap).some((id) => typeof id !== "string")) {
+          throw Object.assign(new Error("Existing Story proposal has an incomplete source operation mapping"), { code: "change_set_identity_conflict" });
         }
         if (typeof details.submittedAt !== "string" || Number.isNaN(Date.parse(details.submittedAt))) {
           throw Object.assign(new Error("Existing Story proposal is missing its source submission timestamp"), { code: "change_set_identity_conflict" });
         }
+        for (const field of ["dependencies", "resultIds", "resultPaths", "resultRevisions", "affectedEntities"] as const) {
+          if (!isRecord(details[field])) throw Object.assign(new Error(`Existing Story proposal is missing ${field} evidence`), { code: "change_set_identity_conflict" });
+        }
         return withActionProposal({
-          changeSetId: converted.changeSetId,
-          proposalId: converted.proposalId,
-          coreProposalId: converted.coreProposalId,
+          changeSetId: source.changeSetId,
+          proposalId: source.coreProposalId,
+          coreProposalId: source.coreProposalId,
           submittedAt: details.submittedAt,
-          operationIds: converted.operationIds,
-          operationMap: converted.operationMap,
-          dependencies: converted.dependencies,
-          resultIds: converted.resultIds,
-          resultPaths: converted.resultPaths,
-          resultRevisions: converted.resultRevisions,
-          affectedEntities: converted.affectedEntities,
-          sourceFingerprint: converted.sourceFingerprint,
+          operationIds: sourceOperationIds.map((id) => operationMap[id] as string),
+          operationMap,
+          dependencies: details.dependencies,
+          resultIds: details.resultIds,
+          resultPaths: details.resultPaths,
+          resultRevisions: details.resultRevisions,
+          affectedEntities: details.affectedEntities,
+          sourceFingerprint: source.sourceFingerprint,
           replayed: true,
         }, prior as unknown as ChangeProposal);
       }
       if (!new Set(["PROPOSAL_NOT_FOUND", "proposal_not_found"]).has(existingResult.error.code)) {
         throw Object.assign(new Error(`Unable to verify existing Core proposal identity: ${existingResult.error.message}`), { code: existingResult.error.code });
       }
+      const converted = await buildNarrativeChangeProposal(context, input, source);
       await context.propose(converted.operations, converted.evidence, converted.proposalId);
       return {
         changeSetId: converted.changeSetId,

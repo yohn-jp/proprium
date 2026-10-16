@@ -273,6 +273,21 @@ function validateChangeSet(value: unknown, context: ModuleActionContext): Narrat
   if (JSON.stringify(row).length > 1_000_000) fail("NarrativeChangeSet exceeds the source size limit");
   return { schemaVersion: 1, id, projectId, goal: row.goal, status: "proposed", assessment: row.assessment as ObjectValue, operations, evidence, diagnostics };
 }
+export function identifyNarrativeChangeSet(context: ModuleActionContext, rawInput: unknown): {
+  changeSetId: string;
+  coreProposalId: string;
+  sourceFingerprint: string;
+  operationIds: string[];
+} {
+  const sourceObject = assertRecord(rawInput, "NarrativeChangeSet");
+  const changeSet = validateChangeSet(rawInput, context);
+  return {
+    changeSetId: changeSet.id,
+    coreProposalId: coreProposalId(changeSet.id),
+    sourceFingerprint: createHash("sha256").update(canonicalJson(sourceObject), "utf8").digest("hex"),
+    operationIds: changeSet.operations.map((operation) => operation.id),
+  };
+}
 function canonical(value: unknown): unknown {
   if (Array.isArray(value)) return value.map(canonical);
   if (value && typeof value === "object") return Object.fromEntries(Object.entries(value as ObjectValue).sort(([a], [b]) => a.localeCompare(b)).map(([key, item]) => [key, canonical(item)]));
@@ -449,7 +464,7 @@ function resultIdentity(operation: NarrativeOperation): string {
 }
 
 /** Convert a validated source v1 change set into snapshot-bound Core operations without mutating files. */
-export async function buildNarrativeChangeProposal(context: ModuleActionContext, rawInput: unknown): Promise<{
+export async function buildNarrativeChangeProposal(context: ModuleActionContext, rawInput: unknown, preparedIdentity?: ReturnType<typeof identifyNarrativeChangeSet>): Promise<{
   changeSetId: string;
   proposalId: string;
   coreProposalId: string;
@@ -467,8 +482,9 @@ export async function buildNarrativeChangeProposal(context: ModuleActionContext,
 }> {
   const sourceObject = assertRecord(rawInput, "NarrativeChangeSet");
   const changeSet = validateChangeSet(rawInput, context);
-  const mappedCoreProposalId = coreProposalId(changeSet.id);
-  const sourceFingerprint = createHash("sha256").update(canonicalJson(sourceObject), "utf8").digest("hex");
+  const identity = preparedIdentity ?? identifyNarrativeChangeSet(context, rawInput);
+  const mappedCoreProposalId = identity.coreProposalId;
+  const sourceFingerprint = identity.sourceFingerprint;
   const submittedAt = new Date().toISOString();
   const story = await readStorySnapshot(context.reader);
   const entities = new Map([...story.entities].map(([id, entity]) => [id, workEntity(entity)]));

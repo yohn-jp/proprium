@@ -305,6 +305,22 @@ test("co-occurrence action returns source Jaccard/PMI and accepts scene scope", 
   assert.equal(invalid.ok, false);
 });
 
+test("reader model action derives chapter disclosures and knowledge checks from the selected snapshot", async () => {
+  const context = makeActionContext(makeReader(fixtureFiles()));
+  const result = await invoke<{
+    chapterId: string;
+    disclosures: Array<{ entityId: string; sceneId: string; evidence: string }>;
+    knowledgeGaps: Array<{ kind: string }>;
+    forgetRisks: Array<{ threadId: string; forgetRisk: number }>;
+    firstReadReaction: null;
+  }>("story.reader-model.build", { chapterId: "ch-main-1" }, context);
+  assert.equal(result.data.chapterId, "ch-main-1");
+  assert.ok(result.data.disclosures.some((item) => item.entityId === "char-uma" && item.sceneId === "sc-1" && item.evidence === "Uma"));
+  assert.ok(Array.isArray(result.data.knowledgeGaps));
+  assert.ok(Array.isArray(result.data.forgetRisks));
+  assert.equal(result.data.firstReadReaction, null, "the local Story action does not invoke an optional external assistant");
+});
+
 test("NarrativeChangeSet retries return the stored proposal and reject changed source meaning", async () => {
   const reader = makeReader(fixtureFiles());
   const proposals: Array<{ id: string; operations: ChangeOperation[] }> = [];
@@ -370,15 +386,23 @@ test("NarrativeChangeSet preserves unrestricted source IDs and maps unsafe IDs t
   const sourceEvidence = stored.evidence?.find((item) => item.kind === "source.narrative-change-set.v1");
   assert.equal((sourceEvidence?.details as { coreProposalId?: string }).coreProposalId, data.coreProposalId);
   assert.equal(((sourceEvidence?.details as { sourceChangeSet?: { id?: string } }).sourceChangeSet)?.id, sourceId);
+  const originalRevision = ((sourceEvidence?.details as { resultRevisions?: Record<string, string> }).resultRevisions)?.["update-uma-legacy"];
+  assert.equal(typeof originalRevision, "string");
 
-  const replay = await actionById("story.changes.propose").invoke(changeSet, context);
+  const changedSnapshotFiles = fixtureFiles();
+  changedSnapshotFiles.set("bible/characters/char-uma/profile.yaml", yaml({ id: "char-uma", name: "A newer remote name", type: "character", aliases: ["U"], tags: ["lead"], notes: { daily: ["Keep the promise"] }, relations: [] }));
+  const newerReader = makeReader(changedSnapshotFiles, "repo-work");
+  const newerContext = makeActionContext(newerReader);
+  newerContext.invoke = context.invoke;
+  const replay = await actionById("story.changes.propose").invoke(changeSet, newerContext);
   assert.equal(replay.ok, true, replay.ok ? undefined : replay.error.message);
   if (replay.ok) {
     assert.equal((replay.data as { replayed: boolean }).replayed, true);
     assert.equal((replay.data as { changeSetId: string }).changeSetId, sourceId);
     assert.equal((replay.data as { coreProposalId: string }).coreProposalId, data.coreProposalId);
+    assert.equal((replay.data as { resultRevisions: Record<string, string> }).resultRevisions["update-uma-legacy"], originalRevision, "replay returns persisted source results even if current snapshot has advanced");
   }
-  const changed = await actionById("story.changes.propose").invoke({ ...changeSet, goal: "A different goal" }, context);
+  const changed = await actionById("story.changes.propose").invoke({ ...changeSet, goal: "A different goal" }, newerContext);
   assert.equal(changed.ok, false);
   if (!changed.ok) assert.equal(changed.error.code, "change_set_identity_conflict");
   assert.equal(proposals.length, 1);
