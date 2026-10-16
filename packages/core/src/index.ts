@@ -2351,7 +2351,10 @@ export class CoreStore implements MutationCoordinator {
         const acknowledged = localOperations.filter((item) => remoteById.has(item.operation.id)).map((item) => item.receipt);
         if (conflicts.length) return { batchId, state: "conflict", remoteCommit: remoteHead, acknowledged };
         const toPublish = localOperations.filter((item) => pendingIds.has(item.operation.id) && !remoteById.has(item.operation.id));
-        if (!toPublish.length) return { batchId, state: "confirmed", remoteCommit: remoteHead, acknowledged };
+        if (!toPublish.length) {
+          const exactReplay = historicalBatch?.operations.map((item) => item.receipt);
+          return { batchId, state: "confirmed", remoteCommit: remoteHead, acknowledged: exactReplay ?? acknowledged };
+        }
         const rows = toPublish.map((item) => ({ operationId: item.operation.id, generation: item.operation.generation, digest: item.digest, receipt: item.receipt }));
         const digest = publicationDigest(batchId, rows);
         if (historicalBatch) {

@@ -394,6 +394,13 @@ test("deleted publication metadata cannot release a batch ID for different opera
     const healthyObservation = await store.observe(project.id);
     assert.equal(healthyObservation.state, "fresh");
     assert.deepEqual(healthyObservation.pending.map((item) => item.operationId), [second.id]);
+
+    const secondPublication = await store.publish(project.id, "batch_second_after_deleted_metadata");
+    assert.equal(secondPublication.state, "confirmed");
+    assert.deepEqual(secondPublication.acknowledged.map((item) => item.operationId), [second.id]);
+    const replayedFirstBatch = await store.publish(project.id, "batch_deleted_metadata");
+    assert.equal(replayedFirstBatch.state, "confirmed");
+    assert.deepEqual(replayedFirstBatch.acknowledged.map((item) => item.operationId), [first.id]);
   } finally {
     await fs.rm(fixture.root, { recursive: true, force: true });
   }
