@@ -40,7 +40,7 @@ const ACCESS_TOKEN = randomBytes(32).toString("base64url");
 const INITIAL_NAME = "Uma";
 const UPDATED_NAME = "Uma Reviewed";
 const SECOND_NAME = "Haru";
-const MANUSCRIPT = "# Scene One\n\nUma enters the cafe at dusk.\n\n　星野は灯りを見た。『俺が行く。』\n";
+const MANUSCRIPT = "# Scene One\n\nUma enters the cafe at dusk.\n\nUma enters the cafe at dusk.\n\n　星野は灯りを見た。『俺が行く。』\n";
 
 function fixtureFiles() {
   return {
@@ -612,13 +612,15 @@ test("spawned stdio and production HTTP MCP preserve Core review boundaries thro
     for (const [name, connection] of [["stdio", stdio], ["HTTP", http]]) {
       const result = success(await connection.client.callTool({
         name: "suggest_rewrite",
-        arguments: { project_id: projectId, scene_id: "sc-1", sentence_index: 1 },
+        arguments: { project_id: projectId, scene_id: "sc-1", sentence_index: 2 },
       }), `${name} Qwen suggest_rewrite`);
       assert.equal(result.data.sceneId, "sc-1");
-      assert.equal(result.data.sentenceIndex, 1);
+      assert.equal(result.data.sentenceIndex, 2);
       assert.equal(result.data.originalSentence, "Uma enters the cafe at dusk.");
       assert.equal(typeof result.data.prompt, "string");
       assert.ok(result.data.prompt.length > 0);
+      assert.match(result.data.prompt, /0始まりの文番号 2/u,
+        "Rewrite prompt must preserve the selected zero-based source sentence index, including blank-line filtering");
       assert.ok(result.data.context && typeof result.data.context === "object");
       assert.equal(result.data.suggestions.length, 3, "Qwen must return the source-required three rewrite candidates");
       assert.ok(result.data.suggestions.every((item) => typeof item.text === "string" && item.text.trim()));
@@ -641,7 +643,7 @@ test("spawned stdio and production HTTP MCP preserve Core review boundaries thro
     assert.ok(!process.env.ARCADIA_LLM_PROVIDER || process.env.ARCADIA_LLM_PROVIDER === "none",
       "Set SCRIPTORIUM_MCP_ACCEPTANCE_REWRITE_PROVIDER=qwen-local to opt in to the local provider acceptance");
     const rewrite = await stdio.client.callTool({
-      name: "suggest_rewrite", arguments: { project_id: projectId, scene_id: "sc-1", sentence_index: 1 },
+      name: "suggest_rewrite", arguments: { project_id: projectId, scene_id: "sc-1", sentence_index: 2 },
     });
     assert.equal(errorCode(rewrite, "suggest_rewrite without a model provider"),
       READY_MODULES.includes("assistant") ? "assistant_provider_unavailable" : "MODULE_UNAVAILABLE");
