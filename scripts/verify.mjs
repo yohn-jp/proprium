@@ -6,15 +6,21 @@ const commands = [
   ["pnpm", ["install", "--frozen-lockfile"]],
   ["pnpm", ["typecheck"]],
   ["pnpm", ["test"]],
-  ["pnpm", ["build"]],
-  ["pnpm", ["audit:core"]],
-  ["pnpm", ["test:e2e"]],
-  ["bash", ["scripts/verify-oci.sh"]],
+  ["pnpm", ["build"], { SCRIPTORIUM_PROFILE: "core" }],
+  ["pnpm", ["audit:core"], { SCRIPTORIUM_PROFILE: "core" }],
+  ["pnpm", ["exec", "playwright", "test", "--config", "tests/e2e/playwright.config.ts"], { SCRIPTORIUM_PROFILE: "core" }],
+  ["bash", ["scripts/verify-oci.sh"], { SCRIPTORIUM_PROFILE: "core", SCRIPTORIUM_OCI_IMAGE: process.env.SCRIPTORIUM_OCI_CORE_IMAGE ?? "scriptorium:verification-core" }],
+  ["pnpm", ["build"], { SCRIPTORIUM_PROFILE: "full" }],
+  ["pnpm", ["exec", "playwright", "test", "--config", "tests/e2e/playwright.config.ts"], { SCRIPTORIUM_PROFILE: "full" }],
+  ["node", ["--test", "tests/integration/mcp-acceptance.test.mjs"], { SCRIPTORIUM_MCP_ACCEPTANCE_MODULES: "story,nlp,diagnostics,semantic,speaker,assistant,publishing,mcp" }],
+  ["node", ["--test", "modules/diagnostics/tests/production.acceptance.mjs"]],
+  ["bash", ["scripts/verify-oci.sh"], { SCRIPTORIUM_PROFILE: "full", SCRIPTORIUM_OCI_IMAGE: process.env.SCRIPTORIUM_OCI_FULL_IMAGE ?? "scriptorium:verification-full" }],
 ];
-for (const [command, args] of commands) {
-  console.info(`\nRunning ${command} ${args.join(" ")}`);
+for (const [command, args, overrides = {}] of commands) {
+  const profile = overrides.SCRIPTORIUM_PROFILE;
+  console.info(`\nRunning ${command} ${args.join(" ")}${profile ? ` (profile=${profile})` : ""}`);
   const code = await new Promise((resolve, reject) => {
-    const child = spawn(command, args, { stdio: "inherit", env: process.env });
+    const child = spawn(command, args, { stdio: "inherit", env: { ...process.env, ...overrides } });
     child.on("error", reject);
     child.on("exit", (status, signal) => resolve(status ?? (signal ? 1 : 0)));
   });
