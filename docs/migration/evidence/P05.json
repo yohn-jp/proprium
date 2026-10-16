@@ -146,7 +146,7 @@
     {
       "id": "P05-STORY-CORE-PRODUCTION-ACCEPTANCE",
       "kind": "compiled Story module with live Core, ModuleRuntime, API, and GitHub repositories",
-      "status": "pending",
+      "status": "candidate_passed",
       "targetFiles": [
         "modules/story/tests/production.acceptance.mjs",
         "modules/story/src/narrativeChangeSet.ts",
@@ -154,9 +154,40 @@
         "packages/module-runtime/src/module-runtime.ts",
         "packages/api/src/server.ts"
       ],
-      "command": "node --test modules/story/tests/production.acceptance.mjs (requires two disposable private synthetic GitHub repositories and gh authentication)",
-      "result": "Awaiting fresh execution against the committed acceptance harness.",
-      "scope": "Uses the compiled Story module through the actual owner action registry and two distinct GitHub repository identities. Exercises virtual-scope multi-create proposals, referenced-file guards, same-ID source payload replay/conflict, partial owner approval and ordered checkpoint/publish, a changed reference target rejected after approval, linked Bible browse with both snapshots, unchanged Bible remote head, and complete Core data-root deletion followed by remote reclone. No repository mutation uses force push; fixtures contain generated Story records only."
+      "command": "node --test modules/story/tests/production.acceptance.mjs (authenticated fixture values supplied via environment; private URLs and credentials omitted)",
+      "result": "1 passed, 0 failed; 449311 ms (7m29s), exit 0 at candidate HEAD abeac4c928d2eff1fb73f8c5d0f9dc7595de52c9.",
+      "scope": "Compiled Story module exercised through the live owner action API, Core, and ModuleRuntime against two distinct GitHub repository identities on each repository’s API-reported default branch. Verified pending-only Zukan create; exact-operation replay after an unrelated default-branch advance without rebasing; changed-meaning same-ID rejection; distinct new operation identity after row removal; series create/bind and a separately browsable read-only Bible overlay carrying both snapshot identities; an atomic three-operation NarrativeChangeSet with virtual membership scopes and target-file read preconditions; full-payload replay and changed-goal conflict; partial owner approval/checkpoint followed by ordered completion and publish; a changed referenced target rejected after approval; unchanged Bible remote head; deletion of the complete Core data root followed by clean project registration/reclone and restored work/Bible overlay reads.",
+      "candidate": {
+        "head": "abeac4c928d2eff1fb73f8d5c0f9dc7595de52c9",
+        "branch": "work/7-p05",
+        "durationMs": 449311,
+        "exitCode": 0,
+        "status": "passed_candidate_not_final"
+      },
+      "fixtureIdentity": {
+        "work": {
+          "alias": "p05-story-acceptance-work-20261017-01",
+          "visibility": "private synthetic repository",
+          "branch": "p05-11464a944e964be5a249",
+          "branchSelection": "GitHub API-reported configured default branch"
+        },
+        "bible": {
+          "alias": "p05-story-acceptance-bible-20261017-01",
+          "visibility": "private synthetic repository",
+          "branch": "p05-e71c07659acb470a95e9",
+          "branchSelection": "GitHub API-reported configured default branch"
+        },
+        "urlsAndCredentials": "omitted"
+      },
+      "shutdownWarning": {
+        "count": 2,
+        "message": "Scriptorium could not determine whether local checkpoints remain pending during shutdown.",
+        "impact": "Non-fatal; the acceptance exited 0 and every assertion passed."
+      },
+      "finalGate": {
+        "status": "pending",
+        "description": "This is a candidate-leaf actual-GitHub acceptance result, not the final frozen-runtime gate. Root will rerun the full composed actual-GitHub acceptance on the final integrated runtime."
+      }
     },
     {
       "id": "P05-INTEGRATED-BROWSER-ACTIONS",
