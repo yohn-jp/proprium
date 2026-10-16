@@ -168,6 +168,28 @@ async function waitForJournalCount(page: Page, count: number): Promise<void> {
   await expect.poll(async () => (await readJournal(page)).length).toBe(count);
 }
 
+test("appearance modes follow system preference initially and persist explicit light, dark, and paper choices", async ({ page }) => {
+  await page.emulateMedia({ colorScheme: "light" });
+  await signIn(page);
+  await expect(page.locator("html")).toHaveAttribute("data-zp-theme", "light");
+  const appearance = page.getByLabel("外観");
+  await expect(appearance).toBeVisible();
+  await appearance.selectOption("dark");
+  await expect.poll(() => page.locator("html").getAttribute("data-zp-theme")).toBe("dark");
+  await expect.poll(() => page.locator("body").evaluate((element) => getComputedStyle(element).backgroundColor)).toBe("rgb(18, 22, 28)");
+  expect(await page.evaluate(() => localStorage.getItem("arcadia-theme-mode"))).toBe("dark");
+
+  await page.reload();
+  await expect(page.getByLabel("外観")).toHaveValue("dark");
+  await page.getByLabel("外観").selectOption("paper");
+  await expect.poll(() => page.locator("html").getAttribute("data-zp-theme")).toBe("paper");
+  await expect.poll(() => page.locator("body").evaluate((element) => getComputedStyle(element).backgroundColor)).toBe("rgb(242, 235, 217)");
+  expect(await page.evaluate(() => localStorage.getItem("arcadia-theme-mode"))).toBe("paper");
+
+  await page.getByLabel("外観").selectOption("light");
+  await expect.poll(() => page.locator("body").evaluate((element) => getComputedStyle(element).backgroundColor)).toBe("rgb(242, 238, 231)");
+});
+
 test("writing UI recovers multi-document drafts and separates Draft, Checkpoint, and GitHub publication", async ({ page }) => {
   expect(authToken.length).toBeGreaterThanOrEqual(32);
   expect(repositoryUrl).not.toBe("");
@@ -765,11 +787,20 @@ test("a remote update during author approval keeps the conflicting editor draft 
   let signalApproval!: () => void;
   const approvalGate = new Promise<void>((resolve) => { releaseApproval = resolve; });
   const approvalStarted = new Promise<void>((resolve) => { signalApproval = resolve; });
+  let releaseFreshSceneRead!: () => void;
+  let signalFreshSceneRead!: () => void;
+  const freshSceneReadGate = new Promise<void>((resolve) => { releaseFreshSceneRead = resolve; });
+  const freshSceneReadStarted = new Promise<void>((resolve) => { signalFreshSceneRead = resolve; });
   await page.route(/\/api\/projects\/[^/]+\/approvals$/u, async (route) => {
     if (route.request().method() === "POST") {
       signalApproval();
       await approvalGate;
     }
+    await route.continue();
+  });
+  await page.route((url) => url.pathname.endsWith("/scenes/scene-1") && url.searchParams.get("view") === "checkpoint", async (route) => {
+    signalFreshSceneRead();
+    await freshSceneReadGate;
     await route.continue();
   });
 
@@ -797,17 +828,29 @@ test("a remote update during author approval keeps the conflicting editor draft 
     const refreshed = await page.request.get(new URL(projectPath + "/observation", origin).toString());
     expect(refreshed.ok()).toBe(true);
     releaseApproval();
+    await freshSceneReadStarted;
+    const duringReadText = "New typing during the fresh conflict snapshot read.";
+    await page.locator(".cm-content").fill(duringReadText);
+    const freshReadResponse = page.waitForResponse((response) => {
+      const url = new URL(response.url());
+      return response.request().method() === "GET" && url.pathname.endsWith("/scenes/scene-1") && url.searchParams.get("view") === "checkpoint";
+    });
+    releaseFreshSceneRead();
+    await freshReadResponse;
     await checkpointClick;
 
     await expect.poll(async () => (await readJournal(page)).find((entry) => entry.text === authorText)?.state).toBe("conflict");
     await expect.poll(() => appObservationCommits.includes(remoteCommit), { timeout: 5_000 }).toBe(true);
+    await expect(page.locator(".loading")).toHaveCount(0);
     await expect(page.locator(".conflict")).toBeVisible();
-    await expect(page.locator(".cm-content")).toContainText(authorText);
+    await expect(page.locator(".cm-content")).toHaveText(duringReadText);
+    await expect.poll(async () => (await readJournal(page)).some((entry) => entry.text === duringReadText && entry.state === "draft")).toBe(true);
     await page.locator(".conflict summary").click();
     await expect(page.locator(".conflict")).toContainText(remoteText);
     await expect(page.getByRole("button", { name: "Checkpoint", exact: true })).toBeDisabled();
   } finally {
     releaseApproval();
+    releaseFreshSceneRead();
     await rm(repositoryRoot, { recursive: true, force: true });
   }
 });

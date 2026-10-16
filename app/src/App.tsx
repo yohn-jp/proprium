@@ -15,8 +15,10 @@ import { ApiError, api, type Project, type SceneRead, type Tree, type TreeRead }
 import { ContributionHost } from "./contributions/ContributionHost";
 import { ProposalReview } from "./contributions/ProposalReview";
 import { PublicModuleView, publicModuleIdForPath } from "./contributions/PublicModuleView";
+import { ThemeControl } from "./components/ThemeControl";
 import { SceneEditor, type ScratchDraftBinding, type ScratchDraftPayload } from "./editor/SceneEditor";
 import { replaceDocumentBody } from "./editor/ruby";
+import { loadThemeMode, persistThemeMode, type ThemeMode } from "./theme";
 import { clearDraft, loadDraft } from "./drafts";
 import {
   BrowserJournal,
@@ -267,12 +269,33 @@ function buildScratchOperation(read: SceneRead, draft: ScratchDraftPayload): { o
   return { operation, path };
 }
 
-export function App() {
+export function App({ initialTheme }: { initialTheme?: ThemeMode } = {}) {
+  const [themeMode, setThemeMode] = useState<ThemeMode>(() => initialTheme ?? loadThemeMode());
+  const [themeError, setThemeError] = useState("");
+  const changeTheme = useCallback((mode: ThemeMode) => {
+    try {
+      persistThemeMode(mode);
+      setThemeMode(mode);
+      setThemeError("");
+    } catch {
+      setThemeError("外観の設定を保存できませんでした。");
+    }
+  }, []);
   const publicModuleId = publicModuleIdForPath(window.location.pathname);
-  return publicModuleId ? <PublicModuleView moduleId={publicModuleId} /> : <AuthorWorkspace />;
+  return publicModuleId
+    ? <PublicModuleView moduleId={publicModuleId} themeMode={themeMode} onThemeChange={changeTheme} themeError={themeError} />
+    : <AuthorWorkspace themeMode={themeMode} onThemeChange={changeTheme} themeError={themeError} />;
 }
 
-function AuthorWorkspace() {
+function AuthorWorkspace({
+  themeMode,
+  onThemeChange,
+  themeError,
+}: {
+  themeMode: ThemeMode;
+  onThemeChange: (mode: ThemeMode) => void;
+  themeError: string;
+}) {
   const [authState, setAuthState] = useState<"checking" | "signed-out" | "ready">("checking");
   const [authorScope, setAuthorScope] = useState("owner");
   const authorScopeRef = useRef("owner");
@@ -655,6 +678,21 @@ function AuthorWorkspace() {
           }
         }
       }
+      // A refresh can take longer than the draft debounce. Preserve edits made
+      // while the pinned reads were in flight, even if IndexedDB has not seen
+      // their newest generation yet.
+      const inMemory = workRef.current;
+      const inMemoryEditor = inMemory?.project.id === projectId && inMemory.selectedSceneId === sceneId &&
+          inMemory.editor?.read.document.path === effective.document.path
+        ? inMemory.editor
+        : null;
+      const inMemoryEntry = inMemoryEditor?.entry;
+      if (inMemoryEditor && inMemoryEntry &&
+          (!latest || inMemoryEntry.operation.generation > latest.operation.generation)) {
+        latest = inMemoryEntry;
+        entry = inMemoryEntry;
+        text = inMemoryEditor.text;
+      }
       if (latest) {
         if (latest.state === "draft" || latest.state === "conflict") text = latest.text;
         const docPrecondition = latest.operation.reads.find((item) => item.path === effective.document.path)?.revision;
@@ -813,13 +851,26 @@ function AuthorWorkspace() {
   }, [authorScope, importRemoteProposals, loadScene, reconcileProject, updateWork]);
   refreshRef.current = refreshRemote;
 
+  const refreshForeground = useCallback(() => {
+    const current = workRef.current;
+    if (current) {
+      void importRemoteProposals(
+        current.project.id,
+        current.observation.snapshot.repository,
+        authorScopeRef.current,
+        navigationRef.current,
+      );
+    }
+    void refreshRef.current();
+  }, [importRemoteProposals]);
+
   useEffect(() => {
     if (!work) return;
-    const timer = window.setInterval(() => void refreshRef.current(), 15_000);
+    const timer = window.setInterval(refreshForeground, 15_000);
     const onForeground = () => {
-      if (document.visibilityState === "visible") void refreshRef.current();
+      if (document.visibilityState === "visible") refreshForeground();
     };
-    const onOnline = () => void refreshRef.current();
+    const onOnline = () => refreshForeground();
     document.addEventListener("visibilitychange", onForeground);
     window.addEventListener("online", onOnline);
     return () => {
@@ -827,7 +878,7 @@ function AuthorWorkspace() {
       document.removeEventListener("visibilitychange", onForeground);
       window.removeEventListener("online", onOnline);
     };
-  }, [work?.project.id]);
+  }, [refreshForeground, work?.project.id]);
 
   useEffect(() => {
     const beforeUnload = (event: BeforeUnloadEvent) => {
@@ -1485,6 +1536,7 @@ function AuthorWorkspace() {
       <header className="topbar">
         <a className="brand" href="/" aria-label="Scriptorium ホーム">Scriptorium</a>
         <div className="topbar-status" role="status" aria-live="polite" data-kind={status.kind}>{status.message || "作品を選択してください"}</div>
+        <ThemeControl mode={themeMode} onChange={onThemeChange} error={themeError} />
         <button type="button" className="quiet-button" onClick={() => void signOut()}>ログアウト</button>
       </header>
       <div className="workspace-grid">
