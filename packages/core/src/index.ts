@@ -1239,6 +1239,12 @@ export class CoreStore implements MutationCoordinator {
     if (head && (!remoteCommit || !(await this.isAncestor(root, head, remoteCommit)))) {
       throw coreError(409, "local_only_commits", "Local-only commits must be preserved before replacing the project workspace");
     }
+    const unremoteHistory = (await git(root, [
+      "rev-list", "--all", "--reflog", ...(remoteCommit ? [`^${remoteCommit}`] : []),
+    ])).trim();
+    if (unremoteHistory) {
+      throw coreError(409, "local_refs_unrecoverable", "Local branches, stashes, or retained refs contain commits absent from the remote branch; preserve them before replacing the project workspace");
+    }
 
     const proposals = new Map<string, StoredOperation>();
     for (const item of [...localOperations, ...remoteOperations]) proposals.set(item.operation.id, item);

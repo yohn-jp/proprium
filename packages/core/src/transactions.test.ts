@@ -770,6 +770,70 @@ test("an explicit reconstruction safely rebinds a clean legacy checkout to the c
   }
 });
 
+test("reconstruction refuses to discard a clean local draft branch", async () => {
+  const fixture = await remoteFixture();
+  try {
+    const dataDir = path.join(fixture.root, "state");
+    const store = new CoreStore({ dataDir, allowLocalRemotes: true });
+    const project = await store.registerProject({ url: fixture.remote });
+    const clonePath = path.join(dataDir, "projects", project.id);
+    const remoteHead = await git(fixture.root, "--git-dir", fixture.remote, "rev-parse", "refs/heads/main");
+    await git(clonePath, "config", "user.name", "Draft Branch Writer");
+    await git(clonePath, "config", "user.email", "draft-branch@example.test");
+    await git(clonePath, "checkout", "-b", "draft-save");
+    await fs.writeFile(path.join(clonePath, "draft-save.md"), "Unpublished branch draft.\n");
+    await git(clonePath, "add", "draft-save.md");
+    await git(clonePath, "commit", "-m", "Save an unpublished draft branch");
+    const draftCommit = await git(clonePath, "rev-parse", "HEAD");
+    await git(clonePath, "checkout", "main");
+    const branchBefore = await git(clonePath, "branch", "--show-current");
+    const headBefore = await git(clonePath, "rev-parse", "HEAD");
+
+    await assert.rejects(store.reconstructProject(project.id),
+      (error: unknown) => error instanceof CoreError && error.code === "local_refs_unrecoverable");
+
+    assert.equal(await git(clonePath, "branch", "--show-current"), branchBefore);
+    assert.equal(await git(clonePath, "rev-parse", "HEAD"), headBefore);
+    assert.equal(await git(clonePath, "rev-parse", "refs/heads/draft-save"), draftCommit);
+    assert.equal(await git(clonePath, "show", "draft-save:draft-save.md"), "Unpublished branch draft.");
+    assert.equal(await git(fixture.root, "--git-dir", fixture.remote, "rev-parse", "refs/heads/main"), remoteHead);
+    assert.deepEqual(await store.listProjects(), [project]);
+  } finally {
+    await fs.rm(fixture.root, { recursive: true, force: true });
+  }
+});
+
+test("reconstruction refuses to discard a saved stash", async () => {
+  const fixture = await remoteFixture();
+  try {
+    const dataDir = path.join(fixture.root, "state");
+    const store = new CoreStore({ dataDir, allowLocalRemotes: true });
+    const project = await store.registerProject({ url: fixture.remote });
+    const clonePath = path.join(dataDir, "projects", project.id);
+    const remoteHead = await git(fixture.root, "--git-dir", fixture.remote, "rev-parse", "refs/heads/main");
+    await fs.writeFile(path.join(clonePath, "README.md"), "Stashed draft text.\n");
+    await git(clonePath, "stash", "push", "-m", "Keep the unpublished manuscript draft");
+    const stashRef = await git(clonePath, "rev-parse", "refs/stash");
+    const stashList = await git(clonePath, "stash", "list", "--format=%H %gs");
+    const branchBefore = await git(clonePath, "branch", "--show-current");
+    const headBefore = await git(clonePath, "rev-parse", "HEAD");
+
+    await assert.rejects(store.reconstructProject(project.id),
+      (error: unknown) => error instanceof CoreError && error.code === "local_refs_unrecoverable");
+
+    assert.equal(await git(clonePath, "branch", "--show-current"), branchBefore);
+    assert.equal(await git(clonePath, "rev-parse", "HEAD"), headBefore);
+    assert.equal(await git(clonePath, "rev-parse", "refs/stash"), stashRef);
+    assert.equal(await git(clonePath, "stash", "list", "--format=%H %gs"), stashList);
+    assert.equal(await git(clonePath, "show", "stash@{0}:README.md"), "Stashed draft text.");
+    assert.equal(await git(clonePath, "status", "--porcelain", "--untracked-files=all"), "");
+    assert.equal(await git(fixture.root, "--git-dir", fixture.remote, "rev-parse", "refs/heads/main"), remoteHead);
+    assert.deepEqual(await store.listProjects(), [project]);
+  } finally {
+    await fs.rm(fixture.root, { recursive: true, force: true });
+  }
+});
+
 test("reconstruction verifies the repository default branch before replacing a clean clone", async () => {
   const fixture = await remoteFixture();
   try {
