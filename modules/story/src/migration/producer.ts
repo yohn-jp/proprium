@@ -332,6 +332,11 @@ async function inspectLegacyStoryFiles(
     const changeSet = canonicalPath.startsWith(".arcadia/change-sets/");
     const localSnapshot = canonicalPath.startsWith(".arcadia/snapshots/");
     const restorableHistory = changeSet || localSnapshot;
+    const restoreTarget = changeSet
+      ? `${STORY_CHANGE_SETS}${canonicalPath.slice(".arcadia/change-sets/".length)}`
+      : localSnapshot
+        ? `${STORY_LOCAL_SNAPSHOTS}${canonicalPath.slice(".arcadia/snapshots/".length)}`
+        : canonicalPath;
     if (!isStorySourceFile(canonicalPath) && !restorableHistory) {
       result.entries.push(
         semanticEntry({
@@ -344,7 +349,20 @@ async function inspectLegacyStoryFiles(
       continue;
     }
 
-    const opaque = await context.target.read(source, "base64");
+    let opaque: Awaited<ReturnType<MigrationContext["target"]["read"]>>;
+    try {
+      opaque = await context.target.read(source, "base64");
+    } catch {
+      result.entries.push(
+        semanticEntry({
+          source,
+          target: restoreTarget,
+          disposition: "blocked",
+          detail: "The opaque Story path could not be read safely from the selected target snapshot; it remains untouched for explicit review.",
+        }),
+      );
+      continue;
+    }
     if (!opaque) {
       result.entries.push(
         semanticEntry({

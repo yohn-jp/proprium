@@ -12,6 +12,7 @@ function contextFor(input: {
   workspaceFiles?: Record<string, string>;
   targets?: Record<string, string | Buffer>;
   targetFiles?: string[];
+  unreadableTargets?: string[];
   enabled?: boolean;
   legacyRepositoryMappings?: Record<string, { provider: "github"; repositoryId: string; defaultBranch: string; ownerScope: string; url: string }>;
   sqliteProject?: Record<string, SqliteRow[]>;
@@ -54,6 +55,13 @@ function contextFor(input: {
     target: {
       snapshot,
       async read(path, encoding = "utf8") {
+        if (input.unreadableTargets?.includes(path)) {
+          const error = Object.assign(new Error("The project path crosses a symbolic link"), {
+            code: "unsafe_project_path",
+            status: 422,
+          });
+          throw error;
+        }
         const bytes = targets.get(path);
         if (bytes === undefined) return null;
         return { content: encoding === "base64" ? bytes.toString("base64") : bytes.toString("utf8"), revision };
@@ -320,6 +328,34 @@ test("restores opaque Story documents to canonical paths after re-enabling the m
     revision: null,
     content,
   });
+});
+
+test("blocks an unreadable legacy symlink path while preserving valid siblings and revision guards", async () => {
+  const unsafeSource = "meta/scriptorium/modules/story/legacy/files/bible/characters/unsafe.yaml";
+  const siblingSource = "meta/scriptorium/modules/story/legacy/files/plot/threads/thread-3.yaml";
+  const siblingBytes = Buffer.from("id: thread-3\nfuture_field: retained\n", "utf8");
+  const result = await createStoryMigrationProducer().inspect(contextFor({
+    targetFiles: [unsafeSource, siblingSource],
+    targets: { [siblingSource]: siblingBytes },
+    unreadableTargets: [unsafeSource],
+  }));
+
+  const blocked = result.entries.find((entry) => entry.source === unsafeSource);
+  assert.equal(blocked?.disposition, "blocked");
+  assert.equal(blocked?.target, "bible/characters/unsafe.yaml");
+  assert.match(blocked?.detail ?? "", /could not be read safely/i);
+
+  const operation = result.operations.find((candidate) => candidate.writes.some((write) => write.path === "plot/threads/thread-3.yaml"));
+  assert.ok(operation);
+  assert.deepEqual(operation.writes[0], {
+    path: "plot/threads/thread-3.yaml",
+    revision: null,
+    content: siblingBytes.toString("utf8"),
+  });
+  assert.ok(operation.reads.some((read) => read.path === "plot/threads/thread-3.yaml" && read.revision === null));
+  assert.ok(operation.reads.some((read) => read.path === siblingSource && read.revision === revision));
+  assert.equal(result.operations.some((candidate) => candidate.writes.some((write) => write.path === "bible/characters/unsafe.yaml")), false);
+  assert.equal(result.recovery.length, 0);
 });
 
 test("reports a canonical target conflict without overwriting it", async () => {
