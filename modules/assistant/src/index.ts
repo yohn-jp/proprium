@@ -8,7 +8,7 @@ export const assistantManifest: ModuleManifest = {
   dependencies: ["story", "nlp", "diagnostics", "semantic", "speaker"],
   provides: [],
   requires: [],
-  optionalRequires: ["host.model-usage"],
+  optionalRequires: ["host.model-usage", "nlp.token-counter"],
   serverEntry: "./dist/index.js",
   browserEntry: "./dist/browser.js",
   statePaths: ["meta/scriptorium/modules/assistant"],

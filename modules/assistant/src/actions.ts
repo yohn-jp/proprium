@@ -7,7 +7,9 @@ import { z } from "zod";
 import {
   assertProjectPath,
   MODEL_USAGE_CAPABILITY,
+  snapshotKey,
   type ActionResult,
+  type BrowserEditorDocument,
   type ChangeOperation,
   type FileRevision,
   type HttpContribution,
@@ -39,7 +41,7 @@ import {
 import { composePrompt, CUSTOM_PROMPT_VERSIONS, loadPromptTemplate, renderPromptTemplate } from "./prompts.js";
 import { normalizeAspectIds, runDeterministicAspectReview, type AspectId } from "./aspect-review.js";
 import { buildDialogueSketchSpeakerContext, type PublicSpeakerDialogueListDto, type PublicSpeakerVoiceProfilesDto } from "./dialogue-context.js";
-import { buildRewriteLocalSuggestions } from "./rewrite-local.js";
+import { buildRewriteFallbackSuggestions, buildRewriteLocalSuggestions, type RewriteFallbackCandidate } from "./rewrite-local.js";
 import { createAssistantQaTools, type AssistantQaToolCallRecord } from "./qa-tools.js";
 import {
   buildContinuationContext,
@@ -66,12 +68,21 @@ const EXTERNAL_FEATURES: Readonly<Record<string, string>> = {
 };
 const MAX_QUEUED_CALLS = 64;
 const DEFAULT_DEADLINE_MS = 15 * 60 * 1000;
+const SETTING_QA_MAX_STEPS = 8;
 const outputSchema: ValueSchema = { parse(value) { return record(value, "action output"); } };
 
 type RecordValue = Record<string, unknown>;
 type LoadedStorySnapshot = Awaited<ReturnType<typeof readStorySnapshot>>;
 interface StoryFile { path: string; content: string; revision: string }
-interface SourceCitation { path: string; revision: string; quote: string; sceneId?: string; label?: string }
+interface SourceCitation {
+  path: string;
+  revision: string;
+  quote: string;
+  sceneId?: string;
+  label?: string;
+  revisionKind?: "editor-document" | "editor-scene";
+  snapshot?: SnapshotId;
+}
 interface GenerationProvenance {
   snapshot: SnapshotId;
   provider: string;
@@ -116,6 +127,56 @@ function parseString(value: unknown, label: string, max: number): string {
 function parseIdInput(value: unknown, label = "sceneId"): RecordValue {
   const input = record(value);
   return { ...input, [label]: parseString(input[label], label, 256) };
+}
+function parseEditorDraft(value: unknown): BrowserEditorDocument {
+  const draft = record(value, "editorDraft");
+  const snapshot = record(draft.snapshot, "editorDraft.snapshot") as unknown as SnapshotId;
+  const baseSnapshot = record(draft.baseSnapshot, "editorDraft.baseSnapshot") as unknown as SnapshotId;
+  const documentRevision = draft.documentRevision;
+  const baseSceneRevision = draft.baseSceneRevision;
+  if (documentRevision !== null && (typeof documentRevision !== "string" || !documentRevision || documentRevision.length > 256)) {
+    throw new TypeError("editorDraft.documentRevision must be null or a bounded revision string");
+  }
+  if (baseSceneRevision !== null && (typeof baseSceneRevision !== "string" || !baseSceneRevision || baseSceneRevision.length > 256)) {
+    throw new TypeError("editorDraft.baseSceneRevision must be null or a bounded revision string");
+  }
+  if (typeof draft.sceneRevision !== "string" || !draft.sceneRevision || draft.sceneRevision.length > 256) {
+    throw new TypeError("editorDraft.sceneRevision must be a bounded revision string");
+  }
+  if (typeof draft.text !== "string" || draft.text.length > 256_000) {
+    throw new TypeError("editorDraft.text must be a string of at most 256000 characters");
+  }
+  // Validate the two identities before comparing them to the remote reader below.
+  try { snapshotKey(snapshot); snapshotKey(baseSnapshot); }
+  catch { throw new TypeError("editorDraft snapshot identities are invalid"); }
+  return {
+    sceneId: parseString(draft.sceneId, "editorDraft.sceneId", 256),
+    documentPath: parseString(draft.documentPath, "editorDraft.documentPath", 1_024),
+    documentRevision: documentRevision as string | null,
+    sceneRevision: draft.sceneRevision,
+    text: draft.text,
+    snapshot,
+    baseSnapshot,
+    baseSceneRevision: baseSceneRevision as string | null,
+  };
+}
+function parseSpeakerAttributionInput(value: unknown): { sceneId: string; editorDraft?: BrowserEditorDocument } {
+  const input = record(value);
+  return {
+    sceneId: parseString(input.sceneId, "sceneId", 256),
+    ...(input.editorDraft === undefined ? {} : { editorDraft: parseEditorDraft(input.editorDraft) }),
+  };
+}
+function assertEditorDraftBase(
+  context: ModuleActionContext,
+  source: ReturnType<typeof sceneContext>,
+  sceneRevision: string | null,
+  editorDraft: BrowserEditorDocument,
+): void {
+  if (editorDraft.sceneId !== source.scene.id) throw codeError("assistant_editor_draft_stale", "The current editor draft belongs to a different scene");
+  if (editorDraft.documentPath !== source.manuscript.path) throw codeError("assistant_editor_draft_stale", "The current editor draft does not target this scene's canonical manuscript");
+  if (snapshotKey(editorDraft.baseSnapshot) !== snapshotKey(context.reader.snapshot)) throw codeError("assistant_editor_draft_stale", "The current editor draft was checkpointed against a different remote snapshot");
+  if (editorDraft.baseSceneRevision !== sceneRevision) throw codeError("assistant_editor_draft_stale", "The current editor draft's remote scene baseline has changed");
 }
 function optionalString(input: RecordValue, key: string, max: number): string | undefined {
   if (input[key] === undefined) return undefined;
@@ -166,6 +227,45 @@ function parseAspectInput(value: unknown): { chapterId: string; aspects: AspectI
   const input = record(value);
   if (Array.isArray(input.aspects) && input.aspects.length > 100) throw new TypeError("aspects must contain at most 100 entries");
   return { chapterId: parseString(input.chapterId, "chapterId", 256), aspects: normalizeAspectIds(input.aspects) };
+}
+function parsePreviewIdInput(value: unknown, key: "sceneId" | "chapterId"): { id: string } {
+  const input = record(value);
+  return { id: parseString(input[key], key, 256) };
+}
+function parseQaPreviewInput(value: unknown): { sceneId?: string } {
+  const input = record(value);
+  const sceneId = optionalString(input, "sceneId", 256);
+  return sceneId ? { sceneId } : {};
+}
+function parseContinuationPreviewInput(value: unknown): { recentSentences: string[] } {
+  const input = record(value);
+  if (input.editorText !== undefined) {
+    if (typeof input.editorText !== "string" || input.editorText.length > 256_000) throw new TypeError("editorText must be a string of at most 256000 characters");
+    return { recentSentences: splitIntoSentences(input.editorText).slice(-12) };
+  }
+  const recentSentences = input.recentSentences ?? [];
+  if (!Array.isArray(recentSentences) || recentSentences.length > 2_000 || recentSentences.some((sentence) => typeof sentence !== "string" || sentence.length > 8_000)) {
+    throw new TypeError("recentSentences must contain at most 2000 bounded strings");
+  }
+  return { recentSentences: (recentSentences as string[]).map((sentence) => sentence.trim()).filter(Boolean) };
+}
+function parseSynonymPreviewInput(value: unknown): SynonymRequest {
+  const input = record(value);
+  const original = parseString(input.original, "original", 256);
+  const sentence = parseString(input.sentence, "sentence", 8_000);
+  if (!sentence.includes(original)) throw new TypeError("sentence must contain original");
+  return { original, sentence, ...(optionalString(input, "reason", 512) ? { reason: optionalString(input, "reason", 512) } : {}) };
+}
+function parseSandboxZukanPreviewInput(value: unknown): { sketchId: string; turnRange?: { start: number; end: number } } {
+  const input = record(value);
+  const range = input.turnRange === undefined ? undefined : record(input.turnRange, "turnRange");
+  if (range && (!Number.isSafeInteger(range.start) || !Number.isSafeInteger(range.end) || (range.start as number) < 0 || (range.end as number) < (range.start as number))) {
+    throw new TypeError("turnRange must contain a valid zero-based inclusive start and end");
+  }
+  return {
+    sketchId: parseString(input.sketchId, "sketchId", 256),
+    ...(range ? { turnRange: { start: range.start as number, end: range.end as number } } : {}),
+  };
 }
 function parseDialogueTopicsInput(value: unknown): { participantEntityIds: string[] } {
   const input = record(value);
@@ -229,6 +329,7 @@ interface ContinuationInput {
   sceneId?: string;
   chapterId?: string;
   recentSentences?: string[];
+  editorDraft?: BrowserEditorDocument;
   k: number;
   tokenBudget?: number;
 }
@@ -236,6 +337,8 @@ function parseContinuationInput(value: unknown): ContinuationInput {
   const input = record(value);
   const sceneId = optionalString(input, "sceneId", 256);
   const chapterId = optionalString(input, "chapterId", 256);
+  const editorDraft = input.editorDraft === undefined ? undefined : parseEditorDraft(input.editorDraft);
+  if (editorDraft && !sceneId) throw new TypeError("sceneId is required when editorDraft is provided");
   let recentSentences: string[] | undefined;
   if (input.recentSentences !== undefined) {
     if (!Array.isArray(input.recentSentences) || input.recentSentences.length > 2_000 || input.recentSentences.some((line) => typeof line !== "string" || line.length > 8_000)) throw new TypeError("recentSentences must be an array of up to 2000 bounded strings");
@@ -247,7 +350,7 @@ function parseContinuationInput(value: unknown): ContinuationInput {
   if (tokenBudget !== undefined && (!Number.isSafeInteger(tokenBudget) || (tokenBudget as number) < 1 || (tokenBudget as number) > 200_000)) throw new TypeError("tokenBudget must be an integer between 1 and 200000");
   return {
     ...(sceneId ? { sceneId } : {}), ...(chapterId ? { chapterId } : {}),
-    ...(recentSentences ? { recentSentences } : {}), k: k as number,
+    ...(recentSentences ? { recentSentences } : {}), ...(editorDraft ? { editorDraft } : {}), k: k as number,
     ...(typeof tokenBudget === "number" ? { tokenBudget } : {}),
   };
 }
@@ -401,6 +504,14 @@ async function settingsForFeature(context: ModuleActionContext, featureId: strin
   return { settings, revision, model };
 }
 
+async function previewModelId(context: ModuleActionContext, featureId: string): Promise<string | null> {
+  const { settings } = await readAssistantSettings(context.reader);
+  const configured = resolveAssistantModel(featureId, settings)?.model;
+  if (configured) return configured;
+  const presetId = settings.featurePresetIds[featureId];
+  return settings.presets.find((preset) => preset.id === presetId)?.model || null;
+}
+
 async function generate(
   moduleContext: ModuleContext,
   context: ModuleActionContext,
@@ -516,6 +627,72 @@ function parseStructured<T>(text: string, schema: z.ZodType<T>): T {
   try { parsed = JSON.parse(candidate) as unknown; }
   catch { parsed = JSON.parse(jsonrepair(candidate)) as unknown; }
   return schema.parse(parsed);
+}
+
+const REWRITE_STRATEGIES = ["concise", "contextual", "voice"] as const;
+type RewriteStrategy = (typeof REWRITE_STRATEGIES)[number];
+interface RewriteSuggestion { text: string; strategy: RewriteStrategy; rationale: string; source: "provider" | "source-heuristic" }
+
+function parseRewriteCandidates(text: string): RewriteSuggestion[] {
+  const unfenced = text.replace(/```(?:json)?\s*/gi, "").replace(/```/g, "").trim();
+  const attempts = [unfenced];
+  const arrayStart = unfenced.indexOf("[");
+  const arrayEnd = unfenced.lastIndexOf("]");
+  if (arrayStart >= 0 && arrayEnd > arrayStart) attempts.push(unfenced.slice(arrayStart, arrayEnd + 1));
+  const objectStart = unfenced.indexOf("{");
+  const objectEnd = unfenced.lastIndexOf("}");
+  if (objectStart >= 0 && objectEnd > objectStart) attempts.push(unfenced.slice(objectStart, objectEnd + 1));
+
+  for (const candidateText of attempts) {
+    let parsed: unknown;
+    try { parsed = JSON.parse(candidateText) as unknown; }
+    catch {
+      try { parsed = JSON.parse(jsonrepair(candidateText)) as unknown; }
+      catch { continue; }
+    }
+    const object = parsed && typeof parsed === "object" && !Array.isArray(parsed) ? parsed as RecordValue : undefined;
+    const rows = Array.isArray(parsed) ? parsed : object?.suggestions ?? object?.candidates ?? object?.rewrites;
+    if (!Array.isArray(rows)) continue;
+    const suggestions = rows.flatMap((value, index): RewriteSuggestion[] => {
+      const row = typeof value === "string" ? undefined : value && typeof value === "object" && !Array.isArray(value) ? value as RecordValue : undefined;
+      const rawText = typeof value === "string" ? value : typeof row?.text === "string" ? row.text : typeof row?.rewrite === "string" ? row.rewrite : "";
+      const normalizedText = rawText.trim();
+      if (!normalizedText || normalizedText.length > 20_000) return [];
+      const rawStrategy = row?.strategy;
+      const strategy = (REWRITE_STRATEGIES as readonly unknown[]).includes(rawStrategy)
+        ? rawStrategy as RewriteStrategy
+        : REWRITE_STRATEGIES[index] ?? "contextual";
+      const rationale = typeof row?.rationale === "string" && row.rationale.trim()
+        ? row.rationale.trim().slice(0, 2_000)
+        : "LLM が文脈を踏まえて生成した候補です。";
+      return [{ text: normalizedText, strategy, rationale, source: "provider" }];
+    });
+    if (suggestions.length) return suggestions.slice(0, 3);
+  }
+
+  return unfenced.split(/\r?\n/u)
+    .map((line) => line.match(/^\s*(?:[-*]|\d+[.)]|[①②③])\s*(.+?)\s*$/u)?.[1]?.trim())
+    .filter((candidate): candidate is string => Boolean(candidate))
+    .slice(0, 3)
+    .flatMap((candidate, index) => {
+      const normalizedText = candidate.replace(/^["「]|["」]$/g, "").trim();
+      return normalizedText && normalizedText.length <= 20_000
+        ? [{ text: normalizedText, strategy: REWRITE_STRATEGIES[index] ?? "contextual", rationale: "LLM が文脈を踏まえて生成した候補です。", source: "provider" }]
+        : [];
+    });
+}
+
+function uniqueRewriteCandidates(candidates: readonly RewriteSuggestion[]): RewriteSuggestion[] {
+  const seen = new Set<string>();
+  const unique: RewriteSuggestion[] = [];
+  for (const candidate of candidates) {
+    const text = candidate.text.trim();
+    if (!text || text.length > 20_000 || seen.has(text)) continue;
+    seen.add(text);
+    unique.push({ ...candidate, text });
+    if (unique.length === 3) break;
+  }
+  return unique;
 }
 
 function makeOperation(
@@ -697,13 +874,6 @@ async function readUsageHistory(moduleContext: ModuleContext, context: ModuleAct
   };
 }
 
-const rewriteSchema = z.object({
-  suggestions: z.array(z.object({
-    text: z.string().min(1).max(20_000),
-    strategy: z.enum(["concise", "contextual", "voice"]),
-    rationale: z.string().min(1).max(2_000),
-  })).length(3),
-});
 const sceneSummarySchema = z.object({
   summaryLines: z.array(z.string().min(1)).length(3),
   characters: z.array(z.string()).max(100),
@@ -817,12 +987,18 @@ async function runRewrite(
   let corpusActionSceneIds: string[] = [];
   try {
     const data = await invokeData(context, "semantic.search", { query: selectedText, mode: "sentence", limit: 12, rerank: false });
-    const hits = (Array.isArray(data.results) ? data.results : []).map((value) => record(value))
-      .filter((hit) => hit.sceneId !== source.scene.id)
-      .filter((hit) => (typeof hit.snippet === "string" ? hit.snippet.trim() : typeof hit.text === "string" ? hit.text.trim() : "").length > 0);
-    corpusActionDescriptions = hits.map((hit) => typeof hit.snippet === "string" ? hit.snippet.trim() : typeof hit.text === "string" ? hit.text.trim() : "")
-      .filter((text) => text !== input.selectedText).slice(0, 3);
-    corpusActionSceneIds = hits.flatMap((hit) => typeof hit.sceneId === "string" ? [hit.sceneId] : []).slice(0, 3);
+    const seenDescriptions = new Set<string>();
+    for (const value of Array.isArray(data.results) ? data.results : []) {
+      const hit = record(value);
+      if (hit.sceneId === source.scene.id && hit.sentenceIndex === selection.sentenceIndex) continue;
+      if (typeof hit.sceneId !== "string" || !hit.sceneId) continue;
+      const description = typeof hit.snippet === "string" ? hit.snippet.trim() : typeof hit.text === "string" ? hit.text.trim() : "";
+      if (!description || description === selectedText || seenDescriptions.has(description)) continue;
+      seenDescriptions.add(description);
+      corpusActionDescriptions.push(description);
+      corpusActionSceneIds.push(hit.sceneId);
+      if (corpusActionDescriptions.length === 3) break;
+    }
   } catch { /* Corpus retrieval is optional, matching the source's best-effort index lookup. */ }
   const sentenceIndex = selection.sentenceIndex;
   const rewriteContext = {
@@ -855,18 +1031,47 @@ async function runRewrite(
     const scene = story.entities.get(id);
     return scene && (scene.filePath === file.path || String(scene.raw.manuscript ?? "") === file.path);
   })));
-  const generated = await generate(moduleContext, context, { feature: "rewrite", prompt, promptVersion: CUSTOM_PROMPT_VERSIONS.rewrite, sourceRevisions, outputTokens: 1_024, ...(onText ? { onText } : {}) });
-  const parsed = parseStructured(generated.text, rewriteSchema);
-  const suggestions = parsed.suggestions.map((candidate) => ({ ...candidate, text: candidate.text.trim() }));
-  if (suggestions.some((candidate) => candidate.text.length > 20_000)) throw codeError("assistant_output_invalid", "A rewrite candidate exceeded its text limit");
+  let generated: GenerationResult | undefined;
+  let providerFallback = false;
+  try {
+    generated = await generate(moduleContext, context, { feature: "rewrite", prompt, promptVersion: CUSTOM_PROMPT_VERSIONS.rewrite, sourceRevisions, outputTokens: 1_024, ...(onText ? { onText } : {}) });
+  } catch (error) {
+    const errorCode = typeof (error as { code?: unknown } | null)?.code === "string" ? String((error as { code: string }).code) : "";
+    if (errorCode !== "assistant_provider_error") throw error;
+    // Source rewrite retains its deterministic alternatives when an enabled provider call fails.
+    // generate() has already recorded the failed attempt and fails closed on usage-store errors.
+    providerFallback = true;
+  }
+  const povProfile = contextualCharacters.find((character) => character.role === "pov")?.voiceProfileExcerpt;
+  const preferredFirstPerson = povProfile?.match(/^一人称:\s*([^\n]+)/mu)?.[1]?.split(/[、，,]/u)[0]?.trim();
+  const fallback = buildRewriteFallbackSuggestions({
+    sentence: selectedText,
+    ...(typeof rewriteContext.intended_tone === "string" ? { intendedTone: rewriteContext.intended_tone } : {}),
+    ...(preferredFirstPerson ? { preferredFirstPerson } : {}),
+  }).map((candidate) => ({ ...candidate, source: "source-heuristic" as const }));
+  const suggestions = uniqueRewriteCandidates([...(generated ? parseRewriteCandidates(generated.text) : []), ...fallback]);
+  if (suggestions.length !== 3) throw codeError("assistant_output_invalid", "The rewrite provider and source fallback did not produce three distinct candidates");
   const local = buildRewriteLocalSuggestions(selectedText, corpusActionDescriptions);
   const selectedCitation = sourceCitation(source.manuscript, selectedText, source.scene.id, "selected passage");
   const citations = [selectedCitation];
   const sourceSentenceOffsets = splitIntoSentenceOffsets(source.body).filter((span) => source.body.slice(span.start, span.end).trim().length > 0);
+  const resultProvenance = generated?.provenance ?? {
+    snapshot: context.reader.snapshot,
+    provider: "local",
+    model: "scriptorium-rewrite-heuristics",
+    modelVersion: "source-heuristic-v1",
+    moduleVersion: ASSISTANT_MODULE_VERSION,
+    promptVersion: `${CUSTOM_PROMPT_VERSIONS.rewrite}:local-fallback-v1`,
+    generatedAt: new Date().toISOString(),
+    sourceRevisions: revisionList([...story.files.values()].filter((file) => file.path === source.scene.filePath || file.path === source.manuscript.path || relatedIds.some((id) => story.entities.get(id)?.filePath === file.path) || [...sampleSceneIds, ...corpusActionSceneIds].some((id) => {
+      const scene = story.entities.get(id);
+      return scene && (scene.filePath === file.path || String(scene.raw.manuscript ?? "") === file.path);
+    }))),
+  };
   return {
     text: selectedText, originalSentence: source.body.slice(sourceSentenceOffsets[sentenceIndex]!.start, sourceSentenceOffsets[sentenceIndex]!.end).trim(), sentenceIndex, context: rewriteContext, prompt, suggestions, ...local, sceneId: source.scene.id,
-    model: generated.provenance.model, provider: generated.provenance.provider,
-    promptVersion: generated.provenance.promptVersion, citations, provenance: generated.provenance,
+    model: resultProvenance.model, provider: resultProvenance.provider,
+    promptVersion: resultProvenance.promptVersion, ...(providerFallback ? { providerAttempt: { outcome: "failed", fallback: "source-heuristics" } } : {}), citations, provenance: resultProvenance,
   };
 }
 
@@ -897,6 +1102,65 @@ function readYamlObject(content: string): RecordValue | null {
   try { return record(YAML.parse(content)); } catch { return null; }
 }
 
+async function buildSceneSummaryPrompt(story: LoadedStorySnapshot, source: ReturnType<typeof sceneContext>) {
+  const appearingIds = Array.isArray(source.scene.raw.appears) ? source.scene.raw.appears.filter((id): id is string => typeof id === "string") : [];
+  const characterNames = [
+    ...(typeof source.scene.raw.pov === "string" ? [source.scene.raw.pov] : []),
+    ...appearingIds,
+  ].flatMap((id) => {
+    const name = story.entities.get(id)?.name;
+    return typeof name === "string" && name.trim() ? [name.trim()] : [];
+  });
+  const knownCharacters = [...new Set(characterNames)];
+  const prepared = await renderPromptTemplate("sceneSummary", {
+    sceneId: source.scene.id,
+    knownCharacters: knownCharacters.join("、") || "なし",
+    manuscriptBody: source.body,
+  });
+  return {
+    prompt: `${await composePrompt(prepared.body)}${promptJson('{"summaryLines":["...","...","..."],"characters":["..."],"stateChanges":["..."]}')}`,
+    promptVersion: prepared.version,
+    knownCharacters,
+  };
+}
+
+async function reportProgress(context: ModuleActionContext, value: number): Promise<void> {
+  if (context.reportProgress) await context.reportProgress(value);
+}
+
+async function buildChapterSummaryPrompt(chapterId: string, sceneRecords: readonly RecordValue[]) {
+  const template = await renderPromptTemplate("chapterSummary", {
+    chapterId,
+    sceneBlocks: sceneRecords.map((item) => `## ${String(item.sceneId)}\n${Array.isArray(item.summaryLines) ? item.summaryLines.join("\n") : ""}`).join("\n\n"),
+  });
+  return {
+    prompt: `${await composePrompt(template.body)}${promptJson('{"summaryLines":["...","...","..."]}')}`,
+    promptVersion: template.version,
+  };
+}
+
+async function buildReaderReactionPrompt(chapterId: string, cumulative: Array<{ chapterId: string; summaryLines: string[] }>) {
+  const template = await renderPromptTemplate("firstReadReaction", {
+    chapterId,
+    blocks: cumulative.map((item) => `chapter_id: ${item.chapterId}\n${item.summaryLines.map((line) => `- ${line}`).join("\n")}`).join("\n\n") || "(要約なし)",
+  });
+  return {
+    prompt: `${await composePrompt(template.body)}${promptJson('{"questions":["..."],"expectations":["..."],"confusions":["..."]}')}`,
+    promptVersion: template.version,
+  };
+}
+
+async function buildSynonymPrompt(request: SynonymRequest): Promise<string> {
+  return composePrompt([
+    request.reason
+      ? `提案理由: ${request.reason}（地の文・セリフの言い換え候補として自然な語を選ぶ）`
+      : "小説の地の文またはセリフで使える言い換え表現を提案する",
+    "対象語句と文全体の意味・文体を保ち、言い換え語句を3〜5個出してください。",
+    `対象語句: ${request.original}`, `文: ${request.sentence}`,
+    promptJson('{"candidates":["...","...","..."]}'),
+  ].join("\n"));
+}
+
 async function runSceneSummary(moduleContext: ModuleContext, context: ModuleActionContext, sceneId: string) {
   const story = await readStorySnapshot(context.reader, { includeManuscripts: true });
   const source = sceneContext(story, sceneId);
@@ -904,19 +1168,19 @@ async function runSceneSummary(moduleContext: ModuleContext, context: ModuleActi
   const existing = await context.reader.read(outputPath);
   const current = existing ? readYamlObject(existing.content) : null;
   const sourceHash = fnv1aHash(source.body);
-  const template = await loadPromptTemplate("sceneSummary");
-  if (current && current.sceneId === sceneId && current.sourceHash === sourceHash && current.promptVersion === template.version && typeof current.model === "string") {
-    return { summary: current, stale: false, cached: true, model: current.model, promptVersion: current.promptVersion, citations: [makeCitation(source.manuscript, source.body, sceneId, "scene manuscript")], provenance: { snapshot: context.reader.snapshot, provider: current.provider, model: current.model, modelVersion: current.model, moduleVersion: ASSISTANT_MODULE_VERSION, promptVersion: template.version, generatedAt: current.generatedAt, sourceRevisions: [{ path: source.manuscript.path, revision: source.manuscript.revision }, { path: source.scene.filePath, revision: story.files.get(source.scene.filePath)!.revision }] } };
+  const prepared = await buildSceneSummaryPrompt(story, source);
+  if (current && current.sceneId === sceneId && current.sourceHash === sourceHash && current.promptVersion === prepared.promptVersion && typeof current.model === "string") {
+    await reportProgress(context, 1);
+    return { summary: current, stale: false, cached: true, model: current.model, promptVersion: current.promptVersion, citations: [makeCitation(source.manuscript, source.body, sceneId, "scene manuscript")], provenance: { snapshot: context.reader.snapshot, provider: current.provider, model: current.model, modelVersion: current.model, moduleVersion: ASSISTANT_MODULE_VERSION, promptVersion: prepared.promptVersion, generatedAt: current.generatedAt, sourceRevisions: [{ path: source.manuscript.path, revision: source.manuscript.revision }, { path: source.scene.filePath, revision: story.files.get(source.scene.filePath)!.revision }] } };
   }
   const sceneFile = story.files.get(source.scene.filePath)!;
-  const knownCharacters = Array.isArray(source.scene.raw.appears) ? source.scene.raw.appears.map((id) => story.entities.get(String(id))?.name ?? String(id)) : [];
-  const prepared = await renderPromptTemplate("sceneSummary", { sceneId, knownCharacters: knownCharacters.join("、") || "なし", manuscriptBody: source.body });
-  const prompt = `${await composePrompt(prepared.body)}${promptJson('{"summaryLines":["...","...","..."],"characters":["..."],"stateChanges":["..."]}')}`;
   const sourceRevisions = [{ path: source.scene.filePath, revision: sceneFile.revision }, { path: source.manuscript.path, revision: source.manuscript.revision }];
-  const generated = await generate(moduleContext, context, { feature: "scene-summary", prompt, promptVersion: prepared.version, sourceRevisions, outputTokens: 768 });
+  await reportProgress(context, 0.1);
+  const generated = await generate(moduleContext, context, { feature: "scene-summary", prompt: prepared.prompt, promptVersion: prepared.promptVersion, sourceRevisions, outputTokens: 768 });
+  await reportProgress(context, 0.9);
   const summary = parseStructured(generated.text, sceneSummarySchema);
   const recordValue = {
-    sceneId, ...summary, sourceHash, generatedAt: generated.provenance.generatedAt,
+    sceneId, ...summary, characters: summary.characters.length ? summary.characters : prepared.knownCharacters, sourceHash, generatedAt: generated.provenance.generatedAt,
     provider: generated.provenance.provider, model: generated.provenance.model,
     modelVersion: generated.provenance.modelVersion, promptVersion: generated.provenance.promptVersion,
     snapshot: generated.provenance.snapshot,
@@ -924,9 +1188,10 @@ async function runSceneSummary(moduleContext: ModuleContext, context: ModuleActi
   const content = YAML.stringify(recordValue);
   const reads = [...sourceRevisions, readRevision(context, outputPath, existing?.revision ?? null), ...generated.provenance.sourceRevisions.filter((item) => item.path === ASSISTANT_SETTINGS_PATH)];
   const operation = makeOperation(context, "metadata", `Propose scene summary for ${sceneId}`, reads, [{ path: outputPath, revision: existing?.revision ?? null, content }]);
-  const proposal = await context.propose([operation], evidence(context, "assistant.scene-summary", reads, { sceneId, model: generated.provenance.model, promptVersion: prepared.version }));
+  const proposal = await context.propose([operation], evidence(context, "assistant.scene-summary", reads, { sceneId, model: generated.provenance.model, promptVersion: prepared.promptVersion }));
+  await reportProgress(context, 1);
   const citations = [makeCitation(source.manuscript, source.body, sceneId, "scene manuscript")];
-  return { summary: recordValue, stale: false, cached: false, model: generated.provenance.model, provider: generated.provenance.provider, promptVersion: prepared.version, citations, provenance: generated.provenance, proposal };
+  return { summary: recordValue, stale: false, cached: false, model: generated.provenance.model, provider: generated.provenance.provider, promptVersion: prepared.promptVersion, citations, provenance: generated.provenance, proposal };
 }
 
 async function prepareSceneSummaryRecord(moduleContext: ModuleContext, context: ModuleActionContext, story: LoadedStorySnapshot, source: ReturnType<typeof sceneContext>) {
@@ -935,23 +1200,23 @@ async function prepareSceneSummaryRecord(moduleContext: ModuleContext, context: 
   const existing = await context.reader.read(outputPath);
   const current = existing ? readYamlObject(existing.content) : null;
   const sourceHash = fnv1aHash(source.body);
-  const template = await loadPromptTemplate("sceneSummary");
+  const prepared = await buildSceneSummaryPrompt(story, source);
   const baseReads = [
     { path: source.scene.filePath, revision: story.files.get(source.scene.filePath)!.revision },
     { path: source.manuscript.path, revision: source.manuscript.revision },
     readRevision(context, outputPath, existing?.revision ?? null),
   ];
-  if (current && current.sceneId === sceneId && current.sourceHash === sourceHash && current.promptVersion === template.version && typeof current.model === "string") {
+  if (current && current.sceneId === sceneId && current.sourceHash === sourceHash && current.promptVersion === prepared.promptVersion && typeof current.model === "string") {
+    await reportProgress(context, 1);
     return { summary: current, cached: true, outputPath, existingRevision: existing!.revision, reads: baseReads, write: undefined as { path: string; revision: string | null; content: string } | undefined, generated: undefined as GenerationResult | undefined };
   }
-  const knownCharacters = Array.isArray(source.scene.raw.appears) ? source.scene.raw.appears.map((id) => story.entities.get(String(id))?.name ?? String(id)) : [];
-  const prepared = await renderPromptTemplate("sceneSummary", { sceneId, knownCharacters: knownCharacters.join("、") || "なし", manuscriptBody: source.body });
-  const prompt = `${await composePrompt(prepared.body)}${promptJson('{"summaryLines":["...","...","..."],"characters":["..."],"stateChanges":["..."]}')}`;
   const sourceRevisions = baseReads.slice(0, 2);
-  const generated = await generate(moduleContext, context, { feature: "scene-summary", prompt, promptVersion: prepared.version, sourceRevisions, outputTokens: 768 });
+  await reportProgress(context, 0.1);
+  const generated = await generate(moduleContext, context, { feature: "scene-summary", prompt: prepared.prompt, promptVersion: prepared.promptVersion, sourceRevisions, outputTokens: 768 });
+  await reportProgress(context, 0.9);
   const parsed = parseStructured(generated.text, sceneSummarySchema);
   const summary = {
-    sceneId, ...parsed, sourceHash, generatedAt: generated.provenance.generatedAt,
+    sceneId, ...parsed, characters: parsed.characters.length ? parsed.characters : prepared.knownCharacters, sourceHash, generatedAt: generated.provenance.generatedAt,
     provider: generated.provenance.provider, model: generated.provenance.model,
     modelVersion: generated.provenance.modelVersion, promptVersion: generated.provenance.promptVersion,
     snapshot: generated.provenance.snapshot,
@@ -973,31 +1238,35 @@ async function runChapterSummary(moduleContext: ModuleContext, context: ModuleAc
   const reads: FileRevision[] = [];
   const writes: Array<{ path: string; revision: string | null; content: string }> = [];
   let latestSceneGeneration: GenerationResult | undefined;
-  for (const source of scenes) {
+  await reportProgress(context, 0.1);
+  for (const [index, source] of scenes.entries()) {
     const sourceSummary = await prepareSceneSummaryRecord(moduleContext, context, story, source);
     sceneRecords.push(record(sourceSummary.summary));
     reads.push(...sourceSummary.reads);
     if (sourceSummary.write) writes.push(sourceSummary.write);
     if (sourceSummary.generated) latestSceneGeneration = sourceSummary.generated;
     citations.push(makeCitation(source.manuscript, source.body, source.scene.id, source.scene.name ?? "scene manuscript"));
+    await reportProgress(context, 0.1 + 0.7 * ((index + 1) / scenes.length));
   }
   const chapterPath = chapterSummaryPath(chapter);
   const existingChapter = await context.reader.read(chapterPath);
   const childHash = fnv1aHash(sceneRecords.map((item) => String(item.sourceHash ?? "")).join("|"));
   const existingSummary = existingChapter ? readYamlObject(existingChapter.content) : null;
   if (existingSummary?.sourceHash === childHash && Array.isArray(existingSummary.summaryLines) && typeof existingSummary.model === "string") {
+    await reportProgress(context, 1);
     return { summary: existingSummary, stale: false, cached: true, model: existingSummary.model, promptVersion: existingSummary.promptVersion, citations: citations.slice(0, 12), provenance: { snapshot: context.reader.snapshot, provider: existingSummary.provider, model: existingSummary.model, modelVersion: existingSummary.modelVersion ?? existingSummary.model, moduleVersion: ASSISTANT_MODULE_VERSION, promptVersion: existingSummary.promptVersion, generatedAt: existingSummary.generatedAt, sourceRevisions: revisionList([], [...reads, { path: chapterPath, revision: existingChapter!.revision }]) } };
   }
-  const template = await renderPromptTemplate("chapterSummary", { chapterId, sceneBlocks: sceneRecords.map((item) => `## ${String(item.sceneId)}\n${Array.isArray(item.summaryLines) ? item.summaryLines.join("\n") : ""}`).join("\n\n") });
-  const prompt = `${await composePrompt(template.body)}${promptJson('{"summaryLines":["...","...","..."]}')}`;
-  const generated = await generate(moduleContext, context, { feature: "chapter-summary", prompt, promptVersion: template.version, sourceRevisions: revisionList([...story.files.values()].filter((file) => reads.some((item) => item.path === file.path))), outputTokens: 512 });
+  const prepared = await buildChapterSummaryPrompt(chapterId, sceneRecords);
+  await reportProgress(context, 0.85);
+  const generated = await generate(moduleContext, context, { feature: "chapter-summary", prompt: prepared.prompt, promptVersion: prepared.promptVersion, sourceRevisions: revisionList([...story.files.values()].filter((file) => reads.some((item) => item.path === file.path))), outputTokens: 512 });
   const summary = parseStructured(generated.text, chapterSummarySchema);
-  const recordValue = { scope: "chapter", id: chapterId, ...summary, sourceHash: childHash, generatedAt: generated.provenance.generatedAt, provider: generated.provenance.provider, model: generated.provenance.model, modelVersion: generated.provenance.modelVersion, promptVersion: template.version, snapshot: generated.provenance.snapshot };
+  const recordValue = { scope: "chapter", id: chapterId, ...summary, sourceHash: childHash, generatedAt: generated.provenance.generatedAt, provider: generated.provenance.provider, model: generated.provenance.model, modelVersion: generated.provenance.modelVersion, promptVersion: prepared.promptVersion, snapshot: generated.provenance.snapshot };
   const operationReads = [...reads, readRevision(context, chapterPath, existingChapter?.revision ?? null), ...generated.provenance.sourceRevisions.filter((item) => item.path === ASSISTANT_SETTINGS_PATH), ...(latestSceneGeneration?.provenance.sourceRevisions.filter((item) => item.path === ASSISTANT_SETTINGS_PATH) ?? [])];
   const operationWrites = [...writes, { path: chapterPath, revision: existingChapter?.revision ?? null, content: YAML.stringify(recordValue) }];
   const operation = makeOperation(context, "metadata", `Propose chapter summary for ${chapterId}`, operationReads, operationWrites);
-  const proposal = await context.propose([operation], evidence(context, "assistant.chapter-summary", operationReads, { chapterId, model: generated.provenance.model, promptVersion: template.version }));
-  return { summary: recordValue, stale: false, cached: false, model: generated.provenance.model, provider: generated.provenance.provider, promptVersion: template.version, citations: citations.slice(0, 12), provenance: generated.provenance, proposal };
+  const proposal = await context.propose([operation], evidence(context, "assistant.chapter-summary", operationReads, { chapterId, model: generated.provenance.model, promptVersion: prepared.promptVersion }));
+  await reportProgress(context, 1);
+  return { summary: recordValue, stale: false, cached: false, model: generated.provenance.model, provider: generated.provenance.provider, promptVersion: prepared.promptVersion, citations: citations.slice(0, 12), provenance: generated.provenance, proposal };
 }
 
 const qaAnswerSchema = z.object({
@@ -1012,27 +1281,32 @@ function qaCitationKey(citation: { kind: string; id: string; quote: string }): s
 
 async function searchAssistantBible(context: ModuleActionContext, query: string, entityKind?: string): Promise<RecordValue> {
   const story = await readStorySnapshot(context.reader);
-  const terms = [...new Set((query.toLocaleLowerCase().match(/[\p{L}\p{N}ー]{2,}/gu) ?? []).slice(0, 16))];
-  if (!terms.length) return { results: [] };
-  const rows: Array<{ score: number; id: string; type: string; name: string; snippet: string; path: string; revision: string }> = [];
-  for (const item of story.entities.values()) {
-    if (!["character", "location", "item", "faction", "lore", "thread", "event"].includes(item.type)) continue;
-    if (entityKind && item.type !== entityKind) continue;
-    const file = story.files.get(item.filePath);
-    if (!file) continue;
-    const lines = file.content.split(/\r?\n/u);
-    const matching = lines.flatMap((line) => {
-      const count = terms.reduce((sum, term) => sum + (line.toLocaleLowerCase().includes(term) ? 1 : 0), 0);
-      return count ? [{ line: line.trim().replace(/^[-# ]+/u, "").slice(0, 400), count }] : [];
-    });
-    const name = item.name ?? item.id;
-    const nameScore = terms.reduce((sum, term) => sum + (name.toLocaleLowerCase().includes(term) ? 2 : 0), 0);
-    const score = nameScore + matching.reduce((sum, line) => sum + line.count, 0);
-    const snippet = matching[0]?.line || (nameScore ? name : "");
-    if (!score || !snippet || !file.content.includes(snippet)) continue;
-    rows.push({ score, id: item.id, type: item.type, name, snippet, path: file.path, revision: file.revision });
-  }
-  rows.sort((a, b) => b.score - a.score || a.name.localeCompare(b.name, "ja") || a.id.localeCompare(b.id));
+  // Source QA delegates to Core's hybrid search, then keeps only supported Bible types.
+  // `semantic.search` is the public snapshot-bound producer for that search in this module set.
+  const result = await invokeData(context, "semantic.search", { query, mode: "scene", limit: 12, rerank: false });
+  const hits = Array.isArray(result.results) ? result.results.map((value) => record(value)) : [];
+  const allowedTypes = new Set(["character", "location", "item", "faction", "lore", "thread", "event"]);
+  const rows = hits.flatMap((hit) => {
+    if (typeof hit.type !== "string" || !allowedTypes.has(hit.type) || (entityKind && hit.type !== entityKind)) return [];
+    const id = typeof hit.entityId === "string" ? hit.entityId : typeof hit.sceneId === "string" ? hit.sceneId : undefined;
+    if (!id) return [];
+    const entityValue = story.entities.get(id);
+    if (!entityValue || entityValue.type !== hit.type) return [];
+    const file = story.files.get(entityValue.filePath);
+    if (!file || (typeof hit.filePath === "string" && hit.filePath !== file.path)) return [];
+    const name = entityValue.name ?? entityValue.id;
+    const quote = typeof hit.snippet === "string" ? hit.snippet.trim() : typeof hit.text === "string" ? hit.text.trim() : name;
+    if (!quote || (!file.content.includes(quote) && quote !== name && !(entityValue.aliases ?? []).includes(quote))) return [];
+    return [{
+      id,
+      type: entityValue.type,
+      name,
+      snippet: quote.slice(0, 400),
+      path: file.path,
+      revision: file.revision,
+      ...(typeof hit.score === "number" ? { score: hit.score } : {}),
+    }];
+  });
   return { results: rows.slice(0, 8) };
 }
 
@@ -1065,6 +1339,25 @@ async function readAssistantSummary(context: ModuleActionContext, scope: "scene"
   return { scope, id, summaryLines: lines.slice(0, 12), path: outputPath, revision: file.revision };
 }
 
+async function buildContinuationPrompt(contextBlock: string) {
+  const template = await renderPromptTemplate("continuationOptions", {});
+  const contextText = contextBlock.trim()
+    ? `【文脈（直近の文と章要約。これ以外は見ない）】\n${contextBlock.trim()}`
+    : "【文脈】（空 — 一般的な展開の方向のみ提案）";
+  return {
+    prompt: `${await composePrompt(`${template.body}\n\n${contextText}`)}${promptJson('{"options":[{"direction":"...","rationale":"..."},{"direction":"...","rationale":"..."},{"direction":"...","rationale":"..."}]}')}`,
+    promptVersion: template.version,
+  };
+}
+
+async function buildQaSystemPrompt(manuscriptBody: string) {
+  const template = await renderPromptTemplate("settingQa", { manuscriptBody: manuscriptBody || "（関連シーンは指定されていません）" });
+  return {
+    system: `${await composePrompt(template.body)}\n\n読み取り専用ツールだけで事実を確認してください。回答はJSONオブジェクト1つで、answer、citations、confidenceを含めてください。citationsはツールが返した kind/id/quote の値をそのまま使い、根拠が無い回答は断定せず citations を空にしてください。confidenceは high / medium / low のいずれかです。`,
+    promptVersion: template.version,
+  };
+}
+
 async function runQa(
   moduleContext: ModuleContext,
   context: ModuleActionContext,
@@ -1073,14 +1366,14 @@ async function runQa(
 ) {
   const story = await readStorySnapshot(context.reader, { includeManuscripts: true });
   const manuscriptBody = input.sceneId ? sceneContext(story, input.sceneId).body : "";
-  const template = await renderPromptTemplate("settingQa", { manuscriptBody: manuscriptBody || "（関連シーンは指定されていません）" });
-  const system = `${await composePrompt(template.body)}\n\n読み取り専用ツールだけで事実を確認してください。回答はJSONオブジェクト1つで、answer、citations、confidenceを含めてください。citationsはツールが返した kind/id/quote の値をそのまま使い、根拠が無い回答は断定せず citations を空にしてください。confidenceは high / medium / low のいずれかです。`;
+  const prepared = await buildQaSystemPrompt(manuscriptBody);
+  const system = prepared.system;
   const verifiedToolCitations = new Map<string, SourceCitation & { kind: string; id: string }>();
   const tools = createAssistantQaTools({
     semanticSearch: async (search) => {
-      const result = await invokeData(context, "semantic.search", search);
-      if (!input.sceneId) return result;
-      return { ...result, results: Array.isArray(result.results) ? result.results.filter((value) => record(value).sceneId === input.sceneId) : [] };
+      // A selected scene adds manuscript context to the system prompt; source QA
+      // still searches the full corpus for supporting evidence.
+      return invokeData(context, "semantic.search", search);
     },
     searchBible: (query, entityKind) => searchAssistantBible(context, query, entityKind),
     worldStateAtScene: async ({ sceneId }) => {
@@ -1115,8 +1408,8 @@ async function runQa(
     }
   });
   const generation = await generate(moduleContext, context, {
-    feature: "setting-qa", system, messages: input.messages as ModelMessage[], tools, maxToolSteps: 6,
-    promptVersion: template.version, sourceRevisions: [
+    feature: "setting-qa", system, messages: input.messages as ModelMessage[], tools, maxToolSteps: SETTING_QA_MAX_STEPS,
+    promptVersion: prepared.promptVersion, sourceRevisions: [
       ...(input.sceneId ? [{ path: sceneContext(story, input.sceneId).manuscript.path, revision: sceneContext(story, input.sceneId).manuscript.revision }] : []),
     ], outputTokens: 1_024, ...(onText ? { onText } : {}),
   });
@@ -1133,11 +1426,18 @@ async function runQa(
 async function runContinuation(moduleContext: ModuleContext, context: ModuleActionContext, input: ContinuationInput) {
   const story = await readStorySnapshot(context.reader, { includeManuscripts: true });
   const source = input.sceneId ? sceneContext(story, input.sceneId) : undefined;
-  const recentSentences = input.recentSentences?.length ? input.recentSentences : source ? splitIntoSentences(source.body) : [];
+  const sceneFile = source ? story.files.get(source.scene.filePath) : undefined;
+  if (source && input.editorDraft) assertEditorDraftBase(context, source, sceneFile?.revision ?? null, input.editorDraft);
+  const recentSentences = input.editorDraft
+    ? splitIntoSentences(input.editorDraft.text).slice(-12)
+    : input.recentSentences?.length ? input.recentSentences : source ? splitIntoSentences(source.body) : [];
   let chapter = input.chapterId ? story.entities.get(input.chapterId) : undefined;
-  if (!chapter && source) {
-    const chapterId = typeof source.scene.raw.chapter === "string" ? source.scene.raw.chapter : story.links.find((link) => link.from === source.scene.id && link.kind === "chapter")?.to;
-    chapter = chapterId ? story.entities.get(chapterId) : undefined;
+  if (source) {
+    const sourceChapterId = typeof source.scene.raw.chapter === "string" ? source.scene.raw.chapter : story.links.find((link) => link.from === source.scene.id && link.kind === "chapter")?.to;
+    if (input.editorDraft && input.chapterId && sourceChapterId && input.chapterId !== sourceChapterId) {
+      throw codeError("assistant_editor_draft_stale", "The selected chapter does not match the current editor scene");
+    }
+    if (sourceChapterId) chapter = story.entities.get(sourceChapterId);
   }
   const chapterSummary = chapter?.type === "chapter" ? await readAssistantSummary(context, "chapter", chapter.id) : null;
   let retrievalHits: ReturnType<typeof normalizeContinuationRetrievalHits> = [];
@@ -1155,38 +1455,75 @@ async function runContinuation(moduleContext: ModuleContext, context: ModuleActi
     const preferences = (await readAssistantSettings(context.reader)).settings;
     tokenizerModelId = resolveAssistantModel("continuation-options", preferences)?.model;
   } catch { /* The provider settings remain optional and contain no credentials. */ }
-  let exactTokenCounts = new Map<string, number>();
-  try {
-    const counted = await invokeData(context, "nlp.countTokens", { texts: [...tokenTexts], ...(tokenizerModelId ? { modelId: tokenizerModelId } : {}) });
-    const counts = Array.isArray(counted.counts) ? counted.counts : [];
-    const counter = record(counted.counter ?? {});
-    if (counter.exact === true && (tokenizerModelId === undefined || counter.modelId === tokenizerModelId) && counted.snapshot && JSON.stringify(counted.snapshot) === JSON.stringify(context.reader.snapshot) && counts.length === tokenTexts.size && counts.every((item) => Number.isSafeInteger(item) && (item as number) >= 0)) {
-      exactTokenCounts = new Map([...tokenTexts].map((text, index) => [text, counts[index] as number]));
-    }
-  } catch { /* Exact counting is a pinned optional NLP worker capability; source permits an identified estimate fallback. */ }
+  const tokenTextsInOrder = [...tokenTexts];
+  const counted = await invokeData(context, "nlp.countTokens", { texts: tokenTextsInOrder, ...(tokenizerModelId ? { modelId: tokenizerModelId } : {}) });
+  const counts = counted.counts;
+  const counter = record(counted.counter, "NLP token counter identity");
+  if (!counted.snapshot || snapshotKey(counted.snapshot as SnapshotId) !== snapshotKey(context.reader.snapshot)) {
+    throw codeError("assistant_token_counter_snapshot_mismatch", "The NLP token counter returned a result for a different snapshot");
+  }
+  if (!Array.isArray(counts) || counts.length !== tokenTextsInOrder.length || counts.some((item) => !Number.isSafeInteger(item) || (item as number) < 0)) {
+    throw codeError("assistant_token_counter_invalid", "The NLP token counter returned invalid counts");
+  }
+  if (typeof counter.exact !== "boolean" || typeof counter.modelId !== "string" || !counter.modelId || typeof counter.engine !== "string" || typeof counter.engineVersion !== "string") {
+    throw codeError("assistant_token_counter_invalid", "The NLP token counter returned an invalid identity");
+  }
+  if (counter.exact && tokenizerModelId !== undefined && counter.modelId !== tokenizerModelId) {
+    throw codeError("assistant_token_counter_model_mismatch", "The NLP token counter measured a different model than the selected continuation model");
+  }
+  const tokenCounts = new Map(tokenTextsInOrder.map((text, index) => [text, counts[index] as number]));
   const built = buildContinuationContext({
     recentSentences, k: input.k, chapterSummary: chapterSummary ? { chapterId: String(chapterSummary.id), text: Array.isArray(chapterSummary.summaryLines) ? chapterSummary.summaryLines.join("\n") : "" } : null,
     retrievalHits, tokenBudget: input.tokenBudget,
-    ...(exactTokenCounts.size ? { countTokens: (text) => {
-      const count = exactTokenCounts.get(text);
+    countTokens: (text) => {
+      const count = tokenCounts.get(text);
       if (count === undefined) throw new Error("Token counter response did not include an assembled continuation section");
       return count;
-    } } : {}),
+    },
   });
-  const template = await renderPromptTemplate("continuationOptions", {});
-  const prompt = `${await composePrompt(`${template.body}\n\n文脈（直近の文、章要約、検索結果。優先順に上限内で選択）:\n${built.text || "（空 — 一般的な展開の方向のみ提案）"}`)}${promptJson('{"options":[{"direction":"...","rationale":"..."},{"direction":"...","rationale":"..."},{"direction":"...","rationale":"..."}]}')}`;
+  const prepared = await buildContinuationPrompt(built.text);
   const sourceRevisions = revisionList([
-    ...(source ? [story.files.get(source.scene.filePath)!, source.manuscript] : []),
+    ...(source ? [sceneFile!, source.manuscript] : []),
     ...(chapter?.type === "chapter" && typeof chapterSummary?.path === "string" && typeof chapterSummary.revision === "string" ? [{ path: chapterSummary.path, revision: chapterSummary.revision, content: "" }] : []),
     ...retrievalHits.flatMap((hit) => { const row = story.entities.get(hit.entityId); const file = row ? story.files.get(row.filePath) : undefined; return file ? [file] : []; }),
   ]);
-  const generated = await generate(moduleContext, context, { feature: "continuation-options", prompt, promptVersion: template.version, sourceRevisions, outputTokens: 768 });
+  const generated = await generate(moduleContext, context, { feature: "continuation-options", prompt: prepared.prompt, promptVersion: prepared.promptVersion, sourceRevisions, outputTokens: 768 });
   const result = parseStructured(generated.text, continuationSchema);
+  const editorQuote = recentSentences.join("\n").slice(-1_200);
+  const citations: SourceCitation[] = input.editorDraft
+    ? [{
+      path: input.editorDraft.documentPath,
+      revision: input.editorDraft.documentRevision ?? input.editorDraft.sceneRevision,
+      quote: editorQuote,
+      sceneId: input.editorDraft.sceneId,
+      label: "current editor draft",
+      revisionKind: input.editorDraft.documentRevision === null ? "editor-scene" : "editor-document",
+      snapshot: input.editorDraft.snapshot,
+    }]
+    : source ? [makeCitation(source.manuscript, source.body, source.scene.id, "scene manuscript")] : [];
+  const provenance = {
+    ...generated.provenance,
+    ...(input.editorDraft ? { editorDraft: {
+      documentPath: input.editorDraft.documentPath,
+      documentRevision: input.editorDraft.documentRevision,
+      sceneRevision: input.editorDraft.sceneRevision,
+      snapshot: input.editorDraft.snapshot,
+      baseSnapshot: input.editorDraft.baseSnapshot,
+      baseSceneRevision: input.editorDraft.baseSceneRevision,
+    } } : {}),
+  };
   return {
     ...result, sceneId: input.sceneId, chapterId: chapter?.id,
-    contextManifest: { ...built.manifest, tokenCounter: exactTokenCounts.size ? { exact: true, modelId: tokenizerModelId } : { exact: false, modelId: "approximate" } },
-    model: generated.provenance.model, provider: generated.provenance.provider, promptVersion: generated.provenance.promptVersion,
-    citations: source ? [makeCitation(source.manuscript, source.body, source.scene.id, "scene manuscript")] : [], provenance: generated.provenance,
+    contextManifest: { ...built.manifest, tokenCountMode: counter.exact ? "provided" : "approximate", tokenCounter: {
+      modelId: counter.modelId,
+      exact: counter.exact,
+      engine: counter.engine,
+      engineVersion: counter.engineVersion,
+      ...(typeof counter.requestedModelId === "string" ? { requestedModelId: counter.requestedModelId } : {}),
+      ...(typeof counter.fallbackReason === "string" ? { fallbackReason: counter.fallbackReason } : {}),
+    } },
+    prompt: prepared.prompt, model: generated.provenance.model, provider: generated.provenance.provider, promptVersion: generated.provenance.promptVersion,
+    citations, provenance,
   };
 }
 
@@ -1194,6 +1531,7 @@ async function runAspectReview(context: ModuleActionContext, input: { chapterId:
   const story = await readStorySnapshot(context.reader, { includeManuscripts: true });
   const { chapter, scenes } = chapterScenes(story, input.chapterId);
   if (!scenes.length) throw codeError("assistant_source_missing", `Chapter ${input.chapterId} has no manuscript scenes`);
+  await reportProgress(context, 0.1);
   const reviewScenes = scenes.map(({ scene, body }) => {
     const povId = story.links.find((link) => link.from === scene.id && link.kind === "pov")?.to;
     const povName = povId ? story.entities.get(povId)?.name : undefined;
@@ -1205,15 +1543,18 @@ async function runAspectReview(context: ModuleActionContext, input: { chapterId:
       ...(povName ? { povName } : {}),
     };
   });
-  return runDeterministicAspectReview(
+  await reportProgress(context, 0.4);
+  const result = runDeterministicAspectReview(
     input.chapterId,
     chapter.name ?? (typeof chapter.raw.title === "string" ? chapter.raw.title : input.chapterId),
     reviewScenes,
     input.aspects,
   );
+  await reportProgress(context, 1);
+  return result;
 }
 
-async function runDialogueTopics(moduleContext: ModuleContext, context: ModuleActionContext, input: { participantEntityIds: string[] }) {
+async function buildDialogueTopicsPrompt(context: ModuleActionContext, input: { participantEntityIds: string[] }) {
   const story = await readStorySnapshot(context.reader);
   const participantIds = input.participantEntityIds;
   if (participantIds.length < 2 || participantIds.length > 8) throw codeError("assistant_dialogue_participants_invalid", "Dialogue topic suggestions require two to eight participants");
@@ -1222,28 +1563,58 @@ async function runDialogueTopics(moduleContext: ModuleContext, context: ModuleAc
   const participants = participantEntities.map((item) => ({ id: item.id, name: item.name ?? item.id }));
   const nameById = Object.fromEntries(participants.map((item) => [item.id, item.name]));
   const pairs: Array<{ a: string; b: string; label: string }> = [];
-  for (let left = 0; left < participantIds.length; left += 1) for (let right = left + 1; right < participantIds.length; right += 1) {
-    const a = participantIds[left]!, b = participantIds[right]!;
-    const relations = story.links.filter((link) => (link.from === a && link.to === b) || (link.from === b && link.to === a));
-    for (const relation of relations.slice(0, 4)) pairs.push({ a, b, label: relation.note ?? relation.kind });
+  const seenRelations = new Set<string>();
+  const participantSet = new Set(participantIds);
+  const addPairRelation = (a: string, b: string, kind: string, note?: string) => {
+    if (!participantSet.has(a) || !participantSet.has(b) || a === b) return;
+    const normalizedKind = kind.trim();
+    const normalizedNote = note?.trim();
+    const label = normalizedKind && normalizedNote ? `${normalizedKind}: ${normalizedNote}` : normalizedNote || normalizedKind || "related";
+    const key = `${a}\0${b}\0${label}`;
+    if (seenRelations.has(key)) return;
+    seenRelations.add(key);
+    pairs.push({ a, b, label });
+  };
+  for (const id of participantIds) {
+    const participant = story.entities.get(id);
+    if (participant?.type !== "character" || !Array.isArray(participant.raw.relations)) continue;
+    for (const rawRelation of participant.raw.relations) {
+      const relation = record(rawRelation, "character relation");
+      if (relation.auto === true || typeof relation.target !== "string" || !relation.target) continue;
+      if (story.entities.get(relation.target)?.type !== "character") continue;
+      addPairRelation(id, relation.target, typeof relation.kind === "string" ? relation.kind : "related", typeof relation.note === "string" ? relation.note : undefined);
+    }
+  }
+  for (const link of story.links) {
+    if (link.kind !== "related") continue;
+    addPairRelation(link.from, link.to, "related", link.note);
   }
   const pairLines = pairs.length ? pairs.map((item) => `- ${nameById[item.a]} ↔ ${nameById[item.b]}: ${item.label}`).join("\n") : "（関係ラベル未登録 — 参加者の対比・緊張を想像してよい）";
   const prompt = await composePrompt([
     "あなたは小説のセリフ問答（SS）用お題の提案者です。",
     "参加キャラの関係性ラベルを種に、対比・緊張・親密さが際立つお題を3〜5個提案してください。",
-    "各お題は title と situation の組で構成してください。セリフ・地の文・説明文は禁止。",
+    "各お題は title（タイトル）と situation（場面設定）の組で構成してください。",
+    "title は名詞で終わる体言止めの短いタイトル（例:「エレベーター閉じ込め」「すれ違う本音」）。",
+    "title の文末を「〜する」「〜られる」のような用言で終わらせないこと。",
+    "situation は場所・時間・状況を1文で具体的に（例:「停電した夜のオフィスビル、二人きりのエレベーターの中」）。",
+    "セリフ・地の文・説明文は禁止。",
     `参加者: ${participants.map((item) => `${item.name} (${item.id})`).join("、")}`,
     `関係種:\n${pairLines}`,
     promptJson('{"topics":[{"title":"...","situation":"..."},{"title":"...","situation":"..."},{"title":"...","situation":"..."}]}'),
   ].join("\n"));
   const sourceRevisions = revisionList(participantEntities.map((participant) => story.files.get(participant.filePath)!).filter(Boolean));
-  const generated = await generate(moduleContext, context, { feature: "dialogue-sketch", prompt, promptVersion: CUSTOM_PROMPT_VERSIONS.dialogueTopics, sourceRevisions, outputTokens: 32_768 });
-  const parsed = parseStructured(generated.text, topicsSchema);
   const citations = participantEntities.map((participant) => {
     const file = story.files.get(participant.filePath)!;
     return sourceCitation(file, file.content.slice(0, 300), undefined, `${participant.name ?? participant.id} profile`);
   });
-  return { topics: parsed.topics, participantEntityIds: participantIds, prompt, model: generated.provenance.model, provider: generated.provenance.provider, promptVersion: generated.provenance.promptVersion, citations, provenance: generated.provenance };
+  return { prompt, sourceRevisions, citations, participantEntityIds: participantIds };
+}
+
+async function runDialogueTopics(moduleContext: ModuleContext, context: ModuleActionContext, input: { participantEntityIds: string[] }) {
+  const prepared = await buildDialogueTopicsPrompt(context, input);
+  const generated = await generate(moduleContext, context, { feature: "dialogue-sketch", prompt: prepared.prompt, promptVersion: CUSTOM_PROMPT_VERSIONS.dialogueTopics, sourceRevisions: prepared.sourceRevisions, outputTokens: 32_768 });
+  const parsed = parseStructured(generated.text, topicsSchema);
+  return { topics: parsed.topics, participantEntityIds: prepared.participantEntityIds, prompt: prepared.prompt, model: generated.provenance.model, provider: generated.provenance.provider, promptVersion: generated.provenance.promptVersion, citations: prepared.citations, provenance: generated.provenance };
 }
 
 function cleanShort(value: unknown, limit = 2_000): string { return typeof value === "string" ? value.trim().slice(0, limit) : ""; }
@@ -1266,7 +1637,7 @@ async function readDialogueParticipants(story: LoadedStorySnapshot, participantI
   }));
 }
 
-async function runDialogueTurns(moduleContext: ModuleContext, context: ModuleActionContext, input: DialogueTurnInput) {
+async function buildDialogueTurnPrompt(context: ModuleActionContext, input: DialogueTurnInput) {
   const story = await readStorySnapshot(context.reader, { includeManuscripts: true });
   const participants = await readDialogueParticipants(story, input.participantEntityIds, context);
   if (input.sketchId) {
@@ -1327,22 +1698,42 @@ async function runDialogueTurns(moduleContext: ModuleContext, context: ModuleAct
     const rows = Array.from({ length: lineCount }, () => '{"speakerEntityId":"participant-id","text":"..."}').join(",");
     prompt = `${await composePrompt(template.body)}${promptJson(`{"lines":[${rows}]}`)}`;
   }
-  const generated = await generate(moduleContext, context, { feature: "dialogue-sketch-turn", prompt, promptVersion: single ? CUSTOM_PROMPT_VERSIONS.dialogueTurn : template.version, sourceRevisions, outputTokens: single ? 256 : 4_096 });
+  return {
+    prompt,
+    promptVersion: single ? CUSTOM_PROMPT_VERSIONS.dialogueTurn : template.version,
+    sourceRevisions,
+    citations,
+    single,
+    lineCount,
+    participantEntityIds: input.participantEntityIds,
+    ...(input.speakerEntityId ? { speakerEntityId: input.speakerEntityId } : {}),
+    ...(input.sketchId ? { sketchId: input.sketchId } : {}),
+  };
+}
+
+async function runDialogueTurns(moduleContext: ModuleContext, context: ModuleActionContext, input: DialogueTurnInput) {
+  const prepared = await buildDialogueTurnPrompt(context, input);
+  const generated = await generate(moduleContext, context, {
+    feature: "dialogue-sketch-turn", prompt: prepared.prompt, promptVersion: prepared.promptVersion,
+    sourceRevisions: prepared.sourceRevisions, outputTokens: prepared.single ? 256 : 4_096,
+  });
+  const { single, lineCount, citations } = prepared;
+  const prompt = prepared.prompt;
   const allowed = new Set(input.participantEntityIds);
   let lines: Array<{ speakerEntityId: string; text: string }>;
   if (single) {
     const parsed = parseStructured(generated.text, dialogueLineResponseSchema);
-    lines = [{ speakerEntityId: input.speakerEntityId!, text: parsed.text.trim().replace(/^[「『]|[」』]$/g, "").trim() }];
+    lines = [{ speakerEntityId: prepared.speakerEntityId!, text: parsed.text.trim().replace(/^[「『]|[」』]$/g, "").trim() }];
   } else {
     const parsed = parseStructured(generated.text, dialogueLinesSchema);
     lines = parsed.lines.slice(0, lineCount).map((line) => ({ ...line, text: line.text.trim().replace(/^[「『]|[」』]$/g, "").trim() }));
   }
   if (lines.some((line) => !allowed.has(line.speakerEntityId) || !line.text)) throw codeError("assistant_output_invalid", "Dialogue output included an invalid speaker or empty line");
   if (lines.length !== lineCount) throw codeError("assistant_output_invalid", `Dialogue output must contain ${lineCount} lines`);
-  return { lines, ...(single ? { text: lines[0]!.text } : {}), ...(input.sketchId ? { sketchId: input.sketchId } : {}), participantEntityIds: input.participantEntityIds, prompt, model: generated.provenance.model, provider: generated.provenance.provider, promptVersion: generated.provenance.promptVersion, citations, provenance: generated.provenance };
+  return { lines, ...(single ? { text: lines[0]!.text } : {}), ...(prepared.sketchId ? { sketchId: prepared.sketchId } : {}), participantEntityIds: prepared.participantEntityIds, prompt, model: generated.provenance.model, provider: generated.provenance.provider, promptVersion: generated.provenance.promptVersion, citations, provenance: generated.provenance };
 }
 
-async function runReaderReaction(moduleContext: ModuleContext, context: ModuleActionContext, chapterId: string) {
+async function buildReaderReactionContext(context: ModuleActionContext, chapterId: string) {
   const story = await readStorySnapshot(context.reader, { includeManuscripts: true });
   const target = entity(story, chapterId);
   if (target.type !== "chapter") throw new TypeError(`${chapterId} is not a chapter`);
@@ -1374,25 +1765,22 @@ async function runReaderReaction(moduleContext: ModuleContext, context: ModuleAc
     cumulative.push({ chapterId: chapter.id, summaryLines: (chapterSummary.summaryLines as unknown[]).filter((line): line is string => typeof line === "string") });
     citations.push(sourceCitation({ ...chapterFile!, path: chapterPath }, chapterSummary.summaryLines.join("\n"), chapter.id, "accepted chapter summary"));
   }
-  const template = await renderPromptTemplate("firstReadReaction", { chapterId, blocks: cumulative.map((item) => `chapter_id: ${item.chapterId}\n${item.summaryLines.map((line) => `- ${line}`).join("\n")}`).join("\n\n") || "(要約なし)" });
-  const prompt = `${await composePrompt(template.body)}${promptJson('{"questions":["..."],"expectations":["..."],"confusions":["..."]}')}`;
-  const generated = await generate(moduleContext, context, { feature: "first-read-reaction", prompt, promptVersion: template.version, sourceRevisions: revisionList([], sourceRevisions), outputTokens: 768 });
+  const prepared = await buildReaderReactionPrompt(chapterId, cumulative);
+  return { ...prepared, citations, sourceRevisions: revisionList([], sourceRevisions) };
+}
+
+async function runReaderReaction(moduleContext: ModuleContext, context: ModuleActionContext, chapterId: string) {
+  const prepared = await buildReaderReactionContext(context, chapterId);
+  const generated = await generate(moduleContext, context, { feature: "first-read-reaction", prompt: prepared.prompt, promptVersion: prepared.promptVersion, sourceRevisions: prepared.sourceRevisions, outputTokens: 768 });
   const reaction = parseStructured(generated.text, reactionSchema);
-  return { chapterId, ...reaction, model: generated.provenance.model, provider: generated.provenance.provider, promptVersion: generated.provenance.promptVersion, citations, provenance: generated.provenance };
+  return { chapterId, ...reaction, model: generated.provenance.model, provider: generated.provenance.provider, promptVersion: generated.provenance.promptVersion, citations: prepared.citations, provenance: generated.provenance };
 }
 
 async function runSynonyms(moduleContext: ModuleContext, context: ModuleActionContext, input: { suggestions: SynonymRequest[] }) {
   const suggestions: Array<RecordValue> = [];
   let last: GenerationResult | undefined;
   for (const request of input.suggestions) {
-    const prompt = await composePrompt([
-      request.reason
-        ? `提案理由: ${request.reason}（地の文・セリフの言い換え候補として自然な語を選ぶ）`
-        : "小説の地の文またはセリフで使える言い換え表現を提案する",
-      "対象語句と文全体の意味・文体を保ち、言い換え語句を3〜5個出してください。",
-      `対象語句: ${request.original}`, `文: ${request.sentence}`,
-      promptJson('{"candidates":["...","...","..."]}'),
-    ].join("\n"));
+    const prompt = await buildSynonymPrompt(request);
     const generated = await generate(moduleContext, context, { feature: "synonym-suggest", prompt, promptVersion: CUSTOM_PROMPT_VERSIONS.synonym, outputTokens: 512 });
     last = generated;
     const parsed = parseStructured(generated.text, synonymSchema);
@@ -1547,6 +1935,35 @@ function buildSandboxZukanPrompt(input: {
   ].join("\n");
 }
 
+function prepareSandboxZukanPrompt(story: LoadedStorySnapshot, sketchId: string, requestedRange?: { start: number; end: number }) {
+  const sketch = entity(story, sketchId);
+  if (sketch.type !== "dialogue_sketch") throw codeError("assistant_source_missing", `Dialogue sketch ${sketchId} was not found`);
+  const lines = dialogueLinesFromRaw(sketch.raw.lines);
+  if (!lines.length) return { sketch, lines, turnRange: requestedRange ?? { start: 0, end: -1 }, participants: [], transcript: "", prompt: "", sourceRevisions: [] as FileRevision[] };
+  const turnRange = requestedRange ?? { start: 0, end: lines.length - 1 };
+  if (!validateSandboxTurnRange(lines.length, sketchId, turnRange)) throw codeError("assistant_source_stale", "Dialogue sketch turn range is no longer valid");
+  const slice = lines.slice(turnRange.start, turnRange.end + 1);
+  const participantIds = [...new Set([
+    ...(Array.isArray(sketch.raw.participantEntityIds) ? sketch.raw.participantEntityIds.filter((id): id is string => typeof id === "string") : []),
+    ...slice.map((line) => line.speakerEntityId),
+  ])];
+  const participants = participantIds.map((id) => {
+    const participant = story.entities.get(id);
+    return { id, name: participant?.name ?? id, notesExcerpt: notesPlainExcerpt(participant?.raw.notes) };
+  });
+  const nameById = new Map(participants.map((participant) => [participant.id, participant.name]));
+  const transcript = slice.map((line, index) => `[${turnRange.start + index}] ${nameById.get(line.speakerEntityId) ?? line.speakerEntityId}: ${line.text}`).join("\n");
+  const prompt = buildSandboxZukanPrompt({ sketchId, turnRange, transcript, participants });
+  const sourceRevisions = revisionList([
+    sourceFile(story, sketch.filePath),
+    ...participantIds.flatMap((id) => {
+      const participant = story.entities.get(id);
+      return participant ? [sourceFile(story, participant.filePath)] : [];
+    }),
+  ]);
+  return { sketch, lines, turnRange, participants, transcript, prompt, sourceRevisions };
+}
+
 function notesPlainExcerpt(value: unknown, maxChars = 2_000): string {
   const parts: string[] = [];
   const addBlocks = (blocks: unknown) => {
@@ -1589,37 +2006,23 @@ function validateSandboxTurnRange(linesLength: number, sessionId: string, range:
 
 async function runSandboxZukanSuggestions(moduleContext: ModuleContext, context: ModuleActionContext, input: ZukanInput) {
   const story = await readStorySnapshot(context.reader, { includeManuscripts: true });
+  await reportProgress(context, 0.1);
   const sketchId = input.sourceSessionId!;
-  const sketch = entity(story, sketchId);
-  if (sketch.type !== "dialogue_sketch") throw codeError("assistant_source_missing", `Dialogue sketch ${sketchId} was not found`);
-  const lines = dialogueLinesFromRaw(sketch.raw.lines);
-  if (!lines.length) return { createdCount: 0, suggestionIds: [], suggestions: [], skippedReason: "no-lines", sourceSessionId: sketchId };
-  const turnRange = input.turnRange ?? { start: 0, end: lines.length - 1 };
-  if (!validateSandboxTurnRange(lines.length, sketchId, turnRange)) throw codeError("assistant_source_stale", "Dialogue sketch turn range is no longer valid");
+  const prepared = prepareSandboxZukanPrompt(story, sketchId, input.turnRange);
+  const { sketch, lines, turnRange, prompt, sourceRevisions } = prepared;
+  if (!lines.length) {
+    await reportProgress(context, 1);
+    return { createdCount: 0, suggestionIds: [], suggestions: [], skippedReason: "no-lines", sourceSessionId: sketchId };
+  }
   const slice = lines.slice(turnRange.start, turnRange.end + 1);
-  const participantIds = [...new Set([
-    ...(Array.isArray(sketch.raw.participantEntityIds) ? sketch.raw.participantEntityIds.filter((id): id is string => typeof id === "string") : []),
-    ...slice.map((line) => line.speakerEntityId),
-  ])];
-  const participants = participantIds.map((id) => {
-    const participant = story.entities.get(id);
-    return { id, name: participant?.name ?? id, notesExcerpt: notesPlainExcerpt(participant?.raw.notes) };
-  });
-  const nameById = new Map(participants.map((participant) => [participant.id, participant.name]));
-  const transcript = slice.map((line, index) => `[${turnRange.start + index}] ${nameById.get(line.speakerEntityId) ?? line.speakerEntityId}: ${line.text}`).join("\n");
-  const prompt = buildSandboxZukanPrompt({ sketchId, turnRange, transcript, participants });
-  const sourceRevisions = revisionList([
-    sourceFile(story, sketch.filePath),
-    ...participantIds.flatMap((id) => {
-      const participant = story.entities.get(id);
-      return participant ? [sourceFile(story, participant.filePath)] : [];
-    }),
-  ]);
+  const participantIds = prepared.participants.map((participant) => participant.id);
+  await reportProgress(context, 0.35);
   const generated = await generate(moduleContext, context, {
     feature: "zukan-proposal", prompt, promptVersion: SANDBOX_ZUKAN_PROMPT_VERSION,
     sourceRevisions, outputTokens: 1_024,
   });
   const parsed = parseStructured(generated.text, sandboxZukanSchema);
+  await reportProgress(context, 0.85);
   const evidenceCorpus = slice.map((line) => line.text).join("\n");
   const suggestions: Array<RecordValue> = [];
   const proposals: unknown[] = [];
@@ -1644,6 +2047,7 @@ async function runSandboxZukanSuggestions(moduleContext: ModuleContext, context:
     if (storyData.created === true && storyResult.proposals?.length) proposals.push(...storyResult.proposals);
   }
   const sketchFile = sourceFile(story, sketch.filePath);
+  await reportProgress(context, 1);
   return {
     source: "sandbox", sourceSessionId: sketchId, sourceTurnRange: turnRange,
     createdCount: suggestions.filter((item) => item.created === true).length,
@@ -1667,6 +2071,7 @@ async function runSandboxZukanSuggestions(moduleContext: ModuleContext, context:
 async function runZukanSuggestions(moduleContext: ModuleContext, context: ModuleActionContext, input: ZukanInput) {
   if (input.source === "sandbox") return runSandboxZukanSuggestions(moduleContext, context, input);
   const story = await readStorySnapshot(context.reader, { includeManuscripts: true });
+  await reportProgress(context, 0.1);
   const target = entity(story, input.entityId!);
   const name = target.name ?? target.id;
   const search = await invokeData(context, "semantic.search", { query: name, mode: "sentence", limit: 12, rerank: false });
@@ -1692,6 +2097,7 @@ async function runZukanSuggestions(moduleContext: ModuleContext, context: Module
     promptJson('{"blockPath":"lead.0","proposedText":"...","evidence":[{"sceneId":"...","quote":"exact source quote"}]}'),
   ].join("\n\n"));
   const sourceRevisions = revisionList([...story.files.values()].filter((file) => file.path === target.filePath || [...eligible.values()].some((item) => item.source.scene.filePath === file.path || item.file.path === file.path)));
+  await reportProgress(context, 0.35);
   const generated = await generate(moduleContext, context, { feature: "zukan-proposal", prompt, promptVersion: CUSTOM_PROMPT_VERSIONS.zukan, sourceRevisions, outputTokens: 1_024 });
   const parsed = parseStructured(generated.text, zukanSchema);
   if (!/^(?:lead\.\d+|sections\.\d+\.body\.\d+)$/.test(parsed.blockPath)) throw codeError("assistant_output_invalid", "Zukan output used an unsupported notes block path");
@@ -1707,12 +2113,14 @@ async function runZukanSuggestions(moduleContext: ModuleContext, context: Module
   }
   if (!verifiedEvidence.length) throw codeError("assistant_output_invalid", "Zukan output did not cite an exact current manuscript passage");
   if (!zukanEvidenceIsGrounded(parsed.proposedText, verifiedEvidence)) throw codeError("assistant_output_ungrounded", "Zukan proposal contains words that are not supported by its evidence");
+  await reportProgress(context, 0.85);
   const storyResult = await context.invoke("story.zukan-suggestions.create", {
     entityId: target.id, proposedText: parsed.proposedText, evidence: verifiedEvidence, source: "manuscript",
     blockPath: parsed.blockPath, kind: "fact", confidence: "low",
   });
   if (!storyResult.ok) throw codeError(storyResult.error.code, storyResult.error.message);
   const storyData = record(storyResult.data, "Story Zukan create result");
+  await reportProgress(context, 1);
   return { entityId: target.id, suggestion: storyData.suggestion ?? storyData, created: storyData.created === true, proposal: storyResult.proposals?.[0] ?? null, model: generated.provenance.model, provider: generated.provenance.provider, promptVersion: generated.provenance.promptVersion, citations, provenance: generated.provenance };
 }
 
@@ -1752,15 +2160,25 @@ async function runStateEventDraft(moduleContext: ModuleContext, context: ModuleA
 
 function isDialogueSentence(text: string): boolean { return /[「『].+[」』]/u.test(text); }
 
-async function runSpeakerAttribution(moduleContext: ModuleContext, context: ModuleActionContext, sceneId: string) {
+async function runSpeakerAttribution(
+  moduleContext: ModuleContext,
+  context: ModuleActionContext,
+  input: ReturnType<typeof parseSpeakerAttributionInput>,
+) {
+  const sceneId = input.sceneId;
   const story = await readStorySnapshot(context.reader, { includeManuscripts: true });
   const source = sceneContext(story, sceneId);
-  const dialogues = splitIntoSentences(source.body).map((text, index) => ({ sentenceIndex: index + 1, text: text.trim() })).filter((item) => item.text && isDialogueSentence(item.text));
+  const sceneFile = story.files.get(source.scene.filePath);
+  const editorDraft = input.editorDraft;
+  if (editorDraft) assertEditorDraftBase(context, source, sceneFile?.revision ?? null, editorDraft);
+  const body = editorDraft?.text ?? source.body;
+  if (!body.trim()) throw codeError("assistant_dialogue_missing", "No quoted dialogue lines were found in the scene");
+  const dialogues = splitIntoSentences(body).map((text, index) => ({ sentenceIndex: index + 1, text: text.trim() })).filter((item) => item.text && isDialogueSentence(item.text));
   if (!dialogues.length) throw codeError("assistant_dialogue_missing", "No quoted dialogue lines were found in the scene");
   const candidateIds = Array.isArray(source.scene.raw.appears) ? [...new Set(source.scene.raw.appears.filter((id): id is string => typeof id === "string"))].slice(0, 32) : [];
   const candidates = candidateIds.map((id) => story.entities.get(id)).filter((item): item is StoryEntity => !!item && item.type === "character");
   const candidateBlock = candidates.map((candidate) => `### ${candidate.name ?? candidate.id} (${candidate.id})\n口調・声紋:\n${JSON.stringify(candidate.raw.voice ?? candidate.raw.voicePatterns ?? {}).slice(0, 2_000) || "（未登録）"}\n図鑑ノート:\n${JSON.stringify(candidate.raw.notes ?? {}).slice(0, 2_000) || "（未登録）"}`).join("\n\n") || "（なし）";
-  const numbered = splitIntoSentences(source.body).map((text, index) => text.trim() ? `${index + 1}. ${text.trim()}` : "").filter(Boolean).join("\n");
+  const numbered = splitIntoSentences(body).map((text, index) => text.trim() ? `${index + 1}. ${text.trim()}` : "").filter(Boolean).join("\n");
   const prompt = await composePrompt([
     "あなたは小説の話者帰属アシスタントです。番号付きシーン本文の各セリフ（鉤括弧）について、候補キャラから話者を推定してください。候補外は null にしてください。",
     `候補キャラ:\n${candidateBlock}`, `シーン本文:\n${numbered}`,
@@ -1775,7 +2193,79 @@ async function runSpeakerAttribution(moduleContext: ModuleContext, context: Modu
     const answer = byIndex.get(dialogue.sentenceIndex);
     return { ...dialogue, speakerEntityId: answer?.speakerEntityId && candidateSet.has(answer.speakerEntityId) ? answer.speakerEntityId : null, ...(answer?.rationale ? { rationale: answer.rationale } : {}) };
   });
-  return { sceneId, attributions: proposals, model: generated.provenance.model, provider: generated.provenance.provider, promptVersion: generated.provenance.promptVersion, citations: [makeCitation(source.manuscript, source.body, sceneId, "scene manuscript")], provenance: generated.provenance };
+  const citations: SourceCitation[] = editorDraft
+    ? [{
+      path: editorDraft.documentPath,
+      revision: editorDraft.documentRevision ?? editorDraft.sceneRevision,
+      quote: proposals.map((item) => item.text).join("\n").slice(0, 1_200),
+      sceneId,
+      label: "current editor draft",
+      revisionKind: editorDraft.documentRevision === null ? "editor-scene" : "editor-document",
+      snapshot: editorDraft.snapshot,
+    }]
+    : [makeCitation(source.manuscript, body, sceneId, "scene manuscript")];
+  const provenance = {
+    ...generated.provenance,
+    ...(editorDraft ? { editorDraft: {
+      documentPath: editorDraft.documentPath,
+      documentRevision: editorDraft.documentRevision,
+      sceneRevision: editorDraft.sceneRevision,
+      snapshot: editorDraft.snapshot,
+      baseSnapshot: editorDraft.baseSnapshot,
+      baseSceneRevision: editorDraft.baseSceneRevision,
+    } } : {}),
+  };
+  return { sceneId, attributions: proposals, model: generated.provenance.model, provider: generated.provenance.provider, promptVersion: generated.provenance.promptVersion, citations, provenance };
+}
+
+async function previewSceneSummaryPrompt(context: ModuleActionContext, sceneId: string) {
+  const story = await readStorySnapshot(context.reader, { includeManuscripts: true });
+  const source = sceneContext(story, sceneId);
+  return { prompt: (await buildSceneSummaryPrompt(story, source)).prompt };
+}
+
+async function previewChapterSummaryPrompt(context: ModuleActionContext, chapterId: string) {
+  const story = await readStorySnapshot(context.reader, { includeManuscripts: true });
+  const { chapter, scenes } = chapterScenes(story, chapterId);
+  const sceneRecords: RecordValue[] = [];
+  for (const source of scenes) {
+    const summary = await readAssistantSummary(context, "scene", source.scene.id);
+    if (summary) sceneRecords.push({ sceneId: source.scene.id, summaryLines: summary.summaryLines });
+  }
+  return { prompt: (await buildChapterSummaryPrompt(chapter.id, sceneRecords)).prompt };
+}
+
+async function previewQaPrompt(context: ModuleActionContext, sceneId?: string) {
+  let manuscriptBody = "";
+  if (sceneId) {
+    const story = await readStorySnapshot(context.reader, { includeManuscripts: true });
+    manuscriptBody = sceneContext(story, sceneId).body;
+  }
+  return { prompt: (await buildQaSystemPrompt(manuscriptBody)).system };
+}
+
+async function previewAspectPrompt(context: ModuleActionContext, input: { chapterId: string; aspects: AspectId[] }) {
+  const story = await readStorySnapshot(context.reader, { includeManuscripts: true });
+  const chapter = entity(story, input.chapterId);
+  if (chapter.type !== "chapter") throw new TypeError(`${input.chapterId} is not a chapter`);
+  const labels: Record<AspectId, string> = { tempo: "テンポ", "pov-shift": "視点の揺れ", "over-explain": "説明過多" };
+  const template = await renderPromptTemplate("aspectReview", {
+    chapterId: input.chapterId,
+    chapterName: chapter.name ?? input.chapterId,
+    aspectLines: input.aspects.map((aspect) => `- ${aspect}（${labels[aspect]}）`).join("\n") || "（なし）",
+    sceneBlocks: "",
+  });
+  return { prompt: `${await composePrompt(template.body)}\n\n※ 実行時に各シーン本文が scenes へ追加されます` };
+}
+
+async function previewDialogueSandboxZukanPrompt(
+  context: ModuleActionContext,
+  input: { sketchId: string; turnRange?: { start: number; end: number } },
+) {
+  const story = await readStorySnapshot(context.reader, { includeManuscripts: true });
+  const prepared = prepareSandboxZukanPrompt(story, input.sketchId, input.turnRange);
+  if (!prepared.lines.length) throw codeError("assistant_dialogue_missing", "The selected dialogue sketch has no dialogue lines");
+  return { model: await previewModelId(context, "zukan-proposal"), prompt: prepared.prompt };
 }
 
 function parseSettingsPatch(value: unknown): { patch: RecordValue } {
@@ -1859,7 +2349,37 @@ export function createAssistantActions(moduleContext: ModuleContext): ModuleActi
     action("assistant.synonyms.suggestions", "compute", parseSynonymInput, async (input, context) => runSynonyms(moduleContext, context, input as ReturnType<typeof parseSynonymInput>)),
     action("assistant.contradictions.assist", "compute", parseContradictionInput, async (input, context) => runContradictionAssist(moduleContext, context, input as ReturnType<typeof parseContradictionInput>)),
     action("assistant.stateEvents.draft", "propose", parseIdInput, async (input, context) => runStateEventDraft(moduleContext, context, input.sceneId as string)),
-    action("assistant.speaker.attribute", "compute", parseIdInput, async (input, context) => runSpeakerAttribution(moduleContext, context, input.sceneId as string)),
+    action("assistant.speaker.attribute", "compute", parseSpeakerAttributionInput, async (input, context) => runSpeakerAttribution(moduleContext, context, input as ReturnType<typeof parseSpeakerAttributionInput>)),
+    action("assistant.summary.scene.preview", "read", (value) => parsePreviewIdInput(value, "sceneId"), async (input, context) => previewSceneSummaryPrompt(context, input.id as string)),
+    action("assistant.summary.chapter.preview", "read", (value) => parsePreviewIdInput(value, "chapterId"), async (input, context) => previewChapterSummaryPrompt(context, input.id as string)),
+    action("assistant.qa.preview", "read", parseQaPreviewInput, async (input, context) => previewQaPrompt(context, input.sceneId as string | undefined)),
+    action("assistant.continuation.preview", "read", parseContinuationPreviewInput, async (input) => {
+      const parsed = input as ReturnType<typeof parseContinuationPreviewInput>;
+      return { prompt: (await buildContinuationPrompt(parsed.recentSentences.join("\n"))).prompt };
+    }),
+    action("assistant.aspect.review.preview", "read", parseAspectInput, async (input, context) => previewAspectPrompt(context, input as ReturnType<typeof parseAspectInput>)),
+    action("assistant.dialogue.topics.preview", "read", parseDialogueTopicsInput, async (input, context) => {
+      const prepared = await buildDialogueTopicsPrompt(context, input as ReturnType<typeof parseDialogueTopicsInput>);
+      return { model: await previewModelId(context, "dialogue-sketch"), prompt: prepared.prompt };
+    }),
+    action("assistant.dialogue.turn.preview", "read", parseDialogueTurnInput, async (input, context) => {
+      const parsed = input as unknown as ReturnType<typeof parseDialogueTurnInput>;
+      if (!parsed.speakerEntityId) throw new TypeError("speakerEntityId is required for single-line prompt preview");
+      const prepared = await buildDialogueTurnPrompt(context, parsed);
+      return { model: await previewModelId(context, "dialogue-sketch-turn"), prompt: prepared.prompt };
+    }),
+    action("assistant.dialogue.turns.preview", "read", parseDialogueTurnInput, async (input, context) => {
+      const parsed = input as unknown as ReturnType<typeof parseDialogueTurnInput>;
+      if (parsed.lineCount === undefined) throw new TypeError("lineCount is required for bulk prompt preview");
+      const prepared = await buildDialogueTurnPrompt(context, parsed);
+      return { model: await previewModelId(context, "dialogue-sketch-turn"), prompt: prepared.prompt };
+    }),
+    action("assistant.reader.reaction.preview", "read", (value) => parsePreviewIdInput(value, "chapterId"), async (input, context) => ({ prompt: (await buildReaderReactionContext(context, input.id as string)).prompt })),
+    action("assistant.synonyms.preview", "read", parseSynonymPreviewInput, async (input, context) => ({
+      model: await previewModelId(context, "synonym-suggest"),
+      prompt: await buildSynonymPrompt(input as unknown as SynonymRequest),
+    })),
+    action("assistant.zukan.sandbox.preview", "read", parseSandboxZukanPreviewInput, async (input, context) => previewDialogueSandboxZukanPrompt(context, input as ReturnType<typeof parseSandboxZukanPreviewInput>)),
   ];
 }
 

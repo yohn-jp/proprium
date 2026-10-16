@@ -4,6 +4,7 @@ import test from "node:test";
 import {
   MODEL_USAGE_CAPABILITY,
   type ActionResult,
+  type BrowserEditorDocument,
   type ChangeOperation,
   type ChangeProposal,
   type ModelUsageEvent,
@@ -42,6 +43,7 @@ function context(options: {
   files?: Record<string, string>;
   invoke?: (actionId: string, input: unknown) => Promise<ActionResult>;
   onPropose?: (operations: ChangeOperation[]) => void;
+  onProgress?: (progress: number) => void;
 } = {}): ModuleActionContext {
   const selectedReader = reader(options.files);
   const controller = new AbortController();
@@ -55,6 +57,7 @@ function context(options: {
     async listActions() { return []; },
     async linkedReader() { return selectedReader; },
     signal: controller.signal,
+    async reportProgress(progress) { options.onProgress?.(progress); },
     async propose(operations, proposalEvidence, proposalId) {
       options.onPropose?.(operations);
       return {
@@ -128,28 +131,369 @@ test("default-denied external consent stops generation before usage lease or pro
   assert.equal(capabilityAcquisitions, 0);
 });
 
-test("setting QA streams an actual read-only tool round and returns only source-revision-bound citations", async () => {
+test("provider NONE keeps source-grounded local rewrite context available and reports typed unavailability", async () => {
+  const previous = process.env.ARCADIA_LLM_PROVIDER;
+  process.env.ARCADIA_LLM_PROVIDER = "none";
+  let capabilityAcquisitions = 0;
+  const scenePath = "plot/volumes/vol-main/chapters/ch-none/scenes/sc-none.yaml";
+  const manuscriptPath = "manuscript/vol-main/ch-none/sc-none.md";
+  const action = getAction(createAssistantActions(moduleContext(undefined, () => { capabilityAcquisitions += 1; })), "assistant.rewrite");
+  try {
+    const result = await action.invoke({ sceneId: "sc-none", sentenceIndex: 0 }, context({
+      files: {
+        "plot/volumes/vol-main/volume.yaml": "id: vol-main\ntype: volume\nname: Main\norder: 1\n",
+        "plot/volumes/vol-main/chapters/ch-none/chapter.yaml": "id: ch-none\ntype: chapter\nname: None\nvolume: vol-main\norder: 1\n",
+        [scenePath]: `id: sc-none\ntype: scene\nchapter: ch-none\norder: 1\nmanuscript: ${manuscriptPath}\n`,
+        [manuscriptPath]: "彼は夜の駅を歩いた。",
+      },
+      async invoke(actionId) {
+        if (actionId === "nlp.features") return { ok: true, snapshot, data: { features: [{ id: "rewrite", locality: "external", enabled: true }] } };
+        if (actionId === "semantic.search") return { ok: true, snapshot, data: { results: [] } };
+        assert.fail(`unexpected action ${actionId}`);
+      },
+    }));
+    assert.equal(result.ok, false);
+    if (!result.ok) assert.equal(result.error.code, "assistant_provider_unavailable");
+    assert.equal(capabilityAcquisitions, 0, "provider NONE does not lease usage storage or initialize a provider client");
+  } finally {
+    if (previous === undefined) delete process.env.ARCADIA_LLM_PROVIDER;
+    else process.env.ARCADIA_LLM_PROVIDER = previous;
+  }
+});
+
+test("speaker attribution uses the explicitly selected live editor text and preserves its separate remote base", async () => {
+  let requestPrompt = "";
+  const server = createServer((request, response) => {
+    const chunks: Buffer[] = [];
+    request.on("data", (chunk: Buffer) => chunks.push(chunk));
+    request.on("end", () => {
+      const body = JSON.parse(Buffer.concat(chunks).toString("utf8")) as Record<string, unknown>;
+      requestPrompt = JSON.stringify(body.messages ?? body);
+      response.writeHead(200, { "Content-Type": "text/event-stream", Connection: "keep-alive" });
+      const content = JSON.stringify({ attributions: [{ sentenceIndex: 1, speakerEntityId: "char-live", rationale: "口調が一致" }] });
+      const chunk = {
+        id: "chatcmpl-live-speaker", object: "chat.completion.chunk", created: 1, model: "synthetic-local",
+        choices: [{ index: 0, delta: { content }, finish_reason: "stop" }],
+      };
+      response.end(`data: ${JSON.stringify(chunk)}\n\ndata: [DONE]\n\n`);
+    });
+  });
+  await new Promise<void>((resolve, reject) => { server.once("error", reject); server.listen(0, "127.0.0.1", resolve); });
+  const address = server.address();
+  assert.ok(address && typeof address !== "string");
+  const envNames = ["ARCADIA_LLM_PROVIDER", "ARCADIA_LLM_MODEL", "ARCADIA_LLM_BASE_URL", "ARCADIA_LLM_API_KEY", "CF_AIG_TOKEN", "CF_AIG_BYOK_ALIAS"] as const;
+  const previousEnv = new Map(envNames.map((name) => [name, process.env[name]]));
+  process.env.ARCADIA_LLM_PROVIDER = "openai-compatible";
+  process.env.ARCADIA_LLM_MODEL = "synthetic-local";
+  process.env.ARCADIA_LLM_BASE_URL = `http://127.0.0.1:${address.port}/v1`;
+  process.env.ARCADIA_LLM_API_KEY = "local-test-placeholder";
+  delete process.env.CF_AIG_TOKEN;
+  delete process.env.CF_AIG_BYOK_ALIAS;
+  const scenePath = "plot/volumes/vol-main/chapters/ch-live/scenes/sc-live.yaml";
+  const manuscriptPath = "manuscript/vol-main/ch-live/sc-live.md";
+  const files = {
+    "plot/volumes/vol-main/volume.yaml": "id: vol-main\ntype: volume\nname: Main\norder: 1\n",
+    "plot/volumes/vol-main/chapters/ch-live/chapter.yaml": "id: ch-live\ntype: chapter\nname: Live editor\nvolume: vol-main\norder: 1\n",
+    [scenePath]: `id: sc-live\ntype: scene\nchapter: ch-live\norder: 1\nappears: [char-live]\nmanuscript: ${manuscriptPath}\n`,
+    "bible/characters/char-live/profile.yaml": "id: char-live\ntype: character\nname: Live speaker\nvoice:\n  tone: calm\n",
+    [manuscriptPath]: "「保存済みの台詞。」と彼女が言った。",
+  };
+  const editorSnapshot: SnapshotId = { repository, remoteCommit: "c".repeat(40), overlayCommit: "d".repeat(40) };
+  const editorDraft: BrowserEditorDocument = {
+    sceneId: "sc-live", documentPath: manuscriptPath, documentRevision: "editor-document-rev-7",
+    sceneRevision: "editor-scene-rev-11", text: "「編集中の新しい台詞。」と彼女が言った。",
+    snapshot: editorSnapshot, baseSnapshot: snapshot, baseSceneRevision: revision,
+  };
+  const usageStore: ModelUsageStore = { async append() {}, async list() { return { events: [] }; } };
+  try {
+    const module = createAssistantActions(moduleContext(usageStore));
+    const attribution = getAction(module, "assistant.speaker.attribute");
+    const staleResult = await attribution.invoke({ sceneId: "sc-live", editorDraft: { ...editorDraft, baseSceneRevision: "b".repeat(64) } }, context({
+      files,
+      async invoke() { assert.fail("a stale editor base must be rejected before consent/provider access"); },
+    }));
+    assert.equal(staleResult.ok, false);
+    if (staleResult.ok) return;
+    assert.equal(staleResult.error.code, "assistant_editor_draft_stale");
+    assert.equal(requestPrompt, "", "stale draft must not be transmitted");
+
+    const result = await attribution.invoke({ sceneId: "sc-live", editorDraft }, context({
+      files,
+      async invoke(actionId) {
+        assert.equal(actionId, "nlp.features");
+        return { ok: true, snapshot, data: { features: [{ id: "speaker-attribution-llm", locality: "external", enabled: true }] } };
+      },
+    }));
+    assert.equal(result.ok, true);
+    assert.match(requestPrompt, /編集中の新しい台詞/u);
+    assert.doesNotMatch(requestPrompt, /保存済みの台詞/u);
+    if (!result.ok) return;
+    const data = result.data as Record<string, unknown>;
+    assert.deepEqual(data.attributions, [{ sentenceIndex: 1, text: "「編集中の新しい台詞。」", speakerEntityId: "char-live", rationale: "口調が一致" }]);
+    const citations = data.citations as Array<Record<string, unknown>>;
+    assert.equal(citations[0]?.label, "current editor draft");
+    assert.equal(citations[0]?.revision, "editor-document-rev-7");
+    assert.deepEqual(citations[0]?.snapshot, editorSnapshot);
+    const provenance = data.provenance as Record<string, unknown>;
+    assert.deepEqual((provenance.editorDraft as Record<string, unknown>).baseSnapshot, snapshot);
+    assert.equal((provenance.editorDraft as Record<string, unknown>).baseSceneRevision, revision);
+  } finally {
+    server.closeAllConnections();
+    await new Promise<void>((resolve) => server.close(() => resolve()));
+    for (const name of envNames) {
+      const value = previousEnv.get(name);
+      if (value === undefined) delete process.env[name];
+      else process.env[name] = value;
+    }
+  }
+});
+
+test("continuation uses only a matching live editor draft after checking its remote scene base", async () => {
+  let requestPrompt = "";
+  const server = createServer((request, response) => {
+    const chunks: Buffer[] = [];
+    request.on("data", (chunk: Buffer) => chunks.push(chunk));
+    request.on("end", () => {
+      const body = JSON.parse(Buffer.concat(chunks).toString("utf8")) as Record<string, unknown>;
+      requestPrompt = JSON.stringify(body.messages ?? body);
+      response.writeHead(200, { "Content-Type": "text/event-stream", Connection: "keep-alive" });
+      const content = JSON.stringify({ options: [
+        { direction: "手紙を開く", rationale: "編集稿の最後から続ける。" },
+        { direction: "駅員へ尋ねる", rationale: "周囲の描写を広げる。" },
+        { direction: "電話をかける", rationale: "人物の動機を見せる。" },
+      ] });
+      const chunk = {
+        id: "chatcmpl-live-continuation", object: "chat.completion.chunk", created: 1, model: "synthetic-local",
+        choices: [{ index: 0, delta: { content }, finish_reason: "stop" }],
+      };
+      response.end(`data: ${JSON.stringify(chunk)}\n\ndata: [DONE]\n\n`);
+    });
+  });
+  await new Promise<void>((resolve, reject) => { server.once("error", reject); server.listen(0, "127.0.0.1", resolve); });
+  const address = server.address();
+  assert.ok(address && typeof address !== "string");
+  const envNames = ["ARCADIA_LLM_PROVIDER", "ARCADIA_LLM_MODEL", "ARCADIA_LLM_BASE_URL", "ARCADIA_LLM_API_KEY", "CF_AIG_TOKEN", "CF_AIG_BYOK_ALIAS"] as const;
+  const previousEnv = new Map(envNames.map((name) => [name, process.env[name]]));
+  process.env.ARCADIA_LLM_PROVIDER = "openai-compatible";
+  process.env.ARCADIA_LLM_MODEL = "synthetic-local";
+  process.env.ARCADIA_LLM_BASE_URL = `http://127.0.0.1:${address.port}/v1`;
+  process.env.ARCADIA_LLM_API_KEY = "local-test-placeholder";
+  delete process.env.CF_AIG_TOKEN;
+  delete process.env.CF_AIG_BYOK_ALIAS;
+  const scenePath = "plot/volumes/vol-main/chapters/ch-live-cont/scenes/sc-live-cont.yaml";
+  const manuscriptPath = "manuscript/vol-main/ch-live-cont/sc-live-cont.md";
+  const files = {
+    "plot/volumes/vol-main/volume.yaml": "id: vol-main\ntype: volume\nname: Main\norder: 1\n",
+    "plot/volumes/vol-main/chapters/ch-live-cont/chapter.yaml": "id: ch-live-cont\ntype: chapter\nname: Live continuation\nvolume: vol-main\norder: 1\n",
+    [scenePath]: `id: sc-live-cont\ntype: scene\nchapter: ch-live-cont\norder: 1\ntitle: Station\nmanuscript: ${manuscriptPath}\n`,
+    [manuscriptPath]: "保存済み本文の文。",
+    "plot/volumes/vol-main/chapters/ch-live-cont/chapter-summary.yaml": "scope: chapter\nid: ch-live-cont\nsummaryLines:\n  - 承認済み要約。\n",
+  };
+  const draftSnapshot: SnapshotId = { repository, remoteCommit: "c".repeat(40), overlayCommit: "e".repeat(40) };
+  const draftText = Array.from({ length: 13 }, (_, index) => `編集中${index + 1}。`).join("");
+  const editorDraft: BrowserEditorDocument = {
+    sceneId: "sc-live-cont", documentPath: manuscriptPath, documentRevision: "editor-document-rev-9",
+    sceneRevision: "editor-scene-rev-14", text: draftText,
+    snapshot: draftSnapshot, baseSnapshot: snapshot, baseSceneRevision: revision,
+  };
+  const usageStore: ModelUsageStore = { async append() {}, async list() { return { events: [] }; } };
+  try {
+    const continuation = getAction(createAssistantActions(moduleContext(usageStore)), "assistant.continuation");
+    const staleResult = await continuation.invoke({ sceneId: "sc-live-cont", editorDraft: { ...editorDraft, baseSceneRevision: "b".repeat(64) }, k: 8 }, context({
+      files,
+      async invoke() { assert.fail("a stale editor base must be rejected before provider, retrieval, or tokenizer access"); },
+    }));
+    assert.equal(staleResult.ok, false);
+    if (staleResult.ok) return;
+    assert.equal(staleResult.error.code, "assistant_editor_draft_stale");
+    assert.equal(requestPrompt, "");
+
+    const expectedRetrievalQuery = ["編集中11。", "編集中12。", "編集中13。"].join(" ");
+    const result = await continuation.invoke({ sceneId: "sc-live-cont", editorDraft, recentSentences: ["must be ignored"], k: 8 }, context({
+      files,
+      async invoke(actionId, input) {
+        if (actionId === "nlp.features") return { ok: true, snapshot, data: { features: [{ id: "continuation-options", locality: "external", enabled: true }] } };
+        if (actionId === "semantic.search") {
+          assert.deepEqual(input, { query: expectedRetrievalQuery, mode: "scene", limit: 5, rerank: false });
+          return { ok: true, snapshot, data: { results: [{ sceneId: "sc-neighbor", entityId: "sc-neighbor", snippet: "別の場面の根拠。" }] } };
+        }
+        if (actionId === "nlp.countTokens") {
+          const request = input as { texts: string[]; modelId?: string };
+          assert.ok(request.texts.some((text) => text.includes("編集中13。")));
+          assert.ok(request.texts.some((text) => text.includes("承認済み要約。")));
+          return { ok: true, snapshot, data: {
+            snapshot, counts: request.texts.map(() => 1),
+            counter: { modelId: "source-fallback", exact: false, engine: "source-approximation", engineVersion: "1", fallbackReason: "test tokenizer absent" },
+          } };
+        }
+        assert.fail(`unexpected action ${actionId}`);
+      },
+    }));
+    assert.equal(result.ok, true);
+    assert.match(requestPrompt, /編集中13。/u);
+    assert.doesNotMatch(requestPrompt, /保存済み本文の文/u);
+    assert.doesNotMatch(requestPrompt, /must be ignored/u);
+    if (!result.ok) return;
+    const data = result.data as Record<string, unknown>;
+    const citations = data.citations as Array<Record<string, unknown>>;
+    assert.equal(citations[0]?.label, "current editor draft");
+    assert.equal(citations[0]?.revision, "editor-document-rev-9");
+    assert.deepEqual(citations[0]?.snapshot, draftSnapshot);
+    const provenance = data.provenance as Record<string, unknown>;
+    assert.deepEqual((provenance.editorDraft as Record<string, unknown>).baseSnapshot, snapshot);
+    assert.equal((provenance.editorDraft as Record<string, unknown>).baseSceneRevision, revision);
+  } finally {
+    server.closeAllConnections();
+    await new Promise<void>((resolve) => server.close(() => resolve()));
+    for (const name of envNames) {
+      const value = previousEnv.get(name);
+      if (value === undefined) delete process.env[name];
+      else process.env[name] = value;
+    }
+  }
+});
+
+test("rewrite parser follows source candidate normalization, keeps same-scene context, and falls back after a recorded provider failure", async () => {
+  let providerFails = false;
+  const prompts: string[] = [];
+  const server = createServer((request, response) => {
+    const chunks: Buffer[] = [];
+    request.on("data", (chunk: Buffer) => chunks.push(chunk));
+    request.on("end", () => {
+      const body = JSON.parse(Buffer.concat(chunks).toString("utf8")) as Record<string, unknown>;
+      prompts.push(JSON.stringify(body.messages ?? body));
+      if (providerFails) {
+        response.writeHead(503, { "Content-Type": "text/plain" }).end("local test provider unavailable");
+        return;
+      }
+      response.writeHead(200, { "Content-Type": "text/event-stream", Connection: "keep-alive" });
+      const content = JSON.stringify({ suggestions: [
+        { text: "簡潔に置き換えた。", strategy: "strategic", rationale: "短くする。" },
+        { rewrite: "文脈を保って言い換えた。", strategy: "contextual", rationale: "場面を維持する。" },
+        { text: "口調を調整して書き換えた。", strategy: "unsupported", rationale: "声を保つ。" },
+      ] });
+      const chunk = {
+        id: "chatcmpl-rewrite-source-shape", object: "chat.completion.chunk", created: 1, model: "synthetic-local",
+        choices: [{ index: 0, delta: { content }, finish_reason: "stop" }],
+      };
+      response.end(`data: ${JSON.stringify(chunk)}\n\ndata: [DONE]\n\n`);
+    });
+  });
+  await new Promise<void>((resolve, reject) => { server.once("error", reject); server.listen(0, "127.0.0.1", resolve); });
+  const address = server.address();
+  assert.ok(address && typeof address !== "string");
+  const envNames = ["ARCADIA_LLM_PROVIDER", "ARCADIA_LLM_MODEL", "ARCADIA_LLM_BASE_URL", "ARCADIA_LLM_API_KEY", "CF_AIG_TOKEN", "CF_AIG_BYOK_ALIAS"] as const;
+  const previousEnv = new Map(envNames.map((name) => [name, process.env[name]]));
+  process.env.ARCADIA_LLM_PROVIDER = "openai-compatible";
+  process.env.ARCADIA_LLM_MODEL = "synthetic-local";
+  process.env.ARCADIA_LLM_BASE_URL = `http://127.0.0.1:${address.port}/v1`;
+  process.env.ARCADIA_LLM_API_KEY = "local-test-placeholder";
+  delete process.env.CF_AIG_TOKEN;
+  delete process.env.CF_AIG_BYOK_ALIAS;
+  const scenePath = "plot/volumes/vol-main/chapters/ch-rewrite-live/scenes/sc-rewrite-live.yaml";
+  const manuscriptPath = "manuscript/vol-main/ch-rewrite-live/sc-rewrite-live.md";
+  const otherScenePath = "plot/volumes/vol-main/chapters/ch-rewrite-live/scenes/sc-other.yaml";
+  const files = {
+    "plot/volumes/vol-main/volume.yaml": "id: vol-main\ntype: volume\nname: Main\norder: 1\n",
+    "plot/volumes/vol-main/chapters/ch-rewrite-live/chapter.yaml": "id: ch-rewrite-live\ntype: chapter\nname: Rewrite\nvolume: vol-main\norder: 1\n",
+    [scenePath]: `id: sc-rewrite-live\ntype: scene\nchapter: ch-rewrite-live\norder: 1\ntitle: Rewrite\npov: char-rewrite\nappears: [char-rewrite]\nmanuscript: ${manuscriptPath}\n`,
+    [otherScenePath]: "id: sc-other\ntype: scene\nchapter: ch-rewrite-live\norder: 2\ntitle: Other\nmanuscript: manuscript/vol-main/ch-rewrite-live/sc-other.md\n",
+    [manuscriptPath]: "彼は駅で彼女を見つめた。別の文では、彼女は悲しかった。",
+    "manuscript/vol-main/ch-rewrite-live/sc-other.md": "別の場面で彼は歩いた。",
+    "bible/characters/char-rewrite/profile.yaml": "id: char-rewrite\ntype: character\nname: Rewrite POV\nvoice:\n  firstPerson: 私\n",
+  };
+  const usageEvents: ModelUsageEvent[] = [];
+  const usageStore: ModelUsageStore = { async append(event) { usageEvents.push(event); }, async list() { return { events: [] }; } };
+  const action = getAction(createAssistantActions(moduleContext(usageStore)), "assistant.rewrite");
+  const actionContext = () => context({
+    files,
+    async invoke(actionId, input) {
+      if (actionId === "nlp.features") return { ok: true, snapshot, data: { features: [{ id: "rewrite", locality: "external", enabled: true }] } };
+      if (actionId === "speaker.voice.profiles") return { ok: true, snapshot, data: { fingerprints: [] } };
+      if (actionId === "speaker.dialogue.list") return { ok: true, snapshot, data: { lines: [] } };
+      if (actionId === "semantic.search") {
+        assert.deepEqual(input, { query: "彼は駅で彼女を見つめた。", mode: "sentence", limit: 12, rerank: false });
+        return { ok: true, snapshot, data: { results: [
+          { sceneId: "sc-rewrite-live", sentenceIndex: 0, snippet: "彼は駅で彼女を見つめた。" },
+          { sceneId: "sc-rewrite-live", sentenceIndex: 1, snippet: "別の文では、彼女は悲しかった。" },
+          { sceneId: "sc-other", sentenceIndex: 0, snippet: "別の場面で彼は歩いた。" },
+          { sceneId: "sc-other", sentenceIndex: 1, snippet: "別の場面で彼は歩いた。" },
+          { sceneId: "sc-other", sentenceIndex: 2, snippet: "さらに別の場面で彼女は待った。" },
+        ] } };
+      }
+      assert.fail(`unexpected action ${actionId}`);
+    },
+  });
+  try {
+    const result = await action.invoke({ sceneId: "sc-rewrite-live", sentenceIndex: 0 }, actionContext());
+    assert.equal(result.ok, true);
+    assert.match(prompts[0] ?? "", /別の文では、彼女は悲しかった/u, "same-scene nonselected sentences remain source examples");
+    assert.match(prompts[0] ?? "", /さらに別の場面で彼女は待った/u);
+    if (!result.ok) return;
+    const resultData = result.data as Record<string, unknown>;
+    assert.deepEqual((resultData.context as Record<string, unknown>).corpus_action_descriptions, [
+      "別の文では、彼女は悲しかった。", "別の場面で彼は歩いた。", "さらに別の場面で彼女は待った。",
+    ]);
+    assert.deepEqual((resultData.suggestions as Array<Record<string, unknown>>).map((item) => item.strategy), ["concise", "contextual", "voice"]);
+    assert.equal(resultData.sentenceIndex, 0);
+
+    providerFails = true;
+    const fallbackResult = await action.invoke({ sceneId: "sc-rewrite-live", sentenceIndex: 0 }, actionContext());
+    assert.equal(fallbackResult.ok, true, "a recorded provider failure should leave the source heuristic alternatives available");
+    if (fallbackResult.ok) {
+      const fallbackData = fallbackResult.data as Record<string, unknown>;
+      assert.equal(fallbackData.provider, "local");
+      assert.deepEqual(fallbackData.providerAttempt, { outcome: "failed", fallback: "source-heuristics" });
+      assert.equal((fallbackData.suggestions as unknown[]).length, 3);
+    }
+    assert.equal(usageEvents.length, 2);
+    assert.equal(usageEvents[1]?.state, "failed", "the fallback does not erase durable failed-provider usage history");
+  } finally {
+    server.closeAllConnections();
+    await new Promise<void>((resolve) => server.close(() => resolve()));
+    for (const name of envNames) {
+      const value = previousEnv.get(name);
+      if (value === undefined) delete process.env[name];
+      else process.env[name] = value;
+    }
+  }
+});
+
+test("setting QA streams source-compatible global scene and hybrid Bible searches with bound citations", async () => {
   let requestCount = 0;
   let sawToolCall = false;
+  let firstRequestMessages = "";
   const server = createServer((request, response) => {
     const chunks: Buffer[] = [];
     request.on("data", (chunk: Buffer) => chunks.push(chunk));
     request.on("end", () => {
       requestCount += 1;
       const body = JSON.parse(Buffer.concat(chunks).toString("utf8")) as Record<string, unknown>;
-      if (requestCount === 1) {
+      if (requestCount <= 6) {
+        if (requestCount === 1) firstRequestMessages = JSON.stringify(body.messages ?? []);
         const tools = Array.isArray(body.tools) ? body.tools : [];
-        sawToolCall = tools.some((item) => JSON.stringify(item).includes("searchScenes"));
+        sawToolCall ||= tools.some((item) => JSON.stringify(item).includes("searchScenes"));
         response.writeHead(200, { "Content-Type": "text/event-stream", Connection: "keep-alive" });
         const chunk = {
-          id: "chatcmpl-qa-tool", object: "chat.completion.chunk", created: 1, model: "synthetic-local",
-          choices: [{ index: 0, delta: { tool_calls: [{ index: 0, id: "call-search-scenes", type: "function", function: { name: "searchScenes", arguments: JSON.stringify({ query: "夜明け", mode: "scene" }) } }] }, finish_reason: "tool_calls" }],
+          id: `chatcmpl-qa-scenes-${requestCount}`, object: "chat.completion.chunk", created: 1, model: "synthetic-local",
+          choices: [{ index: 0, delta: { tool_calls: [{ index: 0, id: `call-search-scenes-${requestCount}`, type: "function", function: { name: "searchScenes", arguments: JSON.stringify({ query: "夜明け", mode: "scene" }) } }] }, finish_reason: "tool_calls" }],
+        };
+        response.end(`data: ${JSON.stringify(chunk)}\n\ndata: [DONE]\n\n`);
+      } else if (requestCount === 7) {
+        assert.ok(Array.isArray(body.messages), "the scene tool results should be sent back as model history");
+        response.writeHead(200, { "Content-Type": "text/event-stream", Connection: "keep-alive" });
+        const chunk = {
+          id: "chatcmpl-qa-bible-tool", object: "chat.completion.chunk", created: 1, model: "synthetic-local",
+          choices: [{ index: 0, delta: { tool_calls: [{ index: 0, id: "call-search-bible", type: "function", function: { name: "searchBible", arguments: JSON.stringify({ query: "アリス", entityKind: "character" }) } }] }, finish_reason: "tool_calls" }],
         };
         response.end(`data: ${JSON.stringify(chunk)}\n\ndata: [DONE]\n\n`);
       } else {
-        assert.ok(Array.isArray(body.messages), "the tool result should be sent back as model history");
+        assert.ok(Array.isArray(body.messages), "the read-only tool results should be sent back as model history");
         response.writeHead(200, { "Content-Type": "text/event-stream", Connection: "keep-alive" });
-        const content = JSON.stringify({ answer: "主人公は夜明けに駅へ着きます。", citations: [{ kind: "scene", id: "sc-qa", quote: "主人公は夜明けに駅へ着いた。" }], confidence: "high" });
+        const content = JSON.stringify({ answer: "アリスが夜明けに駅へ着きます。", citations: [
+          { kind: "scene", id: "sc-other", quote: "別の場面にも夜明けの駅が出てくる。" },
+          { kind: "bible", id: "char-qa", quote: "アリス" },
+        ], confidence: "high" });
         const chunk = {
           id: "chatcmpl-qa-answer", object: "chat.completion.chunk", created: 1, model: "synthetic-local",
           choices: [{ index: 0, delta: { content }, finish_reason: "stop" }],
@@ -171,34 +515,51 @@ test("setting QA streams an actual read-only tool round and returns only source-
   delete process.env.CF_AIG_BYOK_ALIAS;
   const scenePath = "plot/volumes/vol-main/chapters/ch-qa/scenes/sc-qa.yaml";
   const manuscriptPath = "manuscript/vol-main/ch-qa/sc-qa.md";
+  const otherScenePath = "plot/volumes/vol-main/chapters/ch-qa/scenes/sc-other.yaml";
+  const otherManuscriptPath = "manuscript/vol-main/ch-qa/sc-other.md";
   const files = {
     "plot/volumes/vol-main/volume.yaml": "id: vol-main\ntype: volume\nname: Main\norder: 1\n",
     "plot/volumes/vol-main/chapters/ch-qa/chapter.yaml": "id: ch-qa\ntype: chapter\nname: QA\nvolume: vol-main\norder: 1\n",
     [scenePath]: `id: sc-qa\ntype: scene\nchapter: ch-qa\norder: 1\ntitle: Dawn\nmanuscript: ${manuscriptPath}\n`,
+    [otherScenePath]: `id: sc-other\ntype: scene\nchapter: ch-qa\norder: 2\ntitle: Other dawn\nmanuscript: ${otherManuscriptPath}\n`,
+    "bible/characters/char-qa/profile.yaml": "id: char-qa\ntype: character\nname: アリス\nnotes:\n  lead: []\n  sections: []\n",
     [manuscriptPath]: "主人公は夜明けに駅へ着いた。",
+    [otherManuscriptPath]: "別の場面にも夜明けの駅が出てくる。",
   };
   const usageEvents: ModelUsageEvent[] = [];
   const usageStore: ModelUsageStore = { async append(event) { usageEvents.push(event); }, async list() { return { events: [] }; } };
   try {
     const qa = getAction(createAssistantActions(moduleContext(usageStore)), "assistant.qa");
-    const result = await qa.invoke({ messages: [{ role: "user", content: "主人公はいつ駅へ着く?" }] }, context({
+    const result = await qa.invoke({ messages: [{ role: "user", content: "主人公は誰で、いつ駅へ着く?" }], sceneId: "sc-qa" }, context({
       files,
       async invoke(actionId, input) {
         if (actionId === "nlp.features") return { ok: true, snapshot, data: { features: [{ id: "setting-qa", locality: "external", enabled: true }] } };
         if (actionId === "semantic.search") {
-          assert.deepEqual(input, { query: "夜明け", mode: "scene", limit: 8, rerank: false });
-          return { ok: true, snapshot, data: { results: [{ sceneId: "sc-qa", type: "scene", snippet: "主人公は夜明けに駅へ着いた。", filePath: manuscriptPath, revision }] } };
+          const search = input as Record<string, unknown>;
+          if (search.limit === 8) {
+            assert.deepEqual(search, { query: "夜明け", mode: "scene", limit: 8, rerank: false });
+            return { ok: true, snapshot, data: { results: [{ sceneId: "sc-other", type: "scene", snippet: "別の場面にも夜明けの駅が出てくる。", filePath: otherManuscriptPath, revision }] } };
+          }
+          assert.deepEqual(search, { query: "アリス", mode: "scene", limit: 12, rerank: false });
+          return { ok: true, snapshot, data: { results: [
+            { sceneId: "char-qa", entityId: "char-qa", type: "character", name: "アリス", snippet: "アリス", filePath: "bible/characters/char-qa/profile.yaml", score: 0.81 },
+            { sceneId: "sc-other", type: "scene", snippet: "別の場面にも夜明けの駅が出てくる。", filePath: otherManuscriptPath, score: 0.78 },
+          ] } };
         }
         assert.fail(`unexpected action ${actionId}`);
       },
     }));
     assert.equal(result.ok, true);
-    assert.equal(requestCount, 2, "QA must call the model again after the read-only search tool");
+    assert.equal(requestCount, 8, "QA must allow the source limit of eight model steps while using read-only search tools");
     assert.equal(sawToolCall, true);
+    assert.match(firstRequestMessages, /主人公は夜明けに駅へ着いた/u, "the selected scene remains system-prompt context");
     if (!result.ok) return;
     const data = result.data as Record<string, unknown>;
-    assert.equal(data.answer, "主人公は夜明けに駅へ着きます。");
-    assert.deepEqual(data.citations, [{ kind: "scene", id: "sc-qa", quote: "主人公は夜明けに駅へ着いた。", path: manuscriptPath, revision, sceneId: "sc-qa", label: "searchScenes result" }]);
+    assert.equal(data.answer, "アリスが夜明けに駅へ着きます。");
+    assert.deepEqual(data.citations, [
+      { kind: "scene", id: "sc-other", quote: "別の場面にも夜明けの駅が出てくる。", path: otherManuscriptPath, revision, sceneId: "sc-other", label: "searchScenes result" },
+      { kind: "bible", id: "char-qa", quote: "アリス", path: "bible/characters/char-qa/profile.yaml", revision, label: "searchBible result" },
+    ]);
     assert.equal((data.provenance as Record<string, unknown>).snapshot && (data.provenance as Record<string, unknown>).snapshot, snapshot);
     assert.equal(usageEvents.length, 1);
     assert.equal(usageEvents[0]?.feature, "setting-qa");
@@ -258,6 +619,61 @@ test("aspect review runs the deterministic local source implementation without c
   }
 });
 
+test("implemented prompt previews return their actual prompts locally without consent, usage, or proposal effects", async () => {
+  const previous = process.env.ARCADIA_LLM_PROVIDER;
+  process.env.ARCADIA_LLM_PROVIDER = "none";
+  let capabilityAcquisitions = 0;
+  let consentReads = 0;
+  let proposals = 0;
+  const chapterPath = "plot/volumes/vol-main/chapters/ch-preview/chapter.yaml";
+  const scenePath = "plot/volumes/vol-main/chapters/ch-preview/scenes/sc-preview.yaml";
+  const sketchPath = "bible/dialogue_sketches/ds-preview.yaml";
+  const files: Record<string, string> = {
+    "plot/volumes/vol-main/volume.yaml": "id: vol-main\ntype: volume\nname: Main\norder: 1\n",
+    [chapterPath]: "id: ch-preview\ntype: chapter\nname: Preview chapter\nvolume: vol-main\norder: 1\n",
+    [scenePath]: "id: sc-preview\ntype: scene\nchapter: ch-preview\norder: 1\ntitle: Preview scene\nappears: [char-one, char-two]\nmanuscript: manuscript/vol-main/ch-preview/sc-preview.md\n",
+    "bible/characters/char-one/profile.yaml": "id: char-one\ntype: character\nname: One\nvoice:\n  tone: calm\n",
+    "bible/characters/char-two/profile.yaml": "id: char-two\ntype: character\nname: Two\n",
+    [sketchPath]: "id: ds-preview\ntype: dialogue_sketch\nparticipantEntityIds: [char-one, char-two]\ntopic: Tea\nsituation: At a station\nlines:\n  - speakerEntityId: char-one\n    text: Tea is ready.\n",
+    "manuscript/vol-main/ch-preview/sc-preview.md": "彼女は駅へ来た。「お茶ができたわ。」",
+  };
+  try {
+    const actions = createAssistantActions(moduleContext(undefined, () => { capabilityAcquisitions += 1; }));
+    const actionContext = context({
+      files,
+      async invoke(actionId) {
+        if (actionId === "nlp.features") consentReads += 1;
+        return { ok: false, snapshot, error: { code: "not_available", message: "Preview must not need domain actions", retryable: false } };
+      },
+      onPropose() { proposals += 1; },
+    });
+    const previews: Array<[string, unknown]> = [
+      ["assistant.summary.scene.preview", { sceneId: "sc-preview" }],
+      ["assistant.summary.chapter.preview", { chapterId: "ch-preview" }],
+      ["assistant.qa.preview", { sceneId: "sc-preview" }],
+      ["assistant.continuation.preview", { recentSentences: ["彼女は駅へ来た。"] }],
+      ["assistant.aspect.review.preview", { chapterId: "ch-preview", aspects: ["tempo", "pov-shift"] }],
+      ["assistant.dialogue.topics.preview", { participantEntityIds: ["char-one", "char-two"] }],
+      ["assistant.dialogue.turn.preview", { participantEntityIds: ["char-one", "char-two"], speakerEntityId: "char-one", topic: "Tea", situation: "At a station", precedingLines: [] }],
+      ["assistant.dialogue.turns.preview", { participantEntityIds: ["char-one", "char-two"], lineCount: 2, topic: "Tea", situation: "At a station", precedingLines: [] }],
+      ["assistant.reader.reaction.preview", { chapterId: "ch-preview" }],
+      ["assistant.synonyms.preview", { original: "駅", sentence: "駅へ向かう。", reason: "繰り返し" }],
+      ["assistant.zukan.sandbox.preview", { sketchId: "ds-preview", turnRange: { start: 0, end: 0 } }],
+    ];
+    for (const [id, input] of previews) {
+      const result = await getAction(actions, id).invoke(input, actionContext);
+      assert.equal(result.ok, true, `${id} should be available with provider NONE`);
+      if (result.ok) assert.equal(typeof (result.data as Record<string, unknown>).prompt, "string", `${id} should return a populated prompt`);
+    }
+    assert.equal(capabilityAcquisitions, 0);
+    assert.equal(consentReads, 0);
+    assert.equal(proposals, 0);
+  } finally {
+    if (previous === undefined) delete process.env.ARCADIA_LLM_PROVIDER;
+    else process.env.ARCADIA_LLM_PROVIDER = previous;
+  }
+});
+
 test("rewrite proposal preserves all candidates until the author chooses one and pins the manuscript selection", async () => {
   const scenePath = "plot/volumes/vol-main/chapters/ch-rewrite/scenes/sc-rewrite.yaml";
   const manuscriptPath = "manuscript/vol-main/ch-rewrite/sc-rewrite.md";
@@ -289,7 +705,7 @@ test("chapter summary proposes fresh child and parent summaries in one Core oper
     request.on("end", () => {
       requestCount += 1;
       const content = requestCount === 1
-        ? JSON.stringify({ summaryLines: ["彼女が駅へ来た。", "彼が手紙を渡した。", "二人は別れた。"], characters: ["彼女"], stateChanges: [] })
+        ? JSON.stringify({ summaryLines: ["彼女が駅へ来た。", "彼が手紙を渡した。", "二人は別れた。"], characters: [], stateChanges: [] })
         : JSON.stringify({ summaryLines: ["彼女が駅へ来て手紙を受け取る。", "二人は再会を約束して別れる。", "手紙が次章への手がかりになる。"] });
       response.writeHead(200, { "Content-Type": "text/event-stream", Connection: "keep-alive" });
       const chunk = {
@@ -316,11 +732,14 @@ test("chapter summary proposes fresh child and parent summaries in one Core oper
   const files: Record<string, string> = {
     "plot/volumes/vol-main/volume.yaml": "id: vol-main\ntype: volume\nname: Main\norder: 1\n",
     "plot/volumes/vol-main/chapters/ch-summary/chapter.yaml": "id: ch-summary\ntype: chapter\nname: Summary chapter\nvolume: vol-main\norder: 1\n",
-    "plot/volumes/vol-main/chapters/ch-summary/scenes/sc-summary.yaml": "id: sc-summary\ntype: scene\nchapter: ch-summary\norder: 1\ntitle: Station\nmanuscript: manuscript/vol-main/ch-summary/sc-summary.md\n",
+    "plot/volumes/vol-main/chapters/ch-summary/scenes/sc-summary.yaml": "id: sc-summary\ntype: scene\nchapter: ch-summary\norder: 1\ntitle: Station\npov: char-one\nappears: [char-two, char-one]\nmanuscript: manuscript/vol-main/ch-summary/sc-summary.md\n",
+    "bible/characters/char-one/profile.yaml": "id: char-one\ntype: character\nname: One\n",
+    "bible/characters/char-two/profile.yaml": "id: char-two\ntype: character\nname: Two\n",
     "manuscript/vol-main/ch-summary/sc-summary.md": "彼女は駅へ来た。彼は手紙を渡した。二人は別れを告げた。",
   };
   const store: ModelUsageStore = { async append() {}, async list() { return { events: [] }; } };
   const operations: ChangeOperation[][] = [];
+  const progress: number[] = [];
   try {
     const action = getAction(createAssistantActions(moduleContext(store)), "assistant.summary.chapter");
     const result = await action.invoke({ chapterId: "ch-summary" }, context({
@@ -333,6 +752,7 @@ test("chapter summary proposes fresh child and parent summaries in one Core oper
         ] } };
       },
       onPropose(value) { operations.push(value); },
+      onProgress(value) { progress.push(value); },
     }));
     assert.equal(result.ok, true);
     assert.equal(requestCount, 2, "one scene summary and one chapter summary are generated");
@@ -346,6 +766,11 @@ test("chapter summary proposes fresh child and parent summaries in one Core oper
     ].sort());
     assert.equal(operation.reads.find((item) => item.path.endsWith("scene-summaries/sc-summary.yaml"))?.revision, null);
     assert.equal(operation.reads.find((item) => item.path.endsWith("chapter-summary.yaml"))?.revision, null);
+    const sceneSummary = operation.writes.find((write) => write.path.endsWith("scene-summaries/sc-summary.yaml"))?.content;
+    assert.ok(sceneSummary);
+    assert.match(sceneSummary, /characters:\n  - One\n  - Two/u, "the source POV and appearance names fill an empty model character list");
+    assert.equal(progress.at(-1), 1);
+    assert.ok(progress.some((value) => Math.abs(value - 0.8) < 1e-9), "the chapter progress reports completion of its one child summary");
   } finally {
     server.closeAllConnections();
     await new Promise<void>((resolve) => server.close(() => resolve()));
