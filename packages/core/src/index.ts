@@ -138,6 +138,28 @@ export interface WritingStats {
   sceneById: Record<string, SceneWritingStats>;
 }
 
+export type HierarchyKind = "volume" | "chapter" | "scene";
+
+export type CreateHierarchyInput =
+  | { kind: "volume"; id: string; title: string }
+  | { kind: "chapter"; id: string; title: string; volumeId: string }
+  | { kind: "scene"; id: string; title: string; volumeId: string; chapterId: string; manuscriptBody?: string };
+
+export type HierarchyTarget =
+  | { kind: "volume"; id: string }
+  | { kind: "chapter"; id: string; volumeId: string }
+  | { kind: "scene"; id: string; volumeId: string; chapterId: string };
+
+export type ReorderHierarchyInput =
+  | { kind: "volume"; orderedIds: string[] }
+  | { kind: "chapter"; volumeId: string; orderedIds: string[] }
+  | { kind: "scene"; volumeId: string; chapterId: string; orderedIds: string[] };
+
+export interface BuiltChangeOperation {
+  snapshot: SnapshotId;
+  operation: ChangeOperation;
+}
+
 export interface SyncStatus {
   branch: string;
   head: string;
@@ -181,6 +203,35 @@ interface SceneRecord {
   manuscriptPath: string;
   yamlText: string;
   yamlData: Record<string, unknown>;
+}
+
+interface VolumeHierarchyRecord {
+  id: string;
+  title: string;
+  directory: string;
+  path: string;
+  revision: string | null;
+  data: Record<string, unknown>;
+}
+
+interface ChapterHierarchyRecord {
+  id: string;
+  title: string;
+  directory: string;
+  path: string;
+  revision: string | null;
+  volumeId: string;
+  data: Record<string, unknown>;
+}
+
+interface SceneHierarchyRecord {
+  id: string;
+  title: string;
+  path: string;
+  revision: string;
+  data: Record<string, unknown>;
+  volumeId: string;
+  chapterId: string;
 }
 
 interface FrontmatterDocument {
@@ -232,11 +283,9 @@ function titleOf(data: Record<string, unknown>, fallback: string): string {
 
 function sortByOrderAndTitle<T extends { id: string; title: string; order?: number }>(items: T[]): T[] {
   return items.sort((a, b) => {
-    const aOrder = typeof a.order === "number" && Number.isFinite(a.order) ? a.order : null;
-    const bOrder = typeof b.order === "number" && Number.isFinite(b.order) ? b.order : null;
-    if (aOrder !== null && bOrder !== null && aOrder !== bOrder) return aOrder - bOrder;
-    if (aOrder !== null && bOrder === null) return -1;
-    if (aOrder === null && bOrder !== null) return 1;
+    const aOrder = typeof a.order === "number" && Number.isFinite(a.order) ? a.order : 0;
+    const bOrder = typeof b.order === "number" && Number.isFinite(b.order) ? b.order : 0;
+    if (aOrder !== bOrder) return aOrder - bOrder;
     return a.title.localeCompare(b.title) || a.id.localeCompare(b.id);
   });
 }
@@ -304,6 +353,26 @@ function searchSnippet(text: string, offset: number, length: number): string {
   const prefix = start > 0 ? "…" : "";
   const suffix = end < text.length ? "…" : "";
   return `${prefix}${text.slice(start, end).replace(/[\r\n\t]+/g, " ")}${suffix}`;
+}
+
+function hierarchyId(value: unknown): string {
+  if (typeof value !== "string" || !value || value.length > 128 || value.trim() !== value || value.includes("/")) {
+    throw coreError(400, "invalid_hierarchy_id", "Hierarchy IDs must be nonempty path-safe strings of at most 128 characters");
+  }
+  try { assertProjectPath(value); }
+  catch { throw coreError(400, "invalid_hierarchy_id", "Hierarchy IDs must be nonempty path-safe strings of at most 128 characters"); }
+  return value;
+}
+
+function hierarchyTitle(value: unknown): string {
+  if (typeof value !== "string" || !value.trim() || value.length > 512 || /[\x00-\x08\x0B\x0C\x0E-\x1F]/.test(value)) {
+    throw coreError(400, "invalid_hierarchy_title", "A hierarchy title of at most 512 characters is required");
+  }
+  return value.trim();
+}
+
+function hierarchyOrder(data: Record<string, unknown>): number {
+  return typeof data.order === "number" && Number.isFinite(data.order) ? data.order : 0;
 }
 
 function revisionFor(yamlText: string, markdownText: string): string {
@@ -1261,6 +1330,75 @@ export class CoreStore implements MutationCoordinator {
     return { text: file.content, data };
   }
 
+  private async loadHierarchyRecords(root: string, commit: string): Promise<{
+    files: string[];
+    volumes: VolumeHierarchyRecord[];
+    chapters: ChapterHierarchyRecord[];
+    scenes: SceneHierarchyRecord[];
+  }> {
+    const files = await this.snapshotFiles(root, commit, "plot/volumes");
+    const volumeDirectories = [...new Set(files.flatMap((file) => {
+      const match = /^plot\/volumes\/([^/]+)\//.exec(file);
+      return match?.[1] ? [match[1]] : [];
+    }))];
+    const volumes: VolumeHierarchyRecord[] = [];
+    const chapters: ChapterHierarchyRecord[] = [];
+    const scenes: SceneHierarchyRecord[] = [];
+    for (const directoryName of volumeDirectories) {
+      const directory = `plot/volumes/${directoryName}`;
+      const volumePath = `${directory}/volume.yaml`;
+      const volumeYaml = await this.parseSnapshotYaml(root, commit, volumePath);
+      const volumeData = volumeYaml?.data ?? { id: directoryName };
+      const volumeId = typeof volumeData.id === "string" ? volumeData.id : directoryName;
+      volumes.push({
+        id: volumeId,
+        title: titleOf(volumeData, volumeId),
+        directory,
+        path: volumePath,
+        revision: volumeYaml ? revisionForBytes(volumeYaml.text) : null,
+        data: volumeData,
+      });
+      const chapterPrefix = `${directory}/chapters/`;
+      const chapterDirectories = [...new Set(files.flatMap((file) => {
+        if (!file.startsWith(chapterPrefix)) return [];
+        const match = /^([^/]+)\//.exec(file.slice(chapterPrefix.length));
+        return match?.[1] ? [match[1]] : [];
+      }))];
+      for (const chapterDirectoryName of chapterDirectories) {
+        const chapterDirectory = `${chapterPrefix}${chapterDirectoryName}`;
+        const chapterPath = `${chapterDirectory}/chapter.yaml`;
+        const chapterYaml = await this.parseSnapshotYaml(root, commit, chapterPath);
+        const chapterData = chapterYaml?.data ?? { id: chapterDirectoryName };
+        const chapterId = typeof chapterData.id === "string" ? chapterData.id : chapterDirectoryName;
+        chapters.push({
+          id: chapterId,
+          title: titleOf(chapterData, chapterId),
+          directory: chapterDirectory,
+          path: chapterPath,
+          revision: chapterYaml ? revisionForBytes(chapterYaml.text) : null,
+          volumeId,
+          data: chapterData,
+        });
+        const scenePrefix = `${chapterDirectory}/scenes/`;
+        for (const scenePath of files.filter((file) => file.startsWith(scenePrefix) && file.endsWith(".yaml"))) {
+          const sceneYaml = await this.parseSnapshotYaml(root, commit, scenePath);
+          if (!sceneYaml) continue;
+          const sceneId = typeof sceneYaml.data.id === "string" ? sceneYaml.data.id : path.posix.basename(scenePath, ".yaml");
+          scenes.push({
+            id: sceneId,
+            title: titleOf(sceneYaml.data, sceneId),
+            path: scenePath,
+            revision: revisionForBytes(sceneYaml.text),
+            data: sceneYaml.data,
+            volumeId,
+            chapterId,
+          });
+        }
+      }
+    }
+    return { files, volumes, chapters, scenes };
+  }
+
   async observe(projectId: string): Promise<RemoteObservation> {
     return this.withProjectLock(projectId, () => this.requireObservation(projectId));
   }
@@ -1307,16 +1445,21 @@ export class CoreStore implements MutationCoordinator {
           const chapterKey = typeof chapterData.id === "string" ? chapterData.id : chapterId;
           if (seen.has(chapterKey)) throw coreError(409, "duplicate_entity_id", "The project contains duplicate hierarchy ids");
           seen.add(chapterKey);
-          const scenes: TreeScene[] = [];
+          const sceneEntries: Array<TreeScene & { order?: number }> = [];
           for (const file of files.filter((candidate) => candidate.startsWith(`${base}/scenes/`) && candidate.endsWith(".yaml"))) {
             const yaml = await this.parseSnapshotYaml(selected.root, selected.commit, file);
             if (!yaml) continue;
             const sceneId = typeof yaml.data.id === "string" ? yaml.data.id : path.posix.basename(file, ".yaml");
             if (seen.has(sceneId)) throw coreError(409, "duplicate_scene_id", "The project contains duplicate scene ids");
             seen.add(sceneId);
-            scenes.push({ id: sceneId, title: titleOf(yaml.data, sceneId) });
+            sceneEntries.push({
+              id: sceneId,
+              title: titleOf(yaml.data, sceneId),
+              ...(typeof yaml.data.order === "number" && Number.isFinite(yaml.data.order) ? { order: yaml.data.order } : {}),
+            });
           }
-          chapters.push({ id: chapterKey, title: titleOf(chapterData, chapterKey), scenes: scenes.sort((a, b) => a.title.localeCompare(b.title) || a.id.localeCompare(b.id)) });
+          const scenes = sortByOrderAndTitle(sceneEntries).map(({ id, title }) => ({ id, title }));
+          chapters.push({ id: chapterKey, title: titleOf(chapterData, chapterKey), scenes });
         }
         volumes.push({ id: volumeKey, title: titleOf(volumeData, volumeKey), chapters: chapters.sort((a, b) => a.title.localeCompare(b.title) || a.id.localeCompare(b.id)) });
       }
@@ -1518,7 +1661,6 @@ export class CoreStore implements MutationCoordinator {
       orderedVolumes.sort((a, b) => orderOf(a.data) - orderOf(b.data) || a.title.localeCompare(b.title) || a.id.localeCompare(b.id));
       for (const orderedVolume of orderedVolumes) {
         const volumeDirectory = orderedVolume.directory;
-        const volumePath = `plot/volumes/${volumeDirectory}/volume.yaml`;
         const volumeId = orderedVolume.id;
         const chapterPrefix = `plot/volumes/${volumeDirectory}/chapters/`;
         const chapterDirectories = [...new Set(files.flatMap((file) => {
@@ -1588,6 +1730,297 @@ export class CoreStore implements MutationCoordinator {
         snapshot: selected.snapshot,
         stats: { totalCharCount, totalPages400: pages400(totalCharCount), volumes, sceneById },
       };
+    });
+  }
+
+  private makeBuiltOperation(
+    snapshot: SnapshotId,
+    effect: ChangeOperation["effect"],
+    writes: FileChange[],
+    message: string,
+  ): BuiltChangeOperation {
+    const operation: ChangeOperation = {
+      id: randomUUID(),
+      generation: 0,
+      repository: structuredClone(snapshot.repository),
+      baseRemoteCommit: snapshot.remoteCommit,
+      effect,
+      reads: writes.map(({ path: filePath, revision }) => ({ path: filePath, revision })),
+      writes,
+      message,
+    };
+    try {
+      assertChangeOperation(operation);
+      assertUserOperationPaths(operation);
+    } catch {
+      throw coreError(400, "invalid_change_operation", "The Core builder produced an invalid change operation");
+    }
+    return { snapshot: structuredClone(snapshot), operation };
+  }
+
+  async buildCreateHierarchyOperation(
+    projectId: string,
+    input: CreateHierarchyInput,
+    view: "remote" | "checkpoint" = "remote",
+    pinned?: SnapshotId | string,
+  ): Promise<BuiltChangeOperation> {
+    if (!input || !["volume", "chapter", "scene"].includes(input.kind)) {
+      throw coreError(400, "invalid_hierarchy_operation", "A volume, chapter, or scene creation is required");
+    }
+    const id = hierarchyId(input.id);
+    const title = hierarchyTitle(input.title);
+    let volumeId: string | undefined;
+    let chapterId: string | undefined;
+    if (input.kind !== "volume") volumeId = hierarchyId(input.volumeId);
+    if (input.kind === "scene") chapterId = hierarchyId(input.chapterId);
+    let body = "";
+    if (input.kind === "scene") {
+      if (input.manuscriptBody !== undefined && typeof input.manuscriptBody !== "string") {
+        throw coreError(400, "invalid_manuscript_body", "Scene manuscript body must be text");
+      }
+      body = input.manuscriptBody ?? "";
+      if (Buffer.byteLength(body, "utf8") > 8 * 1024 * 1024) throw coreError(413, "manuscript_too_large", "Scene manuscript body exceeds the operation limit");
+    }
+
+    return this.withProjectLock(projectId, async () => {
+      const selected = await this.selectedSnapshotUnlocked(projectId, view, pinned);
+      const hierarchy = await this.loadHierarchyRecords(selected.root, selected.commit);
+      if ([...hierarchy.volumes, ...hierarchy.chapters, ...hierarchy.scenes].some((node) => node.id === id)) {
+        throw coreError(409, "hierarchy_id_exists", "The hierarchy ID is already in use");
+      }
+      let writes: FileChange[];
+      let message: string;
+      if (input.kind === "volume") {
+        const directory = `plot/volumes/${id}`;
+        const metadataPath = `${directory}/volume.yaml`;
+        if (hierarchy.files.some((file) => file === metadataPath || file.startsWith(`${directory}/`))) {
+          throw coreError(409, "hierarchy_path_exists", "The volume path already contains project files");
+        }
+        const order = Math.max(0, ...hierarchy.volumes.map((volume) => hierarchyOrder(volume.data))) + 1;
+        writes = [{ path: metadataPath, revision: null, content: YAML.stringify({ id, name: title, title, order }) }];
+        message = `loom(structure): create volume ${id}`;
+      } else {
+        const parentVolume = hierarchy.volumes.filter((volume) => volume.id === volumeId);
+        if (parentVolume.length !== 1) {
+          if (!parentVolume.length) throw coreError(404, "volume_not_found", "The parent volume was not found");
+          throw coreError(409, "duplicate_entity_id", "The project contains duplicate volume IDs");
+        }
+        const volume = parentVolume[0]!;
+        if (input.kind === "chapter") {
+          const directory = `${volume.directory}/chapters/${id}`;
+          const metadataPath = `${directory}/chapter.yaml`;
+          if (hierarchy.files.some((file) => file === metadataPath || file.startsWith(`${directory}/`))) {
+            throw coreError(409, "hierarchy_path_exists", "The chapter path already contains project files");
+          }
+          const siblings = hierarchy.chapters.filter((chapter) => chapter.volumeId === volume.id);
+          const order = Math.max(0, ...siblings.map((chapter) => hierarchyOrder(chapter.data))) + 1;
+          writes = [{ path: metadataPath, revision: null, content: YAML.stringify({ id, title, volume: volume.id, order }) }];
+          message = `loom(structure): create chapter ${id}`;
+        } else {
+          const parentChapters = hierarchy.chapters.filter((chapter) => chapter.id === chapterId && chapter.volumeId === volume.id);
+          if (parentChapters.length !== 1) {
+            if (!parentChapters.length) throw coreError(404, "chapter_not_found", "The parent chapter was not found in the selected volume");
+            throw coreError(409, "duplicate_entity_id", "The project contains duplicate chapter IDs");
+          }
+          const chapter = parentChapters[0]!;
+          const directory = `${chapter.directory}/scenes`;
+          const metadataPath = `${directory}/${id}.yaml`;
+          const manuscriptPath = `manuscript/${path.posix.basename(volume.directory)}/${path.posix.basename(chapter.directory)}/${id}.md`;
+          try { assertProjectPath(metadataPath); assertProjectPath(manuscriptPath); }
+          catch { throw coreError(400, "invalid_hierarchy_id", "The scene ID cannot form a safe project path"); }
+          if (hierarchy.files.includes(metadataPath) || hierarchy.files.includes(manuscriptPath)) {
+            throw coreError(409, "hierarchy_path_exists", "The scene or manuscript path already exists");
+          }
+          if (await this.snapshotFile(selected.root, selected.commit, manuscriptPath)) {
+            throw coreError(409, "hierarchy_path_exists", "The scene manuscript path already exists");
+          }
+          const siblings = hierarchy.scenes.filter((scene) => scene.chapterId === chapter.id && scene.volumeId === volume.id);
+          const order = Math.max(0, ...siblings.map((scene) => hierarchyOrder(scene.data))) + 1;
+          writes = [
+            {
+              path: metadataPath,
+              revision: null,
+              content: YAML.stringify({
+                id,
+                type: "scene",
+                name: title,
+                title,
+                volume: volume.id,
+                chapter: chapter.id,
+                manuscript: manuscriptPath,
+                order,
+              }),
+            },
+            { path: manuscriptPath, revision: null, content: body },
+          ];
+          message = `loom(structure): create scene ${id}`;
+        }
+      }
+      return this.makeBuiltOperation(selected.snapshot, "structure", writes, message);
+    });
+  }
+
+  async buildDeleteHierarchyOperation(
+    projectId: string,
+    target: HierarchyTarget,
+    view: "remote" | "checkpoint" = "remote",
+    pinned?: SnapshotId | string,
+  ): Promise<BuiltChangeOperation> {
+    if (!target || !["volume", "chapter", "scene"].includes(target.kind)) {
+      throw coreError(400, "invalid_hierarchy_operation", "A volume, chapter, or scene deletion is required");
+    }
+    const id = hierarchyId(target.id);
+    const volumeId = target.kind === "volume" ? undefined : hierarchyId(target.volumeId);
+    const chapterId = target.kind === "scene" ? hierarchyId(target.chapterId) : undefined;
+    return this.withProjectLock(projectId, async () => {
+      const selected = await this.selectedSnapshotUnlocked(projectId, view, pinned);
+      const hierarchy = await this.loadHierarchyRecords(selected.root, selected.commit);
+      let writes: FileChange[];
+      if (target.kind === "volume") {
+        const matches = hierarchy.volumes.filter((volume) => volume.id === id);
+        if (matches.length !== 1) {
+          if (!matches.length) throw coreError(404, "volume_not_found", "The volume was not found");
+          throw coreError(409, "duplicate_entity_id", "The project contains duplicate volume IDs");
+        }
+        const volume = matches[0]!;
+        if (hierarchy.chapters.some((chapter) => chapter.volumeId === volume.id)) {
+          throw coreError(409, "hierarchy_not_empty", "Delete the volume's chapters before deleting the volume");
+        }
+        if (hierarchy.files.some((file) => file.startsWith(`${volume.directory}/`) && file !== volume.path)) {
+          throw coreError(409, "hierarchy_contains_unknown_files", "The volume contains files outside its Core hierarchy metadata");
+        }
+        if (volume.revision === null) throw coreError(409, "hierarchy_metadata_missing", "The volume metadata file is missing");
+        writes = [{ path: volume.path, revision: volume.revision, content: null }];
+      } else if (target.kind === "chapter") {
+        const matches = hierarchy.chapters.filter((chapter) => chapter.id === id && chapter.volumeId === volumeId);
+        if (matches.length !== 1) {
+          if (!matches.length) throw coreError(404, "chapter_not_found", "The chapter was not found in the selected volume");
+          throw coreError(409, "duplicate_entity_id", "The project contains duplicate chapter IDs");
+        }
+        const chapter = matches[0]!;
+        if (hierarchy.scenes.some((scene) => scene.volumeId === chapter.volumeId && scene.chapterId === chapter.id)) {
+          throw coreError(409, "hierarchy_not_empty", "Delete the chapter's scenes before deleting the chapter");
+        }
+        if (hierarchy.files.some((file) => file.startsWith(`${chapter.directory}/`) && file !== chapter.path)) {
+          throw coreError(409, "hierarchy_contains_unknown_files", "The chapter contains files outside its Core hierarchy metadata");
+        }
+        if (chapter.revision === null) throw coreError(409, "hierarchy_metadata_missing", "The chapter metadata file is missing");
+        writes = [{ path: chapter.path, revision: chapter.revision, content: null }];
+      } else {
+        const matches = hierarchy.scenes.filter((scene) => scene.id === id && scene.volumeId === volumeId && scene.chapterId === chapterId);
+        if (matches.length !== 1) {
+          if (!matches.length) throw coreError(404, "scene_not_found", "The scene was not found in the selected hierarchy");
+          throw coreError(409, "duplicate_scene_id", "The project contains duplicate scene IDs");
+        }
+        const scene = matches[0]!;
+        const parts = scene.path.split("/");
+        const manuscriptPath = typeof scene.data.manuscript === "string"
+          ? safeRelativePath(scene.data.manuscript).split(path.sep).join("/")
+          : `manuscript/${parts[2]}/${parts[4]}/${scene.id}.md`;
+        assertProjectPath(manuscriptPath);
+        if (hierarchy.scenes.some((other) => other.id !== scene.id && (
+          typeof other.data.manuscript === "string"
+            ? safeRelativePath(other.data.manuscript).split(path.sep).join("/")
+            : `manuscript/${other.path.split("/")[2]}/${other.path.split("/")[4]}/${other.id}.md`
+        ) === manuscriptPath)) {
+          throw coreError(409, "shared_manuscript_path", "The scene manuscript is shared with another scene and cannot be removed");
+        }
+        const manuscript = await this.snapshotFile(selected.root, selected.commit, manuscriptPath);
+        writes = [
+          { path: scene.path, revision: scene.revision, content: null },
+          { path: manuscriptPath, revision: manuscript?.revision ?? null, content: null },
+        ];
+      }
+      return this.makeBuiltOperation(selected.snapshot, "structure", writes, `loom(structure): delete ${target.kind} ${id}`);
+    });
+  }
+
+  async buildReorderHierarchyOperation(
+    projectId: string,
+    input: ReorderHierarchyInput,
+    view: "checkpoint" | "remote" = "remote",
+    pinned?: SnapshotId | string,
+  ): Promise<BuiltChangeOperation> {
+    if (!input || !["volume", "chapter", "scene"].includes(input.kind) || !Array.isArray(input.orderedIds)) {
+      throw coreError(400, "invalid_hierarchy_order", "An ordered list of volume, chapter, or scene IDs is required");
+    }
+    if (input.orderedIds.length === 0 || input.orderedIds.length > 256) {
+      throw coreError(400, "invalid_hierarchy_order", "Reordering requires between 1 and 256 sibling IDs");
+    }
+    const orderedIds = input.orderedIds.map(hierarchyId);
+    if (new Set(orderedIds).size !== orderedIds.length) throw coreError(400, "invalid_hierarchy_order", "Sibling IDs must be unique");
+    const volumeId = input.kind === "volume" ? undefined : hierarchyId(input.volumeId);
+    const chapterId = input.kind === "scene" ? hierarchyId(input.chapterId) : undefined;
+    return this.withProjectLock(projectId, async () => {
+      const selected = await this.selectedSnapshotUnlocked(projectId, view, pinned);
+      const hierarchy = await this.loadHierarchyRecords(selected.root, selected.commit);
+      const siblings = input.kind === "volume"
+        ? hierarchy.volumes
+        : input.kind === "chapter"
+          ? hierarchy.chapters.filter((chapter) => chapter.volumeId === volumeId)
+          : hierarchy.scenes.filter((scene) => scene.volumeId === volumeId && scene.chapterId === chapterId);
+      if (siblings.length !== orderedIds.length || orderedIds.some((id) => !siblings.some((item) => item.id === id))) {
+        throw coreError(409, "hierarchy_order_membership_changed", "The order must include every current sibling exactly once");
+      }
+      const sortedCurrent = [...siblings].sort((a, b) => hierarchyOrder(a.data) - hierarchyOrder(b.data) || a.title.localeCompare(b.title) || a.id.localeCompare(b.id));
+      if (sortedCurrent.every((item, index) => item.id === orderedIds[index])) {
+        throw coreError(409, "hierarchy_order_unchanged", "The hierarchy already has the requested order");
+      }
+      const records = new Map(siblings.map((item) => [item.id, item]));
+      const writes: FileChange[] = orderedIds.map((id, index) => {
+        const item = records.get(id)!;
+        return {
+          path: item.path,
+          revision: item.revision,
+          content: YAML.stringify({ ...item.data, order: index + 1 }),
+        };
+      });
+      const parent = input.kind === "volume" ? "" : input.kind === "chapter" ? ` in volume ${volumeId}` : ` in chapter ${chapterId}`;
+      return this.makeBuiltOperation(selected.snapshot, "structure", writes, `loom(structure): reorder ${input.kind}${parent}`);
+    });
+  }
+
+  async buildRestoreOperation(
+    projectId: string,
+    operationId: string,
+    view: "remote" | "checkpoint" = "remote",
+    pinned?: SnapshotId | string,
+  ): Promise<BuiltChangeOperation> {
+    if (typeof operationId !== "string" || !/^[A-Za-z0-9_-]{1,128}$/.test(operationId)) {
+      throw coreError(400, "invalid_operation_id", "The operation ID is invalid");
+    }
+    return this.withProjectLock(projectId, async () => {
+      const selected = await this.selectedSnapshotUnlocked(projectId, view, pinned);
+      const operations = await this.readOperationRecords(selected.root, selected.commit);
+      const stored = operations.find((item) => item.operation.id === operationId);
+      if (!stored) throw coreError(404, "checkpoint_not_found", "The approved checkpoint was not found in this selected history");
+      if (!receiptMatchesOperation(stored.receipt, stored.operation)) {
+        throw coreError(409, "checkpoint_receipt_invalid", "The checkpoint receipt does not match its approved operation");
+      }
+      const parentOutput = (await git(selected.root, ["show", "-s", "--format=%P", stored.commit])).trim();
+      const checkpointParent = parentOutput.split(/\s+/)[0] ?? "";
+      const writes: FileChange[] = [];
+      for (const original of stored.operation.writes) {
+        const expected = stored.receipt.revisions.find((revision) => revision.path === original.path);
+        if (!expected) throw coreError(409, "checkpoint_receipt_invalid", "The checkpoint receipt is missing an affected file");
+        const current = await this.snapshotFile(selected.root, selected.commit, original.path, "base64");
+        if ((current?.revision ?? null) !== expected.revision) {
+          throw coreError(409, "restore_target_changed", `The checkpoint effect changed after it was approved: ${original.path}`);
+        }
+        const before = checkpointParent ? await this.snapshotFile(selected.root, checkpointParent, original.path, "base64") : null;
+        writes.push({
+          path: original.path,
+          revision: current?.revision ?? null,
+          content: before?.content ?? null,
+          ...(before ? { encoding: "base64" as const } : {}),
+        });
+      }
+      return this.makeBuiltOperation(
+        selected.snapshot,
+        stored.operation.effect,
+        writes,
+        `loom(restore): ${operationId}`,
+      );
     });
   }
 

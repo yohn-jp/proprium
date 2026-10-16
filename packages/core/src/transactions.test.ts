@@ -110,6 +110,136 @@ test("manuscript snapshots enumerate and read exact documents at a pinned reacha
   }
 });
 
+test("Core hierarchy builders create, reorder, restore, and delete only through approved operations", async () => {
+  const fixture = await remoteFixture();
+  try {
+    const volumeDir = path.join(fixture.seed, "plot/volumes/vol1");
+    const chapterDir = path.join(volumeDir, "chapters/ch1");
+    const sceneDir = path.join(chapterDir, "scenes");
+    const manuscriptDir = path.join(fixture.seed, "manuscript/vol1/ch1");
+    await fs.mkdir(sceneDir, { recursive: true });
+    await fs.mkdir(manuscriptDir, { recursive: true });
+    await fs.writeFile(path.join(volumeDir, "volume.yaml"), "id: vol1\nname: Volume One\norder: 1\nunknown: preserve-volume\n");
+    await fs.writeFile(path.join(chapterDir, "chapter.yaml"), "id: ch1\nvolume: vol1\ntitle: Chapter One\norder: 1\nunknown: preserve-chapter\n");
+    await fs.writeFile(path.join(sceneDir, "scene1.yaml"), "id: scene1\ntype: scene\nvolume: vol1\nchapter: ch1\ntitle: First Scene\nmanuscript: manuscript/vol1/ch1/scene1.md\norder: 1\ncustom: keep-this\n");
+    await fs.writeFile(path.join(manuscriptDir, "scene1.md"), "First body.\n");
+    await git(fixture.seed, "add", ".");
+    await git(fixture.seed, "commit", "-m", "Add hierarchy for Core builder test");
+    await git(fixture.seed, "push", "origin", "main");
+
+    const store = new CoreStore({ dataDir: path.join(fixture.root, "state"), allowLocalRemotes: true });
+    const project = await store.registerProject({ url: fixture.remote });
+    await assert.rejects(
+      store.buildCreateHierarchyOperation(project.id, { kind: "volume", id: "../escape", title: "Unsafe" }),
+      (error: unknown) => error instanceof CoreError && error.code === "invalid_hierarchy_id",
+    );
+    const created = await store.buildCreateHierarchyOperation(project.id, {
+      kind: "scene",
+      id: "scene2",
+      title: "Second Scene",
+      volumeId: "vol1",
+      chapterId: "ch1",
+      manuscriptBody: "Second body.\n",
+    });
+    assert.equal(created.operation.effect, "structure");
+    assert.deepEqual(created.operation.writes.map((write) => ({ path: write.path, revision: write.revision })), [
+      { path: "plot/volumes/vol1/chapters/ch1/scenes/scene2.yaml", revision: null },
+      { path: "manuscript/vol1/ch1/scene2.md", revision: null },
+    ]);
+    await assert.rejects(store.checkpoint(project.id, created.operation), (error: unknown) =>
+      error instanceof CoreError && error.code === "author_approval_required");
+    await assert.rejects(store.readSceneSnapshot(project.id, "scene2", "remote"), (error: unknown) =>
+      error instanceof CoreError && error.code === "scene_not_found");
+    await approveAndCheckpoint(store, project.id, created.snapshot, created.operation);
+    assert.equal((await store.readSceneSnapshot(project.id, "scene2", "checkpoint")).scene.text, "Second body.\n");
+    let tree = (await store.readTreeSnapshot(project.id, "checkpoint")).tree;
+    assert.deepEqual(tree.volumes[0]?.chapters[0]?.scenes.map((scene) => scene.id), ["scene1", "scene2"]);
+
+    await assert.rejects(
+      store.buildDeleteHierarchyOperation(project.id, { kind: "chapter", id: "ch1", volumeId: "vol1" }),
+      (error: unknown) => error instanceof CoreError && error.code === "hierarchy_not_empty",
+    );
+    const reordered = await store.buildReorderHierarchyOperation(project.id, {
+      kind: "scene",
+      volumeId: "vol1",
+      chapterId: "ch1",
+      orderedIds: ["scene2", "scene1"],
+    }, "checkpoint");
+    const originalSceneWrite = reordered.operation.writes.find((write) => write.path.endsWith("/scene1.yaml"));
+    assert.match(originalSceneWrite?.content ?? "", /custom: keep-this/);
+    await approveAndCheckpoint(store, project.id, reordered.snapshot, reordered.operation);
+    tree = (await store.readTreeSnapshot(project.id, "checkpoint")).tree;
+    assert.deepEqual(tree.volumes[0]?.chapters[0]?.scenes.map((scene) => scene.id), ["scene2", "scene1"]);
+    assert.match((await (await store.reader(project.id, "checkpoint")).read("plot/volumes/vol1/chapters/ch1/scenes/scene1.yaml"))?.content ?? "", /custom: keep-this/);
+
+    const restoredOrder = await store.buildRestoreOperation(project.id, reordered.operation.id, "checkpoint");
+    assert.equal(restoredOrder.operation.writes.length, 2);
+    await approveAndCheckpoint(store, project.id, restoredOrder.snapshot, restoredOrder.operation);
+    tree = (await store.readTreeSnapshot(project.id, "checkpoint")).tree;
+    assert.deepEqual(tree.volumes[0]?.chapters[0]?.scenes.map((scene) => scene.id), ["scene1", "scene2"]);
+    await assert.rejects(
+      store.buildRestoreOperation(project.id, reordered.operation.id, "checkpoint"),
+      (error: unknown) => error instanceof CoreError && error.code === "restore_target_changed",
+    );
+
+    const deleted = await store.buildDeleteHierarchyOperation(project.id, {
+      kind: "scene",
+      id: "scene2",
+      volumeId: "vol1",
+      chapterId: "ch1",
+    }, "checkpoint");
+    assert.deepEqual(deleted.operation.writes.map((write) => write.path), [
+      "plot/volumes/vol1/chapters/ch1/scenes/scene2.yaml",
+      "manuscript/vol1/ch1/scene2.md",
+    ]);
+    await approveAndCheckpoint(store, project.id, deleted.snapshot, deleted.operation);
+    assert.deepEqual(await (await store.reader(project.id, "checkpoint")).read("manuscript/vol1/ch1/scene2.md"), null);
+    await assert.rejects(store.readSceneSnapshot(project.id, "scene2", "checkpoint"), (error: unknown) =>
+      error instanceof CoreError && error.code === "scene_not_found");
+    assert.equal((await store.readSceneSnapshot(project.id, "scene1", "checkpoint")).scene.text, "First body.\n");
+  } finally {
+    await fs.rm(fixture.root, { recursive: true, force: true });
+  }
+});
+
+test("Core compensating operations restore exact prior binary bytes from the checkpoint parent", async () => {
+  const fixture = await remoteFixture();
+  const originalBytes = Buffer.from([0, 255, 1, 128, 13, 10, 42]);
+  const changedBytes = Buffer.from([9, 8, 7, 0, 255]);
+  const filePath = "assets/cover.bin";
+  try {
+    await fs.mkdir(path.dirname(path.join(fixture.seed, filePath)), { recursive: true });
+    await fs.writeFile(path.join(fixture.seed, filePath), originalBytes);
+    await git(fixture.seed, "add", filePath);
+    await git(fixture.seed, "commit", "-m", "Add original binary attachment");
+    await git(fixture.seed, "push", "origin", "main");
+    const store = new CoreStore({ dataDir: path.join(fixture.root, "state"), allowLocalRemotes: true });
+    const project = await store.registerProject({ url: fixture.remote });
+    const snapshot = (await store.observe(project.id)).snapshot;
+    const original = await (await store.reader(project.id, "remote")).read(filePath, "base64");
+    assert.equal(original?.content, originalBytes.toString("base64"));
+    const changed = {
+      id: "binary_attachment_change",
+      generation: 1,
+      repository: snapshot.repository,
+      baseRemoteCommit: snapshot.remoteCommit,
+      effect: "metadata" as const,
+      reads: [{ path: filePath, revision: original?.revision ?? null }],
+      writes: [{ path: filePath, revision: original?.revision ?? null, content: changedBytes.toString("base64"), encoding: "base64" as const }],
+      message: "Replace binary attachment",
+    };
+    await approveAndCheckpoint(store, project.id, snapshot, changed);
+
+    const restore = await store.buildRestoreOperation(project.id, changed.id, "checkpoint");
+    assert.equal(restore.operation.writes[0]?.encoding, "base64");
+    assert.equal(restore.operation.writes[0]?.content, originalBytes.toString("base64"));
+    await approveAndCheckpoint(store, project.id, restore.snapshot, restore.operation);
+    assert.deepEqual(await (await store.reader(project.id, "checkpoint")).read(filePath, "base64"), original);
+  } finally {
+    await fs.rm(fixture.root, { recursive: true, force: true });
+  }
+});
+
 test("checkpoints require approval, replay idempotently, and survive a clone from the remote receipt", async () => {
   const fixture = await remoteFixture();
   const dataDir = path.join(fixture.root, "state");
