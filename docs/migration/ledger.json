@@ -6086,12 +6086,21 @@
           "owner": "P02",
           "targetPaths": [
             "app/src/App.tsx",
-            "app/src/api.ts"
+            "app/src/api.ts",
+            "tests/e2e/core.acceptance.spec.ts"
           ],
           "publicActions": [
             {
-              "action": "api.session / api.projects / api.registerProject",
-              "implementation": "GET /api/session, GET /api/projects, POST /api/projects"
+              "action": "api.projects / api.registerProject / api.projectDetails",
+              "implementation": "GET /api/projects, POST /api/projects, and GET /api/projects/:projectId; list/register projects and render selected repository URL, ID, branches, and observed remote commit"
+            },
+            {
+              "action": "api.reconstructProject",
+              "implementation": "PUT /api/projects/:projectId after flushing the browser draft; Core rechecks its guarded reconstruction conditions"
+            },
+            {
+              "action": "api.detachProject",
+              "implementation": "DELETE /api/projects/:projectId after flushing the browser draft; remove local registration/clone while keeping GitHub and browser recovery data"
             }
           ],
           "uiSurfaces": [
@@ -6099,14 +6108,27 @@
           ],
           "dataMappings": [
             {
-              "source": "Owner-selected project and active-project preference",
-              "target": "Core project list/register API; active project ID stored in browser localStorage as `scriptorium:active-project`",
-              "persistence": "Repository content and identity remain Core/Git-owned; browser key stores only selection."
+              "source": "Owner-selected project registry record and observed repository snapshot",
+              "target": "Selected-repository details rendered in App `.project-facts` from `api.projectDetails`; active project ID stored in browser localStorage as `scriptorium:active-project`",
+              "persistence": "Core owns repository identity and Git content; localStorage stores only the selected project ID."
+            },
+            {
+              "source": "Guarded local clone reconstruction and project detachment",
+              "target": "App actions call Core-backed PUT reconstruction and DELETE detach; browser journal remains available after detach",
+              "persistence": "Both actions flush a pending editor draft first. Core rejects dirty detach; successful detach removes only the local registration/clone and active selection, preserving remote repository and browser recovery records."
             }
           ],
-          "proofRefs": [],
+          "proofRefs": [
+            {
+              "id": "P02-R40-e2e-project-lifecycle",
+              "path": "tests/e2e/core.acceptance.spec.ts",
+              "testName": "project details, reconstruction, and guarded removal preserve browser recovery",
+              "scope": "Fresh Chromium end-to-end test verifies selected repository details, successful reconstruction with a pending browser draft retained, dirty-detach refusal without losing project or draft, and clean detach with the draft still available in recovery."
+            }
+          ],
           "limitations": [
-            "The flow covers register/select; it does not provide UI equivalents for source project mutation, removal, or project event endpoints."
+            "The browser surface does not display the API-only manual-sync event stream; the E2E proof covers details, reconstruction, and detach, not event-stream delivery.",
+            "Legacy automatic-merge PATCH behavior is intentionally retired; full-profile composition and live remote-provider acceptance remain separate checks."
           ]
         },
         {
@@ -7028,25 +7050,35 @@
           "status": "implementation-present; integration-acceptance-pending",
           "owner": "P02",
           "targetPaths": [
+            "app/src/App.tsx",
+            "app/src/api.ts",
             "app/src/editor/SceneEditor.tsx",
             "app/src/storage/journal.ts",
-            "app/src/App.tsx"
+            "tests/e2e/core.acceptance.spec.ts"
           ],
           "publicActions": [
             {
-              "action": "SceneEditor scratch autosave",
-              "implementation": "BrowserJournal.putScratch / getScratch; no API call"
+              "action": "ScratchPanel Draft/autosave",
+              "implementation": "persistScratchDraft builds a metadata ChangeOperation and stores the author-scoped entry with BrowserJournal.putLatestDraft in IndexedDB"
+            },
+            {
+              "action": "ScratchPanel Checkpoint",
+              "implementation": "checkpointScratchEntry -> checkpointEntry -> api.propose / api.approve / api.checkpoint; Core writes the approved Markdown and binary attachments to the project Git clone"
+            },
+            {
+              "action": "Save to GitHub",
+              "implementation": "api.publish publishes the checkpointed scratch operation with the selected manuscript operations and records exact acknowledgements"
             }
           ],
           "uiSurfaces": [
             "app/src/editor/SceneEditor.tsx",
-            "app/src/storage/journal.ts"
+            "app/src/App.tsx"
           ],
           "dataMappings": [
             {
-              "source": "Scratch text in the active editing session",
-              "target": "IndexedDB `scratch` object store, keyed by author/repository/document context",
-              "persistence": "Browser-local recovery content; distinct from repository `meta/scratch/*.md` and the Core scratch proposal endpoint."
+              "source": "Scratch Markdown under `meta/scratch/` and its attachment files",
+              "target": "Browser draft journal stores the text and ChangeOperation in IndexedDB; the operation writes `meta/scratch/<id>.md` and optional image bytes under `meta/scratch/assets/<id>/...`",
+              "persistence": "Draft and recovery state are browser-local until explicit author checkpoint. Checkpoint uses the generic Core proposal, owner approval, and checkpoint APIs to persist canonical project files; publication later records a GitHub receipt."
             }
           ],
           "proofRefs": [
@@ -7054,12 +7086,12 @@
               "id": "P02-R45-e2e-writing-flow",
               "path": "tests/e2e/core.acceptance.spec.ts",
               "testName": "writing UI recovers multi-document drafts and separates Draft, Checkpoint, and GitHub publication",
-              "scope": "Browser flow verifies scratch reload and later checkpoint via the editor; the scratch panel continues to use its browser-local journal rather than POST /api/projects/:projectId/scratch."
+              "scope": "Fresh Chromium end-to-end test adds scratch text and a binary image, verifies author-scoped journal recovery after reload and resume, explicitly checkpoints the scratch operation, then confirms publication acknowledges both scratch and manuscript operations."
             }
           ],
           "limitations": [
-            "The target browser scratch panel currently writes to IndexedDB and is not wired to POST /api/projects/:projectId/scratch; source durable project scratch parity remains pending.",
-            "The browser E2E flow verified scratch reload before failing at checkpoint; this partial step is recorded as an acceptance finding, not a passing proof."
+            "Legacy source scratch import and semantic preservation remain part of P12; this browser proof uses a disposable local Git fixture and does not certify a live remote provider.",
+            "The editor ScratchPanel drafts in IndexedDB and checkpoints through the generic proposal/approval/checkpoint API. The dedicated project scratch POST is a separate adapter with the same Core author boundary, not a required UI call."
           ]
         },
         {
@@ -7079,8 +7111,8 @@
           "dataMappings": [
             {
               "source": "Source scratch files and attachments under project `meta/scratch/`",
-              "target": "Core proposal writes to same repository scratch paths with text and bounded binary attachment metadata",
-              "persistence": "API does not write project files directly; author approval/checkpoint is required for persistence."
+              "target": "The project scratch HTTP adapter creates a Core ChangeOperation for `meta/scratch/<id>.md` and bounded attachments under `meta/scratch/files/`",
+              "persistence": "The owner-session handler calls Core propose, owner-scope approve, and checkpoint before returning; it does not write project files directly. The editor UI uses the same Core lifecycle through generic endpoints with its own attachment path layout."
             }
           ],
           "proofRefs": [
@@ -7092,7 +7124,7 @@
             }
           ],
           "limitations": [
-            "The target API operation does not imply the browser scratch panel is wired to it; the current React editor scratch journal is browser-local."
+            "This HTTP test verifies the separate project scratch adapter; browser editor scratch uses its IndexedDB recovery journal and generic proposal/approval/checkpoint calls, as covered by the P02 browser test."
           ]
         }
       ]
