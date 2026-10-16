@@ -11,9 +11,9 @@
   },
   "target": {
     "repository": "yohn-jp/scriptorium",
-    "baseCommit": "97b96bee11bd3b6202ac17cdc26a6a0beb95f38d",
+    "baseCommit": "c90e95d9711e859799f9674138b2db42efad6bc3",
     "branch": "work/7-p05",
-    "implementationCommit": "9aaf7ad7bffe9101c38165db732ce52020fd4b37"
+    "implementationCommit": "5da7363521d7be667b6c72856f8b28a0702ce17b"
   },
   "sourceClassification": [
     {
@@ -116,6 +116,34 @@
       "command": "pnpm --filter @scriptorium/module-story typecheck && pnpm --filter @scriptorium/module-story build",
       "result": "Both commands passed on implementation commit 9aaf7ad7bffe9101c38165db732ce52020fd4b37.",
       "scope": "Compiles the server action producer, migration producer and React browser entry."
+    },
+    {
+      "id": "P05-STORY-ZUKAN-FRESHNESS",
+      "kind": "focused source-parity regression tests",
+      "status": "passed",
+      "targetFiles": [
+        "modules/story/src/actions.ts",
+        "modules/story/src/actions.test.ts",
+        "modules/story/src/browser.tsx"
+      ],
+      "command": "pnpm --filter @scriptorium/module-story test && pnpm --filter @scriptorium/module-story typecheck",
+      "result": "47 passed, 0 failed; Story typecheck passed on commit c93a09eb6ff41830c73a25d5fde84260a3f3f0f1.",
+      "scope": "Manual entity and scene note edits stale matching pending Zukan rows in the same proposal; approving one suggestion stales other pending suggestions tied to the edited block; pending rows remain visible in the UI until the selected snapshot changes."
+    },
+    {
+      "id": "P05-STORY-CORE-PRODUCTION-ACCEPTANCE",
+      "kind": "compiled Story module with live Core, ModuleRuntime, API, and GitHub repositories",
+      "status": "pending",
+      "targetFiles": [
+        "modules/story/tests/production.acceptance.mjs",
+        "modules/story/src/narrativeChangeSet.ts",
+        "packages/core/src/index.ts",
+        "packages/module-runtime/src/module-runtime.ts",
+        "packages/api/src/server.ts"
+      ],
+      "command": "node --test modules/story/tests/production.acceptance.mjs (requires two disposable private synthetic GitHub repositories and gh authentication)",
+      "result": "Awaiting fresh execution against the committed acceptance harness.",
+      "scope": "Uses the compiled Story module through the actual owner action registry and two distinct GitHub repository identities. Exercises virtual-scope multi-create proposals, referenced-file guards, same-ID source payload replay/conflict, partial owner approval and ordered checkpoint/publish, a changed reference target rejected after approval, linked Bible browse with both snapshots, unchanged Bible remote head, and complete Core data-root deletion followed by remote reclone. No repository mutation uses force push; fixtures contain generated Story records only."
     },
     {
       "id": "P05-INTEGRATED-BROWSER-ACTIONS",
