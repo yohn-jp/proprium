@@ -136,7 +136,42 @@
           "reload"
         ],
         "injectedManagerCalls": []
-      }
+      },
+      "targetImplementationSlices": [
+        {
+          "status": "implementation-present; integration-acceptance-pending",
+          "owner": "P08",
+          "targetPaths": [
+            "packages/api/src/server.ts",
+            "packages/api/src/server.test.ts"
+          ],
+          "publicActions": [
+            {
+              "action": "GET /api/health, /api/ready, /health/live, /health/ready, /health/startup",
+              "implementation": "Expose target API liveness/readiness/startup and health probes"
+            }
+          ],
+          "uiSurfaces": [],
+          "dataMappings": [
+            {
+              "source": "Source health and reload endpoints",
+              "target": "Target health probes with Core startup/readiness metadata",
+              "persistence": "There is no target persistent author-data SQLite index to reload; `/api/reload` is not exposed."
+            }
+          ],
+          "proofRefs": [
+            {
+              "id": "P08-R01-health",
+              "path": "packages/api/src/server.test.ts",
+              "testName": "keeps health public, protects project data, and serves the app shell",
+              "scope": "HTTP test checks public health response and protected project data."
+            }
+          ],
+          "limitations": [
+            "Source POST /api/reload only rebuilt a derived index projection; no misleading reload endpoint is exposed."
+          ]
+        }
+      ]
     },
     {
       "id": "R02",
@@ -204,7 +239,42 @@
         ],
         "directCoreCalls": [],
         "injectedManagerCalls": []
-      }
+      },
+      "targetImplementationSlices": [
+        {
+          "status": "implementation-present; integration-acceptance-pending",
+          "owner": "P08",
+          "targetPaths": [
+            "packages/api/src/server.ts",
+            "packages/api/src/server.test.ts"
+          ],
+          "publicActions": [
+            {
+              "action": "GET /api/version",
+              "implementation": "Expose target API/contracts/profile/auth/runtime metadata"
+            }
+          ],
+          "uiSurfaces": [],
+          "dataMappings": [
+            {
+              "source": "Source version/build metadata",
+              "target": "Target Scriptorium API version, selected profile, auth modes, and module availability",
+              "persistence": "Runtime metadata is a read-only response."
+            }
+          ],
+          "proofRefs": [
+            {
+              "id": "P08-R02-version",
+              "path": "packages/api/src/server.test.ts",
+              "testName": "allows bearer compute under runtime effect limits and host-assigns MCP proposal source",
+              "scope": "HTTP test asserts target version authentication modes."
+            }
+          ],
+          "limitations": [
+            "This is target runtime metadata, not legacy Loom version parity."
+          ]
+        }
+      ]
     },
     {
       "id": "R03",
@@ -483,6 +553,75 @@
           "limitations": [
             "Browser run covers the synthetic two-scene fixture and does not certify every source route or remote provider."
           ]
+        },
+        {
+          "status": "implementation-present; integration-acceptance-pending",
+          "owner": "P05",
+          "targetPaths": [
+            "modules/story/src/actions.ts",
+            "modules/story/src/index.ts",
+            "modules/story/src/browser.tsx"
+          ],
+          "publicActions": [
+            {
+              "action": "story.volumes.tree",
+              "implementation": "Read volume/chapter/scene hierarchy from the pinned snapshot"
+            }
+          ],
+          "uiSurfaces": [
+            "modules/story/src/browser.tsx"
+          ],
+          "dataMappings": [
+            {
+              "source": "Selected snapshot of canonical project YAML, Markdown, and Story sidecar files",
+              "target": "SnapshotReader reads; Story updates produce Core ChangeOperation proposals against `bible/`, `plot/`, `meta/`, or versioned Story metadata paths",
+              "persistence": "Canonical project files remain authoritative; persistent changes enter the Core author review, approval, and checkpoint lifecycle."
+            }
+          ],
+          "proofRefs": [
+            {
+              "id": "P05-R05-tree",
+              "path": "modules/story/src/domain/graph.test.ts",
+              "testName": "volume tree and scene-location chronology use volume/chapter/scene order",
+              "scope": "Story domain test verifies source order in the hierarchy projection."
+            }
+          ],
+          "limitations": [
+            "The route replacement is a module action; full module profile mounting and UI navigation acceptance remain pending."
+          ]
+        },
+        {
+          "status": "implementation-present; integration-acceptance-pending",
+          "owner": "P08",
+          "targetPaths": [
+            "packages/api/src/server.ts",
+            "packages/api/src/server.test.ts"
+          ],
+          "publicActions": [
+            {
+              "action": "GET /api/projects/:projectId/tree",
+              "implementation": "Read a pinned Core tree snapshot"
+            }
+          ],
+          "uiSurfaces": [],
+          "dataMappings": [
+            {
+              "source": "Project files and reachable remote/checkpoint Git snapshots",
+              "target": "CoreStore pinned SnapshotReader and revision-bound Git document operations",
+              "persistence": "Repository files and Git history remain canonical; source-side SQLite projections are not reproduced as persistent author-data indexes."
+            }
+          ],
+          "proofRefs": [
+            {
+              "id": "P08-R05-core-snapshot",
+              "path": "packages/api/src/server.test.ts",
+              "testName": "exposes the source Core read surface through pinned routes and composed host actions",
+              "scope": "HTTP test verifies remote and explicitly pinned checkpoint tree reads."
+            }
+          ],
+          "limitations": [
+            "The target uses project-scoped pinned routes; it does not expose the legacy `/api/tree` path."
+          ]
         }
       ]
     },
@@ -700,7 +839,103 @@
           "updateEntity"
         ],
         "injectedManagerCalls": []
-      }
+      },
+      "targetImplementationSlices": [
+        {
+          "status": "implementation-present; integration-acceptance-pending",
+          "owner": "P05",
+          "targetPaths": [
+            "modules/story/src/actions.ts",
+            "modules/story/src/index.ts",
+            "modules/story/src/browser.tsx"
+          ],
+          "publicActions": [
+            {
+              "action": "story.entities.list",
+              "implementation": "List canonical entities from the selected snapshot"
+            },
+            {
+              "action": "story.entities.get",
+              "implementation": "Read entity and source revision"
+            },
+            {
+              "action": "story.entities.create",
+              "implementation": "Propose entity creation with reference and membership preconditions"
+            },
+            {
+              "action": "story.entities.update",
+              "implementation": "Propose revision-bound entity updates"
+            },
+            {
+              "action": "story.entities.reorder",
+              "implementation": "Propose ordered entity changes"
+            },
+            {
+              "action": "story.entities.backlinks",
+              "implementation": "Read relation backlinks"
+            },
+            {
+              "action": "story.entities.appearances",
+              "implementation": "Read scene appearances"
+            },
+            {
+              "action": "story.entities.voice-patterns",
+              "implementation": "Read source-compatible character voice data"
+            },
+            {
+              "action": "story.entities.freshness",
+              "implementation": "Read source-compatible entity freshness projection"
+            },
+            {
+              "action": "story.entities.suggested-tags",
+              "implementation": "Compute optional-tokenizer tag suggestions"
+            },
+            {
+              "action": "story.tags.list",
+              "implementation": "List source-derived tags"
+            }
+          ],
+          "uiSurfaces": [
+            "modules/story/src/browser.tsx"
+          ],
+          "dataMappings": [
+            {
+              "source": "Selected snapshot of canonical project YAML, Markdown, and Story sidecar files",
+              "target": "SnapshotReader reads; Story updates produce Core ChangeOperation proposals against `bible/`, `plot/`, `meta/`, or versioned Story metadata paths",
+              "persistence": "Canonical project files remain authoritative; persistent changes enter the Core author review, approval, and checkpoint lifecycle."
+            }
+          ],
+          "proofRefs": [
+            {
+              "id": "P05-R06-entity-read",
+              "path": "modules/story/src/actions.test.ts",
+              "testName": "entity reads expose source revision and preserve nested notes and character voice",
+              "scope": "Public Story action verifies canonical entity data and source revision."
+            },
+            {
+              "id": "P05-R06-entity-update",
+              "path": "modules/story/src/actions.test.ts",
+              "testName": "entity updates validate source revisions and return a reviewable Core proposal",
+              "scope": "Public Story action verifies revision guards and the proposal boundary."
+            },
+            {
+              "id": "P05-R06-entity-create",
+              "path": "modules/story/src/actions.test.ts",
+              "testName": "scene creation inserts by position in one proposal and includes every changed file precondition",
+              "scope": "Public Story action verifies creation, sibling ordering, and file preconditions."
+            },
+            {
+              "id": "P05-R06-suggested-tags",
+              "path": "modules/story/src/actions.test.ts",
+              "testName": "suggested tags do not allocate NLP at module load and report optional capability absence",
+              "scope": "Story action verifies optional tokenizer capability behavior for tag suggestions."
+            }
+          ],
+          "limitations": [
+            "These action-level tests do not establish all ten legacy route payloads or a mounted browser contribution; source migration remains pending."
+          ]
+        }
+      ]
     },
     {
       "id": "R07",
@@ -828,7 +1063,53 @@
             ]
           }
         ]
-      }
+      },
+      "targetImplementationSlices": [
+        {
+          "status": "implementation-present; integration-acceptance-pending",
+          "owner": "P05",
+          "targetPaths": [
+            "modules/story/src/actions.ts",
+            "modules/story/src/index.ts",
+            "modules/story/src/browser.tsx"
+          ],
+          "publicActions": [
+            {
+              "action": "story.zukan-suggestions.list",
+              "implementation": "List preserved suggestions by entity and workflow status"
+            },
+            {
+              "action": "story.zukan-suggestions.approve",
+              "implementation": "Propose nested-note update and workflow approval atomically"
+            },
+            {
+              "action": "story.zukan-suggestions.reject",
+              "implementation": "Propose workflow rejection"
+            }
+          ],
+          "uiSurfaces": [
+            "modules/story/src/browser.tsx"
+          ],
+          "dataMappings": [
+            {
+              "source": "Persistent `zukan_suggestions` source workflow rows and entity YAML",
+              "target": "Story JSONL workflow records and canonical entity-note proposals",
+              "persistence": "Statuses and unknown non-secret fields are preserved by the Story producer; approval remains a Core proposal."
+            }
+          ],
+          "proofRefs": [
+            {
+              "id": "P05-R07-zukan",
+              "path": "modules/story/src/actions.test.ts",
+              "testName": "Zukan suggestions list by status and approve/reject as snapshot-bound proposals",
+              "scope": "Public actions verify workflow state and reviewable operations."
+            }
+          ],
+          "limitations": [
+            "Module-level semantic import is implemented, but composed importer review and recovery remain P12 acceptance."
+          ]
+        }
+      ]
     },
     {
       "id": "R08",
@@ -1066,7 +1347,91 @@
           "suggestRewrite"
         ],
         "injectedManagerCalls": []
-      }
+      },
+      "targetImplementationSlices": [
+        {
+          "status": "implementation-present; integration-acceptance-pending",
+          "owner": "P05",
+          "targetPaths": [
+            "modules/story/src/actions.ts",
+            "modules/story/src/index.ts",
+            "modules/story/src/browser.tsx"
+          ],
+          "publicActions": [
+            {
+              "action": "story.scene.context",
+              "implementation": "Read scene context from the selected snapshot"
+            },
+            {
+              "action": "story.scene.metadata.update",
+              "implementation": "Propose revision-bound scene metadata changes"
+            }
+          ],
+          "uiSurfaces": [
+            "modules/story/src/browser.tsx"
+          ],
+          "dataMappings": [
+            {
+              "source": "Selected snapshot of canonical project YAML, Markdown, and Story sidecar files",
+              "target": "SnapshotReader reads; Story updates produce Core ChangeOperation proposals against `bible/`, `plot/`, `meta/`, or versioned Story metadata paths",
+              "persistence": "Canonical project files remain authoritative; persistent changes enter the Core author review, approval, and checkpoint lifecycle."
+            }
+          ],
+          "proofRefs": [
+            {
+              "id": "P05-R08-scene-context",
+              "path": "modules/story/src/domain/graph.test.ts",
+              "testName": "scene context resolves POV, raw location, relation collections and manuscript path",
+              "scope": "Story projection test verifies source scene context fields."
+            }
+          ],
+          "limitations": [
+            "Only the Story context and metadata portions are represented; assistant prompts, speaker operations, diagnostics, and voice workflows are owned by other modules or remain pending."
+          ]
+        },
+        {
+          "status": "implementation-present; integration-acceptance-pending",
+          "owner": "P08",
+          "targetPaths": [
+            "packages/api/src/server.ts",
+            "packages/api/src/server.test.ts"
+          ],
+          "publicActions": [
+            {
+              "action": "GET /api/projects/:projectId/scenes/:sceneId",
+              "implementation": "Read a pinned scene snapshot"
+            },
+            {
+              "action": "POST /api/projects/:projectId/actions/:actionId",
+              "implementation": "Invoke declared read/compute/propose actions under host effect limits"
+            }
+          ],
+          "uiSurfaces": [],
+          "dataMappings": [
+            {
+              "source": "Project files and reachable remote/checkpoint Git snapshots",
+              "target": "CoreStore pinned SnapshotReader and revision-bound Git document operations",
+              "persistence": "Repository files and Git history remain canonical; source-side SQLite projections are not reproduced as persistent author-data indexes."
+            },
+            {
+              "source": "Declared scene read/compute/mutation actions",
+              "target": "Core/API host action dispatch with effect checks and proposal port",
+              "persistence": "Persistent writes must use the proposal and approval lifecycle; the module action adapter does not bypass Core."
+            }
+          ],
+          "proofRefs": [
+            {
+              "id": "P08-R08-proposal-boundary",
+              "path": "packages/api/src/server.test.ts",
+              "testName": "assigns proposal source at the host and keeps approval exclusive to same-origin owner sessions",
+              "scope": "HTTP test verifies host-assigned proposal provenance and same-origin owner-only approval."
+            }
+          ],
+          "limitations": [
+            "This maps the Core scene read and mutation boundary only; source assistant, voice, and diagnostics handlers are module-owned or not yet at full parity."
+          ]
+        }
+      ]
     },
     {
       "id": "R09",
@@ -1160,7 +1525,53 @@
         ],
         "directCoreCalls": [],
         "injectedManagerCalls": []
-      }
+      },
+      "targetImplementationSlices": [
+        {
+          "status": "implementation-present; integration-acceptance-pending",
+          "owner": "P05",
+          "targetPaths": [
+            "modules/story/src/actions.ts",
+            "modules/story/src/index.ts",
+            "modules/story/src/browser.tsx"
+          ],
+          "publicActions": [
+            {
+              "action": "story.world-state.at-scene",
+              "implementation": "Read derived world state at scene"
+            },
+            {
+              "action": "story.world-state.history",
+              "implementation": "Read entity state history"
+            },
+            {
+              "action": "story.world-state.workbench",
+              "implementation": "Build world-state proposal workbench"
+            }
+          ],
+          "uiSurfaces": [
+            "modules/story/src/browser.tsx"
+          ],
+          "dataMappings": [
+            {
+              "source": "Canonical entity relations and confirmed scene `state_events`",
+              "target": "Snapshot-derived world-state projections and Story proposal workbench",
+              "persistence": "Derived projections are recomputed from canonical state; only author proposal/workflow rows are persisted."
+            }
+          ],
+          "proofRefs": [
+            {
+              "id": "P05-R09-world-state",
+              "path": "modules/story/src/domain/worldState.test.ts",
+              "testName": "world-state projection folds location, acquaintance, item ownership and confirmed raw events",
+              "scope": "Story domain test verifies canonical relation and confirmed-event folding."
+            }
+          ],
+          "limitations": [
+            "The test covers projection rules, not a full workflow import or composed review/checkpoint flow."
+          ]
+        }
+      ]
     },
     {
       "id": "R10",
@@ -1288,7 +1699,71 @@
         ],
         "directCoreCalls": [],
         "injectedManagerCalls": []
-      }
+      },
+      "targetImplementationSlices": [
+        {
+          "status": "implementation-present; integration-acceptance-pending",
+          "owner": "P05",
+          "targetPaths": [
+            "modules/story/src/actions.ts",
+            "modules/story/src/index.ts",
+            "modules/story/src/browser.tsx"
+          ],
+          "publicActions": [
+            {
+              "action": "story.state-proposals.list",
+              "implementation": "Read provisional state proposals"
+            },
+            {
+              "action": "story.state-proposals.create",
+              "implementation": "Propose a provisional event"
+            },
+            {
+              "action": "story.state-proposals.update",
+              "implementation": "Propose edits to a provisional event"
+            },
+            {
+              "action": "story.state-proposals.approve",
+              "implementation": "Propose confirmed event and status transition"
+            },
+            {
+              "action": "story.state-proposals.reject",
+              "implementation": "Propose rejection transition"
+            },
+            {
+              "action": "story.state-proposals.stale",
+              "implementation": "Propose stale status after manuscript change"
+            }
+          ],
+          "uiSurfaces": [
+            "modules/story/src/browser.tsx"
+          ],
+          "dataMappings": [
+            {
+              "source": "Persistent `.arcadia/index.sqlite#state_proposals` workflow rows and canonical scene YAML",
+              "target": "`meta/scriptorium/modules/story/state-proposals.jsonl` plus revision-bound scene event proposals",
+              "persistence": "Proposal statuses and history are preserved; confirmation updates canonical scene YAML through Core proposals."
+            }
+          ],
+          "proofRefs": [
+            {
+              "id": "P05-R10-state-proposal-lifecycle",
+              "path": "modules/story/src/actions.test.ts",
+              "testName": "state-proposal lifecycle uses the source manuscript FNV hash",
+              "scope": "Public action test verifies source-compatible manuscript identity."
+            },
+            {
+              "id": "P05-R10-event-preconditions",
+              "path": "modules/story/src/actions.test.ts",
+              "testName": "state.append-event rejects stale or mismatched source proposals",
+              "scope": "Public action test verifies stale proposal and revision rejection."
+            }
+          ],
+          "limitations": [
+            "Story has action and producer coverage; source workflow data still requires the composed P12 semantic migration and author review."
+          ]
+        }
+      ]
     },
     {
       "id": "R11",
@@ -1460,7 +1935,92 @@
             ]
           }
         ]
-      }
+      },
+      "targetImplementationSlices": [
+        {
+          "status": "implementation-present; integration-acceptance-pending",
+          "owner": "P05",
+          "targetPaths": [
+            "modules/story/src/actions.ts",
+            "modules/story/src/index.ts",
+            "modules/story/src/browser.tsx"
+          ],
+          "publicActions": [
+            {
+              "action": "story.changes.propose",
+              "implementation": "Validate and submit a complete source NarrativeChangeSet as one identity-bound Core proposal"
+            }
+          ],
+          "uiSurfaces": [
+            "modules/story/src/browser.tsx"
+          ],
+          "dataMappings": [
+            {
+              "source": "Source NarrativeChangeSet v1 records and their operation/result identities",
+              "target": "Bounded Story proposal evidence linked to Core proposal and checkpoint receipts",
+              "persistence": "Source IDs, operation mapping, dependencies, result identities, and submitted time are retained without direct file writes."
+            }
+          ],
+          "proofRefs": [
+            {
+              "id": "P05-R11-changeset-operations",
+              "path": "modules/story/src/actions.test.ts",
+              "testName": "NarrativeChangeSet preserves all nine source operation kinds in one identity-bound Core proposal",
+              "scope": "Public Story action test verifies full source change-set mapping."
+            },
+            {
+              "id": "P05-R11-changeset-retry",
+              "path": "modules/story/src/actions.test.ts",
+              "testName": "NarrativeChangeSet retries return the stored proposal and reject changed source meaning",
+              "scope": "Public Story action test verifies retry identity and changed-payload rejection."
+            }
+          ],
+          "limitations": [
+            "The Story bridge tests do not certify composed MCP, approval, checkpoint, reconciliation, or publication acceptance."
+          ]
+        },
+        {
+          "status": "implementation-present; integration-acceptance-pending",
+          "owner": "P08",
+          "targetPaths": [
+            "packages/api/src/server.ts",
+            "packages/api/src/server.test.ts"
+          ],
+          "publicActions": [
+            {
+              "action": "POST /api/projects/:projectId/proposals",
+              "implementation": "Create a guarded Core proposal"
+            },
+            {
+              "action": "POST /api/projects/:projectId/approvals",
+              "implementation": "Approve only from same-origin owner session"
+            },
+            {
+              "action": "POST /api/projects/:projectId/checkpoints",
+              "implementation": "Checkpoint approved operations through Core"
+            }
+          ],
+          "uiSurfaces": [],
+          "dataMappings": [
+            {
+              "source": "Source ChangeSet apply/restore/reject and mutation flows",
+              "target": "Target proposal evidence, owner approval, checkpoint, reconciliation, and publication receipts",
+              "persistence": "Core owns durable Git operation/evidence; host assigns provenance and excludes approval from bearer/MCP callers."
+            }
+          ],
+          "proofRefs": [
+            {
+              "id": "P08-R11-author-mutation",
+              "path": "packages/api/src/server.test.ts",
+              "testName": "assigns proposal source at the host and keeps approval exclusive to same-origin owner sessions",
+              "scope": "HTTP boundary verifies host-assigned provenance and same-origin owner-only approval."
+            }
+          ],
+          "limitations": [
+            "This generic Core lifecycle is not source ChangeSet history parity; Story/MCP own bounded adaptation and full import remains pending."
+          ]
+        }
+      ]
     },
     {
       "id": "R12",
@@ -1544,7 +2104,45 @@
         ],
         "directCoreCalls": [],
         "injectedManagerCalls": []
-      }
+      },
+      "targetImplementationSlices": [
+        {
+          "status": "implementation-present; integration-acceptance-pending",
+          "owner": "P05",
+          "targetPaths": [
+            "modules/story/src/actions.ts",
+            "modules/story/src/index.ts",
+            "modules/story/src/browser.tsx"
+          ],
+          "publicActions": [
+            {
+              "action": "story.reader-model.build",
+              "implementation": "Compute reader disclosures, knowledge gaps, and thread forget risk from a pinned snapshot"
+            }
+          ],
+          "uiSurfaces": [
+            "modules/story/src/browser.tsx"
+          ],
+          "dataMappings": [
+            {
+              "source": "Canonical entity/manuscript-derived scenes and confirmed world-state events",
+              "target": "Request-time reader disclosure and knowledge-gap projections",
+              "persistence": "Derived reader model outputs are not persisted as author decision history."
+            }
+          ],
+          "proofRefs": [
+            {
+              "id": "P05-R12-reader-model",
+              "path": "modules/story/src/actions.test.ts",
+              "testName": "reader model action derives chapter disclosures and knowledge checks from the selected snapshot",
+              "scope": "Public action test verifies snapshot-bound chapter reading order and knowledge output."
+            }
+          ],
+          "limitations": [
+            "Generated reader reactions and prompt preview remain assistant capabilities, not Story actions."
+          ]
+        }
+      ]
     },
     {
       "id": "R13",
@@ -1649,7 +2247,46 @@
           "semanticSearch"
         ],
         "injectedManagerCalls": []
-      }
+      },
+      "targetImplementationSlices": [
+        {
+          "status": "implementation-present; integration-acceptance-pending",
+          "owner": "P08",
+          "targetPaths": [
+            "packages/api/src/server.ts",
+            "packages/api/src/server.test.ts"
+          ],
+          "publicActions": [
+            {
+              "action": "GET /api/projects/:projectId/search",
+              "implementation": "Read bounded literal search against a selected Core snapshot"
+            },
+            {
+              "action": "POST /api/projects/:projectId/actions/core.search",
+              "implementation": "Invoke typed Core search action"
+            }
+          ],
+          "uiSurfaces": [],
+          "dataMappings": [
+            {
+              "source": "Source literal, semantic, and expression search over indexed project content",
+              "target": "Target bounded literal search over a pinned Core snapshot",
+              "persistence": "Search is computed from canonical Git snapshot contents; there is no persistent source-style FTS index."
+            }
+          ],
+          "proofRefs": [
+            {
+              "id": "P08-R13-pinned-search",
+              "path": "packages/api/src/server.test.ts",
+              "testName": "exposes the source Core read surface through pinned routes and composed host actions",
+              "scope": "HTTP test verifies Core search action result and pinned snapshot read."
+            }
+          ],
+          "limitations": [
+            "Semantic search and expression search are not covered by this target Core action; P09 owns semantic retrieval."
+          ]
+        }
+      ]
     },
     {
       "id": "R14",
@@ -1856,7 +2493,53 @@
           "getThreadsOverview"
         ],
         "injectedManagerCalls": []
-      }
+      },
+      "targetImplementationSlices": [
+        {
+          "status": "implementation-present; integration-acceptance-pending",
+          "owner": "P05",
+          "targetPaths": [
+            "modules/story/src/actions.ts",
+            "modules/story/src/index.ts",
+            "modules/story/src/browser.tsx"
+          ],
+          "publicActions": [
+            {
+              "action": "story.threads.overview",
+              "implementation": "Read source-derived thread overview"
+            },
+            {
+              "action": "story.threads.status",
+              "implementation": "Read point-in-time thread status"
+            },
+            {
+              "action": "story.threads.lifecycle",
+              "implementation": "Compute thread lifecycle and warnings"
+            }
+          ],
+          "uiSurfaces": [
+            "modules/story/src/browser.tsx"
+          ],
+          "dataMappings": [
+            {
+              "source": "Selected snapshot of canonical project YAML, Markdown, and Story sidecar files",
+              "target": "SnapshotReader reads; Story updates produce Core ChangeOperation proposals against `bible/`, `plot/`, `meta/`, or versioned Story metadata paths",
+              "persistence": "Canonical project files remain authoritative; persistent changes enter the Core author review, approval, and checkpoint lifecycle."
+            }
+          ],
+          "proofRefs": [
+            {
+              "id": "P05-R15-thread-lifecycle",
+              "path": "modules/story/src/domain/threadLifecycle.test.ts",
+              "testName": "thread lifecycle selects plant/payoff order and treats advances and mentions as recalls",
+              "scope": "Story domain test verifies source thread lifecycle ordering and recall rules."
+            }
+          ],
+          "limitations": [
+            "No claim is made for assistant summary generation or all legacy thread endpoint behavior."
+          ]
+        }
+      ]
     },
     {
       "id": "R16",
@@ -2008,7 +2691,45 @@
           "listTags"
         ],
         "injectedManagerCalls": []
-      }
+      },
+      "targetImplementationSlices": [
+        {
+          "status": "implementation-present; integration-acceptance-pending",
+          "owner": "P05",
+          "targetPaths": [
+            "modules/story/src/actions.ts",
+            "modules/story/src/index.ts",
+            "modules/story/src/browser.tsx"
+          ],
+          "publicActions": [
+            {
+              "action": "story.tags.list",
+              "implementation": "List source-derived entity tags"
+            }
+          ],
+          "uiSurfaces": [
+            "modules/story/src/browser.tsx"
+          ],
+          "dataMappings": [
+            {
+              "source": "Selected snapshot of canonical project YAML, Markdown, and Story sidecar files",
+              "target": "SnapshotReader reads; Story updates produce Core ChangeOperation proposals against `bible/`, `plot/`, `meta/`, or versioned Story metadata paths",
+              "persistence": "Canonical project files remain authoritative; persistent changes enter the Core author review, approval, and checkpoint lifecycle."
+            }
+          ],
+          "proofRefs": [
+            {
+              "id": "P05-R17-tags",
+              "path": "modules/story/src/actions.test.ts",
+              "testName": "entity reads expose source revision and preserve nested notes and character voice",
+              "scope": "Public action test verifies tags and entity data are snapshot-derived."
+            }
+          ],
+          "limitations": [
+            "The module contribution is not yet mounted in the final profile."
+          ]
+        }
+      ]
     },
     {
       "id": "R18",
@@ -2085,7 +2806,49 @@
           "getGraphData"
         ],
         "injectedManagerCalls": []
-      }
+      },
+      "targetImplementationSlices": [
+        {
+          "status": "implementation-present; integration-acceptance-pending",
+          "owner": "P05",
+          "targetPaths": [
+            "modules/story/src/actions.ts",
+            "modules/story/src/index.ts",
+            "modules/story/src/browser.tsx"
+          ],
+          "publicActions": [
+            {
+              "action": "story.graph.query",
+              "implementation": "Read relationship graph projection"
+            },
+            {
+              "action": "story.map.query",
+              "implementation": "Read location map and reciprocal travel edges"
+            }
+          ],
+          "uiSurfaces": [
+            "modules/story/src/browser.tsx"
+          ],
+          "dataMappings": [
+            {
+              "source": "Selected snapshot of canonical project YAML, Markdown, and Story sidecar files",
+              "target": "SnapshotReader reads; Story updates produce Core ChangeOperation proposals against `bible/`, `plot/`, `meta/`, or versioned Story metadata paths",
+              "persistence": "Canonical project files remain authoritative; persistent changes enter the Core author review, approval, and checkpoint lifecycle."
+            }
+          ],
+          "proofRefs": [
+            {
+              "id": "P05-R18-graph",
+              "path": "modules/story/src/domain/graph.test.ts",
+              "testName": "graph defaults omit scene nodes and location map adds deduplicated reciprocal travel edges",
+              "scope": "Story domain test verifies graph and map projection rules."
+            }
+          ],
+          "limitations": [
+            "Full contribution mounting and browser navigation acceptance remain pending."
+          ]
+        }
+      ]
     },
     {
       "id": "R19",
@@ -2160,7 +2923,45 @@
           "getSceneTimeline"
         ],
         "injectedManagerCalls": []
-      }
+      },
+      "targetImplementationSlices": [
+        {
+          "status": "implementation-present; integration-acceptance-pending",
+          "owner": "P05",
+          "targetPaths": [
+            "modules/story/src/actions.ts",
+            "modules/story/src/index.ts",
+            "modules/story/src/browser.tsx"
+          ],
+          "publicActions": [
+            {
+              "action": "story.timeline.query",
+              "implementation": "Read timeline projection with source surfaces, scene context, confidence, and snapshot identity"
+            }
+          ],
+          "uiSurfaces": [
+            "modules/story/src/browser.tsx"
+          ],
+          "dataMappings": [
+            {
+              "source": "Selected snapshot of canonical project YAML, Markdown, and Story sidecar files",
+              "target": "SnapshotReader reads; Story updates produce Core ChangeOperation proposals against `bible/`, `plot/`, `meta/`, or versioned Story metadata paths",
+              "persistence": "Canonical project files remain authoritative; persistent changes enter the Core author review, approval, and checkpoint lifecycle."
+            }
+          ],
+          "proofRefs": [
+            {
+              "id": "P05-R19-timeline",
+              "path": "modules/story/src/domain/timeline.test.ts",
+              "testName": "timeline entries carry caller snapshot, scene context and confidence labels",
+              "scope": "Story domain test verifies snapshot provenance and confidence labels."
+            }
+          ],
+          "limitations": [
+            "Timeline inference is an implementation slice; final browser composition and source-data migration remain pending."
+          ]
+        }
+      ]
     },
     {
       "id": "R20",
@@ -2315,7 +3116,82 @@
           "validate"
         ],
         "injectedManagerCalls": []
-      }
+      },
+      "targetImplementationSlices": [
+        {
+          "status": "implementation-present; integration-acceptance-pending",
+          "owner": "P05",
+          "targetPaths": [
+            "modules/story/src/actions.ts",
+            "modules/story/src/index.ts",
+            "modules/story/src/browser.tsx"
+          ],
+          "publicActions": [
+            {
+              "action": "story.cooccurrence",
+              "implementation": "Compute source-compatible Jaccard/PMI co-occurrence from selected scenes"
+            }
+          ],
+          "uiSurfaces": [
+            "modules/story/src/browser.tsx"
+          ],
+          "dataMappings": [
+            {
+              "source": "Selected snapshot of canonical project YAML, Markdown, and Story sidecar files",
+              "target": "SnapshotReader reads; Story updates produce Core ChangeOperation proposals against `bible/`, `plot/`, `meta/`, or versioned Story metadata paths",
+              "persistence": "Canonical project files remain authoritative; persistent changes enter the Core author review, approval, and checkpoint lifecycle."
+            }
+          ],
+          "proofRefs": [
+            {
+              "id": "P05-R20-cooccurrence",
+              "path": "modules/story/src/actions.test.ts",
+              "testName": "co-occurrence action returns source Jaccard/PMI and accepts scene scope",
+              "scope": "Public Story action verifies the source scoring and optional scene scope."
+            }
+          ],
+          "limitations": [
+            "This Story action covers co-occurrence only; diagnostics and aggregate inspection belong to P06/Core and remain partial."
+          ]
+        },
+        {
+          "status": "implementation-present; integration-acceptance-pending",
+          "owner": "P08",
+          "targetPaths": [
+            "packages/api/src/server.ts",
+            "packages/api/src/server.test.ts"
+          ],
+          "publicActions": [
+            {
+              "action": "GET /api/projects/:projectId/writing-stats",
+              "implementation": "Compute bounded basic writing-stat envelope from a selected snapshot"
+            },
+            {
+              "action": "POST /api/projects/:projectId/actions/:actionId",
+              "implementation": "Dispatch module diagnostics actions where enabled"
+            }
+          ],
+          "uiSurfaces": [],
+          "dataMappings": [
+            {
+              "source": "Source project inspection, co-occurrence, voice, and basic/rich writing metrics",
+              "target": "Core bounded basic writing-stat response and optional module diagnostics actions",
+              "persistence": "All stats are derived from selected Git snapshot; no source SQLite index is persisted."
+            }
+          ],
+          "proofRefs": [
+            {
+              "id": "P08-R20-stats",
+              "path": "packages/api/src/server.test.ts",
+              "testName": "exposes the source Core read surface through pinned routes and composed host actions",
+              "scope": "HTTP test verifies stats for a pinned snapshot and action descriptors."
+            }
+          ],
+          "limitations": [
+            "Core API does not replace all six source inspection handlers; P05/P06 module slices cover only named domain actions."
+          ]
+        }
+      ]
     },
     {
       "id": "R21",
@@ -2539,7 +3415,7 @@
             },
             {
               "action": "PUT /api/projects/:projectId/scenes/:sceneId",
-              "implementation": "CoreStore.saveScene compatibility handler"
+              "implementation": "Retired with HTTP 410 SCENE_PROPOSAL_REQUIRED; no direct saveScene handler"
             },
             {
               "action": "POST /api/projects/:projectId/proposals, /approvals, /checkpoints",
@@ -2569,7 +3445,6 @@
             }
           ],
           "limitations": [
-            "The target still exposes the owner-authenticated direct PUT compatibility handler, which calls saveScene outside the proposal/approval/checkpoint path; composed mutation-boundary acceptance remains pending.",
             "Legacy snapshot sidecar import and full source endpoint parity are not established by these Core tests."
           ]
         },
@@ -2617,10 +3492,72 @@
               "path": "app/src/journal.test.ts",
               "testName": "journal keys isolate author scopes and retain each operation generation",
               "scope": "Unit test verifies per-author and per-operation-generation recovery records remain distinct."
+            },
+            {
+              "id": "P02-R22-e2e-writing-flow",
+              "path": "tests/e2e/core.acceptance.spec.ts",
+              "testName": "writing UI recovers multi-document drafts and separates Draft, Checkpoint, and GitHub publication",
+              "scope": "Browser flow verifies draft, checkpoint, and publication states against the local Git fixture; historical source snapshot sidecar import remains unverified."
             }
           ],
           "limitations": [
             "These tests exercise the target browser journal and local fixture; they do not prove import of every legacy IndexedDB/project snapshot store or final remote-provider behavior."
+          ]
+        },
+        {
+          "status": "implementation-present; integration-acceptance-pending",
+          "owner": "P08",
+          "targetPaths": [
+            "packages/api/src/server.ts",
+            "packages/api/src/server.test.ts"
+          ],
+          "publicActions": [
+            {
+              "action": "GET /api/projects/:projectId/scenes/:sceneId",
+              "implementation": "Read scene/document from selected pinned Git snapshot"
+            },
+            {
+              "action": "GET /api/projects/:projectId/manuscripts/:manuscriptId/snapshots",
+              "implementation": "List reachable manuscript snapshots"
+            },
+            {
+              "action": "GET /api/projects/:projectId/manuscripts/:manuscriptId/snapshots/:snapshotId",
+              "implementation": "Read exact historical manuscript at selected snapshot"
+            },
+            {
+              "action": "PUT /api/projects/:projectId/scenes/:sceneId",
+              "implementation": "Retired with HTTP 410 SCENE_PROPOSAL_REQUIRED"
+            }
+          ],
+          "uiSurfaces": [],
+          "dataMappings": [
+            {
+              "source": "Project files and reachable remote/checkpoint Git snapshots",
+              "target": "CoreStore pinned SnapshotReader and revision-bound Git document operations",
+              "persistence": "Repository files and Git history remain canonical; source-side SQLite projections are not reproduced as persistent author-data indexes."
+            },
+            {
+              "source": "Source direct manuscript save and snapshot routes/sidecars",
+              "target": "Snapshot reads plus proposal, owner approval, and checkpoint receipts in Git history",
+              "persistence": "Canonical Markdown/frontmatter remains repository data; direct scene PUT is retired and no source snapshot sidecar is imported here."
+            }
+          ],
+          "proofRefs": [
+            {
+              "id": "P08-R22-snapshot-read",
+              "path": "packages/api/src/server.test.ts",
+              "testName": "exposes the source Core read surface through pinned routes and composed host actions",
+              "scope": "HTTP test reads pinned scene, snapshot list, and exact historical document."
+            },
+            {
+              "id": "P08-R22-direct-put-retired",
+              "path": "packages/api/src/server.test.ts",
+              "testName": "assigns proposal source at the host and keeps approval exclusive to same-origin owner sessions",
+              "scope": "HTTP test asserts direct PUT returns 410 and performs zero Core save calls."
+            }
+          ],
+          "limitations": [
+            "Legacy snapshot sidecar migration and full manuscript handler parity remain P12 migration acceptance."
           ]
         }
       ]
@@ -3004,7 +3941,57 @@
           "ignoreCandidates"
         ],
         "injectedManagerCalls": []
-      }
+      },
+      "targetImplementationSlices": [
+        {
+          "status": "implementation-present; integration-acceptance-pending",
+          "owner": "P06",
+          "targetPaths": [
+            "modules/nlp/src/index.ts",
+            "modules/nlp/src/browser.ts",
+            "modules/diagnostics/src/index.ts",
+            "modules/diagnostics/src/browser.ts",
+            "modules/diagnostics/src/production.test.ts"
+          ],
+          "publicActions": [
+            {
+              "action": "nlp.discoverCandidates",
+              "implementation": "Discover and aggregate candidate terms from the pinned project snapshot"
+            },
+            {
+              "action": "nlp.ignoreCandidates",
+              "implementation": "Propose module ignore-list updates"
+            }
+          ],
+          "uiSurfaces": [
+            "modules/nlp/src/browser.ts"
+          ],
+          "dataMappings": [
+            {
+              "source": "Legacy synonyms, candidate ignore list, NLP feature consent, and selected canonical snapshot",
+              "target": "`meta/scriptorium/modules/nlp/{synonyms.yaml,candidate-ignore-list.yaml,feature-settings.json}` plus derived token/candidate results",
+              "persistence": "Dictionary, ignore-list, and consent updates are proposal operations; tokenization and candidate projections are derived from the pinned snapshot."
+            }
+          ],
+          "proofRefs": [
+            {
+              "id": "P06-R25-candidate-action",
+              "path": "modules/diagnostics/src/production.test.ts",
+              "testName": "production modules lazily run the real Lindera child and preserve snapshot-derived NLP and diagnostics behavior",
+              "scope": "Public candidate action reads the selected snapshot and uses the real supervised tokenizer."
+            },
+            {
+              "id": "P06-R25-candidate-ranking",
+              "path": "modules/nlp/src/candidateDiscovery.test.ts",
+              "testName": "candidate aggregation preserves source reading, per-entity occurrence count, and known-name exclusions",
+              "scope": "Algorithm test verifies occurrence grouping and known-name filtering."
+            }
+          ],
+          "limitations": [
+            "Semantic clustering remains owned by P09; ignore and candidate data migration remain pending."
+          ]
+        }
+      ]
     },
     {
       "id": "R26",
@@ -3109,7 +4096,55 @@
           "getEntity"
         ],
         "injectedManagerCalls": []
-      }
+      },
+      "targetImplementationSlices": [
+        {
+          "status": "implementation-present; integration-acceptance-pending",
+          "owner": "P06",
+          "targetPaths": [
+            "modules/diagnostics/src/index.ts",
+            "modules/diagnostics/src/browser.ts",
+            "modules/diagnostics/src/production.test.ts"
+          ],
+          "publicActions": [
+            {
+              "action": "diagnostics.analyze",
+              "implementation": "Compute snapshot-bound Japanese text diagnostics"
+            },
+            {
+              "action": "diagnostics.voiceProfiles / voiceDeviations / stylometricDeviations",
+              "implementation": "Compute voice and stylometric profiles from supplied snapshot inputs"
+            }
+          ],
+          "uiSurfaces": [
+            "modules/diagnostics/src/browser.ts"
+          ],
+          "dataMappings": [
+            {
+              "source": "Canonical manuscript/entity files and source lint/tone/plot lexicons",
+              "target": "Pinned snapshot reads; module lexicons under `meta/scriptorium/modules/diagnostics/`; token/analysis results are derived",
+              "persistence": "Analysis is computed on demand; no canonical manuscript write occurs."
+            }
+          ],
+          "proofRefs": [
+            {
+              "id": "P06-R26-diagnostics-engine",
+              "path": "modules/diagnostics/src/production.test.ts",
+              "testName": "production modules lazily run the real Lindera child and preserve snapshot-derived NLP and diagnostics behavior",
+              "scope": "Public diagnostics action uses real tokenizer/worker, emits snapshot and engine identity, and releases worker resources."
+            },
+            {
+              "id": "P06-R26-voice-lint",
+              "path": "modules/diagnostics/src/production.test.ts",
+              "testName": "public actions read namespaced dictionaries/settings and lint changes remain proposals",
+              "scope": "Focused production test covers project checks, voice/stylometric profile paths, and proposal-only fixes."
+            }
+          ],
+          "limitations": [
+            "Profile payload parity and the full speaker evaluation/training lifecycle remain P10 or composed acceptance."
+          ]
+        }
+      ]
     },
     {
       "id": "R27",
@@ -3178,7 +4213,49 @@
           "listEntities"
         ],
         "injectedManagerCalls": []
-      }
+      },
+      "targetImplementationSlices": [
+        {
+          "status": "implementation-present; integration-acceptance-pending",
+          "owner": "P06",
+          "targetPaths": [
+            "modules/diagnostics/src/index.ts",
+            "modules/diagnostics/src/browser.ts",
+            "modules/diagnostics/src/production.test.ts"
+          ],
+          "publicActions": [
+            {
+              "action": "diagnostics.lint",
+              "implementation": "Compute lint warnings and transformed preview from pinned text/config"
+            },
+            {
+              "action": "diagnostics.proposeLintFix",
+              "implementation": "Create revision-bound Core proposal for lint fixes"
+            }
+          ],
+          "uiSurfaces": [
+            "modules/diagnostics/src/browser.ts"
+          ],
+          "dataMappings": [
+            {
+              "source": "Source lint rules and canonical manuscript Markdown/frontmatter",
+              "target": "`meta/scriptorium/modules/diagnostics/lint-rules.yaml`; proposed manuscript operation preserves frontmatter",
+              "persistence": "Lint output is derived; a fix is only a proposal and does not directly persist manuscript bytes."
+            }
+          ],
+          "proofRefs": [
+            {
+              "id": "P06-R27-lint-proposal",
+              "path": "modules/diagnostics/src/production.test.ts",
+              "testName": "public actions read namespaced dictionaries/settings and lint changes remain proposals",
+              "scope": "Focused production action verifies lint configuration read and proposal-only fix behavior."
+            }
+          ],
+          "limitations": [
+            "Source lint endpoint routing, payload parity, and composed author approval/checkpoint acceptance remain pending."
+          ]
+        }
+      ]
     },
     {
       "id": "R28",
@@ -3285,7 +4362,62 @@
           "appendSynonymGroup"
         ],
         "injectedManagerCalls": []
-      }
+      },
+      "targetImplementationSlices": [
+        {
+          "status": "implementation-present; integration-acceptance-pending",
+          "owner": "P06",
+          "targetPaths": [
+            "modules/nlp/src/index.ts",
+            "modules/nlp/src/browser.ts",
+            "modules/diagnostics/src/index.ts",
+            "modules/diagnostics/src/browser.ts",
+            "modules/diagnostics/src/production.test.ts"
+          ],
+          "publicActions": [
+            {
+              "action": "nlp.dictionary / nlp.saveSynonymGroup",
+              "implementation": "Read the namespaced synonym dictionary and propose merged group changes"
+            },
+            {
+              "action": "diagnostics.analyze",
+              "implementation": "Suggest lexical/corpus synonyms from snapshot text and optional embedding neighbors"
+            }
+          ],
+          "uiSurfaces": [
+            "modules/nlp/src/browser.ts"
+          ],
+          "dataMappings": [
+            {
+              "source": "Legacy synonyms, candidate ignore list, NLP feature consent, and selected canonical snapshot",
+              "target": "`meta/scriptorium/modules/nlp/{synonyms.yaml,candidate-ignore-list.yaml,feature-settings.json}` plus derived token/candidate results",
+              "persistence": "Dictionary, ignore-list, and consent updates are proposal operations; tokenization and candidate projections are derived from the pinned snapshot."
+            },
+            {
+              "source": "Source synonym lexicon and source corpus-derived close-neighbor candidates",
+              "target": "Module-owned synonym YAML and bounded request-time candidate suggestions",
+              "persistence": "Lexicon changes are proposals; corpus candidates are derived and optional embedding provider results remain provider-owned."
+            }
+          ],
+          "proofRefs": [
+            {
+              "id": "P06-R28-synonym-writes",
+              "path": "modules/diagnostics/src/production.test.ts",
+              "testName": "public actions read namespaced dictionaries/settings and lint changes remain proposals",
+              "scope": "Public NLP actions preserve unknown dictionary fields and propose synonym updates."
+            },
+            {
+              "id": "P06-R28-corpus-consumer",
+              "path": "modules/diagnostics/src/production.test.ts",
+              "testName": "corpus synonym suggestions acquire the optional snapshot-indexed provider and keep model identity",
+              "scope": "Public diagnostics consumer checks bounded provider hits, identity, and lease release."
+            }
+          ],
+          "limitations": [
+            "Corpus consumer uses a deterministic provider test double; P09 owns real semantic engine and model-quality acceptance."
+          ]
+        }
+      ]
     },
     {
       "id": "R29",
@@ -3359,7 +4491,82 @@
           "getWritingStats"
         ],
         "injectedManagerCalls": []
-      }
+      },
+      "targetImplementationSlices": [
+        {
+          "status": "implementation-present; integration-acceptance-pending",
+          "owner": "P06",
+          "targetPaths": [
+            "modules/diagnostics/src/index.ts",
+            "modules/diagnostics/src/browser.ts",
+            "modules/diagnostics/src/production.test.ts"
+          ],
+          "publicActions": [
+            {
+              "action": "diagnostics.analyze",
+              "implementation": "Compute richer prose/sentiment diagnostics from the selected snapshot"
+            }
+          ],
+          "uiSurfaces": [
+            "modules/diagnostics/src/browser.ts"
+          ],
+          "dataMappings": [
+            {
+              "source": "Canonical manuscript, entity, and scene data plus source lexicons",
+              "target": "Request-time analysis results and module-owned lexicon settings",
+              "persistence": "Analysis/statistical output is derived; it does not replace Core hierarchical writing statistics."
+            }
+          ],
+          "proofRefs": [
+            {
+              "id": "P06-R29-derived-metrics",
+              "path": "modules/diagnostics/src/production.test.ts",
+              "testName": "production modules lazily run the real Lindera child and preserve snapshot-derived NLP and diagnostics behavior",
+              "scope": "Focused test verifies real tokenizer/diagnostics worker and source-derived sentiment behavior."
+            }
+          ],
+          "limitations": [
+            "Core basic counts are separately exposed as `core.writing-stats`; full metrics and legacy endpoint parity are not certified here."
+          ]
+        },
+        {
+          "status": "implementation-present; integration-acceptance-pending",
+          "owner": "P08",
+          "targetPaths": [
+            "packages/api/src/server.ts",
+            "packages/api/src/server.test.ts"
+          ],
+          "publicActions": [
+            {
+              "action": "GET /api/projects/:projectId/writing-stats",
+              "implementation": "Compute basic writing counts from the selected snapshot"
+            },
+            {
+              "action": "GET /api/projects/:projectId/actions",
+              "implementation": "List available typed Core/module actions"
+            }
+          ],
+          "uiSurfaces": [],
+          "dataMappings": [
+            {
+              "source": "Source writing stats backed by source project data",
+              "target": "Core snapshot-derived basic writing statistics; richer diagnostics remain module actions",
+              "persistence": "Stats are derived, not written to app-state or SQLite."
+            }
+          ],
+          "proofRefs": [
+            {
+              "id": "P08-R29-writing-stats",
+              "path": "packages/api/src/server.test.ts",
+              "testName": "exposes the source Core read surface through pinned routes and composed host actions",
+              "scope": "HTTP test checks the pinned stats snapshot and a bounded count."
+            }
+          ],
+          "limitations": [
+            "This proves target basic writing stats only; it does not establish parity for all source hierarchical or richer prose statistics."
+          ]
+        }
+      ]
     },
     {
       "id": "R30",
@@ -3595,7 +4802,88 @@
         ],
         "directCoreCalls": [],
         "injectedManagerCalls": []
-      }
+      },
+      "targetImplementationSlices": [
+        {
+          "status": "implementation-present; integration-acceptance-pending",
+          "owner": "P06",
+          "targetPaths": [
+            "modules/nlp/src/index.ts",
+            "modules/nlp/src/browser.ts",
+            "modules/diagnostics/src/index.ts",
+            "modules/diagnostics/src/browser.ts",
+            "modules/diagnostics/src/production.test.ts"
+          ],
+          "publicActions": [
+            {
+              "action": "nlp.features",
+              "implementation": "Read current optional feature values and consent state"
+            },
+            {
+              "action": "nlp.updateExternalConsent",
+              "implementation": "Propose explicit external-feature consent changes"
+            }
+          ],
+          "uiSurfaces": [
+            "modules/nlp/src/browser.ts"
+          ],
+          "dataMappings": [
+            {
+              "source": "Legacy synonyms, candidate ignore list, NLP feature consent, and selected canonical snapshot",
+              "target": "`meta/scriptorium/modules/nlp/{synonyms.yaml,candidate-ignore-list.yaml,feature-settings.json}` plus derived token/candidate results",
+              "persistence": "Dictionary, ignore-list, and consent updates are proposal operations; tokenization and candidate projections are derived from the pinned snapshot."
+            }
+          ],
+          "proofRefs": [
+            {
+              "id": "P06-R32-feature-consent",
+              "path": "modules/diagnostics/src/production.test.ts",
+              "testName": "public actions read namespaced dictionaries/settings and lint changes remain proposals",
+              "scope": "Public feature action verifies consent is explicit and does not take effect before proposal approval/snapshot update."
+            }
+          ],
+          "limitations": [
+            "API provider availability endpoint returns `providerKind: none` for this profile; it does not recreate the source feature registry or external provider."
+          ]
+        },
+        {
+          "status": "implementation-present; integration-acceptance-pending",
+          "owner": "P08",
+          "targetPaths": [
+            "packages/api/src/server.ts",
+            "packages/api/src/server.test.ts"
+          ],
+          "publicActions": [
+            {
+              "action": "GET /api/nlp/features",
+              "implementation": "Require authentication and report providerKind none for the Core profile"
+            },
+            {
+              "action": "GET /api/projects/:projectId/modules",
+              "implementation": "Report module availability"
+            }
+          ],
+          "uiSurfaces": [],
+          "dataMappings": [
+            {
+              "source": "Source NLP feature settings and optional external-service consent",
+              "target": "Target provider availability plus module-owned NLP consent/settings actions",
+              "persistence": "No provider is enabled by the Core profile; module decisions remain proposal-backed."
+            }
+          ],
+          "proofRefs": [
+            {
+              "id": "P08-R32-provider-none",
+              "path": "packages/api/src/server.test.ts",
+              "testName": "exposes the source Core read surface through pinned routes and composed host actions",
+              "scope": "HTTP test checks authentication and providerKind none."
+            }
+          ],
+          "limitations": [
+            "Provider availability is not source feature-settings parity; P06 records the module consent actions."
+          ]
+        }
+      ]
     },
     {
       "id": "R33",
@@ -4499,10 +5787,63 @@
               "path": "app/src/journal.test.ts",
               "testName": "publication receipt keys are stable within a scope and distinct across batches/scopes",
               "scope": "Unit test verifies publication receipts are keyed by repository, author scope, and batch."
+            },
+            {
+              "id": "P02-R39-e2e-author-scope",
+              "path": "tests/e2e/core.acceptance.spec.ts",
+              "testName": "browser recovery is author-scoped and foreign records remain untouched",
+              "scope": "Fresh Chromium acceptance verifies current browser recovery isolation; this is separate from GitHub provider acceptance."
             }
           ],
           "limitations": [
             "Browser recovery acceptance uses a disposable local Git remote; real GitHub acceptance is separately recorded and does not certify this browser flow."
+          ]
+        },
+        {
+          "status": "implementation-present; integration-acceptance-pending",
+          "owner": "P08",
+          "targetPaths": [
+            "packages/api/src/server.ts",
+            "packages/api/src/server.test.ts"
+          ],
+          "publicActions": [
+            {
+              "action": "GET /api/session",
+              "implementation": "Read target owner session state"
+            },
+            {
+              "action": "POST /api/login /api/logout",
+              "implementation": "Authenticate/logout the local owner session"
+            },
+            {
+              "action": "POST /api/projects/:projectId/proposals, /approvals, /checkpoints",
+              "implementation": "Use Core author lifecycle and host authorization"
+            }
+          ],
+          "uiSurfaces": [],
+          "dataMappings": [
+            {
+              "source": "Source workspace/session begin-submit operations and Git worktree status",
+              "target": "Target owner session and explicit proposal/approval/checkpoint/reconcile/publish API",
+              "persistence": "Source sessions are not replayed as remote workspace locks; canonical Git mutation is guarded by Core receipts."
+            }
+          ],
+          "proofRefs": [
+            {
+              "id": "P08-R39-auth-session",
+              "path": "packages/api/src/server.test.ts",
+              "testName": "uses an HttpOnly same-site session and enforces same-origin writes",
+              "scope": "HTTP test verifies owner session cookie and same-origin mutation requirement."
+            },
+            {
+              "id": "P08-R39-approval-boundary",
+              "path": "packages/api/src/server.test.ts",
+              "testName": "assigns proposal source at the host and keeps approval exclusive to same-origin owner sessions",
+              "scope": "HTTP test verifies bearer requests cannot approve and owner session can."
+            }
+          ],
+          "limitations": [
+            "Legacy `/api/session/begin` and `/api/session/submit` payload parity is not retained; final browser and provider composition remain separate acceptance."
           ]
         }
       ]
@@ -4737,7 +6078,7 @@
             }
           ],
           "limitations": [
-            "This slice maps project list/register only; source update/delete/patch/events operations have no equivalent in the current Core API surface."
+            "The P08 API supplies guarded re-registration/detach and manual-sync events; source auto-merge PATCH is retired and event semantics are not durable or cross-process."
           ]
         },
         {
@@ -4766,6 +6107,71 @@
           "proofRefs": [],
           "limitations": [
             "The flow covers register/select; it does not provide UI equivalents for source project mutation, removal, or project event endpoints."
+          ]
+        },
+        {
+          "status": "implementation-present; integration-acceptance-pending",
+          "owner": "P08",
+          "targetPaths": [
+            "packages/api/src/server.ts",
+            "packages/api/src/server.test.ts"
+          ],
+          "publicActions": [
+            {
+              "action": "GET /api/projects / GET /api/projects/:projectId",
+              "implementation": "List and inspect Core registrations"
+            },
+            {
+              "action": "POST /api/projects",
+              "implementation": "Register a repository in Core"
+            },
+            {
+              "action": "PUT /api/projects/:projectId",
+              "implementation": "Reconstruct only the stored canonical remote at its verified default branch"
+            },
+            {
+              "action": "DELETE /api/projects/:projectId",
+              "implementation": "Detach through Core guarded detach port"
+            },
+            {
+              "action": "PATCH /api/projects/:projectId",
+              "implementation": "Retire legacy auto-merge settings with HTTP 410"
+            },
+            {
+              "action": "GET /api/projects/events / POST /api/projects/:projectId/sync",
+              "implementation": "Stream owner-scoped started/completed/failed manual-sync outcomes"
+            }
+          ],
+          "uiSurfaces": [],
+          "dataMappings": [
+            {
+              "source": "Source ProjectRegistry records, repository reconstruction, removal/settings, and project events",
+              "target": "Core project registry/clone, guarded reconstruction/detach, retired automatic merge, and per-API-instance manual sync event stream",
+              "persistence": "Registry and repositories are Core-owned; stream events are request-time and not persisted as recent-activity history."
+            }
+          ],
+          "proofRefs": [
+            {
+              "id": "P08-R40-lifecycle",
+              "path": "packages/api/src/server.test.ts",
+              "testName": "routes project reconstruction and detachment only through the guarded Core ports",
+              "scope": "HTTP test verifies remote/credential/branch validation, PATCH retirement, and guarded detach."
+            },
+            {
+              "id": "P08-R40-real-git",
+              "path": "packages/api/src/server.test.ts",
+              "testName": "keeps the real Core clone unchanged on URL mismatch and honors its detach guard",
+              "scope": "Real temporary bare-Git test verifies clone/registry preservation, reconstruction, dirty refusal, and clean detach."
+            },
+            {
+              "id": "P08-R40-events",
+              "path": "packages/api/src/server.test.ts",
+              "testName": "streams owner-scoped events only for actual manual sync outcomes and closes streams on shutdown",
+              "scope": "HTTP test verifies authenticated event stream, correlated manual-sync outcomes, failures, and shutdown."
+            }
+          ],
+          "limitations": [
+            "Source auto-merge PATCH semantics are intentionally retired; event stream covers manual sync outcomes handled by this API instance, not a cross-process or durable event bus."
           ]
         }
       ]
@@ -4914,7 +6320,59 @@
             ]
           }
         ]
-      }
+      },
+      "targetImplementationSlices": [
+        {
+          "status": "implementation-present; integration-acceptance-pending",
+          "owner": "P05",
+          "targetPaths": [
+            "modules/story/src/actions.ts",
+            "modules/story/src/index.ts",
+            "modules/story/src/browser.tsx"
+          ],
+          "publicActions": [
+            {
+              "action": "story.series.list / get / create / update / delete",
+              "implementation": "Read or propose module-owned series settings"
+            },
+            {
+              "action": "story.series.binding.get / update / delete",
+              "implementation": "Read or propose stable repository bindings"
+            },
+            {
+              "action": "story.series.overlay",
+              "implementation": "Read linked Bible entities through explicit linked snapshot"
+            }
+          ],
+          "uiSurfaces": [
+            "modules/story/src/browser.tsx"
+          ],
+          "dataMappings": [
+            {
+              "source": "Legacy series settings, stable work/Bible repository identities, and linked Bible entities",
+              "target": "`meta/scriptorium/modules/story/v1/series.json` and read-only cross-repository overlay",
+              "persistence": "Series settings change through proposals; unresolved source IDs retain explicit author-review markers."
+            }
+          ],
+          "proofRefs": [
+            {
+              "id": "P05-R41-series-binding",
+              "path": "modules/story/src/actions.test.ts",
+              "testName": "series bindings use stable repository identity and preserve unknown settings",
+              "scope": "Public Story action verifies stable IDs and unknown setting retention."
+            },
+            {
+              "id": "P05-R41-series-overlay",
+              "path": "modules/story/src/domain/seriesOverlay.test.ts",
+              "testName": "series overlay gives work entities precedence and deduplicates relation identity",
+              "scope": "Story domain test verifies work/Bible overlay precedence and relation identity."
+            }
+          ],
+          "limitations": [
+            "Optional full-profile mounting, linked-repository access, and composed review flow remain integration acceptance."
+          ]
+        }
+      ]
     },
     {
       "id": "R42",
@@ -5163,7 +6621,46 @@
             ]
           }
         ]
-      }
+      },
+      "targetImplementationSlices": [
+        {
+          "status": "implementation-present; integration-acceptance-pending",
+          "owner": "P08",
+          "targetPaths": [
+            "packages/api/src/server.ts",
+            "packages/api/src/server.test.ts"
+          ],
+          "publicActions": [
+            {
+              "action": "GET /api/session",
+              "implementation": "Read local owner session state"
+            },
+            {
+              "action": "POST /api/login /api/logout",
+              "implementation": "Create/destroy local owner session using configured access credential"
+            }
+          ],
+          "uiSurfaces": [],
+          "dataMappings": [
+            {
+              "source": "Source GitHub device OAuth, user/session management, personal token administration",
+              "target": "Target single-owner local session and configured bearer read/compute/propose access",
+              "persistence": "Hosted identity and account administration are platform-owned; no source credential values are copied."
+            }
+          ],
+          "proofRefs": [
+            {
+              "id": "P08-R42-owner-auth",
+              "path": "packages/api/src/server.test.ts",
+              "testName": "uses an HttpOnly same-site session and enforces same-origin writes",
+              "scope": "HTTP test covers target owner session cookie; API effect test covers bearer capability boundaries."
+            }
+          ],
+          "limitations": [
+            "GitHub device flow, multi-user administration, and source personal-token management are not implemented as Core owner features."
+          ]
+        }
+      ]
     },
     {
       "id": "R43",
@@ -5275,7 +6772,42 @@
             ]
           }
         ]
-      }
+      },
+      "targetImplementationSlices": [
+        {
+          "status": "implementation-present; integration-acceptance-pending",
+          "owner": "P08",
+          "targetPaths": [
+            "packages/api/src/server.ts",
+            "packages/api/src/server.test.ts"
+          ],
+          "publicActions": [
+            {
+              "action": "GET /api/projects/events",
+              "implementation": "Stream request-time project sync event observations"
+            }
+          ],
+          "uiSurfaces": [],
+          "dataMappings": [
+            {
+              "source": "Persistent source recent-activity records and route CRUD",
+              "target": "Target in-memory owner-scoped manual sync event stream",
+              "persistence": "No durable recent-activity record is claimed by the event stream."
+            }
+          ],
+          "proofRefs": [
+            {
+              "id": "P08-R43-sync-events",
+              "path": "packages/api/src/server.test.ts",
+              "testName": "streams owner-scoped events only for actual manual sync outcomes and closes streams on shutdown",
+              "scope": "Focused test checks manual sync event stream behavior only."
+            }
+          ],
+          "limitations": [
+            "Source recent-activity list/upsert semantics remain absent; API events are neither durable nor a substitute for that store."
+          ]
+        }
+      ]
     },
     {
       "id": "R44",
@@ -5357,7 +6889,35 @@
           "getEntity"
         ],
         "injectedManagerCalls": []
-      }
+      },
+      "targetImplementationSlices": [
+        {
+          "status": "implementation-present; integration-acceptance-pending",
+          "owner": "P08",
+          "targetPaths": [
+            "packages/api/src/server.ts",
+            "packages/api/src/server.test.ts"
+          ],
+          "publicActions": [
+            {
+              "action": "GET /api/review-queue / GET /api/projects/:projectId/review-queue",
+              "implementation": "List unresolved Core proposal review/status records globally or for one project"
+            }
+          ],
+          "uiSurfaces": [],
+          "dataMappings": [
+            {
+              "source": "Source story/speaker/assistant review queue contributions",
+              "target": "Core proposal review/status list; module-specific contributions may be added by enabled modules",
+              "persistence": "Review records remain linked to Core proposal evidence; no source queue database is imported."
+            }
+          ],
+          "proofRefs": [],
+          "limitations": [
+            "The handler returns unresolved Core proposals, but the current API test suite has no focused assertion for its response; source story/speaker/assistant queue contributors and composed review remain unverified."
+          ]
+        }
+      ]
     },
     {
       "id": "R45",
@@ -5489,10 +7049,50 @@
               "persistence": "Browser-local recovery content; distinct from repository `meta/scratch/*.md` and the Core scratch proposal endpoint."
             }
           ],
-          "proofRefs": [],
+          "proofRefs": [
+            {
+              "id": "P02-R45-e2e-writing-flow",
+              "path": "tests/e2e/core.acceptance.spec.ts",
+              "testName": "writing UI recovers multi-document drafts and separates Draft, Checkpoint, and GitHub publication",
+              "scope": "Browser flow verifies scratch reload and later checkpoint via the editor; the scratch panel continues to use its browser-local journal rather than POST /api/projects/:projectId/scratch."
+            }
+          ],
           "limitations": [
             "The target browser scratch panel currently writes to IndexedDB and is not wired to POST /api/projects/:projectId/scratch; source durable project scratch parity remains pending.",
             "The browser E2E flow verified scratch reload before failing at checkpoint; this partial step is recorded as an acceptance finding, not a passing proof."
+          ]
+        },
+        {
+          "status": "implementation-present; integration-acceptance-pending",
+          "owner": "P08",
+          "targetPaths": [
+            "packages/api/src/server.ts",
+            "packages/api/src/server.test.ts"
+          ],
+          "publicActions": [
+            {
+              "action": "POST /api/projects/:projectId/scratch",
+              "implementation": "Create scratch Markdown and bounded attachments as Core proposal operations"
+            }
+          ],
+          "uiSurfaces": [],
+          "dataMappings": [
+            {
+              "source": "Source scratch files and attachments under project `meta/scratch/`",
+              "target": "Core proposal writes to same repository scratch paths with text and bounded binary attachment metadata",
+              "persistence": "API does not write project files directly; author approval/checkpoint is required for persistence."
+            }
+          ],
+          "proofRefs": [
+            {
+              "id": "P08-R45-scratch",
+              "path": "packages/api/src/server.test.ts",
+              "testName": "stores scratch text and bounded attachments only through Core proposal/checkpoint operations",
+              "scope": "HTTP boundary test verifies text/attachment paths and proposal-only Core operation calls."
+            }
+          ],
+          "limitations": [
+            "The target API operation does not imply the browser scratch panel is wired to it; the current React editor scratch journal is browser-local."
           ]
         }
       ]
@@ -6198,7 +7798,74 @@
           "section": "P08 — security and shared mutation",
           "lineRange": "179-181"
         }
-      }
+      },
+      "targetImplementationSlices": [
+        {
+          "status": "implementation-present; integration-acceptance-pending",
+          "owner": "P08",
+          "targetPaths": [
+            "modules/mcp/src/http.ts",
+            "modules/mcp/src/tools.ts",
+            "modules/mcp/src/api-client.ts",
+            "modules/mcp/src/stdio.ts",
+            "modules/mcp/src/change-set-schema.ts",
+            "modules/mcp/src/context-manifest.ts",
+            "modules/mcp/src/http.test.ts",
+            "modules/mcp/src/api-client.test.ts"
+          ],
+          "publicActions": [
+            {
+              "action": "MCP HTTP `streamable` contribution",
+              "implementation": "Serve MCP Streamable HTTP tools through the target action host"
+            },
+            {
+              "action": "stdio API client",
+              "implementation": "Call owner bearer API for discovery/actions/proposals"
+            },
+            {
+              "action": "create_scene / update_entity / lint_manuscript(fix) / submit_change_set",
+              "implementation": "Route persistent changes through Story or Diagnostics proposal actions; expose no approval/checkpoint/publish tools"
+            }
+          ],
+          "uiSurfaces": [],
+          "dataMappings": [
+            {
+              "source": "Source HTTP/stdio MCP tools and legacy direct mutation handlers",
+              "target": "Shared MCP tool registry and owner API client; persistent operations become canonical Core proposals",
+              "persistence": "MCP does not directly write project files, commit, approve, checkpoint, reconcile, or publish."
+            }
+          ],
+          "proofRefs": [
+            {
+              "id": "P08-R48-sdk-http",
+              "path": "modules/mcp/src/http.test.ts",
+              "testName": "SDK Streamable HTTP transport lists and invokes tools through the host action context",
+              "scope": "SDK client performs HTTP transport initialization, discovery, and host action invocation."
+            },
+            {
+              "id": "P08-R48-proposal-only",
+              "path": "modules/mcp/src/http.test.ts",
+              "testName": "MCP refuses action names that could approve or publish author changes",
+              "scope": "HTTP MCP tool surface denies checkpoint-capable Core action invocation and does not expose approval/publication control."
+            },
+            {
+              "id": "P08-R48-stdio-client",
+              "path": "modules/mcp/src/api-client.test.ts",
+              "testName": "stdio API client uses bearer actions and host-sourced proposals only",
+              "scope": "Stdio API client uses owner bearer authentication and host-sourced proposal identity."
+            },
+            {
+              "id": "P08-R48-changeset-readback",
+              "path": "modules/mcp/src/http.test.ts",
+              "testName": "ChangeSet readback preserves approved IDs while selected checkpoints are pending",
+              "scope": "MCP ChangeSet readback requires approval/checkpoint receipts and does not invent completion."
+            }
+          ],
+          "limitations": [
+            "SDK component and client tests are not a spawned stdio process against the composed API; module profile mounting and all 27 tool action availability remain pending. The MCP suite does not directly invoke create_scene, update_entity, or lint_manuscript mutation tools; focused Story/Diagnostics tests cover their proposal producers."
+          ]
+        }
+      ]
     }
   ],
   "nonRouterGroups": [
@@ -6395,44 +8062,40 @@
               "path": "app/src/journal.test.ts",
               "testName": "journal keys isolate author scopes and retain each operation generation",
               "scope": "Unit test verifies per-author and per-operation-generation recovery records remain distinct."
-            }
-          ],
-          "limitations": [
-            "Full legacy IndexedDB import, source snapshots/scratch semantic preservation, and final remote-provider browser acceptance remain pending."
-          ],
-          "acceptanceFindings": [
+            },
             {
-              "id": "P02-N01-e2e-checkpoint-state",
+              "id": "P02-N01-e2e-writing-flow",
               "path": "tests/e2e/core.acceptance.spec.ts",
               "testName": "writing UI recovers multi-document drafts and separates Draft, Checkpoint, and GitHub publication",
-              "result": "failed-at-current-ledger-head",
-              "failure": "After clicking Checkpoint the journal did not settle on checkpointed; the visible durability message returned to browser draft after the request was pending.",
-              "observedScope": "The Chromium scenario passed sign-in, project registration/selection, tree navigation, editor modes, scratch reload, multi-document draft write/reload, then failed at the checkpoint-state assertion."
+              "scope": "Fresh Chromium acceptance on implementation tree f1ed8f3: sign-in, project registration/navigation, scratch reload, multi-document draft recovery, checkpoint transitions, and publication acknowledgement against a disposable local Git fixture."
             },
             {
               "id": "P02-N01-e2e-generation-race",
               "path": "tests/e2e/core.acceptance.spec.ts",
               "testName": "new typing survives an older in-flight checkpoint and exact publication acknowledgement",
-              "result": "failed-at-current-ledger-head",
-              "failure": "After releasing the intercepted checkpoint request, the visible state remained browser draft instead of local checkpoint.",
-              "observedScope": "The Chromium scenario created the checkpointing generation and newer draft separately, then failed before exact acknowledgement/publication assertions."
+              "scope": "Fresh Chromium acceptance verifies newer typing survives an older pending checkpoint and checks exact publication acknowledgement."
             },
             {
               "id": "P02-N01-e2e-author-scope",
               "path": "tests/e2e/core.acceptance.spec.ts",
               "testName": "browser recovery is author-scoped and foreign records remain untouched",
-              "result": "failed-at-current-ledger-head",
-              "failure": "The test could not find the expected owner journal seed before creating the foreign-author record.",
-              "observedScope": "The Chromium scenario opened the local fixture but did not reach the foreign-record isolation assertion."
+              "scope": "Fresh Chromium acceptance verifies author-scoped recovery leaves foreign journal records unchanged."
             },
             {
               "id": "P02-N01-e2e-legacy-key",
               "path": "tests/e2e/core.acceptance.spec.ts",
               "testName": "one malformed legacy key does not hide later recoverable drafts",
-              "result": "failed-at-current-ledger-head",
-              "failure": "The legacy recovery panel was visible, but the test could not find the draft body text it expected.",
-              "observedScope": "The Chromium scenario displayed a legacy draft record for the synthetic removed project/scene; the content-text visibility assertion failed."
+              "scope": "Fresh Chromium acceptance verifies malformed legacy entries do not hide subsequent recoverable drafts."
+            },
+            {
+              "id": "P02-N01-e2e-quota",
+              "path": "tests/e2e/core.acceptance.spec.ts",
+              "testName": "IndexedDB quota failures remain visible and block checkpointing",
+              "scope": "Fresh Chromium acceptance verifies quota failure remains visible and blocks checkpointing."
             }
+          ],
+          "limitations": [
+            "Full legacy IndexedDB import, source snapshots/scratch semantic preservation, and final remote-provider browser acceptance remain pending."
           ]
         }
       ]
@@ -6537,6 +8200,55 @@
         "app/src/features/editor/WorldStatePanel.tsx",
         "app/src/features/zukan/CharacterDetailModal.tsx",
         "app/src/features/zukan/CharactersView.tsx"
+      ],
+      "targetImplementationSlices": [
+        {
+          "status": "implementation-present; integration-acceptance-pending",
+          "owner": "P05",
+          "targetPaths": [
+            "modules/story/src/actions.ts",
+            "modules/story/src/index.ts",
+            "modules/story/src/browser.tsx"
+          ],
+          "publicActions": [
+            {
+              "action": "Story public action registry",
+              "implementation": "Snapshot-bound Story domain reads, proposals, and linked repository overlay"
+            }
+          ],
+          "uiSurfaces": [
+            "modules/story/src/browser.tsx"
+          ],
+          "dataMappings": [
+            {
+              "source": "Selected snapshot of canonical project YAML, Markdown, and Story sidecar files",
+              "target": "SnapshotReader reads; Story updates produce Core ChangeOperation proposals against `bible/`, `plot/`, `meta/`, or versioned Story metadata paths",
+              "persistence": "Canonical project files remain authoritative; persistent changes enter the Core author review, approval, and checkpoint lifecycle."
+            },
+            {
+              "source": "Authoritative/provisional workflow records in source SQLite and series JSON",
+              "target": "Versioned Story JSONL/YAML records and opaque SQLite recovery records",
+              "persistence": "Workflow state is semantically preserved; derived scene-state and reader projections are rebuilt or computed at request time."
+            }
+          ],
+          "proofRefs": [
+            {
+              "id": "P05-N02-story-actions",
+              "path": "modules/story/src/actions.test.ts",
+              "testName": "entity updates validate source revisions and return a reviewable Core proposal",
+              "scope": "Representative public Story action test verifies snapshot/revision-bound writes."
+            },
+            {
+              "id": "P05-N02-story-migration",
+              "path": "modules/story/src/migration/producer.test.ts",
+              "testName": "converts source workflow tables to Story JSONL with decisions, unknown fields, and provenance intact",
+              "scope": "Story producer test verifies statuses, unknown fields, and provenance preservation."
+            }
+          ],
+          "limitations": [
+            "Story action and migration producer tests pass; final profile/browser composition and P12 end-to-end migration acceptance remain pending."
+          ]
+        }
       ]
     },
     {
@@ -6620,6 +8332,62 @@
         "app/src/features/editor/ContradictionDiagnosticsPanel.tsx",
         "app/src/features/zukan/SentimentContinuityPanel.tsx",
         "app/src/features/editor/VoiceCheckPanel.tsx"
+      ],
+      "targetImplementationSlices": [
+        {
+          "status": "implementation-present; integration-acceptance-pending",
+          "owner": "P06",
+          "targetPaths": [
+            "modules/diagnostics/src/index.ts",
+            "modules/diagnostics/src/browser.ts",
+            "modules/diagnostics/src/production.test.ts"
+          ],
+          "publicActions": [
+            {
+              "action": "diagnostics.checkConsistency / diagnostics.checkContinuity",
+              "implementation": "Compute project-level findings from pinned snapshots"
+            },
+            {
+              "action": "diagnostics.analyze",
+              "implementation": "Compute source-derived manuscript diagnostics and optional corpus suggestions"
+            },
+            {
+              "action": "diagnostics.checkPlotSemantics / diagnostics.lint / diagnostics.proposeLintFix",
+              "implementation": "Read or compute diagnostics and propose guarded fixes"
+            },
+            {
+              "action": "diagnostics.voiceConsistency / voiceProfiles / voiceDeviations / stylometricDeviations",
+              "implementation": "Compute declared/contextual voice and stylometric findings"
+            }
+          ],
+          "uiSurfaces": [
+            "modules/diagnostics/src/browser.ts"
+          ],
+          "dataMappings": [
+            {
+              "source": "Canonical project/manuscript files and source diagnostic lexicons",
+              "target": "Pinned snapshot readers plus module-namespaced diagnostic lexicons; computed findings are ephemeral",
+              "persistence": "Only author edits use Core proposals; no direct source-file writer is exposed."
+            }
+          ],
+          "proofRefs": [
+            {
+              "id": "P06-N03-diagnostics",
+              "path": "modules/diagnostics/src/production.test.ts",
+              "testName": "public actions read namespaced dictionaries/settings and lint changes remain proposals",
+              "scope": "Public consistency/continuity, voice, lint, and proposal paths are tested."
+            },
+            {
+              "id": "P06-N03-corpus",
+              "path": "modules/diagnostics/src/production.test.ts",
+              "testName": "corpus synonym suggestions acquire the optional snapshot-indexed provider and keep model identity",
+              "scope": "Optional embedding consumer validates bounded snapshot-bound provider use."
+            }
+          ],
+          "limitations": [
+            "Contradiction candidate rebuild/dismissal remains P09-owned; hierarchical Core writing statistics remain Core-owned; composed HTTP/browser/MCP and P10 speaker lifecycle acceptance remain pending."
+          ]
+        }
       ]
     },
     {
@@ -6689,6 +8457,66 @@
         "app/src/features/zukan/SynonymGroupRegister.tsx",
         "app/src/features/editor/ManuscriptAnalysisPanel.tsx",
         "app/src/features/editor/RewriteSuggestModal.tsx"
+      ],
+      "targetImplementationSlices": [
+        {
+          "status": "implementation-present; integration-acceptance-pending",
+          "owner": "P06",
+          "targetPaths": [
+            "modules/nlp/src/index.ts",
+            "modules/nlp/src/browser.ts",
+            "modules/diagnostics/src/index.ts",
+            "modules/diagnostics/src/browser.ts",
+            "modules/diagnostics/src/production.test.ts"
+          ],
+          "publicActions": [
+            {
+              "action": "nlp.analyze / nlp.discoverCandidates / nlp.termVariants",
+              "implementation": "Run real supervised Lindera analysis or derive candidate/variant suggestions from the selected snapshot"
+            },
+            {
+              "action": "nlp.dictionary / nlp.saveSynonymGroup / nlp.ignoreCandidates",
+              "implementation": "Read module-owned dictionary data and propose author dictionary/ignore changes"
+            },
+            {
+              "action": "nlp.features / nlp.updateExternalConsent",
+              "implementation": "Read or propose explicit external-feature consent"
+            }
+          ],
+          "uiSurfaces": [
+            "modules/nlp/src/browser.ts"
+          ],
+          "dataMappings": [
+            {
+              "source": "Legacy synonyms, candidate ignore list, NLP feature consent, and selected canonical snapshot",
+              "target": "`meta/scriptorium/modules/nlp/{synonyms.yaml,candidate-ignore-list.yaml,feature-settings.json}` plus derived token/candidate results",
+              "persistence": "Dictionary, ignore-list, and consent updates are proposal operations; tokenization and candidate projections are derived from the pinned snapshot."
+            }
+          ],
+          "proofRefs": [
+            {
+              "id": "P06-N04-production",
+              "path": "modules/diagnostics/src/production.test.ts",
+              "testName": "production modules lazily run the real Lindera child and preserve snapshot-derived NLP and diagnostics behavior",
+              "scope": "Public nlp.analyze and nlp.discoverCandidates actions use the real worker, preserve Japanese offsets, and release it."
+            },
+            {
+              "id": "P06-N04-dictionary-consent",
+              "path": "modules/diagnostics/src/production.test.ts",
+              "testName": "public actions read namespaced dictionaries/settings and lint changes remain proposals",
+              "scope": "Public actions preserve unknown YAML fields, propose dictionary/ignore writes, and gate feature consent."
+            },
+            {
+              "id": "P06-N04-candidate-algorithms",
+              "path": "modules/nlp/src/candidateDiscovery.test.ts",
+              "testName": "candidate aggregation preserves source reading, per-entity occurrence count, and known-name exclusions",
+              "scope": "NLP algorithm test verifies occurrence counts, source identities, reading, and known-name exclusions."
+            }
+          ],
+          "limitations": [
+            "No external service or semantic-model quality is implied by these CPU and deterministic algorithm tests."
+          ]
+        }
       ]
     },
     {
@@ -7071,6 +8899,49 @@
           "limitations": [
             "The full historic ChangeSet status/receipt import and composed author-session host acceptance remain pending."
           ]
+        },
+        {
+          "status": "implementation-present; integration-acceptance-pending",
+          "owner": "P05",
+          "targetPaths": [
+            "modules/story/src/actions.ts",
+            "modules/story/src/index.ts",
+            "modules/story/src/browser.tsx",
+            "modules/story/src/narrativeChangeSet.ts"
+          ],
+          "publicActions": [
+            {
+              "action": "story.changes.propose",
+              "implementation": "Adapt complete source NarrativeChangeSet payloads into one Core proposal and reconstruct durable status from proposal evidence"
+            }
+          ],
+          "uiSurfaces": [
+            "modules/story/src/browser.tsx"
+          ],
+          "dataMappings": [
+            {
+              "source": "Source ChangeSet IDs, all nine operation kinds, dependencies, source results, and approval/checkpoint state",
+              "target": "Story proposal evidence and Core proposal/checkpoint receipts",
+              "persistence": "MCP cannot approve, checkpoint, reconcile, or publish; incomplete receipts do not fabricate a completed source result."
+            }
+          ],
+          "proofRefs": [
+            {
+              "id": "P05-N08-changeset",
+              "path": "modules/story/src/actions.test.ts",
+              "testName": "NarrativeChangeSet preserves all nine source operation kinds in one identity-bound Core proposal",
+              "scope": "Public Story bridge test checks operation mapping and source identities."
+            },
+            {
+              "id": "P08-N08-changeset-readback",
+              "path": "modules/mcp/src/http.test.ts",
+              "testName": "ChangeSet readback preserves approved IDs while selected checkpoints are pending",
+              "scope": "MCP test verifies source ChangeSet result is not synthesized before checkpoint receipt."
+            }
+          ],
+          "limitations": [
+            "The linked tests are component-level; complete host composition and real imported ChangeSet history remain pending."
+          ]
         }
       ]
     },
@@ -7141,6 +9012,60 @@
         "packages/mcp-server/src/tools/createScene.ts",
         "packages/mcp-server/src/tools/updateEntity.ts",
         "packages/mcp-server/src/tools/lintManuscript.ts"
+      ],
+      "targetImplementationSlices": [
+        {
+          "status": "implementation-present; integration-acceptance-pending",
+          "owner": "P08",
+          "targetPaths": [
+            "modules/mcp/src/index.ts",
+            "modules/mcp/src/http.ts",
+            "modules/mcp/src/tools.ts",
+            "modules/mcp/src/context-manifest.ts",
+            "modules/mcp/src/http.test.ts"
+          ],
+          "publicActions": [
+            {
+              "action": "MCP tool registry",
+              "implementation": "Register source-facing MCP namespaced actions and typed availability failures"
+            },
+            {
+              "action": "MCP context manifest",
+              "implementation": "Preserve source-compatible bounded selection identity and provenance"
+            }
+          ],
+          "uiSurfaces": [],
+          "dataMappings": [
+            {
+              "source": "Source MCP action transport, session cache, context manifest, and 27 tools",
+              "target": "Module-local SDK transports, bounded context manifest, and Core/API host clients",
+              "persistence": "MCP session cache is transport-owned; canonical project state is read from pinned snapshots and mutations are proposals."
+            }
+          ],
+          "proofRefs": [
+            {
+              "id": "P08-N09-tool-registry",
+              "path": "modules/mcp/src/http.test.ts",
+              "testName": "SDK Streamable HTTP transport lists and invokes tools through the host action context",
+              "scope": "SDK test verifies discovery/invocation; exact source-facing tool failures and names are additionally covered by dedicated tests."
+            },
+            {
+              "id": "P08-N09-context",
+              "path": "modules/mcp/src/context-manifest.test.ts",
+              "testName": "writing context preserves source identity, bounds, and selection provenance",
+              "scope": "Context test checks source identity, character limits, and provenance."
+            },
+            {
+              "id": "P08-N09-unavailable",
+              "path": "modules/mcp/src/http.test.ts",
+              "testName": "hybrid search and full diagnostics fail closed instead of returning partial substitutes",
+              "scope": "MCP unavailable semantic/diagnostics paths fail closed until exact producer actions exist."
+            }
+          ],
+          "limitations": [
+            "MCP target is partial: P09/P10 actions remain unavailable where exact source behavior is not implemented; full profile and running-API stdio acceptance remain pending."
+          ]
+        }
       ]
     },
     {
