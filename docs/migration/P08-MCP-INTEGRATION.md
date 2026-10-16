@@ -6,7 +6,7 @@ Run it after building the workspace:
 
 ```sh
 pnpm install --frozen-lockfile
-pnpm build
+SCRIPTORIUM_PROFILE=full pnpm build
 node --test tests/integration/mcp-acceptance.test.mjs
 ```
 
@@ -43,4 +43,4 @@ ARCADIA_LLM_API_KEY=local-only-placeholder \
 node --test tests/integration/mcp-acceptance.test.mjs
 ```
 
-That mode requires loopback Qwen configuration and explicit synthetic-fixture consent. It calls the real action through both spawned stdio and SDK Streamable HTTP transports, checks the source response fields and three candidates, and verifies that computation creates no proposal or repository write. The current Qwen run reached the real model over both transports, but the HTTP response was rejected because one candidate used strategy `strategic`; the pinned source parser maps unsupported labels by candidate index and fills missing or duplicate candidates from its heuristic provider. The two-transport configured-provider gate remains pending that producer parity fix; provider-NONE acceptance passes independently.
+That mode requires loopback Qwen configuration and explicit synthetic-fixture consent. The full-profile production acceptance passes through both spawned stdio and SDK Streamable HTTP transports using the P13-pinned Qwen3-0.6B-Q4_K_M model. It checks the source response fields and three candidates, including the source index fallback for unsupported strategy labels, and verifies that computation creates no proposal or repository write. The separate provider-NONE run passes independently and returns the real Assistant action's typed provider-unavailable error.
