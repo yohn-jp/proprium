@@ -27,6 +27,10 @@ coverage
 **/.arcadia
 data
 **/data
+!modules/diagnostics/src/data
+modules/diagnostics/src/data/*
+!modules/diagnostics/src/data/sentimentLexicon.json
+!modules/diagnostics/src/data/README.md
 *.sqlite
 *.sqlite-*
 **/*.sqlite

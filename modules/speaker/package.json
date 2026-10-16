@@ -26,7 +26,6 @@
   },
   "dependencies": {
     "@scriptorium/contracts": "workspace:*",
-    "@scriptorium/migration": "workspace:*",
     "@scriptorium/module-runtime": "workspace:*",
     "@scriptorium/module-story": "workspace:*",
     "@scriptorium/module-nlp": "workspace:*",
