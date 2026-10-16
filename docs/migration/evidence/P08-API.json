@@ -1,0 +1,117 @@
+{
+  "task": "P08-API",
+  "source": {
+    "repository": "yohn-jp/arcadia-loom",
+    "commit": "edc033c2c9466274a334299dadfa426661d957d9"
+  },
+  "target": {
+    "branch": "branchwork/7-p08",
+    "implementationCommit": "8aa6a57cbfa10a899f10fc705c01c895084f1912",
+    "testedHead": "8aa6a57cbfa10a899f10fc705c01c895084f1912"
+  },
+  "ledger": {
+    "R01": {
+      "target": ["packages/api/src/server.ts", "packages/api/src/server.test.ts"],
+      "proofs": ["P08-api-health-and-static-security"]
+    },
+    "R02": {
+      "target": ["packages/api/src/server.ts", "packages/api/src/server.test.ts"],
+      "proofs": ["P08-api-profile-metadata"]
+    },
+    "R05": {
+      "target": ["packages/api/src/server.ts", "packages/api/src/server.test.ts"],
+      "proofs": ["P08-core-snapshot-actions"]
+    },
+    "R08": {
+      "target": ["packages/api/src/server.ts", "packages/api/src/server.test.ts"],
+      "proofs": ["P08-core-snapshot-actions", "P08-author-mutation-boundary"]
+    },
+    "R11": {
+      "target": ["packages/api/src/server.ts", "packages/api/src/server.test.ts"],
+      "proofs": ["P08-author-mutation-boundary"]
+    },
+    "R13": {
+      "target": ["packages/api/src/server.ts", "packages/api/src/server.test.ts"],
+      "proofs": ["P08-core-snapshot-actions"]
+    },
+    "R20": {
+      "target": ["packages/api/src/server.ts", "packages/api/src/server.test.ts"],
+      "proofs": ["P08-core-snapshot-actions"]
+    },
+    "R22": {
+      "target": ["packages/api/src/server.ts", "packages/api/src/server.test.ts"],
+      "proofs": ["P08-core-snapshot-actions"]
+    },
+    "R29": {
+      "target": ["packages/api/src/server.ts", "packages/api/src/server.test.ts"],
+      "proofs": ["P08-core-snapshot-actions"]
+    },
+    "R32": {
+      "target": ["packages/api/src/server.ts", "packages/api/src/server.test.ts"],
+      "proofs": ["P08-provider-none"]
+    },
+    "R39": {
+      "target": ["packages/api/src/server.ts", "packages/api/src/server.test.ts"],
+      "proofs": ["P08-author-mutation-boundary"]
+    },
+    "R40": {
+      "target": ["packages/api/src/server.ts", "packages/api/src/server.test.ts"],
+      "proofs": ["P08-project-registration"]
+    },
+    "R42": {
+      "target": ["packages/api/src/server.ts", "packages/api/src/server.test.ts"],
+      "proofs": ["P08-author-mutation-boundary"]
+    },
+    "R43": {
+      "target": ["packages/api/src/server.ts", "packages/api/src/server.test.ts"],
+      "proofs": ["P08-author-mutation-boundary"]
+    },
+    "R44": {
+      "target": ["packages/api/src/server.ts", "packages/api/src/server.test.ts"],
+      "proofs": ["P08-core-snapshot-actions", "P08-author-mutation-boundary"]
+    },
+    "R45": {
+      "target": ["packages/api/src/server.ts", "packages/api/src/server.test.ts"],
+      "proofs": ["P08-scratch-core-operation"]
+    }
+  },
+  "proofs": {
+    "P08-api-health-and-static-security": "The actual HTTP test confirms the health path stays public while project data requires authentication, and verifies CSP nonce replacement, safe hashed Vite asset serving, symlink rejection, and denial of arbitrary source files.",
+    "P08-api-profile-metadata": "The version route reports this Scriptorium API and contracts version, selected profile, cookie-owner/bearer-read-compute-propose auth modes, runtime metadata, and current module availability; it does not return legacy Loom metadata.",
+    "P08-core-snapshot-actions": "The HTTP boundary test verifies pinned tree/scene, manuscript snapshot list and historical body routes, bounded search and writing-stat envelopes, and composed Core action descriptors/results with input schema errors. Reads retain the selected Core snapshot identity.",
+    "P08-author-mutation-boundary": "The HTTP boundary test verifies the host replaces request-supplied proposal provenance with `mcp` for bearer requests and MCP module contributions, allows declared compute under runtime effect limits, denies bearer approval, accepts same-origin owner-session approval with host-assigned owner scope, and exposes proposal review/status reads. Legacy direct scene PUT is retired with HTTP 410 so persistent scene changes use proposal, approval, and checkpoint routes.",
+    "P08-project-registration": "Owner-scoped GET /api/projects and POST /api/projects expose CoreStore.listProjects/registerProject. The Core migration ledger records these as the P08 R40 slice; source rebind, detach, auto-merge, and project-event operations have no corresponding safe Core surface in this slice.",
+    "P08-provider-none": "The provider feature endpoint requires authentication and returns `providerKind: none` without preventing project, read, proposal, or review paths from operating.",
+    "P08-scratch-core-operation": "The HTTP boundary test checks scratch text and bounded binary attachments are represented as Core change operations and sent through proposal/approval/checkpoint methods; no API-side project file writer is used.",
+    "P08-module-http-composition": "The actual `ModuleRuntime` and Fastify-backed HTTP server test activate a lazy fixture module, dispatch its relative contribution path with a fresh remote reader, and enforce owner-only access on its owner route. Public contribution dispatch is covered with an in-memory registered remote reader.",
+    "P08-public-module-attenuation": "The public module test verifies the handler gets a fresh remote reader, cannot invoke or enumerate composed actions or read linked repositories, receives no ambient cookie, bearer, or proxy-authorization headers, and can return only the explicitly allowed public Referrer-Policy and X-Robots-Tag headers. Runtime-side public-context rejection is implemented in P03."
+  },
+  "validation": [
+    {
+      "command": "pnpm install --frozen-lockfile",
+      "result": "passed on the isolated P08 API worktree"
+    },
+    {
+      "command": "pnpm --filter @scriptorium/contracts build && pnpm --filter @scriptorium/module-runtime build && pnpm --filter @scriptorium/core build",
+      "result": "passed against merged current main and the P03 public-context restriction"
+    },
+    {
+      "command": "pnpm --filter @scriptorium/api typecheck",
+      "result": "passed against tested head 8aa6a57"
+    },
+    {
+      "command": "pnpm --filter @scriptorium/api test",
+      "result": "passed, 10 of 10 tests against tested head 8aa6a57; the test script builds the API before running the HTTP tests"
+    },
+    {
+      "command": "git diff --check",
+      "result": "passed after the API route removal and test update"
+    }
+  ],
+  "compositionLimits": [
+    "The source `/api/reload` rebuilt a derived SQLite projection. The target reads pinned Core snapshots and has no equivalent persistent author-data index to reload, so P08 does not expose a misleading reload endpoint; the final ledger still needs to record that projection maintenance disposition.",
+    "P08 API exposes generic module action and HTTP contribution adapters. MCP-specific HTTP/stdio tools, enabled-module domain actions, and the full browser review flow are owned by their module/UI tasks and require composed integration checks.",
+    "This evidence does not certify `start()` inside Core/full OCI profiles, real GitHub checkpoint/publish recovery, or container shutdown under a live streamed request. Those remain P13/P12 integration acceptance. The P08 API tests use in-memory Core/runtime fixtures for the endpoint boundaries; the separate P13 publishing acceptance must run against the composed real Core/Fastify/runtime and authorized GitHub fixture.",
+    "R40 only exposes Core-backed project list and registration. Safe project rebind/detach and a Core-owned project event source are absent; the source PATCH auto-merge behavior is excluded by the fixed snapshot/approval architecture."
+  ]
+}
