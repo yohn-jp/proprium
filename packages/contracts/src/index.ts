@@ -59,12 +59,25 @@ export interface ChangeProposal {
   source: "author" | "module" | "mcp";
 }
 export interface Approval { proposalId: string; operationIds: string[]; authorScope: string }
-export interface MutationCoordinator {
+/** Port shared by module and external callers: no author authority. */
+export interface ProposalCoordinator {
+  observe(projectId: string): Promise<RemoteObservation>;
+  reader(projectId: string, view?: "remote" | "checkpoint"): Promise<SnapshotReader>;
+  propose(projectId: string, proposal: ChangeProposal): Promise<ChangeProposal>;
+}
+export interface ReconcileResult {
+  snapshot: SnapshotId;
+  operations: Array<{ operationId: string; state: "unchanged" | "replayed" | "conflict"; receipt?: CheckpointReceipt; paths: string[] }>;
+}
+/** Host-only port. Authenticated author adapters must never expose it to modules/MCP.
+ * Proposal source is assigned by the authenticated transport, not accepted from request JSON. */
+export interface MutationCoordinator extends ProposalCoordinator {
   observe(projectId: string): Promise<RemoteObservation>;
   reader(projectId: string, view?: "remote" | "checkpoint"): Promise<SnapshotReader>;
   propose(projectId: string, proposal: ChangeProposal): Promise<ChangeProposal>;
   approve(projectId: string, approval: Approval): Promise<void>;
   checkpoint(projectId: string, operation: ChangeOperation): Promise<CheckpointReceipt>;
+  reconcile(projectId: string): Promise<ReconcileResult>;
   publish(projectId: string, batchId: string): Promise<PublishReceipt>;
 }
 export interface JobRequest<T = unknown> {
@@ -73,6 +86,8 @@ export interface JobRequest<T = unknown> {
   task: string;
   snapshot: SnapshotId;
   model: string;
+  modelVersion: string;
+  moduleVersion: string;
   deadline: number;
   input: T;
 }
@@ -80,20 +95,28 @@ export interface JobResult<T = unknown> {
   id: string;
   snapshot: SnapshotId;
   model: string;
+  modelVersion: string;
+  moduleVersion: string;
   output: T;
 }
+export interface MachineError { code: string; message: string; retryable: boolean }
+export type JobOutcome<T = unknown> = { ok: true; result: JobResult<T> } | { ok: false; id: string; snapshot: SnapshotId; error: MachineError };
+export interface ValueSchema<T = unknown> { parse(value: unknown): T }
+export type ActionResult<T = unknown> = { ok: true; snapshot: SnapshotId; data: T } | { ok: false; snapshot: SnapshotId; error: MachineError };
 export interface ModuleActionContext {
   projectId: string;
   reader: SnapshotReader;
   signal: AbortSignal;
   /** Only proposes; approval remains an authenticated author action. */
   propose(operations: ChangeOperation[]): Promise<ChangeProposal>;
-  runJob<T = unknown>(request: JobRequest): Promise<JobResult<T>>;
+  runJob<T = unknown>(request: JobRequest, signal?: AbortSignal): Promise<JobOutcome<T>>;
 }
 export interface ModuleAction {
   id: string;
   effect: "read" | "propose" | "compute";
-  invoke(input: unknown, context: ModuleActionContext): Promise<unknown>;
+  inputSchema: ValueSchema;
+  outputSchema: ValueSchema;
+  invoke(input: unknown, context: ModuleActionContext): Promise<ActionResult>;
 }
 export interface UiContribution {
   id: string;
