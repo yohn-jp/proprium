@@ -297,7 +297,7 @@ test("writing UI recovers multi-document drafts and separates Draft, Checkpoint,
   expect(checkpointed.find((entry) => entry.text === sceneOneDraft)?.state).toBe("checkpointed");
   const checkpointBatchId = checkpointed.find((entry) => entry.text === sceneOneDraft)?.operationId;
   const scratchBatchId = checkpointed.find((entry) => entry.documentPath.startsWith("meta/scratch/"))?.operationId;
-  await page.getByRole("button", { name: "履歴" }).click();
+  await page.getByRole("button", { name: "履歴", exact: true }).click();
   const checkpointHistory = page.locator(".manuscript-history");
   await expect(checkpointHistory.getByRole("heading", { name: "改稿の履歴" })).toBeVisible();
   await expect(checkpointHistory.getByRole("alert")).toHaveCount(0);
@@ -315,7 +315,7 @@ test("writing UI recovers multi-document drafts and separates Draft, Checkpoint,
   const laterDraft = "A later draft compared with the published version.";
   await editor.fill(laterDraft);
   await expect.poll(async () => (await readJournal(page)).some((entry) => entry.text === laterDraft && entry.state === "draft")).toBe(true);
-  await page.getByRole("button", { name: "履歴" }).click();
+  await page.getByRole("button", { name: "履歴", exact: true }).click();
   await expect(page.getByRole("heading", { name: "改稿の履歴" })).toBeVisible();
   const versions = page.getByRole("list", { name: "原稿の各バージョン" });
   await expect(versions.locator("li")).toHaveCount(1);
