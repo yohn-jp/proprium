@@ -11,6 +11,14 @@ interface JournalSummary {
   operationId: string;
   generation: number;
   text: string;
+  authorScope: string | null;
+}
+
+interface PublicationReceiptSummary {
+  batchId: string;
+  state: string;
+  acknowledged: Array<{ operationId: string; generation: number }>;
+  authorScope: string;
 }
 
 function repositoryInputValue(value: string): string {
@@ -53,7 +61,7 @@ async function openFixtureProject(page: Page): Promise<void> {
 async function readJournal(page: Page): Promise<JournalSummary[]> {
   return page.evaluate(async () => {
     const database = await new Promise<IDBDatabase>((resolve, reject) => {
-      const request = indexedDB.open("scriptorium-recovery", 2);
+      const request = indexedDB.open("scriptorium-recovery", 3);
       request.onsuccess = () => resolve(request.result);
       request.onerror = () => reject(request.error ?? new Error("IndexedDB open failed"));
     });
@@ -64,6 +72,7 @@ async function readJournal(page: Page): Promise<JournalSummary[]> {
         state: string;
         operation: { id: string; generation: number };
         text: string;
+        authorScope?: string | null;
       }>>((resolve, reject) => {
         const request = transaction.objectStore("operations").getAll();
         request.onsuccess = () => resolve(request.result);
@@ -75,7 +84,36 @@ async function readJournal(page: Page): Promise<JournalSummary[]> {
         operationId: entry.operation.id,
         generation: entry.operation.generation,
         text: entry.text,
+        authorScope: entry.authorScope ?? null,
       }));
+    } finally {
+      database.close();
+    }
+  });
+}
+
+async function readPublicationReceipts(page: Page): Promise<PublicationReceiptSummary[]> {
+  return page.evaluate(async () => {
+    const database = await new Promise<IDBDatabase>((resolve, reject) => {
+      const request = indexedDB.open("scriptorium-recovery", 3);
+      request.onsuccess = () => resolve(request.result);
+      request.onerror = () => reject(request.error ?? new Error("IndexedDB open failed"));
+    });
+    try {
+      const transaction = database.transaction("publicationReceipts", "readonly");
+      return await new Promise<PublicationReceiptSummary[]>((resolve, reject) => {
+        const request = transaction.objectStore("publicationReceipts").getAll();
+        request.onsuccess = () => resolve(request.result.map((record: {
+          authorScope: string;
+          receipt: PublicationReceiptSummary;
+        }) => ({
+          authorScope: record.authorScope,
+          batchId: record.receipt.batchId,
+          state: record.receipt.state,
+          acknowledged: record.receipt.acknowledged.map((item) => ({ operationId: item.operationId, generation: item.generation })),
+        })));
+        request.onerror = () => reject(request.error ?? new Error("IndexedDB receipt read failed"));
+      });
     } finally {
       database.close();
     }
@@ -132,12 +170,16 @@ test("writing UI recovers multi-document drafts and separates Draft, Checkpoint,
 
   const sceneOneDraft = "Scene One draft restored from IndexedDB.";
   await editor.fill(sceneOneDraft);
-  await expect.poll(async () => (await readJournal(page)).some((entry) => entry.state === "draft" && entry.text === sceneOneDraft)).toBe(true);
+  // Move within the debounce window; navigation must flush Scene One before Scene Two can type.
   await page.getByRole("button", { name: "Chapter One: Scene Two" }).click();
   await expect(page.getByRole("heading", { name: "Scene Two" })).toBeVisible();
   const sceneTwoDraft = "A separate Scene Two browser draft.";
   await page.locator(".cm-content").fill(sceneTwoDraft);
-  await expect.poll(async () => (await readJournal(page)).some((entry) => entry.state === "draft" && entry.text === sceneTwoDraft)).toBe(true);
+  await expect.poll(async () => {
+    const entries = await readJournal(page);
+    return entries.some((entry) => entry.state === "draft" && entry.text === sceneOneDraft) &&
+      entries.some((entry) => entry.state === "draft" && entry.text === sceneTwoDraft);
+  }).toBe(true);
   await waitForJournalCount(page, 2);
   await page.getByRole("button", { name: "Chapter One: Scene One" }).click();
   await expect(page.locator(".cm-content")).toHaveText(sceneOneDraft);
@@ -150,6 +192,8 @@ test("writing UI recovers multi-document drafts and separates Draft, Checkpoint,
   await expect(page.getByLabel("本文に含まれないメモ")).toHaveValue("本文に入れない台詞候補");
   await page.getByRole("button", { name: "Chapter One: Scene Two" }).click();
   await expect(page.locator(".cm-content")).toHaveText(sceneTwoDraft);
+  await page.locator(".cm-content").press("Control+z");
+  await expect(page.locator(".cm-content")).toHaveText(sceneTwoDraft);
   await page.getByRole("button", { name: "Chapter One: Scene One" }).click();
 
   await page.getByRole("button", { name: "Checkpoint" }).click();
@@ -158,12 +202,14 @@ test("writing UI recovers multi-document drafts and separates Draft, Checkpoint,
   const checkpointed = await readJournal(page);
   expect(checkpointed).toHaveLength(2);
   expect(checkpointed.find((entry) => entry.text === sceneOneDraft)?.state).toBe("checkpointed");
+  const checkpointBatchId = checkpointed.find((entry) => entry.text === sceneOneDraft)?.operationId;
   await page.getByRole("button", { name: "Save to GitHub" }).click();
   await expect(page.locator(".topbar-status")).toContainText("GitHub への保存を確認しました。");
   await expect(page.getByText("Saved to GitHub", { exact: true })).toBeVisible();
   await expect.poll(async () => (await readJournal(page)).map((entry) => `${entry.documentPath}:${entry.state}`)).toEqual([
     "manuscript/vol-1/ch-1/scene-2.md:draft",
   ]);
+  expect((await readPublicationReceipts(page)).some((receipt) => receipt.state === "confirmed" && receipt.acknowledged.some((item) => item.operationId === checkpointBatchId))).toBe(true);
   await page.getByRole("button", { name: "履歴" }).click();
   await expect(page.getByRole("heading", { name: "Git 履歴" })).toBeVisible();
   expect(cspErrors).toEqual([]);
@@ -217,6 +263,81 @@ test("new typing survives an older in-flight checkpoint and exact publication ac
   expect(afterPublication).toHaveLength(1);
   expect(afterPublication[0]?.text).toBe(newerGeneration);
   expect(afterPublication[0]?.state).toBe("draft");
+});
+
+test("browser recovery is author-scoped and foreign records remain untouched", async ({ page }) => {
+  expect(authToken.length).toBeGreaterThanOrEqual(32);
+  expect(repositoryUrl).not.toBe("");
+  await signIn(page);
+  await openFixtureProject(page);
+  const ownerDraft = "Owner-scoped draft.";
+  await page.locator(".cm-content").fill(ownerDraft);
+  await expect.poll(async () => (await readJournal(page)).some((entry) => entry.text === ownerDraft)).toBe(true);
+
+  const foreignText = "FOREIGN AUTHOR RECOVERY MUST NOT OPEN";
+  await page.evaluate((text) => new Promise<void>((resolve, reject) => {
+    const request = indexedDB.open("scriptorium-recovery", 3);
+    request.onerror = () => reject(request.error ?? new Error("IndexedDB open failed"));
+    request.onsuccess = () => {
+      const database = request.result;
+      const transaction = database.transaction("operations", "readwrite");
+      const store = transaction.objectStore("operations");
+      const get = store.getAll();
+      get.onerror = () => reject(get.error ?? new Error("IndexedDB journal read failed"));
+      get.onsuccess = () => {
+        const seed = get.result.find((entry: { authorScope: string | null; text: string }) => entry.authorScope === "owner" && entry.text === text);
+        if (!seed) {
+          reject(new Error("Owner journal seed is missing"));
+          return;
+        }
+        const repositoryKey = JSON.stringify([seed.repository.provider, seed.repository.ownerScope, seed.repository.repositoryId, seed.repository.defaultBranch]);
+        const documentPath = "manuscript/vol-1/ch-1/scene-2.md";
+        const documentKey = JSON.stringify([repositoryKey, documentPath]);
+        const operation = structuredClone(seed.operation);
+        operation.id = crypto.randomUUID();
+        operation.generation = 999;
+        operation.reads = operation.reads.map((item: { path: string; revision: string | null }) => ({ ...item, path: documentPath }));
+        operation.writes = operation.writes.map((item: { path: string; revision: string | null; content: string | null }) => ({ ...item, path: documentPath, content: text }));
+        store.put({
+          ...seed,
+          key: JSON.stringify([documentKey, "different-author", operation.id, operation.generation]),
+          repositoryKey,
+          documentKey,
+          documentPath,
+          sceneId: "scene-2",
+          authorScope: "different-author",
+          operation,
+          text,
+        });
+      };
+      transaction.oncomplete = () => { database.close(); resolve(); };
+      transaction.onerror = () => reject(transaction.error ?? new Error("IndexedDB write failed"));
+    };
+  }), foreignText);
+
+  await page.getByRole("button", { name: "Chapter One: Scene Two" }).click();
+  await expect(page.getByRole("heading", { name: "Scene Two" })).toBeVisible();
+  await expect(page.locator(".cm-content")).not.toContainText(foreignText);
+  expect((await readJournal(page)).some((entry) => entry.authorScope === "different-author" && entry.text === foreignText)).toBe(true);
+});
+
+test("one malformed legacy key does not hide later recoverable drafts", async ({ page }) => {
+  expect(authToken.length).toBeGreaterThanOrEqual(32);
+  expect(repositoryUrl).not.toBe("");
+  await page.addInitScript(() => {
+    localStorage.setItem("scriptorium:draft:malformed", "{");
+    localStorage.setItem("scriptorium:draft:recoverable", JSON.stringify({
+      version: 1,
+      projectId: "removed-project-id",
+      sceneId: "removed-scene-id",
+      text: "Legacy recovery after malformed item.",
+      revision: "old-revision",
+      savedAt: 1,
+    }));
+  });
+  await signIn(page);
+  await openFixtureProject(page);
+  await expect(page.getByText("Legacy recovery after malformed item.")).toBeVisible();
 });
 
 test("IndexedDB quota failures remain visible and block checkpointing", async ({ page }) => {

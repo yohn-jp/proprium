@@ -42,23 +42,27 @@ function readLegacyDrafts(): LegacyDraftRecord[] {
   const records: LegacyDraftRecord[] = [];
   try {
     for (let index = 0; index < window.localStorage.length; index++) {
-      const key = window.localStorage.key(index);
-      if (!key?.startsWith("scriptorium:draft:")) continue;
-      const raw = window.localStorage.getItem(key);
-      if (!raw) continue;
-      const value: unknown = JSON.parse(raw);
-      if (!value || typeof value !== "object") continue;
-      const item = value as Record<string, unknown>;
-      if (item.version !== 1 || typeof item.projectId !== "string" || typeof item.sceneId !== "string" ||
-          typeof item.text !== "string" || typeof item.revision !== "string" || typeof item.savedAt !== "number") continue;
-      records.push({
-        key,
-        projectId: item.projectId,
-        sceneId: item.sceneId,
-        text: item.text,
-        revision: item.revision,
-        savedAt: item.savedAt,
-      });
+      try {
+        const key = window.localStorage.key(index);
+        if (!key?.startsWith("scriptorium:draft:")) continue;
+        const raw = window.localStorage.getItem(key);
+        if (!raw) continue;
+        const value: unknown = JSON.parse(raw);
+        if (!value || typeof value !== "object") continue;
+        const item = value as Record<string, unknown>;
+        if (item.version !== 1 || typeof item.projectId !== "string" || typeof item.sceneId !== "string" ||
+            typeof item.text !== "string" || typeof item.revision !== "string" || typeof item.savedAt !== "number") continue;
+        records.push({
+          key,
+          projectId: item.projectId,
+          sceneId: item.sceneId,
+          text: item.text,
+          revision: item.revision,
+          savedAt: item.savedAt,
+        });
+      } catch {
+        // One malformed legacy key must not hide later recoverable records.
+      }
     }
   } catch {
     // Legacy storage remains untouched if the browser blocks enumeration.
@@ -116,6 +120,10 @@ function sameRepository(left: RepositoryIdentity, right: RepositoryIdentity): bo
   return repositoryKey(left) === repositoryKey(right);
 }
 
+function draftTimerKey(entry: JournalEntry): string {
+  return JSON.stringify([entry.authorScope, entry.documentKey]);
+}
+
 function sameRemoteSnapshot(left: SnapshotId, right: SnapshotId): boolean {
   return sameRepository(left.repository, right.repository) && left.remoteCommit === right.remoteCommit;
 }
@@ -170,6 +178,7 @@ function proposalIdFor(operation: ChangeOperation): string {
 
 function makeEntry(
   repository: RepositoryIdentity,
+  authorScope: string,
   sceneId: string,
   read: SceneRead,
   text: string,
@@ -183,6 +192,7 @@ function makeEntry(
     key: "",
     repositoryKey: repositoryKey(repository),
     documentKey: key,
+    authorScope,
     repository,
     documentPath: read.document.path,
     sceneId,
@@ -200,6 +210,7 @@ function makeEntry(
 export function App() {
   const [authState, setAuthState] = useState<"checking" | "signed-out" | "ready">("checking");
   const [authorScope, setAuthorScope] = useState("owner");
+  const authorScopeRef = useRef("owner");
   const [token, setToken] = useState("");
   const [loginError, setLoginError] = useState("");
   const [journal, setJournal] = useState<BrowserJournal | null>(null);
@@ -210,6 +221,7 @@ export function App() {
   const [globalError, setGlobalError] = useState("");
   const [entries, setEntries] = useState<JournalEntry[]>([]);
   const [proposals, setProposals] = useState<JournalProposal[]>([]);
+  const [isolatedRecoveryCount, setIsolatedRecoveryCount] = useState(0);
   const [legacyDrafts, setLegacyDrafts] = useState<LegacyDraftRecord[]>([]);
   const [modules, setModules] = useState<ModuleStatus[]>([]);
   const [contributions, setContributions] = useState<UiContribution[]>([]);
@@ -220,7 +232,8 @@ export function App() {
   const workRef = useRef<WorkState | null>(null);
   const journalRef = useRef<BrowserJournal | null>(null);
   const draftQueueRef = useRef<Promise<void>>(Promise.resolve());
-  const draftTimerRef = useRef<number | null>(null);
+  const draftTimersRef = useRef(new Map<string, number>());
+  const pendingDraftsRef = useRef(new Map<string, JournalEntry>());
   const generationRef = useRef(0);
   const observationBusyRef = useRef(false);
   const refreshRef = useRef<() => Promise<void>>(async () => undefined);
@@ -233,7 +246,7 @@ export function App() {
     setWork(next);
   }, []);
 
-  const refreshJournal = useCallback(async (repository?: RepositoryIdentity) => {
+  const refreshJournal = useCallback(async (repository?: RepositoryIdentity, expectedNavigation?: number) => {
     const currentJournal = journalRef.current;
     if (!currentJournal) return;
     try {
@@ -241,13 +254,15 @@ export function App() {
         currentJournal.getAllEntries(),
         currentJournal.getAllProposals(),
       ]);
-      setEntries(repository ? allEntries.filter((entry) => sameRepository(entry.repository, repository)) : allEntries);
+      if (expectedNavigation !== undefined && navigationRef.current !== expectedNavigation) return;
+      setIsolatedRecoveryCount(allEntries.filter((entry) => entry.authorScope !== authorScopeRef.current).length + allProposals.filter((record) => record.authorScope !== authorScopeRef.current).length);
+      setEntries(allEntries.filter((entry) => entry.authorScope === authorScopeRef.current && (!repository || sameRepository(entry.repository, repository))));
       const visibleProposals = repository
-        ? allProposals.filter((record) => sameRepository(record.repository, repository))
-        : allProposals;
+        ? allProposals.filter((record) => record.authorScope === authorScopeRef.current && sameRepository(record.repository, repository))
+        : allProposals.filter((record) => record.authorScope === authorScopeRef.current);
       setProposals(visibleProposals);
     } catch (error) {
-      setGlobalError(messageOf(error));
+      if (expectedNavigation === undefined || navigationRef.current === expectedNavigation) setGlobalError(messageOf(error));
     }
   }, []);
 
@@ -274,7 +289,10 @@ export function App() {
     });
     void api.session().then(async (session) => {
       if (cancelled) return;
-      setAuthorScope(session.authorScope || "owner");
+      const scope = session.authorScope || "owner";
+      authorScopeRef.current = scope;
+      setAuthorScope(scope);
+      void refreshJournal();
       setAuthState("ready");
       try {
         const registered = await api.projects();
@@ -282,7 +300,7 @@ export function App() {
         setProjects(registered);
         const stored = localStorageIfAvailable()?.getItem(ACTIVE_PROJECT_KEY) ?? null;
         const next = registered.find((project) => project.id === stored) ?? registered[0];
-        if (next) await activateProject(next, false);
+        if (next) await activateProject(next, false, scope);
       } catch (error) {
         if (error instanceof ApiError && error.status === 401) {
           setAuthState("signed-out");
@@ -303,13 +321,14 @@ export function App() {
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  const reloadJournalForWork = useCallback(async (repository: RepositoryIdentity) => {
-    await refreshJournal(repository);
+  const reloadJournalForWork = useCallback(async (repository: RepositoryIdentity, expectedNavigation?: number) => {
+    await refreshJournal(repository, expectedNavigation);
   }, [refreshJournal]);
 
   const replayAuthorizedEntry = useCallback(async (projectId: string, entry: JournalEntry, author: string) => {
     const currentJournal = journalRef.current;
     if (!currentJournal) throw new Error("ブラウザー回復ストレージを開けません。");
+    if (entry.authorScope !== author) throw new Error("別の作者スコープの回復記録は再生できません。");
     if (entry.state !== "checkpointing" && entry.state !== "checkpointed") return entry;
     const stableProposalId = entry.proposalId ?? proposalIdFor(entry.operation);
     const prepared = await currentJournal.updateState({ ...entry, proposalId: stableProposalId, authorizedAt: entry.authorizedAt ?? Date.now() }, "checkpointing");
@@ -320,7 +339,7 @@ export function App() {
       source: "author",
     };
     const accepted = await api.propose(projectId, proposal);
-    await currentJournal.putProposal(prepared.repository, accepted);
+    await currentJournal.putProposal(prepared.repository, author, accepted);
     const assigned = await currentJournal.updateState({ ...prepared, proposalId: accepted.id }, "checkpointing");
     await api.approve(projectId, {
       proposalId: accepted.id,
@@ -329,15 +348,17 @@ export function App() {
     });
     const receipt = await api.checkpoint(projectId, assigned.operation);
     const checkpointed = await currentJournal.updateState(assigned, "checkpointed", receipt);
-    await currentJournal.removeProposal(prepared.repository, accepted.id).catch(() => undefined);
+    await currentJournal.removeProposal(prepared.repository, author, accepted.id).catch(() => undefined);
     return checkpointed;
   }, []);
 
-  const reconcileProject = useCallback(async (projectId: string, repository: RepositoryIdentity, author: string) => {
+  const reconcileProject = useCallback(async (projectId: string, repository: RepositoryIdentity, author: string, expectedNavigation?: number) => {
     const currentJournal = journalRef.current;
     if (!currentJournal) return;
-    const persisted = await currentJournal.getRepository(repository);
+    const persisted = await currentJournal.getRepository(repository, author);
+    if (expectedNavigation !== undefined && navigationRef.current !== expectedNavigation) return;
     for (const entry of persisted) {
+      if (expectedNavigation !== undefined && navigationRef.current !== expectedNavigation) return;
       if (entry.state !== "checkpointing" && entry.state !== "checkpointed") continue;
       try {
         await replayAuthorizedEntry(projectId, entry, author);
@@ -351,6 +372,7 @@ export function App() {
     }
     try {
       const reconciled = await api.reconcile(projectId);
+      if (expectedNavigation !== undefined && navigationRef.current !== expectedNavigation) return;
       for (const result of reconciled.operations) {
         const match = persisted.find((entry) => entry.operation.id === result.operationId);
         if (!match) continue;
@@ -362,20 +384,30 @@ export function App() {
     } catch {
       // Observation and editor reads remain available; reconciliation failures stay visible at their next operation.
     }
-    await reloadJournalForWork(repository);
+    await reloadJournalForWork(repository, expectedNavigation);
   }, [reloadJournalForWork, replayAuthorizedEntry]);
 
   const loadScene = useCallback(async (projectId: string, sceneId: string, tree: TreeRead, preferredRepository?: RepositoryIdentity) => {
     const sceneRequest = ++sceneLoadRef.current;
     const nav = navigationRef.current;
+    try {
+      await flushDraft();
+    } catch (error) {
+      if (navigationRef.current === nav && sceneLoadRef.current === sceneRequest) setStatus({ message: messageOf(error), kind: "error" });
+      return;
+    }
+    if (navigationRef.current !== nav || sceneLoadRef.current !== sceneRequest) return;
     updateWork((current) => current ? { ...current, selectedSceneId: sceneId, loadingScene: true } : current);
     try {
       const remote = await api.readScene(projectId, sceneId, "remote", tree.snapshot);
+      if (navigationRef.current !== nav || sceneLoadRef.current !== sceneRequest) return;
       if (snapshotKey(remote.snapshot) !== snapshotKey(tree.snapshot)) throw new Error("作品構成と原稿が異なるリモートスナップショットから返されました。再読み込みしてください。");
       const effective = await api.readScene(projectId, sceneId, "checkpoint");
+      if (navigationRef.current !== nav || sceneLoadRef.current !== sceneRequest) return;
       if (!sameRemoteSnapshot(effective.snapshot, remote.snapshot)) throw new Error("チェックポイントとリモート原稿の基準が異なります。同期状態を確認してください。");
       const repository = preferredRepository ?? effective.snapshot.repository;
-      const localEntries = await journalRef.current?.getDocument(repository, effective.document.path) ?? [];
+      const localEntries = await journalRef.current?.getDocument(repository, effective.document.path, authorScopeRef.current) ?? [];
+      if (navigationRef.current !== nav || sceneLoadRef.current !== sceneRequest) return;
       let latest = localEntries.at(-1) ?? null;
       let text = effective.scene.text;
       let entry = latest;
@@ -384,9 +416,9 @@ export function App() {
         const legacy = loadDraft(localStorageIfAvailable(), projectId, sceneId);
         if (legacy && legacy.text !== effective.scene.text) {
           const operation = buildOperation(effective, legacy.text, crypto.randomUUID(), 1);
-          const migrated = makeEntry(repository, sceneId, effective, legacy.text, effective.scene.text, operation, "draft");
+          const migrated = makeEntry(repository, authorScopeRef.current, sceneId, effective, legacy.text, effective.scene.text, operation, "draft");
           try {
-            await journalRef.current.putLatestDraft(migrated);
+            if (!await journalRef.current.putLatestDraft(migrated)) throw new Error("A newer browser draft already exists.");
             clearDraft(localStorageIfAvailable(), projectId, sceneId);
             latest = migrated;
             if (legacy.revision !== effective.scene.revision) conflict = remote;
@@ -413,8 +445,8 @@ export function App() {
           if (priorCheckpoint) {
             try {
               const operation = buildOperation(effective, latest.text, latest.operation.id, latest.operation.generation);
-              latest = makeEntry(repository, sceneId, effective, latest.text, effective.scene.text, operation, "draft");
-              await journalRef.current?.putLatestDraft(latest);
+              latest = makeEntry(repository, authorScopeRef.current, sceneId, effective, latest.text, effective.scene.text, operation, "draft");
+              if (!await journalRef.current?.putLatestDraft(latest)) throw new Error("A newer browser draft already exists.");
               entry = latest;
             } catch (error) {
               conflict = remote;
@@ -449,25 +481,36 @@ export function App() {
     }
   }, [refreshJournal, updateWork]);
 
-  const activateProject = useCallback(async (project: Project, persistSelection = true) => {
+  const activateProject = useCallback(async (project: Project, persistSelection = true, scopeOverride?: string) => {
     const nav = ++navigationRef.current;
-    updateWork(() => null);
-    setGlobalError("");
     setBusy("project");
     setStatus({ message: "リモートの状態を確認しています…", kind: "normal" });
     try {
+      await flushDraft();
+      if (navigationRef.current !== nav) return;
+      updateWork(() => null);
+      setGlobalError("");
       const observed = await api.observation(project.id);
       if (navigationRef.current !== nav) return;
-      await reconcileProject(project.id, observed.snapshot.repository, authorScope);
+      const scope = scopeOverride ?? authorScopeRef.current;
+      await reconcileProject(project.id, observed.snapshot.repository, scope, nav);
+      if (navigationRef.current !== nav) return;
       if (journalRef.current) recoveredProjectsRef.current.add(`${project.id}:${repositoryKey(observed.snapshot.repository)}`);
       const tree = await api.readTree(project.id, "remote", observed.snapshot);
+      if (navigationRef.current !== nav) return;
       if (snapshotKey(tree.snapshot) !== snapshotKey(observed.snapshot)) throw new Error("作品構成が別のリモートスナップショットから返されました。");
       const next: WorkState = { project, observation: observed, tree, selectedSceneId: "", editor: null, loadingScene: false };
+      const [nextModules, nextContributions] = await Promise.all([
+        api.modules(project.id).catch(() => []),
+        api.contributions(project.id).catch(() => []),
+      ]);
+      if (navigationRef.current !== nav) return;
       workRef.current = next;
       setWork(next);
-      setModules(await api.modules(project.id).catch(() => []));
-      setContributions(await api.contributions(project.id).catch(() => []));
-      await reloadJournalForWork(observed.snapshot.repository);
+      setModules(nextModules);
+      setContributions(nextContributions);
+      await reloadJournalForWork(observed.snapshot.repository, nav);
+      if (navigationRef.current !== nav) return;
       if (persistSelection) localStorageIfAvailable()?.setItem(ACTIVE_PROJECT_KEY, project.id);
       setProjects((current) => current.map((item) => item.id === project.id ? project : item));
       setStatus({
@@ -479,7 +522,7 @@ export function App() {
     } finally {
       if (navigationRef.current === nav) setBusy("");
     }
-  }, [authorScope, reconcileProject, reloadJournalForWork, updateWork]);
+  }, [reconcileProject, reloadJournalForWork, updateWork]);
 
   useEffect(() => {
     const current = workRef.current;
@@ -503,7 +546,7 @@ export function App() {
       const changedRemote = Boolean(latestBeforeRead && latestBeforeRead.observation.snapshot.remoteCommit !== observed.snapshot.remoteCommit);
       const changedCheckpoint = Boolean(latestBeforeRead && latestBeforeRead.observation.checkpointHead !== observed.checkpointHead);
       if (changedRemote) {
-        await reconcileProject(projectId, observed.snapshot.repository, authorScope);
+      await reconcileProject(projectId, observed.snapshot.repository, authorScope, nav);
         if (navigationRef.current !== nav || workRef.current?.project.id !== projectId) return;
       }
       const tree = await api.readTree(projectId, "remote", observed.snapshot);
@@ -549,13 +592,18 @@ export function App() {
   useEffect(() => {
     const beforeUnload = (event: BeforeUnloadEvent) => {
       const editor = workRef.current?.editor;
-      if (editor && !editor.draftStored && editor.text !== editor.read.scene.text) {
+      if (pendingDraftsRef.current.size > 0 || (editor && !editor.draftStored && editor.text !== editor.read.scene.text)) {
         event.preventDefault();
         event.returnValue = "";
       }
     };
     window.addEventListener("beforeunload", beforeUnload);
-    return () => window.removeEventListener("beforeunload", beforeUnload);
+    return () => {
+      window.removeEventListener("beforeunload", beforeUnload);
+      for (const timer of draftTimersRef.current.values()) window.clearTimeout(timer);
+      draftTimersRef.current.clear();
+      for (const entry of pendingDraftsRef.current.values()) void persistDraft(entry);
+    };
   }, []);
 
   async function signIn(event: FormEvent<HTMLFormElement>): Promise<void> {
@@ -565,11 +613,14 @@ export function App() {
       const result = await api.login(token);
       setToken("");
       const session = await api.session();
-      setAuthorScope(session.authorScope || "owner");
+      const scope = session.authorScope || "owner";
+      authorScopeRef.current = scope;
+      setAuthorScope(scope);
+      void refreshJournal();
       setAuthState("ready");
       const registered = await api.projects();
       setProjects(registered);
-      if (registered[0]) await activateProject(registered[0]);
+      if (registered[0]) await activateProject(registered[0], true, scope);
       else setStatus({ message: result.authenticated ? "ログインしました。作品リポジトリを登録してください。" : "ログインできませんでした。", kind: "normal" });
     } catch (error) {
       setLoginError(messageOf(error));
@@ -578,12 +629,14 @@ export function App() {
 
   async function signOut(): Promise<void> {
     try {
+      await flushDraft();
       await api.logout();
-    } finally {
       navigationRef.current++;
       updateWork(() => null);
       setAuthState("signed-out");
       setProjects([]);
+    } catch (error) {
+      setStatus({ message: `下書きを保存してからログアウトしてください。${messageOf(error)}`, kind: "error" });
     }
   }
 
@@ -611,28 +664,38 @@ export function App() {
     setStatus({ message, kind });
   }
 
-  async function persistDraft(entry: JournalEntry): Promise<void> {
+  async function persistDraft(entry: JournalEntry): Promise<boolean> {
+    const navigation = navigationRef.current;
     const currentJournal = journalRef.current;
     if (!currentJournal) {
       updateWork((current) => current?.editor?.entry?.operation.id === entry.operation.id && current.editor.entry.operation.generation === entry.operation.generation
         ? { ...current, editor: { ...current.editor, draftStored: false, journalError: "ブラウザー回復ストレージを利用できません。入力はこのタブにだけあります。" } }
         : current);
-      return;
+      return false;
     }
-    draftQueueRef.current = draftQueueRef.current.then(async () => {
-      await currentJournal.putLatestDraft(entry);
-      await refreshJournal(workRef.current?.observation.snapshot.repository);
+    const queued = draftQueueRef.current.then(async () => {
+      const stored = await currentJournal.putLatestDraft(entry);
+      if (!stored) throw new Error("新しい世代の回復記録があるため、この古い下書きは保存しませんでした。作品を再読み込みしてください。");
+      const pendingKey = draftTimerKey(entry);
+      const pending = pendingDraftsRef.current.get(pendingKey);
+      if (pending?.operation.id === entry.operation.id && pending.operation.generation === entry.operation.generation) {
+        pendingDraftsRef.current.delete(pendingKey);
+      }
+      await refreshJournal(workRef.current?.observation.snapshot.repository, navigation);
       updateWork((current) => current?.editor?.entry?.operation.id === entry.operation.id && current.editor.entry.operation.generation === entry.operation.generation
         ? { ...current, editor: { ...current.editor, draftStored: true, journalError: "" } }
         : current);
+      return true;
     }).catch((error) => {
       const errorText = messageOf(error);
       updateWork((current) => current?.editor?.entry?.operation.id === entry.operation.id && current.editor.entry.operation.generation === entry.operation.generation
         ? { ...current, editor: { ...current.editor, draftStored: false, journalError: errorText } }
         : current);
-      setStatus({ message: errorText, kind: "error" });
+      if (navigationRef.current === navigation) setStatus({ message: errorText, kind: "error" });
+      return false;
     });
-    await draftQueueRef.current;
+    draftQueueRef.current = queued.then(() => undefined);
+    return queued;
   }
 
   function editText(nextText: string): void {
@@ -652,7 +715,7 @@ export function App() {
     let entry: JournalEntry;
     try {
       const operation = buildOperation(editor.read, nextText, id, generation);
-      entry = makeEntry(editor.read.snapshot.repository, editor.read.scene.id, editor.read, nextText, editor.read.scene.text, operation, "draft");
+      entry = makeEntry(editor.read.snapshot.repository, authorScopeRef.current, editor.read.scene.id, editor.read, nextText, editor.read.scene.text, operation, "draft");
     } catch (error) {
       updateWork((latest) => latest?.editor ? { ...latest, editor: { ...latest.editor, text: nextText, draftStored: false, journalError: messageOf(error) } } : latest);
       return;
@@ -661,22 +724,43 @@ export function App() {
       ...latest,
       editor: { ...latest.editor, text: nextText, entry, draftStored: false, journalError: "" },
     } : latest);
-    if (draftTimerRef.current) clearTimeout(draftTimerRef.current);
-    draftTimerRef.current = window.setTimeout(() => void persistDraft(entry), 350);
+    const timerKey = draftTimerKey(entry);
+    const pendingTimer = draftTimersRef.current.get(timerKey);
+    if (pendingTimer) window.clearTimeout(pendingTimer);
+    pendingDraftsRef.current.set(timerKey, entry);
+    const timer = window.setTimeout(() => {
+      if (draftTimersRef.current.get(timerKey) === timer) draftTimersRef.current.delete(timerKey);
+      void persistDraft(entry);
+    }, 350);
+    draftTimersRef.current.set(timerKey, timer);
   }
 
   async function flushDraft(): Promise<JournalEntry | null> {
-    if (draftTimerRef.current) {
-      clearTimeout(draftTimerRef.current);
-      draftTimerRef.current = null;
+    for (let attempt = 0; attempt < 8; attempt++) {
+      const editor = workRef.current?.editor;
+      if (!editor?.entry || editor.entry.state !== "draft") return editor?.entry ?? null;
+      const entry = editor.entry;
+      const timerKey = draftTimerKey(entry);
+      const timer = draftTimersRef.current.get(timerKey);
+      if (timer) window.clearTimeout(timer);
+      draftTimersRef.current.delete(timerKey);
+      await draftQueueRef.current;
+
+      const currentEditor = workRef.current?.editor;
+      const pending = pendingDraftsRef.current.get(timerKey);
+      const target = pending && pending.operation.generation > entry.operation.generation ? pending : currentEditor?.entry ?? entry;
+      if (target.state !== "draft") return target;
+      const currentIsTarget = currentEditor?.entry?.operation.id === target.operation.id && currentEditor.entry.operation.generation === target.operation.generation;
+      if (currentIsTarget && currentEditor.draftStored && !pendingDraftsRef.current.has(timerKey)) return target;
+
+      const stored = await persistDraft(target);
+      if (!stored) throw new Error(workRef.current?.editor?.journalError || "下書きをブラウザーに保存できませんでした。");
+      const latest = workRef.current?.editor;
+      if (latest?.entry?.state === "draft" && draftTimerKey(latest.entry) === timerKey &&
+          (!latest.draftStored || pendingDraftsRef.current.has(timerKey))) continue;
+      return latest?.entry ?? target;
     }
-    await draftQueueRef.current;
-    const editor = workRef.current?.editor;
-    if (!editor?.entry || editor.entry.state !== "draft") return editor?.entry ?? null;
-    await persistDraft(editor.entry);
-    const latest = workRef.current?.editor;
-    if (!latest?.draftStored) throw new Error(latest?.journalError || "下書きをブラウザーに保存できませんでした。");
-    return latest.entry;
+    throw new Error("下書きの入力が続いているため、移動前に保存できませんでした。入力を止めてもう一度お試しください。");
   }
 
   async function checkpointCurrent(): Promise<void> {
@@ -705,12 +789,12 @@ export function App() {
         operations: [operation],
         source: "author",
       });
-      await currentJournal.putProposal(checkpointing.repository, proposal);
+      await currentJournal.putProposal(checkpointing.repository, authorScopeRef.current, proposal);
       await currentJournal.updateState({ ...checkpointing, proposalId: proposal.id }, "checkpointing");
       await api.approve(current.project.id, { proposalId: proposal.id, operationIds: [operation.id], authorScope });
       const receipt = await api.checkpoint(current.project.id, operation);
       const saved = await currentJournal.updateState({ ...checkpointing, proposalId: proposal.id }, "checkpointed", receipt);
-      await currentJournal.removeProposal(checkpointing.repository, proposal.id).catch(() => undefined);
+      await currentJournal.removeProposal(checkpointing.repository, authorScopeRef.current, proposal.id).catch(() => undefined);
       updateWork((state) => state?.editor?.entry?.operation.id === operation.id && state.editor.entry.operation.generation === operation.generation
         ? { ...state, editor: { ...state.editor, entry: saved } }
         : state);
@@ -738,7 +822,7 @@ export function App() {
       const observed = await api.observation(current.project.id);
       await api.reconcile(current.project.id);
       const repository = observed.snapshot.repository;
-      const local = await currentJournal.getRepository(repository);
+      const local = await currentJournal.getRepository(repository, authorScopeRef.current);
       const eligible = local.filter((entry) => entry.state === "checkpointed" || entry.state === "publication_unknown");
       if (eligible.length === 0) throw new Error("GitHub へ保存するチェックポイントがありません。");
       const groups = new Map<string, JournalEntry[]>();
@@ -753,7 +837,7 @@ export function App() {
         for (const entry of group) await currentJournal.updateState({ ...entry, publicationBatchId: batchId }, "publication_unknown");
         const receipt = await api.publish(current.project.id, batchId);
         if (receipt.state === "confirmed") {
-          await currentJournal.acknowledge(repository, receipt);
+          await currentJournal.acknowledge(repository, authorScopeRef.current, receipt);
         } else if (receipt.state === "conflict") {
           for (const entry of group) await currentJournal.updateState(entry, "conflict");
           throw new Error("GitHub に別の更新がありました。チェックポイントは保持し、競合を確認してください。");
@@ -787,12 +871,12 @@ export function App() {
     generationRef.current = generation;
     try {
       const operation = buildOperation(nextBase, editor.text, id, generation);
-      const nextEntry = makeEntry(nextBase.snapshot.repository, nextBase.scene.id, nextBase, editor.text, nextBase.scene.text, operation, "draft");
+      const nextEntry = makeEntry(nextBase.snapshot.repository, authorScopeRef.current, nextBase.scene.id, nextBase, editor.text, nextBase.scene.text, operation, "draft");
       updateWork((state) => state?.editor ? {
         ...state,
         editor: { ...state.editor, read: nextBase, remote: nextBase, baseText: nextBase.scene.text, entry: nextEntry, conflict: null, draftStored: false },
       } : state);
-      await persistDraft(nextEntry);
+      if (!await persistDraft(nextEntry)) throw new Error("比較した下書きが IndexedDB に保存できませんでした。");
       setStatus({ message: "比較した下書きを最新の原稿に結び直しました。", kind: "success" });
     } catch (error) {
       setStatus({ message: messageOf(error), kind: "error" });
@@ -810,7 +894,7 @@ export function App() {
     }
     if (!window.confirm("未チェックポイントの下書きを削除して、現在の GitHub 版に戻しますか？")) return;
     try {
-      await currentJournal.removeDrafts(editor.read.snapshot.repository, editor.read.document.path);
+      await currentJournal.removeDrafts(editor.read.snapshot.repository, editor.read.document.path, authorScopeRef.current);
       const remote = editor.conflict;
       updateWork((state) => state?.editor ? {
         ...state,
@@ -833,13 +917,13 @@ export function App() {
     );
     if (!accepted) return;
     try {
-      const prior = await currentJournal.getDocument(current.observation.snapshot.repository, editor.read.document.path);
+      const prior = await currentJournal.getDocument(current.observation.snapshot.repository, editor.read.document.path, authorScopeRef.current);
       const existing = prior.at(-1);
       const id = existing?.state === "draft" ? existing.operation.id : crypto.randomUUID();
       const generation = Math.max(generationRef.current, existing?.operation.generation ?? 0) + 1;
       const operation = buildOperation(editor.read, record.text, id, generation);
-      const entry = makeEntry(current.observation.snapshot.repository, editor.read.scene.id, editor.read, record.text, editor.read.scene.text, operation, "draft");
-      await currentJournal.putLatestDraft(entry);
+      const entry = makeEntry(current.observation.snapshot.repository, authorScopeRef.current, editor.read.scene.id, editor.read, record.text, editor.read.scene.text, operation, "draft");
+      if (!await currentJournal.putLatestDraft(entry)) throw new Error("新しい回復記録があるため、この古い下書きは移しませんでした。");
       localStorageIfAvailable()?.removeItem(record.key);
       generationRef.current = generation;
       setLegacyDrafts(readLegacyDrafts());
@@ -948,6 +1032,7 @@ export function App() {
         <main className="writing-area" aria-label="執筆">
           {globalError && <p className="status" data-kind="error" role="alert">{globalError}</p>}
           {journalOpenError && <p className="status" data-kind="error" role="alert">{journalOpenError}</p>}
+          {isolatedRecoveryCount > 0 && <p className="status" role="status">別の作者スコープまたは未割り当ての回復記録 {isolatedRecoveryCount} 件を保持しています。現在のセッションには復元しません。</p>}
           {journal && proposals.length > 0 && work && (
             <ProposalReview
               projectId={work.project.id}
@@ -976,6 +1061,7 @@ export function App() {
               {editor && scene && (
                 <>
                   <SceneEditor
+                    key={JSON.stringify([repositoryKey(editor.read.snapshot.repository), editor.read.document.path])}
                     projectId={work.project.id}
                     scene={scene}
                     path={editor.read.document.path}
@@ -1003,10 +1089,10 @@ export function App() {
                     pendingCount={pendingCount}
                   />
                   {historyOpen && <HistoryPanel commits={history} />}
-                    <ContributionHost projectId={work.project.id} slot="editor" contributions={contributions} modules={modules} snapshot={work.tree.snapshot} refresh={refreshContributionContext} journal={journal} onProposalStored={refreshProposals} />
+                    <ContributionHost projectId={work.project.id} authorScope={authorScope} slot="editor" contributions={contributions} modules={modules} snapshot={work.tree.snapshot} refresh={refreshContributionContext} journal={journal} onProposalStored={refreshProposals} />
                   <div className="contribution-dock">
                     {(["dock", "inspection", "review", "settings"] as const).map((slot) => (
-                      <ContributionHost key={slot} projectId={work.project.id} slot={slot} contributions={contributions} modules={modules} snapshot={work.tree.snapshot} refresh={refreshContributionContext} journal={journal} onProposalStored={refreshProposals} />
+                      <ContributionHost key={slot} projectId={work.project.id} authorScope={authorScope} slot={slot} contributions={contributions} modules={modules} snapshot={work.tree.snapshot} refresh={refreshContributionContext} journal={journal} onProposalStored={refreshProposals} />
                     ))}
                   </div>
                 </>

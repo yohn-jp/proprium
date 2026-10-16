@@ -9,10 +9,11 @@ import {
 } from "@scriptorium/contracts";
 
 const DATABASE_NAME = "scriptorium-recovery";
-const DATABASE_VERSION = 2;
+const DATABASE_VERSION = 3;
 const ENTRY_STORE = "operations";
 const SCRATCH_STORE = "scratch";
 const PROPOSAL_STORE = "proposals";
+const RECEIPT_STORE = "publicationReceipts";
 
 export type JournalState = "draft" | "checkpointing" | "checkpointed" | "publication_unknown" | "conflict";
 
@@ -21,6 +22,8 @@ export interface JournalEntry {
   key: string;
   repositoryKey: string;
   documentKey: string;
+  /** null marks a legacy record whose author identity was never recorded. */
+  authorScope: string | null;
   repository: RepositoryIdentity;
   documentPath: string;
   sceneId: string;
@@ -39,6 +42,8 @@ export interface JournalEntry {
 export interface JournalProposal {
   key: string;
   repositoryKey: string;
+  /** null marks a legacy proposal whose author identity was never recorded. */
+  authorScope: string | null;
   repository: RepositoryIdentity;
   proposal: ChangeProposal;
   createdAt: number;
@@ -48,6 +53,14 @@ interface ScratchRecord {
   key: string;
   text: string;
   updatedAt: number;
+}
+
+interface PublicationReceiptRecord {
+  key: string;
+  repositoryKey: string;
+  authorScope: string;
+  receipt: PublishReceipt;
+  createdAt: number;
 }
 
 export class JournalError extends Error {
@@ -70,8 +83,12 @@ export function documentKey(repository: RepositoryIdentity, path: string): strin
   return JSON.stringify([repositoryKey(repository), path]);
 }
 
-export function journalEntryKey(entry: Pick<JournalEntry, "documentKey" | "operation">): string {
-  return JSON.stringify([entry.documentKey, entry.operation.id]);
+export function journalEntryKey(entry: Pick<JournalEntry, "documentKey" | "operation"> & { authorScope?: string | null }): string {
+  return JSON.stringify([entry.documentKey, entry.authorScope ?? null, entry.operation.id, entry.operation.generation]);
+}
+
+export function publicationReceiptKey(repository: RepositoryIdentity, authorScope: string, batchId: string): string {
+  return JSON.stringify([repositoryKey(repository), authorScope, batchId]);
 }
 
 function requestValue<T>(request: IDBRequest<T>): Promise<T> {
@@ -122,6 +139,10 @@ export class BrowserJournal {
           const proposals = database.createObjectStore(PROPOSAL_STORE, { keyPath: "key" });
           proposals.createIndex("repositoryKey", "repositoryKey", { unique: false });
         }
+        if (!database.objectStoreNames.contains(RECEIPT_STORE)) {
+          const receipts = database.createObjectStore(RECEIPT_STORE, { keyPath: "key" });
+          receipts.createIndex("repositoryKey", "repositoryKey", { unique: false });
+        }
       };
       const database = await requestValue(request);
       database.onversionchange = () => database.close();
@@ -137,35 +158,68 @@ export class BrowserJournal {
 
   async put(entry: JournalEntry): Promise<void> {
     try {
+      if (!entry.authorScope) throw new JournalError("The recovery record has no author identity scope.");
       assertChangeOperation(entry.operation);
       const transaction = this.database.transaction(ENTRY_STORE, "readwrite", { durability: "strict" });
       const done = transactionDone(transaction);
-      transaction.objectStore(ENTRY_STORE).put({ ...entry, key: journalEntryKey(entry), updatedAt: Date.now() });
+      const store = transaction.objectStore(ENTRY_STORE);
+      const key = journalEntryKey(entry);
+      const existing = await requestValue(store.get(key)) as JournalEntry | undefined;
+      if (existing && (existing.authorScope !== entry.authorScope || JSON.stringify(existing.operation) !== JSON.stringify(entry.operation))) {
+        await done;
+        throw new JournalError("A journal key cannot be reused for a different author or operation.");
+      }
+      if (!existing) store.put({ ...entry, key, updatedAt: Date.now() });
       await done;
     } catch (error) {
+      if (error instanceof JournalError) throw error;
       throw storageMessage(error, "draft");
     }
   }
 
   /** Keep one editable draft per document while retaining every authorized operation. */
-  async putLatestDraft(entry: JournalEntry): Promise<void> {
+  async putLatestDraft(entry: JournalEntry): Promise<boolean> {
     try {
+      if (!entry.authorScope) throw new JournalError("The recovery record has no author identity scope.");
+      if (entry.state !== "draft") throw new JournalError("Only an editable draft can replace the latest draft.");
       assertChangeOperation(entry.operation);
       const transaction = this.database.transaction(ENTRY_STORE, "readwrite", { durability: "strict" });
       const done = transactionDone(transaction);
       const store = transaction.objectStore(ENTRY_STORE);
       const existing = await requestValue(store.index("documentKey").getAll(entry.documentKey)) as JournalEntry[];
       for (const candidate of existing) {
-        if (candidate.state === "draft" && candidate.key !== journalEntryKey(entry)) store.delete(candidate.key);
+        if (candidate.authorScope !== entry.authorScope) continue;
+        if (candidate.operation.generation > entry.operation.generation) {
+          await done;
+          return false;
+        }
+        if (candidate.operation.generation === entry.operation.generation) {
+          if (candidate.operation.id !== entry.operation.id || candidate.state !== "draft") {
+            await done;
+            return false;
+          }
+          if (JSON.stringify(candidate.operation) !== JSON.stringify(entry.operation)) {
+            await done;
+            throw new JournalError("A journal generation cannot be replaced with different content.");
+          }
+        }
       }
-      store.put({ ...entry, key: journalEntryKey(entry), updatedAt: Date.now() });
+      const key = journalEntryKey(entry);
+      for (const candidate of existing) {
+        if (candidate.authorScope === entry.authorScope && candidate.state === "draft" && candidate.key !== key) {
+          store.delete(candidate.key);
+        }
+      }
+      store.put({ ...entry, key, updatedAt: Date.now() });
       await done;
+      return true;
     } catch (error) {
+      if (error instanceof JournalError) throw error;
       throw storageMessage(error, "draft");
     }
   }
 
-  async getDocument(repository: RepositoryIdentity, path: string): Promise<JournalEntry[]> {
+  async getDocument(repository: RepositoryIdentity, path: string, authorScope: string): Promise<JournalEntry[]> {
     const key = documentKey(repository, path);
     try {
       const transaction = this.database.transaction(ENTRY_STORE, "readonly");
@@ -173,14 +227,14 @@ export class BrowserJournal {
       const records = await requestValue(transaction.objectStore(ENTRY_STORE).index("documentKey").getAll(key)) as JournalEntry[];
       await done;
       return records
-        .filter((entry) => entry.version === 1 && entry.documentKey === key)
+        .filter((entry) => entry.version === 1 && entry.documentKey === key && entry.authorScope === authorScope)
         .sort((left, right) => left.operation.generation - right.operation.generation || left.updatedAt - right.updatedAt);
     } catch (error) {
       throw storageMessage(error, "recovery journal");
     }
   }
 
-  async getRepository(repository: RepositoryIdentity): Promise<JournalEntry[]> {
+  async getRepository(repository: RepositoryIdentity, authorScope: string): Promise<JournalEntry[]> {
     const key = repositoryKey(repository);
     try {
       const transaction = this.database.transaction(ENTRY_STORE, "readonly");
@@ -188,7 +242,7 @@ export class BrowserJournal {
       const records = await requestValue(transaction.objectStore(ENTRY_STORE).index("repositoryKey").getAll(key)) as JournalEntry[];
       await done;
       return records
-        .filter((entry) => entry.version === 1 && entry.repositoryKey === key)
+        .filter((entry) => entry.version === 1 && entry.repositoryKey === key && entry.authorScope === authorScope)
         .sort((left, right) => left.updatedAt - right.updatedAt);
     } catch (error) {
       throw storageMessage(error, "recovery journal");
@@ -201,18 +255,22 @@ export class BrowserJournal {
       const done = transactionDone(transaction);
       const entries = await requestValue(transaction.objectStore(ENTRY_STORE).getAll()) as JournalEntry[];
       await done;
-      return entries.filter((entry) => entry.version === 1);
+      return entries
+        .filter((entry) => entry.version === 1)
+        .map((entry) => ({ ...entry, authorScope: typeof entry.authorScope === "string" && entry.authorScope.length > 0 ? entry.authorScope : null }));
     } catch (error) {
       throw storageMessage(error, "recovery journal");
     }
   }
 
-  async putProposal(repository: RepositoryIdentity, proposal: ChangeProposal): Promise<void> {
+  async putProposal(repository: RepositoryIdentity, authorScope: string, proposal: ChangeProposal): Promise<void> {
+    if (!authorScope) throw new JournalError("The proposal has no author identity scope.");
     for (const operation of proposal.operations) assertChangeOperation(operation);
     const key = repositoryKey(repository);
     const record: JournalProposal = {
-      key: JSON.stringify([key, proposal.id]),
+      key: JSON.stringify([key, authorScope, proposal.id]),
       repositoryKey: key,
+      authorScope,
       repository,
       proposal,
       createdAt: Date.now(),
@@ -227,14 +285,14 @@ export class BrowserJournal {
     }
   }
 
-  async getProposals(repository: RepositoryIdentity): Promise<JournalProposal[]> {
+  async getProposals(repository: RepositoryIdentity, authorScope: string): Promise<JournalProposal[]> {
     const key = repositoryKey(repository);
     try {
       const transaction = this.database.transaction(PROPOSAL_STORE, "readonly");
       const done = transactionDone(transaction);
       const records = await requestValue(transaction.objectStore(PROPOSAL_STORE).index("repositoryKey").getAll(key)) as JournalProposal[];
       await done;
-      return records.filter((record) => record.repositoryKey === key).sort((left, right) => left.createdAt - right.createdAt);
+      return records.filter((record) => record.repositoryKey === key && record.authorScope === authorScope).sort((left, right) => left.createdAt - right.createdAt);
     } catch (error) {
       throw storageMessage(error, "module proposal");
     }
@@ -246,17 +304,20 @@ export class BrowserJournal {
       const done = transactionDone(transaction);
       const records = await requestValue(transaction.objectStore(PROPOSAL_STORE).getAll()) as JournalProposal[];
       await done;
-      return records;
+      return records.map((record) => ({
+        ...record,
+        authorScope: typeof record.authorScope === "string" && record.authorScope.length > 0 ? record.authorScope : null,
+      }));
     } catch (error) {
       throw storageMessage(error, "module proposal");
     }
   }
 
-  async removeProposal(repository: RepositoryIdentity, proposalId: string): Promise<void> {
+  async removeProposal(repository: RepositoryIdentity, authorScope: string, proposalId: string): Promise<void> {
     try {
       const transaction = this.database.transaction(PROPOSAL_STORE, "readwrite", { durability: "strict" });
       const done = transactionDone(transaction);
-      transaction.objectStore(PROPOSAL_STORE).delete(JSON.stringify([repositoryKey(repository), proposalId]));
+      transaction.objectStore(PROPOSAL_STORE).delete(JSON.stringify([repositoryKey(repository), authorScope, proposalId]));
       await done;
     } catch (error) {
       throw storageMessage(error, "module proposal");
@@ -268,34 +329,69 @@ export class BrowserJournal {
     state: JournalState,
     receipt?: CheckpointReceipt,
   ): Promise<JournalEntry> {
-    const updated: JournalEntry = {
-      ...entry,
-      key: journalEntryKey(entry),
-      state,
-      ...(receipt ? { checkpoint: receipt } : {}),
-      updatedAt: Date.now(),
-    };
-    await this.put(updated);
-    return updated;
+    if (!entry.authorScope) throw new JournalError("The recovery record has no author identity scope.");
+    const key = journalEntryKey(entry);
+    try {
+      const transaction = this.database.transaction(ENTRY_STORE, "readwrite", { durability: "strict" });
+      const done = transactionDone(transaction);
+      const store = transaction.objectStore(ENTRY_STORE);
+      const existing = await requestValue(store.get(key)) as JournalEntry | undefined;
+      if (!existing || existing.authorScope !== entry.authorScope ||
+          existing.operation.id !== entry.operation.id || existing.operation.generation !== entry.operation.generation ||
+          JSON.stringify(existing.operation) !== JSON.stringify(entry.operation)) {
+        await done;
+        throw new JournalError("The exact journal operation was not found; refusing a stale state update.");
+      }
+      const rank: Record<JournalState, number> = { draft: 0, checkpointing: 1, checkpointed: 2, publication_unknown: 3, conflict: 4 };
+      const nextState = rank[state] >= rank[existing.state] ? state : existing.state;
+      const updated: JournalEntry = {
+        ...existing,
+        ...(entry.proposalId ? { proposalId: entry.proposalId } : {}),
+        ...(entry.publicationBatchId ? { publicationBatchId: entry.publicationBatchId } : {}),
+        ...(entry.authorizedAt ? { authorizedAt: entry.authorizedAt } : {}),
+        state: nextState,
+        ...(receipt && nextState === "checkpointed" ? { checkpoint: receipt } : {}),
+        updatedAt: Date.now(),
+      };
+      store.put(updated);
+      await done;
+      return updated;
+    } catch (error) {
+      if (error instanceof JournalError) throw error;
+      throw storageMessage(error, "draft state");
+    }
   }
 
   async removeEntry(entry: JournalEntry): Promise<void> {
     try {
       const transaction = this.database.transaction(ENTRY_STORE, "readwrite", { durability: "strict" });
       const done = transactionDone(transaction);
-      transaction.objectStore(ENTRY_STORE).delete(entry.key || journalEntryKey(entry));
+      transaction.objectStore(ENTRY_STORE).delete(journalEntryKey(entry));
+      if (entry.key && entry.key !== journalEntryKey(entry)) transaction.objectStore(ENTRY_STORE).delete(entry.key);
       await done;
     } catch (error) {
       throw storageMessage(error, "draft");
     }
   }
 
-  async acknowledge(repository: RepositoryIdentity, receipt: PublishReceipt): Promise<number> {
+  async acknowledge(repository: RepositoryIdentity, authorScope: string, receipt: PublishReceipt): Promise<number> {
     if (receipt.state !== "confirmed") return 0;
     const acknowledged = new Set(receipt.acknowledged.map((item) => `${item.operationId}\u0000${item.generation}`));
     const owner = repositoryKey(repository);
-    if (acknowledged.size === 0) return 0;
     try {
+      const receiptRecord: PublicationReceiptRecord = {
+        key: publicationReceiptKey(repository, authorScope, receipt.batchId),
+        repositoryKey: owner,
+        authorScope,
+        receipt,
+        createdAt: Date.now(),
+      };
+      const receiptTransaction = this.database.transaction(RECEIPT_STORE, "readwrite", { durability: "strict" });
+      const receiptDone = transactionDone(receiptTransaction);
+      receiptTransaction.objectStore(RECEIPT_STORE).put(receiptRecord);
+      await receiptDone;
+      if (acknowledged.size === 0) return 0;
+
       const transaction = this.database.transaction([ENTRY_STORE, PROPOSAL_STORE], "readwrite", { durability: "strict" });
       const done = transactionDone(transaction);
       const store = transaction.objectStore(ENTRY_STORE);
@@ -307,13 +403,13 @@ export class BrowserJournal {
       let removed = 0;
       for (const entry of entries) {
         const identity = `${entry.operation.id}\u0000${entry.operation.generation}`;
-        if (entry.repositoryKey === owner && entry.publicationBatchId === receipt.batchId && acknowledged.has(identity) && entry.state !== "draft") {
+        if (entry.repositoryKey === owner && entry.authorScope === authorScope && entry.publicationBatchId === receipt.batchId && acknowledged.has(identity) && entry.state !== "draft") {
           store.delete(entry.key);
           removed++;
         }
       }
       for (const record of proposalRecords) {
-        if (record.repositoryKey === owner && record.proposal.operations.every((operation) => acknowledged.has(`${operation.id}\u0000${operation.generation}`))) {
+        if (record.repositoryKey === owner && record.authorScope === authorScope && record.proposal.operations.every((operation) => acknowledged.has(`${operation.id}\u0000${operation.generation}`))) {
           proposals.delete(record.key);
         }
       }
@@ -324,8 +420,24 @@ export class BrowserJournal {
     }
   }
 
-  async removeDrafts(repository: RepositoryIdentity, path: string): Promise<number> {
-    const entries = await this.getDocument(repository, path);
+  async getPublicationReceipts(repository: RepositoryIdentity, authorScope: string): Promise<PublishReceipt[]> {
+    const owner = repositoryKey(repository);
+    try {
+      const transaction = this.database.transaction(RECEIPT_STORE, "readonly");
+      const done = transactionDone(transaction);
+      const records = await requestValue(transaction.objectStore(RECEIPT_STORE).index("repositoryKey").getAll(owner)) as PublicationReceiptRecord[];
+      await done;
+      return records
+        .filter((record) => record.repositoryKey === owner && record.authorScope === authorScope)
+        .sort((left, right) => left.createdAt - right.createdAt)
+        .map((record) => record.receipt);
+    } catch (error) {
+      throw storageMessage(error, "publication receipt");
+    }
+  }
+
+  async removeDrafts(repository: RepositoryIdentity, path: string, authorScope: string): Promise<number> {
+    const entries = await this.getDocument(repository, path, authorScope);
     const drafts = entries.filter((entry) => entry.state === "draft");
     try {
       const transaction = this.database.transaction(ENTRY_STORE, "readwrite", { durability: "strict" });

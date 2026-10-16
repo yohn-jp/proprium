@@ -1,5 +1,5 @@
 import { defaultKeymap, history, historyKeymap } from "@codemirror/commands";
-import { EditorState } from "@codemirror/state";
+import { EditorState, Transaction } from "@codemirror/state";
 import {
   drawSelection,
   EditorView,
@@ -111,7 +111,10 @@ export const ManuscriptInput = forwardRef<ManuscriptInputHandle, ManuscriptInput
     const view = viewRef.current;
     if (!view || view.state.doc.toString() === value) return;
     externalSyncRef.current = true;
-    view.dispatch({ changes: { from: 0, to: view.state.doc.length, insert: value } });
+    view.dispatch({
+      changes: { from: 0, to: view.state.doc.length, insert: value },
+      annotations: Transaction.addToHistory.of(false),
+    });
   }, [value]);
 
   return <div ref={containerRef} className="manuscript-input" style={style} data-testid="manuscript-input" />;

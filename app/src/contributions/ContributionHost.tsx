@@ -14,6 +14,7 @@ const SLOT_LABELS = {
 
 export function ContributionHost({
   projectId,
+  authorScope,
   slot,
   contributions,
   modules,
@@ -23,6 +24,7 @@ export function ContributionHost({
   onProposalStored,
 }: {
   projectId: string;
+  authorScope: string;
   slot: UiContribution["slot"];
   contributions: UiContribution[];
   modules: ModuleStatus[];
@@ -46,6 +48,7 @@ export function ContributionHost({
           key={item.id}
           item={item}
           projectId={projectId}
+          authorScope={authorScope}
           snapshot={snapshot}
           refresh={refresh}
           journal={journal}
@@ -59,6 +62,7 @@ export function ContributionHost({
 function MountedContribution({
   item,
   projectId,
+  authorScope,
   snapshot,
   refresh,
   journal,
@@ -66,6 +70,7 @@ function MountedContribution({
 }: {
   item: UiContribution;
   projectId: string;
+  authorScope: string;
   snapshot: SnapshotId;
   refresh: () => Promise<void>;
   journal: BrowserJournal | null;
@@ -99,7 +104,7 @@ function MountedContribution({
             const result = await api.action(projectId, actionId, input);
             if (result.ok && result.proposals?.length) {
               if (!journal) throw new Error("Browser recovery storage is unavailable; the module proposal was not delivered to its panel.");
-              for (const proposal of result.proposals) await journal.putProposal(snapshot.repository, proposal);
+              for (const proposal of result.proposals) await journal.putProposal(snapshot.repository, authorScope, proposal);
               if (result.proposals.length > 0) onProposalStored();
             }
             if (snapshotKey(result.snapshot) !== snapshotId) throw new Error("Action result belongs to a different repository snapshot.");
@@ -110,11 +115,11 @@ function MountedContribution({
               id: crypto.randomUUID(), snapshot, operations, source: "module", ...(evidence ? { evidence } : {}),
             };
             if (!journal) throw new Error("Browser recovery storage is unavailable; the module proposal was not delivered to its panel.");
-            await journal.putProposal(snapshot.repository, submitted);
+            await journal.putProposal(snapshot.repository, authorScope, submitted);
             onProposalStored();
             const proposal = await api.propose(projectId, submitted);
-            await journal.putProposal(snapshot.repository, proposal);
-            if (proposal.id !== submitted.id) await journal.removeProposal(snapshot.repository, submitted.id);
+            await journal.putProposal(snapshot.repository, authorScope, proposal);
+            if (proposal.id !== submitted.id) await journal.removeProposal(snapshot.repository, authorScope, submitted.id);
             onProposalStored();
             return proposal;
           },
@@ -136,7 +141,7 @@ function MountedContribution({
       controller.abort();
       dispose?.();
     };
-  }, [item.action, item.id, item.module, journal, onProposalStored, projectId, refresh, snapshot, snapshotId]);
+  }, [authorScope, item.action, item.id, item.module, journal, onProposalStored, projectId, refresh, snapshot, snapshotId]);
 
   return (
     <article className="contribution-card" aria-label={item.title}>

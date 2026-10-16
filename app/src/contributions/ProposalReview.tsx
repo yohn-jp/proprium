@@ -28,11 +28,12 @@ export function ProposalReview({
     setBusyId(record.proposal.id);
     setError("");
     try {
-      const pending = await journal.getRepository(repository);
+      const pending = await journal.getRepository(repository, authorScope);
       const records: JournalEntry[] = [];
       for (const operation of record.proposal.operations) {
         const current = pending.find((entry) => entry.operation.id === operation.id && entry.operation.generation === operation.generation);
         const entry = current ?? proposalOperationEntry(record, operation);
+        if (!current) await journal.put(entry);
         const authorized = await journal.updateState({ ...entry, authorizedAt: Date.now() }, "checkpointing");
         records.push(authorized);
       }
@@ -45,7 +46,7 @@ export function ProposalReview({
         const receipt = await api.checkpoint(projectId, entry.operation);
         await journal.updateState(entry, "checkpointed", receipt);
       }
-      await journal.removeProposal(repository, record.proposal.id);
+      await journal.removeProposal(repository, authorScope, record.proposal.id);
       onStatus("承認した提案をローカルチェックポイントに保存しました。GitHub へ保存するまで記録を保持します。", "success");
       onChange();
     } catch (cause) {
@@ -63,12 +64,12 @@ export function ProposalReview({
     setBusyId(record.proposal.id);
     setError("");
     try {
-      const pending = await journal.getRepository(repository);
+      const pending = await journal.getRepository(repository, authorScope);
       const checkpointed = record.proposal.operations.some((operation) =>
         pending.some((entry) => entry.operation.id === operation.id && entry.operation.generation === operation.generation && entry.state !== "draft"),
       );
       if (checkpointed) throw new Error("チェックポイント済みの操作は提案一覧から削除できません。");
-      await journal.removeProposal(repository, record.proposal.id);
+      await journal.removeProposal(repository, authorScope, record.proposal.id);
       onStatus("提案をブラウザーから削除しました。", "success");
       onChange();
     } catch (cause) {
@@ -122,6 +123,7 @@ export function ProposalReview({
 }
 
 function proposalOperationEntry(record: JournalProposal, operation: ChangeOperation): JournalEntry {
+  if (!record.authorScope) throw new Error("This proposal has no author identity scope and cannot be approved.");
   const path = operation.writes[0]?.path ?? "proposal";
   const key = documentKey(record.repository, path);
   const entry: JournalEntry = {
@@ -129,6 +131,7 @@ function proposalOperationEntry(record: JournalProposal, operation: ChangeOperat
     key: "",
     repositoryKey: repositoryKey(record.repository),
     documentKey: key,
+    authorScope: record.authorScope,
     repository: record.repository,
     documentPath: path,
     sceneId: record.proposal.id,
