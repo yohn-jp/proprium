@@ -1,0 +1,12 @@
+.git
+.github
+node_modules
+dist
+build
+coverage
+.turbo
+.env
+.env.*
+data
+.arcadia
+.pnpm-store
