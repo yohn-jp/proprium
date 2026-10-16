@@ -752,11 +752,13 @@ export function createServer(options: ApiServerOptions): Server {
           return { ok: false, snapshot, error: { code: "domain_job_capacity", message: "The host is already tracking the maximum number of domain jobs", retryable: true } };
         }
         const id = randomBytes(16).toString("hex");
+        // Reserve synchronously, before the durable registration awaits, so
+        // concurrent invokes cannot all observe the same free capacity.
+        activeDomainJobIds.add(id);
         let registered = false;
         try {
           const event = await jobHistory.beginDomainJob({ id, type, repository: snapshot.repository });
           registered = true;
-          activeDomainJobIds.add(id);
           publishJobEvent(event);
           onDomainJobStarted?.(id);
           publishJobEvent(await jobHistory.markDomainJobRunning(id));
@@ -767,8 +769,8 @@ export function createServer(options: ApiServerOptions): Server {
                 code: "job_history_unavailable", message: "The host could not safely start this task", retryable: true,
               }, "job_history_unavailable")));
             } catch { /* Keep the original storage failure as the useful boundary error. */ }
-            activeDomainJobIds.delete(id);
           }
+          activeDomainJobIds.delete(id);
           const code = error instanceof JobHistoryError ? error.code : "job_history_unavailable";
           console.error(`Scriptorium domain job was not started (${code}).`);
           return actionFailure(snapshot, { code: "job_history_unavailable", message: "The host could not safely register this job" }, "job_history_unavailable");
