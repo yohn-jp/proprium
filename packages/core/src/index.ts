@@ -9,6 +9,7 @@ import {
   assertChangeOperation,
   assertProjectPath,
   snapshotKey,
+  snapshotScopeRevision,
   type Approval,
   type ChangeOperation,
   type ChangeProposal,
@@ -442,6 +443,9 @@ function isJsonValue(value: unknown, active = new WeakSet<object>(), depth = 0):
 }
 
 function operationRequiresHierarchyRevision(operation: ChangeOperation): boolean {
+  const hasExplicitHierarchyScope = operation.readScopes?.some(({ prefix }) =>
+    prefix === "plot" || prefix === "plot/volumes");
+  if (hasExplicitHierarchyScope) return false;
   return operation.effect === "structure" || operation.writes.some(({ path: filePath }) =>
     filePath === "plot/volumes" || filePath.startsWith("plot/volumes/"));
 }
@@ -473,6 +477,9 @@ function normalizedOperation(operation: ChangeOperation): ChangeOperation {
     baseRemoteCommit: operation.baseRemoteCommit,
     effect: operation.effect,
     reads: operation.reads.map(({ path: filePath, revision }) => ({ path: filePath, revision })),
+    ...(operation.readScopes === undefined ? {} : {
+      readScopes: operation.readScopes.map(({ prefix, revision }) => ({ prefix, revision })),
+    }),
     writes: operation.writes.map((change) => ({
       path: change.path,
       revision: change.revision,
@@ -1279,6 +1286,25 @@ export class CoreStore implements MutationCoordinator {
     if (!commit) return revisionForBytes(Buffer.alloc(0));
     const tree = await gitBuffer(root, ["ls-tree", "-r", "--full-tree", "-z", commit, "--", "plot/volumes"]);
     return revisionForBytes(tree);
+  }
+
+  private async changedReadScopes(
+    root: string,
+    snapshot: SnapshotId,
+    commit: string,
+    scopes: NonNullable<ChangeOperation["readScopes"]>,
+  ): Promise<string[]> {
+    if (!scopes.length) return [];
+    const reader = await this.makeReader(root, snapshot, commit);
+    const conflicts: string[] = [];
+    for (const scope of scopes) {
+      try {
+        if (await snapshotScopeRevision(reader, scope.prefix) !== scope.revision) conflicts.push(scope.prefix);
+      } catch {
+        conflicts.push(scope.prefix);
+      }
+    }
+    return conflicts;
   }
 
   private async createCommit(
@@ -2572,6 +2598,7 @@ export class CoreStore implements MutationCoordinator {
       if (snapshotKey({ repository: proposal.snapshot.repository, remoteCommit: proposal.snapshot.remoteCommit }) !== snapshotKey(observation.snapshot)) {
         throw coreError(409, "proposal_snapshot_stale", "The repository changed after this proposal was created; review a fresh proposal before approving it");
       }
+      await this.ensureSnapshot(root, proposal.snapshot, observation.snapshot.repository, observation.snapshot.remoteCommit);
       const allowed = new Set(proposal.operations.map((operation) => operation.id));
       if (!approval.operationIds.length || new Set(approval.operationIds).size !== approval.operationIds.length || approval.operationIds.some((id) => !allowed.has(id))) {
         throw coreError(400, "invalid_approval", "Approval operation IDs must be a unique subset of the proposal");
@@ -2666,6 +2693,15 @@ export class CoreStore implements MutationCoordinator {
         }
         proposalManifest = undefined;
       }
+    }
+    const readScopeSnapshot: SnapshotId = {
+      repository: operation.repository,
+      remoteCommit: operation.baseRemoteCommit,
+      ...(parent && parent !== operation.baseRemoteCommit ? { overlayCommit: parent } : {}),
+    };
+    const scopeConflicts = await this.changedReadScopes(root, readScopeSnapshot, parent, operation.readScopes ?? []);
+    if (scopeConflicts.length) {
+      throw coreError(409, "scope_precondition_conflict", `The project scope changed since the operation snapshot: ${scopeConflicts.join(", ")}`);
     }
     const preconditions = new Map<string, string | null>();
     for (const item of [...operation.reads, ...operation.writes]) {
@@ -2945,6 +2981,16 @@ export class CoreStore implements MutationCoordinator {
       }
       if (operation.baseRemoteCommit && remoteHead && !(await this.isAncestor(root, operation.baseRemoteCommit, remoteHead))) {
         outcomes.push({ operationId: operation.id, state: "conflict", receipt: stored.receipt, paths });
+        continue;
+      }
+      const scopeSnapshot: SnapshotId = {
+        repository: operation.repository,
+        remoteCommit: operation.baseRemoteCommit,
+        ...(replayHead && replayHead !== remoteHead ? { overlayCommit: replayHead } : {}),
+      };
+      const scopeConflicts = await this.changedReadScopes(root, scopeSnapshot, replayHead, operation.readScopes ?? []);
+      if (scopeConflicts.length) {
+        outcomes.push({ operationId: operation.id, state: "conflict", receipt: stored.receipt, paths: [...paths, ...scopeConflicts] });
         continue;
       }
       if (operationRequiresHierarchyRevision(operation)) {
