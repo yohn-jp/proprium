@@ -6,7 +6,7 @@
   },
   "target": {
     "branch": "work/7-p07",
-    "implementationCommit": "ec2acbdcd0ef9ea498067f61cdd7273d5b5de2cc"
+    "implementationCommit": "441884f9569290edcc667716483cbbaae0e284d6"
   },
   "ledger": {
     "R23": {
@@ -50,16 +50,24 @@
   },
   "validation": [
     {
+      "command": "pnpm install --frozen-lockfile",
+      "result": "passed on the integrated P07 worktree"
+    },
+    {
+      "command": "pnpm --filter @scriptorium/contracts build",
+      "result": "passed on the integrated P07 worktree"
+    },
+    {
       "command": "pnpm --filter @scriptorium/module-publishing typecheck",
-      "result": "passed at implementation commit ec2acbd"
+      "result": "passed at implementation tree 441884f against BrowserModuleDefinition.mountPublic"
     },
     {
       "command": "pnpm --filter @scriptorium/module-publishing test",
-      "result": "passed, 5 of 5 tests at implementation commit ec2acbd"
+      "result": "passed, 5 of 5 tests at implementation tree 441884f"
     },
     {
       "command": "pnpm --filter @scriptorium/module-publishing build",
-      "result": "passed at implementation commit ec2acbd"
+      "result": "passed at implementation tree 441884f"
     },
     {
       "command": "git diff --check",
