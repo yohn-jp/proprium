@@ -20,6 +20,7 @@ const MAX_SCRATCH_ATTACHMENT_BYTES = 8 * 1024 * 1024;
 const API_DRAIN_TIMEOUT_MS = 5_000;
 const API_VERSION = "0.1.0";
 const STYLE_NONCES = new WeakMap<IncomingMessage, string>();
+const PUBLIC_READER_MODULES = new Set(["story", "diagnostics", "nlp", "semantic", "speaker", "assistant", "publishing", "mcp"]);
 
 interface Session {
   expiresAt: number;
@@ -179,6 +180,16 @@ function parseSceneId(value: string): string {
   }
 }
 
+function isPublicReaderPath(pathname: string): boolean {
+  const parts = pathname.split("/");
+  if (parts.length !== 5 || parts[0] !== "" || parts[1] !== "r" ||
+      !/^\d{1,32}$/u.test(parts[3] ?? "") || !/^[A-Za-z0-9._~-]{1,128}$/u.test(parts[4] ?? "")) return false;
+  let moduleId: string;
+  try { moduleId = decodeURIComponent(parts[2] ?? ""); }
+  catch { return false; }
+  return PUBLIC_READER_MODULES.has(moduleId);
+}
+
 async function serveStatic(
   request: IncomingMessage,
   response: ServerResponse,
@@ -187,6 +198,7 @@ async function serveStatic(
 ): Promise<boolean> {
   if (request.method !== "GET" && request.method !== "HEAD") return false;
   const path = requestPath(request);
+  const publicReaderPath = isPublicReaderPath(path);
   const files: Record<string, { filename: string; contentType: string }> = {
     "/": { filename: "index.html", contentType: "text/html; charset=utf-8" },
     "/main.js": { filename: "main.js", contentType: "text/javascript; charset=utf-8" },
@@ -194,7 +206,7 @@ async function serveStatic(
     "/drafts.js": { filename: "drafts.js", contentType: "text/javascript; charset=utf-8" },
     "/styles.css": { filename: "styles.css", contentType: "text/css; charset=utf-8" },
   };
-  let file = files[path];
+  let file = files[path] ?? (publicReaderPath ? files["/"] : undefined);
   if (!file && path.startsWith("/assets/")) {
     const name = path.slice("/assets/".length);
     if (!name || name.includes("/") || name.includes("\\") || name === "." || name === "..") return false;
@@ -231,6 +243,10 @@ async function serveStatic(
     const content = path === "/" || resolvedTarget === resolve(staticDir, "index.html")
       ? Buffer.from(original.toString("utf8").replaceAll("__SCRIPTORIUM_STYLE_NONCE__", styleNonce))
       : original;
+    if (publicReaderPath) {
+      response.setHeader("Referrer-Policy", "no-referrer");
+      response.setHeader("X-Robots-Tag", "noindex, nofollow");
+    }
     response.writeHead(200, { "Content-Type": file.contentType, "Content-Length": content.length });
     response.end(request.method === "HEAD" ? undefined : content);
   } catch (error) {
