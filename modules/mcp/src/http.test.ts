@@ -17,10 +17,11 @@ const snapshot: SnapshotId = {
   remoteCommit: "a".repeat(40),
 };
 
-function actionContext(calls: string[]) {
+function actionContext(calls: string[], extraActions: ActionDescriptor[] = []) {
   const actions: ActionDescriptor[] = [
     { id: "core.status", module: "core", effect: "read" },
     { id: "story.changes.propose", module: "story", effect: "propose" },
+    ...extraActions,
   ];
   const reader = {
     snapshot,
@@ -190,6 +191,42 @@ test("source tools fail with a module availability error when their producer is 
     const result = await client.callTool({ name: "get_dialogue", arguments: { character_id: "char-one" } });
     assert.equal(result.isError, true);
     assert.deepEqual((result.structuredContent as { error: { code: string } }).error.code, "MODULE_UNAVAILABLE");
+    assert.deepEqual(calls, []);
+  } finally {
+    await transport.terminateSession().catch(() => undefined);
+    await client.close().catch(() => undefined);
+  }
+});
+
+test("hybrid search and full diagnostics fail closed instead of returning partial substitutes", async () => {
+  const calls: string[] = [];
+  const host = actionContext(calls, [
+    { id: "core.search", module: "core", effect: "read" },
+    { id: "diagnostics.analyze", module: "diagnostics", effect: "compute" },
+  ]);
+  const contribution = createMcpHttpContribution(new Map());
+  const fetch: FetchLike = async (url, init) => contribution.handle(new Request(url, init), host);
+  const transport = new StreamableHTTPClientTransport(
+    new URL("http://scriptorium.test/api/projects/project-one/modules/mcp/streamable"),
+    { fetch },
+  );
+  const client = new Client({ name: "mcp-module-test", version: "1.0.0" });
+
+  try {
+    await client.connect(transport);
+    const search = await client.callTool({
+      name: "search",
+      arguments: { project_id: "project-one", query: "memory", limit: 20 },
+    });
+    assert.equal(search.isError, true);
+    assert.equal((search.structuredContent as { error: { code: string } }).error.code, "MODULE_UNAVAILABLE");
+
+    const diagnostics = await client.callTool({
+      name: "get_diagnostics",
+      arguments: { project_id: "project-one", scene_id: "scene-one", text: "draft" },
+    });
+    assert.equal(diagnostics.isError, true);
+    assert.equal((diagnostics.structuredContent as { error: { code: string } }).error.code, "ACTION_UNAVAILABLE");
     assert.deepEqual(calls, []);
   } finally {
     await transport.terminateSession().catch(() => undefined);

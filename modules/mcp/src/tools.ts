@@ -321,14 +321,14 @@ export function registerMcpTools(server: McpServer, baseClient: McpActionClient)
 
   server.tool(
     "search",
-    "Search saved project story content",
+    "Run the source hybrid full-text and semantic search over project story content",
     {
       project_id: projectIdSchema,
       query: z.string().describe("Search query"),
       limit: z.number().optional().describe("Maximum result count (default 20)"),
     },
-    guarded(async ({ project_id, query, limit }) =>
-      invoke(scopedClient(baseClient, project_id), "core.search", { query, ...(limit === undefined ? {} : { limit }) })),
+    guarded(async ({ project_id }) =>
+      unavailableModuleAction(scopedClient(baseClient, project_id), "semantic", "search")),
   );
 
   server.tool(
@@ -357,41 +357,14 @@ export function registerMcpTools(server: McpServer, baseClient: McpActionClient)
 
   server.tool(
     "get_diagnostics",
-    "Run saved scene diagnostics and return normalized findings",
+    "Run the full source scene diagnostics, including speaker-dependent checks",
     {
       project_id: projectIdSchema,
       scene_id: z.string().describe("Saved scene ID"),
       text: z.string().optional().describe("Optional caller-supplied text; defaults to saved manuscript"),
     },
-    guarded(async ({ project_id, scene_id, text }) => {
-      const client = scopedClient(baseClient, project_id);
-      const { result, context } = text === undefined
-        ? await savedScene(client, scene_id)
-        : await (async () => {
-            const result = await sceneContext(client, scene_id);
-            if (!result.ok) throw new ToolFailure(result.error.code, result.error.message);
-            if (result.data === null) throw new ToolFailure("NOT_FOUND", `Scene not found: ${scene_id}`);
-            return { result, context: extractSceneContext(result.data, scene_id) };
-          })();
-      if (!result.ok) return actionResult(result);
-      const body = text ?? context?.manuscriptBody;
-      if (body === undefined || body === null) {
-        return errorResult("NOT_FOUND", `Scene manuscript not found: ${scene_id}`);
-      }
-      const actions = await client.listActions();
-      if (!actions.some((action) => action.id === "diagnostics.analyze")) {
-        return unavailableModuleAction(client, "diagnostics", "get_diagnostics");
-      }
-      const diagnostics = await client.invoke("diagnostics.analyze", {
-        text: body,
-        sceneId: scene_id,
-        ...(context?.intendedTone ? { intendedTone: context.intendedTone } : {}),
-        ...(context?.goalConflictText ? { goalConflictText: context.goalConflictText } : {}),
-      });
-      if (!diagnostics.ok) return actionResult(diagnostics);
-      requireSameSnapshot(result.snapshot, diagnostics.snapshot);
-      return outputResult(diagnostics.data, diagnostics.snapshot);
-    }),
+    guarded(async ({ project_id }) =>
+      unavailableModuleAction(scopedClient(baseClient, project_id), "diagnostics", "get_diagnostics")),
   );
 
   server.tool(
@@ -671,7 +644,7 @@ export function registerMcpTools(server: McpServer, baseClient: McpActionClient)
     "Validate story links, threads, and manuscript references within an optional scope",
     { project_id: projectIdSchema, scope: inspectionScope },
     guarded(async ({ project_id }) =>
-      unavailableModuleAction(scopedClient(baseClient, project_id), "story", "check_consistency")),
+      unavailableModuleAction(scopedClient(baseClient, project_id), "diagnostics", "check_consistency")),
   );
 
   server.tool(
@@ -679,7 +652,7 @@ export function registerMcpTools(server: McpServer, baseClient: McpActionClient)
     "Detect scene-to-scene location continuity issues within an optional scope",
     { project_id: projectIdSchema, scope: inspectionScope },
     guarded(async ({ project_id }) =>
-      unavailableModuleAction(scopedClient(baseClient, project_id), "story", "check_continuity")),
+      unavailableModuleAction(scopedClient(baseClient, project_id), "diagnostics", "check_continuity")),
   );
 
   server.tool(
