@@ -122,13 +122,13 @@ export interface ModuleActionContext {
   projectId: string;
   reader: SnapshotReader;
   /** Same authenticated project/snapshot; never exposes author mutation ports. */
-  invoke(actionId: string, input: unknown): Promise<ActionResult>;
+  invoke(actionId: string, input: unknown, signal?: AbortSignal): Promise<ActionResult>;
   listActions(): Promise<ActionDescriptor[]>;
   /** Explicit read-only composition with another registered repository of this owner. */
   linkedReader(repositoryId: string): Promise<SnapshotReader>;
   signal: AbortSignal;
   /** Only proposes; approval remains an authenticated author action. */
-  propose(operations: ChangeOperation[], evidence?: ProposalEvidence[], proposalId?: string): Promise<ChangeProposal>;
+  propose(operations: ChangeOperation[], evidence?: ProposalEvidence[], proposalId?: string, signal?: AbortSignal): Promise<ChangeProposal>;
   runJob<T = unknown>(request: JobRequest, signal?: AbortSignal): Promise<JobOutcome<T>>;
 }
 export interface ModuleAction {
