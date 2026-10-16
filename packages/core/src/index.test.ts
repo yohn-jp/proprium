@@ -97,6 +97,11 @@ test("registers a Git project, preserves frontmatter, rejects stale saves, and s
     });
     assert.equal(saved.text, "Edited body.\nSecond line.");
     assert.ok((await store.history(project.id)).every((commit) => /^[0-9a-f]{40}$/i.test(commit.hash)));
+    const savedVersions = await store.listManuscriptSnapshots(project.id, "ms-one", "scene-1", "checkpoint");
+    assert.equal(savedVersions.snapshots[0]?.sceneId, "scene-1");
+    const savedVersion = await store.readManuscriptSnapshot(project.id, "ms-one", savedVersions.snapshots[0]!.id, "checkpoint", savedVersions.snapshot);
+    assert.equal(savedVersion?.manuscript.body, "Edited body.\nSecond line.");
+    assert.match(savedVersion?.manuscript.document.content ?? "", /author_note: Preserve this/);
     const markdownPath = path.join(await projectWorkspace(dataDir, project.id), "manuscript/vol-1/ch-1/scene-1.md");
     const markdown = await fs.readFile(markdownPath, "utf8");
     assert.ok(markdown.startsWith("---\ntitle: Draft title\nauthor_note: Preserve this\ncustom:\n  nested: true\n---\n"));
@@ -295,6 +300,8 @@ test("creates a missing manuscript link and its nested Markdown file on first sa
     assert.equal((await store.readScene(project.id, "scene-1")).text, "First draft.");
     const storedYaml = YAML.parse(await fs.readFile(path.join(await projectWorkspace(path.join(tempDir, "state"), project.id), "plot/volumes/vol-1/chapters/ch-1/scenes/scene-1.yaml"), "utf8")) as Record<string, unknown>;
     assert.equal(storedYaml.manuscript, "manuscript/vol-1/ch-1/scene-1.md");
+    assert.deepEqual(storedYaml.custom, { nested: ["preserve", "me"] });
+    assert.equal(storedYaml.name, "Scene Name");
   } finally {
     await fs.rm(tempDir, { recursive: true, force: true });
   }

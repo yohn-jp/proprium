@@ -70,6 +70,25 @@ export interface Commit {
   message: string;
 }
 
+export interface ManuscriptSnapshotMeta {
+  id: string;
+  sceneId: string;
+  manuscriptId: string;
+  createdAt: number;
+  charCount: number;
+  source: "git";
+  branch?: string;
+  label?: string;
+  trigger?: "manual" | "submit" | "idle";
+}
+
+export interface ManuscriptSnapshot extends ManuscriptSnapshotMeta {
+  /** Legacy editor body with YAML frontmatter removed. */
+  body: string;
+  /** Exact historical Markdown bytes decoded as UTF-8, including frontmatter. */
+  document: { path: string; content: string; revision: string };
+}
+
 export interface SyncStatus {
   branch: string;
   head: string;
@@ -221,6 +240,46 @@ function revisionForBytes(content: Buffer | string): string {
   return createHash("sha256").update(content).digest("hex");
 }
 
+function isSnapshotId(value: unknown): value is SnapshotId {
+  const snapshot = asRecord(value);
+  const repository = snapshot ? asRecord(snapshot.repository) : null;
+  return !!snapshot && !!repository &&
+    (repository.provider === "github" || repository.provider === "local") &&
+    [repository.repositoryId, repository.defaultBranch, repository.ownerScope, repository.url].every((item) => typeof item === "string" && item.length > 0) &&
+    typeof snapshot.remoteCommit === "string" && /^(?:[a-f0-9]{40}|[a-f0-9]{64}|)$/.test(snapshot.remoteCommit) &&
+    (snapshot.overlayCommit === undefined || (typeof snapshot.overlayCommit === "string" && /^(?:[a-f0-9]{40}|[a-f0-9]{64})$/.test(snapshot.overlayCommit)));
+}
+
+function isJsonValue(value: unknown, active = new WeakSet<object>(), depth = 0): boolean {
+  if (value === null || typeof value === "string" || typeof value === "boolean") return true;
+  if (typeof value === "number") return Number.isFinite(value);
+  if (typeof value !== "object" || depth > 32) return false;
+  if (active.has(value)) return false;
+  if (!Array.isArray(value)) {
+    const prototype = Object.getPrototypeOf(value);
+    if (prototype !== Object.prototype && prototype !== null) return false;
+  }
+  active.add(value);
+  const valid = Array.isArray(value)
+    ? value.every((item) => isJsonValue(item, active, depth + 1))
+    : Object.values(value as Record<string, unknown>).every((item) => isJsonValue(item, active, depth + 1));
+  active.delete(value);
+  return valid;
+}
+
+function assertUserOperationPaths(operation: ChangeOperation): void {
+  const reserved = ["meta/scriptorium/operations", "meta/scriptorium/publications"];
+  for (const write of operation.writes) {
+    const filePath = write.path.toLowerCase();
+    if (reserved.some((root) => filePath === root || filePath.startsWith(`${root}/`))) {
+      throw new Error("Change operations cannot modify Core authority metadata");
+    }
+    if (write.encoding === "base64" && Buffer.from(write.content ?? "", "base64").toString("base64") !== write.content) {
+      throw new Error("Binary change content must use canonical base64 encoding");
+    }
+  }
+}
+
 function normalizedOperation(operation: ChangeOperation): ChangeOperation {
   return {
     id: operation.id,
@@ -254,6 +313,24 @@ function publicationDigest(batchId: string, operations: PublicationMetadata["ope
   return revisionForBytes(JSON.stringify({ version: 1, batchId, operations }));
 }
 
+function receiptMatchesOperation(value: unknown, operation: ChangeOperation): value is CheckpointReceipt {
+  const receipt = asRecord(value);
+  if (!receipt || receipt.operationId !== operation.id || receipt.generation !== operation.generation ||
+      typeof receipt.localCommit !== "string" || !/^(?:[a-f0-9]{40}|[a-f0-9]{64})$/.test(receipt.localCommit) ||
+      receipt.remoteBase !== operation.baseRemoteCommit || !Array.isArray(receipt.revisions)) return false;
+  const expected = operation.writes.map((write) => ({
+    path: write.path,
+    revision: write.content === null
+      ? null
+      : revisionForBytes(write.encoding === "base64" ? Buffer.from(write.content, "base64") : Buffer.from(write.content, "utf8")),
+  }));
+  return receipt.revisions.length === expected.length && receipt.revisions.every((item, index) => {
+    const actual = asRecord(item);
+    const target = expected[index];
+    return !!actual && !!target && actual.path === target.path && actual.revision === target.revision;
+  });
+}
+
 function operationMetadataPath(operationId: string): string {
   return `${OPERATION_DIRECTORY}/${operationId}.json`;
 }
@@ -270,13 +347,18 @@ function parseOperationMetadata(text: string, metadataPath: string): OperationMe
     }
     const operation = value.operation as unknown as ChangeOperation;
     assertChangeOperation(operation);
+    assertUserOperationPaths(operation);
     const normalized = normalizedOperation(operation);
     if (metadataPath !== operationMetadataPath(normalized.id) || value.digest !== operationDigest(normalized)) {
       throw new Error("Mismatched metadata");
     }
+    if (!Number.isSafeInteger(value.sequence) || (value.sequence as number) <= 0 ||
+        (value.authorScope !== undefined && (typeof value.authorScope !== "string" || !value.authorScope.trim()))) {
+      throw new Error("Invalid operation metadata fields");
+    }
     return {
       version: 1,
-      sequence: Number.isSafeInteger(value.sequence) && (value.sequence as number) > 0 ? value.sequence as number : 0,
+      sequence: value.sequence as number,
       digest: value.digest,
       operation: normalized,
       ...(typeof value.authorScope === "string" ? { authorScope: value.authorScope } : {}),
@@ -443,7 +525,7 @@ async function git(
       cwd,
       env,
       timeout: options.timeout ?? GIT_TIMEOUT_MS,
-      maxBuffer: 8 * 1024 * 1024,
+      maxBuffer: 32 * 1024 * 1024,
       windowsHide: true,
     });
     return result.stdout;
@@ -477,7 +559,7 @@ async function gitInput(
       cwd,
       env,
       timeout: options.timeout ?? GIT_TIMEOUT_MS,
-      maxBuffer: 8 * 1024 * 1024,
+      maxBuffer: 32 * 1024 * 1024,
       windowsHide: true,
     }, (error, stdout) => {
       if (error) {
@@ -506,7 +588,7 @@ async function gitBuffer(cwd: string, args: string[]): Promise<Buffer> {
       env: sanitizedEnvironment(),
       encoding: "buffer",
       timeout: GIT_TIMEOUT_MS,
-      maxBuffer: 8 * 1024 * 1024,
+      maxBuffer: 32 * 1024 * 1024,
       windowsHide: true,
     }, (error, stdout) => {
       if (error) {
@@ -516,6 +598,41 @@ async function gitBuffer(cwd: string, args: string[]): Promise<Buffer> {
       resolve(Buffer.isBuffer(stdout) ? stdout : Buffer.from(stdout));
     });
   });
+}
+
+function stripMarkdownFrontmatter(raw: string): string {
+  if (!raw.startsWith("---")) return raw;
+  const end = raw.indexOf("\n---", 3);
+  if (end === -1) return raw;
+  const after = raw.slice(end + 4);
+  return after.startsWith("\n") ? after.slice(1) : after;
+}
+
+function parseLoomTrailers(message: string): Record<string, string> {
+  const trailers: Record<string, string> = {};
+  for (const line of message.split(/\r?\n/)) {
+    const match = /^(Loom-[A-Za-z0-9-]+):\s*(.*)$/.exec(line.trim());
+    if (match?.[1]) trailers[match[1]] = (match[2] ?? "").trim();
+  }
+  return trailers;
+}
+
+function parseLoomSceneId(message: string): string | null {
+  const subject = message.split(/\r?\n/, 1)[0] ?? "";
+  return /^loom\(scene\):\s+(\S+)/.exec(subject.trim())?.[1] ?? null;
+}
+
+function parseGitLogRecord(chunk: string): { hash: string; date: string; body: string } | null {
+  const normalized = chunk.replace(/^\n+/, "").replace(/\n+$/, "");
+  if (!normalized) return null;
+  const first = normalized.indexOf("\0");
+  const second = normalized.indexOf("\0", first + 1);
+  if (first < 1 || second < first + 1) return null;
+  return {
+    hash: normalized.slice(0, first),
+    date: normalized.slice(first + 1, second),
+    body: normalized.slice(second + 1).trimEnd(),
+  };
 }
 
 function validateProjectId(id: string): void {
@@ -576,12 +693,13 @@ async function pathIsWithinProject(root: string, relativePath: string): Promise<
   return pathUnderRoot(root, safeRelativePath(relativePath));
 }
 
-async function atomicWrite(filePath: string, content: string): Promise<void> {
+async function atomicWrite(filePath: string, content: string | Buffer): Promise<void> {
   const directory = path.dirname(filePath);
   await fs.mkdir(directory, { recursive: true, mode: 0o700 });
   const tempPath = path.join(directory, `.${path.basename(filePath)}.${randomUUID()}.tmp`);
   try {
-    await fs.writeFile(tempPath, content, { encoding: "utf8", flag: "wx", mode: 0o600, flush: true });
+    const bytes = Buffer.isBuffer(content) ? content : Buffer.from(content, "utf8");
+    await fs.writeFile(tempPath, bytes, { flag: "wx", mode: 0o600, flush: true });
     await fs.rename(tempPath, filePath);
   } catch (error) {
     await fs.rm(tempPath, { force: true }).catch(() => undefined);
@@ -600,7 +718,7 @@ export class CoreStore implements MutationCoordinator {
   private readonly maxPushAttempts: number;
   private readonly queueTails = new Map<string, Promise<void>>();
   private readonly proposals = new Map<string, Map<string, ChangeProposal>>();
-  private readonly approvals = new Map<string, Map<string, { authorScope: string; operationIds: Set<string> }>>();
+  private readonly approvals = new Map<string, Map<string, { authorScope: string; operationDigests: Map<string, string> }>>();
 
   constructor(options: CoreStoreOptions) {
     if (!options?.dataDir) throw new TypeError("CoreStore requires dataDir");
@@ -782,7 +900,7 @@ export class CoreStore implements MutationCoordinator {
         "-c", "user.email=scriptorium@localhost",
         "commit-tree", tree,
         ...(parent ? ["-p", parent] : []),
-        "-m", message.replace(/[\r\n]+/g, " ").slice(0, 512),
+        "-m", message.replace(/\r\n?/g, "\n").replace(/\0/g, "").slice(0, 1024),
       ])).trim();
       if (!/^[a-f0-9]{40,64}$/.test(commit)) throw coreError(500, "checkpoint_failed", "Git did not create a checkpoint commit");
       return commit;
@@ -867,36 +985,106 @@ export class CoreStore implements MutationCoordinator {
     }
   }
 
-  private async readOperationRecords(root: string, commit: string): Promise<StoredOperation[]> {
-    if (!commit) return [];
-    const files = await this.snapshotFiles(root, commit, OPERATION_DIRECTORY);
-    const publicationFiles = await this.snapshotFiles(root, commit, PUBLICATION_DIRECTORY);
-    const publishedReceipts = new Map<string, CheckpointReceipt>();
-    for (const publicationPath of publicationFiles.filter((filePath) => filePath.endsWith(".json"))) {
-      const file = await this.snapshotFile(root, commit, publicationPath);
-      if (!file) continue;
-      let publication: PublicationMetadata;
-      try { publication = JSON.parse(file.content) as PublicationMetadata; }
-      catch { throw coreError(409, "publication_metadata_invalid", "The repository contains invalid publication metadata"); }
-      if (publication.version !== 1 || typeof publication.batchId !== "string" || !Array.isArray(publication.operations) || publication.digest !== publicationDigest(publication.batchId, publication.operations)) {
-        throw coreError(409, "publication_metadata_invalid", "The repository contains invalid publication metadata");
+  private async readHistoricalMetadataFiles(
+    root: string,
+    commit: string,
+    directory: string,
+  ): Promise<Array<{ path: string; commit: string; content: string }>> {
+    const history = await git(root, ["log", "--full-history", "--format=%H", "--name-only", commit, "--", directory]);
+    const paths = new Map<string, string[]>();
+    let currentCommit = "";
+    for (const rawLine of history.split(/\r?\n/)) {
+      const line = rawLine.trim();
+      if (/^(?:[a-f0-9]{40}|[a-f0-9]{64})$/.test(line)) {
+        currentCommit = line;
+      } else if (currentCommit && line.startsWith(`${directory}/`) && line.endsWith(".json")) {
+        const commits = paths.get(line) ?? [];
+        commits.push(currentCommit);
+        paths.set(line, commits);
       }
-      for (const item of publication.operations) {
-        if (item && typeof item.operationId === "string" && item.receipt?.operationId === item.operationId && item.receipt.generation === item.generation) {
-          publishedReceipts.set(item.operationId, item.receipt);
+    }
+    const records: Array<{ path: string; commit: string; content: string }> = [];
+    for (const [filePath, versions] of paths) {
+      for (const versionCommit of versions) {
+        try {
+          const content = await git(root, ["show", `${versionCommit}:${filePath}`]);
+          records.push({ path: filePath, commit: versionCommit, content });
+        } catch (error) {
+          if (!(error instanceof CoreError) || error.code !== "git_operation_failed") throw error;
+          /* A deletion commit has no blob at its tip; earlier versions remain in the path history. */
         }
       }
     }
-    const operations: StoredOperation[] = [];
-    for (const filePath of files) {
-      if (!filePath.endsWith(".json")) continue;
-      const file = await this.snapshotFile(root, commit, filePath);
-      if (!file || file.content.length > 16 * 1024 * 1024) {
+    return records;
+  }
+
+  private async readOperationRecords(root: string, commit: string): Promise<StoredOperation[]> {
+    if (!commit) return [];
+    const operationVersions = await this.readHistoricalMetadataFiles(root, commit, OPERATION_DIRECTORY);
+    const publicationVersions = await this.readHistoricalMetadataFiles(root, commit, PUBLICATION_DIRECTORY);
+    const operationMetadata = new Map<string, { metadata: OperationMetadata; path: string; commit: string }>();
+    for (const version of operationVersions) {
+      if (version.content.length > 16 * 1024 * 1024) {
         throw coreError(409, "operation_metadata_invalid", "The repository contains invalid Scriptorium operation metadata");
       }
-      const metadata = parseOperationMetadata(file.content, filePath);
-      const changedAt = (await git(root, ["log", "-n1", "--format=%H", commit, "--", filePath])).trim();
-      if (!changedAt) throw coreError(409, "operation_metadata_invalid", "The repository contains untraceable Scriptorium operation metadata");
+      const metadata = parseOperationMetadata(version.content, version.path);
+      const existing = operationMetadata.get(metadata.operation.id);
+      if (existing && (
+        existing.metadata.digest !== metadata.digest || existing.metadata.sequence !== metadata.sequence ||
+        existing.metadata.authorScope !== metadata.authorScope || existing.metadata.operation.generation !== metadata.operation.generation
+      )) {
+        throw coreError(409, "operation_metadata_invalid", "An operation's immutable repository binding changed in Git history");
+      }
+      if (!existing) operationMetadata.set(metadata.operation.id, { metadata, path: version.path, commit: version.commit });
+    }
+
+    const publicationMetadata = new Map<string, PublicationMetadata>();
+    for (const version of publicationVersions) {
+      let publication: PublicationMetadata;
+      try { publication = JSON.parse(version.content) as PublicationMetadata; }
+      catch { throw coreError(409, "publication_metadata_invalid", "The repository contains invalid publication metadata"); }
+      if (
+        publication.version !== 1 || typeof publication.batchId !== "string" || !/^[A-Za-z0-9_-]{1,128}$/.test(publication.batchId) ||
+        version.path !== publicationMetadataPath(publication.batchId) || !Array.isArray(publication.operations) ||
+        publication.operations.length > 256 || typeof publication.digest !== "string" ||
+        publication.digest !== publicationDigest(publication.batchId, publication.operations)
+      ) {
+        throw coreError(409, "publication_metadata_invalid", "The repository contains invalid publication metadata");
+      }
+      const existing = publicationMetadata.get(publication.batchId);
+      if (existing && existing.digest !== publication.digest) {
+        throw coreError(409, "batch_id_reused", "A publication batch's immutable repository binding changed in Git history");
+      }
+      if (!existing) publicationMetadata.set(publication.batchId, publication);
+    }
+
+    const publishedReceipts = new Map<string, { generation: number; digest: string; receipt: CheckpointReceipt }>();
+    for (const publication of publicationMetadata.values()) {
+      const rows = new Set<string>();
+      for (const value of publication.operations as unknown[]) {
+        const row = asRecord(value);
+        if (
+          !row || typeof row.operationId !== "string" || !/^[A-Za-z0-9_-]{1,128}$/.test(row.operationId) ||
+          !Number.isSafeInteger(row.generation) || (row.generation as number) < 0 ||
+          typeof row.digest !== "string" || !/^[a-f0-9]{64}$/.test(row.digest) || rows.has(row.operationId)
+        ) {
+          throw coreError(409, "publication_metadata_invalid", "The repository contains invalid publication metadata");
+        }
+        rows.add(row.operationId);
+        if (publishedReceipts.has(row.operationId)) {
+          throw coreError(409, "publication_metadata_invalid", "An operation appears in more than one publication receipt");
+        }
+        publishedReceipts.set(row.operationId, {
+          generation: row.generation as number,
+          digest: row.digest,
+          receipt: row.receipt as CheckpointReceipt,
+        });
+      }
+    }
+
+    const operations: StoredOperation[] = [];
+    const foundReceipts = new Set<string>();
+    for (const { metadata, path: filePath, commit: changedAt } of operationMetadata.values()) {
       const originalCommit = await this.getRef(root, `refs/scriptorium/checkpoints/${metadata.operation.id}`);
       const reconstructedReceipt: CheckpointReceipt = {
         operationId: metadata.operation.id,
@@ -911,13 +1099,19 @@ export class CoreStore implements MutationCoordinator {
         })),
       };
       const durableReceipt = publishedReceipts.get(metadata.operation.id);
-      const receipt = durableReceipt && durableReceipt.generation === metadata.operation.generation ? durableReceipt : reconstructedReceipt;
-      operations.push({
-        ...metadata,
-        path: filePath,
-        commit: changedAt,
-        receipt,
-      });
+      let receipt = reconstructedReceipt;
+      if (durableReceipt) {
+        if (durableReceipt.generation !== metadata.operation.generation || durableReceipt.digest !== metadata.digest ||
+            !receiptMatchesOperation(durableReceipt.receipt, metadata.operation)) {
+          throw coreError(409, "publication_metadata_invalid", "The publication receipt does not match its checkpoint operation");
+        }
+        receipt = durableReceipt.receipt;
+        foundReceipts.add(metadata.operation.id);
+      }
+      operations.push({ ...metadata, path: filePath, commit: changedAt, receipt });
+    }
+    if ([...publishedReceipts.keys()].some((operationId) => !foundReceipts.has(operationId))) {
+      throw coreError(409, "publication_metadata_invalid", "A publication receipt references an operation that is not present in the repository");
     }
     return operations;
   }
@@ -991,9 +1185,13 @@ export class CoreStore implements MutationCoordinator {
     return this.withProjectLock(projectId, () => this.requireObservation(projectId));
   }
 
-  async reader(projectId: string, view: "remote" | "checkpoint" = "remote"): Promise<SnapshotReader> {
+  async reader(
+    projectId: string,
+    view: "remote" | "checkpoint" = "remote",
+    pinned?: SnapshotId | string,
+  ): Promise<SnapshotReader> {
     return this.withProjectLock(projectId, async () => {
-      const selected = await this.selectedSnapshotUnlocked(projectId, view);
+      const selected = await this.selectedSnapshotUnlocked(projectId, view, pinned);
       return this.makeReader(selected.root, selected.snapshot, selected.commit);
     });
   }
@@ -1051,7 +1249,7 @@ export class CoreStore implements MutationCoordinator {
     sceneId: string,
     view: "remote" | "checkpoint" = "remote",
     pinned?: SnapshotId | string,
-  ): Promise<{ snapshot: SnapshotId; scene: Scene; document: { path: string; content: string; revision: string }; metadata: { path: string; content: string; revision: string } }> {
+  ): Promise<{ snapshot: SnapshotId; scene: Scene; document: { path: string; content: string; revision: string | null }; metadata: { path: string; content: string; revision: string } }> {
     return this.withProjectLock(projectId, async () => {
       const selected = await this.selectedSnapshotUnlocked(projectId, view, pinned);
       const files = await this.snapshotFiles(selected.root, selected.commit, "plot/volumes");
@@ -1081,7 +1279,7 @@ export class CoreStore implements MutationCoordinator {
       return {
         snapshot: selected.snapshot,
         scene: { id: sceneId, title: titleOf(found.data, sceneId), text: parseMarkdownDocument(content).body, revision: revisionFor(found.text, content) },
-        document: { path: manuscriptPath, content, revision: documentFile?.revision ?? revisionForBytes("") },
+        document: { path: manuscriptPath, content, revision: documentFile?.revision ?? null },
         metadata: { path: found.path, content: found.text, revision: revisionForBytes(found.text) },
       };
     });
@@ -1089,8 +1287,12 @@ export class CoreStore implements MutationCoordinator {
 
   async propose(projectId: string, proposal: ChangeProposal): Promise<ChangeProposal> {
     return this.withProjectLock(projectId, async () => {
-      if (!proposal || typeof proposal.id !== "string" || !proposal.id || !Array.isArray(proposal.operations) || !proposal.operations.length) {
-        throw coreError(400, "invalid_proposal", "A proposal with at least one operation is required");
+      if (
+        !proposal || typeof proposal.id !== "string" || !/^[A-Za-z0-9_-]{1,128}$/.test(proposal.id) ||
+        !Array.isArray(proposal.operations) || !proposal.operations.length || proposal.operations.length > 256 ||
+        !isSnapshotId(proposal.snapshot) || !["author", "module", "mcp"].includes(proposal.source)
+      ) {
+        throw coreError(400, "invalid_proposal", "A proposal with a valid snapshot and at least one operation is required");
       }
       const observation = await this.requireObservation(projectId);
       const { record, root } = await this.getProject(projectId);
@@ -1099,23 +1301,49 @@ export class CoreStore implements MutationCoordinator {
       await this.ensureSnapshot(root, proposal.snapshot, observation.snapshot.repository, observation.snapshot.remoteCommit);
       const ids = new Set<string>();
       for (const operation of proposal.operations) {
-        try { assertChangeOperation(operation); }
-        catch { throw coreError(400, "invalid_change_operation", "A proposed change operation is invalid"); }
+        try {
+          assertChangeOperation(operation);
+          assertUserOperationPaths(operation);
+        } catch { throw coreError(400, "invalid_change_operation", "A proposed change operation is invalid"); }
         if (ids.has(operation.id)) throw coreError(400, "invalid_proposal", "A proposal contains duplicate operation IDs");
+        if (operation.evidenceIds !== undefined && (!Array.isArray(operation.evidenceIds) || operation.evidenceIds.some((id) => typeof id !== "string" || !/^[A-Za-z0-9_-]{1,128}$/.test(id)))) {
+          throw coreError(400, "invalid_change_operation", "A proposed operation contains invalid evidence IDs");
+        }
         ids.add(operation.id);
         if (operation.baseRemoteCommit !== proposal.snapshot.remoteCommit || snapshotKey({ repository: operation.repository, remoteCommit: operation.baseRemoteCommit }) !== snapshotKey(proposalBase)) {
           throw coreError(409, "proposal_snapshot_mismatch", "A proposed operation belongs to a different repository snapshot");
         }
       }
       const evidence = proposal.evidence ?? [];
+      if (!Array.isArray(evidence)) throw coreError(400, "invalid_proposal_evidence", "Proposal evidence must be an array");
       let evidenceBytes = 0;
-      try { evidenceBytes = Buffer.byteLength(JSON.stringify(evidence), "utf8"); }
-      catch { throw coreError(400, "invalid_proposal_evidence", "Proposal evidence must be bounded JSON data"); }
+      try {
+        if (!isJsonValue(evidence)) throw new Error("Proposal evidence is not JSON data");
+        evidenceBytes = Buffer.byteLength(JSON.stringify(evidence), "utf8");
+      } catch { throw coreError(400, "invalid_proposal_evidence", "Proposal evidence must be bounded JSON data"); }
       if (evidenceBytes > MAX_PROPOSAL_EVIDENCE_BYTES) throw coreError(413, "proposal_evidence_too_large", "Proposal evidence exceeds the allowed size");
       const evidenceIds = new Set<string>();
       for (const item of evidence) {
-        if (!item || typeof item.id !== "string" || !item.id || evidenceIds.has(item.id) || snapshotKey(item.snapshot) !== snapshotKey(proposal.snapshot)) {
+        if (
+          !item || typeof item.id !== "string" || !/^[A-Za-z0-9_-]{1,128}$/.test(item.id) || evidenceIds.has(item.id) ||
+          !isSnapshotId(item.snapshot) || snapshotKey(item.snapshot) !== snapshotKey(proposal.snapshot) ||
+          !["story", "diagnostics", "nlp", "semantic", "speaker", "assistant", "publishing", "mcp"].includes(item.module) ||
+          typeof item.kind !== "string" || !item.kind.trim() || item.kind.length > 128 || !Array.isArray(item.paths) || item.paths.length > 512 ||
+          !Object.prototype.hasOwnProperty.call(item, "details")
+        ) {
           throw coreError(400, "invalid_proposal_evidence", "Proposal evidence is invalid or belongs to a different snapshot");
+        }
+        for (const file of item.paths) {
+          if (!file || typeof file !== "object") throw coreError(400, "invalid_proposal_evidence", "Proposal evidence contains an invalid file revision");
+          try { assertProjectPath(file.path); } catch { throw coreError(400, "invalid_proposal_evidence", "Proposal evidence contains an unsafe project path"); }
+          if (file.revision !== null && (typeof file.revision !== "string" || !/^[a-f0-9]{64}$/.test(file.revision))) {
+            throw coreError(400, "invalid_proposal_evidence", "Proposal evidence contains an invalid file revision");
+          }
+          const evidenceCommit = proposal.snapshot.overlayCommit ?? proposal.snapshot.remoteCommit;
+          const actual = evidenceCommit ? await this.snapshotFile(root, evidenceCommit, file.path) : null;
+          if ((actual?.revision ?? null) !== file.revision) {
+            throw coreError(409, "evidence_snapshot_mismatch", "Proposal evidence does not match the file revision in its declared snapshot");
+          }
         }
         evidenceIds.add(item.id);
       }
@@ -1131,6 +1359,7 @@ export class CoreStore implements MutationCoordinator {
       };
       const proposals = this.proposals.get(record.id) ?? new Map<string, ChangeProposal>();
       proposals.set(copied.id, copied);
+      this.approvals.get(record.id)?.delete(copied.id);
       this.proposals.set(record.id, proposals);
       return structuredClone(copied);
     });
@@ -1141,15 +1370,23 @@ export class CoreStore implements MutationCoordinator {
       if (!approval || typeof approval.proposalId !== "string" || typeof approval.authorScope !== "string" || !approval.authorScope.trim() || !Array.isArray(approval.operationIds)) {
         throw coreError(400, "invalid_approval", "An authenticated author approval is required");
       }
+      const observation = await this.requireObservation(projectId);
       const { record } = await this.getProject(projectId);
       const proposal = this.proposals.get(record.id)?.get(approval.proposalId);
       if (!proposal) throw coreError(404, "proposal_not_found", "The proposal is no longer available for approval");
+      if (snapshotKey({ repository: proposal.snapshot.repository, remoteCommit: proposal.snapshot.remoteCommit }) !== snapshotKey(observation.snapshot)) {
+        throw coreError(409, "proposal_snapshot_stale", "The repository changed after this proposal was created; review a fresh proposal before approving it");
+      }
       const allowed = new Set(proposal.operations.map((operation) => operation.id));
       if (!approval.operationIds.length || new Set(approval.operationIds).size !== approval.operationIds.length || approval.operationIds.some((id) => !allowed.has(id))) {
         throw coreError(400, "invalid_approval", "Approval operation IDs must be a unique subset of the proposal");
       }
-      const approvals = this.approvals.get(record.id) ?? new Map<string, { authorScope: string; operationIds: Set<string> }>();
-      approvals.set(approval.proposalId, { authorScope: approval.authorScope, operationIds: new Set(approval.operationIds) });
+      const approvedDigests = new Map<string, string>();
+      for (const operation of proposal.operations) {
+        if (approval.operationIds.includes(operation.id)) approvedDigests.set(operation.id, operationDigest(operation));
+      }
+      const approvals = this.approvals.get(record.id) ?? new Map<string, { authorScope: string; operationDigests: Map<string, string> }>();
+      approvals.set(approval.proposalId, { authorScope: approval.authorScope, operationDigests: approvedDigests });
       this.approvals.set(record.id, approvals);
     });
   }
@@ -1157,8 +1394,10 @@ export class CoreStore implements MutationCoordinator {
   private async checkpointUnlocked(projectId: string, operation: ChangeOperation, authorScope?: string): Promise<CheckpointReceipt> {
     const observation = await this.requireObservation(projectId);
     const { record, root } = await this.getProject(projectId);
-    try { assertChangeOperation(operation); }
-    catch { throw coreError(400, "invalid_change_operation", "The change operation is invalid"); }
+    try {
+      assertChangeOperation(operation);
+      assertUserOperationPaths(operation);
+    } catch { throw coreError(400, "invalid_change_operation", "The change operation is invalid"); }
     const identity = observation.snapshot.repository;
     if (snapshotKey({ repository: operation.repository, remoteCommit: operation.baseRemoteCommit }) !== snapshotKey({ repository: identity, remoteCommit: operation.baseRemoteCommit })) {
       throw coreError(409, "operation_repository_mismatch", "The operation belongs to a different repository");
@@ -1174,7 +1413,11 @@ export class CoreStore implements MutationCoordinator {
       if (prior.digest !== digest || prior.operation.generation !== operation.generation) throw coreError(409, "operation_id_reused", "The operation ID and generation are already bound to a different payload");
       return prior.receipt;
     }
-    const parent = await this.checkpointHead(root);
+    const pendingLocal = localOperations.some((item) => !remoteOperations.some((remoteItem) => remoteItem.operation.id === item.operation.id));
+    const trackedHead = await this.checkpointHead(root);
+    const canAdvanceToRemote = !!observation.snapshot.remoteCommit &&
+      (!trackedHead || await this.isAncestor(root, trackedHead, observation.snapshot.remoteCommit));
+    const parent = !pendingLocal && canAdvanceToRemote ? observation.snapshot.remoteCommit : trackedHead;
     const preconditions = new Map<string, string | null>();
     for (const item of [...operation.reads, ...operation.writes]) {
       if (preconditions.has(item.path) && preconditions.get(item.path) !== item.revision) throw coreError(409, "operation_precondition_conflict", `The operation has inconsistent revisions for ${item.path}`);
@@ -1211,7 +1454,7 @@ export class CoreStore implements MutationCoordinator {
       for (const write of operation.writes) {
         const target = await pathUnderRoot(root, write.path);
         if (write.content === null) await fs.rm(target, { force: true });
-        else await atomicWrite(target, write.encoding === "base64" ? Buffer.from(write.content, "base64").toString("utf8") : write.content);
+        else await atomicWrite(target, write.encoding === "base64" ? Buffer.from(write.content, "base64") : write.content);
       }
       await atomicWrite(await pathUnderRoot(root, metadataPath), `${JSON.stringify(metadata, null, 2)}\n`);
       await git(root, ["update-ref", `refs/heads/${record.branch}`, commit, head || "0".repeat(commit.length)]);
@@ -1234,7 +1477,7 @@ export class CoreStore implements MutationCoordinator {
         if (prior.digest !== digest || prior.operation.generation !== operation.generation) throw coreError(409, "operation_id_reused", "The operation ID and generation are already bound to a different payload");
         return prior.receipt;
       }
-      const approval = [...(this.approvals.get(record.id)?.values() ?? [])].find((item) => item.operationIds.has(operation.id));
+      const approval = [...(this.approvals.get(record.id)?.values() ?? [])].find((item) => item.operationDigests.get(operation.id) === digest);
       if (!approval) throw coreError(403, "author_approval_required", "An authenticated author must approve this operation before checkpointing");
       return this.checkpointUnlocked(projectId, operation, approval.authorScope);
     });
@@ -1343,7 +1586,7 @@ export class CoreStore implements MutationCoordinator {
     const { record, root } = await this.getProject(projectId);
     const remote = await this.fetchRemoteUnlocked(record, root);
     const remoteHead = remote.remoteCommit;
-    const localHead = await this.checkpointHead(root);
+    let localHead = await this.checkpointHead(root);
     const remoteOperations = remoteHead ? await this.readOperationRecords(root, remoteHead) : [];
     const localOperations = await this.readLocalOperationRecords(root);
     const remoteById = new Map(remoteOperations.map((item) => [item.operation.id, item]));
@@ -1352,6 +1595,15 @@ export class CoreStore implements MutationCoordinator {
       const published = remoteById.get(local.operation.id);
       if (!published) pending.push(local.receipt);
       else if (published.digest !== local.digest) throw coreError(409, "operation_id_reused", "An operation ID is already bound to a different payload");
+    }
+    if (!pending.length && remoteHead) {
+      const checkpointRef = await this.getRef(root, "refs/scriptorium/checkpoint-head");
+      const trackedHead = checkpointRef || await this.getRef(root, "HEAD");
+      const trackedAsCheckpoint = localOperations.some((item) => item.receipt.localCommit === trackedHead);
+      if (!trackedHead || trackedAsCheckpoint || await this.isAncestor(root, trackedHead, remoteHead)) {
+        await git(root, ["update-ref", "refs/scriptorium/checkpoint-head", remoteHead, ...(checkpointRef ? [checkpointRef] : [])]);
+        localHead = remoteHead;
+      }
     }
     return {
       snapshot: { repository: remote.identity, remoteCommit: remoteHead },
@@ -1725,7 +1977,12 @@ export class CoreStore implements MutationCoordinator {
         effect: "manuscript",
         reads,
         writes,
-        message: `Write scene: ${titleOf(found.data, sceneId)}`.replace(/[\r\n]+/g, " ").slice(0, 1024),
+        message: [
+          "loom(scene): " + sceneId.replace(/[\r\n\s]+/g, "-").slice(0, 128) + " (" + (input.text.length - document.body.length >= 0 ? "+" : "") + (input.text.length - document.body.length) + "字)",
+          "",
+          "Loom-File: " + manuscriptPath.split(path.sep).join("/"),
+          "Loom-Char-Count: " + input.text.length,
+        ].join("\n").slice(0, 1024),
       };
       try { await this.checkpointUnlocked(projectId, operation); }
       catch (error) {
@@ -1733,6 +1990,118 @@ export class CoreStore implements MutationCoordinator {
         throw coreError(500, "save_checkpoint_failed", "The scene checkpoint could not be created; inspect project status before retrying.");
       }
       return { id: sceneId, title: titleOf(found.data, sceneId), text: input.text, revision: revisionFor(nextYaml, nextMarkdown) };
+    });
+  }
+
+  async listManuscriptSnapshots(
+    projectId: string,
+    manuscriptId: string,
+    sceneId?: string,
+    view: "remote" | "checkpoint" = "remote",
+    pinned?: SnapshotId | string,
+  ): Promise<{ snapshot: SnapshotId; snapshots: ManuscriptSnapshotMeta[] }> {
+    if (!manuscriptId || manuscriptId.length > 256 || manuscriptId.includes("\0")) {
+      throw coreError(400, "invalid_manuscript_id", "The manuscript ID is invalid");
+    }
+    if (sceneId !== undefined && (!sceneId || sceneId.length > 256 || sceneId.includes("\0"))) {
+      throw coreError(400, "invalid_scene_id", "The scene ID is invalid");
+    }
+    return this.withProjectLock(projectId, async () => {
+      const selected = await this.selectedSnapshotUnlocked(projectId, view, pinned);
+      if (!selected.commit) return { snapshot: selected.snapshot, snapshots: [] };
+      const raw = await git(selected.root, [
+        "log", "-n" + MAX_HISTORY,
+        "--format=%H%x00%cI%x00%B%x1e",
+        "--grep=loom(scene):", "--fixed-strings",
+        selected.commit,
+      ]);
+      const snapshots: ManuscriptSnapshotMeta[] = [];
+      for (const chunk of raw.split("\x1e")) {
+        const entry = parseGitLogRecord(chunk);
+        if (!entry || !/^(?:[a-f0-9]{40}|[a-f0-9]{64})$/.test(entry.hash)) continue;
+        const scene = parseLoomSceneId(entry.body);
+        if (!scene || (sceneId && scene !== sceneId)) continue;
+        const trailers = parseLoomTrailers(entry.body);
+        const entryManuscript = trailers["Loom-Manuscript"];
+        if (entryManuscript && entryManuscript !== manuscriptId) continue;
+        const parsedCount = Number(trailers["Loom-Char-Count"] ?? "0");
+        const parsedDate = Date.parse(entry.date);
+        const triggerValue = trailers["Loom-Trigger"];
+        const trigger = triggerValue === "manual" || triggerValue === "submit" || triggerValue === "idle"
+          ? triggerValue
+          : undefined;
+        snapshots.push({
+          id: entry.hash,
+          sceneId: scene,
+          manuscriptId: entryManuscript ?? manuscriptId,
+          createdAt: Number.isFinite(parsedDate) ? parsedDate : 0,
+          charCount: Number.isFinite(parsedCount) && parsedCount >= 0 ? parsedCount : 0,
+          source: "git",
+          branch: selected.record.branch,
+          ...(trailers["Loom-Label"] ? { label: trailers["Loom-Label"] } : {}),
+          ...(trigger ? { trigger } : {}),
+        });
+      }
+      return { snapshot: selected.snapshot, snapshots };
+    });
+  }
+
+  async readManuscriptSnapshot(
+    projectId: string,
+    manuscriptId: string,
+    snapshotId: string,
+    view: "remote" | "checkpoint" = "remote",
+    pinned?: SnapshotId | string,
+  ): Promise<{ snapshot: SnapshotId; manuscript: ManuscriptSnapshot } | null> {
+    if (!manuscriptId || manuscriptId.length > 256 || manuscriptId.includes("\0")) {
+      throw coreError(400, "invalid_manuscript_id", "The manuscript ID is invalid");
+    }
+    if (!/^(?:[a-f0-9]{40}|[a-f0-9]{64})$/.test(snapshotId)) {
+      throw coreError(400, "invalid_snapshot_id", "A manuscript snapshot ID must be a full Git commit ID");
+    }
+    return this.withProjectLock(projectId, async () => {
+      const selected = await this.selectedSnapshotUnlocked(projectId, view, pinned);
+      if (!selected.commit || !(await this.isAncestor(selected.root, snapshotId, selected.commit))) return null;
+      const raw = await git(selected.root, ["show", "-s", "--format=%H%x00%cI%x00%B", snapshotId]);
+      const first = raw.indexOf("\0");
+      const second = raw.indexOf("\0", first + 1);
+      if (first < 1 || second < first + 1 || raw.slice(0, first) !== snapshotId) return null;
+      const date = raw.slice(first + 1, second).trim();
+      const message = raw.slice(second + 1).trimEnd();
+      const sceneId = parseLoomSceneId(message);
+      if (!sceneId) return null;
+      const trailers = parseLoomTrailers(message);
+      const recordedManuscriptId = trailers["Loom-Manuscript"];
+      if (recordedManuscriptId && recordedManuscriptId !== manuscriptId) return null;
+      const filePath = trailers["Loom-File"];
+      if (!filePath || !filePath.toLowerCase().endsWith(".md")) return null;
+      try { assertProjectPath(filePath); }
+      catch { throw coreError(422, "unsafe_manuscript_path", "The historical manuscript path is unsafe"); }
+      const file = await this.snapshotFile(selected.root, snapshotId, filePath);
+      if (!file) return null;
+      const body = stripMarkdownFrontmatter(file.content);
+      const parsedCount = Number(trailers["Loom-Char-Count"] ?? body.length);
+      const parsedDate = Date.parse(date);
+      const triggerValue = trailers["Loom-Trigger"];
+      const trigger = triggerValue === "manual" || triggerValue === "submit" || triggerValue === "idle"
+        ? triggerValue
+        : undefined;
+      return {
+        snapshot: selected.snapshot,
+        manuscript: {
+          id: snapshotId,
+          sceneId,
+          manuscriptId: recordedManuscriptId ?? manuscriptId,
+          createdAt: Number.isFinite(parsedDate) ? parsedDate : 0,
+          charCount: Number.isFinite(parsedCount) && parsedCount >= 0 ? parsedCount : body.length,
+          source: "git",
+          branch: selected.record.branch,
+          ...(trailers["Loom-Label"] ? { label: trailers["Loom-Label"] } : {}),
+          ...(trigger ? { trigger } : {}),
+          body,
+          document: { path: filePath, content: file.content, revision: file.revision },
+        },
+      };
     });
   }
 
