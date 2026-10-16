@@ -35,14 +35,14 @@ The Docker build runs `scripts/audit-runtime-deps.mjs --production` against the 
 
 ## Integration host notes
 
-The initial OCI verification host is NixOS x86_64 with no Docker daemon. Podman 5.8.8 is available ephemerally through `nix shell nixpkgs#podman`; its rootless mode is enabled. This Podman package does not install a default image signature policy. For the local build only, the verifier used a temporary policy that rejects images by default and permits the pinned official Node image repository. The file was removed when the command exited:
+The initial OCI verification host is NixOS x86_64 with no Docker daemon. Podman 5.8.8 is available ephemerally through `nix shell nixpkgs#podman`; its rootless mode is enabled. This Podman package does not install a default image signature policy. For the local build only, the verifier used a temporary policy that rejects images by default and permits the pinned official Node image repository and the local container-storage transport used to assemble/re-tag the locally built image. The file was removed when the command exited:
 
 ```sh
 policy_path="$HOME/.config/containers/policy.json"
 test ! -e "$policy_path"
 mkdir -p "$(dirname "$policy_path")"
 trap 'unlink "$policy_path"' EXIT
-printf '%s\n' '{"default":[{"type":"reject"}],"transports":{"docker":{"docker.io/library/node":[{"type":"insecureAcceptAnything"}]}}}' > "$policy_path"
+printf '%s\n' '{"default":[{"type":"reject"}],"transports":{"docker":{"docker.io/library/node":[{"type":"insecureAcceptAnything"}]},"containers-storage":{"":[{"type":"insecureAcceptAnything"}]}}}' > "$policy_path"
 nix shell nixpkgs#podman -c bash scripts/verify-oci.sh
 ```
 
