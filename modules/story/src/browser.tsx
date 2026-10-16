@@ -706,7 +706,7 @@ function ZukanReviewPanel({ context }: { context: BrowserModuleContext }) {
   const refresh = async () => {
     const result = await invoke<{ pendingCount: number; suggestions: ZukanSuggestion[] }>("story.zukan-suggestions.list", { status: "pending" });
     setPendingCount(result.pendingCount);
-    setSuggestions(result.suggestions.filter((item) => !submitted.current.has(item.id)));
+    setSuggestions(result.suggestions);
   };
   useEffect(() => { submitted.current.clear(); void refresh().catch(() => undefined); }, [context.snapshot.repository.repositoryId, context.snapshot.remoteCommit, context.snapshot.overlayCommit]);
   const decide = async (decision: "approve" | "reject", item: ZukanSuggestion) => {
@@ -717,8 +717,6 @@ function ZukanReviewPanel({ context }: { context: BrowserModuleContext }) {
         operation_id: operationId(),
       });
       submitted.current.add(item.id);
-      setSuggestions((previous) => previous.filter((candidate) => candidate.id !== item.id));
-      setPendingCount((previous) => Math.max(0, previous - 1));
       setMessage(`Proposed ${decision} for Zukan suggestion ${item.id}. Review the proposal before checkpointing.`);
     } catch { /* The panel displays the machine error. */ }
   };
@@ -730,9 +728,10 @@ function ZukanReviewPanel({ context }: { context: BrowserModuleContext }) {
       <strong>{item.entityName ?? item.entityId}</strong> · {item.kind ?? "note"} · {item.source} · {item.blockPath}
       <p>{item.proposedText}</p>
       {item.evidence.length > 0 && <details><summary>Evidence ({item.evidence.length})</summary><ul>{item.evidence.map((evidence, index) => <li key={`${evidence.sceneId ?? "quote"}-${index}`}>{evidence.sceneId ? `${evidence.sceneId}: ` : ""}{evidence.quote}</li>)}</ul></details>}
+      {submitted.current.has(item.id) && <p role="status">A review proposal is pending checkpoint; this suggestion remains pending in the selected snapshot.</p>}
       <div style={rowStyle}>
-        <button type="button" style={buttonStyle} disabled={busy || !item.entityRevision} onClick={() => void decide("approve", item)}>Propose approval</button>
-        <button type="button" style={buttonStyle} disabled={busy} onClick={() => void decide("reject", item)}>Propose rejection</button>
+        <button type="button" style={buttonStyle} disabled={busy || !item.entityRevision || submitted.current.has(item.id)} onClick={() => void decide("approve", item)}>{submitted.current.has(item.id) ? "Approval proposal pending" : "Propose approval"}</button>
+        <button type="button" style={buttonStyle} disabled={busy || submitted.current.has(item.id)} onClick={() => void decide("reject", item)}>{submitted.current.has(item.id) ? "Decision proposal pending" : "Propose rejection"}</button>
       </div>
     </li>)}</ul> : <p style={mutedStyle}>No pending suggestions are available in this snapshot.</p>}
     {status}

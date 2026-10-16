@@ -204,7 +204,11 @@ test("Zukan suggestions list by status and approve/reject as snapshot-bound prop
     sections: [{ heading: "History", body: [{ type: "paragraph", text: "Earlier detail." }], children: [{ heading: "Family", body: [], children: [] }] }],
   };
   const suggestionsPath = ZUKAN_SUGGESTIONS_PATH;
-  const rows = [zukanRow(), zukanRow({ id: "suggestion-2", status: "rejected" })];
+  const rows = [
+    zukanRow(),
+    zukanRow({ id: "suggestion-2", status: "rejected" }),
+    zukanRow({ id: "suggestion-same-block", proposed_text: "Another note from this block." }),
+  ];
   const files = fixtureFiles({
     [profilePath]: yaml(original),
     [suggestionsPath]: rows.map((row) => JSON.stringify(row)).join("\n") + "\n",
@@ -212,8 +216,8 @@ test("Zukan suggestions list by status and approve/reject as snapshot-bound prop
   const proposals: Array<{ id: string; operations: ChangeOperation[] }> = [];
   const context = makeActionContext(makeReader(files), { proposals });
   const listed = await invoke<{ pendingCount: number; suggestions: Array<ZukanSuggestion> }>("story.zukan-suggestions.list", {}, context);
-  assert.equal(listed.data.pendingCount, 1);
-  assert.deepEqual(listed.data.suggestions.map((item) => item.id), ["suggestion-1"]);
+  assert.equal(listed.data.pendingCount, 2);
+  assert.deepEqual(listed.data.suggestions.map((item) => item.id), ["suggestion-1", "suggestion-same-block"]);
   assert.equal(listed.data.suggestions[0]?.entityRevision?.length, 73);
 
   const approved = await invoke<{ suggestion: ZukanSuggestion; entityRevision: string }>("story.zukan-suggestions.approve", {
@@ -232,6 +236,8 @@ test("Zukan suggestions list by status and approve/reject as snapshot-bound prop
   assert.equal(approvedRow.updated_at, "2026-01-02T00:00:00.001Z");
   assert.deepEqual(approvedRow.future_field, { preserve: true });
   assert.deepEqual(approvedRow.migrationSource, zukanRow().migrationSource);
+  const approvedRows = approval.writes.find((write) => write.path === suggestionsPath)!.content!.trim().split("\n").map((line) => JSON.parse(line) as Record<string, unknown>);
+  assert.equal(approvedRows.find((row) => row.id === "suggestion-same-block")?.status, "stale", "approving an edit invalidates other pending suggestions based on the same changed note block");
   assert.equal(YAML.parse(files.get(profilePath)!).notes.lead[0].text, "Existing lead.", "proposing does not mutate the selected snapshot");
 
   const rejected = await invoke<{ suggestion: ZukanSuggestion }>("story.zukan-suggestions.reject", {
@@ -241,6 +247,48 @@ test("Zukan suggestions list by status and approve/reject as snapshot-bound prop
   assert.deepEqual(rejection.writes.map((write) => write.path), [suggestionsPath]);
   const rejectedRow = JSON.parse(rejection.writes[0]!.content!.split("\n")[0]!) as Record<string, unknown>;
   assert.equal(rejectedRow.status, "rejected");
+});
+
+test("manual note edits stale matching pending Zukan rows in the same Story proposal", async () => {
+  const profilePath = "bible/characters/char-uma/profile.yaml";
+  const sourceEntity = YAML.parse(fixtureFiles().get(profilePath)!);
+  sourceEntity.notes = {
+    lead: [
+      { type: "paragraph", text: "Original lead." },
+      { type: "paragraph", text: "Unchanged lead." },
+    ],
+    sections: [],
+  };
+  const rows = [
+    zukanRow({ id: "stale-matching-block", block_path: "lead.0" }),
+    zukanRow({ id: "keep-other-block", block_path: "lead.1" }),
+    zukanRow({ id: "keep-other-entity", entity_id: "loc-cafe", block_path: "lead.0" }),
+    zukanRow({ id: "keep-rejected", status: "rejected", block_path: "lead.0" }),
+  ];
+  const suggestionsContent = rows.map((row) => JSON.stringify(row)).join("\n") + "\n";
+  const files = fixtureFiles({
+    [profilePath]: yaml(sourceEntity),
+    [ZUKAN_SUGGESTIONS_PATH]: suggestionsContent,
+  });
+  const proposals: Array<{ id: string; operations: ChangeOperation[] }> = [];
+  const context = makeActionContext(makeReader(files), { proposals });
+  const updated = await invoke("story.entities.update", {
+    id: "char-uma",
+    patch: { notes: { lead: [
+      { type: "paragraph", text: "Rewritten lead." },
+      { type: "paragraph", text: "Unchanged lead." },
+    ], sections: [] } },
+  }, context);
+  const operation = updated.proposals![0]!.operations[0]!;
+  assert.deepEqual(operation.writes.map((write) => write.path).sort(), [profilePath, ZUKAN_SUGGESTIONS_PATH].sort());
+  assert.ok(operation.reads.some((read) => read.path === ZUKAN_SUGGESTIONS_PATH && read.revision === revision(suggestionsContent)));
+  const rewrittenRows = JSON.parse(`[${operation.writes.find((write) => write.path === ZUKAN_SUGGESTIONS_PATH)!.content!.trim().split("\n").join(",")}]`) as Array<Record<string, unknown>>;
+  const statusById = new Map(rewrittenRows.map((row) => [row.id, row.status]));
+  assert.equal(statusById.get("stale-matching-block"), "stale");
+  assert.equal(statusById.get("keep-other-block"), "pending");
+  assert.equal(statusById.get("keep-other-entity"), "pending");
+  assert.equal(statusById.get("keep-rejected"), "rejected");
+  assert.equal(files.get(ZUKAN_SUGGESTIONS_PATH), suggestionsContent, "proposing does not mutate the selected snapshot");
 });
 
 test("scene creation inserts by position in one proposal and includes every changed file precondition", async () => {

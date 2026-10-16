@@ -308,6 +308,46 @@ function suggestionForWrite(row: StoredZukanSuggestion, status: StoredZukanSugge
   return { ...row, status, updatedAt, updated_at: updatedAt };
 }
 
+function changedNotesBlockPaths(beforeValue: unknown, afterValue: unknown): string[] {
+  const before = normalizeNotes(beforeValue), after = normalizeNotes(afterValue);
+  const changed: string[] = [];
+  const key = (block: unknown): string => block === undefined ? "" : JSON.stringify(block);
+  const beforeLead = before?.lead ?? [], afterLead = after?.lead ?? [];
+  for (let index = 0; index < Math.max(beforeLead.length, afterLead.length); index++) {
+    if (key(beforeLead[index]) !== key(afterLead[index])) changed.push(`lead.${index}`);
+  }
+  const beforeSections = before?.sections ?? [], afterSections = after?.sections ?? [];
+  for (let sectionIndex = 0; sectionIndex < Math.max(beforeSections.length, afterSections.length); sectionIndex++) {
+    const beforeBody = beforeSections[sectionIndex]?.body ?? [], afterBody = afterSections[sectionIndex]?.body ?? [];
+    for (let bodyIndex = 0; bodyIndex < Math.max(beforeBody.length, afterBody.length); bodyIndex++) {
+      if (key(beforeBody[bodyIndex]) !== key(afterBody[bodyIndex])) changed.push(`sections.${sectionIndex}.body.${bodyIndex}`);
+    }
+  }
+  return changed;
+}
+
+async function staleSuggestionsForNotesEdit(
+  context: ModuleActionContext,
+  entityId: string,
+  beforeNotes: unknown,
+  afterNotes: unknown,
+): Promise<{ reads: FileRevision[]; writes: ProposedWrite[] }> {
+  const changed = new Set(changedNotesBlockPaths(beforeNotes, afterNotes));
+  if (changed.size === 0) return { reads: [], writes: [] };
+  const { rows, revision } = await readZukanSuggestions(context);
+  let staleCount = 0;
+  const updated = rows.map((row) => {
+    if (row.entityId !== entityId || row.status !== "pending" || !changed.has(row.blockPath)) return row;
+    staleCount++;
+    return suggestionForWrite(row, "stale");
+  });
+  if (staleCount === 0) return { reads: [], writes: [] };
+  return {
+    reads: [{ path: ZUKAN_SUGGESTIONS_PATH, revision }],
+    writes: [{ path: ZUKAN_SUGGESTIONS_PATH, revision, content: zukanSuggestionFile(updated) }],
+  };
+}
+
 function zukanSuggestionFile(rows: readonly StoredZukanSuggestion[]): string {
   return rows.map((row) => JSON.stringify(row)).join("\n") + (rows.length ? "\n" : "");
 }
@@ -984,7 +1024,10 @@ function makeActions(moduleContext: StoryCapabilityContext): ModuleAction[] {
       if (!current) throw new TypeError(`Entity not found: ${String(input.id)}`);
       assertSourceRevision(input, sourceEntityRevision(current));
       const update = await prepareEntityUpdate({ story, context, id: current.id, patch });
-      const operation = buildOperation({ reader: context.reader, operationId: requestedOperationId(input), reads: update.reads, writes: [{ path: update.path, revision: update.revision, content: update.content }], message: `Update Story entity ${input.id}`, effect: "metadata" });
+      const freshness = Object.hasOwn(patch, "notes")
+        ? await staleSuggestionsForNotesEdit(context, current.id, current.raw.notes, update.raw.notes)
+        : { reads: [], writes: [] };
+      const operation = buildOperation({ reader: context.reader, operationId: requestedOperationId(input), reads: [...update.reads, ...freshness.reads], writes: [{ path: update.path, revision: update.revision, content: update.content }, ...freshness.writes], message: `Update Story entity ${input.id}`, effect: "metadata" });
       await context.propose([operation]);
       return { ...update.entity, raw: update.raw, revision: sourceEntityRevision({ ...update.entity, raw: update.raw }) };
     }),
@@ -993,8 +1036,12 @@ function makeActions(moduleContext: StoryCapabilityContext): ModuleAction[] {
       const scene = story.entities.get(stringValue(input.sceneId, "sceneId"));
       if (scene?.type !== "scene") throw new TypeError("Scene not found");
       assertSourceRevision(input, sourceEntityRevision(scene));
-      const update = await prepareEntityUpdate({ story, context, id: scene.id, patch: parseRecord(input.patch, "patch"), effect: "metadata" });
-      const operation = buildOperation({ reader: context.reader, operationId: requestedOperationId(input), reads: update.reads, writes: [{ path: update.path, revision: update.revision, content: update.content }], message: `Update Story scene metadata ${scene.id}`, effect: "metadata" });
+      const patch = parseRecord(input.patch, "patch");
+      const update = await prepareEntityUpdate({ story, context, id: scene.id, patch, effect: "metadata" });
+      const freshness = Object.hasOwn(patch, "notes")
+        ? await staleSuggestionsForNotesEdit(context, scene.id, scene.raw.notes, update.raw.notes)
+        : { reads: [], writes: [] };
+      const operation = buildOperation({ reader: context.reader, operationId: requestedOperationId(input), reads: [...update.reads, ...freshness.reads], writes: [{ path: update.path, revision: update.revision, content: update.content }, ...freshness.writes], message: `Update Story scene metadata ${scene.id}`, effect: "metadata" });
       await context.propose([operation]);
       return { ...scene, raw: update.raw, revision: sourceEntityRevision({ ...scene, raw: update.raw }) };
     }),
@@ -1263,6 +1310,14 @@ function makeActions(moduleContext: StoryCapabilityContext): ModuleAction[] {
       }
       const notes = appendProposedTextToNotes(normalizeNotes(entity.raw.notes), prior.blockPath, prior.proposedText);
       const update = await prepareEntityUpdate({ story, context, id: entity.id, patch: { notes }, effect: "metadata" });
+      const changedBlocks = new Set(changedNotesBlockPaths(entity.raw.notes, notes));
+      for (let rowIndex = 0; rowIndex < rows.length; rowIndex++) {
+        if (rowIndex === index) continue;
+        const row = rows[rowIndex]!;
+        if (row.entityId === entity.id && row.status === "pending" && changedBlocks.has(row.blockPath)) {
+          rows[rowIndex] = suggestionForWrite(row, "stale");
+        }
+      }
       const updated = suggestionForWrite(prior, "approved");
       rows[index] = updated;
       const operation = buildOperation({
