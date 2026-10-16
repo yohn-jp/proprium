@@ -274,6 +274,19 @@ type ProposalStatus = {
   stale: boolean;
 };
 
+type ProjectSyncEvent = {
+  id: string;
+  type: "project-sync";
+  projectId: string;
+  reason: "manual";
+  phase: "started" | "completed" | "failed";
+  at: string;
+  status?: Awaited<ReturnType<CoreStore["sync"]>>;
+  observation?: { snapshot: SnapshotId; state: string; observedAt: string; pendingCount: number };
+  updated?: boolean;
+  error?: { code: string; retryable: boolean };
+};
+
 type CoreStoreApi = CoreStore & {
   listManuscriptSnapshots?: (projectId: string, manuscriptId: string, sceneId?: string, view?: "remote" | "checkpoint", pinned?: SnapshotId | string) => Promise<{ snapshot: SnapshotId; snapshots: unknown[] }>;
   readManuscriptSnapshot?: (projectId: string, manuscriptId: string, snapshotId: string, view?: "remote" | "checkpoint", pinned?: SnapshotId | string) => Promise<{ snapshot: SnapshotId; manuscript: unknown } | null>;
@@ -306,6 +319,7 @@ export function createServer(options: ApiServerOptions): Server {
   const trustProxy = options.trustProxy ?? false;
   const sessions = new Map<string, Session>();
   const requestControllers = new Set<AbortController>();
+  const projectEventStreams = new Set<ServerResponse>();
   const coreStore = options.store as CoreStoreApi;
   const runtime: RuntimeHttpHost = options.runtime ?? new ModuleRuntime({
     manifests: options.runtimeOptions?.manifests ?? [],
@@ -327,6 +341,13 @@ export function createServer(options: ApiServerOptions): Server {
   const shutdownRuntime = (): Promise<void> => {
     runtimeShutdownPromise ??= Promise.resolve().then(() => runtime.shutdown());
     return runtimeShutdownPromise;
+  };
+
+  const emitProjectEvent = (event: ProjectSyncEvent): void => {
+    const frame = `event: ${event.type}\ndata: ${JSON.stringify(event)}\n\n`;
+    for (const response of projectEventStreams) {
+      if (!response.destroyed && !response.writableEnded) response.write(frame);
+    }
   };
 
   app.addContentTypeParser("application/json", { parseAs: "string", bodyLimit: MAX_JSON_BYTES }, (_request, body, done) => {
@@ -862,6 +883,17 @@ export function createServer(options: ApiServerOptions): Server {
       sendJson(response, 200, { authenticated: false });
       return;
     }
+    if (routePath === "/api/projects/events" && method === "GET") {
+      response.statusCode = 200;
+      response.setHeader("Content-Type", "text/event-stream; charset=utf-8");
+      response.setHeader("Cache-Control", "no-store");
+      response.setHeader("Connection", "keep-alive");
+      response.setHeader("X-Accel-Buffering", "no");
+      response.flushHeaders();
+      projectEventStreams.add(response);
+      response.once("close", () => projectEventStreams.delete(response));
+      return;
+    }
     if (routePath === "/api/projects" && method === "GET") { sendJson(response, 200, await options.store.listProjects()); return; }
     if (routePath === "/api/projects" && method === "POST") {
       if (!isCookie) { fail(response, 403, "AUTHOR_SESSION_REQUIRED", "Repository registration requires an owner session"); return; }
@@ -887,6 +919,13 @@ export function createServer(options: ApiServerOptions): Server {
     if (projectRoot) {
       const projectId = projectPathId(projectRoot[1]!);
       const suffix = projectRoot[2] ?? "";
+      if (suffix === "" && method === "GET") {
+        const project = (await options.store.listProjects()).find((candidate) => candidate.id === projectId);
+        if (!project) throw httpFailure(404, "PROJECT_NOT_FOUND", "Project not found");
+        const observation = await options.store.observe(projectId);
+        sendJson(response, 200, { project, observation });
+        return;
+      }
       if (suffix === "modules" && method === "GET") { sendJson(response, 200, await enabledStatuses()); return; }
       if (suffix === "contributions" && method === "GET") {
         await activateEnabled();
@@ -932,7 +971,40 @@ export function createServer(options: ApiServerOptions): Server {
       if (suffix === "observation" && method === "GET") { sendJson(response, 200, await options.store.observe(projectId)); return; }
       if (suffix === "sync" && method === "POST") {
         if (!isCookie) { fail(response, 403, "AUTHOR_SESSION_REQUIRED", "Workspace synchronization requires an owner session"); return; }
-        sendJson(response, 200, await options.store.sync(projectId)); return;
+        const id = randomBytes(16).toString("hex");
+        emitProjectEvent({ id, type: "project-sync", projectId, reason: "manual", phase: "started", at: new Date().toISOString() });
+        try {
+          const before = await options.store.observe(projectId);
+          const status = await options.store.sync(projectId);
+          const after = await options.store.observe(projectId);
+          const beforePending = before.pending.map(({ operationId }) => operationId).sort().join("\n");
+          const afterPending = after.pending.map(({ operationId }) => operationId).sort().join("\n");
+          emitProjectEvent({
+            id,
+            type: "project-sync",
+            projectId,
+            reason: "manual",
+            phase: "completed",
+            at: new Date().toISOString(),
+            status,
+            observation: { snapshot: after.snapshot, state: after.state, observedAt: after.observedAt, pendingCount: after.pending.length },
+            updated: snapshotKey(before.snapshot) !== snapshotKey(after.snapshot) || before.checkpointHead !== after.checkpointHead || beforePending !== afterPending,
+          });
+          sendJson(response, 200, status);
+        } catch (error) {
+          const failure = error as { code?: unknown; retryable?: unknown };
+          emitProjectEvent({
+            id,
+            type: "project-sync",
+            projectId,
+            reason: "manual",
+            phase: "failed",
+            at: new Date().toISOString(),
+            error: { code: typeof failure?.code === "string" ? failure.code : "SYNC_FAILED", retryable: failure?.retryable === true },
+          });
+          throw error;
+        }
+        return;
       }
       if (suffix === "reconcile" && method === "POST") {
         if (!isCookie) { fail(response, 403, "AUTHOR_SESSION_REQUIRED", "Checkpoint reconciliation requires an owner session"); return; }
@@ -1179,6 +1251,8 @@ export function createServer(options: ApiServerOptions): Server {
         resolveDeadline();
       };
       for (const controller of requestControllers) controller.abort(new Error("The API server is shutting down"));
+      for (const stream of projectEventStreams) stream.end();
+      projectEventStreams.clear();
       const nodeDrain = new Promise<Error | undefined>((resolveNode) => nodeClose((error?: Error) => resolveNode(error)));
       const runtimeDrain = shutdownRuntime().then(
         () => undefined,

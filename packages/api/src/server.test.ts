@@ -365,6 +365,14 @@ describe("Scriptorium HTTP boundary", () => {
 
     const projects = await fetch(`${apiServer.base}/api/projects`, { headers: auth });
     assert.deepEqual(await projects.json(), [{ id: "project-1", url: "https://github.com/owner/work.git", branch: "main" }]);
+    const detail = await fetch(`${apiServer.base}/api/projects/project-1`, { headers: auth });
+    const detailBody = await detail.json() as { project: { id: string; url: string; branch: string }; observation: { snapshot: SnapshotId } };
+    assert.equal(detail.status, 200);
+    assert.deepEqual(detailBody.project, { id: "project-1", url: "https://github.com/owner/work.git", branch: "main" });
+    assert.equal(detailBody.observation.snapshot.remoteCommit, SNAPSHOT.remoteCommit);
+    const missingProject = await fetch(`${apiServer.base}/api/projects/missing`, { headers: auth });
+    assert.equal(missingProject.status, 404);
+    assert.equal((await missingProject.json() as { code: string }).code, "PROJECT_NOT_FOUND");
     assert.equal((await fetch(`${apiServer.base}/api/projects/project-1/manuscripts`, { headers: auth })).status, 404);
     const defaultTree = await fetch(`${apiServer.base}/api/projects/project-1/tree`, { headers: auth });
     assert.equal((await defaultTree.json() as { snapshot: SnapshotId }).snapshot.remoteCommit, SNAPSHOT.remoteCommit);
@@ -456,6 +464,70 @@ describe("Scriptorium HTTP boundary", () => {
     });
     assert.equal(authorApproval.status, 204);
     assert.deepEqual(fixture.approvals, [{ proposalId: "mcp-batch-1", operationIds: [operation.id], authorScope: "owner" }]);
+  });
+
+  it("streams owner-scoped events only for actual manual sync outcomes and closes streams on shutdown", async (t) => {
+    const staticDir = await mkdtemp(resolve(tmpdir(), "scriptorium-api-project-events-"));
+    tempDirs.push(staticDir);
+    let syncCount = 0;
+    let observationCount = 0;
+    const store = Object.assign(makeStore(), {
+      async observe() {
+        observationCount += 1;
+        return {
+          snapshot: { ...SNAPSHOT, remoteCommit: observationCount === 1 ? SNAPSHOT.remoteCommit : "b".repeat(40) },
+          checkpointHead: "c".repeat(40), observedAt: new Date().toISOString(), state: "fresh" as const, pending: [],
+        };
+      },
+      async sync() {
+        syncCount += 1;
+        if (syncCount === 2) throw { status: 409, code: "sync_conflict", message: "Remote synchronization failed" };
+        return { branch: "main", head: "b".repeat(40), ahead: 0, behind: 0, dirty: false };
+      },
+    }) as unknown as CoreStore;
+    const apiServer = await startCustomApi(store, staticDir);
+    let closeCalled = false;
+    t.after(async () => { if (!closeCalled) await apiServer.close(); });
+    const owner = await login(apiServer.base);
+    const stream = await fetch(`${apiServer.base}/api/projects/events`, { headers: { Cookie: owner.cookie } });
+    assert.equal(stream.status, 200);
+    assert.match(stream.headers.get("content-type") ?? "", /text\/event-stream/u);
+    assert.equal((await fetch(`${apiServer.base}/api/projects/events`)).status, 401);
+
+    const syncRequest = () => fetch(`${apiServer.base}/api/projects/project-1/sync`, {
+      method: "POST",
+      headers: { Cookie: owner.cookie, Origin: apiServer.base },
+    });
+    const completed = await syncRequest();
+    assert.equal(completed.status, 200);
+    const failed = await syncRequest();
+    assert.equal(failed.status, 409);
+
+    const streamReader = stream.body!.getReader();
+    const decoder = new TextDecoder();
+    let frames = "";
+    while (!frames.includes('"phase":"failed"')) {
+      const item = await streamReader.read();
+      if (item.done) break;
+      frames += decoder.decode(item.value, { stream: true });
+    }
+    const parsed = [...frames.matchAll(/data: (\{[^\n]+\})\n\n/gu)].map((match) => JSON.parse(match[1]!) as {
+      id: string; type: string; projectId: string; reason: string; phase: string; status?: { head: string };
+      observation?: { snapshot: SnapshotId; pendingCount: number }; updated?: boolean; error?: { code: string };
+    });
+    assert.deepEqual(parsed.map(({ phase }) => phase), ["started", "completed", "started", "failed"]);
+    assert.ok(parsed.every((event) => event.type === "project-sync" && event.projectId === "project-1" && event.reason === "manual"));
+    assert.equal(parsed[0]?.id, parsed[1]?.id);
+    assert.equal(parsed[2]?.id, parsed[3]?.id);
+    assert.equal(parsed[1]?.status?.head, "b".repeat(40));
+    assert.equal(parsed[1]?.observation?.snapshot.remoteCommit, "b".repeat(40));
+    assert.equal(parsed[1]?.updated, true);
+    assert.deepEqual(parsed[3]?.error, { code: "sync_conflict", retryable: false });
+    const shutdownAt = Date.now();
+    await apiServer.close();
+    closeCalled = true;
+    assert.equal((await streamReader.read()).done, true, "shutdown must close the live event stream");
+    assert.ok(Date.now() - shutdownAt < 5_000, "shutdown must not wait indefinitely for event-stream clients");
   });
 
   it("allows bearer compute under runtime effect limits and host-assigns MCP proposal source", async (t) => {
