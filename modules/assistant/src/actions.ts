@@ -21,7 +21,6 @@ import {
 } from "@scriptorium/contracts";
 import { readStorySnapshot, type StoryEntity } from "@scriptorium/module-story";
 import { splitIntoSentences } from "@scriptorium/module-nlp";
-import { extractVoiceProfiles } from "@scriptorium/module-speaker";
 import {
   resolveAssistantModel,
   streamAssistantModel,
@@ -38,6 +37,7 @@ import {
 } from "./model-settings.js";
 import { composePrompt, CUSTOM_PROMPT_VERSIONS, loadPromptTemplate, renderPromptTemplate } from "./prompts.js";
 import { normalizeAspectIds, runDeterministicAspectReview, type AspectId } from "./aspect-review.js";
+import { buildDialogueSketchSpeakerContext, type PublicSpeakerDialogueListDto, type PublicSpeakerVoiceProfilesDto } from "./dialogue-context.js";
 import { buildRewriteLocalSuggestions } from "./rewrite-local.js";
 
 const ASSISTANT_MODULE_VERSION = "0.1.0";
@@ -644,68 +644,79 @@ async function runRewrite(
     ...(typeof source.scene.raw.pov === "string" ? [source.scene.raw.pov] : []),
     ...(Array.isArray(source.scene.raw.appears) ? source.scene.raw.appears.filter((id): id is string => typeof id === "string") : []),
   ])].slice(0, 16);
-  const characters = relatedIds.flatMap((id) => {
+  const candidateEntities = relatedIds.flatMap((id) => {
     const candidate = story.entities.get(id);
-    if (!candidate || candidate.type !== "character") return [];
-    return [{ id: candidate.id, name: candidate.name ?? candidate.id, role: candidate.id === source.scene.raw.pov ? "pov" : "appears", voiceProfiles: extractVoiceProfiles({ id: candidate.id, raw: candidate.raw } as never), voice: candidate.raw.voice ?? candidate.raw.voicePatterns ?? null, notes: candidate.raw.notes ?? null }];
+    return candidate?.type === "character" ? [candidate] : [];
   });
-  let fingerprints: RecordValue[] = [];
+  let profilesData: PublicSpeakerVoiceProfilesDto | undefined;
   try {
-    const profiles = await invokeData(context, "speaker.voice.profiles", {});
-    fingerprints = Array.isArray(profiles.fingerprints) ? profiles.fingerprints.map((item) => record(item)) : [];
+    profilesData = await invokeData(context, "speaker.voice.profiles", {}) as unknown as PublicSpeakerVoiceProfilesDto;
   } catch { /* Like the source's optional SQLite index, learned style data may be unavailable. */ }
-  const dialogueSamples = await Promise.all(characters.map(async (character) => {
+  const dialogueSamples = await Promise.all(candidateEntities.map(async (character) => {
     try {
       const data = await invokeData(context, "speaker.dialogue.list", { characterId: character.id, limit: 6, minConfidence: "high" });
       return [character.id, Array.isArray(data.lines) ? data.lines.slice(0, 6).map((item) => record(item)) : [] as RecordValue[]] as const;
     } catch { return [character.id, [] as RecordValue[]] as const; }
   }));
-  const samplesByCharacter = new Map(dialogueSamples);
-  const fingerprintByCharacter = new Map(fingerprints.flatMap((item) => typeof item.entityId === "string" ? [[item.entityId, item] as const] : []));
-  const fingerprintSummary = (fingerprint: RecordValue | undefined) => {
-    if (!fingerprint) return null;
-    const topKeys = (value: unknown) => value && typeof value === "object" && !Array.isArray(value)
-      ? Object.entries(value as Record<string, number>).sort((a, b) => b[1] - a[1] || a[0].localeCompare(b[0])).slice(0, 5).map(([key]) => key)
-      : [];
+  const dialogueByCharacter = new Map(dialogueSamples);
+  const contextualCharacters = candidateEntities.map((candidate) => {
+    const speakerContext = buildDialogueSketchSpeakerContext({
+      entityId: candidate.id,
+      name: candidate.name,
+      raw: candidate.raw,
+      speakerDialogues: dialogueByCharacter.get(candidate.id) as unknown as PublicSpeakerDialogueListDto | undefined,
+      speakerProfiles: profilesData,
+    });
     return {
-      dialogueCount: fingerprint.dialogueCount,
-      topFirstPersons: topKeys(fingerprint.firstPersonDist),
-      topEndings: topKeys(fingerprint.endingBigramDist).map((ending) => ending.replace(/\|/g, "")),
-      politeRatio: fingerprint.politeRatio,
-      avgDialogueLength: fingerprint.avgDialogueLength,
-      exclamationRate: fingerprint.exclamationRate,
-      questionRate: fingerprint.questionRate,
+      id: speakerContext.entityId,
+      name: speakerContext.name,
+      role: speakerContext.entityId === source.scene.raw.pov ? "pov" : "appears",
+      voiceProfileExcerpt: speakerContext.voiceProfileExcerpt,
+      fingerprintSummary: speakerContext.fingerprintSummary,
+      exampleDialogues: speakerContext.exampleDialogues,
+      notesExcerpt: speakerContext.notesExcerpt,
+      blankHeadings: speakerContext.blankHeadings,
     };
-  };
-  const contextualCharacters = characters.map((character) => ({
-    id: character.id,
-    name: character.name,
-    role: character.role,
-    voice: character.voice,
-    voiceProfiles: character.voiceProfiles,
-    notes: character.notes,
-    fingerprint: fingerprintSummary(fingerprintByCharacter.get(character.id)),
-    exampleDialogues: (samplesByCharacter.get(character.id) ?? []).map((item) => item.text).filter((text): text is string => typeof text === "string"),
-  }));
+  });
   let corpusActionDescriptions: string[] = [];
+  let corpusActionSceneIds: string[] = [];
   try {
     const data = await invokeData(context, "semantic.search", { query: input.selectedText, mode: "sentence", limit: 12, rerank: false });
-    corpusActionDescriptions = (Array.isArray(data.results) ? data.results : []).map((value) => record(value))
+    const hits = (Array.isArray(data.results) ? data.results : []).map((value) => record(value))
       .filter((hit) => hit.sceneId !== source.scene.id)
-      .map((hit) => typeof hit.snippet === "string" ? hit.snippet.trim() : typeof hit.text === "string" ? hit.text.trim() : "")
-      .filter((text) => text.length > 0 && text !== input.selectedText).slice(0, 3);
+      .filter((hit) => (typeof hit.snippet === "string" ? hit.snippet.trim() : typeof hit.text === "string" ? hit.text.trim() : "").length > 0);
+    corpusActionDescriptions = hits.map((hit) => typeof hit.snippet === "string" ? hit.snippet.trim() : typeof hit.text === "string" ? hit.text.trim() : "")
+      .filter((text) => text !== input.selectedText).slice(0, 3);
+    corpusActionSceneIds = hits.flatMap((hit) => typeof hit.sceneId === "string" ? [hit.sceneId] : []).slice(0, 3);
   } catch { /* Corpus retrieval is optional, matching the source's best-effort index lookup. */ }
+  const sentenceIndex = Math.max(0, splitIntoSentences(source.body).findIndex((sentence) => sentence.includes(input.selectedText)));
+  const rewriteContext = {
+    pov: typeof source.scene.raw.pov === "string" ? (() => {
+      const pov = story.entities.get(source.scene.raw.pov);
+      return { id: source.scene.raw.pov, ...(pov?.name ? { name: pov.name } : {}) };
+    })() : null,
+    intended_tone: source.scene.raw.intended_tone ?? source.scene.raw.intendedTone ?? null,
+    character_voice_profiles: contextualCharacters,
+    corpus_action_descriptions: corpusActionDescriptions,
+  };
   const prompt = await composePrompt([
     "次の小説の一文について、意味を保った言い換えをちょうど3案生成してください。",
     "診断ではなく、ユーザーが明示的に依頼したリライトです。",
-    `対象文: ${input.selectedText}`,
+    `対象文（0始まりの文番号 ${sentenceIndex}）: ${input.selectedText}`,
+    "シーン文脈:", JSON.stringify(rewriteContext, null, 2),
     `追加指示: ${input.instruction ?? "なし"}`,
-    `シーン文脈: ${JSON.stringify({ sceneTitle: source.scene.raw.title ?? source.scene.name, pov: source.scene.raw.pov ?? null, intendedTone: source.scene.raw.intended_tone ?? source.scene.raw.intendedTone ?? null, characters: contextualCharacters }, null, 2)}`,
-    "各案では POV、意図されたトーン、キャラクター口調を可能な範囲で維持してください。意味の無い文や新しい設定を加えないでください.",
-    promptJson('{"suggestions":[{"text":"...","strategy":"concise|contextual|voice","rationale":"..."},{"text":"...","strategy":"concise|contextual|voice","rationale":"..."},{"text":"...","strategy":"concise|contextual|voice","rationale":"..."}]}'),
+    "各案では POV、意図されたトーン、キャラクター口調を可能な範囲で維持してください。",
+    "自作品コーパスの所作描写がある場合は、tell→show の参考にしつつ文章をそのまま複製しないでください。",
+    promptJson('{"suggestions":[{"text":"...","strategy":"concise","rationale":"..."},{"text":"...","strategy":"contextual","rationale":"..."},{"text":"...","strategy":"voice","rationale":"..."}]}'),
   ].join("\n"));
   const sampleSceneIds = [...new Set(dialogueSamples.flatMap(([, lines]) => lines.flatMap((line) => typeof line.sceneId === "string" ? [line.sceneId] : [])))];
-  const sourceRevisions = revisionList([...story.files.values()].filter((file) => file.path === source.scene.filePath || file.path === source.manuscript.path || relatedIds.some((id) => story.entities.get(id)?.filePath === file.path) || sampleSceneIds.some((id) => {
+  const profileSourcePaths = new Set<string>();
+  for (const scene of story.entities.values()) {
+    if (scene.type !== "scene") continue;
+    profileSourcePaths.add(scene.filePath);
+    if (typeof scene.raw.manuscript === "string") profileSourcePaths.add(scene.raw.manuscript);
+  }
+  const sourceRevisions = revisionList([...story.files.values()].filter((file) => profileSourcePaths.has(file.path) || file.path === source.scene.filePath || file.path === source.manuscript.path || relatedIds.some((id) => story.entities.get(id)?.filePath === file.path) || [...sampleSceneIds, ...corpusActionSceneIds].some((id) => {
     const scene = story.entities.get(id);
     return scene && (scene.filePath === file.path || String(scene.raw.manuscript ?? "") === file.path);
   })));
