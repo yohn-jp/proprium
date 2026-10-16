@@ -30,6 +30,7 @@ export interface ModelUsageEvent {
   inputTokens?: number;
   outputTokens?: number;
   cost?: number;
+  cacheHit?: boolean;
   errorCode?: string;
 }
 export interface ModelUsageStore {
