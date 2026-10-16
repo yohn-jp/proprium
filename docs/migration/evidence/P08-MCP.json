@@ -6,8 +6,8 @@
   },
   "target": {
     "branch": "work/7-p08-mcp",
-    "implementationCommit": "d9499a611b82b240f4b0611d25bc7e89c697349b",
-    "testedHead": "45d38688aef4c48aad9a81079aa12d7e8934d73b"
+    "implementationCommit": "14e497b28a2dd1675f483e7e46f52f59c77a58ca",
+    "testedHead": "c88da3cd416abddcb4da8082c34792c41c926702"
   },
   "ledger": {
     "R48": {
@@ -43,21 +43,22 @@
     }
   },
   "proofs": {
-    "P08-sdk-http-component": "The @modelcontextprotocol/sdk WebStandard Streamable HTTP client/server complete initialization, tool discovery, and action invocation through the module HTTP contribution. A local HTTP server cancellation regression confirms an SDK-cancelled request aborts the host action signal; a separate SDK test verifies cross-project tool calls return a typed scope error without invoking the host. The action host in these component tests is a test context, not a composed production runtime.",
-    "P08-bearer-stdio-client": "The stdio API client sends owner bearer authentication to the namespaced project action/proposal API, validates project discovery responses, binds a selected owner project, forwards SDK cancellation to fetch, and submits proposal IDs without caller-controlled source. These are API-client tests; a spawned stdio process against a running composed API is not yet verified.",
-    "P08-mutation-boundary": "Persistent MCP changes route through canonical proposal actions. create_scene invokes story.entities.create, update_entity invokes story.entities.update, lint_manuscript fix invokes diagnostics.proposeLintFix, and submit_change_set passes the complete validated source NarrativeChangeSet v1 payload to story.changes.propose. The MCP surface exposes no author approval, apply, checkpoint, reconciliation, or publication operation. ChangeSet get/list reconstruct source IDs, operation results, approval IDs, and checkpointed revisions from persisted Story evidence and Core proposal status; pending checkpoints do not synthesize a result, and partial results require checkpoint receipts.",
-    "P08-source-tools-registered": "The SDK test confirms all 27 source tool names remain registered, alongside project/action discovery and status/history/observation tools. Source Story and Diagnostics tools invoke their declared host actions when available; absent producers return typed MODULE_UNAVAILABLE or ACTION_UNAVAILABLE results. Hybrid semantic search and full speaker-composed get_diagnostics fail closed until their exact actions are available.",
+    "P08-sdk-http-component": "The @modelcontextprotocol/sdk WebStandard Streamable HTTP client/server complete initialization, tool discovery, and invocation through the module HTTP contribution. Component tests verify HTTP cancellation reaches a host action, project-scope mismatches return typed errors without invoking the host, and MCP cancellation reaches the stdio client's fetch. The production integration also drives actual SDK HTTP cancellation into a running NLP worker.",
+    "P08-bearer-stdio-client": "A spawned `modules/mcp/dist/stdio.js` client and an SDK Streamable HTTP client authenticate to a live production API using the owner bearer token. Both discover the same 27 source tool names, discover project actions, and read Core status/history. The API supplies proposal source attribution; cookie recovery retries preserve the Core-bound source only for an existing proposal identity, with the full Core digest check unchanged.",
+    "P08-mutation-boundary": "Persistent MCP changes route through canonical proposal actions. create_scene invokes story.entities.create, update_entity invokes story.entities.update, lint fixes invoke diagnostics.proposeLintFix, and submit_change_set submits the complete source NarrativeChangeSet through Story. No MCP tool approves, checkpoints, reconciles, applies, or publishes. The production test verifies a source update becomes an MCP-sourced proposal and does not change the remote until owner approval, checkpoint, and publish. A bearer cannot use author API routes or invoke core.checkpoint.",
+    "P08-source-tools-registered": "The production stdio and Streamable HTTP SDK clients discover all 27 pinned source tool names. The integration exercises Story reads, saved scene context, bounded writing context and its text-free manifest, Diagnostics, semantic.search with the real lexical fallback when no local vector index exists, speaker.dialogue.list, speaker.voice.check output arrays, and publishing.export.plaintext. Assistant-backed tools and full get_diagnostics return typed unavailability instead of fabricated partial results.",
     "P08-context-manifest-parity": "The context-manifest tests verify source-compatible FNV-1a selection identity, Unicode character bounds and title truncation, the 50,000-character manuscript cap, 5,000-character selection limit, source revisions, manifest-only omission, and provenance fields.",
-    "P08-proposal-only-mutations": "Source HTTP create_scene and lint-fix direct-write paths and source stdio lint persistence are replaced by proposal actions. No MCP handler writes project files or commits directly."
+    "P08-proposal-only-mutations": "Source HTTP create_scene and lint-fix direct-write paths and source stdio lint persistence are replaced by proposal actions. No MCP handler writes project files or commits directly.",
+    "P08-core-review-publish-recovery": "Using a temporary bare Git repository with synthetic story data, the production acceptance proposes two operations and verifies the remote is unchanged. An owner approves and checkpoints only one operation; the proposal reports actual partial status, publication changes only that accepted file, and the unapproved operation text is absent from all reachable Git history. A new Core data directory reconstructs the project from Git alone; MCP returns PROPOSAL_PAYLOAD_UNAVAILABLE with digest and operation/review/checkpoint/publication IDs, while list_change_sets reports safe incomplete metadata. The test restores the exact original full Core proposal from a retained private browser record through the owner API, verifies source-level partial status returns, and confirms no accepted operation or checkpoint is duplicated."
   },
   "validation": [
     {
       "command": "pnpm install --frozen-lockfile",
-      "result": "passed on the isolated P08 MCP worktree"
+      "result": "passed on isolated leaf HEAD 1d621415d7f2fb281e7e16d3109356ae3a0ac16a"
     },
     {
-      "command": "pnpm --filter @scriptorium/contracts build",
-      "result": "passed"
+      "command": "pnpm build",
+      "result": "passed; profile build composed zero optional modules and compiled MCP, semantic, speaker, Core, API, and app"
     },
     {
       "command": "pnpm --filter @scriptorium/module-mcp typecheck",
@@ -65,27 +66,11 @@
     },
     {
       "command": "pnpm --filter @scriptorium/module-mcp test",
-      "result": "passed, 17 of 17 tests; SDK protocol integration and cancellation are exercised through the module HTTP contribution with a test action host, not the integrated production runtime"
+      "result": "passed, 17 of 17 tests including SDK HTTP protocol and cancellation checks"
     },
     {
-      "command": "pnpm --filter @scriptorium/module-mcp build",
-      "result": "passed"
-    },
-    {
-      "command": "pnpm typecheck",
-      "result": "passed across all workspace packages"
-    },
-    {
-      "command": "pnpm test",
-      "result": "passed across all workspace suites (158 tests reported, including 17 MCP tests)"
-    },
-    {
-      "command": "pnpm build",
-      "result": "passed; the core profile composed zero optional modules"
-    },
-    {
-      "command": "pnpm audit:core",
-      "result": "passed; 69 production dependency versions scanned"
+      "command": "node --test tests/integration/mcp-acceptance.test.mjs",
+      "result": "passed, 1 of 1 production integration tests on the composed Story/NLP/Diagnostics/Semantic/Speaker/Publishing/MCP runtime and live API. Real SDK stdio and HTTP transports, synthetic Git remote, cancellation, owner lifecycle, privacy-safe reconstruction, exact proposal restoration, and no-duplicate recovery were verified."
     },
     {
       "command": "git diff --check",
@@ -93,9 +78,8 @@
     }
   ],
   "compositionLimits": [
-    "The module returns no model, embedding, or NLP service requirements, but provider-none behavior has not yet been exercised through the final composed runtime.",
-    "The source hybrid search and full get_diagnostics tools remain unavailable until their exact semantic and speaker-composed actions are integrated. Source ChangeSet status now reconstructs from Story evidence and Core proposal status, but the composed production approval and checkpoint lifecycle remains unverified.",
-    "Several source tools remain typed unavailable until their owning actions are integrated, including rewrite/format, reload, speaker-dependent diagnostics/dialogue, and hybrid semantic search.",
-    "The test suite has not yet exercised a spawned stdio process, the composed P08 API route, or a real Runtime/Core action context. Producer-specific runtime tests live with their owning modules."
+    "The MCP module itself has no model, embedding, NLP, or auth-service dependency. Production acceptance uses local CPU module workers, an empty semantic vector index with source lexical fallback, and synthetic content only; it does not certify downloaded model quality or a full-profile provider configuration.",
+    "The assistant-owned suggest_rewrite and format_manuscript tools and core reload remain typed unavailable until their source-equivalent owning actions are published. get_diagnostics remains ACTION_UNAVAILABLE because no single action exposes its full source-composed result; the separate diagnostics and speaker tools are mapped and tested.",
+    "After Core data loss, MCP reports PROPOSAL_PAYLOAD_UNAVAILABLE when only accepted operation payloads survive in Git. Recovery requires the original full Core proposal retained by the private browser record; the production integration verifies exact restore through the owner proposal API."
   ]
 }
