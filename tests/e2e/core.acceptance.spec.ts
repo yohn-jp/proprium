@@ -152,7 +152,7 @@ test("writing UI recovers multi-document drafts and separates Draft, Checkpoint,
   await page.getByRole("button", { name: "縦書き" }).click();
   await expect(page.locator(".manuscript-preview.is-vertical")).toBeVisible();
   await page.getByRole("button", { name: "読書モード" }).click();
-  await expect(page.getByRole("region", { name: "縦書き読書モード" })).toBeVisible();
+  await expect(page.getByRole("document", { name: "縦書き読書モード" })).toBeVisible();
   await page.getByRole("button", { name: "編集に戻る" }).click();
   await page.getByRole("button", { name: "集中" }).click();
   await expect(page.locator(".editor.is-zen")).toBeVisible();
@@ -296,7 +296,7 @@ test("new typing survives an older in-flight checkpoint and exact publication ac
   expect(newerDraft?.operationId).not.toBe(pendingCheckpoint?.operationId);
 
   releaseCheckpoint();
-  await expect(page.locator(".topbar-status")).toContainText("ローカルチェックポイント");
+  await expect.poll(async () => (await readJournal(page)).find((entry) => entry.text === firstGeneration)?.state).toBe("checkpointed");
   await expect(page.locator(".cm-content")).toHaveText(newerGeneration);
   await expect(page.locator(".conflict")).toHaveCount(0);
   const afterCheckpoint = await readJournal(page);
