@@ -52,6 +52,11 @@ function fixtureFiles() {
     ].join("\n"),
     "bible/locations/loc-cafe.yaml": "id: loc-cafe\nname: Cafe\ntype: location\n",
     "meta/scriptorium/modules/nlp/feature-settings.json": JSON.stringify({ externalEnabled: { rewrite: true } }) + "\n",
+    "meta/scriptorium/modules/assistant/model-settings.json": JSON.stringify({
+      defaultPresetId: "env-default",
+      presets: [{ id: "env-default", label: "Acceptance provider", model: "" }],
+      featurePresetIds: { rewrite: "env-default" },
+    }) + "\n",
     "plot/volumes/vol-main/volume.yaml": "id: vol-main\ntitle: Main\ntype: volume\norder: 1\n",
     "plot/volumes/vol-main/chapters/ch-main-1/chapter.yaml": "id: ch-main-1\nvolume: vol-main\ntitle: Opening\ntype: chapter\norder: 1\n",
     "plot/volumes/vol-main/chapters/ch-main-1/scenes/sc-1.yaml": [
@@ -382,6 +387,7 @@ test("spawned stdio and production HTTP MCP preserve Core review boundaries thro
     assert.ok(actionIds.has("speaker.dialogue.list"));
     assert.ok(actionIds.has("speaker.voice.check"));
   }
+  if (READY_MODULES.includes("assistant")) assert.ok(actionIds.has("assistant.rewrite"));
 
   const status = success(await http.client.callTool({
     name: "get_status", arguments: { project_id: projectId },
@@ -624,6 +630,8 @@ test("spawned stdio and production HTTP MCP preserve Core review boundaries thro
       assert.ok(result.data.context && typeof result.data.context === "object");
       assert.equal(result.data.suggestions.length, 3, "Qwen must return the source-required three rewrite candidates");
       assert.ok(result.data.suggestions.every((item) => typeof item.text === "string" && item.text.trim()));
+      assert.ok(result.data.suggestions.every((item) => ["concise", "contextual", "voice"].includes(item.strategy)),
+        "Rewrite candidates must preserve the pinned source strategy vocabulary");
       assert.equal(result.data.model, process.env.ARCADIA_LLM_MODEL);
       assert.equal(result.data.provider, "openai-compatible");
       assert.equal(result.snapshot.remoteCommit, status.snapshot.remoteCommit,
