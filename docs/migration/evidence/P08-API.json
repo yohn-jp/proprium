@@ -6,77 +6,171 @@
   },
   "target": {
     "branch": "branchwork/7-p08",
-    "implementationCommit": "8ce909af9632f99032c4546ac27a02c7cf84d135",
-    "testedHead": "cecad48ee56dd388cd8e205bf540b084fea608b3"
+    "implementationCommit": "7ddbc146519dd0772258e0055e18693fe253c7aa",
+    "testedHead": "7ddbc146519dd0772258e0055e18693fe253c7aa"
   },
   "ledger": {
     "R01": {
-      "target": ["packages/api/src/server.ts", "packages/api/src/server.test.ts"],
-      "proofs": ["P08-api-health-and-static-security"]
+      "target": [
+        "packages/api/src/server.ts",
+        "packages/api/src/server.test.ts"
+      ],
+      "proofs": [
+        "P08-api-health-and-static-security"
+      ]
     },
     "R02": {
-      "target": ["packages/api/src/server.ts", "packages/api/src/server.test.ts"],
-      "proofs": ["P08-api-profile-metadata"]
+      "target": [
+        "packages/api/src/server.ts",
+        "packages/api/src/server.test.ts"
+      ],
+      "proofs": [
+        "P08-api-profile-metadata"
+      ]
     },
     "R05": {
-      "target": ["packages/api/src/server.ts", "packages/api/src/server.test.ts"],
-      "proofs": ["P08-core-snapshot-actions"]
+      "target": [
+        "packages/api/src/server.ts",
+        "packages/api/src/server.test.ts"
+      ],
+      "proofs": [
+        "P08-core-snapshot-actions"
+      ]
     },
     "R08": {
-      "target": ["packages/api/src/server.ts", "packages/api/src/server.test.ts"],
-      "proofs": ["P08-core-snapshot-actions", "P08-author-mutation-boundary"]
+      "target": [
+        "packages/api/src/server.ts",
+        "packages/api/src/server.test.ts"
+      ],
+      "proofs": [
+        "P08-core-snapshot-actions",
+        "P08-author-mutation-boundary"
+      ]
     },
     "R11": {
-      "target": ["packages/api/src/server.ts", "packages/api/src/server.test.ts"],
-      "proofs": ["P08-author-mutation-boundary"]
+      "target": [
+        "packages/api/src/server.ts",
+        "packages/api/src/server.test.ts"
+      ],
+      "proofs": [
+        "P08-author-mutation-boundary"
+      ]
     },
     "R13": {
-      "target": ["packages/api/src/server.ts", "packages/api/src/server.test.ts"],
-      "proofs": ["P08-core-snapshot-actions"]
+      "target": [
+        "packages/api/src/server.ts",
+        "packages/api/src/server.test.ts"
+      ],
+      "proofs": [
+        "P08-core-snapshot-actions"
+      ]
     },
     "R20": {
-      "target": ["packages/api/src/server.ts", "packages/api/src/server.test.ts"],
-      "proofs": ["P08-core-snapshot-actions"]
+      "target": [
+        "packages/api/src/server.ts",
+        "packages/api/src/server.test.ts"
+      ],
+      "proofs": [
+        "P08-core-snapshot-actions"
+      ]
     },
     "R22": {
-      "target": ["packages/api/src/server.ts", "packages/api/src/server.test.ts"],
-      "proofs": ["P08-core-snapshot-actions"]
+      "target": [
+        "packages/api/src/server.ts",
+        "packages/api/src/server.test.ts"
+      ],
+      "proofs": [
+        "P08-core-snapshot-actions"
+      ]
     },
     "R29": {
-      "target": ["packages/api/src/server.ts", "packages/api/src/server.test.ts"],
-      "proofs": ["P08-core-snapshot-actions"]
+      "target": [
+        "packages/api/src/server.ts",
+        "packages/api/src/server.test.ts"
+      ],
+      "proofs": [
+        "P08-core-snapshot-actions"
+      ]
     },
     "R32": {
-      "target": ["packages/api/src/server.ts", "packages/api/src/server.test.ts"],
-      "proofs": ["P08-provider-none"]
+      "target": [
+        "packages/api/src/server.ts",
+        "packages/api/src/server.test.ts"
+      ],
+      "proofs": [
+        "P08-provider-none",
+        "P08-historical-model-usage"
+      ]
     },
     "R39": {
-      "target": ["packages/api/src/server.ts", "packages/api/src/server.test.ts"],
-      "proofs": ["P08-author-mutation-boundary"]
+      "target": [
+        "packages/api/src/server.ts",
+        "packages/api/src/server.test.ts"
+      ],
+      "proofs": [
+        "P08-author-mutation-boundary"
+      ]
     },
     "R40": {
-      "target": ["packages/api/src/server.ts", "packages/api/src/server.test.ts"],
-      "proofs": ["P08-project-lifecycle"]
+      "target": [
+        "packages/api/src/server.ts",
+        "packages/api/src/server.test.ts"
+      ],
+      "proofs": [
+        "P08-project-lifecycle"
+      ]
     },
     "R42": {
-      "target": ["packages/api/src/server.ts", "packages/api/src/server.test.ts"],
-      "proofs": ["P08-author-mutation-boundary"]
+      "target": [
+        "packages/api/src/server.ts",
+        "packages/api/src/server.test.ts"
+      ],
+      "proofs": [
+        "P08-author-mutation-boundary"
+      ]
     },
     "R43": {
-      "target": ["packages/api/src/server.ts", "packages/api/src/server.test.ts"],
-      "proofs": ["P08-author-mutation-boundary"]
+      "target": [
+        "packages/api/src/server.ts",
+        "packages/api/src/server.test.ts"
+      ],
+      "proofs": [
+        "P08-author-mutation-boundary"
+      ]
     },
     "R44": {
-      "target": ["packages/api/src/server.ts", "packages/api/src/server.test.ts"],
-      "proofs": ["P08-core-snapshot-actions", "P08-author-mutation-boundary"]
+      "target": [
+        "packages/api/src/server.ts",
+        "packages/api/src/server.test.ts"
+      ],
+      "proofs": [
+        "P08-core-snapshot-actions",
+        "P08-author-mutation-boundary"
+      ]
     },
     "R45": {
-      "target": ["packages/api/src/server.ts", "packages/api/src/server.test.ts"],
-      "proofs": ["P08-scratch-core-operation"]
+      "target": [
+        "packages/api/src/server.ts",
+        "packages/api/src/server.test.ts"
+      ],
+      "proofs": [
+        "P08-scratch-core-operation"
+      ]
+    },
+    "R38": {
+      "target": [
+        "packages/api/src/server.ts",
+        "packages/api/src/job-history-store.ts",
+        "packages/api/src/server.test.ts"
+      ],
+      "proofs": [
+        "P08-owner-jobs-inbox",
+        "P08-domain-job-results"
+      ]
     }
   },
   "proofs": {
-    "P08-api-health-and-static-security": "The actual HTTP test confirms the health path stays public while project data requires authentication, and verifies CSP nonce replacement, safe hashed Vite asset serving, symlink rejection, and denial of arbitrary source files.",
+    "P08-api-health-and-static-security": "The HTTP test confirms the health path stays public while project data requires authentication, verifies CSP nonce replacement, safe hashed Vite asset serving, symlink rejection, and denial of arbitrary source files. A structurally valid public reader URL serves the SPA shell so an invalid token reaches the reader UI; unknown modules, nonnumeric repository IDs, and extra path segments remain 404.",
     "P08-api-profile-metadata": "The version route reports this Scriptorium API and contracts version, selected profile, cookie-owner/bearer-read-compute-propose auth modes, runtime metadata, and current module availability; it does not return legacy Loom metadata.",
     "P08-core-snapshot-actions": "The HTTP boundary test verifies pinned tree/scene, manuscript snapshot list and historical body routes, bounded search and writing-stat envelopes, and composed Core action descriptors/results with input schema errors. Reads retain the selected Core snapshot identity.",
     "P08-author-mutation-boundary": "The HTTP boundary test verifies the host replaces request-supplied proposal provenance with `mcp` for bearer requests and MCP module contributions, allows declared compute under runtime effect limits, denies bearer approval, accepts same-origin owner-session approval with host-assigned owner scope, and exposes proposal review/status reads. Legacy direct scene PUT is retired with HTTP 410 so persistent scene changes use proposal, approval, and checkpoint routes.",
@@ -84,66 +178,35 @@
     "P08-provider-none": "The provider feature endpoint requires authentication and returns `providerKind: none` without preventing project, read, proposal, or review paths from operating.",
     "P08-scratch-core-operation": "The HTTP boundary test checks scratch text and bounded binary attachments are represented as Core change operations and sent through proposal/approval/checkpoint methods; no API-side project file writer is used.",
     "P08-module-http-composition": "The actual `ModuleRuntime` and Fastify-backed HTTP server test activate a lazy fixture module, dispatch its relative contribution path with a fresh remote reader, and enforce owner-only access on its owner route. Public contribution dispatch is covered with an in-memory registered remote reader.",
-    "P08-public-module-attenuation": "The public module test verifies the handler gets a fresh remote reader, cannot invoke or enumerate composed actions or read linked repositories, receives no ambient cookie, bearer, or proxy-authorization headers, and can return only the explicitly allowed public Referrer-Policy and X-Robots-Tag headers. Runtime-side public-context rejection is implemented in P03."
+    "P08-public-module-attenuation": "The public module test verifies the handler gets a fresh remote reader, cannot invoke or enumerate composed actions or read linked repositories, receives no ambient cookie, bearer, or proxy-authorization headers, and can return only the explicitly allowed public Referrer-Policy and X-Robots-Tag headers. Runtime-side public-context rejection is implemented in P03.",
+    "P08-owner-jobs-inbox": "Owner-cookie routes expose GET /api/jobs, GET /api/jobs/:jobId, GET /api/jobs/events, GET /api/inbox, POST /api/inbox/:id/read, and POST /api/inbox/read-all. Job and inbox state is stored under private host history outside Core data; worker lifecycle rows retain metadata only. Legacy jobs-state.json is archived byte-for-byte and source rows become readable only after explicit user and stable-repository mappings. Unmapped rows remain private and are reported as requiring mapping; nothing is replayed.",
+    "P08-domain-job-results": "A real ModuleRuntime plus the HTTP API invokes a declared source domain action directly and through nested HTTP MCP context.invoke. The host durably registers one job before execution, retains the exact validated ActionResult data or machine error privately, and returns an owner-readable job ID. Prefer: respond-async returns a 202 receipt while the same tracked invocation continues; tests verify running and terminal status, inbox coalescing, history reopen, no input retention, and server cancellation/drain behavior. The capacity reservation is made synchronously before persistence awaits.",
+    "P08-historical-model-usage": "The historical usage store accepts the source prompt version format including rewrite@1 and preserves the validated cacheHit, prompt-version, duration, and queue-wait metadata through append, list, and reopen."
   },
   "validation": [
     {
-      "command": "pnpm install --frozen-lockfile",
-      "result": "passed on the tested integration tree"
+      "command": "pnpm --filter @scriptorium/contracts build",
+      "result": "passed on tested head 7ddbc146519dd0772258e0055e18693fe253c7aa"
     },
     {
-      "command": "pnpm --filter @scriptorium/contracts build && pnpm --filter @scriptorium/module-runtime build && pnpm --filter @scriptorium/core build",
-      "result": "passed against merged current main and the P03 public-context restriction"
+      "command": "pnpm --filter @scriptorium/module-runtime build && pnpm --filter @scriptorium/module-runtime typecheck && pnpm --filter @scriptorium/module-runtime test",
+      "result": "passed on tested head 7ddbc146519dd0772258e0055e18693fe253c7aa; 34 of 34 runtime tests passed on the final rerun"
     },
     {
       "command": "pnpm --filter @scriptorium/api typecheck",
-      "result": "passed; covered again by the full pnpm typecheck on the tested integration tree"
+      "result": "passed on tested head 7ddbc146519dd0772258e0055e18693fe253c7aa"
     },
     {
       "command": "pnpm --filter @scriptorium/api test",
-      "result": "passed, 13 of 13 tests; included again in the full pnpm test run on the tested integration tree"
-    },
-    {
-      "command": "pnpm --filter @scriptorium/core build",
-      "result": "passed with guarded project detach/reconstruction methods available to the API"
-    },
-    {
-      "command": "pnpm --filter @scriptorium/core test",
-      "result": "passed, 50 of 50 tests against the Core lifecycle implementation used by P08"
-    },
-    {
-      "command": "pnpm typecheck",
-      "result": "passed for all workspace packages on tested head cecad48"
-    },
-    {
-      "command": "pnpm test",
-      "result": "passed across all workspace packages on tested head cecad48, including the API 13/13 and Core 50/50 tests"
-    },
-    {
-      "command": "pnpm build",
-      "result": "passed for the Core profile and compiled API/browser app; Vite reported the existing advisory for the 599.47 kB main chunk"
-    },
-    {
-      "command": "pnpm audit:core",
-      "result": "passed; 69 production dependency versions scanned"
-    },
-    {
-      "command": "nix shell nixpkgs#chromium --command bash -c 'chromium_bin=$(command -v chromium); SCRIPTORIUM_E2E_CHROMIUM=\"$chromium_bin\" pnpm test:e2e --trace off'",
-      "result": "passed, all 6 local-Git Chromium browser acceptance tests on tested head cecad48"
-    },
-    {
-      "command": "nix shell nixpkgs#podman -c bash scripts/verify-oci.sh",
-      "result": "passed with the documented temporary image-signature policy: Core OCI image, HTTP probes and assets, UID 1000, writable /data, and SIGTERM API drain; image was not published"
+      "result": "passed on tested head 7ddbc146519dd0772258e0055e18693fe253c7aa; 22 of 22 API tests passed, including direct and nested module action job-result retention, async job status, explicit-mapping legacy history, and rewrite@1 usage history"
     },
     {
       "command": "git diff --check",
-      "result": "passed after the project lifecycle routes, tests, and evidence update"
+      "result": "passed for the active-capacity reservation change before commit"
     }
   ],
   "compositionLimits": [
-    "The source `/api/reload` rebuilt a derived SQLite projection. The target reads pinned Core snapshots and has no equivalent persistent author-data index to reload, so P08 does not expose a misleading reload endpoint; the final ledger still needs to record that projection maintenance disposition.",
-    "P08 API exposes generic module action and HTTP contribution adapters. MCP-specific HTTP/stdio tools, enabled-module domain actions, and the full browser review flow are owned by their module/UI tasks and require composed integration checks.",
-    "This evidence does not certify `start()` inside Core/full OCI profiles, real GitHub checkpoint/publish recovery, or container shutdown under a live streamed request. Those remain P13/P12 integration acceptance. The P08 API tests use in-memory runtime fixtures for several host boundaries and a real local bare-Git Core instance for project registration, reconstruction, and detach; the separate P13 publishing acceptance must run against the composed real Core/Fastify/runtime and authorized GitHub fixture.",
-    "The owner event stream reports manual sync requests handled by this API instance. It is not a cross-process/Core-wide event bus. Legacy auto-merge settings are explicitly retired by the fixed approval and publication workflow."
+    "The source /api/reload rebuilt a derived SQLite projection. The target reads pinned Core snapshots and has no equivalent persistent author-data index to reload, so P08 does not expose a misleading reload endpoint; the final ledger records that projection maintenance disposition.",
+    "The isolated P08 checks do not certify the full browser, configured external Qwen MCP, real authorized GitHub checkpoint/publish, full-workspace, or OCI acceptance. Those require their composed integration runs. The API suite uses a synthetic declared domain module over the actual runtime and HTTP server; legacy import tests use explicit synthetic mappings and verify that host history survives Core data deletion."
   ]
 }
