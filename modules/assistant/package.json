@@ -1,0 +1,68 @@
+{
+  "name": "@scriptorium/module-assistant",
+  "private": true,
+  "version": "0.1.0",
+  "type": "module",
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js"
+    },
+    "./browser": {
+      "types": "./dist/browser.d.ts",
+      "import": "./dist/browser.js"
+    },
+    "./migration": {
+      "types": "./dist/migration.d.ts",
+      "import": "./dist/migration.js"
+    }
+  },
+  "files": [
+    "dist"
+  ],
+  "scripts": {
+    "build": "tsc -p tsconfig.json",
+    "typecheck": "tsc -p tsconfig.json --noEmit",
+    "test": "node --import tsx --test src/*.test.ts"
+  },
+  "dependencies": {
+    "@scriptorium/contracts": "workspace:*",
+    "@scriptorium/module-runtime": "workspace:*",
+    "@scriptorium/migration": "workspace:*",
+    "@scriptorium/module-story": "workspace:*",
+    "@scriptorium/module-nlp": "workspace:*",
+    "@scriptorium/module-diagnostics": "workspace:*",
+    "@scriptorium/module-semantic": "workspace:*",
+    "@scriptorium/module-speaker": "workspace:*",
+    "@ai-sdk/anthropic": "4.0.16",
+    "@ai-sdk/openai-compatible": "2.0.62",
+    "ai": "7.0.31",
+    "jsonrepair": "3.15.0",
+    "zod": "3.25.76",
+    "yaml": "^2.8.1",
+    "react": "^19.1.0",
+    "react-dom": "^19.1.0"
+  },
+  "scriptoriumModule": {
+    "id": "assistant",
+    "version": "0.1.0",
+    "contractVersion": 1,
+    "dependencies": [
+      "story",
+      "nlp",
+      "diagnostics",
+      "semantic",
+      "speaker"
+    ],
+    "provides": [],
+    "requires": [],
+    "serverEntry": "./dist/index.js",
+    "browserEntry": "./dist/browser.js",
+    "statePaths": [
+      "meta/scriptorium/modules/assistant"
+    ],
+    "locality": "optional-external"
+  }
+}
