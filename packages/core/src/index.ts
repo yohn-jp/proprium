@@ -2334,9 +2334,13 @@ export class CoreStore implements MutationCoordinator {
     const proposals = new Map<string, ChangeProposal>();
     for (const proposal of this.proposals.get(record.id)?.values() ?? []) this.mergeProposal(proposals, proposal);
     for (const proposal of (await this.readProposalJournal(record)).values()) this.mergeProposal(proposals, proposal);
-    const commits = [observation.snapshot.remoteCommit, ...[...storedOperations.records.values()].map((item) => item.commit)];
+    const remoteProposalRecords = await this.readDurableProposals(root, [observation.snapshot.remoteCommit]);
+    const remoteProposalIds = new Set(remoteProposalRecords.keys());
+    const commits = [...new Set([
+      observation.snapshot.remoteCommit,
+      ...[...storedOperations.records.values()].map((item) => item.commit),
+    ])];
     const durable = await this.readDurableProposals(root, commits);
-    const durableIds = new Set(durable.keys());
     for (const proposal of durable.values()) {
       if (record.identity && snapshotKey({ repository: proposal.snapshot.repository, remoteCommit: "" }) !==
           snapshotKey({ repository: record.identity, remoteCommit: "" })) {
@@ -2344,9 +2348,11 @@ export class CoreStore implements MutationCoordinator {
       }
       this.mergeProposal(proposals, proposal);
     }
-    const pending = new Map([...proposals].filter(([id]) => !durableIds.has(id)));
-    await this.writeProposalJournal(record, pending);
-    this.durableProposalIds.set(record.id, durableIds);
+    // A checkpoint may be durable only in this local clone. Keep its proposal in
+    // the independent journal until the manifest is present in the remote history.
+    const recoverable = new Map([...proposals].filter(([id]) => !remoteProposalIds.has(id)));
+    await this.writeProposalJournal(record, recoverable);
+    this.durableProposalIds.set(record.id, remoteProposalIds);
     this.proposals.set(record.id, proposals);
     return proposals;
   }

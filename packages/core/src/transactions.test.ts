@@ -790,12 +790,16 @@ test("accepted proposal evidence and publication state reconstruct after full Co
     await originalStore.propose(project.id, proposal);
     await originalStore.approve(project.id, { proposalId: proposal.id, operationIds: [selected.id], authorScope: "owner" });
     const checkpoint = await originalStore.checkpoint(project.id, selected);
+    const proposalJournal = path.join(dataDir, "proposal-journal", `${project.id}.json`);
+    assert.deepEqual(JSON.parse(await fs.readFile(proposalJournal, "utf8")).proposals.map((item: { id: string }) => item.id), [proposal.id]);
     await fs.writeFile(path.join(fixture.seed, "remote-note.txt"), "Upstream disjoint change.\n");
     await git(fixture.seed, "add", "remote-note.txt");
     await git(fixture.seed, "commit", "-m", "Disjoint upstream change for proposal recovery");
     await git(fixture.seed, "push", "origin", "main");
     const published = await originalStore.publish(project.id, "proposal_manifest_publish");
     assert.equal(published.state, "confirmed");
+    assert.equal((await originalStore.getProposal(project.id, proposal.id))?.publishedOperationIds.includes(selected.id), true);
+    await assert.rejects(fs.access(proposalJournal), (error: NodeJS.ErrnoException) => error.code === "ENOENT");
     assert.equal(await git(fixture.root, "--git-dir", fixture.remote, "show", `${published.remoteCommit}:manuscript/selected.md`), "Selected effect.");
     assert.equal(await git(fixture.root, "--git-dir", fixture.remote, "show", `${published.remoteCommit}:remote-note.txt`), "Upstream disjoint change.");
     await assert.rejects(git(fixture.root, "--git-dir", fixture.remote, "show", `${published.remoteCommit}:manuscript/unselected.md`));
