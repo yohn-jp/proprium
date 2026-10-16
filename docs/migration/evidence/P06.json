@@ -18,6 +18,7 @@
       "sourceSymbols": [
         "Tokenizer",
         "analyzeText",
+        "expandSearchTerms",
         "discoverCandidateTermsFiltered",
         "addToIgnoreList",
         "appendSynonymGroup",
@@ -38,7 +39,7 @@
         "meta/synonyms.yaml -> meta/scriptorium/modules/nlp/synonyms.yaml",
         "meta/candidate-ignore-list.yaml -> meta/scriptorium/modules/nlp/candidate-ignore-list.yaml",
         ".arcadia/nlp-feature-settings.json -> meta/scriptorium/modules/nlp/feature-settings.json",
-        "Japanese tokens, UTF-16 spans, candidate terms, and term-variant suggestions are derived from the pinned SnapshotReader; dictionary and ignore changes are ChangeOperation proposals."
+        "Japanese tokens, UTF-16 spans, candidate terms, and term-variant suggestions are derived from the pinned SnapshotReader; dictionary and ignore changes are ChangeOperation proposals. The source search-expansion helper is exported for Semantic query reuse."
       ],
       "proofs": [
         {
@@ -52,7 +53,7 @@
         {
           "id": "P06-NLP-ALGORITHMS",
           "command": "pnpm --filter @scriptorium/module-nlp test",
-          "result": "Candidate aggregation preserves per-entity occurrence counts, source IDs, known-name exclusions, and reading data; term variants preserve known-term precedence and choose the most frequent cluster representative.",
+          "result": "Candidate aggregation preserves per-entity occurrence counts, source IDs, known-name exclusions, and reading data; term variants preserve known-term precedence and choose the most frequent cluster representative; source-style query expansion trims the literal and adds only known close spelling variants.",
           "scope": "focused",
           "testPath": "modules/nlp/src/candidateDiscovery.test.ts"
         },

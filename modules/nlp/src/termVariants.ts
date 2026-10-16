@@ -21,6 +21,18 @@ export function shouldClusterByString(termA: string, termB: string): boolean {
   return levenshteinDistance(termA, termB) <= threshold;
 }
 
+/** Expand a literal query with known spelling variants using the source rules. */
+export function expandSearchTerms(query: string, knownTerms: Iterable<string>): string[] {
+  const normalized = query.trim();
+  if (!normalized) return [];
+  const expanded = new Set<string>([normalized]);
+  for (const term of knownTerms) {
+    if (!term || term === normalized) continue;
+    if (shouldClusterByString(normalized, term)) expanded.add(term);
+  }
+  return [...expanded];
+}
+
 export function suggestTermVariants(
   unknownTermCandidates: Array<{ term: string; count: number }>,
   knownTerms: Set<string>,

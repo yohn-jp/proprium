@@ -4,7 +4,7 @@ import type { WorkerService } from "@scriptorium/contracts";
 import { NLP_TOKENIZER_CAPABILITY, NLP_TOKENIZER_CAPABILITY_VERSION, NLP_MODEL_ID, NLP_MODEL_VERSION, NLP_MODULE_VERSION, type NlpTokenizerCapability } from "./contracts.js";
 import { aggregateCandidateTerms, collectEntityTexts, type CandidateEntityInput } from "./candidateDiscovery.js";
 import { readCanonicalSnapshotEntities } from "./canonicalSnapshot.js";
-import { suggestTermVariants } from "./termVariants.js";
+import { expandSearchTerms, suggestTermVariants } from "./termVariants.js";
 import type { MorphologyAnalysis } from "./tokenizer/types.js";
 import YAML from "yaml";
 
@@ -14,6 +14,7 @@ export { readCanonicalSnapshotEntities, type CanonicalSnapshotEntity } from "./c
 export { isAdjective, isAdverb, isAuxiliaryVerb, isComma, isFinalParticle, isNoun, isNumeral, isParticle, isPronoun, isProperNoun, isSymbol, isTaConjunctive, isUnknown, isVerb } from "./tokenizer/pos.js";
 export { tokenBase, tokenPosDetail1 } from "./tokenizer/types.js";
 export { suggestTermVariants } from "./termVariants.js";
+export { expandSearchTerms } from "./termVariants.js";
 export type { TermVariantSuggestion } from "./termVariants.js";
 export { splitIntoSentenceOffsets, splitIntoSentences } from "./sentenceSplit.js";
 export type { SentenceOffset } from "./sentenceSplit.js";
