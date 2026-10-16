@@ -274,7 +274,7 @@ function clampOutputTokens(value: number): number {
   if (!Number.isFinite(value)) {
     throw new Error("[assistant] maxOutputTokens must be a finite number");
   }
-  return Math.min(256, Math.max(48, Math.floor(value)));
+  return Math.min(32_768, Math.max(48, Math.floor(value)));
 }
 
 function samplingOptions(

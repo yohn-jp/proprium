@@ -250,7 +250,7 @@ class ModelExecutionQueue {
 
 const modelQueue = new ModelExecutionQueue();
 
-function clampOutputTokens(value: number): number { return Math.max(48, Math.min(256, Math.floor(value))); }
+function clampOutputTokens(value: number): number { return Math.max(48, Math.min(32_768, Math.floor(value))); }
 function sha256(value: string): string { return createHash("sha256").update(value).digest("hex"); }
 function fnv1aHash(value: string): string {
   let hash = 0x811c9dc5;
@@ -647,7 +647,7 @@ async function runRewrite(
     promptJson('{"suggestions":[{"text":"...","strategy":"concise|contextual|voice","rationale":"..."},{"text":"...","strategy":"concise|contextual|voice","rationale":"..."},{"text":"...","strategy":"concise|contextual|voice","rationale":"..."}]}'),
   ].join("\n"));
   const sourceRevisions = revisionList([...story.files.values()].filter((file) => file.path === source.scene.filePath || file.path === source.manuscript.path || relatedIds.some((id) => story.entities.get(id)?.filePath === file.path)));
-  const generated = await generate(moduleContext, context, { feature: "rewrite", prompt, promptVersion: CUSTOM_PROMPT_VERSIONS.rewrite, sourceRevisions, outputTokens: 192, ...(onText ? { onText } : {}) });
+  const generated = await generate(moduleContext, context, { feature: "rewrite", prompt, promptVersion: CUSTOM_PROMPT_VERSIONS.rewrite, sourceRevisions, outputTokens: 1_024, ...(onText ? { onText } : {}) });
   const parsed = parseStructured(generated.text, rewriteSchema);
   const chosen = parsed.suggestions[0]!.text.trim();
   if (chosen.length > 20_000) throw codeError("assistant_output_invalid", "The rewrite output exceeded its text limit");
@@ -684,7 +684,7 @@ async function runSceneSummary(moduleContext: ModuleContext, context: ModuleActi
   const prepared = await renderPromptTemplate("sceneSummary", { sceneId, knownCharacters: knownCharacters.join("、") || "なし", manuscriptBody: source.body });
   const prompt = `${await composePrompt(prepared.body)}${promptJson('{"summaryLines":["...","...","..."],"characters":["..."],"stateChanges":["..."]}')}`;
   const sourceRevisions = [{ path: source.scene.filePath, revision: sceneFile.revision }, { path: source.manuscript.path, revision: source.manuscript.revision }];
-  const generated = await generate(moduleContext, context, { feature: "scene-summary", prompt, promptVersion: prepared.version, sourceRevisions, outputTokens: 160 });
+  const generated = await generate(moduleContext, context, { feature: "scene-summary", prompt, promptVersion: prepared.version, sourceRevisions, outputTokens: 768 });
   const summary = parseStructured(generated.text, sceneSummarySchema);
   const recordValue = {
     sceneId, ...summary, sourceHash, generatedAt: generated.provenance.generatedAt,
@@ -733,7 +733,7 @@ async function runChapterSummary(moduleContext: ModuleContext, context: ModuleAc
   }
   const template = await renderPromptTemplate("chapterSummary", { chapterId, sceneBlocks: sceneRecords.map((item) => `## ${String(item.sceneId)}\n${Array.isArray(item.summaryLines) ? item.summaryLines.join("\n") : ""}`).join("\n\n") });
   const prompt = `${await composePrompt(template.body)}${promptJson('{"summaryLines":["...","...","..."]}')}`;
-  const generated = await generate(moduleContext, context, { feature: "chapter-summary", prompt, promptVersion: template.version, sourceRevisions: revisionList([...story.files.values()].filter((file) => reads.some((item) => item.path === file.path))), outputTokens: 128 });
+  const generated = await generate(moduleContext, context, { feature: "chapter-summary", prompt, promptVersion: template.version, sourceRevisions: revisionList([...story.files.values()].filter((file) => reads.some((item) => item.path === file.path))), outputTokens: 512 });
   const summary = parseStructured(generated.text, chapterSummarySchema);
   const recordValue = { scope: "chapter", id: chapterId, ...summary, sourceHash: childHash, generatedAt: generated.provenance.generatedAt, provider: generated.provenance.provider, model: generated.provenance.model, modelVersion: generated.provenance.modelVersion, promptVersion: template.version, snapshot: generated.provenance.snapshot };
   const operationReads = [...reads, readRevision(context, chapterPath, existingChapter?.revision ?? null), ...generated.provenance.sourceRevisions.filter((item) => item.path === ASSISTANT_SETTINGS_PATH)];
@@ -768,7 +768,7 @@ async function runQa(moduleContext: ModuleContext, context: ModuleActionContext,
   const evidenceBlock = citations.map((citation, index) => `[${index + 1}] ${citation.path}${citation.sceneId ? ` (scene ${citation.sceneId})` : ""}\n${citation.quote}`).join("\n\n");
   const template = await renderPromptTemplate("settingQa", { manuscriptBody: evidenceBlock });
   const prompt = `${await composePrompt(`${template.body}\n\n質問: ${input.question}\n\n参照した根拠:\n${evidenceBlock}`)}${promptJson('{"answer":"...","confidence":"high|medium|low"}')}`;
-  const generation = await generate(moduleContext, context, { feature: "setting-qa", prompt, promptVersion: template.version, sourceRevisions: citationPaths(citations), outputTokens: 192 });
+  const generation = await generate(moduleContext, context, { feature: "setting-qa", prompt, promptVersion: template.version, sourceRevisions: citationPaths(citations), outputTokens: 1_024 });
   const parsed = parseStructured(generation.text, z.object({ answer: z.string().min(1), confidence: z.enum(["high", "medium", "low"]) }));
   return { ...parsed, citations, model: generation.provenance.model, provider: generation.provenance.provider, promptVersion: generation.provenance.promptVersion, provenance: generation.provenance };
 }
@@ -780,7 +780,7 @@ async function runContinuation(moduleContext: ModuleContext, context: ModuleActi
   const prompt = `${await composePrompt(`${template.body}\n\n場面本文:\n${source.body}`)}${promptJson('{"options":[{"direction":"...","rationale":"..."},{"direction":"...","rationale":"..."},{"direction":"...","rationale":"..."}]}')}`;
   const sceneFile = story.files.get(source.scene.filePath)!;
   const sourceRevisions = [{ path: source.scene.filePath, revision: sceneFile.revision }, { path: source.manuscript.path, revision: source.manuscript.revision }];
-  const generated = await generate(moduleContext, context, { feature: "continuation-options", prompt, promptVersion: template.version, sourceRevisions, outputTokens: 192 });
+  const generated = await generate(moduleContext, context, { feature: "continuation-options", prompt, promptVersion: template.version, sourceRevisions, outputTokens: 768 });
   const result = parseStructured(generated.text, continuationSchema);
   return { ...result, sceneId, model: generated.provenance.model, provider: generated.provenance.provider, promptVersion: generated.provenance.promptVersion, citations: [makeCitation(source.manuscript, source.body, source.scene.id, "scene manuscript")], provenance: generated.provenance };
 }
@@ -839,7 +839,7 @@ async function runDialogueTopics(moduleContext: ModuleContext, context: ModuleAc
     const participant = story.entities.get(id);
     return participant ? [story.files.get(participant.filePath)!].filter(Boolean) : [];
   })]);
-  const generated = await generate(moduleContext, context, { feature: "dialogue-sketch", prompt, promptVersion: CUSTOM_PROMPT_VERSIONS.dialogueTopics, sourceRevisions, outputTokens: 192 });
+  const generated = await generate(moduleContext, context, { feature: "dialogue-sketch", prompt, promptVersion: CUSTOM_PROMPT_VERSIONS.dialogueTopics, sourceRevisions, outputTokens: 32_768 });
   const parsed = parseStructured(generated.text, topicsSchema);
   return { topics: parsed.topics, sceneId, model: generated.provenance.model, provider: generated.provenance.provider, promptVersion: generated.provenance.promptVersion, citations: [makeCitation(source.manuscript, source.body, source.scene.id, "scene manuscript")], provenance: generated.provenance };
 }
@@ -859,7 +859,7 @@ async function runDialogueTurns(moduleContext: ModuleContext, context: ModuleAct
   });
   const prompt = `${await composePrompt(template.body)}${promptJson('{"lines":[{"speakerEntityId":"participant-id","text":"..."},{"speakerEntityId":"participant-id","text":"..."},{"speakerEntityId":"participant-id","text":"..."}]}')}`;
   const sourceRevisions = revisionList([story.files.get(source.scene.filePath)!, source.manuscript, ...participantEntities.map((item) => story.files.get(item.filePath)!).filter(Boolean)]);
-  const generated = await generate(moduleContext, context, { feature: "dialogue-sketch-turn", prompt, promptVersion: template.version, sourceRevisions, outputTokens: 192 });
+  const generated = await generate(moduleContext, context, { feature: "dialogue-sketch-turn", prompt, promptVersion: template.version, sourceRevisions, outputTokens: 4_096 });
   const parsed = parseStructured(generated.text, dialogueLinesSchema);
   const allowed = new Set(input.participants);
   const lines = parsed.lines.map((line) => {
@@ -909,7 +909,7 @@ async function runReaderReaction(moduleContext: ModuleContext, context: ModuleAc
   }
   const template = await renderPromptTemplate("firstReadReaction", { chapterId, blocks: cumulative.map((item) => `chapter_id: ${item.chapterId}\n${item.summaryLines.map((line) => `- ${line}`).join("\n")}`).join("\n\n") || "(要約なし)" });
   const prompt = `${await composePrompt(template.body)}${promptJson('{"questions":["..."],"expectations":["..."],"confusions":["..."]}')}`;
-  const generated = await generate(moduleContext, context, { feature: "first-read-reaction", prompt, promptVersion: template.version, sourceRevisions: revisionList([], sourceRevisions), outputTokens: 160 });
+  const generated = await generate(moduleContext, context, { feature: "first-read-reaction", prompt, promptVersion: template.version, sourceRevisions: revisionList([], sourceRevisions), outputTokens: 768 });
   const reaction = parseStructured(generated.text, reactionSchema);
   return { chapterId, ...reaction, model: generated.provenance.model, provider: generated.provenance.provider, promptVersion: generated.provenance.promptVersion, citations, provenance: generated.provenance };
 }
@@ -924,7 +924,7 @@ async function runSynonyms(moduleContext: ModuleContext, context: ModuleActionCo
       `対象語句: ${original}`, `文: ${sentence}`,
       promptJson('{"candidates":["...","...","..."]}'),
     ].join("\n"));
-    const generated = await generate(moduleContext, context, { feature: "synonym-suggest", prompt, promptVersion: CUSTOM_PROMPT_VERSIONS.synonym, outputTokens: 128 });
+    const generated = await generate(moduleContext, context, { feature: "synonym-suggest", prompt, promptVersion: CUSTOM_PROMPT_VERSIONS.synonym, outputTokens: 512 });
     const parsed = parseStructured(generated.text, synonymSchema);
     results.push({ term: original, candidates: parsed.candidates, model: generated.provenance.model, provider: generated.provenance.provider, promptVersion: generated.provenance.promptVersion, citations: [], provenance: generated.provenance });
   }
@@ -982,7 +982,7 @@ async function runContradictionAssist(moduleContext: ModuleContext, context: Mod
   ].join("\n\n"));
   const sourceRevisions = revisionList(grounded.flatMap(({ source }) => [story.files.get(source.scene.filePath)!, source.manuscript]));
   const evidenceHash = sha256(`${candidateId ?? claim}:${grounded.map(({ source, quote }) => `${source.scene.id}:${quote}`).join("|")}`).slice(0, 16);
-  const generated = await generate(moduleContext, context, { feature: "contradiction-check", prompt, promptVersion: `${CUSTOM_PROMPT_VERSIONS.contradiction}:${evidenceHash}`, sourceRevisions, outputTokens: 128 });
+  const generated = await generate(moduleContext, context, { feature: "contradiction-check", prompt, promptVersion: `${CUSTOM_PROMPT_VERSIONS.contradiction}:${evidenceHash}`, sourceRevisions, outputTokens: 1_024 });
   const parsed = parseStructured(generated.text, contradictionSchema);
   const allowedQuotes = new Set(grounded.map((item) => item.quote));
   const citations = grounded.map(({ source, quote }, index) => sourceCitation(source.manuscript, quote, source.scene.id, `evidence ${index + 1}`));
@@ -1021,7 +1021,7 @@ async function runZukanSuggestions(moduleContext: ModuleContext, context: Module
     promptJson('{"blockPath":"lead.0","proposedText":"...","evidence":[{"sceneId":"...","quote":"exact source quote"}]}'),
   ].join("\n\n"));
   const sourceRevisions = revisionList([...story.files.values()].filter((file) => file.path === target.filePath || [...eligible.values()].some((item) => item.source.scene.filePath === file.path || item.file.path === file.path)));
-  const generated = await generate(moduleContext, context, { feature: "zukan-proposal", prompt, promptVersion: CUSTOM_PROMPT_VERSIONS.zukan, sourceRevisions, outputTokens: 160 });
+  const generated = await generate(moduleContext, context, { feature: "zukan-proposal", prompt, promptVersion: CUSTOM_PROMPT_VERSIONS.zukan, sourceRevisions, outputTokens: 1_024 });
   const parsed = parseStructured(generated.text, zukanSchema);
   if (!/^(?:lead\.\d+|sections\.\d+\.body\.\d+)$/.test(parsed.blockPath)) throw codeError("assistant_output_invalid", "Zukan output used an unsupported notes block path");
   if (input.blockPath && parsed.blockPath !== input.blockPath) throw codeError("assistant_output_invalid", "Zukan output changed the selected notes block path");
@@ -1056,7 +1056,7 @@ async function runStateEventDraft(moduleContext: ModuleContext, context: ModuleA
     promptJson('{"events":[{"kind":"location|acquaintance|ownership|knowledge","target":"entity-id","operation":"...","before":{},"after":{},"object":"entity-id|null","payload":{},"evidenceQuote":"exact quote"}]}'),
   ].join("\n\n"));
   const sourceRevisions = [{ path: source.scene.filePath, revision: story.files.get(source.scene.filePath)!.revision }, { path: source.manuscript.path, revision: source.manuscript.revision }];
-  const generated = await generate(moduleContext, context, { feature: "state-event-draft", prompt, promptVersion: `${CUSTOM_PROMPT_VERSIONS.stateEvent}:${fnv1aHash(source.body)}`, sourceRevisions, outputTokens: 192 });
+  const generated = await generate(moduleContext, context, { feature: "state-event-draft", prompt, promptVersion: `${CUSTOM_PROMPT_VERSIONS.stateEvent}:${fnv1aHash(source.body)}`, sourceRevisions, outputTokens: 1_024 });
   const parsed = parseStructured(generated.text, stateEventSchema);
   const drafts: Array<RecordValue> = [];
   const proposals: unknown[] = [];
@@ -1095,7 +1095,7 @@ async function runSpeakerAttribution(moduleContext: ModuleContext, context: Modu
     promptJson('{"attributions":[{"sentenceIndex":1,"speakerEntityId":"character-id|null","rationale":"..."}]}'),
   ].join("\n\n"));
   const sourceRevisions = revisionList([story.files.get(source.scene.filePath)!, source.manuscript, ...candidates.map((candidate) => story.files.get(candidate.filePath)!).filter(Boolean)]);
-  const generated = await generate(moduleContext, context, { feature: "speaker-attribution-llm", prompt, promptVersion: CUSTOM_PROMPT_VERSIONS.speaker, sourceRevisions, outputTokens: 192 });
+  const generated = await generate(moduleContext, context, { feature: "speaker-attribution-llm", prompt, promptVersion: CUSTOM_PROMPT_VERSIONS.speaker, sourceRevisions, outputTokens: 4_096 });
   const parsed = parseStructured(generated.text, speakerSchema);
   const candidateSet = new Set(candidates.map((item) => item.id));
   const byIndex = new Map(parsed.attributions.map((item) => [item.sentenceIndex, item]));
