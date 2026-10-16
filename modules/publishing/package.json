@@ -1,0 +1,54 @@
+{
+  "name": "@scriptorium/module-publishing",
+  "private": true,
+  "version": "0.1.0",
+  "type": "module",
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js"
+    },
+    "./browser": {
+      "types": "./dist/browser.d.ts",
+      "import": "./dist/browser.js"
+    },
+    "./migration": {
+      "types": "./dist/migration.d.ts",
+      "import": "./dist/migration.js"
+    }
+  },
+  "files": [
+    "dist"
+  ],
+  "scripts": {
+    "build": "tsc -p tsconfig.json",
+    "typecheck": "tsc -p tsconfig.json --noEmit",
+    "test": "node --import tsx --test src/*.test.ts"
+  },
+  "dependencies": {
+    "@scriptorium/contracts": "workspace:*",
+    "@scriptorium/migration": "workspace:*",
+    "yaml": "^2.8.1",
+    "jszip": "^3.10.1"
+  },
+  "scriptoriumModule": {
+    "id": "publishing",
+    "version": "0.1.0",
+    "contractVersion": 1,
+    "dependencies": [],
+    "provides": [],
+    "requires": [],
+    "serverEntry": "./dist/index.js",
+    "statePaths": [
+      "meta/scriptorium/modules/publishing"
+    ],
+    "locality": "local",
+    "browserEntry": "./dist/browser.js"
+  },
+  "peerDependencies": {
+    "react": "^19.1.0",
+    "react-dom": "^19.1.0"
+  }
+}

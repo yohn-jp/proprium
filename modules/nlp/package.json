@@ -1,0 +1,56 @@
+{
+  "name": "@scriptorium/module-nlp",
+  "private": true,
+  "version": "0.1.0",
+  "type": "module",
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js"
+    },
+    "./browser": {
+      "types": "./dist/browser.d.ts",
+      "import": "./dist/browser.js"
+    },
+    "./worker": "./dist/worker.js",
+    "./migration": {
+      "types": "./dist/migration.d.ts",
+      "import": "./dist/migration.js"
+    }
+  },
+  "files": [
+    "dist"
+  ],
+  "scripts": {
+    "build": "tsc -p tsconfig.json",
+    "typecheck": "tsc -p tsconfig.json --noEmit",
+    "test": "node --import tsx --test src/*.test.ts"
+  },
+  "dependencies": {
+    "@scriptorium/contracts": "workspace:*",
+    "@scriptorium/migration": "workspace:*",
+    "lindera-wasm-nodejs-ipadic": "2.0.0",
+    "yaml": "^2.8.1",
+    "react": "^19.1.0",
+    "react-dom": "^19.1.0"
+  },
+  "scriptoriumModule": {
+    "id": "nlp",
+    "version": "0.1.0",
+    "contractVersion": 1,
+    "dependencies": [],
+    "provides": [
+      "nlp.tokenizer"
+    ],
+    "requires": [],
+    "serverEntry": "./dist/index.js",
+    "statePaths": [
+      "meta/scriptorium/modules/nlp"
+    ],
+    "locality": "local",
+    "browserEntry": "./dist/browser.js",
+    "workerEntry": "./dist/worker.js"
+  }
+}
