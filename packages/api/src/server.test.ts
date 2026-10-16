@@ -1,15 +1,18 @@
 import assert from "node:assert/strict";
 import { execFile as execFileCallback } from "node:child_process";
+import { createHash } from "node:crypto";
 import { lstat, mkdir, mkdtemp, readFile, rm, symlink, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { resolve } from "node:path";
+import { fileURLToPath } from "node:url";
 import { afterEach, describe, it } from "node:test";
 import { promisify } from "node:util";
-import { MODEL_USAGE_CAPABILITY, type ActionResult, type ChangeOperation, type ChangeProposal, type ModelUsageEvent, type ModelUsageStore, type ModuleAction, type ModuleContext, type ModuleDefinition, type ModuleManifest, type ProposalStatus, type RepositoryIdentity, type SnapshotId, type ValueSchema } from "@scriptorium/contracts";
+import { MODEL_USAGE_CAPABILITY, type ActionResult, type ChangeOperation, type ChangeProposal, type JobRequest, type ModelUsageEvent, type ModelUsageStore, type ModuleAction, type ModuleContext, type ModuleDefinition, type ModuleManifest, type ProposalStatus, type RepositoryIdentity, type SnapshotId, type ValueSchema } from "@scriptorium/contracts";
 import { CoreStore, type CoreStore as CoreStoreShape } from "@scriptorium/core";
 import { ModuleRuntime, type ModuleLoader, type ModuleRuntimeOptions } from "@scriptorium/module-runtime";
 import { HistoricalModelUsageError, HistoricalModelUsageStore } from "./historical-store.js";
-import { createServer, type ApiServerOptions } from "./server.js";
+import { JobHistoryError, JobHistoryStore, type WorkerJobLifecycle } from "./job-history-store.js";
+import { createServer, importLegacyJobHistory, type ApiServerOptions } from "./server.js";
 
 const ACCESS_TOKEN = "test-access-token-which-is-longer-than-32-characters";
 const execFile = promisify(execFileCallback);
@@ -223,6 +226,37 @@ function actionBoundaryRuntime(cacheDirectory: string): ModuleRuntime {
   });
 }
 
+const testWorkerEntry = fileURLToPath(new URL("../../module-runtime/src/fixtures/worker.mjs", import.meta.url));
+
+function jobHistoryRuntime(cacheDirectory: string): ModuleRuntime {
+  const manifest: ModuleManifest = {
+    id: "speaker", version: "0.1.0", contractVersion: 1,
+    dependencies: [], provides: [], requires: [], statePaths: [], locality: "local",
+  };
+  const schema: ValueSchema = { parse(value) { return value; } };
+  const definition: ModuleDefinition = {
+    manifest,
+    actions: [{
+      id: "test-worker", effect: "compute", inputSchema: schema, outputSchema: schema,
+      async invoke(input, context): Promise<ActionResult> {
+        const value = input as { jobId: string; task?: string };
+        const request: JobRequest = {
+          id: value.jobId, module: "speaker", task: value.task ?? "echo", snapshot: context.reader.snapshot,
+          model: "test-model", modelVersion: "1", moduleVersion: manifest.version, deadline: Date.now() + 10_000,
+          input: { privatePayload: "worker-input-must-not-enter-owner-history" },
+        };
+        return { ok: true, snapshot: context.reader.snapshot, data: await context.runJob(request) };
+      },
+    }],
+    ui: [],
+    async dispose() {},
+  };
+  return new ModuleRuntime({
+    manifests: [manifest], enabled: ["speaker"], loaders: { speaker: async () => definition },
+    workerEntries: { speaker: testWorkerEntry }, cacheDirectory,
+  });
+}
+
 async function startCustomApi(
   store: CoreStore,
   staticDir: string,
@@ -417,6 +451,303 @@ describe("Scriptorium HTTP boundary", () => {
     const alias = resolve(root, "history-alias");
     await symlink(usageDirectory, alias, "dir");
     await assert.rejects(new HistoricalModelUsageStore(alias).list(SNAPSHOT.repository), (error: unknown) => error instanceof HistoricalModelUsageError && error.code === "model_usage_path_invalid");
+  });
+
+  it("stores only bounded worker lifecycle metadata and durable completion inbox state", async () => {
+    const root = await mkdtemp(resolve(tmpdir(), "scriptorium-api-job-history-"));
+    tempDirs.push(root);
+    const usageDirectory = resolve(root, "host-history");
+    const store = new JobHistoryStore(usageDirectory);
+    await assert.rejects(lstat(usageDirectory), (error: NodeJS.ErrnoException) => error.code === "ENOENT", "construction must not touch host history");
+    const base = {
+      module: "assistant",
+      task: "draft.story",
+      snapshot: SNAPSHOT,
+      createdAt: "2026-10-17T02:00:00.000Z",
+      startedAt: null,
+      finishedAt: null,
+    } satisfies Pick<WorkerJobLifecycle, "module" | "task" | "snapshot" | "createdAt" | "startedAt" | "finishedAt">;
+    const queued: WorkerJobLifecycle = { ...base, jobId: "worker-job-1", state: "queued", updatedAt: base.createdAt };
+    assert.deepEqual(await store.record(queued), {
+      type: "job-status", jobId: "worker-job-1", jobType: "assistant.draft.story", status: "queued", progress: null, at: base.createdAt,
+    });
+    const running: WorkerJobLifecycle = { ...queued, state: "running", startedAt: "2026-10-17T02:00:01.000Z", updatedAt: "2026-10-17T02:00:01.000Z" };
+    await store.record(running);
+    const finished: WorkerJobLifecycle = {
+      ...running, state: "failed", updatedAt: "2026-10-17T02:00:02.000Z", finishedAt: "2026-10-17T02:00:02.000Z", errorCode: "worker_failed",
+    };
+    const event = await store.record(finished);
+    assert.deepEqual(event, {
+      type: "job-status", jobId: "worker-job-1", jobType: "assistant.draft.story", status: "error", progress: null,
+      error: "worker_failed", at: "2026-10-17T02:00:02.000Z",
+    });
+    assert.deepEqual(await store.listJobs(), [{
+      id: "worker-job-1", type: "assistant.draft.story", status: "error", progress: null, result: null, error: "worker_failed",
+      createdAt: "2026-10-17T02:00:00.000Z", updatedAt: "2026-10-17T02:00:02.000Z", finishedAt: "2026-10-17T02:00:02.000Z",
+    }]);
+    const inbox = await store.listInbox({ unreadOnly: true });
+    assert.equal(inbox.items.length, 1);
+    assert.equal(inbox.unreadCount, 1);
+    assert.equal(inbox.items[0]?.body, "The job failed (worker_failed).");
+    assert.equal(inbox.items[0]?.projectKey.includes(SNAPSHOT.repository.repositoryId), false);
+    const stateText = await readFile(resolve(usageDirectory, "jobs", "jobs-state.json"), "utf8");
+    for (const secret of [SNAPSHOT.repository.url, SNAPSHOT.repository.ownerScope, ACCESS_TOKEN, "prompt-secret", "result-secret", "worker error text"]) {
+      assert.equal(stateText.includes(secret), false, `host history must not contain ${secret}`);
+    }
+    assert.equal(stateText.includes('"progress":null'), true);
+    assert.equal(stateText.includes('"result":null'), true);
+    assert.equal(stateText.includes('"type":"assistant.draft.story"'), true);
+    await assert.rejects(store.record({ ...finished, errorCode: undefined, errorMessage: "worker error text" } as unknown as WorkerJobLifecycle),
+      (error: unknown) => error instanceof JobHistoryError && error.code === "job_event_invalid");
+    const reloaded = new JobHistoryStore(usageDirectory);
+    assert.deepEqual(await reloaded.getJob("worker-job-1"), (await store.getJob("worker-job-1")));
+    assert.equal(await reloaded.markAllInboxRead(), 1);
+    assert.deepEqual(await new JobHistoryStore(usageDirectory).listInbox({ unreadOnly: true }), { items: [], unreadCount: 0 });
+    await assert.rejects(reloaded.record({ ...queued, snapshot: { ...SNAPSHOT, repository: { ...SNAPSHOT.repository, repositoryId: "999" } } }),
+      (error: unknown) => error instanceof JobHistoryError && error.code === "job_identity_conflict");
+  });
+
+  it("archives exact legacy jobs outside Core data and exposes only explicitly mapped owner history", async (t) => {
+    const root = await mkdtemp(resolve(tmpdir(), "scriptorium-api-legacy-jobs-"));
+    const staticDir = await mkdtemp(resolve(tmpdir(), "scriptorium-api-legacy-jobs-app-"));
+    tempDirs.push(root, staticDir);
+    const workspaceDataRoot = resolve(root, "core-data");
+    const appState = resolve(workspaceDataRoot, "app-state");
+    const usageDirectory = resolve(root, "history");
+    await mkdir(appState, { recursive: true, mode: 0o700 });
+    const legacyState = {
+      jobs: [
+        {
+          id: "mapped-job", type: "speaker-eval", status: "done", progress: 1,
+          result: { report: "explicitly mapped result" }, error: null,
+          projectKey: "legacy-project-id", userId: "legacy-owner-id",
+          createdAt: "2026-10-16T00:00:00.000Z", updatedAt: "2026-10-16T00:01:00.000Z", finishedAt: "2026-10-16T00:01:00.000Z",
+        },
+        {
+          id: "unmapped-job", type: "zukan-proposal", status: "error", progress: null,
+          result: { secretBody: "unmapped result stays private" }, error: "unmapped error stays private",
+          projectKey: "unknown-project-id", userId: "unknown-user-id",
+          createdAt: "2026-10-16T01:00:00.000Z", updatedAt: "2026-10-16T01:01:00.000Z", finishedAt: "2026-10-16T01:01:00.000Z",
+        },
+      ],
+      inbox: [
+        {
+          id: "mapped-inbox", kind: "job-complete", jobId: "mapped-job", jobType: "speaker-eval",
+          title: "Mapped report", body: "Mapped inbox result body", status: "done", read: false,
+          userId: "legacy-owner-id", projectKey: "legacy-project-id", createdAt: "2026-10-16T00:01:00.000Z",
+        },
+        {
+          id: "unmapped-inbox", kind: "job-complete", jobId: "unmapped-job", jobType: "zukan-proposal",
+          title: "Unmapped title", body: "unmapped inbox body stays private", status: "error", read: false,
+          userId: "unknown-user-id", projectKey: "unknown-project-id", createdAt: "2026-10-16T01:01:00.000Z",
+        },
+      ],
+    };
+    const sourcePath = resolve(appState, "jobs-state.json");
+    const sourceBytes = Buffer.from(JSON.stringify(legacyState), "utf8");
+    await writeFile(sourcePath, sourceBytes, { mode: 0o600 });
+    const report = await importLegacyJobHistory({
+      workspaceDataRoot,
+      usageDirectory,
+      legacyRepositoryMappings: { "legacy-project-id": SNAPSHOT.repository },
+      legacyUserMappings: { "legacy-owner-id": "owner" },
+    });
+    assert.equal(report.archived, true);
+    assert.equal(report.adoptedJobs, 1);
+    assert.equal(report.adoptedInbox, 1);
+    assert.deepEqual(report.mappingRequired, [{
+      projectKey: "unknown-project-id", userId: "unknown-user-id", jobCount: 1, inboxCount: 1,
+    }]);
+    assert.equal(JSON.stringify(report).includes("unmapped result stays private"), false);
+    const archivePath = resolve(usageDirectory, "jobs", "legacy", `${report.sourceHash}.json`);
+    assert.deepEqual(await readFile(archivePath), sourceBytes, "the hash-addressed host archive retains the exact source bytes");
+    assert.deepEqual(await readFile(sourcePath), sourceBytes, "migration leaves the source jobs file untouched");
+    const retry = await importLegacyJobHistory({
+      workspaceDataRoot,
+      usageDirectory,
+      legacyRepositoryMappings: { "legacy-project-id": SNAPSHOT.repository },
+      legacyUserMappings: { "legacy-owner-id": "owner" },
+    });
+    assert.equal(retry.sourceHash, report.sourceHash);
+    assert.equal(retry.adoptedJobs, 0, "a repeated import must not duplicate mapped jobs");
+    assert.equal(retry.adoptedInbox, 0, "a repeated import must not duplicate inbox entries");
+
+    await rm(workspaceDataRoot, { recursive: true, force: true });
+    const apiServer = await startCustomApi(makeStore(), staticDir, { usageDirectory });
+    t.after(apiServer.close);
+    const owner = await login(apiServer.base);
+    const bearer = { Authorization: `Bearer ${ACCESS_TOKEN}` };
+    assert.equal((await fetch(`${apiServer.base}/api/jobs`, { headers: bearer })).status, 403,
+      "legacy private history is cookie-owner-only");
+    const jobListResponse = await fetch(`${apiServer.base}/api/jobs`, { headers: { Cookie: owner.cookie } });
+    assert.equal(jobListResponse.status, 200);
+    assert.deepEqual(await jobListResponse.json(), [{
+      id: "mapped-job", type: "speaker-eval", status: "done", progress: 1,
+      result: { report: "explicitly mapped result" }, error: null,
+      createdAt: "2026-10-16T00:00:00.000Z", updatedAt: "2026-10-16T00:01:00.000Z", finishedAt: "2026-10-16T00:01:00.000Z",
+    }]);
+    const mappedJob = await fetch(`${apiServer.base}/api/jobs/mapped-job`, { headers: { Cookie: owner.cookie } });
+    assert.equal(mappedJob.status, 200);
+    assert.deepEqual(await mappedJob.json(), {
+      id: "mapped-job", type: "speaker-eval", status: "done", progress: 1,
+      result: { report: "explicitly mapped result" }, error: null,
+      createdAt: "2026-10-16T00:00:00.000Z", updatedAt: "2026-10-16T00:01:00.000Z", finishedAt: "2026-10-16T00:01:00.000Z",
+    });
+    assert.equal((await fetch(`${apiServer.base}/api/jobs/unmapped-job`, { headers: { Cookie: owner.cookie } })).status, 404);
+    const inbox = await fetch(`${apiServer.base}/api/inbox`, { headers: { Cookie: owner.cookie } });
+    const inboxBody = await inbox.json() as { items: Array<Record<string, unknown>>; unreadCount: number };
+    assert.equal(inboxBody.unreadCount, 1);
+    assert.equal(inboxBody.items.length, 1);
+    assert.deepEqual(inboxBody.items[0], {
+      id: "mapped-inbox", kind: "job-complete", jobId: "mapped-job", jobType: "speaker-eval",
+      title: "Mapped report", body: "Mapped inbox result body", status: "done", read: false,
+      userId: "owner",
+      projectKey: createHash("sha256").update(`github\0${SNAPSHOT.repository.ownerScope}\0${SNAPSHOT.repository.repositoryId}`).digest("hex"),
+      createdAt: "2026-10-16T00:01:00.000Z",
+    });
+    assert.equal(JSON.stringify(inboxBody).includes("unmapped inbox body stays private"), false);
+    const markRead = await fetch(`${apiServer.base}/api/inbox/mapped-inbox/read`, {
+      method: "POST", headers: { Cookie: owner.cookie, Origin: apiServer.base },
+    });
+    assert.equal(markRead.status, 200);
+    assert.equal(((await markRead.json() as { item: { read: boolean } }).item).read, true);
+    const readAll = await fetch(`${apiServer.base}/api/inbox/read-all`, {
+      method: "POST", headers: { Cookie: owner.cookie, Origin: apiServer.base },
+    });
+    assert.deepEqual(await readAll.json(), { marked: 0 });
+    assert.equal((await fetch(`${apiServer.base}/api/inbox/unmapped-inbox/read`, {
+      method: "POST", headers: { Cookie: owner.cookie, Origin: apiServer.base },
+    })).status, 404);
+    assert.deepEqual(await readFile(archivePath), sourceBytes, "removing the Core data root cannot remove or mutate the legacy archive");
+  });
+
+  it("publishes real supervised worker jobs through owner-only history routes and SSE", async (t) => {
+    const staticDir = await mkdtemp(resolve(tmpdir(), "scriptorium-api-worker-history-app-"));
+    const cacheDirectory = await mkdtemp(resolve(tmpdir(), "scriptorium-api-worker-history-cache-"));
+    const usageDirectory = await mkdtemp(resolve(tmpdir(), "scriptorium-api-worker-history-store-"));
+    tempDirs.push(staticDir, cacheDirectory, usageDirectory);
+    const runtime = jobHistoryRuntime(cacheDirectory);
+    const apiServer = await startCustomApi(makeSnapshotStore().store, staticDir, { runtime, usageDirectory });
+    t.after(apiServer.close);
+    const owner = await login(apiServer.base);
+    const streamAbort = new AbortController();
+    const stream = await fetch(`${apiServer.base}/api/jobs/events`, { headers: { Cookie: owner.cookie }, signal: streamAbort.signal });
+    assert.equal(stream.status, 200);
+    assert.match(stream.headers.get("content-type") ?? "", /text\/event-stream/u);
+    assert.ok(stream.body);
+    const reader = stream.body.getReader();
+    const eventRead = (async () => {
+      const decoder = new TextDecoder();
+      let buffer = "";
+      const events: Array<{ type: string; jobId: string; status: string }> = [];
+      const timeout = setTimeout(() => { void reader.cancel(); }, 15_000);
+      try {
+        while (!events.some((event) => event.jobId === "real-worker-job" && (event.status === "done" || event.status === "error"))) {
+          const { done, value } = await reader.read();
+          if (done) break;
+          buffer += decoder.decode(value, { stream: true });
+          const frames = buffer.split("\n\n");
+          buffer = frames.pop() ?? "";
+          for (const frame of frames) {
+            const data = frame.split("\n").find((line) => line.startsWith("data: "))?.slice(6);
+            if (data) events.push(JSON.parse(data) as { type: string; jobId: string; status: string });
+          }
+        }
+      } finally { clearTimeout(timeout); }
+      return events;
+    })();
+    const invocation = await fetch(`${apiServer.base}/api/projects/project-1/actions/speaker.test-worker`, {
+      method: "POST",
+      headers: { Cookie: owner.cookie, Origin: apiServer.base, "Content-Type": "application/json" },
+      body: JSON.stringify({ input: { jobId: "real-worker-job" } }),
+    });
+    assert.equal(invocation.status, 200);
+    const response = await invocation.json() as ActionResult;
+    assert.equal(response.ok, true);
+    assert.equal(response.ok && (response.data as { ok?: boolean }).ok, true,
+      `the actual supervised worker request must succeed: ${JSON.stringify(response)}`);
+    const events = await eventRead;
+    streamAbort.abort();
+    await reader.cancel().catch(() => undefined);
+    assert.deepEqual(events.map(({ status }) => status), ["queued", "running", "done"]);
+    const jobResponse = await fetch(`${apiServer.base}/api/jobs/real-worker-job`, { headers: { Cookie: owner.cookie } });
+    assert.equal(jobResponse.status, 200);
+    const job = await jobResponse.json() as { id: string; type: string; status: string; progress: unknown; result: unknown; error: unknown; createdAt: string; updatedAt: string; finishedAt: string };
+    assert.deepEqual({ ...job, createdAt: "", updatedAt: "", finishedAt: "" }, {
+      id: "real-worker-job", type: "speaker.echo", status: "done", progress: null, result: null, error: null,
+      createdAt: "", updatedAt: "", finishedAt: "",
+    });
+    for (const timestamp of [job.createdAt, job.updatedAt, job.finishedAt]) assert.ok(Date.parse(timestamp) > 0);
+    const privateState = await readFile(resolve(usageDirectory, "jobs", "jobs-state.json"), "utf8");
+    assert.equal(privateState.includes("worker-input-must-not-enter-owner-history"), false);
+    assert.equal(privateState.includes("worker-input"), false);
+    assert.equal((await fetch(`${apiServer.base}/api/jobs/real-worker-job`, { headers: { Authorization: `Bearer ${ACCESS_TOKEN}` } })).status, 403);
+    const inboxResponse = await fetch(`${apiServer.base}/api/inbox`, { headers: { Cookie: owner.cookie } });
+    assert.equal((await inboxResponse.json() as { unreadCount: number }).unreadCount, 1);
+  });
+
+  it("propagates a disconnected owner action to a real running worker and records cancellation", async (t) => {
+    const staticDir = await mkdtemp(resolve(tmpdir(), "scriptorium-api-worker-cancel-app-"));
+    const cacheDirectory = await mkdtemp(resolve(tmpdir(), "scriptorium-api-worker-cancel-cache-"));
+    const usageDirectory = await mkdtemp(resolve(tmpdir(), "scriptorium-api-worker-cancel-store-"));
+    tempDirs.push(staticDir, cacheDirectory, usageDirectory);
+    const apiServer = await startCustomApi(makeSnapshotStore().store, staticDir, {
+      runtime: jobHistoryRuntime(cacheDirectory), usageDirectory,
+    });
+    t.after(apiServer.close);
+    const owner = await login(apiServer.base);
+    const streamAbort = new AbortController();
+    const stream = await fetch(`${apiServer.base}/api/jobs/events`, { headers: { Cookie: owner.cookie }, signal: streamAbort.signal });
+    assert.equal(stream.status, 200);
+    assert.ok(stream.body);
+    const reader = stream.body.getReader();
+    const decoder = new TextDecoder();
+    const events: Array<{ jobId: string; status: string; error?: string }> = [];
+    let buffer = "";
+    const nextEvent = async (): Promise<{ jobId: string; status: string; error?: string }> => {
+      while (events.length === 0) {
+        const { done, value } = await reader.read();
+        if (done) throw new Error("The job event stream closed before publishing a worker event");
+        buffer += decoder.decode(value, { stream: true });
+        const frames = buffer.split("\n\n");
+        buffer = frames.pop() ?? "";
+        for (const frame of frames) {
+          const data = frame.split("\n").find((line) => line.startsWith("data: "))?.slice(6);
+          if (data) events.push(JSON.parse(data) as { jobId: string; status: string; error?: string });
+        }
+      }
+      return events.shift()!;
+    };
+    const readNextEvent = async (): Promise<{ jobId: string; status: string; error?: string }> => {
+      let timer: NodeJS.Timeout | undefined;
+      try {
+        return await Promise.race([
+          nextEvent(),
+          new Promise<never>((_resolve, reject) => { timer = setTimeout(() => reject(new Error("Timed out waiting for a worker event")), 5_000); }),
+        ]);
+      } finally { if (timer) clearTimeout(timer); }
+    };
+    const actionAbort = new AbortController();
+    const request = fetch(`${apiServer.base}/api/projects/project-1/actions/speaker.test-worker`, {
+      method: "POST",
+      headers: { Cookie: owner.cookie, Origin: apiServer.base, "Content-Type": "application/json" },
+      body: JSON.stringify({ input: { jobId: "cancelled-worker-job", task: "hold" } }),
+      signal: actionAbort.signal,
+    }).catch((error: unknown) => error);
+    let event = await readNextEvent();
+    while (!(event.jobId === "cancelled-worker-job" && event.status === "running")) event = await readNextEvent();
+    actionAbort.abort();
+    let terminal = await readNextEvent();
+    while (!(terminal.jobId === "cancelled-worker-job" && terminal.status === "error")) terminal = await readNextEvent();
+    assert.equal(terminal.error, "job_cancelled");
+    assert.ok(await request instanceof Error, "the client request should be cancelled while its worker is running");
+    streamAbort.abort();
+    await reader.cancel().catch(() => undefined);
+    const statusResponse = await fetch(`${apiServer.base}/api/jobs/cancelled-worker-job`, { headers: { Cookie: owner.cookie } });
+    assert.equal(statusResponse.status, 200);
+    const job = await statusResponse.json() as { status: string; error: string };
+    assert.equal(job.status, "error");
+    assert.equal(job.error, "job_cancelled");
   });
 
   it("wires model usage lazily into the host and retains it after Core data-root deletion and reconstruction", async (t) => {
