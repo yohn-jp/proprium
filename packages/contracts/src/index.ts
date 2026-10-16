@@ -327,11 +327,23 @@ export function assertChangeOperation(value: unknown): asserts value is ChangeOp
   }
 }
 
+/** A point-in-time copy of the active editor, including its actual persisted base. */
+export interface BrowserEditorDocument {
+  sceneId: string;
+  documentPath: string;
+  documentRevision: string | null;
+  sceneRevision: string;
+  text: string;
+  snapshot: SnapshotId;
+}
+
 /** Browser modules mount real domain UI into shared slots without author approval authority. */
 export interface BrowserModuleContext {
   projectId: string;
   snapshot: SnapshotId;
   signal: AbortSignal;
+  /** Read on demand so typing does not remount contributions or capture an obsolete draft. */
+  readCurrentEditor?(): BrowserEditorDocument | null;
   invoke(actionId: string, input: unknown): Promise<ActionResult>;
   /** The shell journals the complete proposal before acknowledging it to the module UI. */
   propose(operations: ChangeOperation[], evidence?: ProposalEvidence[], proposalId?: string): Promise<ChangeProposal>;
