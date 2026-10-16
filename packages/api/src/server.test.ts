@@ -5,7 +5,7 @@ import { tmpdir } from "node:os";
 import { resolve } from "node:path";
 import { afterEach, describe, it } from "node:test";
 import { promisify } from "node:util";
-import type { ActionResult, ChangeOperation, ChangeProposal, ModuleAction, ModuleDefinition, ModuleManifest, SnapshotId, ValueSchema } from "@scriptorium/contracts";
+import type { ActionResult, ChangeOperation, ChangeProposal, ModuleAction, ModuleDefinition, ModuleManifest, ProposalStatus, SnapshotId, ValueSchema } from "@scriptorium/contracts";
 import { CoreStore, type CoreStore as CoreStoreShape } from "@scriptorium/core";
 import { ModuleRuntime } from "@scriptorium/module-runtime";
 import { createServer } from "./server.js";
@@ -490,6 +490,141 @@ describe("Scriptorium HTTP boundary", () => {
     });
     assert.equal(authorApproval.status, 204);
     assert.deepEqual(fixture.approvals, [{ proposalId: "mcp-batch-1", operationIds: [operation.id], authorScope: "owner" }]);
+  });
+
+  it("restores a partial MCP proposal through an exact owner retry after Core data loss", async (t) => {
+    const { root, remote } = await makeBareRemote();
+    tempDirs.push(root);
+    const staticDir = await mkdtemp(resolve(tmpdir(), "scriptorium-api-proposal-recovery-"));
+    tempDirs.push(staticDir);
+    const dataDir = resolve(root, "state");
+    let store = new CoreStore({ dataDir, allowLocalRemotes: true });
+    let apiServer: Awaited<ReturnType<typeof startCustomApi>> | undefined;
+    t.after(async () => { if (apiServer) await apiServer.close(); });
+
+    apiServer = await startCustomApi(store, staticDir);
+    let owner = await login(apiServer.base);
+    const ownerHeaders = () => ({ Cookie: owner.cookie, Origin: apiServer!.base, "Content-Type": "application/json" });
+    const registration = await fetch(`${apiServer.base}/api/projects`, {
+      method: "POST", headers: ownerHeaders(), body: JSON.stringify({ url: remote }),
+    });
+    assert.equal(registration.status, 201);
+    const project = await registration.json() as { id: string; url: string; branch: string };
+    const snapshot = (await store.observe(project.id)).snapshot;
+    const operation = (id: string, path: string, content: string): ChangeOperation => ({
+      id, generation: 1, repository: snapshot.repository, baseRemoteCommit: snapshot.remoteCommit,
+      effect: "manuscript", reads: [{ path, revision: null }], writes: [{ path, revision: null, content }],
+      message: `Write ${path}`,
+    });
+    const selected = operation("recovery_selected_op", "manuscript/recovery-selected.md", "Selected and published.\n");
+    const unselected = operation("recovery_unselected_op", "manuscript/recovery-unselected.md", "Still pending after recovery.\n");
+    const proposal: ChangeProposal = {
+      id: "recovery_mcp_batch",
+      snapshot,
+      operations: [selected, unselected],
+      source: "mcp",
+      evidence: [{
+        id: "recovery_mcp_evidence", snapshot, module: "mcp", kind: "source_change_set_mapping", paths: [],
+        details: { sourceChangeSetId: "source-change-set-recovery" },
+      }],
+    };
+
+    const initial = await fetch(`${apiServer.base}/api/projects/${project.id}/proposals`, {
+      method: "POST", headers: { Authorization: `Bearer ${ACCESS_TOKEN}`, "Content-Type": "application/json" },
+      body: JSON.stringify({ ...proposal, source: "author" }),
+    });
+    assert.equal(initial.status, 201);
+    assert.deepEqual(await initial.json(), proposal, "new bearer submissions are attributed to MCP regardless of request source");
+
+    const cookieOperation = operation("cookie_author_source_op", "manuscript/cookie-author.md", "Created by the owner session.\n");
+    const cookieCreated = await fetch(`${apiServer.base}/api/projects/${project.id}/proposals`, {
+      method: "POST", headers: ownerHeaders(),
+      body: JSON.stringify({ id: "cookie_author_source", snapshot, operations: [cookieOperation], source: "mcp" }),
+    });
+    assert.equal(cookieCreated.status, 201);
+    assert.equal((await cookieCreated.json() as ChangeProposal).source, "author", "new cookie submissions cannot claim MCP provenance");
+
+    const approval = await fetch(`${apiServer.base}/api/projects/${project.id}/approvals`, {
+      method: "POST", headers: ownerHeaders(),
+      body: JSON.stringify({ proposalId: proposal.id, operationIds: [selected.id] }),
+    });
+    assert.equal(approval.status, 204);
+    const checkpoint = await fetch(`${apiServer.base}/api/projects/${project.id}/checkpoints`, {
+      method: "POST", headers: ownerHeaders(), body: JSON.stringify(selected),
+    });
+    assert.equal(checkpoint.status, 201);
+    const publication = await fetch(`${apiServer.base}/api/projects/${project.id}/publish`, {
+      method: "POST", headers: ownerHeaders(), body: JSON.stringify({ batchId: "recovery_publish_batch" }),
+    });
+    assert.equal(publication.status, 200);
+    assert.equal((await publication.json() as { state: string }).state, "confirmed");
+
+    await apiServer.close();
+    apiServer = undefined;
+    await rm(dataDir, { recursive: true, force: true });
+    store = new CoreStore({ dataDir, allowLocalRemotes: true });
+    apiServer = await startCustomApi(store, staticDir);
+    owner = await login(apiServer.base);
+    const recoveredRegistration = await fetch(`${apiServer.base}/api/projects`, {
+      method: "POST", headers: ownerHeaders(), body: JSON.stringify({ url: remote }),
+    });
+    assert.equal(recoveredRegistration.status, 201);
+    const recoveredProject = await recoveredRegistration.json() as { id: string };
+    assert.notEqual(recoveredProject.id, project.id, "the project cache is reconstructed from the remote after data-root deletion");
+
+    const statusPath = `${apiServer.base}/api/projects/${recoveredProject.id}/proposals/${proposal.id}`;
+    const partialResponse = await fetch(statusPath, { headers: { Cookie: owner.cookie } });
+    assert.equal(partialResponse.status, 200);
+    const partial = await partialResponse.json() as ProposalStatus;
+    assert.equal(partial.payloadComplete, false);
+    assert.equal(partial.proposal.source, "mcp");
+    assert.deepEqual(partial.operationIds, [selected.id, unselected.id]);
+    assert.deepEqual(partial.proposal.operations.map(({ id }) => id), [selected.id]);
+    assert.deepEqual(partial.approvedOperationIds, [selected.id]);
+    assert.deepEqual(partial.publishedOperationIds, [selected.id]);
+
+    const retry = await fetch(`${apiServer.base}/api/projects/${recoveredProject.id}/proposals`, {
+      method: "POST", headers: ownerHeaders(), body: JSON.stringify(proposal),
+    });
+    assert.equal(retry.status, 201);
+    assert.deepEqual(await retry.json(), proposal, "the owner retry restores the exact original MCP payload and source");
+    const restoredResponse = await fetch(statusPath, { headers: { Cookie: owner.cookie } });
+    const restored = await restoredResponse.json() as ProposalStatus;
+    assert.equal(restored.payloadComplete, true);
+    assert.deepEqual(restored.proposal, proposal);
+    assert.deepEqual(restored.approvedOperationIds, [selected.id], "restoring payload must not approve the remaining operation");
+    assert.deepEqual(restored.publishedOperationIds, [selected.id]);
+
+    const changed = {
+      ...proposal,
+      operations: proposal.operations.map((item) => item.id === unselected.id
+        ? { ...item, writes: [{ ...item.writes[0]!, content: "Changed recovered payload.\n" }] }
+        : item),
+    };
+    const changedRetry = await fetch(`${apiServer.base}/api/projects/${recoveredProject.id}/proposals`, {
+      method: "POST", headers: ownerHeaders(), body: JSON.stringify(changed),
+    });
+    assert.equal(changedRetry.status, 409);
+    assert.equal((await changedRetry.json() as { code: string }).code, "proposal_id_reused", "Core must keep enforcing the original full-payload digest");
+
+    const unapprovedCheckpoint = await fetch(`${apiServer.base}/api/projects/${recoveredProject.id}/checkpoints`, {
+      method: "POST", headers: ownerHeaders(), body: JSON.stringify(unselected),
+    });
+    assert.equal(unapprovedCheckpoint.status, 403);
+    assert.equal((await unapprovedCheckpoint.json() as { code: string }).code, "author_approval_required");
+
+    const currentSnapshot = (await store.observe(recoveredProject.id)).snapshot;
+    const newCookieOperation = {
+      ...cookieOperation,
+      repository: currentSnapshot.repository,
+      baseRemoteCommit: currentSnapshot.remoteCommit,
+    };
+    const newCookieProposal = await fetch(`${apiServer.base}/api/projects/${recoveredProject.id}/proposals`, {
+      method: "POST", headers: ownerHeaders(),
+      body: JSON.stringify({ id: "new_cookie_after_recovery", snapshot: currentSnapshot, operations: [newCookieOperation], source: "mcp" }),
+    });
+    assert.equal(newCookieProposal.status, 201);
+    assert.equal((await newCookieProposal.json() as ChangeProposal).source, "author", "transport attribution still applies to new cookie proposals after recovery");
   });
 
   it("streams owner-scoped events only for actual manual sync outcomes and closes streams on shutdown", async (t) => {

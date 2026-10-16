@@ -1068,12 +1068,24 @@ export function createServer(options: ApiServerOptions): Server {
         const body = await readJson(request, parsedBody);
         if (!isRecord(body) || !isRecord(body.snapshot) || !Array.isArray(body.operations) || !body.operations.length) throw httpFailure(400, "INVALID_PROPOSAL", "A proposal snapshot and at least one operation are required");
         if (signal.aborted) throw httpFailure(499, "ACTION_CANCELLED", "Proposal request was cancelled");
-        const requestedId = typeof body.id === "string" ? body.id : typeof body.proposalId === "string" ? body.proposalId : undefined;
+        const suppliedId = typeof body.id === "string" ? body.id : typeof body.proposalId === "string" ? body.proposalId : undefined;
+        const requestedId = suppliedId || undefined;
+        let source: ChangeProposal["source"] = isBearer ? "mcp" : "author";
+        if (requestedId !== undefined) {
+          if (!coreStore.getProposal) throw httpFailure(503, "PROPOSAL_IDENTITY_UNAVAILABLE", "Core cannot verify an existing proposal identity for this retry");
+          const existing = await coreStore.getProposal(projectId, requestedId);
+          if (signal.aborted) throw httpFailure(499, "ACTION_CANCELLED", "Proposal request was cancelled");
+          if (existing) {
+            if (existing.proposal.id !== requestedId) throw httpFailure(503, "PROPOSAL_IDENTITY_INVALID", "Core returned a mismatched proposal identity");
+            // Preserve only Core's immutable source for an existing identity; Core still checks the full original digest below.
+            source = existing.proposal.source;
+          }
+        }
         const proposal: ChangeProposal = {
           id: requestedId || randomBytes(16).toString("hex"),
           snapshot: body.snapshot as unknown as SnapshotId,
           operations: body.operations as ChangeOperation[],
-          source: isBearer ? "mcp" : "author",
+          source,
           ...(Array.isArray(body.evidence) ? { evidence: body.evidence as ProposalEvidence[] } : {}),
         };
         const stored = await options.store.propose(projectId, proposal);
