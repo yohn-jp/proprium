@@ -6,6 +6,8 @@ import { WorkerSupervisor } from "./index.js";
 
 const workerEntry = fileURLToPath(new URL("./fixtures/worker.mjs", import.meta.url));
 const workerServiceEntry = fileURLToPath(new URL("./fixtures/worker-service.mjs", import.meta.url));
+const unreadyWorkerServiceEntry = fileURLToPath(new URL("./fixtures/worker-service-unready.mjs", import.meta.url));
+const missingNodeExecutable = fileURLToPath(new URL("./fixtures/node-executable-missing", import.meta.url));
 const snapshot: SnapshotId = {
   repository: { provider: "github", repositoryId: "repo-1", defaultBranch: "main", ownerScope: "owner", url: "https://github.com/owner/repo" },
   remoteCommit: "b".repeat(40),
@@ -191,6 +193,67 @@ test("persistent service and per-service job admission are bounded and require c
   }
   assert.throws(() => process.kill(pid, 0), (error: unknown) => (error as NodeJS.ErrnoException).code === "ESRCH");
   await supervisor.shutdown();
+});
+
+test("spawn errors close one-shot and persistent worker records and release their admission slots", async () => {
+  const supervisor = new WorkerSupervisor({
+    workerExecPath: missingNodeExecutable,
+    maxConcurrentJobs: 1,
+    maxQueuedJobs: 0,
+    maxWorkerServices: 1,
+  });
+  try {
+    for (let attempt = 0; attempt < 2; attempt += 1) {
+      const outcome = await supervisor.run(request(), workerEntry);
+      assert.equal(outcome.ok, false);
+      if (!outcome.ok) assert.equal(outcome.error.code, "worker_start_failed");
+      assert.equal(supervisor.activeJobCount, 0);
+      assert.deepEqual(supervisor.activeWorkerPids, []);
+    }
+
+    for (let attempt = 0; attempt < 2; attempt += 1) {
+      await assert.rejects(
+        supervisor.createService("nlp", "0.1.0", workerServiceEntry),
+        (error: unknown) => (error as { code?: string }).code === "worker_start_failed",
+      );
+      assert.deepEqual(supervisor.activeWorkerPids, []);
+    }
+  } finally {
+    await supervisor.shutdown();
+  }
+});
+
+test("a timed-out unready service keeps its process slot until its resistant child exits", async () => {
+  const supervisor = new WorkerSupervisor({ maxWorkerServices: 1, maxJobDurationMs: 100, cancellationGraceMs: 250 });
+  let pid: number | undefined;
+  let startupFailure: Promise<unknown> | undefined;
+  try {
+    startupFailure = supervisor.createService("nlp", "0.1.0", unreadyWorkerServiceEntry).then(
+      () => undefined,
+      (error: unknown) => error,
+    );
+    pid = await waitForPid(supervisor);
+    await new Promise((resolve) => setTimeout(resolve, 125));
+    assert.doesNotThrow(() => process.kill(pid!, 0), "the startup timeout should still be draining the SIGTERM-resistant process");
+
+    const replacement = await supervisor.createService("story", "0.1.0", workerServiceEntry).then(
+      (service) => ({ service }),
+      (error: unknown) => ({ error }),
+    );
+    if ("service" in replacement) await replacement.service.dispose();
+    assert.ok("error" in replacement, "a replacement service must be rejected while the old process remains alive");
+    if ("error" in replacement) assert.equal((replacement.error as { code?: string }).code, "worker_overloaded");
+
+    const error = await startupFailure;
+    assert.equal((error as { code?: string } | undefined)?.code, "worker_service_start_timeout");
+    assertGone(pid);
+  } finally {
+    if (startupFailure) await startupFailure;
+    await supervisor.shutdown();
+    if (pid !== undefined) {
+      try { process.kill(pid, "SIGKILL"); } catch { /* The supervised child has already exited. */ }
+    }
+  }
 });
 
 test("worker IPC enforces the shared UTF-8 input and output byte limits and identity", async () => {

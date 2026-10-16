@@ -437,8 +437,8 @@ export class ModuleRuntime {
     try {
       const context = this.createActionContext(manifest.id, contribution.effect, contribution.effect, host, signal, proposals, 0);
       const response = await contribution.handle(request, context);
-      if (!(response instanceof Response)) return httpFailure(502, "invalid_http_response", "HTTP contribution returned an invalid response");
       if (signal.aborted) return httpFailure(499, "request_cancelled", "HTTP request was cancelled");
+      if (!(response instanceof Response)) return httpFailure(502, "invalid_http_response", "HTTP contribution returned an invalid response");
       if (!response.body || [204, 205, 304].includes(response.status)) {
         await response.body?.cancel().catch(() => {});
         return new Response(null, { status: response.status, statusText: response.statusText, headers: response.headers });
@@ -529,6 +529,7 @@ export class ModuleRuntime {
       const proposals: ChangeProposal[] = [];
       const context = this.createActionContext(manifest.id, action.effect, policy, host, actionSignal, proposals, depth);
       const result = await action.invoke(parsed, context);
+      if (actionSignal.aborted) throw new ModuleRuntimeError("action_cancelled", "Action was cancelled");
       const validated = this.validateActionResult(action, result, host.reader.snapshot);
       if (validated.ok && proposals.length > 0) return { ...validated, proposals };
       return validated;
@@ -576,6 +577,7 @@ export class ModuleRuntime {
       const proposals: ChangeProposal[] = [];
       const context = this.createActionContext("core", action.effect, policy, host, signal, proposals, depth);
       const result = await action.invoke(parsed, context);
+      if (signal.aborted) throw new ModuleRuntimeError("action_cancelled", "Action was cancelled");
       const validated = this.validateActionResult(action, result, snapshot);
       if (validated.ok && proposals.length > 0) return { ...validated, proposals };
       return validated;

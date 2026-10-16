@@ -312,7 +312,7 @@ test("disabling a consumer cancels its provider-owned job and keeps the shared c
   await runtime.disable("story");
   const cancelled = await storyInvocation;
   assert.equal(cancelled.ok, false);
-  if (!cancelled.ok) assert.equal(cancelled.error.code, "job_cancelled");
+  if (!cancelled.ok) assert.equal(cancelled.error.code, "action_cancelled");
   assert.equal(runtime.workerSupervisor.activeJobCountFor("nlp"), 0);
   assert.doesNotThrow(() => process.kill(pid!, 0), "the other consumer still holds the shared service");
 
@@ -384,7 +384,8 @@ test("disabling a module drains its real child process and leaves author data un
   });
   await runtime.disable("speaker");
   const result = await invocation;
-  assert.equal(result.ok, true);
+  assert.equal(result.ok, false);
+  if (!result.ok) assert.equal(result.error.code, "action_cancelled");
   assert.equal(runtime.status("speaker").availability, "disabled");
   assert.equal(runtime.workerSupervisor.activeJobCount, 0);
   assert.equal(disposed, 1);
@@ -589,6 +590,67 @@ test("module disable bounds a non-cooperative action drain and rejects late prop
   if (!result.ok) assert.equal(result.error.code, "action_cancelled");
   assert.equal(proposalCalls, 0);
   assert.equal(runtime.status("assistant").availability, "disabled");
+  await runtime.shutdown();
+});
+
+test("a late non-cooperative action cannot return success after disable times out", async () => {
+  const metadata = manifest("assistant");
+  let finishAction: (() => void) | undefined;
+  let markStarted!: () => void;
+  const started = new Promise<void>((resolve) => { markStarted = resolve; });
+  const runtime = new ModuleRuntime({
+    manifests: [metadata], enabled: ["assistant"], cacheDirectory: "/tmp/scriptorium-runtime-test", moduleDrainTimeoutMs: 20,
+    loaders: { assistant: async () => definition(metadata, {
+      id: "assistant.late-data",
+      effect: "compute",
+      inputSchema: schema,
+      outputSchema: schema,
+      async invoke(_input, action) {
+        await new Promise<void>((resolve) => {
+          finishAction = resolve;
+          markStarted();
+        });
+        return { ok: true, snapshot: action.reader.snapshot, data: { stale: true } };
+      },
+    }) },
+  });
+
+  const invocation = runtime.invokeAction("assistant", "assistant.late-data", {}, readContext());
+  await started;
+  await assert.rejects(runtime.disable("assistant"), (error: unknown) => error instanceof ModuleRuntimeError && error.code === "module_drain_timeout");
+  finishAction?.();
+  const result = await invocation;
+  assert.equal(result.ok, false);
+  if (!result.ok) assert.equal(result.error.code, "action_cancelled");
+  await runtime.shutdown();
+});
+
+test("a late HTTP handler cannot return a response after module disable", async () => {
+  const metadata = manifest("assistant");
+  let finishHandler: ((response: Response) => void) | undefined;
+  let markStarted!: () => void;
+  const started = new Promise<void>((resolve) => { markStarted = resolve; });
+  const runtime = new ModuleRuntime({
+    manifests: [metadata], enabled: ["assistant"], cacheDirectory: "/tmp/scriptorium-runtime-test", moduleDrainTimeoutMs: 20,
+    loaders: { assistant: async () => ({
+      manifest: metadata,
+      actions: [],
+      ui: [],
+      http: [{ id: "late-response", path: "late", methods: ["GET"], access: "owner", effect: "read", async handle() {
+        const response = new Promise<Response>((resolve) => { finishHandler = resolve; });
+        markStarted();
+        return response;
+      } }],
+      async dispose() {},
+    }) },
+  });
+  const host = { ...readContext(), access: "owner" as const };
+  const invocation = runtime.invokeHttp("assistant", "late-response", new Request("http://localhost/late"), host);
+  await started;
+  await assert.rejects(runtime.disable("assistant"), (error: unknown) => error instanceof ModuleRuntimeError && error.code === "module_drain_timeout");
+  finishHandler?.(new Response("late"));
+  const response = await invocation;
+  assert.equal(response.status, 499);
   await runtime.shutdown();
 });
 

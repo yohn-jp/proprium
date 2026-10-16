@@ -37,6 +37,8 @@ export interface WorkerSupervisorOptions {
   maxConcurrentServiceJobs?: number;
   /** Maximum jobs waiting for one persistent service; defaults to 4 (32 MiB at the input bound). */
   maxQueuedServiceJobs?: number;
+  /** Absolute Node executable used to launch workers; defaults to process.execPath. */
+  workerExecPath?: string;
   maxJobDurationMs?: number;
   cancellationGraceMs?: number;
 }
@@ -112,6 +114,7 @@ export class WorkerSupervisor {
   private readonly maxWorkerServices: number;
   private readonly maxConcurrentServiceJobs: number;
   private readonly maxQueuedServiceJobs: number;
+  private readonly workerExecPath: string;
   private readonly maxJobDurationMs: number;
   private readonly cancellationGraceMs: number;
   private closed = false;
@@ -122,6 +125,8 @@ export class WorkerSupervisor {
     this.maxWorkerServices = boundedOption("maxWorkerServices", options.maxWorkerServices, 8);
     this.maxConcurrentServiceJobs = boundedOption("maxConcurrentServiceJobs", options.maxConcurrentServiceJobs, 1);
     this.maxQueuedServiceJobs = boundedOption("maxQueuedServiceJobs", options.maxQueuedServiceJobs, 4, true);
+    this.workerExecPath = options.workerExecPath ?? process.execPath;
+    if (!path.isAbsolute(this.workerExecPath)) throw new RangeError("workerExecPath must be absolute");
     this.maxJobDurationMs = options.maxJobDurationMs ?? 15 * 60_000;
     this.cancellationGraceMs = options.cancellationGraceMs ?? 250;
     if (!Number.isSafeInteger(this.maxJobDurationMs) || this.maxJobDurationMs < 1 || this.maxJobDurationMs > 24 * 60 * 60_000 ||
@@ -165,6 +170,7 @@ export class WorkerSupervisor {
       this.cancellationGraceMs,
       this.maxConcurrentServiceJobs,
       this.maxQueuedServiceJobs,
+      this.workerExecPath,
       () => this.services.delete(service),
       (id) => this.jobs.has(id) || this.queuedJobs.has(id) || [...this.services].some((candidate) => candidate.hasJob(id)),
     );
@@ -182,7 +188,6 @@ export class WorkerSupervisor {
       }
       return service;
     } catch (error) {
-      this.services.delete(service);
       await service.dispose();
       throw error;
     }
@@ -291,6 +296,7 @@ export class WorkerSupervisor {
         cwd: path.dirname(record.workerEntry),
         env: workerEnvironment("job"),
         execArgv: [],
+        execPath: this.workerExecPath,
         stdio: ["ignore", "ignore", "inherit", "ipc"],
       });
     } catch (error) {
@@ -302,10 +308,14 @@ export class WorkerSupervisor {
     record.state = "running";
     child.on("message", (message: unknown) => this.receive(record, message));
     child.once("error", (error) => {
-      if (!record.response && !record.stopError) record.stopError = machineError("worker_failed", error.message || "Worker process failed", true);
+      if (!record.response && !record.stopError) {
+        record.stopError = machineError(child.pid === undefined ? "worker_start_failed" : "worker_failed", error.message || "Worker process failed", true);
+      }
       this.terminate(record);
     });
-    child.once("exit", (code, signalName) => this.onExit(record, code, signalName));
+    const finish = (code: number | null, signalName: NodeJS.Signals | null) => this.onExit(record, code, signalName);
+    child.once("exit", finish);
+    child.once("close", finish);
     child.send({ type: "job", request: record.request }, (error) => {
       if (error && !record.response && !record.stopError) {
         record.stopError = machineError("worker_ipc_failed", error.message, true);
@@ -473,6 +483,7 @@ class SupervisedWorkerService implements WorkerService {
   private readonly cancellationGraceMs: number;
   private readonly maxConcurrentServiceJobs: number;
   private readonly maxQueuedServiceJobs: number;
+  private readonly workerExecPath: string;
   private readonly onRemoved: () => void;
   private readonly isDuplicateJobId: (id: string) => boolean;
   private readonly jobs = new Map<string, ServiceJobRecord>();
@@ -499,6 +510,7 @@ class SupervisedWorkerService implements WorkerService {
     cancellationGraceMs: number,
     maxConcurrentServiceJobs: number,
     maxQueuedServiceJobs: number,
+    workerExecPath: string,
     onRemoved: () => void,
     isDuplicateJobId: (id: string) => boolean,
   ) {
@@ -509,6 +521,7 @@ class SupervisedWorkerService implements WorkerService {
     this.cancellationGraceMs = cancellationGraceMs;
     this.maxConcurrentServiceJobs = maxConcurrentServiceJobs;
     this.maxQueuedServiceJobs = maxQueuedServiceJobs;
+    this.workerExecPath = workerExecPath;
     this.onRemoved = onRemoved;
     this.isDuplicateJobId = isDuplicateJobId;
   }
@@ -630,13 +643,19 @@ class SupervisedWorkerService implements WorkerService {
       cwd: path.dirname(this.workerEntry),
       env: workerEnvironment("service"),
       execArgv: [],
+      execPath: this.workerExecPath,
       stdio: ["ignore", "ignore", "inherit", "ipc"],
     });
     this.child = child;
     this.exitPromise = new Promise<void>((resolve) => { this.resolveExit = resolve; });
     child.on("message", (message: unknown) => this.receive(message));
-    child.once("error", (error) => this.killService(machineError("worker_service_failed", error.message || "Worker service failed", true)));
-    child.once("exit", (code, signal) => {
+    child.once("error", (error) => this.killService(machineError(
+      child.pid === undefined ? "worker_start_failed" : "worker_service_failed",
+      error.message || "Worker service failed",
+      true,
+    )));
+    const finish = (code: number | null, signal: NodeJS.Signals | null) => {
+      if (this.exitSeen) return;
       this.exitSeen = true;
       if (this.readyTimer) clearTimeout(this.readyTimer);
       if (this.killTimer) clearTimeout(this.killTimer);
@@ -644,7 +663,9 @@ class SupervisedWorkerService implements WorkerService {
       for (const record of [...this.records.values()]) this.finishJob(record, record.stopError ?? this.terminalError);
       this.resolveExit?.();
       this.finishDispose();
-    });
+    };
+    child.once("exit", finish);
+    child.once("close", finish);
     this.readyTimer = setTimeout(() => this.killService(machineError("worker_service_start_timeout", "Worker service did not become ready", true)), Math.min(this.maxJobDurationMs, 30_000));
     await new Promise<void>((resolve, reject) => {
       const check = () => {
