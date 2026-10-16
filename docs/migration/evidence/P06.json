@@ -11,7 +11,8 @@
     "53b1cd63b7641b8166b95ba7230dd24627ff81ad",
     "8f5be3a5fffb484d4506d5f81ca74d0f25d42dba",
     "1b319e4bb20fb9c855ef1e92546448c3ecb701f4",
-    "a25285586f16c213c4f271ea32ea6aa0fb8d0ce4"
+    "a25285586f16c213c4f271ea32ea6aa0fb8d0ce4",
+    "6d85692935bafec64fc7be80034950993f38f704"
   ],
   "claims": [
     {
@@ -142,12 +143,52 @@
           "testPath": "modules/diagnostics/src/production.test.ts"
         }
       ]
+    },
+    {
+      "ledgerIds": ["N03", "N04", "R21", "R25", "R26", "R27", "R28", "R29", "R32"],
+      "sourceSymbols": [
+        "Tokenizer.analyze",
+        "discoverCandidateTermsFiltered",
+        "DiagnosticsService.analyze",
+        "QueryService.checkContinuity",
+        "checkVoiceConsistency",
+        "lintManuscript",
+        "appendSynonymGroup",
+        "addToIgnoreList"
+      ],
+      "targetActions": [
+        "nlp.analyze",
+        "nlp.discoverCandidates",
+        "nlp.dictionary",
+        "nlp.saveSynonymGroup",
+        "nlp.ignoreCandidates",
+        "nlp.features",
+        "diagnostics.analyze",
+        "diagnostics.checkContinuity",
+        "diagnostics.voiceConsistency",
+        "diagnostics.proposeLintFix"
+      ],
+      "targetUi": [],
+      "dataMappings": [
+        "A synthetic Japanese repository with canonical story, manuscript, and module-namespaced settings is read from one pinned Core snapshot; writes are proposals and become durable only after author approval, checkpoint, and publish.",
+        "After deleting the entire Core data root, Git reclone reconstructs published synonym, ignored-term, consent, manuscript, and proposal state; NLP candidate discovery and diagnostics are then rebuilt through the public actions."
+      ],
+      "proofs": [
+        {
+          "id": "P06-CORE-PRODUCTION",
+          "command": "pnpm --filter @scriptorium/contracts build && pnpm --filter @scriptorium/core build && pnpm --filter @scriptorium/module-runtime build && pnpm --filter @scriptorium/module-nlp build && pnpm --filter @scriptorium/module-diagnostics build && node --test modules/diagnostics/tests/production.acceptance.mjs",
+          "result": "The integration test uses CoreStore, a local bare Git remote, compiled NLP and diagnostics module factories, and the real Lindera WASM/IPADIC child. It checks Japanese token, sentence, and UTF-16 offsets; synonym/feature reads; continuity, declared-voice, sentiment, and lint behavior; no direct workspace edits before approval; four proposal approve/checkpoint/publish operations; complete Core data-root deletion; Git reclone and proposal reconstruction; preserved namespaced settings; and post-reclone public-action recomputation. No semantic embedding result is asserted.",
+          "scope": "integration",
+          "testPath": "modules/diagnostics/tests/production.acceptance.mjs",
+          "engineModelIdentity": {"id": "lindera-wasm-nodejs-ipadic", "version": "2.0.0", "diagnosticsEngine": "scriptorium-diagnostics-cpu", "diagnosticsEngineVersion": "1.0.0"}
+        }
+      ]
     }
   ],
   "compositionLimits": [
-    "This is module-level public-action evidence using the actual supervised Lindera CPU engine. It does not certify the composed HTTP/API, browser, MCP, full-profile, or Core approval/checkpoint/publish paths.",
+    "The synthetic local-bare-Git integration proves Core approval/checkpoint/publish and delete/reclone for module-authored NLP/diagnostics changes with the actual supervised Lindera CPU engine. It does not certify the composed HTTP/API, browser, MCP, full-profile, or a private project corpus.",
     "The corpus-neighbor consumer is wired to semantic.embedding but its focused consumer test uses a provider test double. P09 must verify the actual pinned embedding model and worker before composed corpus search is claimed.",
     "Contradiction candidate/rebuild/dismissal behavior from R21 is owned by P09 semantic rather than this P06 diagnostics module. R29's hierarchical snapshot writing-statistics aggregation is Core-owned; this module owns richer per-text prose and sentiment metrics.",
-    "P12 still owns composed legacy-import registration and the delete/reclone round trip for diagnostics/NLP settings. The module migration producers and namespaced runtime reads are present, but this evidence does not claim that end-to-end migration proof."
+    "P12 still owns composed legacy-import registration and legacy-import/delete-reclone proof. This integration test reconstructs module-produced author settings; it does not claim the P12 migration-import proof."
   ]
 }
