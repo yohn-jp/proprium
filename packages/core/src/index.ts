@@ -1491,7 +1491,11 @@ export class CoreStore implements MutationCoordinator {
       if (record.identity.defaultBranch !== identity.defaultBranch) {
         throw coreError(409, "default_branch_changed", "The repository default branch changed; explicitly rebind the project before writing");
       }
-    } else {
+    }
+    if (record.branch !== identity.defaultBranch) {
+      throw coreError(409, "non_default_branch", "The registered branch is not the repository default; preserve local state and explicitly reconstruct the project to rebind it");
+    }
+    if (!record.identity) {
       record.identity = identity;
       await this.withRegistryLock(async () => {
         const records = await this.readRegistry();
@@ -3567,6 +3571,9 @@ export class CoreStore implements MutationCoordinator {
       identity = /^https:\/\//i.test(url)
         ? await githubIdentity(url, this.token, this.fetcher)
         : localIdentity(url, branchName(discoveredDefault));
+      if (explicitBranch && explicitBranch !== identity.defaultBranch) {
+        throw coreError(409, "non_default_branch", "New projects must use the repository default branch");
+      }
       branch = explicitBranch ?? identity.defaultBranch;
       const branchExists = remoteHeads.includes(branch);
       if (!branchExists && remoteHeads.length > 0) {

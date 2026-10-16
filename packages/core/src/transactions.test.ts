@@ -34,6 +34,15 @@ async function remoteFixture(): Promise<{ root: string; remote: string; seed: st
   return { root, remote, seed };
 }
 
+async function addRemoteBranch(fixture: { seed: string }, branch: string): Promise<void> {
+  await git(fixture.seed, "checkout", "-b", branch);
+  await fs.writeFile(path.join(fixture.seed, `${branch}.md`), `Content on ${branch}.\n`);
+  await git(fixture.seed, "add", `${branch}.md`);
+  await git(fixture.seed, "commit", "-m", `Add ${branch} branch`);
+  await git(fixture.seed, "push", "-u", "origin", branch);
+  await git(fixture.seed, "checkout", "main");
+}
+
 function operation(snapshot: SnapshotId, filePath: string, content: string, revision: string | null = null, id = "operation_1"): ChangeOperation {
   return {
     id,
@@ -649,6 +658,113 @@ test("detach refuses proposals that remain only in local recovery state", async 
     assert.equal((await store.listProjects()).length, 1);
     assert.equal(await fs.stat(clonePath).then((stat) => stat.isDirectory()), true);
     assert.equal(await git(fixture.root, "--git-dir", fixture.remote, "rev-parse", "refs/heads/main"), remoteHead);
+  } finally {
+    await fs.rm(fixture.root, { recursive: true, force: true });
+  }
+});
+
+test("new registration rejects an explicit non-default branch without changing repository or registry state", async () => {
+  const fixture = await remoteFixture();
+  try {
+    await addRemoteBranch(fixture, "feature");
+    const mainHead = await git(fixture.root, "--git-dir", fixture.remote, "rev-parse", "refs/heads/main");
+    const featureHead = await git(fixture.root, "--git-dir", fixture.remote, "rev-parse", "refs/heads/feature");
+    const defaultRef = await git(fixture.root, "--git-dir", fixture.remote, "symbolic-ref", "HEAD");
+    const store = new CoreStore({ dataDir: path.join(fixture.root, "state"), allowLocalRemotes: true });
+
+    await assert.rejects(store.registerProject({ url: fixture.remote, branch: "feature" }),
+      (error: unknown) => error instanceof CoreError && error.code === "non_default_branch");
+
+    assert.deepEqual(await store.listProjects(), []);
+    assert.equal(await git(fixture.root, "--git-dir", fixture.remote, "rev-parse", "refs/heads/main"), mainHead);
+    assert.equal(await git(fixture.root, "--git-dir", fixture.remote, "rev-parse", "refs/heads/feature"), featureHead);
+    assert.equal(await git(fixture.root, "--git-dir", fixture.remote, "symbolic-ref", "HEAD"), defaultRef);
+    assert.deepEqual(await fs.readdir(path.join(fixture.root, "state", "projects")), []);
+  } finally {
+    await fs.rm(fixture.root, { recursive: true, force: true });
+  }
+});
+
+test("legacy non-default registrations pause observation and preserve dirty clones during reconstruction", async () => {
+  const fixture = await remoteFixture();
+  try {
+    await addRemoteBranch(fixture, "feature");
+    const dataDir = path.join(fixture.root, "state");
+    const store = new CoreStore({ dataDir, allowLocalRemotes: true });
+    const project = await store.registerProject({ url: fixture.remote });
+    const clonePath = path.join(dataDir, "projects", project.id);
+    await git(clonePath, "fetch", "origin", "refs/heads/feature");
+    await git(clonePath, "checkout", "-b", "feature", "FETCH_HEAD");
+    await git(clonePath, "config", "user.name", "Legacy Test Writer");
+    await git(clonePath, "config", "user.email", "legacy@example.test");
+    await fs.writeFile(path.join(clonePath, "local-only.txt"), "Preserve the legacy branch commit.\n");
+    await git(clonePath, "add", "local-only.txt");
+    await git(clonePath, "commit", "-m", "Local legacy branch commit");
+    const localCommit = await git(clonePath, "rev-parse", "HEAD");
+    await fs.writeFile(path.join(clonePath, "staged.txt"), "Preserve staged content.\n");
+    await git(clonePath, "add", "staged.txt");
+    await fs.writeFile(path.join(clonePath, "unknown.txt"), "Preserve untracked content.\n");
+    const statusBefore = await git(clonePath, "status", "--porcelain", "--untracked-files=all");
+
+    const registryPath = path.join(dataDir, "projects.json");
+    const registryBefore = JSON.parse(await fs.readFile(registryPath, "utf8")) as Array<{ id: string; branch: string; identity?: { defaultBranch: string } }>;
+    const legacyRecord = registryBefore.find((item) => item.id === project.id);
+    assert.ok(legacyRecord);
+    legacyRecord.branch = "feature";
+    delete legacyRecord.identity;
+    await fs.writeFile(registryPath, `${JSON.stringify(registryBefore, null, 2)}\n`);
+
+    const mainHead = await git(fixture.root, "--git-dir", fixture.remote, "rev-parse", "refs/heads/main");
+    const featureHead = await git(fixture.root, "--git-dir", fixture.remote, "rev-parse", "refs/heads/feature");
+    await assert.rejects(store.observe(project.id),
+      (error: unknown) => error instanceof CoreError && error.code === "non_default_branch");
+    await assert.rejects(store.reconstructProject(project.id),
+      (error: unknown) => error instanceof CoreError && error.code === "working_tree_dirty");
+
+    assert.equal(await git(clonePath, "branch", "--show-current"), "feature");
+    assert.equal(await git(clonePath, "rev-parse", "HEAD"), localCommit);
+    assert.equal(await git(clonePath, "status", "--porcelain", "--untracked-files=all"), statusBefore);
+    assert.equal(await fs.readFile(path.join(clonePath, "local-only.txt"), "utf8"), "Preserve the legacy branch commit.\n");
+    assert.equal(await fs.readFile(path.join(clonePath, "staged.txt"), "utf8"), "Preserve staged content.\n");
+    assert.equal(await fs.readFile(path.join(clonePath, "unknown.txt"), "utf8"), "Preserve untracked content.\n");
+    assert.deepEqual(await store.listProjects(), [{ ...project, branch: "feature" }]);
+    const registryAfter = JSON.parse(await fs.readFile(registryPath, "utf8")) as typeof registryBefore;
+    assert.deepEqual(registryAfter, registryBefore);
+    assert.equal(Object.hasOwn(registryAfter[0] ?? {}, "identity"), false);
+    assert.equal(await git(fixture.root, "--git-dir", fixture.remote, "rev-parse", "refs/heads/main"), mainHead);
+    assert.equal(await git(fixture.root, "--git-dir", fixture.remote, "rev-parse", "refs/heads/feature"), featureHead);
+  } finally {
+    await fs.rm(fixture.root, { recursive: true, force: true });
+  }
+});
+
+test("an explicit reconstruction safely rebinds a clean legacy checkout to the current default", async () => {
+  const fixture = await remoteFixture();
+  try {
+    await addRemoteBranch(fixture, "feature");
+    const dataDir = path.join(fixture.root, "state");
+    const store = new CoreStore({ dataDir, allowLocalRemotes: true });
+    const project = await store.registerProject({ url: fixture.remote });
+    const clonePath = path.join(dataDir, "projects", project.id);
+    await git(clonePath, "fetch", "origin", "refs/heads/feature");
+    await git(clonePath, "checkout", "-b", "feature", "FETCH_HEAD");
+    const registryPath = path.join(dataDir, "projects.json");
+    const registry = JSON.parse(await fs.readFile(registryPath, "utf8")) as Array<{ id: string; branch: string }>;
+    const legacyRecord = registry.find((item) => item.id === project.id);
+    assert.ok(legacyRecord);
+    legacyRecord.branch = "feature";
+    await fs.writeFile(registryPath, `${JSON.stringify(registry, null, 2)}\n`);
+
+    const remoteMain = await git(fixture.root, "--git-dir", fixture.remote, "rev-parse", "refs/heads/main");
+    const remoteFeature = await git(fixture.root, "--git-dir", fixture.remote, "rev-parse", "refs/heads/feature");
+    const rebound = await store.reconstructProject(project.id);
+
+    assert.deepEqual(rebound, { ...project, branch: "main" });
+    assert.equal(await git(clonePath, "branch", "--show-current"), "main");
+    assert.equal(await git(clonePath, "rev-parse", "HEAD"), remoteMain);
+    assert.deepEqual(await store.listProjects(), [rebound]);
+    assert.equal(await git(fixture.root, "--git-dir", fixture.remote, "rev-parse", "refs/heads/main"), remoteMain);
+    assert.equal(await git(fixture.root, "--git-dir", fixture.remote, "rev-parse", "refs/heads/feature"), remoteFeature);
   } finally {
     await fs.rm(fixture.root, { recursive: true, force: true });
   }
