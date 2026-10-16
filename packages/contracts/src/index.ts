@@ -16,6 +16,29 @@ export interface SnapshotId {
   remoteCommit: string;
   overlayCommit?: string;
 }
+/** Optional host-owned historical records; never a project mutation or disposable model cache. */
+export const MODEL_USAGE_CAPABILITY = "host.model-usage";
+export interface ModelUsageEvent {
+  id: string;
+  repository: RepositoryIdentity;
+  feature: string;
+  provider: string;
+  model: string;
+  startedAt: string;
+  completedAt: string;
+  state: "completed" | "aborted" | "failed";
+  inputTokens?: number;
+  outputTokens?: number;
+  cost?: number;
+  errorCode?: string;
+}
+export interface ModelUsageStore {
+  append(event: ModelUsageEvent): Promise<void>;
+  list(repository: RepositoryIdentity, query?: { from?: string; to?: string; limit?: number; cursor?: string }): Promise<{
+    events: ModelUsageEvent[];
+    nextCursor?: string;
+  }>;
+}
 export interface FileRevision { path: string; revision: string | null }
 /** Binds a directory membership and every listed file revision, including absent members. */
 export interface ScopeRevision { prefix: string; revision: string }

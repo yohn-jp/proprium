@@ -63,6 +63,9 @@
     "statePaths": [
       "meta/scriptorium/modules/assistant"
     ],
-    "locality": "optional-external"
+    "locality": "optional-external",
+    "optionalRequires": [
+      "host.model-usage"
+    ]
   }
 }
