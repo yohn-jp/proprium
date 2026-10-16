@@ -5,7 +5,7 @@ import { join, resolve } from "node:path";
 
 const externalRepository = Boolean(process.env.SCRIPTORIUM_E2E_REPOSITORY_URL);
 const configuredBaseURL = process.env.SCRIPTORIUM_E2E_BASE_URL ?? process.env.SCRIPTORIUM_BASE_URL;
-const baseURL = configuredBaseURL ?? "http://127.0.0.1:4173";
+const baseURL = configuredBaseURL ?? `http://127.0.0.1:${process.env.SCRIPTORIUM_E2E_PORT ?? "4173"}`;
 const externalServer = Boolean(configuredBaseURL);
 const isTemporaryStateDir = !process.env.SCRIPTORIUM_E2E_STATE_DIR && !externalServer;
 const stateDir = process.env.SCRIPTORIUM_E2E_STATE_DIR
