@@ -34,7 +34,11 @@ export interface ActionHostContext {
   linkedReader?(repositoryId: string): Promise<ModuleActionContext["reader"]>;
   /** Authentication level of the current HTTP caller. Omission grants no owner access. */
   access?: "owner" | "public";
-  propose(operations: ChangeOperation[], evidence?: Parameters<ModuleActionContext["propose"]>[1]): Promise<ChangeProposal>;
+  propose(
+    operations: ChangeOperation[],
+    evidence?: Parameters<ModuleActionContext["propose"]>[1],
+    proposalId?: Parameters<ModuleActionContext["propose"]>[2],
+  ): Promise<ChangeProposal>;
 }
 
 export type HttpContributionDescriptor = Omit<HttpContribution, "handle">;
@@ -638,11 +642,11 @@ export class ModuleRuntime {
         if (signal.aborted) throw new ModuleRuntimeError("action_cancelled", "Action was cancelled");
         return reader;
       },
-      propose: async (operations, evidence) => {
+      propose: async (operations, evidence, proposalId) => {
         if (signal.aborted) throw new ModuleRuntimeError("action_cancelled", "Action was cancelled");
         if (effect !== "propose" || inheritedEffect !== "propose") throw new ModuleRuntimeError("action_effect_denied", `Action ${moduleId} is not allowed to propose changes`);
         for (const operation of operations) this.assertOperationSnapshot(operation, host.reader.snapshot);
-        const proposal = await host.propose(operations, evidence);
+        const proposal = await host.propose(operations, evidence, proposalId);
         if (!sameSnapshot(proposal.snapshot, host.reader.snapshot)) throw new ModuleRuntimeError("action_snapshot_mismatch", "Proposal coordinator returned a different snapshot");
         proposals.push(proposal);
         return proposal;

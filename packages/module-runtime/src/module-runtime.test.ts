@@ -104,6 +104,7 @@ test("enabled idle modules import no heavy capability; proposals are host-issued
   const metadata = manifest("story", { statePaths: ["meta/scriptorium/modules/story"], requires: ["model:test"] });
   let loaded = 0;
   let created = 0;
+  let forwardedProposalId: string | undefined;
   const operation = proposalOperation();
   const runtime = new ModuleRuntime({
     manifests: [metadata], enabled: ["story"], cacheDirectory: "/tmp/scriptorium-runtime-test",
@@ -118,7 +119,7 @@ test("enabled idle modules import no heavy capability; proposals are host-issued
         async invoke(_input, actionContext) {
           const lease = await context.acquireCapability<{ id: string }>("model:test");
           await lease.release();
-          await actionContext.propose([operation]);
+          await actionContext.propose([operation], undefined, "mcp-batch-1");
           return { ok: true, snapshot, data: { accepted: false } };
         },
       });
@@ -132,14 +133,16 @@ test("enabled idle modules import no heavy capability; proposals are host-issued
   assert.equal(runtime.status("story").availability, "enabled-idle");
   const host = {
     ...readContext(),
-    async propose(operations: ChangeOperation[]): Promise<ChangeProposal> {
-      return { id: "proposal-1", snapshot, operations, source: "module" };
+    async propose(operations: ChangeOperation[], _evidence, proposalId): Promise<ChangeProposal> {
+      forwardedProposalId = proposalId;
+      return { id: proposalId ?? "proposal-1", snapshot, operations, source: "module" };
     },
   };
   const result = await runtime.invokeAction("story", "propose", {}, host);
   assert.equal(result.ok, true, JSON.stringify(result));
+  assert.equal(forwardedProposalId, "mcp-batch-1", "the host receives the caller's stable proposal ID");
   if (result.ok) {
-    assert.deepEqual(result.proposals, [{ id: "proposal-1", snapshot, operations: [operation], source: "module" }]);
+    assert.deepEqual(result.proposals, [{ id: "mcp-batch-1", snapshot, operations: [operation], source: "module" }]);
   }
   await runtime.shutdown();
 });
