@@ -31,6 +31,9 @@ export interface ModelUsageEvent {
   outputTokens?: number;
   cost?: number;
   cacheHit?: boolean;
+  promptVersion?: string;
+  durationMs?: number;
+  queueWaitMs?: number;
   errorCode?: string;
 }
 export interface ModelUsageStore {
