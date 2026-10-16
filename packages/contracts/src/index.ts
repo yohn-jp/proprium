@@ -116,7 +116,7 @@ export interface JobResult<T = unknown> {
 export interface MachineError { code: string; message: string; retryable: boolean }
 export type JobOutcome<T = unknown> = { ok: true; result: JobResult<T> } | { ok: false; id: string; snapshot: SnapshotId; error: MachineError };
 export interface ValueSchema<T = unknown> { parse(value: unknown): T }
-export type ActionResult<T = unknown> = { ok: true; snapshot: SnapshotId; data: T } | { ok: false; snapshot: SnapshotId; error: MachineError };
+export type ActionResult<T = unknown> = { ok: true; snapshot: SnapshotId; data: T; proposals?: ChangeProposal[] } | { ok: false; snapshot: SnapshotId; error: MachineError };
 export interface ModuleActionContext {
   projectId: string;
   reader: SnapshotReader;
@@ -210,4 +210,18 @@ export function assertChangeOperation(value: unknown): asserts value is ChangeOp
     size += item.content?.length ?? 0;
     if (size > 8 * 1024 * 1024) throw new ContractError("Operation payload exceeds limit");
   }
+}
+
+/** Browser modules mount real domain UI into shared slots without author approval authority. */
+export interface BrowserModuleContext {
+  projectId: string;
+  snapshot: SnapshotId;
+  signal: AbortSignal;
+  invoke(actionId: string, input: unknown): Promise<ActionResult>;
+  /** The shell journals the complete proposal before acknowledging it to the module UI. */
+  propose(operations: ChangeOperation[], evidence?: ProposalEvidence[]): Promise<ChangeProposal>;
+  refresh(): Promise<void>;
+}
+export interface BrowserModuleDefinition {
+  mount(contributionId: string, element: HTMLElement, context: BrowserModuleContext): Promise<() => void>;
 }
