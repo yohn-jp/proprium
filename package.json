@@ -1,0 +1,22 @@
+{
+  "name": "scriptorium",
+  "private": true,
+  "version": "0.1.0",
+  "license": "MIT",
+  "packageManager": "pnpm@12.10.1",
+  "engines": {
+    "node": ">=24.0.0"
+  },
+  "scripts": {
+    "build": "pnpm --filter @scriptorium/core build && pnpm --filter @scriptorium/app build && pnpm --filter @scriptorium/api build",
+    "typecheck": "pnpm --filter @scriptorium/core typecheck && pnpm --filter @scriptorium/app typecheck && pnpm --filter @scriptorium/api typecheck",
+    "test": "pnpm --filter @scriptorium/core test && pnpm --filter @scriptorium/api test && pnpm --filter @scriptorium/app test",
+    "start": "node packages/api/dist/server.js",
+    "audit:core": "node scripts/audit-core.mjs"
+  },
+  "devDependencies": {
+    "@types/node": "^24.0.0",
+    "typescript": "~5.9.3",
+    "tsx": "^4.20.0"
+  }
+}
