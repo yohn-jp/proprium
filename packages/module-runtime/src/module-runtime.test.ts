@@ -319,6 +319,194 @@ test("disabling a module drains its real child process and leaves author data un
   await runtime.shutdown();
 });
 
+test("module actions compose through namespaced host actions and owner-checked linked readers", async () => {
+  const metadata = manifest("story");
+  const linkedSnapshot: SnapshotId = { ...snapshot, repository: { ...snapshot.repository, repositoryId: "repo-linked" } };
+  const linkedReader = {
+    snapshot: linkedSnapshot,
+    async read() { return "linked"; },
+    async list() { return ["linked.md"]; },
+  };
+  let loaderCalls = 0;
+  const runtime = new ModuleRuntime({
+    manifests: [metadata], enabled: ["story"], cacheDirectory: "/tmp/scriptorium-runtime-test",
+    loaders: { story: async () => {
+      loaderCalls += 1;
+      return definition(metadata, {
+        id: "story.describe",
+        effect: "read",
+        inputSchema: schema,
+        outputSchema: schema,
+        async invoke(_input, action) {
+          const actions = await action.listActions();
+          const status = await action.invoke("core.status", {});
+          const linked = await action.linkedReader("repo-linked");
+          return { ok: true, snapshot: action.reader.snapshot, data: {
+            actions: actions.map(({ id, module }) => ({ id, module })),
+            status,
+            projectId: action.projectId,
+            linkedPaths: await linked.list(),
+          } };
+        },
+      });
+    } },
+  });
+  assert.equal(loaderCalls, 0, "enabled idle modules remain lazy");
+  const host = {
+    ...readContext(),
+    actions: [{ module: "core" as const, action: {
+      id: "status", effect: "read" as const, inputSchema: schema, outputSchema: schema,
+      async invoke(_input: unknown, context: ModuleActionContext) {
+        return { ok: true as const, snapshot: context.reader.snapshot, data: { projectId: context.projectId } };
+      },
+    } }],
+    async linkedReader(repositoryId: string) {
+      assert.equal(repositoryId, "repo-linked");
+      return linkedReader;
+    },
+  };
+  const result = await runtime.invokeAction("story", "story.describe", {}, host);
+  assert.equal(result.ok, true, JSON.stringify(result));
+  if (result.ok) {
+    assert.deepEqual(result.data, {
+      actions: [{ id: "story.describe", module: "story" }, { id: "core.status", module: "core" }],
+      status: { ok: true, snapshot, data: { projectId: "project-1" } },
+      projectId: "project-1",
+      linkedPaths: ["linked.md"],
+    });
+  }
+  assert.equal(loaderCalls, 1);
+  await runtime.shutdown();
+});
+
+test("optional capabilities do not block profile resolution and cannot activate a disabled provider", async () => {
+  const nlp = manifest("nlp", { provides: ["nlp.tokenizer"] });
+  const story = manifest("story", { optionalRequires: ["nlp.tokenizer"] });
+  const plan = resolveModulePlan([nlp, story], ["story"]);
+  assert.deepEqual([...plan.enabled], ["story"]);
+
+  let providerImports = 0;
+  let held: { release(): Promise<void> } | undefined;
+  const runtime = new ModuleRuntime({
+    manifests: [nlp, story], enabled: ["story"], cacheDirectory: "/tmp/scriptorium-runtime-test",
+    loaders: {
+      nlp: async () => {
+        providerImports += 1;
+        return { manifest: nlp, actions: [], ui: [], capabilities: [{
+          id: "nlp.tokenizer", version: "1.0.0", async create() { return { tokens: true }; },
+        }], async dispose() {} };
+      },
+      story: async (context) => definition(story, {
+        id: "suggest-tags",
+        effect: "compute",
+        inputSchema: schema,
+        outputSchema: schema,
+        async invoke(_input, action) {
+          held = await context.acquireCapability("nlp.tokenizer");
+          return { ok: true, snapshot: action.reader.snapshot, data: { ready: true } };
+        },
+      }),
+    },
+  });
+  const host = readContext();
+  const unavailable = await runtime.invokeAction("story", "suggest-tags", {}, host);
+  assert.equal(unavailable.ok, false);
+  if (!unavailable.ok) assert.equal(unavailable.error.code, "optional_capability_unavailable");
+  assert.equal(providerImports, 0, "optional acquisition must not import a disabled provider");
+
+  runtime.enable("nlp");
+  const available = await runtime.invokeAction("story", "suggest-tags", {}, host);
+  assert.equal(available.ok, true, JSON.stringify(available));
+  assert.equal(providerImports, 1);
+  await assert.rejects(runtime.disable("nlp"), (error: unknown) => error instanceof ModuleRuntimeError && error.code === "module_dependency_in_use");
+  await held?.release();
+  await runtime.disable("nlp");
+  await runtime.shutdown();
+});
+
+test("HTTP contributions are hidden until activation and public reads cannot propose; streamed calls drain on cancel", async () => {
+  const metadata = manifest("publishing");
+  let proposals = 0;
+  const runtime = new ModuleRuntime({
+    manifests: [metadata], enabled: ["publishing"], cacheDirectory: "/tmp/scriptorium-runtime-test",
+    loaders: { publishing: async () => ({
+      manifest: metadata,
+      actions: [],
+      ui: [],
+      http: [
+        { id: "public-read", path: "public/status", methods: ["GET"], access: "public", effect: "read", async handle(_request, context) {
+          await context.propose([proposalOperation()]);
+          return Response.json({ ok: true });
+        } },
+        { id: "stream", path: "public/stream", methods: ["GET"], access: "public", effect: "read", async handle() {
+          return new Response(new ReadableStream<Uint8Array>({ pull(controller) { controller.enqueue(new TextEncoder().encode("chunk")); } }));
+        } },
+      ],
+      async dispose() {},
+    }) },
+  });
+  assert.deepEqual(runtime.httpContributions("publishing"), []);
+  await runtime.activate("publishing");
+  const descriptors = runtime.httpContributions("publishing");
+  assert.equal(descriptors.length, 2);
+  assert.equal("handle" in descriptors[0]!, false);
+  const host = {
+    ...readContext(),
+    access: "public" as const,
+    async propose(operations: ChangeOperation[]): Promise<ChangeProposal> {
+      proposals += 1;
+      return { id: "proposal-http", snapshot, operations, source: "module" };
+    },
+  };
+  const denied = await runtime.invokeHttp("publishing", "public-read", new Request("http://localhost/public/status"), host);
+  assert.equal(denied.status, 403);
+  assert.equal(proposals, 0);
+
+  const streaming = await runtime.invokeHttp("publishing", "stream", new Request("http://localhost/public/stream"), host);
+  assert.equal(streaming.status, 200);
+  assert.equal(runtime.status("publishing").availability, "active");
+  await streaming.body?.cancel();
+  assert.equal(runtime.status("publishing").availability, "enabled-idle");
+  await runtime.disable("publishing");
+  assert.deepEqual(runtime.httpContributions("publishing"), []);
+  assert.equal((await runtime.invokeHttp("publishing", "stream", new Request("http://localhost/public/stream"), host)).status, 404);
+  await runtime.shutdown();
+});
+
+test("module disable bounds a non-cooperative action drain and rejects late proposals", async () => {
+  const metadata = manifest("assistant");
+  let proposalCalls = 0;
+  let finishAction: (() => void) | undefined;
+  const runtime = new ModuleRuntime({
+    manifests: [metadata], enabled: ["assistant"], cacheDirectory: "/tmp/scriptorium-runtime-test", moduleDrainTimeoutMs: 20,
+    loaders: { assistant: async () => definition(metadata, {
+      id: "assistant.wait",
+      effect: "propose",
+      inputSchema: schema,
+      outputSchema: schema,
+      async invoke(_input, action) {
+        await new Promise<void>((resolve) => { finishAction = resolve; });
+        await action.propose([proposalOperation()]);
+        return { ok: true, snapshot: action.reader.snapshot, data: {} };
+      },
+    }) },
+  });
+  const host = { ...readContext(), async propose(): Promise<ChangeProposal> {
+    proposalCalls += 1;
+    return { id: "proposal-late", snapshot, operations: [], source: "module" };
+  } };
+  const invocation = runtime.invokeAction("assistant", "assistant.wait", {}, host);
+  await new Promise<void>((resolve) => setTimeout(resolve, 0));
+  await assert.rejects(runtime.disable("assistant"), (error: unknown) => error instanceof ModuleRuntimeError && error.code === "module_drain_timeout");
+  finishAction?.();
+  const result = await invocation;
+  assert.equal(result.ok, false);
+  if (!result.ok) assert.equal(result.error.code, "action_cancelled");
+  assert.equal(proposalCalls, 0);
+  assert.equal(runtime.status("assistant").availability, "disabled");
+  await runtime.shutdown();
+});
+
 function jobRequest(module: ModuleId, options: Partial<JobRequest> = {}): JobRequest {
   return {
     id: `job-${Math.random().toString(16).slice(2)}`,

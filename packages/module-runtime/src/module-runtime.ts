@@ -1,5 +1,5 @@
 import path from "node:path";
-import { snapshotKey, type ActionResult, type CapabilityDefinition, type ChangeOperation, type ChangeProposal, type JobOutcome, type JobRequest, type MachineError, type ModuleAction, type ModuleActionContext, type ModuleAvailability, type ModuleContext, type ModuleDefinition, type ModuleId, type ModuleManifest, type ModuleStatus, type SnapshotId, type WorkerService } from "@scriptorium/contracts";
+import { snapshotKey, type ActionDescriptor, type ActionResult, type CapabilityDefinition, type ChangeOperation, type ChangeProposal, type HttpContribution, type JobOutcome, type JobRequest, type MachineError, type ModuleAction, type ModuleActionContext, type ModuleAvailability, type ModuleContext, type ModuleDefinition, type ModuleId, type ModuleManifest, type ModuleStatus, type SnapshotId, type WorkerService } from "@scriptorium/contracts";
 import { CapabilityProvider, SharedCapabilityPool } from "./capability-pool.js";
 import { resolveModulePlan, type ResolvedModulePlan } from "./module-plan.js";
 import { isModuleId, MODULE_IDS, ModuleRuntimeError } from "./runtime-error.js";
@@ -20,14 +20,24 @@ export interface ModuleRuntimeOptions {
   /** Base directory for manifest-relative worker entry paths. */
   moduleDirectories?: Readonly<Partial<Record<ModuleId, string>>>;
   workerOptions?: WorkerSupervisorOptions;
+  /** Maximum wait for aborted in-process module calls and activation to drain. */
+  moduleDrainTimeoutMs?: number;
 }
 
 export interface ActionHostContext {
   projectId: string;
   reader: ModuleActionContext["reader"];
   signal: AbortSignal;
+  /** Core actions are explicitly supplied by the host and run against this same project and reader. */
+  actions?: readonly { module: ModuleId | "core"; action: ModuleAction }[];
+  /** Resolves only repositories registered to the same owner; runtime verifies the returned identity. */
+  linkedReader?(repositoryId: string): Promise<ModuleActionContext["reader"]>;
+  /** Authentication level of the current HTTP caller. Omission grants no owner access. */
+  access?: "owner" | "public";
   propose(operations: ChangeOperation[], evidence?: Parameters<ModuleActionContext["propose"]>[1]): Promise<ChangeProposal>;
 }
+
+export type HttpContributionDescriptor = Omit<HttpContribution, "handle">;
 
 export interface ModuleActionRegistration {
   id: string;
@@ -41,6 +51,8 @@ interface ModuleSession {
   definition?: ModuleDefinition;
   context?: ModuleContext;
   leases: Set<() => Promise<void>>;
+  capabilityLeases: Map<string, number>;
+  pendingCapabilityIds: Map<string, number>;
   workerServices: Set<WorkerService>;
   calls: number;
   pendingCapabilities: number;
@@ -74,6 +86,7 @@ function sameManifest(left: ModuleManifest, right: ModuleManifest): boolean {
     dependencies: [...manifest.dependencies].sort(),
     provides: [...manifest.provides].sort(),
     requires: [...manifest.requires].sort(),
+    optionalRequires: [...(manifest.optionalRequires ?? [])].sort(),
     serverEntry: manifest.serverEntry ?? null,
     browserEntry: manifest.browserEntry ?? null,
     workerEntry: manifest.workerEntry ?? null,
@@ -81,6 +94,21 @@ function sameManifest(left: ModuleManifest, right: ModuleManifest): boolean {
     locality: manifest.locality,
   });
   return key(left) === key(right);
+}
+
+function actionIdFor(module: ModuleId | "core", action: ModuleAction): string {
+  return action.id.startsWith(`${module}.`) ? action.id : `${module}.${action.id}`;
+}
+
+function safeHttpPath(value: unknown): value is string {
+  if (typeof value !== "string" || value.length === 0 || value.length > 512 || value.startsWith("/") ||
+      /[\\\x00-\x20?#%]/.test(value)) return false;
+  return value.split("/").every((segment) => segment.length > 0 && segment !== "." && segment !== ".." &&
+    /^[A-Za-z0-9._:-]+$/.test(segment));
+}
+
+function httpFailure(status: number, code: string, message: string): Response {
+  return Response.json({ error: machineError(code, message) }, { status });
 }
 
 function sameSnapshot(left: SnapshotId, right: SnapshotId): boolean {
@@ -121,20 +149,49 @@ function validateDefinition(expected: ModuleManifest, definition: ModuleDefiniti
     throw new ModuleRuntimeError("invalid_module_definition", `Module ${expected.id} did not register every capability in its manifest`);
   }
   const actionIds = new Set<string>();
+  const actionNames = new Set<string>();
   for (const action of definition.actions) {
     invalidAction(action);
     if (actionIds.has(action.id)) throw new ModuleRuntimeError("invalid_module_definition", `Module ${expected.id} declares duplicate action ${action.id}`);
+    if (/^(?:core|story|diagnostics|nlp|semantic|speaker|assistant|publishing|mcp)\./.test(action.id) &&
+        !action.id.startsWith(`${expected.id}.`)) {
+      throw new ModuleRuntimeError("invalid_module_definition", `Action ${action.id} is not namespaced to ${expected.id}`);
+    }
     actionIds.add(action.id);
+    const canonical = actionIdFor(expected.id, action);
+    if (actionNames.has(canonical)) throw new ModuleRuntimeError("invalid_module_definition", `Module ${expected.id} declares duplicate action ${canonical}`);
+    actionNames.add(canonical);
   }
   const contributionIds = new Set<string>();
   for (const contribution of definition.ui) {
     if (!contribution || contribution.module !== expected.id || !/^[A-Za-z0-9._:-]{1,128}$/.test(contribution.id) ||
         !["editor", "dock", "inspection", "review", "settings"].includes(contribution.slot) ||
-        typeof contribution.title !== "string" || contribution.title.length > 256 || !actionIds.has(contribution.action) ||
+        typeof contribution.title !== "string" || contribution.title.length > 256 ||
+        !actionIds.has(contribution.action) && !actionNames.has(actionIdFor(expected.id, { id: contribution.action } as ModuleAction)) ||
         contributionIds.has(contribution.id)) {
       throw new ModuleRuntimeError("invalid_module_definition", `Module ${expected.id} declares an invalid UI contribution`);
     }
     contributionIds.add(contribution.id);
+  }
+  const httpIds = new Set<string>();
+  const httpPaths = new Map<string, Set<string>>();
+  for (const contribution of definition.http ?? []) {
+    const methods = contribution?.methods;
+    if (!contribution || typeof contribution.id !== "string" || !/^[A-Za-z0-9._:-]{1,128}$/.test(contribution.id) ||
+        !safeHttpPath(contribution.path) || !Array.isArray(methods) || methods.length === 0 || methods.length > 4 ||
+        methods.some((method) => !["GET", "HEAD", "POST", "DELETE"].includes(method)) || new Set(methods).size !== methods.length ||
+        !["owner", "public"].includes(contribution.access) || !["read", "propose"].includes(contribution.effect) ||
+        (contribution.access === "public" && contribution.effect !== "read") || typeof contribution.handle !== "function" ||
+        httpIds.has(contribution.id)) {
+      throw new ModuleRuntimeError("invalid_module_definition", `Module ${expected.id} declares an invalid HTTP contribution`);
+    }
+    const routeMethods = httpPaths.get(contribution.path) ?? new Set<string>();
+    if (methods.some((method) => routeMethods.has(method))) {
+      throw new ModuleRuntimeError("invalid_module_definition", `Module ${expected.id} declares duplicate HTTP method/path pairs`);
+    }
+    for (const method of methods) routeMethods.add(method);
+    httpPaths.set(contribution.path, routeMethods);
+    httpIds.add(contribution.id);
   }
 }
 
@@ -148,6 +205,7 @@ export class ModuleRuntime {
   private readonly hostCapabilities: readonly string[];
   private readonly capabilityPool: SharedCapabilityPool;
   private readonly workers: WorkerSupervisor;
+  private readonly moduleDrainTimeoutMs: number;
   private readonly sessions = new Map<ModuleId, ModuleSession>();
   private requested = new Set<ModuleId>();
   private plan: ResolvedModulePlan;
@@ -161,6 +219,10 @@ export class ModuleRuntime {
     this.hostCapabilities = options.hostCapabilities ?? Object.keys(options.capabilityProviders ?? {});
     this.capabilityPool = new SharedCapabilityPool(options.capabilityProviders ?? {});
     this.workers = new WorkerSupervisor(options.workerOptions);
+    this.moduleDrainTimeoutMs = options.moduleDrainTimeoutMs ?? 30_000;
+    if (!Number.isSafeInteger(this.moduleDrainTimeoutMs) || this.moduleDrainTimeoutMs < 1 || this.moduleDrainTimeoutMs > 120_000) {
+      throw new RangeError("moduleDrainTimeoutMs must be between 1 and 120000 milliseconds");
+    }
     this.plan = resolveModulePlan(options.manifests, options.enabled, this.hostCapabilities);
     this.manifests = this.plan.manifests;
     this.requested = new Set(options.enabled as ModuleId[]);
@@ -209,6 +271,15 @@ export class ModuleRuntime {
     if (capabilityConsumers.length) {
       throw new ModuleRuntimeError("module_dependency_in_use", `Cannot disable ${id} while enabled modules require its capabilities: ${capabilityConsumers.join(", ")}`);
     }
+    const optionalCapabilityConsumers = [...this.plan.enabled].filter((consumerId) => consumerId !== id &&
+      this.manifests.get(consumerId)!.optionalRequires?.some((capability) => providerCapabilities.has(capability)) &&
+      [...providerCapabilities].some((capability) => {
+        const consumer = this.sessions.get(consumerId);
+        return (consumer?.capabilityLeases.get(capability) ?? 0) > 0 || (consumer?.pendingCapabilityIds.get(capability) ?? 0) > 0;
+      }));
+    if (optionalCapabilityConsumers.length) {
+      throw new ModuleRuntimeError("module_dependency_in_use", `Cannot disable ${id} while enabled modules hold optional capabilities: ${optionalCapabilityConsumers.join(", ")}`);
+    }
     const next = resolveModulePlan([...this.manifests.values()], [...requested], this.hostCapabilityIds());
     if (next.enabled.has(id)) throw new ModuleRuntimeError("module_dependency_in_use", `Cannot disable ${id} while an enabled module depends on it`);
     const disabled = [...this.plan.enabled].filter((moduleId) => !next.enabled.has(moduleId));
@@ -228,7 +299,7 @@ export class ModuleRuntime {
     const manifest = this.requireEnabled(id);
     let session = this.sessions.get(manifest.id);
     if (!session) {
-      session = { id: manifest.id, controller: new AbortController(), leases: new Set(), workerServices: new Set(), calls: 0, pendingCapabilities: 0 };
+      session = { id: manifest.id, controller: new AbortController(), leases: new Set(), capabilityLeases: new Map(), pendingCapabilityIds: new Map(), workerServices: new Set(), calls: 0, pendingCapabilities: 0 };
       this.sessions.set(manifest.id, session);
     }
     if (!session.loaderPromise) {
@@ -279,7 +350,7 @@ export class ModuleRuntime {
     const manifest = this.manifests.get(id);
     if (!manifest || !this.plan.enabled.has(id)) return [];
     const definition = this.sessions.get(manifest.id)?.definition;
-    return definition?.actions.map(({ id: actionId, effect }) => ({ id: actionId, effect })) ?? [];
+    return definition?.actions.map((action) => ({ id: actionIdFor(manifest.id, action), effect: action.effect })) ?? [];
   }
 
   contributions(id: string): ModuleDefinition["ui"] {
@@ -289,51 +360,174 @@ export class ModuleRuntime {
     return this.sessions.get(manifest.id)?.definition?.ui ?? [];
   }
 
+  /** HTTP descriptors are visible only after an included, enabled module has been activated and validated. */
+  httpContributions(id: string): readonly HttpContributionDescriptor[] {
+    if (!isModuleId(id)) throw new ModuleRuntimeError("unknown_module_id", `Unknown module ID ${id}`);
+    const manifest = this.manifests.get(id);
+    if (!manifest || !this.plan.enabled.has(id)) return [];
+    const definition = this.sessions.get(manifest.id)?.definition;
+    return (definition?.http ?? []).map(({ handle: _handle, ...descriptor }) => ({ ...descriptor, methods: [...descriptor.methods] }));
+  }
+
+  /** Activates enabled modules on demand so action discovery never imports absent/disabled packages. */
+  async listActions(host?: ActionHostContext): Promise<ActionDescriptor[]> {
+    this.assertOpen();
+    const actions: ActionDescriptor[] = [];
+    for (const id of this.plan.order) {
+      try { await this.activate(id); } catch { continue; }
+      const definition = this.sessions.get(id)?.definition;
+      for (const action of definition?.actions ?? []) actions.push({ id: actionIdFor(id, action), module: id, effect: action.effect });
+    }
+    for (const entry of host?.actions ?? []) {
+      if (entry.module !== "core") throw new ModuleRuntimeError("invalid_host_action", "Host action registry may contain only core-owned actions");
+      invalidAction(entry.action);
+      actions.push({ id: actionIdFor("core", entry.action), module: "core", effect: entry.action.effect });
+    }
+    const ids = new Set<string>();
+    for (const action of actions) {
+      if (ids.has(action.id)) throw new ModuleRuntimeError("duplicate_action_id", `Action ${action.id} is registered more than once`);
+      ids.add(action.id);
+    }
+    return actions;
+  }
+
   async invokeAction(id: string, actionId: string, input: unknown, host: ActionHostContext): Promise<ActionResult> {
+    return this.invokeModuleAction(id, actionId, input, host, host.signal, 0);
+  }
+
+  async invokeHttp(moduleId: string, contributionId: string, request: Request, host: ActionHostContext): Promise<Response> {
     let manifest: Readonly<ModuleManifest>;
+    try {
+      manifest = this.requireEnabled(moduleId);
+      await this.activate(moduleId);
+    } catch (error) {
+      const failure = toMachineError(error);
+      return httpFailure(failure.code === "module_disabled" || failure.code === "redeployment_required" ? 404 : 503,
+        failure.code, failure.message);
+    }
+    const session = this.sessions.get(manifest.id);
+    const contribution = session?.definition?.http?.find((candidate) => candidate.id === contributionId);
+    if (!session || session.controller.signal.aborted || !contribution) return httpFailure(404, "http_contribution_not_found", "HTTP contribution is unavailable");
+    if (contribution.access === "owner" && host.access !== "owner") return httpFailure(403, "owner_access_required", "This route requires owner access");
+    if (!contribution.methods.includes(request.method as HttpContribution["methods"][number])) {
+      return httpFailure(405, "http_method_not_allowed", "HTTP method is not allowed for this contribution");
+    }
+    if (session.calls === 0) session.drain = new Promise<void>((resolve) => { session.finishDrain = resolve; });
+    session.calls += 1;
+    let deferredDrain = false;
+    let callFinished = false;
+    const finishCall = () => {
+      if (callFinished) return;
+      callFinished = true;
+      session!.calls -= 1;
+      if (session!.calls === 0) {
+        session!.finishDrain?.();
+        session!.finishDrain = undefined;
+        session!.drain = undefined;
+      }
+    };
+    const requestController = new AbortController();
+    const signal = AbortSignal.any([session.controller.signal, host.signal, request.signal, requestController.signal]);
+    const proposals: ChangeProposal[] = [];
+    try {
+      const context = this.createActionContext(manifest.id, contribution.effect, contribution.effect, host, signal, proposals, 0);
+      const response = await contribution.handle(request, context);
+      if (!(response instanceof Response)) return httpFailure(502, "invalid_http_response", "HTTP contribution returned an invalid response");
+      if (signal.aborted) return httpFailure(499, "request_cancelled", "HTTP request was cancelled");
+      if (!response.body || [204, 205, 304].includes(response.status)) {
+        await response.body?.cancel().catch(() => {});
+        return new Response(null, { status: response.status, statusText: response.statusText, headers: response.headers });
+      }
+      const reader = response.body.getReader();
+      let abortListener: (() => void) | undefined;
+      const finish = () => {
+        if (abortListener) signal.removeEventListener("abort", abortListener);
+        finishCall();
+      };
+      const trackedBody = new ReadableStream<Uint8Array>({
+        start(controller) {
+          abortListener = () => {
+            void reader.cancel(signal.reason).finally(() => {
+              try { controller.close(); } catch { /* The consumer already closed the stream. */ }
+              finish();
+            });
+          };
+          signal.addEventListener("abort", abortListener, { once: true });
+        },
+        async pull(controller) {
+          try {
+            if (signal.aborted) {
+              await reader.cancel(signal.reason).catch(() => {});
+              controller.close();
+              finish();
+              return;
+            }
+            const chunk = await reader.read();
+            if (chunk.done) {
+              controller.close();
+              finish();
+              return;
+            }
+            controller.enqueue(chunk.value);
+          } catch (error) {
+            controller.error(error);
+            finish();
+          }
+        },
+        async cancel(reason) {
+          requestController.abort(reason);
+          await reader.cancel(reason).catch(() => {});
+          finish();
+        },
+      });
+      deferredDrain = true;
+      return new Response(trackedBody, { status: response.status, statusText: response.statusText, headers: response.headers });
+    } catch (error) {
+      const failure = toMachineError(error);
+      const status = failure.code === "action_effect_denied" ? 403 : failure.code === "module_disabled" ? 503 : 500;
+      return httpFailure(status, failure.code, failure.message);
+    } finally {
+      if (!deferredDrain) finishCall();
+    }
+  }
+
+  private async invokeModuleAction(
+    id: string,
+    requestedActionId: string,
+    input: unknown,
+    host: ActionHostContext,
+    parentSignal: AbortSignal,
+    depth: number,
+    inheritedEffect?: ModuleAction["effect"],
+  ): Promise<ActionResult> {
+    const snapshot = host?.reader?.snapshot;
     let session: ModuleSession | undefined;
     let callStarted = false;
     try {
-      manifest = this.requireEnabled(id);
+      if (depth > 16) throw new ModuleRuntimeError("action_recursion_limit", "Nested action limit exceeded");
+      const manifest = this.requireEnabled(id);
       await this.activate(manifest.id);
       session = this.sessions.get(manifest.id);
       if (!session || session.controller.signal.aborted) throw new ModuleRuntimeError("module_disabled", `Module ${manifest.id} is disabled`);
       const definition = session.definition;
       if (!definition) throw new ModuleRuntimeError("module_disabled", `Module ${manifest.id} is not active`);
-      const action = definition.actions.find((candidate) => candidate.id === actionId);
-      if (!action) throw new ModuleRuntimeError("action_not_found", `Action ${manifest.id}.${actionId} is unavailable`);
+      const action = definition.actions.find((candidate) => candidate.id === requestedActionId || actionIdFor(manifest.id, candidate) === requestedActionId);
+      if (!action) throw new ModuleRuntimeError("action_not_found", `Action ${manifest.id}.${requestedActionId} is unavailable`);
+      const policy = inheritedEffect ?? action.effect;
+      if (!this.effectAllowed(policy, action.effect)) throw new ModuleRuntimeError("action_effect_denied", `Action ${actionIdFor(manifest.id, action)} exceeds its caller's effect`);
       const parsed = action.inputSchema.parse(input);
       if (session.calls === 0) session.drain = new Promise<void>((resolve) => { session!.finishDrain = resolve; });
       session.calls += 1;
       callStarted = true;
-      const actionSignal = AbortSignal.any([session.controller.signal, host.signal]);
+      const actionSignal = AbortSignal.any([session.controller.signal, host.signal, parentSignal]);
+      if (actionSignal.aborted) throw new ModuleRuntimeError("action_cancelled", "Action was cancelled");
       const proposals: ChangeProposal[] = [];
-      const actionContext: ModuleActionContext = {
-        projectId: host.projectId,
-        reader: host.reader,
-        signal: actionSignal,
-        propose: async (operations, evidence) => {
-          if (action.effect !== "propose") throw new ModuleRuntimeError("action_effect_denied", `Action ${action.id} is not allowed to propose changes`);
-          for (const operation of operations) this.assertOperationSnapshot(operation, host.reader.snapshot);
-          const proposal = await host.propose(operations, evidence);
-          if (!sameSnapshot(proposal.snapshot, host.reader.snapshot)) throw new ModuleRuntimeError("action_snapshot_mismatch", "Proposal coordinator returned a different snapshot");
-          proposals.push(proposal);
-          return proposal;
-        },
-        runJob: async <T>(request: JobRequest, signal?: AbortSignal): Promise<JobOutcome<T>> => {
-          if (action.effect === "read") return { ok: false, id: request.id, snapshot: request.snapshot, error: machineError("action_effect_denied", `Action ${action.id} is not allowed to run jobs`) };
-          if (request.module !== manifest.id || !sameSnapshot(request.snapshot, host.reader.snapshot)) {
-            return { ok: false, id: request.id, snapshot: request.snapshot, error: machineError("job_identity_mismatch", "Job module or snapshot does not match the active action") };
-          }
-          return this.runJob<T>(request, signal ?? actionSignal);
-        },
-      };
-      const result = await action.invoke(parsed, actionContext);
+      const context = this.createActionContext(manifest.id, action.effect, policy, host, actionSignal, proposals, depth);
+      const result = await action.invoke(parsed, context);
       const validated = this.validateActionResult(action, result, host.reader.snapshot);
       if (validated.ok && proposals.length > 0) return { ...validated, proposals };
       return validated;
     } catch (error) {
-      const snapshot = host?.reader?.snapshot;
       if (!snapshot) throw error;
       return actionFailure(snapshot, toMachineError(error));
     } finally {
@@ -346,6 +540,122 @@ export class ModuleRuntime {
         }
       }
     }
+  }
+
+  private async invokeCoreAction(
+    requestedActionId: string,
+    input: unknown,
+    host: ActionHostContext,
+    parentSignal: AbortSignal,
+    depth: number,
+    inheritedEffect?: ModuleAction["effect"],
+  ): Promise<ActionResult> {
+    const snapshot = host.reader.snapshot;
+    try {
+      if (depth > 16) throw new ModuleRuntimeError("action_recursion_limit", "Nested action limit exceeded");
+      if (parentSignal.aborted || host.signal.aborted) throw new ModuleRuntimeError("action_cancelled", "Action was cancelled");
+      const registrations = host.actions ?? [];
+      if (registrations.some((entry) => entry.module !== "core")) throw new ModuleRuntimeError("invalid_host_action", "Host action registry may contain only core-owned actions");
+      const registryIds = registrations.map((entry) => {
+        invalidAction(entry.action);
+        return actionIdFor("core", entry.action);
+      });
+      if (new Set(registryIds).size !== registryIds.length) throw new ModuleRuntimeError("duplicate_action_id", "Host action registry contains duplicate IDs");
+      const action = registrations.find((entry) => actionIdFor("core", entry.action) === requestedActionId)?.action;
+      if (!action) throw new ModuleRuntimeError("action_not_found", `Core action ${requestedActionId} is unavailable`);
+      invalidAction(action);
+      const policy = inheritedEffect ?? action.effect;
+      if (!this.effectAllowed(policy, action.effect)) throw new ModuleRuntimeError("action_effect_denied", `Core action ${requestedActionId} exceeds its caller's effect`);
+      const parsed = action.inputSchema.parse(input);
+      const signal = AbortSignal.any([host.signal, parentSignal]);
+      const proposals: ChangeProposal[] = [];
+      const context = this.createActionContext("core", action.effect, policy, host, signal, proposals, depth);
+      const result = await action.invoke(parsed, context);
+      const validated = this.validateActionResult(action, result, snapshot);
+      if (validated.ok && proposals.length > 0) return { ...validated, proposals };
+      return validated;
+    } catch (error) {
+      return actionFailure(snapshot, toMachineError(error));
+    }
+  }
+
+  private async invokeComposedAction(
+    actionId: string,
+    input: unknown,
+    host: ActionHostContext,
+    signal: AbortSignal,
+    depth: number,
+    inheritedEffect: ModuleAction["effect"],
+  ): Promise<ActionResult> {
+    const separator = actionId.indexOf(".");
+    if (separator < 1 || separator === actionId.length - 1) {
+      return actionFailure(host.reader.snapshot, machineError("action_not_found", `Namespaced action ${actionId} is unavailable`));
+    }
+    const owner = actionId.slice(0, separator);
+    const localActionId = actionId.slice(separator + 1);
+    if (owner === "core") return this.invokeCoreAction(actionId, input, host, signal, depth, inheritedEffect);
+    if (!isModuleId(owner)) return actionFailure(host.reader.snapshot, machineError("action_not_found", `Namespaced action ${actionId} is unavailable`));
+    return this.invokeModuleAction(owner, localActionId, input, host, signal, depth, inheritedEffect);
+  }
+
+  private effectAllowed(parent: ModuleAction["effect"], child: ModuleAction["effect"]): boolean {
+    if (parent === "read") return child === "read";
+    if (parent === "compute") return child !== "propose";
+    return true;
+  }
+
+  private createActionContext(
+    moduleId: ModuleId | "core",
+    effect: ModuleAction["effect"],
+    inheritedEffect: ModuleAction["effect"],
+    host: ActionHostContext,
+    signal: AbortSignal,
+    proposals: ChangeProposal[],
+    depth: number,
+  ): ModuleActionContext {
+    return {
+      projectId: host.projectId,
+      reader: host.reader,
+      signal,
+      invoke: async (actionId, input) => {
+        if (signal.aborted) return actionFailure(host.reader.snapshot, machineError("action_cancelled", "Action was cancelled"));
+        const result = await this.invokeComposedAction(actionId, input, host, signal, depth + 1, inheritedEffect);
+        if (result.ok && result.proposals?.length) proposals.push(...result.proposals);
+        return result;
+      },
+      listActions: () => this.listActions(host),
+      linkedReader: async (repositoryId) => {
+        if (signal.aborted) throw new ModuleRuntimeError("action_cancelled", "Action was cancelled");
+        if (!host.linkedReader) throw new ModuleRuntimeError("linked_repository_unavailable", "No linked repository reader is registered for this host");
+        const reader = await host.linkedReader(repositoryId);
+        const linked = reader?.snapshot?.repository;
+        const current = host.reader.snapshot.repository;
+        if (!reader || typeof reader.read !== "function" || typeof reader.list !== "function" ||
+            !linked || linked.repositoryId !== repositoryId || linked.ownerScope !== current.ownerScope) {
+          throw new ModuleRuntimeError("linked_repository_unavailable", "Linked repository is unavailable for this owner");
+        }
+        if (signal.aborted) throw new ModuleRuntimeError("action_cancelled", "Action was cancelled");
+        return reader;
+      },
+      propose: async (operations, evidence) => {
+        if (signal.aborted) throw new ModuleRuntimeError("action_cancelled", "Action was cancelled");
+        if (effect !== "propose" || inheritedEffect !== "propose") throw new ModuleRuntimeError("action_effect_denied", `Action ${moduleId} is not allowed to propose changes`);
+        for (const operation of operations) this.assertOperationSnapshot(operation, host.reader.snapshot);
+        const proposal = await host.propose(operations, evidence);
+        if (!sameSnapshot(proposal.snapshot, host.reader.snapshot)) throw new ModuleRuntimeError("action_snapshot_mismatch", "Proposal coordinator returned a different snapshot");
+        proposals.push(proposal);
+        return proposal;
+      },
+      runJob: async <T>(request: JobRequest, requestSignal?: AbortSignal): Promise<JobOutcome<T>> => {
+        if (effect === "read" || inheritedEffect === "read") return { ok: false, id: request.id, snapshot: request.snapshot, error: machineError("action_effect_denied", `Action ${moduleId} is not allowed to run jobs`) };
+        if (moduleId === "core" || request.module !== moduleId || !sameSnapshot(request.snapshot, host.reader.snapshot)) {
+          return { ok: false, id: request.id, snapshot: request.snapshot, error: machineError("job_identity_mismatch", "Job module or snapshot does not match the active action") };
+        }
+        const jobSignal = requestSignal ? AbortSignal.any([signal, requestSignal]) : signal;
+        if (jobSignal.aborted) return { ok: false, id: request.id, snapshot: request.snapshot, error: machineError("job_cancelled", "Job was cancelled") };
+        return this.runJob<T>(request, jobSignal);
+      },
+    };
   }
 
   async runJob<T = unknown>(request: JobRequest, signal?: AbortSignal): Promise<JobOutcome<T>> {
@@ -413,23 +723,31 @@ export class ModuleRuntime {
       throw new ModuleRuntimeError("module_disabled", `Module ${session.id} is disabled`);
     }
     const manifest = this.manifests.get(session.id)!;
-    if (!manifest.requires.includes(id) && !manifest.provides.includes(id)) {
+    const optional = manifest.optionalRequires?.includes(id) ?? false;
+    if (!manifest.requires.includes(id) && !manifest.provides.includes(id) && !optional) {
       throw new ModuleRuntimeError("undeclared_capability", `Module ${session.id} did not declare required capability ${id}`);
+    }
+    const owner = this.providerFor(id);
+    if (optional && (!owner && !this.hostCapabilities.includes(id) || owner && !this.plan.enabled.has(owner))) {
+      throw new ModuleRuntimeError("optional_capability_unavailable", `Optional capability ${id} is not enabled in this profile`);
     }
     if (session.loaderPromise && !session.definition) {
       throw new ModuleRuntimeError("module_initialization_capability_acquire", `Module ${session.id} cannot acquire capabilities while its definition is loading`);
     }
     session.pendingCapabilities += 1;
+    session.pendingCapabilityIds.set(id, (session.pendingCapabilityIds.get(id) ?? 0) + 1);
     if (session.pendingCapabilities === 1) {
       session.capabilityDrain = new Promise<void>((resolve) => { session.finishCapabilityDrain = resolve; });
     }
     let lease;
     try {
-      const owner = this.providerFor(id);
       if (owner && owner !== session.id) await this.activate(owner);
       lease = await this.capabilityPool.acquire<T>(id, session.controller.signal);
     } finally {
       session.pendingCapabilities -= 1;
+      const pendingCount = (session.pendingCapabilityIds.get(id) ?? 1) - 1;
+      if (pendingCount <= 0) session.pendingCapabilityIds.delete(id);
+      else session.pendingCapabilityIds.set(id, pendingCount);
       if (session.pendingCapabilities === 0) {
         session.finishCapabilityDrain?.();
         session.finishCapabilityDrain = undefined;
@@ -441,6 +759,9 @@ export class ModuleRuntime {
       if (released) return;
       released = true;
       session.leases.delete(release);
+      const leaseCount = (session.capabilityLeases.get(id) ?? 1) - 1;
+      if (leaseCount <= 0) session.capabilityLeases.delete(id);
+      else session.capabilityLeases.set(id, leaseCount);
       await lease.release();
     };
     if (session.controller.signal.aborted || !this.plan.enabled.has(session.id)) {
@@ -448,6 +769,7 @@ export class ModuleRuntime {
       throw new ModuleRuntimeError("module_disabled", `Module ${session.id} was disabled while acquiring ${id}`);
     }
     session.leases.add(release);
+    session.capabilityLeases.set(id, (session.capabilityLeases.get(id) ?? 0) + 1);
     return { value: lease.value, release };
   }
 
@@ -506,11 +828,19 @@ export class ModuleRuntime {
       session.controller.abort();
       const errors: unknown[] = [];
       try { await this.workers.cancelModule(id); } catch (error) { errors.push(error); }
-      if (session.loaderPromise) {
-        try { await session.loaderPromise; } catch { /* Activation failure is already reported to its caller. */ }
+      const drains: Promise<unknown>[] = [];
+      if (session.loaderPromise) drains.push(session.loaderPromise.catch(() => undefined));
+      if (session.calls > 0 && session.drain) drains.push(session.drain);
+      if (session.pendingCapabilities > 0 && session.capabilityDrain) drains.push(session.capabilityDrain);
+      if (drains.length) {
+        let timer: NodeJS.Timeout | undefined;
+        const drained = await Promise.race([
+          Promise.all(drains).then(() => true),
+          new Promise<boolean>((resolve) => { timer = setTimeout(() => resolve(false), this.moduleDrainTimeoutMs); }),
+        ]);
+        if (timer) clearTimeout(timer);
+        if (!drained) errors.push(new ModuleRuntimeError("module_drain_timeout", `Module ${id} did not drain within ${this.moduleDrainTimeoutMs} ms`, true));
       }
-      if (session.calls > 0 && session.drain) await session.drain;
-      if (session.pendingCapabilities > 0 && session.capabilityDrain) await session.capabilityDrain;
       try { await this.releaseCapabilities(session); } catch (error) { errors.push(error); }
       for (const service of [...session.workerServices]) {
         try { await service.dispose(); } catch (error) { errors.push(error); }

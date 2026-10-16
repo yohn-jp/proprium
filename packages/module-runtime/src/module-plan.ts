@@ -40,7 +40,8 @@ function copyManifest(value: ModuleManifest): Readonly<ModuleManifest> {
   if (manifest.contractVersion !== CONTRACT_VERSION) {
     throw new ModuleRuntimeError("contract_version_mismatch", `Module ${id} requires contract ${String(manifest.contractVersion)}; host provides ${CONTRACT_VERSION}`);
   }
-  if (!Array.isArray(manifest.dependencies) || !Array.isArray(manifest.provides) || !Array.isArray(manifest.requires) || !Array.isArray(manifest.statePaths)) {
+  if (!Array.isArray(manifest.dependencies) || !Array.isArray(manifest.provides) || !Array.isArray(manifest.requires) ||
+      (manifest.optionalRequires !== undefined && !Array.isArray(manifest.optionalRequires)) || !Array.isArray(manifest.statePaths)) {
     throw new ModuleRuntimeError("invalid_manifest", `Module ${id} has invalid dependency, capability, or state metadata`);
   }
   const dependencies = manifest.dependencies.map((dependency) => {
@@ -63,13 +64,20 @@ function copyManifest(value: ModuleManifest): Readonly<ModuleManifest> {
   if (manifest.statePaths.length > 64 || manifest.statePaths.some((path) => typeof path !== "string" || !path || path.startsWith("/") || path.split("/").includes("..") || path.includes("\\") || path.length > 1024)) {
     throw new ModuleRuntimeError("invalid_manifest", `Module ${id} has unsafe state paths`);
   }
+  const provides = capabilities(manifest.provides, "provided capabilities");
+  const requires = capabilities(manifest.requires, "required capabilities");
+  const optionalRequires = capabilities(manifest.optionalRequires ?? [], "optional capabilities");
+  if (optionalRequires.some((capability) => requires.includes(capability) || provides.includes(capability))) {
+    throw new ModuleRuntimeError("invalid_manifest", `Module ${id} repeats a provided, required, or optional capability`);
+  }
   return Object.freeze({
     id,
     version: manifest.version,
     contractVersion: manifest.contractVersion,
     dependencies: Object.freeze(dependencies) as unknown as ModuleId[],
-    provides: Object.freeze(capabilities(manifest.provides, "provided capabilities")) as unknown as string[],
-    requires: Object.freeze(capabilities(manifest.requires, "required capabilities")) as unknown as string[],
+    provides: Object.freeze(provides) as unknown as string[],
+    requires: Object.freeze(requires) as unknown as string[],
+    optionalRequires: Object.freeze(optionalRequires) as unknown as string[],
     serverEntry: safeEntry(manifest.serverEntry, `${id} server entry`),
     browserEntry: safeEntry(manifest.browserEntry, `${id} browser entry`),
     workerEntry: safeEntry(manifest.workerEntry, `${id} worker entry`),
