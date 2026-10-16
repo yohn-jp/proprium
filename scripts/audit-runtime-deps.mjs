@@ -4,20 +4,24 @@ import { lstat, readdir, readFile } from 'node:fs/promises';
 import path from 'node:path';
 import process from 'node:process';
 
-const deniedPackage = /(?:^|[/.+@_-])(?:onnx(?:runtime(?:-(?:node|web))?)?|transformers?|tokenizers?|gpt-tokenizer|tiktoken|sentencepiece|fastembed|embedding|reranker|nlp|wink-nlp|natural|compromise|speaker(?:-attribution)?|diarization|pyannote|speechbrain|whisper|openai|anthropic|langchain|ollama)(?:$|[/.+@_-])/i;
+const deniedCorePackage = /(?:^|[/.+@_-])(?:onnx(?:runtime(?:-(?:node|web))?)?|transformers?|tokenizers?|gpt-tokenizer|tiktoken|sentencepiece|fastembed|embedding|reranker|nlp|wink-nlp|natural|compromise|speaker(?:-attribution)?|diarization|pyannote|speechbrain|whisper|openai|anthropic|langchain|ollama)(?:$|[/.+@_-])/i;
+const deniedBuildPackage = /(?:^|[/.+@_-])(?:typescript|tsx|@types|playwright|vitest|jest|eslint|prettier|turbo|vite|esbuild)(?:$|[/.+@_-])/i;
 const packageImport = /(?:\bfrom\s*|\bimport\s*(?:\(\s*)?|\brequire\s*\(\s*)["']([^"']+)["']/g;
 
 function usage() {
-  console.error('Usage: node scripts/audit-runtime-deps.mjs --node-modules <dir> [--dist <dir> ...]');
+  console.error('Usage: node scripts/audit-runtime-deps.mjs --node-modules <dir> [--production] [--dist <dir> ...]');
   process.exit(2);
 }
 
 const args = process.argv.slice(2);
 let nodeModules;
+let production = false;
 const distDirs = [];
 for (let i = 0; i < args.length; i += 1) {
   if (args[i] === '--node-modules' && args[i + 1]) {
     nodeModules = path.resolve(args[++i]);
+  } else if (args[i] === '--production') {
+    production = true;
   } else if (args[i] === '--dist' && args[i + 1]) {
     distDirs.push(path.resolve(args[++i]));
   } else {
@@ -71,7 +75,9 @@ if (installed.size === 0) {
 
 const violations = [];
 for (const [id, name] of installed) {
-  if (deniedPackage.test(name)) violations.push(`runtime dependency ${id}`);
+  if (deniedCorePackage.test(name) || (production && deniedBuildPackage.test(name))) {
+    violations.push(`runtime dependency ${id}`);
+  }
 }
 
 async function scanDist(current) {
@@ -92,7 +98,9 @@ async function scanDist(current) {
         const name = specifier.startsWith('@')
           ? specifier.split('/').slice(0, 2).join('/')
           : specifier.split('/')[0];
-        if (deniedPackage.test(name)) violations.push(`compiled import ${specifier} in ${filePath}`);
+        if (deniedCorePackage.test(name) || (production && deniedBuildPackage.test(name))) {
+          violations.push(`compiled import ${specifier} in ${filePath}`);
+        }
       }
     }
   }
@@ -101,10 +109,10 @@ async function scanDist(current) {
 for (const distDir of distDirs) await scanDist(distDir);
 
 if (violations.length > 0) {
-  console.error('Forbidden Core runtime dependency found:');
+  console.error(production ? 'Forbidden Core production dependency found:' : 'Forbidden Core dependency found:');
   for (const violation of violations) console.error(`- ${violation}`);
   process.exit(1);
 }
 
-console.log(`Runtime dependency audit passed: ${installed.size} installed package versions scanned.`);
+console.log(`${production ? 'Production runtime' : 'Core'} dependency audit passed: ${installed.size} installed package versions scanned.`);
 console.log(`Packages: ${[...installed.keys()].sort().join(', ')}`);

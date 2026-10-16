@@ -30,11 +30,15 @@ COPY app/package.json app/package.json
 COPY scripts/audit-runtime-deps.mjs ./scripts/audit-runtime-deps.mjs
 RUN pnpm install --prod --frozen-lockfile --filter '@scriptorium/api...' --ignore-scripts \
  && mkdir -p packages/api/node_modules packages/core/node_modules \
- && node scripts/audit-runtime-deps.mjs --node-modules node_modules
-COPY --from=build /app/packages/api/dist ./packages/api/dist
-COPY --from=build /app/packages/core/dist ./packages/core/dist
-COPY --from=build /app/app/dist ./app/dist
-RUN node scripts/audit-runtime-deps.mjs --node-modules node_modules \
+ && node scripts/audit-runtime-deps.mjs --node-modules node_modules --production
+COPY --from=build /app/packages/api/dist/server.js ./packages/api/dist/server.js
+COPY --from=build /app/packages/core/dist/index.js ./packages/core/dist/index.js
+COPY --from=build /app/app/dist/index.html ./app/dist/index.html
+COPY --from=build /app/app/dist/styles.css ./app/dist/styles.css
+COPY --from=build /app/app/dist/main.js ./app/dist/main.js
+COPY --from=build /app/app/dist/api.js ./app/dist/api.js
+COPY --from=build /app/app/dist/drafts.js ./app/dist/drafts.js
+RUN node scripts/audit-runtime-deps.mjs --node-modules node_modules --production \
       --dist packages/api/dist --dist packages/core/dist --dist app/dist
 
 FROM ${NODE_IMAGE} AS runtime
@@ -49,14 +53,15 @@ RUN apk add --no-cache ca-certificates git tini \
  && chown node:node /data
 WORKDIR /app
 
+COPY LICENSE ./LICENSE
 COPY --from=runtime-deps /app/node_modules ./node_modules
 COPY --from=runtime-deps /app/packages/api/node_modules ./packages/api/node_modules
 COPY --from=runtime-deps /app/packages/core/node_modules ./packages/core/node_modules
-COPY --from=build /app/packages/api/package.json ./packages/api/package.json
-COPY --from=build /app/packages/api/dist ./packages/api/dist
-COPY --from=build /app/packages/core/package.json ./packages/core/package.json
-COPY --from=build /app/packages/core/dist ./packages/core/dist
-COPY --from=build /app/app/dist ./app/dist
+COPY --from=runtime-deps /app/packages/api/package.json ./packages/api/package.json
+COPY --from=runtime-deps /app/packages/api/dist/server.js ./packages/api/dist/server.js
+COPY --from=runtime-deps /app/packages/core/package.json ./packages/core/package.json
+COPY --from=runtime-deps /app/packages/core/dist/index.js ./packages/core/dist/index.js
+COPY --from=runtime-deps /app/app/dist ./app/dist
 
 USER node
 VOLUME ["/data"]

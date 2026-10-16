@@ -31,7 +31,7 @@ bash scripts/verify-oci.sh
 
 The probe creates a temporary random authentication token, builds the image, checks the readiness API and web root, confirms the process runs as UID 1000, and verifies `/data` is writable. It removes its temporary container on exit. Set `OCI_ENGINE`, `SCRIPTORIUM_OCI_IMAGE`, or `SCRIPTORIUM_OCI_PORT` to select the engine, image tag, or host port.
 
-The Docker build runs `scripts/audit-runtime-deps.mjs` against the production pnpm virtual store and the compiled API, Core, and web output. The audit fails on runtime packages or compiled imports associated with NLP, model providers, tokenizers, embeddings, rerankers, or speaker inference. The lockfile still contains development-only tools; the audit covers the installed production closure included in the image.
+The Docker build runs `scripts/audit-runtime-deps.mjs --production` against the production pnpm virtual store and the compiled API, Core, and web output. The audit fails on packages or compiled imports associated with NLP, model providers, tokenizers, embeddings, rerankers, or speaker inference. Production mode also fails if TypeScript, test, or bundler tools enter the image. The local `pnpm audit:core` command checks the Core dependency set and compiled outputs while allowing development tools installed for local work.
 
 ## Local verification record
 
