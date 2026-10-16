@@ -307,7 +307,7 @@ export class BrowserJournal {
       let removed = 0;
       for (const entry of entries) {
         const identity = `${entry.operation.id}\u0000${entry.operation.generation}`;
-        if (entry.repositoryKey === owner && acknowledged.has(identity) && entry.state !== "draft") {
+        if (entry.repositoryKey === owner && entry.publicationBatchId === receipt.batchId && acknowledged.has(identity) && entry.state !== "draft") {
           store.delete(entry.key);
           removed++;
         }

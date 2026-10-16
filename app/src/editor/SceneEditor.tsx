@@ -229,6 +229,7 @@ function ScratchPanel({
   const currentText = useRef(text);
   const onErrorRef = useRef(onError);
   const writeGeneration = useRef(0);
+  const dirty = useRef(false);
   currentText.current = text;
   onErrorRef.current = onError;
   const repositoryId = JSON.stringify([repository.provider, repository.ownerScope, repository.repositoryId, repository.defaultBranch]);
@@ -238,6 +239,7 @@ function ScratchPanel({
     writeGeneration.current++;
     setText("");
     setSaved(true);
+    dirty.current = false;
     if (!journal) return;
     setLoading(true);
     void journal.getScratch(repository, path).then((value) => {
@@ -249,7 +251,15 @@ function ScratchPanel({
     });
     return () => {
       loadGeneration.current++;
-      if (timer.current) clearTimeout(timer.current);
+      if (timer.current) {
+        clearTimeout(timer.current);
+        timer.current = null;
+      }
+      if (journal && dirty.current) {
+        void journal.putScratch(repository, path, currentText.current).catch((error: unknown) => {
+          onErrorRef.current(error instanceof Error ? error.message : "スクラッチを保存できませんでした。");
+        });
+      }
     };
   }, [journal, path, repositoryId]);
 
@@ -259,15 +269,20 @@ function ScratchPanel({
       return;
     }
     await journal.putScratch(repository, path, value);
-    if (writeGeneration.current === generation) setSaved(true);
+    if (writeGeneration.current === generation) {
+      dirty.current = false;
+      setSaved(true);
+    }
   }
 
   function change(value: string): void {
     setText(value);
     setSaved(false);
+    dirty.current = true;
     if (timer.current) clearTimeout(timer.current);
     const generation = ++writeGeneration.current;
     timer.current = setTimeout(() => {
+      timer.current = null;
       void flush(value, generation).catch((error: unknown) => onError(error instanceof Error ? error.message : "スクラッチを保存できませんでした。"));
     }, 350);
   }
@@ -278,6 +293,7 @@ function ScratchPanel({
       <label htmlFor="scratch">本文に含まれないメモ</label>
       <textarea id="scratch" value={text} onChange={(event) => change(event.currentTarget.value)} onBlur={() => {
         if (timer.current) clearTimeout(timer.current);
+        timer.current = null;
         const generation = ++writeGeneration.current;
         void flush(currentText.current, generation).catch((error: unknown) => onError(error instanceof Error ? error.message : "スクラッチを保存できませんでした。"));
       }} placeholder="台詞候補・没文など。本文には入りません" spellCheck={false} />

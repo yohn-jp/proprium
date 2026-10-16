@@ -827,7 +827,7 @@ export function App() {
     const current = workRef.current;
     const editor = current?.editor;
     const currentJournal = journalRef.current;
-    if (!current || !editor || editor.read.scene.id !== record.sceneId || !currentJournal) return;
+    if (!current || !editor || current.loadingScene || current.selectedSceneId !== editor.read.scene.id || !currentJournal) return;
     const accepted = window.confirm(
       `この古い記録を現在選択中の作品「${projectLabel(current.project)}」の「${editor.read.scene.title}」へ下書きとして移しますか？本文は Git に送信されません。`,
     );
@@ -935,7 +935,7 @@ export function App() {
             </ul>
           </section>
           {tree && <TreeNav tree={tree} selectedSceneId={work?.selectedSceneId ?? ""} disabled={Boolean(busy)} onSelect={(sceneId) => work && void loadScene(work.project.id, sceneId, work.tree, work.observation.snapshot.repository)} />}
-          {legacyDrafts.length > 0 && <LegacyRecoveryPanel drafts={legacyDrafts} selectedSceneId={work?.editor?.read.scene.id ?? ""} onExport={exportLegacyDrafts} onMap={(draft) => void mapLegacyDraft(draft)} />}
+          {legacyDrafts.length > 0 && <LegacyRecoveryPanel drafts={legacyDrafts} selectedSceneId={work && !work.loadingScene && work.editor?.read.scene.id === work.selectedSceneId ? work.selectedSceneId : ""} onExport={exportLegacyDrafts} onMap={(draft) => void mapLegacyDraft(draft)} />}
           {!work && recoverableEntries.length > 0 && (
             <section className="recovery-panel" aria-labelledby="recovery-title">
               <h2 id="recovery-title">ブラウザーの回復記録</h2>
@@ -1097,7 +1097,7 @@ function LegacyRecoveryPanel({
           <li key={draft.key}>
             <strong>シーン {draft.sceneId}</strong>
             <span>{draft.text.length} 字 · {new Date(draft.savedAt).toLocaleString("ja-JP")}</span>
-            {selectedSceneId === draft.sceneId && <button type="button" className="quiet-button" onClick={() => onMap(draft)}>選択中のシーンに下書きとして移す</button>}
+            {selectedSceneId && <button type="button" className="quiet-button" onClick={() => onMap(draft)}>選択中のシーンに下書きとして移す</button>}
           </li>
         ))}
       </ul>
