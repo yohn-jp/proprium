@@ -97,6 +97,47 @@ export interface ProposalStatus {
   stale: boolean;
 }
 
+export interface LiteralSearchResult {
+  id: string;
+  type: "scene" | "chapter" | "volume" | "manuscript";
+  name?: string;
+  snippet?: string;
+  filePath: string;
+  score: number;
+  field?: "body" | "name";
+  /** Match offsets are UTF-16 code units within the reported field. */
+  offset?: number;
+  length?: number;
+}
+
+export interface SceneWritingStats {
+  sceneId: string;
+  charCount: number;
+  pages400: number;
+  status?: string;
+}
+
+export interface ChapterWritingStats {
+  chapterId: string;
+  charCount: number;
+  pages400: number;
+  scenes: SceneWritingStats[];
+}
+
+export interface VolumeWritingStats {
+  volumeId: string;
+  charCount: number;
+  pages400: number;
+  chapters: ChapterWritingStats[];
+}
+
+export interface WritingStats {
+  totalCharCount: number;
+  totalPages400: number;
+  volumes: VolumeWritingStats[];
+  sceneById: Record<string, SceneWritingStats>;
+}
+
 export interface SyncStatus {
   branch: string;
   head: string;
@@ -145,6 +186,7 @@ interface SceneRecord {
 interface FrontmatterDocument {
   prefix: string;
   body: string;
+  data: Record<string, unknown>;
 }
 
 interface OperationMetadata {
@@ -215,7 +257,7 @@ function safeRelativePath(value: string): string {
 
 function parseMarkdownDocument(document: string): FrontmatterDocument {
   const opening = /^(---)[ \t]*\r?\n/.exec(document);
-  if (!opening) return { prefix: "", body: document };
+  if (!opening) return { prefix: "", body: document, data: {} };
 
   const delimiter = /^---[ \t]*\r?$/gm;
   delimiter.lastIndex = opening[0].length;
@@ -223,11 +265,14 @@ function parseMarkdownDocument(document: string): FrontmatterDocument {
   if (!closing) throw coreError(422, "invalid_frontmatter", "The scene Markdown has unclosed YAML frontmatter");
 
   const frontmatter = document.slice(opening[0].length, closing.index);
+  let data: Record<string, unknown> = {};
   try {
     const parsed = YAML.parse(frontmatter);
-    if (parsed !== null && asRecord(parsed) === null) {
+    const record = asRecord(parsed);
+    if (parsed !== null && record === null) {
       throw new Error("Frontmatter must be a YAML mapping");
     }
+    data = record ?? {};
   } catch (error) {
     const message = error instanceof Error ? error.message : "Invalid YAML frontmatter";
     throw coreError(422, "invalid_frontmatter", `The scene Markdown has invalid YAML frontmatter: ${message}`);
@@ -237,7 +282,28 @@ function parseMarkdownDocument(document: string): FrontmatterDocument {
   if (document.startsWith("\r\n", bodyStart)) bodyStart += 2;
   else if (document.startsWith("\n", bodyStart)) bodyStart += 1;
   const prefix = document.slice(0, bodyStart);
-  return { prefix, body: document.slice(bodyStart) };
+  return { prefix, body: document.slice(bodyStart), data };
+}
+
+const WRITING_PAGE_CHARS = 400;
+
+function pages400(charCount: number): number {
+  return charCount <= 0 ? 0 : Math.ceil(charCount / WRITING_PAGE_CHARS);
+}
+
+function findLiteralInsensitive(text: string, query: string): { offset: number; length: number } | null {
+  if (!query) return null;
+  const escaped = query.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+  const match = new RegExp(escaped, "iu").exec(text);
+  return match ? { offset: match.index, length: match[0].length } : null;
+}
+
+function searchSnippet(text: string, offset: number, length: number): string {
+  const start = Math.max(0, offset - 48);
+  const end = Math.min(text.length, offset + length + 48);
+  const prefix = start > 0 ? "…" : "";
+  const suffix = end < text.length ? "…" : "";
+  return `${prefix}${text.slice(start, end).replace(/[\r\n\t]+/g, " ")}${suffix}`;
 }
 
 function revisionFor(yamlText: string, markdownText: string): string {
@@ -1295,6 +1361,232 @@ export class CoreStore implements MutationCoordinator {
         scene: { id: sceneId, title: titleOf(found.data, sceneId), text: parseMarkdownDocument(content).body, revision: revisionFor(found.text, content) },
         document: { path: manuscriptPath, content, revision: documentFile?.revision ?? null },
         metadata: { path: found.path, content: found.text, revision: revisionForBytes(found.text) },
+      };
+    });
+  }
+
+  async searchSnapshot(
+    projectId: string,
+    query: string,
+    limit = 20,
+    view: "remote" | "checkpoint" = "remote",
+    pinned?: SnapshotId | string,
+  ): Promise<{ snapshot: SnapshotId; results: LiteralSearchResult[] }> {
+    if (typeof query !== "string" || query.length > 512) {
+      throw coreError(400, "invalid_search_query", "Search query must be a string of at most 512 characters");
+    }
+    if (!Number.isFinite(limit) || limit < 1) throw coreError(400, "invalid_search_limit", "Search limit must be a positive number");
+    if (!query) return this.withProjectLock(projectId, async () => {
+      const selected = await this.selectedSnapshotUnlocked(projectId, view, pinned);
+      return { snapshot: selected.snapshot, results: [] };
+    });
+    const resultLimit = Math.min(100, Math.floor(limit));
+    return this.withProjectLock(projectId, async () => {
+      const selected = await this.selectedSnapshotUnlocked(projectId, view, pinned);
+      const files = await this.snapshotFiles(selected.root, selected.commit, "plot/volumes");
+      const resultsByEntity = new Map<string, LiteralSearchResult>();
+      const sceneIds = new Set<string>();
+      const add = (result: LiteralSearchResult): void => {
+        const key = `${result.type}:${result.id}`;
+        const previous = resultsByEntity.get(key);
+        if (!previous || result.score > previous.score || (result.score === previous.score && (result.offset ?? Infinity) < (previous.offset ?? Infinity))) {
+          resultsByEntity.set(key, result);
+        }
+      };
+      const titleHit = (input: { id: string; type: "scene" | "chapter" | "volume"; title: string; filePath: string }): void => {
+        const match = findLiteralInsensitive(input.title, query);
+        if (!match) return;
+        add({
+          id: input.id,
+          type: input.type,
+          name: input.title,
+          snippet: searchSnippet(input.title, match.offset, match.length),
+          filePath: input.filePath,
+          score: 0.5,
+          field: "name",
+          offset: match.offset,
+          length: match.length,
+        });
+      };
+
+      const volumeDirectories = [...new Set(files.flatMap((file) => {
+        const match = /^plot\/volumes\/([^/]+)\//.exec(file);
+        return match?.[1] ? [match[1]] : [];
+      }))];
+      for (const volumeDirectory of volumeDirectories) {
+        const volumePath = `plot/volumes/${volumeDirectory}/volume.yaml`;
+        const volume = (await this.parseSnapshotYaml(selected.root, selected.commit, volumePath))?.data ?? { id: volumeDirectory };
+        const volumeId = typeof volume.id === "string" ? volume.id : volumeDirectory;
+        titleHit({ id: volumeId, type: "volume", title: titleOf(volume, volumeId), filePath: volumePath });
+        const chapterPrefix = `plot/volumes/${volumeDirectory}/chapters/`;
+        const chapterDirectories = [...new Set(files.flatMap((file) => {
+          if (!file.startsWith(chapterPrefix)) return [];
+          const match = /^([^/]+)\//.exec(file.slice(chapterPrefix.length));
+          return match?.[1] ? [match[1]] : [];
+        }))];
+        for (const chapterDirectory of chapterDirectories) {
+          const chapterPath = `${chapterPrefix}${chapterDirectory}/chapter.yaml`;
+          const chapter = (await this.parseSnapshotYaml(selected.root, selected.commit, chapterPath))?.data ?? { id: chapterDirectory };
+          const chapterId = typeof chapter.id === "string" ? chapter.id : chapterDirectory;
+          titleHit({ id: chapterId, type: "chapter", title: titleOf(chapter, chapterId), filePath: chapterPath });
+          const scenePrefix = `${chapterPrefix}${chapterDirectory}/scenes/`;
+          for (const scenePath of files.filter((file) => file.startsWith(scenePrefix) && file.endsWith(".yaml"))) {
+            const parsed = await this.parseSnapshotYaml(selected.root, selected.commit, scenePath);
+            if (!parsed) continue;
+            const sceneId = typeof parsed.data.id === "string" ? parsed.data.id : path.posix.basename(scenePath, ".yaml");
+            if (sceneIds.has(sceneId)) throw coreError(409, "duplicate_scene_id", "The project contains duplicate scene ids");
+            sceneIds.add(sceneId);
+            const title = titleOf(parsed.data, sceneId);
+            titleHit({ id: sceneId, type: "scene", title, filePath: scenePath });
+            const parts = scenePath.split("/");
+            const manuscriptPath = typeof parsed.data.manuscript === "string"
+              ? safeRelativePath(parsed.data.manuscript).split(path.sep).join("/")
+              : `manuscript/${parts[2]}/${parts[4]}/${sceneId}.md`;
+            assertProjectPath(manuscriptPath);
+            const document = await this.snapshotFile(selected.root, selected.commit, manuscriptPath);
+            if (!document) continue;
+            const body = parseMarkdownDocument(document.content).body;
+            const match = findLiteralInsensitive(body, query);
+            if (!match) continue;
+            add({
+              id: sceneId,
+              type: "scene",
+              name: title,
+              snippet: searchSnippet(body, match.offset, match.length),
+              filePath: manuscriptPath,
+              score: 1,
+              field: "body",
+              offset: match.offset,
+              length: match.length,
+            });
+          }
+        }
+      }
+
+      for (const scratchPath of await this.snapshotFiles(selected.root, selected.commit, "meta/scratch")) {
+        if (!scratchPath.toLowerCase().endsWith(".md")) continue;
+        const document = await this.snapshotFile(selected.root, selected.commit, scratchPath);
+        if (!document) continue;
+        const body = parseMarkdownDocument(document.content).body;
+        const match = findLiteralInsensitive(body, query);
+        if (!match) continue;
+        const name = path.posix.basename(scratchPath, ".md");
+        add({
+          id: `scratch:${scratchPath}`,
+          type: "manuscript",
+          name,
+          snippet: searchSnippet(body, match.offset, match.length),
+          filePath: scratchPath,
+          score: 1,
+          field: "body",
+          offset: match.offset,
+          length: match.length,
+        });
+      }
+
+      const results = [...resultsByEntity.values()]
+        .sort((a, b) => b.score - a.score || a.filePath.localeCompare(b.filePath) || (a.offset ?? 0) - (b.offset ?? 0))
+        .slice(0, resultLimit);
+      return { snapshot: selected.snapshot, results };
+    });
+  }
+
+  async writingStatsSnapshot(
+    projectId: string,
+    view: "remote" | "checkpoint" = "remote",
+    pinned?: SnapshotId | string,
+  ): Promise<{ snapshot: SnapshotId; stats: WritingStats }> {
+    return this.withProjectLock(projectId, async () => {
+      const selected = await this.selectedSnapshotUnlocked(projectId, view, pinned);
+      const files = await this.snapshotFiles(selected.root, selected.commit, "plot/volumes");
+      const sceneById: Record<string, SceneWritingStats> = Object.create(null) as Record<string, SceneWritingStats>;
+      let totalCharCount = 0;
+      const volumeDirectories = [...new Set(files.flatMap((file) => {
+        const match = /^plot\/volumes\/([^/]+)\//.exec(file);
+        return match?.[1] ? [match[1]] : [];
+      }))];
+      const orderOf = (data: Record<string, unknown>): number => typeof data.order === "number" && Number.isFinite(data.order) ? data.order : 0;
+      const volumes: VolumeWritingStats[] = [];
+      const seenIds = new Set<string>();
+      const orderedVolumes: Array<{ directory: string; id: string; data: Record<string, unknown>; title: string }> = [];
+      for (const directory of volumeDirectories) {
+        const volumePath = `plot/volumes/${directory}/volume.yaml`;
+        const data = (await this.parseSnapshotYaml(selected.root, selected.commit, volumePath))?.data ?? { id: directory };
+        const id = typeof data.id === "string" ? data.id : directory;
+        orderedVolumes.push({ directory, id, data, title: titleOf(data, id) });
+      }
+      orderedVolumes.sort((a, b) => orderOf(a.data) - orderOf(b.data) || a.title.localeCompare(b.title) || a.id.localeCompare(b.id));
+      for (const orderedVolume of orderedVolumes) {
+        const volumeDirectory = orderedVolume.directory;
+        const volumePath = `plot/volumes/${volumeDirectory}/volume.yaml`;
+        const volumeId = orderedVolume.id;
+        const chapterPrefix = `plot/volumes/${volumeDirectory}/chapters/`;
+        const chapterDirectories = [...new Set(files.flatMap((file) => {
+          if (!file.startsWith(chapterPrefix)) return [];
+          const match = /^([^/]+)\//.exec(file.slice(chapterPrefix.length));
+          return match?.[1] ? [match[1]] : [];
+        }))];
+        const chapters: ChapterWritingStats[] = [];
+        let volumeCharCount = 0;
+        const orderedChapters: Array<{ directory: string; id: string; data: Record<string, unknown>; title: string }> = [];
+        for (const directory of chapterDirectories) {
+          const chapterPath = `${chapterPrefix}${directory}/chapter.yaml`;
+          const data = (await this.parseSnapshotYaml(selected.root, selected.commit, chapterPath))?.data ?? { id: directory };
+          const id = typeof data.id === "string" ? data.id : directory;
+          orderedChapters.push({ directory, id, data, title: titleOf(data, id) });
+        }
+        orderedChapters.sort((a, b) => orderOf(a.data) - orderOf(b.data) || a.title.localeCompare(b.title) || a.id.localeCompare(b.id));
+        for (const chapter of orderedChapters) {
+          const chapterDirectory = `${chapterPrefix}${chapter.directory}`;
+          const scenePrefix = `${chapterDirectory}/scenes/`;
+          const orderedScenes: Array<{ path: string; id: string; data: Record<string, unknown>; title: string }> = [];
+          for (const scenePath of files.filter((file) => file.startsWith(scenePrefix) && file.endsWith(".yaml"))) {
+            const parsed = await this.parseSnapshotYaml(selected.root, selected.commit, scenePath);
+            if (!parsed) continue;
+            const id = typeof parsed.data.id === "string" ? parsed.data.id : path.posix.basename(scenePath, ".yaml");
+            orderedScenes.push({ path: scenePath, id, data: parsed.data, title: titleOf(parsed.data, id) });
+          }
+          orderedScenes.sort((a, b) => orderOf(a.data) - orderOf(b.data) || a.title.localeCompare(b.title) || a.id.localeCompare(b.id));
+          const scenes: SceneWritingStats[] = [];
+          let chapterCharCount = 0;
+          for (const scene of orderedScenes) {
+            if (seenIds.has(scene.id)) throw coreError(409, "duplicate_scene_id", "The project contains duplicate scene ids");
+            seenIds.add(scene.id);
+            const parts = scene.path.split("/");
+            const manuscriptPath = typeof scene.data.manuscript === "string"
+              ? safeRelativePath(scene.data.manuscript).split(path.sep).join("/")
+              : `manuscript/${parts[2]}/${parts[4]}/${scene.id}.md`;
+            assertProjectPath(manuscriptPath);
+            const documentFile = await this.snapshotFile(selected.root, selected.commit, manuscriptPath);
+            const document = parseMarkdownDocument(documentFile?.content ?? "");
+            const charCount = document.body.length;
+            const rawStatus = scene.data.status;
+            const status = typeof rawStatus === "string" && rawStatus ? rawStatus :
+              typeof document.data.status === "string" ? document.data.status : undefined;
+            const stat: SceneWritingStats = {
+              sceneId: scene.id,
+              charCount,
+              pages400: pages400(charCount),
+              ...(status !== undefined ? { status } : {}),
+            };
+            scenes.push(stat);
+            sceneById[scene.id] = stat;
+            chapterCharCount += charCount;
+          }
+          chapters.push({
+            chapterId: chapter.id,
+            charCount: chapterCharCount,
+            pages400: pages400(chapterCharCount),
+            scenes,
+          });
+          volumeCharCount += chapterCharCount;
+        }
+        volumes.push({ volumeId, charCount: volumeCharCount, pages400: pages400(volumeCharCount), chapters });
+        totalCharCount += volumeCharCount;
+      }
+      return {
+        snapshot: selected.snapshot,
+        stats: { totalCharCount, totalPages400: pages400(totalCharCount), volumes, sceneById },
       };
     });
   }

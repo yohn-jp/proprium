@@ -469,3 +469,72 @@ test("requires a GitHub HTTPS URL in production mode", async () => {
     await fs.rm(tempDir, { recursive: true, force: true });
   }
 });
+
+test("search and writing statistics read one pinned remote snapshot", async () => {
+  const { tempDir, remote, seed } = await makeRemote();
+  const sceneOnePath = path.join(seed, "manuscript/vol-1/ch-1/scene-1.md");
+  const sceneTwoYamlPath = path.join(seed, "plot/volumes/vol-1/chapters/ch-1/scenes/scene-2.yaml");
+  const sceneTwoMarkdownPath = path.join(seed, "manuscript/vol-1/ch-1/scene-2.md");
+  const scratchPath = path.join(seed, "meta/scratch/side-note.md");
+  try {
+    const firstBody = `${"a".repeat(10)}Needle${"b".repeat(384)}`;
+    assert.equal(firstBody.length, 400);
+    await fs.writeFile(sceneOnePath, `---\ntitle: Draft\nstatus: done\n---\n${firstBody}`, "utf8");
+    await writeYaml(sceneTwoYamlPath, {
+      id: "scene-2",
+      type: "scene",
+      title: "Second Scene",
+      volume: "vol-1",
+      chapter: "ch-1",
+      manuscript: "manuscript/vol-1/ch-1/scene-2.md",
+    });
+    await fs.writeFile(sceneTwoMarkdownPath, "---\nstatus: drafting\n---\nx", "utf8");
+    await fs.mkdir(path.dirname(scratchPath), { recursive: true });
+    await fs.writeFile(scratchPath, "---\ntitle: Scratch\n---\nA scratchword [literal]+ is here.\n", "utf8");
+    await runGit(seed, "add", ".");
+    await runGit(seed, "commit", "-m", "Add searchable manuscript and scratch content");
+    await runGit(seed, "push", "origin", "main");
+
+    const store = new CoreStore({ dataDir: path.join(tempDir, "state"), allowLocalRemotes: true });
+    const project = await store.registerProject({ url: remote });
+    const originalSnapshot = (await store.observe(project.id)).snapshot;
+    const found = await store.searchSnapshot(project.id, "needle", 20, "remote", originalSnapshot);
+    assert.equal(found.snapshot.remoteCommit, originalSnapshot.remoteCommit);
+    assert.deepEqual(found.results.map(({ id, field, offset, length }) => ({ id, field, offset, length })), [
+      { id: "scene-1", field: "body", offset: 10, length: 6 },
+    ]);
+    const scratch = await store.searchSnapshot(project.id, "SCRATCHWORD", 20, "remote", originalSnapshot);
+    assert.equal(scratch.results[0]?.id, "scratch:meta/scratch/side-note.md");
+    assert.equal(scratch.results[0]?.filePath, "meta/scratch/side-note.md");
+    const punctuation = await store.searchSnapshot(project.id, "[literal]+", 20, "remote", originalSnapshot);
+    assert.equal(punctuation.results[0]?.filePath, "meta/scratch/side-note.md");
+    const title = await store.searchSnapshot(project.id, "scene one", 20, "remote", originalSnapshot);
+    assert.equal(title.results[0]?.id, "scene-1");
+    assert.equal(title.results[0]?.field, "name");
+
+    const stats = await store.writingStatsSnapshot(project.id, "remote", originalSnapshot);
+    assert.equal(stats.snapshot.remoteCommit, originalSnapshot.remoteCommit);
+    assert.equal(stats.stats.totalCharCount, 401);
+    assert.equal(stats.stats.totalPages400, 2);
+    assert.equal(stats.stats.volumes[0]?.chapters[0]?.scenes[0]?.sceneId, "scene-1");
+    assert.equal(stats.stats.sceneById["scene-1"]?.charCount, 400);
+    assert.equal(stats.stats.sceneById["scene-1"]?.status, "done");
+    assert.equal(stats.stats.sceneById["scene-2"]?.charCount, 1);
+    assert.equal(stats.stats.sceneById["scene-2"]?.status, "drafting");
+
+    await fs.writeFile(sceneOnePath, "Updated without the old literal.\n", "utf8");
+    await runGit(seed, "add", sceneOnePath);
+    await runGit(seed, "commit", "-m", "Change manuscript after pinned snapshot");
+    await runGit(seed, "push", "origin", "main");
+    const latest = await store.searchSnapshot(project.id, "needle");
+    assert.equal(latest.results.length, 0);
+    const pinnedAgain = await store.searchSnapshot(project.id, "needle", 20, "remote", originalSnapshot);
+    assert.equal(pinnedAgain.results[0]?.offset, 10);
+    const latestStats = await store.writingStatsSnapshot(project.id);
+    assert.equal(latestStats.stats.totalCharCount, "Updated without the old literal.\n".length + 1);
+    const pinnedStats = await store.writingStatsSnapshot(project.id, "remote", originalSnapshot);
+    assert.equal(pinnedStats.stats.totalCharCount, 401);
+  } finally {
+    await fs.rm(tempDir, { recursive: true, force: true });
+  }
+});
