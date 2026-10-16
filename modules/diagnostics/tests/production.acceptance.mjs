@@ -258,6 +258,63 @@ test("P06 public actions survive Core-approved publish, data-root deletion, and 
     for (const sentence of nlp.sentences) assert.equal(nlp.text.slice(sentence.start, sentence.end), sentence.text);
     assert.deepEqual(runtime.workerSupervisor.activeWorkerPids, [], "the actual NLP child exits after its final tokenizer lease");
 
+    const cachedTokenizerModels = process.env.SCRIPTORIUM_TOKENIZER_MODELS_DIR ?? "/tmp/scriptorium-model-runtime-edc033c/home/.arcadia/models";
+    await stat(join(cachedTokenizerModels, "Xenova/multilingual-e5-small/761b726dd34fb83930e26aab4e9ac3899aa1fa78/tokenizer.json"));
+    const originalHome = process.env.HOME;
+    const originalBackend = process.env.ARCADIA_TOKENIZER_BACKEND;
+    const originalTokenizerModel = process.env.ARCADIA_TOKENIZER_MODEL;
+    const originalLlmModel = process.env.ARCADIA_LLM_MODEL;
+    const restoreTokenizerEnvironment = () => {
+      if (originalHome === undefined) delete process.env.HOME;
+      else process.env.HOME = originalHome;
+      if (originalBackend === undefined) delete process.env.ARCADIA_TOKENIZER_BACKEND;
+      else process.env.ARCADIA_TOKENIZER_BACKEND = originalBackend;
+      if (originalTokenizerModel === undefined) delete process.env.ARCADIA_TOKENIZER_MODEL;
+      else process.env.ARCADIA_TOKENIZER_MODEL = originalTokenizerModel;
+      if (originalLlmModel === undefined) delete process.env.ARCADIA_LLM_MODEL;
+      else process.env.ARCADIA_LLM_MODEL = originalLlmModel;
+    };
+    try {
+      process.env.HOME = dirname(dirname(cachedTokenizerModels));
+      delete process.env.ARCADIA_TOKENIZER_BACKEND;
+      process.env.ARCADIA_TOKENIZER_MODEL = "Xenova/multilingual-e5-small";
+      delete process.env.ARCADIA_LLM_MODEL;
+      const exactTokenResult = await runtime.invokeAction("nlp", "nlp.countTokens", {
+        texts: ["駅で別れた。", "A quiet station.", "星野は遺跡へ向かう。"],
+        modelId: "Xenova/multilingual-e5-small",
+      }, host);
+      const exactTokens = actionData(exactTokenResult, "nlp.countTokens exact E5", reader);
+      assert.deepEqual(exactTokens.counts, [8, 6, 11], "the supervised worker uses the cached E5 AutoTokenizer output");
+      assert.deepEqual(exactTokens.snapshot, reader.snapshot);
+      assert.deepEqual(exactTokens.counter, {
+        modelId: "Xenova/multilingual-e5-small",
+        exact: true,
+        engine: "huggingface-transformers",
+        engineVersion: "3.8.1",
+      });
+      assert.deepEqual(runtime.workerSupervisor.activeWorkerPids, [], "the actual tokenizer child exits after its lease is released");
+
+      const emptyTokenizerHome = join(root, "empty-tokenizer-home");
+      await mkdir(emptyTokenizerHome, { recursive: true });
+      process.env.HOME = emptyTokenizerHome;
+      const fallbackTokenResult = await runtime.invokeAction("nlp", "nlp.countTokens", {
+        texts: ["駅abc", "abcdef", ""], modelId: "scriptorium-p06/no-such-tokenizer",
+      }, host);
+      const fallbackTokens = actionData(fallbackTokenResult, "nlp.countTokens unavailable fallback", reader);
+      assert.deepEqual(fallbackTokens.counts, [2, 2, 0], "an unavailable local tokenizer uses the source CJK/three-character formula");
+      assert.deepEqual(fallbackTokens.counter, {
+        modelId: "approx",
+        exact: false,
+        engine: "source-approx",
+        engineVersion: "source-approx-v1",
+        requestedModelId: "scriptorium-p06/no-such-tokenizer",
+        fallbackReason: "tokenizer_unavailable",
+      });
+      assert.deepEqual(runtime.workerSupervisor.activeWorkerPids, [], "the unavailable-tokenizer child exits after its lease is released");
+    } finally {
+      restoreTokenizerEnvironment();
+    }
+
     const dictionaryResult = await runtime.invokeAction("nlp", "nlp.dictionary", { term: "強い" }, host);
     const dictionary = actionData(dictionaryResult, "nlp.dictionary", reader);
     assert.deepEqual(dictionary.alternatives, ["力強い"]);
@@ -418,6 +475,11 @@ test("P06 public actions survive Core-approved publish, data-root deletion, and 
     const publication = await approveCheckpointAndPublish(store, project.id, proposals);
     assert.equal(publication.acknowledged.length, 6);
     assert.deepEqual(runtime.workerSupervisor.activeWorkerPids, [], "all NLP and diagnostics worker processes have exited before data-root replacement");
+    await runtime.disable("speaker");
+    await runtime.disable("story");
+    await runtime.disable("diagnostics");
+    assert.equal(runtime.status("nlp").availability, "disabled", "the final NLP consumer disable releases its owned child service");
+    assert.deepEqual(runtime.workerSupervisor.activeWorkerPids, [], "disabling the final NLP consumer leaves no tokenizer child process");
     await runtime.shutdown();
     runtime = undefined;
 

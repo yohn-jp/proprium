@@ -1,10 +1,11 @@
 import { randomUUID } from "node:crypto";
 import type { ActionResult, ChangeOperation, JobRequest, ModuleAction, ModuleContext, ModuleDefinition, ModuleManifest, ModuleActionContext, SnapshotId, ValueSchema } from "@scriptorium/contracts";
 import type { WorkerService } from "@scriptorium/contracts";
-import { NLP_TOKENIZER_CAPABILITY, NLP_TOKENIZER_CAPABILITY_VERSION, NLP_MODEL_ID, NLP_MODEL_VERSION, NLP_MODULE_VERSION, type NlpTokenizerCapability } from "./contracts.js";
+import { NLP_TOKENIZER_CAPABILITY, NLP_TOKENIZER_CAPABILITY_VERSION, NLP_TOKEN_COUNTER_CAPABILITY, NLP_TOKEN_COUNTER_CAPABILITY_VERSION, NLP_TOKENIZER_ENGINE_VERSION, NLP_APPROX_TOKEN_COUNTER_VERSION, NLP_MODEL_ID, NLP_MODEL_VERSION, NLP_MODULE_VERSION, type NlpTokenCountBatch, type NlpTokenCounterCapability, type NlpTokenizerCapability } from "./contracts.js";
 import { aggregateCandidateTerms, collectEntityTexts, type CandidateEntityInput } from "./candidateDiscovery.js";
 import { readCanonicalSnapshotEntities } from "./canonicalSnapshot.js";
 import { expandSearchTerms, suggestTermVariants } from "./termVariants.js";
+import { isSafeHuggingFaceModelId, resolveTokenCountConfiguration, validateTokenCountTexts } from "./tokenCount.js";
 import type { MorphologyAnalysis } from "./tokenizer/types.js";
 import YAML from "yaml";
 
@@ -21,11 +22,13 @@ export type { SentenceOffset } from "./sentenceSplit.js";
 export type { CandidateTerm } from "./candidateDiscovery.js";
 export type { MorphologyAnalysis, MorphToken, SentenceSpan, Token, Tokenizer } from "./tokenizer/types.js";
 export type { NlpTokenizerCapability } from "./contracts.js";
-export { NLP_TOKENIZER_CAPABILITY, NLP_TOKENIZER_CAPABILITY_VERSION, NLP_MODEL_ID, NLP_MODEL_VERSION, NLP_MODULE_VERSION } from "./contracts.js";
+export { NLP_TOKENIZER_CAPABILITY, NLP_TOKENIZER_CAPABILITY_VERSION, NLP_TOKEN_COUNTER_CAPABILITY, NLP_TOKEN_COUNTER_CAPABILITY_VERSION, NLP_TOKENIZER_ENGINE_VERSION, NLP_APPROX_TOKEN_COUNTER_VERSION, NLP_MODEL_ID, NLP_MODEL_VERSION, NLP_MODULE_VERSION } from "./contracts.js";
+export type { NlpTokenCountBatch, NlpTokenCounterCapability, NlpTokenCounterIdentity } from "./contracts.js";
+export { isSafeHuggingFaceModelId, MAX_TOKEN_COUNT_BATCH_BYTES, MAX_TOKEN_COUNT_TEXT_BYTES, MAX_TOKEN_COUNT_TEXTS, sourceApproxTokenCount } from "./tokenCount.js";
 
 const manifest: ModuleManifest = {
   id: "nlp", version: NLP_MODULE_VERSION, contractVersion: 1,
-  dependencies: [], provides: [NLP_TOKENIZER_CAPABILITY], requires: [],
+  dependencies: [], provides: [NLP_TOKENIZER_CAPABILITY, NLP_TOKEN_COUNTER_CAPABILITY], requires: [],
   serverEntry: "./dist/index.js", browserEntry: "./dist/browser.js", workerEntry: "./dist/worker.js",
   statePaths: ["meta/scriptorium/modules/nlp"], locality: "local",
 };
@@ -54,6 +57,15 @@ function textListInput(value: unknown): { text: string[]; knownTerms: string[] }
   if (!Array.isArray(knownTerms) || knownTerms.some((item) => typeof item !== "string" || item.length > 256)) throw new TypeError("knownTerms must be a string array");
   return { text: input.text as string[], knownTerms: knownTerms as string[] };
 }
+function tokenCountInput(value: unknown): { texts: string[]; modelId?: string } {
+  const input = record(value, "input");
+  const texts = validateTokenCountTexts(input.texts);
+  if (input.modelId === undefined) return { texts };
+  if (typeof input.modelId !== "string" || !isSafeHuggingFaceModelId(input.modelId.trim())) {
+    throw new TypeError("modelId must be a safe Hugging Face model identifier of at most 128 characters");
+  }
+  return { texts, modelId: input.modelId.trim() };
+}
 function emptyInput(value: unknown): ObjectValue { return record(value, "input"); }
 function objectOutput(value: unknown): unknown {
   if (!value || typeof value !== "object" || Array.isArray(value)) throw new TypeError("action output must be an object");
@@ -72,7 +84,22 @@ async function withTokenizer<T>(moduleContext: ModuleContext, signal: AbortSigna
   finally { await lease.release(); }
 }
 
-function workerCapability(worker: WorkerService): NlpTokenizerCapability & { dispose(): Promise<void> } {
+async function withTokenCounter<T>(moduleContext: ModuleContext, signal: AbortSignal, fn: (counter: NlpTokenCounterCapability) => Promise<T>): Promise<T> {
+  if (signal.aborted) throw Object.assign(new Error("NLP token-count action was cancelled"), { code: "job_cancelled" });
+  const lease = await moduleContext.acquireCapability<NlpTokenCounterCapability>(NLP_TOKEN_COUNTER_CAPABILITY);
+  try { return await fn(lease.value); }
+  finally { await lease.release(); }
+}
+
+interface TokenCounterWorkerInput {
+  texts: string[];
+  backend: "auto" | "approx";
+  modelId?: string;
+  modelsDir: string;
+  fallbackReason?: "backend_approx" | "model_unconfigured" | "tokenizer_unavailable";
+}
+
+function workerCapability(worker: WorkerService): NlpTokenizerCapability & NlpTokenCounterCapability & { dispose(): Promise<void> } {
   return {
     model: { id: NLP_MODEL_ID, version: NLP_MODEL_VERSION },
     async analyze(text, snapshot, signal) {
@@ -82,6 +109,25 @@ function workerCapability(worker: WorkerService): NlpTokenizerCapability & { dis
         deadline: Date.now() + 120_000, input: { text },
       };
       const outcome = await worker.request<MorphologyAnalysis>(request, signal);
+      if (!outcome.ok) throw Object.assign(new Error(outcome.error.message), outcome.error);
+      return outcome.result.output;
+    },
+    async countMany(texts, snapshot, signal, options) {
+      if (signal.aborted) throw Object.assign(new Error("NLP token-count action was cancelled"), { code: "job_cancelled" });
+      const inputTexts = validateTokenCountTexts(texts);
+      const configuration = resolveTokenCountConfiguration(process.env, options);
+      const input: TokenCounterWorkerInput = {
+        ...configuration,
+        texts: inputTexts,
+      };
+      const model = configuration.modelId ?? "approx";
+      const modelVersion = configuration.modelId ? NLP_TOKENIZER_ENGINE_VERSION : NLP_APPROX_TOKEN_COUNTER_VERSION;
+      const request: JobRequest<TokenCounterWorkerInput> = {
+        id: randomUUID(), module: "nlp", task: "nlp.countTokens", snapshot,
+        model, modelVersion, moduleVersion: NLP_MODULE_VERSION,
+        deadline: Date.now() + 120_000, input,
+      };
+      const outcome = await worker.request<NlpTokenCountBatch>(request, signal);
       if (!outcome.ok) throw Object.assign(new Error(outcome.error.message), outcome.error);
       return outcome.result.output;
     },
@@ -153,6 +199,16 @@ function makeActions(moduleContext: ModuleContext): ModuleAction[] {
       const { text } = value as { text: string };
       const analysis = await withTokenizer(moduleContext, context.signal, (tokenizer) => tokenizer.analyze(text, context.reader.snapshot, context.signal));
       return { ok: true, snapshot: context.reader.snapshot, data: { analysis, engine: NLP_MODEL_ID, engineVersion: NLP_MODEL_VERSION } } as ActionResult;
+    }),
+    action("nlp.countTokens", "compute", { parse: tokenCountInput }, async (value, context) => {
+      const input = value as { texts: string[]; modelId?: string };
+      const batch = await withTokenCounter(moduleContext, context.signal, (counter) => counter.countMany(
+        input.texts,
+        context.reader.snapshot,
+        context.signal,
+        input.modelId ? { modelId: input.modelId } : undefined,
+      ));
+      return { ok: true, snapshot: context.reader.snapshot, data: batch } as ActionResult;
     }),
     action("nlp.discoverCandidates", "compute", { parse: emptyInput }, async (_value, context) => {
       const snapshotEntities = await readCanonicalSnapshotEntities(context.reader, context.signal);
@@ -286,7 +342,17 @@ export async function createModule(moduleContext: ModuleContext): Promise<Module
     capabilities: [{
       id: NLP_TOKENIZER_CAPABILITY, version: NLP_TOKENIZER_CAPABILITY_VERSION,
       async create(context) { return workerCapability(await context.createWorkerService()); },
-      async dispose(capability) { await (capability as NlpTokenizerCapability & { dispose(): Promise<void> }).dispose(); },
+      async dispose(capability) { await (capability as NlpTokenizerCapability & NlpTokenCounterCapability & { dispose(): Promise<void> }).dispose(); },
+    }, {
+      id: NLP_TOKEN_COUNTER_CAPABILITY, version: NLP_TOKEN_COUNTER_CAPABILITY_VERSION,
+      async create(context) {
+        const lease = await context.acquireCapability<NlpTokenizerCapability & NlpTokenCounterCapability>(NLP_TOKENIZER_CAPABILITY);
+        return {
+          countMany: (texts, snapshot, signal, options) => lease.value.countMany(texts, snapshot, signal, options),
+          async dispose() { await lease.release(); },
+        } satisfies NlpTokenCounterCapability & { dispose(): Promise<void> };
+      },
+      async dispose(capability) { await (capability as NlpTokenCounterCapability & { dispose(): Promise<void> }).dispose(); },
     }],
     actions: makeActions(moduleContext),
     ui: [
