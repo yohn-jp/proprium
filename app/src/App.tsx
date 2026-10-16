@@ -21,6 +21,7 @@ import {
   BrowserJournal,
   documentKey,
   journalEntryKey,
+  proposalOperationEntry,
   repositoryKey,
   requestPersistentStorage,
   type JournalEntry,
@@ -286,6 +287,7 @@ export function App() {
   const refreshRef = useRef<() => Promise<void>>(async () => undefined);
   const sceneLoadRef = useRef(0);
   const recoveredProjectsRef = useRef(new Set<string>());
+  const proposalPollsRef = useRef(new Map<string, Promise<void>>());
 
   const registerScratchFlush = useCallback((flush: (() => Promise<JournalEntry | null>) | null) => {
     scratchFlushRef.current = flush ?? (async () => null);
@@ -321,19 +323,98 @@ export function App() {
       setIsolatedRecoveryCount(allEntries.filter((entry) => entry.authorScope !== authorScopeRef.current).length + allProposals.filter((record) => record.authorScope !== authorScopeRef.current).length);
       setEntries(allEntries.filter((entry) => entry.authorScope === authorScopeRef.current && (!repository || sameRepository(entry.repository, repository))));
       const visibleProposals = repository
-        ? allProposals.filter((record) => record.authorScope === authorScopeRef.current && sameRepository(record.repository, repository))
-        : allProposals.filter((record) => record.authorScope === authorScopeRef.current);
+        ? allProposals.filter((record) => record.authorScope === authorScopeRef.current && record.dismissedAt === undefined &&
+          !record.proposal.operations.every((operation) => record.status?.publishedOperationIds.includes(operation.id)) &&
+          sameRepository(record.repository, repository))
+        : allProposals.filter((record) => record.authorScope === authorScopeRef.current && record.dismissedAt === undefined &&
+          !record.proposal.operations.every((operation) => record.status?.publishedOperationIds.includes(operation.id)));
       setProposals(visibleProposals);
     } catch (error) {
       if (expectedNavigation === undefined || navigationRef.current === expectedNavigation) setGlobalError(messageOf(error));
     }
   }, []);
 
+  const importRemoteProposals = useCallback(async (
+    projectId: string,
+    repository: RepositoryIdentity,
+    scope: string,
+    expectedNavigation?: number,
+  ) => {
+    const currentJournal = journalRef.current;
+    if (!currentJournal || !scope) return;
+    const owner = repositoryKey(repository);
+    const pollKey = JSON.stringify([projectId, owner, scope]);
+    const inFlight = proposalPollsRef.current.get(pollKey);
+    if (inFlight) return inFlight;
+    const poll = (async () => {
+      let response: Awaited<ReturnType<typeof api.proposalStatuses>>;
+      let receipts: Awaited<ReturnType<BrowserJournal["getPublicationReceipts"]>>;
+      try {
+        [response, receipts] = await Promise.all([
+          api.proposalStatuses(projectId),
+          currentJournal.getPublicationReceipts(repository, scope),
+        ]);
+      } catch (error) {
+        if (expectedNavigation === undefined || isCurrentProject(expectedNavigation, projectId, repository)) {
+          setStatus({ message: `外部提案を確認できませんでした。${messageOf(error)}`, kind: "error" });
+        }
+        return;
+      }
+      const failures: string[] = [];
+      const acknowledged = new Set(receipts.flatMap((receipt) => receipt.acknowledged.map((item) => `${item.operationId}\u0000${item.generation}`)));
+      for (const status of response.proposals) {
+        try {
+          const proposal = status?.proposal;
+          if (!proposal || proposal.snapshot?.repository == null || repositoryKey(proposal.snapshot.repository) !== owner ||
+              !Array.isArray(proposal.operations) || proposal.operations.length === 0 ||
+              !Array.isArray(status.approvedOperationIds) || !Array.isArray(status.checkpoints) ||
+              !Array.isArray(status.publishedOperationIds ?? []) || typeof status.stale !== "boolean") {
+            throw new Error("Core から不正な提案状態が返されました。");
+          }
+          const fullyAcknowledged = proposal.operations.every((operation) => acknowledged.has(`${operation.id}\u0000${operation.generation}`));
+          if (fullyAcknowledged) {
+            await currentJournal.removeProposal(repository, scope, proposal.id).catch(() => undefined);
+            continue;
+          }
+          const publishedIds = new Set(status.publishedOperationIds ?? []);
+          const checkpointByOperation = new Map(status.checkpoints.map((receipt) => [`${receipt.operationId}\u0000${receipt.generation}`, receipt]));
+          // Persist the full operation, provenance and evidence before exposing the proposal in React.
+          await currentJournal.putProposal(repository, scope, proposal, status);
+          for (const operation of proposal.operations) {
+            if (publishedIds.has(operation.id)) continue;
+            const receipt = checkpointByOperation.get(`${operation.id}\u0000${operation.generation}`);
+            if (!receipt) continue;
+            const exactReceipt = acknowledged.has(`${operation.id}\u0000${operation.generation}`) ? undefined : receipt;
+            if (!exactReceipt) continue;
+            const entry = proposalOperationEntry(repository, scope, proposal, operation, "checkpointing");
+            await currentJournal.put(entry);
+            await currentJournal.updateState(entry, "checkpointed", exactReceipt);
+          }
+        } catch (error) {
+          failures.push(`${status?.proposal?.id ?? "提案"}: ${messageOf(error)}`);
+        }
+      }
+      if (expectedNavigation === undefined || isCurrentProject(expectedNavigation, projectId, repository)) {
+        if (failures.length) setStatus({ message: `外部提案を回復記録へ取り込めませんでした。${failures.join(" / ")}`, kind: "error" });
+      }
+    })();
+    proposalPollsRef.current.set(pollKey, poll);
+    try {
+      await poll;
+      if (expectedNavigation === undefined || isCurrentProject(expectedNavigation, projectId, repository)) {
+        await refreshJournal(repository, expectedNavigation);
+      }
+    } finally {
+      if (proposalPollsRef.current.get(pollKey) === poll) proposalPollsRef.current.delete(pollKey);
+    }
+  }, [refreshJournal]);
+
   const refreshContributionContext = useCallback(() => refreshRef.current(), []);
   const refreshProposals = useCallback(() => {
-    const repository = workRef.current?.observation.snapshot.repository;
-    if (repository) void refreshJournal(repository);
-  }, [refreshJournal]);
+    const current = workRef.current;
+    const repository = current?.observation.snapshot.repository;
+    if (current && repository) void importRemoteProposals(current.project.id, repository, authorScopeRef.current, navigationRef.current);
+  }, [importRemoteProposals]);
 
   useEffect(() => {
     let cancelled = false;
@@ -494,7 +575,7 @@ export function App() {
         }
       }
       if (latest) {
-        text = latest.text;
+        if (latest.state === "draft") text = latest.text;
         const docPrecondition = latest.operation.reads.find((item) => item.path === effective.document.path)?.revision;
         const docWrite = latest.operation.writes.find((item) => item.path === effective.document.path)?.content;
         if (latest.state === "draft" && docPrecondition !== effective.document.revision) {
@@ -572,6 +653,8 @@ export function App() {
       setWork(next);
       setModules(nextModules);
       setContributions(nextContributions);
+      await importRemoteProposals(project.id, observed.snapshot.repository, scope, nav);
+      if (navigationRef.current !== nav) return;
       await reloadJournalForWork(observed.snapshot.repository, nav);
       if (navigationRef.current !== nav) return;
       if (persistSelection) localStorageIfAvailable()?.setItem(ACTIVE_PROJECT_KEY, project.id);
@@ -585,7 +668,13 @@ export function App() {
     } finally {
       if (navigationRef.current === nav) setBusy("");
     }
-  }, [reconcileProject, reloadJournalForWork, updateWork]);
+  }, [importRemoteProposals, reconcileProject, reloadJournalForWork, updateWork]);
+
+  useEffect(() => {
+    const current = workRef.current;
+    if (!journal || !current) return;
+    void importRemoteProposals(current.project.id, current.observation.snapshot.repository, authorScope, navigationRef.current);
+  }, [authorScope, importRemoteProposals, journal, work?.project.id]);
 
   useEffect(() => {
     const current = workRef.current;
@@ -604,6 +693,8 @@ export function App() {
     const nav = navigationRef.current;
     try {
       const observed = await api.observation(projectId);
+      if (navigationRef.current !== nav || workRef.current?.project.id !== projectId) return;
+      await importRemoteProposals(projectId, observed.snapshot.repository, authorScope, nav);
       if (navigationRef.current !== nav || workRef.current?.project.id !== projectId) return;
       const latestBeforeRead = workRef.current;
       const changedRemote = Boolean(latestBeforeRead && latestBeforeRead.observation.snapshot.remoteCommit !== observed.snapshot.remoteCommit);
@@ -633,7 +724,7 @@ export function App() {
     } finally {
       observationBusyRef.current = false;
     }
-  }, [authorScope, loadScene, reconcileProject, updateWork]);
+  }, [authorScope, importRemoteProposals, loadScene, reconcileProject, updateWork]);
   refreshRef.current = refreshRemote;
 
   useEffect(() => {
@@ -976,8 +1067,11 @@ export function App() {
       if (!isCurrentProject(nav, projectId, initialRepository) || !sameRepository(repository, initialRepository)) return;
       await api.reconcile(projectId);
       if (!isCurrentProject(nav, projectId, initialRepository)) return;
+      const proposalStatuses = await api.proposalStatuses(projectId);
+      if (!isCurrentProject(nav, projectId, initialRepository)) return;
+      const alreadyPublished = new Set(proposalStatuses.proposals.flatMap((item) => item.publishedOperationIds ?? []));
       const local = await currentJournal.getRepository(repository, authorScopeRef.current);
-      const eligible = local.filter((entry) => entry.state === "checkpointed" || entry.state === "publication_unknown");
+      const eligible = local.filter((entry) => (entry.state === "checkpointed" || entry.state === "publication_unknown") && !alreadyPublished.has(entry.operation.id));
       if (eligible.length === 0) throw new Error("GitHub へ保存するチェックポイントがありません。");
       const groups = new Map<string, JournalEntry[]>();
       for (const entry of eligible) {
@@ -1120,14 +1214,15 @@ export function App() {
   const currentRepoEntries = useMemo(() => work ? entries.filter((entry) => sameRepository(entry.repository, work.observation.snapshot.repository)) : [], [entries, work]);
   const currentRepoProposals = useMemo(() => work ? proposals.filter((proposal) => sameRepository(proposal.repository, work.observation.snapshot.repository)) : [], [proposals, work]);
   const renderedNavigation = navigationRef.current;
-  const pendingCount = currentRepoEntries.filter((entry) => entry.state !== "draft").length;
+  const publishedOperationIds = useMemo(() => new Set(currentRepoProposals.flatMap((record) => record.status?.publishedOperationIds ?? [])), [currentRepoProposals]);
+  const pendingCount = currentRepoEntries.filter((entry) => entry.state !== "draft" && !publishedOperationIds.has(entry.operation.id)).length;
   const recoverableEntries = useMemo(() => entries.filter((entry) => entry.state === "draft" || entry.state === "checkpointing" || entry.state === "checkpointed" || entry.state === "publication_unknown" || entry.state === "conflict"), [entries]);
   const tree = work?.tree.tree ?? null;
   const scene = work?.editor?.read.scene ?? null;
   const editor = work?.editor ?? null;
   const canCheckpoint = Boolean(editor?.entry && work && !work.loadingScene && work.selectedSceneId === editor.read.scene.id && (editor.entry.state === "draft" || editor.entry.state === "checkpointing") && editor.draftStored && !editor.conflict && editor.text !== editor.read.scene.text && !busy);
   const canResolveDraft = Boolean(editor?.conflict && (!editor.entry || editor.entry.state === "draft"));
-  const canPublish = pendingCount > 0 && currentRepoEntries.some((entry) => entry.state === "checkpointed" || entry.state === "publication_unknown") && !busy;
+  const canPublish = pendingCount > 0 && currentRepoEntries.some((entry) => (entry.state === "checkpointed" || entry.state === "publication_unknown") && !publishedOperationIds.has(entry.operation.id)) && !busy;
 
   if (authState === "checking") return <main className="loading" role="status">Scriptorium を開いています…</main>;
   if (authState === "signed-out") {
@@ -1200,7 +1295,11 @@ export function App() {
               authorScope={authorScope}
               journal={journal}
               proposals={currentRepoProposals}
-              onChange={() => void refreshJournal(work.observation.snapshot.repository, renderedNavigation)}
+              onChange={() => {
+                if (isCurrentProject(renderedNavigation, work.project.id, work.observation.snapshot.repository)) {
+                  void importRemoteProposals(work.project.id, work.observation.snapshot.repository, authorScope, renderedNavigation);
+                }
+              }}
               onStatus={(message, kind) => {
                 if (isCurrentProject(renderedNavigation, work.project.id, work.observation.snapshot.repository)) setStatusMessage(message, kind);
               }}

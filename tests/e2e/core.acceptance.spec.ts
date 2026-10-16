@@ -23,6 +23,17 @@ interface PublicationReceiptSummary {
   authorScope: string;
 }
 
+interface ProposalJournalSummary {
+  authorScope: string | null;
+  proposal: {
+    id: string;
+    source: string;
+    operations: Array<{ id: string; generation: number; writes: Array<{ path: string; content: string | null }> }>;
+    evidence?: Array<{ id: string; module: string }>;
+  };
+  status?: { state: string; approvedOperationIds: string[]; checkpoints: unknown[] };
+}
+
 function repositoryInputValue(value: string): string {
   return value.startsWith("https://") || value.startsWith("file://")
     ? value
@@ -117,6 +128,30 @@ async function readPublicationReceipts(page: Page): Promise<PublicationReceiptSu
           acknowledged: record.receipt.acknowledged.map((item) => ({ operationId: item.operationId, generation: item.generation })),
         })));
         request.onerror = () => reject(request.error ?? new Error("IndexedDB receipt read failed"));
+      });
+    } finally {
+      database.close();
+    }
+  });
+}
+
+async function readProposalJournal(page: Page): Promise<ProposalJournalSummary[]> {
+  return page.evaluate(async () => {
+    const database = await new Promise<IDBDatabase>((resolve, reject) => {
+      const request = indexedDB.open("scriptorium-recovery", 3);
+      request.onsuccess = () => resolve(request.result);
+      request.onerror = () => reject(request.error ?? new Error("IndexedDB open failed"));
+    });
+    try {
+      const transaction = database.transaction("proposals", "readonly");
+      return await new Promise<ProposalJournalSummary[]>((resolve, reject) => {
+        const request = transaction.objectStore("proposals").getAll();
+        request.onsuccess = () => resolve(request.result.map((record: ProposalJournalSummary) => ({
+          authorScope: record.authorScope ?? null,
+          proposal: record.proposal,
+          status: record.status,
+        })));
+        request.onerror = () => reject(request.error ?? new Error("IndexedDB proposal journal read failed"));
       });
     } finally {
       database.close();
@@ -227,7 +262,7 @@ test("writing UI recovers multi-document drafts and separates Draft, Checkpoint,
   await page.getByRole("button", { name: "Chapter One: Scene One" }).click();
   await expect(page.locator(".cm-content")).toHaveText(sceneOneDraft);
 
-  await page.getByRole("button", { name: "Checkpoint" }).click();
+  await page.getByRole("button", { name: "Checkpoint", exact: true }).click();
   await expect(page.locator(".durability-message")).toContainText("ローカルチェックポイント");
   await expect(page.getByRole("button", { name: "Save to GitHub" })).toBeEnabled();
   const checkpointed = await readJournal(page);
@@ -284,7 +319,7 @@ test("new typing survives an older in-flight checkpoint and exact publication ac
     await route.continue();
   });
 
-  await page.getByRole("button", { name: "Checkpoint" }).click();
+  await page.getByRole("button", { name: "Checkpoint", exact: true }).click();
   await checkpointStarted;
   const newerGeneration = "New typing while generation one checkpoints.";
   await page.locator(".cm-content").fill(newerGeneration);
@@ -388,6 +423,113 @@ test("one malformed legacy key does not hide later recoverable drafts", async ({
   await expect(page.getByText("シーン removed-scene-id")).toBeVisible();
 });
 
+test("external MCP proposals enter owner review before approval, then checkpoint and publish", async ({ page }) => {
+  expect(authToken.length).toBeGreaterThanOrEqual(32);
+  expect(repositoryUrl).not.toBe("");
+  await signIn(page);
+  await openFixtureProject(page);
+
+  const projectResponse = await page.request.get(new URL("/api/projects", page.url()).toString());
+  expect(projectResponse.ok()).toBe(true);
+  const projects = await projectResponse.json() as Array<{ id: string }>;
+  const projectId = projects[0]?.id;
+  expect(projectId).toBeTruthy();
+  const projectPath = "/api/projects/" + encodeURIComponent(projectId!);
+  const observationResponse = await page.request.get(new URL(projectPath + "/observation", page.url()).toString());
+  expect(observationResponse.ok()).toBe(true);
+  const observation = await observationResponse.json() as {
+    snapshot: { repository: { provider: "github" | "local"; repositoryId: string; defaultBranch: string; ownerScope: string; url: string }; remoteCommit: string };
+  };
+  const sceneResponse = await page.request.get(new URL(
+    projectPath + "/scenes/scene-1?view=remote&snapshot=" + encodeURIComponent(observation.snapshot.remoteCommit),
+    page.url(),
+  ).toString());
+  expect(sceneResponse.ok()).toBe(true);
+  const sceneRead = await sceneResponse.json() as {
+    snapshot: typeof observation.snapshot;
+    scene: { id: string };
+    document: { path: string; content: string; revision: string | null };
+  };
+  const suffix = crypto.randomUUID().replaceAll("-", "");
+  const proposalId = "mcp-e2e-" + suffix;
+  const operationId = "mcp-e2e-op-" + suffix;
+  const generatedText = "MCP text requiring owner approval.";
+  const content = sceneRead.document.content + "\n" + generatedText + "\n";
+  const operation = {
+    id: operationId,
+    generation: 1,
+    repository: observation.snapshot.repository,
+    baseRemoteCommit: observation.snapshot.remoteCommit,
+    effect: "manuscript",
+    reads: [{ path: sceneRead.document.path, revision: sceneRead.document.revision }],
+    writes: [{ path: sceneRead.document.path, revision: sceneRead.document.revision, content }],
+    message: "loom(scene): scene-1 MCP acceptance\n\nLoom-Manuscript: scene-1\nLoom-File: " + sceneRead.document.path + "\nLoom-Char-Count: " + generatedText.length,
+  };
+  const evidence = {
+    id: "mcp-evidence-" + suffix,
+    snapshot: observation.snapshot,
+    module: "mcp",
+    kind: "external-proposal",
+    paths: [{ path: sceneRead.document.path, revision: sceneRead.document.revision }],
+    details: { intent: "e2e author review acceptance" },
+  };
+  const origin = new URL(page.url()).origin;
+  const proposed = await fetch(origin + projectPath + "/proposals", {
+    method: "POST",
+    headers: { "content-type": "application/json", authorization: "Bearer " + authToken },
+    body: JSON.stringify({
+      id: proposalId,
+      snapshot: observation.snapshot,
+      operations: [operation],
+      evidence: [evidence],
+    }),
+  });
+  expect(proposed.status).toBe(201);
+  const storedProposal = await proposed.json() as { id: string; source: string };
+  expect(storedProposal).toMatchObject({ id: proposalId, source: "mcp" });
+  await expect.poll(async () => {
+    await page.evaluate(() => window.dispatchEvent(new Event("online")));
+    return page.getByText(proposalId, { exact: false }).isVisible().catch(() => false);
+  }).toBe(true);
+  const journaledBeforeApproval = (await readProposalJournal(page)).find((record) => record.proposal.id === proposalId);
+  expect(journaledBeforeApproval).toMatchObject({
+    authorScope: "owner",
+    proposal: { id: proposalId, source: "mcp", evidence: [{ id: evidence.id, module: "mcp" }] },
+    status: { state: "proposed", approvedOperationIds: [], checkpoints: [] },
+  });
+  expect(journaledBeforeApproval?.proposal.operations[0]?.writes[0]?.content).toContain(generatedText);
+  const remoteBeforeApproval = await page.request.get(new URL(projectPath + "/proposals/" + encodeURIComponent(proposalId), page.url()).toString());
+  expect(remoteBeforeApproval.ok()).toBe(true);
+  expect(await remoteBeforeApproval.json()).toMatchObject({ state: "proposed", approvedOperationIds: [], checkpoints: [] });
+
+  await page.getByRole("button", { name: "承認して Checkpoint" }).click();
+  const proposalCard = page.locator(".proposal-card").filter({ hasText: proposalId });
+  await expect(proposalCard.getByText(/ローカル Checkpoint 済み/u)).toBeVisible();
+  await expect.poll(async () => (await readJournal(page)).some((record) =>
+    record.operationId === operationId && record.generation === 1 && record.state === "checkpointed" && record.authorScope === "owner",
+  )).toBe(true);
+  await expect(page.getByRole("button", { name: "Save to GitHub" })).toBeEnabled();
+  await page.getByRole("button", { name: "Save to GitHub" }).click();
+  await expect(page.locator(".topbar-status")).toContainText("GitHub への保存を確認しました。");
+  await expect.poll(async () => (await readJournal(page)).some((record) => record.operationId === operationId)).toBe(false);
+  expect((await readPublicationReceipts(page)).some((receipt) => receipt.state === "confirmed" &&
+    receipt.acknowledged.some((item) => item.operationId === operationId && item.generation === 1))).toBe(true);
+
+  const afterPublishObservation = await page.request.get(new URL(projectPath + "/observation", page.url()).toString());
+  const afterPublish = await afterPublishObservation.json() as { snapshot: { remoteCommit: string } };
+  const publishedStatusResponse = await page.request.get(new URL(projectPath + "/proposals/" + encodeURIComponent(proposalId), page.url()).toString());
+  expect(publishedStatusResponse.ok()).toBe(true);
+  const publishedStatus = await publishedStatusResponse.json() as { publishedOperationIds: string[] };
+  expect(publishedStatus.publishedOperationIds).toContain(operationId);
+  const publishedSceneResponse = await page.request.get(new URL(
+    projectPath + "/scenes/scene-1?view=remote&snapshot=" + encodeURIComponent(afterPublish.snapshot.remoteCommit),
+    page.url(),
+  ).toString());
+  const publishedScene = await publishedSceneResponse.json() as { document: { content: string } };
+  expect(publishedScene.document.content).toContain(generatedText);
+  expect((await readProposalJournal(page)).some((record) => record.proposal.id === proposalId)).toBe(false);
+});
+
 test("IndexedDB quota failures remain visible and block checkpointing", async ({ page }) => {
   expect(authToken.length).toBeGreaterThanOrEqual(32);
   expect(repositoryUrl).not.toBe("");
@@ -404,7 +546,7 @@ test("IndexedDB quota failures remain visible and block checkpointing", async ({
   const canonicalBefore = await page.locator(".cm-content").textContent();
   await page.locator(".cm-content").fill("This edit cannot be journaled because the browser is full.");
   await expect(page.getByRole("alert")).toContainText("Browser storage is full");
-  await expect(page.getByRole("button", { name: "Checkpoint" })).toBeDisabled();
+  await expect(page.getByRole("button", { name: "Checkpoint", exact: true })).toBeDisabled();
 
   const unloadDialog = page.waitForEvent("dialog");
   const reloading = page.reload();

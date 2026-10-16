@@ -6,6 +6,7 @@ import type {
   CheckpointReceipt,
   ModuleStatus,
   PublishReceipt,
+  ProposalStatus,
   RemoteObservation,
   RepositoryIdentity,
   ReconcileResult,
@@ -196,6 +197,7 @@ export const api = {
   },
   status: (projectId: string) => request<SyncStatus>(projectPath(projectId, "status")),
   observation: (projectId: string) => request<RemoteObservation>(projectPath(projectId, "observation")),
+  proposalStatuses: (projectId: string) => request<{ proposals: ProposalStatus[] }>(projectPath(projectId, "proposals")),
   propose: (projectId: string, proposal: ChangeProposal) => request<ChangeProposal>(projectPath(projectId, "proposals"), {
     method: "POST",
     body: JSON.stringify(proposal),

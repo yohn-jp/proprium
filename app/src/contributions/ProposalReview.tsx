@@ -1,7 +1,15 @@
 import { useState } from "react";
-import type { ChangeOperation, RepositoryIdentity } from "@scriptorium/contracts";
+import type { ChangeOperation, ProposalStatus, RepositoryIdentity } from "@scriptorium/contracts";
 import { api } from "../api";
-import { BrowserJournal, documentKey, journalEntryKey, repositoryKey, type JournalEntry, type JournalProposal } from "../storage/journal";
+import { BrowserJournal, proposalOperationEntry, type JournalEntry, type JournalProposal } from "../storage/journal";
+
+function operationKey(operation: ChangeOperation): string {
+  return operation.id + "\u0000" + operation.generation;
+}
+
+function checkpointFor(status: ProposalStatus | undefined, operation: ChangeOperation) {
+  return status?.checkpoints.find((receipt) => receipt.operationId === operation.id && receipt.generation === operation.generation);
+}
 
 export function ProposalReview({
   projectId,
@@ -24,56 +32,77 @@ export function ProposalReview({
   const [error, setError] = useState("");
 
   async function approve(record: JournalProposal): Promise<void> {
-    if (busyId) return;
+    if (busyId || record.authorScope !== authorScope) return;
     setBusyId(record.proposal.id);
     setError("");
     try {
       const pending = await journal.getRepository(repository, authorScope);
-      const records: JournalEntry[] = [];
+      const status = record.status;
+      const published = new Set(status?.publishedOperationIds ?? []);
+      const alreadyApproved = new Set(status?.approvedOperationIds ?? []);
+      const entries: JournalEntry[] = [];
+      const needsApproval: string[] = [];
       for (const operation of record.proposal.operations) {
+        if (published.has(operation.id) || checkpointFor(status, operation)) continue;
         const current = pending.find((entry) => entry.operation.id === operation.id && entry.operation.generation === operation.generation);
-        const entry = current ?? proposalOperationEntry(record, operation);
-        if (!current) await journal.put(entry);
-        const authorized = await journal.updateState({ ...entry, authorizedAt: Date.now() }, "checkpointing");
-        records.push(authorized);
+        const entry = current ?? proposalOperationEntry(repository, authorScope, record.proposal, operation);
+        // Persist the exact operation and author scope before either approval or checkpointing.
+        await journal.put(entry);
+        const authorized = await journal.updateState({
+          ...entry,
+          proposalId: record.proposal.id,
+          authorizedAt: entry.authorizedAt ?? Date.now(),
+        }, "checkpointing");
+        entries.push(authorized);
+        if (!alreadyApproved.has(operation.id)) needsApproval.push(operation.id);
       }
-      await api.approve(projectId, {
-        proposalId: record.proposal.id,
-        operationIds: record.proposal.operations.map((operation) => operation.id),
-        authorScope,
-      });
-      for (const entry of records) {
+      if (entries.length === 0) {
+        onStatus("この提案の操作はすでに Checkpoint 済みです。GitHub への公開待ちです。", "normal");
+        onChange();
+        return;
+      }
+      if (needsApproval.length > 0) {
+        await api.approve(projectId, {
+          proposalId: record.proposal.id,
+          operationIds: needsApproval,
+          authorScope,
+        });
+      }
+      for (const entry of entries) {
         const receipt = await api.checkpoint(projectId, entry.operation);
         await journal.updateState(entry, "checkpointed", receipt);
       }
-      await journal.removeProposal(repository, authorScope, record.proposal.id);
-      onStatus("承認した提案をローカルチェックポイントに保存しました。GitHub へ保存するまで記録を保持します。", "success");
+      onStatus("確認した操作をローカル Checkpoint に保存しました。GitHub への公開まで回復記録を保持します。", "success");
       onChange();
     } catch (cause) {
       const message = cause instanceof Error ? cause.message : "提案を処理できませんでした。";
       setError(message);
-      onStatus(`提案は保持されています。${message}`, "error");
+      onStatus("提案はブラウザー回復記録に保持されています。" + message, "error");
       onChange();
     } finally {
       setBusyId("");
     }
   }
 
-  async function discard(record: JournalProposal): Promise<void> {
-    if (busyId || !window.confirm("この未承認の提案をブラウザーの回復記録から削除しますか？")) return;
+  async function dismiss(record: JournalProposal): Promise<void> {
+    if (busyId || record.authorScope !== authorScope || !window.confirm("この未承認提案をブラウザーの一覧から隠しますか？サーバー上の提案は削除されません。")) return;
     setBusyId(record.proposal.id);
     setError("");
     try {
+      const status = record.status;
+      if ((status?.approvedOperationIds.length ?? 0) > 0 || (status?.checkpoints.length ?? 0) > 0) {
+        throw new Error("承認済みまたは Checkpoint 済みの提案は一覧から隠せません。");
+      }
       const pending = await journal.getRepository(repository, authorScope);
-      const checkpointed = record.proposal.operations.some((operation) =>
-        pending.some((entry) => entry.operation.id === operation.id && entry.operation.generation === operation.generation && entry.state !== "draft"),
-      );
-      if (checkpointed) throw new Error("チェックポイント済みの操作は提案一覧から削除できません。");
-      await journal.removeProposal(repository, authorScope, record.proposal.id);
-      onStatus("提案をブラウザーから削除しました。", "success");
+      const authorized = record.proposal.operations.some((operation) => pending.some((entry) =>
+        entry.operation.id === operation.id && entry.operation.generation === operation.generation && entry.state !== "draft",
+      ));
+      if (authorized) throw new Error("承認処理が始まった提案は一覧から隠せません。");
+      await journal.dismissProposal(repository, authorScope, record.proposal.id);
+      onStatus("提案をこのブラウザーの一覧から隠しました。Core 上の提案記録は保持しています。", "success");
       onChange();
     } catch (cause) {
-      setError(cause instanceof Error ? cause.message : "提案を削除できませんでした。");
+      setError(cause instanceof Error ? cause.message : "提案を隠せませんでした。");
     } finally {
       setBusyId("");
     }
@@ -83,66 +112,67 @@ export function ProposalReview({
   return (
     <section className="proposal-review" aria-labelledby="proposal-review-title">
       <h2 id="proposal-review-title">確認待ちの提案</h2>
-      <p>提案の内容を確認し、承認した操作だけローカルチェックポイントに保存できます。</p>
+      <p>外部ツールやモジュールの操作内容と根拠を確認し、明示的に承認した操作だけ Checkpoint に保存できます。</p>
       {error && <p className="status" data-kind="error" role="alert">{error}</p>}
       <ul className="proposal-list">
-        {proposals.map((record) => (
-          <li key={record.proposal.id}>
-            <article className="proposal-card">
-              <header>
-                <strong>{record.proposal.source === "author" ? "作者の提案" : `${record.proposal.source} 提案`}</strong>
-                <span>{new Date(record.createdAt).toLocaleString("ja-JP")}</span>
-              </header>
-              {record.proposal.operations.map((operation) => (
-                <div className="proposal-operation" key={`${operation.id}-${operation.generation}`}>
-                  <h3>{operation.message}</h3>
-                  <p>{operation.effect} · {operation.writes.length} 件のファイル変更</p>
-                  <ul>
-                    {operation.writes.map((write) => <li key={write.path}>{write.content === null ? "削除" : "更新"}: <code>{write.path}</code></li>)}
-                  </ul>
+        {proposals.map((record) => {
+          const status = record.status;
+          const published = new Set(status?.publishedOperationIds ?? []);
+          const pendingOperations = record.proposal.operations.filter((operation) =>
+            !published.has(operation.id) && !checkpointFor(status, operation),
+          );
+          const needsApproval = pendingOperations.some((operation) => !status?.approvedOperationIds.includes(operation.id));
+          const completed = pendingOperations.length === 0;
+          return (
+            <li key={record.proposal.id}>
+              <article className="proposal-card">
+                <header>
+                  <strong>{record.proposal.source === "author" ? "作者の提案" : record.proposal.source + " 提案"}</strong>
+                  <span>{new Date(record.createdAt).toLocaleString("ja-JP")}</span>
+                </header>
+                <p>提案 ID: <code>{record.proposal.id}</code> · 作者スコープ: <code>{record.authorScope ?? "未割り当て"}</code></p>
+                {status?.stale && <p className="status" data-kind="error" role="status">提案の基準リモートが現在の HEAD より古くなっています。Checkpoint 時に Core が競合を確認します。</p>}
+                {record.proposal.operations.map((operation) => {
+                  const isPublished = published.has(operation.id);
+                  const receipt = checkpointFor(status, operation);
+                  const isApproved = status?.approvedOperationIds.includes(operation.id) ?? false;
+                  return (
+                    <div className="proposal-operation" key={operationKey(operation)}>
+                      <h3>{operation.message}</h3>
+                      <p>{operation.effect} · operation <code>{operation.id}</code> · generation {operation.generation} · {operation.writes.length} 件のファイル変更</p>
+                      {isPublished ? <p>GitHub 保存済み</p> : receipt ? <p>ローカル Checkpoint 済み · {receipt.localCommit.slice(0, 12)}</p> : isApproved ? <p>作者承認済み · Checkpoint 待ち</p> : <p>承認待ち</p>}
+                      <ul>
+                        {operation.writes.map((write) => (
+                          <li key={write.path}>
+                            <details>
+                              <summary>{write.content === null ? "削除" : "更新"}: <code>{write.path}</code></summary>
+                              <pre>{write.content === null ? "ファイルを削除" : write.encoding === "base64" ? "バイナリ内容を含む変更" : write.content}</pre>
+                            </details>
+                          </li>
+                        ))}
+                      </ul>
+                    </div>
+                  );
+                })}
+                {record.proposal.evidence?.length ? (
+                  <details>
+                    <summary>根拠を確認</summary>
+                    <pre>{JSON.stringify(record.proposal.evidence, null, 2)}</pre>
+                  </details>
+                ) : null}
+                <div className="proposal-actions">
+                  <button type="button" onClick={() => void approve(record)} disabled={Boolean(busyId) || completed}>
+                    {busyId === record.proposal.id ? "承認内容を保存中…" : completed ? "Checkpoint 完了" : needsApproval ? "承認して Checkpoint" : "承認済みを Checkpoint"}
+                  </button>
+                  <button type="button" className="quiet-button" onClick={() => void dismiss(record)} disabled={Boolean(busyId) || (status?.approvedOperationIds.length ?? 0) > 0 || (status?.checkpoints.length ?? 0) > 0}>
+                    この提案を隠す
+                  </button>
                 </div>
-              ))}
-              {record.proposal.evidence?.length ? (
-                <details>
-                  <summary>根拠を確認</summary>
-                  <pre>{JSON.stringify(record.proposal.evidence, null, 2)}</pre>
-                </details>
-              ) : null}
-              <div className="proposal-actions">
-                <button type="button" onClick={() => void approve(record)} disabled={Boolean(busyId)}>
-                  {busyId === record.proposal.id ? "承認内容を保存中…" : "承認して Checkpoint"}
-                </button>
-                <button type="button" className="quiet-button" onClick={() => void discard(record)} disabled={Boolean(busyId)}>提案を削除</button>
-              </div>
-            </article>
-          </li>
-        ))}
+              </article>
+            </li>
+          );
+        })}
       </ul>
     </section>
   );
-}
-
-function proposalOperationEntry(record: JournalProposal, operation: ChangeOperation): JournalEntry {
-  if (!record.authorScope) throw new Error("This proposal has no author identity scope and cannot be approved.");
-  const path = operation.writes[0]?.path ?? "proposal";
-  const key = documentKey(record.repository, path);
-  const entry: JournalEntry = {
-    version: 1,
-    key: "",
-    repositoryKey: repositoryKey(record.repository),
-    documentKey: key,
-    authorScope: record.authorScope,
-    repository: record.repository,
-    documentPath: path,
-    sceneId: record.proposal.id,
-    snapshot: record.proposal.snapshot,
-    text: "",
-    baseText: "",
-    operation,
-    state: "checkpointing",
-    authorizedAt: Date.now(),
-    updatedAt: Date.now(),
-  };
-  entry.key = journalEntryKey(entry);
-  return entry;
 }
