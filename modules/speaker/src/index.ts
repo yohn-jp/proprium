@@ -44,6 +44,7 @@ export * from "./algorithms/speakerReranker.js";
 export * from "./algorithms/speakerRuleStats.js";
 export * from "./algorithms/speakerCorrectionLog.js";
 export * from "./algorithms/voice/index.js";
+export { createSpeakerMigrationProducer } from "./migration.js";
 export { runSpeakerPipeline } from "./algorithms/pipeline.js";
 
 const manifest: ModuleManifest = {
@@ -874,11 +875,12 @@ async function speakerVoiceProfiles(_input: RecordValue, context: ModuleActionCo
   };
 }
 
-async function speakerVoiceCheck(input: { sceneId: string }, context: ModuleActionContext, moduleContext: ModuleContext): Promise<unknown> {
+async function speakerVoiceCheck(input: { sceneId: string; text?: string }, context: ModuleActionContext, moduleContext: ModuleContext): Promise<unknown> {
   const identity = await cacheIdentityFor(context);
   const { entities, scenes } = await loadCorpusScenes(context);
-  const target = scenes.find((scene) => scene.scene.id === input.sceneId);
+  let target = scenes.find((scene) => scene.scene.id === input.sceneId);
   if (!target) throw Object.assign(new Error(`Scene not found: ${input.sceneId}`), { code: "not_found" });
+  if (input.text !== undefined) target = (await loadScene(context, input.sceneId, input.text)).prepared;
   const profiles = await analyzeVoiceProfiles(entities, scenes, context, moduleContext, target);
   const targetResult = profiles.targetResult;
   if (!targetResult) throw new TypeError("Speaker voice analysis did not return target-scene attributions");
@@ -902,6 +904,10 @@ async function speakerVoiceCheck(input: { sceneId: string }, context: ModuleActi
     ...generatedResultIdentity(identity),
     sceneId: input.sceneId,
     attributions: targetResult.attributions,
+    estimatedN: targetResult.estimatedN,
+    fromManual: targetResult.fromManual,
+    evidence: targetResult.evidence,
+    clusterTrails: targetResult.clusterTrails,
     warnings: declaredWarnings,
     styleDeviations: learnedWarnings,
     stylometricDeviations: stylometricWarnings,
@@ -980,7 +986,7 @@ function makeActions(moduleContext: ModuleContext): ModuleAction[] {
         tokenizerModelVersion: NLP_MODEL_VERSION,
       };
     }),
-    action("speaker.voice.check", "compute", schema(parseIdInput), async (input, context) => speakerVoiceCheck(input as ReturnType<typeof parseIdInput>, context, moduleContext)),
+    action("speaker.voice.check", "compute", schema(parseSceneTextInput), async (input, context) => speakerVoiceCheck(input as ReturnType<typeof parseSceneTextInput>, context, moduleContext)),
     action("speaker.review.queue", "compute", schema(objectSchema), async (_input, context) => {
       const identity = await cacheIdentityFor(context);
       const { entities, scenes } = await loadCorpusScenes(context);

@@ -256,6 +256,17 @@ test("speaker actions run real CPU attribution, propose corrections/model adopti
     assert.ok(mergedIssues.some((warning) => warning.source === "stylometric"), JSON.stringify(voiceData));
     assert.deepEqual(runtime.workerSupervisor.activeWorkerPids, [], "voice-check worker and its shared Lindera lease are released after the action");
 
+    const draftText = "星野は灯りを見た。『僕が行く。』";
+    const voiceDraft = await runtime.invokeAction("speaker", "speaker.voice.check", { sceneId: "sc-synthetic-voice-probe", text: draftText }, host);
+    const voiceDraftData = dataOf(voiceDraft);
+    assertSpeakerIdentity(voiceDraftData, null);
+    assert.equal((voiceDraftData.attributions as Array<{ text: string }>)[0]?.text, "『僕が行く。』");
+    assert.equal(voiceDraftData.estimatedN, 1);
+    assert.equal(voiceDraftData.fromManual, true);
+    assert.ok(voiceDraftData.evidence && typeof voiceDraftData.evidence === "object");
+    assert.ok(Array.isArray(voiceDraftData.clusterTrails));
+    assert.deepEqual(runtime.workerSupervisor.activeWorkerPids, [], "draft voice-check releases worker and shared tokenizer lease");
+
     const dialogue = await runtime.invokeAction("speaker", "speaker.dialogue.list", { characterId: "char-hero", limit: 80, minConfidence: "low" }, host);
     const dialogueData = dataOf(dialogue);
     assertSpeakerIdentity(dialogueData, null);
