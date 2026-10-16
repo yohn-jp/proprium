@@ -658,11 +658,15 @@ function displayRewriteFinal(
       for (const candidateButton of proposalButtons) candidateButton.disabled = true;
       status.textContent = "選んだ言い換えを変更案にしています…";
       try {
-        const created = await invoke(context, "assistant.rewrite.propose", {
+        const proposalInput: Data = {
           sceneId: sourceSceneId,
           selectedText: sourceText,
           replacementText: candidateText,
-        });
+        };
+        if (typeof response.sentenceIndex === "number" && Number.isFinite(response.sentenceIndex)) {
+          proposalInput.sentenceIndex = response.sentenceIndex;
+        }
+        const created = await invoke(context, "assistant.rewrite.propose", proposalInput);
         if (context.signal.aborted) return;
         proposalCreated = true;
         status.textContent = proposalStatus(created, "選んだ候補を変更案として送りました。レビューキューで確認できます。");
@@ -741,10 +745,199 @@ function mountQa(root: HTMLElement, context: BrowserModuleContext, cleanup: Clea
   question.setAttribute("aria-label", "質問");
   const sceneId = input("scene ID（任意）");
   const run = button("設定に質問する");
+  const retry = button("回答を再試行");
+  retry.hidden = true;
+  const cancel = button("回答生成をキャンセル");
+  cancel.hidden = true;
+  const clear = button("会話をクリア");
   const status = statusNode();
-  const result = el("div");
-  bindAction(run, () => ({ question: question.value.trim(), ...(sceneId.value.trim() ? { sceneId: sceneId.value.trim() } : {}) }), context, "assistant.qa", status, result, cleanup, { loading: "質問への回答を作成しています…", done: "回答と根拠を読み込みました。" });
-  root.append(intro, field("質問", question), field("関連シーン（任意）", sceneId), run, status, result);
+  const conversation = el("div");
+  const preview = el("div");
+  type QaTurn = { role: "user" | "assistant"; content: string; citations?: unknown; confidence?: unknown };
+  const turns: QaTurn[] = [];
+  let retryPrompt: string | undefined;
+  let controller: AbortController | undefined;
+  let userCancelled = false;
+
+  const renderConversation = () => {
+    const items = turns.map((turn) => {
+      const article = el("article");
+      article.style.border = "1px solid currentColor";
+      article.style.borderRadius = "0.35rem";
+      article.style.padding = "0.6rem";
+      article.style.marginBlock = "0.5rem";
+      article.append(el("h4", turn.role === "user" ? "質問" : "回答"));
+      const content = el("p", turn.content);
+      content.style.whiteSpace = "pre-wrap";
+      article.append(content);
+      if (turn.role === "assistant") {
+        if (typeof turn.confidence === "string" || typeof turn.confidence === "number") {
+          article.append(el("p", `確度: ${String(turn.confidence)}`));
+        }
+        if (Array.isArray(turn.citations) && turn.citations.length > 0) {
+          const evidence = section("根拠");
+          const list = el("ul");
+          for (const value of turn.citations) {
+            const citation = asRecord(value);
+            const identity = [citation.kind, citation.id].filter((part) => typeof part === "string").join(":");
+            const quote = typeof citation.quote === "string" ? citation.quote : resultItemText(value);
+            const location = [citation.path, citation.revision].filter((part) => typeof part === "string").join(" · ");
+            const item = el("li");
+            item.textContent = `${identity ? `[${identity}] ` : ""}${quote}${location ? ` (${location})` : ""}`;
+            list.append(item);
+          }
+          evidence.append(list);
+          article.append(evidence);
+        }
+      }
+      return article;
+    });
+    conversation.replaceChildren(...items);
+  };
+
+  const cancelRun = () => {
+    if (!controller) return;
+    userCancelled = true;
+    controller.abort();
+    retryPrompt = question.value.trim() || retryPrompt;
+    status.textContent = "回答生成をキャンセルしました。会話には追加されていません。";
+    cancel.hidden = true;
+  };
+  on(cancel, "click", cancelRun, cleanup);
+  on(clear, "click", () => {
+    if (controller) return;
+    turns.splice(0, turns.length);
+    retryPrompt = undefined;
+    question.value = "";
+    retry.hidden = true;
+    renderConversation();
+    status.textContent = "会話をクリアしました。";
+  }, cleanup);
+  const abortFromHost = () => controller?.abort(context.signal.reason);
+  context.signal.addEventListener("abort", abortFromHost, { once: true });
+  cleanup.push(() => context.signal.removeEventListener("abort", abortFromHost));
+
+  const ask = async () => {
+    const prompt = question.value.trim() || retryPrompt || "";
+    const sourceSceneId = sceneId.value.trim();
+    if (!prompt) {
+      status.textContent = "質問を入力してください。";
+      return;
+    }
+    const messages = [...turns.map(({ role, content }) => ({ role, content })), { role: "user" as const, content: prompt }];
+    if (messages.length > 20) {
+      status.textContent = "会話は最大20件です。会話をクリアしてから質問してください。";
+      return;
+    }
+    controller?.abort();
+    controller = new AbortController();
+    userCancelled = false;
+    retry.hidden = true;
+    run.disabled = true;
+    question.disabled = true;
+    sceneId.disabled = true;
+    clear.disabled = true;
+    cancel.hidden = false;
+    status.textContent = "質問への回答を作成しています…";
+    preview.replaceChildren();
+    let pendingText = "";
+    let finalResponse: Data | undefined;
+    let finalReceived = false;
+    try {
+      const response = await fetch(`/api/projects/${encodeURIComponent(context.projectId)}/modules/assistant/qa/stream`, {
+        method: "POST",
+        credentials: "same-origin",
+        headers: { "Content-Type": "application/json", Accept: "text/event-stream" },
+        body: JSON.stringify({ ...(sourceSceneId ? { sceneId: sourceSceneId } : {}), messages }),
+        signal: controller.signal,
+      });
+      if (!response.ok) {
+        const body: unknown = await response.json().catch(() => null);
+        const error = asRecord(body).error;
+        throw new Error(typeof error === "string" ? error : `質問に失敗しました (${response.status})`);
+      }
+      if (!response.body) throw new Error("ストリーミング応答を読み取れませんでした。");
+      const reader = response.body.getReader();
+      const decoder = new TextDecoder();
+      let buffer = "";
+      const processFrame = (frame: string) => {
+        let eventName = "message";
+        const dataLines: string[] = [];
+        for (const line of frame.split(/\r?\n/u)) {
+          if (line.startsWith("event:")) eventName = line.slice(6).trim();
+          else if (line.startsWith("data:")) dataLines.push(line.slice(5).trimStart());
+        }
+        if (dataLines.length === 0) return;
+        const raw = dataLines.join("\n");
+        let payload: unknown = raw;
+        try { payload = JSON.parse(raw) as unknown; } catch { /* Plain text data is supported for simple delta frames. */ }
+        const data = asRecord(payload);
+        if (eventName === "delta") {
+          if (typeof data.delta === "string") pendingText += data.delta;
+          else if (typeof payload === "string") pendingText += payload;
+          const block = section("生成中の回答");
+          const text = el("p", pendingText);
+          text.style.whiteSpace = "pre-wrap";
+          block.append(text);
+          preview.replaceChildren(block);
+        } else if (eventName === "final") {
+          finalReceived = true;
+          finalResponse = data;
+        } else if (eventName === "error" || eventName === "cancelled") {
+          const message = typeof data.message === "string" ? data.message : typeof payload === "string" ? payload : eventName;
+          throw Object.assign(new Error(message), { streamEvent: eventName });
+        }
+      };
+      while (true) {
+        const item = await reader.read();
+        if (item.done) break;
+        buffer += decoder.decode(item.value, { stream: true });
+        let boundary = /\r?\n\r?\n/u.exec(buffer);
+        while (boundary) {
+          const frame = buffer.slice(0, boundary.index);
+          buffer = buffer.slice(boundary.index + boundary[0].length);
+          processFrame(frame);
+          boundary = /\r?\n\r?\n/u.exec(buffer);
+        }
+      }
+      buffer += decoder.decode();
+      if (buffer.trim()) processFrame(buffer);
+      if (!finalReceived || typeof finalResponse?.answer !== "string") {
+        throw new Error("生成が完了する前にストリームが終了しました。");
+      }
+      turns.push(
+        { role: "user", content: prompt },
+        { role: "assistant", content: finalResponse.answer, citations: finalResponse.citations, confidence: finalResponse.confidence },
+      );
+      retryPrompt = undefined;
+      question.value = "";
+      renderConversation();
+      preview.replaceChildren();
+      status.textContent = "回答と根拠を読み込みました。";
+    } catch (error) {
+      if (!context.signal.aborted) {
+        retryPrompt = prompt;
+        retry.hidden = false;
+        if (userCancelled || controller.signal.aborted) {
+          status.textContent = "回答生成をキャンセルしました。会話には追加されていません。";
+        } else {
+          status.textContent = error instanceof Error ? error.message : String(error);
+        }
+      }
+      preview.replaceChildren();
+    } finally {
+      if (!context.signal.aborted) {
+        cancel.hidden = true;
+        run.disabled = false;
+        question.disabled = false;
+        sceneId.disabled = false;
+        clear.disabled = false;
+      }
+    }
+  };
+  on(run, "click", () => { void ask(); }, cleanup);
+  on(retry, "click", () => { void ask(); }, cleanup);
+  root.append(intro, field("質問", question), field("関連シーン（任意）", sceneId), run, retry, cancel, clear, status, preview, conversation);
 }
 
 function mountContinuation(root: HTMLElement, context: BrowserModuleContext, cleanup: Cleanup): void {

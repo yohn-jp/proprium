@@ -15,11 +15,13 @@ const repository = {
 };
 const snapshot = { repository, remoteCommit: "a".repeat(40) };
 const calls = [];
-let failQaOnce = true;
-let delayQa = false;
 let streamMode = "success";
+let qaStreamMode = "error";
+const qaRequests = [];
 let resolveStreamClosed;
 const streamClosed = new Promise((resolvePromise) => { resolveStreamClosed = resolvePromise; });
+let resolveQaStreamClosed;
+const qaStreamClosed = new Promise((resolvePromise) => { resolveQaStreamClosed = resolvePromise; });
 
 const actionData = {
   "assistant.health": { provider: "openai-compatible", ok: true, checked: "deep" },
@@ -37,9 +39,8 @@ const actionData = {
   "assistant.usage.read": { month: "2026-10", total: 12 },
   "assistant.summary.scene": { summary: "駅で二人が再会する。", proposal: { id: "proposal-scene-summary" } },
   "assistant.summary.chapter": { summary: "二人が再会し、旅に出る。", proposal: { id: "proposal-chapter-summary" } },
-  "assistant.qa": { answer: "<img src=x onerror=alert(1)> 回答", citations: [{ kind: "scene", id: "sc-1", quote: "駅で会った。" }] },
   "assistant.continuation": { options: ["列車が動き出した。", "彼女は切符を握りしめた。"] },
-  "assistant.aspect.review": { findings: [{ aspect: "tempo", finding: "間を少し短くできます。" }], proposal: { id: "proposal-aspect" } },
+  "assistant.aspect.review": { findings: [{ aspect: "tempo", aspectLabel: "テンポ", finding: "間を少し短くできます。" }] },
   "story.entities.list": [{
     id: "ds-1",
     name: "駅の対話スケッチ",
@@ -60,12 +61,11 @@ const actionData = {
   "assistant.reader.reaction": { questions: ["二人はどこへ向かうのだろう？"], expectations: ["旅の始まり"], confusions: [] },
   "assistant.zukan.suggestions": { proposal: { id: "proposal-zukan" }, suggestion: "人物の変更案" },
   "assistant.synonyms.suggestions": {
-    proposal: { id: "proposal-synonyms" },
     suggestions: [{ term: "静か", candidates: ["静かに", "そっと"] }],
   },
-  "assistant.contradictions.assist": { proposal: { id: "proposal-contradiction" }, findings: [] },
+  "assistant.contradictions.assist": { findings: [] },
   "assistant.stateEvents.draft": { proposal: { id: "proposal-state" }, events: [] },
-  "assistant.speaker.attribute": { proposal: { id: "proposal-speaker" }, attributions: [] },
+  "assistant.speaker.attribute": { attributions: [] },
 };
 
 const server = await createServer({
@@ -74,9 +74,13 @@ const server = await createServer({
   logLevel: "error",
   server: { host: "127.0.0.1", port: 0 },
 });
-server.middlewares.use((request, response, next) => {
+server.middlewares.stack.unshift({ route: "", handle: (request, response, next) => {
   const pathname = new URL(request.url ?? "/", "http://localhost").pathname;
-  if (pathname !== "/api/projects/assistant-browser-fixture/modules/assistant/rewrite/stream" || streamMode !== "hang") {
+  const rewritePath = "/api/projects/assistant-browser-fixture/modules/assistant/rewrite/stream";
+  const qaPath = "/api/projects/assistant-browser-fixture/modules/assistant/qa/stream";
+  const isRewrite = pathname === rewritePath && streamMode === "hang";
+  const isQa = pathname === qaPath && qaStreamMode === "hang";
+  if (request.method !== "POST" || (!isRewrite && !isQa)) {
     next();
     return;
   }
@@ -84,11 +88,16 @@ server.middlewares.use((request, response, next) => {
   request.on("end", () => {
     response.writeHead(200, { "Content-Type": "text/event-stream", "Cache-Control": "no-cache" });
     response.on("close", () => {
-      if (!response.writableEnded) resolveStreamClosed();
+      if (!response.writableEnded) {
+        if (isRewrite) resolveStreamClosed();
+        if (isQa) resolveQaStreamClosed();
+      }
     });
-    response.write('event: delta\ndata: {"delta":"途中の候補"}\n\n');
+    response.write(isRewrite
+      ? 'event: delta\ndata: {"delta":"途中の候補"}\n\n'
+      : 'event: delta\ndata: {"delta":"未確定の回答"}\n\n');
   });
-});
+} });
 
 let browser;
 try {
@@ -106,11 +115,6 @@ try {
   page.on("pageerror", (error) => pageErrors.push(error.message));
   await page.exposeFunction("assistantInvoke", async (actionId, input) => {
     calls.push({ actionId, input });
-    if (actionId === "assistant.qa" && failQaOnce) {
-      failQaOnce = false;
-      return { ok: false, snapshot, error: { code: "provider_unavailable", message: "一時的なプロバイダーエラー", retryable: true } };
-    }
-    if (actionId === "assistant.qa" && delayQa) await new Promise((resolvePromise) => setTimeout(resolvePromise, 120));
     if (actionId === "assistant.rewrite.propose") {
       const proposal = { id: "proposal-rewrite-choice" };
       return { ok: true, snapshot, data: { proposal }, proposals: [proposal] };
@@ -131,11 +135,37 @@ try {
       await route.fulfill({
         status: 200,
         contentType: "text/event-stream",
-        body: 'event: delta\ndata: {"delta":"夜の駅で"}\n\nevent: delta\ndata: {"delta":"彼を見つけた。"}\n\nevent: final\ndata: {"text":"夜の駅で彼を見つけた。","suggestions":[{"text":"暗い駅で彼を見つけた。","strategy":"concise","rationale":"短くする"},{"text":"夜の駅のホームで彼を見つけた。","strategy":"contextual","rationale":"場所を補う"},{"text":"夜の駅で彼を見つけたんだ。","strategy":"voice","rationale":"口調を調整する"}],"sentenceSplit":{"text":"夜の駅で彼を見つけた。胸が高鳴る。","rationale":"二文に分ける"},"tellToShow":{"text":"足音が止まった。彼がいた。","rationale":"動作で示す","source":"corpus"},"model":"test-model","provider":"test-provider","promptVersion":"1","citations":[],"provenance":{}}\n\n',
+        body: 'event: delta\ndata: {"delta":"夜の駅で"}\n\nevent: delta\ndata: {"delta":"彼を見つけた。"}\n\nevent: final\ndata: {"text":"夜の駅で彼を見つけた。","sentenceIndex":1,"suggestions":[{"text":"暗い駅で彼を見つけた。","strategy":"concise","rationale":"短くする"},{"text":"夜の駅のホームで彼を見つけた。","strategy":"contextual","rationale":"場所を補う"},{"text":"夜の駅で彼を見つけたんだ。","strategy":"voice","rationale":"口調を調整する"}],"sentenceSplit":{"text":"夜の駅で彼を見つけた。胸が高鳴る。","rationale":"二文に分ける"},"tellToShow":{"text":"足音が止まった。彼がいた。","rationale":"動作で示す","source":"corpus"},"model":"test-model","provider":"test-provider","promptVersion":"1","citations":[],"provenance":{}}\n\n',
       });
       return;
     }
     await route.continue();
+  });
+  await page.route("**/api/projects/assistant-browser-fixture/modules/assistant/qa/stream", async (route) => {
+    qaRequests.push(route.request().postDataJSON());
+    if (qaStreamMode === "hang") {
+      await route.continue();
+      return;
+    }
+    if (qaStreamMode === "error") {
+      await route.fulfill({ status: 503, contentType: "application/json", body: JSON.stringify({ error: "一時的なプロバイダーエラー" }) });
+      return;
+    }
+    const answer = qaRequests.length === 2 ? "<img src=x onerror=alert(1)> 回答" : "再試行後の回答";
+    const response = {
+      answer,
+      confidence: "medium",
+      citations: [{ kind: "scene", id: "sc-1", quote: "駅で会った。", path: "scenes/sc-1.md", revision: "r1" }],
+      model: "test-model",
+      provider: "test-provider",
+      promptVersion: "qa-1",
+      provenance: {},
+    };
+    await route.fulfill({
+      status: 200,
+      contentType: "text/event-stream",
+      body: `event: delta\ndata: ${JSON.stringify({ delta: answer })}\n\nevent: final\ndata: ${JSON.stringify(response)}\n\n`,
+    });
   });
 
   await page.evaluate(async ({ origin, snapshot }) => {
@@ -194,13 +224,14 @@ try {
     sceneId: "sc-1",
     selectedText: "夜の駅で彼を見つけた。",
     replacementText: "夜の駅で彼を見つけたんだ。",
+    sentenceIndex: 1,
   });
   assert.equal(await page.getByRole("button", { name: "簡潔案を変更案にする" }).isDisabled(), true, "one selected rewrite candidate is proposed at a time");
   assert.equal(calls.some((call) => call.actionId === "assistant.rewrite"), false, "streamed candidate is not regenerated through the action API");
 
   streamMode = "hang";
   await page.getByRole("button", { name: "ストリーミングで言い換え案を作る" }).click();
-  await page.getByText("途中の候補", { exact: true }).waitFor();
+  await page.getByText("生成中の候補", { exact: true }).waitFor();
   await page.getByRole("button", { name: "生成をキャンセル" }).click();
   await page.getByText("生成をキャンセルしました。変更案は作成されていません。", { exact: true }).waitFor();
   await Promise.race([
@@ -220,11 +251,34 @@ try {
   await page.getByLabel("質問").fill("この章で二人はどこで会った？");
   await page.getByRole("button", { name: "設定に質問する" }).click();
   await page.getByText("一時的なプロバイダーエラー", { exact: true }).waitFor();
-  delayQa = true;
-  await page.getByRole("button", { name: "設定に質問する" }).click();
-  await page.getByText("質問への回答を作成しています…", { exact: true }).waitFor();
-  await page.getByText("<img src=x onerror=alert(1)> 回答", { exact: false }).waitFor();
+  qaStreamMode = "success";
+  await page.getByRole("button", { name: "回答を再試行" }).click();
+  await page.getByText("<img src=x onerror=alert(1)> 回答", { exact: true }).waitFor();
+  await page.getByText("[scene:sc-1] 駅で会った。 (scenes/sc-1.md · r1)", { exact: true }).waitFor();
   assert.equal(await page.locator("img").count(), 0, "model text is rendered as text, never executable markup");
+  assert.deepEqual(qaRequests[0], { messages: [{ role: "user", content: "この章で二人はどこで会った？" }] });
+
+  qaStreamMode = "hang";
+  await page.getByLabel("質問").fill("会話に追加される前にキャンセルする質問");
+  await page.getByRole("button", { name: "設定に質問する" }).click();
+  await page.getByText("生成中の回答", { exact: true }).waitFor();
+  await page.getByRole("button", { name: "回答生成をキャンセル" }).click();
+  await page.getByText("回答生成をキャンセルしました。会話には追加されていません。", { exact: true }).waitFor();
+  await Promise.race([
+    qaStreamClosed,
+    new Promise((_, reject) => setTimeout(() => reject(new Error("QA stream request was not cancelled")), 3000)),
+  ]);
+  assert.equal(await page.locator("#assistant-root article").count(), 2, "cancelled QA requests do not become conversation turns");
+  qaStreamMode = "success";
+  await page.getByRole("button", { name: "回答を再試行" }).click();
+  await page.getByText("再試行後の回答", { exact: true }).waitFor();
+  assert.deepEqual(qaRequests[3], {
+    messages: [
+      { role: "user", content: "この章で二人はどこで会った？" },
+      { role: "assistant", content: "<img src=x onerror=alert(1)> 回答" },
+      { role: "user", content: "会話に追加される前にキャンセルする質問" },
+    ],
+  }, "retry keeps completed history and excludes the cancelled attempt");
 
   await page.evaluate(() => window.assistantMount("assistant.continuation"));
   await page.getByLabel("シーン ID").fill("sc-1");
@@ -311,16 +365,16 @@ try {
   await page.getByLabel("記述").fill("主人公は雪の村で寒がりだと言った。");
   await page.getByRole("button", { name: "矛盾を確認する" }).click();
   await page.getByText("矛盾候補を確認しました", { exact: false }).waitFor();
-  await page.getByLabel("scene ID").nth(0).fill("sc-1");
+  await page.getByLabel("シーン ID").nth(0).fill("sc-1");
   await page.getByRole("button", { name: "状態イベント案を作る" }).click();
-  await page.getByText("状態イベント案を作成しました", { exact: false }).waitFor();
-  await page.getByLabel("scene ID").nth(1).fill("sc-1");
+  await page.getByText("変更案をレビューキューに送りました", { exact: false }).last().waitFor();
+  await page.getByLabel("シーン ID").nth(1).fill("sc-1");
   await page.getByRole("button", { name: "話者候補を確認する" }).click();
   await page.getByText("話者候補を受け取りました", { exact: false }).waitFor();
 
   const allowedActions = new Set([
     "assistant.health", "assistant.queue.status", "assistant.settings.read", "assistant.settings.propose", "assistant.usage.read",
-    "assistant.rewrite", "assistant.summary.scene", "assistant.summary.chapter", "assistant.qa", "assistant.continuation", "assistant.aspect.review",
+    "assistant.rewrite", "assistant.summary.scene", "assistant.summary.chapter", "assistant.continuation", "assistant.aspect.review",
     "assistant.rewrite.propose", "story.entities.list", "assistant.dialogue.topics", "assistant.dialogue.turns", "assistant.reader.reaction", "assistant.zukan.suggestions",
     "assistant.synonyms.suggestions", "assistant.contradictions.assist", "assistant.stateEvents.draft", "assistant.speaker.attribute",
   ]);
