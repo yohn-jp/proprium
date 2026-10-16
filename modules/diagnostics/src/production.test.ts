@@ -38,6 +38,8 @@ async function createRuntime(files: Map<string, { content: string; revision: str
   const diagnosticsManifest = packageManifest(new URL("../package.json", import.meta.url));
   assert.deepEqual(nlpDefinition.manifest, nlpManifest, "NLP factory metadata must match installed package metadata");
   assert.deepEqual(diagnosticsDefinition.manifest, diagnosticsManifest, "diagnostics factory metadata must match installed package metadata");
+  assert.ok(diagnosticsDefinition.ui?.some((item) => item.id === "diagnostics.consistency" && item.action === "diagnostics.checkConsistency"));
+  assert.ok(diagnosticsDefinition.ui?.some((item) => item.id === "diagnostics.continuity" && item.action === "diagnostics.checkContinuity"));
   const manifests = [nlpManifest, diagnosticsManifest];
   const runtime = new ModuleRuntime({
     manifests,
@@ -87,6 +89,7 @@ test("production modules lazily run the real Lindera child and preserve snapshot
     const analyzed = await analysisPromise;
     assert.equal(observedRealWorker, true, "the public action must start an actual supervised child process");
     assert.equal(analyzed.ok, true, JSON.stringify(analyzed));
+    assert.deepEqual(analyzed.snapshot, snapshot);
     if (!analyzed.ok) return;
     const nlpData = analyzed.data as { analysis: { text: string; tokens: Array<{ surface: string; start: number; end: number }>; sentences: Array<{ start: number; end: number; text: string }> }; engine: string; engineVersion: string };
     assert.equal(nlpData.engine, "lindera-wasm-nodejs-ipadic");
@@ -100,6 +103,7 @@ test("production modules lazily run the real Lindera child and preserve snapshot
 
     const candidates = await runtime.invokeAction("nlp", "nlp.discoverCandidates", {}, host);
     assert.equal(candidates.ok, true, JSON.stringify(candidates));
+    assert.deepEqual(candidates.snapshot, snapshot);
     if (candidates.ok) {
       const candidateData = candidates.data as { candidates: Array<{ term: string; sourceEntityIds: string[] }>; sourceCount: number };
       assert.equal(candidateData.sourceCount, 3, "candidate discovery reads canonical YAML and manuscript files without a Story module");
@@ -109,6 +113,7 @@ test("production modules lazily run the real Lindera child and preserve snapshot
     const diagnosticsText = "星野は古い遺跡へ走った。黒い霧が道を塞ぐ。";
     const diagnostics = await runtime.invokeAction("diagnostics", "diagnostics.analyze", { text: diagnosticsText, sceneId: "scene-1" }, host);
     assert.equal(diagnostics.ok, true, JSON.stringify(diagnostics));
+    assert.deepEqual(diagnostics.snapshot, snapshot);
     if (!diagnostics.ok) return;
     const data = diagnostics.data as { analysis: { charCount: number; sentenceCount: number; sentimentArc: { points: unknown[] } }; plotSemanticWarnings: unknown[]; synonymSuggestions: unknown[]; model: string; modelVersion: string; diagnosticsEngine: string };
     assert.equal(data.model, "lindera-wasm-nodejs-ipadic");
@@ -119,6 +124,13 @@ test("production modules lazily run the real Lindera child and preserve snapshot
     assert.ok(data.analysis.sentimentArc.points.length > 0);
     assert.ok(Array.isArray(data.plotSemanticWarnings));
     assert.ok(Array.isArray(data.synonymSuggestions));
+
+    const sentiment = await runtime.invokeAction("diagnostics", "diagnostics.analyze", { text: "彼は悲しい。" }, host);
+    assert.equal(sentiment.ok, true, JSON.stringify(sentiment));
+    if (sentiment.ok) {
+      const arc = (sentiment.data as { analysis: { sentimentArc: { points: Array<{ raw: number }> } } }).analysis.sentimentArc;
+      assert.ok(arc.points[0]?.raw < 0, "the worker loads the packaged project lexicon and scores a source-covered negative term");
+    }
 
     const plot = await runtime.invokeAction("diagnostics", "diagnostics.checkPlotSemantics", { sceneId: "scene-1" }, host);
     assert.equal(plot.ok, true, JSON.stringify(plot));
@@ -132,6 +144,15 @@ test("production modules lazily run the real Lindera child and preserve snapshot
 
 test("public actions read namespaced dictionaries/settings and lint changes remain proposals", { timeout: 90_000 }, async () => {
   const files = new Map(initialFiles);
+  files.set("plot/volumes/volume-1/volume.yaml", { content: "id: volume-1\nname: 第一巻\norder: 1\n", revision: "volume-r1" });
+  files.set("plot/volumes/volume-1/chapter.yaml", { content: "id: chapter-1\nname: 第一章\nvolume: volume-1\norder: 1\n", revision: "chapter-r1" });
+  files.set("plot/volumes/volume-1/scenes/scene-1.yaml", { content: "id: scene-1\ntype: scene\nname: 遺跡\nchapter: chapter-1\norder: 1\nlocation: loc-a\nappears: [char-hero]\nmentions: [char-ghost]\neffects:\n  - action: acquire_item\n    characterId: char-hero\n    itemId: relic-1\nmanuscript: manuscript/v1/scene-1.md\n", revision: "scene-r1" });
+  files.set("plot/volumes/volume-1/scenes/scene-2.yaml", { content: "id: scene-2\ntype: scene\nname: 帰路\nchapter: chapter-1\norder: 2\nlocation: loc-b\nappears: [char-hero, char-companion]\neffects:\n  - action: use_item\n    characterId: char-companion\n    itemId: relic-1\nmanuscript: manuscript/v1/scene-2.md\n", revision: "scene-2-r1" });
+  files.set("bible/characters/companion/profile.yaml", { content: "id: char-companion\nname: 旅人\n", revision: "companion-r1" });
+  files.set("bible/locations/loc-a.yaml", { content: "id: loc-a\nname: 遺跡\n", revision: "loc-a-r1" });
+  files.set("bible/locations/loc-b.yaml", { content: "id: loc-b\nname: 村\n", revision: "loc-b-r1" });
+  files.set("plot/threads/thread-1.yaml", { content: "id: thread-1\nname: 古い約束\nstatus: open\n", revision: "thread-r1" });
+  files.set("manuscript/v1/scene-2.md", { content: "---\ntitle: 帰路\n---\n前日、旅人は遺物を手にした。", revision: "manuscript-2-r1" });
   const proposals: ChangeProposal[] = [];
   const { runtime, host } = await createRuntime(files, proposals);
   try {
@@ -161,6 +182,26 @@ test("public actions read namespaced dictionaries/settings and lint changes rema
     assert.equal(consent.ok, true, JSON.stringify(consent));
     assert.equal(proposals.length, 2);
     assert.equal(proposals[1].operations[0].writes[0].path, "meta/scriptorium/modules/nlp/feature-settings.json");
+
+    const consistency = await runtime.invokeAction("diagnostics", "diagnostics.checkConsistency", {}, host);
+    assert.equal(consistency.ok, true, JSON.stringify(consistency));
+    assert.deepEqual(consistency.snapshot, snapshot);
+    if (consistency.ok) {
+      const issues = (consistency.data as { issues: Array<{ code: string }> }).issues;
+      assert.ok(issues.some((issue) => issue.code === "THREAD_NO_PLANT"), "open-thread validation is sourced from the entity/link graph");
+      assert.ok(issues.some((issue) => issue.code === "MISSING_LINK_TARGET"), "validation reports a missing linked entity");
+    }
+    const continuity = await runtime.invokeAction("diagnostics", "diagnostics.checkContinuity", {}, host);
+    assert.equal(continuity.ok, true, JSON.stringify(continuity));
+    assert.deepEqual(continuity.snapshot, snapshot);
+    if (continuity.ok) {
+      const warnings = (continuity.data as { warnings: Array<{ reason: string }> }).warnings;
+      assert.ok(warnings.some((warning) => warning.reason === "non-adjacent-location"));
+      assert.ok(warnings.some((warning) => warning.reason === "item-owner-mismatch"));
+      assert.ok(warnings.some((warning) => warning.reason === "unrecorded-teleport"));
+      assert.ok(warnings.some((warning) => warning.reason === "timeline-reversal"));
+    }
+    assert.deepEqual(runtime.workerSupervisor.activeWorkerPids, [], "project rule checks stay local and do not start NLP workers");
   } finally {
     await runtime.shutdown();
   }

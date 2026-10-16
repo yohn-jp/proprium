@@ -15,6 +15,7 @@ import type { ToneLexiconConfig } from "./tone/types.js";
 import type { StylometricMetrics, StylometricProfile } from "./stylometry/types.js";
 import { removeDialogueBrackets, type StyleAttribution, type StyleFingerprint } from "./voiceStyle.js";
 import { suggestSynonyms, type SynonymsConfig } from "./synonymSuggestions.js";
+import { checkProjectConsistency, checkProjectContinuity } from "./projectDiagnostics.js";
 
 export * from "./analysis.js";
 export { createDiagnosticsMigrationProducer } from "./migration.js";
@@ -360,6 +361,14 @@ async function checkPlotSemanticsAction(value: unknown, context: ModuleActionCon
 function makeActions(moduleContext: ModuleContext): ModuleAction[] {
   const analyzeInput = { parse: parseAnalyze };
   return [
+    action("diagnostics.checkConsistency", "read", { parse: parseEmpty }, async (_value, context) => ({
+      ok: true, snapshot: context.reader.snapshot,
+      data: { issues: await checkProjectConsistency(context.reader, context.signal) },
+    })),
+    action("diagnostics.checkContinuity", "read", { parse: parseEmpty }, async (_value, context) => ({
+      ok: true, snapshot: context.reader.snapshot,
+      data: { warnings: await checkProjectContinuity(context.reader, context.signal) },
+    })),
     action("diagnostics.analyze", "compute", analyzeInput, (value, context) => analyzeAction(value, context, moduleContext)),
     action("diagnostics.checkPlotSemantics", "compute", { parse: parsePlotSemantics }, (value, context) => checkPlotSemanticsAction(value, context, moduleContext)),
     action("diagnostics.lint", "compute", { parse: parseLint }, async (value, context) => {
@@ -437,6 +446,8 @@ export async function createModule(moduleContext: ModuleContext): Promise<Module
     manifest,
     actions: makeActions(moduleContext),
     ui: [
+      { id: "diagnostics.consistency", module: "diagnostics", slot: "review", title: "設定整合性", action: "diagnostics.checkConsistency" },
+      { id: "diagnostics.continuity", module: "diagnostics", slot: "review", title: "連続性チェック", action: "diagnostics.checkContinuity" },
       { id: "diagnostics.analysis", module: "diagnostics", slot: "dock", title: "文章診断", action: "diagnostics.analyze" },
       { id: "diagnostics.lint", module: "diagnostics", slot: "review", title: "組版チェック", action: "diagnostics.lint" },
       { id: "diagnostics.voice", module: "diagnostics", slot: "inspection", title: "文体プロファイル", action: "diagnostics.voiceProfiles" },

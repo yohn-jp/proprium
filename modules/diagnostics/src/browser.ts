@@ -74,6 +74,28 @@ function mountLint(root: HTMLElement, context: BrowserModuleContext, cleanup: Ar
   root.append(field("Markdown ファイルのパス（整形案用）", path), field("確認する本文", text), run, propose, status, results);
 }
 
+function mountProjectCheck(action: "diagnostics.checkConsistency" | "diagnostics.checkContinuity", label: string, root: HTMLElement, context: BrowserModuleContext, cleanup: Array<() => void>): void {
+  const run = button(label);
+  const status = output();
+  const results = element("pre");
+  const onClick = async () => {
+    run.disabled = true;
+    status.textContent = "同じスナップショットのプロジェクト資料を確認しています…";
+    results.textContent = "";
+    try {
+      const data = await invoke(context, action, {});
+      const rows = (action === "diagnostics.checkConsistency" ? data.issues : data.warnings) as unknown[];
+      results.textContent = JSON.stringify(rows, null, 2);
+      status.textContent = `${rows.length} 件の指摘`;
+    } catch (error) {
+      status.textContent = error instanceof Error ? error.message : String(error);
+    } finally { run.disabled = false; }
+  };
+  run.addEventListener("click", onClick);
+  cleanup.push(() => run.removeEventListener("click", onClick));
+  root.append(run, status, results);
+}
+
 function mountVoice(root: HTMLElement, context: BrowserModuleContext, cleanup: Array<() => void>): void {
   const dialogues = element("textarea"); dialogues.rows = 8; dialogues.placeholder = '{"character-id":["「台詞」", "「別の台詞」", "…"]}';
   const run = button("文体プロファイルを計算"); const status = output(); const result = element("pre");
@@ -97,6 +119,8 @@ export const browserModule: BrowserModuleDefinition = {
       "diagnostics.analysis": { title: "日本語本文の統合診断", mount: mountAnalysis },
       "diagnostics.lint": { title: "宣言型の組版ルール", mount: mountLint },
       "diagnostics.voice": { title: "声・文体の統計プロファイル", mount: mountVoice },
+      "diagnostics.consistency": { title: "設定・参照の整合性", mount: (root: HTMLElement, context: BrowserModuleContext, cleanup: Array<() => void>) => mountProjectCheck("diagnostics.checkConsistency", "整合性を確認", root, context, cleanup) },
+      "diagnostics.continuity": { title: "シーン間の連続性", mount: (root: HTMLElement, context: BrowserModuleContext, cleanup: Array<() => void>) => mountProjectCheck("diagnostics.checkContinuity", "連続性を確認", root, context, cleanup) },
     } as const;
     const contribution = config[contributionId as keyof typeof config];
     if (!contribution) throw new Error(`Unknown diagnostics contribution: ${contributionId}`);
