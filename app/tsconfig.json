@@ -15,11 +15,10 @@
     "jsx": "react-jsx",
     "module": "ESNext",
     "moduleResolution": "Bundler",
-    "noEmit": true
+    "rootDir": "src"
   },
   "include": [
     "src/**/*.ts",
-    "src/**/*.tsx",
-    "vite.config.ts"
+    "src/**/*.tsx"
   ]
 }
