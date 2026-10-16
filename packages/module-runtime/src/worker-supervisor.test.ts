@@ -57,6 +57,18 @@ async function waitForLifecycle(
   assert.fail(`job ${jobId} did not reach lifecycle state ${state}`);
 }
 
+async function within<T>(promise: Promise<T>, milliseconds: number, label: string): Promise<T> {
+  let timer: NodeJS.Timeout | undefined;
+  try {
+    return await Promise.race([
+      promise,
+      new Promise<never>((_resolve, reject) => { timer = setTimeout(() => reject(new Error(`${label} exceeded ${milliseconds} ms`)), milliseconds); }),
+    ]);
+  } finally {
+    if (timer) clearTimeout(timer);
+  }
+}
+
 function assertGone(pid: number): void {
   assert.throws(() => process.kill(pid, 0), (error: unknown) => (error as NodeJS.ErrnoException).code === "ESRCH");
 }
@@ -186,6 +198,89 @@ test("persistent worker requests publish successful and AbortSignal-cancelled li
     unsubscribe();
     await service.dispose();
     await supervisor.shutdown();
+  }
+});
+
+test("a non-cooperative queued listener cannot hold a short job deadline or shutdown", async () => {
+  const supervisor = new WorkerSupervisor({ jobLifecycleListenerTimeoutMs: 250 });
+  const never = new Promise<void>(() => {});
+  const states: WorkerJobLifecycleSnapshot["state"][] = [];
+  let markQueued!: () => void;
+  const queued = new Promise<void>((resolve) => { markQueued = resolve; });
+  const job = request("hold", {}, { id: "lifecycle-never-queued", deadline: Date.now() + 200 });
+  const unsubscribe = supervisor.subscribeJobLifecycle(async (event) => {
+    if (event.jobId !== job.id) return;
+    states.push(event.state);
+    if (event.state === "queued") markQueued();
+    await never;
+  });
+  try {
+    const running = supervisor.run(job, workerEntry);
+    await within(queued, 500, "queued lifecycle callback");
+    await new Promise((resolve) => setTimeout(resolve, 240));
+    await within(supervisor.shutdown(), 500, "supervisor shutdown");
+    const outcome = await within(running, 1_000, "one-shot job promise");
+    assert.equal(outcome.ok, false);
+    if (!outcome.ok) assert.equal(outcome.error.code, "job_deadline_exceeded");
+    assert.deepEqual(states, ["queued", "failed"]);
+    assert.equal(supervisor.activeJobCount, 0);
+  } finally {
+    unsubscribe();
+    await within(supervisor.shutdown(), 500, "supervisor cleanup");
+  }
+});
+
+test("a non-cooperative running listener cannot hold a real one-shot child result", async () => {
+  const supervisor = new WorkerSupervisor({ jobLifecycleListenerTimeoutMs: 25 });
+  const never = new Promise<void>(() => {});
+  const job = request("echo", { privateText: "omitted" }, { id: "lifecycle-never-running" });
+  let markRunning!: () => void;
+  const runningState = new Promise<void>((resolve) => { markRunning = resolve; });
+  const unsubscribe = supervisor.subscribeJobLifecycle(async (event) => {
+    if (event.jobId === job.id && event.state === "running") {
+      markRunning();
+      await never;
+    }
+  });
+  try {
+    const running = supervisor.run(job, workerEntry);
+    await within(runningState, 1_000, "running lifecycle callback");
+    const outcome = await within(running, 500, "one-shot child result");
+    assert.equal(outcome.ok, true);
+    if (outcome.ok) assert.deepEqual(outcome.result.output.echo, { privateText: "omitted" });
+    assert.equal(supervisor.activeJobCount, 0);
+  } finally {
+    unsubscribe();
+    await within(supervisor.shutdown(), 500, "supervisor cleanup");
+  }
+});
+
+test("a non-cooperative service listener cannot hold AbortSignal cancellation or service shutdown", async () => {
+  const supervisor = new WorkerSupervisor({ jobLifecycleListenerTimeoutMs: 25, cancellationGraceMs: 50 });
+  const never = new Promise<void>(() => {});
+  const service = await supervisor.createService("story", "0.1.0", workerServiceEntry);
+  const controller = new AbortController();
+  const job = request("hold", {}, { id: "lifecycle-service-never-running", deadline: Date.now() + 5_000 });
+  let markRunning!: () => void;
+  const runningState = new Promise<void>((resolve) => { markRunning = resolve; });
+  const unsubscribe = supervisor.subscribeJobLifecycle(async (event) => {
+    if (event.jobId === job.id && event.state === "running") {
+      markRunning();
+      await never;
+    }
+  });
+  try {
+    const requestPromise = service.request(job, controller.signal);
+    await within(runningState, 1_000, "service running lifecycle callback");
+    controller.abort();
+    const outcome = await within(requestPromise, 500, "persistent worker cancellation");
+    assert.equal(outcome.ok, false);
+    if (!outcome.ok) assert.equal(outcome.error.code, "job_cancelled");
+    assert.equal(service.activeJobCount, 0);
+    await within(supervisor.shutdown(), 1_000, "service shutdown");
+  } finally {
+    unsubscribe();
+    await within(supervisor.shutdown(), 1_000, "supervisor cleanup");
   }
 });
 

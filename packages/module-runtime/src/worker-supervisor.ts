@@ -38,6 +38,8 @@ export interface WorkerSupervisorOptions {
   maxConcurrentServiceJobs?: number;
   /** Maximum jobs waiting for one persistent service; defaults to 4 (32 MiB at the input bound). */
   maxQueuedServiceJobs?: number;
+  /** Maximum time an async job lifecycle listener may delay a state transition. Defaults to 2 seconds. */
+  jobLifecycleListenerTimeoutMs?: number;
   /** Absolute Node executable used to launch workers; defaults to process.execPath. */
   workerExecPath?: string;
   maxJobDurationMs?: number;
@@ -69,12 +71,22 @@ interface JobLifecycleRecord {
   startedAt: string | null;
   finishedAt: string | null;
   errorCode?: string;
+  listeners: JobLifecycleSubscription[];
   delivery: Promise<void>;
 }
 
-function newJobLifecycleRecord(): JobLifecycleRecord {
+interface JobLifecycleSubscription {
+  listener: WorkerJobLifecycleListener;
+  subscribed: boolean;
+  accepting: boolean;
+  pendingDeliveries: number;
+}
+
+const MAX_PENDING_JOB_LIFECYCLE_DELIVERIES = 64;
+
+function newJobLifecycleRecord(listeners: JobLifecycleSubscription[]): JobLifecycleRecord {
   const now = new Date().toISOString();
-  return { state: "queued", createdAt: now, updatedAt: now, startedAt: null, finishedAt: null, delivery: Promise.resolve() };
+  return { state: "queued", createdAt: now, updatedAt: now, startedAt: null, finishedAt: null, listeners, delivery: Promise.resolve() };
 }
 
 function terminalState(error: MachineError | undefined): Exclude<WorkerJobLifecycleState, "queued" | "running"> {
@@ -160,7 +172,8 @@ export class WorkerSupervisor {
   private readonly workerExecPath: string;
   private readonly maxJobDurationMs: number;
   private readonly cancellationGraceMs: number;
-  private readonly jobLifecycleListeners = new Set<WorkerJobLifecycleListener>();
+  private readonly jobLifecycleListeners = new Set<JobLifecycleSubscription>();
+  private readonly jobLifecycleListenerTimeoutMs: number;
   private closed = false;
 
   constructor(options: WorkerSupervisorOptions = {}) {
@@ -169,6 +182,8 @@ export class WorkerSupervisor {
     this.maxWorkerServices = boundedOption("maxWorkerServices", options.maxWorkerServices, 8);
     this.maxConcurrentServiceJobs = boundedOption("maxConcurrentServiceJobs", options.maxConcurrentServiceJobs, 1);
     this.maxQueuedServiceJobs = boundedOption("maxQueuedServiceJobs", options.maxQueuedServiceJobs, 4, true);
+    this.jobLifecycleListenerTimeoutMs = boundedOption("jobLifecycleListenerTimeoutMs", options.jobLifecycleListenerTimeoutMs, 2_000);
+    if (this.jobLifecycleListenerTimeoutMs > 10_000) throw new RangeError("jobLifecycleListenerTimeoutMs must not exceed 10000 ms");
     this.workerExecPath = options.workerExecPath ?? process.execPath;
     if (!path.isAbsolute(this.workerExecPath)) throw new RangeError("workerExecPath must be absolute");
     this.maxJobDurationMs = options.maxJobDurationMs ?? 15 * 60_000;
@@ -182,13 +197,53 @@ export class WorkerSupervisor {
   /** Subscribe to bounded lifecycle metadata without activating any module or worker. */
   subscribeJobLifecycle(listener: WorkerJobLifecycleListener): () => void {
     if (this.closed) return () => {};
-    this.jobLifecycleListeners.add(listener);
-    let subscribed = true;
+    const subscription: JobLifecycleSubscription = { listener, subscribed: true, accepting: true, pendingDeliveries: 0 };
+    this.jobLifecycleListeners.add(subscription);
     return () => {
-      if (!subscribed) return;
-      subscribed = false;
-      this.jobLifecycleListeners.delete(listener);
+      if (!subscription.subscribed) return;
+      subscription.subscribed = false;
+      subscription.accepting = false;
+      this.jobLifecycleListeners.delete(subscription);
     };
+  }
+
+  private nextLifecycleTime(lifecycle: JobLifecycleRecord): string {
+    return new Date(Math.max(Date.now(), Date.parse(lifecycle.updatedAt) + 1)).toISOString();
+  }
+
+  private async deliverLifecycle(
+    subscription: JobLifecycleSubscription,
+    event: WorkerJobLifecycleSnapshot,
+    deadline: number,
+    terminal: boolean,
+  ): Promise<void> {
+    if (!subscription.subscribed || (!terminal && !subscription.accepting)) return;
+    if (subscription.pendingDeliveries >= MAX_PENDING_JOB_LIFECYCLE_DELIVERIES) {
+      subscription.accepting = false;
+      this.jobLifecycleListeners.delete(subscription);
+      return;
+    }
+
+    subscription.pendingDeliveries += 1;
+    const callback = Promise.resolve()
+      .then(() => subscription.listener({ ...event, snapshot: structuredClone(event.snapshot) }))
+      .then(() => undefined, () => undefined);
+    void callback.then(() => { subscription.pendingDeliveries -= 1; });
+
+    const remainingMs = terminal ? this.jobLifecycleListenerTimeoutMs : Math.max(0, deadline - Date.now());
+    const timeoutMs = Math.min(this.jobLifecycleListenerTimeoutMs, remainingMs);
+    let timer: NodeJS.Timeout | undefined;
+    const completed = await Promise.race([
+      callback.then(() => true),
+      new Promise<false>((resolve) => { timer = setTimeout(() => resolve(false), timeoutMs); }),
+    ]);
+    if (timer) clearTimeout(timer);
+    if (!completed) {
+      // Detach a listener that has stopped making progress. Already accepted jobs
+      // retain one best-effort terminal notification, but no new jobs are attached.
+      subscription.accepting = false;
+      this.jobLifecycleListeners.delete(subscription);
+    }
   }
 
   private publishJobLifecycle(
@@ -198,7 +253,7 @@ export class WorkerSupervisor {
     error?: MachineError,
   ): Promise<void> {
     if (lifecycle.finishedAt !== null) return lifecycle.delivery;
-    const now = new Date().toISOString();
+    const now = this.nextLifecycleTime(lifecycle);
     lifecycle.state = state;
     lifecycle.updatedAt = now;
     if (state === "running" && lifecycle.startedAt === null) lifecycle.startedAt = now;
@@ -218,12 +273,10 @@ export class WorkerSupervisor {
       finishedAt: lifecycle.finishedAt,
       ...(lifecycle.errorCode ? { errorCode: lifecycle.errorCode } : {}),
     };
-    const listeners = [...this.jobLifecycleListeners];
     lifecycle.delivery = lifecycle.delivery.then(async () => {
-      await Promise.allSettled(listeners.map((listener) => Promise.resolve().then(() => listener({
-        ...event,
-        snapshot: structuredClone(event.snapshot),
-      }))));
+      const terminal = state === "succeeded" || state === "failed" || state === "cancelled";
+      await Promise.all(lifecycle.listeners.map((subscription) =>
+        this.deliverLifecycle(subscription, event, request.deadline, terminal)));
     });
     return lifecycle.delivery;
   }
@@ -267,6 +320,7 @@ export class WorkerSupervisor {
       () => this.services.delete(service),
       (id) => this.jobs.has(id) || this.queuedJobs.has(id) || [...this.services].some((candidate) => candidate.hasJob(id)),
       (request, lifecycle, state, error) => this.publishJobLifecycle(request, lifecycle, state, error),
+      () => [...this.jobLifecycleListeners],
     );
     this.services.add(service);
     try {
@@ -317,7 +371,7 @@ export class WorkerSupervisor {
     if (queued && this.queuedJobs.size >= this.maxQueuedJobs) {
       return failure<T>(activeRequest, machineError("worker_overloaded", "Worker job queue is full", true));
     }
-    const record: WorkerRecord = { request: activeRequest, lifecycle: newJobLifecycleRecord(), workerEntry, promise, resolve, state: queued ? "queued" : "starting", exiting: false };
+    const record: WorkerRecord = { request: activeRequest, lifecycle: newJobLifecycleRecord([...this.jobLifecycleListeners]), workerEntry, promise, resolve, state: queued ? "queued" : "starting", exiting: false };
     if (queued) {
       this.queuedJobs.set(activeRequest.id, record);
       this.jobQueue.push(record);
@@ -605,6 +659,7 @@ class SupervisedWorkerService implements WorkerService {
     state: WorkerJobLifecycleState,
     error?: MachineError,
   ) => Promise<void>;
+  private readonly captureLifecycleListeners: () => JobLifecycleSubscription[];
   private readonly jobs = new Map<string, ServiceJobRecord>();
   private readonly records = new Map<string, ServiceJobRecord>();
   private readonly jobQueue: ServiceJobRecord[] = [];
@@ -638,6 +693,7 @@ class SupervisedWorkerService implements WorkerService {
       state: WorkerJobLifecycleState,
       error?: MachineError,
     ) => Promise<void>,
+    captureLifecycleListeners: () => JobLifecycleSubscription[],
   ) {
     this.module = module;
     this.moduleVersion = moduleVersion;
@@ -650,6 +706,7 @@ class SupervisedWorkerService implements WorkerService {
     this.onRemoved = onRemoved;
     this.isDuplicateJobId = isDuplicateJobId;
     this.publishLifecycle = publishLifecycle;
+    this.captureLifecycleListeners = captureLifecycleListeners;
   }
 
   get pid(): number | undefined { return this.exited ? undefined : this.child?.pid; }
@@ -694,7 +751,7 @@ class SupervisedWorkerService implements WorkerService {
     if (queued && this.jobQueue.length >= this.maxQueuedServiceJobs) {
       return failure<T>(serialized, machineError("worker_overloaded", "Persistent worker service queue is full", true));
     }
-    const record: ServiceJobRecord = { request: serialized, lifecycle: newJobLifecycleRecord(), promise, resolve, state: queued ? "queued" : "active", dispatched: false };
+    const record: ServiceJobRecord = { request: serialized, lifecycle: newJobLifecycleRecord(this.captureLifecycleListeners()), promise, resolve, state: queued ? "queued" : "active", dispatched: false };
     this.records.set(serialized.id, record);
     if (!queued) this.jobs.set(serialized.id, record);
     record.deadlineTimer = setTimeout(() => this.stopJob(record, machineError("job_deadline_exceeded", "Job exceeded its deadline", true)), remainingMs);
