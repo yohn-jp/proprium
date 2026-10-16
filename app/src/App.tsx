@@ -15,8 +15,10 @@ import { ApiError, api, type Project, type SceneRead, type Tree, type TreeRead }
 import { ContributionHost } from "./contributions/ContributionHost";
 import { ProposalReview } from "./contributions/ProposalReview";
 import { PublicModuleView, publicModuleIdForPath } from "./contributions/PublicModuleView";
+import { ThemeControl } from "./components/ThemeControl";
 import { SceneEditor, type ScratchDraftBinding, type ScratchDraftPayload } from "./editor/SceneEditor";
 import { replaceDocumentBody } from "./editor/ruby";
+import { loadThemeMode, persistThemeMode, type ThemeMode } from "./theme";
 import { clearDraft, loadDraft } from "./drafts";
 import {
   BrowserJournal,
@@ -267,12 +269,33 @@ function buildScratchOperation(read: SceneRead, draft: ScratchDraftPayload): { o
   return { operation, path };
 }
 
-export function App() {
+export function App({ initialTheme }: { initialTheme?: ThemeMode } = {}) {
+  const [themeMode, setThemeMode] = useState<ThemeMode>(() => initialTheme ?? loadThemeMode());
+  const [themeError, setThemeError] = useState("");
+  const changeTheme = useCallback((mode: ThemeMode) => {
+    try {
+      persistThemeMode(mode);
+      setThemeMode(mode);
+      setThemeError("");
+    } catch {
+      setThemeError("外観の設定を保存できませんでした。");
+    }
+  }, []);
   const publicModuleId = publicModuleIdForPath(window.location.pathname);
-  return publicModuleId ? <PublicModuleView moduleId={publicModuleId} /> : <AuthorWorkspace />;
+  return publicModuleId
+    ? <PublicModuleView moduleId={publicModuleId} themeMode={themeMode} onThemeChange={changeTheme} themeError={themeError} />
+    : <AuthorWorkspace themeMode={themeMode} onThemeChange={changeTheme} themeError={themeError} />;
 }
 
-function AuthorWorkspace() {
+function AuthorWorkspace({
+  themeMode,
+  onThemeChange,
+  themeError,
+}: {
+  themeMode: ThemeMode;
+  onThemeChange: (mode: ThemeMode) => void;
+  themeError: string;
+}) {
   const [authState, setAuthState] = useState<"checking" | "signed-out" | "ready">("checking");
   const [authorScope, setAuthorScope] = useState("owner");
   const authorScopeRef = useRef("owner");
@@ -357,7 +380,8 @@ function AuthorWorkspace() {
             entry.documentPath === activeEditor.read.document.path && entry.operation.id === activeEntry.operation.id &&
             entry.operation.generation === activeEntry.operation.generation)
           : undefined;
-        if (conflictEntry && (activeEditor?.entry?.state !== "conflict" || !activeEditor.conflict)) {
+        const editorSnapshotIsCurrent = activeEditor && sameRemoteSnapshot(activeEditor.remote.snapshot, active.observation.snapshot);
+        if (conflictEntry && editorSnapshotIsCurrent && (activeEditor?.entry?.state !== "conflict" || !activeEditor.conflict)) {
           updateWork((current) => current?.editor?.read.document.path === conflictEntry.documentPath &&
               current.editor.entry?.operation.id === conflictEntry.operation.id &&
               current.editor.entry.operation.generation === conflictEntry.operation.generation &&
@@ -654,6 +678,21 @@ function AuthorWorkspace() {
           }
         }
       }
+      // A refresh can take longer than the draft debounce. Preserve edits made
+      // while the pinned reads were in flight, even if IndexedDB has not seen
+      // their newest generation yet.
+      const inMemory = workRef.current;
+      const inMemoryEditor = inMemory?.project.id === projectId && inMemory.selectedSceneId === sceneId &&
+          inMemory.editor?.read.document.path === effective.document.path
+        ? inMemory.editor
+        : null;
+      const inMemoryEntry = inMemoryEditor?.entry;
+      if (inMemoryEditor && inMemoryEntry &&
+          (!latest || inMemoryEntry.operation.generation > latest.operation.generation)) {
+        latest = inMemoryEntry;
+        entry = inMemoryEntry;
+        text = inMemoryEditor.text;
+      }
       if (latest) {
         if (latest.state === "draft" || latest.state === "conflict") text = latest.text;
         const docPrecondition = latest.operation.reads.find((item) => item.path === effective.document.path)?.revision;
@@ -812,13 +851,26 @@ function AuthorWorkspace() {
   }, [authorScope, importRemoteProposals, loadScene, reconcileProject, updateWork]);
   refreshRef.current = refreshRemote;
 
+  const refreshForeground = useCallback(() => {
+    const current = workRef.current;
+    if (current) {
+      void importRemoteProposals(
+        current.project.id,
+        current.observation.snapshot.repository,
+        authorScopeRef.current,
+        navigationRef.current,
+      );
+    }
+    void refreshRef.current();
+  }, [importRemoteProposals]);
+
   useEffect(() => {
     if (!work) return;
-    const timer = window.setInterval(() => void refreshRef.current(), 15_000);
+    const timer = window.setInterval(refreshForeground, 15_000);
     const onForeground = () => {
-      if (document.visibilityState === "visible") void refreshRef.current();
+      if (document.visibilityState === "visible") refreshForeground();
     };
-    const onOnline = () => void refreshRef.current();
+    const onOnline = () => refreshForeground();
     document.addEventListener("visibilitychange", onForeground);
     window.addEventListener("online", onOnline);
     return () => {
@@ -826,7 +878,7 @@ function AuthorWorkspace() {
       document.removeEventListener("visibilitychange", onForeground);
       window.removeEventListener("online", onOnline);
     };
-  }, [work?.project.id]);
+  }, [refreshForeground, work?.project.id]);
 
   useEffect(() => {
     const beforeUnload = (event: BeforeUnloadEvent) => {
@@ -1122,6 +1174,73 @@ function AuthorWorkspace() {
     return saved;
   }
 
+  async function reloadConflictSnapshot(
+    nav: number,
+    projectId: string,
+    repository: RepositoryIdentity,
+    sceneId: string,
+    documentPath: string,
+    operationId: string,
+    generation: number,
+  ): Promise<void> {
+    const before = workRef.current;
+    const beforeEditor = before?.editor;
+    if (!isCurrentProject(nav, projectId, repository) || before?.selectedSceneId !== sceneId ||
+        beforeEditor?.read.document.path !== documentPath) return;
+
+    const observed = await api.observation(projectId);
+    if (!isCurrentProject(nav, projectId, repository)) return;
+    if (!sameRepository(observed.snapshot.repository, repository)) {
+      throw new Error("登録済みリポジトリの識別情報が変わったため、競合の最新原稿を読み込めませんでした。");
+    }
+    const remoteChanged = before.observation.snapshot.remoteCommit !== observed.snapshot.remoteCommit;
+    const checkpointChanged = before.observation.checkpointHead !== observed.checkpointHead;
+    if (remoteChanged || checkpointChanged) {
+      await reconcileProject(projectId, repository, authorScopeRef.current, nav);
+      if (!isCurrentProject(nav, projectId, repository)) return;
+    }
+    const tree = await api.readTree(projectId, "remote", observed.snapshot);
+    if (!isCurrentProject(nav, projectId, repository)) return;
+    if (snapshotKey(tree.snapshot) !== snapshotKey(observed.snapshot)) {
+      throw new Error("競合確認中に作品構成と原稿のリモート版が一致しませんでした。");
+    }
+
+    const latest = workRef.current;
+    const editor = latest?.editor;
+    if (latest?.selectedSceneId !== sceneId || editor?.read.document.path !== documentPath) return;
+    const preservedEditor: EditorSession = { ...editor, conflict: null };
+    updateWork((current) => current?.project.id === projectId && current.selectedSceneId === sceneId &&
+        current.editor?.read.document.path === documentPath && sameRepository(current.observation.snapshot.repository, repository)
+      ? {
+        ...current,
+        observation: observed,
+        tree,
+        loadingScene: true,
+        editor: { ...current.editor, conflict: null },
+      }
+      : current);
+    setStatus({ message: "現在のリモート版を取得し、保護された下書きと比較しています…", kind: "normal" });
+    await loadScene(projectId, sceneId, tree, repository);
+    if (!isCurrentProject(nav, projectId, repository)) return;
+    const loaded = workRef.current;
+    if (loaded?.selectedSceneId !== sceneId) return;
+    if (!loaded.editor) {
+      // A failed fresh read must not erase the author copy. Keep recovery visible but
+      // with conflict controls unavailable until a canonical remote scene is loaded.
+      updateWork((current) => current?.project.id === projectId && current.selectedSceneId === sceneId &&
+          current.editor === null && sameRepository(current.observation.snapshot.repository, repository)
+        ? { ...current, loadingScene: false, editor: preservedEditor }
+        : current);
+      return;
+    }
+    if (loaded.editor.entry?.operation.id === operationId && loaded.editor.entry.operation.generation === generation &&
+        loaded.editor.text !== editor.text) {
+      setStatus({ message: "リモート版を読み込みましたが、保護された操作本文が一致しません。ブラウザーの回復記録を保持しています。", kind: "error" });
+      return;
+    }
+    await refreshJournal(repository, nav);
+  }
+
   async function checkpointCurrent(): Promise<void> {
     const current = workRef.current;
     const editor = current?.editor;
@@ -1158,9 +1277,28 @@ function AuthorWorkspace() {
       await refreshRemote();
     } catch (error) {
       if (error instanceof ApiError && (error.status === 409 || error.status === 412)) {
-        await currentJournal.updateState(submittedEntry, "conflict").catch(() => undefined);
-        if (isCurrentEditor(nav, projectId, repository, documentPath, sceneId)) {
-          updateWork((state) => state?.editor ? { ...state, editor: { ...state.editor, conflict: state.editor.remote } } : state);
+        let conflictEntry: JournalEntry | null = null;
+        try {
+          conflictEntry = await currentJournal.updateState(submittedEntry, "conflict");
+        } catch (storageError) {
+          if (isCurrentProject(nav, projectId, repository)) {
+            setStatus({ message: `チェックポイントが競合しましたが、競合状態を回復記録へ保存できませんでした。${messageOf(storageError)}`, kind: "error" });
+          }
+        }
+        if (conflictEntry && isCurrentEditor(nav, projectId, repository, documentPath, sceneId)) {
+          updateWork((state) => state?.editor?.entry?.operation.id === submittedEntry.operation.id &&
+              state.editor.entry.operation.generation === submittedEntry.operation.generation
+            ? { ...state, editor: { ...state.editor, entry: conflictEntry!, text: conflictEntry!.text, conflict: null, draftStored: true } }
+            : state);
+        }
+        if (conflictEntry && isCurrentProject(nav, projectId, repository)) {
+          try {
+            await reloadConflictSnapshot(nav, projectId, repository, sceneId, documentPath, submittedEntry.operation.id, submittedEntry.operation.generation);
+          } catch (refreshError) {
+            if (isCurrentProject(nav, projectId, repository)) {
+              setStatus({ message: `チェックポイントは競合しました。最新のリモート原稿を確認できませんでした。下書きは回復記録に保持しています。${messageOf(refreshError)}`, kind: "error" });
+            }
+          }
         }
       }
       if (isCurrentEditor(nav, projectId, repository, documentPath, sceneId)) setStatus({ message: messageOf(error), kind: "error" });
@@ -1398,6 +1536,7 @@ function AuthorWorkspace() {
       <header className="topbar">
         <a className="brand" href="/" aria-label="Scriptorium ホーム">Scriptorium</a>
         <div className="topbar-status" role="status" aria-live="polite" data-kind={status.kind}>{status.message || "作品を選択してください"}</div>
+        <ThemeControl mode={themeMode} onChange={onThemeChange} error={themeError} />
         <button type="button" className="quiet-button" onClick={() => void signOut()}>ログアウト</button>
       </header>
       <div className="workspace-grid">

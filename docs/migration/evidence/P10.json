@@ -17,9 +17,13 @@
       "5d54a650e062f2cfcc6cb47b5a489b426c932daa",
       "76d1e6606db271e5e9030928578991ed11efcc2d",
       "39431ac6c032e5988e02173be2516af2f7a6b224",
-      "d7491a5347bf98792d469442292fd8c74e558628"
+      "d7491a5347bf98792d469442292fd8c74e558628",
+      "530e5d9d56289af6b16a6c2fabdc33a23c4345a5",
+      "7b461b161467ff335a6bf559a501b6e26c0807f5",
+      "2bf5fdf5ee047026fc9d22afd9be71216422b3cc",
+      "82672602ba4979265af4920fcd45000e7b74d090"
     ],
-    "testedHead": "d7491a5347bf98792d469442292fd8c74e558628"
+    "testedHead": "82672602ba4979265af4920fcd45000e7b74d090"
   },
   "sourceClassification": [
     {
@@ -27,16 +31,16 @@
       "category": "authoritative author corrections",
       "target": ["meta/scriptorium/modules/speaker/corrections.jsonl", "the existing canonical plot/volumes scene YAML path"],
       "sourceProof": ["packages/core/src/speakerService.ts", "packages/core/src/speakerCorrectionLog.ts"],
-      "targetProof": ["modules/speaker/src/index.ts", "packages/migration/src/producers/filesystem.ts"],
-      "preservation": "Corrections update the canonical scene override and namespaced correction log through a pinned Core ChangeOperation proposal. P04's generic file producer performs the legacy path mapping; P10 does not create a duplicate speaker-specific importer or writer."
+      "targetProof": ["modules/speaker/src/index.ts", "modules/speaker/src/migration.ts", "modules/speaker/package.json", "packages/migration/src/producers/filesystem.ts"],
+      "preservation": "Corrections update the canonical scene override and namespaced correction log through a pinned Core ChangeOperation proposal. P04's generic file producer owns still-present source files and the legacy path mapping. When the module is re-enabled after the source file is absent, the speaker reactivation producer restores retained bytes only if the canonical target is absent; identical targets are unchanged and divergent targets are reported as conflicts."
     },
     {
       "source": ["meta/speaker-model.json"],
       "category": "authoritative adopted model",
       "target": ["meta/scriptorium/modules/speaker/adopted-model.json"],
       "sourceProof": ["packages/core/src/speakerReranker.ts", "packages/core/src/speakerRetrainRunner.ts"],
-      "targetProof": ["modules/speaker/src/index.ts", "modules/speaker/src/algorithms/speakerReranker.ts"],
-      "preservation": "Only a model that improves the deterministic held-out score by at least five percentage points is proposed, with the canonical model file revision as a read precondition. The model is author state; the worker never writes it. P04 owns the generic legacy-path mapping."
+      "targetProof": ["modules/speaker/src/index.ts", "modules/speaker/src/migration.ts", "modules/speaker/package.json", "modules/speaker/src/algorithms/speakerReranker.ts"],
+      "preservation": "Only a model that improves the deterministic held-out score by at least five percentage points is proposed, with the canonical model file revision as a read precondition. The model is author state; the worker never writes it. P04's generic file producer owns still-present source files and the legacy path mapping; the speaker reactivation producer later restores retained bytes with absent-only writes and unchanged/conflict reporting."
     },
     {
       "source": [".arcadia/speaker-eval-latest.json", "meta/speaker-rule-gates.json", "shared evaluation/retraining job status"],
@@ -54,6 +58,8 @@
     "Voice checking composes P06's declared voice-pattern/context-profile checks, learned fingerprint deviations, and stylometric deviations over the same actual scene attributions. It returns the three detailed warning sets and one merged UI list with registered, learned, or stylometric source labels.",
     "The browser contribution renders attribution and correction controls, count proposals, the confirmation queue, character dialogue, voice-profile comparison and similar-character warnings, and evaluation/gate/retraining workflows. Browser acceptance exercises the rendered controls and their registered action boundary.",
     "Every generated public speaker result carries a shared additive identity envelope for the speaker engine/module, shared tokenizer, and the canonical adopted-model file revision (or null when no adopted model is present); legacy provenance fields remain available.",
+    "The voice-check action accepts an optional unsaved text override and returns attribution, speaker-count evidence, and cluster trails from the same profile-informed target run, so diagnostics can consume draft text without bypassing speaker's canonical action boundary.",
+    "The public speaker migration producer restores retained corrections and adopted-model bytes only when the source files are absent and speaker is enabled; it uses stable proposal IDs, absent-only target revisions, and deterministic unchanged/conflict reporting.",
     "Server imports use pure shared engine constants/types; importing the server module does not execute the worker entry or add a process IPC message listener. Worker IPC is installed only when the compiled worker entry runs in its supervised child."
   ],
   "proofs": [
@@ -63,7 +69,7 @@
       "status": "passed",
       "targetFiles": ["modules/speaker/src/production.test.ts", "modules/speaker/src/index.ts", "modules/speaker/src/worker.ts"],
       "command": "pnpm --filter @scriptorium/module-speaker test",
-      "result": "2 passed, 0 failed on tested head d7491a5347bf98792d469442292fd8c74e558628. The composed ModuleRuntime loads the real Story, NLP, diagnostics, and speaker actions, uses the actual Lindera tokenizer and compiled CPU workers, and exercises synthetic Japanese scenes. It verifies attribution, registered/learned/stylometric warning composition, character dialogue and profile actions, generated-result identity across attribution, override, dialogue, voice, review, training, evaluation, and cache reads (including the actual adopted-model file revision after approval), 14 author correction proposals, 12 training examples with a two-scene holdout, a passing adoption gate, proposal-only model persistence, reranking after simulated author approval, evaluation and rule gates, stale cache-identity rejection/rebuild, and model reload after runtime restart. Legacy provenance keys remain available. It also checks that workers and shared capability processes are released after actions.",
+      "result": "6 passed, 0 failed on tested head 82672602ba4979265af4920fcd45000e7b74d090. The composed ModuleRuntime loads the real Story, NLP, diagnostics, and speaker actions, uses the actual Lindera tokenizer and compiled CPU workers, and exercises synthetic Japanese scenes. It verifies attribution, registered/learned/stylometric warning composition, unsaved draft text flowing through profile-informed voice attribution with estimatedN/evidence/clusterTrails, character dialogue and profile actions, generated-result identity across attribution, override, dialogue, voice, review, training, evaluation, and cache reads (including the actual adopted-model file revision after approval), 14 author correction proposals, 12 training examples with a two-scene holdout, a passing adoption gate, proposal-only model persistence, reranking after simulated author approval, evaluation and rule gates, stale cache-identity rejection/rebuild, and model reload after runtime restart. Legacy provenance keys remain available. It also checks that workers and shared capability processes are released after actions.",
       "scope": "focused composed CPU workflow; author review is simulated by applying the Core proposal in the in-memory snapshot harness",
       "engineModelIdentity": {
         "speakerEngine": "scriptorium-speaker-cpu@1.0.0",
@@ -71,6 +77,24 @@
         "tokenizer": "lindera-wasm-nodejs-ipadic@2.0.0",
         "diagnosticsEngine": "scriptorium-diagnostics-cpu@1.0.0"
       }
+    },
+    {
+      "id": "P10-SPEAKER-REACTIVATION",
+      "kind": "focused migration producer test",
+      "status": "passed",
+      "targetFiles": ["modules/speaker/src/migration.ts", "modules/speaker/src/migration.test.ts"],
+      "command": "pnpm --filter @scriptorium/module-speaker test; pnpm --filter @scriptorium/module-speaker build; pnpm --filter @scriptorium/module-speaker exec node --input-type=module -e 'import { createSpeakerMigrationProducer } from \"@scriptorium/module-speaker/migration\"; ...'",
+      "result": "Three synthetic migration tests passed on tested head 82672602ba4979265af4920fcd45000e7b74d090. They verify exact retained bytes and stable IDs, absent-only operations, unchanged/conflict behavior, generic-producer precedence while source files remain, and no reactivation reads while speaker is disabled. The public package subpath resolves to `speaker-reactivation-v1` after compilation.",
+      "scope": "focused reactivation hook; full migration and re-enable composition remain with P12"
+    },
+    {
+      "id": "P10-SOURCE-JOB-METADATA",
+      "kind": "focused action descriptor test",
+      "status": "passed",
+      "targetFiles": ["modules/speaker/src/index.ts", "modules/speaker/src/production.test.ts"],
+      "command": "pnpm --filter @scriptorium/module-speaker test",
+      "result": "The production module test passes on tested head 82672602ba4979265af4920fcd45000e7b74d090 and asserts the public evaluation and retraining actions declare source-compatible job types `speaker-eval` and `speaker-retrain`.",
+      "scope": "static descriptors only; runtime/API history persistence is verified by the host acceptance owner"
     },
     {
       "id": "P10-SERVER-WORKER-ISOLATION",
@@ -87,7 +111,7 @@
       "status": "passed",
       "targetFiles": ["modules/speaker/src/browser.ts", "modules/speaker/tests/browser-workflow.acceptance.mjs", "modules/speaker/tests/browser-workflow.html"],
       "command": "SCRIPTORIUM_E2E_CHROMIUM=/nix/store/ini1ifgvcsvw48x4mxawrv9jvbdwn70p-chromium-155.0.8059.79/bin/chromium node modules/speaker/tests/browser-workflow.acceptance.mjs",
-      "result": "Passed on tested head d7491a5347bf98792d469442292fd8c74e558628 with actual Chromium/Playwright DOM mounting through Vite. It selects scenes and characters, runs attribution/voice diagnostics, submits correction and count proposals, renders the confirmation queue, filters character dialogue, displays voice similarity/stylometry and peer comparison, expands evaluation rows, toggles mismatch-only display, updates gates, and starts retraining. The browser test stubs only the action transport; CPU behavior is verified by P10-SPEAKER-CPU-WORKFLOW.",
+      "result": "Passed on tested head 82672602ba4979265af4920fcd45000e7b74d090 with actual Chromium/Playwright DOM mounting through Vite. It selects scenes and characters, runs attribution/voice diagnostics, submits correction and count proposals, renders the confirmation queue, filters character dialogue, displays voice similarity/stylometry and peer comparison, expands evaluation rows, toggles mismatch-only display, updates gates, and starts retraining. The browser test stubs only the action transport; CPU behavior is verified by P10-SPEAKER-CPU-WORKFLOW.",
       "scope": "focused browser UI/action-boundary test"
     },
     {
@@ -96,7 +120,7 @@
       "status": "passed",
       "targetFiles": ["modules/speaker/src/**/*.ts", "modules/speaker/src/**/*.tsx"],
       "command": "pnpm --filter @scriptorium/module-speaker typecheck && pnpm --filter @scriptorium/module-speaker build",
-      "result": "Typecheck and build both passed on tested head d7491a5347bf98792d469442292fd8c74e558628.",
+      "result": "Typecheck and build both passed on tested head 82672602ba4979265af4920fcd45000e7b74d090.",
       "scope": "focused module compilation"
     },
     {

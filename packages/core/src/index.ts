@@ -29,6 +29,8 @@ const execFile = promisify(execFileCallback);
 const DEFAULT_BRANCH = "main";
 const MAX_HISTORY = 100;
 const GIT_TIMEOUT_MS = 120_000;
+// The active-project observation cadence is 15 seconds (FULL-MIGRATION §4).
+const READ_OBSERVATION_MAX_AGE_MS = 15_000;
 
 export interface Project {
   id: string;
@@ -1022,6 +1024,7 @@ export class CoreStore implements MutationCoordinator {
   private readonly fetcher: typeof fetch;
   private readonly maxPushAttempts: number;
   private readonly queueTails = new Map<string, Promise<void>>();
+  private readonly readObservations = new Map<string, RemoteObservation>();
   private readonly proposals = new Map<string, Map<string, ChangeProposal>>();
   private readonly durableProposalIds = new Map<string, Set<string>>();
   private readonly approvals = new Map<string, Map<string, {
@@ -1238,6 +1241,12 @@ export class CoreStore implements MutationCoordinator {
     }
     if (head && (!remoteCommit || !(await this.isAncestor(root, head, remoteCommit)))) {
       throw coreError(409, "local_only_commits", "Local-only commits must be preserved before replacing the project workspace");
+    }
+    const unremoteHistory = (await git(root, [
+      "rev-list", "--all", "--reflog", ...(remoteCommit ? [`^${remoteCommit}`] : []),
+    ])).trim();
+    if (unremoteHistory) {
+      throw coreError(409, "local_refs_unrecoverable", "Local branches, stashes, or retained refs contain commits absent from the remote branch; preserve them before replacing the project workspace");
     }
 
     const proposals = new Map<string, StoredOperation>();
@@ -1899,11 +1908,11 @@ export class CoreStore implements MutationCoordinator {
   }
 
   private async selectedSnapshotUnlocked(projectId: string, view: "remote" | "checkpoint" = "remote", pinned?: SnapshotId | string) {
-    const observation = await this.requireObservation(projectId);
     const { record, root } = await this.getProject(projectId);
+    const observation = await this.requireReadObservation(projectId, record, root);
     let snapshot = observation.snapshot;
     if (view === "checkpoint") {
-      const reconciled = await this.reconcileUnlocked(projectId);
+      const reconciled = await this.reconcileUnlocked(projectId, observation);
       snapshot = reconciled.snapshot;
       if (reconciled.operations.some((operation) => operation.state === "conflict")) {
         const localHead = await this.checkpointHead(root);
@@ -1917,7 +1926,8 @@ export class CoreStore implements MutationCoordinator {
       await this.ensureSnapshot(root, pinned, observation.snapshot.repository, observation.snapshot.remoteCommit);
       snapshot = pinned;
     }
-    await this.ensureSnapshot(root, snapshot, observation.snapshot.repository, observation.snapshot.remoteCommit);
+    const fetchedRemote = await this.getRef(root, `refs/remotes/origin/${record.branch}`) ?? observation.snapshot.remoteCommit;
+    await this.ensureSnapshot(root, snapshot, record.identity ?? observation.snapshot.repository, fetchedRemote);
     return { snapshot, commit: view === "checkpoint" ? snapshot.overlayCommit ?? snapshot.remoteCommit : snapshot.remoteCommit, record, root };
   }
 
@@ -2737,8 +2747,8 @@ export class CoreStore implements MutationCoordinator {
 
   async listProposals(projectId: string): Promise<ProposalStatus[]> {
     return this.withProjectLock(projectId, async () => {
-      const observation = await this.requireObservation(projectId);
       const { record, root } = await this.getProject(projectId);
+      const observation = await this.requireReadObservation(projectId, record, root);
       const operations = await this.proposalOperationRecords(root, observation);
       const proposals = await this.loadProjectProposals(record, root, observation, operations);
       return [...proposals.values()].map((proposal) => this.buildProposalStatus(
@@ -2751,8 +2761,8 @@ export class CoreStore implements MutationCoordinator {
       throw coreError(400, "invalid_proposal_id", "The proposal ID is invalid");
     }
     return this.withProjectLock(projectId, async () => {
-      const observation = await this.requireObservation(projectId);
       const { record, root } = await this.getProject(projectId);
+      const observation = await this.requireReadObservation(projectId, record, root);
       const operations = await this.proposalOperationRecords(root, observation);
       const proposals = await this.loadProjectProposals(record, root, observation, operations);
       const proposal = proposals.get(proposalId);
@@ -3188,6 +3198,7 @@ export class CoreStore implements MutationCoordinator {
         await fs.mkdir(askpassDir, { recursive: true, mode: 0o700 });
         try {
           const askpass = await makeAskpassScript(askpassDir);
+          this.readObservations.delete(projectId);
           await git(root, ["push", "origin", `${commit}:refs/heads/${record.branch}`], { token: this.token, askpass });
         } catch { /* A fresh remote observation below distinguishes rejection from a lost response. */ }
         finally { await fs.rm(askpassDir, { recursive: true, force: true }).catch(() => undefined); }
@@ -3277,15 +3288,38 @@ export class CoreStore implements MutationCoordinator {
   }
 
   private async requireObservation(projectId: string): Promise<RemoteObservation> {
-    try { return await this.observedUnlocked(projectId); }
+    try {
+      const observation = await this.observedUnlocked(projectId);
+      this.readObservations.set(projectId, structuredClone(observation));
+      return observation;
+    }
     catch (error) {
       if (error instanceof CoreError) throw error;
       throw coreError(502, "remote_observation_failed", "The repository could not be freshly observed");
     }
   }
 
-  private async reconcileUnlocked(projectId: string): Promise<ReconcileResult> {
-    const observation = await this.requireObservation(projectId);
+  private async requireReadObservation(
+    projectId: string,
+    record: ProjectRecord,
+    root: string,
+  ): Promise<RemoteObservation> {
+    const cached = this.readObservations.get(projectId);
+    if (cached && record.identity &&
+        snapshotKey({ repository: cached.snapshot.repository, remoteCommit: "" }) ===
+          snapshotKey({ repository: record.identity, remoteCommit: "" })) {
+      const age = Date.now() - Date.parse(cached.observedAt);
+      const latestFetchedRemote = await this.getRef(root, `refs/remotes/origin/${record.branch}`) ?? "";
+      if (Number.isFinite(age) && age >= 0 && age < READ_OBSERVATION_MAX_AGE_MS &&
+          latestFetchedRemote === cached.snapshot.remoteCommit) {
+        return structuredClone(cached);
+      }
+    }
+    return this.requireObservation(projectId);
+  }
+
+  private async reconcileUnlocked(projectId: string, knownObservation?: RemoteObservation): Promise<ReconcileResult> {
+    const observation = knownObservation ?? await this.requireObservation(projectId);
     const { root } = await this.getProject(projectId);
     const remoteHead = observation.snapshot.remoteCommit;
     const localOperations = await this.readLocalOperationRecords(root);
@@ -3664,6 +3698,7 @@ export class CoreStore implements MutationCoordinator {
       this.proposals.delete(projectId);
       this.durableProposalIds.delete(projectId);
       this.approvals.delete(projectId);
+      this.readObservations.delete(projectId);
       if (detached) {
         await fs.rm(detachedRoot, { recursive: true, force: true }).catch(() => undefined);
         if (movedJournal) await fs.rm(detachedJournal, { force: true }).catch(() => undefined);
@@ -3796,6 +3831,7 @@ export class CoreStore implements MutationCoordinator {
         this.approvals.delete(projectId);
         this.proposals.delete(projectId);
         this.durableProposalIds.delete(projectId);
+        this.readObservations.delete(projectId);
         if (backedUp) await fs.rm(backupRoot, { recursive: true, force: true }).catch(() => undefined);
         return { id: projectId, url: updated.url, branch: updated.branch };
       } catch (error) {
@@ -4080,8 +4116,8 @@ export class CoreStore implements MutationCoordinator {
 
   async history(projectId: string): Promise<Commit[]> {
     return this.withProjectLock(projectId, async () => {
-      const { root } = await this.getProject(projectId);
-      const observation = await this.requireObservation(projectId);
+      const { record, root } = await this.getProject(projectId);
+      const observation = await this.requireReadObservation(projectId, record, root);
       const localHead = await this.getRef(root, "HEAD");
       const heads = !localHead ? [observation.snapshot.remoteCommit]
         : !observation.snapshot.remoteCommit || await this.isAncestor(root, observation.snapshot.remoteCommit, localHead) ? [localHead]

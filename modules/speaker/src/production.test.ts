@@ -216,6 +216,13 @@ test("loading the server entry does not install worker IPC listeners in the host
   assert.equal(result.status, 0, result.stderr || result.stdout);
 });
 
+test("evaluation and retraining actions advertise their source job types", async () => {
+  const definition = await createSpeakerModule(moduleContext());
+  const actions = new Map(definition.actions.map((action) => [action.id, action]));
+  assert.deepEqual(actions.get("speaker.evaluation.run")?.job, { type: "speaker-eval" });
+  assert.deepEqual(actions.get("speaker.retraining.run")?.job, { type: "speaker-retrain" });
+});
+
 test("speaker actions run real CPU attribution, propose corrections/model adoption, and reload from the reviewed snapshot", { timeout: 180_000 }, async () => {
   const files = initialFiles();
   let snapshot = snapshotFor(files);
@@ -255,6 +262,17 @@ test("speaker actions run real CPU attribution, propose corrections/model adopti
     assert.ok(mergedIssues.some((warning) => warning.source === "learned" && warning.issueLabel === "学習語尾から逸脱"), JSON.stringify(voiceData));
     assert.ok(mergedIssues.some((warning) => warning.source === "stylometric"), JSON.stringify(voiceData));
     assert.deepEqual(runtime.workerSupervisor.activeWorkerPids, [], "voice-check worker and its shared Lindera lease are released after the action");
+
+    const draftText = "星野は灯りを見た。『僕が行く。』";
+    const voiceDraft = await runtime.invokeAction("speaker", "speaker.voice.check", { sceneId: "sc-synthetic-voice-probe", text: draftText }, host);
+    const voiceDraftData = dataOf(voiceDraft);
+    assertSpeakerIdentity(voiceDraftData, null);
+    assert.equal((voiceDraftData.attributions as Array<{ text: string }>)[0]?.text, "『僕が行く。』");
+    assert.equal(voiceDraftData.estimatedN, 1);
+    assert.equal(voiceDraftData.fromManual, true);
+    assert.ok(voiceDraftData.evidence && typeof voiceDraftData.evidence === "object");
+    assert.ok(Array.isArray(voiceDraftData.clusterTrails));
+    assert.deepEqual(runtime.workerSupervisor.activeWorkerPids, [], "draft voice-check releases worker and shared tokenizer lease");
 
     const dialogue = await runtime.invokeAction("speaker", "speaker.dialogue.list", { characterId: "char-hero", limit: 80, minConfidence: "low" }, host);
     const dialogueData = dataOf(dialogue);

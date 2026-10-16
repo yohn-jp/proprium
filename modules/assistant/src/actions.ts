@@ -280,9 +280,10 @@ function action(
   effect: ModuleAction["effect"],
   parse: (value: unknown) => unknown,
   handler: (input: RecordValue, context: ModuleActionContext) => Promise<unknown>,
+  jobType?: string,
 ): ModuleAction {
   return {
-    id, effect, inputSchema: { parse }, outputSchema,
+    id, effect, ...(jobType ? { job: { type: jobType } } : {}), inputSchema: { parse }, outputSchema,
     async invoke(value, context) {
       try {
         if (context.signal.aborted) throw context.signal.reason ?? codeError("action_cancelled", "Assistant action was cancelled");
@@ -1846,15 +1847,15 @@ export function createAssistantActions(moduleContext: ModuleContext): ModuleActi
     action("assistant.usage.read", "read", parseUsageInput, async (input, context) => readUsageHistory(moduleContext, context, input as ReturnType<typeof parseUsageInput>)),
     action("assistant.rewrite", "compute", parseRewriteInput, async (input, context) => runRewrite(moduleContext, context, input as ReturnType<typeof parseRewriteInput>)),
     action("assistant.rewrite.propose", "propose", parseRewriteProposalInput, async (input, context) => proposeRewrite(context, input as ReturnType<typeof parseRewriteProposalInput>)),
-    action("assistant.summary.scene", "propose", parseIdInput, async (input, context) => runSceneSummary(moduleContext, context, input.sceneId as string)),
-    action("assistant.summary.chapter", "propose", (value) => parseIdInput(value, "chapterId"), async (input, context) => runChapterSummary(moduleContext, context, input.chapterId as string)),
+    action("assistant.summary.scene", "propose", parseIdInput, async (input, context) => runSceneSummary(moduleContext, context, input.sceneId as string), "summary-refresh"),
+    action("assistant.summary.chapter", "propose", (value) => parseIdInput(value, "chapterId"), async (input, context) => runChapterSummary(moduleContext, context, input.chapterId as string), "summary-refresh"),
     action("assistant.qa", "compute", parseQaInput, async (input, context) => runQa(moduleContext, context, input as ReturnType<typeof parseQaInput>)),
     action("assistant.continuation", "compute", parseContinuationInput, async (input, context) => runContinuation(moduleContext, context, input as unknown as ReturnType<typeof parseContinuationInput>)),
-    action("assistant.aspect.review", "compute", parseAspectInput, async (input, context) => runAspectReview(context, input as ReturnType<typeof parseAspectInput>)),
+    action("assistant.aspect.review", "compute", parseAspectInput, async (input, context) => runAspectReview(context, input as ReturnType<typeof parseAspectInput>), "aspect-review"),
     action("assistant.dialogue.topics", "compute", parseDialogueTopicsInput, async (input, context) => runDialogueTopics(moduleContext, context, input as ReturnType<typeof parseDialogueTopicsInput>)),
     action("assistant.dialogue.turns", "compute", parseDialogueTurnInput, async (input, context) => runDialogueTurns(moduleContext, context, input as unknown as ReturnType<typeof parseDialogueTurnInput>)),
     action("assistant.reader.reaction", "compute", (value) => parseIdInput(value, "chapterId"), async (input, context) => runReaderReaction(moduleContext, context, input.chapterId as string)),
-    action("assistant.zukan.suggestions", "propose", parseZukanInput, async (input, context) => runZukanSuggestions(moduleContext, context, input as unknown as ReturnType<typeof parseZukanInput>)),
+    action("assistant.zukan.suggestions", "propose", parseZukanInput, async (input, context) => runZukanSuggestions(moduleContext, context, input as unknown as ReturnType<typeof parseZukanInput>), "zukan-proposal"),
     action("assistant.synonyms.suggestions", "compute", parseSynonymInput, async (input, context) => runSynonyms(moduleContext, context, input as ReturnType<typeof parseSynonymInput>)),
     action("assistant.contradictions.assist", "compute", parseContradictionInput, async (input, context) => runContradictionAssist(moduleContext, context, input as ReturnType<typeof parseContradictionInput>)),
     action("assistant.stateEvents.draft", "propose", parseIdInput, async (input, context) => runStateEventDraft(moduleContext, context, input.sceneId as string)),

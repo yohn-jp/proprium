@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import { randomUUID } from "node:crypto";
+import { createHash, randomUUID } from "node:crypto";
 import { execFile as execFileCallback } from "node:child_process";
 import { promisify } from "node:util";
 import { mkdtemp, mkdir, readFile, rm, stat, writeFile } from "node:fs/promises";
@@ -15,14 +15,23 @@ import { ModuleRuntime } from "../../../packages/module-runtime/dist/index.js";
 const execFile = promisify(execFileCallback);
 const nlpPackageUrl = new URL("../../nlp/package.json", import.meta.url);
 const diagnosticsPackageUrl = new URL("../package.json", import.meta.url);
+const storyPackageUrl = new URL("../../story/package.json", import.meta.url);
+const speakerPackageUrl = new URL("../../speaker/package.json", import.meta.url);
 const nlpPackage = JSON.parse(await readFile(nlpPackageUrl, "utf8"));
 const diagnosticsPackage = JSON.parse(await readFile(diagnosticsPackageUrl, "utf8"));
+const storyPackage = JSON.parse(await readFile(storyPackageUrl, "utf8"));
+const speakerPackage = JSON.parse(await readFile(speakerPackageUrl, "utf8"));
 const nlpManifest = nlpPackage.scriptoriumModule;
 const diagnosticsManifest = diagnosticsPackage.scriptoriumModule;
+const storyManifest = storyPackage.scriptoriumModule;
+const speakerManifest = speakerPackage.scriptoriumModule;
 const nlpEntry = new URL("../../nlp/dist/index.js", import.meta.url).href;
 const diagnosticsEntry = new URL("../dist/index.js", import.meta.url).href;
+const storyEntry = new URL("../../story/dist/index.js", import.meta.url).href;
+const speakerEntry = new URL("../../speaker/dist/index.js", import.meta.url).href;
 const nlpWorker = fileURLToPath(new URL("../../nlp/dist/worker.js", import.meta.url));
 const diagnosticsWorker = fileURLToPath(new URL("../dist/worker.js", import.meta.url));
+const speakerWorker = fileURLToPath(new URL("../../speaker/dist/worker.js", import.meta.url));
 
 const synonymsPath = "meta/scriptorium/modules/nlp/synonyms.yaml";
 const ignoredPath = "meta/scriptorium/modules/nlp/candidate-ignore-list.yaml";
@@ -67,6 +76,10 @@ async function createSyntheticRepository(root) {
     id: "sc-two", type: "scene", name: "帰路", chapter: "ch-one", order: 2,
     location: "loc-b", appears: ["char-hero"], manuscript: "manuscript/vol-one/ch-one/sc-two.md",
   });
+  await writeYaml(seed, "plot/volumes/vol-one/chapters/ch-one/scenes/sc-three.yaml", {
+    id: "sc-three", type: "scene", name: "夜明け", chapter: "ch-one", order: 3,
+    location: "loc-b", appears: ["char-hero"], manuscript: "manuscript/vol-one/ch-one/sc-three.md",
+  });
   await writeYaml(seed, "plot/threads/thread-open.yaml", { id: "thread-open", type: "thread", name: "古い約束", status: "open" });
   await writeYaml(seed, "bible/characters/hero/profile.yaml", {
     id: "char-hero", type: "character", name: "星野", aliases: ["星の剣士"],
@@ -78,6 +91,7 @@ async function createSyntheticRepository(root) {
   await writeText(seed, firstScenePath,
     "---\ntitle: 遺跡\nauthor_note: preserve-this\ncustom:\n  nested: true\n---\n星野は悲しい。星影列車の古文書を調べた…。\n「俺は行く。」\n");
   await writeText(seed, "manuscript/vol-one/ch-one/sc-two.md", "---\ntitle: 帰路\nauthor_note: preserve-formatting-metadata\ncustom:\n  nested: true\n---\n\t前日、星野は青い彗星を見上げた…。\n　「俺は行く。」\n");
+  await writeText(seed, "manuscript/vol-one/ch-one/sc-three.md", "---\ntitle: 夜明け\nauthor_note: preserve-source-proposal-metadata\ncustom:\n  nested: true\n---\n\t星野は夜明けを待った…。\n　「もう大丈夫だ。」\n");
 
   await writeYaml(seed, synonymsPath, {
     ownerNote: "preserve-synonym-root",
@@ -110,24 +124,43 @@ async function createSyntheticRepository(root) {
 async function createRuntime(cacheDirectory) {
   await mkdir(cacheDirectory, { recursive: true });
   const runtime = new ModuleRuntime({
-    manifests: [nlpManifest, diagnosticsManifest],
-    enabled: ["diagnostics"],
+    manifests: [nlpManifest, storyManifest, diagnosticsManifest, speakerManifest],
+    enabled: ["diagnostics", "speaker", "story"],
     cacheDirectory,
-    workerEntries: { nlp: nlpWorker, diagnostics: diagnosticsWorker },
+    workerEntries: { nlp: nlpWorker, diagnostics: diagnosticsWorker, speaker: speakerWorker },
     loaders: {
       nlp: async (context) => (await import(nlpEntry)).createModule(context),
+      story: async (context) => (await import(storyEntry)).createModule(context),
       diagnostics: async (context) => (await import(diagnosticsEntry)).createModule(context),
+      speaker: async (context) => (await import(speakerEntry)).createModule(context),
     },
   });
   return runtime;
 }
 
 function actionHost(store, projectId, reader) {
+  const passThrough = { parse(value) { return value; } };
   return {
     projectId,
     reader,
     signal: new AbortController().signal,
     access: "owner",
+    actions: [{
+      module: "core",
+      action: {
+        id: "core.proposals.get",
+        effect: "read",
+        inputSchema: passThrough,
+        outputSchema: passThrough,
+        async invoke(input, context) {
+          const proposalId = input?.proposalId;
+          if (typeof proposalId !== "string") throw new TypeError("proposalId is required");
+          const proposal = await store.getProposal(projectId, proposalId);
+          if (!proposal) throw Object.assign(new Error("Proposal not found"), { code: "PROPOSAL_NOT_FOUND" });
+          return { ok: true, snapshot: context.reader.snapshot, data: { proposal } };
+        },
+      },
+    }],
     async propose(operations, evidence, proposalId, signal) {
       if (signal?.aborted) throw Object.assign(new Error("Acceptance proposal was cancelled"), { code: "action_cancelled" });
       return store.propose(projectId, {
@@ -152,6 +185,27 @@ function proposalFor(result, name) {
   assert.ok(proposal && Array.isArray(proposal.operations) && proposal.operations.length > 0, `${name} did not return a Core proposal`);
   assert.equal(proposal.source, "module");
   return proposal;
+}
+
+function fnv1aHash(input) {
+  let hash = 0x811c9dc5;
+  for (let index = 0; index < input.length; index++) {
+    hash ^= input.charCodeAt(index);
+    hash = Math.imul(hash, 0x01000193);
+  }
+  return (hash >>> 0).toString(16).padStart(8, "0");
+}
+
+function sourceFormatterResultId({ projectId, sceneId, manuscriptId, manuscriptRevision, text }) {
+  return `na-${createHash("sha256").update(JSON.stringify({
+    action: "format-manuscript",
+    projectId,
+    sceneId,
+    manuscriptId,
+    manuscriptRevision,
+    manuscriptContentHash: fnv1aHash(text),
+    text,
+  })).digest("hex")}`;
 }
 
 async function approveCheckpointAndPublish(store, projectId, proposals) {
@@ -230,6 +284,25 @@ test("P06 public actions survive Core-approved publish, data-root deletion, and 
     assert.ok(diagnostics.analysis.sentimentArc.points.length > 0);
     assert.ok(diagnostics.semanticEmbedding === undefined, "this P06 acceptance run does not claim P09 embedding-engine certification");
 
+    const draftText = "星野は古文書を見つけた。\n『俺は行く。』";
+    const fullResult = await runtime.invokeAction("diagnostics", "diagnostics.scene", { sceneId: "sc-one", text: draftText }, host);
+    const full = actionData(fullResult, "diagnostics.scene", reader);
+    assert.deepEqual(Object.keys(full), [
+      "textHash", "tier", "meta", "analysis", "speakerAttributions", "estimatedN", "clusterTrails",
+      "voiceWarnings", "styleDeviations", "stylometricDeviations", "plotSemanticWarnings", "proseBalance",
+      "synonymSuggestions", "issues",
+    ], "the composed action retains the source SceneDiagnosticsResult DTO without transport/model fields");
+    assert.equal(full.tier, "full");
+    assert.equal(full.analysis.charCount, draftText.length, "the optional draft text override is used by the complete analysis");
+    assert.equal(typeof full.textHash, "string");
+    assert.equal(typeof full.estimatedN, "number");
+    for (const key of ["speakerAttributions", "clusterTrails", "voiceWarnings", "styleDeviations", "stylometricDeviations", "plotSemanticWarnings", "synonymSuggestions", "issues"]) {
+      assert.ok(Array.isArray(full[key]), `full diagnostics includes source field ${key}`);
+    }
+    assert.ok(full.issues.some((issue) => issue.kind === "voice" && issue.meta?.basis === "profile" && issue.meta?.found === "俺"),
+      "actual speaker attribution and declared voice profile findings reach the source-normalized issue list");
+    assert.equal(full.semanticEmbedding, undefined, "the source DTO does not gain provider fields when optional semantic modules are unavailable");
+
     const continuityResult = await runtime.invokeAction("diagnostics", "diagnostics.checkContinuity", {}, host);
     const continuity = actionData(continuityResult, "diagnostics.checkContinuity", reader);
     assert.ok(continuity.warnings.some((warning) => warning.reason === "non-adjacent-location"));
@@ -268,6 +341,52 @@ test("P06 public actions survive Core-approved publish, data-root deletion, and 
     assert.equal(formatProposal.operations[0].id, `${formatted.proposalId}-replace`);
     assert.equal(formatProposal.operations[0].writes[0].path, "manuscript/vol-one/ch-one/sc-two.md");
 
+    const storyContextResult = await runtime.invokeAction("story", "story.scene.context", { sceneId: "sc-three" }, host);
+    const storyContext = actionData(storyContextResult, "story.scene.context", reader);
+    assert.equal(storyContext.manuscriptPath, "manuscript/vol-one/ch-one/sc-three.md");
+    assert.equal(typeof storyContext.manuscriptRevision, "string");
+    const sourceFormatResult = await runtime.invokeAction("diagnostics", "diagnostics.formatManuscript", {
+      sceneId: "sc-three", registerProposal: false,
+    }, host);
+    const sourceFormatted = actionData(sourceFormatResult, "diagnostics.formatManuscript source adapter", reader);
+    assert.equal(sourceFormatted.actionId, "format-manuscript");
+    assert.equal(sourceFormatted.formattedText, "星野は夜明けを待った……。\n\n「もう大丈夫だ。」");
+    assert.equal(sourceFormatted.resultId, sourceFormatterResultId({
+      projectId: project.id,
+      sceneId: "sc-three",
+      manuscriptId: storyContext.manuscript.id,
+      manuscriptRevision: storyContext.manuscriptRevision,
+      text: storyContext.manuscriptBody,
+    }), "result identity matches the source formatter's pinned Story revision and text hash");
+    assert.equal(sourceFormatted.proposalId, sourceFormatted.sourceProposal.id);
+    assert.equal(sourceFormatted.proposal, null, "registerProposal:false does not create a canonical Core proposal");
+    assert.equal(sourceFormatResult.proposals, undefined, "the adapter leaves source submission to the author-facing Story route");
+    const sourceNcs = sourceFormatted.sourceProposal;
+    assert.deepEqual(Object.keys(sourceNcs), ["schemaVersion", "id", "projectId", "goal", "status", "assessment", "operations", "evidence", "diagnostics"]);
+    assert.equal(sourceNcs.projectId, project.id);
+    assert.equal(sourceNcs.goal, "Format manuscript");
+    assert.equal(sourceNcs.operations.length, 1);
+    assert.deepEqual(sourceNcs.operations[0], {
+      id: `${sourceNcs.id}-replace`,
+      kind: "manuscript.replace-range",
+      target: { manuscriptId: storyContext.manuscript.id, sceneId: "sc-three" },
+      precondition: { kind: "revision", value: storyContext.manuscriptRevision },
+      range: { start: 0, end: storyContext.manuscriptBody.length },
+      replacement: sourceFormatted.formattedText,
+      evidenceIds: [`${sourceNcs.id}-source`],
+      assessment: { confidence: 1, risk: "low" },
+    }, "source replacement operation uses the semantic Story revision, not the Core file revision");
+    assert.deepEqual(sourceNcs.evidence, [{
+      id: `${sourceNcs.id}-source`, sourceKind: "manuscript", sourceId: storyContext.manuscript.id,
+      revision: storyContext.manuscriptRevision, range: { start: 0, end: storyContext.manuscriptBody.length },
+    }]);
+    assert.deepEqual(sourceNcs.diagnostics, { before: null, after: null });
+    const sourceSubmitResult = await runtime.invokeAction("story", "story.changes.propose", sourceNcs, host);
+    const sourceSubmit = actionData(sourceSubmitResult, "story.changes.propose formatted NCS", reader);
+    const sourceCoreProposal = proposalFor(sourceSubmitResult, "story.changes.propose formatted NCS");
+    assert.equal(sourceSubmit.changeSetId, sourceNcs.id, "the emitted source NarrativeChangeSet is accepted by the public Story submission action");
+    assert.ok(sourceCoreProposal.operations.some((operation) => operation.writes.some((write) => write.path === "manuscript/vol-one/ch-one/sc-three.md")));
+
     const synonymResult = await runtime.invokeAction("nlp", "nlp.saveSynonymGroup", {
       words: ["剛健"], mergeGroupIndex: 0,
     }, host);
@@ -283,19 +402,21 @@ test("P06 public actions survive Core-approved publish, data-root deletion, and 
     const proposals = [
       proposalFor(lintResult, "diagnostics.proposeLintFix"),
       formatProposal,
+      sourceCoreProposal,
       proposalFor(synonymResult, "nlp.saveSynonymGroup"),
       proposalFor(ignoredResult, "nlp.ignoreCandidates"),
       proposalFor(consentResult, "nlp.updateExternalConsent"),
     ];
-    assert.equal(proposals.length, 5);
+    assert.equal(proposals.length, 6);
     const unchangedReader = await pinnedRemoteReader(store, project.id);
     assert.deepEqual(unchangedReader.snapshot, reader.snapshot, "module proposals leave the canonical remote snapshot unchanged until author approval");
     assert.equal((await unchangedReader.read(synonymsPath)).content, (await reader.read(synonymsPath)).content);
     assert.equal((await unchangedReader.read(firstScenePath)).content, manuscript.content, "lint never edits the Git worktree directly");
     assert.equal((await unchangedReader.read("manuscript/vol-one/ch-one/sc-two.md")).content, (await reader.read("manuscript/vol-one/ch-one/sc-two.md")).content, "formatting never edits the Git worktree directly");
+    assert.equal((await unchangedReader.read("manuscript/vol-one/ch-one/sc-three.md")).content, (await reader.read("manuscript/vol-one/ch-one/sc-three.md")).content, "source formatting remains a proposal until the author submits and approves its NarrativeChangeSet");
 
     const publication = await approveCheckpointAndPublish(store, project.id, proposals);
-    assert.equal(publication.acknowledged.length, 5);
+    assert.equal(publication.acknowledged.length, 6);
     assert.deepEqual(runtime.workerSupervisor.activeWorkerPids, [], "all NLP and diagnostics worker processes have exited before data-root replacement");
     await runtime.shutdown();
     runtime = undefined;
@@ -319,6 +440,9 @@ test("P06 public actions survive Core-approved publish, data-root deletion, and 
     const committedFormatted = (await committedReader.read("manuscript/vol-one/ch-one/sc-two.md")).content;
     assert.ok(committedFormatted.startsWith("---\ntitle: 帰路\nauthor_note: preserve-formatting-metadata\ncustom:\n  nested: true\n---\n"));
     assert.ok(committedFormatted.endsWith("前日、星野は青い彗星を見上げた……。\n\n「俺は行く。」"));
+    const committedSourceFormatted = (await committedReader.read("manuscript/vol-one/ch-one/sc-three.md")).content;
+    assert.ok(committedSourceFormatted.startsWith("---\ntitle: 夜明け\nauthor_note: preserve-source-proposal-metadata\ncustom:\n  nested: true\n---\n"));
+    assert.ok(committedSourceFormatted.endsWith("星野は夜明けを待った……。\n\n「もう大丈夫だ。」\n"));
 
     await rm(dataDirectory, { recursive: true, force: true });
     await assert.rejects(stat(dataDirectory), { code: "ENOENT" },
@@ -339,6 +463,7 @@ test("P06 public actions survive Core-approved publish, data-root deletion, and 
     host = actionHost(store, project.id, rebuiltReader);
     assert.equal(restartedRuntime.status("nlp").availability, "enabled-idle");
     assert.equal(restartedRuntime.status("diagnostics").availability, "enabled-idle");
+    assert.equal(restartedRuntime.status("speaker").availability, "enabled-idle");
     assert.deepEqual(restartedRuntime.workerSupervisor.activeWorkerPids, [], "re-enabled modules remain idle until the rebuilt snapshot is queried");
 
     const rebuiltDictionary = actionData(await restartedRuntime.invokeAction("nlp", "nlp.dictionary", { term: "強い" }, host), "recloned nlp.dictionary", rebuiltReader);
@@ -349,6 +474,12 @@ test("P06 public actions survive Core-approved publish, data-root deletion, and 
     assert.equal(rebuiltFeatures.settings.ownerNote, "preserve-feature-settings");
     const rebuiltContinuity = actionData(await restartedRuntime.invokeAction("diagnostics", "diagnostics.checkContinuity", {}, host), "recloned diagnostics.checkContinuity", rebuiltReader);
     assert.ok(rebuiltContinuity.warnings.some((warning) => warning.reason === "unrecorded-teleport"));
+    const rebuiltNoOp = actionData(await restartedRuntime.invokeAction("diagnostics", "diagnostics.formatManuscript", {
+      sceneId: "sc-three", registerProposal: false,
+    }, host), "recloned diagnostics.formatManuscript no-op", rebuiltReader);
+    assert.equal(rebuiltNoOp.sourceProposal, null);
+    assert.equal(rebuiltNoOp.proposalId, null);
+    assert.equal(rebuiltNoOp.proposal, null);
 
     const rebuiltCandidatesResult = await restartedRuntime.invokeAction("nlp", "nlp.discoverCandidates", {}, host);
     const rebuiltCandidates = actionData(rebuiltCandidatesResult, "recloned nlp.discoverCandidates", rebuiltReader);

@@ -163,7 +163,9 @@ export interface MachineError { code: string; message: string; retryable: boolea
 export type JobOutcome<T = unknown> = { ok: true; result: JobResult<T> } | { ok: false; id: string; snapshot: SnapshotId; error: MachineError };
 export interface ValueSchema<T = unknown> { parse(value: unknown): T }
 export type ActionResult<T = unknown> = { ok: true; snapshot: SnapshotId; data: T; proposals?: ChangeProposal[] } | { ok: false; snapshot: SnapshotId; error: MachineError };
-export interface ActionDescriptor { id: string; module: ModuleId | "core"; effect: "read" | "propose" | "compute" }
+/** Optional host-owned history for a source domain task; never grants author approval. */
+export interface DomainJobDescriptor { type: string }
+export interface ActionDescriptor { id: string; module: ModuleId | "core"; effect: "read" | "propose" | "compute"; job?: DomainJobDescriptor }
 export interface ModuleActionContext {
   projectId: string;
   reader: SnapshotReader;
@@ -180,6 +182,8 @@ export interface ModuleActionContext {
 export interface ModuleAction {
   id: string;
   effect: "read" | "propose" | "compute";
+  /** Declared by the owning module; the host records the exact outer action result privately. */
+  job?: DomainJobDescriptor;
   inputSchema: ValueSchema;
   outputSchema: ValueSchema;
   invoke(input: unknown, context: ModuleActionContext): Promise<ActionResult>;

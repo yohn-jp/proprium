@@ -19,6 +19,7 @@ import { removeDialogueBrackets, type StyleAttribution, type StyleFingerprint } 
 import { suggestSynonyms, type CorpusNeighbor, type SynonymsConfig } from "./synonymSuggestions.js";
 import { checkProjectConsistency, checkProjectContinuity } from "./projectDiagnostics.js";
 import { checkDeclaredVoiceConsistency, type DeclaredVoiceAttribution } from "./declaredVoice.js";
+import { composeSceneDiagnostics } from "./fullDiagnostics.js";
 
 export * from "./analysis.js";
 export { createDiagnosticsMigrationProducer } from "./migration.js";
@@ -35,6 +36,7 @@ export * from "./stylometry/profile.js";
 export * from "./stylometry/deviationDetector.js";
 export * from "./textHash.js";
 export * from "./declaredVoice.js";
+export type { SceneDiagnosticsResult } from "./fullDiagnostics.js";
 
 const manifest: ModuleManifest = {
   id: "diagnostics", version: DIAGNOSTICS_MODULE_VERSION, contractVersion: 1,
@@ -120,10 +122,17 @@ function parseFix(value: unknown): { path: string; baseRevision?: string; operat
   if (input.operationId !== undefined && (typeof input.operationId !== "string" || !/^[A-Za-z0-9_-]{1,128}$/.test(input.operationId))) throw new TypeError("operationId must be a stable operation identifier");
   return { path: input.path, ...(typeof input.baseRevision === "string" ? { baseRevision: input.baseRevision } : {}), ...(typeof input.operationId === "string" ? { operationId: input.operationId } : {}) };
 }
-function parseFormatManuscript(value: unknown): { sceneId: string } {
+function parseFormatManuscript(value: unknown): { sceneId: string; registerProposal: boolean } {
   const input = record(value, "input");
   if (typeof input.sceneId !== "string" || !input.sceneId.trim() || input.sceneId.length > 256) throw new TypeError("sceneId must be a non-empty string of at most 256 characters");
-  return { sceneId: input.sceneId };
+  if (input.registerProposal !== undefined && typeof input.registerProposal !== "boolean") throw new TypeError("registerProposal must be a boolean when provided");
+  return { sceneId: input.sceneId, registerProposal: input.registerProposal !== false };
+}
+function parseSceneDiagnostics(value: unknown): { sceneId: string; text?: string } {
+  const input = record(value, "input");
+  if (typeof input.sceneId !== "string" || !input.sceneId.trim() || input.sceneId.length > 256) throw new TypeError("sceneId must be a non-empty string of at most 256 characters");
+  if (input.text !== undefined && (typeof input.text !== "string" || input.text.length > MAX_TEXT_LENGTH)) throw new TypeError("text must be a string of at most 500000 characters when provided");
+  return { sceneId: input.sceneId, ...(typeof input.text === "string" ? { text: input.text } : {}) };
 }
 
 function parseVoice(value: unknown): { dialoguesByCharacter: Record<string, string[]> } {
@@ -402,6 +411,103 @@ function extractFrontMatter(content: string): { frontMatter: string; body: strin
   return match ? { frontMatter: match[0], body: content.slice(match[0].length) } : { frontMatter: "", body: content };
 }
 
+function canonicalRevisionValue(value: unknown): unknown {
+  if (Array.isArray(value)) return value.map(canonicalRevisionValue);
+  if (value && typeof value === "object") {
+    return Object.fromEntries(Object.entries(value as Record<string, unknown>)
+      .sort(([left], [right]) => left.localeCompare(right))
+      .map(([key, item]) => [key, canonicalRevisionValue(item)]));
+  }
+  return value;
+}
+
+/** Matches Story's sourceEntityRevision for a manuscript loaded from this pinned snapshot. */
+function sourceManuscriptRevision(raw: RecordValue, body: string): string {
+  const canonical = canonicalRevisionValue({ raw, body });
+  return `"sha256-${createHash("sha256").update(JSON.stringify(canonical)).digest("hex")}"`;
+}
+
+interface SourceNarrativeChangeSet {
+  schemaVersion: 1;
+  id: string;
+  projectId: string;
+  goal: string;
+  status: "proposed";
+  assessment: { confidence: 1; risk: "low" };
+  operations: Array<{
+    id: string;
+    kind: "manuscript.replace-range";
+    target: { manuscriptId: string; sceneId: string };
+    precondition: { kind: "revision"; value: string };
+    range: { start: number; end: number };
+    replacement: string;
+    evidenceIds: string[];
+    assessment: { confidence: 1; risk: "low" };
+  }>;
+  evidence: Array<{
+    id: string;
+    sourceKind: "manuscript";
+    sourceId: string;
+    revision: string;
+    range: { start: number; end: number };
+  }>;
+  diagnostics: { before: null; after: null };
+}
+
+function sourceFormatterProposal(input: {
+  projectId: string;
+  sceneId: string;
+  manuscriptId: string;
+  manuscriptRevision: string;
+  text: string;
+  formattedText: string;
+}): { resultId: string; proposalId: string | null; proposal: SourceNarrativeChangeSet | null } {
+  const resultId = `na-${createHash("sha256").update(JSON.stringify({
+    action: "format-manuscript",
+    projectId: input.projectId,
+    sceneId: input.sceneId,
+    manuscriptId: input.manuscriptId,
+    manuscriptRevision: input.manuscriptRevision,
+    manuscriptContentHash: hashManuscriptText(input.text),
+    text: input.text,
+  })).digest("hex")}`;
+  if (input.formattedText === input.text) return { resultId, proposalId: null, proposal: null };
+  const proposalId = `cs-${resultId.slice(3)}`;
+  const assessment = { confidence: 1, risk: "low" } as const;
+  const evidenceId = `${proposalId}-source`;
+  const range = { start: 0, end: input.text.length };
+  return {
+    resultId,
+    proposalId,
+    proposal: {
+      schemaVersion: 1,
+      id: proposalId,
+      projectId: input.projectId,
+      goal: "Format manuscript",
+      status: "proposed",
+      assessment,
+      operations: [{
+        id: `${proposalId}-replace`,
+        kind: "manuscript.replace-range",
+        target: { manuscriptId: input.manuscriptId, sceneId: input.sceneId },
+        precondition: { kind: "revision", value: input.manuscriptRevision },
+        range,
+        replacement: input.formattedText,
+        evidenceIds: [evidenceId],
+        assessment,
+      }],
+      evidence: [{
+        id: evidenceId,
+        sourceKind: "manuscript",
+        sourceId: input.manuscriptId,
+        revision: input.manuscriptRevision,
+        range,
+      }],
+      diagnostics: { before: null, after: null },
+    },
+  };
+}
+
 function operation(context: ModuleActionContext, path: string, revision: string, content: string, operationId: string): ChangeOperation {
   return {
     id: operationId, generation: 0, repository: context.reader.snapshot.repository,
@@ -510,6 +616,10 @@ function makeActions(moduleContext: ModuleContext): ModuleAction[] {
       return { ok: true, snapshot: context.reader.snapshot, data: { warnings } };
     }),
     action("diagnostics.analyze", "compute", analyzeInput, (value, context) => analyzeAction(value, context, moduleContext)),
+    action("diagnostics.scene", "compute", { parse: parseSceneDiagnostics }, async (value, context) => {
+      const result = await composeSceneDiagnostics(value as ReturnType<typeof parseSceneDiagnostics>, context);
+      return { ok: true, snapshot: context.reader.snapshot, data: result };
+    }),
     action("diagnostics.checkPlotSemantics", "compute", { parse: parsePlotSemantics }, (value, context) => checkPlotSemanticsAction(value, context, moduleContext)),
     action("diagnostics.lint", "compute", { parse: parseLint }, async (value, context) => {
       const { text } = value as ReturnType<typeof parseLint>;
@@ -538,7 +648,7 @@ function makeActions(moduleContext: ModuleContext): ModuleAction[] {
       return { ok: true, snapshot: context.reader.snapshot, data: { path, warnings, fixed: true, body: transformed, operationId: proposedOperationId, baseRevision: file.revision, proposal } };
     }),
     action("diagnostics.formatManuscript", "propose", { parse: parseFormatManuscript }, async (value, context) => {
-      const { sceneId } = value as ReturnType<typeof parseFormatManuscript>;
+      const { sceneId, registerProposal } = value as ReturnType<typeof parseFormatManuscript>;
       if (context.signal.aborted) throw Object.assign(new Error("Manuscript formatting was cancelled"), { code: "job_cancelled" });
       const entities = await readSnapshotAnalysisEntities(context);
       const scene = entities.find((entity) => entity.id === sceneId && entity.kind === "scene");
@@ -554,31 +664,35 @@ function makeActions(moduleContext: ModuleContext): ModuleAction[] {
       if (file.content.length > MAX_TEXT_LENGTH + 100_000) throw Object.assign(new Error("Manuscript exceeds the formatting size limit"), { code: "too_large" });
 
       const { frontMatter, body } = extractFrontMatter(file.content);
-      if (body.length > 100_000) throw Object.assign(new Error("Manuscript exceeds the formatting input limit"), { code: "too_large" });
-      const formattedText = formatManuscript(body);
+      const sourceText = manuscript.body ?? body.trim();
+      if (sourceText.length > 100_000) throw Object.assign(new Error("Manuscript exceeds the formatting input limit"), { code: "too_large" });
+      const formattedText = formatManuscript(sourceText);
       if (formattedText.length > 100_000) throw Object.assign(new Error("Formatted manuscript exceeds the output limit"), { code: "too_large" });
-      const resultIdentity = {
-        action: "format-manuscript",
+      const source = sourceFormatterProposal({
         projectId: context.projectId,
         sceneId,
         manuscriptId: manuscript.id,
-        manuscriptRevision: file.revision,
-        manuscriptContentHash: hashManuscriptText(body),
-        text: body,
-      };
-      const resultId = `na-${createHash("sha256").update(JSON.stringify(resultIdentity)).digest("hex")}`;
-      const proposalId = `cs-${resultId.slice(3)}`;
+        manuscriptRevision: sourceManuscriptRevision(manuscript.data, sourceText),
+        text: sourceText,
+        formattedText,
+      });
       const updated = frontMatter + formattedText;
       let proposal: ChangeProposal | null = null;
-      if (updated !== file.content) {
-        const operationId = `${proposalId}-replace`;
-        proposal = await context.propose([operation(context, path, file.revision, updated, operationId)], [{
-          id: `${proposalId}-source`, snapshot: context.reader.snapshot, module: "diagnostics", kind: "format_manuscript",
-          paths: [{ path, revision: file.revision }], details: { sceneId, manuscriptId: manuscript.id, resultId },
-        }], proposalId, context.signal);
+      if (source.proposal && registerProposal) {
+        const coreProposal = await context.propose([operation(context, path, file.revision, updated, source.proposal.operations[0].id)], [{
+          id: `${source.proposal.id}-source`, snapshot: context.reader.snapshot, module: "diagnostics", kind: "format_manuscript",
+          paths: [{ path, revision: file.revision }], details: { sceneId, manuscriptId: manuscript.id, resultId: source.resultId },
+        }], source.proposal.id, context.signal);
+        if (coreProposal.id !== source.proposal.id) throw Object.assign(new Error("Core returned a different proposal identity for the formatter result"), { code: "proposal_identity_mismatch" });
+        proposal = coreProposal;
       }
       return { ok: true, snapshot: context.reader.snapshot, data: {
-        actionId: "format-manuscript", resultId, proposalId: proposal?.id ?? null, formattedText, proposal,
+        actionId: "format-manuscript",
+        resultId: source.resultId,
+        proposalId: source.proposalId,
+        formattedText,
+        proposal,
+        sourceProposal: source.proposal,
       } } as ActionResult;
     }),
     action("diagnostics.voiceProfiles", "compute", { parse: parseVoice }, async (value, context) => {
@@ -633,6 +747,7 @@ export async function createModule(moduleContext: ModuleContext): Promise<Module
       { id: "diagnostics.consistency", module: "diagnostics", slot: "review", title: "設定整合性", action: "diagnostics.checkConsistency" },
       { id: "diagnostics.continuity", module: "diagnostics", slot: "review", title: "連続性チェック", action: "diagnostics.checkContinuity" },
       { id: "diagnostics.analysis", module: "diagnostics", slot: "dock", title: "文章診断", action: "diagnostics.analyze" },
+      { id: "diagnostics.scene", module: "diagnostics", slot: "dock", title: "シーン統合診断", action: "diagnostics.scene" },
       { id: "diagnostics.lint", module: "diagnostics", slot: "review", title: "組版チェック", action: "diagnostics.lint" },
       { id: "diagnostics.voice", module: "diagnostics", slot: "inspection", title: "文体プロファイル", action: "diagnostics.voiceProfiles" },
     ],

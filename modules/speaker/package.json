@@ -14,7 +14,11 @@
       "types": "./dist/browser.d.ts",
       "import": "./dist/browser.js"
     },
-    "./worker": "./dist/worker.js"
+    "./worker": "./dist/worker.js",
+    "./migration": {
+      "types": "./dist/migration.d.ts",
+      "import": "./dist/migration.js"
+    }
   },
   "files": [
     "dist"
@@ -31,7 +35,8 @@
     "@scriptorium/module-nlp": "workspace:*",
     "yaml": "^2.8.1",
     "@scriptorium/module-diagnostics": "workspace:*",
-    "zod": "3.25.76"
+    "zod": "3.25.76",
+    "@scriptorium/migration": "workspace:*"
   },
   "scriptoriumModule": {
     "id": "speaker",

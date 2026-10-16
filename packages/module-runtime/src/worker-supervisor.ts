@@ -11,6 +11,7 @@ type WorkerResponse =
 
 interface WorkerRecord {
   request: JobRequest;
+  lifecycle: JobLifecycleRecord;
   workerEntry: string;
   child?: ChildProcess;
   promise: Promise<JobOutcome>;
@@ -37,10 +38,64 @@ export interface WorkerSupervisorOptions {
   maxConcurrentServiceJobs?: number;
   /** Maximum jobs waiting for one persistent service; defaults to 4 (32 MiB at the input bound). */
   maxQueuedServiceJobs?: number;
+  /** Maximum time an async job lifecycle listener may delay a state transition. Defaults to 2 seconds. */
+  jobLifecycleListenerTimeoutMs?: number;
   /** Absolute Node executable used to launch workers; defaults to process.execPath. */
   workerExecPath?: string;
   maxJobDurationMs?: number;
   cancellationGraceMs?: number;
+}
+
+export type WorkerJobLifecycleState = "queued" | "running" | "succeeded" | "failed" | "cancelled";
+
+/** Runtime-owned job metadata. Request and result payloads and raw error messages are deliberately omitted. */
+export interface WorkerJobLifecycleSnapshot {
+  readonly jobId: string;
+  readonly module: ModuleId;
+  readonly task: string;
+  readonly snapshot: JobRequest["snapshot"];
+  readonly state: WorkerJobLifecycleState;
+  readonly createdAt: string;
+  readonly updatedAt: string;
+  readonly startedAt: string | null;
+  readonly finishedAt: string | null;
+  readonly errorCode?: string;
+}
+
+export type WorkerJobLifecycleListener = (job: WorkerJobLifecycleSnapshot) => void | Promise<void>;
+
+interface JobLifecycleRecord {
+  state: WorkerJobLifecycleState;
+  createdAt: string;
+  updatedAt: string;
+  startedAt: string | null;
+  finishedAt: string | null;
+  errorCode?: string;
+  listeners: JobLifecycleSubscription[];
+  delivery: Promise<void>;
+}
+
+interface JobLifecycleSubscription {
+  listener: WorkerJobLifecycleListener;
+  subscribed: boolean;
+  accepting: boolean;
+  pendingDeliveries: number;
+}
+
+const MAX_PENDING_JOB_LIFECYCLE_DELIVERIES = 64;
+
+function newJobLifecycleRecord(listeners: JobLifecycleSubscription[]): JobLifecycleRecord {
+  const now = new Date().toISOString();
+  return { state: "queued", createdAt: now, updatedAt: now, startedAt: null, finishedAt: null, listeners, delivery: Promise.resolve() };
+}
+
+function terminalState(error: MachineError | undefined): Exclude<WorkerJobLifecycleState, "queued" | "running"> {
+  if (!error) return "succeeded";
+  return ["job_cancelled", "module_disabled", "runtime_shutdown"].includes(error.code) ? "cancelled" : "failed";
+}
+
+function safeErrorCode(error: MachineError | undefined): string | undefined {
+  return error && /^[A-Za-z0-9_.-]{1,128}$/.test(error.code) ? error.code : undefined;
 }
 
 const DEFAULT_MAX_CONCURRENT_JOBS = Math.max(1, Math.min(availableParallelism(), 8));
@@ -117,6 +172,8 @@ export class WorkerSupervisor {
   private readonly workerExecPath: string;
   private readonly maxJobDurationMs: number;
   private readonly cancellationGraceMs: number;
+  private readonly jobLifecycleListeners = new Set<JobLifecycleSubscription>();
+  private readonly jobLifecycleListenerTimeoutMs: number;
   private closed = false;
 
   constructor(options: WorkerSupervisorOptions = {}) {
@@ -125,6 +182,8 @@ export class WorkerSupervisor {
     this.maxWorkerServices = boundedOption("maxWorkerServices", options.maxWorkerServices, 8);
     this.maxConcurrentServiceJobs = boundedOption("maxConcurrentServiceJobs", options.maxConcurrentServiceJobs, 1);
     this.maxQueuedServiceJobs = boundedOption("maxQueuedServiceJobs", options.maxQueuedServiceJobs, 4, true);
+    this.jobLifecycleListenerTimeoutMs = boundedOption("jobLifecycleListenerTimeoutMs", options.jobLifecycleListenerTimeoutMs, 2_000);
+    if (this.jobLifecycleListenerTimeoutMs > 10_000) throw new RangeError("jobLifecycleListenerTimeoutMs must not exceed 10000 ms");
     this.workerExecPath = options.workerExecPath ?? process.execPath;
     if (!path.isAbsolute(this.workerExecPath)) throw new RangeError("workerExecPath must be absolute");
     this.maxJobDurationMs = options.maxJobDurationMs ?? 15 * 60_000;
@@ -133,6 +192,93 @@ export class WorkerSupervisor {
         !Number.isSafeInteger(this.cancellationGraceMs) || this.cancellationGraceMs < 1 || this.cancellationGraceMs > 10_000) {
       throw new RangeError("Invalid worker supervisor bounds");
     }
+  }
+
+  /** Subscribe to bounded lifecycle metadata without activating any module or worker. */
+  subscribeJobLifecycle(listener: WorkerJobLifecycleListener): () => void {
+    if (this.closed) return () => {};
+    const subscription: JobLifecycleSubscription = { listener, subscribed: true, accepting: true, pendingDeliveries: 0 };
+    this.jobLifecycleListeners.add(subscription);
+    return () => {
+      if (!subscription.subscribed) return;
+      subscription.subscribed = false;
+      subscription.accepting = false;
+      this.jobLifecycleListeners.delete(subscription);
+    };
+  }
+
+  private nextLifecycleTime(lifecycle: JobLifecycleRecord): string {
+    return new Date(Math.max(Date.now(), Date.parse(lifecycle.updatedAt) + 1)).toISOString();
+  }
+
+  private async deliverLifecycle(
+    subscription: JobLifecycleSubscription,
+    event: WorkerJobLifecycleSnapshot,
+    deadline: number,
+    terminal: boolean,
+  ): Promise<void> {
+    if (!subscription.subscribed || (!terminal && !subscription.accepting)) return;
+    if (subscription.pendingDeliveries >= MAX_PENDING_JOB_LIFECYCLE_DELIVERIES) {
+      subscription.accepting = false;
+      this.jobLifecycleListeners.delete(subscription);
+      return;
+    }
+
+    subscription.pendingDeliveries += 1;
+    const callback = Promise.resolve()
+      .then(() => subscription.listener({ ...event, snapshot: structuredClone(event.snapshot) }))
+      .then(() => undefined, () => undefined);
+    void callback.then(() => { subscription.pendingDeliveries -= 1; });
+
+    const remainingMs = terminal ? this.jobLifecycleListenerTimeoutMs : Math.max(0, deadline - Date.now());
+    const timeoutMs = Math.min(this.jobLifecycleListenerTimeoutMs, remainingMs);
+    let timer: NodeJS.Timeout | undefined;
+    const completed = await Promise.race([
+      callback.then(() => true),
+      new Promise<false>((resolve) => { timer = setTimeout(() => resolve(false), timeoutMs); }),
+    ]);
+    if (timer) clearTimeout(timer);
+    if (!completed) {
+      // Detach a listener that has stopped making progress. Already accepted jobs
+      // retain one best-effort terminal notification, but no new jobs are attached.
+      subscription.accepting = false;
+      this.jobLifecycleListeners.delete(subscription);
+    }
+  }
+
+  private publishJobLifecycle(
+    request: JobRequest,
+    lifecycle: JobLifecycleRecord,
+    state: WorkerJobLifecycleState,
+    error?: MachineError,
+  ): Promise<void> {
+    if (lifecycle.finishedAt !== null) return lifecycle.delivery;
+    const now = this.nextLifecycleTime(lifecycle);
+    lifecycle.state = state;
+    lifecycle.updatedAt = now;
+    if (state === "running" && lifecycle.startedAt === null) lifecycle.startedAt = now;
+    if (state === "succeeded" || state === "failed" || state === "cancelled") {
+      lifecycle.finishedAt = now;
+      lifecycle.errorCode = safeErrorCode(error);
+    }
+    const event: WorkerJobLifecycleSnapshot = {
+      jobId: request.id,
+      module: request.module,
+      task: request.task,
+      snapshot: structuredClone(request.snapshot),
+      state: lifecycle.state,
+      createdAt: lifecycle.createdAt,
+      updatedAt: lifecycle.updatedAt,
+      startedAt: lifecycle.startedAt,
+      finishedAt: lifecycle.finishedAt,
+      ...(lifecycle.errorCode ? { errorCode: lifecycle.errorCode } : {}),
+    };
+    lifecycle.delivery = lifecycle.delivery.then(async () => {
+      const terminal = state === "succeeded" || state === "failed" || state === "cancelled";
+      await Promise.all(lifecycle.listeners.map((subscription) =>
+        this.deliverLifecycle(subscription, event, request.deadline, terminal)));
+    });
+    return lifecycle.delivery;
   }
 
   get activeJobCount(): number {
@@ -173,6 +319,8 @@ export class WorkerSupervisor {
       this.workerExecPath,
       () => this.services.delete(service),
       (id) => this.jobs.has(id) || this.queuedJobs.has(id) || [...this.services].some((candidate) => candidate.hasJob(id)),
+      (request, lifecycle, state, error) => this.publishJobLifecycle(request, lifecycle, state, error),
+      () => [...this.jobLifecycleListeners],
     );
     this.services.add(service);
     try {
@@ -223,20 +371,22 @@ export class WorkerSupervisor {
     if (queued && this.queuedJobs.size >= this.maxQueuedJobs) {
       return failure<T>(activeRequest, machineError("worker_overloaded", "Worker job queue is full", true));
     }
-    const record: WorkerRecord = { request: activeRequest, workerEntry, promise, resolve, state: queued ? "queued" : "starting", exiting: false };
+    const record: WorkerRecord = { request: activeRequest, lifecycle: newJobLifecycleRecord([...this.jobLifecycleListeners]), workerEntry, promise, resolve, state: queued ? "queued" : "starting", exiting: false };
     if (queued) {
       this.queuedJobs.set(activeRequest.id, record);
       this.jobQueue.push(record);
     } else {
       this.jobs.set(activeRequest.id, record);
-      void this.startJob(record);
     }
     record.deadlineTimer = setTimeout(() => this.stop(record, machineError("job_deadline_exceeded", "Job exceeded its deadline", true)), remainingMs);
+    void this.publishJobLifecycle(record.request, record.lifecycle, "queued");
     if (signal) {
       record.abortSignal = signal;
       record.abortListener = () => this.stop(record, machineError("job_cancelled", "Job was cancelled"));
       signal.addEventListener("abort", record.abortListener, { once: true });
+      if (signal.aborted) record.abortListener();
     }
+    if (!queued && this.jobs.get(record.request.id) === record) void this.startJob(record);
     return (await promise) as JobOutcome<T>;
   }
 
@@ -269,9 +419,11 @@ export class WorkerSupervisor {
       ...records.map((record) => record.promise),
       ...[...this.services].map((service) => service.dispose()),
     ]);
+    this.jobLifecycleListeners.clear();
   }
 
   private async startJob(record: WorkerRecord): Promise<void> {
+    await record.lifecycle.delivery;
     if (this.jobs.get(record.request.id) !== record || record.state !== "starting") return;
     let workerAvailable = false;
     try { workerAvailable = (await stat(record.workerEntry)).isFile(); } catch { workerAvailable = false; }
@@ -316,12 +468,19 @@ export class WorkerSupervisor {
     const finish = (code: number | null, signalName: NodeJS.Signals | null) => this.onExit(record, code, signalName);
     child.once("exit", finish);
     child.once("close", finish);
-    child.send({ type: "job", request: record.request }, (error) => {
-      if (error && !record.response && !record.stopError) {
-        record.stopError = machineError("worker_ipc_failed", error.message, true);
-        this.terminate(record);
-      }
-    });
+    try {
+      child.send({ type: "job", request: record.request }, (error) => {
+        if (error && !record.response && !record.stopError) {
+          record.stopError = machineError("worker_ipc_failed", error.message, true);
+          this.terminate(record);
+        }
+      });
+    } catch (error) {
+      this.stop(record, machineError("worker_ipc_failed", error instanceof Error ? error.message : "Worker IPC failed", true));
+      return;
+    }
+    await this.publishJobLifecycle(record.request, record.lifecycle, "running");
+    if (record.state !== "running" || record.stopError || this.jobs.get(record.request.id) !== record) this.terminate(record);
   }
 
   private pumpJobs(): void {
@@ -344,7 +503,9 @@ export class WorkerSupervisor {
     if (queuedIndex >= 0) this.jobQueue.splice(queuedIndex, 1);
     record.state = "settled";
     this.clearJobTimers(record);
-    record.resolve(failure(record.request, error));
+    void this.publishJobLifecycle(record.request, record.lifecycle, terminalState(error), error).then(() => {
+      record.resolve(failure(record.request, error));
+    });
     this.pumpJobs();
   }
 
@@ -447,22 +608,28 @@ export class WorkerSupervisor {
     if (record.abortSignal && record.abortListener) record.abortSignal.removeEventListener("abort", record.abortListener);
     if (this.jobs.get(record.request.id) === record) this.jobs.delete(record.request.id);
     record.state = "settled";
+    let outcome: JobOutcome;
+    let error: MachineError | undefined;
     if (record.stopError) {
-      record.resolve({ ok: false, id: record.request.id, snapshot: record.request.snapshot, error: record.stopError });
+      error = record.stopError;
+      outcome = { ok: false, id: record.request.id, snapshot: record.request.snapshot, error };
     } else if (record.response?.type === "error") {
-      record.resolve({ ok: false, id: record.request.id, snapshot: record.request.snapshot, error: record.response.error });
+      error = record.response.error;
+      outcome = { ok: false, id: record.request.id, snapshot: record.request.snapshot, error };
     } else if (record.response?.type === "result") {
-      record.resolve({ ok: true, result: record.response.result });
+      outcome = { ok: true, result: record.response.result };
     } else {
-      record.resolve({ ok: false, id: record.request.id, snapshot: record.request.snapshot,
-        error: machineError("worker_exited", `Worker exited without a result (code ${String(code)}, signal ${String(signal)})`, true) });
+      error = machineError("worker_exited", `Worker exited without a result (code ${String(code)}, signal ${String(signal)})`, true);
+      outcome = { ok: false, id: record.request.id, snapshot: record.request.snapshot, error };
     }
+    void this.publishJobLifecycle(record.request, record.lifecycle, terminalState(error), error).then(() => record.resolve(outcome));
     this.pumpJobs();
   }
 }
 
 interface ServiceJobRecord {
   request: JobRequest;
+  lifecycle: JobLifecycleRecord;
   promise: Promise<JobOutcome>;
   resolve(value: JobOutcome): void;
   state: "queued" | "active";
@@ -486,6 +653,13 @@ class SupervisedWorkerService implements WorkerService {
   private readonly workerExecPath: string;
   private readonly onRemoved: () => void;
   private readonly isDuplicateJobId: (id: string) => boolean;
+  private readonly publishLifecycle: (
+    request: JobRequest,
+    lifecycle: JobLifecycleRecord,
+    state: WorkerJobLifecycleState,
+    error?: MachineError,
+  ) => Promise<void>;
+  private readonly captureLifecycleListeners: () => JobLifecycleSubscription[];
   private readonly jobs = new Map<string, ServiceJobRecord>();
   private readonly records = new Map<string, ServiceJobRecord>();
   private readonly jobQueue: ServiceJobRecord[] = [];
@@ -513,6 +687,13 @@ class SupervisedWorkerService implements WorkerService {
     workerExecPath: string,
     onRemoved: () => void,
     isDuplicateJobId: (id: string) => boolean,
+    publishLifecycle: (
+      request: JobRequest,
+      lifecycle: JobLifecycleRecord,
+      state: WorkerJobLifecycleState,
+      error?: MachineError,
+    ) => Promise<void>,
+    captureLifecycleListeners: () => JobLifecycleSubscription[],
   ) {
     this.module = module;
     this.moduleVersion = moduleVersion;
@@ -524,6 +705,8 @@ class SupervisedWorkerService implements WorkerService {
     this.workerExecPath = workerExecPath;
     this.onRemoved = onRemoved;
     this.isDuplicateJobId = isDuplicateJobId;
+    this.publishLifecycle = publishLifecycle;
+    this.captureLifecycleListeners = captureLifecycleListeners;
   }
 
   get pid(): number | undefined { return this.exited ? undefined : this.child?.pid; }
@@ -568,15 +751,17 @@ class SupervisedWorkerService implements WorkerService {
     if (queued && this.jobQueue.length >= this.maxQueuedServiceJobs) {
       return failure<T>(serialized, machineError("worker_overloaded", "Persistent worker service queue is full", true));
     }
-    const record: ServiceJobRecord = { request: serialized, promise, resolve, state: queued ? "queued" : "active", dispatched: false };
+    const record: ServiceJobRecord = { request: serialized, lifecycle: newJobLifecycleRecord(this.captureLifecycleListeners()), promise, resolve, state: queued ? "queued" : "active", dispatched: false };
     this.records.set(serialized.id, record);
     if (!queued) this.jobs.set(serialized.id, record);
     record.deadlineTimer = setTimeout(() => this.stopJob(record, machineError("job_deadline_exceeded", "Job exceeded its deadline", true)), remainingMs);
+    void this.publishLifecycle(record.request, record.lifecycle, "queued");
     record.abortSignal = signal;
     record.abortListener = () => this.stopJob(record, machineError("job_cancelled", "Job was cancelled"));
     signal.addEventListener("abort", record.abortListener, { once: true });
-    if (queued) this.jobQueue.push(record);
-    else void this.dispatch(record);
+    if (signal.aborted) record.abortListener();
+    if (queued && this.records.get(serialized.id) === record) this.jobQueue.push(record);
+    else if (!queued && this.records.get(serialized.id) === record) void this.dispatch(record);
     return (await promise) as JobOutcome<T>;
   }
 
@@ -681,6 +866,8 @@ class SupervisedWorkerService implements WorkerService {
 
   private async dispatch(record: ServiceJobRecord): Promise<void> {
     if (this.records.get(record.request.id) !== record || record.state !== "active" || record.dispatched) return;
+    await record.lifecycle.delivery;
+    if (this.records.get(record.request.id) !== record || record.stopError) return;
     try {
       await this.start();
     } catch (error) {
@@ -703,7 +890,9 @@ class SupervisedWorkerService implements WorkerService {
       });
     } catch (error) {
       this.killService(machineError("worker_ipc_failed", error instanceof Error ? error.message : "Worker service IPC failed", true));
+      return;
     }
+    await this.publishLifecycle(record.request, record.lifecycle, "running");
   }
 
   private pumpJobs(): void {
@@ -801,10 +990,11 @@ class SupervisedWorkerService implements WorkerService {
     if (record.deadlineTimer) clearTimeout(record.deadlineTimer);
     if (record.graceTimer) clearTimeout(record.graceTimer);
     if (record.abortSignal && record.abortListener) record.abortSignal.removeEventListener("abort", record.abortListener);
-    if (record.stopError) record.resolve(failure(record.request, record.stopError));
-    else if (error) record.resolve(failure(record.request, error));
-    else if (result) record.resolve({ ok: true, result });
-    else record.resolve(failure(record.request, machineError("worker_protocol_error", "Worker service returned no result")));
+    const finalError = record.stopError ?? error ?? (!result ? machineError("worker_protocol_error", "Worker service returned no result") : undefined);
+    const outcome: JobOutcome = finalError
+      ? failure(record.request, finalError)
+      : { ok: true, result: result! };
+    void this.publishLifecycle(record.request, record.lifecycle, terminalState(finalError), finalError).then(() => record.resolve(outcome));
     this.pumpJobs();
   }
 

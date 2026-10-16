@@ -1,5 +1,7 @@
 import { useEffect, useRef, useState } from "react";
 import type { ModuleId } from "@scriptorium/contracts";
+import { ThemeControl } from "../components/ThemeControl";
+import type { ThemeMode } from "../theme";
 import { moduleBrowserLoaders } from "../generated/browser-modules";
 
 const MODULE_IDS = new Set<ModuleId>([
@@ -25,7 +27,17 @@ export function publicModuleIdForPath(pathname: string): ModuleId | null {
   return MODULE_IDS.has(moduleId as ModuleId) ? moduleId as ModuleId : null;
 }
 
-export function PublicModuleView({ moduleId }: { moduleId: ModuleId }) {
+export function PublicModuleView({
+  moduleId,
+  themeMode,
+  onThemeChange,
+  themeError,
+}: {
+  moduleId: ModuleId;
+  themeMode: ThemeMode;
+  onThemeChange: (mode: ThemeMode) => void;
+  themeError: string;
+}) {
   const elementRef = useRef<HTMLDivElement>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
@@ -77,6 +89,7 @@ export function PublicModuleView({ moduleId }: { moduleId: ModuleId }) {
       <header className="public-module-header">
         <span>Scriptorium</span>
         <span>公開読書ビュー</span>
+        <ThemeControl mode={themeMode} onChange={onThemeChange} error={themeError} />
       </header>
       {loading && <p className="public-module-status" role="status">公開コンテンツを読み込んでいます…</p>}
       {error && <p className="public-module-status" data-kind="error" role="alert">{error}</p>}

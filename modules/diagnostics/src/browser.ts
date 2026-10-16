@@ -45,6 +45,36 @@ function mountAnalysis(root: HTMLElement, context: BrowserModuleContext, cleanup
   root.append(field("本文", text), field("意図したトーン（任意）", tone), field("goal / conflict（任意）", goal), run, status, results);
 }
 
+function mountSceneDiagnostics(root: HTMLElement, context: BrowserModuleContext, cleanup: Array<() => void>): void {
+  const sceneId = element("input"); sceneId.type = "text"; sceneId.maxLength = 256; sceneId.placeholder = "例: sc-vol01-ch01-01";
+  const useSaved = element("input"); useSaved.type = "checkbox"; useSaved.checked = true;
+  const text = element("textarea"); text.rows = 9; text.maxLength = 500_000; text.placeholder = "本文（保存済み原稿を使う場合は未入力のまま）"; text.disabled = true;
+  const run = button("シーンを総合診断"); const status = output(); const results = element("section");
+  const onSavedChange = () => { text.disabled = useSaved.checked; };
+  const onClick = async () => {
+    run.disabled = true; status.textContent = "同じスナップショットから本文・話者・文体・プロットを診断しています…"; results.replaceChildren();
+    try {
+      const data = await invoke(context, "diagnostics.scene", {
+        sceneId: sceneId.value,
+        ...(!useSaved.checked ? { text: text.value } : {}),
+      });
+      const analysis = data.analysis as { charCount: number; sentenceCount: number; sentimentArc: { mean: number } };
+      const issues = data.issues as Array<{ kind: string; severity: string; message: string; sentenceIndex?: number; range?: { start: number; end: number } }>;
+      const stats = element("p", `${analysis.charCount}文字・${analysis.sentenceCount}文 · 感情平均 ${analysis.sentimentArc.mean.toFixed(3)} · ${String(data.speakerAttributions instanceof Array ? data.speakerAttributions.length : 0)} 件の話者帰属`);
+      const list = element("ol");
+      for (const issue of issues) {
+        list.append(element("li", `[${issue.severity}/${issue.kind}] ${issue.message}${issue.sentenceIndex ? ` (文 ${issue.sentenceIndex})` : ""}${issue.range ? ` (位置 ${issue.range.start}–${issue.range.end})` : ""}`));
+      }
+      results.append(stats, list);
+      status.textContent = `全文診断 · ${issues.length} 件の指摘 · ${String(data.textHash)}`;
+    } catch (error) { status.textContent = error instanceof Error ? error.message : String(error); }
+    finally { run.disabled = false; }
+  };
+  useSaved.addEventListener("change", onSavedChange); run.addEventListener("click", onClick);
+  cleanup.push(() => useSaved.removeEventListener("change", onSavedChange), () => run.removeEventListener("click", onClick));
+  root.append(field("シーン ID", sceneId), field("保存済み原稿を使う", useSaved), field("未保存本文を診断する場合の本文", text), run, status, results);
+}
+
 function mountLint(root: HTMLElement, context: BrowserModuleContext, cleanup: Array<() => void>): void {
   const path = element("input"); path.type = "text"; path.placeholder = "manuscript/chapter/scene.md";
   const text = element("textarea"); text.rows = 7; text.maxLength = 500_000; text.placeholder = "確認する本文";
@@ -117,6 +147,7 @@ export const browserModule: BrowserModuleDefinition = {
     const cleanup: Array<() => void> = [];
     const config = {
       "diagnostics.analysis": { title: "日本語本文の統合診断", mount: mountAnalysis },
+      "diagnostics.scene": { title: "シーン統合診断", mount: mountSceneDiagnostics },
       "diagnostics.lint": { title: "宣言型の組版ルール", mount: mountLint },
       "diagnostics.voice": { title: "声・文体の統計プロファイル", mount: mountVoice },
       "diagnostics.consistency": { title: "設定・参照の整合性", mount: (root: HTMLElement, context: BrowserModuleContext, cleanup: Array<() => void>) => mountProjectCheck("diagnostics.checkConsistency", "整合性を確認", root, context, cleanup) },

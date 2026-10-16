@@ -353,7 +353,46 @@
         ],
         "directCoreCalls": [],
         "injectedManagerCalls": []
-      }
+      },
+      "targetImplementationSlices": [
+        {
+          "status": "implementation-present; integration-acceptance-pending",
+          "owner": "P11",
+          "targetPaths": [
+            "modules/assistant/src/index.ts",
+            "modules/assistant/src/actions.ts",
+            "modules/assistant/src/provider.ts",
+            "modules/assistant/src/actions.test.ts"
+          ],
+          "publicActions": [
+            {
+              "action": "assistant.health",
+              "implementation": "Read optional provider configuration without making provider health a Core readiness dependency."
+            }
+          ],
+          "uiSurfaces": [
+            "modules/assistant/src/browser.ts"
+          ],
+          "dataMappings": [
+            {
+              "source": "Source LLM provider health/runtime metadata",
+              "target": "Lazy optional Assistant provider state",
+              "persistence": "Request-time metadata only; credentials remain environment/host injected and outside project files."
+            }
+          ],
+          "proofRefs": [
+            {
+              "id": "P11-R03-idle-health",
+              "path": "modules/assistant/src/actions.test.ts",
+              "testName": "module activation and provider health stay idle without provider or capabilities",
+              "scope": "Focused action test confirms module activation and health do not initialize provider or acquire capabilities."
+            }
+          ],
+          "limitations": [
+            "The real-provider reference workflow and full-profile health integration remain pending."
+          ]
+        }
+      ]
     },
     {
       "id": "R04",
@@ -414,7 +453,45 @@
         ],
         "directCoreCalls": [],
         "injectedManagerCalls": []
-      }
+      },
+      "targetImplementationSlices": [
+        {
+          "status": "implementation-present; integration-acceptance-pending",
+          "owner": "P11",
+          "targetPaths": [
+            "modules/assistant/src/actions.ts",
+            "modules/assistant/src/provider.ts",
+            "modules/assistant/src/browser.ts"
+          ],
+          "publicActions": [
+            {
+              "action": "assistant.queue.status",
+              "implementation": "Expose bounded in-process model-call queue status for Assistant actions."
+            }
+          ],
+          "uiSurfaces": [
+            "modules/assistant/src/browser.ts"
+          ],
+          "dataMappings": [
+            {
+              "source": "Source LLM request queue status",
+              "target": "Assistant model-call queue snapshot",
+              "persistence": "Process-local request scheduling state; this action is not the source retained jobs/inbox store in R38."
+            }
+          ],
+          "proofRefs": [
+            {
+              "id": "P11-R04-browser-queue",
+              "path": "modules/assistant/tests/browser-workflow.acceptance.mjs",
+              "testName": "PASS: assistant panels render safely, invoke approved actions, stream and cancel rewrite, and keep generated changes in review proposals",
+              "scope": "Rendered Assistant settings panel queries queue status through a stubbed action bridge."
+            }
+          ],
+          "limitations": [
+            "This bounded provider queue does not replace retained source job detail, inbox, read-state, event, or cross-process semantics; those remain mapped to R38."
+          ]
+        }
+      ]
     },
     {
       "id": "R05",
@@ -1108,6 +1185,54 @@
           "limitations": [
             "Module-level semantic import is implemented, but composed importer review and recovery remain P12 acceptance."
           ]
+        },
+        {
+          "status": "implementation-present; integration-acceptance-pending",
+          "owner": "P11",
+          "targetPaths": [
+            "modules/assistant/src/actions.ts",
+            "modules/assistant/src/browser.ts",
+            "modules/story/src/actions.ts",
+            "modules/semantic/src/actions.ts"
+          ],
+          "publicActions": [
+            {
+              "action": "assistant.zukan.suggestions",
+              "implementation": "Use snapshot-bound semantic manuscript hits and exact quote checks, then ask Story to create a reviewable suggestion proposal."
+            },
+            {
+              "action": "story.zukan-suggestions.create / list / approve / reject",
+              "implementation": "Validate and manage persistent pending note suggestions through snapshot-bound Core proposals."
+            }
+          ],
+          "uiSurfaces": [
+            "modules/assistant/src/browser.ts",
+            "modules/story/src/browser.tsx"
+          ],
+          "dataMappings": [
+            {
+              "source": "Source model-generated entity-note suggestions with persistent suggestion status and author approval",
+              "target": "Grounded Assistant suggestion plus Story JSONL proposal state and canonical note operation",
+              "persistence": "Suggestion creation/approval are Core proposal operations; model credentials and generated intermediate text are not persisted as canonical notes."
+            }
+          ],
+          "proofRefs": [
+            {
+              "id": "P11-R07-assistant-browser",
+              "path": "modules/assistant/tests/browser-workflow.acceptance.mjs",
+              "testName": "PASS: assistant panels render safely, invoke approved actions, stream and cancel rewrite, and keep generated changes in review proposals",
+              "scope": "Browser action-boundary test renders the Zukan contribution and verifies the result enters review; action transport is stubbed."
+            },
+            {
+              "id": "P05-R07-zukan-evidence-validation",
+              "path": "modules/story/src/actions.test.ts",
+              "testName": "Zukan creation validates manuscript provenance and proposes a stable pending JSONL row",
+              "scope": "Story action test verifies grounded evidence and persistent pending suggestion rows use a Core proposal."
+            }
+          ],
+          "limitations": [
+            "This maps the manuscript-grounded suggestion flow only. Source sandbox generation from a saved dialogue-sketch session/range remains separate and pending P11 producer integration; composed migration/review acceptance remains P12."
+          ]
         }
       ]
     },
@@ -1429,6 +1554,57 @@
           ],
           "limitations": [
             "This maps the Core scene read and mutation boundary only; source assistant, voice, and diagnostics handlers are module-owned or not yet at full parity."
+          ]
+        },
+        {
+          "status": "implementation-present; integration-acceptance-pending",
+          "owner": "P10",
+          "targetPaths": [
+            "modules/speaker/src/index.ts",
+            "modules/speaker/src/algorithms/speakerAttribution.ts",
+            "modules/speaker/src/algorithms/speakerOverrides.ts",
+            "modules/speaker/src/production.test.ts"
+          ],
+          "publicActions": [
+            {
+              "action": "speaker.attribute",
+              "implementation": "Run source-derived CPU attribution for the selected scene snapshot."
+            },
+            {
+              "action": "speaker.override",
+              "implementation": "Propose an exact-text, source-revision-bound speaker override."
+            },
+            {
+              "action": "speaker.voice.check",
+              "implementation": "Combine registered voice-pattern, learned fingerprint, and stylometric warnings for the selected scene."
+            }
+          ],
+          "uiSurfaces": [
+            "modules/speaker/src/browser.ts"
+          ],
+          "dataMappings": [
+            {
+              "source": "Source scene attribution, voice check, and speaker override handlers over manuscript text, character voice data, and canonical scene YAML",
+              "target": "Speaker CPU action outputs and proposal-only scene metadata changes",
+              "persistence": "Scene overrides and correction JSONL are changed only by Core proposals; attribution and warnings are derived from the pinned snapshot."
+            }
+          ],
+          "proofRefs": [
+            {
+              "id": "P10-R08-CPU-WORKFLOW",
+              "path": "modules/speaker/src/production.test.ts",
+              "testName": "speaker actions run real CPU attribution, propose corrections/model adoption, and reload from the reviewed snapshot",
+              "scope": "Focused composed ModuleRuntime workflow with real CPU workers/tokenizer over synthetic Japanese scenes; author approval is simulated in the in-memory snapshot harness."
+            },
+            {
+              "id": "P10-R08-BROWSER-WORKFLOW",
+              "path": "modules/speaker/tests/browser-workflow.acceptance.mjs",
+              "testName": "PASS: rendered speaker attribution, review, character dialogue, voice profiles, diagnostics, evaluation, and retraining controls invoke their registered action boundary",
+              "scope": "Rendered Playwright browser contribution test; action transport is stubbed, while CPU behavior is checked separately by the production test."
+            }
+          ],
+          "limitations": [
+            "This module action slice does not establish the legacy HTTP route payload/job behavior or P12 imported correction history; those acceptance gates remain pending."
           ]
         }
       ]
@@ -2141,6 +2317,42 @@
           "limitations": [
             "Generated reader reactions and prompt preview remain assistant capabilities, not Story actions."
           ]
+        },
+        {
+          "status": "implementation-present; integration-acceptance-pending",
+          "owner": "P11",
+          "targetPaths": [
+            "modules/assistant/src/actions.ts",
+            "modules/assistant/src/browser.ts",
+            "modules/story/src/actions.ts"
+          ],
+          "publicActions": [
+            {
+              "action": "assistant.reader.reaction",
+              "implementation": "Generate a chapter first-read reaction from pinned Story chapter/manuscript context."
+            }
+          ],
+          "uiSurfaces": [
+            "modules/assistant/src/browser.ts"
+          ],
+          "dataMappings": [
+            {
+              "source": "Reader-model disclosure/context projection plus generated first-read questions, expectations, and confusions",
+              "target": "Story snapshot-derived context and Assistant response with verified source citations",
+              "persistence": "Reader model is derived/request-time; generated reaction remains reviewable UI output and does not write author data."
+            }
+          ],
+          "proofRefs": [
+            {
+              "id": "P11-R12-reader-browser",
+              "path": "modules/assistant/tests/browser-workflow.acceptance.mjs",
+              "testName": "PASS: assistant panels render safely, invoke approved actions, stream and cancel rewrite, and keep generated changes in review proposals",
+              "scope": "Rendered reader-reaction contribution/action boundary with a stubbed action transport."
+            }
+          ],
+          "limitations": [
+            "Prompt-preview handler parity and action-level real-provider reader-reaction acceptance remain pending; P12 composition is not established."
+          ]
         }
       ]
     },
@@ -2285,6 +2497,56 @@
           "limitations": [
             "Semantic search and expression search are not covered by this target Core action; P09 owns semantic retrieval."
           ]
+        },
+        {
+          "status": "implementation-present; integration-acceptance-pending",
+          "owner": "P09",
+          "targetPaths": [
+            "modules/semantic/src/actions.ts",
+            "modules/semantic/src/search.ts",
+            "modules/semantic/src/worker.ts",
+            "modules/semantic/src/semantic.test.ts"
+          ],
+          "publicActions": [
+            {
+              "action": "semantic.index.status / semantic.index.rebuild",
+              "implementation": "Read or rebuild the private snapshot-keyed semantic cache through supervised worker actions."
+            },
+            {
+              "action": "semantic.search",
+              "implementation": "Hybrid literal/vector search over a pinned Story snapshot with optional bounded reranking."
+            },
+            {
+              "action": "semantic.expressions.search",
+              "implementation": "Search expression matches through the same snapshot-bound semantic provider."
+            }
+          ],
+          "uiSurfaces": [
+            "modules/semantic/src/browser.ts"
+          ],
+          "dataMappings": [
+            {
+              "source": "Source `/api/search/semantic` embedding projection in `.arcadia/index.sqlite` and semantic query behavior",
+              "target": "Snapshot-derived passage inputs and semantic module search actions",
+              "persistence": "Sentence vectors are rebuildable private module cache entries keyed by repository/snapshot/model identity; source SQLite embeddings are not migrated as author state."
+            },
+            {
+              "source": "Source `/api/expressions/search` and source expression index",
+              "target": "`semantic.expressions.search` over the pinned snapshot",
+              "persistence": "Results are request-time read projections; canonical entity/manuscript files remain authoritative."
+            }
+          ],
+          "proofRefs": [
+            {
+              "id": "P09-R13-DEFAULT-RUNTIME",
+              "path": "modules/semantic/src/semantic.test.ts",
+              "testName": "default ModuleRuntime composes semantic status, real CPU rebuild/search/rerank, and cache recovery",
+              "scope": "Composes the real semantic module through default ModuleRuntime with pinned CPU embedding/reranker artifacts, snapshot-bound search, cache reuse, deletion, and rebuild."
+            }
+          ],
+          "limitations": [
+            "This is a module action replacement slice; final HTTP/profile composition, full source endpoint parity, provider-consumer integration, and P12 data-root migration/reclone acceptance remain pending."
+          ]
         }
       ]
     },
@@ -2400,7 +2662,45 @@
             ]
           }
         ]
-      }
+      },
+      "targetImplementationSlices": [
+        {
+          "status": "implementation-present; integration-acceptance-pending",
+          "owner": "P11",
+          "targetPaths": [
+            "modules/assistant/src/actions.ts",
+            "modules/assistant/src/prompts.ts",
+            "modules/assistant/src/browser.ts"
+          ],
+          "publicActions": [
+            {
+              "action": "assistant.summary.scene / assistant.summary.chapter",
+              "implementation": "Read snapshot summaries when fresh or generate summary proposals with source hash/revision evidence."
+            }
+          ],
+          "uiSurfaces": [
+            "modules/assistant/src/browser.ts"
+          ],
+          "dataMappings": [
+            {
+              "source": "Source tracked scene-summary YAML keyed to canonical manuscript freshness and refresh jobs",
+              "target": "Snapshot-hash-aware Assistant summary records proposed as metadata changes under Core",
+              "persistence": "A summary update is not written until author review/approval/checkpoint; existing stale records are recomputed from snapshot source."
+            }
+          ],
+          "proofRefs": [
+            {
+              "id": "P11-R14-summary-browser",
+              "path": "modules/assistant/tests/browser-workflow.acceptance.mjs",
+              "testName": "PASS: assistant panels render safely, invoke approved actions, stream and cancel rewrite, and keep generated changes in review proposals",
+              "scope": "Rendered scene/chapter summary controls use the registered Assistant actions; action transport is stubbed."
+            }
+          ],
+          "limitations": [
+            "The source prompt-preview route is not represented by a target action/API. Full summary refresh/job composition and real-provider output acceptance remain pending."
+          ]
+        }
+      ]
     },
     {
       "id": "R15",
@@ -2615,7 +2915,51 @@
           "getEntity"
         ],
         "injectedManagerCalls": []
-      }
+      },
+      "targetImplementationSlices": [
+        {
+          "status": "implementation-present; integration-acceptance-pending",
+          "owner": "P10",
+          "targetPaths": [
+            "modules/speaker/src/index.ts",
+            "modules/speaker/src/browser.ts",
+            "modules/speaker/src/production.test.ts"
+          ],
+          "publicActions": [
+            {
+              "action": "speaker.dialogue.list",
+              "implementation": "List attributed character dialogue in source volume/chapter/scene order with confidence and limit filters."
+            }
+          ],
+          "uiSurfaces": [
+            "modules/speaker/src/browser.ts"
+          ],
+          "dataMappings": [
+            {
+              "source": "Character dialogue by volume/chapter/scene order, with speaker confidence and selected scene filters",
+              "target": "Attributed dialogue projection from pinned Story snapshot",
+              "persistence": "Read projection only; canonical manuscript and scene YAML remain authoritative."
+            }
+          ],
+          "proofRefs": [
+            {
+              "id": "P10-R16-CPU-WORKFLOW",
+              "path": "modules/speaker/src/production.test.ts",
+              "testName": "speaker actions run real CPU attribution, propose corrections/model adoption, and reload from the reviewed snapshot",
+              "scope": "Focused composed ModuleRuntime workflow with real CPU workers/tokenizer over synthetic Japanese scenes; author approval is simulated in the in-memory snapshot harness."
+            },
+            {
+              "id": "P10-R16-BROWSER-WORKFLOW",
+              "path": "modules/speaker/tests/browser-workflow.acceptance.mjs",
+              "testName": "PASS: rendered speaker attribution, review, character dialogue, voice profiles, diagnostics, evaluation, and retraining controls invoke their registered action boundary",
+              "scope": "Rendered Playwright browser contribution test; action transport is stubbed, while CPU behavior is checked separately by P10-SPEAKER-CPU-WORKFLOW."
+            }
+          ],
+          "limitations": [
+            "The browser proof covers the contribution with a stubbed action transport; the CPU module test covers the actual dialogue action. Final host composition remains pending."
+          ]
+        }
+      ]
     },
     {
       "id": "R17",
@@ -3190,6 +3534,47 @@
           "limitations": [
             "Core API does not replace all six source inspection handlers; P05/P06 module slices cover only named domain actions."
           ]
+        },
+        {
+          "status": "implementation-present; integration-acceptance-pending",
+          "owner": "P10",
+          "targetPaths": [
+            "modules/speaker/src/index.ts",
+            "modules/speaker/src/algorithms/speakerAttribution.ts",
+            "modules/speaker/src/algorithms/speakerReranker.ts",
+            "modules/speaker/src/production.test.ts"
+          ],
+          "publicActions": [
+            {
+              "action": "speaker.voice.check",
+              "implementation": "Run voice consistency checks against pinned scene text and the derived attributed-dialogue profiles."
+            },
+            {
+              "action": "speaker.voice.profiles",
+              "implementation": "Build learned character fingerprints, comparison matrix, and stylometric profiles from pinned corpus dialogue."
+            }
+          ],
+          "uiSurfaces": [
+            "modules/speaker/src/browser.ts"
+          ],
+          "dataMappings": [
+            {
+              "source": "Source `GET /api/voice-consistency` and character voice/style inputs",
+              "target": "Speaker attribution plus Diagnostics declared-voice, learned-fingerprint and stylometric checks",
+              "persistence": "Check results and learned profiles are derived projections; canonical character and manuscript files remain authoritative."
+            }
+          ],
+          "proofRefs": [
+            {
+              "id": "P10-R20-CPU-WORKFLOW",
+              "path": "modules/speaker/src/production.test.ts",
+              "testName": "speaker actions run real CPU attribution, propose corrections/model adoption, and reload from the reviewed snapshot",
+              "scope": "Focused composed ModuleRuntime workflow with real CPU workers/tokenizer over synthetic Japanese scenes; author approval is simulated in the in-memory snapshot harness."
+            }
+          ],
+          "limitations": [
+            "P10 tests cover the named speaker actions and warning composition; they do not establish every source inspection route or full HTTP composition."
+          ]
         }
       ]
     },
@@ -3276,7 +3661,61 @@
         ],
         "directCoreCalls": [],
         "injectedManagerCalls": []
-      }
+      },
+      "targetImplementationSlices": [
+        {
+          "status": "implementation-present; integration-acceptance-pending",
+          "owner": "P09",
+          "targetPaths": [
+            "modules/semantic/src/actions.ts",
+            "modules/semantic/src/contradictions.ts",
+            "modules/semantic/src/migration.ts",
+            "modules/semantic/src/semantic.test.ts"
+          ],
+          "publicActions": [
+            {
+              "action": "semantic.contradictions.rebuild",
+              "implementation": "Recompute snapshot-bound rule and embedding candidate results from canonical source facts."
+            },
+            {
+              "action": "semantic.contradictions.dismiss",
+              "implementation": "Propose a revision-guarded update to author dismissal decisions through Core."
+            }
+          ],
+          "uiSurfaces": [
+            "modules/semantic/src/browser.ts"
+          ],
+          "dataMappings": [
+            {
+              "source": "Source `.arcadia/index.sqlite#contradiction_candidates` derived candidate rows",
+              "target": "Request-time rule and embedding candidates on the current snapshot",
+              "persistence": "Candidates are recomputed and are not treated as author decisions."
+            },
+            {
+              "source": "`meta/contradiction-dismissals.jsonl` authoritative dismissal decisions",
+              "target": "`meta/scriptorium/modules/semantic/contradiction-dismissals.jsonl`",
+              "persistence": "Dismissal changes are proposals; P04 preserves source bytes while disabled and the semantic producer restores only to an absent canonical target, reporting conflicts."
+            }
+          ],
+          "proofRefs": [
+            {
+              "id": "P09-R21-DISMISSAL-SCOPE",
+              "path": "modules/semantic/src/semantic.test.ts",
+              "testName": "contradiction dismissal binds Bible and plot source scopes to its proposal",
+              "scope": "Checks that dismissal proposals carry the current Bible and plot source revisions and become stale after a canonical alias change."
+            },
+            {
+              "id": "P09-R21-REACTIVATION",
+              "path": "modules/semantic/src/migration.test.ts",
+              "testName": "semantic reactivation restores opaque dismissal decisions exactly and reports conflicts",
+              "scope": "Module producer test checks byte-exact absent-only dismissal restoration and conflict reporting after disabled-module preservation."
+            }
+          ],
+          "limitations": [
+            "A synthetic CoreStore test verifies Bible/plot scope conflict behavior, but full imported decision history and composed P12 reactivation/reclone acceptance remain pending."
+          ]
+        }
+      ]
     },
     {
       "id": "R22",
@@ -3990,6 +4429,42 @@
           "limitations": [
             "Semantic clustering remains owned by P09; ignore and candidate data migration remain pending."
           ]
+        },
+        {
+          "status": "implementation-present; integration-acceptance-pending",
+          "owner": "P09",
+          "targetPaths": [
+            "modules/semantic/src/actions.ts",
+            "modules/semantic/src/termClustering.ts",
+            "modules/semantic/src/semantic.test.ts"
+          ],
+          "publicActions": [
+            {
+              "action": "semantic.terms.clusters",
+              "implementation": "Return deterministic lexical clusters with source reading/edit-distance behavior and optional semantic edges."
+            }
+          ],
+          "uiSurfaces": [
+            "modules/semantic/src/browser.ts"
+          ],
+          "dataMappings": [
+            {
+              "source": "Source `/api/candidates/clusters` generated lexical candidate grouping",
+              "target": "`semantic.terms.clusters` on source-derived Story terms",
+              "persistence": "Groups are computed projections; candidate ignore decisions remain in their owning Diagnostics/source migration path."
+            }
+          ],
+          "proofRefs": [
+            {
+              "id": "P09-R25-SOURCE-TERM-CLUSTERING",
+              "path": "modules/semantic/src/semantic.test.ts",
+              "testName": "term clustering retains source reading, edit distance, canonical ordering, and opt-in semantic edges",
+              "scope": "Focused term-cluster source behavior: readings, edit distance, stable ordering, and opt-in embedding edges."
+            }
+          ],
+          "limitations": [
+            "This adds semantic cluster enrichment only; it does not replace the Diagnostics-owned literal candidate list/ignore workflow or certify HTTP route composition."
+          ]
         }
       ]
     },
@@ -4416,6 +4891,42 @@
           "limitations": [
             "Corpus consumer uses a deterministic provider test double; P09 owns real semantic engine and model-quality acceptance."
           ]
+        },
+        {
+          "status": "implementation-present; integration-acceptance-pending",
+          "owner": "P11",
+          "targetPaths": [
+            "modules/assistant/src/actions.ts",
+            "modules/assistant/src/provider.ts",
+            "modules/assistant/src/browser.ts"
+          ],
+          "publicActions": [
+            {
+              "action": "assistant.synonyms.suggestions",
+              "implementation": "Generate external synonym candidates from explicit terms/context without writing the project dictionary."
+            }
+          ],
+          "uiSurfaces": [
+            "modules/assistant/src/browser.ts"
+          ],
+          "dataMappings": [
+            {
+              "source": "Source optional-provider synonym prompt/suggestion endpoints",
+              "target": "Optional Assistant generation result; dictionary writes remain separately owned by `nlp.saveSynonymGroup` proposal action",
+              "persistence": "Suggestions are transient until separately selected and proposed through the NLP dictionary action."
+            }
+          ],
+          "proofRefs": [
+            {
+              "id": "P11-R28-synonym-browser",
+              "path": "modules/assistant/tests/browser-workflow.acceptance.mjs",
+              "testName": "PASS: assistant panels render safely, invoke approved actions, stream and cancel rewrite, and keep generated changes in review proposals",
+              "scope": "Rendered synonym suggestion control invokes its registered action with a stubbed bridge."
+            }
+          ],
+          "limitations": [
+            "The source prompt-preview route is not represented; actual provider/semantic quality and composed UI acceptance remain pending."
+          ]
         }
       ]
     },
@@ -4636,7 +5147,51 @@
         ],
         "directCoreCalls": [],
         "injectedManagerCalls": []
-      }
+      },
+      "targetImplementationSlices": [
+        {
+          "status": "implementation-present; integration-acceptance-pending",
+          "owner": "P11",
+          "targetPaths": [
+            "modules/assistant/src/actions.ts",
+            "modules/assistant/src/migration.ts",
+            "modules/assistant/src/migration.test.ts"
+          ],
+          "publicActions": [
+            {
+              "action": "assistant.usage.read",
+              "implementation": "Merge preserved project usage JSONL and host-owned usage events for a repository-scoped view."
+            }
+          ],
+          "uiSurfaces": [
+            "modules/assistant/src/browser.ts"
+          ],
+          "dataMappings": [
+            {
+              "source": "`.arcadia/llm-usage.jsonl` historical records plus provider usage events",
+              "target": "`meta/scriptorium/modules/assistant/usage.jsonl` plus host `ModelUsageStore` events",
+              "persistence": "Legacy JSONL is preserved byte-for-byte; new usage events are host-owned and are not written into source project bytes."
+            }
+          ],
+          "proofRefs": [
+            {
+              "id": "P11-R30-usage-read",
+              "path": "modules/assistant/src/actions.test.ts",
+              "testName": "usage history combines preserved JSONL and host-owned events without rewriting legacy bytes",
+              "scope": "Action test verifies merged history, event aggregation, and unchanged legacy file bytes."
+            },
+            {
+              "id": "P11-R30-usage-reactivation",
+              "path": "modules/assistant/src/migration.test.ts",
+              "testName": "Assistant reactivation restores exact settings and usage bytes, including unknown fields",
+              "scope": "Module producer test verifies exact-byte usage/settings restoration after source importer ownership ends."
+            }
+          ],
+          "limitations": [
+            "Usage history tests are focused module tests; data-root replacement and final host integration remain P12/P13 acceptance."
+          ]
+        }
+      ]
     },
     {
       "id": "R31",
@@ -4719,7 +5274,52 @@
         ],
         "directCoreCalls": [],
         "injectedManagerCalls": []
-      }
+      },
+      "targetImplementationSlices": [
+        {
+          "status": "implementation-present; integration-acceptance-pending",
+          "owner": "P11",
+          "targetPaths": [
+            "modules/assistant/src/actions.ts",
+            "modules/assistant/src/model-settings.ts",
+            "modules/assistant/src/migration.ts",
+            "modules/assistant/src/migration.test.ts"
+          ],
+          "publicActions": [
+            {
+              "action": "assistant.settings.read / assistant.settings.propose",
+              "implementation": "Read versioned non-secret model preferences and submit revision-guarded settings changes to author review."
+            }
+          ],
+          "uiSurfaces": [
+            "modules/assistant/src/browser.ts"
+          ],
+          "dataMappings": [
+            {
+              "source": "`.arcadia/llm-model-settings.json` feature/model preferences and secret references",
+              "target": "`meta/scriptorium/modules/assistant/model-settings.json` for non-secret preferences; credentials remain host/environment injected",
+              "persistence": "Preference changes are Core proposals; credentials and secret values are not imported."
+            }
+          ],
+          "proofRefs": [
+            {
+              "id": "P11-R31-settings-proposal",
+              "path": "modules/assistant/src/actions.test.ts",
+              "testName": "settings changes become a review proposal with snapshot preconditions",
+              "scope": "Action test verifies settings updates carry the observed file revision and proposal boundary."
+            },
+            {
+              "id": "P11-R31-settings-reactivation",
+              "path": "modules/assistant/src/migration.test.ts",
+              "testName": "Assistant reactivation restores exact settings and usage bytes, including unknown fields",
+              "scope": "Module producer test verifies exact-byte settings restoration and unknown field preservation."
+            }
+          ],
+          "limitations": [
+            "The source prompt-preview routes remain unrepresented; final real-provider and composed reactivation acceptance remain pending."
+          ]
+        }
+      ]
     },
     {
       "id": "R32",
@@ -5024,7 +5624,44 @@
         ],
         "directCoreCalls": [],
         "injectedManagerCalls": []
-      }
+      },
+      "targetImplementationSlices": [
+        {
+          "status": "implementation-present; integration-acceptance-pending",
+          "owner": "P11",
+          "targetPaths": [
+            "modules/assistant/src/actions.ts",
+            "modules/assistant/src/browser.ts"
+          ],
+          "publicActions": [
+            {
+              "action": "assistant.qa",
+              "implementation": "Answer a setting question using snapshot-bound semantic/source evidence and return citations."
+            }
+          ],
+          "uiSurfaces": [
+            "modules/assistant/src/browser.ts"
+          ],
+          "dataMappings": [
+            {
+              "source": "Source project-scoped QA question and generated cited response",
+              "target": "Pinned semantic search plus Assistant response with verified citations",
+              "persistence": "Request-time output; no project writer is called."
+            }
+          ],
+          "proofRefs": [
+            {
+              "id": "P11-R34-qa-browser",
+              "path": "modules/assistant/tests/browser-workflow.acceptance.mjs",
+              "testName": "PASS: assistant panels render safely, invoke approved actions, stream and cancel rewrite, and keep generated changes in review proposals",
+              "scope": "Rendered QA contribution verifies error recovery and safely renders provider text through stubbed actions."
+            }
+          ],
+          "limitations": [
+            "The source `GET /api/qa/prompt-preview` contract is not represented; real-provider reference flow and full API/UI composition remain pending."
+          ]
+        }
+      ]
     },
     {
       "id": "R35",
@@ -5108,7 +5745,44 @@
           "getEntity"
         ],
         "injectedManagerCalls": []
-      }
+      },
+      "targetImplementationSlices": [
+        {
+          "status": "implementation-present; integration-acceptance-pending",
+          "owner": "P11",
+          "targetPaths": [
+            "modules/assistant/src/actions.ts",
+            "modules/assistant/src/browser.ts"
+          ],
+          "publicActions": [
+            {
+              "action": "assistant.continuation",
+              "implementation": "Generate bounded continuation options from pinned scene/manuscript context."
+            }
+          ],
+          "uiSurfaces": [
+            "modules/assistant/src/browser.ts"
+          ],
+          "dataMappings": [
+            {
+              "source": "Source chapter/scene continuation-options generated response",
+              "target": "Pinned Story snapshot plus Assistant continuation result",
+              "persistence": "Transient suggestions only; no author text is written without a separate proposal action."
+            }
+          ],
+          "proofRefs": [
+            {
+              "id": "P11-R35-continuation-browser",
+              "path": "modules/assistant/tests/browser-workflow.acceptance.mjs",
+              "testName": "PASS: assistant panels render safely, invoke approved actions, stream and cancel rewrite, and keep generated changes in review proposals",
+              "scope": "Rendered continuation contribution invokes the Assistant action through a stubbed action bridge."
+            }
+          ],
+          "limitations": [
+            "The source prompt-preview contract is not represented; real-provider output and composed acceptance remain pending."
+          ]
+        }
+      ]
     },
     {
       "id": "R36",
@@ -5270,7 +5944,73 @@
             ]
           }
         ]
-      }
+      },
+      "targetImplementationSlices": [
+        {
+          "status": "implementation-present; integration-acceptance-pending",
+          "owner": "P10",
+          "targetPaths": [
+            "modules/speaker/src/index.ts",
+            "modules/speaker/src/algorithms/speakerAttribution.ts",
+            "modules/speaker/src/algorithms/speakerEval.ts",
+            "modules/speaker/src/algorithms/speakerReranker.ts",
+            "modules/speaker/src/migration.ts",
+            "modules/speaker/src/production.test.ts"
+          ],
+          "publicActions": [
+            {
+              "action": "speaker.scenes.list / speaker.attribute / speaker.review.queue",
+              "implementation": "Read scenes and proposals, run source-derived CPU attribution, and expose the unresolved/low-confidence queue."
+            },
+            {
+              "action": "speaker.override / speaker.count.update",
+              "implementation": "Propose revision-guarded scene/count corrections through Core."
+            },
+            {
+              "action": "speaker.evaluation.latest / speaker.ruleGates / speaker.evaluation.run / speaker.retraining.run",
+              "implementation": "Read or rebuild snapshot-keyed evaluation and gates, train deterministically, and propose eligible model adoption."
+            }
+          ],
+          "uiSurfaces": [
+            "modules/speaker/src/browser.ts"
+          ],
+          "dataMappings": [
+            {
+              "source": "`meta/speaker-corrections.jsonl`, canonical scene `speakerOverrides`, and `meta/speaker-model.json`",
+              "target": "`meta/scriptorium/modules/speaker/corrections.jsonl`, existing canonical scene YAML, and `meta/scriptorium/modules/speaker/adopted-model.json`",
+              "persistence": "Author changes use Core proposals; the P04 generic filesystem producer maps legacy files; module reactivation restores retained bytes only when targets are absent and reports conflicts."
+            },
+            {
+              "source": "`.arcadia/speaker-eval-latest.json`, `meta/speaker-rule-gates.json`, inference/training outputs and source JobManager statuses",
+              "target": "Private cache identity-bound reports/gates and supervised per-action worker results",
+              "persistence": "Derived reports rebuild from pinned canonical files; job outputs are not durable author state. Source persistent job/event HTTP semantics are not provided by this slice."
+            }
+          ],
+          "proofRefs": [
+            {
+              "id": "P10-R36-CPU-WORKFLOW",
+              "path": "modules/speaker/src/production.test.ts",
+              "testName": "speaker actions run real CPU attribution, propose corrections/model adoption, and reload from the reviewed snapshot",
+              "scope": "Focused composed ModuleRuntime workflow with real CPU workers/tokenizer over synthetic Japanese scenes; author approval is simulated in the in-memory snapshot harness."
+            },
+            {
+              "id": "P10-R36-BROWSER-WORKFLOW",
+              "path": "modules/speaker/tests/browser-workflow.acceptance.mjs",
+              "testName": "PASS: rendered speaker attribution, review, character dialogue, voice profiles, diagnostics, evaluation, and retraining controls invoke their registered action boundary",
+              "scope": "Rendered Playwright browser contribution test; action transport is stubbed, while CPU behavior is checked separately by P10-SPEAKER-CPU-WORKFLOW."
+            },
+            {
+              "id": "P10-R36-SPEAKER-REACTIVATION",
+              "path": "modules/speaker/src/migration.test.ts",
+              "testName": "speaker reactivation restores retained corrections and model bytes with stable absent-only proposals",
+              "scope": "Speaker producer test checks exact retained author correction/model bytes and stable proposal operations on reactivation."
+            }
+          ],
+          "limitations": [
+            "The P10 module workflow and its producer tests are focused tests; source jobId polling and retained inbox/job event parity remain R38 gaps. Real Core approval, import composition, provider/profile composition and data-root deletion/reclone acceptance remain P12/P13 gates."
+          ]
+        }
+      ]
     },
     {
       "id": "R37",
@@ -5383,7 +6123,46 @@
             ]
           }
         ]
-      }
+      },
+      "targetImplementationSlices": [
+        {
+          "status": "implementation-present; integration-acceptance-pending",
+          "owner": "P11",
+          "targetPaths": [
+            "modules/assistant/src/actions.ts",
+            "modules/assistant/src/aspect-review.ts",
+            "modules/assistant/src/actions.test.ts",
+            "modules/assistant/src/browser.ts"
+          ],
+          "publicActions": [
+            {
+              "action": "assistant.aspect.review",
+              "implementation": "Run deterministic local tempo, POV-shift, and over-explanation review over the selected chapter snapshot."
+            }
+          ],
+          "uiSurfaces": [
+            "modules/assistant/src/browser.ts"
+          ],
+          "dataMappings": [
+            {
+              "source": "Canonical chapter/scene/manuscript inputs and deterministic local aspect-review analysis",
+              "target": "Snapshot-read Assistant action returning findings for UI review",
+              "persistence": "Analysis is local and request-time; it neither uses model credentials nor writes author documents."
+            }
+          ],
+          "proofRefs": [
+            {
+              "id": "P11-LOCAL-ASPECT-REVIEW",
+              "path": "modules/assistant/src/actions.test.ts",
+              "testName": "aspect review runs the deterministic local source implementation without consent or model access",
+              "scope": "Assistant action test verifies chapter source analysis runs with provider=none and acquires neither the model capability nor a proposal writer."
+            }
+          ],
+          "limitations": [
+            "This maps the deterministic local source implementation. The source prompt builder is explicitly marked as a future LLM path; the source prompt-preview HTTP skeleton is a separate registered handler and is not proof of the future provider path. P11 composed browser/API acceptance remains pending."
+          ]
+        }
+      ]
     },
     {
       "id": "R38",
@@ -7280,7 +8059,45 @@
           "getEntity"
         ],
         "injectedManagerCalls": []
-      }
+      },
+      "targetImplementationSlices": [
+        {
+          "status": "implementation-present; integration-acceptance-pending",
+          "owner": "P11",
+          "targetPaths": [
+            "modules/assistant/src/actions.ts",
+            "modules/assistant/src/prompts.ts",
+            "modules/assistant/src/browser.ts"
+          ],
+          "publicActions": [
+            {
+              "action": "assistant.dialogue.topics / assistant.dialogue.turns",
+              "implementation": "Generate topic and three-line dialogue suggestions from snapshot characters, voice notes, and scene context."
+            }
+          ],
+          "uiSurfaces": [
+            "modules/assistant/src/browser.ts"
+          ],
+          "dataMappings": [
+            {
+              "source": "Source dialogue-sketch topic/line requests and canonical character/scene context",
+              "target": "Pinned Story reads and transient Assistant dialogue suggestions",
+              "persistence": "Generated lines are not directly persisted; author changes must use the proposal boundary."
+            }
+          ],
+          "proofRefs": [
+            {
+              "id": "P11-R46-dialogue-browser",
+              "path": "modules/assistant/tests/browser-workflow.acceptance.mjs",
+              "testName": "PASS: assistant panels render safely, invoke approved actions, stream and cancel rewrite, and keep generated changes in review proposals",
+              "scope": "Rendered dialogue contribution exercises topic and turn actions through a stubbed action transport."
+            }
+          ],
+          "limitations": [
+            "This slice covers topic and three-line generation only. Source single-line generation, sandbox Zukan analysis, and exact prompt-preview routes are not represented by the current target action surface."
+          ]
+        }
+      ]
     },
     {
       "id": "R47",
@@ -8419,6 +9236,57 @@
           "limitations": [
             "Contradiction candidate rebuild/dismissal remains P09-owned; hierarchical Core writing statistics remain Core-owned; composed HTTP/browser/MCP and P10 speaker lifecycle acceptance remain pending."
           ]
+        },
+        {
+          "status": "implementation-present; integration-acceptance-pending",
+          "owner": "P09",
+          "targetPaths": [
+            "modules/semantic/src/actions.ts",
+            "modules/semantic/src/contradictions.ts",
+            "modules/semantic/src/semantic.test.ts"
+          ],
+          "publicActions": [
+            {
+              "action": "semantic.contradictions.rebuild",
+              "implementation": "Rebuild derived contradiction candidates from the selected snapshot."
+            },
+            {
+              "action": "semantic.contradictions.dismiss",
+              "implementation": "Submit a snapshot-guarded proposal for a durable author dismissal."
+            }
+          ],
+          "uiSurfaces": [
+            "modules/semantic/src/browser.ts"
+          ],
+          "dataMappings": [
+            {
+              "source": "Rule/embedding contradiction candidates in legacy local SQLite",
+              "target": "Recomputed candidates over canonical snapshot entities and semantic indexes",
+              "persistence": "Derived candidates rebuild; they are not durable author records."
+            },
+            {
+              "source": "`meta/contradiction-dismissals.jsonl`",
+              "target": "`meta/scriptorium/modules/semantic/contradiction-dismissals.jsonl`",
+              "persistence": "Durable author choices use proposal/checkpoint lifecycle and absent-only reactivation."
+            }
+          ],
+          "proofRefs": [
+            {
+              "id": "P09-N03-DISMISSAL-SCOPE",
+              "path": "modules/semantic/src/semantic.test.ts",
+              "testName": "contradiction dismissal binds Bible and plot source scopes to its proposal",
+              "scope": "Checks that dismissal proposals carry the current Bible and plot source revisions and become stale after a canonical alias change."
+            },
+            {
+              "id": "P09-N03-REACTIVATION",
+              "path": "modules/semantic/src/migration.test.ts",
+              "testName": "semantic reactivation restores opaque dismissal decisions exactly and reports conflicts",
+              "scope": "Module producer test checks byte-exact absent-only dismissal restoration and conflict reporting after disabled-module preservation."
+            }
+          ],
+          "limitations": [
+            "Diagnostics/P09 producer coverage exists at module level; P12 composed import, recovery, and full-profile acceptance are pending."
+          ]
         }
       ]
     },
@@ -8628,6 +9496,60 @@
         "app/src/components/ExpressionInventoryPanel.tsx",
         "app/src/features/zukan/CharacterDetailModal.tsx",
         "app/src/features/editor/ContradictionDiagnosticsPanel.tsx"
+      ],
+      "targetImplementationSlices": [
+        {
+          "status": "implementation-present; integration-acceptance-pending",
+          "owner": "P09",
+          "targetPaths": [
+            "modules/semantic/src/worker.ts",
+            "modules/semantic/src/embedding.ts",
+            "modules/semantic/src/migration.ts",
+            "modules/semantic/src/migration.test.ts"
+          ],
+          "publicActions": [
+            {
+              "action": "semantic.index.rebuild / semantic.index.status",
+              "implementation": "Build and report the derived private index for the pinned repository snapshot."
+            },
+            {
+              "action": "semantic.contradictions.rebuild / semantic.contradictions.dismiss",
+              "implementation": "Rebuild transient candidates and preserve author dismissal decisions separately."
+            }
+          ],
+          "uiSurfaces": [
+            "modules/semantic/src/browser.ts"
+          ],
+          "dataMappings": [
+            {
+              "source": "Legacy `.arcadia/index.sqlite#sentence_embeddings` and `#contradiction_candidates`",
+              "target": "Private local semantic cache and snapshot recomputation",
+              "persistence": "Both are derived projections; they rebuild from canonical source and model identity, not imported as author state."
+            },
+            {
+              "source": "`meta/contradiction-dismissals.jsonl`",
+              "target": "`meta/scriptorium/modules/semantic/contradiction-dismissals.jsonl`",
+              "persistence": "Author dismissal bytes are retained while the module is disabled and restored absent-only when reactivated."
+            }
+          ],
+          "proofRefs": [
+            {
+              "id": "P09-N05-DEFAULT-RUNTIME",
+              "path": "modules/semantic/src/semantic.test.ts",
+              "testName": "default ModuleRuntime composes semantic status, real CPU rebuild/search/rerank, and cache recovery",
+              "scope": "Composes the real semantic module through default ModuleRuntime with pinned CPU embedding/reranker artifacts, snapshot-bound search, cache reuse, deletion, and rebuild."
+            },
+            {
+              "id": "P09-N05-REACTIVATION",
+              "path": "modules/semantic/src/migration.test.ts",
+              "testName": "semantic reactivation restores opaque dismissal decisions exactly and reports conflicts",
+              "scope": "Module producer test checks byte-exact absent-only dismissal restoration and conflict reporting after disabled-module preservation."
+            }
+          ],
+          "limitations": [
+            "The source has two SQLite index roots; this slice classifies only the semantic artifacts it owns. Complete source store inspection and composed import/reclone proof remain P12."
+          ]
+        }
       ]
     },
     {
@@ -8710,6 +9632,50 @@
         "app/src/features/speakers/SpeakerEvalView.tsx",
         "app/src/features/zukan/CharacterVoiceDashboard.tsx",
         "app/src/features/zukan/CharacterDialogueList.tsx"
+      ],
+      "targetImplementationSlices": [
+        {
+          "status": "implementation-present; integration-acceptance-pending",
+          "owner": "P10",
+          "targetPaths": [
+            "modules/speaker/src/migration.ts",
+            "modules/speaker/src/migration.test.ts",
+            "modules/speaker/src/index.ts",
+            "packages/migration/src/producers/filesystem.ts"
+          ],
+          "publicActions": [
+            {
+              "action": "createSpeakerMigrationProducer",
+              "implementation": "Restore source corrections/model only after module reactivation when generic source import no longer owns those files."
+            }
+          ],
+          "uiSurfaces": [
+            "modules/speaker/src/browser.ts"
+          ],
+          "dataMappings": [
+            {
+              "source": "Author correction JSONL and canonical scene overrides",
+              "target": "Namespaced correction JSONL plus the same canonical scene YAML path",
+              "persistence": "Exact retained author bytes and approved corrections flow through Core proposals."
+            },
+            {
+              "source": "Adopted speaker model JSON",
+              "target": "Namespaced adopted-model JSON",
+              "persistence": "Model reactivation is absent-only and proposal-based; caches/reports are rebuilt."
+            }
+          ],
+          "proofRefs": [
+            {
+              "id": "P10-N06-REACTIVATION",
+              "path": "modules/speaker/src/migration.test.ts",
+              "testName": "speaker reactivation restores retained corrections and model bytes with stable absent-only proposals",
+              "scope": "Speaker producer test checks exact retained author correction/model bytes and stable proposal operations on reactivation."
+            }
+          ],
+          "limitations": [
+            "The producer test proves focused byte restoration/conflict behavior; final P04-to-P10 importer orchestration and reactivation through real proposal/checkpoint/reclone remain pending P12."
+          ]
+        }
       ]
     },
     {
@@ -8802,6 +9768,73 @@
         "app/src/features/ai/DialogueSketchView.tsx",
         "app/src/features/editor/SceneSummaryPanel.tsx",
         "app/src/features/editor/FirstReadReactionPanel.tsx"
+      ],
+      "targetImplementationSlices": [
+        {
+          "status": "implementation-present; integration-acceptance-pending",
+          "owner": "P11",
+          "targetPaths": [
+            "modules/assistant/src/actions.ts",
+            "modules/assistant/src/provider.ts",
+            "modules/assistant/src/model-settings.ts",
+            "modules/assistant/src/migration.ts",
+            "modules/assistant/src/migration.test.ts"
+          ],
+          "publicActions": [
+            {
+              "action": "assistant.health / assistant.queue.status / assistant.settings.read / assistant.settings.propose / assistant.usage.read",
+              "implementation": "Expose optional provider health, bounded queue status, versioned non-secret settings proposals, and historical usage reads."
+            },
+            {
+              "action": "assistant.rewrite / assistant.summary.scene / assistant.summary.chapter / assistant.qa / assistant.continuation / assistant.reader.reaction",
+              "implementation": "Generate supported writing assistance from pinned Story context; prose/settings mutations are Core proposals."
+            }
+          ],
+          "uiSurfaces": [
+            "modules/assistant/src/browser.ts"
+          ],
+          "dataMappings": [
+            {
+              "source": "`.arcadia/llm-model-settings.json` and `.arcadia/llm-usage.jsonl`",
+              "target": "`meta/scriptorium/modules/assistant/model-settings.json` and `meta/scriptorium/modules/assistant/usage.jsonl`",
+              "persistence": "Settings are non-secret versioned project state; historical usage bytes are preserved, host-owned usage events remain a distinct source."
+            },
+            {
+              "source": "Provider credentials, model calls, response cache, generated summary sidecars, and background job state",
+              "target": "Environment-only credentials, lazy optional provider capability, proposal-based outputs, private cache/request-time results",
+              "persistence": "Secrets are not migrated; generated results are not committed outside Core proposal flow. This slice does not establish source summary sidecar write parity or durable jobs/inbox."
+            }
+          ],
+          "proofRefs": [
+            {
+              "id": "P11-ASSISTANT-IDLE-AND-HEALTH",
+              "path": "modules/assistant/src/actions.test.ts",
+              "testName": "module activation and provider health stay idle without provider or capabilities",
+              "scope": "Assistant module action test verifies activation and health are idle without an enabled provider or leased model capability."
+            },
+            {
+              "id": "P11-ASSISTANT-SETTINGS-PROPOSAL",
+              "path": "modules/assistant/src/actions.test.ts",
+              "testName": "settings changes become a review proposal with snapshot preconditions",
+              "scope": "Settings update is a revision-guarded Core proposal, not a direct settings write."
+            },
+            {
+              "id": "P11-ASSISTANT-USAGE-READ",
+              "path": "modules/assistant/src/actions.test.ts",
+              "testName": "usage history combines preserved JSONL and host-owned events without rewriting legacy bytes",
+              "scope": "Usage history combines source project JSONL and host-owned records without rewriting the original bytes."
+            },
+            {
+              "id": "P11-ASSISTANT-REACTIVATION",
+              "path": "modules/assistant/src/migration.test.ts",
+              "testName": "Assistant reactivation restores exact settings and usage bytes, including unknown fields",
+              "scope": "Focused assistant producer test checks exact-byte restoration and unknown-field retention."
+            }
+          ],
+          "limitations": [
+            "This records focused action and producer test coverage only. Browser acceptance uses an action-transport stub, and the real-provider reference flow, prompt previews, full-profile UI/API composition, P12 reactivation/import/reclone and final product acceptance remain pending."
+          ]
+        }
       ]
     },
     {
@@ -9323,6 +10356,51 @@
         "app/src/components/LoginGate.tsx",
         "app/src/components/ProjectSwitcher.tsx",
         "app/src/components/layout/AppHeader.tsx"
+      ],
+      "targetImplementationSlices": [
+        {
+          "status": "implementation-present; integration-acceptance-pending",
+          "owner": "P02",
+          "targetPaths": [
+            "app/src/App.tsx",
+            "app/src/api.ts",
+            "app/styles.css",
+            "tests/e2e/core.acceptance.spec.ts"
+          ],
+          "publicActions": [
+            {
+              "action": "React writing shell, project selection, registration and recovery surfaces",
+              "implementation": "Render the target shell and route project/editor operations through the target HTTP API and IndexedDB journal."
+            }
+          ],
+          "uiSurfaces": [
+            "app/src/App.tsx",
+            "app/styles.css"
+          ],
+          "dataMappings": [
+            {
+              "source": "Active project and `arcadia-theme-mode` localStorage preference; source light/dark/paper mode and system preference",
+              "target": "Target active project key and static light application styles",
+              "persistence": "Project selection is browser-local; as of this target tree there is no theme-mode state/control and no equivalent three-mode/system preference persistence."
+            },
+            {
+              "source": "IndexedDB manuscript recovery and source typography/vertical writing controls",
+              "target": "Author-scoped `scriptorium-recovery` journal and React editor controls",
+              "persistence": "Draft recovery is browser-local until checkpoint/publish; it does not supply the missing source theme modes."
+            }
+          ],
+          "proofRefs": [
+            {
+              "id": "P02-N11-PROJECT-LIFECYCLE-SHELL",
+              "path": "tests/e2e/core.acceptance.spec.ts",
+              "testName": "project details, reconstruction, and guarded removal preserve browser recovery",
+              "scope": "Chromium acceptance checks the current React project/lifecycle shell and recovery behavior; this test does not exercise theme modes."
+            }
+          ],
+          "limitations": [
+            "Source UX theme parity is not implemented in the current target tree: `app/styles.css` fixes `color-scheme: light` and no target theme controller corresponds to source light/dark/paper/system preference. P02 shell/lifecycle coverage is not a theme acceptance proof; retain this as pending until a dedicated behavior test exists."
+          ]
+        }
       ]
     },
     {

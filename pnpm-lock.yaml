@@ -169,6 +169,33 @@ importers:
       '@playwright/test':
         specifier: ^1.64.1
         version: 1.64.1
+      '@scriptorium/api':
+        specifier: workspace:*
+        version: link:packages/api
+      '@scriptorium/module-assistant':
+        specifier: workspace:*
+        version: link:modules/assistant
+      '@scriptorium/module-diagnostics':
+        specifier: workspace:*
+        version: link:modules/diagnostics
+      '@scriptorium/module-mcp':
+        specifier: workspace:*
+        version: link:modules/mcp
+      '@scriptorium/module-nlp':
+        specifier: workspace:*
+        version: link:modules/nlp
+      '@scriptorium/module-publishing':
+        specifier: workspace:*
+        version: link:modules/publishing
+      '@scriptorium/module-semantic':
+        specifier: workspace:*
+        version: link:modules/semantic
+      '@scriptorium/module-speaker':
+        specifier: workspace:*
+        version: link:modules/speaker
+      '@scriptorium/module-story':
+        specifier: workspace:*
+        version: link:modules/story
       '@types/node':
         specifier: ^24.0.0
         version: 24.19.2
@@ -308,6 +335,9 @@ importers:
 
   modules/nlp:
     dependencies:
+      '@huggingface/transformers':
+        specifier: 3.8.1
+        version: 3.8.1
       '@scriptorium/contracts':
         specifier: workspace:*
         version: link:../../packages/contracts
@@ -386,6 +416,9 @@ importers:
       '@scriptorium/contracts':
         specifier: workspace:*
         version: link:../../packages/contracts
+      '@scriptorium/migration':
+        specifier: workspace:*
+        version: link:../../packages/migration
       '@scriptorium/module-diagnostics':
         specifier: workspace:*
         version: link:../diagnostics

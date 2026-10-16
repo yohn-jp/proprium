@@ -8,8 +8,11 @@ import { fileURLToPath, pathToFileURL } from "node:url";
 import Fastify, { type FastifyInstance, type FastifyRequest } from "fastify";
 import { CONTRACT_VERSION, MODEL_USAGE_CAPABILITY, snapshotKey, type ActionDescriptor, type ActionResult, type ChangeOperation, type ChangeProposal, type HttpContribution, type ModelUsageStore, type ModuleAction, type ModuleActionContext, type ModuleId, type ModuleStatus, type ProposalEvidence, type SnapshotId, type ValueSchema } from "@scriptorium/contracts";
 import type { CoreStore, CreateHierarchyInput, HierarchyTarget, Project, ReorderHierarchyInput } from "@scriptorium/core";
-import { ModuleRuntime, type ActionHostContext, type ModuleLoader, type ModuleRuntimeOptions } from "@scriptorium/module-runtime";
+import { ModuleRuntime, type ActionHostContext, type ModuleLoader, type ModuleRuntimeOptions, type WorkerJobLifecycleSnapshot } from "@scriptorium/module-runtime";
 import { HistoricalModelUsageStore } from "./historical-store.js";
+import { JobHistoryError, JobHistoryStore } from "./job-history-store.js";
+
+export { importLegacyJobHistory, type LegacyJobHistoryImportOptions, type LegacyJobHistoryImportReport } from "./job-history-store.js";
 
 const SESSION_COOKIE = "scriptorium_session";
 const SESSION_TTL_MS = 8 * 60 * 60 * 1000;
@@ -20,6 +23,7 @@ const MAX_SCRATCH_ATTACHMENT_BYTES = 8 * 1024 * 1024;
 const API_DRAIN_TIMEOUT_MS = 5_000;
 const API_VERSION = "0.1.0";
 const STYLE_NONCES = new WeakMap<IncomingMessage, string>();
+const PUBLIC_READER_MODULES = new Set(["story", "diagnostics", "nlp", "semantic", "speaker", "assistant", "publishing", "mcp"]);
 
 interface Session {
   expiresAt: number;
@@ -179,6 +183,16 @@ function parseSceneId(value: string): string {
   }
 }
 
+function isPublicReaderPath(pathname: string): boolean {
+  const parts = pathname.split("/");
+  if (parts.length !== 5 || parts[0] !== "" || parts[1] !== "r" ||
+      !/^\d{1,32}$/u.test(parts[3] ?? "") || !/^[A-Za-z0-9._~-]{1,128}$/u.test(parts[4] ?? "")) return false;
+  let moduleId: string;
+  try { moduleId = decodeURIComponent(parts[2] ?? ""); }
+  catch { return false; }
+  return PUBLIC_READER_MODULES.has(moduleId);
+}
+
 async function serveStatic(
   request: IncomingMessage,
   response: ServerResponse,
@@ -187,6 +201,7 @@ async function serveStatic(
 ): Promise<boolean> {
   if (request.method !== "GET" && request.method !== "HEAD") return false;
   const path = requestPath(request);
+  const publicReaderPath = isPublicReaderPath(path);
   const files: Record<string, { filename: string; contentType: string }> = {
     "/": { filename: "index.html", contentType: "text/html; charset=utf-8" },
     "/main.js": { filename: "main.js", contentType: "text/javascript; charset=utf-8" },
@@ -194,7 +209,7 @@ async function serveStatic(
     "/drafts.js": { filename: "drafts.js", contentType: "text/javascript; charset=utf-8" },
     "/styles.css": { filename: "styles.css", contentType: "text/css; charset=utf-8" },
   };
-  let file = files[path];
+  let file = files[path] ?? (publicReaderPath ? files["/"] : undefined);
   if (!file && path.startsWith("/assets/")) {
     const name = path.slice("/assets/".length);
     if (!name || name.includes("/") || name.includes("\\") || name === "." || name === "..") return false;
@@ -231,6 +246,10 @@ async function serveStatic(
     const content = path === "/" || resolvedTarget === resolve(staticDir, "index.html")
       ? Buffer.from(original.toString("utf8").replaceAll("__SCRIPTORIUM_STYLE_NONCE__", styleNonce))
       : original;
+    if (publicReaderPath) {
+      response.setHeader("Referrer-Policy", "no-referrer");
+      response.setHeader("X-Robots-Tag", "noindex, nofollow");
+    }
     response.writeHead(200, { "Content-Type": file.contentType, "Content-Length": content.length });
     response.end(request.method === "HEAD" ? undefined : content);
   } catch (error) {
@@ -325,9 +344,11 @@ export function createServer(options: ApiServerOptions): Server {
   const configuredUsageDirectory = options.usageDirectory ?? process.env.SCRIPTORIUM_USAGE_DIR ?? resolve(process.env.SCRIPTORIUM_DATA_DIR ?? "./data", "host-history");
   if (!configuredUsageDirectory.trim()) throw new Error("Model usage history requires a non-empty usage directory");
   const usageDirectory = resolve(configuredUsageDirectory);
+  const jobHistory = new JobHistoryStore(usageDirectory);
   const sessions = new Map<string, Session>();
   const requestControllers = new Set<AbortController>();
   const projectEventStreams = new Set<ServerResponse>();
+  const jobEventStreams = new Set<ServerResponse>();
   const coreStore = options.store as CoreStoreApi;
   const capabilityProviders = {
     ...(options.runtimeOptions?.capabilityProviders ?? {}),
@@ -350,6 +371,7 @@ export function createServer(options: ApiServerOptions): Server {
     throw new Error("The full profile requires trusted runtime manifests and lazy loaders");
   }
   const app: FastifyInstance = Fastify({ logger: false, trustProxy });
+  let unsubscribeJobLifecycle = (): void => undefined;
   let shuttingDown = false;
   let activeRequests = 0;
   let started = false;
@@ -357,9 +379,25 @@ export function createServer(options: ApiServerOptions): Server {
   let closed = false;
   let runtimeShutdownPromise: Promise<void> | undefined;
   const shutdownRuntime = (): Promise<void> => {
-    runtimeShutdownPromise ??= Promise.resolve().then(() => runtime.shutdown());
+    runtimeShutdownPromise ??= Promise.resolve().then(() => runtime.shutdown()).finally(async () => {
+      unsubscribeJobLifecycle();
+      await jobHistory.flush();
+    });
     return runtimeShutdownPromise;
   };
+
+  unsubscribeJobLifecycle = runtime.subscribeJobLifecycle(async (lifecycle: WorkerJobLifecycleSnapshot) => {
+    try {
+      const event = await jobHistory.record(lifecycle);
+      const frame = `data: ${JSON.stringify(event)}\n\n`;
+      for (const response of jobEventStreams) {
+        if (!response.destroyed && !response.writableEnded) response.write(frame);
+      }
+    } catch (error) {
+      const code = error instanceof JobHistoryError ? error.code : "storage_failure";
+      console.error(`Scriptorium worker lifecycle history was not retained (${code}).`);
+    }
+  });
 
   const emitProjectEvent = (event: ProjectSyncEvent): void => {
     const frame = `event: ${event.type}\ndata: ${JSON.stringify(event)}\n\n`;
@@ -912,6 +950,74 @@ export function createServer(options: ApiServerOptions): Server {
       response.once("close", () => projectEventStreams.delete(response));
       return;
     }
+    if (routePath === "/api/jobs/events" && method === "GET") {
+      if (!isCookie) { fail(response, 403, "AUTHOR_SESSION_REQUIRED", "Job events require an owner session"); return; }
+      if (jobEventStreams.size >= 100) throw httpFailure(503, "JOB_EVENT_STREAM_LIMIT", "Too many job event streams are open");
+      response.writeHead(200, {
+        "Content-Type": "text/event-stream; charset=utf-8",
+        "Cache-Control": "no-cache",
+        Connection: "keep-alive",
+        "X-Accel-Buffering": "no",
+      });
+      response.write(": ok\n\n");
+      jobEventStreams.add(response);
+      const cleanup = (): void => { jobEventStreams.delete(response); };
+      response.once("close", cleanup);
+      response.once("finish", cleanup);
+      const heartbeat = setInterval(() => {
+        if (!response.destroyed && !response.writableEnded) response.write(": heartbeat\n\n");
+      }, 30_000);
+      heartbeat.unref();
+      response.once("close", () => clearInterval(heartbeat));
+      response.once("finish", () => clearInterval(heartbeat));
+      return;
+    }
+    if (routePath === "/api/jobs" && method === "GET") {
+      if (!isCookie) { fail(response, 403, "AUTHOR_SESSION_REQUIRED", "Job history requires an owner session"); return; }
+      try { sendJson(response, 200, await jobHistory.listJobs()); }
+      catch { throw httpFailure(503, "JOB_HISTORY_UNAVAILABLE", "Job history is temporarily unavailable"); }
+      return;
+    }
+    const jobMatch = routePath.match(/^\/api\/jobs\/([^/]+)$/u);
+    if (jobMatch && method === "GET") {
+      if (!isCookie) { fail(response, 403, "AUTHOR_SESSION_REQUIRED", "Job history requires an owner session"); return; }
+      const jobId = parseProjectId(jobMatch[1]!);
+      try {
+        const job = await jobHistory.getJob(jobId);
+        if (!job) throw httpFailure(404, "JOB_NOT_FOUND", "Job was not found");
+        sendJson(response, 200, job);
+      } catch (error) {
+        if (isHttpFailure(error)) throw error;
+        throw httpFailure(503, "JOB_HISTORY_UNAVAILABLE", "Job history is temporarily unavailable");
+      }
+      return;
+    }
+    if (routePath === "/api/inbox" && method === "GET") {
+      if (!isCookie) { fail(response, 403, "AUTHOR_SESSION_REQUIRED", "Inbox requires an owner session"); return; }
+      try { sendJson(response, 200, await jobHistory.listInbox({ unreadOnly: query.get("unread") === "1" })); }
+      catch { throw httpFailure(503, "JOB_HISTORY_UNAVAILABLE", "Inbox is temporarily unavailable"); }
+      return;
+    }
+    if (routePath === "/api/inbox/read-all" && method === "POST") {
+      if (!isCookie) { fail(response, 403, "AUTHOR_SESSION_REQUIRED", "Inbox updates require an owner session"); return; }
+      try { sendJson(response, 200, { marked: await jobHistory.markAllInboxRead() }); }
+      catch { throw httpFailure(503, "JOB_HISTORY_UNAVAILABLE", "Inbox is temporarily unavailable"); }
+      return;
+    }
+    const inboxReadMatch = routePath.match(/^\/api\/inbox\/([^/]+)\/read$/u);
+    if (inboxReadMatch && method === "POST") {
+      if (!isCookie) { fail(response, 403, "AUTHOR_SESSION_REQUIRED", "Inbox updates require an owner session"); return; }
+      const inboxId = parseProjectId(inboxReadMatch[1]!);
+      try {
+        const item = await jobHistory.markInboxRead(inboxId);
+        if (!item) throw httpFailure(404, "INBOX_ITEM_NOT_FOUND", "Inbox item was not found");
+        sendJson(response, 200, { item });
+      } catch (error) {
+        if (isHttpFailure(error)) throw error;
+        throw httpFailure(503, "JOB_HISTORY_UNAVAILABLE", "Inbox is temporarily unavailable");
+      }
+      return;
+    }
     if (routePath === "/api/projects" && method === "GET") { sendJson(response, 200, await options.store.listProjects()); return; }
     if (routePath === "/api/projects" && method === "POST") {
       if (!isCookie) { fail(response, 403, "AUTHOR_SESSION_REQUIRED", "Repository registration requires an owner session"); return; }
@@ -1329,6 +1435,8 @@ export function createServer(options: ApiServerOptions): Server {
       for (const controller of requestControllers) controller.abort(new Error("The API server is shutting down"));
       for (const stream of projectEventStreams) stream.end();
       projectEventStreams.clear();
+      for (const stream of jobEventStreams) stream.end();
+      jobEventStreams.clear();
       const nodeDrain = new Promise<Error | undefined>((resolveNode) => nodeClose((error?: Error) => resolveNode(error)));
       const runtimeDrain = shutdownRuntime().then(
         () => undefined,

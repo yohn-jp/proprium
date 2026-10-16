@@ -277,7 +277,7 @@ async function seedGitHistory(sourceRoot: string): Promise<void> {
   runGit(sourceRoot, ["add", "-f", ".ssh/id_ed25519", ".ssh/id_rsa", ".git-credentials", ".config/git/credentials", ".config/gh/hosts.yml", "gcloud/credentials.db", ".config/gcloud/legacy_credentials/user/adc.json", ".aws/credentials", ".azure/accessTokens.json", ".docker/config.json", ".kube/config"]);
 }
 
-async function createProjectStores(sourceRoot: string, workspaceRoot: string): Promise<void> {
+async function createProjectStores(sourceRoot: string, workspaceRoot: string): Promise<Buffer> {
   await writeFile(sourceRoot, "meta/speaker-corrections.jsonl", '{"id":"correction-1","entityId":"speaker-a","chosen":"speaker-b"}\n');
   await writeFile(sourceRoot, "meta/speaker-model.json", '{"version":1,"featureNames":["manual"],"weights":[0.5],"bias":0,"highProbabilityThreshold":0.7,"trainedAt":"2025-01-01T00:00:00.000Z","vendorExtension":{"preserve":true}}\n');
   await writeFile(sourceRoot, "meta/synonyms.yaml", "groups:\n  - canonical: lantern\n    variants: [lamp, light]\nlegacy-extension: keep-this-field\n");
@@ -307,6 +307,9 @@ async function createProjectStores(sourceRoot: string, workspaceRoot: string): P
   };
   await writeFile(workspaceRoot, "app-state/share-tokens.json", JSON.stringify([grant]) + "\n");
   await fs.symlink("app-state/share-tokens.json", path.join(workspaceRoot, "share-tokens.json"));
+  const jobHistory = Buffer.from('{"jobs":[{"id":"private-job","result":{"text":"PRIVATE_JOB_RESULT_SENTINEL"}}],"inbox":[]}\n');
+  await fs.writeFile(path.join(workspaceRoot, "app-state/jobs-state.json"), jobHistory, { mode: 0o600 });
+  return jobHistory;
 }
 
 function operationContent(files: TargetFiles, target: string): string {
@@ -325,7 +328,7 @@ test("legacy inspection preserves scoped data, both SQLite stores, and pending G
   await seedGitHistory(sourceRoot);
   await fs.mkdir(path.join(sourceRoot, ".arcadia"), { recursive: true });
   await fs.mkdir(workspaceRoot, { recursive: true });
-  await createProjectStores(sourceRoot, workspaceRoot);
+  const jobHistory = await createProjectStores(sourceRoot, workspaceRoot);
   const databases = await createDatabaseFixtures(sourceRoot, workspaceRoot);
   t.after(async () => {
     for (const db of databases) db.close();
@@ -405,6 +408,12 @@ test("legacy inspection preserves scoped data, both SQLite stores, and pending G
   assert.ok(inspection.entries.some((entry) => entry.source.endsWith("#private_tokens") && entry.category === "secret" && entry.disposition === "excluded"));
   assert.ok(inspection.entries.some((entry) => entry.source === "meta/custom-extension.yaml" && entry.category === "provisional" && entry.disposition === "planned"));
   assert.ok(inspection.entries.some((entry) => entry.source === "app-state/projects.json" && entry.disposition === "relocated"));
+  const jobsEntry = inspection.entries.find((entry) => entry.source === "app-state/jobs-state.json");
+  assert.equal(jobsEntry?.category, "authoritative");
+  assert.equal(jobsEntry?.disposition, "relocated");
+  assert.equal(jobsEntry?.target, `/history/jobs/legacy/${digest(jobHistory)}.json`);
+  assert.match(jobsEntry?.detail ?? "", /API-owned legacy job import hook/u);
+  assert.ok(!JSON.stringify(inspection).includes("PRIVATE_JOB_RESULT_SENTINEL"), "legacy job result bodies stay outside Core inspection output");
   assert.ok(inspection.entries.some((entry) => entry.source === ".env" && entry.category === "secret" && entry.disposition === "excluded"));
   assert.ok(inspection.entries.some((entry) => entry.source.endsWith("#state_proposals") && entry.category === "provisional" && entry.disposition === "deferred"));
   assert.ok(inspection.entries.some((entry) => entry.source.endsWith("#zukan_suggestions") && entry.category === "provisional" && entry.disposition === "deferred"));

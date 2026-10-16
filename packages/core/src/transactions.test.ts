@@ -149,6 +149,66 @@ test("manuscript snapshots enumerate and read exact documents at a pinned reacha
   }
 });
 
+test("read snapshots reuse a recent remote observation, refresh on cadence, and leave dirty files untouched", async () => {
+  const fixture = await remoteFixture();
+  const dataDir = path.join(fixture.root, "state");
+  const store = new CoreStore({ dataDir, allowLocalRemotes: true });
+  try {
+    const project = await store.registerProject({ url: fixture.remote });
+    const workspace = path.join(dataDir, "projects", project.id);
+    const first = await store.observe(project.id);
+    const initialRemote = first.snapshot.remoteCommit;
+    const updateRemote = async (content: string, message: string): Promise<string> => {
+      await fs.writeFile(path.join(fixture.seed, "README.md"), content);
+      await git(fixture.seed, "add", "README.md");
+      await git(fixture.seed, "commit", "-m", message);
+      await git(fixture.seed, "push", "origin", "main");
+      return git(fixture.seed, "rev-parse", "HEAD");
+    };
+
+    const secondRemote = await updateRemote("Second remote revision.\n", "Second remote revision");
+    assert.equal(await git(workspace, "rev-parse", "refs/remotes/origin/main"), initialRemote);
+
+    const pinned = await store.reader(project.id, "remote", first.snapshot);
+    assert.equal(pinned.snapshot.remoteCommit, initialRemote);
+    assert.equal((await pinned.read("README.md"))?.content, "Initial.\n");
+    const checkpoint = await store.reader(project.id, "checkpoint");
+    assert.equal(checkpoint.snapshot.remoteCommit, initialRemote);
+    assert.equal((await checkpoint.read("README.md"))?.content, "Initial.\n");
+    assert.equal(await git(workspace, "rev-parse", "refs/remotes/origin/main"), initialRemote,
+      "pinned and checkpoint reads reuse the same actual fetch instead of fetching again");
+
+    const observed = await store.observe(project.id);
+    assert.equal(observed.snapshot.remoteCommit, secondRemote);
+    assert.equal(await git(workspace, "rev-parse", "refs/remotes/origin/main"), secondRemote);
+    assert.equal((await store.reader(project.id)).snapshot.remoteCommit, secondRemote,
+      "the first read after explicit observation follows the discovered commit");
+
+    const thirdRemote = await updateRemote("Third remote revision.\n", "Third remote revision");
+    const localReadme = path.join(workspace, "README.md");
+    await fs.writeFile(localReadme, "Uncommitted local bytes.\n");
+    const originalNow = Date.now;
+    let elapsed = 0;
+    Date.now = () => originalNow() + elapsed;
+    try {
+      elapsed = 15_001;
+      const refreshed = await store.reader(project.id);
+      assert.equal(refreshed.snapshot.remoteCommit, thirdRemote,
+        "a read after the observation cadence performs a real remote fetch");
+      assert.equal((await refreshed.read("README.md"))?.content, "Third remote revision.\n");
+      assert.equal(await fs.readFile(localReadme, "utf8"), "Uncommitted local bytes.\n",
+        "reading the newly fetched snapshot does not replace a dirty workspace file");
+      await assert.rejects(store.sync(project.id), (error: unknown) =>
+        error instanceof CoreError && error.code === "working_tree_dirty");
+      assert.equal(await fs.readFile(localReadme, "utf8"), "Uncommitted local bytes.\n");
+    } finally {
+      Date.now = originalNow;
+    }
+  } finally {
+    await fs.rm(fixture.root, { recursive: true, force: true });
+  }
+});
+
 test("Core hierarchy builders create, reorder, restore, and delete only through approved operations", async () => {
   const fixture = await remoteFixture();
   try {
@@ -765,6 +825,70 @@ test("an explicit reconstruction safely rebinds a clean legacy checkout to the c
     assert.deepEqual(await store.listProjects(), [rebound]);
     assert.equal(await git(fixture.root, "--git-dir", fixture.remote, "rev-parse", "refs/heads/main"), remoteMain);
     assert.equal(await git(fixture.root, "--git-dir", fixture.remote, "rev-parse", "refs/heads/feature"), remoteFeature);
+  } finally {
+    await fs.rm(fixture.root, { recursive: true, force: true });
+  }
+});
+
+test("reconstruction refuses to discard a clean local draft branch", async () => {
+  const fixture = await remoteFixture();
+  try {
+    const dataDir = path.join(fixture.root, "state");
+    const store = new CoreStore({ dataDir, allowLocalRemotes: true });
+    const project = await store.registerProject({ url: fixture.remote });
+    const clonePath = path.join(dataDir, "projects", project.id);
+    const remoteHead = await git(fixture.root, "--git-dir", fixture.remote, "rev-parse", "refs/heads/main");
+    await git(clonePath, "config", "user.name", "Draft Branch Writer");
+    await git(clonePath, "config", "user.email", "draft-branch@example.test");
+    await git(clonePath, "checkout", "-b", "draft-save");
+    await fs.writeFile(path.join(clonePath, "draft-save.md"), "Unpublished branch draft.\n");
+    await git(clonePath, "add", "draft-save.md");
+    await git(clonePath, "commit", "-m", "Save an unpublished draft branch");
+    const draftCommit = await git(clonePath, "rev-parse", "HEAD");
+    await git(clonePath, "checkout", "main");
+    const branchBefore = await git(clonePath, "branch", "--show-current");
+    const headBefore = await git(clonePath, "rev-parse", "HEAD");
+
+    await assert.rejects(store.reconstructProject(project.id),
+      (error: unknown) => error instanceof CoreError && error.code === "local_refs_unrecoverable");
+
+    assert.equal(await git(clonePath, "branch", "--show-current"), branchBefore);
+    assert.equal(await git(clonePath, "rev-parse", "HEAD"), headBefore);
+    assert.equal(await git(clonePath, "rev-parse", "refs/heads/draft-save"), draftCommit);
+    assert.equal(await git(clonePath, "show", "draft-save:draft-save.md"), "Unpublished branch draft.");
+    assert.equal(await git(fixture.root, "--git-dir", fixture.remote, "rev-parse", "refs/heads/main"), remoteHead);
+    assert.deepEqual(await store.listProjects(), [project]);
+  } finally {
+    await fs.rm(fixture.root, { recursive: true, force: true });
+  }
+});
+
+test("reconstruction refuses to discard a saved stash", async () => {
+  const fixture = await remoteFixture();
+  try {
+    const dataDir = path.join(fixture.root, "state");
+    const store = new CoreStore({ dataDir, allowLocalRemotes: true });
+    const project = await store.registerProject({ url: fixture.remote });
+    const clonePath = path.join(dataDir, "projects", project.id);
+    const remoteHead = await git(fixture.root, "--git-dir", fixture.remote, "rev-parse", "refs/heads/main");
+    await fs.writeFile(path.join(clonePath, "README.md"), "Stashed draft text.\n");
+    await git(clonePath, "stash", "push", "-m", "Keep the unpublished manuscript draft");
+    const stashRef = await git(clonePath, "rev-parse", "refs/stash");
+    const stashList = await git(clonePath, "stash", "list", "--format=%H %gs");
+    const branchBefore = await git(clonePath, "branch", "--show-current");
+    const headBefore = await git(clonePath, "rev-parse", "HEAD");
+
+    await assert.rejects(store.reconstructProject(project.id),
+      (error: unknown) => error instanceof CoreError && error.code === "local_refs_unrecoverable");
+
+    assert.equal(await git(clonePath, "branch", "--show-current"), branchBefore);
+    assert.equal(await git(clonePath, "rev-parse", "HEAD"), headBefore);
+    assert.equal(await git(clonePath, "rev-parse", "refs/stash"), stashRef);
+    assert.equal(await git(clonePath, "stash", "list", "--format=%H %gs"), stashList);
+    assert.equal(await git(clonePath, "show", "stash@{0}:README.md"), "Stashed draft text.");
+    assert.equal(await git(clonePath, "status", "--porcelain", "--untracked-files=all"), "");
+    assert.equal(await git(fixture.root, "--git-dir", fixture.remote, "rev-parse", "refs/heads/main"), remoteHead);
+    assert.deepEqual(await store.listProjects(), [project]);
   } finally {
     await fs.rm(fixture.root, { recursive: true, force: true });
   }
@@ -1429,6 +1553,7 @@ test("approval is rejected when the proposal's remote snapshot has changed", asy
     await git(fixture.seed, "add", "upstream.md");
     await git(fixture.seed, "commit", "-m", "Change repository after proposal");
     await git(fixture.seed, "push", "origin", "main");
+    await store.observe(project.id);
     assert.equal((await store.getProposal(project.id, proposal.id))?.stale, true);
     await assert.rejects(
       store.approve(project.id, { proposalId: proposal.id, operationIds: [op.id], authorScope: "owner" }),
@@ -1470,6 +1595,7 @@ test("scene snapshot exposes full documents, preserved YAML, and absent-file pre
     await git(fixture.seed, "add", "manuscript/v1/c1/scene1.md");
     await git(fixture.seed, "commit", "-m", "Add scene manuscript");
     await git(fixture.seed, "push", "origin", "main");
+    await store.observe(project.id);
     const latest = await store.readSceneSnapshot(project.id, "scene1", "remote");
     assert.equal(latest.document.content, fullDocument);
     assert.equal(latest.document.revision, createHash("sha256").update(fullDocument).digest("hex"));

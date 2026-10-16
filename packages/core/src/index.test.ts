@@ -526,6 +526,7 @@ test("search and writing statistics read one pinned remote snapshot", async () =
     await runGit(seed, "add", sceneOnePath);
     await runGit(seed, "commit", "-m", "Change manuscript after pinned snapshot");
     await runGit(seed, "push", "origin", "main");
+    await store.observe(project.id);
     const latest = await store.searchSnapshot(project.id, "needle");
     assert.equal(latest.results.length, 0);
     const pinnedAgain = await store.searchSnapshot(project.id, "needle", 20, "remote", originalSnapshot);

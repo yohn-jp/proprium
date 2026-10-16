@@ -1,3 +1,4 @@
+import { createHash } from "node:crypto";
 import type { MigrationContext, MigrationContribution, MigrationProducer } from "../types.js";
 import { planGeneratedFileImport, stableMigrationId } from "../operations.js";
 
@@ -237,6 +238,29 @@ export function createWorkspaceProducer(): MigrationProducer {
       const known = new Map(WORKSPACE_FILES.map((item) => [item.path, item]));
       for (const file of files) {
         if (file === "app-state/share-tokens.json" || file === "share-tokens.json") continue;
+        if (file === "app-state/jobs-state.json") {
+          const bytes = await context.source.readWorkspaceFile(file);
+          if (!bytes) {
+            result.entries.push({
+              producerId: "workspace-jobs",
+              source: file,
+              category: "authoritative",
+              disposition: "blocked",
+              detail: "Legacy job history was listed but could not be read for its private archive identity; preserve the source workspace until the API history import confirms retention.",
+            });
+            continue;
+          }
+          const sourceHash = createHash("sha256").update(bytes).digest("hex");
+          result.entries.push({
+            producerId: "workspace-jobs",
+            source: file,
+            target: `/history/jobs/legacy/${sourceHash}.json`,
+            category: "authoritative",
+            disposition: "relocated",
+            detail: "Historical job results, errors, and inbox records belong in the private host history archive. The API-owned legacy job import hook must archive the exact source bytes and report any explicit owner/repository mappings before this workspace can be removed; this generic Core importer does not copy the payload.",
+          });
+          continue;
+        }
         // Series membership is Story-owned work metadata. A registered Story
         // producer consumes it through the explicit legacy repository mapping;
         // the generic host workspace pass must not misclassify it as disposable.
