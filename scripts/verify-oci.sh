@@ -35,7 +35,11 @@ cleanup() {
 }
 trap cleanup EXIT INT TERM
 
-"$engine" build --pull --tag "$image" .
+if [[ "${engine##*/}" == podman ]]; then
+  "$engine" build --format oci --pull --tag "$image" .
+else
+  "$engine" build --pull --tag "$image" .
+fi
 "$engine" run --detach \
   --name "$container" \
   --publish "127.0.0.1:${port}:3000" \
@@ -83,4 +87,8 @@ uid="$("$engine" exec "$container" node -p 'process.getuid()')"
 "$engine" exec "$container" node -e "require('node:fs').writeFileSync('/data/.oci-smoke', 'ok'); require('node:fs').unlinkSync('/data/.oci-smoke')"
 
 echo "OCI startup checks passed: health API, UI assets, nonroot UID, and writable /data."
-"$engine" image inspect --format 'Image ID: {{.Id}} ({{.Os}}/{{.Architecture}})' "$image"
+if [[ "${engine##*/}" == podman ]]; then
+  "$engine" image inspect --format 'Image ID: {{.Id}}; manifest digest: {{.Digest}} ({{.Os}}/{{.Architecture}})' "$image"
+else
+  "$engine" image inspect --format 'Image ID: {{.Id}} ({{.Os}}/{{.Architecture}}); repo digests: {{json .RepoDigests}}' "$image"
+fi
