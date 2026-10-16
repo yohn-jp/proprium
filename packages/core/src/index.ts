@@ -4,6 +4,25 @@ import { promisify } from "node:util";
 import fs from "node:fs/promises";
 import path from "node:path";
 import YAML from "yaml";
+import {
+  MAX_PROPOSAL_EVIDENCE_BYTES,
+  assertChangeOperation,
+  assertProjectPath,
+  snapshotKey,
+  type Approval,
+  type ChangeOperation,
+  type ChangeProposal,
+  type CheckpointReceipt,
+  type FileChange,
+  type FileRevision,
+  type MutationCoordinator,
+  type ProposalEvidence,
+  type ReconcileResult,
+  type RemoteObservation,
+  type RepositoryIdentity,
+  type SnapshotId,
+  type SnapshotReader,
+} from "@scriptorium/contracts";
 
 const execFile = promisify(execFileCallback);
 const DEFAULT_BRANCH = "main";
@@ -75,11 +94,16 @@ export interface CoreStoreOptions {
   githubToken?: string;
   /** Allows local filesystem remotes for isolated tests and development. */
   allowLocalRemotes?: boolean;
+  /** Optional fetch implementation for controlled GitHub API tests. */
+  fetch?: typeof fetch;
+  /** Maximum normal-push attempts after a remote race. Defaults to three. */
+  maxPushRetries?: number;
 }
 
 interface ProjectRecord extends Project {
   directory: string;
   emptyRemote: boolean;
+  identity?: RepositoryIdentity;
 }
 
 interface SceneRecord {
@@ -95,6 +119,31 @@ interface FrontmatterDocument {
   prefix: string;
   body: string;
 }
+
+interface OperationMetadata {
+  version: 1;
+  sequence: number;
+  digest: string;
+  operation: ChangeOperation;
+  authorScope?: string;
+}
+
+interface PublicationMetadata {
+  version: 1;
+  batchId: string;
+  digest: string;
+  operations: Array<{ operationId: string; generation: number; digest: string; receipt: CheckpointReceipt }>;
+}
+
+interface StoredOperation extends OperationMetadata {
+  path: string;
+  commit: string;
+  receipt: CheckpointReceipt;
+}
+
+const OPERATION_DIRECTORY = "meta/scriptorium/operations/v1";
+const PUBLICATION_DIRECTORY = "meta/scriptorium/publications/v1";
+const MAX_PUSH_ATTEMPTS = 3;
 
 function coreError(status: number, code: string, message: string): CoreError {
   return new CoreError(status, code, message);
@@ -166,6 +215,140 @@ function parseMarkdownDocument(document: string): FrontmatterDocument {
 
 function revisionFor(yamlText: string, markdownText: string): string {
   return createHash("sha256").update(yamlText).update("\0").update(markdownText).digest("hex");
+}
+
+function revisionForBytes(content: Buffer | string): string {
+  return createHash("sha256").update(content).digest("hex");
+}
+
+function normalizedOperation(operation: ChangeOperation): ChangeOperation {
+  return {
+    id: operation.id,
+    generation: operation.generation,
+    repository: {
+      provider: operation.repository.provider,
+      repositoryId: operation.repository.repositoryId,
+      defaultBranch: operation.repository.defaultBranch,
+      ownerScope: operation.repository.ownerScope,
+      url: operation.repository.url,
+    },
+    baseRemoteCommit: operation.baseRemoteCommit,
+    effect: operation.effect,
+    reads: operation.reads.map(({ path: filePath, revision }) => ({ path: filePath, revision })),
+    writes: operation.writes.map((change) => ({
+      path: change.path,
+      revision: change.revision,
+      content: change.content,
+      ...(change.encoding === undefined ? {} : { encoding: change.encoding }),
+    })),
+    message: operation.message,
+    ...(operation.evidenceIds === undefined ? {} : { evidenceIds: [...operation.evidenceIds] }),
+  };
+}
+
+function operationDigest(operation: ChangeOperation): string {
+  return revisionForBytes(JSON.stringify(normalizedOperation(operation)));
+}
+
+function publicationDigest(batchId: string, operations: PublicationMetadata["operations"]): string {
+  return revisionForBytes(JSON.stringify({ version: 1, batchId, operations }));
+}
+
+function operationMetadataPath(operationId: string): string {
+  return `${OPERATION_DIRECTORY}/${operationId}.json`;
+}
+
+function publicationMetadataPath(batchId: string): string {
+  return `${PUBLICATION_DIRECTORY}/${batchId}.json`;
+}
+
+function parseOperationMetadata(text: string, metadataPath: string): OperationMetadata {
+  try {
+    const value = asRecord(JSON.parse(text));
+    if (!value || value.version !== 1 || typeof value.digest !== "string" || !asRecord(value.operation)) {
+      throw new Error("Invalid metadata");
+    }
+    const operation = value.operation as unknown as ChangeOperation;
+    assertChangeOperation(operation);
+    const normalized = normalizedOperation(operation);
+    if (metadataPath !== operationMetadataPath(normalized.id) || value.digest !== operationDigest(normalized)) {
+      throw new Error("Mismatched metadata");
+    }
+    return {
+      version: 1,
+      sequence: Number.isSafeInteger(value.sequence) && (value.sequence as number) > 0 ? value.sequence as number : 0,
+      digest: value.digest,
+      operation: normalized,
+      ...(typeof value.authorScope === "string" ? { authorScope: value.authorScope } : {}),
+    };
+  } catch {
+    throw coreError(409, "operation_metadata_invalid", "The repository contains invalid Scriptorium operation metadata");
+  }
+}
+
+function gitHubSlug(url: string): { owner: string; repository: string } {
+  const parsed = new URL(url);
+  const segments = parsed.pathname.split("/").filter(Boolean);
+  return { owner: segments[0] ?? "", repository: (segments[1] ?? "").replace(/\.git$/i, "") };
+}
+
+async function githubIdentity(
+  url: string,
+  token: string | undefined,
+  request: typeof fetch,
+): Promise<RepositoryIdentity> {
+  const { owner, repository } = gitHubSlug(url);
+  const headers = new Headers({
+    Accept: "application/vnd.github+json",
+    "X-GitHub-Api-Version": "2022-11-28",
+    "User-Agent": "Scriptorium-Core",
+  });
+  if (token) headers.set("Authorization", `Bearer ${token}`);
+  let response: Response;
+  try {
+    response = await request(`https://api.github.com/repos/${encodeURIComponent(owner)}/${encodeURIComponent(repository)}`, {
+      method: "GET",
+      headers,
+      redirect: "error",
+      signal: AbortSignal.timeout(15_000),
+    });
+  } catch {
+    throw coreError(502, "repository_metadata_unavailable", "GitHub repository metadata could not be fetched");
+  }
+  if (!response.ok) {
+    const status = response.status === 404 || response.status === 410 ? 409 : 502;
+    const code = status === 409 ? "repository_unavailable" : "repository_metadata_unavailable";
+    throw coreError(status, code, "GitHub repository metadata could not be fetched");
+  }
+  let value: Record<string, unknown> | null;
+  try { value = asRecord(await response.json()); }
+  catch { value = null; }
+  const ownerValue = value ? asRecord(value.owner) : null;
+  if (
+    !value || !Number.isSafeInteger(value.id) || (value.id as number) <= 0 ||
+    typeof value.default_branch !== "string" || !ownerValue ||
+    !(Number.isSafeInteger(ownerValue.id) || (typeof ownerValue.login === "string" && ownerValue.login.length > 0))
+  ) {
+    throw coreError(502, "repository_metadata_invalid", "GitHub returned invalid repository metadata");
+  }
+  return {
+    provider: "github",
+    repositoryId: String(value.id),
+    defaultBranch: branchName(value.default_branch),
+    ownerScope: `github:${String(ownerValue.id ?? ownerValue.login)}`,
+    url,
+  };
+}
+
+function localIdentity(url: string, defaultBranch: string): RepositoryIdentity {
+  const repositoryId = createHash("sha256").update(url).digest("hex");
+  return {
+    provider: "local",
+    repositoryId,
+    defaultBranch,
+    ownerScope: `local:${repositoryId}`,
+    url,
+  };
 }
 
 function normalizeGitHubUrl(input: string): string {
@@ -241,7 +424,7 @@ function makeAskpassScript(directory: string): Promise<string> {
 async function git(
   cwd: string,
   args: string[],
-  options: { token?: string; askpass?: string; timeout?: number } = {},
+  options: { token?: string; askpass?: string; timeout?: number; env?: NodeJS.ProcessEnv } = {},
 ): Promise<string> {
   const baseArgs = [
     "--literal-pathspecs",
@@ -250,7 +433,7 @@ async function git(
     "-c", "init.templateDir=/dev/null",
     ...args,
   ];
-  const env = sanitizedEnvironment(options.token);
+  const env = { ...sanitizedEnvironment(options.token), ...options.env };
   if (options.askpass) {
     env.GIT_ASKPASS = options.askpass;
     env.GIT_ASKPASS_REQUIRE = "force";
@@ -269,6 +452,70 @@ async function git(
     const redacted = options.token ? detail.split(options.token).join("[redacted]") : detail;
     throw coreError(502, "git_operation_failed", `Git operation failed: ${redacted}`);
   }
+}
+
+async function gitInput(
+  cwd: string,
+  args: string[],
+  input: Buffer | string,
+  options: { token?: string; askpass?: string; timeout?: number; env?: NodeJS.ProcessEnv } = {},
+): Promise<string> {
+  const baseArgs = [
+    "--literal-pathspecs",
+    "-c", "core.hooksPath=/dev/null",
+    "-c", "credential.helper=",
+    "-c", "init.templateDir=/dev/null",
+    ...args,
+  ];
+  const env = { ...sanitizedEnvironment(options.token), ...options.env };
+  if (options.askpass) {
+    env.GIT_ASKPASS = options.askpass;
+    env.GIT_ASKPASS_REQUIRE = "force";
+  }
+  return await new Promise<string>((resolve, reject) => {
+    const child = execFileCallback("git", baseArgs, {
+      cwd,
+      env,
+      timeout: options.timeout ?? GIT_TIMEOUT_MS,
+      maxBuffer: 8 * 1024 * 1024,
+      windowsHide: true,
+    }, (error, stdout) => {
+      if (error) {
+        const detail = error.message;
+        const redacted = options.token ? detail.split(options.token).join("[redacted]") : detail;
+        reject(coreError(502, "git_operation_failed", `Git operation failed: ${redacted}`));
+        return;
+      }
+      resolve(stdout);
+    });
+    child.stdin?.end(input);
+  });
+}
+
+async function gitBuffer(cwd: string, args: string[]): Promise<Buffer> {
+  const baseArgs = [
+    "--literal-pathspecs",
+    "-c", "core.hooksPath=/dev/null",
+    "-c", "credential.helper=",
+    "-c", "init.templateDir=/dev/null",
+    ...args,
+  ];
+  return await new Promise<Buffer>((resolve, reject) => {
+    execFileCallback("git", baseArgs, {
+      cwd,
+      env: sanitizedEnvironment(),
+      encoding: "buffer",
+      timeout: GIT_TIMEOUT_MS,
+      maxBuffer: 8 * 1024 * 1024,
+      windowsHide: true,
+    }, (error, stdout) => {
+      if (error) {
+        reject(coreError(502, "git_operation_failed", `Git operation failed: ${error.message}`));
+        return;
+      }
+      resolve(Buffer.isBuffer(stdout) ? stdout : Buffer.from(stdout));
+    });
+  });
 }
 
 function validateProjectId(id: string): void {
@@ -342,14 +589,18 @@ async function atomicWrite(filePath: string, content: string): Promise<void> {
   }
 }
 
-export class CoreStore {
+export class CoreStore implements MutationCoordinator {
   readonly dataDir: string;
   private readonly projectsDir: string;
   private readonly locksDir: string;
   private readonly registryPath: string;
   private readonly token?: string;
   private readonly allowLocalRemotes: boolean;
+  private readonly fetcher: typeof fetch;
+  private readonly maxPushAttempts: number;
   private readonly queueTails = new Map<string, Promise<void>>();
+  private readonly proposals = new Map<string, Map<string, ChangeProposal>>();
+  private readonly approvals = new Map<string, Map<string, { authorScope: string; operationIds: Set<string> }>>();
 
   constructor(options: CoreStoreOptions) {
     if (!options?.dataDir) throw new TypeError("CoreStore requires dataDir");
@@ -359,6 +610,8 @@ export class CoreStore {
     this.registryPath = path.join(this.dataDir, "projects.json");
     this.token = options.githubToken ?? process.env.SCRIPTORIUM_GITHUB_TOKEN;
     this.allowLocalRemotes = options.allowLocalRemotes ?? false;
+    this.fetcher = options.fetch ?? fetch;
+    this.maxPushAttempts = Math.min(MAX_PUSH_ATTEMPTS, Math.max(1, options.maxPushRetries ?? MAX_PUSH_ATTEMPTS));
   }
 
   private async initialize(): Promise<void> {
@@ -389,12 +642,28 @@ export class CoreStore {
         }
         validateProjectId(item.id);
         if (item.directory !== item.id) throw new Error("Project registry directory is invalid");
+        const identityValue = asRecord(item.identity);
+        const identity = identityValue &&
+          (identityValue.provider === "github" || identityValue.provider === "local") &&
+          typeof identityValue.repositoryId === "string" &&
+          typeof identityValue.defaultBranch === "string" &&
+          typeof identityValue.ownerScope === "string" &&
+          typeof identityValue.url === "string"
+          ? {
+              provider: identityValue.provider,
+              repositoryId: identityValue.repositoryId,
+              defaultBranch: identityValue.defaultBranch,
+              ownerScope: identityValue.ownerScope,
+              url: identityValue.url,
+            } as RepositoryIdentity
+          : undefined;
         return {
           id: item.id,
           url: item.url,
           branch: item.branch,
           directory: item.directory,
           emptyRemote: typeof item.emptyRemote === "boolean" ? item.emptyRemote : false,
+          ...(identity ? { identity } : {}),
         };
       });
     } catch (error) {
@@ -418,6 +687,755 @@ export class CoreStore {
       throw coreError(500, "project_workspace_invalid", "The project workspace is missing or unsafe");
     }
     return { record, root };
+  }
+
+  private async treeEntry(root: string, commit: string, relativePath: string): Promise<{ mode: string; type: string; hash: string } | null> {
+    assertProjectPath(relativePath);
+    if (!commit) return null;
+    let treeish = commit;
+    const segments = relativePath.split("/");
+    for (let index = 0; index < segments.length; index++) {
+      const segment = segments[index];
+      if (!segment) return null;
+      const output = await git(root, ["ls-tree", "-z", treeish, "--", segment]);
+      const entries = output.split("\0").filter(Boolean);
+      const encoded = entries.find((entry) => entry.slice(entry.indexOf("\t") + 1) === segment);
+      if (!encoded) return null;
+      const tab = encoded.indexOf("\t");
+      const fields = encoded.slice(0, tab).split(" ");
+      const mode = fields[0] ?? "";
+      const type = fields[1] ?? "";
+      const hash = fields[2] ?? "";
+      if (mode === "120000") {
+        throw coreError(422, "unsafe_project_path", "The project path crosses a symbolic link");
+      }
+      if (index < segments.length - 1) {
+        if (type !== "tree") throw coreError(422, "unsafe_project_path", "The project path contains a non-directory parent");
+        treeish = hash;
+      } else {
+        if (type !== "blob") throw coreError(422, "unsafe_project_path", "The project path is not a regular file");
+        return { mode, type, hash };
+      }
+    }
+    return null;
+  }
+
+  private async snapshotFile(root: string, commit: string, relativePath: string): Promise<{ content: string; revision: string } | null> {
+    const entry = await this.treeEntry(root, commit, relativePath);
+    if (!entry) return null;
+    const bytes = await gitBuffer(root, ["cat-file", "blob", entry.hash]);
+    return { content: bytes.toString("utf8"), revision: revisionForBytes(bytes) };
+  }
+
+  private async snapshotFiles(root: string, commit: string, prefix: string): Promise<string[]> {
+    if (prefix) {
+      try { assertProjectPath(prefix.replace(/\/$/, "")); }
+      catch { throw coreError(422, "unsafe_project_path", "The project path is unsafe"); }
+    }
+    if (!commit) return [];
+    const output = await git(root, ["ls-tree", "-r", "--full-tree", "-z", commit]);
+    const files: string[] = [];
+    for (const entry of output.split("\0")) {
+      if (!entry) continue;
+      const tab = entry.indexOf("\t");
+      if (tab < 0) continue;
+      const filePath = entry.slice(tab + 1);
+      if (!prefix || filePath === prefix || filePath.startsWith(`${prefix.replace(/\/$/, "")}/`)) files.push(filePath);
+    }
+    return files.sort((a, b) => a.localeCompare(b));
+  }
+
+  private async createCommit(
+    root: string,
+    parent: string,
+    writes: FileChange[],
+    metadata: Array<{ path: string; content: string }>,
+    message: string,
+  ): Promise<string> {
+    const indexDir = await fs.mkdtemp(path.join(this.dataDir, ".operation-index-"));
+    const indexPath = path.join(indexDir, "index");
+    const env = { GIT_INDEX_FILE: indexPath };
+    try {
+      await git(root, ["read-tree", parent || "--empty"], { env });
+      const allWrites: Array<{ path: string; content: string | null; encoding?: "utf8" | "base64" }> = [
+        ...writes.map((change) => ({ path: change.path, content: change.content, ...(change.encoding ? { encoding: change.encoding } : {}) })),
+        ...metadata.map((item) => ({ path: item.path, content: item.content, encoding: "utf8" as const })),
+      ];
+      for (const change of allWrites) {
+        assertProjectPath(change.path);
+        const existing = parent ? await this.treeEntry(root, parent, change.path).catch((error) => {
+          if (error instanceof CoreError && error.code === "unsafe_project_path") throw error;
+          throw error;
+        }) : null;
+        if (change.content === null) {
+          if (existing) await git(root, ["update-index", "--force-remove", "--", change.path], { env });
+          continue;
+        }
+        const bytes = change.encoding === "base64" ? Buffer.from(change.content, "base64") : Buffer.from(change.content, "utf8");
+        const blob = (await gitInput(root, ["hash-object", "-w", "--stdin"], bytes)).trim();
+        const mode = existing?.mode === "100755" ? "100755" : "100644";
+        await git(root, ["update-index", "--add", "--cacheinfo", `${mode},${blob},${change.path}`], { env });
+      }
+      const tree = (await git(root, ["write-tree"], { env })).trim();
+      const commit = (await git(root, [
+        "-c", "user.name=Scriptorium",
+        "-c", "user.email=scriptorium@localhost",
+        "commit-tree", tree,
+        ...(parent ? ["-p", parent] : []),
+        "-m", message.replace(/[\r\n]+/g, " ").slice(0, 512),
+      ])).trim();
+      if (!/^[a-f0-9]{40,64}$/.test(commit)) throw coreError(500, "checkpoint_failed", "Git did not create a checkpoint commit");
+      return commit;
+    } finally {
+      await fs.rm(indexDir, { recursive: true, force: true }).catch(() => undefined);
+    }
+  }
+
+  private async commitTreeFiles(root: string, commit: string): Promise<string[]> {
+    if (!commit) return [];
+    return this.snapshotFiles(root, commit, "");
+  }
+
+  private async getRef(root: string, ref: string): Promise<string> {
+    try { return (await git(root, ["rev-parse", "--verify", ref])).trim(); }
+    catch (error) {
+      if (error instanceof CoreError && error.code === "git_operation_failed") return "";
+      throw error;
+    }
+  }
+
+  private async isAncestor(root: string, ancestor: string, descendant: string): Promise<boolean> {
+    if (!ancestor || !descendant) return ancestor === descendant;
+    try { await git(root, ["merge-base", "--is-ancestor", ancestor, descendant]); return true; }
+    catch (error) {
+      if (error instanceof CoreError && error.code === "git_operation_failed") return false;
+      throw error;
+    }
+  }
+
+  private async getRepositoryIdentity(record: ProjectRecord, root: string, askpass: string): Promise<RepositoryIdentity> {
+    let identity: RepositoryIdentity;
+    if (record.identity?.provider === "github" || /^https:\/\//i.test(record.url)) {
+      identity = await githubIdentity(record.url, this.token, this.fetcher);
+    } else {
+      const head = await git(root, ["ls-remote", "--symref", "origin", "HEAD"], { token: this.token, askpass });
+      const defaultBranch = head.match(/^ref: refs\/heads\/(.+)\tHEAD$/m)?.[1] ?? record.identity?.defaultBranch ?? record.branch;
+      identity = localIdentity(record.url, branchName(defaultBranch));
+    }
+    if (record.identity) {
+      if (record.identity.provider !== identity.provider || record.identity.repositoryId !== identity.repositoryId) {
+        throw coreError(409, "repository_replaced", "The registered repository identity changed; mutations are paused");
+      }
+      if (record.identity.defaultBranch !== identity.defaultBranch) {
+        throw coreError(409, "default_branch_changed", "The repository default branch changed; explicitly rebind the project before writing");
+      }
+    } else {
+      record.identity = identity;
+      await this.withRegistryLock(async () => {
+        const records = await this.readRegistry();
+        await this.writeRegistry(records.map((item) => item.id === record.id ? { ...item, identity } : item));
+      });
+    }
+    return identity;
+  }
+
+  private async fetchRemoteUnlocked(record: ProjectRecord, root: string): Promise<{ identity: RepositoryIdentity; remoteCommit: string }> {
+    const askpassDir = path.join(this.dataDir, `.askpass-${record.id}`);
+    await fs.mkdir(askpassDir, { recursive: true, mode: 0o700 });
+    try {
+      const askpass = await makeAskpassScript(askpassDir);
+      const identity = await this.getRepositoryIdentity(record, root, askpass);
+      const remote = await git(root, ["ls-remote", "--heads", "origin", `refs/heads/${record.branch}`], { token: this.token, askpass });
+      const exists = remote.split(/\r?\n/).some((line) => line.endsWith(`\trefs/heads/${record.branch}`));
+      if (!exists) {
+        if (record.emptyRemote) return { identity, remoteCommit: "" };
+        throw coreError(409, "remote_branch_missing", "The registered GitHub branch no longer exists");
+      }
+      await git(root, ["fetch", "--no-tags", "origin", record.branch], { token: this.token, askpass });
+      const remoteCommit = await this.getRef(root, `refs/remotes/origin/${record.branch}`);
+      if (!remoteCommit) throw coreError(409, "remote_branch_missing", "The registered GitHub branch no longer exists");
+      if (record.emptyRemote) {
+        record.emptyRemote = false;
+        await this.withRegistryLock(async () => {
+          const records = await this.readRegistry();
+          await this.writeRegistry(records.map((item) => item.id === record.id ? { ...item, emptyRemote: false } : item));
+        });
+      }
+      return { identity, remoteCommit };
+    } finally {
+      await fs.rm(askpassDir, { recursive: true, force: true }).catch(() => undefined);
+    }
+  }
+
+  private async readOperationRecords(root: string, commit: string): Promise<StoredOperation[]> {
+    if (!commit) return [];
+    const files = await this.snapshotFiles(root, commit, OPERATION_DIRECTORY);
+    const publicationFiles = await this.snapshotFiles(root, commit, PUBLICATION_DIRECTORY);
+    const publishedReceipts = new Map<string, CheckpointReceipt>();
+    for (const publicationPath of publicationFiles.filter((filePath) => filePath.endsWith(".json"))) {
+      const file = await this.snapshotFile(root, commit, publicationPath);
+      if (!file) continue;
+      let publication: PublicationMetadata;
+      try { publication = JSON.parse(file.content) as PublicationMetadata; }
+      catch { throw coreError(409, "publication_metadata_invalid", "The repository contains invalid publication metadata"); }
+      if (publication.version !== 1 || typeof publication.batchId !== "string" || !Array.isArray(publication.operations) || publication.digest !== publicationDigest(publication.batchId, publication.operations)) {
+        throw coreError(409, "publication_metadata_invalid", "The repository contains invalid publication metadata");
+      }
+      for (const item of publication.operations) {
+        if (item && typeof item.operationId === "string" && item.receipt?.operationId === item.operationId && item.receipt.generation === item.generation) {
+          publishedReceipts.set(item.operationId, item.receipt);
+        }
+      }
+    }
+    const operations: StoredOperation[] = [];
+    for (const filePath of files) {
+      if (!filePath.endsWith(".json")) continue;
+      const file = await this.snapshotFile(root, commit, filePath);
+      if (!file || file.content.length > 16 * 1024 * 1024) {
+        throw coreError(409, "operation_metadata_invalid", "The repository contains invalid Scriptorium operation metadata");
+      }
+      const metadata = parseOperationMetadata(file.content, filePath);
+      const changedAt = (await git(root, ["log", "-n1", "--format=%H", commit, "--", filePath])).trim();
+      if (!changedAt) throw coreError(409, "operation_metadata_invalid", "The repository contains untraceable Scriptorium operation metadata");
+      const originalCommit = await this.getRef(root, `refs/scriptorium/checkpoints/${metadata.operation.id}`);
+      const reconstructedReceipt: CheckpointReceipt = {
+        operationId: metadata.operation.id,
+        generation: metadata.operation.generation,
+        localCommit: originalCommit || changedAt,
+        remoteBase: metadata.operation.baseRemoteCommit,
+        revisions: metadata.operation.writes.map((write) => ({
+          path: write.path,
+          revision: write.content === null
+            ? null
+            : revisionForBytes(write.encoding === "base64" ? Buffer.from(write.content, "base64") : Buffer.from(write.content, "utf8")),
+        })),
+      };
+      const durableReceipt = publishedReceipts.get(metadata.operation.id);
+      const receipt = durableReceipt && durableReceipt.generation === metadata.operation.generation ? durableReceipt : reconstructedReceipt;
+      operations.push({
+        ...metadata,
+        path: filePath,
+        commit: changedAt,
+        receipt,
+      });
+    }
+    return operations;
+  }
+
+  private async readLocalOperationRecords(root: string): Promise<StoredOperation[]> {
+    const refs = (await git(root, ["for-each-ref", "--format=%(refname)", "refs/scriptorium/checkpoints/"]))
+      .trim().split(/\r?\n/).filter(Boolean);
+    const byId = new Map<string, StoredOperation>();
+    for (const ref of refs) {
+      const id = ref.slice("refs/scriptorium/checkpoints/".length);
+      if (!/^[A-Za-z0-9_-]{1,128}$/.test(id)) continue;
+      const commit = await this.getRef(root, ref);
+      if (!commit) continue;
+      const operation = (await this.readOperationRecords(root, commit)).find((item) => item.operation.id === id);
+      if (operation) byId.set(id, operation);
+    }
+    return [...byId.values()].sort((a, b) => a.sequence - b.sequence || a.operation.id.localeCompare(b.operation.id));
+  }
+
+  private async checkpointHead(root: string): Promise<string> {
+    const tracked = await this.getRef(root, "refs/scriptorium/checkpoint-head");
+    if (tracked) return tracked;
+    return this.getRef(root, "HEAD");
+  }
+
+  private async makeReader(root: string, snapshot: SnapshotId, commit: string): Promise<SnapshotReader> {
+    return {
+      snapshot,
+      read: async (relativePath) => {
+        assertProjectPath(relativePath);
+        return this.snapshotFile(root, commit, relativePath);
+      },
+      list: async (prefix) => this.snapshotFiles(root, commit, prefix),
+    };
+  }
+
+  private async selectedSnapshotUnlocked(projectId: string, view: "remote" | "checkpoint" = "remote", pinned?: SnapshotId | string) {
+    const observation = await this.requireObservation(projectId);
+    const { record, root } = await this.getProject(projectId);
+    let snapshot = observation.snapshot;
+    if (view === "checkpoint") {
+      const reconciled = await this.reconcileUnlocked(projectId);
+      snapshot = reconciled.snapshot;
+      if (reconciled.operations.some((operation) => operation.state === "conflict")) {
+        const localHead = await this.checkpointHead(root);
+        if (localHead && localHead !== snapshot.remoteCommit) snapshot = { ...snapshot, overlayCommit: localHead };
+      }
+    }
+    if (typeof pinned === "string") {
+      if (!/^(?:[a-f0-9]{40}|[a-f0-9]{64})$/.test(pinned)) throw coreError(400, "invalid_snapshot", "A pinned snapshot must be a Git commit ID");
+      snapshot = { ...snapshot, remoteCommit: pinned };
+    } else if (pinned) {
+      await this.ensureSnapshot(root, pinned, observation.snapshot.repository, observation.snapshot.remoteCommit);
+      snapshot = pinned;
+    }
+    await this.ensureSnapshot(root, snapshot, observation.snapshot.repository, observation.snapshot.remoteCommit);
+    return { snapshot, commit: view === "checkpoint" ? snapshot.overlayCommit ?? snapshot.remoteCommit : snapshot.remoteCommit, record, root };
+  }
+
+  private async parseSnapshotYaml(root: string, commit: string, filePath: string): Promise<{ text: string; data: Record<string, unknown> } | null> {
+    const file = await this.snapshotFile(root, commit, filePath);
+    if (!file) return null;
+    let data: Record<string, unknown> | null;
+    try { data = asRecord(YAML.parse(file.content)); }
+    catch { throw coreError(422, "project_data_invalid", "A hierarchy YAML file is invalid"); }
+    if (!data) throw coreError(422, "project_data_invalid", "A hierarchy YAML file must contain a mapping");
+    return { text: file.content, data };
+  }
+
+  async observe(projectId: string): Promise<RemoteObservation> {
+    return this.withProjectLock(projectId, () => this.requireObservation(projectId));
+  }
+
+  async reader(projectId: string, view: "remote" | "checkpoint" = "remote"): Promise<SnapshotReader> {
+    return this.withProjectLock(projectId, async () => {
+      const selected = await this.selectedSnapshotUnlocked(projectId, view);
+      return this.makeReader(selected.root, selected.snapshot, selected.commit);
+    });
+  }
+
+  async readTreeSnapshot(projectId: string, view: "remote" | "checkpoint" = "remote", pinned?: SnapshotId | string): Promise<{ snapshot: SnapshotId; tree: Tree }> {
+    return this.withProjectLock(projectId, async () => {
+      const selected = await this.selectedSnapshotUnlocked(projectId, view, pinned);
+      let title = repositoryTitle(selected.record.url);
+      const project = await this.parseSnapshotYaml(selected.root, selected.commit, "meta/project.yaml");
+      if (project) title = titleOf(project.data, title);
+      const files = await this.snapshotFiles(selected.root, selected.commit, "plot/volumes");
+      const volumeIds = [...new Set(files.flatMap((file) => {
+        const found = file.match(/^plot\/volumes\/([^/]+)\//)?.[1];
+        return found ? [found] : [];
+      }))];
+      const volumes: TreeVolume[] = [];
+      const seen = new Set<string>();
+      for (const volumeId of volumeIds) {
+        const volumeData = (await this.parseSnapshotYaml(selected.root, selected.commit, `plot/volumes/${volumeId}/volume.yaml`))?.data ?? { id: volumeId };
+        const volumeKey = typeof volumeData.id === "string" ? volumeData.id : volumeId;
+        if (seen.has(volumeKey)) throw coreError(409, "duplicate_entity_id", "The project contains duplicate hierarchy ids");
+        seen.add(volumeKey);
+        const prefix = `plot/volumes/${volumeId}/chapters/`;
+        const chapterIds = [...new Set(files.flatMap((file) => {
+          if (!file.startsWith(prefix)) return [];
+          const found = file.slice(prefix.length).match(/^([^/]+)\//)?.[1];
+          return found ? [found] : [];
+        }))];
+        const chapters: TreeChapter[] = [];
+        for (const chapterId of chapterIds) {
+          const base = `${prefix}${chapterId}`;
+          const chapterData = (await this.parseSnapshotYaml(selected.root, selected.commit, `${base}/chapter.yaml`))?.data ?? { id: chapterId };
+          const chapterKey = typeof chapterData.id === "string" ? chapterData.id : chapterId;
+          if (seen.has(chapterKey)) throw coreError(409, "duplicate_entity_id", "The project contains duplicate hierarchy ids");
+          seen.add(chapterKey);
+          const scenes: TreeScene[] = [];
+          for (const file of files.filter((candidate) => candidate.startsWith(`${base}/scenes/`) && candidate.endsWith(".yaml"))) {
+            const yaml = await this.parseSnapshotYaml(selected.root, selected.commit, file);
+            if (!yaml) continue;
+            const sceneId = typeof yaml.data.id === "string" ? yaml.data.id : path.posix.basename(file, ".yaml");
+            if (seen.has(sceneId)) throw coreError(409, "duplicate_scene_id", "The project contains duplicate scene ids");
+            seen.add(sceneId);
+            scenes.push({ id: sceneId, title: titleOf(yaml.data, sceneId) });
+          }
+          chapters.push({ id: chapterKey, title: titleOf(chapterData, chapterKey), scenes: scenes.sort((a, b) => a.title.localeCompare(b.title) || a.id.localeCompare(b.id)) });
+        }
+        volumes.push({ id: volumeKey, title: titleOf(volumeData, volumeKey), chapters: chapters.sort((a, b) => a.title.localeCompare(b.title) || a.id.localeCompare(b.id)) });
+      }
+      return { snapshot: selected.snapshot, tree: { title, volumes: volumes.sort((a, b) => a.title.localeCompare(b.title) || a.id.localeCompare(b.id)) } };
+    });
+  }
+
+  async readSceneSnapshot(
+    projectId: string,
+    sceneId: string,
+    view: "remote" | "checkpoint" = "remote",
+    pinned?: SnapshotId | string,
+  ): Promise<{ snapshot: SnapshotId; scene: Scene; document: { path: string; content: string; revision: string }; metadata: { path: string; content: string; revision: string } }> {
+    return this.withProjectLock(projectId, async () => {
+      const selected = await this.selectedSnapshotUnlocked(projectId, view, pinned);
+      const files = await this.snapshotFiles(selected.root, selected.commit, "plot/volumes");
+      const matches: Array<{ path: string; text: string; data: Record<string, unknown> }> = [];
+      for (const file of files.filter((candidate) => /\/scenes\/[^/]+\.yaml$/.test(candidate))) {
+        const yaml = await this.parseSnapshotYaml(selected.root, selected.commit, file);
+        if (!yaml) continue;
+        const id = typeof yaml.data.id === "string" ? yaml.data.id : path.posix.basename(file, ".yaml");
+        if (id === sceneId) matches.push({ path: file, text: yaml.text, data: yaml.data });
+      }
+      if (!matches.length) throw coreError(404, "scene_not_found", "Scene not found");
+      if (matches.length > 1) throw coreError(409, "duplicate_scene_id", "The project contains duplicate scene ids");
+      const found = matches[0]!;
+      const parts = found.path.split("/");
+      const manuscriptPath = typeof found.data.manuscript === "string"
+        ? safeRelativePath(found.data.manuscript).split(path.sep).join("/")
+        : `manuscript/${parts[2]}/${parts[4]}/${sceneId}.md`;
+      try { assertProjectPath(manuscriptPath); }
+      catch { throw coreError(422, "invalid_manuscript_path", "The scene has an unsafe manuscript path"); }
+      let documentFile: { content: string; revision: string } | null;
+      try { documentFile = await this.snapshotFile(selected.root, selected.commit, manuscriptPath); }
+      catch (error) {
+        if (error instanceof CoreError && error.code === "unsafe_project_path") throw coreError(422, "unsafe_manuscript_path", "The scene manuscript path crosses a symbolic link");
+        throw error;
+      }
+      const content = documentFile?.content ?? "";
+      return {
+        snapshot: selected.snapshot,
+        scene: { id: sceneId, title: titleOf(found.data, sceneId), text: parseMarkdownDocument(content).body, revision: revisionFor(found.text, content) },
+        document: { path: manuscriptPath, content, revision: documentFile?.revision ?? revisionForBytes("") },
+        metadata: { path: found.path, content: found.text, revision: revisionForBytes(found.text) },
+      };
+    });
+  }
+
+  async propose(projectId: string, proposal: ChangeProposal): Promise<ChangeProposal> {
+    return this.withProjectLock(projectId, async () => {
+      if (!proposal || typeof proposal.id !== "string" || !proposal.id || !Array.isArray(proposal.operations) || !proposal.operations.length) {
+        throw coreError(400, "invalid_proposal", "A proposal with at least one operation is required");
+      }
+      const observation = await this.requireObservation(projectId);
+      const { record, root } = await this.getProject(projectId);
+      const proposalBase = { repository: proposal.snapshot.repository, remoteCommit: proposal.snapshot.remoteCommit };
+      if (snapshotKey(proposalBase) !== snapshotKey(observation.snapshot)) throw coreError(409, "proposal_snapshot_stale", "The proposal was based on a stale repository snapshot");
+      await this.ensureSnapshot(root, proposal.snapshot, observation.snapshot.repository, observation.snapshot.remoteCommit);
+      const ids = new Set<string>();
+      for (const operation of proposal.operations) {
+        try { assertChangeOperation(operation); }
+        catch { throw coreError(400, "invalid_change_operation", "A proposed change operation is invalid"); }
+        if (ids.has(operation.id)) throw coreError(400, "invalid_proposal", "A proposal contains duplicate operation IDs");
+        ids.add(operation.id);
+        if (operation.baseRemoteCommit !== proposal.snapshot.remoteCommit || snapshotKey({ repository: operation.repository, remoteCommit: operation.baseRemoteCommit }) !== snapshotKey(proposalBase)) {
+          throw coreError(409, "proposal_snapshot_mismatch", "A proposed operation belongs to a different repository snapshot");
+        }
+      }
+      const evidence = proposal.evidence ?? [];
+      let evidenceBytes = 0;
+      try { evidenceBytes = Buffer.byteLength(JSON.stringify(evidence), "utf8"); }
+      catch { throw coreError(400, "invalid_proposal_evidence", "Proposal evidence must be bounded JSON data"); }
+      if (evidenceBytes > MAX_PROPOSAL_EVIDENCE_BYTES) throw coreError(413, "proposal_evidence_too_large", "Proposal evidence exceeds the allowed size");
+      const evidenceIds = new Set<string>();
+      for (const item of evidence) {
+        if (!item || typeof item.id !== "string" || !item.id || evidenceIds.has(item.id) || snapshotKey(item.snapshot) !== snapshotKey(proposal.snapshot)) {
+          throw coreError(400, "invalid_proposal_evidence", "Proposal evidence is invalid or belongs to a different snapshot");
+        }
+        evidenceIds.add(item.id);
+      }
+      for (const operation of proposal.operations) {
+        if (operation.evidenceIds?.some((id) => !evidenceIds.has(id))) throw coreError(400, "proposal_evidence_missing", "An operation references evidence that is not attached to the proposal");
+      }
+      const copied: ChangeProposal = {
+        id: proposal.id,
+        snapshot: structuredClone(proposal.snapshot),
+        operations: proposal.operations.map(normalizedOperation),
+        source: proposal.source,
+        ...(evidence.length ? { evidence: structuredClone(evidence) } : {}),
+      };
+      const proposals = this.proposals.get(record.id) ?? new Map<string, ChangeProposal>();
+      proposals.set(copied.id, copied);
+      this.proposals.set(record.id, proposals);
+      return structuredClone(copied);
+    });
+  }
+
+  async approve(projectId: string, approval: Approval): Promise<void> {
+    return this.withProjectLock(projectId, async () => {
+      if (!approval || typeof approval.proposalId !== "string" || typeof approval.authorScope !== "string" || !approval.authorScope.trim() || !Array.isArray(approval.operationIds)) {
+        throw coreError(400, "invalid_approval", "An authenticated author approval is required");
+      }
+      const { record } = await this.getProject(projectId);
+      const proposal = this.proposals.get(record.id)?.get(approval.proposalId);
+      if (!proposal) throw coreError(404, "proposal_not_found", "The proposal is no longer available for approval");
+      const allowed = new Set(proposal.operations.map((operation) => operation.id));
+      if (!approval.operationIds.length || new Set(approval.operationIds).size !== approval.operationIds.length || approval.operationIds.some((id) => !allowed.has(id))) {
+        throw coreError(400, "invalid_approval", "Approval operation IDs must be a unique subset of the proposal");
+      }
+      const approvals = this.approvals.get(record.id) ?? new Map<string, { authorScope: string; operationIds: Set<string> }>();
+      approvals.set(approval.proposalId, { authorScope: approval.authorScope, operationIds: new Set(approval.operationIds) });
+      this.approvals.set(record.id, approvals);
+    });
+  }
+
+  private async checkpointUnlocked(projectId: string, operation: ChangeOperation, authorScope?: string): Promise<CheckpointReceipt> {
+    const observation = await this.requireObservation(projectId);
+    const { record, root } = await this.getProject(projectId);
+    try { assertChangeOperation(operation); }
+    catch { throw coreError(400, "invalid_change_operation", "The change operation is invalid"); }
+    const identity = observation.snapshot.repository;
+    if (snapshotKey({ repository: operation.repository, remoteCommit: operation.baseRemoteCommit }) !== snapshotKey({ repository: identity, remoteCommit: operation.baseRemoteCommit })) {
+      throw coreError(409, "operation_repository_mismatch", "The operation belongs to a different repository");
+    }
+    if (operation.baseRemoteCommit && observation.snapshot.remoteCommit && !(await this.isAncestor(root, operation.baseRemoteCommit, observation.snapshot.remoteCommit))) {
+      throw coreError(409, "operation_base_stale", "The operation base is no longer in the remote history");
+    }
+    const digest = operationDigest(operation);
+    const remoteOperations = observation.snapshot.remoteCommit ? await this.readOperationRecords(root, observation.snapshot.remoteCommit) : [];
+    const localOperations = await this.readLocalOperationRecords(root);
+    const prior = [...remoteOperations, ...localOperations].find((item) => item.operation.id === operation.id);
+    if (prior) {
+      if (prior.digest !== digest || prior.operation.generation !== operation.generation) throw coreError(409, "operation_id_reused", "The operation ID and generation are already bound to a different payload");
+      return prior.receipt;
+    }
+    const parent = await this.checkpointHead(root);
+    const preconditions = new Map<string, string | null>();
+    for (const item of [...operation.reads, ...operation.writes]) {
+      if (preconditions.has(item.path) && preconditions.get(item.path) !== item.revision) throw coreError(409, "operation_precondition_conflict", `The operation has inconsistent revisions for ${item.path}`);
+      preconditions.set(item.path, item.revision);
+    }
+    for (const [filePath, expected] of preconditions) {
+      const current = parent ? await this.snapshotFile(root, parent, filePath) : null;
+      if ((current?.revision ?? null) !== expected) throw coreError(409, "operation_precondition_conflict", `The file changed since the operation snapshot: ${filePath}`);
+    }
+    const metadataPath = operationMetadataPath(operation.id);
+    const touched = [...new Set([...operation.writes.map((write) => write.path), metadataPath])];
+    if (parent && (await git(root, ["status", "--porcelain", "--untracked-files=all", "--", ...touched])).trim()) {
+      throw coreError(409, "working_tree_path_dirty", "A changed file has uncommitted workspace edits");
+    }
+    const sequence = Math.max(0, ...remoteOperations.map((item) => item.sequence), ...localOperations.map((item) => item.sequence)) + 1;
+    const metadata: OperationMetadata = { version: 1, sequence, digest, operation: normalizedOperation(operation), ...(authorScope ? { authorScope } : {}) };
+    const commit = await this.createCommit(root, parent, operation.writes, [{ path: metadataPath, content: `${JSON.stringify(metadata, null, 2)}\n` }], operation.message);
+    const receipt: CheckpointReceipt = {
+      operationId: operation.id,
+      generation: operation.generation,
+      localCommit: commit,
+      remoteBase: operation.baseRemoteCommit,
+      revisions: operation.writes.map((write) => ({
+        path: write.path,
+        revision: write.content === null ? null : revisionForBytes(write.encoding === "base64" ? Buffer.from(write.content, "base64") : Buffer.from(write.content, "utf8")),
+      })),
+    };
+    await git(root, ["update-ref", `refs/scriptorium/checkpoints/${operation.id}`, commit]);
+    const oldCheckpointHead = await this.getRef(root, "refs/scriptorium/checkpoint-head");
+    await git(root, ["update-ref", "refs/scriptorium/checkpoint-head", commit, ...(oldCheckpointHead ? [oldCheckpointHead] : [])]);
+    const head = await this.getRef(root, "HEAD");
+    const branch = (await git(root, ["branch", "--show-current"])).trim();
+    if (head === parent && branch === record.branch) {
+      for (const write of operation.writes) {
+        const target = await pathUnderRoot(root, write.path);
+        if (write.content === null) await fs.rm(target, { force: true });
+        else await atomicWrite(target, write.encoding === "base64" ? Buffer.from(write.content, "base64").toString("utf8") : write.content);
+      }
+      await atomicWrite(await pathUnderRoot(root, metadataPath), `${JSON.stringify(metadata, null, 2)}\n`);
+      await git(root, ["update-ref", `refs/heads/${record.branch}`, commit, head || "0".repeat(commit.length)]);
+      await git(root, ["reset", "--quiet", commit, "--", ...touched]);
+    }
+    return receipt;
+  }
+
+  async checkpoint(projectId: string, operation: ChangeOperation): Promise<CheckpointReceipt> {
+    return this.withProjectLock(projectId, async () => {
+      try { assertChangeOperation(operation); }
+      catch { throw coreError(400, "invalid_change_operation", "The change operation is invalid"); }
+      const { record, root } = await this.getProject(projectId);
+      const digest = operationDigest(operation);
+      const observation = await this.requireObservation(projectId);
+      const remoteOperations = observation.snapshot.remoteCommit ? await this.readOperationRecords(root, observation.snapshot.remoteCommit) : [];
+      const localOperations = await this.readLocalOperationRecords(root);
+      const prior = [...remoteOperations, ...localOperations].find((item) => item.operation.id === operation.id);
+      if (prior) {
+        if (prior.digest !== digest || prior.operation.generation !== operation.generation) throw coreError(409, "operation_id_reused", "The operation ID and generation are already bound to a different payload");
+        return prior.receipt;
+      }
+      const approval = [...(this.approvals.get(record.id)?.values() ?? [])].find((item) => item.operationIds.has(operation.id));
+      if (!approval) throw coreError(403, "author_approval_required", "An authenticated author must approve this operation before checkpointing");
+      return this.checkpointUnlocked(projectId, operation, approval.authorScope);
+    });
+  }
+
+  async reconcile(projectId: string): Promise<ReconcileResult> {
+    return this.withProjectLock(projectId, () => this.reconcileUnlocked(projectId));
+  }
+
+  async publish(projectId: string, batchId: string): Promise<import("@scriptorium/contracts").PublishReceipt> {
+    return this.withProjectLock(projectId, async () => {
+      if (typeof batchId !== "string" || !/^[A-Za-z0-9_-]{1,128}$/.test(batchId)) throw coreError(400, "invalid_batch_id", "The publication batch ID is invalid");
+      const { record, root } = await this.getProject(projectId);
+      const manifestPath = publicationMetadataPath(batchId);
+      for (let attempt = 0; attempt < this.maxPushAttempts; attempt += 1) {
+        const reconciled = await this.reconcileUnlocked(projectId);
+        const remoteHead = reconciled.snapshot.remoteCommit;
+        const existing = remoteHead ? await this.snapshotFile(root, remoteHead, manifestPath) : null;
+        if (existing) {
+          let manifest: PublicationMetadata;
+          try { manifest = JSON.parse(existing.content) as PublicationMetadata; }
+          catch { throw coreError(409, "publication_metadata_invalid", "The repository contains invalid publication metadata"); }
+          if (manifest.version !== 1 || manifest.batchId !== batchId || !Array.isArray(manifest.operations) || manifest.digest !== publicationDigest(batchId, manifest.operations)) {
+            throw coreError(409, "batch_id_reused", "The publication batch ID is already bound to a different payload");
+          }
+          return { batchId, state: "confirmed", remoteCommit: remoteHead, acknowledged: manifest.operations.map((item) => item.receipt) };
+        }
+        const observation = await this.requireObservation(projectId);
+        const pendingIds = new Set(observation.pending.map((receipt) => receipt.operationId));
+        const localOperations = await this.readLocalOperationRecords(root);
+        const remoteOperations = remoteHead ? await this.readOperationRecords(root, remoteHead) : [];
+        const remoteById = new Map(remoteOperations.map((item) => [item.operation.id, item]));
+        const conflicts = reconciled.operations.filter((item) => item.state === "conflict");
+        const acknowledged = localOperations.filter((item) => remoteById.has(item.operation.id)).map((item) => item.receipt);
+        if (conflicts.length) return { batchId, state: "conflict", remoteCommit: remoteHead, acknowledged };
+        const toPublish = localOperations.filter((item) => pendingIds.has(item.operation.id) && !remoteById.has(item.operation.id));
+        if (!toPublish.length) return { batchId, state: "confirmed", remoteCommit: remoteHead, acknowledged };
+        const rows = toPublish.map((item) => ({ operationId: item.operation.id, generation: item.operation.generation, digest: item.digest, receipt: item.receipt }));
+        const manifest: PublicationMetadata = { version: 1, batchId, digest: publicationDigest(batchId, rows), operations: rows };
+        const parent = reconciled.snapshot.overlayCommit ?? remoteHead;
+        const commit = await this.createCommit(root, parent, [], [{ path: manifestPath, content: `${JSON.stringify(manifest, null, 2)}\n` }], `Publish checkpoint batch ${batchId}`);
+        const publicationRef = `refs/scriptorium/publications/${batchId}`;
+        const previous = await this.getRef(root, publicationRef);
+        await git(root, ["update-ref", publicationRef, commit, ...(previous ? [previous] : [])]);
+        const askpassDir = path.join(this.dataDir, `.askpass-${record.id}`);
+        await fs.mkdir(askpassDir, { recursive: true, mode: 0o700 });
+        try {
+          const askpass = await makeAskpassScript(askpassDir);
+          await git(root, ["push", "origin", `${commit}:refs/heads/${record.branch}`], { token: this.token, askpass });
+        } catch { /* A fresh remote observation below distinguishes rejection from a lost response. */ }
+        finally { await fs.rm(askpassDir, { recursive: true, force: true }).catch(() => undefined); }
+
+        let after: RemoteObservation;
+        try { after = await this.requireObservation(projectId); }
+        catch (error) {
+          if (error instanceof CoreError && (error.code === "default_branch_changed" || error.code === "repository_replaced")) throw error;
+          return { batchId, state: "publication_unknown", remoteCommit: remoteHead, acknowledged: [] };
+        }
+        const remoteManifest = after.snapshot.remoteCommit ? await this.snapshotFile(root, after.snapshot.remoteCommit, manifestPath) : null;
+        if (remoteManifest) {
+          let parsed: PublicationMetadata;
+          try { parsed = JSON.parse(remoteManifest.content) as PublicationMetadata; }
+          catch { throw coreError(409, "publication_metadata_invalid", "The repository contains invalid publication metadata"); }
+          if (parsed.batchId === batchId && parsed.digest === publicationDigest(batchId, parsed.operations) && await this.isAncestor(root, commit, after.snapshot.remoteCommit)) {
+            return { batchId, state: "confirmed", remoteCommit: after.snapshot.remoteCommit, acknowledged: parsed.operations.map((item) => item.receipt) };
+          }
+        }
+        if (attempt + 1 >= this.maxPushAttempts) {
+          const current = await this.getRef(root, `refs/remotes/origin/${record.branch}`);
+          return { batchId, state: "conflict", remoteCommit: current || remoteHead, acknowledged: [] };
+        }
+      }
+      return { batchId, state: "conflict", remoteCommit: "", acknowledged: [] };
+    });
+  }
+
+  private async ensureSnapshot(root: string, snapshot: SnapshotId, identity: RepositoryIdentity, currentRemote: string): Promise<void> {
+    if (!snapshot || snapshotKey({ ...snapshot, repository: identity }) !== snapshotKey(snapshot)) {
+      throw coreError(409, "snapshot_repository_mismatch", "The requested snapshot belongs to a different repository");
+    }
+    if (snapshot.repository.defaultBranch !== identity.defaultBranch || snapshot.repository.repositoryId !== identity.repositoryId || snapshot.repository.ownerScope !== identity.ownerScope) {
+      throw coreError(409, "snapshot_repository_mismatch", "The requested snapshot belongs to a different repository");
+    }
+    if (snapshot.remoteCommit) {
+      try { await git(root, ["cat-file", "-e", `${snapshot.remoteCommit}^{commit}`]); }
+      catch { throw coreError(409, "snapshot_unavailable", "The requested repository snapshot is unavailable"); }
+      if (currentRemote && !(await this.isAncestor(root, snapshot.remoteCommit, currentRemote))) {
+        throw coreError(409, "snapshot_unavailable", "The requested repository snapshot is no longer in the remote history");
+      }
+    }
+    if (snapshot.overlayCommit) {
+      try { await git(root, ["cat-file", "-e", `${snapshot.overlayCommit}^{commit}`]); }
+      catch { throw coreError(409, "snapshot_unavailable", "The requested checkpoint snapshot is unavailable"); }
+      const candidates = [currentRemote, await this.checkpointHead(root), await this.getRef(root, "refs/scriptorium/reconciled-head")];
+      const refs = (await git(root, ["for-each-ref", "--format=%(refname)", "refs/scriptorium/checkpoints/", "refs/scriptorium/reconciliations/"])).trim().split(/\r?\n/).filter(Boolean);
+      for (const ref of refs) candidates.push(await this.getRef(root, ref));
+      let reachable = snapshot.overlayCommit === snapshot.remoteCommit;
+      for (const candidate of candidates.filter(Boolean)) {
+        if (await this.isAncestor(root, snapshot.overlayCommit, candidate)) { reachable = true; break; }
+      }
+      if (!reachable) throw coreError(409, "snapshot_unavailable", "The requested checkpoint snapshot is not a recognized Scriptorium checkpoint");
+    }
+  }
+
+  private async observedUnlocked(projectId: string): Promise<RemoteObservation> {
+    const { record, root } = await this.getProject(projectId);
+    const remote = await this.fetchRemoteUnlocked(record, root);
+    const remoteHead = remote.remoteCommit;
+    const localHead = await this.checkpointHead(root);
+    const remoteOperations = remoteHead ? await this.readOperationRecords(root, remoteHead) : [];
+    const localOperations = await this.readLocalOperationRecords(root);
+    const remoteById = new Map(remoteOperations.map((item) => [item.operation.id, item]));
+    const pending: CheckpointReceipt[] = [];
+    for (const local of localOperations) {
+      const published = remoteById.get(local.operation.id);
+      if (!published) pending.push(local.receipt);
+      else if (published.digest !== local.digest) throw coreError(409, "operation_id_reused", "An operation ID is already bound to a different payload");
+    }
+    return {
+      snapshot: { repository: remote.identity, remoteCommit: remoteHead },
+      checkpointHead: localHead,
+      observedAt: new Date().toISOString(),
+      state: "fresh",
+      pending,
+    };
+  }
+
+  private async requireObservation(projectId: string): Promise<RemoteObservation> {
+    try { return await this.observedUnlocked(projectId); }
+    catch (error) {
+      if (error instanceof CoreError) throw error;
+      throw coreError(502, "remote_observation_failed", "The repository could not be freshly observed");
+    }
+  }
+
+  private async reconcileUnlocked(projectId: string): Promise<ReconcileResult> {
+    const observation = await this.requireObservation(projectId);
+    const { root } = await this.getProject(projectId);
+    const remoteHead = observation.snapshot.remoteCommit;
+    const localOperations = await this.readLocalOperationRecords(root);
+    const remoteOperations = remoteHead ? await this.readOperationRecords(root, remoteHead) : [];
+    const remoteById = new Map(remoteOperations.map((item) => [item.operation.id, item]));
+    let replayHead = remoteHead;
+    const outcomes: ReconcileResult["operations"] = [];
+    for (const stored of localOperations) {
+      const operation = stored.operation;
+      const remote = remoteById.get(operation.id);
+      const paths = operation.writes.map((write) => write.path);
+      if (remote) {
+        outcomes.push(remote.digest === stored.digest
+          ? { operationId: operation.id, state: "unchanged", receipt: remote.receipt, paths }
+          : { operationId: operation.id, state: "conflict", paths });
+        continue;
+      }
+      if (operation.baseRemoteCommit && remoteHead && !(await this.isAncestor(root, operation.baseRemoteCommit, remoteHead))) {
+        outcomes.push({ operationId: operation.id, state: "conflict", receipt: stored.receipt, paths });
+        continue;
+      }
+      const preconditions = new Map<string, string | null>();
+      for (const precondition of [...operation.reads, ...operation.writes]) {
+        if (preconditions.has(precondition.path) && preconditions.get(precondition.path) !== precondition.revision) {
+          preconditions.set(precondition.path, "__invalid__");
+        } else preconditions.set(precondition.path, precondition.revision);
+      }
+      const conflicts: string[] = [];
+      for (const [filePath, expected] of preconditions) {
+        const actual = replayHead ? await this.snapshotFile(root, replayHead, filePath) : null;
+        if (expected === "__invalid__" || (actual?.revision ?? null) !== expected) conflicts.push(filePath);
+      }
+      const metaPath = operationMetadataPath(operation.id);
+      const collision = replayHead ? await this.snapshotFile(root, replayHead, metaPath) : null;
+      if (collision) {
+        try { if (parseOperationMetadata(collision.content, metaPath).digest !== stored.digest) conflicts.push(metaPath); }
+        catch { conflicts.push(metaPath); }
+      }
+      if (conflicts.length) {
+        outcomes.push({ operationId: operation.id, state: "conflict", receipt: stored.receipt, paths: [...new Set(conflicts)] });
+        continue;
+      }
+      const parentLine = (await git(root, ["rev-list", "--parents", "-n1", stored.commit])).trim().split(/\s+/);
+      const originalParent = parentLine[1] ?? "";
+      if (replayHead === originalParent) {
+        replayHead = stored.commit;
+        outcomes.push({ operationId: operation.id, state: "unchanged", receipt: stored.receipt, paths });
+        continue;
+      }
+      const metadata: OperationMetadata = { version: 1, sequence: stored.sequence, digest: stored.digest, operation, ...(stored.authorScope ? { authorScope: stored.authorScope } : {}) };
+      const replayCommit = await this.createCommit(root, replayHead, operation.writes, [{ path: metaPath, content: `${JSON.stringify(metadata, null, 2)}\n` }], operation.message);
+      const ref = `refs/scriptorium/reconciliations/${operation.id}`;
+      const previous = await this.getRef(root, ref);
+      await git(root, ["update-ref", ref, replayCommit, ...(previous ? [previous] : [])]);
+      replayHead = replayCommit;
+      outcomes.push({ operationId: operation.id, state: "replayed", receipt: stored.receipt, paths });
+    }
+    const previous = await this.getRef(root, "refs/scriptorium/reconciled-head");
+    if (replayHead) await git(root, ["update-ref", "refs/scriptorium/reconciled-head", replayHead, ...(previous ? [previous] : [])]);
+    else if (previous) await git(root, ["update-ref", "-d", "refs/scriptorium/reconciled-head", previous]);
+    return {
+      snapshot: { ...observation.snapshot, ...(replayHead && replayHead !== remoteHead ? { overlayCommit: replayHead } : {}) },
+      operations: outcomes,
+    };
   }
 
   private withProjectLock<T>(projectId: string, action: () => Promise<T>): Promise<T> {
@@ -515,6 +1533,7 @@ export class CoreStore {
     await fs.mkdir(askpassDir, { mode: 0o700 });
     let branch = explicitBranch ?? DEFAULT_BRANCH;
     let remoteWasEmpty = false;
+    let identity: RepositoryIdentity;
     try {
       const askpass = await makeAskpassScript(askpassDir);
       const headInfo = await git(this.dataDir, ["ls-remote", "--symref", url, "HEAD"], { token: this.token, askpass });
@@ -525,10 +1544,11 @@ export class CoreStore {
         .filter((ref): ref is string => typeof ref === "string" && ref.startsWith("refs/heads/"))
         .map((ref) => ref.slice("refs/heads/".length));
       remoteWasEmpty = remoteHeads.length === 0;
-      if (!explicitBranch) {
-        branch = remoteHead ?? (remoteHeads.includes(DEFAULT_BRANCH) ? DEFAULT_BRANCH : remoteHeads[0] ?? DEFAULT_BRANCH);
-        branch = branchName(branch);
-      }
+      const discoveredDefault = remoteHead ?? (remoteHeads.includes(DEFAULT_BRANCH) ? DEFAULT_BRANCH : remoteHeads[0] ?? DEFAULT_BRANCH);
+      identity = /^https:\/\//i.test(url)
+        ? await githubIdentity(url, this.token, this.fetcher)
+        : localIdentity(url, branchName(discoveredDefault));
+      branch = explicitBranch ?? identity.defaultBranch;
       const branchExists = remoteHeads.includes(branch);
       if (!branchExists && remoteHeads.length > 0) {
         throw coreError(404, "branch_not_found", `Branch "${branch}" was not found in the repository`);
@@ -548,7 +1568,7 @@ export class CoreStore {
       await fs.rm(askpassDir, { recursive: true, force: true }).catch(() => undefined);
     }
 
-    const record: ProjectRecord = { id, url, branch, directory, emptyRemote: false };
+    const record: ProjectRecord = { id, url, branch, directory, emptyRemote: false, identity };
     try {
       const registered = await this.withRegistryLock(async () => {
         const records = await this.readRegistry();
@@ -648,103 +1668,11 @@ export class CoreStore {
   }
 
   async tree(projectId: string): Promise<Tree> {
-    return this.withProjectLock(projectId, async () => {
-      const { root, record } = await this.getProject(projectId);
-      const projectMeta = path.join(root, "meta", "project.yaml");
-      let title = repositoryTitle(record.url);
-      try { title = titleOf((await this.readYaml(root, "meta/project.yaml")).data, title); }
-      catch (error) { if ((error as NodeJS.ErrnoException).code !== "ENOENT" && !(error instanceof CoreError && error.code === "project_data_invalid")) throw error; }
-
-      const volumesRoot = await pathUnderRoot(root, "plot/volumes");
-      const volumeEntries = await fs.readdir(volumesRoot, { withFileTypes: true }).catch((error: NodeJS.ErrnoException) => {
-        if (error.code === "ENOENT") return [];
-        throw error;
-      });
-      const volumes: Array<TreeVolume & { order?: number }> = [];
-      const seenEntityIds = new Set<string>();
-      for (const volumeEntry of volumeEntries) {
-        if (volumeEntry.isSymbolicLink()) throw coreError(422, "unsafe_project_tree", "The project hierarchy contains a symbolic link");
-        if (!volumeEntry.isDirectory()) continue;
-        const volumeId = volumeEntry.name;
-        const volumeData: Record<string, unknown> = await this.readYaml(root, `plot/volumes/${volumeId}/volume.yaml`).then((value) => value.data).catch((error): Record<string, unknown> => {
-          if ((error as NodeJS.ErrnoException).code === "ENOENT") return { id: volumeId };
-          throw error;
-        });
-        const actualVolumeId = typeof volumeData.id === "string" ? volumeData.id : volumeId;
-        if (seenEntityIds.has(actualVolumeId)) throw coreError(409, "duplicate_entity_id", "The project contains duplicate hierarchy ids");
-        seenEntityIds.add(actualVolumeId);
-        const chapterDir = await pathUnderRoot(root, `plot/volumes/${volumeId}/chapters`);
-        const chapterEntries = await fs.readdir(chapterDir, { withFileTypes: true }).catch((error: NodeJS.ErrnoException) => {
-          if (error.code === "ENOENT") return [];
-          throw error;
-        });
-        const chapters: Array<TreeChapter & { order?: number }> = [];
-        for (const chapterEntry of chapterEntries) {
-          if (chapterEntry.isSymbolicLink()) throw coreError(422, "unsafe_project_tree", "The project hierarchy contains a symbolic link");
-          if (!chapterEntry.isDirectory()) continue;
-          const chapterId = chapterEntry.name;
-          const chapterData: Record<string, unknown> = await this.readYaml(root, `plot/volumes/${volumeId}/chapters/${chapterId}/chapter.yaml`).then((value) => value.data).catch((error): Record<string, unknown> => {
-            if ((error as NodeJS.ErrnoException).code === "ENOENT") return { id: chapterId };
-            throw error;
-          });
-          const actualChapterId = typeof chapterData.id === "string" ? chapterData.id : chapterId;
-          if (seenEntityIds.has(actualChapterId)) throw coreError(409, "duplicate_entity_id", "The project contains duplicate hierarchy ids");
-          seenEntityIds.add(actualChapterId);
-          const sceneDir = await pathUnderRoot(root, `plot/volumes/${volumeId}/chapters/${chapterId}/scenes`);
-          const sceneEntries = await fs.readdir(sceneDir, { withFileTypes: true }).catch((error: NodeJS.ErrnoException) => {
-            if (error.code === "ENOENT") return [];
-            throw error;
-          });
-          const scenes: Array<TreeScene & { order?: number }> = [];
-          for (const sceneEntry of sceneEntries) {
-            if (sceneEntry.isSymbolicLink()) throw coreError(422, "unsafe_project_tree", "The project hierarchy contains a symbolic link");
-            if (!sceneEntry.isFile() || !sceneEntry.name.endsWith(".yaml")) continue;
-            const data = (await this.readYaml(root, `plot/volumes/${volumeId}/chapters/${chapterId}/scenes/${sceneEntry.name}`)).data;
-            const sceneId = typeof data.id === "string" ? data.id : path.basename(sceneEntry.name, ".yaml");
-            if (seenEntityIds.has(sceneId)) throw coreError(409, "duplicate_scene_id", "The project contains duplicate hierarchy ids");
-            seenEntityIds.add(sceneId);
-            scenes.push({ id: sceneId, title: titleOf(data, sceneId), order: typeof data.order === "number" ? data.order : undefined });
-          }
-          chapters.push({
-            id: actualChapterId,
-            title: titleOf(chapterData, actualChapterId),
-            order: typeof chapterData.order === "number" ? chapterData.order : undefined,
-            scenes: sortByOrderAndTitle(scenes),
-          });
-        }
-        volumes.push({
-          id: actualVolumeId,
-          title: titleOf(volumeData, actualVolumeId),
-          order: typeof volumeData.order === "number" ? volumeData.order : undefined,
-          chapters: sortByOrderAndTitle(chapters),
-        });
-      }
-      return {
-        title,
-        volumes: sortByOrderAndTitle(volumes).map(({ id, title: volumeTitle, chapters }) => ({
-          id,
-          title: volumeTitle,
-          chapters: chapters.map(({ id: chapterId, title: chapterTitle, scenes }) => ({
-            id: chapterId,
-            title: chapterTitle,
-            scenes: scenes.map(({ id: sceneId, title: sceneTitle }) => ({ id: sceneId, title: sceneTitle })),
-          })),
-        })),
-      };
-    });
+    return (await this.readTreeSnapshot(projectId, "checkpoint")).tree;
   }
 
   async readScene(projectId: string, sceneId: string): Promise<Scene> {
-    return this.withProjectLock(projectId, async () => {
-      const { root } = await this.getProject(projectId);
-      const scene = await this.resolveScene(root, sceneId);
-      const markdownFile = await pathIsWithinProject(root, scene.manuscriptPath);
-      let markdownText = "";
-      try { markdownText = await fs.readFile(markdownFile, "utf8"); }
-      catch (error) { if ((error as NodeJS.ErrnoException).code !== "ENOENT") throw error; }
-      const document = parseMarkdownDocument(markdownText);
-      return { id: scene.id, title: scene.title, text: document.body, revision: revisionFor(scene.yamlText, markdownText) };
-    });
+    return (await this.readSceneSnapshot(projectId, sceneId, "checkpoint")).scene;
   }
 
   async saveScene(
@@ -756,109 +1684,96 @@ export class CoreStore {
       throw coreError(400, "invalid_scene_save", "Scene text and revision are required");
     }
     return this.withProjectLock(projectId, async () => {
-      const { root } = await this.getProject(projectId);
-      const scene = await this.resolveScene(root, sceneId);
-      const markdownFile = await pathIsWithinProject(root, scene.manuscriptPath);
-      let oldMarkdown = "";
-      try { oldMarkdown = await fs.readFile(markdownFile, "utf8"); }
-      catch (error) { if ((error as NodeJS.ErrnoException).code !== "ENOENT") throw error; }
-      const currentRevision = revisionFor(scene.yamlText, oldMarkdown);
-      if (input.revision !== currentRevision) {
-        throw coreError(409, "revision_conflict", "The scene changed after it was loaded. Reload it before saving.");
+      const selected = await this.selectedSnapshotUnlocked(projectId, "checkpoint");
+      const files = await this.snapshotFiles(selected.root, selected.commit, "plot/volumes");
+      const matches: Array<{ path: string; data: Record<string, unknown>; yamlText: string }> = [];
+      for (const file of files.filter((candidate) => /\/scenes\/[^/]+\.yaml$/.test(candidate))) {
+        const yaml = await this.parseSnapshotYaml(selected.root, selected.commit, file);
+        if (!yaml) continue;
+        const id = typeof yaml.data.id === "string" ? yaml.data.id : path.posix.basename(file, ".yaml");
+        if (id === sceneId) matches.push({ path: file, data: yaml.data, yamlText: yaml.text });
       }
+      if (!matches.length) throw coreError(404, "scene_not_found", "Scene not found");
+      if (matches.length > 1) throw coreError(409, "duplicate_scene_id", "The project contains duplicate scene ids");
+      const found = matches[0]!;
+      const parts = found.path.split("/");
+      const manuscriptPath = typeof found.data.manuscript === "string"
+        ? safeRelativePath(found.data.manuscript)
+        : `manuscript/${parts[2]}/${parts[4]}/${sceneId}.md`;
+      assertProjectPath(manuscriptPath);
+      const currentFile = await this.snapshotFile(selected.root, selected.commit, manuscriptPath);
+      const oldMarkdown = currentFile?.content ?? "";
+      const currentRevision = revisionFor(found.yamlText, oldMarkdown);
+      if (input.revision !== currentRevision) throw coreError(409, "revision_conflict", "The scene changed after it was loaded. Reload it before saving.");
       const document = parseMarkdownDocument(oldMarkdown);
       const nextMarkdown = `${document.prefix}${input.text}`;
-      const missingLink = typeof scene.yamlData.manuscript !== "string";
-      const nextYaml = missingLink
-        ? YAML.stringify({ ...scene.yamlData, manuscript: scene.manuscriptPath })
-        : scene.yamlText;
-      const yamlFile = await pathUnderRoot(root, scene.yamlPath);
+      const missingLink = typeof found.data.manuscript !== "string";
+      const nextYaml = missingLink ? YAML.stringify({ ...found.data, manuscript: manuscriptPath }) : found.yamlText;
+      if (nextMarkdown === oldMarkdown && !missingLink) return { id: sceneId, title: titleOf(found.data, sceneId), text: input.text, revision: currentRevision };
+      const metadataRevision = revisionForBytes(found.yamlText);
+      const writes: FileChange[] = [{ path: manuscriptPath, revision: currentFile?.revision ?? null, content: nextMarkdown }];
+      const reads: FileRevision[] = [{ path: manuscriptPath, revision: currentFile?.revision ?? null }];
       if (missingLink) {
-        await atomicWrite(yamlFile, nextYaml);
+        writes.push({ path: found.path, revision: metadataRevision, content: nextYaml });
+        reads.push({ path: found.path, revision: metadataRevision });
       }
-      let markdownExists = true;
-      try { await fs.access(markdownFile); }
-      catch (error) {
-        if ((error as NodeJS.ErrnoException).code === "ENOENT") markdownExists = false;
-        else throw error;
-      }
-      if (markdownExists && nextMarkdown === oldMarkdown && !missingLink) {
-        return {
-          id: scene.id,
-          title: scene.title,
-          text: input.text,
-          revision: currentRevision,
-        };
-      }
-      await atomicWrite(markdownFile, nextMarkdown);
-      try {
-        const paths = [scene.manuscriptPath, ...(missingLink ? [scene.yamlPath] : [])];
-        await git(root, ["add", "--", ...paths]);
-        await git(root, [
-          "-c", "user.name=Scriptorium",
-          "-c", "user.email=scriptorium@localhost",
-          "commit", "--only", "-m", `Write scene: ${scene.title.replace(/[\r\n]+/g, " ").slice(0, 120)}`, "--", ...paths,
-        ]);
-      } catch {
-        throw coreError(500, "save_commit_failed", "Save could not complete; project files may have changed without a commit. Inspect project status before retrying.");
-      }
-      return {
-        id: scene.id,
-        title: scene.title,
-        text: input.text,
-        revision: revisionFor(nextYaml, nextMarkdown),
+      const operation: ChangeOperation = {
+        id: randomUUID(),
+        generation: 0,
+        repository: selected.snapshot.repository,
+        baseRemoteCommit: selected.snapshot.remoteCommit,
+        effect: "manuscript",
+        reads,
+        writes,
+        message: `Write scene: ${titleOf(found.data, sceneId)}`.replace(/[\r\n]+/g, " ").slice(0, 1024),
       };
+      try { await this.checkpointUnlocked(projectId, operation); }
+      catch (error) {
+        if (error instanceof CoreError) throw error;
+        throw coreError(500, "save_checkpoint_failed", "The scene checkpoint could not be created; inspect project status before retrying.");
+      }
+      return { id: sceneId, title: titleOf(found.data, sceneId), text: input.text, revision: revisionFor(nextYaml, nextMarkdown) };
     });
   }
 
   async history(projectId: string): Promise<Commit[]> {
     return this.withProjectLock(projectId, async () => {
       const { root } = await this.getProject(projectId);
-      const head = await git(root, ["rev-parse", "--verify", "HEAD"]).catch((error) => {
-        if (error instanceof CoreError && error.code === "git_operation_failed") return "";
-        throw error;
-      });
-      if (!head.trim()) return [];
-      const raw = await git(root, ["log", "-z", `-n${MAX_HISTORY}`, "--format=%H%x00%cI%x00%s"]);
-      const fields = raw.split("\0");
-      if (fields.at(-1) === "") fields.pop();
-      const commits: Commit[] = [];
-      for (let index = 0; index + 2 < fields.length; index += 3) {
-        commits.push({ hash: fields[index], date: fields[index + 1], message: fields[index + 2] });
+      const observation = await this.requireObservation(projectId);
+      const localHead = await this.getRef(root, "HEAD");
+      const heads = !localHead ? [observation.snapshot.remoteCommit]
+        : !observation.snapshot.remoteCommit || await this.isAncestor(root, observation.snapshot.remoteCommit, localHead) ? [localHead]
+          : await this.isAncestor(root, localHead, observation.snapshot.remoteCommit) ? [observation.snapshot.remoteCommit]
+            : [localHead, observation.snapshot.remoteCommit];
+      const commitsByHash = new Map<string, Commit>();
+      for (const commit of new Set(heads.filter(Boolean))) {
+        const raw = await git(root, ["log", "-z", `-n${MAX_HISTORY}`, "--format=%H%x1f%cI%x1f%s", commit]);
+        for (const row of raw.split("\0")) {
+          const [hash, date, ...messageParts] = row.replace(/^\n/, "").split("\x1f");
+          if (hash) commitsByHash.set(hash, { hash, date: date ?? "", message: messageParts.join("\x1f") });
+        }
       }
-      return commits;
+      return [...commitsByHash.values()].slice(0, MAX_HISTORY);
     });
   }
 
   private async statusUnlocked(root: string, record: ProjectRecord): Promise<SyncStatus> {
-    const [head, branchOutput, dirtyOutput] = await Promise.all([
-      git(root, ["rev-parse", "--verify", "HEAD"]).catch((error) => {
-        if (error instanceof CoreError && error.code === "git_operation_failed") return "";
-        throw error;
-      }),
-      git(root, ["branch", "--show-current"]),
-      git(root, ["status", "--porcelain", "--untracked-files=all"]),
-    ]);
-    const branch = branchOutput.trim();
+    const branch = (await git(root, ["branch", "--show-current"])).trim();
     if (!branch || branch !== record.branch) {
       throw coreError(409, "branch_changed", "The project is no longer on its registered branch");
     }
-    if (!head.trim()) return { branch, head: "", ahead: 0, behind: 0, dirty: dirtyOutput.length > 0 };
+    const remote = await this.fetchRemoteUnlocked(record, root);
+    const head = await this.getRef(root, "HEAD");
+    const dirtyOutput = await git(root, ["status", "--porcelain", "--untracked-files=all"]);
     let ahead = 0;
     let behind = 0;
-    const remoteRef = `refs/remotes/origin/${record.branch}`;
-    const exists = await git(root, ["show-ref", "--verify", "--quiet", remoteRef]).then(() => true).catch((error) => {
-      if (error instanceof CoreError && error.code === "git_operation_failed") return false;
-      throw error;
-    });
-    if (exists) {
-      const counts = (await git(root, ["rev-list", "--left-right", "--count", `HEAD...origin/${record.branch}`])).trim().split(/\s+/);
+    if (head && remote.remoteCommit) {
+      const counts = (await git(root, ["rev-list", "--left-right", "--count", `${head}...${remote.remoteCommit}`])).trim().split(/\s+/);
       ahead = Number.parseInt(counts[0] ?? "0", 10) || 0;
       behind = Number.parseInt(counts[1] ?? "0", 10) || 0;
-    } else {
-      ahead = Number.parseInt((await git(root, ["rev-list", "--count", "HEAD"])).trim(), 10) || 0;
-    }
-    return { branch, head: head.trim(), ahead, behind, dirty: dirtyOutput.length > 0 };
+    } else if (head) ahead = Number.parseInt((await git(root, ["rev-list", "--count", head])).trim(), 10) || 0;
+    else if (remote.remoteCommit) behind = Number.parseInt((await git(root, ["rev-list", "--count", remote.remoteCommit])).trim(), 10) || 0;
+    return { branch, head, ahead, behind, dirty: dirtyOutput.length > 0 };
   }
 
   async status(projectId: string): Promise<SyncStatus> {
@@ -869,55 +1784,36 @@ export class CoreStore {
   }
 
   async sync(projectId: string): Promise<SyncStatus> {
-    return this.withProjectLock(projectId, async () => {
+    let status = await this.status(projectId);
+    if (status.dirty) throw coreError(409, "working_tree_dirty", "Commit or preserve local workspace edits before synchronizing");
+    const reconciled = await this.reconcile(projectId);
+    if (reconciled.operations.some((operation) => operation.state === "conflict")) throw coreError(409, "sync_conflict", "A checkpoint conflicts with the current remote files");
+    const observation = await this.observe(projectId);
+    if (observation.pending.length) {
+      const publication = await this.publish(projectId, randomUUID());
+      if (publication.state === "publication_unknown") throw coreError(502, "publication_unknown", "The publish result is unknown; reconcile before retrying");
+      if (publication.state !== "confirmed") throw coreError(409, "sync_conflict", "The remote did not accept the checkpoint batch");
+    }
+    await this.withProjectLock(projectId, async () => {
       const { root, record } = await this.getProject(projectId);
-      let status = await this.statusUnlocked(root, record);
-      if (status.dirty) throw coreError(409, "working_tree_dirty", "Commit or discard local project changes before synchronizing");
-
-      const askpassDir = path.join(this.dataDir, `.askpass-${record.id}`);
-      await fs.mkdir(askpassDir, { mode: 0o700 });
-      try {
-        const askpass = await makeAskpassScript(askpassDir);
-        const remoteHeads = await git(root, ["ls-remote", "--heads", "origin", `refs/heads/${record.branch}`], { token: this.token, askpass });
-        const remoteBranchExists = remoteHeads.split(/\r?\n/).some((line) => line.endsWith(`\trefs/heads/${record.branch}`));
-        if (!remoteBranchExists) {
-          if (!record.emptyRemote) throw coreError(409, "remote_branch_missing", "The registered GitHub branch no longer exists");
-          if (status.head) {
-            await git(root, ["push", "origin", `HEAD:refs/heads/${record.branch}`], { token: this.token, askpass });
-            await git(root, ["fetch", "--no-tags", "origin", record.branch], { token: this.token, askpass });
-            await this.withRegistryLock(async () => {
-              const records = await this.readRegistry();
-              await this.writeRegistry(records.map((item) => item.id === record.id ? { ...item, emptyRemote: false } : item));
-            });
-          }
-        } else {
-          await git(root, ["fetch", "--no-tags", "origin", record.branch], { token: this.token, askpass });
-          if (record.emptyRemote) {
-            await this.withRegistryLock(async () => {
-              const records = await this.readRegistry();
-              await this.writeRegistry(records.map((item) => item.id === record.id ? { ...item, emptyRemote: false } : item));
-            });
-            record.emptyRemote = false;
-          }
-          if (!status.head) await git(root, ["checkout", "-B", record.branch, `origin/${record.branch}`]);
-          const counts = (await git(root, ["rev-list", "--left-right", "--count", `HEAD...origin/${record.branch}`])).trim().split(/\s+/);
-          const ahead = Number.parseInt(counts[0] ?? "0", 10) || 0;
-          const behind = Number.parseInt(counts[1] ?? "0", 10) || 0;
-          if (ahead > 0 && behind > 0) throw coreError(409, "sync_conflict", "Local and GitHub histories diverged; resolve the conflict in Git before synchronizing");
-          if (behind > 0 && status.head) await git(root, ["merge", "--ff-only", `origin/${record.branch}`]);
-          if (ahead > 0) await git(root, ["push", "origin", `HEAD:refs/heads/${record.branch}`], { token: this.token, askpass });
-        }
-      } catch (error) {
-        if (error instanceof CoreError) throw error;
-        throw error;
-      } finally {
-        await fs.rm(askpassDir, { recursive: true, force: true }).catch(() => undefined);
+      status = await this.statusUnlocked(root, record);
+      if (status.dirty) throw coreError(409, "working_tree_dirty", "Commit or preserve local workspace edits before synchronizing");
+      const remoteHead = await this.getRef(root, `refs/remotes/origin/${record.branch}`);
+      const head = await this.getRef(root, "HEAD");
+      if (!remoteHead) return;
+      if (!head) await git(root, ["checkout", "-B", record.branch, remoteHead]);
+      else if (await this.isAncestor(root, head, remoteHead)) {
+        if (head !== remoteHead) await git(root, ["merge", "--ff-only", remoteHead]);
+      } else if (!(await this.isAncestor(root, remoteHead, head))) {
+        const localOnly = (await git(root, ["rev-list", head, `^${remoteHead}`])).trim().split(/\r?\n/).filter(Boolean);
+        const checkpointRefs = (await git(root, ["for-each-ref", "--format=%(objectname)", "refs/scriptorium/checkpoints/"])).trim().split(/\r?\n/).filter(Boolean);
+        const checkpointCommits = new Set(checkpointRefs);
+        if (localOnly.some((commit) => !checkpointCommits.has(commit))) throw coreError(409, "sync_conflict", "Unregistered local commits are preserved and need explicit reconciliation");
+        await git(root, ["reset", "--keep", remoteHead]);
       }
       status = await this.statusUnlocked(root, record);
-      if (status.dirty || status.ahead !== 0 || status.behind !== 0) {
-        throw coreError(502, "sync_incomplete", "Git synchronization did not finish cleanly");
-      }
-      return status;
+      if (status.dirty || status.ahead !== 0 || status.behind !== 0) throw coreError(502, "sync_incomplete", `Git synchronization did not finish cleanly (ahead=${status.ahead}, behind=${status.behind}, dirty=${status.dirty}, head=${status.head}, remote=${remoteHead})`);
     });
+    return status;
   }
 }
