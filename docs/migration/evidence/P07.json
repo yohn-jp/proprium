@@ -1,0 +1,73 @@
+{
+  "task": "P07",
+  "source": {
+    "repository": "yohn-jp/arcadia-loom",
+    "commit": "edc033c2c9466274a334299dadfa426661d957d9"
+  },
+  "target": {
+    "branch": "work/7-p07",
+    "implementationCommit": "ec2acbdcd0ef9ea498067f61cdd7273d5b5de2cc"
+  },
+  "ledger": {
+    "R23": {
+      "target": [
+        "modules/publishing/src/plaintext.ts",
+        "modules/publishing/src/epub.ts",
+        "modules/publishing/src/verticalPrint.ts",
+        "modules/publishing/src/actions.ts",
+        "modules/publishing/src/browser.tsx"
+      ],
+      "proofs": ["P07-plaintext-vertical", "P07-epub-zip"]
+    },
+    "R24": {
+      "target": [
+        "modules/publishing/src/episodes.ts",
+        "modules/publishing/src/actions.ts",
+        "modules/publishing/src/browser.tsx"
+      ],
+      "proofs": ["P07-episode-proposal-preservation"]
+    },
+    "R47": {
+      "target": [
+        "modules/publishing/src/grants.ts",
+        "modules/publishing/src/http.ts",
+        "modules/publishing/src/actions.ts",
+        "modules/publishing/src/browser.tsx"
+      ],
+      "proofs": ["P07-share-remote-activation-revocation"]
+    },
+    "N10": {
+      "target": ["modules/publishing/src/migration.ts", "modules/publishing/src/publishing.test.ts"],
+      "proofs": ["P07-migration-semantic-validation"]
+    }
+  },
+  "proofs": {
+    "P07-plaintext-vertical": "Source ruby/bouten stripping and Kakuyomu/Narou conversion preserve Japanese scene order; vertical print retains headings and source spacing.",
+    "P07-epub-zip": "An actual JSZip EPUB is unzipped in the test and checked for EPUB3 package/navigation, XHTML escaping and ruby, optional bible appendix, and byte-identical binary cover content.",
+    "P07-episode-proposal-preservation": "Episode-map edits use the proposal port and retain top-level and per-episode unknown YAML fields, publishedAt, and sceneIds without changing source bytes.",
+    "P07-share-remote-activation-revocation": "The bearer is absent from operation content; the public read adapter rejects unpublished and overlay snapshots, filters scope, checks expiry and current remote revocation, and exposes no token hash in the owner list.",
+    "P07-migration-semantic-validation": "The module migration producer validates source episode YAML and selected workspace grants; the generic filesystem/workspace producer owns exact-byte/map and grant writes, avoiding duplicate operations. The test checks selected-project isolation, hash/date/revocation retention, host-field exclusion, and map round-trip."
+  },
+  "validation": [
+    {
+      "command": "pnpm --filter @scriptorium/module-publishing typecheck",
+      "result": "passed at implementation commit ec2acbd"
+    },
+    {
+      "command": "pnpm --filter @scriptorium/module-publishing test",
+      "result": "passed, 5 of 5 tests at implementation commit ec2acbd"
+    },
+    {
+      "command": "pnpm --filter @scriptorium/module-publishing build",
+      "result": "passed at implementation commit ec2acbd"
+    },
+    {
+      "command": "git diff --check",
+      "result": "passed before implementation commit"
+    }
+  ],
+  "compositionLimits": [
+    "The module HTTP contributions are tested directly with remote and overlay snapshot readers; the P08 composed HTTP route and anonymous browser mount still require integrated acceptance.",
+    "The complete Core approval, checkpoint, confirmed push, data-root deletion, and reclone round trip remains an integrated P12 acceptance; this evidence does not claim that composed lifecycle."
+  ]
+}
