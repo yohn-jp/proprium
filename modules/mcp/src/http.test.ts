@@ -24,6 +24,7 @@ function actionContext(
   calls: string[],
   extraActions: ActionDescriptor[] = [],
   onStatusSignal?: (signal: AbortSignal | undefined) => void,
+  sourceOperationIds: string[] = ["op-one"],
 ) {
   const actions: ActionDescriptor[] = [
     { id: "core.status", module: "core", effect: "read" },
@@ -60,30 +61,38 @@ function actionContext(
         const coreProposalId = /^[A-Za-z0-9_-]{1,128}$/u.test(changeSet.id)
           ? changeSet.id
           : `story-cs-${createHash("sha256").update(changeSet.id, "utf8").digest("hex")}`;
+        const operationMap = Object.fromEntries(sourceOperationIds.map((id) => [id, id]));
+        const resultIds = Object.fromEntries(sourceOperationIds.map((id, index) => [id, `char-${index ? "two" : "one"}`]));
+        const resultPaths = Object.fromEntries(sourceOperationIds.map((id, index) => [id, [`characters/char-${index ? "two" : "one"}.yaml`]]));
+        const resultRevisions = Object.fromEntries(sourceOperationIds.map((id) => [id, `sha256-${id}`]));
         const sourceDetails = {
           sourceChangeSet: input,
           sourceFingerprint: "f".repeat(64),
           submittedAt: "2026-10-17T00:00:00.000Z",
           coreProposalId,
-          operationMap: { "op-one": "op-one" },
-          resultIds: { "op-one": "char-one" },
-          resultPaths: { "op-one": ["characters/char-one.yaml"] },
-          resultRevisions: { "op-one": "sha256-result" },
+          operationMap,
+          resultIds,
+          resultPaths,
+          resultRevisions,
           affectedEntities: {},
         };
         const proposal: ChangeProposal = {
           id: coreProposalId,
           snapshot,
-          operations: [{
-            id: "op-one",
+          operations: sourceOperationIds.map((id, index) => ({
+            id,
             generation: 0,
             repository: snapshot.repository,
             baseRemoteCommit: snapshot.remoteCommit,
             effect: "metadata",
             reads: [],
-            writes: [{ path: "characters/char-one.yaml", revision: "a".repeat(64), content: "updated" }],
+            writes: [{
+              path: `characters/char-${index ? "two" : "one"}.yaml`,
+              revision: "a".repeat(64),
+              content: "updated",
+            }],
             message: "test source change",
-          }],
+          })),
           source: "mcp",
           evidence: [{
             id: "ncs-one",
@@ -111,12 +120,12 @@ function actionContext(
             coreProposalId,
             submittedAt: sourceDetails.submittedAt,
             sourceFingerprint: sourceDetails.sourceFingerprint,
-            operationIds: ["op-one"],
-            operationMap: sourceDetails.operationMap,
+            operationIds: sourceOperationIds,
+            operationMap,
             dependencies: {},
-            resultIds: sourceDetails.resultIds,
-            resultPaths: sourceDetails.resultPaths,
-            resultRevisions: sourceDetails.resultRevisions,
+            resultIds,
+            resultPaths,
+            resultRevisions,
             affectedEntities: {},
             replayed: false,
           },
@@ -131,6 +140,12 @@ function actionContext(
       }
       if (actionId === "story.cooccurrence") {
         return { ok: true, snapshot, data: { edges: [], gaps: [] } };
+      }
+      if (actionId === "diagnostics.checkConsistency") {
+        return { ok: true, snapshot, data: { ok: true, scope: null, issues: [] } };
+      }
+      if (actionId === "diagnostics.checkContinuity") {
+        return { ok: true, snapshot, data: { scope: null, warnings: [] } };
       }
       return { ok: false, snapshot, error: { code: "not_found", message: "Unknown action", retryable: false } };
     },
@@ -245,6 +260,42 @@ test("compute_cooccurrence maps to the Story co-occurrence action without extra 
   }
 });
 
+test("consistency and continuity use their exact project-level diagnostics actions", async () => {
+  const calls: string[] = [];
+  const host = actionContext(calls, [
+    { id: "diagnostics.checkConsistency", module: "diagnostics", effect: "read" },
+    { id: "diagnostics.checkContinuity", module: "diagnostics", effect: "read" },
+  ]);
+  const contribution = createMcpHttpContribution(new Map());
+  const fetch: FetchLike = async (url, init) => contribution.handle(new Request(url, init), host);
+  const transport = new StreamableHTTPClientTransport(
+    new URL("http://scriptorium.test/api/projects/project-one/modules/mcp/streamable"),
+    { fetch },
+  );
+  const client = new Client({ name: "mcp-module-test", version: "1.0.0" });
+
+  try {
+    await client.connect(transport);
+    const { tools } = await client.listTools();
+    for (const name of ["check_consistency", "check_continuity"]) {
+      const tool = tools.find((candidate) => candidate.name === name);
+      assert.ok(tool);
+      assert.equal("scope" in (tool.inputSchema.properties ?? {}), false);
+    }
+    const consistency = await client.callTool({ name: "check_consistency", arguments: { project_id: "project-one" } });
+    assert.deepEqual(consistency.structuredContent, {
+      snapshot,
+      data: { ok: true, issue_count: 0, issues: [] },
+    });
+    const continuity = await client.callTool({ name: "check_continuity", arguments: { project_id: "project-one" } });
+    assert.deepEqual(continuity.structuredContent, { snapshot, data: [] });
+    assert.deepEqual(calls, ["diagnostics.checkConsistency", "diagnostics.checkContinuity"]);
+  } finally {
+    await transport.terminateSession().catch(() => undefined);
+    await client.close().catch(() => undefined);
+  }
+});
+
 test("submit_change_set returns a source ChangeSetRecord with its source ID", async () => {
   const calls: string[] = [];
   const host = actionContext(calls);
@@ -308,7 +359,96 @@ test("submit_change_set returns a source ChangeSetRecord with its source ID", as
       operationId: "op-one",
       kind: "entity.update",
       precondition: { kind: "revision", value: "r1" },
-      resultingRevision: "sha256-result",
+      resultingRevision: "sha256-op-one",
+      resultId: "char-one",
+    }]);
+  } finally {
+    await transport.terminateSession().catch(() => undefined);
+    await client.close().catch(() => undefined);
+  }
+});
+
+test("ChangeSet readback preserves approved IDs while selected checkpoints are pending", async () => {
+  const calls: string[] = [];
+  const host = actionContext(calls, [], undefined, ["op-one", "op-two"]);
+  const contribution = createMcpHttpContribution(new Map());
+  const fetch: FetchLike = async (url, init) => contribution.handle(new Request(url, init), host);
+  const transport = new StreamableHTTPClientTransport(
+    new URL("http://scriptorium.test/api/projects/project-one/modules/mcp/streamable"),
+    { fetch },
+  );
+  const client = new Client({ name: "mcp-module-test", version: "1.0.0" });
+  const changeSet = {
+    schemaVersion: 1,
+    id: "cs-two-operations",
+    projectId: "project-one",
+    goal: "Update two character profiles",
+    status: "proposed",
+    assessment: { confidence: 0.9, risk: "low" },
+    operations: ["op-one", "op-two"].map((id, index) => ({
+      id,
+      kind: "entity.update",
+      precondition: { kind: "revision", value: `r${index + 1}` },
+      target: { entityId: `char-${index ? "two" : "one"}` },
+      changes: { name: `New name ${index + 1}` },
+      evidenceIds: [`evidence-${index + 1}`],
+      assessment: { confidence: 0.9, risk: "low" },
+    })),
+    evidence: [1, 2].map((index) => ({
+      id: `evidence-${index}`,
+      sourceKind: "entity",
+      sourceId: `char-${index === 1 ? "one" : "two"}`,
+      revision: `r${index}`,
+    })),
+    diagnostics: { before: null, after: null },
+  };
+
+  try {
+    await client.connect(transport);
+    const submitted = await client.callTool({
+      name: "submit_change_set",
+      arguments: { project_id: "project-one", change_set: changeSet },
+    });
+    assert.notEqual(submitted.isError, true);
+    host.setProposalReview(["op-one", "op-two"], [{
+      operationId: "op-one",
+      generation: 0,
+      localCommit: "d".repeat(40),
+      remoteBase: "a".repeat(40),
+      revisions: [{ path: "characters/char-one.yaml", revision: "b".repeat(64) }],
+    }]);
+    const mixed = await client.callTool({
+      name: "get_change_set",
+      arguments: { project_id: "project-one", change_set_id: "cs-two-operations" },
+    });
+    const mixedRecord = mixed.structuredContent as { status: string; approvedOperationIds: string[]; result?: unknown };
+    assert.equal(mixedRecord.status, "approved");
+    assert.deepEqual(mixedRecord.approvedOperationIds, ["op-one", "op-two"]);
+    assert.equal("result" in mixedRecord, false);
+
+    host.setProposalReview(["op-one"], [{
+      operationId: "op-one",
+      generation: 0,
+      localCommit: "d".repeat(40),
+      remoteBase: "a".repeat(40),
+      revisions: [{ path: "characters/char-one.yaml", revision: "b".repeat(64) }],
+    }]);
+    const partial = await client.callTool({
+      name: "get_change_set",
+      arguments: { project_id: "project-one", change_set_id: "cs-two-operations" },
+    });
+    const partialRecord = partial.structuredContent as {
+      status: string;
+      approvedOperationIds: string[];
+      result: { status: string; operations: Array<{ operationId: string }> };
+    };
+    assert.equal(partialRecord.status, "partially-applied");
+    assert.deepEqual(partialRecord.approvedOperationIds, ["op-one"]);
+    assert.deepEqual(partialRecord.result.operations, [{
+      operationId: "op-one",
+      kind: "entity.update",
+      precondition: { kind: "revision", value: "r1" },
+      resultingRevision: "sha256-op-one",
       resultId: "char-one",
     }]);
   } finally {
