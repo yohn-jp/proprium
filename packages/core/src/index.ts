@@ -246,6 +246,7 @@ interface OperationMetadata {
   digest: string;
   operation: ChangeOperation;
   authorScope?: string;
+  hierarchyRevision?: string;
 }
 
 interface PublicationMetadata {
@@ -422,6 +423,11 @@ function isJsonValue(value: unknown, active = new WeakSet<object>(), depth = 0):
   return valid;
 }
 
+function operationRequiresHierarchyRevision(operation: ChangeOperation): boolean {
+  return operation.effect === "structure" || operation.writes.some(({ path: filePath }) =>
+    filePath === "plot/volumes" || filePath.startsWith("plot/volumes/"));
+}
+
 function assertUserOperationPaths(operation: ChangeOperation): void {
   const reserved = ["meta/scriptorium/operations", "meta/scriptorium/publications"];
   for (const write of operation.writes) {
@@ -508,7 +514,8 @@ function parseOperationMetadata(text: string, metadataPath: string): OperationMe
       throw new Error("Mismatched metadata");
     }
     if (!Number.isSafeInteger(value.sequence) || (value.sequence as number) <= 0 ||
-        (value.authorScope !== undefined && (typeof value.authorScope !== "string" || !value.authorScope.trim()))) {
+        (value.authorScope !== undefined && (typeof value.authorScope !== "string" || !value.authorScope.trim())) ||
+        (value.hierarchyRevision !== undefined && (typeof value.hierarchyRevision !== "string" || !/^[a-f0-9]{64}$/.test(value.hierarchyRevision)))) {
       throw new Error("Invalid operation metadata fields");
     }
     return {
@@ -517,6 +524,7 @@ function parseOperationMetadata(text: string, metadataPath: string): OperationMe
       digest: value.digest,
       operation: normalized,
       ...(typeof value.authorScope === "string" ? { authorScope: value.authorScope } : {}),
+      ...(typeof value.hierarchyRevision === "string" ? { hierarchyRevision: value.hierarchyRevision } : {}),
     };
   } catch {
     throw coreError(409, "operation_metadata_invalid", "The repository contains invalid Scriptorium operation metadata");
@@ -873,7 +881,11 @@ export class CoreStore implements MutationCoordinator {
   private readonly maxPushAttempts: number;
   private readonly queueTails = new Map<string, Promise<void>>();
   private readonly proposals = new Map<string, Map<string, ChangeProposal>>();
-  private readonly approvals = new Map<string, Map<string, { authorScope: string; operationDigests: Map<string, string> }>>();
+  private readonly approvals = new Map<string, Map<string, {
+    authorScope: string;
+    operationDigests: Map<string, string>;
+    hierarchyRevisions: Map<string, string>;
+  }>>();
 
   constructor(options: CoreStoreOptions) {
     if (!options?.dataDir) throw new TypeError("CoreStore requires dataDir");
@@ -1021,6 +1033,12 @@ export class CoreStore implements MutationCoordinator {
       if (!prefix || filePath === prefix || filePath.startsWith(`${prefix.replace(/\/$/, "")}/`)) files.push(filePath);
     }
     return files.sort((a, b) => a.localeCompare(b));
+  }
+
+  private async hierarchyTreeRevision(root: string, commit: string): Promise<string> {
+    if (!commit) return revisionForBytes(Buffer.alloc(0));
+    const tree = await gitBuffer(root, ["ls-tree", "-r", "--full-tree", "-z", commit, "--", "plot/volumes"]);
+    return revisionForBytes(tree);
   }
 
   private async createCommit(
@@ -1216,7 +1234,8 @@ export class CoreStore implements MutationCoordinator {
       const existing = operationMetadata.get(metadata.operation.id);
       if (existing && (
         existing.metadata.digest !== metadata.digest || existing.metadata.sequence !== metadata.sequence ||
-        existing.metadata.authorScope !== metadata.authorScope || existing.metadata.operation.generation !== metadata.operation.generation
+        existing.metadata.authorScope !== metadata.authorScope || existing.metadata.operation.generation !== metadata.operation.generation ||
+        existing.metadata.hierarchyRevision !== metadata.hierarchyRevision
       )) {
         throw coreError(409, "operation_metadata_invalid", "An operation's immutable repository binding changed in Git history");
       }
@@ -2206,7 +2225,7 @@ export class CoreStore implements MutationCoordinator {
         throw coreError(400, "invalid_approval", "An authenticated author approval is required");
       }
       const observation = await this.requireObservation(projectId);
-      const { record } = await this.getProject(projectId);
+      const { record, root } = await this.getProject(projectId);
       const proposal = this.proposals.get(record.id)?.get(approval.proposalId);
       if (!proposal) throw coreError(404, "proposal_not_found", "The proposal is no longer available for approval");
       if (snapshotKey({ repository: proposal.snapshot.repository, remoteCommit: proposal.snapshot.remoteCommit }) !== snapshotKey(observation.snapshot)) {
@@ -2217,16 +2236,31 @@ export class CoreStore implements MutationCoordinator {
         throw coreError(400, "invalid_approval", "Approval operation IDs must be a unique subset of the proposal");
       }
       const approvedDigests = new Map<string, string>();
+      const hierarchyRevisions = new Map<string, string>();
+      const hierarchyCommit = proposal.snapshot.overlayCommit ?? proposal.snapshot.remoteCommit;
       for (const operation of proposal.operations) {
-        if (approval.operationIds.includes(operation.id)) approvedDigests.set(operation.id, operationDigest(operation));
+        if (!approval.operationIds.includes(operation.id)) continue;
+        approvedDigests.set(operation.id, operationDigest(operation));
+        if (operationRequiresHierarchyRevision(operation)) {
+          hierarchyRevisions.set(operation.id, await this.hierarchyTreeRevision(root, hierarchyCommit));
+        }
       }
-      const approvals = this.approvals.get(record.id) ?? new Map<string, { authorScope: string; operationDigests: Map<string, string> }>();
-      approvals.set(approval.proposalId, { authorScope: approval.authorScope, operationDigests: approvedDigests });
+      const approvals = this.approvals.get(record.id) ?? new Map<string, {
+        authorScope: string;
+        operationDigests: Map<string, string>;
+        hierarchyRevisions: Map<string, string>;
+      }>();
+      approvals.set(approval.proposalId, { authorScope: approval.authorScope, operationDigests: approvedDigests, hierarchyRevisions });
       this.approvals.set(record.id, approvals);
     });
   }
 
-  private async checkpointUnlocked(projectId: string, operation: ChangeOperation, authorScope?: string): Promise<CheckpointReceipt> {
+  private async checkpointUnlocked(
+    projectId: string,
+    operation: ChangeOperation,
+    authorScope?: string,
+    approvedHierarchyRevisions: string[] = [],
+  ): Promise<CheckpointReceipt> {
     const observation = await this.requireObservation(projectId);
     const { record, root } = await this.getProject(projectId);
     try {
@@ -2262,13 +2296,27 @@ export class CoreStore implements MutationCoordinator {
       const current = parent ? await this.snapshotFile(root, parent, filePath) : null;
       if ((current?.revision ?? null) !== expected) throw coreError(409, "operation_precondition_conflict", `The file changed since the operation snapshot: ${filePath}`);
     }
+    let hierarchyRevision: string | undefined;
+    if (operationRequiresHierarchyRevision(operation)) {
+      hierarchyRevision = parent ? await this.hierarchyTreeRevision(root, parent) : revisionForBytes(Buffer.alloc(0));
+      if (!approvedHierarchyRevisions.includes(hierarchyRevision)) {
+        throw coreError(409, "hierarchy_precondition_conflict", "The project hierarchy changed after the operation was approved");
+      }
+    }
     const metadataPath = operationMetadataPath(operation.id);
     const touched = [...new Set([...operation.writes.map((write) => write.path), metadataPath])];
     if (parent && (await git(root, ["status", "--porcelain", "--untracked-files=all", "--", ...touched])).trim()) {
       throw coreError(409, "working_tree_path_dirty", "A changed file has uncommitted workspace edits");
     }
     const sequence = Math.max(0, ...remoteOperations.map((item) => item.sequence), ...localOperations.map((item) => item.sequence)) + 1;
-    const metadata: OperationMetadata = { version: 1, sequence, digest, operation: normalizedOperation(operation), ...(authorScope ? { authorScope } : {}) };
+    const metadata: OperationMetadata = {
+      version: 1,
+      sequence,
+      digest,
+      operation: normalizedOperation(operation),
+      ...(authorScope ? { authorScope } : {}),
+      ...(hierarchyRevision ? { hierarchyRevision } : {}),
+    };
     const commit = await this.createCommit(root, parent, operation.writes, [{ path: metadataPath, content: `${JSON.stringify(metadata, null, 2)}\n` }], operation.message);
     const receipt: CheckpointReceipt = {
       operationId: operation.id,
@@ -2312,9 +2360,14 @@ export class CoreStore implements MutationCoordinator {
         if (prior.digest !== digest || prior.operation.generation !== operation.generation) throw coreError(409, "operation_id_reused", "The operation ID and generation are already bound to a different payload");
         return prior.receipt;
       }
-      const approval = [...(this.approvals.get(record.id)?.values() ?? [])].find((item) => item.operationDigests.get(operation.id) === digest);
-      if (!approval) throw coreError(403, "author_approval_required", "An authenticated author must approve this operation before checkpointing");
-      return this.checkpointUnlocked(projectId, operation, approval.authorScope);
+      const approvals = [...(this.approvals.get(record.id)?.values() ?? [])]
+        .filter((item) => item.operationDigests.get(operation.id) === digest);
+      if (!approvals.length) throw coreError(403, "author_approval_required", "An authenticated author must approve this operation before checkpointing");
+      const hierarchyRevisions = [...new Set(approvals.flatMap((item) => {
+        const revision = item.hierarchyRevisions.get(operation.id);
+        return revision ? [revision] : [];
+      }))];
+      return this.checkpointUnlocked(projectId, operation, approvals.at(-1)?.authorScope, hierarchyRevisions);
     });
   }
 
@@ -2492,6 +2545,15 @@ export class CoreStore implements MutationCoordinator {
         outcomes.push({ operationId: operation.id, state: "conflict", receipt: stored.receipt, paths });
         continue;
       }
+      if (operationRequiresHierarchyRevision(operation)) {
+        const currentHierarchyRevision = replayHead
+          ? await this.hierarchyTreeRevision(root, replayHead)
+          : revisionForBytes(Buffer.alloc(0));
+        if (!stored.hierarchyRevision || currentHierarchyRevision !== stored.hierarchyRevision) {
+          outcomes.push({ operationId: operation.id, state: "conflict", receipt: stored.receipt, paths });
+          continue;
+        }
+      }
       const preconditions = new Map<string, string | null>();
       for (const precondition of [...operation.reads, ...operation.writes]) {
         if (preconditions.has(precondition.path) && preconditions.get(precondition.path) !== precondition.revision) {
@@ -2520,7 +2582,14 @@ export class CoreStore implements MutationCoordinator {
         outcomes.push({ operationId: operation.id, state: "unchanged", receipt: stored.receipt, paths });
         continue;
       }
-      const metadata: OperationMetadata = { version: 1, sequence: stored.sequence, digest: stored.digest, operation, ...(stored.authorScope ? { authorScope: stored.authorScope } : {}) };
+      const metadata: OperationMetadata = {
+        version: 1,
+        sequence: stored.sequence,
+        digest: stored.digest,
+        operation,
+        ...(stored.authorScope ? { authorScope: stored.authorScope } : {}),
+        ...(stored.hierarchyRevision ? { hierarchyRevision: stored.hierarchyRevision } : {}),
+      };
       const replayCommit = await this.createCommit(root, replayHead, operation.writes, [{ path: metaPath, content: `${JSON.stringify(metadata, null, 2)}\n` }], operation.message);
       const ref = `refs/scriptorium/reconciliations/${operation.id}`;
       const previous = await this.getRef(root, ref);
@@ -2831,7 +2900,10 @@ export class CoreStore implements MutationCoordinator {
           "Loom-Char-Count: " + input.text.length,
         ].join("\n").slice(0, 1024),
       };
-      try { await this.checkpointUnlocked(projectId, operation); }
+      const approvedHierarchyRevisions = operationRequiresHierarchyRevision(operation)
+        ? [await this.hierarchyTreeRevision(selected.root, selected.commit)]
+        : [];
+      try { await this.checkpointUnlocked(projectId, operation, undefined, approvedHierarchyRevisions); }
       catch (error) {
         if (error instanceof CoreError) throw error;
         throw coreError(500, "save_checkpoint_failed", "The scene checkpoint could not be created; inspect project status before retrying.");

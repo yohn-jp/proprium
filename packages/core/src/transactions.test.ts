@@ -53,6 +53,29 @@ async function approveAndCheckpoint(store: CoreStore, projectId: string, snapsho
   return store.checkpoint(projectId, op);
 }
 
+async function seedHierarchy(fixture: { seed: string }, chapterIds: string[]): Promise<void> {
+  const volumeDir = path.join(fixture.seed, "plot/volumes/vol1");
+  await fs.mkdir(volumeDir, { recursive: true });
+  await fs.writeFile(path.join(volumeDir, "volume.yaml"), "id: vol1\nname: Volume One\norder: 1\n");
+  for (const chapterId of chapterIds) {
+    const chapterDir = path.join(volumeDir, "chapters", chapterId);
+    await fs.mkdir(chapterDir, { recursive: true });
+    await fs.writeFile(path.join(chapterDir, "chapter.yaml"), `id: ${chapterId}\nvolume: vol1\ntitle: ${chapterId}\norder: 1\n`);
+  }
+  await git(fixture.seed, "add", "plot/volumes");
+  await git(fixture.seed, "commit", "-m", "Add Core hierarchy for concurrency test");
+  await git(fixture.seed, "push", "origin", "main");
+}
+
+async function addRemoteScene(fixture: { seed: string }, chapterId: string, sceneId: string): Promise<void> {
+  const directory = path.join(fixture.seed, "plot/volumes/vol1/chapters", chapterId, "scenes");
+  await fs.mkdir(directory, { recursive: true });
+  await fs.writeFile(path.join(directory, `${sceneId}.yaml`), `id: ${sceneId}\ntype: scene\nvolume: vol1\nchapter: ${chapterId}\ntitle: ${sceneId}\norder: 1\n`);
+  await git(fixture.seed, "add", "plot/volumes");
+  await git(fixture.seed, "commit", "-m", "Add a remote scene during an approved operation");
+  await git(fixture.seed, "push", "origin", "main");
+}
+
 test("manuscript snapshots enumerate and read exact documents at a pinned reachable commit", async () => {
   const fixture = await remoteFixture();
   try {
@@ -197,6 +220,90 @@ test("Core hierarchy builders create, reorder, restore, and delete only through 
     await assert.rejects(store.readSceneSnapshot(project.id, "scene2", "checkpoint"), (error: unknown) =>
       error instanceof CoreError && error.code === "scene_not_found");
     assert.equal((await store.readSceneSnapshot(project.id, "scene1", "checkpoint")).scene.text, "First body.\n");
+  } finally {
+    await fs.rm(fixture.root, { recursive: true, force: true });
+  }
+});
+
+test("stale chapter deletion is rejected when the remote hierarchy gains a child", async () => {
+  const fixture = await remoteFixture();
+  try {
+    await seedHierarchy(fixture, ["ch1"]);
+    const store = new CoreStore({ dataDir: path.join(fixture.root, "state"), allowLocalRemotes: true });
+    const project = await store.registerProject({ url: fixture.remote });
+    const deletion = await store.buildDeleteHierarchyOperation(project.id, { kind: "chapter", id: "ch1", volumeId: "vol1" });
+    const proposal = await store.propose(project.id, {
+      id: "proposal_delete_chapter_stale_remote",
+      snapshot: deletion.snapshot,
+      operations: [deletion.operation],
+      source: "author",
+    });
+    await store.approve(project.id, { proposalId: proposal.id, operationIds: [deletion.operation.id], authorScope: "owner" });
+
+    await addRemoteScene(fixture, "ch1", "remote_scene");
+    await assert.rejects(store.checkpoint(project.id, deletion.operation), (error: unknown) =>
+      error instanceof CoreError && error.code === "hierarchy_precondition_conflict");
+    assert.match(await git(fixture.root, "--git-dir", fixture.remote, "show", "main:plot/volumes/vol1/chapters/ch1/chapter.yaml"), /id: ch1/);
+    assert.match(await git(fixture.root, "--git-dir", fixture.remote, "show", "main:plot/volumes/vol1/chapters/ch1/scenes/remote_scene.yaml"), /id: remote_scene/);
+    assert.equal((await store.observe(project.id)).pending.length, 0);
+  } finally {
+    await fs.rm(fixture.root, { recursive: true, force: true });
+  }
+});
+
+test("reconcile retains a structure checkpoint as conflicted when remote hierarchy membership changed", async () => {
+  const fixture = await remoteFixture();
+  try {
+    await seedHierarchy(fixture, ["ch1"]);
+    const store = new CoreStore({ dataDir: path.join(fixture.root, "state"), allowLocalRemotes: true });
+    const project = await store.registerProject({ url: fixture.remote });
+    const deletion = await store.buildDeleteHierarchyOperation(project.id, { kind: "chapter", id: "ch1", volumeId: "vol1" });
+    await approveAndCheckpoint(store, project.id, deletion.snapshot, deletion.operation);
+
+    await addRemoteScene(fixture, "ch1", "remote_scene");
+    const reconciliation = await store.reconcile(project.id);
+    assert.deepEqual(reconciliation.operations.map(({ operationId, state, paths }) => ({ operationId, state, paths })), [{
+      operationId: deletion.operation.id,
+      state: "conflict",
+      paths: ["plot/volumes/vol1/chapters/ch1/chapter.yaml"],
+    }]);
+    assert.match(await git(fixture.root, "--git-dir", fixture.remote, "show", "main:plot/volumes/vol1/chapters/ch1/scenes/remote_scene.yaml"), /id: remote_scene/);
+    assert.equal(await (await store.reader(project.id, "checkpoint")).read("plot/volumes/vol1/chapters/ch1/chapter.yaml"), null);
+    assert.match((await store.reader(project.id, "remote")).snapshot.remoteCommit, /^[a-f0-9]{40}$/);
+    assert.equal((await store.observe(project.id)).pending.length, 1);
+  } finally {
+    await fs.rm(fixture.root, { recursive: true, force: true });
+  }
+});
+
+test("same-snapshot hierarchy creations with a duplicate global ID cannot both checkpoint", async () => {
+  const fixture = await remoteFixture();
+  try {
+    await seedHierarchy(fixture, ["ch1", "ch2"]);
+    const store = new CoreStore({ dataDir: path.join(fixture.root, "state"), allowLocalRemotes: true });
+    const project = await store.registerProject({ url: fixture.remote });
+    const snapshot = (await store.observe(project.id)).snapshot;
+    const first = await store.buildCreateHierarchyOperation(project.id, {
+      kind: "scene", id: "shared_scene", title: "Shared", volumeId: "vol1", chapterId: "ch1", manuscriptBody: "First.\n",
+    }, "remote", snapshot);
+    const second = await store.buildCreateHierarchyOperation(project.id, {
+      kind: "scene", id: "shared_scene", title: "Shared", volumeId: "vol1", chapterId: "ch2", manuscriptBody: "Second.\n",
+    }, "remote", snapshot);
+    assert.notEqual(first.operation.writes[0]?.path, second.operation.writes[0]?.path);
+    await approveAndCheckpoint(store, project.id, first.snapshot, first.operation);
+    const secondProposal = await store.propose(project.id, {
+      id: `proposal_${second.operation.id}`,
+      snapshot: second.snapshot,
+      operations: [second.operation],
+      source: "author",
+    });
+    await store.approve(project.id, { proposalId: secondProposal.id, operationIds: [second.operation.id], authorScope: "owner" });
+
+    await assert.rejects(store.checkpoint(project.id, second.operation), (error: unknown) =>
+      error instanceof CoreError && error.code === "hierarchy_precondition_conflict");
+    const checkpointTree = (await store.readTreeSnapshot(project.id, "checkpoint")).tree;
+    assert.deepEqual(checkpointTree.volumes[0]?.chapters.map((chapter) => chapter.scenes.map((scene) => scene.id)), [["shared_scene"], []]);
+    assert.equal((await store.observe(project.id)).pending.length, 1);
   } finally {
     await fs.rm(fixture.root, { recursive: true, force: true });
   }
