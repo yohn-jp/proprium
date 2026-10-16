@@ -13,7 +13,7 @@
     "repository": "yohn-jp/scriptorium",
     "baseCommit": "97b96bee11bd3b6202ac17cdc26a6a0beb95f38d",
     "branch": "work/7-p05",
-    "implementationCommit": "048ff59addd09dd858b529098855e12e525ffa46"
+    "implementationCommit": "9aaf7ad7bffe9101c38165db732ce52020fd4b37"
   },
   "sourceClassification": [
     {
@@ -38,14 +38,17 @@
       "target": [
         "meta/scriptorium/modules/story/state-proposals.jsonl",
         "meta/scriptorium/modules/story/zukan-suggestions.jsonl",
-        "same-origin migration recovery for unresolved rows"
+        "meta/scriptorium/modules/story/legacy/sqlite/<database>/<table>.jsonl for opaque source-row recovery"
       ],
       "sourceProof": [
         "packages/core/src/worldState/proposals.ts",
         "packages/core/src/nlp/zukanSuggestions/store.ts"
       ],
-      "targetProof": ["packages/migration/src/producers/sqlite.ts"],
-      "preservation": "Stable row IDs and complete row fields are retained for approved/rejected decisions; other statuses remain provisional for author review. Story does not duplicate the generic SQLite operations."
+      "targetProof": [
+        "modules/story/src/migration/workflowRows.ts",
+        "packages/migration/src/producers/sqlite.ts"
+      ],
+      "preservation": "Story semantically converts workflow rows into the JSONL records consumed by its proposal/review actions, retaining source IDs, every status, unknown non-secret fields and source-database provenance. Pending/proposed/stale rows remain reviewable; divergent duplicate IDs are withheld with explicit recovery. P04 separately retains the opaque SQLite row snapshots; credentials are redacted."
     },
     {
       "source": [
@@ -81,10 +84,12 @@
   "implementedBehavior": [
     "Snapshot-bound entity list/get/create/update/reorder, entity-specific reference validation, source-compatible entity revisions, tags, nested notes, backlinks, appearances and optional tokenizer-backed tag suggestions.",
     "Volume/chapter/scene tree and scene context, including manuscript and scene revisions; scene creation with optional sibling insertion uses one atomic proposal and captures sibling preconditions.",
+    "Reference-changing operations include target file revision preconditions; create operations guard both bible and plot membership, while source ChangeSets retain dependencies for earlier writes represented by later virtual scopes.",
     "One-proposal Story bridge for all nine supported NarrativeChangeSet operation kinds, retaining the full source object, operation mapping, dependencies, source result identities/revisions, submittedAt and original source ID in bounded Core evidence.",
     "Thread lifecycle/status, relationship graph, location map, chronology and source-derived character co-occurrence projections.",
     "World-state proposal lifecycle, confirmed event folding, reader disclosures, character-reader knowledge gaps and thread forget-risk computation.",
-    "React contribution panels for entity-specific editing and structured nested notes, references/tags/backlinks/appearances, scene metadata, thread lifecycle, relationship overlay, chronology, location links, reader knowledge, world state and series binding."
+    "React contribution panels for entity-specific editing and structured nested notes, references/tags/backlinks/appearances, scene metadata, thread lifecycle, relationship overlay, chronology, location links, reader knowledge, world state, Zukan review, and series binding. Work and linked Bible entities are browsable by name, type, alias, tag or ID; the Bible view remains read-only and carries both snapshot identities.",
+    "Zukan suggestion approval updates nested entity notes and workflow status atomically through a reviewable Core proposal; rejection updates only workflow status."
   ],
   "proofs": [
     {
@@ -96,11 +101,12 @@
         "modules/story/src/actions.test.ts",
         "modules/story/src/domain/**/*.test.ts",
         "modules/story/src/migration/producer.ts",
+        "modules/story/src/migration/workflowRows.ts",
         "modules/story/src/migration/producer.test.ts"
       ],
       "command": "pnpm --filter @scriptorium/module-story test",
-      "result": "42 passed, 0 failed on implementation commit 048ff59addd09dd858b529098855e12e525ffa46.",
-      "scope": "Entity and scene proposals, source revision and reference validation, optional NLP absence, all nine source ChangeSet kinds and retry identity, source FNV manuscript identity, state-proposal event/conflict/manuscript freshness and JSONL revision precondition, source-to-Core ID mapping, series bindings, co-occurrence, domain graph/chronology/thread/world/knowledge algorithms, exact-byte migration, and explicit series repository mapping."
+      "result": "46 passed, 0 failed on implementation commit 9aaf7ad7bffe9101c38165db732ce52020fd4b37.",
+      "scope": "Entity and scene proposals, referenced-file and membership-scope preconditions, thread relation direction/lifecycle, Zukan workflow status and nested-note preservation, optional NLP absence, all nine source ChangeSet kinds and retry identity, source FNV manuscript identity, state-proposal event/conflict/manuscript freshness and JSONL revision precondition, source-to-Core ID mapping, series binding and read-only overlay, co-occurrence, domain graph/chronology/thread/world/knowledge algorithms, exact-byte migration, workflow semantic migration and explicit series repository mapping."
     },
     {
       "id": "P05-STORY-BUILD",
@@ -108,7 +114,7 @@
       "status": "passed",
       "targetFiles": ["modules/story/src/**/*.ts", "modules/story/src/**/*.tsx"],
       "command": "pnpm --filter @scriptorium/module-story typecheck && pnpm --filter @scriptorium/module-story build",
-      "result": "Both commands passed on implementation commit 048ff59addd09dd858b529098855e12e525ffa46.",
+      "result": "Both commands passed on implementation commit 9aaf7ad7bffe9101c38165db732ce52020fd4b37.",
       "scope": "Compiles the server action producer, migration producer and React browser entry."
     },
     {
