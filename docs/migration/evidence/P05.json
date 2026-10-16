@@ -13,7 +13,7 @@
     "repository": "yohn-jp/scriptorium",
     "baseCommit": "97b96bee11bd3b6202ac17cdc26a6a0beb95f38d",
     "branch": "work/7-p05",
-    "implementationCommit": "61745b5b74aad31b7d587413981aed7cdf8d415d"
+    "implementationCommit": "0f2714b836d66e57cc302babe7f8edd5f405db42"
   },
   "sourceClassification": [
     {
@@ -99,7 +99,7 @@
         "modules/story/src/migration/producer.test.ts"
       ],
       "command": "node --import tsx --test modules/story/src/actions.test.ts modules/story/src/domain/*.test.ts modules/story/src/migration/*.test.ts",
-      "result": "40 passed, 0 failed on implementation commit 61745b5b74aad31b7d587413981aed7cdf8d415d.",
+      "result": "40 passed, 0 failed on implementation commit 0f2714b836d66e57cc302babe7f8edd5f405db42.",
       "scope": "Entity and scene proposals, source revision and reference validation, optional NLP absence, all nine source ChangeSet kinds and retry identity, source-to-Core ID mapping, series bindings, co-occurrence, domain graph/chronology/thread/world/knowledge algorithms, exact-byte migration, and explicit series repository mapping."
     },
     {
@@ -108,7 +108,7 @@
       "status": "passed",
       "targetFiles": ["modules/story/src/**/*.ts", "modules/story/src/**/*.tsx"],
       "command": "pnpm --filter @scriptorium/module-story typecheck && pnpm --filter @scriptorium/module-story build",
-      "result": "Both commands passed on implementation commit 61745b5b74aad31b7d587413981aed7cdf8d415d.",
+      "result": "Both commands passed on implementation commit 0f2714b836d66e57cc302babe7f8edd5f405db42.",
       "scope": "Compiles the server action producer, migration producer and React browser entry."
     },
     {
