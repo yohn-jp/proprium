@@ -3,7 +3,7 @@ import { fileURLToPath } from "node:url";
 import { test } from "node:test";
 import type { ActionDescriptor, ActionResult, ChangeOperation, ChangeProposal, JobRequest, ModuleAction, ModuleActionContext, ModuleDefinition, ModuleId, ModuleManifest, SnapshotId, ValueSchema, WorkerService } from "@scriptorium/contracts";
 import { createStoryActions } from "../../../modules/story/src/actions.js";
-import { ModuleRuntime, ModuleRuntimeError, resolveModulePlan, SharedCapabilityPool, type WorkerJobLifecycleSnapshot } from "./index.js";
+import { ModuleRuntime, ModuleRuntimeError, resolveModulePlan, SharedCapabilityPool, type DomainJobProgressSink, type WorkerJobLifecycleSnapshot } from "./index.js";
 
 const snapshot: SnapshotId = {
   repository: { provider: "github", repositoryId: "repo-1", defaultBranch: "main", ownerScope: "owner", url: "https://github.com/owner/repo" },
@@ -323,6 +323,134 @@ test("abort while the host creates a queued record prevents the module action fr
     controller.abort();
     const result = await invocation;
     assert.equal(executions, 0);
+    assert.equal(result.ok, false);
+    if (!result.ok) assert.equal(result.error.code, "action_cancelled");
+  } finally {
+    await runtime.shutdown();
+  }
+});
+
+test("domain progress stays scoped to its host job through nested and overlapping invocations", async () => {
+  const metadata = manifest("speaker");
+  const outerIds = new Set<string>();
+  let releaseBoth!: () => void;
+  const bothStarted = new Promise<void>((resolve) => { releaseBoth = resolve; });
+  const progressEvents: string[] = [];
+  const makeOuter = (id: string, type: string): ModuleAction => ({
+    id, effect: "compute", job: { type }, inputSchema: schema, outputSchema: schema,
+    async invoke(input, context) {
+      const name = (input as { name: string }).name;
+      outerIds.add(name);
+      if (outerIds.size === 2) releaseBoth();
+      await bothStarted;
+      assert.equal(typeof context.reportProgress, "function");
+      await context.reportProgress!(0.1);
+      const child = await context.invoke("speaker.inner", { name, progress: name === "a" ? 0.4 : 0.6 });
+      await context.reportProgress!(0.9);
+      return { ok: true, snapshot: context.reader.snapshot, data: { child } };
+    },
+  });
+  const inner: ModuleAction = {
+    id: "inner", effect: "compute", job: { type: "aspect-review" }, inputSchema: schema, outputSchema: schema,
+    async invoke(input, context) {
+      const value = input as { name: string; progress: number };
+      assert.equal(typeof context.reportProgress, "function");
+      await context.reportProgress!(value.progress);
+      return { ok: true, snapshot: context.reader.snapshot, data: { name: value.name } };
+    },
+  };
+  const runtime = new ModuleRuntime({
+    manifests: [metadata], enabled: ["speaker"], cacheDirectory: "/tmp/scriptorium-runtime-test",
+    loaders: { speaker: async () => ({ manifest: metadata, actions: [makeOuter("outer-a", "speaker-eval"), makeOuter("outer-b", "retrain"), inner], ui: [], async dispose() {} }) },
+  });
+  const tracked: string[] = [];
+  const host = {
+    ...readContext(), access: "owner" as const,
+    async trackDomainJob(descriptor: ActionDescriptor & { job: NonNullable<ActionDescriptor["job"]> }, _actionSnapshot: SnapshotId, _signal: AbortSignal, execute: (reportProgress?: DomainJobProgressSink) => Promise<ActionResult>): Promise<ActionResult> {
+      tracked.push(descriptor.id);
+      return execute(async (progress) => { progressEvents.push(`${descriptor.id}:${progress}`); });
+    },
+  };
+  try {
+    const results = await Promise.all([
+      runtime.invokeAction("speaker", "speaker.outer-a", { name: "a" }, host),
+      runtime.invokeAction("speaker", "speaker.outer-b", { name: "b" }, host),
+    ]);
+    assert.deepEqual(results.map((result) => result.ok), [true, true]);
+    assert.deepEqual(tracked.sort(), ["speaker.outer-a", "speaker.outer-b"], "nested declared jobs remain under their tracked outer invocation");
+    assert.deepEqual(progressEvents.sort(), [
+      "speaker.outer-a:0.1", "speaker.outer-a:0.4", "speaker.outer-a:0.9",
+      "speaker.outer-b:0.1", "speaker.outer-b:0.6", "speaker.outer-b:0.9",
+    ]);
+  } finally {
+    await runtime.shutdown();
+  }
+});
+
+test("domain progress rejects non-finite values and clamps finite values to the source range", async () => {
+  const metadata = manifest("speaker");
+  const delivered: number[] = [];
+  const runtime = new ModuleRuntime({
+    manifests: [metadata], enabled: ["speaker"], cacheDirectory: "/tmp/scriptorium-runtime-test",
+    loaders: { speaker: async () => definition(metadata, {
+      id: "evaluate", effect: "compute", job: { type: "speaker-eval" }, inputSchema: schema, outputSchema: schema,
+      async invoke(_input, context) {
+        await context.reportProgress?.(-0.5);
+        await context.reportProgress?.(1.5);
+        await context.reportProgress?.(Number.NaN);
+        return { ok: true, snapshot: context.reader.snapshot, data: { evaluated: true } };
+      },
+    }) },
+  });
+  const host = {
+    ...readContext(), access: "owner" as const,
+    async trackDomainJob(_descriptor: ActionDescriptor & { job: NonNullable<ActionDescriptor["job"]> }, _actionSnapshot: SnapshotId, _signal: AbortSignal, execute: (reportProgress?: DomainJobProgressSink) => Promise<ActionResult>): Promise<ActionResult> {
+      return execute(async (progress) => { delivered.push(progress); });
+    },
+  };
+  try {
+    const result = await runtime.invokeAction("speaker", "speaker.evaluate", {}, host);
+    assert.deepEqual(delivered, [0, 1]);
+    assert.equal(result.ok, false);
+    if (!result.ok) assert.equal(result.error.code, "invalid_job_progress");
+  } finally {
+    await runtime.shutdown();
+  }
+});
+
+test("cancellation during progress delivery stops the action before it continues", async () => {
+  const metadata = manifest("speaker");
+  const controller = new AbortController();
+  let progressStarted!: () => void;
+  const reported = new Promise<void>((resolve) => { progressStarted = resolve; });
+  let continued = false;
+  const runtime = new ModuleRuntime({
+    manifests: [metadata], enabled: ["speaker"], cacheDirectory: "/tmp/scriptorium-runtime-test",
+    loaders: { speaker: async () => definition(metadata, {
+      id: "evaluate", effect: "compute", job: { type: "speaker-eval" }, inputSchema: schema, outputSchema: schema,
+      async invoke(_input, context) {
+        await context.reportProgress?.(0.5);
+        continued = true;
+        return { ok: true, snapshot: context.reader.snapshot, data: { evaluated: true } };
+      },
+    }) },
+  });
+  const host = {
+    ...readContext(controller.signal), access: "owner" as const,
+    async trackDomainJob(_descriptor: ActionDescriptor & { job: NonNullable<ActionDescriptor["job"]> }, _actionSnapshot: SnapshotId, signal: AbortSignal, execute: (reportProgress?: DomainJobProgressSink) => Promise<ActionResult>): Promise<ActionResult> {
+      return execute(async () => {
+        const aborted = new Promise<void>((resolve) => signal.addEventListener("abort", () => resolve(), { once: true }));
+        progressStarted();
+        await aborted;
+      });
+    },
+  };
+  try {
+    const invocation = runtime.invokeAction("speaker", "speaker.evaluate", {}, host);
+    await reported;
+    controller.abort();
+    const result = await invocation;
+    assert.equal(continued, false);
     assert.equal(result.ok, false);
     if (!result.ok) assert.equal(result.error.code, "action_cancelled");
   } finally {

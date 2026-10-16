@@ -6,6 +6,8 @@ import { isModuleId, MODULE_IDS, ModuleRuntimeError } from "./runtime-error.js";
 import { WorkerSupervisor, type WorkerJobLifecycleListener, type WorkerSupervisorOptions } from "./worker-supervisor.js";
 
 export type ModuleLoader = (context: ModuleContext) => Promise<ModuleDefinition>;
+export type DomainJobProgressSink = (progress: number) => Promise<void>;
+export type DomainJobActionExecutor = (reportProgress?: DomainJobProgressSink) => Promise<ActionResult>;
 
 export interface ModuleRuntimeOptions {
   manifests: readonly ModuleManifest[];
@@ -39,7 +41,7 @@ export interface ActionHostContext {
     descriptor: ActionDescriptor & { job: NonNullable<ActionDescriptor["job"]> },
     snapshot: SnapshotId,
     signal: AbortSignal,
-    execute: () => Promise<ActionResult>,
+    execute: DomainJobActionExecutor,
   ): Promise<ActionResult>;
   propose(
     operations: ChangeOperation[],
@@ -542,6 +544,7 @@ export class ModuleRuntime {
     depth: number,
     inheritedEffect?: ModuleAction["effect"],
     domainJobTracked = false,
+    progressSink?: DomainJobProgressSink,
   ): Promise<ActionResult> {
     const snapshot = host?.reader?.snapshot;
     let session: ModuleSession | undefined;
@@ -564,14 +567,14 @@ export class ModuleRuntime {
       callStarted = true;
       const actionSignal = AbortSignal.any([session.controller.signal, host.signal, parentSignal]);
       if (actionSignal.aborted) throw new ModuleRuntimeError("action_cancelled", "Action was cancelled");
-      const proposals: ChangeProposal[] = [];
       const job = copyActionJobDescriptor(action);
       const track = job && !domainJobTracked ? host.trackDomainJob : undefined;
       const trackingActive = domainJobTracked || track !== undefined;
-      const context = this.createActionContext(manifest.id, action.effect, policy, host, actionSignal, proposals, depth, trackingActive);
-      const executeAction = async (): Promise<ActionResult> => {
+      const executeAction = async (actionProgressSink?: DomainJobProgressSink): Promise<ActionResult> => {
         try {
           if (actionSignal.aborted) throw new ModuleRuntimeError("action_cancelled", "Action was cancelled");
+          const proposals: ChangeProposal[] = [];
+          const context = this.createActionContext(manifest.id, action.effect, policy, host, actionSignal, proposals, depth, trackingActive, actionProgressSink);
           const result = await action.invoke(parsed, context);
           if (actionSignal.aborted) throw new ModuleRuntimeError("action_cancelled", "Action was cancelled");
           const validated = this.validateActionResult(action, result, host.reader.snapshot);
@@ -587,9 +590,9 @@ export class ModuleRuntime {
         };
         let execution: Promise<ActionResult> | undefined;
         let trackerSettled = false;
-        const execute = () => {
+        const execute: DomainJobActionExecutor = (reportProgress) => {
           if (trackerSettled && !execution) return Promise.reject(new ModuleRuntimeError("action_tracking_closed", "Domain job tracking ended before action execution started"));
-          return execution ??= executeAction();
+          return execution ??= executeAction(reportProgress);
         };
         try {
           const trackedResult = await track(descriptor, host.reader.snapshot, actionSignal, execute);
@@ -603,7 +606,7 @@ export class ModuleRuntime {
           if (execution) await execution.catch(() => {});
         }
       }
-      return await executeAction();
+      return await executeAction(progressSink);
     } catch (error) {
       if (!snapshot) throw error;
       return actionFailure(snapshot, toMachineError(error));
@@ -627,6 +630,7 @@ export class ModuleRuntime {
     depth: number,
     inheritedEffect?: ModuleAction["effect"],
     domainJobTracked = false,
+    progressSink?: DomainJobProgressSink,
   ): Promise<ActionResult> {
     const snapshot = host.reader.snapshot;
     try {
@@ -647,7 +651,7 @@ export class ModuleRuntime {
       const parsed = action.inputSchema.parse(input);
       const signal = AbortSignal.any([host.signal, parentSignal]);
       const proposals: ChangeProposal[] = [];
-      const context = this.createActionContext("core", action.effect, policy, host, signal, proposals, depth, domainJobTracked);
+      const context = this.createActionContext("core", action.effect, policy, host, signal, proposals, depth, domainJobTracked, progressSink);
       const result = await action.invoke(parsed, context);
       if (signal.aborted) throw new ModuleRuntimeError("action_cancelled", "Action was cancelled");
       const validated = this.validateActionResult(action, result, snapshot);
@@ -666,15 +670,16 @@ export class ModuleRuntime {
     depth: number,
     inheritedEffect: ModuleAction["effect"],
     domainJobTracked: boolean,
+    progressSink?: DomainJobProgressSink,
   ): Promise<ActionResult> {
     const separator = actionId.indexOf(".");
     if (separator < 1 || separator === actionId.length - 1) {
       return actionFailure(host.reader.snapshot, machineError("action_not_found", `Namespaced action ${actionId} is unavailable`));
     }
     const owner = actionId.slice(0, separator);
-    if (owner === "core") return this.invokeCoreAction(actionId, input, host, signal, depth, inheritedEffect, domainJobTracked);
+    if (owner === "core") return this.invokeCoreAction(actionId, input, host, signal, depth, inheritedEffect, domainJobTracked, progressSink);
     if (!isModuleId(owner)) return actionFailure(host.reader.snapshot, machineError("action_not_found", `Namespaced action ${actionId} is unavailable`));
-    return this.invokeModuleAction(owner, actionId, input, host, signal, depth, inheritedEffect, domainJobTracked);
+    return this.invokeModuleAction(owner, actionId, input, host, signal, depth, inheritedEffect, domainJobTracked, progressSink);
   }
 
   private effectAllowed(parent: ModuleAction["effect"], child: ModuleAction["effect"]): boolean {
@@ -692,16 +697,23 @@ export class ModuleRuntime {
     proposals: ChangeProposal[],
     depth: number,
     domainJobTracked: boolean,
+    progressSink?: DomainJobProgressSink,
   ): ModuleActionContext {
     return {
       projectId: host.projectId,
       reader: host.reader,
       signal,
+      ...(progressSink ? { reportProgress: async (progress: number) => {
+        if (!Number.isFinite(progress)) throw new ModuleRuntimeError("invalid_job_progress", "Domain job progress must be finite");
+        if (signal.aborted) throw new ModuleRuntimeError("action_cancelled", "Action was cancelled");
+        await progressSink(Math.max(0, Math.min(1, progress)));
+        if (signal.aborted) throw new ModuleRuntimeError("action_cancelled", "Action was cancelled");
+      } } : {}),
       invoke: async (actionId, input, callSignal) => {
         const invocationSignal = callSignal ? AbortSignal.any([signal, callSignal]) : signal;
         if (invocationSignal.aborted) return actionFailure(host.reader.snapshot, machineError("action_cancelled", "Action was cancelled"));
         if (host.access === "public") return actionFailure(host.reader.snapshot, machineError("public_action_unavailable", "Public routes cannot invoke composed actions"));
-        const result = await this.invokeComposedAction(actionId, input, host, invocationSignal, depth + 1, inheritedEffect, domainJobTracked);
+        const result = await this.invokeComposedAction(actionId, input, host, invocationSignal, depth + 1, inheritedEffect, domainJobTracked, progressSink);
         if (invocationSignal.aborted) return actionFailure(host.reader.snapshot, machineError("action_cancelled", "Action was cancelled"));
         if (result.ok && result.proposals?.length) proposals.push(...result.proposals);
         return result;
