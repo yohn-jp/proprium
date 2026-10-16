@@ -50,12 +50,12 @@ The Dockerfile pins the Node multi-platform image index by digest, so this tempo
 
 ## Local verification record
 
-The values below are recorded from an actual local OCI build and container run after the source packages and lockfile are integrated. The image ID identifies the locally built image; this project does not publish container images as part of source verification.
+The values below are recorded from an actual local OCI build and container run on main commit `2067a9292d4f4670e0824ead59955fca2a8613e0`. The image ID identifies the locally built image; this project does not publish container images as part of source verification.
 
 | Field | Result |
 | --- | --- |
-| OCI engine and version | Pending integrated build |
-| Image tag | Pending integrated build |
-| Image ID and platform | Pending integrated build |
-| Build and startup probe | Pending integrated build |
-| Production dependency audit | Pending integrated build |
+| OCI engine and version | Rootless Podman 5.8.8 on NixOS x86_64, provided ephemerally by Nix |
+| Image tag | `localhost/scriptorium:final-2067a92` |
+| Image ID and platform | `f9ee951a8985d047734bf5eca687bd7256c1fa8e2cdaba18eaf960f3bc05ea6a`; manifest `sha256:cd0752b6a7cfba5328a69c18702aba331ab287fedb30b68caf9cbcccfd5fbfe5`; `linux/amd64`; 189,360,435 bytes |
+| Build and startup probe | Passed: OCI build, `/api/health`, UI HTML/CSS/JavaScript MIME types, UID 1000, and writable `/data` |
+| Production dependency audit | Passed: one runtime package version, `yaml@2.9.1`; no NLP, model, or build/test dependencies |
