@@ -1,0 +1,116 @@
+{
+  "schemaVersion": 1,
+  "task": "P10",
+  "implementationStatus": "in_progress",
+  "acceptanceStatus": "pending",
+  "source": {
+    "repository": "yohn-jp/arcadia-loom",
+    "commit": "edc033c2c9466274a334299dadfa426661d957d9",
+    "readOnly": true,
+    "ledgerItems": ["docs/migration/ledger.json#N06", "docs/migration/ledger.json#R16", "docs/migration/ledger.json#R36"]
+  },
+  "target": {
+    "repository": "yohn-jp/scriptorium",
+    "baseCommit": "c8c4eb8de0dfee2b764e0aa5a62002bf5b0a9af9",
+    "branch": "work/7-p10",
+    "implementationCommits": [
+      "5d54a650e062f2cfcc6cb47b5a489b426c932daa",
+      "76d1e6606db271e5e9030928578991ed11efcc2d",
+      "39431ac6c032e5988e02173be2516af2f7a6b224"
+    ],
+    "testedHead": "39431ac6c032e5988e02173be2516af2f7a6b224"
+  },
+  "sourceClassification": [
+    {
+      "source": ["meta/speaker-corrections.jsonl", "scene-level speakerOverrides in canonical plot/volumes/**/*.yaml"],
+      "category": "authoritative author corrections",
+      "target": ["meta/scriptorium/modules/speaker/corrections.jsonl", "the existing canonical plot/volumes scene YAML path"],
+      "sourceProof": ["packages/core/src/speakerService.ts", "packages/core/src/speakerCorrectionLog.ts"],
+      "targetProof": ["modules/speaker/src/index.ts", "packages/migration/src/producers/filesystem.ts"],
+      "preservation": "Corrections update the canonical scene override and namespaced correction log through a pinned Core ChangeOperation proposal. P04's generic file producer performs the legacy path mapping; P10 does not create a duplicate speaker-specific importer or writer."
+    },
+    {
+      "source": ["meta/speaker-model.json"],
+      "category": "authoritative adopted model",
+      "target": ["meta/scriptorium/modules/speaker/adopted-model.json"],
+      "sourceProof": ["packages/core/src/speakerReranker.ts", "packages/core/src/speakerRetrainRunner.ts"],
+      "targetProof": ["modules/speaker/src/index.ts", "modules/speaker/src/algorithms/speakerReranker.ts"],
+      "preservation": "Only a model that improves the deterministic held-out score by at least five percentage points is proposed, with the canonical model file revision as a read precondition. The model is author state; the worker never writes it. P04 owns the generic legacy-path mapping."
+    },
+    {
+      "source": [".arcadia/speaker-eval-latest.json", "meta/speaker-rule-gates.json", "shared evaluation/retraining job status"],
+      "category": "derived and ephemeral",
+      "target": ["ModuleContext.cacheDirectory/speaker/evaluation-<identity>.json", "ModuleContext.cacheDirectory/speaker/rules-<identity>.json", "per-action supervised worker result"],
+      "sourceProof": ["packages/core/src/speakerEval.ts", "packages/core/src/speakerRuleStats.ts", "packages/api/src/jobs/jobManager.ts"],
+      "targetProof": ["modules/speaker/src/index.ts", "modules/speaker/src/engine.ts", "modules/speaker/src/worker.ts"],
+      "preservation": "Reports and gates are rebuilt from the pinned canonical snapshot. Cache path and stored envelope identity include the snapshot, speaker module and engine versions, shared tokenizer model/version, and adopted-model revision; stale identities are rejected. Training status and outputs are not committed author data."
+    }
+  ],
+  "implementedBehavior": [
+    "Ports the source CPU attribution pipeline, mention matching, voice-profile hints, speaker-count estimation, clustering and group labeling, override alignment, rule gates, held-out evaluation, correction logging, and the TypeScript logistic reranker/trainer. Shared Lindera analysis is acquired through the host NLP capability; speaker jobs execute in the compiled worker entry and are disposed after each action.",
+    "Public actions cover scene attribution, the unresolved/low-confidence confirmation queue, proposal-only speaker and speaker-count corrections, latest evaluation and rule-gate reads, evaluation/gate rebuild, deterministic held-out retraining and gated model-adoption proposals.",
+    "R16 character dialogue listing preserves volume/chapter scene order, high/low confidence filtering, optional scene selection, and trailing-limit behavior. Character voice profiles report learned fingerprints, similarity pairs, and stylometric profiles from high-confidence attributed dialogue.",
+    "Voice checking composes P06's declared voice-pattern/context-profile checks, learned fingerprint deviations, and stylometric deviations over the same actual scene attributions. It returns the three detailed warning sets and one merged UI list with registered, learned, or stylometric source labels.",
+    "The browser contribution renders attribution and correction controls, count proposals, the confirmation queue, character dialogue, voice-profile comparison and similar-character warnings, and evaluation/gate/retraining workflows. Browser acceptance exercises the rendered controls and their registered action boundary.",
+    "Server imports use pure shared engine constants/types; importing the server module does not execute the worker entry or add a process IPC message listener. Worker IPC is installed only when the compiled worker entry runs in its supervised child."
+  ],
+  "proofs": [
+    {
+      "id": "P10-SPEAKER-CPU-WORKFLOW",
+      "kind": "focused production module test",
+      "status": "passed",
+      "targetFiles": ["modules/speaker/src/production.test.ts", "modules/speaker/src/index.ts", "modules/speaker/src/worker.ts"],
+      "command": "pnpm --filter @scriptorium/module-speaker test",
+      "result": "2 passed, 0 failed on tested head 39431ac6c032e5988e02173be2516af2f7a6b224. The composed ModuleRuntime loads the real Story, NLP, diagnostics, and speaker actions, uses the actual Lindera tokenizer and compiled CPU workers, and exercises synthetic Japanese scenes. It verifies attribution, registered/learned/stylometric warning composition, character dialogue and profile actions, 14 author correction proposals, 12 training examples with a two-scene holdout, a passing adoption gate, proposal-only model persistence, reranking after simulated author approval, evaluation and rule gates, stale cache-identity rejection/rebuild, and model reload after runtime restart. It also checks that workers and shared capability processes are released after actions.",
+      "scope": "focused composed CPU workflow; author review is simulated by applying the Core proposal in the in-memory snapshot harness",
+      "engineModelIdentity": {
+        "speakerEngine": "scriptorium-speaker-cpu@1.0.0",
+        "speakerModule": "0.1.0",
+        "tokenizer": "lindera-wasm-nodejs-ipadic@2.0.0",
+        "diagnosticsEngine": "scriptorium-diagnostics-cpu@1.0.0"
+      }
+    },
+    {
+      "id": "P10-SERVER-WORKER-ISOLATION",
+      "kind": "server import regression",
+      "status": "passed",
+      "targetFiles": ["modules/speaker/src/engine.ts", "modules/speaker/src/index.ts", "modules/speaker/src/worker.ts", "modules/speaker/src/production.test.ts"],
+      "command": "pnpm --filter @scriptorium/module-speaker test",
+      "result": "A fresh subprocess imports the server entry and confirms its process message-listener count does not change; the production workflow separately verifies that the worker is launched only for real jobs and is stopped after completion.",
+      "scope": "production module test"
+    },
+    {
+      "id": "P10-BROWSER-CONTRIBUTIONS",
+      "kind": "rendered browser workflow",
+      "status": "passed",
+      "targetFiles": ["modules/speaker/src/browser.ts", "modules/speaker/tests/browser-workflow.acceptance.mjs", "modules/speaker/tests/browser-workflow.html"],
+      "command": "SCRIPTORIUM_E2E_CHROMIUM=/nix/store/ini1ifgvcsvw48x4mxawrv9jvbdwn70p-chromium-155.0.8059.79/bin/chromium node modules/speaker/tests/browser-workflow.acceptance.mjs",
+      "result": "Passed with actual Chromium/Playwright DOM mounting through Vite. It selects scenes and characters, runs attribution/voice diagnostics, submits correction and count proposals, renders the confirmation queue, filters character dialogue, displays voice similarity/stylometry and peer comparison, expands evaluation rows, toggles mismatch-only display, updates gates, and starts retraining. The browser test stubs only the action transport; CPU behavior is verified by P10-SPEAKER-CPU-WORKFLOW.",
+      "scope": "focused browser UI/action-boundary test"
+    },
+    {
+      "id": "P10-TYPECHECK-AND-BUILD",
+      "kind": "module compilation",
+      "status": "passed",
+      "targetFiles": ["modules/speaker/src/**/*.ts", "modules/speaker/src/**/*.tsx"],
+      "command": "pnpm --filter @scriptorium/module-speaker typecheck && pnpm --filter @scriptorium/module-speaker build",
+      "result": "Both commands passed on tested head 39431ac6c032e5988e02173be2516af2f7a6b224.",
+      "scope": "focused module compilation"
+    },
+    {
+      "id": "P10-DIFF-CHECK",
+      "kind": "patch hygiene",
+      "status": "passed",
+      "targetFiles": ["modules/speaker/src/", "modules/speaker/tests/"],
+      "command": "git diff --check",
+      "result": "Passed on the tested implementation tree.",
+      "scope": "focused"
+    }
+  ],
+  "compositionLimits": [
+    "The production module test uses a synthetic in-memory repository and simulates a reviewed proposal by applying the proposal to its pinned snapshot. It does not certify real Core approval, checkpoint, publish, migration import, data-root deletion, or Git reclone; those composed durability checks remain with P12.",
+    "The Chromium browser acceptance uses a deterministic action-transport stub to exercise actual DOM behavior. It does not certify the full API/React host, session review screen, or proposal approval flow.",
+    "The model preflight at docs/verification/P13-MODEL-PREFLIGHT.md reports only a finite-weight synthetic trainer smoke for its original runtime preflight; it is not evidence of P10 feature acceptance. P10-SPEAKER-CPU-WORKFLOW runs the actual speaker worker and source algorithm on a small public synthetic corpus. No private corpus, saved model, or provider call is used.",
+    "Root owns integrated whole-repository frozen install, typecheck, tests, build, and Core audit on the final composed tree. Acceptance remains pending that composed integration and the P12 durability proof."
+  ]
+}
