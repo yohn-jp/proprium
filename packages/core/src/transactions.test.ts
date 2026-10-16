@@ -6,7 +6,7 @@ import fs from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 import { test } from "node:test";
-import { snapshotScopeRevision, type ChangeOperation, type SnapshotId } from "@scriptorium/contracts";
+import { snapshotScopeRevision, type ChangeOperation, type ChangeProposal, type SnapshotId } from "@scriptorium/contracts";
 import { CoreError, CoreStore } from "./index.js";
 
 const execFile = promisify(execFileCallback);
@@ -812,9 +812,101 @@ test("semantic read scopes allow ordered virtual proposal operations and reject 
     await store.checkpoint(project.id, volumeOperation);
     await store.checkpoint(project.id, chapterOperation);
 
+    const reverseVolume = {
+      ...operation(snapshot, volumePath, volumeContent, null, "reverse_virtual_volume_create"),
+      effect: "structure" as const,
+      readScopes: [{ prefix: "plot/volumes", revision: scopeRevision({}) }],
+    };
+    const reverseChapter = {
+      ...operation(snapshot, "plot/volumes/vol1/chapters/chapter2.yaml", "id: chapter2\nvolume: vol1\n", null, "reverse_virtual_chapter_create"),
+      effect: "structure" as const,
+      readScopes: [{ prefix: "plot/volumes", revision: scopeRevision({ [volumePath]: volumeContent }) }],
+    };
+    await assert.rejects(store.propose(project.id, {
+      id: "reverse_virtual_structure_proposal",
+      snapshot,
+      operations: [reverseChapter, reverseVolume],
+      source: "module",
+    }), (error: unknown) => error instanceof CoreError && error.code === "scope_precondition_conflict");
+
     const reader = await store.reader(project.id, "checkpoint");
     assert.equal((await reader.read(volumePath))?.content, volumeContent);
     assert.equal((await reader.read("plot/volumes/vol1/chapters/chapter1.yaml"))?.content, "id: chapter1\nvolume: vol1\n");
+  } finally {
+    await fs.rm(fixture.root, { recursive: true, force: true });
+  }
+});
+
+test("proposal scopes reject a future remote digest that differs from the ordered virtual state", async () => {
+  const fixture = await remoteFixture();
+  try {
+    const store = new CoreStore({ dataDir: path.join(fixture.root, "state"), allowLocalRemotes: true });
+    const project = await store.registerProject({ url: fixture.remote });
+    const snapshot = (await store.observe(project.id)).snapshot;
+    const filePath = "bible/characters/rival.yaml";
+    const futureContent = "id: rival\nname: Remote Rival\n";
+    const futureRevision = scopeRevision({ [filePath]: futureContent });
+    const first = {
+      ...operation(snapshot, filePath, "id: rival\nname: Proposed Rival\n", null, "scope_virtual_first"),
+      readScopes: [{ prefix: "bible/characters", revision: scopeRevision({}) }],
+    };
+    const second = {
+      ...operation(snapshot, "bible/characters/other.yaml", "id: other\nname: Other\n", null, "scope_virtual_second"),
+      readScopes: [{ prefix: "bible/characters", revision: futureRevision }],
+    };
+
+    await assert.rejects(store.propose(project.id, {
+      id: "scope_future_remote_digest",
+      snapshot,
+      operations: [first, second],
+      source: "module",
+    }), (error: unknown) => error instanceof CoreError && error.code === "scope_precondition_conflict");
+
+    await fs.mkdir(path.dirname(path.join(fixture.seed, filePath)), { recursive: true });
+    await fs.writeFile(path.join(fixture.seed, filePath), futureContent);
+    await git(fixture.seed, "add", filePath);
+    await git(fixture.seed, "commit", "-m", "Add the future scoped value");
+    await git(fixture.seed, "push", "origin", "main");
+    await store.observe(project.id);
+    assert.equal(await snapshotScopeRevision(await store.reader(project.id, "remote"), "bible/characters"), futureRevision);
+  } finally {
+    await fs.rm(fixture.root, { recursive: true, force: true });
+  }
+});
+
+test("author approval revalidates proposal scopes from the pinned snapshot after journal recovery", async () => {
+  const fixture = await remoteFixture();
+  try {
+    const dataDir = path.join(fixture.root, "state");
+    const store = new CoreStore({ dataDir, allowLocalRemotes: true });
+    const project = await store.registerProject({ url: fixture.remote });
+    const snapshot = (await store.observe(project.id)).snapshot;
+    const operationWithScope = {
+      ...operation(snapshot, "manuscript/recovered-scope.md", "Scoped proposal.\n", null, "recovered_scope_operation"),
+      readScopes: [{ prefix: "bible/characters", revision: scopeRevision({}) }],
+    };
+    const proposal = await store.propose(project.id, {
+      id: "recovered_scope_proposal",
+      snapshot,
+      operations: [operationWithScope],
+      source: "module",
+    });
+
+    const journalPath = path.join(dataDir, "proposal-journal", `${project.id}.json`);
+    const journal = JSON.parse(await fs.readFile(journalPath, "utf8")) as { proposals: ChangeProposal[] };
+    const recoveredOperation = journal.proposals[0]?.operations[0];
+    assert.ok(recoveredOperation?.readScopes?.[0]);
+    recoveredOperation.readScopes[0].revision = scopeRevision({ "bible/characters/future.yaml": "future" });
+    await fs.writeFile(journalPath, `${JSON.stringify(journal, null, 2)}\n`);
+
+    const recoveredStore = new CoreStore({ dataDir, allowLocalRemotes: true });
+    const recoveredProject = await recoveredStore.registerProject({ url: fixture.remote });
+    assert.equal(recoveredProject.id, project.id);
+    await assert.rejects(recoveredStore.approve(project.id, {
+      proposalId: proposal.id,
+      operationIds: [operationWithScope.id],
+      authorScope: "owner",
+    }), (error: unknown) => error instanceof CoreError && error.code === "scope_precondition_conflict");
   } finally {
     await fs.rm(fixture.root, { recursive: true, force: true });
   }

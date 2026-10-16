@@ -1355,6 +1355,58 @@ export class CoreStore implements MutationCoordinator {
     return conflicts;
   }
 
+  private async validateProposalReadScopes(root: string, proposal: ChangeProposal): Promise<void> {
+    const baseCommit = proposal.snapshot.overlayCommit ?? proposal.snapshot.remoteCommit;
+    const baseReader = await this.makeReader(root, proposal.snapshot, baseCommit);
+    const writes = new Map<string, Buffer | null>();
+
+    for (const operation of proposal.operations) {
+      const reader: SnapshotReader = {
+        snapshot: proposal.snapshot,
+        read: async (filePath, encoding = "utf8") => {
+          assertProjectPath(filePath);
+          if (encoding !== "utf8" && encoding !== "base64") {
+            throw coreError(400, "invalid_read_encoding", "Snapshot reads support UTF-8 or base64 encoding");
+          }
+          if (writes.has(filePath)) {
+            const bytes = writes.get(filePath);
+            if (!bytes) return null;
+            return {
+              content: encoding === "base64" ? bytes.toString("base64") : bytes.toString("utf8"),
+              revision: revisionForBytes(bytes),
+            };
+          }
+          return baseReader.read(filePath, encoding);
+        },
+        list: async (prefix) => {
+          const paths = new Set(await baseReader.list(prefix));
+          for (const [filePath, content] of writes) {
+            if (filePath !== prefix && !filePath.startsWith(`${prefix}/`)) continue;
+            if (content === null) paths.delete(filePath);
+            else paths.add(filePath);
+          }
+          return [...paths].sort();
+        },
+      };
+      const conflicts: string[] = [];
+      for (const scope of operation.readScopes ?? []) {
+        try {
+          if (await snapshotScopeRevision(reader, scope.prefix) !== scope.revision) conflicts.push(scope.prefix);
+        } catch {
+          conflicts.push(scope.prefix);
+        }
+      }
+      if (conflicts.length) {
+        throw coreError(409, "scope_precondition_conflict", `The proposal scope does not match its pinned virtual snapshot: ${[...new Set(conflicts)].join(", ")}`);
+      }
+      for (const write of operation.writes) {
+        writes.set(write.path, write.content === null
+          ? null
+          : Buffer.from(write.content, write.encoding === "base64" ? "base64" : "utf8"));
+      }
+    }
+  }
+
   private async createCommit(
     root: string,
     parent: string,
@@ -2796,6 +2848,7 @@ export class CoreStore implements MutationCoordinator {
         return structuredClone(copied);
       }
       if (snapshotKey(proposalBase) !== snapshotKey(observation.snapshot)) throw coreError(409, "proposal_snapshot_stale", "The proposal was based on a stale repository snapshot");
+      await this.validateProposalReadScopes(root, copied);
       const updated = new Map(this.proposals.get(record.id) ?? []);
       updated.set(copied.id, copied);
       const durableIds = this.durableProposalIds.get(record.id) ?? new Set<string>();
@@ -2822,6 +2875,7 @@ export class CoreStore implements MutationCoordinator {
         throw coreError(409, "proposal_snapshot_stale", "The repository changed after this proposal was created; review a fresh proposal before approving it");
       }
       await this.ensureSnapshot(root, proposal.snapshot, observation.snapshot.repository, observation.snapshot.remoteCommit);
+      await this.validateProposalReadScopes(root, proposal);
       const allowed = new Set(proposal.operations.map((operation) => operation.id));
       if (!approval.operationIds.length || new Set(approval.operationIds).size !== approval.operationIds.length || approval.operationIds.some((id) => !allowed.has(id))) {
         throw coreError(400, "invalid_approval", "Approval operation IDs must be a unique subset of the proposal");
