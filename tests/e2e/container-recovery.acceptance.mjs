@@ -310,8 +310,14 @@ async function readJournal(page) {
     try {
       const transaction = database.transaction("operations", "readonly");
       return await new Promise((resolvePromise, reject) => {
-        const request = transaction.objectStore("operations").getAll();
-        request.onsuccess = () => resolvePromise(request.result.map((entry) => ({
+        let entries;
+        transaction.oncomplete = () => resolvePromise(entries.map((entry) => ({
+          key: entry.key,
+          repositoryKey: entry.repositoryKey,
+          documentKey: entry.documentKey,
+          sceneId: entry.sceneId,
+          snapshot: entry.snapshot,
+          updatedAt: entry.updatedAt,
           documentPath: entry.documentPath,
           state: entry.state,
           operationId: entry.operation.id,
@@ -336,12 +342,70 @@ async function readJournal(page) {
           operationWrites: entry.operation.writes.map((write) => ({ path: write.path, contentLength: typeof write.content === "string" ? write.content.length : null })),
           localCommit: entry.checkpoint?.localCommit ?? null,
         })));
+        transaction.onerror = () => reject(transaction.error ?? new Error("IndexedDB journal transaction failed"));
+        transaction.onabort = () => reject(transaction.error ?? new Error("IndexedDB journal transaction was aborted"));
+        const request = transaction.objectStore("operations").getAll();
+        request.onsuccess = () => { entries = request.result; };
         request.onerror = () => reject(request.error ?? new Error("IndexedDB journal read failed"));
       });
     } finally {
       database.close();
     }
   });
+}
+
+async function readJournalEntry(page, key) {
+  return page.evaluate(async (entryKey) => {
+    const database = await new Promise((resolvePromise, reject) => {
+      const request = indexedDB.open("scriptorium-recovery", 3);
+      request.onsuccess = () => resolvePromise(request.result);
+      request.onerror = () => reject(request.error ?? new Error("IndexedDB open failed"));
+    });
+    try {
+      const transaction = database.transaction("operations", "readonly");
+      return await new Promise((resolvePromise, reject) => {
+        let entry;
+        transaction.oncomplete = () => resolvePromise(entry ? {
+          key: entry.key,
+          repositoryKey: entry.repositoryKey,
+          documentKey: entry.documentKey,
+          sceneId: entry.sceneId,
+          snapshot: entry.snapshot,
+          updatedAt: entry.updatedAt,
+          documentPath: entry.documentPath,
+          state: entry.state,
+          operationId: entry.operation.id,
+          generation: entry.operation.generation,
+          authorScope: entry.authorScope ?? null,
+          entryKeys: Object.keys(entry).sort(),
+          repositoryIdentity: {
+            provider: entry.repository.provider,
+            ownerScope: entry.repository.ownerScope,
+            repositoryId: entry.repository.repositoryId,
+            defaultBranch: entry.repository.defaultBranch,
+          },
+          proposalId: entry.proposalId ?? null,
+          checkpointReceipt: entry.checkpoint ? {
+            operationId: entry.checkpoint.operationId,
+            generation: entry.checkpoint.generation,
+            localCommit: entry.checkpoint.localCommit,
+            remoteBase: entry.checkpoint.remoteBase,
+          } : null,
+          text: entry.text,
+          operationContent: entry.operation.writes.find((write) => write.path === entry.documentPath)?.content ?? null,
+          operationWrites: entry.operation.writes.map((write) => ({ path: write.path, contentLength: typeof write.content === "string" ? write.content.length : null })),
+          localCommit: entry.checkpoint?.localCommit ?? null,
+        } : null);
+        transaction.onerror = () => reject(transaction.error ?? new Error("IndexedDB journal transaction failed"));
+        transaction.onabort = () => reject(transaction.error ?? new Error("IndexedDB journal transaction was aborted"));
+        const request = transaction.objectStore("operations").get(entryKey);
+        request.onsuccess = () => { entry = request.result; };
+        request.onerror = () => reject(request.error ?? new Error("IndexedDB journal read failed"));
+      });
+    } finally {
+      database.close();
+    }
+  }, key);
 }
 
 async function readPublicationReceipts(page) {
@@ -387,7 +451,8 @@ async function openProject(page, baseUrl) {
     await existing.click();
   } else {
     await page.getByLabel("GitHub リポジトリ URL").fill(repositoryUrl.replace(/\.git$/u, ""));
-    await page.getByLabel("ブランチ（任意）").fill("");
+    const branchInput = page.getByLabel("ブランチ（任意）");
+    if (await branchInput.count()) await branchInput.fill("");
     await page.getByRole("button", { name: "リポジトリを登録" }).click();
   }
   await page.getByRole("heading", { name: "Volume One" }).waitFor({ state: "visible", timeout: 90_000 });
@@ -589,6 +654,7 @@ async function main() {
     const authorDraft = await waitFor("the same-file author Draft", () => readJournal(recoveredPage), (entries) => entries.some((entry) => entry.documentPath === sceneTwoPath && entry.text === conflictAuthorText && entry.state === "draft"));
     const authorDraftEntry = authorDraft.find((entry) => entry.documentPath === sceneTwoPath && entry.text === conflictAuthorText);
     assert.ok(authorDraftEntry);
+    assert.ok(authorDraftEntry.key, "The author operation must have a stable IndexedDB primary key.");
     assert.ok(authorDraftEntry.operationContent?.includes(conflictAuthorText), "The Draft operation must store the author's exact recoverable write before checkpointing.");
     const conflictOperationId = authorDraftEntry.operationId;
     await recoveredPage.getByRole("button", { name: "Checkpoint", exact: true }).click();
@@ -599,7 +665,7 @@ async function main() {
     await waitFor("the production conflict observation", () => remoteCommit(recoveredPage, project), (head) => head === externalHeadTwo, 120_000);
     let conflictEntry;
     try {
-      conflictEntry = await waitFor("the exact author-scoped conflicted manuscript journal operation", () => readJournal(recoveredPage), (entries) => entries.find((entry) => entry.operationId === conflictOperationId && entry.generation === authorDraftEntry.generation && entry.authorScope === authorDraftEntry.authorScope && entry.documentPath === sceneTwoPath && entry.state === "conflict"), 120_000);
+      conflictEntry = await waitFor("the exact author-scoped conflicted manuscript journal operation", () => readJournalEntry(recoveredPage, authorDraftEntry.key), (entry) => entry?.key === authorDraftEntry.key && entry.operationId === conflictOperationId && entry.generation === authorDraftEntry.generation && entry.authorScope === authorDraftEntry.authorScope && entry.documentPath === sceneTwoPath && entry.state === "conflict", 120_000);
       assert.equal(conflictEntry.text, conflictAuthorText, "The conflicted author journal entry must retain the exact editor text.");
       assert.ok(conflictEntry.operationContent?.includes(conflictAuthorText), "The conflicted journal operation must retain the author's exact recoverable write.");
       await recoveredPage.getByRole("heading", { name: "Scene Two" }).waitFor({ state: "visible", timeout: 120_000 });
