@@ -171,9 +171,19 @@ export interface ModuleContext {
   /** Resolves this installed module's declared worker, with bounded supervised IPC. */
   createWorkerService(): Promise<WorkerService>;
 }
+export interface HttpContribution {
+  id: string;
+  /** Relative path template under the host-owned project or stable-repository prefix. */
+  path: string;
+  methods: Array<"GET" | "HEAD" | "POST" | "DELETE">;
+  access: "owner" | "public";
+  effect: "read" | "propose";
+  handle(request: Request, context: ModuleActionContext): Promise<Response>;
+}
 export interface ModuleDefinition {
   manifest: ModuleManifest;
   capabilities?: CapabilityDefinition[];
+  http?: HttpContribution[];
   actions: ModuleAction[];
   ui: UiContribution[];
   dispose(): Promise<void>;
