@@ -13,7 +13,7 @@
     "repository": "yohn-jp/scriptorium",
     "baseCommit": "97b96bee11bd3b6202ac17cdc26a6a0beb95f38d",
     "branch": "work/7-p05",
-    "implementationCommit": "0f2714b836d66e57cc302babe7f8edd5f405db42"
+    "implementationCommit": "048ff59addd09dd858b529098855e12e525ffa46"
   },
   "sourceClassification": [
     {
@@ -98,9 +98,9 @@
         "modules/story/src/migration/producer.ts",
         "modules/story/src/migration/producer.test.ts"
       ],
-      "command": "node --import tsx --test modules/story/src/actions.test.ts modules/story/src/domain/*.test.ts modules/story/src/migration/*.test.ts",
-      "result": "40 passed, 0 failed on implementation commit 0f2714b836d66e57cc302babe7f8edd5f405db42.",
-      "scope": "Entity and scene proposals, source revision and reference validation, optional NLP absence, all nine source ChangeSet kinds and retry identity, source-to-Core ID mapping, series bindings, co-occurrence, domain graph/chronology/thread/world/knowledge algorithms, exact-byte migration, and explicit series repository mapping."
+      "command": "pnpm --filter @scriptorium/module-story test",
+      "result": "42 passed, 0 failed on implementation commit 048ff59addd09dd858b529098855e12e525ffa46.",
+      "scope": "Entity and scene proposals, source revision and reference validation, optional NLP absence, all nine source ChangeSet kinds and retry identity, source FNV manuscript identity, state-proposal event/conflict/manuscript freshness and JSONL revision precondition, source-to-Core ID mapping, series bindings, co-occurrence, domain graph/chronology/thread/world/knowledge algorithms, exact-byte migration, and explicit series repository mapping."
     },
     {
       "id": "P05-STORY-BUILD",
@@ -108,7 +108,7 @@
       "status": "passed",
       "targetFiles": ["modules/story/src/**/*.ts", "modules/story/src/**/*.tsx"],
       "command": "pnpm --filter @scriptorium/module-story typecheck && pnpm --filter @scriptorium/module-story build",
-      "result": "Both commands passed on implementation commit 0f2714b836d66e57cc302babe7f8edd5f405db42.",
+      "result": "Both commands passed on implementation commit 048ff59addd09dd858b529098855e12e525ffa46.",
       "scope": "Compiles the server action producer, migration producer and React browser entry."
     },
     {
