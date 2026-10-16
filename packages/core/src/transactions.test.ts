@@ -727,6 +727,109 @@ test("concurrent proposal ID reuse rejects changed payloads and preserves approv
   }
 });
 
+test("pending proposals survive a CoreStore process restart through the local journal", async () => {
+  const fixture = await remoteFixture();
+  try {
+    const dataDir = path.join(fixture.root, "state");
+    const firstStore = new CoreStore({ dataDir, allowLocalRemotes: true });
+    const project = await firstStore.registerProject({ url: fixture.remote });
+    const snapshot = (await firstStore.observe(project.id)).snapshot;
+    const op = {
+      ...operation(snapshot, "manuscript/journaled.md", "Pending draft.\n", null, "journaled_pending_operation"),
+      evidenceIds: ["pending_evidence"],
+    };
+    const proposal = await firstStore.propose(project.id, {
+      id: "journaled_pending_proposal",
+      snapshot,
+      operations: [op],
+      source: "mcp",
+      evidence: [{
+        id: "pending_evidence",
+        snapshot,
+        module: "mcp",
+        kind: "source_ncs_mapping",
+        paths: [],
+        details: { sourceChangeSetId: "source-set-17", goalToOperation: { goalA: op.id } },
+      }],
+    });
+
+    const restartedStore = new CoreStore({ dataDir, allowLocalRemotes: true });
+    const recovered = await restartedStore.getProposal(project.id, proposal.id);
+    assert.equal(recovered?.state, "proposed");
+    assert.deepEqual(recovered?.proposal, proposal);
+    assert.deepEqual(recovered?.publishedOperationIds, []);
+    assert.deepEqual(recovered?.checkpoints, []);
+  } finally {
+    await fs.rm(fixture.root, { recursive: true, force: true });
+  }
+});
+
+test("accepted proposal evidence and publication state reconstruct after full Core data loss", async () => {
+  const fixture = await remoteFixture();
+  try {
+    const dataDir = path.join(fixture.root, "state");
+    const originalStore = new CoreStore({ dataDir, allowLocalRemotes: true });
+    const project = await originalStore.registerProject({ url: fixture.remote });
+    const snapshot = (await originalStore.observe(project.id)).snapshot;
+    const selected = operation(snapshot, "manuscript/selected.md", "Selected effect.\n", null, "selected_manifest_operation");
+    const unselected = operation(snapshot, "manuscript/unselected.md", "Unselected workflow data.\n", null, "unselected_manifest_operation");
+    const proposal = {
+      id: "accepted_mcp_proposal_manifest",
+      snapshot,
+      operations: [selected, unselected],
+      source: "mcp" as const,
+      evidence: [{
+        id: "source_ncs_map",
+        snapshot,
+        module: "mcp" as const,
+        kind: "source_change_set_mapping",
+        paths: [],
+        details: { sourceChangeSetId: "ncs-22", goalToOperation: { acceptedGoal: selected.id, pendingGoal: unselected.id } },
+      }],
+    };
+    await originalStore.propose(project.id, proposal);
+    await originalStore.approve(project.id, { proposalId: proposal.id, operationIds: [selected.id], authorScope: "owner" });
+    const checkpoint = await originalStore.checkpoint(project.id, selected);
+    await fs.writeFile(path.join(fixture.seed, "remote-note.txt"), "Upstream disjoint change.\n");
+    await git(fixture.seed, "add", "remote-note.txt");
+    await git(fixture.seed, "commit", "-m", "Disjoint upstream change for proposal recovery");
+    await git(fixture.seed, "push", "origin", "main");
+    const published = await originalStore.publish(project.id, "proposal_manifest_publish");
+    assert.equal(published.state, "confirmed");
+    assert.equal(await git(fixture.root, "--git-dir", fixture.remote, "show", `${published.remoteCommit}:manuscript/selected.md`), "Selected effect.");
+    assert.equal(await git(fixture.root, "--git-dir", fixture.remote, "show", `${published.remoteCommit}:remote-note.txt`), "Upstream disjoint change.");
+    await assert.rejects(git(fixture.root, "--git-dir", fixture.remote, "show", `${published.remoteCommit}:manuscript/unselected.md`));
+
+    await git(fixture.seed, "fetch", "origin", "main");
+    await git(fixture.seed, "reset", "--hard", "origin/main");
+    await git(fixture.seed, "rm", `meta/scriptorium/proposals/v1/${proposal.id}.json`);
+    await git(fixture.seed, "commit", "-m", "Remove visible accepted proposal metadata");
+    await git(fixture.seed, "push", "origin", "main");
+    await fs.rm(dataDir, { recursive: true, force: true });
+    const recoveredStore = new CoreStore({ dataDir, allowLocalRemotes: true });
+    const recoveredProject = await recoveredStore.registerProject({ url: fixture.remote });
+    const recovered = await recoveredStore.getProposal(recoveredProject.id, proposal.id);
+    assert.equal(recovered?.state, "partially_approved");
+    assert.deepEqual(recovered?.proposal, proposal);
+    assert.deepEqual(recovered?.approvedOperationIds, [selected.id]);
+    assert.deepEqual(recovered?.checkpoints.map((receipt) => receipt.operationId), [selected.id]);
+    assert.deepEqual(recovered?.publishedOperationIds, [selected.id]);
+    assert.equal(recovered?.checkpoints[0]?.operationId, checkpoint.operationId);
+    assert.deepEqual((await recoveredStore.listProposals(recoveredProject.id)).map((item) => item.proposal.id), [proposal.id]);
+
+    const rebound = {
+      ...proposal,
+      evidence: [{ ...proposal.evidence[0]!, details: { sourceChangeSetId: "different-source-set" } }],
+    };
+    await assert.rejects(recoveredStore.propose(recoveredProject.id, rebound), (error: unknown) =>
+      error instanceof CoreError && error.code === "proposal_id_reused");
+    assert.deepEqual((await recoveredStore.observe(recoveredProject.id)).pending, []);
+    assert.equal(await recoveredStore.reader(recoveredProject.id, "remote").then((reader) => reader.read("manuscript/unselected.md")), null);
+  } finally {
+    await fs.rm(fixture.root, { recursive: true, force: true });
+  }
+});
+
 test("proposal status counts approved and checkpointed operations only once", async () => {
   const fixture = await remoteFixture();
   try {
@@ -935,6 +1038,11 @@ test("generic operations cannot replace Core authority metadata but may write mo
     const reserved = operation(snapshot, "meta/scriptorium/operations/v1/forged.json", "{}\n", null, "reserved_metadata_op");
     await assert.rejects(
       store.propose(project.id, { id: "proposal_reserved", snapshot, operations: [reserved], source: "module" }),
+      (error: unknown) => error instanceof CoreError && error.code === "invalid_change_operation",
+    );
+    const forgedProposalBinding = operation(snapshot, "meta/scriptorium/proposals/v1/forged.json", "{}\n", null, "reserved_proposal_metadata_op");
+    await assert.rejects(
+      store.propose(project.id, { id: "proposal_reserved_binding", snapshot, operations: [forgedProposalBinding], source: "module" }),
       (error: unknown) => error instanceof CoreError && error.code === "invalid_change_operation",
     );
     const moduleData = operation(snapshot, "meta/scriptorium/modules/assistant/settings.yaml", "enabled: true\n", null, "module_settings_op");
