@@ -254,7 +254,8 @@ test("writing UI recovers multi-document drafts and separates Draft, Checkpoint,
   await expect(page.getByRole("button", { name: "この版を下書きとして開く" })).toBeVisible();
   await page.getByRole("button", { name: "この版を下書きとして開く" }).click();
   await expect(page.locator(".cm-content")).toHaveText(sceneOneDraft);
-  const restoredHistoryDraft = (await readJournal(page)).find((entry) => entry.documentPath === "manuscript/vol-1/ch-1/scene-1.md");
+  await expect.poll(async () => (await readJournal(page)).some((entry) => entry.documentPath === "manuscript/vol-1/ch-1/scene-1.md" && entry.text === sceneOneDraft && entry.state === "draft")).toBe(true);
+  const restoredHistoryDraft = (await readJournal(page)).find((entry) => entry.documentPath === "manuscript/vol-1/ch-1/scene-1.md" && entry.text === sceneOneDraft);
   expect(restoredHistoryDraft?.state).toBe("draft");
   expect(restoredHistoryDraft?.text).toBe(sceneOneDraft);
   expect(restoredHistoryDraft?.writes.find((write) => write.path.endsWith("scene-1.md"))?.content).toContain(sceneOneDraft);
