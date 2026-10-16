@@ -144,10 +144,10 @@ test("production modules lazily run the real Lindera child and preserve snapshot
 
 test("public actions read namespaced dictionaries/settings and lint changes remain proposals", { timeout: 90_000 }, async () => {
   const files = new Map(initialFiles);
-  files.set("plot/volumes/volume-1/volume.yaml", { content: "id: volume-1\nname: 第一巻\norder: 1\n", revision: "volume-r1" });
-  files.set("plot/volumes/volume-1/chapter.yaml", { content: "id: chapter-1\nname: 第一章\nvolume: volume-1\norder: 1\n", revision: "chapter-r1" });
-  files.set("plot/volumes/volume-1/scenes/scene-1.yaml", { content: "id: scene-1\ntype: scene\nname: 遺跡\nchapter: chapter-1\norder: 1\nlocation: loc-a\nappears: [char-hero]\nmentions: [char-ghost]\neffects:\n  - action: acquire_item\n    characterId: char-hero\n    itemId: relic-1\nmanuscript: manuscript/v1/scene-1.md\n", revision: "scene-r1" });
-  files.set("plot/volumes/volume-1/scenes/scene-2.yaml", { content: "id: scene-2\ntype: scene\nname: 帰路\nchapter: chapter-1\norder: 2\nlocation: loc-b\nappears: [char-hero, char-companion]\neffects:\n  - action: use_item\n    characterId: char-companion\n    itemId: relic-1\nmanuscript: manuscript/v1/scene-2.md\n", revision: "scene-2-r1" });
+  files.set("plot/volumes/volume-1/volume.yaml", { content: "id: vol-volume-1\nname: 第一巻\norder: 1\n", revision: "volume-r1" });
+  files.set("plot/volumes/volume-1/chapter.yaml", { content: "id: ch-chapter-1\nname: 第一章\nvolume: vol-volume-1\norder: 1\n", revision: "chapter-r1" });
+  files.set("plot/volumes/volume-1/scenes/scene-1.yaml", { content: "id: sc-scene-1\ntype: scene\nname: 遺跡\nchapter: ch-chapter-1\norder: 1\nlocation: loc-a\nappears: [char-hero]\nmentions: [char-ghost]\neffects:\n  - action: acquire_item\n    characterId: char-hero\n    itemId: relic-1\nmanuscript: manuscript/v1/scene-1.md\n", revision: "scene-r1" });
+  files.set("plot/volumes/volume-1/scenes/scene-2.yaml", { content: "id: sc-scene-2\ntype: scene\nname: 帰路\nchapter: ch-chapter-1\norder: 2\nlocation: loc-b\nappears: [char-hero, char-companion]\neffects:\n  - action: use_item\n    characterId: char-companion\n    itemId: relic-1\nmanuscript: manuscript/v1/scene-2.md\n", revision: "scene-2-r1" });
   files.set("bible/characters/companion/profile.yaml", { content: "id: char-companion\nname: 旅人\n", revision: "companion-r1" });
   files.set("bible/locations/loc-a.yaml", { content: "id: loc-a\nname: 遺跡\n", revision: "loc-a-r1" });
   files.set("bible/locations/loc-b.yaml", { content: "id: loc-b\nname: 村\n", revision: "loc-b-r1" });
@@ -200,6 +200,21 @@ test("public actions read namespaced dictionaries/settings and lint changes rema
       assert.ok(warnings.some((warning) => warning.reason === "item-owner-mismatch"));
       assert.ok(warnings.some((warning) => warning.reason === "unrecorded-teleport"));
       assert.ok(warnings.some((warning) => warning.reason === "timeline-reversal"));
+    }
+    const scopedConsistency = await runtime.invokeAction("diagnostics", "diagnostics.checkConsistency", { scope: "sc-scene-1" }, host);
+    assert.equal(scopedConsistency.ok, true, JSON.stringify(scopedConsistency));
+    if (scopedConsistency.ok) {
+      const result = scopedConsistency.data as { scope: string; issues: Array<{ code: string }> };
+      assert.equal(result.scope, "sc-scene-1");
+      assert.ok(result.issues.some((issue) => issue.code === "MISSING_LINK_TARGET"));
+      assert.ok(!result.issues.some((issue) => issue.code === "THREAD_NO_PLANT"), "unrelated issues are filtered like the scoped source route");
+    }
+    const scopedContinuity = await runtime.invokeAction("diagnostics", "diagnostics.checkContinuity", { scope: "sc-scene-1" }, host);
+    assert.equal(scopedContinuity.ok, true, JSON.stringify(scopedContinuity));
+    if (scopedContinuity.ok) {
+      const result = scopedContinuity.data as { scope: string; warnings: Array<{ sceneId: string; previousSceneId: string }> };
+      assert.equal(result.scope, "sc-scene-1");
+      assert.ok(result.warnings.some((warning) => warning.sceneId === "sc-scene-2"), "continuity scope includes its adjacent scene as the source route does");
     }
     assert.deepEqual(runtime.workerSupervisor.activeWorkerPids, [], "project rule checks stay local and do not start NLP workers");
   } finally {

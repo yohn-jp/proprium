@@ -56,7 +56,11 @@ function record(value: unknown, label: string): RecordValue {
   if (!value || typeof value !== "object" || Array.isArray(value)) throw new TypeError(`${label} must be an object`);
   return value as RecordValue;
 }
-function parseEmpty(value: unknown): RecordValue { return record(value, "input"); }
+function parseInspectionScope(value: unknown): { scope?: string } {
+  const input = record(value, "input");
+  if (input.scope !== undefined && typeof input.scope !== "string") throw new TypeError("scope must be a string when provided");
+  return typeof input.scope === "string" ? { scope: input.scope } : {};
+}
 function parseObjectOutput(value: unknown): unknown { return record(value, "output"); }
 const outputSchema: ValueSchema = { parse: parseObjectOutput };
 function action(id: string, effect: ModuleAction["effect"], inputSchema: ValueSchema, invoke: ModuleAction["invoke"]): ModuleAction {
@@ -361,14 +365,16 @@ async function checkPlotSemanticsAction(value: unknown, context: ModuleActionCon
 function makeActions(moduleContext: ModuleContext): ModuleAction[] {
   const analyzeInput = { parse: parseAnalyze };
   return [
-    action("diagnostics.checkConsistency", "read", { parse: parseEmpty }, async (_value, context) => ({
-      ok: true, snapshot: context.reader.snapshot,
-      data: { issues: await checkProjectConsistency(context.reader, context.signal) },
-    })),
-    action("diagnostics.checkContinuity", "read", { parse: parseEmpty }, async (_value, context) => ({
-      ok: true, snapshot: context.reader.snapshot,
-      data: { warnings: await checkProjectContinuity(context.reader, context.signal) },
-    })),
+    action("diagnostics.checkConsistency", "read", { parse: parseInspectionScope }, async (value, context) => {
+      const { scope } = value as ReturnType<typeof parseInspectionScope>;
+      const issues = await checkProjectConsistency(context.reader, context.signal, scope);
+      return { ok: true, snapshot: context.reader.snapshot, data: { ok: issues.every((issue) => issue.severity !== "error"), scope: scope?.trim() || null, issues } };
+    }),
+    action("diagnostics.checkContinuity", "read", { parse: parseInspectionScope }, async (value, context) => {
+      const { scope } = value as ReturnType<typeof parseInspectionScope>;
+      const warnings = await checkProjectContinuity(context.reader, context.signal, scope);
+      return { ok: true, snapshot: context.reader.snapshot, data: { scope: scope?.trim() || null, warnings } };
+    }),
     action("diagnostics.analyze", "compute", analyzeInput, (value, context) => analyzeAction(value, context, moduleContext)),
     action("diagnostics.checkPlotSemantics", "compute", { parse: parsePlotSemantics }, (value, context) => checkPlotSemanticsAction(value, context, moduleContext)),
     action("diagnostics.lint", "compute", { parse: parseLint }, async (value, context) => {

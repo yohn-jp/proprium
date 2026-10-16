@@ -150,31 +150,69 @@ function linked(entities: Map<string, Entity>, links: Link[], sceneId: string, k
 
 interface SceneInfo { sceneId: string; order: number; locationId?: string; characterIds: string[]; chapterId?: string }
 function compareJa(a: Entity, b: Entity): number { return (a.name ?? a.id).localeCompare(b.name ?? b.id, "ja"); }
-function buildSceneLocationInfos(entities: Map<string, Entity>, links: Link[]): SceneInfo[] {
+type ScopeKind = "all" | "scene" | "chapter" | "volume";
+
+function orderedScenes(entities: Map<string, Entity>): Entity[] {
   const volumes = [...entities.values()].filter((entity) => entity.type === "volume").sort(compareJa).sort((a, b) => Number(a.raw.order ?? 0) - Number(b.raw.order ?? 0));
   const chapters = [...entities.values()].filter((entity) => entity.type === "chapter").sort(compareJa);
   const scenes = [...entities.values()].filter((entity) => entity.type === "scene").sort(compareJa);
+  return volumes.flatMap((volume) => chapters
+    .filter((chapter) => chapter.raw.volume === volume.id || String(chapter.raw.volume) === volume.id)
+    .sort((a, b) => Number(a.raw.order ?? 0) - Number(b.raw.order ?? 0))
+    .flatMap((chapter) => scenes
+      .filter((scene) => scene.raw.chapter === chapter.id || scene.raw.chapter === chapter.raw.id)
+      .sort((a, b) => Number(a.raw.order ?? 0) - Number(b.raw.order ?? 0))));
+}
+
+function resolveScope(entities: Map<string, Entity>, scope?: string): { kind: ScopeKind; sceneIds: string[] } {
+  const trimmed = scope?.trim() || undefined;
+  if (!trimmed) return { kind: "all", sceneIds: [...entities.values()].filter((entity) => entity.type === "scene").map((entity) => entity.id) };
+  const scenes = orderedScenes(entities);
+  if (trimmed.startsWith("sc-")) {
+    if (entities.get(trimmed)?.type !== "scene") throw Object.assign(new Error(`Scene not found: ${trimmed}`), { code: "scope_invalid" });
+    return { kind: "scene", sceneIds: [trimmed] };
+  }
+  if (trimmed.startsWith("ch-")) {
+    const chapter = [...entities.values()].find((entity) => entity.type === "chapter" && entity.id === trimmed);
+    const volumes = [...entities.values()].filter((entity) => entity.type === "volume");
+    if (!chapter || !volumes.some((volume) => chapter.raw.volume === volume.id || String(chapter.raw.volume) === volume.id)) throw Object.assign(new Error(`Chapter not found: ${trimmed}`), { code: "scope_invalid" });
+    return { kind: "chapter", sceneIds: scenes.filter((scene) => scene.raw.chapter === chapter.id || scene.raw.chapter === chapter.raw.id).map((scene) => scene.id) };
+  }
+  if (trimmed.startsWith("vol-")) {
+    const volume = [...entities.values()].find((entity) => entity.type === "volume" && entity.id === trimmed);
+    if (!volume) throw Object.assign(new Error(`Volume not found: ${trimmed}`), { code: "scope_invalid" });
+    const chapterIds = new Set([...entities.values()].filter((entity) => entity.type === "chapter" && (entity.raw.volume === volume.id || String(entity.raw.volume) === volume.id)).map((entity) => entity.id));
+    return { kind: "volume", sceneIds: scenes.filter((scene) => typeof scene.raw.chapter === "string" && chapterIds.has(scene.raw.chapter)).map((scene) => scene.id) };
+  }
+  throw Object.assign(new Error(`Invalid scope "${trimmed}": expected sc-*, ch-*, or vol-* prefix`), { code: "scope_invalid" });
+}
+
+function expandScopeWithNeighbors(entities: Map<string, Entity>, sceneIds: string[], kind: ScopeKind): string[] {
+  if (kind === "all" || sceneIds.length === 0) return sceneIds;
+  const ordered = orderedScenes(entities).map((scene) => scene.id);
+  const selected = new Set(sceneIds);
+  const indices = ordered.map((id, index) => selected.has(id) ? index : -1).filter((index) => index >= 0);
+  if (indices.length === 0) return sceneIds;
+  return ordered.slice(Math.max(0, Math.min(...indices) - 1), Math.min(ordered.length, Math.max(...indices) + 2));
+}
+
+function buildSceneLocationInfos(entities: Map<string, Entity>, links: Link[]): SceneInfo[] {
   const infos: SceneInfo[] = [];
   let order = 0;
-  for (const volume of volumes) {
-    const volumeChapters = chapters.filter((chapter) => chapter.raw.volume === volume.id || String(chapter.raw.volume) === volume.id).sort((a, b) => Number(a.raw.order ?? 0) - Number(b.raw.order ?? 0));
-    for (const chapter of volumeChapters) {
-      const chapterScenes = scenes.filter((scene) => scene.raw.chapter === chapter.id || scene.raw.chapter === chapter.raw.id).sort((a, b) => Number(a.raw.order ?? 0) - Number(b.raw.order ?? 0));
-      for (const scene of chapterScenes) {
-        order += 1;
-        const locationLink = links.find((link) => link.from === scene.id && (link.kind === "appears" || link.to.startsWith("loc-")));
-        const appears = linked(entities, links, scene.id, "appears");
-        const characters = appears.filter((entity) => entity.type === "character");
-        const location = (typeof scene.raw.location === "string" ? entities.get(scene.raw.location) : undefined)
-          ?? (locationLink ? entities.get(locationLink.to) : undefined);
-        infos.push({
-          sceneId: scene.id, order,
-          ...(location ? { locationId: location.id } : {}),
-          characterIds: (characters.length ? characters : appears).filter((entity) => entity.type === "character").map((entity) => entity.id),
-          chapterId: typeof chapter.id === "string" ? chapter.id : typeof chapter.raw.id === "string" ? chapter.raw.id : undefined,
-        });
-      }
-    }
+  for (const scene of orderedScenes(entities)) {
+    order += 1;
+    const chapter = entities.get(String(scene.raw.chapter));
+    const locationLink = links.find((link) => link.from === scene.id && (link.kind === "appears" || link.to.startsWith("loc-")));
+    const appears = linked(entities, links, scene.id, "appears");
+    const characters = appears.filter((entity) => entity.type === "character");
+    const location = (typeof scene.raw.location === "string" ? entities.get(scene.raw.location) : undefined)
+      ?? (locationLink ? entities.get(locationLink.to) : undefined);
+    infos.push({
+      sceneId: scene.id, order,
+      ...(location ? { locationId: location.id } : {}),
+      characterIds: (characters.length ? characters : appears).filter((entity) => entity.type === "character").map((entity) => entity.id),
+      ...(chapter ? { chapterId: chapter.id } : {}),
+    });
   }
   return infos;
 }
@@ -367,13 +405,24 @@ function detectContinuityWarnings(entities: Map<string, Entity>, sceneInfos: Sce
   return warnings;
 }
 
-export async function checkProjectConsistency(reader: SnapshotReader, signal: AbortSignal): Promise<ValidationIssue[]> {
+export async function checkProjectConsistency(reader: SnapshotReader, signal: AbortSignal, scope?: string): Promise<ValidationIssue[]> {
   const project = await readProject(reader, signal);
-  return validateProject(project.entities, project.links, project.duplicateIds);
+  const resolved = resolveScope(project.entities, scope);
+  const issues = validateProject(project.entities, project.links, project.duplicateIds);
+  if (resolved.kind === "all") return issues;
+  const selected = new Set(resolved.sceneIds);
+  return issues.filter((issue) => {
+    if (!issue.entityId || selected.has(issue.entityId)) return true;
+    const related = project.links.filter((link) => link.from === issue.entityId).map((link) => link.to)
+      .concat(project.links.filter((link) => link.to === issue.entityId).map((link) => link.from));
+    return related.some((id) => selected.has(id));
+  });
 }
 
-export async function checkProjectContinuity(reader: SnapshotReader, signal: AbortSignal): Promise<ContinuityWarning[]> {
+export async function checkProjectContinuity(reader: SnapshotReader, signal: AbortSignal, scope?: string): Promise<ContinuityWarning[]> {
   const project = await readProject(reader, signal);
+  const resolved = resolveScope(project.entities, scope);
+  const selected = resolved.kind === "all" ? null : new Set(expandScopeWithNeighbors(project.entities, resolved.sceneIds, resolved.kind));
   const sceneInfos = buildSceneLocationInfos(project.entities, project.links);
   const timelineScenes = sceneInfos.map((info) => {
     const scene = project.entities.get(info.sceneId);
@@ -382,5 +431,6 @@ export async function checkProjectContinuity(reader: SnapshotReader, signal: Abo
     const linkedManuscript = linked(project.entities, project.links, info.sceneId, "manuscript")[0];
     return { sceneId: info.sceneId, order: info.order, text: linkedManuscript?.body ?? manuscript?.body ?? "" };
   });
-  return detectContinuityWarnings(project.entities, sceneInfos, timelineScenes);
+  const warnings = detectContinuityWarnings(project.entities, sceneInfos, timelineScenes);
+  return selected === null ? warnings : warnings.filter((warning) => selected.has(warning.sceneId) || selected.has(warning.previousSceneId));
 }
