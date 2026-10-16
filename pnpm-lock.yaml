@@ -386,6 +386,9 @@ importers:
       '@scriptorium/contracts':
         specifier: workspace:*
         version: link:../../packages/contracts
+      '@scriptorium/migration':
+        specifier: workspace:*
+        version: link:../../packages/migration
       '@scriptorium/module-diagnostics':
         specifier: workspace:*
         version: link:../diagnostics
