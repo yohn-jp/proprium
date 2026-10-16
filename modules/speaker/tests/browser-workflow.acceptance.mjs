@@ -32,6 +32,21 @@ const report = {
 };
 const actionData = {
   "speaker.scenes.list": { scenes: [{ id: "sc-1", name: "夜の駅" }] },
+  "story.entities.list": [
+    { id: "char-hero", name: "星野", type: "character" },
+    { id: "char-rival", name: "月城", type: "character" },
+  ],
+  "speaker.dialogue.list": { characterId: "char-hero", count: 1, minConfidence: "low", lines: [{ sceneId: "sc-1", sceneName: "夜の駅", sentenceIndex: 1, text: "『俺が行く。』", confidence: "high", reason: "preceding-narration" }] },
+  "speaker.voice.profiles": {
+    tokenizerModel: "lindera-wasm-nodejs-ipadic", tokenizerModelVersion: "2.0.0",
+    diagnosticsEngine: "scriptorium-diagnostics-cpu", diagnosticsEngineVersion: "1.0.0",
+    fingerprints: [
+      { entityId: "char-hero", dialogueCount: 10, firstPersonDist: { 俺: 0.8, 僕: 0.2 }, endingBigramDist: { "行|く": 0.6 }, particleDist: { が: 0.4 }, exclamationRate: 0.2, questionRate: 0.1, politeRatio: 0.15, katakanaRate: 0.03, avgDialogueLength: 12, dialogueLengthVariance: 4 },
+      { entityId: "char-rival", dialogueCount: 10, firstPersonDist: { 私: 0.9 }, endingBigramDist: { "です|ね": 0.7 }, particleDist: { は: 0.5 }, exclamationRate: 0.1, questionRate: 0.1, politeRatio: 0.8, katakanaRate: 0.02, avgDialogueLength: 13, dialogueLengthVariance: 3 },
+    ],
+    matrix: [{ entityIdA: "char-hero", entityIdB: "char-rival", similarity: 0.94, tooSimilar: true }],
+    stylometricProfiles: [{ entityId: "char-hero", dialogueCount: 10, mean: { typeTokenRatio: 0.72, morphemeCount: 8, commaFrequency: 0.14, adjectiveRatio: 0.2, verbRatio: 0.4 }, stdDev: { typeTokenRatio: 0.08, morphemeCount: 1.2, commaFrequency: 0.03, adjectiveRatio: 0.04, verbRatio: 0.05 } }],
+  },
   "speaker.attribute": {
     estimatedN: 1,
     fromManual: false,
@@ -64,7 +79,7 @@ const moduleContext = {
   async createWorkerService() { throw new Error("browser acceptance does not run engine actions"); },
 };
 const definition = await createModule(moduleContext);
-for (const id of ["speaker.attribute", "speaker.voice.check", "speaker.review.queue", "speaker.override", "speaker.evaluation.run", "speaker.retraining.run"]) {
+for (const id of ["speaker.attribute", "speaker.voice.check", "speaker.review.queue", "speaker.dialogue.list", "speaker.voice.profiles", "speaker.override", "speaker.evaluation.run", "speaker.retraining.run"]) {
   assert.ok(definition.actions.some((action) => action.id === id), `registered action ${id}`);
 }
 const server = await createServer({
@@ -131,6 +146,17 @@ try {
   await page.getByText("未解決話者 1", { exact: false }).waitFor();
   assert.ok((await page.locator("main").innerText()).includes("未確定を優先"));
 
+  await page.evaluate(async () => { await window.speakerUnmount(); window.speakerUnmount = await window.speakerMount("speaker.dialogue"); });
+  await page.getByLabel("キャラクター").selectOption("char-hero");
+  await page.getByText("『俺が行く。』", { exact: true }).waitFor();
+  assert.ok(calls.some((call) => call.actionId === "speaker.dialogue.list" && call.input.limit === 80 && call.input.minConfidence === "low"));
+
+  await page.evaluate(async () => { await window.speakerUnmount(); window.speakerUnmount = await window.speakerMount("speaker.voice.profiles"); });
+  await page.getByText("声が似すぎているキャラ", { exact: true }).waitFor();
+  await page.getByText("語彙豊富さ (TTR)", { exact: true }).waitFor();
+  await page.getByRole("button", { name: "月城" }).first().click();
+  assert.ok(calls.some((call) => call.actionId === "speaker.voice.profiles"));
+
   await page.evaluate(async () => { await window.speakerUnmount(); window.speakerUnmount = await window.speakerMount("speaker.evaluation"); });
   await page.getByRole("button", { name: /sc-1 · 突合 2 · textHash 不一致 1/ }).waitFor();
   await page.getByRole("button", { name: /sc-1 · 突合 2 · textHash 不一致 1/ }).click();
@@ -147,7 +173,7 @@ try {
   assert.deepEqual(pageErrors, []);
   await page.evaluate(() => window.speakerUnmount());
   await page.close();
-  console.log("PASS: rendered speaker attribution, review, diagnostics, evaluation, and retraining controls invoke their registered action boundary");
+  console.log("PASS: rendered speaker attribution, review, character dialogue, voice profiles, diagnostics, evaluation, and retraining controls invoke their registered action boundary");
 } finally {
   await browser?.close();
   await server.close();

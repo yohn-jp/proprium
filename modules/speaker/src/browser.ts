@@ -54,10 +54,11 @@ function ensureData(value: unknown): Data {
   return value as Data;
 }
 
-async function invoke(context: BrowserModuleContext, actionId: string, input: unknown): Promise<Data> {
+async function invoke<T = Data>(context: BrowserModuleContext, actionId: string, input: unknown): Promise<T> {
   const result = await context.invoke(actionId, input);
   if (!result.ok) throw Object.assign(new Error(result.error.message), { code: result.error.code });
-  return ensureData(result.data);
+  if (!result.data || typeof result.data !== "object") throw new Error("Speaker module returned an invalid result");
+  return result.data as T;
 }
 
 function appendWarning(status: HTMLOutputElement, error: unknown): void {
@@ -108,6 +109,22 @@ async function loadScenes(context: BrowserModuleContext): Promise<SceneChoice[]>
     const item = ensureData(row);
     return { id: String(item.id), name: String(item.name ?? item.id) };
   });
+}
+
+async function loadCharacters(context: BrowserModuleContext): Promise<SceneChoice[]> {
+  const data = await invoke<unknown>(context, "story.entities.list", { type: "character" });
+  if (!Array.isArray(data)) throw new Error("キャラクター一覧が不正です");
+  return data.map((row) => {
+    const item = ensureData(row);
+    return { id: String(item.id), name: String(item.name ?? item.id) };
+  });
+}
+
+function characterPicker(): HTMLSelectElement {
+  const select = el("select");
+  select.setAttribute("aria-label", "キャラクター");
+  select.append(new Option("キャラクターを選択", ""));
+  return select;
 }
 
 function attributionRow(
@@ -253,6 +270,211 @@ function mountReviewQueue(root: HTMLElement, context: BrowserModuleContext, clea
   reload.addEventListener("click", onReload); cleanups.push(() => reload.removeEventListener("click", onReload));
   root.append(reload, status, results);
   void onReload();
+}
+
+function mountCharacterDialogue(root: HTMLElement, context: BrowserModuleContext, cleanups: Array<() => void>): void {
+  const status = statusNode();
+  const character = characterPicker();
+  const scene = scenePicker([]);
+  scene.options[0]!.textContent = "すべてのシーン";
+  const confidence = el("select"); confidence.setAttribute("aria-label", "最低信頼度");
+  confidence.append(new Option("高・低信頼", "low"), new Option("高信頼のみ", "high"));
+  const reload = button("再読込");
+  const results = section("セリフ一覧");
+  const onReload = async () => {
+    if (!character.value) { status.textContent = "先にキャラクターを選択してください。"; return; }
+    reload.disabled = true; status.textContent = "キャラクターの帰属セリフを走査しています…";
+    results.replaceChildren(el("h4", "セリフ一覧"));
+    try {
+      const data = await invoke(context, "speaker.dialogue.list", {
+        characterId: character.value,
+        ...(scene.value ? { sceneId: scene.value } : {}),
+        limit: 80,
+        minConfidence: confidence.value,
+      });
+      const lines = Array.isArray(data.lines) ? data.lines.map(ensureData) : [];
+      const byScene = new Map<string, { name: string; lines: Data[] }>();
+      for (const line of lines) {
+        const sceneId = String(line.sceneId ?? "(unknown)");
+        const group = byScene.get(sceneId) ?? { name: String(line.sceneName ?? sceneId), lines: [] };
+        group.lines.push(line); byScene.set(sceneId, group);
+      }
+      if (lines.length === 0) results.append(el("p", "帰属セリフはまだありません。"));
+      for (const [sceneId, group] of byScene) {
+        const groupSection = section(group.name || sceneId);
+        for (const line of group.lines) {
+          groupSection.append(el("p", String(line.text ?? "—")));
+          groupSection.append(el("small", `文 ${String(line.sentenceIndex)} · ${confidenceLabel(line.confidence as Attribution["confidence"])} · ${reasonLabel(String(line.reason ?? "none"))}`));
+        }
+        results.append(groupSection);
+      }
+      status.textContent = `${String(data.count ?? lines.length)} 件のセリフ · ${confidence.value === "high" ? "高信頼のみ" : "高・低信頼"} · 直近最大 80 件`;
+    } catch (error) { appendWarning(status, error); }
+    finally { reload.disabled = false; }
+  };
+  const onFilterChange = () => { if (character.value) void onReload(); };
+  reload.addEventListener("click", onReload); character.addEventListener("change", onFilterChange);
+  scene.addEventListener("change", onFilterChange); confidence.addEventListener("change", onFilterChange);
+  cleanups.push(
+    () => reload.removeEventListener("click", onReload),
+    () => character.removeEventListener("change", onFilterChange),
+    () => scene.removeEventListener("change", onFilterChange),
+    () => confidence.removeEventListener("change", onFilterChange),
+  );
+  root.append(field("キャラクター", character), field("シーン", scene), field("最低信頼度", confidence), reload, status, results);
+  void Promise.all([loadCharacters(context), loadScenes(context)]).then(([characters, scenes]) => {
+    for (const item of characters) character.append(new Option(item.name, item.id));
+    for (const item of scenes) scene.append(new Option(item.name, item.id));
+  }).catch((error) => appendWarning(status, error));
+}
+
+function distributionList(title: string, raw: unknown): HTMLElement {
+  const distribution = raw && typeof raw === "object" && !Array.isArray(raw) ? ensureData(raw) : {};
+  const entries = Object.entries(distribution).filter(([, value]) => typeof value === "number" && value > 0)
+    .sort((a, b) => Number(b[1]) - Number(a[1])).slice(0, 8);
+  const sectionNode = section(title);
+  if (!entries.length) { sectionNode.append(el("p", "データなし")); return sectionNode; }
+  const max = Number(entries[0]![1]);
+  const list = el("ul");
+  for (const [label, rawValue] of entries) {
+    const value = Number(rawValue);
+    const row = el("li");
+    const bar = el("span"); bar.style.display = "inline-block"; bar.style.height = "0.55rem"; bar.style.marginInline = "0.5rem"; bar.style.background = "currentColor"; bar.style.width = `${Math.max(4, value / max * 100)}%`;
+    row.append(el("span", label.replaceAll("|", "")), bar, el("small", `${(value * 100).toFixed(0)}%`));
+    list.append(row);
+  }
+  sectionNode.append(list);
+  return sectionNode;
+}
+
+function metricRow(label: string, value: unknown, percentage = false): HTMLElement {
+  const row = el("div"); row.style.display = "flex"; row.style.justifyContent = "space-between";
+  const numeric = typeof value === "number" && Number.isFinite(value) ? value : null;
+  row.append(el("span", label), el("span", numeric === null ? "—" : percentage ? `${(numeric * 100).toFixed(1)}%` : numeric.toFixed(numeric >= 10 ? 1 : 2)));
+  return row;
+}
+
+function renderVoiceProfile(
+  root: HTMLElement,
+  profileData: Data,
+  characterId: string,
+  characters: SceneChoice[],
+  onSelect: (id: string) => void,
+): void {
+  root.replaceChildren();
+  const fingerprints = Array.isArray(profileData.fingerprints) ? profileData.fingerprints.map(ensureData) : [];
+  const stylometrics = Array.isArray(profileData.stylometricProfiles) ? profileData.stylometricProfiles.map(ensureData) : [];
+  const matrix = Array.isArray(profileData.matrix) ? profileData.matrix.map(ensureData) : [];
+  const fingerprint = fingerprints.find((item) => item.entityId === characterId);
+  const stylometric = stylometrics.find((item) => item.entityId === characterId);
+  if (!fingerprint) {
+    root.append(el("h4", "声紋サマリー"), el("p", "学習に必要なセリフがまだ不足しています。"));
+    if (stylometric) root.append(renderStylometric(stylometric));
+    return;
+  }
+  const dialogueCount = Number(fingerprint.dialogueCount ?? 0);
+  const coverage = dialogueCount >= 10 ? "診断可能" : dialogueCount >= 3 ? "学習中" : "不足";
+  root.append(el("p", `${coverage} · 高信頼セリフ ${dialogueCount} 件（プロファイル 3+ / 逸脱判定 10+）`));
+  const first = distributionEntries(fingerprint.firstPersonDist)[0];
+  const ending = distributionEntries(fingerprint.endingBigramDist)[0];
+  if (first || ending) root.append(el("p", `代表口調:${first ? ` 一人称「${first[0]}」${(Number(first[1]) * 100).toFixed(0)}%` : ""}${first && ending ? " ·" : ""}${ending ? ` 語尾「${ending[0].replaceAll("|", "")}」${(Number(ending[1]) * 100).toFixed(0)}%` : ""}`));
+  const metrics = el("div");
+  metrics.append(
+    metricRow("感嘆符率", fingerprint.exclamationRate, true), metricRow("疑問符率", fingerprint.questionRate, true),
+    metricRow("丁寧語比率", fingerprint.politeRatio, true), metricRow("カタカナ率", fingerprint.katakanaRate, true),
+    metricRow("平均セリフ長", fingerprint.avgDialogueLength), metricRow("セリフ長の分散", fingerprint.dialogueLengthVariance),
+  );
+  root.append(metrics, distributionList("一人称分布", fingerprint.firstPersonDist), distributionList("語尾 bigram", fingerprint.endingBigramDist), distributionList("助詞分布", fingerprint.particleDist));
+  const similar = matrix.filter((pair) => pair.entityIdA === characterId || pair.entityIdB === characterId)
+    .sort((a, b) => Number(b.similarity) - Number(a.similarity));
+  const tooSimilar = similar.filter((pair) => pair.tooSimilar === true);
+  if (tooSimilar.length) {
+    const list = el("ul");
+    for (const pair of tooSimilar) {
+      const otherId = String(pair.entityIdA === characterId ? pair.entityIdB : pair.entityIdA);
+      const otherName = characters.find((item) => item.id === otherId)?.name ?? otherId;
+      const choose = button(otherName); choose.addEventListener("click", () => onSelect(otherId));
+      const row = el("li"); row.append(choose, el("span", ` 類似度 ${Number(pair.similarity).toFixed(2)}`)); list.append(row);
+    }
+    const warning = section("声が似すぎているキャラ"); warning.append(list); root.append(warning);
+  }
+  const peers = similar.slice(0, 2);
+  if (peers.length) {
+    const table = el("table");
+    const head = el("tr"); head.append(el("th", "指標"));
+    const peerProfiles: Data[] = [fingerprint];
+    for (const peer of peers) {
+      const otherId = String(peer.entityIdA === characterId ? peer.entityIdB : peer.entityIdA);
+      const otherName = characters.find((item) => item.id === otherId)?.name ?? otherId;
+      const choose = button(otherName); choose.addEventListener("click", () => onSelect(otherId));
+      const th = el("th"); th.append(choose, el("small", ` ${Number(peer.similarity).toFixed(2)}`)); head.append(th);
+      const found = fingerprints.find((item) => item.entityId === otherId);
+      if (found) peerProfiles.push(found);
+    }
+    table.append(head);
+    for (const [label, key, percent] of [["丁寧語", "politeRatio", true], ["感嘆符", "exclamationRate", true], ["平均長", "avgDialogueLength", false]] as const) {
+      const row = el("tr"); row.append(el("td", label));
+      for (const peerProfile of peerProfiles) row.append(el("td", typeof peerProfile[key] === "number" ? percent ? `${(Number(peerProfile[key]) * 100).toFixed(0)}%` : Number(peerProfile[key]).toFixed(1) : "—"));
+      table.append(row);
+    }
+    const compare = section("類似キャラとの比較"); compare.append(table); root.append(compare);
+  }
+  if (stylometric) root.append(renderStylometric(stylometric));
+  else root.append(el("p", "量的スタイル: 学習に必要なセリフがまだ不足しています。"));
+}
+
+function distributionEntries(raw: unknown): Array<[string, number]> {
+  if (!raw || typeof raw !== "object" || Array.isArray(raw)) return [];
+  return Object.entries(raw).filter((entry): entry is [string, number] => typeof entry[1] === "number" && entry[1] > 0).sort((a, b) => b[1] - a[1]);
+}
+
+function renderStylometric(profile: Data): HTMLElement {
+  const mean = profile.mean && typeof profile.mean === "object" ? ensureData(profile.mean) : {};
+  const stdDev = profile.stdDev && typeof profile.stdDev === "object" ? ensureData(profile.stdDev) : {};
+  const sectionNode = section("量的スタイル");
+  sectionNode.append(el("p", `n=${String(profile.dialogueCount ?? 0)}`));
+  sectionNode.append(
+    metricRow("語彙豊富さ (TTR)", mean.typeTokenRatio, true), metricRow("平均形態素数", mean.morphemeCount),
+    metricRow("読点頻度", mean.commaFrequency, true), metricRow("形容詞比", mean.adjectiveRatio, true), metricRow("動詞比", mean.verbRatio, true),
+  );
+  const details = el("details"); details.append(el("summary", "分布の広がり (stdDev)"));
+  details.append(metricRow("TTR", stdDev.typeTokenRatio), metricRow("形態素数", stdDev.morphemeCount), metricRow("読点頻度", stdDev.commaFrequency), metricRow("形容詞比", stdDev.adjectiveRatio), metricRow("動詞比", stdDev.verbRatio));
+  sectionNode.append(details);
+  return sectionNode;
+}
+
+function mountVoiceProfiles(root: HTMLElement, context: BrowserModuleContext, cleanups: Array<() => void>): void {
+  const status = statusNode();
+  const character = characterPicker();
+  const content = section("声紋サマリー");
+  const reload = button("声紋を再計算");
+  let characters: SceneChoice[] = [];
+  let profiles: Data | null = null;
+  const draw = () => {
+    if (!profiles || !character.value) { content.replaceChildren(el("h4", "声紋サマリー"), el("p", "キャラクターを選択してください。")); return; }
+    renderVoiceProfile(content, profiles, character.value, characters, (id) => { character.value = id; draw(); });
+  };
+  const onCharacter = () => draw();
+  const onReload = async () => {
+    reload.disabled = true; status.textContent = "高信頼セリフから声紋と量的スタイルを再計算しています…";
+    try {
+      const result = await invoke(context, "speaker.voice.profiles", {});
+      profiles = result;
+      draw();
+      status.textContent = `文体解析 ${String(result.diagnosticsEngine)}@${String(result.diagnosticsEngineVersion)} · 共有 tokenizer ${String(result.tokenizerModel)}@${String(result.tokenizerModelVersion)}`;
+    } catch (error) { appendWarning(status, error); }
+    finally { reload.disabled = false; }
+  };
+  character.addEventListener("change", onCharacter); reload.addEventListener("click", onReload);
+  cleanups.push(() => character.removeEventListener("change", onCharacter), () => reload.removeEventListener("click", onReload));
+  root.append(field("キャラクター", character), reload, status, content);
+  void loadCharacters(context).then((items) => {
+    characters = items;
+    for (const item of items) character.append(new Option(item.name, item.id));
+    if (items[0]) character.value = items[0].id;
+    draw();
+    return onReload();
+  }).catch((error) => appendWarning(status, error));
 }
 
 function renderEvaluation(root: HTMLElement, data: Data): void {
@@ -404,12 +626,16 @@ export const browserModule: BrowserModuleDefinition = {
     const titles: Record<string, string> = {
       "speaker.attribution": "話者帰属と声の確認",
       "speaker.review": "話者確認キュー",
+      "speaker.dialogue": "キャラクター別セリフ",
+      "speaker.voice.profiles": "キャラクター声紋",
       "speaker.evaluation": "話者評価とモデル",
     };
     if (!titles[contributionId]) throw new Error(`Unknown speaker contribution: ${contributionId}`);
     root.replaceChildren(el("h3", titles[contributionId]));
     if (contributionId === "speaker.attribution") mountAttribution(root, context, cleanups);
     else if (contributionId === "speaker.review") mountReviewQueue(root, context, cleanups);
+    else if (contributionId === "speaker.dialogue") mountCharacterDialogue(root, context, cleanups);
+    else if (contributionId === "speaker.voice.profiles") mountVoiceProfiles(root, context, cleanups);
     else mountEvaluation(root, context, cleanups);
     const dispose = () => {
       for (const cleanup of cleanups.splice(0)) cleanup();

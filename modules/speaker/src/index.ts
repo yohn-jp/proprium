@@ -31,7 +31,7 @@ import { splitIntoSentences, isDialogue } from "./algorithms/textAnalysis.js";
 import { hashDialogueText, type SpeakerAttribution, type SpeakerOverride } from "./algorithms/speakerAttribution.js";
 import { runSpeakerPipeline, type SpeakerPipelineInput, type SpeakerPipelineResult } from "./algorithms/pipeline.js";
 import type { SpeakerEvalReport } from "./algorithms/speakerEval.js";
-import { SPEAKER_ENGINE_ID, SPEAKER_ENGINE_VERSION, SPEAKER_MODULE_VERSION, type SpeakerTrainingResult, type SpeakerWorkerInput } from "./worker.js";
+import { SPEAKER_ENGINE_ID, SPEAKER_ENGINE_VERSION, SPEAKER_MODULE_VERSION, type SpeakerTrainingResult, type SpeakerWorkerInput } from "./engine.js";
 
 export * from "./algorithms/speakerAttribution.js";
 export * from "./algorithms/speakerClustering.js";
@@ -72,6 +72,15 @@ const CONFIDENCE_RANK: Record<SpeakerAttribution["confidence"], number> = { none
 const passThrough: ValueSchema = { parse(value) { return value; } };
 
 type RecordValue = Record<string, unknown>;
+type SpeakerCacheIdentity = {
+  schemaVersion: 1;
+  moduleVersion: string;
+  engineId: string;
+  engineVersion: string;
+  tokenizerModel: string;
+  tokenizerModelVersion: string;
+  adoptedModelRevision: string | null;
+};
 type SceneContextDto = {
   scene: StoryEntity;
   appears?: StoryEntity[];
@@ -84,6 +93,7 @@ type PreparedScene = {
   text: string;
   candidates: StoryEntity[];
 };
+const cacheIdentityByContext = new WeakMap<ModuleActionContext, Promise<SpeakerCacheIdentity>>();
 
 function record(value: unknown, label = "input"): RecordValue {
   if (!value || typeof value !== "object" || Array.isArray(value)) throw new TypeError(`${label} must be an object`);
@@ -155,6 +165,22 @@ function parseSceneTextInput(value: unknown): { sceneId: string; text?: string }
   const raw = record(value);
   if (raw.text !== undefined && (typeof raw.text !== "string" || raw.text.length > MAX_SCENE_CHARACTERS)) throw new TypeError(`text must be at most ${MAX_SCENE_CHARACTERS} characters`);
   return { ...input, ...(typeof raw.text === "string" ? { text: raw.text } : {}) };
+}
+
+function parseDialogueInput(value: unknown): { characterId: string; sceneId?: string; limit: number; minConfidence: "high" | "low" } {
+  const input = record(value);
+  if (typeof input.characterId !== "string" || !input.characterId.trim() || input.characterId.length > 256) throw new TypeError("characterId must be a non-empty string of at most 256 characters");
+  if (input.sceneId !== undefined && (typeof input.sceneId !== "string" || !input.sceneId.trim() || input.sceneId.length > 256)) throw new TypeError("sceneId must be a non-empty string of at most 256 characters");
+  const limit = input.limit === undefined ? 20 : input.limit;
+  if (!Number.isSafeInteger(limit) || (limit as number) < 1 || (limit as number) > 2_000) throw new TypeError("limit must be an integer between 1 and 2000");
+  const minConfidence = input.minConfidence === undefined ? "low" : input.minConfidence;
+  if (minConfidence !== "high" && minConfidence !== "low") throw new TypeError("minConfidence must be high or low");
+  return {
+    characterId: input.characterId,
+    ...(typeof input.sceneId === "string" ? { sceneId: input.sceneId } : {}),
+    limit: limit as number,
+    minConfidence,
+  };
 }
 
 function parseOverrideInput(value: unknown): {
@@ -265,9 +291,10 @@ async function enrichPipeline(
   moduleContext: ModuleContext,
   options: { stylometricProfiles?: StylometricProfile[]; ignoreOverrides?: boolean; skipReranker?: boolean } = {},
 ): Promise<SpeakerPipelineInput> {
+  const identity = await cacheIdentityFor(context);
   const [cache, gates, model] = await Promise.all([
     prepareTokenCache(scene.text, tokenizer, context.reader.snapshot, context.signal),
-    readGateCache(moduleContext.cacheDirectory, context.reader.snapshot),
+    readGateCache(moduleContext.cacheDirectory, context.reader.snapshot, identity),
     readAdoptedModel(context),
   ]);
   return {
@@ -291,9 +318,45 @@ async function readAdoptedModel(context: ModuleActionContext): Promise<SpeakerMo
   catch { return null; }
 }
 
-function cacheFile(cacheDirectory: string, kind: "rules" | "evaluation", snapshot: SnapshotId): string {
-  const digest = createHash("sha256").update(snapshotKey(snapshot)).digest("hex");
+async function cacheIdentityFor(context: ModuleActionContext): Promise<SpeakerCacheIdentity> {
+  let pending = cacheIdentityByContext.get(context);
+  if (!pending) {
+    pending = context.reader.read(ADOPTED_MODEL_PATH).then((adoptedModel) => ({
+      schemaVersion: 1,
+      moduleVersion: SPEAKER_MODULE_VERSION,
+      engineId: SPEAKER_ENGINE_ID,
+      engineVersion: SPEAKER_ENGINE_VERSION,
+      tokenizerModel: NLP_MODEL_ID,
+      tokenizerModelVersion: NLP_MODEL_VERSION,
+      adoptedModelRevision: adoptedModel?.revision ?? null,
+    }));
+    cacheIdentityByContext.set(context, pending);
+  }
+  return pending;
+}
+
+function cacheFile(cacheDirectory: string, kind: "rules" | "evaluation", snapshot: SnapshotId, identity: SpeakerCacheIdentity): string {
+  const key = JSON.stringify({ snapshot: snapshotKey(snapshot), identity });
+  const digest = createHash("sha256").update(key).digest("hex");
   return path.join(cacheDirectory, "speaker", `${kind}-${digest}.json`);
+}
+
+function sameCacheIdentity(actual: unknown, expected: SpeakerCacheIdentity): boolean {
+  if (!actual || typeof actual !== "object" || Array.isArray(actual)) return false;
+  const value = actual as Record<string, unknown>;
+  return Object.keys(expected).length === Object.keys(value).length
+    && Object.entries(expected).every(([key, expectedValue]) => value[key] === expectedValue);
+}
+
+function cacheProvenance(identity: SpeakerCacheIdentity): RecordValue {
+  return {
+    moduleVersion: identity.moduleVersion,
+    engineId: identity.engineId,
+    engineVersion: identity.engineVersion,
+    tokenizerModel: identity.tokenizerModel,
+    tokenizerModelVersion: identity.tokenizerModelVersion,
+    adoptedModelRevision: identity.adoptedModelRevision,
+  };
 }
 
 async function writeCache(cacheDirectory: string, filePath: string, value: unknown): Promise<void> {
@@ -308,24 +371,24 @@ async function writeCache(cacheDirectory: string, filePath: string, value: unkno
   }
 }
 
-async function readGateCache(cacheDirectory: string, snapshot: SnapshotId): Promise<{ gates: SpeakerRuleGates; exists: boolean }> {
+async function readGateCache(cacheDirectory: string, snapshot: SnapshotId, identity: SpeakerCacheIdentity): Promise<{ gates: SpeakerRuleGates; exists: boolean; provenance: RecordValue }> {
   try {
-    const parsed = JSON.parse(await readFile(cacheFile(cacheDirectory, "rules", snapshot), "utf8")) as { snapshot?: unknown; gates?: unknown };
-    if (parsed.snapshot !== snapshotKey(snapshot)) return { gates: emptySpeakerRuleGates(), exists: false };
-    return { gates: parseSpeakerRuleGates(parsed.gates), exists: true };
-  } catch { return { gates: emptySpeakerRuleGates(), exists: false }; }
+    const parsed = JSON.parse(await readFile(cacheFile(cacheDirectory, "rules", snapshot, identity), "utf8")) as { snapshot?: unknown; identity?: unknown; gates?: unknown };
+    if (parsed.snapshot !== snapshotKey(snapshot) || !sameCacheIdentity(parsed.identity, identity)) return { gates: emptySpeakerRuleGates(), exists: false, provenance: cacheProvenance(identity) };
+    return { gates: parseSpeakerRuleGates(parsed.gates), exists: true, provenance: cacheProvenance(identity) };
+  } catch { return { gates: emptySpeakerRuleGates(), exists: false, provenance: cacheProvenance(identity) }; }
 }
 
-async function writeGateCache(cacheDirectory: string, snapshot: SnapshotId, gates: SpeakerRuleGates): Promise<void> {
-  await writeCache(cacheDirectory, cacheFile(cacheDirectory, "rules", snapshot), { version: 1, snapshot: snapshotKey(snapshot), gates });
+async function writeGateCache(cacheDirectory: string, snapshot: SnapshotId, identity: SpeakerCacheIdentity, gates: SpeakerRuleGates): Promise<void> {
+  await writeCache(cacheDirectory, cacheFile(cacheDirectory, "rules", snapshot, identity), { version: 2, snapshot: snapshotKey(snapshot), identity, gates });
 }
 
-async function readEvaluationCache(cacheDirectory: string, snapshot: SnapshotId): Promise<{ report: SpeakerEvalReport | null; exists: boolean }> {
+async function readEvaluationCache(cacheDirectory: string, snapshot: SnapshotId, identity: SpeakerCacheIdentity): Promise<{ report: SpeakerEvalReport | null; exists: boolean; provenance: RecordValue }> {
   try {
-    const parsed = JSON.parse(await readFile(cacheFile(cacheDirectory, "evaluation", snapshot), "utf8")) as { snapshot?: unknown; report?: unknown };
-    if (parsed.snapshot !== snapshotKey(snapshot) || !isSpeakerEvalReport(parsed.report)) return { report: null, exists: false };
-    return { report: parsed.report, exists: true };
-  } catch { return { report: null, exists: false }; }
+    const parsed = JSON.parse(await readFile(cacheFile(cacheDirectory, "evaluation", snapshot, identity), "utf8")) as { snapshot?: unknown; identity?: unknown; report?: unknown };
+    if (parsed.snapshot !== snapshotKey(snapshot) || !sameCacheIdentity(parsed.identity, identity) || !isSpeakerEvalReport(parsed.report)) return { report: null, exists: false, provenance: cacheProvenance(identity) };
+    return { report: parsed.report, exists: true, provenance: cacheProvenance(identity) };
+  } catch { return { report: null, exists: false, provenance: cacheProvenance(identity) }; }
 }
 
 function isSpeakerEvalReport(value: unknown): value is SpeakerEvalReport {
@@ -337,8 +400,8 @@ function isSpeakerEvalReport(value: unknown): value is SpeakerEvalReport {
   return Object.values(metrics as Record<string, unknown>).every((metric) => typeof metric === "number" && Number.isFinite(metric));
 }
 
-async function writeEvaluationCache(cacheDirectory: string, snapshot: SnapshotId, report: SpeakerEvalReport): Promise<void> {
-  await writeCache(cacheDirectory, cacheFile(cacheDirectory, "evaluation", snapshot), { version: 1, snapshot: snapshotKey(snapshot), report });
+async function writeEvaluationCache(cacheDirectory: string, snapshot: SnapshotId, identity: SpeakerCacheIdentity, report: SpeakerEvalReport): Promise<void> {
+  await writeCache(cacheDirectory, cacheFile(cacheDirectory, "evaluation", snapshot, identity), { version: 2, snapshot: snapshotKey(snapshot), identity, report });
 }
 
 async function withTokenizer<T>(moduleContext: ModuleContext, signal: AbortSignal, callback: (tokenizer: NlpTokenizerCapability) => Promise<T>): Promise<T> {
@@ -439,6 +502,72 @@ async function prepareCorpusPipelines(
     pipelines.push(await enrichPipeline(scene, entities, tokenizer, context, moduleContext, options));
   }
   return pipelines;
+}
+
+async function orderedSceneIds(context: ModuleActionContext): Promise<string[]> {
+  const raw = record(await invokeData(context, "story.volumes.tree", {}), "Story volume tree");
+  if (!Array.isArray(raw.tree)) throw new TypeError("Story volume tree is not an array");
+  const sceneIds: string[] = [];
+  for (const volumeValue of raw.tree) {
+    const volume = record(volumeValue, "volume tree item");
+    if (!Array.isArray(volume.chapters)) continue;
+    for (const chapterValue of volume.chapters) {
+      const chapter = record(chapterValue, "chapter tree item");
+      if (!Array.isArray(chapter.scenes)) continue;
+      for (const sceneValue of chapter.scenes) {
+        const scene = record(sceneValue, "scene tree item");
+        if (typeof scene.id === "string") sceneIds.push(scene.id);
+      }
+    }
+  }
+  return [...new Set(sceneIds)];
+}
+
+async function speakerDialogueList(
+  input: ReturnType<typeof parseDialogueInput>,
+  context: ModuleActionContext,
+  moduleContext: ModuleContext,
+): Promise<unknown> {
+  const { entities, scenes } = await loadCorpusScenes(context);
+  const character = entities.find((entity) => entity.id === input.characterId);
+  if (character?.type !== "character") throw Object.assign(new Error(`Character not found: ${input.characterId}`), { code: "not_found" });
+  let selectedScenes = scenes;
+  if (input.sceneId) {
+    const scene = entities.find((entity) => entity.id === input.sceneId);
+    if (scene?.type !== "scene") throw Object.assign(new Error(`Scene not found: ${input.sceneId}`), { code: "not_found" });
+    selectedScenes = scenes.filter((item) => item.scene.id === input.sceneId);
+  } else {
+    const ids = await orderedSceneIds(context);
+    const sceneById = new Map(scenes.map((item) => [item.scene.id, item]));
+    selectedScenes = ids.flatMap((id) => sceneById.has(id) ? [sceneById.get(id)!] : []);
+  }
+
+  const minRank = CONFIDENCE_RANK[input.minConfidence];
+  const lines: Array<{ text: string; sceneId: string; sceneName: string; sentenceIndex: number; confidence: SpeakerAttribution["confidence"]; reason: string }> = [];
+  await withTokenizer(moduleContext, context.signal, async (tokenizer) => withSpeakerWorker(moduleContext, async (worker) => {
+    for (const scene of selectedScenes) {
+      if (context.signal.aborted) throw context.signal.reason ?? Object.assign(new Error("Speaker action cancelled"), { code: "job_cancelled" });
+      const pipeline = await enrichPipeline(scene, entities, tokenizer, context, moduleContext);
+      const result = await requestSpeakerWorker<SpeakerPipelineResult>(worker, context, "attribute", { kind: "attribute", pipeline });
+      for (const attribution of result.attributions) {
+        if (attribution.speakerEntityId !== input.characterId || CONFIDENCE_RANK[attribution.confidence] < minRank) continue;
+        lines.push({
+          text: attribution.text,
+          sceneId: scene.scene.id,
+          sceneName: scene.scene.name ?? scene.scene.id,
+          sentenceIndex: attribution.sentenceIndex,
+          confidence: attribution.confidence,
+          reason: attribution.reason,
+        });
+      }
+    }
+  }));
+  return {
+    characterId: input.characterId,
+    count: Math.min(lines.length, input.limit),
+    minConfidence: input.minConfidence,
+    lines: lines.slice(Math.max(0, lines.length - input.limit)),
+  };
 }
 
 function correctionsFromScene(raw: unknown): SpeakerOverride[] {
@@ -556,23 +685,25 @@ interface SpeakerEvaluationResult {
   report: SpeakerEvalReport;
   gates: SpeakerRuleGates;
   gatesUpdated: boolean;
+  provenance: RecordValue;
 }
 
 async function runEvaluation(input: { writeGates: boolean }, context: ModuleActionContext, moduleContext: ModuleContext): Promise<SpeakerEvaluationResult> {
+  const identity = await cacheIdentityFor(context);
   const { entities, scenes } = await loadCorpusScenes(context);
   const goldScenes = scenes.filter((scene) => correctionsFromScene(scene.scene.raw.speakerOverrides).length > 0);
   const report = await withTokenizer(moduleContext, context.signal, async (tokenizer) => {
     const pipelines = await prepareCorpusPipelines(goldScenes, entities, tokenizer, context, moduleContext);
     return runWorker<SpeakerEvalReport>(moduleContext, context, "evaluate", { kind: "evaluate", pipelines, generatedAt: new Date().toISOString() });
   });
-  await writeEvaluationCache(moduleContext.cacheDirectory, context.reader.snapshot, report);
-  let gates = await readGateCache(moduleContext.cacheDirectory, context.reader.snapshot);
+  await writeEvaluationCache(moduleContext.cacheDirectory, context.reader.snapshot, identity, report);
+  let gates = await readGateCache(moduleContext.cacheDirectory, context.reader.snapshot, identity);
   if (input.writeGates) {
     const { records } = await readCorrections(context);
-    gates = { gates: computeSpeakerRuleGates(report.byReason, records), exists: true };
-    await writeGateCache(moduleContext.cacheDirectory, context.reader.snapshot, gates.gates);
+    gates = { gates: computeSpeakerRuleGates(report.byReason, records), exists: true, provenance: cacheProvenance(identity) };
+    await writeGateCache(moduleContext.cacheDirectory, context.reader.snapshot, identity, gates.gates);
   }
-  return { report, gates: gates.gates, gatesUpdated: input.writeGates };
+  return { report, gates: gates.gates, gatesUpdated: input.writeGates, provenance: cacheProvenance(identity) };
 }
 
 async function deterministicHoldoutIds(scenes: PreparedScene[]): Promise<string[]> {
@@ -586,6 +717,7 @@ async function deterministicHoldoutIds(scenes: PreparedScene[]): Promise<string[
 }
 
 async function speakerRetrainAction(input: ReturnType<typeof parseRetrainInput>, context: ModuleActionContext, moduleContext: ModuleContext): Promise<unknown> {
+  const identity = await cacheIdentityFor(context);
   const { entities, scenes } = await loadCorpusScenes(context);
   const goldScenes = scenes.filter((scene) => correctionsFromScene(scene.scene.raw.speakerOverrides).length > 0);
   const holdoutIds = input.holdoutSceneIds ?? await deterministicHoldoutIds(goldScenes);
@@ -596,7 +728,7 @@ async function speakerRetrainAction(input: ReturnType<typeof parseRetrainInput>,
   const holdoutScenes = goldScenes.filter((scene) => holdoutSet.has(scene.scene.id));
   if (holdoutScenes.length === 0) throw Object.assign(new Error("At least one holdout scene with canonical speaker overrides is required"), { code: "empty_holdout" });
   const { records: corrections } = await readCorrections(context);
-  const gates = await readGateCache(moduleContext.cacheDirectory, context.reader.snapshot);
+  const gates = await readGateCache(moduleContext.cacheDirectory, context.reader.snapshot, identity);
   const result = await withTokenizer(moduleContext, context.signal, async (tokenizer) => {
     const [trainPipelines, holdoutPipelines] = await Promise.all([
       prepareCorpusPipelines(trainingScenes, entities, tokenizer, context, moduleContext, { ignoreOverrides: true, skipReranker: true }),
@@ -630,46 +762,90 @@ async function speakerRetrainAction(input: ReturnType<typeof parseRetrainInput>,
       deltaPt: result.deltaPt,
     }), `speaker-model-adoption-${randomUUID()}`, context.signal);
   }
-  return { ...metrics, model, adoptionProposal, dryRun: input.dryRun };
+  return { ...metrics, model, adoptionProposal, dryRun: input.dryRun, provenance: cacheProvenance(identity) };
+}
+
+interface VoiceProfileAnalysis {
+  fingerprints: RecordValue[];
+  matrix: RecordValue[];
+  stylometricProfiles: StylometricProfile[];
+  diagnosticsEngine: string;
+  diagnosticsEngineVersion: string;
+  targetResult?: SpeakerPipelineResult;
+}
+
+async function analyzeVoiceProfiles(
+  entities: StoryEntity[],
+  scenes: PreparedScene[],
+  context: ModuleActionContext,
+  moduleContext: ModuleContext,
+  target?: PreparedScene,
+): Promise<VoiceProfileAnalysis> {
+  return withTokenizer(moduleContext, context.signal, async (tokenizer) => withSpeakerWorker(moduleContext, async (worker) => {
+    const corpusDialogues: Record<string, string[]> = {};
+    for (const scene of scenes) {
+      if (context.signal.aborted) throw context.signal.reason ?? Object.assign(new Error("Speaker action cancelled"), { code: "job_cancelled" });
+      const pipeline = await enrichPipeline(scene, entities, tokenizer, context, moduleContext);
+      const result = await requestSpeakerWorker<SpeakerPipelineResult>(worker, context, "attribute", {
+        kind: "attribute", pipeline: { ...pipeline, stylometricProfiles: [] },
+      });
+      for (const attribution of result.attributions) {
+        if (attribution.confidence !== "high" || !attribution.speakerEntityId) continue;
+        (corpusDialogues[attribution.speakerEntityId] ??= []).push(attribution.text);
+      }
+    }
+    let count = 0;
+    let totalCharacters = 0;
+    for (const values of Object.values(corpusDialogues)) {
+      count += values.length;
+      totalCharacters += values.reduce((sum, text) => sum + text.length, 0);
+    }
+    if (count > MAX_DIALOGUES || totalCharacters > MAX_CORPUS_CHARACTERS) throw Object.assign(new Error(`Attributed corpus exceeds diagnostics profile limits (${MAX_DIALOGUES} utterances / ${MAX_CORPUS_CHARACTERS} characters)`), { code: "voice_corpus_too_large" });
+    const voiceData = record(await invokeData(context, "diagnostics.voiceProfiles", { dialoguesByCharacter: corpusDialogues }), "diagnostics.voiceProfiles output");
+    const fingerprints = arrayField(voiceData, "fingerprints");
+    const matrix = arrayField(voiceData, "matrix");
+    const stylometricProfiles = arrayField(voiceData, "stylometricProfiles") as unknown as StylometricProfile[];
+    if (typeof voiceData.diagnosticsEngine !== "string" || typeof voiceData.diagnosticsEngineVersion !== "string") throw new TypeError("Diagnostics voice profile identity is missing");
+    let targetResult: SpeakerPipelineResult | undefined;
+    if (target) {
+      const targetPipeline = await enrichPipeline(target, entities, tokenizer, context, moduleContext, { stylometricProfiles });
+      targetResult = await requestSpeakerWorker<SpeakerPipelineResult>(worker, context, "attribute", { kind: "attribute", pipeline: targetPipeline });
+    }
+    return {
+      fingerprints,
+      matrix,
+      stylometricProfiles,
+      diagnosticsEngine: voiceData.diagnosticsEngine,
+      diagnosticsEngineVersion: voiceData.diagnosticsEngineVersion,
+      ...(targetResult ? { targetResult } : {}),
+    };
+  }));
+}
+
+async function speakerVoiceProfiles(_input: RecordValue, context: ModuleActionContext, moduleContext: ModuleContext): Promise<unknown> {
+  const { entities, scenes } = await loadCorpusScenes(context);
+  const profiles = await analyzeVoiceProfiles(entities, scenes, context, moduleContext);
+  return {
+    fingerprints: profiles.fingerprints,
+    matrix: profiles.matrix,
+    stylometricProfiles: profiles.stylometricProfiles,
+    tokenizerModel: NLP_MODEL_ID,
+    tokenizerModelVersion: NLP_MODEL_VERSION,
+    diagnosticsEngine: profiles.diagnosticsEngine,
+    diagnosticsEngineVersion: profiles.diagnosticsEngineVersion,
+  };
 }
 
 async function speakerVoiceCheck(input: { sceneId: string }, context: ModuleActionContext, moduleContext: ModuleContext): Promise<unknown> {
   const { entities, scenes } = await loadCorpusScenes(context);
   const target = scenes.find((scene) => scene.scene.id === input.sceneId);
   if (!target) throw Object.assign(new Error(`Scene not found: ${input.sceneId}`), { code: "not_found" });
-  const [profiles, targetOutput] = await withTokenizer(moduleContext, context.signal, async (tokenizer) => {
-    const corpusDialogues: Record<string, string[]> = {};
-    const workerResults = await withSpeakerWorker(moduleContext, async (worker) => {
-      for (const scene of scenes) {
-        const pipeline = await enrichPipeline(scene, entities, tokenizer, context, moduleContext);
-        const result = await requestSpeakerWorker<SpeakerPipelineResult>(worker, context, "attribute", {
-          kind: "attribute", pipeline: { ...pipeline, stylometricProfiles: [] },
-        });
-        for (const attribution of result.attributions) {
-          if (attribution.confidence !== "high" || !attribution.speakerEntityId) continue;
-          (corpusDialogues[attribution.speakerEntityId] ??= []).push(attribution.text);
-        }
-      }
-      let count = 0;
-      let totalCharacters = 0;
-      for (const values of Object.values(corpusDialogues)) {
-        count += values.length;
-        totalCharacters += values.reduce((sum, text) => sum + text.length, 0);
-      }
-      if (count > MAX_DIALOGUES || totalCharacters > MAX_CORPUS_CHARACTERS) throw Object.assign(new Error(`Attributed corpus exceeds diagnostics profile limits (${MAX_DIALOGUES} utterances / ${MAX_CORPUS_CHARACTERS} characters)`), { code: "voice_corpus_too_large" });
-      const voiceData = await invokeData(context, "diagnostics.voiceProfiles", { dialoguesByCharacter: corpusDialogues });
-      const output = record(voiceData, "diagnostics.voiceProfiles output");
-      const fingerprints = Array.isArray(output.fingerprints) ? output.fingerprints : [];
-      const stylometricProfiles = Array.isArray(output.stylometricProfiles) ? output.stylometricProfiles : [];
-      const targetPipeline = await enrichPipeline(target, entities, tokenizer, context, moduleContext, { stylometricProfiles });
-      const result = await requestSpeakerWorker<SpeakerPipelineResult>(worker, context, "attribute", { kind: "attribute", pipeline: targetPipeline });
-      return [{ fingerprints, stylometricProfiles, voiceData }, { pipeline: targetPipeline, result }] as const;
-    });
-    return workerResults;
-  });
+  const profiles = await analyzeVoiceProfiles(entities, scenes, context, moduleContext, target);
+  const targetResult = profiles.targetResult;
+  if (!targetResult) throw new TypeError("Speaker voice analysis did not return target-scene attributions");
 
   const speakerDefinitions = Object.fromEntries(entities.filter((entity) => entity.type === "character").map((entity) => [entity.id, entity.raw]));
-  const attributionInput = targetOutput.result.attributions.map(({ speakerEntityId, confidence, text, sentenceIndex }) => ({ speakerEntityId, confidence, text, sentenceIndex }));
+  const attributionInput = targetResult.attributions.map(({ speakerEntityId, confidence, text, sentenceIndex }) => ({ speakerEntityId, confidence, text, sentenceIndex }));
   const [declaredResult, learnedResult, stylometricResult] = await Promise.all([
     invokeData(context, "diagnostics.voiceConsistency", { attributions: attributionInput, speakerDefinitions, sceneMetadata: target.scene.raw }),
     invokeData(context, "diagnostics.voiceDeviations", { attributions: attributionInput, fingerprints: profiles.fingerprints }),
@@ -685,15 +861,20 @@ async function speakerVoiceCheck(input: { sceneId: string }, context: ModuleActi
   ].sort((a, b) => Number(a.sentenceIndex) - Number(b.sentenceIndex));
   return {
     sceneId: input.sceneId,
-    attributions: targetOutput.result.attributions,
+    attributions: targetResult.attributions,
     warnings: declaredWarnings,
     styleDeviations: learnedWarnings,
     stylometricDeviations: stylometricWarnings,
     issues: merged,
     fingerprints: profiles.fingerprints,
+    matrix: profiles.matrix,
     stylometricProfiles: profiles.stylometricProfiles,
-    model: NLP_MODEL_ID,
-    modelVersion: NLP_MODEL_VERSION,
+    speakerEngine: SPEAKER_ENGINE_ID,
+    speakerEngineVersion: SPEAKER_ENGINE_VERSION,
+    tokenizerModel: NLP_MODEL_ID,
+    tokenizerModelVersion: NLP_MODEL_VERSION,
+    diagnosticsEngine: profiles.diagnosticsEngine,
+    diagnosticsEngineVersion: profiles.diagnosticsEngineVersion,
   };
 }
 
@@ -745,6 +926,8 @@ function makeActions(moduleContext: ModuleContext): ModuleAction[] {
       const entities = await loadEntities(context);
       return { scenes: entities.filter((entity) => entity.type === "scene").map(({ id, name, raw, filePath }) => ({ id, name: name ?? id, filePath, volume: raw.volume, chapter: raw.chapter })) };
     }),
+    action("speaker.dialogue.list", "compute", schema(parseDialogueInput), async (input, context) => speakerDialogueList(input as ReturnType<typeof parseDialogueInput>, context, moduleContext)),
+    action("speaker.voice.profiles", "compute", schema(objectSchema), async (input, context) => speakerVoiceProfiles(input, context, moduleContext)),
     action("speaker.attribute", "compute", schema(parseSceneTextInput), async (input, context) => {
       const run = await runPipelineAction(input as ReturnType<typeof parseSceneTextInput>, context, moduleContext);
       return {
@@ -793,8 +976,8 @@ function makeActions(moduleContext: ModuleContext): ModuleAction[] {
       if (!result.ok) throw Object.assign(new Error(result.error.message), { code: result.error.code });
       return { proposed: Boolean(result.proposals?.length) };
     }),
-    action("speaker.evaluation.latest", "read", schema(objectSchema), async (_input, context) => readEvaluationCache(moduleContext.cacheDirectory, context.reader.snapshot)),
-    action("speaker.ruleGates", "read", schema(objectSchema), async (_input, context) => readGateCache(moduleContext.cacheDirectory, context.reader.snapshot)),
+    action("speaker.evaluation.latest", "read", schema(objectSchema), async (_input, context) => readEvaluationCache(moduleContext.cacheDirectory, context.reader.snapshot, await cacheIdentityFor(context))),
+    action("speaker.ruleGates", "read", schema(objectSchema), async (_input, context) => readGateCache(moduleContext.cacheDirectory, context.reader.snapshot, await cacheIdentityFor(context))),
     action("speaker.evaluation.run", "compute", schema(parseEvaluationInput), async (input, context) => runEvaluation(input as ReturnType<typeof parseEvaluationInput>, context, moduleContext)),
     action("speaker.retraining.run", "propose", schema(parseRetrainInput), async (input, context) => speakerRetrainAction(input as ReturnType<typeof parseRetrainInput>, context, moduleContext)),
   ];
@@ -807,6 +990,8 @@ export async function createModule(_moduleContext: ModuleContext): Promise<Modul
     ui: [
       { id: "speaker.attribution", module: "speaker", slot: "dock", title: "話者帰属", action: "speaker.attribute" },
       { id: "speaker.review", module: "speaker", slot: "review", title: "話者確認キュー", action: "speaker.review.queue" },
+      { id: "speaker.dialogue", module: "speaker", slot: "inspection", title: "キャラクター別セリフ", action: "speaker.dialogue.list" },
+      { id: "speaker.voice.profiles", module: "speaker", slot: "inspection", title: "キャラクター声紋", action: "speaker.voice.profiles" },
       { id: "speaker.evaluation", module: "speaker", slot: "settings", title: "話者評価・モデル", action: "speaker.evaluation.run" },
     ],
     async dispose() {},

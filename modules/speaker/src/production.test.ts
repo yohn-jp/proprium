@@ -1,10 +1,11 @@
 import assert from "node:assert/strict";
 import { createHash } from "node:crypto";
+import { spawnSync } from "node:child_process";
 import { readFileSync } from "node:fs";
-import { mkdtemp, rm } from "node:fs/promises";
+import { mkdtemp, readdir, readFile, rm, writeFile } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
-import { fileURLToPath } from "node:url";
+import { fileURLToPath, pathToFileURL } from "node:url";
 import { test } from "node:test";
 import { assertChangeOperation, type ChangeOperation, type ChangeProposal, type ModuleContext, type ModuleManifest, type SnapshotId } from "@scriptorium/contracts";
 import { ModuleRuntime } from "@scriptorium/module-runtime";
@@ -32,9 +33,32 @@ function snapshotFor(files: Map<string, { content: string; revision: string }>):
 
 function sceneText(): string { return "星野は灯りを見た。『俺が行く。』"; }
 
+function addModelProbeScene(files: Map<string, { content: string; revision: string }>): void {
+  const sceneId = "sc-synthetic-model-probe";
+  const scenePath = `plot/volumes/volume-1/chapters/chapter-1/scenes/${sceneId}.yaml`;
+  const manuscriptPath = `manuscript/v1/${sceneId}.md`;
+  files.set(scenePath, {
+    content: [
+      `id: ${sceneId}`,
+      "type: scene",
+      "name: 合成モデル確認シーン",
+      "volume: volume-1",
+      "chapter: chapter-1",
+      "appears: [char-hero]",
+      "speakerCount: 1",
+      `manuscript: ${manuscriptPath}`,
+      "",
+    ].join("\n"),
+    revision: fileRevision([`id: ${sceneId}`, "type: scene", "name: 合成モデル確認シーン", "volume: volume-1", "chapter: chapter-1", "appears: [char-hero]", "speakerCount: 1", `manuscript: ${manuscriptPath}`, ""].join("\n")),
+  });
+  files.set(manuscriptPath, { content: sceneText(), revision: fileRevision(sceneText()) });
+}
+
 function initialFiles(sceneCount = 14): Map<string, { content: string; revision: string }> {
   const files = new Map<string, { content: string; revision: string }>();
   const add = (filePath: string, content: string) => files.set(filePath, { content, revision: fileRevision(content) });
+  add("plot/volumes/volume-1/volume.yaml", ["id: volume-1", "type: volume", "name: 第一巻", "order: 1", ""].join("\n"));
+  add("plot/volumes/volume-1/chapters/chapter-1/chapter.yaml", ["id: chapter-1", "type: chapter", "name: はじまり", "volume: volume-1", "order: 1", ""].join("\n"));
   add("bible/characters/hero/profile.yaml", [
     "id: char-hero",
     "type: character",
@@ -47,12 +71,14 @@ function initialFiles(sceneCount = 14): Map<string, { content: string; revision:
   for (let index = 0; index < sceneCount; index += 1) {
     const id = `sc-synthetic-${String(index + 1).padStart(2, "0")}`;
     const slug = String(index + 1).padStart(2, "0");
-    const scenePath = `plot/volumes/volume-1/scenes/${id}.yaml`;
+    const scenePath = `plot/volumes/volume-1/chapters/chapter-1/scenes/${id}.yaml`;
     const manuscriptPath = `manuscript/v1/${id}.md`;
     add(scenePath, [
       `id: ${id}`,
       "type: scene",
       `name: 合成シーン ${slug}`,
+      "volume: volume-1",
+      "chapter: chapter-1",
       "appears: [char-hero]",
       "speakerCount: 1",
       `manuscript: ${manuscriptPath}`,
@@ -60,6 +86,19 @@ function initialFiles(sceneCount = 14): Map<string, { content: string; revision:
     ].join("\n"));
     add(manuscriptPath, sceneText());
   }
+  const voiceProbeText = "星野は灯りを見た。『俺がゆっくり行きます。』";
+  add("plot/volumes/volume-1/chapters/chapter-1/scenes/sc-synthetic-voice-probe.yaml", [
+    "id: sc-synthetic-voice-probe",
+    "type: scene",
+    "name: 口調診断プローブ",
+    "volume: volume-1",
+    "chapter: chapter-1",
+    "appears: [char-hero]",
+    "speakerCount: 1",
+    "manuscript: manuscript/v1/sc-synthetic-voice-probe.md",
+    "",
+  ].join("\n"));
+  add("manuscript/v1/sc-synthetic-voice-probe.md", voiceProbeText);
   return files;
 }
 
@@ -157,6 +196,17 @@ function dataOf(result: Awaited<ReturnType<ModuleRuntime["invokeAction"]>>): Rec
   return result.data as Record<string, unknown>;
 }
 
+test("loading the server entry does not install worker IPC listeners in the host", () => {
+  const entry = pathToFileURL(fileURLToPath(new URL("./index.ts", import.meta.url))).href;
+  const script = `const before = process.listenerCount("message"); await import(${JSON.stringify(entry)}); const after = process.listenerCount("message"); if (after !== before) { console.error(JSON.stringify({ before, after })); process.exitCode = 1; }`;
+  const result = spawnSync(process.execPath, ["--import", "tsx", "--input-type=module", "-e", script], {
+    cwd: path.dirname(fileURLToPath(import.meta.url)),
+    encoding: "utf8",
+    timeout: 20_000,
+  });
+  assert.equal(result.status, 0, result.stderr || result.stdout);
+});
+
 test("speaker actions run real CPU attribution, propose corrections/model adoption, and reload from the reviewed snapshot", { timeout: 180_000 }, async () => {
   const files = initialFiles();
   let snapshot = snapshotFor(files);
@@ -181,11 +231,35 @@ test("speaker actions run real CPU attribution, propose corrections/model adopti
     assert.equal(predicted.speakerEntityId, "char-hero", JSON.stringify(predicted));
     assert.equal(predicted.confidence, "high", JSON.stringify(predicted));
 
-    const voice = await runtime.invokeAction("speaker", "speaker.voice.check", { sceneId }, host);
+    const voice = await runtime.invokeAction("speaker", "speaker.voice.check", { sceneId: "sc-synthetic-voice-probe" }, host);
     const voiceData = dataOf(voice);
     const voiceWarnings = voiceData.warnings as Array<{ issue: string; basis: string }>;
     assert.ok(voiceWarnings.some((warning) => warning.issue === "unexpected-first-person" && warning.basis === "profile"), JSON.stringify(voiceData));
+    const learnedVoiceWarnings = voiceData.styleDeviations as Array<{ issue: string; basis: string; sentenceIndex: number }>;
+    assert.ok(learnedVoiceWarnings.some((warning) => warning.issue === "unusual-ending" && warning.basis === "statistical"), JSON.stringify(voiceData));
+    const stylometricWarnings = voiceData.stylometricDeviations as Array<{ sentenceIndex: number }>;
+    assert.ok(stylometricWarnings.some((warning) => warning.sentenceIndex === 2), JSON.stringify(voiceData));
+    const mergedIssues = voiceData.issues as Array<{ source: string; issueLabel: string }>;
+    assert.ok(mergedIssues.some((warning) => warning.source === "registered" && warning.issueLabel === "想定外の一人称"), JSON.stringify(voiceData));
+    assert.ok(mergedIssues.some((warning) => warning.source === "learned" && warning.issueLabel === "学習語尾から逸脱"), JSON.stringify(voiceData));
+    assert.ok(mergedIssues.some((warning) => warning.source === "stylometric"), JSON.stringify(voiceData));
     assert.deepEqual(runtime.workerSupervisor.activeWorkerPids, [], "voice-check worker and its shared Lindera lease are released after the action");
+
+    const dialogue = await runtime.invokeAction("speaker", "speaker.dialogue.list", { characterId: "char-hero", limit: 80, minConfidence: "low" }, host);
+    const dialogueData = dataOf(dialogue);
+    assert.equal(dialogueData.count, 15);
+    assert.ok((dialogueData.lines as Array<Record<string, unknown>>).some((line) => line.sceneId === "sc-synthetic-01"));
+    assert.equal((dialogueData.lines as Array<Record<string, unknown>>)[0]?.confidence, "high");
+    assert.deepEqual(runtime.workerSupervisor.activeWorkerPids, []);
+
+    const voiceProfiles = await runtime.invokeAction("speaker", "speaker.voice.profiles", {}, host);
+    const voiceProfileData = dataOf(voiceProfiles);
+    const heroFingerprint = (voiceProfileData.fingerprints as Array<{ entityId: string; dialogueCount: number }>).find((row) => row.entityId === "char-hero");
+    const heroStylometric = (voiceProfileData.stylometricProfiles as Array<{ entityId: string; dialogueCount: number }>).find((row) => row.entityId === "char-hero");
+    assert.equal(heroFingerprint?.dialogueCount, 15);
+    assert.equal(heroStylometric?.dialogueCount, 15);
+    assert.equal(voiceProfileData.diagnosticsEngine, "scriptorium-diagnostics-cpu");
+    assert.deepEqual(runtime.workerSupervisor.activeWorkerPids, []);
 
     for (let index = 0; index < 14; index += 1) {
       const currentSceneId = `sc-synthetic-${String(index + 1).padStart(2, "0")}`;
@@ -205,7 +279,7 @@ test("speaker actions run real CPU attribution, propose corrections/model adopti
       assert.ok(proposal, JSON.stringify(proposalData));
       assert.deepEqual(proposal.operations[0]?.writes.map((write) => write.path).sort(), [
         `meta/scriptorium/modules/speaker/corrections.jsonl`,
-        `plot/volumes/volume-1/scenes/${currentSceneId}.yaml`,
+        `plot/volumes/volume-1/chapters/chapter-1/scenes/${currentSceneId}.yaml`,
       ].sort());
       applyReviewedProposal(proposal, files, () => snapshot, (next) => { snapshot = next; });
       assert.deepEqual(runtime.workerSupervisor.activeWorkerPids, [], "each action releases both supervised CPU processes");
@@ -222,6 +296,10 @@ test("speaker actions run real CPU attribution, propose corrections/model adopti
     assert.equal(trainingData.adopted, true, JSON.stringify({ accuracyWithoutModel: trainingData.accuracyWithoutModel, accuracyWithModel: trainingData.accuracyWithModel, deltaPt: trainingData.deltaPt }));
     assert.ok(Number(trainingData.deltaPt) >= 5, JSON.stringify(trainingData));
     assert.ok(Number(trainingData.trainExampleCount) >= 10);
+    const trainingProvenance = trainingData.provenance as Record<string, unknown>;
+    assert.equal(trainingProvenance.engineId, "scriptorium-speaker-cpu");
+    assert.equal(trainingProvenance.engineVersion, "1.0.0");
+    assert.equal(trainingProvenance.moduleVersion, "0.1.0");
     assert.ok(Array.isArray(trainingData.model && (trainingData.model as Record<string, unknown>).weights));
     const modelProposal = trained.ok ? trained.proposals?.find((proposal) => proposal.operations.some((operation) => operation.writes.some((write) => write.path === "meta/scriptorium/modules/speaker/adopted-model.json"))) : undefined;
     assert.ok(modelProposal, "only the host proposal boundary receives the adopted CPU model");
@@ -230,7 +308,9 @@ test("speaker actions run real CPU attribution, propose corrections/model adopti
     assert.deepEqual(modelOperation.writes.map((write) => write.path), ["meta/scriptorium/modules/speaker/adopted-model.json"]);
     applyReviewedProposal(modelProposal, files, () => snapshot, (next) => { snapshot = next; });
 
-    const applied = await runtime.invokeAction("speaker", "speaker.attribute", { sceneId: holdoutIds[0] }, host);
+    addModelProbeScene(files);
+    snapshot = snapshotFor(files);
+    const applied = await runtime.invokeAction("speaker", "speaker.attribute", { sceneId: "sc-synthetic-model-probe" }, host);
     const appliedData = dataOf(applied);
     const appliedRow = (appliedData.attributions as typeof attributions)[0]!;
     assert.equal(appliedRow.speakerEntityId, null, JSON.stringify(appliedRow));
@@ -240,6 +320,11 @@ test("speaker actions run real CPU attribution, propose corrections/model adopti
     const evaluation = await runtime.invokeAction("speaker", "speaker.evaluation.run", { writeGates: true }, host);
     const evaluationData = dataOf(evaluation);
     assert.equal(evaluationData.gatesUpdated, true);
+    const evaluationProvenance = evaluationData.provenance as Record<string, unknown>;
+    assert.equal(evaluationProvenance.engineId, "scriptorium-speaker-cpu");
+    assert.equal(evaluationProvenance.engineVersion, "1.0.0");
+    assert.equal(evaluationProvenance.tokenizerModel, "lindera-wasm-nodejs-ipadic");
+    assert.equal(typeof evaluationProvenance.adoptedModelRevision, "string");
     const report = evaluationData.report as { scenes: Array<{ sceneId: string }>; metrics: { attributionAccuracy: number } };
     assert.equal(report.scenes.length, 14);
     assert.equal(report.metrics.attributionAccuracy, 1, JSON.stringify(report.metrics));
@@ -247,6 +332,23 @@ test("speaker actions run real CPU attribution, propose corrections/model adopti
     assert.equal((dataOf(latest).exists), true);
     const gates = await runtime.invokeAction("speaker", "speaker.ruleGates", {}, host);
     assert.equal((dataOf(gates).exists), true);
+
+    const cacheDirectoryForSpeaker = path.join(cacheDirectory, "speaker", "speaker");
+    const cacheFiles = await readdir(cacheDirectoryForSpeaker);
+    for (const kind of ["evaluation", "rules"] as const) {
+      const fileName = cacheFiles.find((name) => name.startsWith(`${kind}-`) && name.endsWith(".json"));
+      assert.ok(fileName, `${kind} cache was persisted`);
+      const filePath = path.join(cacheDirectoryForSpeaker, fileName);
+      const stored = JSON.parse(await readFile(filePath, "utf8")) as { identity: Record<string, unknown> };
+      stored.identity.engineVersion = "0.0.0";
+      await writeFile(filePath, `${JSON.stringify(stored, null, 2)}\n`, "utf8");
+    }
+    assert.equal(dataOf(await runtime.invokeAction("speaker", "speaker.evaluation.latest", {}, host)).exists, false, "stored evaluation from an old engine is rejected despite matching snapshot and cache path");
+    assert.equal(dataOf(await runtime.invokeAction("speaker", "speaker.ruleGates", {}, host)).exists, false, "stored rule gates from an old engine are rejected despite matching snapshot and cache path");
+    const rebuilt = await runtime.invokeAction("speaker", "speaker.evaluation.run", { writeGates: true }, host);
+    assert.equal(dataOf(rebuilt).gatesUpdated, true);
+    assert.equal(dataOf(await runtime.invokeAction("speaker", "speaker.evaluation.latest", {}, host)).exists, true);
+    assert.equal(dataOf(await runtime.invokeAction("speaker", "speaker.ruleGates", {}, host)).exists, true);
 
     await runtime.shutdown();
     runtime = undefined;
@@ -256,7 +358,7 @@ test("speaker actions run real CPU attribution, propose corrections/model adopti
     runtime = restarted.runtime;
     assert.equal(runtime.status("speaker").availability, "enabled-idle");
     assert.deepEqual(runtime.workerSupervisor.activeWorkerPids, [], "recreated runtime starts idle and reloads only on demand");
-    const reloaded = await runtime.invokeAction("speaker", "speaker.attribute", { sceneId: holdoutIds[0] }, restarted.host);
+    const reloaded = await runtime.invokeAction("speaker", "speaker.attribute", { sceneId: "sc-synthetic-model-probe" }, restarted.host);
     const reloadedRow = (dataOf(reloaded).attributions as typeof attributions)[0]!;
     assert.equal(reloadedRow.speakerEntityId, null, JSON.stringify(reloadedRow));
     assert.equal(reloadedRow.reason, "rerank", JSON.stringify(reloadedRow));

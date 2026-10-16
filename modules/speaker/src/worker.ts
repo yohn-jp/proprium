@@ -1,5 +1,6 @@
 import type { JobRequest } from "@scriptorium/contracts";
 import { installWorkerHandler } from "@scriptorium/module-runtime";
+import { SPEAKER_ENGINE_ID, SPEAKER_ENGINE_VERSION, SPEAKER_MODULE_VERSION, type SpeakerTrainingResult, type SpeakerWorkerInput } from "./engine.js";
 import {
   attributionAccuracyFromPairs,
   buildSpeakerRerankExamples,
@@ -16,34 +17,8 @@ import { buildSceneEvalResult, buildSpeakerEvalReport, matchGoldToPredictions, t
 import { runSpeakerPipeline, type SpeakerPipelineInput } from "./algorithms/pipeline.js";
 import { hashDialogueText } from "./algorithms/speakerAttribution.js";
 
-export const SPEAKER_MODULE_VERSION = "0.1.0";
-export const SPEAKER_ENGINE_ID = "scriptorium-speaker-cpu";
-export const SPEAKER_ENGINE_VERSION = "1.0.0";
-
-export type SpeakerWorkerInput =
-  | { kind: "attribute"; pipeline: SpeakerPipelineInput }
-  | { kind: "evaluate"; pipelines: SpeakerPipelineInput[]; generatedAt?: string }
-  | {
-      kind: "train";
-      trainPipelines: SpeakerPipelineInput[];
-      holdoutPipelines: SpeakerPipelineInput[];
-      corrections: SpeakerCorrectionRecord[];
-      reasonPrecision: Record<string, number>;
-    };
-
-export interface SpeakerTrainingResult {
-  trainExampleCount: number;
-  holdoutSceneIds: string[];
-  accuracyWithoutModel: number;
-  accuracyWithModel: number;
-  deltaPt: number;
-  adopted: boolean;
-  highProbabilityThreshold: number;
-  trainedAt: string;
-  written: boolean;
-  pipelineHoldoutAccuracy: number | null;
-  model: SpeakerModel;
-}
+export { SPEAKER_ENGINE_ID, SPEAKER_ENGINE_VERSION, SPEAKER_MODULE_VERSION } from "./engine.js";
+export type { SpeakerTrainingResult, SpeakerWorkerInput } from "./engine.js";
 
 function assertNotAborted(signal: AbortSignal): void {
   if (signal.aborted) throw Object.assign(new Error("Speaker job was cancelled"), { code: "job_cancelled" });
