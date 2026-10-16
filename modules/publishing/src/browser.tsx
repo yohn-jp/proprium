@@ -12,8 +12,8 @@ interface Episode extends Record<string, unknown> {
   title: string;
   scope: "volume" | "chapter";
   scopeId: string;
-  publishedAt?: string;
-  sceneIds?: string[];
+  publishedAt?: string | null;
+  sceneIds?: string[] | null;
 }
 interface ShareInfo {
   id: string;
@@ -332,7 +332,8 @@ function EpisodeMapPanel({ context, tree }: { context: BrowserModuleContext; tre
   async function save() {
     setBusy(true); setError(""); setStatus("");
     try {
-      await invoke(context, "publishing.episodes.propose", { episodes });
+      const data = await invoke(context, "publishing.episodes.propose", { episodes });
+      if (Array.isArray(data.episodes)) setEpisodes(data.episodes as Episode[]);
       setStatus("変更をレビューに追加しました。承認・チェックポイント・公開後に反映されます。");
     } catch (cause) { setError(messageOf(cause)); }
     finally { setBusy(false); }
@@ -364,7 +365,7 @@ function EpisodeMapPanel({ context, tree }: { context: BrowserModuleContext; tre
           onChange={(event) => patchSelected({ number: Math.max(1, Number(event.target.value) || 1) })} /></label>
         <label>タイトル <input style={fieldStyle()} value={selectedEpisode.title} onChange={(event) => patchSelected({ title: event.target.value })} /></label>
         <label>公開日 <input style={fieldStyle()} type="date" value={selectedEpisode.publishedAt?.slice(0, 10) ?? ""}
-          onChange={(event) => patchSelected({ publishedAt: event.target.value || undefined })} /></label>
+          onChange={(event) => patchSelected({ publishedAt: event.target.value || null })} /></label>
         <label>範囲
           <select style={fieldStyle()} value={selectedEpisode.scope}
             onChange={(event) => {
@@ -392,7 +393,7 @@ function EpisodeMapPanel({ context, tree }: { context: BrowserModuleContext; tre
             return <label key={scene.id} style={{ display: "block" }}>
               <input type="checkbox" checked={current.includes(scene.id)} onChange={() => {
                 const next = current.includes(scene.id) ? current.filter((id) => id !== scene.id) : [...current, scene.id];
-                patchSelected({ sceneIds: next.length ? next : undefined });
+                patchSelected({ sceneIds: next.length ? next : null });
               }} />{scene.title}
             </label>;
           })}
@@ -515,6 +516,20 @@ function ShareReaderView({ repositoryId, token }: { repositoryId: string; token:
   const [busy, setBusy] = useState(false);
   const base = "/api/public/repos/" + encodeURIComponent(repositoryId) +
     "/modules/publishing/share/" + encodeURIComponent(token);
+  useEffect(() => {
+    const robots = document.createElement("meta");
+    robots.name = "robots";
+    robots.content = "noindex, nofollow";
+    document.head.appendChild(robots);
+    const referrer = document.createElement("meta");
+    referrer.name = "referrer";
+    referrer.content = "no-referrer";
+    document.head.appendChild(referrer);
+    return () => {
+      robots.remove();
+      referrer.remove();
+    };
+  }, []);
   useEffect(() => {
     let alive = true;
     void fetch(base, { headers: { accept: "application/json" }, cache: "no-store" }).then(async (response) => {

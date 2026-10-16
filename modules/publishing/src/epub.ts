@@ -425,6 +425,8 @@ ${bibleSpine}${colophonSpine}  </spine>
 }
 
 function notesSummaryText(notes: unknown): string {
+  const structured = structuredNotesPlainTexts(notes);
+  if (structured) return structured.map((text) => text.trim()).filter(Boolean).join(" ").slice(0, 800);
   if (typeof notes === "string") return notes.trim().slice(0, 800);
   if (!notes || typeof notes !== "object") return "";
   const values: string[] = [];
@@ -446,6 +448,56 @@ function notesSummaryText(notes: unknown): string {
   };
   visit(notes);
   return values.join(" ").slice(0, 800);
+}
+
+interface NotesTextBlock { type: "paragraph"; text: string }
+interface NotesLabeledBlock { type: "definitions" | "steps"; items: Array<{ term: string; description: string }> }
+type NotesBlock = NotesTextBlock | NotesLabeledBlock;
+interface NotesSection { heading: string; body: NotesBlock[]; children: NotesSection[] }
+
+function notesRecord(value: unknown): Record<string, unknown> | null {
+  return value && typeof value === "object" && !Array.isArray(value)
+    ? value as Record<string, unknown>
+    : null;
+}
+
+function notesBlock(value: unknown): value is NotesBlock {
+  const block = notesRecord(value);
+  if (!block) return false;
+  if (block.type === "paragraph") return typeof block.text === "string";
+  if (block.type !== "definitions" && block.type !== "steps") return false;
+  return Array.isArray(block.items) && block.items.every((item) => {
+    const labeled = notesRecord(item);
+    return Boolean(labeled && typeof labeled.term === "string" && typeof labeled.description === "string");
+  });
+}
+
+function notesSection(value: unknown): value is NotesSection {
+  const section = notesRecord(value);
+  return Boolean(section && typeof section.heading === "string" &&
+    Array.isArray(section.body) && section.body.every(notesBlock) &&
+    Array.isArray(section.children) && section.children.every(notesSection));
+}
+
+/** Source-compatible flattening for typed StructuredNotes and nested sections. */
+function structuredNotesPlainTexts(value: unknown): string[] | null {
+  const notes = notesRecord(value);
+  if (!notes || !Array.isArray(notes.lead) || !notes.lead.every(notesBlock) ||
+      !Array.isArray(notes.sections) || !notes.sections.every(notesSection)) return null;
+  const texts: string[] = [];
+  const collectBlocks = (blocks: NotesBlock[]) => {
+    for (const block of blocks) {
+      if (block.type === "paragraph") texts.push(block.text);
+      else for (const item of block.items) texts.push(item.term, item.description);
+    }
+  };
+  const collectSection = (section: NotesSection) => {
+    collectBlocks(section.body);
+    for (const child of section.children) collectSection(child);
+  };
+  collectBlocks(notes.lead);
+  for (const section of notes.sections) collectSection(section);
+  return texts;
 }
 
 function buildBibleAppendixXhtml(entries: EpubBibleEntry[]): string {

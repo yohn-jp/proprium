@@ -13,6 +13,16 @@ export interface PublishEpisodeRecord extends Record<string, unknown> {
   sceneIds?: string[];
 }
 
+interface EpisodeUpdate extends Record<string, unknown> {
+  id: string;
+  number: number;
+  title: string;
+  scope: "volume" | "chapter";
+  scopeId: string;
+  publishedAt?: string | null;
+  sceneIds?: string[] | null;
+}
+
 export interface EpisodeMapDocument {
   root: Record<string, unknown>;
   episodes: PublishEpisodeRecord[];
@@ -24,16 +34,17 @@ function isRecord(value: unknown): value is Record<string, unknown> {
   return Boolean(value) && typeof value === "object" && !Array.isArray(value);
 }
 
-function validateEpisode(value: unknown, index: number): PublishEpisodeRecord {
+function validateEpisode(value: unknown, index: number, allowClear = false): EpisodeUpdate {
   if (!isRecord(value) || typeof value.id !== "string" || !value.id.trim() ||
       typeof value.number !== "number" || !Number.isSafeInteger(value.number) || value.number < 1 ||
       typeof value.title !== "string" || (value.scope !== "volume" && value.scope !== "chapter") ||
       typeof value.scopeId !== "string" || !value.scopeId.trim() ||
-      (value.publishedAt !== undefined && typeof value.publishedAt !== "string") ||
-      (value.sceneIds !== undefined && (!Array.isArray(value.sceneIds) || value.sceneIds.some((id) => typeof id !== "string")))) {
+      (value.publishedAt !== undefined && typeof value.publishedAt !== "string" && !(allowClear && value.publishedAt === null)) ||
+      (value.sceneIds !== undefined && !(allowClear && value.sceneIds === null) &&
+        (!Array.isArray(value.sceneIds) || value.sceneIds.some((id) => typeof id !== "string")))) {
     throw new Error(`Invalid publication episode at index ${index}`);
   }
-  return value as PublishEpisodeRecord;
+  return value as EpisodeUpdate;
 }
 
 export async function readEpisodeMap(reader: SnapshotReader): Promise<EpisodeMapDocument> {
@@ -44,7 +55,8 @@ export async function readEpisodeMap(reader: SnapshotReader): Promise<EpisodeMap
   if (!isRecord(parsed) || (parsed.episodes !== undefined && !Array.isArray(parsed.episodes))) {
     throw new Error("Publication episode map must contain an episodes array");
   }
-  const episodes = (parsed.episodes as unknown[] | undefined ?? []).map(validateEpisode);
+  const episodes = (parsed.episodes as unknown[] | undefined ?? [])
+    .map((episode, index) => validateEpisode(episode, index) as PublishEpisodeRecord);
   return { root: parsed, episodes, content: file.content, revision: file.revision };
 }
 
@@ -53,11 +65,16 @@ export function mergeEpisodeMap(existing: EpisodeMapDocument, input: unknown): {
   const priorById = new Map(existing.episodes.map((episode) => [episode.id, episode]));
   const seenIds = new Set<string>();
   const episodes = input.map((value, index) => {
-    const episode = validateEpisode(value, index);
+    const episode = validateEpisode(value, index, true);
     if (seenIds.has(episode.id)) throw new Error(`Duplicate publication episode ID: ${episode.id}`);
     seenIds.add(episode.id);
     // Keep fields unknown to the current UI when it edits known fields.
-    return { ...(priorById.get(episode.id) ?? {}), ...episode };
+    const merged = { ...(priorById.get(episode.id) ?? {}), ...episode };
+    // JSON omits undefined optional fields, so null is the explicit tombstone
+    // the browser uses to distinguish a clear from an untouched field.
+    if (episode.publishedAt === null) delete merged.publishedAt;
+    if (episode.sceneIds === null) delete merged.sceneIds;
+    return merged as PublishEpisodeRecord;
   }).sort((left, right) => left.number - right.number || left.id.localeCompare(right.id));
   const root = { ...existing.root, episodes };
   return { root, episodes, content: YAML.stringify(root) };

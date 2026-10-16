@@ -6,6 +6,7 @@ import YAML from "yaml";
 import type { ChangeOperation, ChangeProposal, ModuleActionContext, ModuleContext, SnapshotId, SnapshotReader } from "@scriptorium/contracts";
 import { createWorkspaceProducer, type LegacySourceReader, type MigrationContext } from "@scriptorium/migration";
 import { createModule } from "./index.js";
+import { readEpubBibleEntries } from "./bible.js";
 import { buildEpubExport } from "./epub.js";
 import { buildPlaintextExport, stripManuscriptMarkup, toNarouDialect } from "./plaintext.js";
 import { composeVerticalPrintText } from "./verticalPrint.js";
@@ -130,11 +131,35 @@ test("real EPUB ZIP contains EPUB3 manifest, Japanese XHTML, appendix, and binar
   const cover = Buffer.from([0xff, 0xd8, 0x00, 0x81, 0xfe, 0x00, 0xd9]);
   const files = fixtureFiles();
   files.set("meta/scriptorium/modules/publishing/assets/cover.jpg", cover);
+  files.set("bible/characters/character-ari/profile.yaml", YAML.stringify({
+    id: "character-ari",
+    name: "アリ",
+    aliases: ["あり"],
+    notes: {
+      lead: [{ type: "paragraph", text: "星を読む。" }],
+      sections: [{
+        heading: "記録",
+        body: [{ type: "definitions", items: [{ term: "声紋の核", description: "星の力" }] }],
+        children: [{
+          heading: "補注",
+          body: [{ type: "steps", items: [{ term: "第一の段階", description: "薄明から始める" }] }],
+          children: [],
+        }],
+      }],
+    },
+  }));
+  // The source loader attaches this id-less helper to profile.yaml; it is not
+  // a separate character or bibliography entry.
+  files.set("bible/characters/character-ari/voice.yaml", "first_person:\n  - name: 我\nduality:\n  outer:\n    tone: 静かな話し方\n");
+  const reader = new MemoryReader(files);
+  const bibleEntries = await readEpubBibleEntries(reader);
+  assert.equal(bibleEntries.length, 1, "profile.yaml contributes one character; voice.yaml is a helper");
+  assert.equal(bibleEntries[0]!.id, "character-ari");
   const exported = await buildEpubExport(
     project,
     { scope: "all", coverPath: "meta/scriptorium/modules/publishing/assets/cover.jpg", includeBibleAppendix: true },
-    new MemoryReader(files),
-    [{ id: "ari", type: "character", name: "アリ", aliases: ["あり"], notes: "星を読む。" }],
+    reader,
+    bibleEntries,
   );
   assert.equal(exported.filename, "arcadia-all.epub");
   const zip = await JSZip.loadAsync(exported.buffer);
@@ -149,7 +174,25 @@ test("real EPUB ZIP contains EPUB3 manifest, Japanese XHTML, appendix, and binar
   assert.match(scene, /&amp; &lt;物語&gt;/u);
   const appendix = await zip.file("OEBPS/bible-appendix.xhtml")!.async("string");
   assert.match(appendix, /アリ/u);
+  assert.match(appendix, /星を読む/u);
+  assert.match(appendix, /声紋の核/u);
+  assert.match(appendix, /星の力/u);
+  assert.match(appendix, /第一の段階/u);
+  assert.match(appendix, /薄明から始める/u);
+  assert.doesNotMatch(appendix, /静かな話し方|<h3>voice<\/h3>/u);
   assert.deepEqual(await zip.file("OEBPS/images/cover.jpg")!.async("nodebuffer"), cover);
+});
+
+test("EPUB bible reader keeps source flat character entities and typed lore/location YAML", async () => {
+  const reader = new MemoryReader(new Map([
+    ["bible/characters/char-flat.yaml", "id: char-flat\ntype: character\nname: 古い人物\n"],
+    ["bible/characters/char-flat/voice.yaml", "first_person:\n  - name: 我\n"],
+    ["bible/lore/lore-1.yaml", "id: lore-1\nname: 星の法則\n"],
+    ["bible/locations/location-1.yaml", "id: location-1\nname: 海辺\n"],
+  ]));
+  const entries = await readEpubBibleEntries(reader);
+  assert.deepEqual(entries.map((entry) => entry.id).sort(), ["char-flat", "location-1", "lore-1"]);
+  assert.equal(entries.find((entry) => entry.id === "char-flat")!.name, "古い人物");
 });
 
 test("episode edits propose metadata operations and preserve unknown YAML and publication dates", async () => {
@@ -180,6 +223,20 @@ test("episode edits propose metadata operations and preserve unknown YAML and pu
   assert.equal((proposalData.episodes as unknown[]).length, 1);
   assert.equal(episodes.length, 1);
   assert.equal((await reader.read(EPISODES_PATH))!.content, existingMap, "actions never write source files");
+
+  const cleared = await invokeAction(definition, "publishing.episodes.propose", {
+    episodes: [{
+      id: "ep-1", number: 2, title: "改題", scope: "chapter", scopeId: "ch-1",
+      publishedAt: null, sceneIds: null,
+    }],
+  }, context);
+  const clearedEpisode = (cleared.episodes as Array<Record<string, unknown>>)[0]!;
+  const clearedYaml = YAML.parse(proposals.at(-1)!.operations[0]!.writes[0]!.content!);
+  assert.ok(!Object.hasOwn(clearedEpisode, "publishedAt"), "explicit null clears the date from the action result");
+  assert.ok(!Object.hasOwn(clearedEpisode, "sceneIds"), "explicit null clears scene annotations from the action result");
+  assert.ok(!Object.hasOwn(clearedYaml.episodes[0], "publishedAt"), "explicit null clears the persisted date");
+  assert.ok(!Object.hasOwn(clearedYaml.episodes[0], "sceneIds"), "explicit null clears persisted scene annotations");
+  assert.deepEqual(clearedYaml.episodes[0].futureEpisodeField, { retain: "yes" }, "unknown episode fields remain preserved on clear");
 });
 
 test("a share activates only on the remote published snapshot and revocation is checked on every public read", async () => {
@@ -209,6 +266,8 @@ test("a share activates only on the remote published snapshot and revocation is 
   remote = applyOperation(remote, createOperation, NEXT_COMMIT);
   const metadataResponse = await publicBase.handle(new Request(url), publicContext(remote));
   assert.equal(metadataResponse.status, 200);
+  assert.equal(metadataResponse.headers.get("x-robots-tag"), "noindex, nofollow");
+  assert.equal(metadataResponse.headers.get("referrer-policy"), "no-referrer");
   const metadata = await metadataResponse.json() as { sceneCount: number; tree: Array<{ chapters: Array<{ scenes: Array<{ id: string }> }> }> };
   assert.equal(metadata.sceneCount, 2);
   assert.deepEqual(metadata.tree[0]!.chapters[0]!.scenes.map((scene) => scene.id), ["sc-1", "sc-2"]);

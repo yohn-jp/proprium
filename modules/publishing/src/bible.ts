@@ -12,10 +12,15 @@ function record(value: unknown): Record<string, unknown> | null {
 
 function pathsFor(reader: SnapshotReader, type: BibleType): Promise<string[]> {
   const prefix = "bible/" + (type === "character" ? "characters" : type === "lore" ? "lore" : "locations");
-  return reader.list(prefix).then((paths) => paths.filter((path) =>
-    type === "character"
-      ? path.endsWith("/profile.yaml") || path.endsWith(".yaml")
-      : path.endsWith(".yaml")));
+  return reader.list(prefix).then((paths) => paths.filter((path) => {
+    if (!path.endsWith(".yaml")) return false;
+    if (type !== "character") return true;
+    const relative = path.startsWith(prefix + "/") ? path.slice(prefix.length + 1) : "";
+    // New source characters use nested profile.yaml. Older source projects also
+    // have direct-child character records; voice.yaml and other nested helpers
+    // are not separate character entities.
+    return relative === "profile.yaml" || relative.endsWith("/profile.yaml") || !relative.includes("/");
+  }));
 }
 
 /** Read the source's character/lore/location records for the optional EPUB appendix. */
@@ -34,8 +39,10 @@ export async function readEpubBibleEntries(reader: SnapshotReader): Promise<Epub
       }
       const data = record(parsed);
       if (!data) throw new Error("Expected a YAML mapping in " + path);
-      const fallback = path.split("/").at(-1)!.replace(/\.yaml$/, "");
-      const id = typeof data.id === "string" && data.id.trim() ? data.id : fallback;
+      // Core's source loader ignores YAML without an explicit entity ID. That
+      // excludes id-less voice.yaml helpers instead of inventing a filename ID.
+      if (typeof data.id !== "string" || !data.id.trim()) continue;
+      const id = data.id;
       const name = [data.name, data.title].find((value) => typeof value === "string" && value.trim());
       const aliases = Array.isArray(data.aliases)
         ? data.aliases.filter((value): value is string => typeof value === "string")
