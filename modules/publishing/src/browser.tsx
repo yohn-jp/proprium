@@ -1,6 +1,6 @@
 import { createElement, useEffect, useMemo, useState, type ReactNode } from "react";
 import { createRoot } from "react-dom/client";
-import type { BrowserModuleContext } from "@scriptorium/contracts";
+import type { BrowserModuleContext, BrowserModuleDefinition } from "@scriptorium/contracts";
 
 interface SceneItem { id: string; title: string }
 interface ChapterItem { id: string; title: string; scenes: SceneItem[] }
@@ -568,10 +568,7 @@ function publicRouteParts(request: Request): { repositoryId: string; token: stri
   } catch { return null; }
 }
 
-export const browserModule: {
-  mount(contributionId: string, element: HTMLElement, context: BrowserModuleContext): Promise<() => void>;
-  mountPublic(viewId: string, element: HTMLElement, request: Request): Promise<() => void>;
-} = {
+export const browserModule: BrowserModuleDefinition = {
   async mount(contributionId: string, element: HTMLElement, context: BrowserModuleContext): Promise<() => void> {
     const root = createRoot(element);
     root.render(createElement(MountView, { contributionId, context }));
