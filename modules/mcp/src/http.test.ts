@@ -166,6 +166,25 @@ function actionContext(
         checkpoints,
       };
     },
+    setProposalPayloadIncomplete(approvedOperationIds: string[], checkpoints: unknown[], publishedOperationIds: string[] = []) {
+      if (!storedProposalStatus || !storedProposal || typeof storedProposalStatus !== "object") throw new Error("No proposal is stored");
+      storedProposal = {
+        ...storedProposal,
+        operations: storedProposal.operations.filter((operation) => approvedOperationIds.includes(operation.id)),
+        evidence: [],
+      };
+      storedProposalStatus = {
+        ...(storedProposalStatus as Record<string, unknown>),
+        proposal: storedProposal,
+        payloadComplete: false,
+        originalDigest: "e".repeat(64),
+        operationIds: sourceOperationIds,
+        approvedOperationIds,
+        checkpoints,
+        publishedOperationIds,
+        state: checkpoints.length ? "partially_approved" : approvedOperationIds.length ? "approved" : "proposed",
+      };
+    },
   } satisfies ModuleActionContext;
 }
 
@@ -451,6 +470,54 @@ test("ChangeSet readback preserves approved IDs while selected checkpoints are p
       resultingRevision: "sha256-op-one",
       resultId: "char-one",
     }]);
+
+    host.setProposalPayloadIncomplete(["op-one"], [{
+      operationId: "op-one",
+      generation: 0,
+      localCommit: "d".repeat(40),
+      remoteBase: "a".repeat(40),
+      revisions: [{ path: "characters/char-one.yaml", revision: "b".repeat(64) }],
+    }], ["op-one"]);
+    const unavailable = await client.callTool({
+      name: "get_change_set",
+      arguments: { project_id: "project-one", change_set_id: "cs-two-operations" },
+    });
+    assert.equal(unavailable.isError, true);
+    const error = unavailable.structuredContent as {
+      error: { code: string; details: Record<string, unknown> };
+    };
+    assert.equal(error.error.code, "PROPOSAL_PAYLOAD_UNAVAILABLE");
+    assert.deepEqual(error.error.details, {
+      coreProposalId: "cs-two-operations",
+      sourceChangeSetId: "cs-two-operations",
+      payloadComplete: false,
+      originalDigest: "e".repeat(64),
+      operationIds: ["op-one", "op-two"],
+      approvedOperationIds: ["op-one"],
+      checkpointedOperationIds: ["op-one"],
+      publishedOperationIds: ["op-one"],
+      state: "partially_approved",
+      recovery: "Restore the original browser/private proposal to recover its complete NarrativeChangeSet. This MCP result contains Core review status only.",
+    });
+    assert.equal(JSON.stringify(unavailable.structuredContent).includes("New name 2"), false);
+
+    const listed = await client.callTool({ name: "list_change_sets", arguments: { project_id: "project-one" } });
+    assert.deepEqual(listed.structuredContent, {
+      change_sets: [],
+      incomplete_payloads: [
+        {
+          coreProposalId: "cs-two-operations",
+          payloadComplete: false,
+          originalDigest: "e".repeat(64),
+          operationIds: ["op-one", "op-two"],
+          approvedOperationIds: ["op-one"],
+          checkpointedOperationIds: ["op-one"],
+          publishedOperationIds: ["op-one"],
+          state: "partially_approved",
+          recovery: "Restore the original browser/private proposal to recover its complete NarrativeChangeSet. This MCP result contains Core review status only.",
+        },
+      ],
+    });
   } finally {
     await transport.terminateSession().catch(() => undefined);
     await client.close().catch(() => undefined);

@@ -18,6 +18,13 @@ const sceneIdSchema = z.string().min(1).max(256);
 const operationIdSchema = z.string().regex(/^[a-zA-Z0-9._:-]{1,128}$/);
 
 type JsonRecord = Record<string, unknown>;
+const AUTHOR_OPERATION_ACTIONS = new Set([
+  "core.approve",
+  "core.checkpoint",
+  "core.reconcile",
+  "core.publish",
+  "core.apply",
+]);
 const toolCancellation = new AsyncLocalStorage<AbortSignal>();
 
 class ToolFailure extends Error {
@@ -31,8 +38,12 @@ function isRecord(value: unknown): value is JsonRecord {
   return value !== null && typeof value === "object" && !Array.isArray(value);
 }
 
-function errorResult(code: string, message: string) {
-  const error = { code, message: message.slice(0, 512) };
+function errorResult(code: string, message: string, details?: unknown) {
+  const error = {
+    code,
+    message: message.slice(0, 512),
+    ...(details === undefined ? {} : { details }),
+  };
   return {
     isError: true,
     structuredContent: { error },
@@ -304,6 +315,47 @@ function changeSetRecordFromProposalStatus(value: unknown): Record<string, unkno
   };
 }
 
+function unavailableChangeSetPayload(value: unknown, sourceChangeSetId?: string): Record<string, unknown> | undefined {
+  if (!isRecord(value) || value.payloadComplete !== false || !isRecord(value.proposal)) return undefined;
+  const proposal = value.proposal;
+  if (typeof proposal.id !== "string" || (sourceChangeSetId && proposal.id !== coreProposalIdForChangeSet(sourceChangeSetId))) {
+    return undefined;
+  }
+  const operationIds = Array.isArray(value.operationIds)
+    ? value.operationIds.filter((id): id is string => typeof id === "string")
+    : [];
+  const approvedOperationIds = Array.isArray(value.approvedOperationIds)
+    ? value.approvedOperationIds.filter((id): id is string => typeof id === "string")
+    : [];
+  const checkpointedOperationIds = Array.isArray(value.checkpoints)
+    ? value.checkpoints.flatMap((receipt) =>
+        isRecord(receipt) && typeof receipt.operationId === "string" ? [receipt.operationId] : [])
+    : [];
+  const publishedOperationIds = Array.isArray(value.publishedOperationIds)
+    ? value.publishedOperationIds.filter((id): id is string => typeof id === "string")
+    : [];
+  return {
+    coreProposalId: proposal.id,
+    ...(sourceChangeSetId ? { sourceChangeSetId } : {}),
+    payloadComplete: false,
+    ...(typeof value.originalDigest === "string" ? { originalDigest: value.originalDigest } : {}),
+    operationIds,
+    approvedOperationIds,
+    checkpointedOperationIds,
+    publishedOperationIds,
+    ...(typeof value.state === "string" ? { state: value.state } : {}),
+    recovery: "Restore the original browser/private proposal to recover its complete NarrativeChangeSet. This MCP result contains Core review status only.",
+  };
+}
+
+function unavailableChangeSetError(status: Record<string, unknown>) {
+  return errorResult(
+    "PROPOSAL_PAYLOAD_UNAVAILABLE",
+    "The complete source ChangeSet is not recoverable from the current Core journal",
+    status,
+  );
+}
+
 function structuredRecord(record: Record<string, unknown>) {
   return {
     structuredContent: record,
@@ -409,16 +461,20 @@ export function registerMcpTools(server: McpServer, baseClient: McpActionClient)
       input: z.record(z.unknown()).default({}),
     },
     guarded(async ({ project_id, action_id, input }) => {
-      if (/approve|checkpoint|publish|reconcile|apply/i.test(action_id)) {
-        return errorResult("FORBIDDEN", "MCP can propose changes but cannot approve, apply, checkpoint, or publish");
+      if (AUTHOR_OPERATION_ACTIONS.has(action_id)) {
+        return errorResult("FORBIDDEN", "MCP cannot approve, checkpoint, reconcile, apply, or publish author changes");
       }
       if (byteLength(input) > 1_048_576) {
         return errorResult("INVALID_INPUT", "Action input exceeds the 1 MiB MCP limit");
       }
       const client = scopedClient(baseClient, project_id);
       const actions = await client.listActions();
-      if (!actions.some((action) => action.id === action_id)) {
+      const action = actions.find((candidate) => candidate.id === action_id);
+      if (!action) {
         return errorResult("ACTION_UNAVAILABLE", `Action is not enabled: ${action_id}`);
+      }
+      if (!["read", "compute", "propose"].includes(action.effect)) {
+        return errorResult("FORBIDDEN", "MCP can invoke only read, compute, and proposal actions");
       }
       return invoke(client, action_id, input);
     }),
@@ -690,7 +746,14 @@ export function registerMcpTools(server: McpServer, baseClient: McpActionClient)
           } : {}),
         };
       });
-      return structuredRecord({ change_sets: changeSets });
+      const incompletePayloads = data.proposals.flatMap((status) => {
+        const incomplete = unavailableChangeSetPayload(status);
+        return incomplete ? [incomplete] : [];
+      });
+      return structuredRecord({
+        change_sets: changeSets,
+        ...(incompletePayloads.length ? { incomplete_payloads: incompletePayloads } : {}),
+      });
     }),
   );
 
@@ -713,6 +776,8 @@ export function registerMcpTools(server: McpServer, baseClient: McpActionClient)
       const data = isRecord(result.data) ? result.data : {};
       const record = changeSetRecordFromProposalStatus(data.proposal);
       if (!record || !isRecord(record.changeSet) || record.changeSet.id !== change_set_id) {
+        const incomplete = unavailableChangeSetPayload(data.proposal, change_set_id);
+        if (incomplete) return unavailableChangeSetError(incomplete);
         return errorResult("NOT_FOUND", `ChangeSet not found: ${change_set_id}`);
       }
       return structuredRecord(record);
