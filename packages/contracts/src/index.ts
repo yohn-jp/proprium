@@ -53,7 +53,7 @@ export interface RemoteObservation {
 }
 export interface SnapshotReader {
   snapshot: SnapshotId;
-  read(path: string): Promise<{ content: string; revision: string } | null>;
+  read(path: string, encoding?: "utf8" | "base64"): Promise<{ content: string; revision: string } | null>;
   list(prefix: string): Promise<string[]>;
 }
 export interface ProposalEvidence {
@@ -117,9 +117,15 @@ export interface MachineError { code: string; message: string; retryable: boolea
 export type JobOutcome<T = unknown> = { ok: true; result: JobResult<T> } | { ok: false; id: string; snapshot: SnapshotId; error: MachineError };
 export interface ValueSchema<T = unknown> { parse(value: unknown): T }
 export type ActionResult<T = unknown> = { ok: true; snapshot: SnapshotId; data: T; proposals?: ChangeProposal[] } | { ok: false; snapshot: SnapshotId; error: MachineError };
+export interface ActionDescriptor { id: string; module: ModuleId; effect: "read" | "propose" | "compute" }
 export interface ModuleActionContext {
   projectId: string;
   reader: SnapshotReader;
+  /** Same authenticated project/snapshot; never exposes author mutation ports. */
+  invoke(actionId: string, input: unknown): Promise<ActionResult>;
+  listActions(): Promise<ActionDescriptor[]>;
+  /** Explicit read-only composition with another registered repository of this owner. */
+  linkedReader(repositoryId: string): Promise<SnapshotReader>;
   signal: AbortSignal;
   /** Only proposes; approval remains an authenticated author action. */
   propose(operations: ChangeOperation[], evidence?: ProposalEvidence[]): Promise<ChangeProposal>;
@@ -146,6 +152,8 @@ export interface ModuleManifest {
   dependencies: ModuleId[];
   provides: string[];
   requires: string[];
+  /** Availability-gated source features do not force the optional provider into a profile. */
+  optionalRequires?: string[];
   serverEntry?: string;
   browserEntry?: string;
   workerEntry?: string;
