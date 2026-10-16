@@ -52,7 +52,7 @@ pnpm build
 pnpm audit:core
 ```
 
-For browser verification, install Chromium with `pnpm exec playwright install chromium` and run `pnpm test:e2e`. Browser and image acceptance evidence is recorded under [docs/verification](docs/verification). CI and GitHub Actions are intentionally outside this initial recovery; local results do not imply remote CI success.
+For browser verification, install Chromium with `pnpm exec playwright install chromium` and run `pnpm test:e2e`. Browser and image acceptance evidence is recorded under [docs/verification/ACCEPTANCE.md](docs/verification/ACCEPTANCE.md). CI and GitHub Actions are intentionally outside this initial recovery; local results do not imply remote CI success.
 
 The [Core architecture](docs/architecture/CORE.md) defines ownership and dependency direction. NLP, embeddings, rerankers, speaker inference, and LLM execution are excluded. Future add-ons must be independent workspace packages; Core must not depend on them.
 
