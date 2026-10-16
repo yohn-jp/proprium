@@ -6,9 +6,10 @@ import { lstat, readFile, realpath } from "node:fs/promises";
 import { extname, resolve, sep } from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
 import Fastify, { type FastifyInstance, type FastifyRequest } from "fastify";
-import { CONTRACT_VERSION, snapshotKey, type ActionDescriptor, type ActionResult, type ChangeOperation, type ChangeProposal, type HttpContribution, type ModuleAction, type ModuleActionContext, type ModuleId, type ModuleStatus, type ProposalEvidence, type SnapshotId, type ValueSchema } from "@scriptorium/contracts";
+import { CONTRACT_VERSION, MODEL_USAGE_CAPABILITY, snapshotKey, type ActionDescriptor, type ActionResult, type ChangeOperation, type ChangeProposal, type HttpContribution, type ModelUsageStore, type ModuleAction, type ModuleActionContext, type ModuleId, type ModuleStatus, type ProposalEvidence, type SnapshotId, type ValueSchema } from "@scriptorium/contracts";
 import type { CoreStore, CreateHierarchyInput, HierarchyTarget, Project, ReorderHierarchyInput } from "@scriptorium/core";
 import { ModuleRuntime, type ActionHostContext, type ModuleLoader, type ModuleRuntimeOptions } from "@scriptorium/module-runtime";
+import { HistoricalModelUsageStore } from "./historical-store.js";
 
 const SESSION_COOKIE = "scriptorium_session";
 const SESSION_TTL_MS = 8 * 60 * 60 * 1000;
@@ -35,6 +36,8 @@ export interface ApiServerOptions {
   runtime?: ModuleRuntime;
   /** Trusted profile composition; loaders remain lazy until their module is activated. */
   runtimeOptions?: Omit<ModuleRuntimeOptions, "cacheDirectory"> & { cacheDirectory?: string };
+  /** Host-owned historical model usage, independent from Core's disposable cache. */
+  usageDirectory?: string;
   profile?: string;
 }
 
@@ -319,14 +322,27 @@ export function createServer(options: ApiServerOptions): Server {
   }
   const staticDir = options.staticDir ?? resolve(process.cwd(), "app/dist");
   const trustProxy = options.trustProxy ?? false;
+  const configuredUsageDirectory = options.usageDirectory ?? process.env.SCRIPTORIUM_USAGE_DIR ?? resolve(process.env.SCRIPTORIUM_DATA_DIR ?? "./data", "host-history");
+  if (!configuredUsageDirectory.trim()) throw new Error("Model usage history requires a non-empty usage directory");
+  const usageDirectory = resolve(configuredUsageDirectory);
   const sessions = new Map<string, Session>();
   const requestControllers = new Set<AbortController>();
   const projectEventStreams = new Set<ServerResponse>();
   const coreStore = options.store as CoreStoreApi;
+  const capabilityProviders = {
+    ...(options.runtimeOptions?.capabilityProviders ?? {}),
+    [MODEL_USAGE_CAPABILITY]: { create: (): ModelUsageStore => new HistoricalModelUsageStore(usageDirectory) },
+  };
+  const hostCapabilities = [...new Set([
+    ...(options.runtimeOptions?.hostCapabilities ?? Object.keys(capabilityProviders)),
+    MODEL_USAGE_CAPABILITY,
+  ])];
   const runtime: RuntimeHttpHost = options.runtime ?? new ModuleRuntime({
     manifests: options.runtimeOptions?.manifests ?? [],
     enabled: options.runtimeOptions?.enabled ?? [],
     ...(options.runtimeOptions ?? {}),
+    hostCapabilities,
+    capabilityProviders,
     cacheDirectory: options.runtimeOptions?.cacheDirectory ?? resolve(process.cwd(), "data/module-cache"),
   });
   const profile = options.profile ?? process.env.SCRIPTORIUM_PROFILE ?? "core";
@@ -1385,8 +1401,9 @@ export async function start(options?: ApiServerOptions): Promise<Server> {
   const profile = process.env.SCRIPTORIUM_PROFILE ?? "core";
   const cacheDirectory = resolve(process.env.SCRIPTORIUM_MODULE_CACHE_DIR ?? "./data/module-cache");
   const runtimeOptions = await loadProfileRuntimeOptions(profile, cacheDirectory);
+  const dataDirectory = process.env.SCRIPTORIUM_DATA_DIR ?? "./data";
   const store = new CoreStore({
-    dataDir: process.env.SCRIPTORIUM_DATA_DIR ?? "./data",
+    dataDir: dataDirectory,
     ...(process.env.SCRIPTORIUM_GITHUB_TOKEN ? { githubToken: process.env.SCRIPTORIUM_GITHUB_TOKEN } : {}),
   });
   return startServer({
@@ -1394,6 +1411,7 @@ export async function start(options?: ApiServerOptions): Promise<Server> {
     authToken,
     trustProxy: process.env.SCRIPTORIUM_TRUST_PROXY === "1",
     runtimeOptions,
+    usageDirectory: process.env.SCRIPTORIUM_USAGE_DIR ?? resolve(dataDirectory, "host-history"),
     profile,
   });
 }

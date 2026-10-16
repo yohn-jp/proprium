@@ -30,6 +30,8 @@ nix shell nixpkgs#podman -c node tests/e2e/container-recovery.acceptance.mjs
 
 The script builds and identifies the image, creates an ephemeral named volume, runs the browser journey, and removes its browser directory, container, and final temporary volume even when the journey fails. It prints an image ID and manifest digest only after every scenario passes. `OCI_ENGINE` may select another installed engine. The script has a 60–120 second bounded wait for GitHub-backed operations; live GitHub latency can make the full run take several minutes.
 
+For a failed run where the live IndexedDB state needs inspection, set `SCRIPTORIUM_KEEP_FAILURE_ARTIFACTS=1`. On failure only, the script retains the synthetic Chromium profile and sanitized API request/console metadata under a printed `/tmp/scriptorium-p13-failure-*` directory. It clears the profile's session cookies before retaining it; the IndexedDB data remains available for inspection. The default path still removes the profile and diagnostics, and successful runs always clean them up.
+
 ## Evidence and limits
 
 Record the exact source HEAD, OCI engine/version, image ID, manifest digest, platform, initial and final GitHub commits, recovered operation ID and remote commit count from the successful JSON output. Compare the reported source HEAD with the checkout used to build the image. This acceptance certifies only the tested Core tree and these browser recovery/publication/conflict paths. It does not certify optional modules, model behavior, deployment quotas, image registry publication, or the final composed Epic #7 tree; rerun it after integrating production changes that affect Core, the API, the app, packaging, or their contracts.
