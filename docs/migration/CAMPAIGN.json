@@ -106,7 +106,7 @@
         "P05",
         "P06"
       ],
-      "implementation": "pending",
+      "implementation": "in_progress",
       "acceptance": "pending",
       "proofs": []
     },
@@ -116,7 +116,7 @@
         "P05",
         "P06"
       ],
-      "implementation": "pending",
+      "implementation": "in_progress",
       "acceptance": "pending",
       "proofs": []
     },
@@ -176,8 +176,8 @@
     {
       "gate": "real-provider-reference-flow",
       "status": "NOT_CHECKED",
-      "reason": "No OpenAI/Anthropic credentials or configured local provider exported at initial environment inspection; provider-none and unrelated implementation continue.",
-      "unblock": "Inject a supported test-provider credential/endpoint for the bounded synthetic reference flow; do not commit credentials."
+      "reason": "Local CPU OpenAI-compatible provider preflight passed through the source adapter; migrated P11 reference flow is pending.",
+      "unblock": "Execute migrated P11 reference flow against the bounded loopback endpoint recorded in P13-PROVIDER-PREFLIGHT.md."
     }
   ]
 }

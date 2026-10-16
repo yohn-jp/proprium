@@ -350,12 +350,6 @@ importers:
       '@scriptorium/module-story':
         specifier: workspace:*
         version: link:../story
-      react:
-        specifier: ^19.1.0
-        version: 19.3.1
-      react-dom:
-        specifier: ^19.1.0
-        version: 19.3.1(react@19.3.1)
       yaml:
         specifier: ^2.8.1
         version: 2.9.1

@@ -54,6 +54,9 @@
     ],
     "locality": "local",
     "browserEntry": "./dist/browser.js",
-    "workerEntry": "./dist/worker.js"
+    "workerEntry": "./dist/worker.js",
+    "optionalRequires": [
+      "semantic.embedding"
+    ]
   }
 }
