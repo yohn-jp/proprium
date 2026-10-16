@@ -520,10 +520,22 @@ test("external MCP proposals enter owner review before approval, then checkpoint
   expect(proposed.status).toBe(201);
   const storedProposal = await proposed.json() as { id: string; source: string };
   expect(storedProposal).toMatchObject({ id: proposalId, source: "mcp" });
-  await expect.poll(async () => {
-    await page.evaluate(() => window.dispatchEvent(new Event("online")));
-    return page.getByText(proposalId, { exact: false }).isVisible().catch(() => false);
-  }).toBe(true);
+  const foregroundReads: Array<{ path: string; at: number }> = [];
+  page.on("request", (request) => {
+    if (request.method() !== "GET") return;
+    const path = new URL(request.url()).pathname;
+    if (path === `${projectPath}/observation` || path === `${projectPath}/proposals`) {
+      foregroundReads.push({ path, at: Date.now() });
+    }
+  });
+  await page.evaluate(() => window.dispatchEvent(new Event("online")));
+  await expect.poll(() => new Set(foregroundReads.map((read) => read.path)).size).toBe(2);
+  const observationStart = foregroundReads.find((read) => read.path === `${projectPath}/observation`)?.at;
+  const proposalStart = foregroundReads.find((read) => read.path === `${projectPath}/proposals`)?.at;
+  expect(observationStart).toBeDefined();
+  expect(proposalStart).toBeDefined();
+  expect(Math.abs(observationStart! - proposalStart!)).toBeLessThan(1_000);
+  await expect.poll(() => page.getByText(proposalId, { exact: false }).isVisible().catch(() => false)).toBe(true);
   const journaledBeforeApproval = (await readProposalJournal(page)).find((record) => record.proposal.id === proposalId);
   expect(journaledBeforeApproval).toMatchObject({
     authorScope: "owner",
