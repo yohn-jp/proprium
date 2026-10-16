@@ -29,18 +29,20 @@ ENV NODE_ENV=production \
     SCRIPTORIUM_PROFILE=${PROFILE} \
     SCRIPTORIUM_MODULE_PROFILE_PATH=/app/generated/server.mjs \
     SCRIPTORIUM_DATA_DIR=/data \
+    SCRIPTORIUM_USAGE_DIR=/history \
     HOME=/data \
     TMPDIR=/tmp
 RUN apt-get update \
  && apt-get install -y --no-install-recommends ca-certificates git tini \
  && rm -rf /var/lib/apt/lists/* \
- && mkdir -p /data \
- && chown node:node /data
+ && mkdir -p /data /history \
+ && chmod 0700 /history \
+ && chown node:node /data /history
 WORKDIR /app
 COPY --chown=node:node --from=build /runtime/ ./
 
 USER node
-VOLUME ["/data"]
+VOLUME ["/data", "/history"]
 EXPOSE 3000
 ENTRYPOINT ["/usr/bin/tini", "--"]
 CMD ["node", "launch.mjs"]

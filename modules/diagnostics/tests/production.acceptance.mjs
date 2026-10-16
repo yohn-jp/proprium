@@ -77,7 +77,7 @@ async function createSyntheticRepository(root) {
   await writeYaml(seed, "bible/locations/loc-b.yaml", { id: "loc-b", type: "location", name: "村" });
   await writeText(seed, firstScenePath,
     "---\ntitle: 遺跡\nauthor_note: preserve-this\ncustom:\n  nested: true\n---\n星野は悲しい。星影列車の古文書を調べた…。\n「俺は行く。」\n");
-  await writeText(seed, "manuscript/vol-one/ch-one/sc-two.md", "---\ntitle: 帰路\n---\n前日、星野は青い彗星を見上げた。\n");
+  await writeText(seed, "manuscript/vol-one/ch-one/sc-two.md", "---\ntitle: 帰路\nauthor_note: preserve-formatting-metadata\ncustom:\n  nested: true\n---\n\t前日、星野は青い彗星を見上げた…。\n　「俺は行く。」\n");
 
   await writeYaml(seed, synonymsPath, {
     ownerNote: "preserve-synonym-root",
@@ -258,6 +258,16 @@ test("P06 public actions survive Core-approved publish, data-root deletion, and 
     assert.equal(lintProposal.operations[0].writes[0].path, firstScenePath);
     assert.equal(lintProposal.operations[0].reads[0].revision, manuscript.revision);
 
+    const formatResult = await runtime.invokeAction("diagnostics", "diagnostics.formatManuscript", { sceneId: "sc-two" }, host);
+    const formatted = actionData(formatResult, "diagnostics.formatManuscript", reader);
+    assert.equal(formatted.actionId, "format-manuscript");
+    assert.equal(formatted.formattedText, "前日、星野は青い彗星を見上げた……。\n\n「俺は行く。」");
+    assert.match(formatted.resultId, /^na-[a-f0-9]{64}$/u);
+    const formatProposal = proposalFor(formatResult, "diagnostics.formatManuscript");
+    assert.equal(formatProposal.id, formatted.proposalId);
+    assert.equal(formatProposal.operations[0].id, `${formatted.proposalId}-replace`);
+    assert.equal(formatProposal.operations[0].writes[0].path, "manuscript/vol-one/ch-one/sc-two.md");
+
     const synonymResult = await runtime.invokeAction("nlp", "nlp.saveSynonymGroup", {
       words: ["剛健"], mergeGroupIndex: 0,
     }, host);
@@ -272,18 +282,20 @@ test("P06 public actions survive Core-approved publish, data-root deletion, and 
 
     const proposals = [
       proposalFor(lintResult, "diagnostics.proposeLintFix"),
+      formatProposal,
       proposalFor(synonymResult, "nlp.saveSynonymGroup"),
       proposalFor(ignoredResult, "nlp.ignoreCandidates"),
       proposalFor(consentResult, "nlp.updateExternalConsent"),
     ];
-    assert.equal(proposals.length, 4);
+    assert.equal(proposals.length, 5);
     const unchangedReader = await pinnedRemoteReader(store, project.id);
     assert.deepEqual(unchangedReader.snapshot, reader.snapshot, "module proposals leave the canonical remote snapshot unchanged until author approval");
     assert.equal((await unchangedReader.read(synonymsPath)).content, (await reader.read(synonymsPath)).content);
     assert.equal((await unchangedReader.read(firstScenePath)).content, manuscript.content, "lint never edits the Git worktree directly");
+    assert.equal((await unchangedReader.read("manuscript/vol-one/ch-one/sc-two.md")).content, (await reader.read("manuscript/vol-one/ch-one/sc-two.md")).content, "formatting never edits the Git worktree directly");
 
     const publication = await approveCheckpointAndPublish(store, project.id, proposals);
-    assert.equal(publication.acknowledged.length, 4);
+    assert.equal(publication.acknowledged.length, 5);
     assert.deepEqual(runtime.workerSupervisor.activeWorkerPids, [], "all NLP and diagnostics worker processes have exited before data-root replacement");
     await runtime.shutdown();
     runtime = undefined;
@@ -304,6 +316,9 @@ test("P06 public actions survive Core-approved publish, data-root deletion, and 
     assert.ok(committedManuscript.startsWith("---\ntitle: 遺跡\nauthor_note: preserve-this\ncustom:\n  nested: true\n---\n"));
     assert.ok(committedManuscript.includes("……"));
     assert.ok(committedManuscript.includes("\n\n「俺は行く。」"));
+    const committedFormatted = (await committedReader.read("manuscript/vol-one/ch-one/sc-two.md")).content;
+    assert.ok(committedFormatted.startsWith("---\ntitle: 帰路\nauthor_note: preserve-formatting-metadata\ncustom:\n  nested: true\n---\n"));
+    assert.ok(committedFormatted.endsWith("前日、星野は青い彗星を見上げた……。\n\n「俺は行く。」"));
 
     await rm(dataDirectory, { recursive: true, force: true });
     await assert.rejects(stat(dataDirectory), { code: "ENOENT" },

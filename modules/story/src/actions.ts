@@ -125,6 +125,8 @@ type StoredZukanSuggestion = ObjectValue & {
   confidence: "high" | "low" | "none" | null;
   createdAt: string;
   updatedAt: string;
+  sourceHash?: string;
+  sourceSnapshot?: string;
 };
 type StoryCapabilityContext = ModuleContext & {
   acquireCapability<T>(id: string): Promise<{ value: T; release(): Promise<void> }>;
@@ -252,7 +254,7 @@ function normalizeZukanSuggestion(value: ObjectValue): StoredZukanSuggestion {
   const source = value.source;
   const kind = value.kind ?? null;
   const sourceSessionId = value.sourceSessionId ?? value.source_session_id ?? null;
-  const turnRangeValue = parseOptionalJson(value.sourceTurnRange ?? value.source_turn_range_json, "Zukan turn range");
+  const turnRangeValue = parseOptionalJson(value.sourceTurnRange !== undefined ? value.sourceTurnRange : value.source_turn_range_json, "Zukan turn range");
   const sourceTurnRange = turnRangeValue === null ? null : isRecord(turnRangeValue) &&
     Number.isInteger(turnRangeValue.start) && Number.isInteger(turnRangeValue.end) &&
     Number(turnRangeValue.start) >= 0 && Number(turnRangeValue.end) >= Number(turnRangeValue.start)
@@ -267,7 +269,9 @@ function normalizeZukanSuggestion(value: ObjectValue): StoredZukanSuggestion {
       (kind !== null && !new Set(["fact", "dynamic", "habit"]).has(String(kind))) ||
       (sourceSessionId !== null && typeof sourceSessionId !== "string") || sourceTurnRange === undefined ||
       (confidence !== null && !new Set(["high", "low", "none"]).has(String(confidence))) ||
-      typeof createdAt !== "string" || typeof updatedAt !== "string") {
+      typeof createdAt !== "string" || typeof updatedAt !== "string" ||
+      (value.sourceHash !== undefined && (typeof value.sourceHash !== "string" || !/^[a-f0-9]{64}$/u.test(value.sourceHash))) ||
+      (value.sourceSnapshot !== undefined && typeof value.sourceSnapshot !== "string")) {
     throw new TypeError("Story zukan-suggestions JSONL contains a malformed suggestion row");
   }
   return {
@@ -350,6 +354,134 @@ async function staleSuggestionsForNotesEdit(
 
 function zukanSuggestionFile(rows: readonly StoredZukanSuggestion[]): string {
   return rows.map((row) => JSON.stringify(row)).join("\n") + (rows.length ? "\n" : "");
+}
+
+function zukanCreateSchema(): ValueSchema<ObjectValue> {
+  return {
+    parse(value) {
+      const input = parseRecord(value);
+      for (const key of ["entityId", "proposedText", "source"]) {
+        if (typeof input[key] !== "string" || !String(input[key]).trim()) throw new TypeError(`${key} must be a non-empty string`);
+      }
+      if (!Array.isArray(input.evidence)) throw new TypeError("evidence must be an array");
+      if (input.blockPath !== undefined && typeof input.blockPath !== "string") throw new TypeError("blockPath must be a string");
+      if (input.source !== "manuscript" && input.source !== "sandbox") throw new TypeError("source must be manuscript or sandbox");
+      if (input.kind !== undefined && input.kind !== null && !["fact", "dynamic", "habit"].includes(String(input.kind))) throw new TypeError("kind must be fact, dynamic, habit, or null");
+      for (const key of ["sourceSessionId", "operationId", "operation_id"]) {
+        if (input[key] !== undefined && input[key] !== null && typeof input[key] !== "string") throw new TypeError(`${key} must be a string`);
+      }
+      if (input.confidence !== undefined && input.confidence !== null && !["high", "low", "none"].includes(String(input.confidence))) throw new TypeError("confidence must be high, low, none, or null");
+      if (input.sourceTurnRange !== undefined && input.sourceTurnRange !== null &&
+          (!isRecord(input.sourceTurnRange) || !Number.isSafeInteger(input.sourceTurnRange.start) || !Number.isSafeInteger(input.sourceTurnRange.end) ||
+            Number(input.sourceTurnRange.start) < 0 || Number(input.sourceTurnRange.end) < Number(input.sourceTurnRange.start))) {
+        throw new TypeError("sourceTurnRange must contain a non-negative inclusive start/end range");
+      }
+      return input;
+    },
+  };
+}
+
+type ZukanEvidenceInput = { quote: string; sceneId?: string };
+type ZukanSourceRead = { path: string; revision: string; source: string };
+
+function defaultZukanBlockPath(notesValue: unknown): string {
+  const notes = normalizeNotes(notesValue);
+  if (!notes || notes.lead.length === 0) return "lead.0";
+  for (let index = notes.lead.length - 1; index >= 0; index--) {
+    if (notes.lead[index]?.type === "paragraph") return `lead.${index}`;
+  }
+  return `lead.${notes.lead.length}`;
+}
+
+function validateZukanBlockPath(value: string): void {
+  const match = /^(?:lead\.(\d+)|sections\.(\d+)\.body\.(\d+))$/u.exec(value);
+  if (!match) throw new TypeError("blockPath must be lead.<index> or sections.<index>.body.<index>");
+  const indices = match.slice(1).filter((item): item is string => item !== undefined).map(Number);
+  if (indices.some((index) => !Number.isSafeInteger(index) || index < 0 || index > 1000)) {
+    throw new TypeError("blockPath indices must be between 0 and 1000");
+  }
+}
+
+function normalizeZukanEvidence(value: unknown): ZukanEvidenceInput[] {
+  if (!Array.isArray(value) || value.length === 0 || value.length > 64 || !value.every((item) =>
+    isRecord(item) && typeof item.quote === "string" && !!item.quote.trim() && item.quote.length <= 20_000 &&
+    (item.sceneId === undefined || (typeof item.sceneId === "string" && !!item.sceneId.trim())))) {
+    throw new TypeError("evidence must contain 1 to 64 quoted source references");
+  }
+  return value.map((item) => ({ quote: (item as ObjectValue).quote as string, ...((item as ObjectValue).sceneId === undefined ? {} : { sceneId: (item as ObjectValue).sceneId as string }) }));
+}
+
+function compactSourceText(value: string): string { return value.replace(/\s+/gu, " ").trim(); }
+function sourceContainsQuote(source: string, quote: string): boolean {
+  const normalizedQuote = compactSourceText(quote);
+  return normalizedQuote.length > 0 && compactSourceText(source).includes(normalizedQuote);
+}
+
+function dialogueSketchLines(value: unknown): Array<{ speakerEntityId: string; text: string }> {
+  if (!Array.isArray(value)) return [];
+  return value.flatMap((item) => isRecord(item) && typeof item.speakerEntityId === "string" && !!item.speakerEntityId.trim() &&
+    typeof item.text === "string" && !!item.text.trim() ? [{ speakerEntityId: item.speakerEntityId, text: item.text }] : []);
+}
+
+function zukanIdentity(value: Pick<StoredZukanSuggestion, "entityId" | "blockPath" | "proposedText" | "evidence" | "source" | "kind" | "sourceSessionId" | "sourceTurnRange" | "confidence">): string {
+  return JSON.stringify(canonical({
+    entityId: value.entityId,
+    blockPath: value.blockPath,
+    proposedText: value.proposedText.trim(),
+    evidence: value.evidence,
+    source: value.source,
+    kind: value.kind,
+    sourceSessionId: value.sourceSessionId,
+    sourceTurnRange: value.sourceTurnRange,
+    confidence: value.confidence,
+  }));
+}
+
+function zukanDigest(value: unknown): string {
+  return createHash("sha256").update(JSON.stringify(canonical(value))).digest("hex");
+}
+
+function zukanNoteBlock(notesValue: unknown, blockPath: string): unknown {
+  const notes = normalizeNotes(notesValue);
+  const lead = /^lead\.(\d+)$/u.exec(blockPath);
+  if (lead) return notes?.lead[Number(lead[1])] ?? null;
+  const section = /^sections\.(\d+)\.body\.(\d+)$/u.exec(blockPath);
+  if (!section) return null;
+  return notes?.sections[Number(section[1])]?.body[Number(section[2])] ?? null;
+}
+
+function zukanSourceError(message: string, code = "operation_precondition_conflict"): Error {
+  return Object.assign(new Error(message), { code });
+}
+
+async function existingZukanCreateProposal(
+  context: ModuleActionContext,
+  proposalId: string,
+  identityHash: string,
+): Promise<{ suggestion: StoredZukanSuggestion } | null> {
+  const available = await context.listActions();
+  if (!available.some((candidate) => candidate.id === "core.proposals.get")) return null;
+  const result = await context.invoke("core.proposals.get", { proposalId });
+  if (!result.ok) {
+    if (result.error.code === "proposal_not_found") return null;
+    throw Object.assign(new Error(result.error.message), { code: result.error.code });
+  }
+  const data = result.data as { proposal: {
+    proposal: ChangeProposal;
+    payloadComplete?: boolean;
+  } };
+  const status = data.proposal;
+  if (status.payloadComplete === false) {
+    throw Object.assign(new Error("The original complete Zukan proposal payload is unavailable for recovery"), { code: "proposal_payload_unavailable" });
+  }
+  const storedEvidence = status.proposal.evidence?.find((item) => item.kind === "story.zukan-suggestion.create.v1");
+  const details = isRecord(storedEvidence?.details) ? storedEvidence.details : null;
+  if (!details || details.identityHash !== identityHash || !isRecord(details.suggestion)) {
+    throw Object.assign(new Error("The stable Zukan proposal ID is already bound to different evidence"), { code: "suggestion_identity_conflict" });
+  }
+  const suggestion = normalizeZukanSuggestion(details.suggestion);
+  await context.propose(status.proposal.operations, status.proposal.evidence, status.proposal.id);
+  return { suggestion };
 }
 
 function normalizeStoredProposal(row: StoredStateProposal): StateProposal {
@@ -838,7 +970,11 @@ function makeActions(moduleContext: StoryCapabilityContext): ModuleAction[] {
       const source = identifyNarrativeChangeSet(context, input);
       const existingResult = await context.invoke("core.proposals.get", { proposalId: source.coreProposalId });
       if (existingResult.ok) {
-        const status = (existingResult.data as { proposal?: { proposal?: unknown } }).proposal;
+        const envelope = (existingResult.data as { proposal?: { payloadComplete?: boolean; proposal?: unknown } }).proposal;
+        if (envelope?.payloadComplete === false) {
+          throw Object.assign(new Error("The complete original Story change proposal payload is unavailable; it cannot be reconstructed from the accepted subset"), { code: "PROPOSAL_PAYLOAD_UNAVAILABLE" });
+        }
+        const status = envelope;
         const prior = status?.proposal;
         if (!isRecord(prior) || !Array.isArray(prior.evidence)) {
           throw Object.assign(new Error("Existing Core proposal has no Story source identity evidence"), { code: "change_set_identity_conflict" });
@@ -1294,6 +1430,158 @@ function makeActions(moduleContext: StoryCapabilityContext): ModuleAction[] {
         };
       });
       return { pendingCount: matching.filter((row) => row.status === "pending").length, suggestions };
+    }),
+    action("story.zukan-suggestions.create", propose, zukanCreateSchema(), async (input, context) => {
+      const story = await readStorySnapshot(context.reader, { includeManuscripts: true });
+      const entityId = stringValue(input.entityId, "entityId");
+      const entity = story.entities.get(entityId);
+      if (!entity || story.duplicateIds.has(entityId)) throw new TypeError(`Zukan entity is missing or ambiguous: ${entityId}`);
+      const proposedText = stringValue(input.proposedText, "proposedText").trim();
+      if (!proposedText || proposedText.length > 20_000) throw new TypeError("proposedText must contain 1 to 20000 characters");
+      const source = input.source as StoredZukanSuggestion["source"];
+      const evidence = normalizeZukanEvidence(input.evidence);
+      const blockPath = typeof input.blockPath === "string" && input.blockPath.trim()
+        ? input.blockPath.trim()
+        : defaultZukanBlockPath(entity.raw.notes);
+      validateZukanBlockPath(blockPath);
+      const kind = (input.kind ?? null) as StoredZukanSuggestion["kind"];
+      const confidence = (input.confidence ?? null) as StoredZukanSuggestion["confidence"];
+      const sourceSessionId = typeof input.sourceSessionId === "string" && input.sourceSessionId.trim()
+        ? input.sourceSessionId.trim()
+        : null;
+      const sourceTurnRange = input.sourceTurnRange === undefined || input.sourceTurnRange === null
+        ? null
+        : { start: Number((input.sourceTurnRange as ObjectValue).start), end: Number((input.sourceTurnRange as ObjectValue).end) };
+      const sourceReads = new Map<string, ZukanSourceRead>();
+      let sourceContext: ObjectValue;
+
+      if (source === "manuscript") {
+        if (sourceSessionId !== null || sourceTurnRange !== null) throw new TypeError("Manuscript suggestions cannot include sandbox session metadata");
+        for (const item of evidence) {
+          if (!item.sceneId) throw new TypeError("Manuscript evidence must identify its source scene");
+          const scene = story.entities.get(item.sceneId);
+          if (scene?.type !== "scene" || story.duplicateIds.has(item.sceneId) || typeof scene.raw.manuscript !== "string") {
+            throw zukanSourceError(`Manuscript evidence scene is missing or ambiguous: ${item.sceneId}`);
+          }
+          const manuscript = [...story.entities.values()].find((candidate) => candidate.type === "manuscript" && candidate.filePath === scene.raw.manuscript);
+          if (!manuscript || typeof manuscript.body !== "string") throw zukanSourceError(`Manuscript evidence source is missing: ${item.sceneId}`);
+          if (!sourceContainsQuote(manuscript.body, item.quote)) throw zukanSourceError(`Manuscript evidence changed after generation: ${item.sceneId}`);
+          const sceneRevision = story.revisions.get(scene.filePath);
+          const manuscriptRevision = story.revisions.get(manuscript.filePath);
+          if (!sceneRevision || !manuscriptRevision) throw zukanSourceError(`Manuscript evidence revision is unavailable: ${item.sceneId}`);
+          sourceReads.set(scene.filePath, { path: scene.filePath, revision: sceneRevision, source: `scene:${scene.id}` });
+          sourceReads.set(manuscript.filePath, { path: manuscript.filePath, revision: manuscriptRevision, source: `manuscript:${scene.id}` });
+        }
+        sourceContext = {
+          source,
+          sources: [...sourceReads.values()].map(({ path, revision, source: sourceId }) => ({ path, revision, sourceId })).sort((a, b) => a.path.localeCompare(b.path)),
+        };
+      } else {
+        if (!sourceSessionId || !sourceTurnRange) throw new TypeError("Sandbox suggestions require sourceSessionId and sourceTurnRange");
+        const sketch = story.entities.get(sourceSessionId);
+        if (sketch?.type !== "dialogue_sketch" || story.duplicateIds.has(sourceSessionId)) {
+          throw zukanSourceError(`Sandbox source session is missing or ambiguous: ${sourceSessionId}`);
+        }
+        const lines = dialogueSketchLines(sketch.raw.lines);
+        if (sourceTurnRange.end >= lines.length) throw zukanSourceError("Sandbox source turn range is stale");
+        const selected = lines.slice(sourceTurnRange.start, sourceTurnRange.end + 1);
+        const participants = new Set([
+          ...(Array.isArray(sketch.raw.participantEntityIds) ? sketch.raw.participantEntityIds.filter((id): id is string => typeof id === "string") : []),
+          ...selected.map((line) => line.speakerEntityId),
+        ]);
+        if (!participants.has(entityId)) throw zukanSourceError("Sandbox suggestion entity is not a participant in the selected source turns");
+        const transcript = selected.map((line) => line.text).join("\n");
+        if (evidence.some((item) => !sourceContainsQuote(transcript, item.quote))) throw zukanSourceError("Sandbox evidence changed after generation");
+        const sketchRevision = story.revisions.get(sketch.filePath);
+        if (!sketchRevision) throw zukanSourceError(`Sandbox source revision is unavailable: ${sourceSessionId}`);
+        sourceReads.set(sketch.filePath, { path: sketch.filePath, revision: sketchRevision, source: `sandbox:${sourceSessionId}` });
+        sourceContext = {
+          source,
+          sourceSessionId,
+          sourceTurnRange,
+          sources: [...sourceReads.values()].map(({ path, revision, source: sourceId }) => ({ path, revision, sourceId })),
+        };
+      }
+
+      const entityFileRevision = story.revisions.get(entity.filePath);
+      if (!entityFileRevision) throw zukanSourceError(`Zukan target entity revision is unavailable: ${entityId}`);
+      const sourceHash = zukanDigest({
+        entityId,
+        entityFilePath: entity.filePath,
+        entityFileRevision,
+        blockPath,
+        noteBlock: zukanNoteBlock(entity.raw.notes, blockPath),
+        sourceContext,
+      });
+      const identity = {
+        entityId,
+        blockPath,
+        proposedText,
+        evidence,
+        source,
+        kind,
+        sourceSessionId,
+        sourceTurnRange,
+        confidence,
+      } satisfies Pick<StoredZukanSuggestion, "entityId" | "blockPath" | "proposedText" | "evidence" | "source" | "kind" | "sourceSessionId" | "sourceTurnRange" | "confidence">;
+      const identityHash = zukanDigest({ identity, sourceHash });
+      const id = `zukan-${identityHash}`;
+      const { rows, revision } = await readZukanSuggestions(context);
+      const duplicate = rows.find((row) => row.id === id ||
+        (row.sourceHash === sourceHash && zukanIdentity(row) === zukanIdentity(identity)) ||
+        (row.sourceHash === undefined && zukanIdentity(row) === zukanIdentity(identity)));
+      if (duplicate) return { suggestion: { ...duplicate, ...(entity.name ? { entityName: entity.name } : {}) }, created: false };
+
+      const proposalId = `story-zukan-${identityHash}`;
+      const replay = await existingZukanCreateProposal(context, proposalId, identityHash);
+      if (replay) return { suggestion: { ...replay.suggestion, ...(entity.name ? { entityName: entity.name } : {}) }, created: true };
+
+      const now = new Date().toISOString();
+      const suggestion: StoredZukanSuggestion = {
+        id,
+        ...identity,
+        status: "pending",
+        createdAt: now,
+        updatedAt: now,
+        sourceHash,
+        sourceSnapshot: context.reader.snapshot.remoteCommit,
+      };
+      const sourceSceneIds = new Set(source === "manuscript" ? evidence.flatMap((item) => item.sceneId ? [item.sceneId] : []) : [sourceSessionId!]);
+      let staleCount = 0;
+      const updatedRows = rows.map((row) => {
+        const existingSources = row.source === "manuscript"
+          ? row.evidence.flatMap((item) => item.sceneId ? [item.sceneId] : [])
+          : row.sourceSessionId ? [row.sourceSessionId] : [];
+        if (row.status !== "pending" || row.entityId !== entityId || row.blockPath !== blockPath || row.source !== source ||
+            (row.sourceSessionId ?? null) !== sourceSessionId || row.sourceHash === undefined || row.sourceHash === sourceHash ||
+            !existingSources.some((sourceId) => sourceSceneIds.has(sourceId))) return row;
+        staleCount++;
+        return suggestionForWrite(row, "stale");
+      });
+      const allRows = [...updatedRows, suggestion];
+      const reads = [
+        { path: ZUKAN_SUGGESTIONS_PATH, revision },
+        { path: entity.filePath, revision: entityFileRevision },
+        ...[...sourceReads.values()].map(({ path, revision: fileRevision }) => ({ path, revision: fileRevision })),
+      ];
+      const evidenceRecord = {
+        id: `zukan-${identityHash}`,
+        snapshot: context.reader.snapshot,
+        module: "story" as const,
+        kind: "story.zukan-suggestion.create.v1",
+        paths: reads,
+        details: { identityHash, sourceHash, suggestion },
+      };
+      const operation = buildOperation({
+        reader: context.reader,
+        reads,
+        writes: [{ path: ZUKAN_SUGGESTIONS_PATH, revision, content: zukanSuggestionFile(allRows) }],
+        message: `Create pending Zukan suggestion ${id}`,
+        effect: "metadata",
+        operationId: requestedOperationId(input) ?? `zukan-create-${id}`,
+      });
+      await context.propose([operation], [evidenceRecord], proposalId);
+      return { suggestion: { ...suggestion, ...(entity.name ? { entityName: entity.name } : {}) }, created: true, staledPendingCount: staleCount };
     }),
     action("story.zukan-suggestions.approve", propose, fieldSchema(["id"], ["id", "entityRevision", "entity_revision", "operationId", "operation_id"]), async (input, context) => {
       const story = await readStorySnapshot(context.reader);

@@ -24,6 +24,7 @@ import {
   proposalOperationEntry,
   repositoryKey,
   requestPersistentStorage,
+  stableJson,
   type JournalEntry,
   type JournalProposal,
 } from "./storage/journal";
@@ -177,6 +178,16 @@ function proposalIdFor(operation: ChangeOperation): string {
   return `author-${operation.id}-${operation.generation}`;
 }
 
+function proposalOperationIds(proposal: ChangeProposal): string[] {
+  return proposal.operations.map((operation) => operation.id);
+}
+
+function proposalIsFullyPublished(record: JournalProposal): boolean {
+  const originalIds = record.status?.operationIds ?? proposalOperationIds(record.proposal);
+  const published = new Set(record.status?.publishedOperationIds ?? []);
+  return originalIds.length > 0 && originalIds.every((id) => published.has(id));
+}
+
 function makeEntry(
   repository: RepositoryIdentity,
   authorScope: string,
@@ -325,11 +336,39 @@ export function App() {
       setEntries(allEntries.filter((entry) => entry.authorScope === authorScopeRef.current && (!repository || sameRepository(entry.repository, repository))));
       const visibleProposals = repository
         ? allProposals.filter((record) => record.authorScope === authorScopeRef.current && record.dismissedAt === undefined &&
-          !record.proposal.operations.every((operation) => record.status?.publishedOperationIds.includes(operation.id)) &&
+          !proposalIsFullyPublished(record) &&
           sameRepository(record.repository, repository))
         : allProposals.filter((record) => record.authorScope === authorScopeRef.current && record.dismissedAt === undefined &&
-          !record.proposal.operations.every((operation) => record.status?.publishedOperationIds.includes(operation.id)));
+          !proposalIsFullyPublished(record));
       setProposals(visibleProposals);
+      if (repository) {
+        const active = workRef.current;
+        const activeEditor = active?.editor;
+        const activeEntry = activeEditor?.entry;
+        const conflictEntry = activeEditor && activeEntry && active?.selectedSceneId === activeEditor.read.scene.id &&
+            sameRepository(active.observation.snapshot.repository, repository)
+          ? allEntries.find((entry) => entry.authorScope === authorScopeRef.current && entry.state === "conflict" &&
+            entry.documentPath === activeEditor.read.document.path && entry.operation.id === activeEntry.operation.id &&
+            entry.operation.generation === activeEntry.operation.generation)
+          : undefined;
+        if (conflictEntry && (activeEditor?.entry?.state !== "conflict" || !activeEditor.conflict)) {
+          updateWork((current) => current?.editor?.read.document.path === conflictEntry.documentPath &&
+              current.editor.entry?.operation.id === conflictEntry.operation.id &&
+              current.editor.entry.operation.generation === conflictEntry.operation.generation &&
+              sameRepository(current.observation.snapshot.repository, repository)
+            ? {
+              ...current,
+              editor: {
+                ...current.editor,
+                entry: conflictEntry,
+                text: conflictEntry.text,
+                conflict: current.editor.conflict ?? current.editor.remote,
+                draftStored: true,
+              },
+            }
+            : current);
+        }
+      }
     } catch (error) {
       if (expectedNavigation === undefined || navigationRef.current === expectedNavigation) setGlobalError(messageOf(error));
     }
@@ -350,10 +389,12 @@ export function App() {
     const poll = (async () => {
       let response: Awaited<ReturnType<typeof api.proposalStatuses>>;
       let receipts: Awaited<ReturnType<BrowserJournal["getPublicationReceipts"]>>;
+      let localProposals: JournalProposal[];
       try {
-        [response, receipts] = await Promise.all([
+        [response, receipts, localProposals] = await Promise.all([
           api.proposalStatuses(projectId),
           currentJournal.getPublicationReceipts(repository, scope),
+          currentJournal.getProposals(repository, scope),
         ]);
       } catch (error) {
         if (expectedNavigation === undefined || isCurrentProject(expectedNavigation, projectId, repository)) {
@@ -362,6 +403,31 @@ export function App() {
         return;
       }
       const failures: string[] = [];
+      let restoredAny = false;
+      for (const status of response.proposals) {
+        if (status?.payloadComplete !== false) continue;
+        const remoteProposal = status.proposal;
+        const privateRecord = localProposals.find((record) => record.proposal.id === remoteProposal.id);
+        const originalIds = status.operationIds;
+        if (!privateRecord || !Array.isArray(originalIds) ||
+            JSON.stringify(proposalOperationIds(privateRecord.proposal)) !== JSON.stringify(originalIds)) continue;
+        try {
+          const restored = await api.propose(projectId, privateRecord.proposal);
+          if (stableJson(restored) !== stableJson(privateRecord.proposal)) {
+            throw new Error("Core に保存された元の提案がブラウザー回復記録と一致しません。");
+          }
+          restoredAny = true;
+        } catch (error) {
+          failures.push(`${remoteProposal.id}: 元の提案を照合できませんでした。${messageOf(error)}`);
+        }
+      }
+      if (restoredAny) {
+        try {
+          response = await api.proposalStatuses(projectId);
+        } catch (error) {
+          failures.push(`提案の復元後の状態を確認できませんでした。${messageOf(error)}`);
+        }
+      }
       const acknowledged = new Set(receipts.flatMap((receipt) => receipt.acknowledged.map((item) => `${item.operationId}\u0000${item.generation}`)));
       for (const status of response.proposals) {
         try {
@@ -372,12 +438,19 @@ export function App() {
               !Array.isArray(status.publishedOperationIds ?? []) || typeof status.stale !== "boolean") {
             throw new Error("Core から不正な提案状態が返されました。");
           }
-          const fullyAcknowledged = proposal.operations.every((operation) => acknowledged.has(`${operation.id}\u0000${operation.generation}`));
+          if (status.payloadComplete === false && (!/^[a-f0-9]{64}$/u.test(status.originalDigest ?? "") ||
+              !Array.isArray(status.operationIds) || status.operationIds.length < proposal.operations.length ||
+              new Set(status.operationIds).size !== status.operationIds.length ||
+              !proposal.operations.every((operation) => status.operationIds!.includes(operation.id)))) {
+            throw new Error("Core から元の提案との結び付きがない部分回復状態が返されました。");
+          }
+          const originalIds = status.operationIds ?? proposalOperationIds(proposal);
+          const publishedIds = new Set(status.publishedOperationIds ?? []);
+          const fullyAcknowledged = originalIds.length > 0 && originalIds.every((id) => publishedIds.has(id));
           if (fullyAcknowledged) {
             await currentJournal.removeProposal(repository, scope, proposal.id).catch(() => undefined);
             continue;
           }
-          const publishedIds = new Set(status.publishedOperationIds ?? []);
           const checkpointByOperation = new Map(status.checkpoints.map((receipt) => [`${receipt.operationId}\u0000${receipt.generation}`, receipt]));
           // Persist the full operation, provenance and evidence before exposing the proposal in React.
           await currentJournal.putProposal(repository, scope, proposal, status);
@@ -576,7 +649,7 @@ export function App() {
         }
       }
       if (latest) {
-        if (latest.state === "draft") text = latest.text;
+        if (latest.state === "draft" || latest.state === "conflict") text = latest.text;
         const docPrecondition = latest.operation.reads.find((item) => item.path === effective.document.path)?.revision;
         const docWrite = latest.operation.writes.find((item) => item.path === effective.document.path)?.content;
         if (latest.state === "draft" && docPrecondition !== effective.document.revision) {
@@ -703,6 +776,8 @@ export function App() {
       const latestBeforeRead = workRef.current;
       const changedRemote = Boolean(latestBeforeRead && latestBeforeRead.observation.snapshot.remoteCommit !== observed.snapshot.remoteCommit);
       const changedCheckpoint = Boolean(latestBeforeRead && latestBeforeRead.observation.checkpointHead !== observed.checkpointHead);
+      const changedEditorSnapshot = Boolean(latestBeforeRead?.editor &&
+        !sameRemoteSnapshot(latestBeforeRead.editor.remote.snapshot, observed.snapshot));
       if (changedRemote) {
       await reconcileProject(projectId, observed.snapshot.repository, authorScope, nav);
         if (navigationRef.current !== nav || workRef.current?.project.id !== projectId) return;
@@ -719,7 +794,7 @@ export function App() {
         kind: observed.state === "fresh" ? "normal" : "error",
       });
       const latest = workRef.current;
-      if ((changedRemote || changedCheckpoint || changedTree) && latest?.project.id === projectId && latest.selectedSceneId) {
+      if ((changedRemote || changedCheckpoint || changedTree || changedEditorSnapshot) && latest?.project.id === projectId && latest.selectedSceneId) {
         await flushDraft();
         await loadScene(projectId, latest.selectedSceneId, tree, observed.snapshot.repository);
       }
@@ -804,11 +879,10 @@ export function App() {
     const nav = navigationRef.current;
     const form = new FormData(formElement);
     const url = String(form.get("url") ?? "").trim();
-    const branch = String(form.get("branch") ?? "").trim();
     setBusy("register");
     setGlobalError("");
     try {
-      const project = await api.registerProject(url, branch || undefined);
+      const project = await api.registerProject(url);
       if (navigationRef.current !== nav) return;
       formElement.reset();
       const nextProjects = await api.projects();
@@ -1326,8 +1400,6 @@ export function App() {
             <h2>作品を追加</h2>
             <label htmlFor="repo-url">GitHub リポジトリ URL</label>
             <input id="repo-url" name="url" type="url" placeholder="https://github.com/owner/work" required />
-            <label htmlFor="repo-branch">ブランチ（任意）</label>
-            <input id="repo-branch" name="branch" type="text" autoComplete="off" />
             <button type="submit" disabled={busy === "register"}>{busy === "register" ? "登録中…" : "リポジトリを登録"}</button>
           </form>
           <section className="project-list-section" aria-labelledby="projects-title">

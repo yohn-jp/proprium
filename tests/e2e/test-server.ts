@@ -1,7 +1,11 @@
 import { execFileSync } from "node:child_process";
+import { createServer as createControlServer, type Server } from "node:http";
 import { mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
+import { pathToFileURL } from "node:url";
+import type { ModuleId, ModuleManifest } from "@scriptorium/contracts";
+import type { ModuleLoader, ModuleRuntimeOptions } from "@scriptorium/module-runtime";
 import { createServer } from "../../packages/api/dist/server.js";
 import { CoreStore } from "../../packages/core/dist/index.js";
 
@@ -81,31 +85,105 @@ async function createLocalFixture(): Promise<void> {
   }
 }
 
+async function listen(server: Server, listenPort: number): Promise<void> {
+  await new Promise<void>((resolveListen, reject) => {
+    server.once("error", reject);
+    server.listen(listenPort, "127.0.0.1", () => {
+      server.off("error", reject);
+      resolveListen();
+    });
+  });
+}
+
+async function close(server: Server): Promise<void> {
+  if (!server.listening) return;
+  await new Promise<void>((resolveClose, reject) => {
+    server.close((error) => error ? reject(error) : resolveClose());
+  });
+}
+
 async function startTestServer(): Promise<void> {
   if (process.env.SCRIPTORIUM_E2E_EXTERNAL_REPOSITORY !== "1") {
     await createLocalFixture();
   }
 
-  const store = new CoreStore({
-    dataDir: join(stateDir, "store"),
-    allowLocalRemotes: true,
-  });
-  const server = createServer({
-    store,
-    authToken,
-    staticDir: resolve("app/dist"),
-  });
+  const profile = process.env.SCRIPTORIUM_PROFILE ?? "core";
+  let runtimeOptions: ModuleRuntimeOptions | undefined;
+  if (profile !== "core") {
+    const generatedPath = resolve("profiles", profile, "generated", "server.mjs");
+    const composition = await import(pathToFileURL(generatedPath).href) as {
+      profile: string;
+      moduleManifests: ModuleManifest[];
+      moduleLoaders: Partial<Record<ModuleId, ModuleLoader>>;
+      moduleDirectories: ModuleRuntimeOptions["moduleDirectories"];
+      moduleWorkerEntries: ModuleRuntimeOptions["workerEntries"];
+    };
+    if (composition.profile !== profile) throw new Error(`Generated E2E module profile does not match ${profile}`);
+    runtimeOptions = {
+      manifests: composition.moduleManifests,
+      enabled: composition.moduleManifests.map((manifest) => manifest.id),
+      loaders: composition.moduleLoaders,
+      moduleDirectories: composition.moduleDirectories,
+      workerEntries: composition.moduleWorkerEntries,
+      cacheDirectory: join(stateDir, "module-cache"),
+    };
+  }
 
-  await new Promise<void>((resolveListen, reject) => {
-    server.once("error", reject);
-    server.listen(port, "127.0.0.1", () => {
-      server.off("error", reject);
-      resolveListen();
+  const startApi = async (): Promise<Server> => {
+    const store = new CoreStore({ dataDir: join(stateDir, "store"), allowLocalRemotes: true });
+    const server = createServer({
+      store,
+      authToken,
+      staticDir: resolve("app/dist"),
+      profile,
+      ...(runtimeOptions ? { runtimeOptions } : {}),
     });
-  });
+    await listen(server, port);
+    return server;
+  };
 
+  let apiServer = await startApi();
+  let resetting = false;
+  const controlServer = createControlServer((request, response) => {
+    if (request.socket.remoteAddress !== "127.0.0.1" && request.socket.remoteAddress !== "::ffff:127.0.0.1") {
+      response.writeHead(403).end();
+      return;
+    }
+    if (request.method !== "POST" || request.url !== "/__e2e/reset-core") {
+      response.writeHead(404).end();
+      return;
+    }
+    request.resume();
+    if (resetting) {
+      response.writeHead(409).end("Core reset is already in progress");
+      return;
+    }
+    resetting = true;
+    void (async () => {
+      try {
+        await close(apiServer);
+        // The disposable Git remote lives beside this directory and is intentionally preserved.
+        await rm(join(stateDir, "store"), { recursive: true, force: true });
+        apiServer = await startApi();
+        response.writeHead(204).end();
+      } catch (error) {
+        response.writeHead(500, { "content-type": "text/plain; charset=utf-8" })
+          .end(error instanceof Error ? error.message : "Core reset failed");
+      } finally {
+        resetting = false;
+      }
+    })();
+  });
+  const controlPort = port + 1;
+  if (!Number.isInteger(controlPort) || controlPort > 65_535) throw new Error("The E2E control port must be valid");
+  await listen(controlServer, controlPort);
+
+  let stopped = false;
   const stop = () => {
-    server.close(() => {
+    if (stopped) return;
+    stopped = true;
+    void close(controlServer);
+    void close(apiServer).finally(() => {
       if (process.env.SCRIPTORIUM_E2E_TEMP_STATE_DIR === "1") {
         void rm(stateDir, { recursive: true, force: true });
       }

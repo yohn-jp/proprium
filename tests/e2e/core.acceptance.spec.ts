@@ -1,11 +1,12 @@
 import { expect, test, type Page } from "@playwright/test";
-import { rm, writeFile } from "node:fs/promises";
+import { execFileSync } from "node:child_process";
+import { mkdtemp, rm, writeFile } from "node:fs/promises";
+import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { pathToFileURL } from "node:url";
 
 const authToken = process.env.SCRIPTORIUM_E2E_AUTH_TOKEN ?? "";
 const repositoryUrl = process.env.SCRIPTORIUM_E2E_REPOSITORY_URL ?? "";
-const branch = process.env.SCRIPTORIUM_E2E_REPOSITORY_BRANCH ?? "main";
 
 interface JournalSummary {
   documentPath: string;
@@ -34,7 +35,7 @@ interface ProposalJournalSummary {
     operations: Array<{ id: string; generation: number; writes: Array<{ path: string; content: string | null }> }>;
     evidence?: Array<{ id: string; module: string }>;
   };
-  status?: { state: string; approvedOperationIds: string[]; checkpoints: unknown[] };
+  status?: { state: string; payloadComplete?: boolean; originalDigest?: string; operationIds?: string[]; approvedOperationIds: string[]; checkpoints: unknown[]; publishedOperationIds?: string[] };
 }
 
 function repositoryInputValue(value: string): string {
@@ -65,7 +66,6 @@ async function openFixtureProject(page: Page): Promise<void> {
     await existing.click();
   } else {
     await page.getByLabel("GitHub リポジトリ URL").fill(repositoryInputValue(repositoryUrl));
-    await page.getByLabel("ブランチ（任意）").fill(branch);
     await page.getByRole("button", { name: "リポジトリを登録" }).click();
   }
   await expect(page.getByRole("heading", { name: "Volume One" })).toBeVisible();
@@ -539,6 +539,269 @@ test("external MCP proposals enter owner review before approval, then checkpoint
   const publishedScene = await publishedSceneResponse.json() as { document: { content: string } };
   expect(publishedScene.document.content).toContain(generatedText);
   expect((await readProposalJournal(page)).some((record) => record.proposal.id === proposalId)).toBe(false);
+});
+
+
+test("full browser MCP proposal payload is restored after Core data loss before review", async ({ page }) => {
+  test.skip(Boolean(process.env.SCRIPTORIUM_E2E_EXTERNAL_REPOSITORY === "1" || process.env.SCRIPTORIUM_E2E_BASE_URL || process.env.SCRIPTORIUM_BASE_URL),
+    "This recovery acceptance resets only the disposable local Core data directory.");
+  expect(authToken.length).toBeGreaterThanOrEqual(32);
+  expect(repositoryUrl).not.toBe("");
+  await signIn(page);
+  await openFixtureProject(page);
+
+  const origin = new URL(page.url()).origin;
+  const projectsResponse = await page.request.get(new URL("/api/projects", origin).toString());
+  const projects = await projectsResponse.json() as Array<{ id: string }>;
+  const projectId = projects[0]?.id;
+  expect(projectId).toBeTruthy();
+  const projectPath = "/api/projects/" + encodeURIComponent(projectId!);
+  const observationResponse = await page.request.get(new URL(projectPath + "/observation", origin).toString());
+  const observation = await observationResponse.json() as {
+    snapshot: { repository: { provider: "github" | "local"; repositoryId: string; defaultBranch: string; ownerScope: string; url: string }; remoteCommit: string };
+  };
+  const [firstSceneResponse, secondSceneResponse] = await Promise.all([
+    page.request.get(new URL(projectPath + "/scenes/scene-1?view=remote&snapshot=" + encodeURIComponent(observation.snapshot.remoteCommit), origin).toString()),
+    page.request.get(new URL(projectPath + "/scenes/scene-2?view=remote&snapshot=" + encodeURIComponent(observation.snapshot.remoteCommit), origin).toString()),
+  ]);
+  expect(firstSceneResponse.ok()).toBe(true);
+  expect(secondSceneResponse.ok()).toBe(true);
+  const firstScene = await firstSceneResponse.json() as { document: { path: string; content: string; revision: string | null } };
+  const secondScene = await secondSceneResponse.json() as { document: { path: string; content: string; revision: string | null } };
+  const suffix = crypto.randomUUID().replaceAll("-", "");
+  const proposalId = "mcp-recovery-" + suffix;
+  const firstOperationId = "mcp-recovery-first-" + suffix;
+  const remainingOperationId = "mcp-recovery-rest-" + suffix;
+  const firstText = "Accepted before Core recovery.";
+  const remainingText = "Unapproved content recovered from the browser.";
+  const makeManuscriptOperation = (
+    id: string,
+    sceneId: string,
+    document: { path: string; content: string; revision: string | null },
+    text: string,
+  ) => ({
+    id,
+    generation: 1,
+    repository: observation.snapshot.repository,
+    baseRemoteCommit: observation.snapshot.remoteCommit,
+    effect: "manuscript",
+    reads: [{ path: document.path, revision: document.revision }],
+    writes: [{ path: document.path, revision: document.revision, content: document.content + "\n" + text + "\n" }],
+    message: "loom(scene): " + sceneId + " MCP recovery\n\nLoom-Manuscript: " + sceneId + "\nLoom-File: " + document.path + "\nLoom-Char-Count: " + text.length,
+  });
+  const firstOperation = makeManuscriptOperation(firstOperationId, "scene-1", firstScene.document, firstText);
+  const remainingOperation = makeManuscriptOperation(remainingOperationId, "scene-2", secondScene.document, remainingText);
+  const evidence = {
+    id: "mcp-recovery-evidence-" + suffix,
+    snapshot: observation.snapshot,
+    module: "mcp",
+    kind: "external-proposal",
+    paths: [
+      { path: firstScene.document.path, revision: firstScene.document.revision },
+      { path: secondScene.document.path, revision: secondScene.document.revision },
+    ],
+    details: { intent: "restore the complete MCP proposal before owner review" },
+  };
+  const proposal = {
+    id: proposalId,
+    snapshot: observation.snapshot,
+    operations: [firstOperation, remainingOperation],
+    evidence: [evidence],
+  };
+  const bearerProposal = await fetch(new URL(projectPath + "/proposals", origin), {
+    method: "POST",
+    headers: { "content-type": "application/json", authorization: "Bearer " + authToken },
+    body: JSON.stringify(proposal),
+  });
+  expect(bearerProposal.status).toBe(201);
+  expect(await bearerProposal.json()).toMatchObject({ id: proposalId, source: "mcp" });
+  await expect.poll(async () => {
+    await page.evaluate(() => window.dispatchEvent(new Event("online")));
+    return page.getByText(proposalId, { exact: false }).isVisible().catch(() => false);
+  }).toBe(true);
+  const original = (await readProposalJournal(page)).find((record) => record.proposal.id === proposalId);
+  expect(original).toMatchObject({
+    authorScope: "owner",
+    proposal: { id: proposalId, source: "mcp", evidence: [{ id: evidence.id, module: "mcp" }] },
+    status: { payloadComplete: true, operationIds: [firstOperationId, remainingOperationId] },
+  });
+  expect(original?.proposal.operations).toHaveLength(2);
+  expect(original?.proposal.operations[1]?.writes[0]?.content).toContain(remainingText);
+
+  const ownerHeaders = { origin, "content-type": "application/json" };
+  const approvalResponse = await page.request.post(new URL(projectPath + "/approvals", origin).toString(), {
+    headers: ownerHeaders,
+    data: { proposalId, operationIds: [firstOperationId], authorScope: "untrusted-client-value" },
+  });
+  expect(approvalResponse.status()).toBe(204);
+  const checkpointResponse = await page.request.post(new URL(projectPath + "/checkpoints", origin).toString(), {
+    headers: ownerHeaders,
+    data: firstOperation,
+  });
+  expect(checkpointResponse.status()).toBe(201);
+  const initialPublish = await page.request.post(new URL(projectPath + "/publish", origin).toString(), {
+    headers: ownerHeaders,
+    data: { batchId: "partial-recovery-" + suffix },
+  });
+  expect(initialPublish.status()).toBe(200);
+  expect(await initialPublish.json()).toMatchObject({ state: "confirmed" });
+
+  // Preserve IndexedDB and the synthetic Git remote while deleting the only Core copy of private data.
+  await page.goto("about:blank");
+  const e2ePort = Number.parseInt(process.env.SCRIPTORIUM_E2E_PORT ?? "4173", 10);
+  const resetResponse = await fetch(`http://127.0.0.1:${e2ePort + 1}/__e2e/reset-core`, { method: "POST" });
+  expect(resetResponse.status).toBe(204);
+  const resetHealth = await fetch(new URL("/api/health", origin));
+  expect(resetHealth.ok).toBe(true);
+
+  // The disposable API restart clears its in-memory session along with Core; sign in again on the same origin.
+  await signIn(page);
+  const reRegisteredResponse = await page.request.post(new URL("/api/projects", origin).toString(), {
+    headers: ownerHeaders,
+    data: { url: repositoryUrl },
+  });
+  expect(reRegisteredResponse.status()).toBe(201);
+  const reRegistered = await reRegisteredResponse.json() as { id: string };
+  expect(reRegistered.id).not.toBe(projectId);
+  const recoveredStatusesResponse = await page.request.get(
+    new URL("/api/projects/" + encodeURIComponent(reRegistered.id) + "/proposals", origin).toString(),
+  );
+  expect(recoveredStatusesResponse.ok()).toBe(true);
+  const recoveredStatuses = await recoveredStatusesResponse.json() as { proposals: Array<{
+    proposal: { id: string; source: string; operations: Array<{ id: string }>; evidence?: unknown[] };
+    payloadComplete?: boolean;
+    operationIds?: string[];
+  }> };
+  const partial = recoveredStatuses.proposals.find((status) => status.proposal.id === proposalId);
+  expect(partial).toMatchObject({
+    payloadComplete: false,
+    operationIds: [firstOperationId, remainingOperationId],
+    proposal: { id: proposalId, source: "mcp", operations: [{ id: firstOperationId }] },
+  });
+  expect(partial?.proposal.evidence).toBeUndefined();
+
+  await page.goto(new URL("/", origin).toString());
+  await expect(page.locator(".project-button")).toHaveCount(1);
+  await page.getByRole("button", { name: projectLabel(repositoryUrl), exact: true }).click();
+  await expect(page.getByRole("heading", { name: "Volume One" })).toBeVisible();
+  await expect.poll(async () => {
+    const record = (await readProposalJournal(page)).find((item) => item.proposal.id === proposalId);
+    return record?.status?.payloadComplete === true && record.proposal.operations.length === 2 &&
+      record.status.publishedOperationIds.includes(firstOperationId) &&
+      record.proposal.source === "mcp" && record.proposal.evidence?.some((item) => item.id === evidence.id) === true;
+  }).toBe(true);
+  const recoveredRecord = (await readProposalJournal(page)).find((record) => record.proposal.id === proposalId);
+  expect(recoveredRecord).toMatchObject({ authorScope: "owner", proposal: { id: proposalId, source: "mcp", evidence: [{ id: evidence.id }] } });
+  expect(recoveredRecord?.status?.publishedOperationIds).toContain(firstOperationId);
+  expect(recoveredRecord?.status?.operationIds).toEqual([firstOperationId, remainingOperationId]);
+  expect(recoveredRecord?.status?.approvedOperationIds).toContain(firstOperationId);
+  expect(recoveredRecord?.status?.approvedOperationIds).not.toContain(remainingOperationId);
+  expect(recoveredRecord?.status?.checkpoints.map((receipt) => receipt.operationId)).toContain(firstOperationId);
+  expect(recoveredRecord?.status?.checkpoints.map((receipt) => receipt.operationId)).not.toContain(remainingOperationId);
+
+  const restoredStatusResponse = await page.request.get(new URL(
+    "/api/projects/" + encodeURIComponent(reRegistered.id) + "/proposals/" + encodeURIComponent(proposalId), origin,
+  ).toString());
+  expect(restoredStatusResponse.ok()).toBe(true);
+  const restoredStatus = await restoredStatusResponse.json() as {
+    proposal: { id: string; source: string; operations: Array<{ id: string }>; evidence?: unknown[] };
+    payloadComplete: boolean;
+    stale: boolean;
+    approvedOperationIds: string[];
+    checkpoints: Array<{ operationId: string }>;
+    publishedOperationIds: string[];
+  };
+  expect(restoredStatus).toMatchObject({
+    payloadComplete: true,
+    stale: true,
+    proposal: { id: proposalId, source: "mcp", operations: [{ id: firstOperationId }, { id: remainingOperationId }], evidence: [{ id: evidence.id }] },
+  });
+  expect(restoredStatus.publishedOperationIds).toContain(firstOperationId);
+  expect(restoredStatus.approvedOperationIds).not.toContain(remainingOperationId);
+
+  const proposalCard = page.locator(".proposal-card").filter({ hasText: proposalId });
+  await expect(proposalCard).toBeVisible();
+  await expect(proposalCard.getByText(/基準リモートが現在の HEAD より古くなっています/u)).toBeVisible();
+  await expect(proposalCard.locator(".proposal-operation").filter({ hasText: remainingOperationId })).toContainText("承認待ち");
+  await proposalCard.getByRole("button", { name: "承認して Checkpoint" }).click();
+  await expect(page.locator(".proposal-review [role=alert]")).toContainText("repository changed after this proposal was created");
+  const afterRejectedApprovalResponse = await page.request.get(new URL(
+    "/api/projects/" + encodeURIComponent(reRegistered.id) + "/proposals/" + encodeURIComponent(proposalId), origin,
+  ).toString());
+  const afterRejectedApproval = await afterRejectedApprovalResponse.json() as typeof restoredStatus;
+  expect(afterRejectedApproval.approvedOperationIds).not.toContain(remainingOperationId);
+  expect(afterRejectedApproval.checkpoints.map((receipt) => receipt.operationId)).not.toContain(remainingOperationId);
+  expect(afterRejectedApproval.publishedOperationIds).toContain(firstOperationId);
+  const retainedProposal = (await readProposalJournal(page)).find((record) => record.proposal.id === proposalId);
+  expect(retainedProposal?.proposal.operations.map((operation) => operation.id)).toEqual([firstOperationId, remainingOperationId]);
+  expect(retainedProposal?.proposal.operations[1]?.writes[0]?.content).toContain(remainingText);
+});
+
+test("a remote update during author approval keeps the conflicting editor draft visible", async ({ page }) => {
+  test.skip(process.env.SCRIPTORIUM_E2E_EXTERNAL_REPOSITORY === "1", "This conflict acceptance pushes only to the disposable local Git fixture.");
+  expect(authToken.length).toBeGreaterThanOrEqual(32);
+  expect(repositoryUrl).not.toBe("");
+  await signIn(page);
+  await openFixtureProject(page);
+
+  const origin = new URL(page.url()).origin;
+  const projectsResponse = await page.request.get(new URL("/api/projects", origin).toString());
+  const projects = await projectsResponse.json() as Array<{ id: string }>;
+  const projectId = projects[0]?.id;
+  expect(projectId).toBeTruthy();
+  const projectPath = "/api/projects/" + encodeURIComponent(projectId!);
+  const authorText = "Protected author draft during remote update.";
+  await page.locator(".cm-content").fill(authorText);
+  await expect.poll(async () => (await readJournal(page)).some((entry) => entry.text === authorText && entry.state === "draft")).toBe(true);
+
+  let releaseApproval!: () => void;
+  let signalApproval!: () => void;
+  const approvalGate = new Promise<void>((resolve) => { releaseApproval = resolve; });
+  const approvalStarted = new Promise<void>((resolve) => { signalApproval = resolve; });
+  await page.route(/\/api\/projects\/[^/]+\/approvals$/u, async (route) => {
+    if (route.request().method() === "POST") {
+      signalApproval();
+      await approvalGate;
+    }
+    await route.continue();
+  });
+
+  const checkpointClick = page.getByRole("button", { name: "Checkpoint", exact: true }).click();
+  await approvalStarted;
+  const repositoryRoot = await mkdtemp(join(tmpdir(), "scriptorium-e2e-conflict-"));
+  const workingCopy = join(repositoryRoot, "work");
+  try {
+    execFileSync("git", ["clone", "--quiet", repositoryUrl, workingCopy], { stdio: "ignore" });
+    const manuscriptPath = join(workingCopy, "manuscript/vol-1/ch-1/scene-1.md");
+    const remoteText = "External remote revision during author approval.";
+    await writeFile(manuscriptPath, `# Scene One\n\nThe first line of the story.\n\n${remoteText}\n`, "utf8");
+    const gitEnv = {
+      ...process.env,
+      GIT_AUTHOR_NAME: "Scriptorium Acceptance",
+      GIT_AUTHOR_EMAIL: "acceptance@example.invalid",
+      GIT_COMMITTER_NAME: "Scriptorium Acceptance",
+      GIT_COMMITTER_EMAIL: "acceptance@example.invalid",
+    };
+    execFileSync("git", ["add", "manuscript/vol-1/ch-1/scene-1.md"], { cwd: workingCopy, stdio: "ignore" });
+    execFileSync("git", ["commit", "-m", "External conflict fixture update"], { cwd: workingCopy, env: gitEnv, stdio: "ignore" });
+    execFileSync("git", ["push", "origin", "HEAD"], { cwd: workingCopy, stdio: "ignore" });
+
+    const refreshed = await page.request.get(new URL(projectPath + "/observation", origin).toString());
+    expect(refreshed.ok()).toBe(true);
+    releaseApproval();
+    await checkpointClick;
+
+    await expect.poll(async () => (await readJournal(page)).find((entry) => entry.text === authorText)?.state).toBe("conflict");
+    await page.evaluate(() => window.dispatchEvent(new Event("online")));
+    await expect(page.locator(".conflict")).toBeVisible();
+    await expect(page.locator(".cm-content")).toContainText(authorText);
+    await page.locator(".conflict summary").click();
+    await expect(page.locator(".conflict")).toContainText(remoteText);
+    await expect(page.getByRole("button", { name: "Checkpoint", exact: true })).toBeDisabled();
+  } finally {
+    releaseApproval();
+    await rm(repositoryRoot, { recursive: true, force: true });
+  }
 });
 
 test("IndexedDB quota failures remain visible and block checkpointing", async ({ page }) => {

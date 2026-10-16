@@ -96,7 +96,7 @@ export function publicationReceiptKey(repository: RepositoryIdentity, authorScop
   return JSON.stringify([repositoryKey(repository), authorScope, batchId]);
 }
 
-function stableJson(value: unknown): string {
+export function stableJson(value: unknown): string {
   if (Array.isArray(value)) return `[${value.map(stableJson).join(",")}]`;
   if (value && typeof value === "object") {
     const record = value as Record<string, unknown>;
@@ -328,8 +328,28 @@ export class BrowserJournal {
         throw new JournalError("The proposal contains an operation for a different repository snapshot.");
       }
     }
-    if (status && stableJson(status.proposal) !== stableJson(proposal)) {
-      throw new JournalError("The review status does not contain the complete journaled proposal.");
+    if (status) {
+      const statusProposal = status.proposal;
+      if (!statusProposal || statusProposal.id !== proposal.id || repositoryKey(statusProposal.snapshot.repository) !== repositoryKey(repository) ||
+          statusProposal.snapshot.remoteCommit !== proposal.snapshot.remoteCommit || statusProposal.source !== proposal.source ||
+          !Array.isArray(statusProposal.operations) || !statusProposal.operations.length) {
+        throw new JournalError("The review status does not match the journaled proposal identity.");
+      }
+      if (status.payloadComplete === false) {
+        if (!/^[a-f0-9]{64}$/u.test(status.originalDigest ?? "") || !Array.isArray(status.operationIds) ||
+            status.operationIds.length < statusProposal.operations.length || new Set(status.operationIds).size !== status.operationIds.length ||
+            !statusProposal.operations.every((operation) => status.operationIds!.includes(operation.id))) {
+          throw new JournalError("The partial review status is missing its original proposal binding.");
+        }
+        for (const operation of statusProposal.operations) {
+          assertChangeOperation(operation);
+          if (repositoryKey(operation.repository) !== repositoryKey(repository) || operation.baseRemoteCommit !== proposal.snapshot.remoteCommit) {
+            throw new JournalError("The partial review status contains an operation for a different repository snapshot.");
+          }
+        }
+      } else if (stableJson(statusProposal) !== stableJson(proposal)) {
+        throw new JournalError("The review status does not contain the complete journaled proposal.");
+      }
     }
     const owner = repositoryKey(repository);
     const record: JournalProposal = {
@@ -346,15 +366,45 @@ export class BrowserJournal {
       const done = transactionDone(transaction);
       const store = transaction.objectStore(PROPOSAL_STORE);
       const existing = await requestValue(store.get(record.key)) as JournalProposal | undefined;
-      if (existing && (existing.authorScope !== authorScope || existing.repositoryKey !== owner ||
-          stableJson(existing.proposal) !== stableJson(proposal))) {
+      if (existing && (existing.authorScope !== authorScope || existing.repositoryKey !== owner)) {
         await done;
         throw new JournalError("A proposal ID cannot be reused for a different author, repository, or payload.");
       }
+      const existingWasPartial = existing?.status?.payloadComplete === false;
+      const retryRestoredOriginal = Boolean(existing && existingWasPartial && status?.payloadComplete !== false &&
+        JSON.stringify(proposal.operations.map((operation) => operation.id)) === JSON.stringify(existing.status?.operationIds) &&
+        stableJson(status?.proposal) === stableJson(proposal));
+      if (existingWasPartial && status?.payloadComplete === false &&
+          (existing!.status?.originalDigest !== status.originalDigest ||
+            JSON.stringify(existing!.status?.operationIds) !== JSON.stringify(status.operationIds))) {
+        await done;
+        throw new JournalError("The partial proposal's immutable original binding changed.");
+      }
+      if (existing && stableJson(existing.proposal) !== stableJson(proposal) &&
+          !(status?.payloadComplete === false || retryRestoredOriginal)) {
+        await done;
+        throw new JournalError("A proposal ID cannot be reused for a different author, repository, or payload.");
+      }
+      // A partial Git recovery is only the accepted subset. Never let it replace a complete
+      // browser copy; retain that private payload while updating the server review status.
+      const keepCompletePrivatePayload = Boolean(existing && status?.payloadComplete === false && !existingWasPartial);
+      const effectiveProposal = keepCompletePrivatePayload
+        ? existing!.proposal
+        : existingWasPartial && status?.payloadComplete === false
+          ? {
+            ...proposal,
+            operations: status.operationIds!.flatMap((id) => {
+              const known = existing!.proposal.operations.find((operation) => operation.id === id);
+              const latest = proposal.operations.find((operation) => operation.id === id);
+              return known ? [known] : latest ? [latest] : [];
+            }),
+            ...(existing!.proposal.evidence ? { evidence: existing!.proposal.evidence } : {}),
+          }
+          : proposal;
       const updated: JournalProposal = existing
         ? {
           ...existing,
-          proposal,
+          proposal: effectiveProposal,
           ...(status ? { status } : {}),
           ...(status && (status.approvedOperationIds.length > 0 || status.checkpoints.length > 0 || status.publishedOperationIds.length > 0)
             ? { dismissedAt: undefined }

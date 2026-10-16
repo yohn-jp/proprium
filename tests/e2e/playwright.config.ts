@@ -19,7 +19,7 @@ process.env.SCRIPTORIUM_E2E_REPOSITORY_URL ??= resolve(stateDir, "origin.git");
 process.env.SCRIPTORIUM_E2E_REPOSITORY_BRANCH ??= "main";
 process.env.SCRIPTORIUM_E2E_AUTH_TOKEN = authToken;
 process.env.SCRIPTORIUM_E2E_PORT ??= "4173";
-process.env.SCRIPTORIUM_E2E_EXTERNAL_REPOSITORY = externalRepository ? "1" : "";
+process.env.SCRIPTORIUM_E2E_EXTERNAL_REPOSITORY ??= externalRepository ? "1" : "";
 process.env.SCRIPTORIUM_E2E_TEMP_STATE_DIR = isTemporaryStateDir ? "1" : "";
 if (externalServer && !externalRepository) {
   throw new Error("Set SCRIPTORIUM_E2E_REPOSITORY_URL to a disposable HTTPS GitHub fixture when targeting an external app");

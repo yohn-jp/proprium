@@ -249,6 +249,96 @@ test("Zukan suggestions list by status and approve/reject as snapshot-bound prop
   assert.equal(rejectedRow.status, "rejected");
 });
 
+test("Zukan creation validates manuscript provenance and proposes a stable pending JSONL row", async () => {
+  const oldRow = zukanRow({ sourceHash: "a".repeat(64) });
+  const files = fixtureFiles({
+    [ZUKAN_SUGGESTIONS_PATH]: `${JSON.stringify(oldRow)}\n`,
+  });
+  const proposals: Array<{ id: string; operations: ChangeOperation[]; evidence?: ChangeProposal["evidence"] }> = [];
+  const context = makeActionContext(makeReader(files), { proposals });
+  const input = {
+    entityId: "char-uma",
+    blockPath: "lead.0",
+    proposedText: "Uma enters the cafe.",
+    evidence: [{ quote: "Uma enters the cafe.", sceneId: "sc-1" }],
+    source: "manuscript",
+    kind: null,
+    confidence: "high",
+    operation_id: "zukan-create-uma",
+  };
+  const created = await invoke<{ suggestion: Record<string, unknown>; created: boolean; staledPendingCount: number }>(
+    "story.zukan-suggestions.create", input, context,
+  );
+  assert.equal(created.data.created, true);
+  assert.equal(created.data.staledPendingCount, 1, "a pending row with changed source freshness is staled atomically");
+  const suggestion = created.data.suggestion;
+  assert.match(String(suggestion.id), /^zukan-[a-f0-9]{64}$/u);
+  assert.equal(suggestion.status, "pending", "creation only proposes a pending row and does not auto-approve it");
+  assert.equal(suggestion.entityId, "char-uma");
+  assert.equal(suggestion.entityName, "Uma");
+  assert.equal(suggestion.sourceSnapshot, "a".repeat(40));
+  assert.match(String(suggestion.sourceHash), /^[a-f0-9]{64}$/u);
+  assert.equal(suggestion.createdAt, suggestion.updatedAt);
+
+  const operation = created.proposals![0]!.operations[0]!;
+  const profilePath = "bible/characters/char-uma/profile.yaml";
+  const scenePath = "plot/volumes/vol-main/chapters/ch-main-1/scenes/sc-1.yaml";
+  const manuscriptPath = "manuscript/vol-main/ch-main-1/sc-1.md";
+  assert.deepEqual(operation.writes.map((write) => write.path), [ZUKAN_SUGGESTIONS_PATH]);
+  for (const path of [profilePath, scenePath, manuscriptPath, ZUKAN_SUGGESTIONS_PATH]) {
+    assert.ok(operation.reads.some((read) => read.path === path && read.revision === (files.has(path) ? revision(files.get(path)!) : null)), `missing current revision for ${path}`);
+  }
+  assert.equal(operation.id, "story-zukan-create-uma");
+  const proposedRows = operation.writes[0]!.content!.trim().split("\n").map((line) => JSON.parse(line) as Record<string, unknown>);
+  assert.equal(proposedRows[0]?.status, "stale");
+  assert.deepEqual(proposedRows[0]?.future_field, { preserve: true });
+  assert.equal(proposedRows[1]?.id, suggestion.id);
+  assert.equal(proposedRows[1]?.sourceHash, suggestion.sourceHash);
+  assert.equal(files.get(ZUKAN_SUGGESTIONS_PATH), `${JSON.stringify(oldRow)}\n`, "proposing does not mutate the selected snapshot");
+
+  files.set(ZUKAN_SUGGESTIONS_PATH, operation.writes[0]!.content!);
+  const duplicate = await invoke<{ suggestion: Record<string, unknown>; created: boolean }>("story.zukan-suggestions.create", input, context);
+  assert.equal(duplicate.data.created, false);
+  assert.equal(duplicate.data.suggestion.id, suggestion.id);
+  assert.equal(duplicate.proposals, undefined, "an already persisted stable suggestion is not proposed again");
+  assert.equal(proposals.length, 1);
+});
+
+test("Zukan creation rejects stale manuscript quotes and validates sandbox source ranges", async () => {
+  const files = fixtureFiles({
+    "bible/dialogue_sketches/ds-uma.yaml": yaml({
+      id: "ds-uma", type: "dialogue_sketch", participantEntityIds: ["char-uma"],
+      lines: [{ speakerEntityId: "char-uma", text: "Uma likes tea." }],
+    }),
+  });
+  const proposals: Array<{ id: string; operations: ChangeOperation[] }> = [];
+  const context = makeActionContext(makeReader(files), { proposals });
+  const stale = await actionById("story.zukan-suggestions.create").invoke({
+    entityId: "char-uma", proposedText: "Uma visits the station.", source: "manuscript",
+    evidence: [{ quote: "Uma visits the station.", sceneId: "sc-1" }], operation_id: "stale-zukan-quote",
+  }, context);
+  assert.equal(stale.ok, false);
+  if (!stale.ok) assert.equal(stale.error.code, "operation_precondition_conflict");
+  assert.equal(proposals.length, 0);
+
+  const sandbox = await invoke<{ suggestion: Record<string, unknown>; created: boolean }>("story.zukan-suggestions.create", {
+    entityId: "char-uma", proposedText: "Uma likes tea.", source: "sandbox", sourceSessionId: "ds-uma",
+    sourceTurnRange: { start: 0, end: 0 }, evidence: [{ quote: "likes tea" }], kind: "habit", confidence: "high",
+    operation_id: "sandbox-zukan-uma",
+  }, context);
+  const sandboxOperation = sandbox.proposals![0]!.operations[0]!;
+  assert.equal(sandbox.data.suggestion.sourceSessionId, "ds-uma");
+  assert.deepEqual(sandbox.data.suggestion.sourceTurnRange, { start: 0, end: 0 });
+  assert.ok(sandboxOperation.reads.some((read) => read.path === "bible/dialogue_sketches/ds-uma.yaml" && read.revision === revision(files.get("bible/dialogue_sketches/ds-uma.yaml")!)));
+  const staleRange = await actionById("story.zukan-suggestions.create").invoke({
+    entityId: "char-uma", proposedText: "Uma likes tea.", source: "sandbox", sourceSessionId: "ds-uma",
+    sourceTurnRange: { start: 0, end: 2 }, evidence: [{ quote: "likes tea" }], operation_id: "stale-zukan-range",
+  }, context);
+  assert.equal(staleRange.ok, false);
+  if (!staleRange.ok) assert.equal(staleRange.error.code, "operation_precondition_conflict");
+  assert.equal(proposals.length, 1);
+});
+
 test("manual note edits stale matching pending Zukan rows in the same Story proposal", async () => {
   const profilePath = "bible/characters/char-uma/profile.yaml";
   const sourceEntity = YAML.parse(fixtureFiles().get(profilePath)!);
@@ -613,6 +703,36 @@ test("NarrativeChangeSet retries return the stored proposal and reject changed s
   assert.equal(changed.ok, false);
   if (!changed.ok) assert.equal(changed.error.code, "change_set_identity_conflict");
   assert.equal(proposals.length, 1, "an exact retry does not reset Core approvals by proposing again");
+});
+
+test("NarrativeChangeSet refuses to reconstruct an incomplete recovered Core proposal", async () => {
+  const reader = makeReader(fixtureFiles());
+  const proposals: ChangeProposal[] = [];
+  const context = makeActionContext(reader, { proposals });
+  let recovered: unknown;
+  context.invoke = async () => recovered
+    ? { ok: true, snapshot: reader.snapshot, data: { proposal: recovered } }
+    : { ok: false, snapshot: reader.snapshot, error: { code: "proposal_not_found", message: "missing", retryable: false } };
+  const current = (await invoke<{ revision: string }>("story.entities.get", { id: "char-uma" }, context)).data;
+  const changeSet = {
+    schemaVersion: 1, id: "ncs-incomplete-recovery", projectId: context.projectId, goal: "Update a name", status: "proposed",
+    assessment: { confidence: 0.8, risk: "low" },
+    operations: [{ id: "update-uma", kind: "entity.update", precondition: { kind: "revision", value: current.revision }, target: { entityId: "char-uma" }, changes: { name: "Uma Recovery" }, evidenceIds: [], assessment: { confidence: 0.8, risk: "low" } }],
+    evidence: [], diagnostics: { before: null, after: null },
+  };
+  const first = await actionById("story.changes.propose").invoke(changeSet, context);
+  assert.equal(first.ok, true, first.ok ? undefined : first.error.message);
+  if (!first.ok) return;
+  const fullProposal = first.proposals![0]!;
+  recovered = {
+    proposal: { ...fullProposal, evidence: undefined },
+    payloadComplete: false,
+    operationIds: fullProposal.operations.map((operation) => operation.id),
+  };
+  const retry = await actionById("story.changes.propose").invoke(changeSet, context);
+  assert.equal(retry.ok, false);
+  if (!retry.ok) assert.equal(retry.error.code, "PROPOSAL_PAYLOAD_UNAVAILABLE");
+  assert.equal(proposals.length, 1, "Story does not fabricate a full source proposal from Core's accepted subset");
 });
 
 test("NarrativeChangeSet preserves unrestricted source IDs and maps unsafe IDs to Core-safe proposal IDs", async () => {
