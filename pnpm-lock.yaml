@@ -335,6 +335,9 @@ importers:
 
   modules/nlp:
     dependencies:
+      '@huggingface/transformers':
+        specifier: 3.8.1
+        version: 3.8.1
       '@scriptorium/contracts':
         specifier: workspace:*
         version: link:../../packages/contracts
