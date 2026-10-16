@@ -7,7 +7,7 @@
   "target": {
     "branch": "work/7-p08-mcp",
     "implementationCommit": "d9499a611b82b240f4b0611d25bc7e89c697349b",
-    "testedHead": "d9499a611b82b240f4b0611d25bc7e89c697349b"
+    "testedHead": "45d38688aef4c48aad9a81079aa12d7e8934d73b"
   },
   "ledger": {
     "R48": {
@@ -70,6 +70,22 @@
     {
       "command": "pnpm --filter @scriptorium/module-mcp build",
       "result": "passed"
+    },
+    {
+      "command": "pnpm typecheck",
+      "result": "passed across all workspace packages"
+    },
+    {
+      "command": "pnpm test",
+      "result": "passed across all workspace suites (158 tests reported, including 17 MCP tests)"
+    },
+    {
+      "command": "pnpm build",
+      "result": "passed; the core profile composed zero optional modules"
+    },
+    {
+      "command": "pnpm audit:core",
+      "result": "passed; 69 production dependency versions scanned"
     },
     {
       "command": "git diff --check",
