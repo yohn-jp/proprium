@@ -408,6 +408,53 @@ async function readJournalEntry(page, key) {
   }, key);
 }
 
+async function readDocumentJournal(page, documentKey, authorScope, expectedText) {
+  return page.evaluate(async ({ key, scope, text }) => {
+    const database = await new Promise((resolvePromise, reject) => {
+      const request = indexedDB.open("scriptorium-recovery", 3);
+      request.onsuccess = () => resolvePromise(request.result);
+      request.onerror = () => reject(request.error ?? new Error("IndexedDB open failed"));
+    });
+    try {
+      const transaction = database.transaction("operations", "readonly");
+      return await new Promise((resolvePromise, reject) => {
+        let entries;
+        transaction.oncomplete = () => {
+          const rows = entries
+            .filter((entry) => entry.version === 1 && entry.documentKey === key && entry.authorScope === scope)
+            .sort((left, right) => left.operation.generation - right.operation.generation || left.updatedAt - right.updatedAt)
+            .map((entry) => ({
+              key: entry.key,
+              operationId: entry.operation.id,
+              generation: entry.operation.generation,
+              state: entry.state,
+              updatedAt: entry.updatedAt,
+              authorScope: entry.authorScope,
+              documentPath: entry.documentPath,
+              repositoryKey: entry.repositoryKey,
+              textLength: typeof entry.text === "string" ? entry.text.length : null,
+              textMatchesExpectedAuthorInput: entry.text === text,
+              operationContentLength: typeof entry.operation.writes.find((write) => write.path === entry.documentPath)?.content === "string"
+                ? entry.operation.writes.find((write) => write.path === entry.documentPath).content.length
+                : null,
+              operationContentMatchesExpectedAuthorInput: entry.operation.writes.find((write) => write.path === entry.documentPath)?.content === text,
+              entryKeys: Object.keys(entry).sort(),
+            }));
+          const selected = rows.at(-1);
+          resolvePromise({ rows, selectedKey: selected?.key ?? null, selectedOperationId: selected?.operationId ?? null, selectedGeneration: selected?.generation ?? null, selectedState: selected?.state ?? null });
+        };
+        transaction.onerror = () => reject(transaction.error ?? new Error("IndexedDB journal transaction failed"));
+        transaction.onabort = () => reject(transaction.error ?? new Error("IndexedDB journal transaction was aborted"));
+        const request = transaction.objectStore("operations").index("documentKey").getAll(key);
+        request.onsuccess = () => { entries = request.result; };
+        request.onerror = () => reject(request.error ?? new Error("IndexedDB document journal read failed"));
+      });
+    } finally {
+      database.close();
+    }
+  }, { key: documentKey, scope: authorScope, text: expectedText });
+}
+
 async function readPublicationReceipts(page) {
   return page.evaluate(async () => {
     const database = await new Promise((resolvePromise, reject) => {
@@ -481,11 +528,12 @@ async function remoteCommit(page, id) {
   }, id);
 }
 
-async function reportConflictDiagnostics(page, diagnostics, project, expectedHead, expectedOperationId, expectedGeneration, expectedAuthorText) {
-  const [coreObservedHead, ui, entries] = await Promise.all([
+async function reportConflictDiagnostics(page, diagnostics, project, expectedHead, authorDraftEntry, expectedAuthorText) {
+  const [coreObservedHead, ui, entries, documentJournal] = await Promise.all([
     remoteCommit(page, project).catch((error) => `unavailable: ${String(error.message).slice(0, 300)}`),
     browserUiState(page, expectedAuthorText).catch((error) => ({ unavailable: String(error.message).slice(0, 300) })),
     readJournal(page).catch((error) => [{ error: String(error.message).slice(0, 300) }]),
+    readDocumentJournal(page, authorDraftEntry.documentKey, authorDraftEntry.authorScope, expectedAuthorText).catch((error) => ({ unavailable: String(error.message).slice(0, 300) })),
   ]);
   const screenshotPath = `/tmp/scriptorium-p13-conflict-${randomBytes(5).toString("hex")}.png`;
   await page.screenshot({ path: screenshotPath, fullPage: true }).catch(() => undefined);
@@ -496,10 +544,12 @@ async function reportConflictDiagnostics(page, diagnostics, project, expectedHea
     ui,
     screenshotPath,
     journalStore: "scriptorium-recovery.operations",
-    expectedOperationId,
-    expectedGeneration,
+    expectedOperationId: authorDraftEntry.operationId,
+    expectedGeneration: authorDraftEntry.generation,
     expectedAuthorTextLength: expectedAuthorText.length,
-    matchingJournalEntries: entries.filter((entry) => entry.operationId === expectedOperationId && entry.generation === expectedGeneration).map((entry) => ({
+    expectedAuthorEntryKey: authorDraftEntry.key,
+    documentJournal,
+    matchingJournalEntries: entries.filter((entry) => entry.operationId === authorDraftEntry.operationId && entry.generation === authorDraftEntry.generation).map((entry) => ({
       operationId: entry.operationId,
       generation: entry.generation,
       state: entry.state,
@@ -664,6 +714,7 @@ async function main() {
     await dispatchRemoteRefresh(recoveredPage);
     await waitFor("the production conflict observation", () => remoteCommit(recoveredPage, project), (head) => head === externalHeadTwo, 120_000);
     let conflictEntry;
+    let conflictDocumentJournal;
     try {
       conflictEntry = await waitFor("the exact author-scoped conflicted manuscript journal operation", () => readJournalEntry(recoveredPage, authorDraftEntry.key), (entry) => entry?.key === authorDraftEntry.key && entry.operationId === conflictOperationId && entry.generation === authorDraftEntry.generation && entry.authorScope === authorDraftEntry.authorScope && entry.documentPath === sceneTwoPath && entry.state === "conflict", 120_000);
       assert.equal(conflictEntry.text, conflictAuthorText, "The conflicted author journal entry must retain the exact editor text.");
@@ -671,8 +722,13 @@ async function main() {
       await recoveredPage.getByRole("heading", { name: "Scene Two" }).waitFor({ state: "visible", timeout: 120_000 });
       await expect(recoveredPage.locator(".cm-content")).toHaveText(conflictAuthorText, { timeout: 120_000 });
       await expect(recoveredPage.locator(".conflict")).toBeVisible({ timeout: 120_000 });
+      conflictDocumentJournal = await readDocumentJournal(recoveredPage, authorDraftEntry.documentKey, authorDraftEntry.authorScope, conflictAuthorText);
+      const selectedDocumentEntry = conflictDocumentJournal.rows.at(-1);
+      assert.ok(selectedDocumentEntry, "Journal.getDocument must return the author-scoped manuscript entry.");
+      assert.equal(selectedDocumentEntry.textMatchesExpectedAuthorInput, true, "The entry selected last by Journal.getDocument must retain the exact author input.");
+      assert.ok(selectedDocumentEntry.operationContentMatchesExpectedAuthorInput, "The selected entry's recoverable operation must retain the exact author input.");
     } catch (error) {
-      await reportConflictDiagnostics(recoveredPage, diagnostics, project, externalHeadTwo, conflictOperationId, authorDraftEntry.generation, conflictAuthorText);
+      await reportConflictDiagnostics(recoveredPage, diagnostics, project, externalHeadTwo, authorDraftEntry, conflictAuthorText);
       throw error;
     }
 
@@ -708,6 +764,8 @@ async function main() {
       dataVolumeDeletedAndRecreated: true,
       externalUneditedSceneUpdateObserved: externalHeadOne,
       sameFileConflictPreservedAuthorInput: true,
+      sameFileJournalRows: conflictDocumentJournal.rows,
+      sameFileJournalSelectedKey: conflictDocumentJournal.selectedKey,
       rejectedPublishState: refused.receipt.state,
       conflictingOperationPublished: false,
       finalRemoteCommit: await github.branchHead(branch),
