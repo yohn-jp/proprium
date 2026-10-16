@@ -1193,12 +1193,13 @@
             "modules/assistant/src/actions.ts",
             "modules/assistant/src/browser.ts",
             "modules/story/src/actions.ts",
-            "modules/semantic/src/actions.ts"
+            "modules/semantic/src/actions.ts",
+            "modules/assistant/src/actions.test.ts"
           ],
           "publicActions": [
             {
               "action": "assistant.zukan.suggestions",
-              "implementation": "Use snapshot-bound semantic manuscript hits and exact quote checks, then ask Story to create a reviewable suggestion proposal."
+              "implementation": "Use snapshot-bound manuscript evidence or a saved dialogue-sketch plus selected turn range, verify quoted grounding, then ask Story to create a reviewable suggestion proposal."
             },
             {
               "action": "story.zukan-suggestions.create / list / approve / reject",
@@ -1211,8 +1212,8 @@
           ],
           "dataMappings": [
             {
-              "source": "Source model-generated entity-note suggestions with persistent suggestion status and author approval",
-              "target": "Grounded Assistant suggestion plus Story JSONL proposal state and canonical note operation",
+              "source": "Source manuscript-based and saved-dialogue-sketch sandbox Zukan suggestions with evidence and selected turn-range provenance",
+              "target": "Grounding-checked Assistant suggestions plus Story `story.zukan-suggestions.create` proposal with source session and turn-range metadata",
               "persistence": "Suggestion creation/approval are Core proposal operations; model credentials and generated intermediate text are not persisted as canonical notes."
             }
           ],
@@ -1228,10 +1229,16 @@
               "path": "modules/story/src/actions.test.ts",
               "testName": "Zukan creation validates manuscript provenance and proposes a stable pending JSONL row",
               "scope": "Story action test verifies grounded evidence and persistent pending suggestion rows use a Core proposal."
+            },
+            {
+              "id": "P11-R07-sandbox-zukan-grounding",
+              "path": "modules/assistant/src/actions.test.ts",
+              "testName": "manuscript and sandbox Zukan suggestions are grounded before Story receives proposals",
+              "scope": "Action test proves both sources are quote-checked and ungrounded sandbox output never reaches Story proposal creation."
             }
           ],
           "limitations": [
-            "This maps the manuscript-grounded suggestion flow only. Source sandbox generation from a saved dialogue-sketch session/range remains separate and pending P11 producer integration; composed migration/review acceptance remains P12."
+            "Focused Assistant and Story tests cover grounding, source range checks and proposal creation; composed importer/review/reclone remains P12 acceptance."
           ]
         }
       ]
@@ -1605,6 +1612,91 @@
           ],
           "limitations": [
             "This module action slice does not establish the legacy HTTP route payload/job behavior or P12 imported correction history; those acceptance gates remain pending."
+          ]
+        },
+        {
+          "status": "implementation-present; integration-acceptance-pending",
+          "owner": "P06",
+          "targetPaths": [
+            "modules/diagnostics/src/fullDiagnostics.ts",
+            "modules/diagnostics/src/index.ts",
+            "modules/diagnostics/src/browser.ts",
+            "tests/integration/mcp-acceptance.test.mjs"
+          ],
+          "publicActions": [
+            {
+              "action": "diagnostics.scene",
+              "implementation": "Compose a source full-tier scene result from canonical analysis, speaker attribution/profiles, voice/style/stylometric checks, plot semantics, prose balance, synonym suggestions and normalized issues at one snapshot."
+            }
+          ],
+          "uiSurfaces": [
+            "modules/diagnostics/src/browser.ts"
+          ],
+          "dataMappings": [
+            {
+              "source": "Source `POST /api/scenes/:id/diagnostics` and per-scene analysis/voice/style/plot inputs",
+              "target": "`diagnostics.scene` over the pinned Core snapshot, composing `diagnostics.analyze`, `speaker.attribute`, `speaker.voice.profiles`, and Diagnostics projections",
+              "persistence": "The aggregate is derived and request-time; it writes no project or author data. Full tier is unavailable when required Speaker actions are absent."
+            }
+          ],
+          "proofRefs": [
+            {
+              "id": "P06-R08-full-diagnostics-production",
+              "path": "tests/integration/mcp-acceptance.test.mjs",
+              "testName": "spawned stdio and production HTTP MCP preserve Core review boundaries through publish and restart",
+              "scope": "Production API plus composed Story/NLP/Diagnostics/Semantic/Speaker/Publishing/MCP test checks full diagnostic tier and equal snapshots through the real stdio and Streamable HTTP transports."
+            }
+          ],
+          "limitations": [
+            "The diagnostic action is module-composed and the integration test uses a synthetic Git project; final full-profile/browser/OCI campaign certification remains pending."
+          ]
+        },
+        {
+          "status": "implementation-present; integration-acceptance-pending",
+          "owner": "P11",
+          "targetPaths": [
+            "modules/assistant/src/actions.ts",
+            "modules/assistant/src/rewrite-local.ts",
+            "modules/assistant/src/provider.ts",
+            "modules/assistant/src/browser.ts",
+            "modules/assistant/tests/browser-workflow.acceptance.mjs"
+          ],
+          "publicActions": [
+            {
+              "action": "assistant.rewrite",
+              "implementation": "Compute three rewrite candidates for selected scene text from pinned manuscript context and return prompt, citations and provider provenance without proposing a change."
+            },
+            {
+              "action": "assistant.rewrite.propose",
+              "implementation": "Submit only the author-selected candidate as a revision-bound Core proposal."
+            }
+          ],
+          "uiSurfaces": [
+            "modules/assistant/src/browser.ts"
+          ],
+          "dataMappings": [
+            {
+              "source": "Source `POST /api/suggest-rewrite` for a selected scene/sentence and source author-choice flow",
+              "target": "Pinned Story manuscript context, compute-only `assistant.rewrite`, then separate `assistant.rewrite.propose` after author selection",
+              "persistence": "Computed candidates and prompts are transient. Only an explicit author-selected replacement enters the Core proposal boundary."
+            }
+          ],
+          "proofRefs": [
+            {
+              "id": "P11-R08-rewrite-choice",
+              "path": "modules/assistant/src/actions.test.ts",
+              "testName": "rewrite proposal preserves all candidates until the author chooses one and pins the manuscript selection",
+              "scope": "Action test verifies candidate selection, snapshot-bound source reads and proposal creation only after the choice."
+            },
+            {
+              "id": "P11-R08-rewrite-browser",
+              "path": "modules/assistant/tests/browser-workflow.acceptance.mjs",
+              "testName": "PASS: assistant panels render safely, invoke approved actions, stream and cancel rewrite, and keep generated changes in review proposals",
+              "scope": "Rendered Assistant panel test covers streaming/cancellation and disables stale candidate proposal; action calls use a test bridge."
+            }
+          ],
+          "limitations": [
+            "The production MCP adapter also exposes compute-only `suggest_rewrite`; actual real-provider output remains an opt-in P13 acceptance gate. Source prompt-preview routes for other features remain uncovered."
           ]
         }
       ]
@@ -2303,7 +2395,7 @@
             {
               "source": "Canonical entity/manuscript-derived scenes and confirmed world-state events",
               "target": "Request-time reader disclosure and knowledge-gap projections",
-              "persistence": "Derived reader model outputs are not persisted as author decision history."
+              "persistence": "Reader model disclosures and knowledge checks are derived from canonical files; reader_knowledge_events is refreshed at request time and scene_state_events is rebuilt from current entities/links, so neither table is author decision history."
             }
           ],
           "proofRefs": [
@@ -2694,10 +2786,16 @@
               "path": "modules/assistant/tests/browser-workflow.acceptance.mjs",
               "testName": "PASS: assistant panels render safely, invoke approved actions, stream and cancel rewrite, and keep generated changes in review proposals",
               "scope": "Rendered scene/chapter summary controls use the registered Assistant actions; action transport is stubbed."
+            },
+            {
+              "id": "P11-R14-summary-action",
+              "path": "modules/assistant/src/actions.test.ts",
+              "testName": "chapter summary proposes fresh child and parent summaries in one Core operation",
+              "scope": "Assistant action test verifies scene and chapter summary proposals are source-hash/revision-bound and submitted as one Core operation."
             }
           ],
           "limitations": [
-            "The source prompt-preview route is not represented by a target action/API. Full summary refresh/job composition and real-provider output acceptance remain pending."
+            "The source prompt-preview-only contract still has no target action/API. Summary actions declare and use the API host domain-job tracker, then return revision-bound Core proposals; fresh real-provider and campaign composition acceptance remains pending."
           ]
         }
       ]
@@ -5631,7 +5729,10 @@
           "owner": "P11",
           "targetPaths": [
             "modules/assistant/src/actions.ts",
-            "modules/assistant/src/browser.ts"
+            "modules/assistant/src/browser.ts",
+            "modules/assistant/src/qa-tools.ts",
+            "modules/assistant/src/qa-tools.test.ts",
+            "modules/assistant/src/actions.test.ts"
           ],
           "publicActions": [
             {
@@ -5655,10 +5756,22 @@
               "path": "modules/assistant/tests/browser-workflow.acceptance.mjs",
               "testName": "PASS: assistant panels render safely, invoke approved actions, stream and cancel rewrite, and keep generated changes in review proposals",
               "scope": "Rendered QA contribution verifies error recovery and safely renders provider text through stubbed actions."
+            },
+            {
+              "id": "P11-R34-qa-action-round",
+              "path": "modules/assistant/src/actions.test.ts",
+              "testName": "setting QA streams an actual read-only tool round and returns only source-revision-bound citations",
+              "scope": "Assistant action test exercises the real tool-call round, rejects unverified citations and confirms no persistent writer is invoked."
+            },
+            {
+              "id": "P11-R34-qa-tool-bounds",
+              "path": "modules/assistant/src/qa-tools.test.ts",
+              "testName": "search tools call only their read capabilities and keep bounded source citations",
+              "scope": "Tool tests verify read-only capabilities and bounded, revision-backed source citations."
             }
           ],
           "limitations": [
-            "The source `GET /api/qa/prompt-preview` contract is not represented; real-provider reference flow and full API/UI composition remain pending."
+            "The source preview-only endpoint still has no target action/API. Action tests use a local test provider; real-provider output and full profile/API/UI composition remain pending."
           ]
         }
       ]
@@ -5752,12 +5865,15 @@
           "owner": "P11",
           "targetPaths": [
             "modules/assistant/src/actions.ts",
-            "modules/assistant/src/browser.ts"
+            "modules/assistant/src/browser.ts",
+            "modules/assistant/src/continuation-context.ts",
+            "modules/assistant/src/continuation-context.test.ts",
+            "modules/nlp/src/index.ts"
           ],
           "publicActions": [
             {
               "action": "assistant.continuation",
-              "implementation": "Generate bounded continuation options from pinned scene/manuscript context."
+              "implementation": "Generate bounded continuation options from pinned scene/manuscript context, optional chapter summary and up to five semantic hits; prefer the source-selected model tokenizer through `nlp.countTokens` and label approximate fallback explicitly."
             }
           ],
           "uiSurfaces": [
@@ -5767,7 +5883,7 @@
             {
               "source": "Source chapter/scene continuation-options generated response",
               "target": "Pinned Story snapshot plus Assistant continuation result",
-              "persistence": "Transient suggestions only; no author text is written without a separate proposal action."
+              "persistence": "Suggestions are transient; context sections are trimmed to the requested token budget. Exact NLP counts are accepted only when model identity and snapshot match; otherwise the source-approved approximation is labeled approximate."
             }
           ],
           "proofRefs": [
@@ -5776,10 +5892,73 @@
               "path": "modules/assistant/tests/browser-workflow.acceptance.mjs",
               "testName": "PASS: assistant panels render safely, invoke approved actions, stream and cancel rewrite, and keep generated changes in review proposals",
               "scope": "Rendered continuation contribution invokes the Assistant action through a stubbed action bridge."
+            },
+            {
+              "id": "P11-R35-continuation-context-priority",
+              "path": "modules/assistant/src/continuation-context.test.ts",
+              "testName": "chapter summary and up to five retrieval hits follow source context priority",
+              "scope": "Context builder test verifies source ordering and top-five retrieval bound."
+            },
+            {
+              "id": "P11-R35-continuation-approximation",
+              "path": "modules/assistant/src/continuation-context.test.ts",
+              "testName": "approximate fallback is explicitly labeled and is not presented as model-token measurement",
+              "scope": "Context test verifies fallback counts are clearly marked as approximate."
             }
           ],
           "limitations": [
             "The source prompt-preview contract is not represented; real-provider output and composed acceptance remain pending."
+          ]
+        },
+        {
+          "status": "implementation-present; integration-acceptance-pending",
+          "owner": "P06",
+          "targetPaths": [
+            "modules/nlp/src/index.ts",
+            "modules/nlp/src/tokenCount.ts",
+            "modules/nlp/src/worker.ts",
+            "modules/nlp/src/tokenCount.test.ts",
+            "modules/assistant/src/actions.ts"
+          ],
+          "publicActions": [
+            {
+              "action": "nlp.countTokens",
+              "implementation": "Provide bounded token counts through the shared supervised tokenizer child for continuation-context budgeting."
+            }
+          ],
+          "uiSurfaces": [],
+          "dataMappings": [
+            {
+              "source": "Source `getTokenCounter()` and `buildContinuationContext({ countTokens })` for the 12,000-token default cap",
+              "target": "`assistant.continuation` calls public `nlp.countTokens` with the selected continuation model when configured",
+              "persistence": "Counter results are pinned to the same snapshot and accepted only with matching model identity; when exact count is unavailable the fallback uses the source approximation and is labeled approximate."
+            }
+          ],
+          "proofRefs": [
+            {
+              "id": "P06-R35-token-count-fallback",
+              "path": "modules/nlp/src/tokenCount.test.ts",
+              "testName": "source-approved approximation counts CJK code points and conservatively rounds other text",
+              "scope": "Unit test verifies the exact source fallback formula."
+            },
+            {
+              "id": "P06-R35-token-count-continuation",
+              "path": "modules/assistant/src/continuation-context.test.ts",
+              "testName": "approximate fallback is explicitly labeled and is not presented as model-token measurement",
+              "scope": "Continuation-context test verifies approximate mode is reported rather than mislabeled as exact model count."
+            }
+          ],
+          "runtimeEvidenceRefs": [
+            {
+              "id": "P06-R35-token-count-exact-worker",
+              "path": "docs/migration/evidence/P06.json",
+              "locator": "P06-NLP-TOKEN-COUNT-PRODUCTION (claims entry for R35)",
+              "scope": "Recorded production run confirms exact public token-count results through the supervised local Transformers tokenizer, explicit fallback identity, and snapshot binding.",
+              "jsonPointer": "/claims/4/proofs/1"
+            }
+          ],
+          "limitations": [
+            "Focused counter and producer evidence does not certify the final real-provider continuation reference flow; campaign-level model acceptance remains pending."
           ]
         }
       ]
@@ -6159,7 +6338,7 @@
             }
           ],
           "limitations": [
-            "This maps the deterministic local source implementation. The source prompt builder is explicitly marked as a future LLM path; the source prompt-preview HTTP skeleton is a separate registered handler and is not proof of the future provider path. P11 composed browser/API acceptance remains pending."
+            "The source prompt-preview handler returns a no-provider skeleton only; its separate prompt builder marks the LLM path as future work, which is excluded. The deterministic local action has focused tests; composed browser/API acceptance remains pending."
           ]
         }
       ]
@@ -6319,7 +6498,83 @@
             ]
           }
         ]
-      }
+      },
+      "targetImplementationSlices": [
+        {
+          "status": "implementation-present; integration-acceptance-pending",
+          "owner": "P08",
+          "targetPaths": [
+            "packages/module-runtime/src/module-runtime.ts",
+            "packages/module-runtime/src/worker-supervisor.ts",
+            "packages/api/src/server.ts",
+            "packages/api/src/job-history-store.ts",
+            "packages/api/src/server.test.ts",
+            "packages/contracts/src/index.ts"
+          ],
+          "publicActions": [
+            {
+              "action": "GET /api/jobs; GET /api/jobs/:jobId; GET /api/jobs/events",
+              "implementation": "Expose owner-cookie-only retained worker and declared domain-action job summaries/details plus lifecycle SSE; domain job records retain bounded, validated action results/errors, while worker records carry safe lifecycle metadata."
+            },
+            {
+              "action": "GET /api/inbox; POST /api/inbox/:id/read; POST /api/inbox/read-all",
+              "implementation": "Expose owner-cookie-only durable completion inbox reads and read-state updates for worker and domain jobs."
+            },
+            {
+              "action": "importLegacyJobHistory(options)",
+              "implementation": "Archive exact source job-state bytes by hash outside Core data and adopt only records whose legacy repository and owner mappings were explicitly supplied."
+            }
+          ],
+          "uiSurfaces": [],
+          "dataMappings": [
+            {
+              "source": "Source `JobManager` retained jobs/results/inbox in `<dataDir>/app-state/jobs-state.json` and process-local events; source tasks include speaker evaluation/retraining, aspect review, Zukan proposal and summary refresh",
+              "target": "Declared module action job types are durably tracked by the API host; worker lifecycle snapshots and domain ActionResult data/errors share host-owned `JobHistoryStore` at `<usageDirectory>/jobs/jobs-state.json`, with owner-only jobs/inbox routes and process-local SSE",
+              "persistence": "New worker jobs retain bounded identity/status/timestamps/error codes without request/result payloads. Declared domain jobs retain their validated final action data or machine error, never action input; source domain result polling can use GET /api/jobs/:jobId. SSE subscribers are process-local, not a durable event log."
+            },
+            {
+              "source": "Legacy `<workspaceDataRoot>/app-state/jobs-state.json` jobs and inbox rows",
+              "target": "Immutable exact-byte archive at `<usageDirectory>/jobs/legacy/<sourceHash>.json`, with explicitly mapped safe records adopted into host `jobs-state.json`",
+              "persistence": "The source file is left unchanged. Records without explicit legacy repository and user mappings remain archived and are not exposed to the owner API."
+            }
+          ],
+          "proofRefs": [
+            {
+              "id": "P08-R38-job-history-lifecycle",
+              "path": "packages/api/src/server.test.ts",
+              "testName": "stores only bounded worker lifecycle metadata and durable completion inbox state",
+              "scope": "Store fixture verifies retained normalized metadata, read-state durability, bounds, conflict validation and no request/result/private values in job state."
+            },
+            {
+              "id": "P08-R38-legacy-job-relocation",
+              "path": "packages/api/src/server.test.ts",
+              "testName": "archives exact legacy jobs outside Core data and exposes only explicitly mapped owner history",
+              "scope": "Production API fixture verifies exact immutable archive, explicit repository/user mapping, source immutability, retry idempotence, owner-cookie routes and Core-root deletion."
+            },
+            {
+              "id": "P08-R38-live-worker-sse",
+              "path": "packages/api/src/server.test.ts",
+              "testName": "publishes real supervised worker jobs through owner-only history routes and SSE",
+              "scope": "API test runs a real supervised worker request and verifies queued/running/done SSE, persisted safe status and owner-only access."
+            },
+            {
+              "id": "P03-R38-worker-lifecycle-metadata",
+              "path": "packages/module-runtime/src/worker-supervisor.test.ts",
+              "testName": "one-shot lifecycle subscription awaits ordered metadata and omits request and result payloads",
+              "scope": "Worker supervisor test verifies ordered typed lifecycle metadata without request/result payloads."
+            },
+            {
+              "id": "P08-R38-domain-job-results",
+              "path": "packages/api/src/server.test.ts",
+              "testName": "tracks exact source job results through direct actions and nested HTTP MCP invokes",
+              "scope": "Real ModuleRuntime/API test verifies durable domain-job registration, exact result/error retention, owner job readback, nested MCP action tracking, Prefer: respond-async receipts, running/terminal state, inbox updates and cancellation/drain."
+            }
+          ],
+          "limitations": [
+            "No target app component currently calls the jobs/inbox routes or restores the source InboxButton/job detail UI. Legacy job import remains an explicit host helper with identity maps, not yet part of the composed P12 migration/restart/reclone acceptance. SSE delivery is process-local while durable status/results remain host-persisted."
+          ]
+        }
+      ]
     },
     {
       "id": "R39",
@@ -8072,7 +8327,7 @@
           "publicActions": [
             {
               "action": "assistant.dialogue.topics / assistant.dialogue.turns",
-              "implementation": "Generate topic and three-line dialogue suggestions from snapshot characters, voice notes, and scene context."
+              "implementation": "Generate dialogue topics and either one speaker-specific line or a bounded multi-line turn set from pinned Story characters, saved sketch context, source-shaped voice notes, speaker fingerprints and confirmed dialogue examples."
             }
           ],
           "uiSurfaces": [
@@ -8080,9 +8335,9 @@
           ],
           "dataMappings": [
             {
-              "source": "Source dialogue-sketch topic/line requests and canonical character/scene context",
+              "source": "Source dialogue-sketch topic, single-line and multi-line generation handlers over canonical characters and saved dialogue-sketch sessions",
               "target": "Pinned Story reads and transient Assistant dialogue suggestions",
-              "persistence": "Generated lines are not directly persisted; author changes must use the proposal boundary."
+              "persistence": "Generated topics and lines are transient; saved-sketch/session and character/manuscript evidence is read from the pinned snapshot. Persistent author changes remain a separate Core proposal operation."
             }
           ],
           "proofRefs": [
@@ -8091,10 +8346,17 @@
               "path": "modules/assistant/tests/browser-workflow.acceptance.mjs",
               "testName": "PASS: assistant panels render safely, invoke approved actions, stream and cancel rewrite, and keep generated changes in review proposals",
               "scope": "Rendered dialogue contribution exercises topic and turn actions through a stubbed action transport."
+            },
+            {
+              "id": "P11-R46-dialogue-context",
+              "path": "modules/assistant/src/dialogue-context.test.ts",
+              "testName": "builds source-shaped voice, fingerprint, notes, blank headings, and high-confidence examples",
+              "scope": "Context builder test verifies source-shaped voice and dialogue evidence inputs used by generated single/multiple lines."
             }
           ],
           "limitations": [
-            "This slice covers topic and three-line generation only. Source single-line generation, sandbox Zukan analysis, and exact prompt-preview routes are not represented by the current target action surface."
+            "Topic and single/bulk line generation are represented; the source line/lines/topics/Zukan prompt-preview handlers remain without a preview-only target action. Generation actions may return their assembled prompt only after generation; they do not provide the source preview-only contract.",
+            "The Dialogue action itself has browser bridge and context-builder coverage, but no focused real-provider action test; provider-backed dialogue output remains unverified."
           ]
         }
       ]
@@ -8660,28 +8922,42 @@
             "modules/mcp/src/change-set-schema.ts",
             "modules/mcp/src/context-manifest.ts",
             "modules/mcp/src/http.test.ts",
-            "modules/mcp/src/api-client.test.ts"
+            "modules/mcp/src/api-client.test.ts",
+            "modules/diagnostics/src/fullDiagnostics.ts",
+            "modules/diagnostics/src/index.ts",
+            "modules/diagnostics/src/linter/manuscriptFormat.ts",
+            "modules/assistant/src/actions.ts",
+            "tests/integration/mcp-acceptance.test.mjs"
           ],
           "publicActions": [
             {
-              "action": "MCP HTTP `streamable` contribution",
-              "implementation": "Serve MCP Streamable HTTP tools through the target action host"
+              "action": "get_diagnostics",
+              "implementation": "Invoke canonical `diagnostics.scene` and preserve the source full-tier DTO at one selected snapshot; require Diagnostics and Speaker components instead of silently returning partial results."
             },
             {
-              "action": "stdio API client",
-              "implementation": "Call owner bearer API for discovery/actions/proposals"
+              "action": "suggest_rewrite",
+              "implementation": "Map the source zero-based sentence index through `nlp.analyze`, validate spans against the saved scene body, and invoke compute-only `assistant.rewrite`; do not create a proposal."
             },
             {
-              "action": "create_scene / update_entity / lint_manuscript(fix) / submit_change_set",
-              "implementation": "Route persistent changes through Story or Diagnostics proposal actions; expose no approval/checkpoint/publish tools"
+              "action": "format_manuscript",
+              "implementation": "Invoke local `diagnostics.formatManuscript` with proposal registration disabled and return a stable source NarrativeChangeSet; author submits it separately through `submit_change_set`."
+            },
+            {
+              "action": "create_scene / update_entity / lint_manuscript(fix=true) / submit_change_set",
+              "implementation": "Route persistent changes through Story or Diagnostics/Core proposal paths; no MCP tool approves, checkpoints, reconciles, applies, or publishes."
             }
           ],
           "uiSurfaces": [],
           "dataMappings": [
             {
-              "source": "Source HTTP/stdio MCP tools and legacy direct mutation handlers",
-              "target": "Shared MCP tool registry and owner API client; persistent operations become canonical Core proposals",
-              "persistence": "MCP does not directly write project files, commit, approve, checkpoint, reconcile, or publish."
+              "source": "Source HTTP/stdio MCP tools, including legacy direct persistent mutations",
+              "target": "Shared MCP action registry and owner API client over both transports",
+              "persistence": "MCP does not write project files or commit. Persistent effects enter the Core author review boundary; formatter returns a NarrativeChangeSet before explicit submission, and rewrite remains compute-only until author selection."
+            },
+            {
+              "source": "Source `get_diagnostics`, `suggest_rewrite`, and `format_manuscript` MCP outputs",
+              "target": "`diagnostics.scene`, `nlp.analyze` + `assistant.rewrite`, and `diagnostics.formatManuscript` respectively",
+              "persistence": "Diagnostics is request-time read-only; rewrite is transient; formatting is a stable proposal-shaped result but is not registered with Core until explicit `submit_change_set`."
             }
           ],
           "proofRefs": [
@@ -8708,10 +8984,29 @@
               "path": "modules/mcp/src/http.test.ts",
               "testName": "ChangeSet readback preserves approved IDs while selected checkpoints are pending",
               "scope": "MCP ChangeSet readback requires approval/checkpoint receipts and does not invent completion."
+            },
+            {
+              "id": "P08-R48-composed-full-diagnostics",
+              "path": "tests/integration/mcp-acceptance.test.mjs",
+              "testName": "spawned stdio and production HTTP MCP preserve Core review boundaries through publish and restart",
+              "scope": "Composed production integration exercises full-tier diagnostics through both real MCP transports and checks the selected snapshot/DTO."
+            },
+            {
+              "id": "P08-R48-composed-formatter",
+              "path": "tests/integration/mcp-acceptance.test.mjs",
+              "testName": "spawned stdio and production HTTP MCP preserve Core review boundaries through publish and restart",
+              "scope": "Composed production integration verifies both transports return the same stable formatter NarrativeChangeSet, do not write project files, then require explicit submit/review/checkpoint/publication."
+            },
+            {
+              "id": "P08-R48-composed-rewrite",
+              "path": "tests/integration/mcp-acceptance.test.mjs",
+              "testName": "spawned stdio and production HTTP MCP preserve Core review boundaries through publish and restart",
+              "scope": "Composed production integration checks typed no-provider behavior by default; its explicit qwen-local mode checks real Assistant rewrite output and no Core proposal/write through both transports."
             }
           ],
           "limitations": [
-            "SDK component and client tests are not a spawned stdio process against the composed API; module profile mounting and all 27 tool action availability remain pending. The MCP suite does not directly invoke create_scene, update_entity, or lint_manuscript mutation tools; focused Story/Diagnostics tests cover their proposal producers."
+            "The P08 integration source supports the full Story/NLP/Diagnostics/Semantic/Speaker/Publishing/MCP composition, but this ledger update does not certify a fresh run at the final campaign head. The Assistant rewrite Qwen path is opt-in and real-provider acceptance remains pending.",
+            "The target keeps source direct mutation paths behind reviewable proposals; the formatter result itself remains transient until the author submits it. Profile closure and campaign final acceptance remain pending."
           ]
         }
       ]
@@ -9367,7 +9662,10 @@
             "modules/nlp/src/browser.ts",
             "modules/diagnostics/src/index.ts",
             "modules/diagnostics/src/browser.ts",
-            "modules/diagnostics/src/production.test.ts"
+            "modules/diagnostics/src/production.test.ts",
+            "modules/nlp/src/tokenCount.ts",
+            "modules/nlp/src/tokenCount.test.ts",
+            "modules/nlp/src/worker.ts"
           ],
           "publicActions": [
             {
@@ -9381,6 +9679,10 @@
             {
               "action": "nlp.features / nlp.updateExternalConsent",
               "implementation": "Read or propose explicit external-feature consent"
+            },
+            {
+              "action": "nlp.countTokens",
+              "implementation": "Count bounded text batches through the supervised NLP token-counter capability, returning the selected snapshot and exact or explicitly approximate counter identity."
             }
           ],
           "uiSurfaces": [
@@ -9391,6 +9693,11 @@
               "source": "Legacy synonyms, candidate ignore list, NLP feature consent, and selected canonical snapshot",
               "target": "`meta/scriptorium/modules/nlp/{synonyms.yaml,candidate-ignore-list.yaml,feature-settings.json}` plus derived token/candidate results",
               "persistence": "Dictionary, ignore-list, and consent updates are proposal operations; tokenization and candidate projections are derived from the pinned snapshot."
+            },
+            {
+              "source": "Source `getTokenCounter`, `createApproxTokenCounter`, and `loadHfTokenizer` used to budget continuation context",
+              "target": "`nlp.countTokens` and the shared supervised NLP child; tokenizer model selection follows explicit model, tokenizer environment, then LLM environment",
+              "persistence": "Counts are derived per request; tokenizer weights are loaded locally on demand. Missing/unavailable tokenizer fallback preserves the source CJK/three-character formula and labels the result approximate."
             }
           ],
           "proofRefs": [
@@ -9411,10 +9718,31 @@
               "path": "modules/nlp/src/candidateDiscovery.test.ts",
               "testName": "candidate aggregation preserves source reading, per-entity occurrence count, and known-name exclusions",
               "scope": "NLP algorithm test verifies occurrence counts, source identities, reading, and known-name exclusions."
+            },
+            {
+              "id": "P06-N04-token-count-config",
+              "path": "modules/nlp/src/tokenCount.test.ts",
+              "testName": "model selection follows explicit model, tokenizer environment, then LLM environment",
+              "scope": "Helper test verifies source-aligned tokenizer selection precedence."
+            },
+            {
+              "id": "P06-N04-token-count-bounds",
+              "path": "modules/nlp/src/tokenCount.test.ts",
+              "testName": "token count batches enforce per-text, aggregate byte, and item bounds",
+              "scope": "Helper test verifies per-text and aggregate UTF-8 limits and batch item limits."
             }
           ],
           "limitations": [
             "No external service or semantic-model quality is implied by these CPU and deterministic algorithm tests."
+          ],
+          "runtimeEvidenceRefs": [
+            {
+              "id": "P06-N04-token-count-runtime",
+              "path": "docs/migration/evidence/P06.json",
+              "locator": "P06-NLP-TOKEN-COUNT-PRODUCTION (claims entry for R35)",
+              "scope": "Recorded production acceptance invokes the public nlp.countTokens action with the actual supervised Transformers tokenizer and verifies explicitly identified approximate fallback on the same snapshot.",
+              "jsonPointer": "/claims/4/proofs/1"
+            }
           ]
         }
       ]
@@ -9786,8 +10114,8 @@
               "implementation": "Expose optional provider health, bounded queue status, versioned non-secret settings proposals, and historical usage reads."
             },
             {
-              "action": "assistant.rewrite / assistant.summary.scene / assistant.summary.chapter / assistant.qa / assistant.continuation / assistant.reader.reaction",
-              "implementation": "Generate supported writing assistance from pinned Story context; prose/settings mutations are Core proposals."
+              "action": "assistant.rewrite / assistant.rewrite.propose / assistant.summary.scene / assistant.summary.chapter / assistant.qa / assistant.continuation / assistant.dialogue.topics / assistant.dialogue.turns / assistant.reader.reaction / assistant.synonyms.suggestions / assistant.zukan.suggestions / assistant.aspect.review / assistant.stateEvents.draft",
+              "implementation": "Generate source-covered writing assistance from pinned Story context; keep generated outputs transient except explicit Story/Core proposal actions and expose provider provenance."
             }
           ],
           "uiSurfaces": [
@@ -9800,9 +10128,9 @@
               "persistence": "Settings are non-secret versioned project state; historical usage bytes are preserved, host-owned usage events remain a distinct source."
             },
             {
-              "source": "Provider credentials, model calls, response cache, generated summary sidecars, and background job state",
-              "target": "Environment-only credentials, lazy optional provider capability, proposal-based outputs, private cache/request-time results",
-              "persistence": "Secrets are not migrated; generated results are not committed outside Core proposal flow. This slice does not establish source summary sidecar write parity or durable jobs/inbox."
+              "source": "Provider credentials, model calls, response cache, summary sidecars, and source background-job state",
+              "target": "Environment-only credentials, lazy optional Assistant provider, proposal-based outputs, private cache/request-time results, and API-owned bounded worker lifecycle history",
+              "persistence": "Secrets are not migrated and generated model responses do not write canonical prose directly. P08 R38 owns bounded host job/inbox metadata and explicit source-history archive/adoption; Assistant does not persist request/result payloads. Source prompt-preview-only contracts and composed P12 importer acceptance remain pending."
             }
           ],
           "proofRefs": [
@@ -9832,7 +10160,8 @@
             }
           ],
           "limitations": [
-            "This records focused action and producer test coverage only. Browser acceptance uses an action-transport stub, and the real-provider reference flow, prompt previews, full-profile UI/API composition, P12 reactivation/import/reclone and final product acceptance remain pending."
+            "Assistant action/context helpers and browser contributions have focused tests; browser action transports are stubbed, and the real-provider reference flow remains pending.",
+            "Source prompt-preview-only routes for reader model, summaries, synonyms, QA, continuation, and dialogue sketch are not exposed as target preview actions. P12 reactivation/import/reclone composition and final product acceptance remain pending."
           ]
         }
       ]
@@ -10363,7 +10692,10 @@
           "owner": "P02",
           "targetPaths": [
             "app/src/App.tsx",
-            "app/src/api.ts",
+            "app/src/main.tsx",
+            "app/src/theme.ts",
+            "app/src/theme.test.ts",
+            "app/src/components/ThemeControl.tsx",
             "app/styles.css",
             "tests/e2e/core.acceptance.spec.ts"
           ],
@@ -10371,25 +10703,42 @@
             {
               "action": "React writing shell, project selection, registration and recovery surfaces",
               "implementation": "Render the target shell and route project/editor operations through the target HTTP API and IndexedDB journal."
+            },
+            {
+              "action": "Light, dark and paper appearance preference",
+              "implementation": "Choose an initial mode from the saved preference or system light/dark preference, expose the appearance selector, persist explicit choices in localStorage, and apply mode-specific theme tokens."
             }
           ],
           "uiSurfaces": [
             "app/src/App.tsx",
+            "app/src/components/ThemeControl.tsx",
             "app/styles.css"
           ],
           "dataMappings": [
             {
-              "source": "Active project and `arcadia-theme-mode` localStorage preference; source light/dark/paper mode and system preference",
-              "target": "Target active project key and static light application styles",
-              "persistence": "Project selection is browser-local; as of this target tree there is no theme-mode state/control and no equivalent three-mode/system preference persistence."
+              "source": "Source `arcadia-theme-mode` preference and light/dark/paper modes with system preference at startup",
+              "target": "`app/src/theme.ts` and `<html data-zp-theme>`; explicit selections persist in localStorage under `arcadia-theme-mode`",
+              "persistence": "An explicit saved choice wins; when absent or invalid, the system light/dark preference selects the initial mode. Theme state is browser-local."
             },
             {
               "source": "IndexedDB manuscript recovery and source typography/vertical writing controls",
               "target": "Author-scoped `scriptorium-recovery` journal and React editor controls",
-              "persistence": "Draft recovery is browser-local until checkpoint/publish; it does not supply the missing source theme modes."
+              "persistence": "Draft recovery is browser-local until checkpoint/publish; appearance preference remains a separate browser-local setting."
             }
           ],
           "proofRefs": [
+            {
+              "id": "P02-N11-theme-behavior",
+              "path": "app/src/theme.test.ts",
+              "testName": "a missing or invalid saved mode follows the system preference once at startup",
+              "scope": "Unit test verifies the storage key and initial system-preference fallback."
+            },
+            {
+              "id": "P02-N11-theme-browser",
+              "path": "tests/e2e/core.acceptance.spec.ts",
+              "testName": "appearance modes follow system preference initially and persist explicit light, dark, and paper choices",
+              "scope": "Chromium test checks the visible selector, system-selected startup mode, light/dark/paper rendering and persisted explicit choices after reload."
+            },
             {
               "id": "P02-N11-PROJECT-LIFECYCLE-SHELL",
               "path": "tests/e2e/core.acceptance.spec.ts",
@@ -10398,7 +10747,7 @@
             }
           ],
           "limitations": [
-            "Source UX theme parity is not implemented in the current target tree: `app/styles.css` fixes `color-scheme: light` and no target theme controller corresponds to source light/dark/paper/system preference. P02 shell/lifecycle coverage is not a theme acceptance proof; retain this as pending until a dedicated behavior test exists."
+            "Theme behavior has focused browser and unit coverage; the final campaign browser/OCI certification remains pending."
           ]
         }
       ]
@@ -10585,6 +10934,64 @@
           ],
           "limitations": [
             "This is the generic producer boundary and synthetic fixture coverage; module-specific semantic conversions, final importer composition, author review, checkpoint, and publication are P12 integration acceptance."
+          ]
+        },
+        {
+          "status": "implementation-present; integration-acceptance-pending",
+          "owner": "P05",
+          "targetPaths": [
+            "modules/story/src/migration/producer.ts",
+            "modules/story/src/migration/workflowRows.ts",
+            "modules/story/src/migration/producer.test.ts",
+            "modules/story/src/index.ts"
+          ],
+          "publicActions": [
+            {
+              "action": "createStoryMigrationProducer()",
+              "implementation": "When Story is disabled preserve canonical Story files and scratch attachments in an opaque versioned namespace; on reactivation restore exact bytes safely, migrate selected committed ChangeSet/snapshot history, convert Story workflow tables, and retain conflicts for explicit review."
+            }
+          ],
+          "uiSurfaces": [],
+          "dataMappings": [
+            {
+              "source": "Canonical Story YAML/Markdown, `meta/scratch/**`, workspace `app-state/series.json`, committed `.arcadia/change-sets/**` and `.arcadia/snapshots/**`",
+              "target": "Disabled files under `meta/scriptorium/modules/story/legacy/files/**`; on reactivation canonical files, Story `change-sets/**`, `local-snapshots/**`, and versioned `series.json`",
+              "persistence": "Opaque Markdown/YAML and scratch asset bytes are preserved; binary assets are base64 encoded. Re-enable restores only to safe absent targets or reports exact conflicts. Proposed/pending ChangeSets are deferred to explicit recovery; no approval is inferred."
+            },
+            {
+              "source": "SQLite `state_proposals` and `zukan_suggestions` rows from project `.arcadia/index.sqlite` and configured workspace index",
+              "target": "`meta/scriptorium/modules/story/state-proposals.jsonl` and `zukan-suggestions.jsonl` with per-row source database provenance",
+              "persistence": "Provisional status, source history/evidence, unknown non-secret fields and stable IDs are retained; secret-like columns are dropped. Divergent duplicate IDs are withheld into local review recovery. Derived `scene_state_events`/`reader_knowledge_events` are not imported as author decisions."
+            }
+          ],
+          "proofRefs": [
+            {
+              "id": "P05-N12-story-opaque-disabled",
+              "path": "modules/story/src/migration/producer.test.ts",
+              "testName": "preserves source Story files opaquely while the module is disabled",
+              "scope": "Producer fixture verifies source bytes and canonical paths are retained under the Story opaque namespace while disabled."
+            },
+            {
+              "id": "P05-N12-story-reactivation-history",
+              "path": "modules/story/src/migration/producer.test.ts",
+              "testName": "reactivates opaque scratch, committed change-set history, and local snapshots byte-for-byte",
+              "scope": "Producer fixture verifies exact restore, status-category retention, deferred pending recovery, conflict guards and repeat-plan stability."
+            },
+            {
+              "id": "P05-N12-story-workflow-rows",
+              "path": "modules/story/src/migration/producer.test.ts",
+              "testName": "converts source workflow tables to Story JSONL with decisions, unknown fields, and provenance intact",
+              "scope": "Synthetic SQLite fixture verifies provisional state/Zukan row fields and source database provenance."
+            },
+            {
+              "id": "P05-N12-story-workflow-conflicts",
+              "path": "modules/story/src/migration/producer.test.ts",
+              "testName": "withholds divergent workflow IDs and emits explicit local review recovery",
+              "scope": "Synthetic duplicate-table fixture verifies divergent records are not selected automatically and recovery retains them."
+            }
+          ],
+          "limitations": [
+            "These are isolated Story producer fixtures. P12 still must register and run the composed source-root importer with disabled/re-enabled modules through review, checkpoint, publication, data-root deletion, and reclone."
           ]
         }
       ]
