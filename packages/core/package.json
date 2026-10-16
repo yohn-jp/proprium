@@ -19,5 +19,8 @@
   "dependencies": {
     "yaml": "^2.8.1",
     "@scriptorium/contracts": "workspace:*"
-  }
+  },
+  "files": [
+    "dist"
+  ]
 }

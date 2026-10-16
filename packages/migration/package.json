@@ -18,5 +18,8 @@
   },
   "dependencies": {
     "@scriptorium/contracts": "workspace:*"
-  }
+  },
+  "files": [
+    "dist"
+  ]
 }
