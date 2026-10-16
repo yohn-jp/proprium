@@ -8,9 +8,9 @@ const markdown = "---\ntitle: Draft\nfuture_frontmatter: retained\n---\n本文\n
 const revision = "a".repeat(64);
 
 function contextFor(input: {
-  files?: Record<string, string>;
+  files?: Record<string, string | Buffer>;
   workspaceFiles?: Record<string, string>;
-  targets?: Record<string, string>;
+  targets?: Record<string, string | Buffer>;
   targetFiles?: string[];
   enabled?: boolean;
   legacyRepositoryMappings?: Record<string, { provider: "github"; repositoryId: string; defaultBranch: string; ownerScope: string; url: string }>;
@@ -20,7 +20,7 @@ function contextFor(input: {
   const files = new Map(
     Object.entries(input.files ?? {}).map(([path, content]) => [path, Buffer.from(content)]),
   );
-  const targets = new Map(Object.entries(input.targets ?? {}));
+  const targets = new Map(Object.entries(input.targets ?? {}).map(([path, content]) => [path, Buffer.from(content)]));
   const workspaceFiles = new Map(Object.entries(input.workspaceFiles ?? {}).map(([path, content]) => [path, Buffer.from(content)]));
   const repository = {
     provider: "local" as const,
@@ -53,9 +53,10 @@ function contextFor(input: {
     } as MigrationContext["source"],
     target: {
       snapshot,
-      async read(path) {
-        const content = targets.get(path);
-        return content === undefined ? null : { content, revision };
+      async read(path, encoding = "utf8") {
+        const bytes = targets.get(path);
+        if (bytes === undefined) return null;
+        return { content: encoding === "base64" ? bytes.toString("base64") : bytes.toString("utf8"), revision };
       },
       async list(prefix) {
         return (input.targetFiles ?? []).filter((path) => path.startsWith(`${prefix}/`)).sort();
@@ -128,6 +129,175 @@ test("preserves source Story files opaquely while the module is disabled", async
     revision: null,
     content,
   });
+});
+
+test("imports committed Story scratch notes and binary attachments at their original paths", async () => {
+  const notePath = "meta/scratch/idea-stable.md";
+  const assetPath = "meta/scratch/files/idea-stable/diagram.bin";
+  const note = Buffer.from("# Stable idea\nKeep this note.\n", "utf8");
+  const asset = Buffer.from([0, 255, 1, 128, 13, 10]);
+  const result = await createStoryMigrationProducer().inspect(contextFor({
+    files: {
+      [notePath]: note,
+      [assetPath]: asset,
+      "meta/project.yaml": "id: story-project\n",
+      "meta/synonyms.yaml": "synonyms: []\n",
+      "meta/candidate-ignore-list.yaml": "ignore: []\n",
+      "meta/publish-episodes.yaml": "episodes: []\n",
+      "meta/lint-rules.yaml": "rules: []\n",
+      "meta/tone-lexicon.yaml": "tones: []\n",
+      "meta/plot-lexicon.yaml": "terms: []\n",
+    },
+  }));
+  const writes = result.operations.flatMap((operation) => operation.writes);
+  const noteWrite = writes.find((write) => write.path === notePath);
+  const assetWrite = writes.find((write) => write.path === assetPath);
+  assert.equal(noteWrite?.content, note.toString("utf8"));
+  assert.equal(assetWrite?.content, asset.toString("base64"));
+  assert.equal(assetWrite?.encoding, "base64");
+  assert.ok(writes.some((write) => write.path === "meta/project.yaml"));
+  for (const path of [
+    "meta/synonyms.yaml",
+    "meta/candidate-ignore-list.yaml",
+    "meta/publish-episodes.yaml",
+    "meta/lint-rules.yaml",
+    "meta/tone-lexicon.yaml",
+    "meta/plot-lexicon.yaml",
+  ]) {
+    assert.equal(writes.some((write) => write.path === path), false, `${path} remains owned by its source module`);
+  }
+});
+
+test("retains committed scratch notes and binary attachments at their original paths while Story is disabled", async () => {
+  const notePath = "meta/scratch/idea-stable.md";
+  const assetPath = "meta/scratch/files/idea-stable/diagram.bin";
+  const note = Buffer.from("# Stable idea\nKeep this note.\n", "utf8");
+  const asset = Buffer.from([0, 255, 1, 128, 13, 10]);
+  const result = await createStoryMigrationProducer().inspect(contextFor({
+    files: { [notePath]: note, [assetPath]: asset },
+    enabled: false,
+  }));
+  const writes = new Map(result.operations.flatMap((operation) => operation.writes.map((write) => [write.path, write])));
+  assert.equal(writes.get(`meta/scriptorium/modules/story/legacy/files/${notePath}`)?.content, note.toString("utf8"));
+  assert.equal(writes.get(`meta/scriptorium/modules/story/legacy/files/${assetPath}`)?.content, asset.toString("base64"));
+  assert.equal(writes.get(`meta/scriptorium/modules/story/legacy/files/${assetPath}`)?.encoding, "base64");
+  assert.ok(result.entries.every((entry) => entry.category === "authoritative" && entry.disposition === "preserved-unreadable"));
+});
+
+test("reactivates opaque scratch, committed change-set history, and local snapshots byte-for-byte", async () => {
+  const scratchNote = Buffer.from("# Kept scratch\n", "utf8");
+  const scratchAsset = Buffer.from([0, 254, 7, 0, 255]);
+  const applied = Buffer.from('{"changeSet":{"id":"applied-changeset-stable"},"status":"applied","unknownField":{"retain":true}}\n', "utf8");
+  const partial = Buffer.from('{"changeSet":{"id":"partial-changeset-stable"},"status":"partially-applied","future":2}\n', "utf8");
+  const rejected = Buffer.from('{"changeSet":{"id":"rejected-changeset-stable"},"status":"rejected","future":3}\n', "utf8");
+  const pending = Buffer.from('{"changeSet":{"id":"pending-changeset-stable"},"status":"proposed","future":4}\n', "utf8");
+  const snapshotText = Buffer.from("# Local snapshot\n", "utf8");
+  const snapshotAsset = Buffer.from([0, 128, 9, 255]);
+  const opaque = {
+    "meta/scriptorium/modules/story/legacy/files/meta/scratch/idea-stable.md": scratchNote,
+    "meta/scriptorium/modules/story/legacy/files/meta/scratch/files/idea-stable/diagram.bin": scratchAsset,
+    "meta/scriptorium/modules/story/legacy/files/.arcadia/change-sets/applied.json": applied,
+    "meta/scriptorium/modules/story/legacy/files/.arcadia/change-sets/partial.json": partial,
+    "meta/scriptorium/modules/story/legacy/files/.arcadia/change-sets/rejected.json": rejected,
+    "meta/scriptorium/modules/story/legacy/files/.arcadia/change-sets/pending.json": pending,
+    "meta/scriptorium/modules/story/legacy/files/.arcadia/snapshots/scene-before.md": snapshotText,
+    "meta/scriptorium/modules/story/legacy/files/.arcadia/snapshots/attachments/diagram.bin": snapshotAsset,
+  };
+  const context = contextFor({ targets: opaque, targetFiles: Object.keys(opaque) });
+  const producer = createStoryMigrationProducer();
+  const result = await producer.inspect(context);
+  const writes = result.operations.flatMap((operation) => operation.writes);
+  const byPath = new Map(writes.map((write) => [write.path, write]));
+  assert.equal(byPath.get("meta/scratch/idea-stable.md")?.content, scratchNote.toString("utf8"));
+  assert.equal(byPath.get("meta/scratch/files/idea-stable/diagram.bin")?.content, scratchAsset.toString("base64"));
+  assert.equal(byPath.get("meta/scratch/files/idea-stable/diagram.bin")?.encoding, "base64");
+  assert.equal(byPath.get("meta/scriptorium/modules/story/change-sets/applied.json")?.content, applied.toString("utf8"));
+  assert.equal(byPath.get("meta/scriptorium/modules/story/change-sets/partial.json")?.content, partial.toString("utf8"));
+  assert.equal(byPath.get("meta/scriptorium/modules/story/change-sets/rejected.json")?.content, rejected.toString("utf8"));
+  assert.equal(byPath.get("meta/scriptorium/modules/story/local-snapshots/scene-before.md")?.content, snapshotText.toString("utf8"));
+  assert.equal(byPath.get("meta/scriptorium/modules/story/local-snapshots/attachments/diagram.bin")?.content, snapshotAsset.toString("base64"));
+  assert.equal(byPath.get("meta/scriptorium/modules/story/local-snapshots/attachments/diagram.bin")?.encoding, "base64");
+  assert.equal(byPath.has("meta/scriptorium/modules/story/change-sets/pending.json"), false);
+  for (const file of ["applied.json", "partial.json", "rejected.json"]) {
+    assert.equal(result.entries.find((entry) => entry.source.endsWith(`/change-sets/${file}`))?.category, "authoritative");
+  }
+  const pendingEntry = result.entries.find((entry) => entry.source.endsWith("/change-sets/pending.json"));
+  assert.equal(pendingEntry?.category, "provisional");
+  assert.equal(pendingEntry?.disposition, "deferred");
+  assert.deepEqual(result.recovery.map((record) => ({ source: record.source, content: record.content, encoding: record.encoding })), [{
+    source: ".arcadia/change-sets/pending.json",
+    content: pending.toString("base64"),
+    encoding: "base64",
+  }]);
+  assert.ok(result.operations.every((operation) => operation.reads.some((read) => read.path.startsWith("meta/scriptorium/modules/story/legacy/files/"))));
+  const appliedOperation = result.operations.find((operation) => operation.writes.some((write) => write.path === "meta/scriptorium/modules/story/change-sets/applied.json"));
+  assert.ok(appliedOperation?.reads.some((read) => read.path === "meta/scriptorium/modules/story/change-sets/applied.json" && read.revision === null));
+  assert.ok(appliedOperation?.reads.some((read) => read.path === "meta/scriptorium/modules/story/legacy/files/.arcadia/change-sets/applied.json" && read.revision === revision));
+  const repeated = await producer.inspect(context);
+  assert.deepEqual(repeated.operations.map((operation) => operation.id), result.operations.map((operation) => operation.id));
+  assert.equal(repeated.recovery[0]?.id, result.recovery[0]?.id);
+});
+
+test("uses nested changeSet IDs and supports top-level IDs when restoring committed history", async () => {
+  const source = ".arcadia/change-sets/top-level-id.json";
+  const opaquePath = `meta/scriptorium/modules/story/legacy/files/${source}`;
+  const bytes = Buffer.from('{"id":"top-level-stable-id","status":"rejected","future":true}\n', "utf8");
+  const result = await createStoryMigrationProducer().inspect(contextFor({
+    targets: { [opaquePath]: bytes },
+    targetFiles: [opaquePath],
+  }));
+  const write = result.operations.flatMap((operation) => operation.writes).find((item) => item.path === "meta/scriptorium/modules/story/change-sets/top-level-id.json");
+  assert.equal(write?.content, bytes.toString("utf8"));
+  assert.equal(result.entries.find((entry) => entry.source === opaquePath)?.disposition, "planned");
+});
+
+test("defers matching live change-set and snapshot sources to the filesystem importer", async () => {
+  const appliedPath = ".arcadia/change-sets/applied.json";
+  const snapshotPath = ".arcadia/snapshots/scene-before.md";
+  const applied = Buffer.from('{"changeSet":{"id":"applied-stable"},"status":"applied"}\n', "utf8");
+  const snapshot = Buffer.from("# Current snapshot\n", "utf8");
+  const opaqueApplied = `meta/scriptorium/modules/story/legacy/files/${appliedPath}`;
+  const opaqueSnapshot = `meta/scriptorium/modules/story/legacy/files/${snapshotPath}`;
+  const result = await createStoryMigrationProducer().inspect(contextFor({
+    files: { [appliedPath]: applied, [snapshotPath]: snapshot },
+    targets: { [opaqueApplied]: applied, [opaqueSnapshot]: snapshot },
+    targetFiles: [opaqueApplied, opaqueSnapshot],
+  }));
+  assert.equal(result.entries.find((entry) => entry.source === opaqueApplied)?.disposition, "unchanged");
+  assert.equal(result.entries.find((entry) => entry.source === opaqueSnapshot)?.disposition, "unchanged");
+  assert.equal(result.operations.length, 0);
+});
+
+test("reports changed live change-set and snapshot sources as conflicts", async () => {
+  const appliedPath = ".arcadia/change-sets/applied.json";
+  const snapshotPath = ".arcadia/snapshots/scene-before.md";
+  const retainedApplied = Buffer.from('{"changeSet":{"id":"applied-stable"},"status":"applied"}\n', "utf8");
+  const currentApplied = Buffer.from('{"changeSet":{"id":"applied-stable"},"status":"partially-applied"}\n', "utf8");
+  const retainedSnapshot = Buffer.from("# Retained snapshot\n", "utf8");
+  const currentSnapshot = Buffer.from("# Current snapshot\n", "utf8");
+  const opaqueApplied = `meta/scriptorium/modules/story/legacy/files/${appliedPath}`;
+  const opaqueSnapshot = `meta/scriptorium/modules/story/legacy/files/${snapshotPath}`;
+  const result = await createStoryMigrationProducer().inspect(contextFor({
+    files: { [appliedPath]: currentApplied, [snapshotPath]: currentSnapshot },
+    targets: { [opaqueApplied]: retainedApplied, [opaqueSnapshot]: retainedSnapshot },
+    targetFiles: [opaqueApplied, opaqueSnapshot],
+  }));
+  assert.equal(result.entries.find((entry) => entry.source === opaqueApplied)?.disposition, "conflict");
+  assert.equal(result.entries.find((entry) => entry.source === opaqueSnapshot)?.disposition, "conflict");
+  assert.equal(result.operations.length, 0);
+});
+
+test("does not duplicate a live scratch import when the retained copy has the same bytes", async () => {
+  const source = "meta/scratch/idea-stable.md";
+  const note = Buffer.from("# Stable idea\n", "utf8");
+  const opaquePath = `meta/scriptorium/modules/story/legacy/files/${source}`;
+  const result = await createStoryMigrationProducer().inspect(contextFor({
+    files: { [source]: note },
+    targets: { [source]: note, [opaquePath]: note },
+    targetFiles: [opaquePath],
+  }));
+  assert.equal(result.entries.find((entry) => entry.source === opaquePath)?.disposition, "unchanged");
+  assert.equal(result.operations.length, 0);
 });
 
 test("restores opaque Story documents to canonical paths after re-enabling the module", async () => {
