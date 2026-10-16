@@ -1,4 +1,4 @@
-import type { LanguageModel } from "ai";
+import type { LanguageModel, ModelMessage, ToolSet } from "ai";
 
 export type AssistantProviderKind = "anthropic" | "openai-compatible";
 export type AssistantModelPurpose = "quality" | "bulk";
@@ -41,7 +41,10 @@ export interface StreamAssistantModelOptions {
   preferences?: AssistantModelPreferences;
   /** A previously resolved identity or model ID override. Provider selection still comes from env. */
   model?: AssistantModelIdentity | string;
-  prompt: string;
+  prompt?: string;
+  messages?: ModelMessage[];
+  tools?: ToolSet;
+  maxToolSteps?: number;
   system?: string;
   maxOutputTokens: number;
   temperature?: number;
@@ -394,13 +397,17 @@ export async function streamAssistantModel(
     : ownAbort.signal;
   if (combinedSignal.aborted) throw abortError(combinedSignal);
   const model = await createLanguageModel(identity);
-  const { streamText } = await import("ai");
+  const { streamText, stepCountIs } = await import("ai");
   if (combinedSignal.aborted) throw abortError(combinedSignal);
 
+  if ((input.prompt === undefined) === (input.messages === undefined)) {
+    throw new TypeError("[assistant] provide exactly one of prompt or messages");
+  }
   const streamed = streamText({
     model,
     ...(input.system !== undefined ? { system: input.system } : {}),
-    prompt: input.prompt,
+    ...(input.messages ? { messages: input.messages } : { prompt: input.prompt! }),
+    ...(input.tools ? { tools: input.tools, stopWhen: stepCountIs(input.maxToolSteps ?? 6) } : {}),
     maxOutputTokens: clampOutputTokens(input.maxOutputTokens),
     abortSignal: combinedSignal,
     ...samplingOptions(identity.provider, identity.sampling, input.temperature),

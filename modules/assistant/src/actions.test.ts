@@ -102,8 +102,7 @@ test("module activation and provider health stay idle without provider or capabi
     if (!result.ok) return;
     assert.deepEqual(result.data, { available: false, providerKind: "none", configuredModel: null, locality: "optional-external" });
     assert.equal(capabilityAcquisitions, 0);
-    assert.equal(definition.http?.length, 1);
-    assert.equal(definition.http?.[0]?.path, "rewrite/stream");
+    assert.deepEqual(definition.http?.map((item) => item.path).sort(), ["qa/stream", "rewrite/stream"]);
     await definition.dispose();
   } finally {
     if (previous === undefined) delete process.env.ARCADIA_LLM_PROVIDER;
@@ -122,11 +121,96 @@ test("default-denied external consent stops generation before usage lease or pro
     },
   });
 
-  const result = await action.invoke({ terms: ["夜明け"] }, actionContext);
+  const result = await action.invoke({ suggestions: [{ original: "夜明け", sentence: "夜明けが見える。" }] }, actionContext);
   assert.equal(result.ok, false);
   if (result.ok) return;
   assert.equal(result.error.code, "assistant_privacy_denied");
   assert.equal(capabilityAcquisitions, 0);
+});
+
+test("setting QA streams an actual read-only tool round and returns only source-revision-bound citations", async () => {
+  let requestCount = 0;
+  let sawToolCall = false;
+  const server = createServer((request, response) => {
+    const chunks: Buffer[] = [];
+    request.on("data", (chunk: Buffer) => chunks.push(chunk));
+    request.on("end", () => {
+      requestCount += 1;
+      const body = JSON.parse(Buffer.concat(chunks).toString("utf8")) as Record<string, unknown>;
+      if (requestCount === 1) {
+        const tools = Array.isArray(body.tools) ? body.tools : [];
+        sawToolCall = tools.some((item) => JSON.stringify(item).includes("searchScenes"));
+        response.writeHead(200, { "Content-Type": "text/event-stream", Connection: "keep-alive" });
+        const chunk = {
+          id: "chatcmpl-qa-tool", object: "chat.completion.chunk", created: 1, model: "synthetic-local",
+          choices: [{ index: 0, delta: { tool_calls: [{ index: 0, id: "call-search-scenes", type: "function", function: { name: "searchScenes", arguments: JSON.stringify({ query: "夜明け", mode: "scene" }) } }] }, finish_reason: "tool_calls" }],
+        };
+        response.end(`data: ${JSON.stringify(chunk)}\n\ndata: [DONE]\n\n`);
+      } else {
+        assert.ok(Array.isArray(body.messages), "the tool result should be sent back as model history");
+        response.writeHead(200, { "Content-Type": "text/event-stream", Connection: "keep-alive" });
+        const content = JSON.stringify({ answer: "主人公は夜明けに駅へ着きます。", citations: [{ kind: "scene", id: "sc-qa", quote: "主人公は夜明けに駅へ着いた。" }], confidence: "high" });
+        const chunk = {
+          id: "chatcmpl-qa-answer", object: "chat.completion.chunk", created: 1, model: "synthetic-local",
+          choices: [{ index: 0, delta: { content }, finish_reason: "stop" }],
+        };
+        response.end(`data: ${JSON.stringify(chunk)}\n\ndata: [DONE]\n\n`);
+      }
+    });
+  });
+  await new Promise<void>((resolve, reject) => { server.once("error", reject); server.listen(0, "127.0.0.1", resolve); });
+  const address = server.address();
+  assert.ok(address && typeof address !== "string");
+  const envNames = ["ARCADIA_LLM_PROVIDER", "ARCADIA_LLM_MODEL", "ARCADIA_LLM_BASE_URL", "ARCADIA_LLM_API_KEY", "CF_AIG_TOKEN", "CF_AIG_BYOK_ALIAS"] as const;
+  const previousEnv = new Map(envNames.map((name) => [name, process.env[name]]));
+  process.env.ARCADIA_LLM_PROVIDER = "openai-compatible";
+  process.env.ARCADIA_LLM_MODEL = "synthetic-local";
+  process.env.ARCADIA_LLM_BASE_URL = `http://127.0.0.1:${address.port}/v1`;
+  process.env.ARCADIA_LLM_API_KEY = "local-test-placeholder";
+  delete process.env.CF_AIG_TOKEN;
+  delete process.env.CF_AIG_BYOK_ALIAS;
+  const scenePath = "plot/volumes/vol-main/chapters/ch-qa/scenes/sc-qa.yaml";
+  const manuscriptPath = "manuscript/vol-main/ch-qa/sc-qa.md";
+  const files = {
+    "plot/volumes/vol-main/volume.yaml": "id: vol-main\ntype: volume\nname: Main\norder: 1\n",
+    "plot/volumes/vol-main/chapters/ch-qa/chapter.yaml": "id: ch-qa\ntype: chapter\nname: QA\nvolume: vol-main\norder: 1\n",
+    [scenePath]: `id: sc-qa\ntype: scene\nchapter: ch-qa\norder: 1\ntitle: Dawn\nmanuscript: ${manuscriptPath}\n`,
+    [manuscriptPath]: "主人公は夜明けに駅へ着いた。",
+  };
+  const usageEvents: ModelUsageEvent[] = [];
+  const usageStore: ModelUsageStore = { async append(event) { usageEvents.push(event); }, async list() { return { events: [] }; } };
+  try {
+    const qa = getAction(createAssistantActions(moduleContext(usageStore)), "assistant.qa");
+    const result = await qa.invoke({ messages: [{ role: "user", content: "主人公はいつ駅へ着く?" }] }, context({
+      files,
+      async invoke(actionId, input) {
+        if (actionId === "nlp.features") return { ok: true, snapshot, data: { features: [{ id: "setting-qa", locality: "external", enabled: true }] } };
+        if (actionId === "semantic.search") {
+          assert.deepEqual(input, { query: "夜明け", mode: "scene", limit: 8, rerank: false });
+          return { ok: true, snapshot, data: { results: [{ sceneId: "sc-qa", type: "scene", snippet: "主人公は夜明けに駅へ着いた。", filePath: manuscriptPath, revision }] } };
+        }
+        assert.fail(`unexpected action ${actionId}`);
+      },
+    }));
+    assert.equal(result.ok, true);
+    assert.equal(requestCount, 2, "QA must call the model again after the read-only search tool");
+    assert.equal(sawToolCall, true);
+    if (!result.ok) return;
+    const data = result.data as Record<string, unknown>;
+    assert.equal(data.answer, "主人公は夜明けに駅へ着きます。");
+    assert.deepEqual(data.citations, [{ kind: "scene", id: "sc-qa", quote: "主人公は夜明けに駅へ着いた。", path: manuscriptPath, revision, sceneId: "sc-qa", label: "searchScenes result" }]);
+    assert.equal((data.provenance as Record<string, unknown>).snapshot && (data.provenance as Record<string, unknown>).snapshot, snapshot);
+    assert.equal(usageEvents.length, 1);
+    assert.equal(usageEvents[0]?.feature, "setting-qa");
+  } finally {
+    server.closeAllConnections();
+    await new Promise<void>((resolve) => server.close(() => resolve()));
+    for (const name of envNames) {
+      const value = previousEnv.get(name);
+      if (value === undefined) delete process.env[name];
+      else process.env[name] = value;
+    }
+  }
 });
 
 test("aspect review runs the deterministic local source implementation without consent or model access", async () => {

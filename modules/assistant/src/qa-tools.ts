@@ -40,6 +40,7 @@ export interface AssistantQaToolCallRecord {
   resultSummary: string;
   chars: number;
 }
+export type AssistantQaToolResultObserver = (toolName: string, input: unknown, result: unknown) => void;
 
 function isRecord(value: unknown): value is Record<string, unknown> {
   return value !== null && typeof value === "object" && !Array.isArray(value);
@@ -86,13 +87,16 @@ function summarize(value: unknown): string {
 
 function recordCall(
   log: AssistantQaToolCallRecord[] | undefined,
+  observe: AssistantQaToolResultObserver | undefined,
   toolName: string,
   input: unknown,
   result: unknown,
 ): void {
-  if (!log) return;
-  const resultSummary = summarize(result);
-  log.push({ toolName, input, resultSummary, chars: resultSummary.length });
+  if (log) {
+    const resultSummary = summarize(result);
+    log.push({ toolName, input, resultSummary, chars: resultSummary.length });
+  }
+  observe?.(toolName, input, result);
 }
 
 function limitedStateMap<T>(
@@ -172,6 +176,7 @@ const getSummarySchema = z.object({
 export function createAssistantQaTools(
   reads: AssistantQaReadCapabilities,
   toolLog?: AssistantQaToolCallRecord[],
+  observeResult?: AssistantQaToolResultObserver,
 ): ToolSet {
   return {
     searchScenes: tool({
@@ -197,11 +202,11 @@ export function createAssistantQaTools(
                 ...(typeof hit.sentenceIndex === "number" ? { sentenceIndex: hit.sentenceIndex } : {}),
               }];
             });
-          recordCall(toolLog, "searchScenes", { query, mode: selectedMode }, result);
+          recordCall(toolLog, observeResult, "searchScenes", { query, mode: selectedMode }, result);
           return result;
         } catch {
           const stub = { error: "searchScenes unavailable" };
-          recordCall(toolLog, "searchScenes", { query, mode: mode ?? "scene" }, stub);
+          recordCall(toolLog, observeResult, "searchScenes", { query, mode: mode ?? "scene" }, stub);
           return stub;
         }
       },
@@ -229,11 +234,11 @@ export function createAssistantQaTools(
                 citation: citationFields(hit, id, quote),
               }];
             });
-          recordCall(toolLog, "searchBible", { query, entityKind }, result);
+          recordCall(toolLog, observeResult, "searchBible", { query, entityKind }, result);
           return result;
         } catch {
           const stub = { error: "searchBible unavailable" };
-          recordCall(toolLog, "searchBible", { query, entityKind }, stub);
+          recordCall(toolLog, observeResult, "searchBible", { query, entityKind }, stub);
           return stub;
         }
       },
@@ -246,7 +251,7 @@ export function createAssistantQaTools(
           const snapshot = unwrapActionData(await reads.worldStateAtScene({ sceneId }));
           if (!isRecord(snapshot)) {
             const miss = { error: "scene not found", sceneId };
-            recordCall(toolLog, "getWorldState", { sceneId, entityId }, miss);
+            recordCall(toolLog, observeResult, "getWorldState", { sceneId, entityId }, miss);
             return miss;
           }
           let filtered: Record<string, unknown>;
@@ -284,13 +289,13 @@ export function createAssistantQaTools(
             ...filtered,
             ...(truncated ? { truncated: true } : {}),
             quote: quoteJson(filtered),
-            citation: citationFields({}, sceneId, quoteJson(filtered)),
+            citation: citationFields(isRecord(snapshot.citation) ? snapshot.citation : {}, sceneId, quoteJson(filtered)),
           };
-          recordCall(toolLog, "getWorldState", { sceneId, entityId }, result);
+          recordCall(toolLog, observeResult, "getWorldState", { sceneId, entityId }, result);
           return result;
         } catch {
           const stub = { error: "getWorldState unavailable" };
-          recordCall(toolLog, "getWorldState", { sceneId, entityId }, stub);
+          recordCall(toolLog, observeResult, "getWorldState", { sceneId, entityId }, stub);
           return stub;
         }
       },
@@ -315,11 +320,11 @@ export function createAssistantQaTools(
             quote: limitedText(summaryLines.join(" / "), MAX_QUOTE_LENGTH),
             citation: citationFields(isRecord(summary) ? summary : {}, id, limitedText(summaryLines.join(" / "), MAX_QUOTE_LENGTH)),
           };
-          recordCall(toolLog, "getSummary", { scope, id }, result);
+          recordCall(toolLog, observeResult, "getSummary", { scope, id }, result);
           return result;
         } catch {
           const stub = { error: "getSummary unavailable" };
-          recordCall(toolLog, "getSummary", { scope, id }, stub);
+          recordCall(toolLog, observeResult, "getSummary", { scope, id }, stub);
           return stub;
         }
       },

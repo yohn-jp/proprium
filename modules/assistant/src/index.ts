@@ -1,5 +1,5 @@
 import { CONTRACT_VERSION, type ModuleContext, type ModuleDefinition, type ModuleManifest } from "@scriptorium/contracts";
-import { createAssistantActions, createRewriteStreamHttpContribution } from "./actions.js";
+import { createAssistantActions, createAssistantQaStreamHttpContribution, createRewriteStreamHttpContribution } from "./actions.js";
 
 export const assistantManifest: ModuleManifest = {
   id: "assistant",
@@ -31,12 +31,12 @@ export async function createModule(moduleContext: ModuleContext): Promise<Module
       { id: "assistant.reader-reaction", module: "assistant", slot: "review", title: "初読レポート", action: "assistant.reader.reaction" },
       { id: "assistant.proposals", module: "assistant", slot: "review", title: "執筆支援の変更案", action: "assistant.stateEvents.draft" },
     ],
-    http: [createRewriteStreamHttpContribution(moduleContext)],
+    http: [createRewriteStreamHttpContribution(moduleContext), createAssistantQaStreamHttpContribution(moduleContext)],
     async dispose() {},
   };
 }
 
-export { createAssistantActions, createRewriteStreamHttpContribution } from "./actions.js";
+export { createAssistantActions, createAssistantQaStreamHttpContribution, createRewriteStreamHttpContribution } from "./actions.js";
 export { createAssistantMigrationProducer } from "./migration.js";
 export {
   applyAssistantSettingsPatch,
