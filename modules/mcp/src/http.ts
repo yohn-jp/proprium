@@ -30,11 +30,11 @@ function requestClient(storage: AsyncLocalStorage<ModuleActionContext>): McpActi
     listActions(): Promise<ActionDescriptor[]> {
       return current().listActions();
     },
-    invoke(actionId: string, input: unknown) {
-      return current().invoke(actionId, input);
+    invoke(actionId: string, input: unknown, signal?: AbortSignal) {
+      return current().invoke(actionId, input, signal);
     },
-    propose(operations: ChangeOperation[], evidence?: ProposalEvidence[], proposalId?: string): Promise<ChangeProposal> {
-      return current().propose(operations, evidence, proposalId);
+    propose(operations: ChangeOperation[], evidence?: ProposalEvidence[], proposalId?: string, signal?: AbortSignal): Promise<ChangeProposal> {
+      return current().propose(operations, evidence, proposalId, signal);
     },
     forProject(projectId: string): McpActionClient {
       const context = current();
@@ -44,8 +44,8 @@ function requestClient(storage: AsyncLocalStorage<ModuleActionContext>): McpActi
       return {
         projectId,
         listActions: () => context.listActions(),
-        invoke: (actionId, input) => context.invoke(actionId, input),
-        propose: (operations, evidence, proposalId) => context.propose(operations, evidence, proposalId),
+        invoke: (actionId, input, signal) => context.invoke(actionId, input, signal),
+        propose: (operations, evidence, proposalId, signal) => context.propose(operations, evidence, proposalId, signal),
         forProject(requestedId) {
           if (requestedId !== projectId) throw new McpApiError(403, "PROJECT_SCOPE_MISMATCH", "The requested project does not match this MCP session");
           return this;
