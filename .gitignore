@@ -19,3 +19,6 @@ data/
 
 /test-results/
 /playwright-report/
+
+/profiles/*/generated/
+/profiles/generated/
