@@ -6,7 +6,7 @@
   },
   "target": {
     "branch": "work/7-p07",
-    "implementationCommit": "441884f9569290edcc667716483cbbaae0e284d6"
+    "implementationCommit": "308118876b7c4abe3b64f8b6496e8b9baa62576d"
   },
   "ledger": {
     "R23": {
@@ -17,7 +17,7 @@
         "modules/publishing/src/actions.ts",
         "modules/publishing/src/browser.tsx"
       ],
-      "proofs": ["P07-plaintext-vertical", "P07-epub-zip"]
+      "proofs": ["P07-plaintext-vertical", "P07-epub-zip", "P07-epub-source-bible-parity"]
     },
     "R24": {
       "target": [
@@ -25,7 +25,7 @@
         "modules/publishing/src/actions.ts",
         "modules/publishing/src/browser.tsx"
       ],
-      "proofs": ["P07-episode-proposal-preservation"]
+      "proofs": ["P07-episode-proposal-preservation", "P07-episode-clear-ui-roundtrip"]
     },
     "R47": {
       "target": [
@@ -34,7 +34,7 @@
         "modules/publishing/src/actions.ts",
         "modules/publishing/src/browser.tsx"
       ],
-      "proofs": ["P07-share-remote-activation-revocation"]
+      "proofs": ["P07-share-remote-activation-revocation", "P07-share-privacy-metadata"]
     },
     "N10": {
       "target": ["modules/publishing/src/migration.ts", "modules/publishing/src/publishing.test.ts"],
@@ -44,34 +44,41 @@
   "proofs": {
     "P07-plaintext-vertical": "Source ruby/bouten stripping and Kakuyomu/Narou conversion preserve Japanese scene order; vertical print retains headings and source spacing.",
     "P07-epub-zip": "An actual JSZip EPUB is unzipped in the test and checked for EPUB3 package/navigation, XHTML escaping and ruby, optional bible appendix, and byte-identical binary cover content.",
-    "P07-episode-proposal-preservation": "Episode-map edits use the proposal port and retain top-level and per-episode unknown YAML fields, publishedAt, and sceneIds without changing source bytes.",
+    "P07-epub-source-bible-parity": "EPUB appendix reads nested profile.yaml and source-supported flat character records while excluding id-less voice.yaml helpers. A source-shaped StructuredNotes fixture verifies lead paragraphs, nested sections, and labeled term/description text in the generated EPUB.",
+    "P07-episode-proposal-preservation": "Episode-map edits use the proposal port, preserve unknown YAML and retain omitted optional fields without changing source bytes. Explicit null tombstones remove publishedAt and sceneIds from proposed metadata while preserving unknown episode fields.",
+    "P07-episode-clear-ui-roundtrip": "A Playwright browser mounts the real publishing browser module, clears the rendered publication date and last selected scene, routes calls through the real publishing actions, and verifies the resulting proposal YAML omits both fields while retaining unknown data.",
     "P07-share-remote-activation-revocation": "The bearer is absent from operation content; the public read adapter rejects unpublished and overlay snapshots, filters scope, checks expiry and current remote revocation, and exposes no token hash in the owner list.",
+    "P07-share-privacy-metadata": "Public share JSON responses carry X-Robots-Tag: noindex, nofollow and Referrer-Policy: no-referrer; the anonymous browser view applies matching robots/referrer meta tags and removes them on unmount.",
     "P07-migration-semantic-validation": "The module migration producer validates source episode YAML and selected workspace grants; the generic filesystem/workspace producer owns exact-byte/map and grant writes, avoiding duplicate operations. The test checks selected-project isolation, hash/date/revocation retention, host-field exclusion, and map round-trip."
   },
   "validation": [
     {
       "command": "pnpm install --frozen-lockfile",
-      "result": "passed on the integrated P07 worktree"
+      "result": "passed on implementation commit 308118876b7c4abe3b64f8b6496e8b9baa62576d"
     },
     {
       "command": "pnpm --filter @scriptorium/contracts build",
-      "result": "passed on the integrated P07 worktree"
+      "result": "passed on implementation commit 308118876b7c4abe3b64f8b6496e8b9baa62576d"
     },
     {
       "command": "pnpm --filter @scriptorium/module-publishing typecheck",
-      "result": "passed at implementation tree 441884f against BrowserModuleDefinition.mountPublic"
+      "result": "passed on implementation commit 308118876b7c4abe3b64f8b6496e8b9baa62576d"
     },
     {
       "command": "pnpm --filter @scriptorium/module-publishing test",
-      "result": "passed, 5 of 5 tests at implementation tree 441884f"
+      "result": "passed, 6 of 6 tests on implementation commit 308118876b7c4abe3b64f8b6496e8b9baa62576d"
     },
     {
       "command": "pnpm --filter @scriptorium/module-publishing build",
-      "result": "passed at implementation tree 441884f"
+      "result": "passed on implementation commit 308118876b7c4abe3b64f8b6496e8b9baa62576d"
+    },
+    {
+      "command": "SCRIPTORIUM_E2E_CHROMIUM=/nix/store/ini1ifgvcsvw48x4mxawrv9jvbdwn70p-chromium-155.0.8059.79/bin/chromium node modules/publishing/tests/browser-clear.acceptance.mjs",
+      "result": "passed on implementation commit 308118876b7c4abe3b64f8b6496e8b9baa62576d; rendered browser UI clear roundtrip exercised the real action and proposal path"
     },
     {
       "command": "git diff --check",
-      "result": "passed before implementation commit"
+      "result": "passed on implementation commit 308118876b7c4abe3b64f8b6496e8b9baa62576d"
     }
   ],
   "compositionLimits": [
