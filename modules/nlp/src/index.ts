@@ -9,8 +9,7 @@ import type { MorphologyAnalysis } from "./tokenizer/types.js";
 import YAML from "yaml";
 
 export { aggregateCandidateTerms, extractCompoundNouns, extractCompoundNounsWithReading, isEligibleTerm } from "./candidateDiscovery.js";
-export { buildMorphologyAnalysis, assignTokensToSentences } from "./analyze/index.js";
-export { resetInitializedTokenizerForTests, resetLinderaTokenizerCacheForTests } from "./tokenizer/index.js";
+export { buildMorphologyAnalysis, assignTokensToSentences } from "./analyze/primitives.js";
 export { readCanonicalSnapshotEntities, type CanonicalSnapshotEntity } from "./canonicalSnapshot.js";
 export { isAdjective, isAdverb, isAuxiliaryVerb, isComma, isFinalParticle, isNoun, isNumeral, isParticle, isPronoun, isProperNoun, isSymbol, isTaConjunctive, isUnknown, isVerb } from "./tokenizer/pos.js";
 export { tokenBase, tokenPosDetail1 } from "./tokenizer/types.js";

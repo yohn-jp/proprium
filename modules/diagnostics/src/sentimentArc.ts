@@ -1,4 +1,4 @@
-import sentimentLexicon from "../data/sentimentLexicon.json" with { type: "json" };
+import sentimentLexicon from "./data/sentimentLexicon.json" with { type: "json" };
 import type { Token } from "@scriptorium/module-nlp";
 import { tokenBase } from "@scriptorium/module-nlp";
 import { isDialogue } from "./textAnalysis.js";
