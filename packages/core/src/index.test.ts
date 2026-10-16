@@ -163,6 +163,39 @@ test("reports divergent local and remote histories without replacing the local d
   }
 });
 
+test("preserves history records with empty commit subjects", async () => {
+  const { tempDir, remote } = await makeRemote();
+  try {
+    const store = new CoreStore({ dataDir: path.join(tempDir, "state"), allowLocalRemotes: true });
+    const project = await store.registerProject({ url: remote });
+    const workspace = await projectWorkspace(path.join(tempDir, "state"), project.id);
+    const historyFile = path.join(workspace, "history.md");
+    await runGit(workspace, "config", "user.name", "History Writer");
+    await runGit(workspace, "config", "user.email", "history@example.test");
+
+    await fs.writeFile(historyFile, "Before empty message.\n", "utf8");
+    await runGit(workspace, "add", "history.md");
+    await runGit(workspace, "commit", "-m", "History before empty subject");
+    await fs.writeFile(historyFile, "Empty message commit.\n", "utf8");
+    await runGit(workspace, "add", "history.md");
+    await runGit(workspace, "commit", "--allow-empty-message", "-m", "");
+    await fs.writeFile(historyFile, "After empty message.\n", "utf8");
+    await runGit(workspace, "add", "history.md");
+    await runGit(workspace, "commit", "-m", "History after empty subject");
+
+    const history = await store.history(project.id);
+    assert.deepEqual(history.slice(0, 3).map((commit) => commit.message), [
+      "History after empty subject",
+      "",
+      "History before empty subject",
+    ]);
+    assert.ok(history.every((commit) => /^[0-9a-f]{40}$/i.test(commit.hash)));
+    assert.ok(history.every((commit) => !Number.isNaN(Date.parse(commit.date))));
+  } finally {
+    await fs.rm(tempDir, { recursive: true, force: true });
+  }
+});
+
 test("serializes simultaneous stale-revision saves through one CoreStore", async () => {
   const { tempDir, remote } = await makeRemote();
   try {
@@ -368,6 +401,46 @@ test("remembers when an initially empty remote acquires a branch", async () => {
     await runGit(tempDir, "--git-dir", remote, "update-ref", "-d", "refs/heads/main");
     await assert.rejects(store.sync(project.id), (error: unknown) =>
       error instanceof CoreError && error.status === 409 && error.code === "remote_branch_missing");
+  } finally {
+    await fs.rm(tempDir, { recursive: true, force: true });
+  }
+});
+
+test("rejects .git manuscript paths without corrupting an active dotted branch ref", async () => {
+  const { tempDir, remote, seed } = await makeRemote();
+  try {
+    const sceneYaml = path.join(seed, "plot/volumes/vol-1/chapters/ch-1/scenes/scene-1.yaml");
+    const sceneData = YAML.parse(await fs.readFile(sceneYaml, "utf8")) as Record<string, unknown>;
+    sceneData.manuscript = ".git/refs/heads/main.md";
+    await fs.writeFile(sceneYaml, YAML.stringify(sceneData), "utf8");
+    await runGit(seed, "add", sceneYaml);
+    await runGit(seed, "commit", "-m", "Use a forbidden Git metadata path");
+    await runGit(seed, "push", "origin", "main");
+    await runGit(seed, "branch", "main.md");
+    await runGit(seed, "push", "origin", "main.md");
+    await runGit(tempDir, "--git-dir", remote, "symbolic-ref", "HEAD", "refs/heads/main.md");
+
+    const dataDir = path.join(tempDir, "state");
+    const store = new CoreStore({ dataDir, allowLocalRemotes: true });
+    const project = await store.registerProject({ url: remote, branch: "main.md" });
+    const workspace = await projectWorkspace(dataDir, project.id);
+    const headBefore = await runGit(workspace, "rev-parse", "HEAD");
+    const yamlPath = path.join(workspace, "plot/volumes/vol-1/chapters/ch-1/scenes/scene-1.yaml");
+    const yamlBefore = await fs.readFile(yamlPath, "utf8");
+    const rejectsUnsafePath = (error: unknown) =>
+      error instanceof CoreError && error.status === 422 && error.code === "invalid_manuscript_path";
+
+    await assert.rejects(store.readScene(project.id, "scene-1"), rejectsUnsafePath);
+    await assert.rejects(
+      store.saveScene(project.id, "scene-1", { text: "Must not overwrite Git metadata.\n", revision: "0".repeat(64) }),
+      rejectsUnsafePath,
+    );
+
+    assert.equal(await runGit(workspace, "rev-parse", "HEAD"), headBefore);
+    assert.equal(await runGit(workspace, "show-ref", "--verify", "--hash", "refs/heads/main.md"), headBefore);
+    assert.equal(await runGit(workspace, "cat-file", "-e", `${headBefore}^{commit}`), "");
+    assert.equal(await fs.readFile(yamlPath, "utf8"), yamlBefore);
+    assert.equal(await runGit(workspace, "status", "--porcelain"), "");
   } finally {
     await fs.rm(tempDir, { recursive: true, force: true });
   }

@@ -128,7 +128,7 @@ function safeRelativePath(value: string): string {
     throw coreError(422, "invalid_manuscript_path", "The scene has an unsafe manuscript path");
   }
   const segments = value.split("/");
-  if (segments.some((segment) => !segment || segment === "." || segment === "..")) {
+  if (segments.some((segment) => !segment || segment === "." || segment === ".." || segment.toLowerCase() === ".git")) {
     throw coreError(422, "invalid_manuscript_path", "The scene has an unsafe manuscript path");
   }
   if (!value.toLowerCase().endsWith(".md")) {
@@ -800,7 +800,7 @@ export class CoreStore {
           "commit", "--only", "-m", `Write scene: ${scene.title.replace(/[\r\n]+/g, " ").slice(0, 120)}`, "--", ...paths,
         ]);
       } catch {
-        throw coreError(500, "save_commit_failed", "The manuscript file was written but could not be committed; check project status before retrying");
+        throw coreError(500, "save_commit_failed", "Save could not complete; project files may have changed without a commit. Inspect project status before retrying.");
       }
       return {
         id: scene.id,
@@ -820,7 +820,8 @@ export class CoreStore {
       });
       if (!head.trim()) return [];
       const raw = await git(root, ["log", "-z", `-n${MAX_HISTORY}`, "--format=%H%x00%cI%x00%s"]);
-      const fields = raw.split("\0").filter((value) => value.length > 0);
+      const fields = raw.split("\0");
+      if (fields.at(-1) === "") fields.pop();
       const commits: Commit[] = [];
       for (let index = 0; index + 2 < fields.length; index += 3) {
         commits.push({ hash: fields[index], date: fields[index + 1], message: fields[index + 2] });
