@@ -62,7 +62,7 @@
         "P03",
         "P04"
       ],
-      "implementation": "pending",
+      "implementation": "in_progress",
       "acceptance": "pending",
       "proofs": []
     },
@@ -73,7 +73,7 @@
         "P02",
         "P03"
       ],
-      "implementation": "pending",
+      "implementation": "in_progress",
       "acceptance": "pending",
       "proofs": []
     },
@@ -85,7 +85,7 @@
         "P03",
         "P04"
       ],
-      "implementation": "pending",
+      "implementation": "in_progress",
       "acceptance": "pending",
       "proofs": []
     },
@@ -96,7 +96,7 @@
         "P02",
         "P03"
       ],
-      "implementation": "pending",
+      "implementation": "in_progress",
       "acceptance": "pending",
       "proofs": []
     },

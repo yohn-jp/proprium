@@ -34,7 +34,8 @@
     "lindera-wasm-nodejs-ipadic": "2.0.0",
     "yaml": "^2.8.1",
     "react": "^19.1.0",
-    "react-dom": "^19.1.0"
+    "react-dom": "^19.1.0",
+    "@scriptorium/module-runtime": "workspace:*"
   },
   "scriptoriumModule": {
     "id": "nlp",

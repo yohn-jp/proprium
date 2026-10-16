@@ -128,7 +128,7 @@ export interface ModuleActionContext {
   linkedReader(repositoryId: string): Promise<SnapshotReader>;
   signal: AbortSignal;
   /** Only proposes; approval remains an authenticated author action. */
-  propose(operations: ChangeOperation[], evidence?: ProposalEvidence[]): Promise<ChangeProposal>;
+  propose(operations: ChangeOperation[], evidence?: ProposalEvidence[], proposalId?: string): Promise<ChangeProposal>;
   runJob<T = unknown>(request: JobRequest, signal?: AbortSignal): Promise<JobOutcome<T>>;
 }
 export interface ModuleAction {
@@ -252,9 +252,11 @@ export interface BrowserModuleContext {
   signal: AbortSignal;
   invoke(actionId: string, input: unknown): Promise<ActionResult>;
   /** The shell journals the complete proposal before acknowledging it to the module UI. */
-  propose(operations: ChangeOperation[], evidence?: ProposalEvidence[]): Promise<ChangeProposal>;
+  propose(operations: ChangeOperation[], evidence?: ProposalEvidence[], proposalId?: string): Promise<ChangeProposal>;
   refresh(): Promise<void>;
 }
 export interface BrowserModuleDefinition {
   mount(contributionId: string, element: HTMLElement, context: BrowserModuleContext): Promise<() => void>;
+  /** Public read-only source views receive no author or private-work capability. */
+  mountPublic?(viewId: string, element: HTMLElement, request: Request): Promise<() => void>;
 }

@@ -34,7 +34,8 @@
     "@scriptorium/module-nlp": "workspace:*",
     "yaml": "^2.8.1",
     "react": "^19.1.0",
-    "react-dom": "^19.1.0"
+    "react-dom": "^19.1.0",
+    "@scriptorium/module-runtime": "workspace:*"
   },
   "scriptoriumModule": {
     "id": "diagnostics",

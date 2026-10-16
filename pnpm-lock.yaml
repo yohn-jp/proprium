@@ -230,6 +230,9 @@ importers:
       '@scriptorium/module-nlp':
         specifier: workspace:*
         version: link:../nlp
+      '@scriptorium/module-runtime':
+        specifier: workspace:*
+        version: link:../../packages/module-runtime
       react:
         specifier: ^19.1.0
         version: 19.3.1
@@ -260,6 +263,9 @@ importers:
       '@scriptorium/migration':
         specifier: workspace:*
         version: link:../../packages/migration
+      '@scriptorium/module-runtime':
+        specifier: workspace:*
+        version: link:../../packages/module-runtime
       lindera-wasm-nodejs-ipadic:
         specifier: 2.0.0
         version: 2.0.0
