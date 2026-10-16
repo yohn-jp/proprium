@@ -21,9 +21,10 @@
       "530e5d9d56289af6b16a6c2fabdc33a23c4345a5",
       "7b461b161467ff335a6bf559a501b6e26c0807f5",
       "2bf5fdf5ee047026fc9d22afd9be71216422b3cc",
-      "82672602ba4979265af4920fcd45000e7b74d090"
+      "82672602ba4979265af4920fcd45000e7b74d090",
+      "29d8f5e5cef2a41407d91a402594a0e617f7cedc"
     ],
-    "testedHead": "82672602ba4979265af4920fcd45000e7b74d090"
+    "testedHead": "29d8f5e5cef2a41407d91a402594a0e617f7cedc"
   },
   "sourceClassification": [
     {
@@ -69,7 +70,7 @@
       "status": "passed",
       "targetFiles": ["modules/speaker/src/production.test.ts", "modules/speaker/src/index.ts", "modules/speaker/src/worker.ts"],
       "command": "pnpm --filter @scriptorium/module-speaker test",
-      "result": "6 passed, 0 failed on tested head 82672602ba4979265af4920fcd45000e7b74d090. The composed ModuleRuntime loads the real Story, NLP, diagnostics, and speaker actions, uses the actual Lindera tokenizer and compiled CPU workers, and exercises synthetic Japanese scenes. It verifies attribution, registered/learned/stylometric warning composition, unsaved draft text flowing through profile-informed voice attribution with estimatedN/evidence/clusterTrails, character dialogue and profile actions, generated-result identity across attribution, override, dialogue, voice, review, training, evaluation, and cache reads (including the actual adopted-model file revision after approval), 14 author correction proposals, 12 training examples with a two-scene holdout, a passing adoption gate, proposal-only model persistence, reranking after simulated author approval, evaluation and rule gates, stale cache-identity rejection/rebuild, and model reload after runtime restart. Legacy provenance keys remain available. It also checks that workers and shared capability processes are released after actions.",
+      "result": "6 passed, 0 failed on tested head 29d8f5e5cef2a41407d91a402594a0e617f7cedc. The composed ModuleRuntime loads the real Story, NLP, diagnostics, and speaker actions, uses the actual Lindera tokenizer and compiled CPU workers, and exercises synthetic Japanese scenes. It verifies attribution, registered/learned/stylometric warning composition, unsaved draft text flowing through profile-informed voice attribution with estimatedN/evidence/clusterTrails, character dialogue and profile actions, generated-result identity across attribution, override, dialogue, voice, review, training, evaluation, and cache reads (including the actual adopted-model file revision after approval), 14 author correction proposals, 12 training examples with a two-scene holdout, a passing adoption gate, proposal-only model persistence, reranking after simulated author approval, evaluation and rule gates, stale cache-identity rejection/rebuild, and model reload after runtime restart. Legacy provenance keys remain available. The real CPU retraining and evaluation actions report exactly [0.05, 1] through the job-scoped ModuleRuntime sink, including a second evaluation during cache rebuild. The test also checks that workers and shared capability processes are released after actions.",
       "scope": "focused composed CPU workflow; author review is simulated by applying the Core proposal in the in-memory snapshot harness",
       "engineModelIdentity": {
         "speakerEngine": "scriptorium-speaker-cpu@1.0.0",
@@ -93,8 +94,17 @@
       "status": "passed",
       "targetFiles": ["modules/speaker/src/index.ts", "modules/speaker/src/production.test.ts"],
       "command": "pnpm --filter @scriptorium/module-speaker test",
-      "result": "The production module test passes on tested head 82672602ba4979265af4920fcd45000e7b74d090 and asserts the public evaluation and retraining actions declare source-compatible job types `speaker-eval` and `speaker-retrain`.",
+      "result": "The production module test passes on tested head 29d8f5e5cef2a41407d91a402594a0e617f7cedc and asserts the public evaluation and retraining actions declare source-compatible job types `speaker-eval` and `speaker-retrain`.",
       "scope": "static descriptors only; runtime/API history persistence is verified by the host acceptance owner"
+    },
+    {
+      "id": "P10-SPEAKER-JOB-PROGRESS",
+      "kind": "focused production module test",
+      "status": "passed",
+      "targetFiles": ["modules/speaker/src/index.ts", "modules/speaker/src/production.test.ts", "packages/module-runtime/src/module-runtime.ts"],
+      "command": "pnpm --filter @scriptorium/module-runtime test; pnpm --filter @scriptorium/module-speaker typecheck && pnpm --filter @scriptorium/module-speaker build && pnpm --filter @scriptorium/module-speaker test",
+      "result": "Runtime tests pass 37/37 and speaker production tests pass 6/6 on tested head 29d8f5e5cef2a41407d91a402594a0e617f7cedc. Against the committed scoped reporter producer 85051665cc1e038e0fcb8e8fb1d927a054e1c933, actual compiled CPU retraining and evaluation emit exactly the source's 0.05 pre-run and 1 post-success phases through the tracked job sink; a cache rebuild emits the same evaluation phases. No child worker progress protocol was added.",
+      "scope": "source-compatible speaker progress callbacks within the runtime scope; durable API job storage is covered by P08"
     },
     {
       "id": "P10-SERVER-WORKER-ISOLATION",
@@ -120,7 +130,7 @@
       "status": "passed",
       "targetFiles": ["modules/speaker/src/**/*.ts", "modules/speaker/src/**/*.tsx"],
       "command": "pnpm --filter @scriptorium/module-speaker typecheck && pnpm --filter @scriptorium/module-speaker build",
-      "result": "Typecheck and build both passed on tested head 82672602ba4979265af4920fcd45000e7b74d090.",
+      "result": "Typecheck and build both passed on tested head 29d8f5e5cef2a41407d91a402594a0e617f7cedc.",
       "scope": "focused module compilation"
     },
     {
