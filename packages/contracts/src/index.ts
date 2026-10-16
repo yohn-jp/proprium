@@ -78,6 +78,8 @@ export interface ProposalStatus {
   state: "proposed" | "partially_approved" | "approved" | "checkpointed";
   approvedOperationIds: string[];
   checkpoints: CheckpointReceipt[];
+  /** Confirmed in the currently observed canonical remote history. */
+  publishedOperationIds: string[];
   stale: boolean;
 }
 export interface Approval { proposalId: string; operationIds: string[]; authorScope: string }
