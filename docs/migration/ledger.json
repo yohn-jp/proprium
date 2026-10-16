@@ -1,6 +1,6 @@
 {
   "schemaVersion": 1,
-  "inventoryStatus": "producer-registration-freeze; caller/UI, handler-call and storage expansion pending",
+  "inventoryStatus": "source-expansion-recorded; migration-pending",
   "targetRepository": "yohn-jp/scriptorium",
   "targetBaseCommit": "016a69cb924cbe1f9aed9af18f2f31143dff9676",
   "sourceRepository": "yohn-jp/arcadia-loom",
@@ -4033,12 +4033,33 @@
             ]
           }
         ],
-        "observedUiCallsitePaths": [],
+        "observedUiCallsitePaths": [
+          "app/src/hooks/useSceneEditing.ts"
+        ],
         "absenceInterpretation": "No direct browser wrapper/reference found is recorded as an observation only, not evidence that a route or behavior is dead.",
         "observedUiSurfaceAreas": [
-          "app/src/features/settings/**"
+          "app/src/features/settings/**",
+          "app/src/hooks/useSceneEditing.ts"
         ],
-        "uiEvidenceMethod": "Paths contain call-expression references to one of the recorded wrapper/component symbols; this is source reference evidence, not proof of runtime reachability or completion."
+        "uiEvidenceMethod": "Paths contain call-expression references to one of the recorded wrapper/component symbols; this is source reference evidence, not proof of runtime reachability or completion.",
+        "observedUiCallsites": [
+          {
+            "module": "app/src/hooks/useSceneEditing.ts",
+            "caller": "performSubmit",
+            "line": 601,
+            "callee": "submitSession",
+            "calleeModule": "app/src/features/settings/api.ts",
+            "calleeDefinitionLine": 423
+          },
+          {
+            "module": "app/src/hooks/useSceneEditing.ts",
+            "caller": "handleValidate",
+            "line": 658,
+            "callee": "validateProject",
+            "calleeModule": "app/src/features/settings/api.ts",
+            "calleeDefinitionLine": 62
+          }
+        ]
       },
       "handlerCallSymbolsExpansion": {
         "status": "registrar-and-direct-call-symbols-recorded",
@@ -5739,9 +5760,9 @@
         "sourceFactOnly": true,
         "storage": {
           "canonical": "Entity/relationship and story metadata are project YAML; manuscript is Markdown, read through Core loader/ProjectStore.",
-          "proposalsAndKnowledge": "State proposals, zukan suggestions and reader-knowledge helper tables use default `<projectRoot>/.arcadia/index.sqlite`; approved state events and entity notes are canonical scene/entity YAML.",
+          "proposalsAndKnowledge": "Persistent provisional workflow rows: state_proposals and zukan_suggestions in default <projectRoot>/.arcadia/index.sqlite; proposal statuses are retained as author workflow data, and approvals write canonical scene/entity YAML. reader_knowledge_events are derived disclosure rows refreshed at buildReaderModel request time, not author decisions; the current loadKnowledgeEvents helper reads scene_state_events.",
           "series": "Series and project binding data is `<dataDir>/app-state/series.json`; work-project overlay is read-only runtime composition from another repository.",
-          "disposition": "Separate canonical files, author decisions, generated/index rows and series registry; do not merge into a single derived-data label."
+          "disposition": "Separate canonical files, persistent proposal workflow rows, derived reader/state projections and series registry; preserve proposal status while migration disposition/proofs remain pending."
         },
         "evidence": [
           "packages/core/src/loader.ts",
@@ -6677,16 +6698,16 @@
       "configuredProjectStoreIndex": {
         "path": "<dataDir>/index/<project-basename>/index.sqlite",
         "writer": "ProjectStore.syncIndex/reload receives indexDir from ProjectRuntimeStore and packages/api/src/index.ts",
-        "behavior": "rebuild drops/recreates entities/links/search FTS and regenerates scene_state_events; other extension tables are retained/ensured."
+        "behavior": "Rebuild drops/recreates entities/links/search FTS, ensures extension schemas including reader_knowledge_events, and regenerates scene_state_events from entities/links. It does not replace reader_knowledge_events rows; reader-model requests refresh those derived disclosure rows separately. Other extension tables are retained/ensured."
       },
       "defaultLegacyProjectIndex": {
         "path": "<projectRoot>/.arcadia/index.sqlite",
         "default": "getIndexPath(rootDir) when indexDir omitted",
         "observedReadersWriters": [
           "QueryService.openIndex(rootDir) for search/semantic/expression queries",
-          "zukan_suggestions proposal CRUD",
+          "zukan_suggestions proposal/status CRUD",
           "state_proposals CRUD",
-          "reader-knowledge build helper",
+          "buildReaderModel replaces derived reader_knowledge_events disclosure rows at request time; its current loadKnowledgeEvents reads scene_state_events from this DB",
           "contradiction candidate and embedding reads/writes",
           "style fingerprint persistence/read helpers",
           "dialogue sketch/search helpers"
@@ -6704,7 +6725,54 @@
         "packages/core/src/nlp/readerKnowledge/buildReaderModel.ts",
         "packages/core/src/nlp/contradiction/rebuild.ts",
         "packages/core/src/styleFingerprintStore.ts"
-      ]
+      ],
+      "tableClassifications": {
+        "durableProposalWorkflowTables": [
+          {
+            "table": "zukan_suggestions",
+            "path": "<projectRoot>/.arcadia/index.sqlite",
+            "classification": "Persistent generated proposals and status/stale/approval workflow records; approved notes are also written to canonical entity YAML. These rows are not dropped by ProjectStore index rebuild.",
+            "evidence": [
+              "packages/core/src/nlp/zukanSuggestions/store.ts",
+              "packages/api/src/routes/zukanSuggestions.ts",
+              "packages/core/src/index-db.ts:194-230"
+            ]
+          },
+          {
+            "table": "state_proposals",
+            "path": "<projectRoot>/.arcadia/index.sqlite",
+            "classification": "Persistent provisional author proposal records and status transitions; approval writes canonical scene YAML. These rows are not dropped by ProjectStore index rebuild.",
+            "evidence": [
+              "packages/core/src/worldState/proposals.ts",
+              "packages/api/src/routes/stateProposals.ts",
+              "packages/core/src/index-db.ts:194-230"
+            ]
+          }
+        ],
+        "derivedProjectionTables": [
+          {
+            "table": "scene_state_events",
+            "path": "configured <dataDir>/index/<project-basename>/index.sqlite; helpers may separately read default project-local index",
+            "classification": "Rule-derived extraction from current entities/links; regenerated on ProjectStore index rebuild, not author decision/history data.",
+            "evidence": [
+              "packages/core/src/index-db.ts:228-229",
+              "packages/core/src/worldState/store.ts"
+            ]
+          },
+          {
+            "table": "reader_knowledge_events",
+            "path": "default <projectRoot>/.arcadia/index.sqlite for buildReaderModel helper",
+            "classification": "Derived reader-disclosure rows rebuilt from current entities/manuscript-derived scenes at buildReaderModel request time; the current loadKnowledgeEvents helper reads scene_state_events instead of this table.",
+            "evidence": [
+              "packages/core/src/nlp/readerKnowledge/buildReaderModel.ts:90-105",
+              "packages/core/src/nlp/readerKnowledge/buildReaderModel.ts:108-116",
+              "packages/core/src/nlp/readerKnowledge/buildReaderModel.ts:127-131"
+            ]
+          }
+        ],
+        "sourceFactOnly": true,
+        "migrationDisposition": "pending"
+      }
     },
     "durableNonProjectState": {
       "appState": "<dataDir>/app-state/*.json (projects, users, sessions, personal-tokens, series, recent-activity, jobs-state, share-tokens); exact files attached by route rows.",
@@ -6727,10 +6795,12 @@
     ],
     "derivedOrRequestTime": [
       "Core in-memory caches",
-      "rebuildable entities/links/FTS and scene-state extraction projections",
+      "rebuildable entities/links/FTS projections",
+      "scene_state_events rule extraction rebuilt from entities/links on ProjectStore reload",
+      "reader_knowledge_events derived disclosure rows refreshed by buildReaderModel at request time; current loader reads scene_state_events instead",
       "request-time diagnostics/graph/timeline/export results",
       "active stream/job event subscribers and device-flow handle map"
     ],
-    "warning": "Do not classify either SQLite file as wholly disposable from filename/schema alone. The source creates/retains side tables alongside rebuildable projections, and different modules currently target different paths. Migration decisions and proof remain pending."
+    "warning": "Do not classify either SQLite file as wholly disposable from filename/schema alone. Persistent zukan_suggestions and state_proposals proposal/status rows share the schema with derived projections; scene_state_events and reader_knowledge_events are derived and are not author decision/history tables. Different modules currently target different paths; all migration disposition and proof remain pending."
   }
 }
