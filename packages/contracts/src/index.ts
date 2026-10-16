@@ -332,9 +332,14 @@ export interface BrowserEditorDocument {
   sceneId: string;
   documentPath: string;
   documentRevision: string | null;
+  /** Combined scene/manuscript revision from the editor's persisted view. */
   sceneRevision: string;
   text: string;
   snapshot: SnapshotId;
+  /** Remote baseline, kept distinct from a locally checkpointed editor view. */
+  baseSnapshot: SnapshotId;
+  /** Exact scene metadata file revision in that remote baseline. */
+  baseSceneRevision: string | null;
 }
 
 /** Browser modules mount real domain UI into shared slots without author approval authority. */
