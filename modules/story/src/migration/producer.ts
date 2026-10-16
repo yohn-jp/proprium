@@ -230,7 +230,21 @@ async function planStoryFileImport(input: {
       },
     };
   }
-  const existing = await input.context.target.read(input.target, encoded.encoding);
+  let existing: Awaited<ReturnType<MigrationContext["target"]["read"]>>;
+  try {
+    existing = await input.context.target.read(input.target, encoded.encoding);
+  } catch {
+    return {
+      entry: {
+        producerId: "story-v1",
+        source: input.source,
+        target: input.target,
+        category: input.category,
+        disposition: "blocked",
+        detail: "The Story destination could not be read safely from the selected target snapshot; neither path is changed.",
+      },
+    };
+  }
   if (existing?.content === encoded.content) {
     return {
       entry: {

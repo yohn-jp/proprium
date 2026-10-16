@@ -358,6 +358,37 @@ test("blocks an unreadable legacy symlink path while preserving valid siblings a
   assert.equal(result.recovery.length, 0);
 });
 
+test("blocks an unsafe canonical destination while preserving archived siblings and revision guards", async () => {
+  const unsafeDestination = "bible/characters/unsafe.yaml";
+  const unsafeSource = `meta/scriptorium/modules/story/legacy/files/${unsafeDestination}`;
+  const siblingDestination = "plot/threads/thread-3.yaml";
+  const siblingSource = `meta/scriptorium/modules/story/legacy/files/${siblingDestination}`;
+  const unsafeBytes = Buffer.from("id: unsafe\n", "utf8");
+  const siblingBytes = Buffer.from("id: thread-3\nfuture_field: retained\n", "utf8");
+  const result = await createStoryMigrationProducer().inspect(contextFor({
+    targetFiles: [unsafeSource, siblingSource],
+    targets: { [unsafeSource]: unsafeBytes, [siblingSource]: siblingBytes },
+    unreadableTargets: [unsafeDestination],
+  }));
+
+  const blocked = result.entries.find((entry) => entry.source === unsafeSource);
+  assert.equal(blocked?.disposition, "blocked");
+  assert.equal(blocked?.target, unsafeDestination);
+  assert.match(blocked?.detail ?? "", /could not be read safely/i);
+
+  const operation = result.operations.find((candidate) => candidate.writes.some((write) => write.path === siblingDestination));
+  assert.ok(operation);
+  assert.deepEqual(operation.writes[0], {
+    path: siblingDestination,
+    revision: null,
+    content: siblingBytes.toString("utf8"),
+  });
+  assert.ok(operation.reads.some((read) => read.path === siblingDestination && read.revision === null));
+  assert.ok(operation.reads.some((read) => read.path === siblingSource && read.revision === revision));
+  assert.equal(result.operations.length, 1);
+  assert.equal(result.recovery.length, 0);
+});
+
 test("reports a canonical target conflict without overwriting it", async () => {
   const source = "bible/locations/harbor.yaml";
   const result = await createStoryMigrationProducer().inspect(
