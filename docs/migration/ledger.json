@@ -421,7 +421,70 @@
           "getVolumeTree"
         ],
         "injectedManagerCalls": []
-      }
+      },
+      "targetImplementationSlices": [
+        {
+          "status": "implementation-present; integration-acceptance-pending",
+          "owner": "P01",
+          "targetPaths": [
+            "packages/api/src/server.ts",
+            "packages/core/src/index.ts"
+          ],
+          "publicActions": [
+            {
+              "action": "GET /api/projects/:projectId/tree",
+              "implementation": "CoreStore.tree / CoreStore.readTreeSnapshot"
+            }
+          ],
+          "uiSurfaces": [],
+          "dataMappings": [
+            {
+              "source": "Canonical project/volume/chapter/scene YAML in the selected repository snapshot",
+              "target": "Core hierarchy returned from a pinned remote or checkpoint Git commit",
+              "persistence": "Project files remain canonical; tree response is a read projection."
+            }
+          ],
+          "proofRefs": [
+            {
+              "id": "P01-R05-core-tree",
+              "path": "packages/core/src/index.test.ts",
+              "testName": "registers a Git project, preserves frontmatter, rejects stale saves, and synchronizes history",
+              "scope": "CoreStore project registration/listing and hierarchy tree read against a synthetic local Git remote; also checks scene editing and history sync."
+            }
+          ],
+          "limitations": [
+            "This target path is a source-route replacement mapping; it does not certify the full 48-route composition or legacy data import."
+          ]
+        },
+        {
+          "status": "implementation-present; integration-acceptance-pending",
+          "owner": "P02",
+          "targetPaths": [
+            "app/src/App.tsx",
+            "app/src/api.ts"
+          ],
+          "publicActions": [
+            {
+              "action": "api.readTree(projectId, view, pinned)",
+              "implementation": "GET /api/projects/:projectId/tree?view=…&snapshot=…"
+            }
+          ],
+          "uiSurfaces": [
+            "app/src/App.tsx"
+          ],
+          "dataMappings": [
+            {
+              "source": "Project tree displayed by the writing shell",
+              "target": "TreeRead returned by the target API and used for scene navigation",
+              "persistence": "Read-only; canonical hierarchy stays in repository YAML."
+            }
+          ],
+          "proofRefs": [],
+          "limitations": [
+            "Browser run covers the synthetic two-scene fixture and does not certify every source route or remote provider."
+          ]
+        }
+      ]
     },
     {
       "id": "R06",
@@ -2451,7 +2514,116 @@
           "updateManuscript"
         ],
         "injectedManagerCalls": []
-      }
+      },
+      "targetImplementationSlices": [
+        {
+          "status": "implementation-present; integration-acceptance-pending",
+          "owner": "P01",
+          "targetPaths": [
+            "packages/api/src/server.ts",
+            "packages/core/src/index.ts",
+            "packages/core/src/transactions.test.ts"
+          ],
+          "publicActions": [
+            {
+              "action": "GET /api/projects/:projectId/scenes/:sceneId",
+              "implementation": "CoreStore.readSceneSnapshot"
+            },
+            {
+              "action": "GET /api/projects/:projectId/manuscripts/:manuscriptId/snapshots",
+              "implementation": "CoreStore.listManuscriptSnapshots"
+            },
+            {
+              "action": "GET /api/projects/:projectId/manuscripts/:manuscriptId/snapshots/:snapshotId",
+              "implementation": "CoreStore.readManuscriptSnapshot"
+            },
+            {
+              "action": "PUT /api/projects/:projectId/scenes/:sceneId",
+              "implementation": "CoreStore.saveScene compatibility handler"
+            },
+            {
+              "action": "POST /api/projects/:projectId/proposals, /approvals, /checkpoints",
+              "implementation": "CoreStore.propose / approve / checkpoint"
+            }
+          ],
+          "uiSurfaces": [],
+          "dataMappings": [
+            {
+              "source": "Scene YAML plus linked manuscript Markdown, including YAML frontmatter",
+              "target": "Pinned Git snapshot document/path/revision reads; approved document operations create reachable Git history",
+              "persistence": "Markdown and YAML remain canonical repository files; checkpoint snapshot metadata is Git-derived."
+            }
+          ],
+          "proofRefs": [
+            {
+              "id": "P01-R22-snapshot-document",
+              "path": "packages/core/src/transactions.test.ts",
+              "testName": "manuscript snapshots enumerate and read exact documents at a pinned reachable commit",
+              "scope": "Core transaction test checks pinned reachable commit, exact Markdown document bytes, and snapshot lookup."
+            },
+            {
+              "id": "P01-R22-frontmatter-revision",
+              "path": "packages/core/src/index.test.ts",
+              "testName": "registers a Git project, preserves frontmatter, rejects stale saves, and synchronizes history",
+              "scope": "Core test verifies frontmatter preservation on save and rejects a stale scene revision."
+            }
+          ],
+          "limitations": [
+            "The target still exposes the owner-authenticated direct PUT compatibility handler, which calls saveScene outside the proposal/approval/checkpoint path; composed mutation-boundary acceptance remains pending.",
+            "Legacy snapshot sidecar import and full source endpoint parity are not established by these Core tests."
+          ]
+        },
+        {
+          "status": "implementation-present; integration-acceptance-pending",
+          "owner": "P02",
+          "targetPaths": [
+            "app/src/App.tsx",
+            "app/src/api.ts",
+            "app/src/storage/journal.ts",
+            "app/src/editor/SceneEditor.tsx",
+            "app/src/editor/ManuscriptInput.tsx"
+          ],
+          "publicActions": [
+            {
+              "action": "api.readScene(projectId, sceneId, view, pinned)",
+              "implementation": "GET /api/projects/:projectId/scenes/:sceneId"
+            },
+            {
+              "action": "api.propose / api.approve / api.checkpoint",
+              "implementation": "POST /api/projects/:projectId/proposals, /approvals, /checkpoints"
+            }
+          ],
+          "uiSurfaces": [
+            "app/src/App.tsx",
+            "app/src/editor/SceneEditor.tsx",
+            "app/src/editor/ManuscriptInput.tsx"
+          ],
+          "dataMappings": [
+            {
+              "source": "In-progress manuscript edits in the browser",
+              "target": "IndexedDB `scriptorium-recovery` operations journal; approved checkpoint writes canonical Markdown/YAML through Core",
+              "persistence": "Browser journal stores draft/checkpoint state and publication receipts; repository Git history stores canonical document revisions."
+            }
+          ],
+          "proofRefs": [
+            {
+              "id": "P02-R22-editor-ruby",
+              "path": "app/src/editor.test.ts",
+              "testName": "ruby parsing keeps the source's explicit Aozora syntax and frontmatter bytes",
+              "scope": "Editor unit test checks explicit Aozora ruby parsing and frontmatter byte preservation."
+            },
+            {
+              "id": "P02-R22-journal-keying",
+              "path": "app/src/journal.test.ts",
+              "testName": "journal keys isolate author scopes and retain each operation generation",
+              "scope": "Unit test verifies per-author and per-operation-generation recovery records remain distinct."
+            }
+          ],
+          "limitations": [
+            "These tests exercise the target browser journal and local fixture; they do not prove import of every legacy IndexedDB/project snapshot store or final remote-provider behavior."
+          ]
+        }
+      ]
     },
     {
       "id": "R23",
@@ -2540,7 +2712,63 @@
           "exportPlaintext"
         ],
         "injectedManagerCalls": []
-      }
+      },
+      "targetImplementationSlices": [
+        {
+          "status": "implementation-present; integration-acceptance-pending",
+          "owner": "P07",
+          "targetPaths": [
+            "modules/publishing/src/actions.ts",
+            "modules/publishing/src/plaintext.ts",
+            "modules/publishing/src/epub.ts",
+            "modules/publishing/src/verticalPrint.ts",
+            "modules/publishing/src/index.ts",
+            "modules/publishing/src/browser.tsx"
+          ],
+          "publicActions": [
+            {
+              "action": "publishing.export.plaintext",
+              "implementation": "Compute text/plain export from the supplied snapshot reader"
+            },
+            {
+              "action": "publishing.export.epub",
+              "implementation": "Compute EPUB3 archive from the supplied snapshot reader and optional cover/appendix"
+            },
+            {
+              "action": "publishing.export.vertical-print",
+              "implementation": "Compute Japanese vertical print text from selected scenes"
+            }
+          ],
+          "uiSurfaces": [
+            "modules/publishing/src/browser.tsx",
+            "modules/publishing/src/index.ts"
+          ],
+          "dataMappings": [
+            {
+              "source": "Canonical scene YAML/Markdown, ruby/bouten markup, optional Bible records, and module-owned cover bytes",
+              "target": "On-demand plaintext, EPUB, and vertical-print action results/downloads",
+              "persistence": "Export artifacts are derived responses; source manuscripts and assets are read-only inputs."
+            }
+          ],
+          "proofRefs": [
+            {
+              "id": "P07-R23-plaintext-vertical",
+              "path": "modules/publishing/src/publishing.test.ts",
+              "testName": "source plaintext conversion and vertical print keep Japanese text and scene order",
+              "scope": "Module unit test verifies source ruby/bouten stripping, Japanese conversion, selected scene order, and vertical text spacing."
+            },
+            {
+              "id": "P07-R23-epub-bytes",
+              "path": "modules/publishing/src/publishing.test.ts",
+              "testName": "real EPUB ZIP contains EPUB3 manifest, Japanese XHTML, appendix, and binary cover bytes",
+              "scope": "Module unit test opens the generated ZIP and checks EPUB3 files, ruby/bouten markup, appendix, escaping, and exact binary cover bytes."
+            }
+          ],
+          "limitations": [
+            "Module action and browser contribution tests do not establish final profile activation or the composed API/browser download path."
+          ]
+        }
+      ]
     },
     {
       "id": "R24",
@@ -2627,7 +2855,52 @@
           "savePublishEpisodeMap"
         ],
         "injectedManagerCalls": []
-      }
+      },
+      "targetImplementationSlices": [
+        {
+          "status": "implementation-present; integration-acceptance-pending",
+          "owner": "P07",
+          "targetPaths": [
+            "modules/publishing/src/actions.ts",
+            "modules/publishing/src/episodes.ts",
+            "modules/publishing/src/migration.ts",
+            "modules/publishing/src/browser.tsx",
+            "modules/publishing/src/index.ts"
+          ],
+          "publicActions": [
+            {
+              "action": "publishing.episodes.read",
+              "implementation": "Read the module-owned episode map from the snapshot"
+            },
+            {
+              "action": "publishing.episodes.propose",
+              "implementation": "Merge submitted edits and call the author proposal port"
+            }
+          ],
+          "uiSurfaces": [
+            "modules/publishing/src/browser.tsx",
+            "modules/publishing/src/index.ts"
+          ],
+          "dataMappings": [
+            {
+              "source": "`meta/publish-episodes.yaml` with unknown top-level and per-episode YAML fields",
+              "target": "`meta/scriptorium/modules/publishing/episodes.yaml` and module episode-map UI",
+              "persistence": "Edits are proposals; unknown fields, scene IDs, and published dates are retained."
+            }
+          ],
+          "proofRefs": [
+            {
+              "id": "P07-R24-episode-preservation",
+              "path": "modules/publishing/src/publishing.test.ts",
+              "testName": "episode edits propose metadata operations and preserve unknown YAML and publication dates",
+              "scope": "Module test verifies the write is a proposal, the source bytes are unchanged, and unknown map/episode fields, publishedAt, and sceneIds survive the merge."
+            }
+          ],
+          "limitations": [
+            "The source compatibility API paths are replaced by module action routing; mounted profile and end-to-end proposal approval/publish acceptance remain pending."
+          ]
+        }
+      ]
     },
     {
       "id": "R25",
@@ -4118,7 +4391,121 @@
             ]
           }
         ]
-      }
+      },
+      "targetImplementationSlices": [
+        {
+          "status": "implementation-present; integration-acceptance-pending",
+          "owner": "P01",
+          "targetPaths": [
+            "packages/api/src/server.ts",
+            "packages/core/src/index.ts",
+            "packages/core/src/transactions.test.ts"
+          ],
+          "publicActions": [
+            {
+              "action": "POST /api/projects/:projectId/proposals",
+              "implementation": "CoreStore.propose"
+            },
+            {
+              "action": "POST /api/projects/:projectId/approvals",
+              "implementation": "CoreStore.approve"
+            },
+            {
+              "action": "POST /api/projects/:projectId/checkpoints",
+              "implementation": "CoreStore.checkpoint"
+            },
+            {
+              "action": "POST /api/projects/:projectId/reconcile and /publish",
+              "implementation": "CoreStore.reconcile / publish"
+            },
+            {
+              "action": "POST /api/projects/:projectId/sync",
+              "implementation": "CoreStore.sync"
+            }
+          ],
+          "uiSurfaces": [],
+          "dataMappings": [
+            {
+              "source": "Source workspace/session submit writes and pending Git changes",
+              "target": "Approved ChangeOperation checkpoints and Git publication receipts in `meta/scriptorium/operations/v1` and `meta/scriptorium/publications/v1`",
+              "persistence": "Project Git commits/refs are canonical; browser journal carries recoverable local operation state."
+            },
+            {
+              "source": "Source workspace/session and recovery state",
+              "target": "Explicit browser IndexedDB journal plus Core project registry/clone",
+              "persistence": "No single route-local session file is asserted as equivalent."
+            }
+          ],
+          "proofRefs": [
+            {
+              "id": "P01-R39-checkpoint-approval",
+              "path": "packages/core/src/transactions.test.ts",
+              "testName": "checkpoints require approval, replay idempotently, and survive a clone from the remote receipt",
+              "scope": "Core test verifies approval precondition, idempotent replay, durable local checkpoint receipt, and reconstruction after a new clone."
+            },
+            {
+              "id": "P01-R39-publish-batches",
+              "path": "packages/core/src/transactions.test.ts",
+              "testName": "publication reports only unacknowledged operations across successive checkpoint batches",
+              "scope": "Core test verifies publication acknowledgement is scoped to the operations in each batch."
+            }
+          ],
+          "runtimeEvidenceRefs": [
+            {
+              "id": "P01-R39-github-runtime",
+              "path": "docs/verification/P01-GITHUB.md",
+              "locator": "# P01 real GitHub persistence check",
+              "scope": "Recorded real GitHub Core check covers clone/fetch/default-branch push, an approved metadata checkpoint pending before publication, confirmed publication, data-root deletion, reclone, receipt reconstruction, and replay. It explicitly does not certify browser recovery, OCI, composed module persistence, or later Core changes."
+            }
+          ],
+          "limitations": [
+            "The recorded GitHub check used runtime tree 4ee62b6 and Core source 655e5ac; final-tree recertification is still required.",
+            "Old session/begin and submit endpoints are not retained as equivalent target endpoints; current browser and Core transaction actions need composed acceptance."
+          ]
+        },
+        {
+          "status": "implementation-present; integration-acceptance-pending",
+          "owner": "P02",
+          "targetPaths": [
+            "app/src/App.tsx",
+            "app/src/api.ts",
+            "app/src/storage/journal.ts",
+            "app/src/drafts.ts"
+          ],
+          "publicActions": [
+            {
+              "action": "api.observation / api.reconcile",
+              "implementation": "GET /api/projects/:projectId/observation; POST /api/projects/:projectId/reconcile"
+            },
+            {
+              "action": "api.propose / api.approve / api.checkpoint / api.publish",
+              "implementation": "POST project proposal, approval, checkpoint, and publish endpoints"
+            }
+          ],
+          "uiSurfaces": [
+            "app/src/App.tsx",
+            "app/src/storage/journal.ts"
+          ],
+          "dataMappings": [
+            {
+              "source": "Unsaved browser edits, pending checkpoints, and publication receipts",
+              "target": "Author-scoped IndexedDB stores `operations`, `proposals`, and `publicationReceipts` in `scriptorium-recovery` version 3",
+              "persistence": "Drafts stay in browser recovery until approved/checkpointed; confirmed publication receipts are scoped by repository and author."
+            }
+          ],
+          "proofRefs": [
+            {
+              "id": "P02-R39-receipt-keying",
+              "path": "app/src/journal.test.ts",
+              "testName": "publication receipt keys are stable within a scope and distinct across batches/scopes",
+              "scope": "Unit test verifies publication receipts are keyed by repository, author scope, and batch."
+            }
+          ],
+          "limitations": [
+            "Browser recovery acceptance uses a disposable local Git remote; real GitHub acceptance is separately recorded and does not certify this browser flow."
+          ]
+        }
+      ]
     },
     {
       "id": "R40",
@@ -4313,7 +4700,75 @@
             ]
           }
         ]
-      }
+      },
+      "targetImplementationSlices": [
+        {
+          "status": "implementation-present; integration-acceptance-pending",
+          "owner": "P01",
+          "targetPaths": [
+            "packages/api/src/server.ts",
+            "packages/core/src/index.ts",
+            "packages/core/src/index.test.ts"
+          ],
+          "publicActions": [
+            {
+              "action": "GET /api/projects",
+              "implementation": "CoreStore.listProjects"
+            },
+            {
+              "action": "POST /api/projects",
+              "implementation": "CoreStore.registerProject"
+            }
+          ],
+          "uiSurfaces": [],
+          "dataMappings": [
+            {
+              "source": "Source ProjectRegistry app-state records and project clone/runtime",
+              "target": "Core `<dataDir>/projects.json` registry plus `<dataDir>/projects/<projectId>` clone",
+              "persistence": "Registered remote URL, branch, stable target ID, and Git clone are owned by Core."
+            }
+          ],
+          "proofRefs": [
+            {
+              "id": "P01-R40-register-project",
+              "path": "packages/core/src/index.test.ts",
+              "testName": "registers a Git project, preserves frontmatter, rejects stale saves, and synchronizes history",
+              "scope": "Core test verifies local remote registration, stable project ID/branch, registry listing, tree load, clone-backed editing, and reopening a new CoreStore from the same data directory."
+            }
+          ],
+          "limitations": [
+            "This slice maps project list/register only; source update/delete/patch/events operations have no equivalent in the current Core API surface."
+          ]
+        },
+        {
+          "status": "implementation-present; integration-acceptance-pending",
+          "owner": "P02",
+          "targetPaths": [
+            "app/src/App.tsx",
+            "app/src/api.ts"
+          ],
+          "publicActions": [
+            {
+              "action": "api.session / api.projects / api.registerProject",
+              "implementation": "GET /api/session, GET /api/projects, POST /api/projects"
+            }
+          ],
+          "uiSurfaces": [
+            "app/src/App.tsx"
+          ],
+          "dataMappings": [
+            {
+              "source": "Owner-selected project and active-project preference",
+              "target": "Core project list/register API; active project ID stored in browser localStorage as `scriptorium:active-project`",
+              "persistence": "Repository content and identity remain Core/Git-owned; browser key stores only selection."
+            }
+          ],
+          "proofRefs": [],
+          "limitations": [
+            "The flow covers register/select; it does not provide UI equivalents for source project mutation, removal, or project event endpoints."
+          ]
+        }
+      ]
     },
     {
       "id": "R41",
@@ -4974,7 +5429,73 @@
         ],
         "directCoreCalls": [],
         "injectedManagerCalls": []
-      }
+      },
+      "targetImplementationSlices": [
+        {
+          "status": "implementation-present; integration-acceptance-pending",
+          "owner": "P01",
+          "targetPaths": [
+            "packages/api/src/server.ts",
+            "packages/core/src/transactions.test.ts"
+          ],
+          "publicActions": [
+            {
+              "action": "POST /api/projects/:projectId/scratch",
+              "implementation": "createScratch -> propose -> approve -> checkpoint"
+            }
+          ],
+          "uiSurfaces": [],
+          "dataMappings": [
+            {
+              "source": "Scratch Markdown and attachment files under `meta/scratch/`",
+              "target": "Guarded multi-file metadata ChangeOperation checkpointed into project Git history",
+              "persistence": "Text and binary attachments are repository files; attachment bytes use canonical base64 in operations."
+            }
+          ],
+          "proofRefs": [
+            {
+              "id": "P01-R45-scratch-checkpoint",
+              "path": "packages/core/src/transactions.test.ts",
+              "testName": "scratch Markdown and attachments use the generic multi-file checkpoint queue",
+              "scope": "Core transaction test checks scratch Markdown plus binary attachment writes through the generic operation/checkpoint queue."
+            }
+          ],
+          "limitations": [
+            "The test validates Core operation storage, not old-app scratch import or composed browser routing."
+          ]
+        },
+        {
+          "status": "implementation-present; integration-acceptance-pending",
+          "owner": "P02",
+          "targetPaths": [
+            "app/src/editor/SceneEditor.tsx",
+            "app/src/storage/journal.ts",
+            "app/src/App.tsx"
+          ],
+          "publicActions": [
+            {
+              "action": "SceneEditor scratch autosave",
+              "implementation": "BrowserJournal.putScratch / getScratch; no API call"
+            }
+          ],
+          "uiSurfaces": [
+            "app/src/editor/SceneEditor.tsx",
+            "app/src/storage/journal.ts"
+          ],
+          "dataMappings": [
+            {
+              "source": "Scratch text in the active editing session",
+              "target": "IndexedDB `scratch` object store, keyed by author/repository/document context",
+              "persistence": "Browser-local recovery content; distinct from repository `meta/scratch/*.md` and the Core scratch proposal endpoint."
+            }
+          ],
+          "proofRefs": [],
+          "limitations": [
+            "The target browser scratch panel currently writes to IndexedDB and is not wired to POST /api/projects/:projectId/scratch; source durable project scratch parity remains pending.",
+            "The browser E2E flow verified scratch reload before failing at checkpoint; this partial step is recorded as an acceptance finding, not a passing proof."
+          ]
+        }
+      ]
     },
     {
       "id": "R46",
@@ -5274,7 +5795,56 @@
             ]
           }
         ]
-      }
+      },
+      "targetImplementationSlices": [
+        {
+          "status": "implementation-present; integration-acceptance-pending",
+          "owner": "P07",
+          "targetPaths": [
+            "modules/publishing/src/actions.ts",
+            "modules/publishing/src/grants.ts",
+            "modules/publishing/src/http.ts",
+            "modules/publishing/src/browser.tsx",
+            "modules/publishing/src/index.ts"
+          ],
+          "publicActions": [
+            {
+              "action": "publishing.shares.list / create / revoke",
+              "implementation": "Read grants or propose grant changes through the author proposal port"
+            },
+            {
+              "action": "publishing.http.public-share",
+              "implementation": "Public GET contribution `share/:token`"
+            },
+            {
+              "action": "publishing.http.public-share-scene",
+              "implementation": "Public GET contribution `share/:token/scenes/:sceneId`"
+            }
+          ],
+          "uiSurfaces": [
+            "modules/publishing/src/browser.tsx",
+            "modules/publishing/src/index.ts"
+          ],
+          "dataMappings": [
+            {
+              "source": "Selected legacy project share records containing hashed bearers, scope, expiry, and revocation",
+              "target": "`meta/scriptorium/modules/publishing/share-grants.jsonl`",
+              "persistence": "Raw bearer is never committed; public reads require the remote published snapshot, apply scope/expiry, and re-check remote revocation."
+            }
+          ],
+          "proofRefs": [
+            {
+              "id": "P07-R47-published-share-revocation",
+              "path": "modules/publishing/src/publishing.test.ts",
+              "testName": "a share activates only on the remote published snapshot and revocation is checked on every public read",
+              "scope": "Module test invokes public HTTP contributions with remote/checkpoint readers and checks unpublished/overlay denial, scope filtering, expiry, token-hash privacy, and remote revocation."
+            }
+          ],
+          "limitations": [
+            "Tests invoke module HTTP contributions directly; the integrated public API router, anonymous browser mount, and full-profile exposure still require acceptance."
+          ]
+        }
+      ]
     },
     {
       "id": "R48",
@@ -5722,6 +6292,149 @@
         "app/src/features/settings/ExportVerticalPrintPanel.tsx",
         "app/src/hooks/useSceneEditing.ts",
         "app/src/hooks/useDraftRecovery.ts"
+      ],
+      "targetImplementationSlices": [
+        {
+          "status": "implementation-present; integration-acceptance-pending",
+          "owner": "P01",
+          "targetPaths": [
+            "packages/core/src/index.ts",
+            "packages/core/src/transactions.test.ts"
+          ],
+          "publicActions": [
+            {
+              "action": "CoreStore.readTreeSnapshot / readSceneSnapshot",
+              "implementation": "Pinned remote/checkpoint document reads"
+            },
+            {
+              "action": "CoreStore.propose / approve / checkpoint / reconcile / publish",
+              "implementation": "Author-approved writing and Git delivery lifecycle"
+            }
+          ],
+          "uiSurfaces": [],
+          "dataMappings": [
+            {
+              "source": "Canonical scene YAML, manuscript Markdown, and author-approved edits",
+              "target": "Same repository files with revision-guarded, operation-linked Git history",
+              "persistence": "Project repo remains canonical; the P01 Core tests cover local fixture remotes and proposal/checkpoint/publish semantics."
+            }
+          ],
+          "proofRefs": [
+            {
+              "id": "P01-N01-revisioned-manuscript",
+              "path": "packages/core/src/index.test.ts",
+              "testName": "registers a Git project, preserves frontmatter, rejects stale saves, and synchronizes history",
+              "scope": "Core test checks scene read/save, frontmatter retention, stale revision rejection, history, and sync."
+            },
+            {
+              "id": "P01-N01-snapshot-read",
+              "path": "packages/core/src/transactions.test.ts",
+              "testName": "scene snapshot exposes full documents, preserved YAML, and absent-file preconditions",
+              "scope": "Core transaction test checks snapshot document bytes and revision preconditions for absent files."
+            }
+          ],
+          "limitations": [
+            "Core unit tests do not by themselves certify the composed browser, optional module, and production-provider writing flow."
+          ]
+        },
+        {
+          "status": "implementation-present; integration-acceptance-pending",
+          "owner": "P02",
+          "targetPaths": [
+            "app/src/App.tsx",
+            "app/src/api.ts",
+            "app/src/storage/journal.ts",
+            "app/src/drafts.ts",
+            "app/src/editor/SceneEditor.tsx",
+            "app/src/editor/ManuscriptInput.tsx",
+            "app/src/editor/ruby.tsx",
+            "app/src/editor/typography.ts"
+          ],
+          "publicActions": [
+            {
+              "action": "api.readTree / api.readScene",
+              "implementation": "Load selected pinned project hierarchy and scene document"
+            },
+            {
+              "action": "api.propose / api.approve / api.checkpoint / api.reconcile / api.publish",
+              "implementation": "Drive separate draft, checkpoint, recovery, and publication transitions"
+            }
+          ],
+          "uiSurfaces": [
+            "app/src/App.tsx",
+            "app/src/editor/SceneEditor.tsx",
+            "app/src/editor/ManuscriptInput.tsx"
+          ],
+          "dataMappings": [
+            {
+              "source": "Japanese manuscript editing, ruby syntax, and typography preferences",
+              "target": "React writing shell/editor and browser preview",
+              "persistence": "Canonical prose remains Core/Git project Markdown; editor formatting does not rewrite source frontmatter."
+            },
+            {
+              "source": "Unsaved edits and publication receipts",
+              "target": "Author-scoped `scriptorium-recovery` IndexedDB journal",
+              "persistence": "Recovery data is browser-local until the author-approved Core/Git flow checkpoints/publishes it."
+            }
+          ],
+          "proofRefs": [
+            {
+              "id": "P02-N01-writing-editor",
+              "path": "app/src/editor.test.ts",
+              "testName": "ruby parsing keeps the source's explicit Aozora syntax and frontmatter bytes",
+              "scope": "Editor unit test checks explicit Aozora ruby parsing and frontmatter byte preservation."
+            },
+            {
+              "id": "P02-N01-draft-isolation",
+              "path": "app/src/drafts.test.ts",
+              "testName": "keeps drafts isolated by project and scene and restores the base revision",
+              "scope": "Draft unit test checks project/scene isolation and stale base-revision recovery."
+            },
+            {
+              "id": "P02-N01-journal-keys",
+              "path": "app/src/journal.test.ts",
+              "testName": "journal keys isolate author scopes and retain each operation generation",
+              "scope": "Unit test verifies per-author and per-operation-generation recovery records remain distinct."
+            }
+          ],
+          "limitations": [
+            "Full legacy IndexedDB import, source snapshots/scratch semantic preservation, and final remote-provider browser acceptance remain pending."
+          ],
+          "acceptanceFindings": [
+            {
+              "id": "P02-N01-e2e-checkpoint-state",
+              "path": "tests/e2e/core.acceptance.spec.ts",
+              "testName": "writing UI recovers multi-document drafts and separates Draft, Checkpoint, and GitHub publication",
+              "result": "failed-at-current-ledger-head",
+              "failure": "After clicking Checkpoint the journal did not settle on checkpointed; the visible durability message returned to browser draft after the request was pending.",
+              "observedScope": "The Chromium scenario passed sign-in, project registration/selection, tree navigation, editor modes, scratch reload, multi-document draft write/reload, then failed at the checkpoint-state assertion."
+            },
+            {
+              "id": "P02-N01-e2e-generation-race",
+              "path": "tests/e2e/core.acceptance.spec.ts",
+              "testName": "new typing survives an older in-flight checkpoint and exact publication acknowledgement",
+              "result": "failed-at-current-ledger-head",
+              "failure": "After releasing the intercepted checkpoint request, the visible state remained browser draft instead of local checkpoint.",
+              "observedScope": "The Chromium scenario created the checkpointing generation and newer draft separately, then failed before exact acknowledgement/publication assertions."
+            },
+            {
+              "id": "P02-N01-e2e-author-scope",
+              "path": "tests/e2e/core.acceptance.spec.ts",
+              "testName": "browser recovery is author-scoped and foreign records remain untouched",
+              "result": "failed-at-current-ledger-head",
+              "failure": "The test could not find the expected owner journal seed before creating the foreign-author record.",
+              "observedScope": "The Chromium scenario opened the local fixture but did not reach the foreign-record isolation assertion."
+            },
+            {
+              "id": "P02-N01-e2e-legacy-key",
+              "path": "tests/e2e/core.acceptance.spec.ts",
+              "testName": "one malformed legacy key does not hide later recoverable drafts",
+              "result": "failed-at-current-ledger-head",
+              "failure": "The legacy recovery panel was visible, but the test could not find the draft body text it expected.",
+              "observedScope": "The Chromium scenario displayed a legacy draft record for the synthetic removed project/scene; the content-text visibility assertion failed."
+            }
+          ]
+        }
       ]
     },
     {
@@ -6302,6 +7015,63 @@
         "app/src/dock/modes/ChangesMode.tsx",
         "app/src/actions/workspaceActions.ts",
         "app/src/features/editor/inlineChangeSet.ts"
+      ],
+      "targetImplementationSlices": [
+        {
+          "status": "implementation-present; integration-acceptance-pending",
+          "owner": "P01",
+          "targetPaths": [
+            "packages/core/src/index.ts",
+            "packages/core/src/transactions.test.ts",
+            "packages/api/src/server.ts"
+          ],
+          "publicActions": [
+            {
+              "action": "POST /api/projects/:projectId/proposals and GET /proposals",
+              "implementation": "Create/list reviewable ChangeProposal records"
+            },
+            {
+              "action": "POST /api/projects/:projectId/approvals and /checkpoints",
+              "implementation": "Bind author approval to exact operation payload before local Git checkpoint"
+            },
+            {
+              "action": "POST /api/projects/:projectId/reconcile and /publish",
+              "implementation": "Reconcile checkpoint state and publish/confirm remote batches"
+            }
+          ],
+          "uiSurfaces": [
+            "app/src/contributions/ProposalReview.tsx"
+          ],
+          "dataMappings": [
+            {
+              "source": "Legacy ChangeSet proposal/apply/reject records",
+              "target": "Core ChangeProposal review state plus operation metadata in `meta/scriptorium/operations/v1`",
+              "persistence": "Proposal state is not a one-to-one durable import in this slice; checkpointed operation identity/digest and Git history are durable."
+            },
+            {
+              "source": "Legacy mutation receipts",
+              "target": "Checkpoint and publication receipts bound to operation IDs/generations",
+              "persistence": "Publication manifests are committed under `meta/scriptorium/publications/v1`; derived context remains request-time."
+            }
+          ],
+          "proofRefs": [
+            {
+              "id": "P01-N08-approval-payload-binding",
+              "path": "packages/core/src/transactions.test.ts",
+              "testName": "author approval binds to the exact operation payload",
+              "scope": "Core test rejects approval/checkpoint when the operation payload changes after author review."
+            },
+            {
+              "id": "P01-N08-proposal-status",
+              "path": "packages/core/src/transactions.test.ts",
+              "testName": "author proposal review exposes defensive copies and durable checkpoint status",
+              "scope": "Core test checks defensive proposal copies and checkpoint status after receipt creation."
+            }
+          ],
+          "limitations": [
+            "The full historic ChangeSet status/receipt import and composed author-session host acceptance remain pending."
+          ]
+        }
       ]
     },
     {
@@ -6445,6 +7215,71 @@
         "app/src/features/settings/PublishEpisodeMapPanel.tsx",
         "app/src/features/settings/ShareLinksPanel.tsx",
         "app/src/features/share/ShareReaderPage.tsx"
+      ],
+      "targetImplementationSlices": [
+        {
+          "status": "implementation-present; integration-acceptance-pending",
+          "owner": "P07",
+          "targetPaths": [
+            "modules/publishing/src/index.ts",
+            "modules/publishing/src/actions.ts",
+            "modules/publishing/src/browser.tsx",
+            "modules/publishing/src/migration.ts",
+            "modules/publishing/src/publishing.test.ts"
+          ],
+          "publicActions": [
+            {
+              "action": "publishing.export.plaintext / publishing.export.epub / publishing.export.vertical-print",
+              "implementation": "Snapshot-based derived export actions"
+            },
+            {
+              "action": "publishing.episodes.read / publishing.episodes.propose",
+              "implementation": "Read or propose module-owned episode metadata"
+            },
+            {
+              "action": "publishing.shares.list / publishing.shares.create / publishing.shares.revoke",
+              "implementation": "Read or propose share-grant metadata"
+            },
+            {
+              "action": "publishing.http.public-share / publishing.http.public-share-scene",
+              "implementation": "Read-only public module HTTP contributions"
+            }
+          ],
+          "uiSurfaces": [
+            "modules/publishing/src/browser.tsx",
+            "modules/publishing/src/index.ts"
+          ],
+          "dataMappings": [
+            {
+              "source": "Legacy episode map and selected hashed workspace share grants",
+              "target": "Publishing-owned episode YAML and share-grants JSONL under `meta/scriptorium/modules/publishing/`",
+              "persistence": "P07 semantic producer validates selected content; generic filesystem/workspace producers own exact-byte guarded writes; author approval/publish remains separate."
+            },
+            {
+              "source": "Manuscript tree and cover/Bible inputs",
+              "target": "Derived exports and module browser settings/public-share views",
+              "persistence": "Export output is transient; project/module metadata is canonical only after the normal proposal lifecycle."
+            }
+          ],
+          "proofRefs": [
+            {
+              "id": "P07-N10-module-migration",
+              "path": "modules/publishing/src/publishing.test.ts",
+              "testName": "publishing migration hook validates the exact-byte episode map and selected hashed share records without duplicate writes",
+              "scope": "Module test validates selected-project grant isolation, hash/date/revocation retention, host-field exclusion, episode-map round-trip, and no duplicate module/generic writes."
+            },
+            {
+              "id": "P07-N10-owner-evidence",
+              "path": "docs/migration/evidence/P07.json",
+              "jsonPointer": "/ledger/N10",
+              "testName": "P07 publishing evidence ledger entry",
+              "scope": "Owner evidence maps publishing implementation paths and proof IDs; its composition limits explicitly leave composed HTTP/public browser and complete lifecycle acceptance pending."
+            }
+          ],
+          "limitations": [
+            "The module is optional/profile-loaded. This evidence does not certify the final full-profile mount, composed API routing, author approval/checkpoint/push, or end-to-end legacy data-root migration."
+          ]
+        }
       ]
     },
     {
@@ -6667,6 +7502,56 @@
       "observedUiSurfacePaths": [
         "app/src/hooks/draftRecovery.ts",
         "app/src/api/client.ts"
+      ],
+      "targetImplementationSlices": [
+        {
+          "status": "implementation-present; integration-acceptance-pending",
+          "owner": "P04",
+          "targetPaths": [
+            "packages/migration/src/index.ts",
+            "packages/migration/src/source.ts",
+            "packages/migration/src/registry.ts",
+            "packages/migration/src/producers/filesystem.ts",
+            "packages/migration/src/producers/sqlite.ts",
+            "packages/migration/src/producers/workspace.ts",
+            "packages/migration/src/producers/git.ts",
+            "packages/migration/src/migration.test.ts"
+          ],
+          "publicActions": [
+            {
+              "action": "inspectLegacyProject(options)",
+              "implementation": "Explicit-root read-only legacy inspection returning categorized entries, guarded operations, recovery records, and pending Git state"
+            },
+            {
+              "action": "proposeMigrationImport(coordinator, projectId, inspection)",
+              "implementation": "Submit guarded operations as an author proposal; does not approve, checkpoint, or publish"
+            }
+          ],
+          "uiSurfaces": [],
+          "dataMappings": [
+            {
+              "source": "Explicit legacy project root, optional workspace data root, both SQLite stores, authoritative project files, selected workspace records, and pending Git state",
+              "target": "Deterministic categorized inspection plus guarded ChangeOperations and provisional recovery records",
+              "persistence": "Source roots are read-only; all writes remain in target proposals and normal author review."
+            },
+            {
+              "source": "Secret-like credential paths and unselected host/share-owner records",
+              "target": "Excluded from inspected/imported content or reported as relocated/blocked by source classification",
+              "persistence": "No secret values or private payloads are copied to evidence."
+            }
+          ],
+          "proofRefs": [
+            {
+              "id": "P04-N12-read-only-import",
+              "path": "packages/migration/src/migration.test.ts",
+              "testName": "legacy inspection preserves scoped data, both SQLite stores, and pending Git work without source writes",
+              "scope": "Synthetic source/workspace fixture verifies both SQLite paths, durable provisional decisions, pending Git operations, secret-path filtering, proposal submission, idempotence, and no source filesystem changes."
+            }
+          ],
+          "limitations": [
+            "This is the generic producer boundary and synthetic fixture coverage; module-specific semantic conversions, final importer composition, author review, checkpoint, and publication are P12 integration acceptance."
+          ]
+        }
       ]
     }
   ],
