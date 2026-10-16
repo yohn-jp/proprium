@@ -13,7 +13,7 @@
     "repository": "yohn-jp/scriptorium",
     "baseCommit": "c90e95d9711e859799f9674138b2db42efad6bc3",
     "branch": "work/7-p05",
-    "implementationCommit": "5da7363521d7be667b6c72856f8b28a0702ce17b"
+    "implementationCommit": "1c6831ea8a204936af536a068d34c93aab8339db"
   },
   "sourceClassification": [
     {
@@ -89,7 +89,7 @@
     "Thread lifecycle/status, relationship graph, location map, chronology and source-derived character co-occurrence projections.",
     "World-state proposal lifecycle, confirmed event folding, reader disclosures, character-reader knowledge gaps and thread forget-risk computation.",
     "React contribution panels for entity-specific editing and structured nested notes, references/tags/backlinks/appearances, scene metadata, thread lifecycle, relationship overlay, chronology, location links, reader knowledge, world state, Zukan review, and series binding. Work and linked Bible entities are browsable by name, type, alias, tag or ID; the Bible view remains read-only and carries both snapshot identities.",
-    "Zukan suggestion approval updates nested entity notes and workflow status atomically through a reviewable Core proposal; rejection updates only workflow status."
+    "Zukan suggestions can be created from snapshot-validated manuscript or dialogue-sketch evidence as pending-only reviewable proposals; freshness hashes, stable IDs, source revisions, and stale-row updates remain bound to the source snapshot. Approval updates nested entity notes and workflow status atomically; rejection updates only workflow status."
   ],
   "proofs": [
     {
@@ -105,8 +105,8 @@
         "modules/story/src/migration/producer.test.ts"
       ],
       "command": "pnpm --filter @scriptorium/module-story test",
-      "result": "46 passed, 0 failed on implementation commit 9aaf7ad7bffe9101c38165db732ce52020fd4b37.",
-      "scope": "Entity and scene proposals, referenced-file and membership-scope preconditions, thread relation direction/lifecycle, Zukan workflow status and nested-note preservation, optional NLP absence, all nine source ChangeSet kinds and retry identity, source FNV manuscript identity, state-proposal event/conflict/manuscript freshness and JSONL revision precondition, source-to-Core ID mapping, series binding and read-only overlay, co-occurrence, domain graph/chronology/thread/world/knowledge algorithms, exact-byte migration, workflow semantic migration and explicit series repository mapping."
+      "result": "50 passed, 0 failed on implementation commit 1c6831ea8a204936af536a068d34c93aab8339db.",
+      "scope": "Entity and scene proposals, referenced-file and membership-scope preconditions, thread relation direction/lifecycle, Zukan creation and lifecycle including provenance validation, source freshness, stable identity and nested-note preservation, optional NLP absence, all nine source ChangeSet kinds and retry identity, source FNV manuscript identity, state-proposal event/conflict/manuscript freshness and JSONL revision precondition, source-to-Core ID mapping, series binding and read-only overlay, co-occurrence, domain graph/chronology/thread/world/knowledge algorithms, exact-byte migration, workflow semantic migration and explicit series repository mapping."
     },
     {
       "id": "P05-STORY-BUILD",
@@ -114,7 +114,7 @@
       "status": "passed",
       "targetFiles": ["modules/story/src/**/*.ts", "modules/story/src/**/*.tsx"],
       "command": "pnpm --filter @scriptorium/module-story typecheck && pnpm --filter @scriptorium/module-story build",
-      "result": "Both commands passed on implementation commit 9aaf7ad7bffe9101c38165db732ce52020fd4b37.",
+      "result": "Both commands passed on implementation commit 1c6831ea8a204936af536a068d34c93aab8339db.",
       "scope": "Compiles the server action producer, migration producer and React browser entry."
     },
     {
@@ -129,6 +129,19 @@
       "command": "pnpm --filter @scriptorium/module-story test && pnpm --filter @scriptorium/module-story typecheck",
       "result": "47 passed, 0 failed; Story typecheck passed on commit c93a09eb6ff41830c73a25d5fde84260a3f3f0f1.",
       "scope": "Manual entity and scene note edits stale matching pending Zukan rows in the same proposal; approving one suggestion stales other pending suggestions tied to the edited block; pending rows remain visible in the UI until the selected snapshot changes."
+    },
+    {
+      "id": "P05-STORY-ZUKAN-CORE-ACCEPTANCE",
+      "kind": "actual Story module with Core, API, ModuleRuntime and a local bare Git repository",
+      "status": "passed",
+      "targetFiles": [
+        "modules/story/src/actions.ts",
+        "modules/story/tests/zukan-core.acceptance.mjs",
+        "modules/story/tests/production.acceptance.mjs"
+      ],
+      "command": "pnpm --filter @scriptorium/module-story build && pnpm --filter @scriptorium/contracts build && pnpm --filter @scriptorium/module-runtime build && pnpm --filter @scriptorium/core build && pnpm --filter @scriptorium/api build && node --test modules/story/tests/zukan-core.acceptance.mjs",
+      "result": "1 passed, 0 failed on implementation commit 1c6831ea8a204936af536a068d34c93aab8339db.",
+      "scope": "The composed Story action validates manuscript evidence, creates a pending-only suggestion, retries with the same Core proposal identity, and persists through owner approval, checkpoint, publish and a fresh Core-data root that reclones the same bare Git remote."
     },
     {
       "id": "P05-STORY-CORE-PRODUCTION-ACCEPTANCE",
