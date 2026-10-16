@@ -984,14 +984,213 @@ async function runContradictionAssist(moduleContext: ModuleContext, context: Mod
   return { ...(candidateId ? { candidateId } : { candidate: claim }), verdict: parsed.verdict, reason: parsed.reason, quotes: parsed.quotes.filter((quote) => allowedQuotes.has(quote)), model: generated.provenance.model, provider: generated.provenance.provider, promptVersion: generated.provenance.promptVersion, citations, provenance: generated.provenance };
 }
 
-function parseZukanInput(value: unknown): { entityId: string; blockPath?: string; prompt?: string } {
-  const input = record(value);
-  return { entityId: parseString(input.entityId, "entityId", 256), ...(optionalString(input, "blockPath", 128) ? { blockPath: optionalString(input, "blockPath", 128) } : {}), ...(optionalString(input, "prompt", 4_000) ? { prompt: optionalString(input, "prompt", 4_000) } : {}) };
+interface ZukanInput {
+  source: "manuscript" | "sandbox";
+  entityId?: string;
+  blockPath?: string;
+  prompt?: string;
+  sourceSessionId?: string;
+  turnRange?: { start: number; end: number };
 }
 
-async function runZukanSuggestions(moduleContext: ModuleContext, context: ModuleActionContext, input: { entityId: string; blockPath?: string; prompt?: string }) {
+function parseZukanInput(value: unknown): ZukanInput {
+  const input = record(value);
+  const source = input.source ?? "manuscript";
+  if (source !== "manuscript" && source !== "sandbox") throw new TypeError("source must be manuscript or sandbox");
+  const sourceSessionId = optionalString(input, "sourceSessionId", 256);
+  let turnRange: { start: number; end: number } | undefined;
+  if (input.turnRange !== undefined) {
+    const range = record(input.turnRange, "turnRange");
+    if (!Number.isSafeInteger(range.start) || !Number.isSafeInteger(range.end) || (range.start as number) < 0 || (range.end as number) < (range.start as number)) {
+      throw new TypeError("turnRange must contain non-negative integer start/end values");
+    }
+    turnRange = { start: range.start as number, end: range.end as number };
+  }
+  if (source === "sandbox" && !sourceSessionId) throw new TypeError("sourceSessionId is required for sandbox suggestions");
+  return {
+    source,
+    ...(source === "manuscript" ? { entityId: parseString(input.entityId, "entityId", 256) } : {}),
+    ...(optionalString(input, "blockPath", 128) ? { blockPath: optionalString(input, "blockPath", 128) } : {}),
+    ...(optionalString(input, "prompt", 4_000) ? { prompt: optionalString(input, "prompt", 4_000) } : {}),
+    ...(sourceSessionId ? { sourceSessionId } : {}), ...(turnRange ? { turnRange } : {}),
+  };
+}
+
+function findUnsourcedZukanTokens(source: string, output: string): string[] {
+  const tokens = (value: string) => value.match(/[一-龠ァ-ヶー]{2,}/g) ?? [];
+  const sourceTokens = new Set(tokens(source));
+  return [...new Set(tokens(output).filter((token) => !sourceTokens.has(token)))];
+}
+
+function zukanEvidenceIsGrounded(proposedText: string, evidence: Array<{ quote: string }>): boolean {
+  if (!evidence.length || evidence.some((item) => !item.quote.trim())) return false;
+  const corpus = evidence.map((item) => item.quote).join("\n");
+  return !!corpus.trim() && findUnsourcedZukanTokens(corpus, proposedText).length === 0;
+}
+
+const dialogueSketchLineSchema = z.object({ speakerEntityId: z.string().min(1), text: z.string().min(1) });
+const sandboxZukanSchema = z.object({ suggestions: z.array(z.object({
+  kind: z.enum(["fact", "dynamic", "habit"]), targetEntityId: z.string().min(1), blockPath: z.string().min(1),
+  proposedText: z.string().min(1), evidenceQuote: z.string().min(1), confidence: z.enum(["high", "low"]),
+})) });
+const SANDBOX_ZUKAN_PROMPT_VERSION = "zukan-sandbox@3";
+const STRUCTURED_OUTPUT_RULES = [
+  "応答は有効なJSONオブジェクト1個のみ（json_object モード）。",
+  "Markdown・コードフェンス（```）・説明文・前置き・後書きは禁止。",
+  "挨拶・解説・「以下が結果」・思考過程など JSON 以外の文字は禁止。",
+  "応答は `{` で始まり `}` で終わる単一 JSON オブジェクトのみ。",
+  "キー名・型・配列長は下記スキーマどおり厳守。",
+  "存在しないキーを追加しない。必須キーを省略しない。",
+];
+
+function buildSandboxZukanPrompt(input: {
+  sketchId: string;
+  turnRange: { start: number; end: number };
+  transcript: string;
+  participants: Array<{ id: string; name: string; notesExcerpt: string }>;
+}): string {
+  const participantNotes = input.participants.map((participant) => `--- ${participant.name} (${participant.id}) ---\n現行ノート:\n${participant.notesExcerpt || "(空)"}`).join("\n\n");
+  return [
+    "あなたは小説の図鑑ノート編集アシスタントです。",
+    "セリフ問答の対話ログから、図鑑へ追記すべき事実・関係性・言語習慣を抽出してください。",
+    "各提案は kind: fact|dynamic|habit、targetEntityId、blockPath、proposedText、evidenceQuote、confidence。",
+    "evidenceQuote は対話ログに実在する文言のみ。無い設定を作らない。",
+    "図鑑を直接書き換えない。差分提案だけ。",
+    `sketchId (sourceSessionId): ${input.sketchId}`,
+    `turnRange: ${input.turnRange.start}-${input.turnRange.end}`,
+    "参加キャラと現行ノート:", participantNotes, "対話ログ:", input.transcript,
+    "blockPath は lead.<i> または sections.<si>.body.<bi>。",
+    "", "=== 出力形式（厳守） ===", ...STRUCTURED_OUTPUT_RULES,
+    'トップレベルキー "suggestions" のみ。',
+    "suggestions: オブジェクト配列（0件以上）。",
+    '各要素: kind ("fact"|"dynamic"|"habit"), targetEntityId, blockPath, proposedText, evidenceQuote, confidence ("high"|"low").',
+    "evidenceQuote は対話ログに実在する文言のみ。無い設定を作らない。",
+    "出力例（この形に合わせる）:",
+    '{"suggestions":[{"kind":"fact","targetEntityId":"char-yuki","blockPath":"lead.0","proposedText":"雨の日は傘を忘れがち。","evidenceQuote":"また傘忘れたの？","confidence":"high"}]}',
+  ].join("\n");
+}
+
+function notesPlainExcerpt(value: unknown, maxChars = 2_000): string {
+  const parts: string[] = [];
+  const addBlocks = (blocks: unknown) => {
+    if (typeof blocks === "string") { if (blocks.trim()) parts.push(blocks); return; }
+    if (!Array.isArray(blocks)) return;
+    for (const block of blocks) {
+      if (!block || typeof block !== "object" || Array.isArray(block)) continue;
+      const row = block as RecordValue;
+      if (row.type === "paragraph" && typeof row.text === "string") parts.push(row.text);
+    }
+  };
+  if (!value || typeof value !== "object" || Array.isArray(value)) return "";
+  const notes = value as RecordValue;
+  addBlocks(notes.lead);
+  if (Array.isArray(notes.sections)) {
+    const visit = (section: unknown) => {
+      if (!section || typeof section !== "object" || Array.isArray(section)) return;
+      const row = section as RecordValue;
+      if (typeof row.heading === "string" && row.heading) parts.push(`# ${row.heading}`);
+      addBlocks(row.body);
+      if (Array.isArray(row.children)) for (const child of row.children) visit(child);
+    };
+    for (const section of notes.sections) visit(section);
+  }
+  const joined = parts.join("\n").trim();
+  return joined.length <= maxChars ? joined : `${joined.slice(0, maxChars)}…`;
+}
+
+function dialogueLinesFromRaw(value: unknown): Array<{ speakerEntityId: string; text: string }> {
+  if (!Array.isArray(value)) return [];
+  return value.flatMap((line) => {
+    const parsed = dialogueSketchLineSchema.safeParse(line);
+    return parsed.success ? [parsed.data] : [];
+  });
+}
+
+function validateSandboxTurnRange(linesLength: number, sessionId: string, range: { start: number; end: number }): boolean {
+  return !!sessionId.trim() && range.start >= 0 && range.end >= range.start && range.end < linesLength;
+}
+
+async function runSandboxZukanSuggestions(moduleContext: ModuleContext, context: ModuleActionContext, input: ZukanInput) {
   const story = await readStorySnapshot(context.reader, { includeManuscripts: true });
-  const target = entity(story, input.entityId);
+  const sketchId = input.sourceSessionId!;
+  const sketch = entity(story, sketchId);
+  if (sketch.type !== "dialogue_sketch") throw codeError("assistant_source_missing", `Dialogue sketch ${sketchId} was not found`);
+  const lines = dialogueLinesFromRaw(sketch.raw.lines);
+  if (!lines.length) return { createdCount: 0, suggestionIds: [], suggestions: [], skippedReason: "no-lines", sourceSessionId: sketchId };
+  const turnRange = input.turnRange ?? { start: 0, end: lines.length - 1 };
+  if (!validateSandboxTurnRange(lines.length, sketchId, turnRange)) throw codeError("assistant_source_stale", "Dialogue sketch turn range is no longer valid");
+  const slice = lines.slice(turnRange.start, turnRange.end + 1);
+  const participantIds = [...new Set([
+    ...(Array.isArray(sketch.raw.participantEntityIds) ? sketch.raw.participantEntityIds.filter((id): id is string => typeof id === "string") : []),
+    ...slice.map((line) => line.speakerEntityId),
+  ])];
+  const participants = participantIds.map((id) => {
+    const participant = story.entities.get(id);
+    return { id, name: participant?.name ?? id, notesExcerpt: notesPlainExcerpt(participant?.raw.notes) };
+  });
+  const nameById = new Map(participants.map((participant) => [participant.id, participant.name]));
+  const transcript = slice.map((line, index) => `[${turnRange.start + index}] ${nameById.get(line.speakerEntityId) ?? line.speakerEntityId}: ${line.text}`).join("\n");
+  const prompt = buildSandboxZukanPrompt({ sketchId, turnRange, transcript, participants });
+  const sourceRevisions = revisionList([
+    sourceFile(story, sketch.filePath),
+    ...participantIds.flatMap((id) => {
+      const participant = story.entities.get(id);
+      return participant ? [sourceFile(story, participant.filePath)] : [];
+    }),
+  ]);
+  const generated = await generate(moduleContext, context, {
+    feature: "zukan-proposal", prompt, promptVersion: SANDBOX_ZUKAN_PROMPT_VERSION,
+    sourceRevisions, outputTokens: 1_024,
+  });
+  const parsed = parseStructured(generated.text, sandboxZukanSchema);
+  const evidenceCorpus = slice.map((line) => line.text).join("\n");
+  const suggestions: Array<RecordValue> = [];
+  const proposals: unknown[] = [];
+  for (const item of parsed.suggestions) {
+    if (!participantIds.includes(item.targetEntityId) || !evidenceCorpus.includes(item.evidenceQuote)) continue;
+    if (!zukanEvidenceIsGrounded(item.proposedText, [{ quote: item.evidenceQuote }])) continue;
+    const storyResult = await context.invoke("story.zukan-suggestions.create", {
+      entityId: item.targetEntityId,
+      proposedText: item.proposedText.trim(),
+      evidence: [{ quote: item.evidenceQuote }],
+      source: "sandbox",
+      sourceSessionId: sketchId,
+      sourceTurnRange: turnRange,
+      blockPath: item.blockPath,
+      kind: item.kind,
+      confidence: item.confidence,
+    });
+    if (!storyResult.ok) throw codeError(storyResult.error.code, storyResult.error.message);
+    const storyData = record(storyResult.data, "Story sandbox Zukan create result");
+    const suggestion = storyData.suggestion ?? storyData;
+    suggestions.push({ suggestion, created: storyData.created === true, staledPendingCount: storyData.staledPendingCount ?? 0 });
+    if (storyData.created === true && storyResult.proposals?.length) proposals.push(...storyResult.proposals);
+  }
+  const sketchFile = sourceFile(story, sketch.filePath);
+  return {
+    source: "sandbox", sourceSessionId: sketchId, sourceTurnRange: turnRange,
+    createdCount: suggestions.filter((item) => item.created === true).length,
+    suggestionIds: suggestions.flatMap((item) => {
+      const suggestion = record(item.suggestion);
+      return typeof suggestion.id === "string" ? [suggestion.id] : [];
+    }),
+    suggestions, proposals,
+    proposal: proposals[0] ?? null,
+    model: generated.provenance.model, provider: generated.provenance.provider,
+    promptVersion: generated.provenance.promptVersion,
+    citations: suggestions.flatMap((item) => {
+      const suggestion = record(item.suggestion);
+      const evidence = Array.isArray(suggestion.evidence) ? suggestion.evidence.map((entry) => record(entry)) : [];
+      return evidence.flatMap((entry) => typeof entry.quote === "string" ? [sourceCitation(sketchFile, entry.quote, undefined, "dialogue sketch evidence")] : []);
+    }),
+    provenance: generated.provenance,
+  };
+}
+
+async function runZukanSuggestions(moduleContext: ModuleContext, context: ModuleActionContext, input: ZukanInput) {
+  if (input.source === "sandbox") return runSandboxZukanSuggestions(moduleContext, context, input);
+  const story = await readStorySnapshot(context.reader, { includeManuscripts: true });
+  const target = entity(story, input.entityId!);
   const name = target.name ?? target.id;
   const search = await invokeData(context, "semantic.search", { query: name, mode: "sentence", limit: 12, rerank: false });
   const candidates = Array.isArray(search.results) ? search.results.map((item) => record(item)) : [];
@@ -1030,6 +1229,7 @@ async function runZukanSuggestions(moduleContext: ModuleContext, context: Module
     citations.push(sourceCitation(source.manuscript, item.quote, item.sceneId, "Zukan evidence"));
   }
   if (!verifiedEvidence.length) throw codeError("assistant_output_invalid", "Zukan output did not cite an exact current manuscript passage");
+  if (!zukanEvidenceIsGrounded(parsed.proposedText, verifiedEvidence)) throw codeError("assistant_output_ungrounded", "Zukan proposal contains words that are not supported by its evidence");
   const storyResult = await context.invoke("story.zukan-suggestions.create", {
     entityId: target.id, proposedText: parsed.proposedText, evidence: verifiedEvidence, source: "manuscript",
     blockPath: parsed.blockPath, kind: "fact", confidence: "low",
@@ -1177,7 +1377,7 @@ export function createAssistantActions(moduleContext: ModuleContext): ModuleActi
     action("assistant.dialogue.topics", "compute", parseIdInput, async (input, context) => runDialogueTopics(moduleContext, context, input.sceneId as string)),
     action("assistant.dialogue.turns", "compute", parseDialogueTurnInput, async (input, context) => runDialogueTurns(moduleContext, context, input as ReturnType<typeof parseDialogueTurnInput>)),
     action("assistant.reader.reaction", "compute", (value) => parseIdInput(value, "chapterId"), async (input, context) => runReaderReaction(moduleContext, context, input.chapterId as string)),
-    action("assistant.zukan.suggestions", "propose", parseZukanInput, async (input, context) => runZukanSuggestions(moduleContext, context, input as ReturnType<typeof parseZukanInput>)),
+    action("assistant.zukan.suggestions", "propose", parseZukanInput, async (input, context) => runZukanSuggestions(moduleContext, context, input as unknown as ReturnType<typeof parseZukanInput>)),
     action("assistant.synonyms.suggestions", "compute", parseSynonymInput, async (input, context) => runSynonyms(moduleContext, context, input as ReturnType<typeof parseSynonymInput>)),
     action("assistant.contradictions.assist", "compute", parseContradictionInput, async (input, context) => runContradictionAssist(moduleContext, context, input as ReturnType<typeof parseContradictionInput>)),
     action("assistant.stateEvents.draft", "propose", parseIdInput, async (input, context) => runStateEventDraft(moduleContext, context, input.sceneId as string)),
