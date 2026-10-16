@@ -1,6 +1,6 @@
 # Scriptorium
 
-A lightweight Git-backed writing workspace, extracted from Arcadia Loom. Git-controlled YAML and Markdown remain the source of truth. Core runs without NLP, model downloads, or an embedded LLM.
+A modular Git-backed writing workspace migrated from Arcadia Loom. Git-controlled YAML and Markdown remain the source of truth. The Core profile runs without optional analysis or model dependencies; the full profile composes eight independent add-ons.
 
 Connect a GitHub work repository, browse volumes, chapters and scenes, edit Markdown, save with revision checks, inspect Git commits, and explicitly synchronize with GitHub. The editor keeps unsaved drafts in this browser and offers Japanese vertical preview. One server instance serves one trusted owner; all registered projects belong to that owner.
 
@@ -27,21 +27,24 @@ plot/volumes/<volume>/chapters/<chapter>/scenes/<scene>.yaml
 manuscript/<volume>/<chapter>/<scene>.md
 ```
 
-Scene YAML identifies its Markdown file with `manuscript: manuscript/.../scene.md`. Unsupported metadata and files are preserved. An empty repository can be connected; create its work structure in Git before writing. The Core does not create a complete novel structure or port Arcadia's advanced analysis features.
+Scene YAML identifies its Markdown file with `manuscript: manuscript/.../scene.md`. Unsupported metadata and files are preserved. The writing UI can create and reorder volumes, chapters, and scenes through reviewed Core operations.
 
-Each save checks the revision read by the editor and creates a local Git commit. A stale save reports a conflict and retains the draft. The ahead/behind counters compare against the most recently fetched remote state. Sync fetches, integrates only fast-forward changes, and pushes local commits; divergent histories require reconciliation outside the application. Browser drafts are local recovery copies: use the same browser and origin, and save important work before clearing browser storage.
+Draft means browser recovery storage; Checkpoint means a local Git commit; Saved means publication to GitHub has been confirmed. Checkpoint retains the browser recovery record. Remote observation fetches the repository's default branch and keeps its canonical snapshot separate from unpublished local work. Revision checks protect editing and report conflicts without automatically resolving manuscript text. Retried operations retain their identities across response loss and clone reconstruction. Browser recovery uses the same browser and origin; clearing browser storage removes that recovery copy.
+
+To build and run the full composition, use `SCRIPTORIUM_PROFILE=full pnpm build` and `SCRIPTORIUM_PROFILE=full pnpm start`. It includes Story, Diagnostics, NLP, Semantic, Speaker, Assistant, Publishing, and MCP. Module settings distinguish absent, disabled, enabled-idle, and active modules. Heavy engines run in supervised child processes. Assistant provider execution requires provider configuration and author consent; selecting no provider keeps local writing and review available.
 
 ## Single OCI image
 
 ```sh
-docker build -t ghcr.io/yohn-jp/scriptorium:local .
+docker build --build-arg PROFILE=core -t scriptorium:local .
 docker run --rm -p 127.0.0.1:3000:3000 \
   --env SCRIPTORIUM_AUTH_TOKEN --env SCRIPTORIUM_GITHUB_TOKEN \
   --mount type=volume,src=scriptorium-data,dst=/data \
-  ghcr.io/yohn-jp/scriptorium:local
+  --mount type=volume,src=scriptorium-history,dst=/history \
+  scriptorium:local
 ```
 
-Keep `/data` persistent. Use HTTPS through a trusted reverse proxy when accessing the instance beyond localhost. Do not run multiple containers against one workspace volume. This is a single-owner application, not a multi-tenant hosting service.
+Use `PROFILE=full` with the same Dockerfile for the full composition. Keep `/data` and `/history` persistent: `/history` holds private usage and job history separately from Git work repositories. Use HTTPS through a trusted reverse proxy when accessing the instance beyond localhost. Do not run multiple containers against one workspace volume. This is a single-owner application.
 
 ## Development and verification
 
@@ -54,6 +57,8 @@ pnpm audit:core
 
 For browser verification, install Chromium with `pnpm exec playwright install chromium` and run `pnpm test:e2e`. Browser and image acceptance evidence is recorded under [docs/verification/ACCEPTANCE.md](docs/verification/ACCEPTANCE.md). CI and GitHub Actions are intentionally outside this initial recovery; local results do not imply remote CI success.
 
-The [Core architecture](docs/architecture/CORE.md) defines ownership and dependency direction. NLP, embeddings, rerankers, speaker inference, and LLM execution are excluded. Future add-ons must be independent workspace packages; Core must not depend on them.
+`pnpm verify` runs the frozen install, type and test checks, then builds and checks both Core and full profiles in Chromium and OCI. It also exercises both MCP transports and the NLP/Diagnostics persistence round trip. It requires an OCI engine, Chromium, and the tokenizer artifacts used by that acceptance. The separate real-provider, model-lifecycle, GitHub, and container-recovery gates have reproduction instructions under `docs/verification`; the local command alone does not certify those gates.
 
-See [CONTRIBUTING.md](CONTRIBUTING.md), [SECURITY.md](SECURITY.md), and the [MIT license](LICENSE). [Epic #1](https://github.com/yohn-jp/scriptorium/issues/1) tracks the initial recovery.
+The [Full Migration Architecture](docs/architecture/FULL-MIGRATION.md) and [fixed migration plan](docs/migration/FULL-MIGRATION-PLAN.md) define Epic #7. [Core Architecture](docs/architecture/CORE.md) remains the baseline where not superseded. Core does not import individual add-ons. Migration implementation and acceptance status are tracked in the plan's feature/data ledgers; older Core acceptance records describe their recorded commits.
+
+See [CONTRIBUTING.md](CONTRIBUTING.md), [SECURITY.md](SECURITY.md), and the [MIT license](LICENSE). [Epic #7](https://github.com/yohn-jp/scriptorium/issues/7) tracks the full migration; Epic #1 is the initial Core recovery history.
