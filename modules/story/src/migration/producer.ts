@@ -6,6 +6,7 @@ import {
   type MigrationProducer,
 } from "@scriptorium/migration";
 import type { RepositoryIdentity } from "@scriptorium/contracts";
+import { planStorySqliteWorkflow } from "./workflowRows.js";
 
 const STORY_SOURCE_ROOTS = [
   { prefix: "bible", extension: ".yaml" },
@@ -356,6 +357,11 @@ export function createStoryMigrationProducer(): MigrationProducer {
         const restored = await inspectLegacyStoryFiles(context, sourceFiles);
         result.entries.push(...restored.entries);
         result.operations.push(...restored.operations);
+
+        const workflows = await planStorySqliteWorkflow(context);
+        result.entries.push(...workflows.entries);
+        result.operations.push(...workflows.operations);
+        result.recovery.push(...workflows.recovery);
       }
 
       return result;
