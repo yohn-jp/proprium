@@ -183,7 +183,7 @@ test("writing UI recovers multi-document drafts and separates Draft, Checkpoint,
   await expect(page.locator(".scratch-panel summary")).toContainText("Draft を保護済み");
   await expect.poll(async () => (await readJournal(page)).some((entry) => entry.documentPath.startsWith("meta/scratch/") && entry.text === scratchText && entry.attachmentWrites === 1)).toBe(true);
 
-  const longReadingDraft = Array.from({ length: 240 }, () => "物語の続きを書く。読書ページを移動します。").join("\n");
+  const longReadingDraft = Array.from({ length: 240 }, () => "物語の続きを書く。読書ページを移動します。").join("");
   await editor.fill(longReadingDraft);
   await page.getByRole("button", { name: "読書モード" }).click();
   const pager = page.locator(".reading-pager");
