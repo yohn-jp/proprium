@@ -20,6 +20,52 @@ export interface Project {
   branch: string;
 }
 
+export type JobStatus = "queued" | "running" | "done" | "error";
+
+export interface PublicJob {
+  id: string;
+  type: string;
+  status: JobStatus;
+  /** Progress is a source-compatible 0–1 hint; null means unavailable. */
+  progress: number | null;
+  result: unknown | null;
+  error: string | null;
+  errorCode?: string;
+  retryable?: boolean;
+  createdAt: string;
+  updatedAt: string;
+  finishedAt: string | null;
+}
+
+export type JobEvent = {
+  type: "job-status" | "job-progress";
+  jobId: string;
+  jobType: string;
+  status: JobStatus;
+  progress: number | null;
+  error?: string;
+  at: string;
+};
+
+export interface InboxItem {
+  id: string;
+  kind: "job-complete";
+  jobId: string;
+  jobType: string;
+  title: string;
+  body: string;
+  status: "done" | "error";
+  read: boolean;
+  userId: string | null;
+  projectKey: string;
+  createdAt: string;
+}
+
+export interface InboxListResponse {
+  items: InboxItem[];
+  unreadCount: number;
+}
+
 export interface ProjectDetails {
   project: Project;
   observation: RemoteObservation;
@@ -161,6 +207,25 @@ async function request<T>(path: string, init: RequestInit = {}): Promise<T> {
   return body as T;
 }
 
+async function requestEventStream(path: string, signal: AbortSignal): Promise<Response> {
+  const response = await fetch(path, {
+    headers: { Accept: "text/event-stream" },
+    credentials: "same-origin",
+    signal,
+  });
+  if (!response.ok) {
+    const body: unknown = await response.json().catch(() => null);
+    const details = body && typeof body === "object" ? (body as Record<string, unknown>) : {};
+    throw new ApiError(
+      typeof details.error === "string" ? details.error : `Request failed (${response.status})`,
+      response.status,
+      typeof details.code === "string" ? details.code : "REQUEST_FAILED",
+    );
+  }
+  if (!response.body) throw new ApiError("Job event stream is unavailable", response.status, "STREAM_UNAVAILABLE");
+  return response;
+}
+
 function projectPath(projectId: string, suffix: string): string {
   return `/api/projects/${encodeURIComponent(projectId)}/${suffix}`;
 }
@@ -176,6 +241,23 @@ export const api = {
   login: (token: string) => request<{ authenticated: true }>("/api/login", { method: "POST", body: JSON.stringify({ token }) }),
   session: () => request<Session>("/api/session"),
   logout: () => request<{ authenticated: false }>("/api/logout", { method: "POST", body: "{}" }),
+  jobs: (signal?: AbortSignal) => request<PublicJob[]>("/api/jobs", { signal }),
+  job: (jobId: string, signal?: AbortSignal) =>
+    request<PublicJob>(`/api/jobs/${encodeURIComponent(jobId)}`, { signal }),
+  inbox: (unreadOnly = false, signal?: AbortSignal) => {
+    const query = unreadOnly ? "?unread=1" : "";
+    return request<InboxListResponse>(`/api/inbox${query}`, { signal });
+  },
+  markInboxRead: async (id: string, signal?: AbortSignal) => {
+    const response = await request<{ item: InboxItem }>(`/api/inbox/${encodeURIComponent(id)}/read`, {
+      method: "POST",
+      signal,
+    });
+    return response.item;
+  },
+  markAllInboxRead: (signal?: AbortSignal) =>
+    request<{ marked: number }>("/api/inbox/read-all", { method: "POST", signal }),
+  jobEventStream: (signal: AbortSignal) => requestEventStream("/api/jobs/events", signal),
   projects: () => request<Project[]>("/api/projects"),
   projectDetails: (projectId: string) => request<ProjectDetails>(`/api/projects/${encodeURIComponent(projectId)}`),
   registerProject: (url: string, branch?: string) => request<Project>("/api/projects", {
