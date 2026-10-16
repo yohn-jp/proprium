@@ -12,7 +12,7 @@
     "typecheck": "pnpm --filter @scriptorium/core typecheck && pnpm --filter @scriptorium/app typecheck && pnpm --filter @scriptorium/api typecheck",
     "test": "pnpm --filter @scriptorium/core test && pnpm --filter @scriptorium/api test && pnpm --filter @scriptorium/app test",
     "start": "node packages/api/dist/server.js",
-    "audit:core": "node scripts/audit-core.mjs"
+    "audit:core": "node scripts/audit-runtime-deps.mjs --node-modules node_modules --dist packages/core/dist --dist packages/api/dist --dist app/dist"
   },
   "devDependencies": {
     "@playwright/test": "^1.64.1",
