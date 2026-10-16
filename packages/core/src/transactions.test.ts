@@ -364,6 +364,32 @@ test("author approval binds to the exact operation payload", async () => {
   }
 });
 
+test("author proposal review exposes defensive copies and durable checkpoint status", async () => {
+  const fixture = await remoteFixture();
+  try {
+    const store = new CoreStore({ dataDir: path.join(fixture.root, "state"), allowLocalRemotes: true });
+    const project = await store.registerProject({ url: fixture.remote });
+    const snapshot = (await store.observe(project.id)).snapshot;
+    const op = operation(snapshot, "manuscript/reviewed.md", "Review this version.\n", null, "review_status_operation");
+    const proposal = await store.propose(project.id, { id: "review_status_proposal", snapshot, operations: [op], source: "module" });
+    const initial = await store.getProposal(project.id, proposal.id);
+    assert.equal(initial?.state, "proposed");
+    assert.equal(initial?.stale, false);
+    initial!.proposal.operations[0]!.writes[0]!.content = "mutated returned value";
+    assert.equal((await store.getProposal(project.id, proposal.id))?.proposal.operations[0]?.writes[0]?.content, "Review this version.\n");
+
+    await store.approve(project.id, { proposalId: proposal.id, operationIds: [op.id], authorScope: "owner" });
+    assert.equal((await store.listProposals(project.id))[0]?.state, "approved");
+    const receipt = await store.checkpoint(project.id, op);
+    const checkpointed = await store.getProposal(project.id, proposal.id);
+    assert.equal(checkpointed?.state, "checkpointed");
+    assert.deepEqual(checkpointed?.checkpoints, [receipt]);
+    assert.deepEqual(checkpointed?.approvedOperationIds, [op.id]);
+  } finally {
+    await fs.rm(fixture.root, { recursive: true, force: true });
+  }
+});
+
 test("approval is rejected when the proposal's remote snapshot has changed", async () => {
   const fixture = await remoteFixture();
   try {
@@ -377,6 +403,7 @@ test("approval is rejected when the proposal's remote snapshot has changed", asy
     await git(fixture.seed, "add", "upstream.md");
     await git(fixture.seed, "commit", "-m", "Change repository after proposal");
     await git(fixture.seed, "push", "origin", "main");
+    assert.equal((await store.getProposal(project.id, proposal.id))?.stale, true);
     await assert.rejects(
       store.approve(project.id, { proposalId: proposal.id, operationIds: [op.id], authorScope: "owner" }),
       (error: unknown) => error instanceof CoreError && error.code === "proposal_snapshot_stale",
@@ -448,10 +475,16 @@ test("binary operation writes preserve exact bytes in the workspace and a replac
     assert.deepEqual(await fs.readFile(path.join(dataDir, "projects", project.id, "attachments/raw.bin")), bytes);
     const publication = await store.publish(project.id, "batch_binary_attachment");
     assert.equal(publication.state, "confirmed");
+    const remoteBinary = await (await store.reader(project.id, "remote")).read("attachments/raw.bin", "base64");
+    assert.equal(remoteBinary?.content, bytes.toString("base64"));
+    assert.equal(remoteBinary?.revision, createHash("sha256").update(bytes).digest("hex"));
 
     const replacement = new CoreStore({ dataDir: path.join(fixture.root, "replacement-state"), allowLocalRemotes: true });
     const clone = await replacement.registerProject({ url: fixture.remote });
     assert.deepEqual(await fs.readFile(path.join(replacement.dataDir, "projects", clone.id, "attachments/raw.bin")), bytes);
+    const clonedBinary = await (await replacement.reader(clone.id, "remote")).read("attachments/raw.bin", "base64");
+    assert.equal(clonedBinary?.content, bytes.toString("base64"));
+    assert.equal(clonedBinary?.revision, createHash("sha256").update(bytes).digest("hex"));
     assert.equal((await replacement.observe(clone.id)).pending.length, 0);
   } finally {
     await fs.rm(fixture.root, { recursive: true, force: true });

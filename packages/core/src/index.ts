@@ -89,6 +89,14 @@ export interface ManuscriptSnapshot extends ManuscriptSnapshotMeta {
   document: { path: string; content: string; revision: string };
 }
 
+export interface ProposalStatus {
+  proposal: ChangeProposal;
+  state: "proposed" | "partially_approved" | "approved" | "checkpointed";
+  approvedOperationIds: string[];
+  checkpoints: CheckpointReceipt[];
+  stale: boolean;
+}
+
 export interface SyncStatus {
   branch: string;
   head: string;
@@ -838,11 +846,16 @@ export class CoreStore implements MutationCoordinator {
     return null;
   }
 
-  private async snapshotFile(root: string, commit: string, relativePath: string): Promise<{ content: string; revision: string } | null> {
+  private async snapshotFile(
+    root: string,
+    commit: string,
+    relativePath: string,
+    encoding: "utf8" | "base64" = "utf8",
+  ): Promise<{ content: string; revision: string } | null> {
     const entry = await this.treeEntry(root, commit, relativePath);
     if (!entry) return null;
     const bytes = await gitBuffer(root, ["cat-file", "blob", entry.hash]);
-    return { content: bytes.toString("utf8"), revision: revisionForBytes(bytes) };
+    return { content: encoding === "base64" ? bytes.toString("base64") : bytes.toString("utf8"), revision: revisionForBytes(bytes) };
   }
 
   private async snapshotFiles(root: string, commit: string, prefix: string): Promise<string[]> {
@@ -1140,9 +1153,10 @@ export class CoreStore implements MutationCoordinator {
   private async makeReader(root: string, snapshot: SnapshotId, commit: string): Promise<SnapshotReader> {
     return {
       snapshot,
-      read: async (relativePath) => {
+      read: async (relativePath, encoding = "utf8") => {
         assertProjectPath(relativePath);
-        return this.snapshotFile(root, commit, relativePath);
+        if (encoding !== "utf8" && encoding !== "base64") throw coreError(400, "invalid_read_encoding", "Snapshot reads support UTF-8 or base64 encoding");
+        return this.snapshotFile(root, commit, relativePath, encoding);
       },
       list: async (prefix) => this.snapshotFiles(root, commit, prefix),
     };
@@ -1282,6 +1296,76 @@ export class CoreStore implements MutationCoordinator {
         document: { path: manuscriptPath, content, revision: documentFile?.revision ?? null },
         metadata: { path: found.path, content: found.text, revision: revisionForBytes(found.text) },
       };
+    });
+  }
+
+  private buildProposalStatus(
+    projectId: string,
+    proposal: ChangeProposal,
+    observation: RemoteObservation,
+    storedOperations: Map<string, StoredOperation>,
+  ): ProposalStatus {
+    const approval = this.approvals.get(projectId)?.get(proposal.id);
+    const approvedOperationIds: string[] = [];
+    const checkpoints: CheckpointReceipt[] = [];
+    for (const operation of proposal.operations) {
+      const digest = operationDigest(operation);
+      if (approval?.operationDigests.get(operation.id) === digest) approvedOperationIds.push(operation.id);
+      const stored = storedOperations.get(operation.id);
+      if (stored && stored.digest === digest && stored.operation.generation === operation.generation && receiptMatchesOperation(stored.receipt, operation)) {
+        checkpoints.push(structuredClone(stored.receipt));
+      }
+    }
+    const total = proposal.operations.length;
+    const checkpointedCount = checkpoints.length;
+    const approvedCount = approvedOperationIds.length;
+    const state: ProposalStatus["state"] = checkpointedCount === total
+      ? "checkpointed"
+      : approvedCount + checkpointedCount === total
+        ? "approved"
+        : approvedCount + checkpointedCount > 0
+          ? "partially_approved"
+          : "proposed";
+    return {
+      proposal: structuredClone(proposal),
+      state,
+      approvedOperationIds,
+      checkpoints,
+      stale: snapshotKey({ repository: proposal.snapshot.repository, remoteCommit: proposal.snapshot.remoteCommit }) !==
+        snapshotKey({ repository: observation.snapshot.repository, remoteCommit: observation.snapshot.remoteCommit }),
+    };
+  }
+
+  private async proposalOperationRecords(root: string, observation: RemoteObservation): Promise<Map<string, StoredOperation>> {
+    const remote = observation.snapshot.remoteCommit ? await this.readOperationRecords(root, observation.snapshot.remoteCommit) : [];
+    const local = await this.readLocalOperationRecords(root);
+    const records = new Map<string, StoredOperation>();
+    for (const stored of local) records.set(stored.operation.id, stored);
+    for (const stored of remote) records.set(stored.operation.id, stored);
+    return records;
+  }
+
+  async listProposals(projectId: string): Promise<ProposalStatus[]> {
+    return this.withProjectLock(projectId, async () => {
+      const observation = await this.requireObservation(projectId);
+      const { record, root } = await this.getProject(projectId);
+      const proposals = [...(this.proposals.get(record.id)?.values() ?? [])];
+      const storedOperations = await this.proposalOperationRecords(root, observation);
+      return proposals.map((proposal) => this.buildProposalStatus(record.id, proposal, observation, storedOperations));
+    });
+  }
+
+  async getProposal(projectId: string, proposalId: string): Promise<ProposalStatus | null> {
+    if (typeof proposalId !== "string" || !/^[A-Za-z0-9_-]{1,128}$/.test(proposalId)) {
+      throw coreError(400, "invalid_proposal_id", "The proposal ID is invalid");
+    }
+    return this.withProjectLock(projectId, async () => {
+      const observation = await this.requireObservation(projectId);
+      const { record, root } = await this.getProject(projectId);
+      const proposal = this.proposals.get(record.id)?.get(proposalId);
+      if (!proposal) return null;
+      const storedOperations = await this.proposalOperationRecords(root, observation);
+      return this.buildProposalStatus(record.id, proposal, observation, storedOperations);
     });
   }
 
