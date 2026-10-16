@@ -217,6 +217,20 @@ function sourceHash(text: string): string {
   return (hash >>> 0).toString(16).padStart(8, "0");
 }
 
+test("state-proposal lifecycle uses the source manuscript FNV hash", async () => {
+  const reader = makeReader(fixtureFiles());
+  const proposals: Array<{ id: string; operations: ChangeOperation[] }> = [];
+  const context = makeActionContext(reader, { proposals });
+  const created = await invoke<{ id: string; manuscriptHash: string }>("story.state-proposals.create", {
+    id: "proposal-arrival",
+    sceneId: "sc-1",
+    event: { kind: "location", subject: "char-uma", object: "loc-cafe", payload: {} },
+  }, context);
+  assert.equal(created.data.manuscriptHash, sourceHash("Uma enters the cafe."));
+  const row = JSON.parse(proposals[0]!.operations[0]!.writes[0]!.content!) as { manuscript_hash: string };
+  assert.equal(row.manuscript_hash, sourceHash("Uma enters the cafe."));
+});
+
 test("NarrativeChangeSet preserves all nine source operation kinds in one identity-bound Core proposal", async () => {
   const body = "Uma enters the cafe.";
   const stateProposal = {

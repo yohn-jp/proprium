@@ -254,6 +254,15 @@ function stateProposalFile(rows: readonly StoredStateProposal[]): string {
   return rows.map((row) => JSON.stringify(row)).join("\n") + (rows.length ? "\n" : "");
 }
 
+function manuscriptTextHash(value: string): string {
+  let hash = 0x811c9dc5;
+  for (let index = 0; index < value.length; index++) {
+    hash ^= value.charCodeAt(index);
+    hash = Math.imul(hash, 0x01000193);
+  }
+  return (hash >>> 0).toString(16).padStart(8, "0");
+}
+
 function createStateEvent(input: ObjectValue, scene: StoryEntity, manuscriptHash: string): StateProposal {
   const raw = parseRecord(input.event, "event");
   const kind = raw.kind;
@@ -971,7 +980,7 @@ function makeActions(moduleContext: StoryCapabilityContext): ModuleAction[] {
       const scene = story.entities.get(stringValue(input.sceneId, "sceneId"));
       if (scene?.type !== "scene") throw new TypeError(`Scene not found: ${String(input.sceneId)}`);
       const manuscript = typeof scene.raw.manuscript === "string" ? [...story.entities.values()].find((entity) => entity.filePath === scene.raw.manuscript)?.body ?? "" : "";
-      const proposal = createStateEvent(input, scene, createHash("sha256").update(manuscript, "utf8").digest("hex"));
+      const proposal = createStateEvent(input, scene, manuscriptTextHash(manuscript));
       validateEventReferences(proposal.event, story);
       const { rows, revision } = await readStateProposals(context);
       if (rows.some((row) => row.id === proposal.id)) throw Object.assign(new Error(`State proposal already exists: ${proposal.id}`), { code: "proposal_conflict" });
@@ -991,7 +1000,7 @@ function makeActions(moduleContext: StoryCapabilityContext): ModuleAction[] {
       const scene = story.entities.get(String(prior.event.sceneId));
       if (scene?.type !== "scene") throw new TypeError("State proposal scene not found");
       const manuscript = typeof scene.raw.manuscript === "string" ? [...story.entities.values()].find((entity) => entity.filePath === scene.raw.manuscript)?.body ?? "" : "";
-      const updated = createStateEvent({ id: prior.id, event: input.event }, scene, createHash("sha256").update(manuscript, "utf8").digest("hex"));
+      const updated = createStateEvent({ id: prior.id, event: input.event }, scene, manuscriptTextHash(manuscript));
       validateEventReferences(updated.event, story);
       updated.createdAt = prior.createdAt;
       updated.history = [...prior.history, { action: "edited", at: updated.updatedAt, event: updated.event }];
@@ -1048,7 +1057,7 @@ function makeActions(moduleContext: StoryCapabilityContext): ModuleAction[] {
       const scene = story.entities.get(stringValue(input.sceneId, "sceneId"));
       if (scene?.type !== "scene") throw new TypeError("Scene not found");
       const manuscript = typeof scene.raw.manuscript === "string" ? [...story.entities.values()].find((entity) => entity.filePath === scene.raw.manuscript)?.body ?? "" : "";
-      const hash = createHash("sha256").update(manuscript, "utf8").digest("hex");
+      const hash = manuscriptTextHash(manuscript);
       const { rows, revision } = await readStateProposals(context);
       const changed: StateProposal[] = [];
       for (let index = 0; index < rows.length; index++) {
