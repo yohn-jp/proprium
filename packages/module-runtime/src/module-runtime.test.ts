@@ -637,33 +637,64 @@ test("optional capabilities do not block profile resolution and cannot activate 
 
 test("HTTP contributions are hidden until activation and public reads cannot propose; streamed calls drain on cancel", async () => {
   const metadata = manifest("publishing");
+  const story = manifest("story");
   let proposals = 0;
+  let storyImports = 0;
+  let linkedReaderCalls = 0;
   const runtime = new ModuleRuntime({
-    manifests: [metadata], enabled: ["publishing"], cacheDirectory: "/tmp/scriptorium-runtime-test",
-    loaders: { publishing: async () => ({
-      manifest: metadata,
-      actions: [],
-      ui: [],
-      http: [
-        { id: "public-read", path: "public/status", methods: ["GET"], access: "public", effect: "read", async handle(_request, context) {
-          await context.propose([proposalOperation()]);
-          return Response.json({ ok: true });
-        } },
-        { id: "stream", path: "public/stream", methods: ["GET"], access: "public", effect: "read", async handle() {
-          return new Response(new ReadableStream<Uint8Array>({ pull(controller) { controller.enqueue(new TextEncoder().encode("chunk")); } }));
-        } },
-      ],
-      async dispose() {},
-    }) },
+    manifests: [metadata, story], enabled: ["publishing", "story"], cacheDirectory: "/tmp/scriptorium-runtime-test",
+    loaders: {
+      story: async () => {
+        storyImports += 1;
+        return definition(story, {
+          id: "private-read", effect: "read", inputSchema: schema, outputSchema: schema,
+          async invoke(_input, context) { return { ok: true, snapshot: context.reader.snapshot, data: { private: true } }; },
+        });
+      },
+      publishing: async () => ({
+        manifest: metadata,
+        actions: [],
+        ui: [],
+        http: [
+          { id: "public-read", path: "public/status", methods: ["GET"], access: "public", effect: "read", async handle(_request, context) {
+            await context.propose([proposalOperation()]);
+            return Response.json({ ok: true });
+          } },
+          { id: "public-context", path: "public/context", methods: ["GET"], access: "public", effect: "read", async handle(_request, context) {
+            const actions = await context.listActions();
+            const nested = await context.invoke("story.private-read", {});
+            let linkedReaderError: string | undefined;
+            try { await context.linkedReader("repo-linked"); } catch (error) {
+              linkedReaderError = (error as { code?: string }).code;
+            }
+            return Response.json({ actions, nested, linkedReaderError });
+          } },
+          { id: "stream", path: "public/stream", methods: ["GET"], access: "public", effect: "read", async handle() {
+            return new Response(new ReadableStream<Uint8Array>({ pull(controller) { controller.enqueue(new TextEncoder().encode("chunk")); } }));
+          } },
+        ],
+        async dispose() {},
+      }),
+    },
   });
   assert.deepEqual(runtime.httpContributions("publishing"), []);
   await runtime.activate("publishing");
   const descriptors = runtime.httpContributions("publishing");
-  assert.equal(descriptors.length, 2);
+  assert.equal(descriptors.length, 3);
   assert.equal("handle" in descriptors[0]!, false);
   const host = {
     ...readContext(),
     access: "public" as const,
+    actions: [{ module: "core" as const, action: {
+      id: "status", effect: "read" as const, inputSchema: schema, outputSchema: schema,
+      async invoke(_input: unknown, context: ModuleActionContext) {
+        return { ok: true as const, snapshot: context.reader.snapshot, data: { projectId: context.projectId } };
+      },
+    } }],
+    async linkedReader() {
+      linkedReaderCalls += 1;
+      return { ...readContext().reader, snapshot: { ...snapshot, repository: { ...snapshot.repository, repositoryId: "repo-linked" } } };
+    },
     async propose(operations: ChangeOperation[]): Promise<ChangeProposal> {
       proposals += 1;
       return { id: "proposal-http", snapshot, operations, source: "module" };
@@ -672,6 +703,16 @@ test("HTTP contributions are hidden until activation and public reads cannot pro
   const denied = await runtime.invokeHttp("publishing", "public-read", new Request("http://localhost/public/status"), host);
   assert.equal(denied.status, 403);
   assert.equal(proposals, 0);
+
+  const publicContext = await runtime.invokeHttp("publishing", "public-context", new Request("http://localhost/public/context"), host);
+  assert.equal(publicContext.status, 200);
+  assert.deepEqual(await publicContext.json(), {
+    actions: [],
+    nested: { ok: false, snapshot, error: { code: "public_action_unavailable", message: "Public routes cannot invoke composed actions", retryable: false } },
+    linkedReaderError: "public_access_restricted",
+  });
+  assert.equal(storyImports, 0, "public route contexts do not enumerate or activate private modules");
+  assert.equal(linkedReaderCalls, 0, "public route contexts cannot access linked repositories");
 
   const streaming = await runtime.invokeHttp("publishing", "stream", new Request("http://localhost/public/stream"), host);
   assert.equal(streaming.status, 200);

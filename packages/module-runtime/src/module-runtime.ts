@@ -628,14 +628,16 @@ export class ModuleRuntime {
       invoke: async (actionId, input, callSignal) => {
         const invocationSignal = callSignal ? AbortSignal.any([signal, callSignal]) : signal;
         if (invocationSignal.aborted) return actionFailure(host.reader.snapshot, machineError("action_cancelled", "Action was cancelled"));
+        if (host.access === "public") return actionFailure(host.reader.snapshot, machineError("public_action_unavailable", "Public routes cannot invoke composed actions"));
         const result = await this.invokeComposedAction(actionId, input, host, invocationSignal, depth + 1, inheritedEffect);
         if (invocationSignal.aborted) return actionFailure(host.reader.snapshot, machineError("action_cancelled", "Action was cancelled"));
         if (result.ok && result.proposals?.length) proposals.push(...result.proposals);
         return result;
       },
-      listActions: () => this.listActions(host),
+      listActions: () => host.access === "public" ? Promise.resolve([]) : this.listActions(host),
       linkedReader: async (repositoryId) => {
         if (signal.aborted) throw new ModuleRuntimeError("action_cancelled", "Action was cancelled");
+        if (host.access === "public") throw new ModuleRuntimeError("public_access_restricted", "Public routes cannot read linked repositories");
         if (!host.linkedReader) throw new ModuleRuntimeError("linked_repository_unavailable", "No linked repository reader is registered for this host");
         const reader = await host.linkedReader(repositoryId);
         const linked = reader?.snapshot?.repository;
