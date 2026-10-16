@@ -35,13 +35,24 @@ export interface PublicJob {
   finishedAt: string | null;
 }
 
-export interface JobEvent {
+export type JobEvent = JobStatusEvent | JobProgressEvent;
+
+export interface JobStatusEvent {
   type: "job-status";
   jobId: string;
   jobType: string;
   status: PublicJobStatus;
   progress: number | null;
   error?: string;
+  at: string;
+}
+
+export interface JobProgressEvent {
+  type: "job-progress";
+  jobId: string;
+  jobType: string;
+  status: PublicJobStatus;
+  progress: number;
   at: string;
 }
 
@@ -205,6 +216,31 @@ export class JobHistoryStore {
       record.job.status = "running";
       record.job.updatedAt = now;
       const event = jobEvent(record.job);
+      await this.persist(next);
+      this.state = next;
+      return event;
+    });
+  }
+
+  /** Store the source-compatible 0..1 progress hint and return its SSE event. */
+  async reportDomainJobProgress(id: string, progress: number): Promise<JobProgressEvent | null> {
+    return this.exclusive(async () => {
+      await this.load();
+      if (!Number.isFinite(progress)) throw new JobHistoryError("job_progress_invalid", "Job progress must be a finite number");
+      const current = this.state.jobs.find((entry) => entry.job.id === id);
+      if (!current || current.kind !== "domain") throw new JobHistoryError("job_not_found", "Domain job was not registered");
+      if (current.job.status !== "running") throw new JobHistoryError("job_lifecycle_conflict", "Only a running domain job can report progress");
+
+      const boundedProgress = Math.max(0, Math.min(1, progress));
+      if (current.job.progress === boundedProgress) return null;
+      const next = cloneState(this.state);
+      const record = next.jobs.find((entry) => entry.job.id === id)!;
+      record.job.progress = boundedProgress;
+      record.job.updatedAt = nextTimestamp(record.job.updatedAt);
+      const event: JobProgressEvent = {
+        type: "job-progress", jobId: record.job.id, jobType: record.job.type, status: record.job.status,
+        progress: boundedProgress, at: record.job.updatedAt,
+      };
       await this.persist(next);
       this.state = next;
       return event;
@@ -613,7 +649,7 @@ function domainResultJob(current: PublicJob, result: ActionResult): PublicJob {
   return next;
 }
 
-function jobEvent(job: PublicJob): JobEvent {
+function jobEvent(job: PublicJob): JobStatusEvent {
   return {
     type: "job-status", jobId: job.id, jobType: job.type, status: job.status, progress: job.progress,
     ...(job.error ? { error: job.error } : {}), at: job.updatedAt,

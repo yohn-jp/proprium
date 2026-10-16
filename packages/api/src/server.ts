@@ -8,7 +8,7 @@ import { fileURLToPath, pathToFileURL } from "node:url";
 import Fastify, { type FastifyInstance, type FastifyRequest } from "fastify";
 import { CONTRACT_VERSION, MODEL_USAGE_CAPABILITY, snapshotKey, type ActionDescriptor, type ActionResult, type ChangeOperation, type ChangeProposal, type HttpContribution, type ModelUsageStore, type ModuleAction, type ModuleActionContext, type ModuleId, type ModuleStatus, type ProposalEvidence, type SnapshotId, type ValueSchema } from "@scriptorium/contracts";
 import type { CoreStore, CreateHierarchyInput, HierarchyTarget, Project, ReorderHierarchyInput } from "@scriptorium/core";
-import { ModuleRuntime, type ActionHostContext, type ModuleLoader, type ModuleRuntimeOptions, type WorkerJobLifecycleSnapshot } from "@scriptorium/module-runtime";
+import { ModuleRuntime, type ActionHostContext, type DomainJobActionExecutor, type ModuleLoader, type ModuleRuntimeOptions, type WorkerJobLifecycleSnapshot } from "@scriptorium/module-runtime";
 import { HistoricalModelUsageStore } from "./historical-store.js";
 import { JobHistoryError, JobHistoryStore, type JobEvent } from "./job-history-store.js";
 
@@ -335,7 +335,7 @@ type DomainJobTracker = (
   descriptor: TrackedDomainAction,
   snapshot: SnapshotId,
   signal: AbortSignal,
-  execute: () => Promise<ActionResult>,
+  execute: DomainJobActionExecutor,
 ) => Promise<ActionResult>;
 
 type ApiActionHost = Omit<ActionHostContext, "propose"> & {
@@ -779,7 +779,10 @@ export function createServer(options: ApiServerOptions): Server {
         try {
           result = jobSignal.aborted
             ? actionFailure(snapshot, jobSignal.reason, "action_cancelled")
-            : await execute();
+            : await execute(async (progress) => {
+                const event = await jobHistory.reportDomainJobProgress(id, progress);
+                if (event) publishJobEvent(event);
+              });
         }
         catch (error) { result = actionFailure(snapshot, error, "domain_job_failed"); }
         try { publishJobEvent(await jobHistory.finishDomainJob(id, result)); }

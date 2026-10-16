@@ -279,7 +279,11 @@ function sourceDomainJobRuntime(cacheDirectory: string): {
     id: "speaker.evaluation.run", effect: "compute", job: { type: "speaker-eval" },
     inputSchema: schema, outputSchema: schema,
     async invoke(rawInput, context): Promise<ActionResult> {
-      const input = rawInput as { fail?: boolean; wait?: boolean };
+      const input = rawInput as { fail?: boolean; wait?: boolean; progress?: number[] };
+      if (Array.isArray(input.progress)) {
+        if (!context.reportProgress) throw new Error("The host did not scope domain progress to this invocation");
+        for (const progress of input.progress) await context.reportProgress(progress);
+      }
       if (input.wait) {
         resolveAsyncStarted();
         await asyncGate;
@@ -591,6 +595,18 @@ describe("Scriptorium HTTP boundary", () => {
     assert.equal(queued.progress, 0);
     const running = await store.markDomainJobRunning("domain-job-success");
     assert.equal(running.status, "running");
+    assert.deepEqual(await store.reportDomainJobProgress("domain-job-success", 0.4), {
+      type: "job-progress", jobId: "domain-job-success", jobType: "speaker-eval", status: "running", progress: 0.4,
+      at: (await store.getJob("domain-job-success"))!.updatedAt,
+    });
+    const regressed = await store.reportDomainJobProgress("domain-job-success", 0.1);
+    assert.equal(regressed?.type, "job-progress", "source progress may report a lower value in a later phase");
+    assert.equal(regressed?.progress, 0.1);
+    assert.equal(await store.reportDomainJobProgress("domain-job-success", 1.5).then((event) => event?.progress), 1,
+      "finite source progress is bounded to the source 0–1 range");
+    assert.equal(await store.reportDomainJobProgress("domain-job-success", 1), null, "identical progress may be coalesced");
+    await assert.rejects(store.reportDomainJobProgress("domain-job-success", Number.NaN),
+      (error: unknown) => error instanceof JobHistoryError && error.code === "job_progress_invalid");
     assert.equal((await store.finishDomainJob("domain-job-success", success)).status, "done");
 
     const failed: ActionResult = {
@@ -616,11 +632,13 @@ describe("Scriptorium HTTP boundary", () => {
     assert.equal(failedJob?.retryable, false);
     await store.beginDomainJob({ id: "domain-job-interrupted", type: "speaker-retrain", repository: SNAPSHOT.repository });
     await store.markDomainJobRunning("domain-job-interrupted");
+    await store.reportDomainJobProgress("domain-job-interrupted", 0.42);
     assert.equal((await reopened.listInbox()).unreadCount, 2);
     const afterRestart = new JobHistoryStore(usageDirectory);
     const interrupted = await afterRestart.getJob("domain-job-interrupted");
     assert.equal(interrupted?.status, "error", "an active target task becomes a non-replayed interruption after a store restart");
     assert.equal(interrupted?.errorCode, "worker_interrupted");
+    assert.equal(interrupted?.progress, 0.42, "the latest fractional progress survives a host-history restart");
   });
 
   it("tracks exact source job results through direct actions and nested HTTP MCP invokes", async (t) => {
@@ -634,13 +652,48 @@ describe("Scriptorium HTTP boundary", () => {
       runtime: domain.runtime,
       usageDirectory,
     });
-    t.after(async () => { domain.releaseAsync(); await api.close(); });
     const owner = await login(api.base);
     const ownerHeaders = { Cookie: owner.cookie, Origin: api.base, "Content-Type": "application/json" };
     const expectedData = { report: { examples: 3, accuracy: 0.75 }, version: "synthetic-v1" };
+    let progressAbort: AbortController | undefined;
+    let progressReader: ReadableStreamDefaultReader<Uint8Array> | undefined;
+    let progressEventsTask: Promise<Array<{ type: string; jobId: string; jobType: string; status: string; progress: number; at: string }>> | undefined;
+    t.after(async () => {
+      domain.releaseAsync();
+      progressAbort?.abort();
+      await progressReader?.cancel().catch(() => undefined);
+      await progressEventsTask?.catch(() => undefined);
+      await api.close();
+    });
+    progressAbort = new AbortController();
+    const progressResponse = await fetch(`${api.base}/api/jobs/events`, {
+      headers: { Cookie: owner.cookie }, signal: progressAbort.signal,
+    });
+    assert.equal(progressResponse.status, 200);
+    assert.ok(progressResponse.body);
+    progressReader = progressResponse.body.getReader();
+    progressEventsTask = (async () => {
+      const decoder = new TextDecoder();
+      const events: Array<{ type: string; jobId: string; jobType: string; status: string; progress: number; at: string }> = [];
+      let buffer = "";
+      while (events.length < 5) {
+        const { value, done } = await progressReader!.read();
+        if (done) throw new Error("The owner job event stream closed before all progress events arrived");
+        buffer += decoder.decode(value, { stream: true });
+        const frames = buffer.split("\n\n");
+        buffer = frames.pop() ?? "";
+        for (const frame of frames) {
+          const data = frame.split("\n").find((line) => line.startsWith("data: "))?.slice(6);
+          if (!data) continue;
+          const event = JSON.parse(data) as { type: string; jobId: string; jobType: string; status: string; progress: number; at: string };
+          if (event.type === "job-progress") events.push(event);
+        }
+      }
+      return events;
+    })();
 
     const directResponse = await fetch(`${api.base}/api/projects/project-1/actions/speaker.evaluation.run`, {
-      method: "POST", headers: ownerHeaders, body: JSON.stringify({ input: { requestSecret: "must-not-be-captured" } }),
+      method: "POST", headers: ownerHeaders, body: JSON.stringify({ input: { requestSecret: "must-not-be-captured", progress: [0.7] } }),
     });
     assert.equal(directResponse.status, 200);
     const directJobId = directResponse.headers.get("x-scriptorium-job-id");
@@ -654,7 +707,7 @@ describe("Scriptorium HTTP boundary", () => {
     assert.deepEqual(directJob.result, expectedData);
 
     const nestedResponse = await fetch(`${api.base}/api/projects/project-1/modules/mcp/invoke`, {
-      method: "POST", headers: ownerHeaders, body: JSON.stringify({ nested: true }),
+      method: "POST", headers: ownerHeaders, body: JSON.stringify({ nested: true, progress: [0.4, 0.1] }),
     });
     assert.equal(nestedResponse.status, 200);
     const nestedJobId = nestedResponse.headers.get("x-scriptorium-job-id");
@@ -681,7 +734,7 @@ describe("Scriptorium HTTP boundary", () => {
 
     const asyncResponsePromise = fetch(`${api.base}/api/projects/project-1/actions/speaker.evaluation.run`, {
       method: "POST", headers: { ...ownerHeaders, Prefer: "respond-async" },
-      body: JSON.stringify({ input: { wait: true } }),
+      body: JSON.stringify({ input: { wait: true, progress: [0.05, 1.5] } }),
     });
     const asyncResponse = await asyncResponsePromise;
     assert.equal(asyncResponse.status, 202);
@@ -690,6 +743,13 @@ describe("Scriptorium HTTP boundary", () => {
     assert.ok(asyncJobId);
     assert.equal((await asyncResponse.json() as { id: string }).id, asyncJobId);
     await domain.asyncStarted;
+    const progressEvents = await progressEventsTask;
+    assert.deepEqual(progressEvents.map(({ jobId, progress }) => [jobId, progress]), [
+      [directJobId, 0.7], [nestedJobId, 0.4], [nestedJobId, 0.1], [asyncJobId, 0.05], [asyncJobId, 1],
+    ], "SSE progress keeps source fractions, phase regressions, clamped values, and exact direct/nested job IDs");
+    assert.ok(progressEvents.every(({ type, jobType, status, at }) => type === "job-progress" && jobType === "speaker-eval" && status === "running" && Date.parse(at) > 0));
+    progressAbort.abort();
+    await progressReader.cancel().catch(() => undefined);
     const runningJobResponse = await fetch(`${api.base}/api/jobs/${asyncJobId}`, { headers: { Cookie: owner.cookie } });
     assert.equal(runningJobResponse.status, 200);
     assert.equal((await runningJobResponse.json() as { status: string }).status, "running");
