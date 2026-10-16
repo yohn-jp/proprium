@@ -174,6 +174,105 @@ test("aspect review runs the deterministic local source implementation without c
   }
 });
 
+test("rewrite proposal preserves all candidates until the author chooses one and pins the manuscript selection", async () => {
+  const scenePath = "plot/volumes/vol-main/chapters/ch-rewrite/scenes/sc-rewrite.yaml";
+  const manuscriptPath = "manuscript/vol-main/ch-rewrite/sc-rewrite.md";
+  const files = {
+    "plot/volumes/vol-main/volume.yaml": "id: vol-main\ntype: volume\nname: Main\norder: 1\n",
+    "plot/volumes/vol-main/chapters/ch-rewrite/chapter.yaml": "id: ch-rewrite\ntype: chapter\nname: Rewrite\nvolume: vol-main\norder: 1\n",
+    [scenePath]: `id: sc-rewrite\ntype: scene\nchapter: ch-rewrite\norder: 1\ntitle: Rewrite\nmanuscript: ${manuscriptPath}\n`,
+    [manuscriptPath]: "---\ntitle: Rewrite\n---\n彼は夜の駅で彼女を見つけた。",
+  };
+  let proposed: ChangeOperation[] = [];
+  const action = getAction(createAssistantActions(moduleContext()), "assistant.rewrite.propose");
+  const result = await action.invoke({
+    sceneId: "sc-rewrite",
+    selectedText: "彼は夜の駅で彼女を見つけた。",
+    replacementText: "夜の駅で、彼は彼女へ目を向けた。",
+  }, context({ files, onPropose(operations) { proposed = operations; } }));
+  assert.equal(result.ok, true);
+  assert.equal(proposed.length, 1);
+  assert.equal(proposed[0]?.effect, "manuscript");
+  assert.deepEqual(proposed[0]?.reads.map((item) => item.path).sort(), [scenePath, manuscriptPath].sort());
+  assert.equal(proposed[0]?.writes[0]?.content, "---\ntitle: Rewrite\n---\n夜の駅で、彼は彼女へ目を向けた。");
+  if (result.ok) assert.equal((result.data as Record<string, unknown>).replacementText, "夜の駅で、彼は彼女へ目を向けた。");
+});
+
+test("chapter summary proposes fresh child and parent summaries in one Core operation", async () => {
+  let requestCount = 0;
+  const server = createServer((request, response) => {
+    request.resume();
+    request.on("end", () => {
+      requestCount += 1;
+      const content = requestCount === 1
+        ? JSON.stringify({ summaryLines: ["彼女が駅へ来た。", "彼が手紙を渡した。", "二人は別れた。"], characters: ["彼女"], stateChanges: [] })
+        : JSON.stringify({ summaryLines: ["彼女が駅へ来て手紙を受け取る。", "二人は再会を約束して別れる。", "手紙が次章への手がかりになる。"] });
+      response.writeHead(200, { "Content-Type": "text/event-stream", Connection: "keep-alive" });
+      const chunk = {
+        id: `chatcmpl-local-summary-${requestCount}`, object: "chat.completion.chunk", created: 1, model: "synthetic-local",
+        choices: [{ index: 0, delta: { content }, finish_reason: "stop" }],
+      };
+      response.end(`data: ${JSON.stringify(chunk)}\n\ndata: [DONE]\n\n`);
+    });
+  });
+  await new Promise<void>((resolve, reject) => {
+    server.once("error", reject);
+    server.listen(0, "127.0.0.1", resolve);
+  });
+  const address = server.address();
+  assert.ok(address && typeof address !== "string");
+  const envNames = ["ARCADIA_LLM_PROVIDER", "ARCADIA_LLM_MODEL", "ARCADIA_LLM_BASE_URL", "ARCADIA_LLM_API_KEY", "CF_AIG_TOKEN", "CF_AIG_BYOK_ALIAS"] as const;
+  const previousEnv = new Map(envNames.map((name) => [name, process.env[name]]));
+  process.env.ARCADIA_LLM_PROVIDER = "openai-compatible";
+  process.env.ARCADIA_LLM_MODEL = "synthetic-local";
+  process.env.ARCADIA_LLM_BASE_URL = `http://127.0.0.1:${address.port}/v1`;
+  process.env.ARCADIA_LLM_API_KEY = "local-test-placeholder";
+  delete process.env.CF_AIG_TOKEN;
+  delete process.env.CF_AIG_BYOK_ALIAS;
+  const files: Record<string, string> = {
+    "plot/volumes/vol-main/volume.yaml": "id: vol-main\ntype: volume\nname: Main\norder: 1\n",
+    "plot/volumes/vol-main/chapters/ch-summary/chapter.yaml": "id: ch-summary\ntype: chapter\nname: Summary chapter\nvolume: vol-main\norder: 1\n",
+    "plot/volumes/vol-main/chapters/ch-summary/scenes/sc-summary.yaml": "id: sc-summary\ntype: scene\nchapter: ch-summary\norder: 1\ntitle: Station\nmanuscript: manuscript/vol-main/ch-summary/sc-summary.md\n",
+    "manuscript/vol-main/ch-summary/sc-summary.md": "彼女は駅へ来た。彼は手紙を渡した。二人は別れを告げた。",
+  };
+  const store: ModelUsageStore = { async append() {}, async list() { return { events: [] }; } };
+  const operations: ChangeOperation[][] = [];
+  try {
+    const action = getAction(createAssistantActions(moduleContext(store)), "assistant.summary.chapter");
+    const result = await action.invoke({ chapterId: "ch-summary" }, context({
+      files,
+      async invoke(actionId) {
+        assert.equal(actionId, "nlp.features");
+        return { ok: true, snapshot, data: { features: [
+          { id: "scene-summary", locality: "external", enabled: true },
+          { id: "chapter-summary", locality: "external", enabled: true },
+        ] } };
+      },
+      onPropose(value) { operations.push(value); },
+    }));
+    assert.equal(result.ok, true);
+    assert.equal(requestCount, 2, "one scene summary and one chapter summary are generated");
+    assert.equal(operations.length, 1, "all related writes must be one atomic review operation");
+    assert.equal(operations[0]?.length, 1);
+    const operation = operations[0]![0]!;
+    assert.equal(operation.effect, "metadata");
+    assert.deepEqual(operation.writes.map((write) => write.path).sort(), [
+      "plot/volumes/vol-main/chapters/ch-summary/chapter-summary.yaml",
+      "plot/volumes/vol-main/chapters/ch-summary/scene-summaries/sc-summary.yaml",
+    ].sort());
+    assert.equal(operation.reads.find((item) => item.path.endsWith("scene-summaries/sc-summary.yaml"))?.revision, null);
+    assert.equal(operation.reads.find((item) => item.path.endsWith("chapter-summary.yaml"))?.revision, null);
+  } finally {
+    server.closeAllConnections();
+    await new Promise<void>((resolve) => server.close(() => resolve()));
+    for (const name of envNames) {
+      const value = previousEnv.get(name);
+      if (value === undefined) delete process.env[name];
+      else process.env[name] = value;
+    }
+  }
+});
+
 test("manuscript and sandbox Zukan suggestions are grounded before Story receives proposals", async () => {
   const sandboxOutputs = [
     JSON.stringify({ suggestions: [{ kind: "fact", targetEntityId: "char-zukan", blockPath: "lead.0", proposedText: "透明な魔法の杖を持つ。", evidenceQuote: "好きな紅茶を飲む。", confidence: "high" }] }),

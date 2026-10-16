@@ -21,6 +21,7 @@ import {
 } from "@scriptorium/contracts";
 import { readStorySnapshot, type StoryEntity } from "@scriptorium/module-story";
 import { splitIntoSentences } from "@scriptorium/module-nlp";
+import { extractVoiceProfiles } from "@scriptorium/module-speaker";
 import {
   resolveAssistantModel,
   streamAssistantModel,
@@ -37,6 +38,7 @@ import {
 } from "./model-settings.js";
 import { composePrompt, CUSTOM_PROMPT_VERSIONS, loadPromptTemplate, renderPromptTemplate } from "./prompts.js";
 import { normalizeAspectIds, runDeterministicAspectReview, type AspectId } from "./aspect-review.js";
+import { buildRewriteLocalSuggestions } from "./rewrite-local.js";
 
 const ASSISTANT_MODULE_VERSION = "0.1.0";
 const USAGE_PATH = "meta/scriptorium/modules/assistant/usage.jsonl";
@@ -118,6 +120,14 @@ function parseRewriteInput(value: unknown): { sceneId: string; selectedText: str
     sceneId: parseString(input.sceneId, "sceneId", 256),
     selectedText: parseString(input.selectedText, "selectedText", 20_000),
     ...(optionalString(input, "instruction", 4_000) ? { instruction: optionalString(input, "instruction", 4_000) } : {}),
+  };
+}
+function parseRewriteProposalInput(value: unknown): { sceneId: string; selectedText: string; replacementText: string } {
+  const input = record(value);
+  return {
+    sceneId: parseString(input.sceneId, "sceneId", 256),
+    selectedText: parseString(input.selectedText, "selectedText", 20_000),
+    replacementText: parseString(input.replacementText, "replacementText", 20_000),
   };
 }
 function parseQaInput(value: unknown): { question: string; sceneId?: string } {
@@ -630,37 +640,113 @@ async function runRewrite(
   if (startInBody < bodyStart || startInBody + input.selectedText.length > bodyEnd || (nextMatch >= 0 && nextMatch < bodyEnd)) {
     throw codeError("assistant_rewrite_selection_ambiguous", "Selected text must occur exactly once in the referenced scene");
   }
-  const relatedIds = Array.isArray(source.scene.raw.appears) ? source.scene.raw.appears.filter((id): id is string => typeof id === "string") : [];
-  const characters = relatedIds.slice(0, 16).flatMap((id) => {
+  const relatedIds = [...new Set([
+    ...(typeof source.scene.raw.pov === "string" ? [source.scene.raw.pov] : []),
+    ...(Array.isArray(source.scene.raw.appears) ? source.scene.raw.appears.filter((id): id is string => typeof id === "string") : []),
+  ])].slice(0, 16);
+  const characters = relatedIds.flatMap((id) => {
     const candidate = story.entities.get(id);
     if (!candidate || candidate.type !== "character") return [];
-    return [{ id: candidate.id, name: candidate.name ?? candidate.id, role: candidate.id === source.scene.raw.pov ? "pov" : "appears", voice: candidate.raw.voice ?? candidate.raw.voicePatterns ?? null, notes: candidate.raw.notes ?? null }];
+    return [{ id: candidate.id, name: candidate.name ?? candidate.id, role: candidate.id === source.scene.raw.pov ? "pov" : "appears", voiceProfiles: extractVoiceProfiles({ id: candidate.id, raw: candidate.raw } as never), voice: candidate.raw.voice ?? candidate.raw.voicePatterns ?? null, notes: candidate.raw.notes ?? null }];
   });
+  let fingerprints: RecordValue[] = [];
+  try {
+    const profiles = await invokeData(context, "speaker.voice.profiles", {});
+    fingerprints = Array.isArray(profiles.fingerprints) ? profiles.fingerprints.map((item) => record(item)) : [];
+  } catch { /* Like the source's optional SQLite index, learned style data may be unavailable. */ }
+  const dialogueSamples = await Promise.all(characters.map(async (character) => {
+    try {
+      const data = await invokeData(context, "speaker.dialogue.list", { characterId: character.id, limit: 6, minConfidence: "high" });
+      return [character.id, Array.isArray(data.lines) ? data.lines.slice(0, 6).map((item) => record(item)) : [] as RecordValue[]] as const;
+    } catch { return [character.id, [] as RecordValue[]] as const; }
+  }));
+  const samplesByCharacter = new Map(dialogueSamples);
+  const fingerprintByCharacter = new Map(fingerprints.flatMap((item) => typeof item.entityId === "string" ? [[item.entityId, item] as const] : []));
+  const fingerprintSummary = (fingerprint: RecordValue | undefined) => {
+    if (!fingerprint) return null;
+    const topKeys = (value: unknown) => value && typeof value === "object" && !Array.isArray(value)
+      ? Object.entries(value as Record<string, number>).sort((a, b) => b[1] - a[1] || a[0].localeCompare(b[0])).slice(0, 5).map(([key]) => key)
+      : [];
+    return {
+      dialogueCount: fingerprint.dialogueCount,
+      topFirstPersons: topKeys(fingerprint.firstPersonDist),
+      topEndings: topKeys(fingerprint.endingBigramDist).map((ending) => ending.replace(/\|/g, "")),
+      politeRatio: fingerprint.politeRatio,
+      avgDialogueLength: fingerprint.avgDialogueLength,
+      exclamationRate: fingerprint.exclamationRate,
+      questionRate: fingerprint.questionRate,
+    };
+  };
+  const contextualCharacters = characters.map((character) => ({
+    id: character.id,
+    name: character.name,
+    role: character.role,
+    voice: character.voice,
+    voiceProfiles: character.voiceProfiles,
+    notes: character.notes,
+    fingerprint: fingerprintSummary(fingerprintByCharacter.get(character.id)),
+    exampleDialogues: (samplesByCharacter.get(character.id) ?? []).map((item) => item.text).filter((text): text is string => typeof text === "string"),
+  }));
+  let corpusActionDescriptions: string[] = [];
+  try {
+    const data = await invokeData(context, "semantic.search", { query: input.selectedText, mode: "sentence", limit: 12, rerank: false });
+    corpusActionDescriptions = (Array.isArray(data.results) ? data.results : []).map((value) => record(value))
+      .filter((hit) => hit.sceneId !== source.scene.id)
+      .map((hit) => typeof hit.snippet === "string" ? hit.snippet.trim() : typeof hit.text === "string" ? hit.text.trim() : "")
+      .filter((text) => text.length > 0 && text !== input.selectedText).slice(0, 3);
+  } catch { /* Corpus retrieval is optional, matching the source's best-effort index lookup. */ }
   const prompt = await composePrompt([
     "次の小説の一文について、意味を保った言い換えをちょうど3案生成してください。",
     "診断ではなく、ユーザーが明示的に依頼したリライトです。",
     `対象文: ${input.selectedText}`,
     `追加指示: ${input.instruction ?? "なし"}`,
-    `シーン文脈: ${JSON.stringify({ pov: source.scene.raw.pov ?? null, intendedTone: source.scene.raw.intendedTone ?? null, characters }, null, 2)}`,
+    `シーン文脈: ${JSON.stringify({ sceneTitle: source.scene.raw.title ?? source.scene.name, pov: source.scene.raw.pov ?? null, intendedTone: source.scene.raw.intended_tone ?? source.scene.raw.intendedTone ?? null, characters: contextualCharacters }, null, 2)}`,
     "各案では POV、意図されたトーン、キャラクター口調を可能な範囲で維持してください。意味の無い文や新しい設定を加えないでください.",
     promptJson('{"suggestions":[{"text":"...","strategy":"concise|contextual|voice","rationale":"..."},{"text":"...","strategy":"concise|contextual|voice","rationale":"..."},{"text":"...","strategy":"concise|contextual|voice","rationale":"..."}]}'),
   ].join("\n"));
-  const sourceRevisions = revisionList([...story.files.values()].filter((file) => file.path === source.scene.filePath || file.path === source.manuscript.path || relatedIds.some((id) => story.entities.get(id)?.filePath === file.path)));
+  const sampleSceneIds = [...new Set(dialogueSamples.flatMap(([, lines]) => lines.flatMap((line) => typeof line.sceneId === "string" ? [line.sceneId] : [])))];
+  const sourceRevisions = revisionList([...story.files.values()].filter((file) => file.path === source.scene.filePath || file.path === source.manuscript.path || relatedIds.some((id) => story.entities.get(id)?.filePath === file.path) || sampleSceneIds.some((id) => {
+    const scene = story.entities.get(id);
+    return scene && (scene.filePath === file.path || String(scene.raw.manuscript ?? "") === file.path);
+  })));
   const generated = await generate(moduleContext, context, { feature: "rewrite", prompt, promptVersion: CUSTOM_PROMPT_VERSIONS.rewrite, sourceRevisions, outputTokens: 1_024, ...(onText ? { onText } : {}) });
   const parsed = parseStructured(generated.text, rewriteSchema);
-  const chosen = parsed.suggestions[0]!.text.trim();
-  if (chosen.length > 20_000) throw codeError("assistant_output_invalid", "The rewrite output exceeded its text limit");
-  const updatedContent = `${source.manuscript.content.slice(0, startInBody)}${chosen}${source.manuscript.content.slice(startInBody + input.selectedText.length)}`;
+  const suggestions = parsed.suggestions.map((candidate) => ({ ...candidate, text: candidate.text.trim() }));
+  if (suggestions.some((candidate) => candidate.text.length > 20_000)) throw codeError("assistant_output_invalid", "A rewrite candidate exceeded its text limit");
+  const local = buildRewriteLocalSuggestions(input.selectedText, corpusActionDescriptions);
   const selectedCitation = sourceCitation(source.manuscript, input.selectedText, source.scene.id, "selected passage");
   const citations = [selectedCitation];
-  const reads = [...generated.provenance.sourceRevisions, { path: source.scene.filePath, revision: story.files.get(source.scene.filePath)!.revision }, { path: source.manuscript.path, revision: source.manuscript.revision }];
-  const operation = makeOperation(context, "manuscript", `Propose assistant rewrite for ${source.scene.id}`, reads, [{ path: source.manuscript.path, revision: source.manuscript.revision, content: updatedContent }]);
-  const proposal = await context.propose([operation], evidence(context, "assistant.rewrite", reads, { sceneId: source.scene.id, model: generated.provenance.model, promptVersion: generated.provenance.promptVersion }));
   return {
-    text: chosen, suggestions: parsed.suggestions, sceneId: source.scene.id,
+    text: input.selectedText, suggestions, ...local, sceneId: source.scene.id,
     model: generated.provenance.model, provider: generated.provenance.provider,
-    promptVersion: generated.provenance.promptVersion, citations, provenance: generated.provenance, proposal,
+    promptVersion: generated.provenance.promptVersion, citations, provenance: generated.provenance,
   };
+}
+
+async function proposeRewrite(context: ModuleActionContext, input: ReturnType<typeof parseRewriteProposalInput>) {
+  const story = await readStorySnapshot(context.reader, { includeManuscripts: true });
+  const source = sceneContext(story, input.sceneId);
+  const rawBody = source.manuscript.content.slice(source.bodyOffset);
+  const bodyStart = source.bodyOffset + rawBody.length - rawBody.trimStart().length;
+  const bodyEnd = bodyStart + source.body.length;
+  const start = source.manuscript.content.indexOf(input.selectedText, bodyStart);
+  const next = source.manuscript.content.indexOf(input.selectedText, start + 1);
+  if (start < bodyStart || start + input.selectedText.length > bodyEnd || (next >= 0 && next < bodyEnd)) {
+    throw codeError("assistant_rewrite_selection_ambiguous", "Selected text must occur exactly once in the referenced scene");
+  }
+  if (input.replacementText === input.selectedText) throw codeError("assistant_rewrite_selection_unchanged", "The selected candidate is unchanged");
+  const updatedContent = `${source.manuscript.content.slice(0, start)}${input.replacementText}${source.manuscript.content.slice(start + input.selectedText.length)}`;
+  const reads = [
+    { path: source.scene.filePath, revision: story.files.get(source.scene.filePath)!.revision },
+    { path: source.manuscript.path, revision: source.manuscript.revision },
+  ];
+  const operation = makeOperation(context, "manuscript", `Propose author-selected Assistant rewrite for ${source.scene.id}`, reads, [{ path: source.manuscript.path, revision: source.manuscript.revision, content: updatedContent }]);
+  const proposal = await context.propose([operation], evidence(context, "assistant.rewrite.choice", reads, {
+    sceneId: source.scene.id,
+    selectedTextHash: sha256(input.selectedText),
+    replacementTextHash: sha256(input.replacementText),
+  }));
+  return { sceneId: source.scene.id, selectedText: input.selectedText, replacementText: input.replacementText, proposal };
 }
 
 function readYamlObject(content: string): RecordValue | null {
@@ -699,6 +785,40 @@ async function runSceneSummary(moduleContext: ModuleContext, context: ModuleActi
   return { summary: recordValue, stale: false, cached: false, model: generated.provenance.model, provider: generated.provenance.provider, promptVersion: prepared.version, citations, provenance: generated.provenance, proposal };
 }
 
+async function prepareSceneSummaryRecord(moduleContext: ModuleContext, context: ModuleActionContext, story: LoadedStorySnapshot, source: ReturnType<typeof sceneContext>) {
+  const sceneId = source.scene.id;
+  const outputPath = sceneSummaryPath(source.scene);
+  const existing = await context.reader.read(outputPath);
+  const current = existing ? readYamlObject(existing.content) : null;
+  const sourceHash = fnv1aHash(source.body);
+  const template = await loadPromptTemplate("sceneSummary");
+  const baseReads = [
+    { path: source.scene.filePath, revision: story.files.get(source.scene.filePath)!.revision },
+    { path: source.manuscript.path, revision: source.manuscript.revision },
+    readRevision(context, outputPath, existing?.revision ?? null),
+  ];
+  if (current && current.sceneId === sceneId && current.sourceHash === sourceHash && current.promptVersion === template.version && typeof current.model === "string") {
+    return { summary: current, cached: true, outputPath, existingRevision: existing!.revision, reads: baseReads, write: undefined as { path: string; revision: string | null; content: string } | undefined, generated: undefined as GenerationResult | undefined };
+  }
+  const knownCharacters = Array.isArray(source.scene.raw.appears) ? source.scene.raw.appears.map((id) => story.entities.get(String(id))?.name ?? String(id)) : [];
+  const prepared = await renderPromptTemplate("sceneSummary", { sceneId, knownCharacters: knownCharacters.join("、") || "なし", manuscriptBody: source.body });
+  const prompt = `${await composePrompt(prepared.body)}${promptJson('{"summaryLines":["...","...","..."],"characters":["..."],"stateChanges":["..."]}')}`;
+  const sourceRevisions = baseReads.slice(0, 2);
+  const generated = await generate(moduleContext, context, { feature: "scene-summary", prompt, promptVersion: prepared.version, sourceRevisions, outputTokens: 768 });
+  const parsed = parseStructured(generated.text, sceneSummarySchema);
+  const summary = {
+    sceneId, ...parsed, sourceHash, generatedAt: generated.provenance.generatedAt,
+    provider: generated.provenance.provider, model: generated.provenance.model,
+    modelVersion: generated.provenance.modelVersion, promptVersion: generated.provenance.promptVersion,
+    snapshot: generated.provenance.snapshot,
+  };
+  return {
+    summary, cached: false, outputPath, existingRevision: existing?.revision ?? null,
+    reads: [...baseReads, ...generated.provenance.sourceRevisions.filter((item) => item.path === ASSISTANT_SETTINGS_PATH)],
+    write: { path: outputPath, revision: existing?.revision ?? null, content: YAML.stringify(summary) }, generated,
+  };
+}
+
 async function runChapterSummary(moduleContext: ModuleContext, context: ModuleActionContext, chapterId: string) {
   const story = await readStorySnapshot(context.reader, { includeManuscripts: true });
   const { chapter, scenes } = chapterScenes(story, chapterId);
@@ -707,20 +827,14 @@ async function runChapterSummary(moduleContext: ModuleContext, context: ModuleAc
   const sceneRecords: Array<RecordValue> = [];
   const citations: SourceCitation[] = [];
   const reads: FileRevision[] = [];
+  const writes: Array<{ path: string; revision: string | null; content: string }> = [];
+  let latestSceneGeneration: GenerationResult | undefined;
   for (const source of scenes) {
-    const outputPath = sceneSummaryPath(source.scene);
-    const existing = await context.reader.read(outputPath);
-    const parsed = existing ? readYamlObject(existing.content) : null;
-    if (parsed && parsed.sceneId === source.scene.id && parsed.sourceHash === fnv1aHash(source.body) && Array.isArray(parsed.summaryLines) && typeof parsed.model === "string") {
-      sceneRecords.push(parsed);
-    } else {
-      const result = await runSceneSummary(moduleContext, context, source.scene.id);
-      const recordValue = record(result.summary);
-      sceneRecords.push(recordValue);
-      if (result.proposal) { /* the operation was proposed by the nested generation */ }
-    }
-    const sceneFile = story.files.get(source.scene.filePath)!;
-    reads.push({ path: source.scene.filePath, revision: sceneFile.revision }, { path: source.manuscript.path, revision: source.manuscript.revision }, { path: outputPath, revision: existing?.revision ?? null });
+    const sourceSummary = await prepareSceneSummaryRecord(moduleContext, context, story, source);
+    sceneRecords.push(record(sourceSummary.summary));
+    reads.push(...sourceSummary.reads);
+    if (sourceSummary.write) writes.push(sourceSummary.write);
+    if (sourceSummary.generated) latestSceneGeneration = sourceSummary.generated;
     citations.push(makeCitation(source.manuscript, source.body, source.scene.id, source.scene.name ?? "scene manuscript"));
   }
   const chapterPath = chapterSummaryPath(chapter);
@@ -735,8 +849,9 @@ async function runChapterSummary(moduleContext: ModuleContext, context: ModuleAc
   const generated = await generate(moduleContext, context, { feature: "chapter-summary", prompt, promptVersion: template.version, sourceRevisions: revisionList([...story.files.values()].filter((file) => reads.some((item) => item.path === file.path))), outputTokens: 512 });
   const summary = parseStructured(generated.text, chapterSummarySchema);
   const recordValue = { scope: "chapter", id: chapterId, ...summary, sourceHash: childHash, generatedAt: generated.provenance.generatedAt, provider: generated.provenance.provider, model: generated.provenance.model, modelVersion: generated.provenance.modelVersion, promptVersion: template.version, snapshot: generated.provenance.snapshot };
-  const operationReads = [...reads, readRevision(context, chapterPath, existingChapter?.revision ?? null), ...generated.provenance.sourceRevisions.filter((item) => item.path === ASSISTANT_SETTINGS_PATH)];
-  const operation = makeOperation(context, "metadata", `Propose chapter summary for ${chapterId}`, operationReads, [{ path: chapterPath, revision: existingChapter?.revision ?? null, content: YAML.stringify(recordValue) }]);
+  const operationReads = [...reads, readRevision(context, chapterPath, existingChapter?.revision ?? null), ...generated.provenance.sourceRevisions.filter((item) => item.path === ASSISTANT_SETTINGS_PATH), ...(latestSceneGeneration?.provenance.sourceRevisions.filter((item) => item.path === ASSISTANT_SETTINGS_PATH) ?? [])];
+  const operationWrites = [...writes, { path: chapterPath, revision: existingChapter?.revision ?? null, content: YAML.stringify(recordValue) }];
+  const operation = makeOperation(context, "metadata", `Propose chapter summary for ${chapterId}`, operationReads, operationWrites);
   const proposal = await context.propose([operation], evidence(context, "assistant.chapter-summary", operationReads, { chapterId, model: generated.provenance.model, promptVersion: template.version }));
   return { summary: recordValue, stale: false, cached: false, model: generated.provenance.model, provider: generated.provenance.provider, promptVersion: template.version, citations: citations.slice(0, 12), provenance: generated.provenance, proposal };
 }
@@ -882,22 +997,16 @@ async function runReaderReaction(moduleContext: ModuleContext, context: ModuleAc
   const sourceRevisions: FileRevision[] = [];
   for (const chapter of chapters.slice(0, targetIndex + 1)) {
     const { scenes } = chapterScenes(story, chapter.id);
-    const childHashes: string[] = [];
-    let fresh = scenes.length > 0;
-    for (const scene of scenes) {
-      const path = sceneSummaryPath(scene.scene);
-      const file = await context.reader.read(path);
-      const summary = file ? readYamlObject(file.content) : null;
-      if (!summary || summary.sceneId !== scene.scene.id || summary.sourceHash !== fnv1aHash(scene.body) || !Array.isArray(summary.summaryLines)) { fresh = false; break; }
-      childHashes.push(String(summary.sourceHash));
-      sourceRevisions.push({ path, revision: file!.revision }, { path: scene.manuscript.path, revision: scene.manuscript.revision });
-    }
     const chapterPath = chapterSummaryPath(chapter);
     const chapterFile = await context.reader.read(chapterPath);
     const chapterSummary = chapterFile ? readYamlObject(chapterFile.content) : null;
-    if (!fresh || !chapterSummary || chapterSummary.id !== chapter.id || chapterSummary.sourceHash !== fnv1aHash(childHashes.join("|")) || !Array.isArray(chapterSummary.summaryLines)) {
-      throw codeError("assistant_summary_stale", `Fresh accepted summaries are required through chapter ${chapter.id}`);
-    }
+    // Source reader-reaction semantics skip chapters without an accepted chapter summary.
+    // When a summary is present, bind it to the current ordered manuscript snapshot so a
+    // stale accepted record is never sent to an external provider as reader context.
+    if (!chapterSummary || chapterSummary.id !== chapter.id || !Array.isArray(chapterSummary.summaryLines) || chapterSummary.summaryLines.length === 0) continue;
+    const currentChildHash = fnv1aHash(scenes.map((scene) => fnv1aHash(scene.body)).join("|"));
+    if (chapterSummary.sourceHash !== currentChildHash) throw codeError("assistant_summary_stale", `Accepted summary for chapter ${chapter.id} is stale for this manuscript snapshot`);
+    for (const scene of scenes) sourceRevisions.push({ path: scene.scene.filePath, revision: story.files.get(scene.scene.filePath)!.revision }, { path: scene.manuscript.path, revision: scene.manuscript.revision });
     sourceRevisions.push({ path: chapterPath, revision: chapterFile!.revision });
     cumulative.push({ chapterId: chapter.id, summaryLines: (chapterSummary.summaryLines as unknown[]).filter((line): line is string => typeof line === "string") });
     citations.push(sourceCitation({ ...chapterFile!, path: chapterPath }, chapterSummary.summaryLines.join("\n"), chapter.id, "accepted chapter summary"));
@@ -1368,7 +1477,8 @@ export function createAssistantActions(moduleContext: ModuleContext): ModuleActi
       return { settings, revision: current.revision, proposal };
     }),
     action("assistant.usage.read", "read", parseUsageInput, async (input, context) => readUsageHistory(moduleContext, context, input as ReturnType<typeof parseUsageInput>)),
-    action("assistant.rewrite", "propose", parseRewriteInput, async (input, context) => runRewrite(moduleContext, context, input as ReturnType<typeof parseRewriteInput>)),
+    action("assistant.rewrite", "compute", parseRewriteInput, async (input, context) => runRewrite(moduleContext, context, input as ReturnType<typeof parseRewriteInput>)),
+    action("assistant.rewrite.propose", "propose", parseRewriteProposalInput, async (input, context) => proposeRewrite(context, input as ReturnType<typeof parseRewriteProposalInput>)),
     action("assistant.summary.scene", "propose", parseIdInput, async (input, context) => runSceneSummary(moduleContext, context, input.sceneId as string)),
     action("assistant.summary.chapter", "propose", (value) => parseIdInput(value, "chapterId"), async (input, context) => runChapterSummary(moduleContext, context, input.chapterId as string)),
     action("assistant.qa", "compute", parseQaInput, async (input, context) => runQa(moduleContext, context, input as ReturnType<typeof parseQaInput>)),
@@ -1421,7 +1531,7 @@ export function createRewriteStreamHttpContribution(moduleContext: ModuleContext
           void (async () => {
             try {
               const result = await runRewrite(moduleContext, streamContext, input, (delta) => send("delta", { delta }));
-              send("final", { ...result, proposals: result.proposal ? [result.proposal] : [] });
+              send("final", { ...result, proposals: [] });
             } catch (error) {
               const err = error instanceof Error ? error : new Error(String(error));
               send(signal.aborted ? "cancelled" : "error", { code: (error as { code?: unknown })?.code ?? "assistant_action_failed", message: err.message.slice(0, 512) });
