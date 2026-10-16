@@ -65,7 +65,8 @@
     ],
     "locality": "optional-external",
     "optionalRequires": [
-      "host.model-usage"
+      "host.model-usage",
+      "nlp.token-counter"
     ]
   }
 }
