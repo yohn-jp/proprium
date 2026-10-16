@@ -21,14 +21,23 @@ export interface ScratchAttachmentDraft {
 export interface ScratchDraftPayload {
   id: string;
   generation: number;
+  createdAt?: string;
   text: string;
   attachments: ScratchAttachmentDraft[];
+}
+
+export interface ScratchDraftBinding {
+  repositoryKey: string;
+  snapshot: SnapshotId;
+  sceneId: string;
+  documentPath: string;
 }
 
 export function SceneEditor({
   projectId,
   repositoryKey,
   snapshot,
+  historySnapshot,
   scene,
   path,
   breadcrumb,
@@ -60,6 +69,8 @@ export function SceneEditor({
   projectId: string;
   repositoryKey: string;
   snapshot: SnapshotId;
+  /** Manuscript history is GitHub history and must remain pinned to the observed remote HEAD. */
+  historySnapshot: SnapshotId;
   scene: Scene;
   path: string;
   breadcrumb: string;
@@ -82,7 +93,7 @@ export function SceneEditor({
   historyOpen: boolean;
   onRestoreHistoryBody: (body: string) => void;
   scratchEntries: JournalEntry[];
-  onDraftScratch: (draft: ScratchDraftPayload) => Promise<JournalEntry | null>;
+  onDraftScratch: (draft: ScratchDraftPayload, binding: ScratchDraftBinding) => Promise<JournalEntry | null>;
   onCheckpointScratch: (entry: JournalEntry) => Promise<void>;
   registerScratchFlush: (flush: (() => Promise<JournalEntry | null>) | null) => void;
   scratchBusy: boolean;
@@ -256,6 +267,7 @@ export function SceneEditor({
             <ScratchPanel
               disabled={scratchBusy}
               entries={scratchEntries}
+              binding={{ repositoryKey, snapshot, sceneId: scene.id, documentPath: path }}
               onCheckpoint={onCheckpointScratch}
               onDraft={onDraftScratch}
               registerFlush={registerScratchFlush}
@@ -272,7 +284,7 @@ export function SceneEditor({
       <div className={`print-view ${vertical ? "is-vertical" : ""}`} aria-hidden={!printing} style={readerStyle(typography)}>
         <RubyText text={text} className="print-manuscript" />
       </div>
-      {historyOpen && <ManuscriptHistoryPanel projectId={projectId} manuscriptId={scene.id} sceneId={scene.id} snapshot={snapshot} currentBody={text} onRestore={onRestoreHistoryBody} onClose={onHistory} />}
+      {historyOpen && <ManuscriptHistoryPanel projectId={projectId} manuscriptId={scene.id} sceneId={scene.id} snapshot={historySnapshot} currentBody={text} onRestore={onRestoreHistoryBody} onClose={onHistory} />}
     </section>
   );
 }
@@ -322,6 +334,20 @@ function attachmentDrafts(entry: JournalEntry): ScratchAttachmentDraft[] {
     });
 }
 
+function scratchCreatedAt(entry: JournalEntry): string | undefined {
+  const content = entry.operation.writes.find((write) => write.path === entry.documentPath)?.content;
+  if (typeof content === "string") {
+    const raw = content.match(/^createdAt:\s*(.+)$/mu)?.[1];
+    if (raw) {
+      try {
+        const value: unknown = JSON.parse(raw);
+        if (typeof value === "string" && Number.isFinite(Date.parse(value))) return value;
+      } catch { /* Older or malformed scratch metadata is preserved without synthesizing new bytes. */ }
+    }
+  }
+  return undefined;
+}
+
 function fileToBase64(file: File): Promise<string> {
   return new Promise((resolve, reject) => {
     const reader = new FileReader();
@@ -339,17 +365,19 @@ function fileToBase64(file: File): Promise<string> {
 function ScratchPanel({
   disabled,
   entries,
+  binding,
   onCheckpoint,
   onDraft,
   registerFlush,
 }: {
   disabled: boolean;
   entries: JournalEntry[];
+  binding: ScratchDraftBinding;
   onCheckpoint: (entry: JournalEntry) => Promise<void>;
-  onDraft: (draft: ScratchDraftPayload) => Promise<JournalEntry | null>;
+  onDraft: (draft: ScratchDraftPayload, binding: ScratchDraftBinding) => Promise<JournalEntry | null>;
   registerFlush: (flush: (() => Promise<JournalEntry | null>) | null) => void;
 }) {
-  const initialDraft = (): ScratchDraftPayload => ({ id: crypto.randomUUID(), generation: 0, text: "", attachments: [] });
+  const initialDraft = (): ScratchDraftPayload => ({ id: crypto.randomUUID(), generation: 0, createdAt: new Date().toISOString(), text: "", attachments: [] });
   const [draft, setDraft] = useState<ScratchDraftPayload>(initialDraft);
   const [stored, setStored] = useState(true);
   const [error, setError] = useState("");
@@ -357,18 +385,23 @@ function ScratchPanel({
   const [resumedId, setResumedId] = useState("");
   const timer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const draftRef = useRef(draft);
+  const bindingRef = useRef(binding);
+  const disposedRef = useRef(false);
+  const pendingImageReadsRef = useRef(new Set<Promise<void>>());
+  const imageQueueRef = useRef<Promise<void>>(Promise.resolve());
   const persistQueueRef = useRef<Promise<void>>(Promise.resolve());
   const onDraftRef = useRef(onDraft);
   const onCheckpointRef = useRef(onCheckpoint);
   onDraftRef.current = onDraft;
   onCheckpointRef.current = onCheckpoint;
   draftRef.current = draft;
+  bindingRef.current = binding;
 
-  const persist = useCallback(async (target: ScratchDraftPayload): Promise<JournalEntry | null> => {
-    const queued = persistQueueRef.current.then(() => onDraftRef.current(target));
+  const persist = useCallback(async (target: ScratchDraftPayload, targetBinding: ScratchDraftBinding): Promise<JournalEntry | null> => {
+    const queued = persistQueueRef.current.then(() => onDraftRef.current(target, targetBinding));
     persistQueueRef.current = queued.then(() => undefined, () => undefined);
     const entry = await queued;
-    if (entry && draftRef.current.id === target.id && draftRef.current.generation === target.generation) {
+    if (!disposedRef.current && entry && draftRef.current.id === target.id && draftRef.current.generation === target.generation) {
       setStored(true);
       setError("");
     }
@@ -376,15 +409,20 @@ function ScratchPanel({
   }, []);
 
   const flush = useCallback(async (): Promise<JournalEntry | null> => {
+    const targetBinding = bindingRef.current;
+    await Promise.all([...pendingImageReadsRef.current]);
     for (let attempt = 0; attempt < 8; attempt++) {
       if (timer.current) clearTimeout(timer.current);
       timer.current = null;
+      if (disposedRef.current || JSON.stringify(bindingRef.current) !== JSON.stringify(targetBinding)) {
+        throw new Error("移動先が変わったため、古いシーンのスクラッチを保存できませんでした。");
+      }
       const target = draftRef.current;
       if (!target.text.trim() && target.attachments.length === 0) return null;
       const existing = entries.find((entry) => entry.operation.id === target.id && entry.operation.generation === target.generation);
       if (stored && existing) return existing;
       try {
-        const entry = await persist(target);
+        const entry = await persist(target, targetBinding);
         if (draftRef.current.id !== target.id || draftRef.current.generation !== target.generation) continue;
         if (!entry) throw new Error("新しい世代のスクラッチがあるため、この記録は置き換えませんでした。");
         return entry;
@@ -404,7 +442,7 @@ function ScratchPanel({
     registerFlush(flush);
     const beforeUnload = (event: BeforeUnloadEvent) => {
       const current = draftRef.current;
-      if (!stored && (current.text.trim() || current.attachments.length > 0)) {
+      if (pendingImageReadsRef.current.size > 0 || (!stored && (current.text.trim() || current.attachments.length > 0))) {
         event.preventDefault();
         event.returnValue = "";
       }
@@ -417,7 +455,10 @@ function ScratchPanel({
     };
   }, [flush, registerFlush, stored]);
 
+  useEffect(() => () => { disposedRef.current = true; }, []);
+
   function updateDraft(next: ScratchDraftPayload): void {
+    const targetBinding = bindingRef.current;
     draftRef.current = next;
     setDraft(next);
     setStored(false);
@@ -425,7 +466,11 @@ function ScratchPanel({
     if (timer.current) clearTimeout(timer.current);
     timer.current = setTimeout(() => {
       timer.current = null;
-      void persist(next).catch((caught: unknown) => setError(caught instanceof Error ? caught.message : "スクラッチの回復記録を保存できませんでした。"));
+      void persist(next, targetBinding).catch((caught: unknown) => {
+        if (!disposedRef.current && JSON.stringify(bindingRef.current) === JSON.stringify(targetBinding)) {
+          setError(caught instanceof Error ? caught.message : "スクラッチの回復記録を保存できませんでした。");
+        }
+      });
     }, 350);
   }
 
@@ -437,8 +482,11 @@ function ScratchPanel({
   async function addImages(files: FileList | null): Promise<void> {
     const selected = Array.from(files ?? []);
     if (selected.length === 0) return;
-    const current = draftRef.current;
-    try {
+    const targetBinding = bindingRef.current;
+    const targetDraftId = draftRef.current.id;
+    const task = imageQueueRef.current.then(async () => {
+      if (disposedRef.current || JSON.stringify(bindingRef.current) !== JSON.stringify(targetBinding) || draftRef.current.id !== targetDraftId) return;
+      const current = draftRef.current;
       let totalBytes = current.attachments.reduce((sum, attachment) => sum + attachment.dataBase64.length, 0);
       const additions: ScratchAttachmentDraft[] = [];
       for (const file of selected) {
@@ -449,10 +497,20 @@ function ScratchPanel({
         if (totalBytes > 5 * 1024 * 1024) throw new Error("添付画像の合計は 5 MB 以下にしてください。");
         additions.push({ filename: file.name || "capture.jpg", mimeType: file.type || "image/jpeg", dataBase64 });
       }
+      if (disposedRef.current || JSON.stringify(bindingRef.current) !== JSON.stringify(targetBinding) || draftRef.current.id !== targetDraftId) return;
       const latest = draftRef.current;
       updateDraft({ ...latest, generation: latest.generation + 1, attachments: [...latest.attachments, ...additions] });
+    });
+    pendingImageReadsRef.current.add(task);
+    imageQueueRef.current = task.catch(() => undefined);
+    try {
+      await task;
     } catch (caught) {
-      setError(caught instanceof Error ? caught.message : "画像を添付できませんでした。");
+      if (!disposedRef.current && JSON.stringify(bindingRef.current) === JSON.stringify(targetBinding)) {
+        setError(caught instanceof Error ? caught.message : "画像を添付できませんでした。");
+      }
+    } finally {
+      pendingImageReadsRef.current.delete(task);
     }
   }
 
@@ -461,6 +519,7 @@ function ScratchPanel({
     const resumed: ScratchDraftPayload = {
       id: entry.operation.id,
       generation: entry.operation.generation,
+      createdAt: scratchCreatedAt(entry),
       text: entry.text,
       attachments: attachmentDrafts(entry),
     };

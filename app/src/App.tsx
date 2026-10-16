@@ -14,7 +14,7 @@ import {
 import { ApiError, api, type Project, type SceneRead, type Tree, type TreeRead } from "./api";
 import { ContributionHost } from "./contributions/ContributionHost";
 import { ProposalReview } from "./contributions/ProposalReview";
-import { SceneEditor, type ScratchDraftPayload } from "./editor/SceneEditor";
+import { SceneEditor, type ScratchDraftBinding, type ScratchDraftPayload } from "./editor/SceneEditor";
 import { replaceDocumentBody } from "./editor/ruby";
 import { clearDraft, loadDraft } from "./drafts";
 import {
@@ -228,7 +228,7 @@ function buildScratchOperation(read: SceneRead, draft: ScratchDraftPayload): { o
     "---",
     `id: ${JSON.stringify(draft.id)}`,
     `sceneId: ${JSON.stringify(read.scene.id)}`,
-    `createdAt: ${JSON.stringify(new Date().toISOString())}`,
+    ...(draft.createdAt ? [`createdAt: ${JSON.stringify(draft.createdAt)}`] : []),
     "attachments:",
     ...attachments.map((attachment) => `  - path: ${JSON.stringify(attachment.path)}\n    filename: ${JSON.stringify(attachment.filename)}\n    mimeType: ${JSON.stringify(attachment.mimeType)}`),
     "---",
@@ -923,12 +923,16 @@ export function App() {
     return queued;
   }
 
-  async function persistScratchDraft(draft: ScratchDraftPayload): Promise<JournalEntry | null> {
+  async function persistScratchDraft(draft: ScratchDraftPayload, binding: ScratchDraftBinding): Promise<JournalEntry | null> {
     const current = workRef.current;
     const currentJournal = journalRef.current;
     if (!current || !current.editor || !currentJournal) throw new Error("作品またはブラウザー回復ストレージを利用できません。");
-    if (!draft.text.trim() && draft.attachments.length === 0) return null;
     const read = current.editor.read;
+    if (repositoryKey(read.snapshot.repository) !== binding.repositoryKey || snapshotKey(read.snapshot) !== snapshotKey(binding.snapshot) ||
+        read.scene.id !== binding.sceneId || read.document.path !== binding.documentPath || current.selectedSceneId !== binding.sceneId || current.loadingScene) {
+      throw new Error("スクラッチの読み込み中に表示中の原稿が変わりました。添付先を確認してもう一度保存してください。");
+    }
+    if (!draft.text.trim() && draft.attachments.length === 0) return null;
     const nav = navigationRef.current;
     const { operation, path } = buildScratchOperation(read, draft);
     const entry = makeEntry(read.snapshot.repository, authorScopeRef.current, read.scene.id, read, draft.text, "", operation, "draft", path);
@@ -1419,6 +1423,7 @@ export function App() {
                     projectId={work.project.id}
                     repositoryKey={repositoryKey(editor.read.snapshot.repository)}
                     snapshot={editor.read.snapshot}
+                    historySnapshot={work.observation.snapshot}
                     scene={scene}
                     path={editor.read.document.path}
                     breadcrumb={breadcrumbFor(tree, scene.id)}

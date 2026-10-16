@@ -9,6 +9,7 @@ const branch = process.env.SCRIPTORIUM_E2E_REPOSITORY_BRANCH ?? "main";
 
 interface JournalSummary {
   documentPath: string;
+  sceneId: string;
   state: string;
   operationId: string;
   generation: number;
@@ -84,6 +85,7 @@ async function readJournal(page: Page): Promise<JournalSummary[]> {
       const transaction = database.transaction("operations", "readonly");
       const records = await new Promise<Array<{
         documentPath: string;
+        sceneId: string;
         state: string;
         text: string;
         authorScope?: string | null;
@@ -95,6 +97,7 @@ async function readJournal(page: Page): Promise<JournalSummary[]> {
       });
       return records.map((entry) => ({
         documentPath: entry.documentPath,
+        sceneId: entry.sceneId,
         state: entry.state,
         operationId: entry.operation.id,
         generation: entry.operation.generation,
@@ -272,6 +275,12 @@ test("writing UI recovers multi-document drafts and separates Draft, Checkpoint,
   expect(checkpointed.find((entry) => entry.text === sceneOneDraft)?.state).toBe("checkpointed");
   const checkpointBatchId = checkpointed.find((entry) => entry.text === sceneOneDraft)?.operationId;
   const scratchBatchId = checkpointed.find((entry) => entry.documentPath.startsWith("meta/scratch/"))?.operationId;
+  await page.getByRole("button", { name: "履歴" }).click();
+  const checkpointHistory = page.locator(".manuscript-history");
+  await expect(checkpointHistory.getByRole("heading", { name: "改稿の履歴" })).toBeVisible();
+  await expect(checkpointHistory.getByRole("alert")).toHaveCount(0);
+  await expect(checkpointHistory).toContainText("確認済みリモート版");
+  await checkpointHistory.getByRole("button", { name: "閉じる" }).click();
   await page.getByRole("button", { name: "Save to GitHub" }).click();
   await expect(page.locator(".topbar-status")).toContainText("GitHub への保存を確認しました。");
   await expect(page.getByText("Saved to GitHub", { exact: true })).toBeVisible();
@@ -614,4 +623,34 @@ test("project details, reconstruction, and guarded removal preserve browser reco
   await expect(recoveryPanel.getByRole("heading", { name: "ブラウザーの回復記録" })).toBeVisible();
   await expect(recoveryPanel.locator(".recovery-list")).toContainText("manuscript/vol-1/ch-1/scene-1.md");
   expect((await readJournal(page)).some((entry) => entry.text === recoverableText && entry.state === "draft")).toBe(true);
+});
+
+
+test("a pending scratch image read is flushed to its captured scene before navigation", async ({ page }) => {
+  expect(authToken.length).toBeGreaterThanOrEqual(32);
+  expect(repositoryUrl).not.toBe("");
+  await page.addInitScript(() => {
+    const originalRead = FileReader.prototype.readAsDataURL;
+    FileReader.prototype.readAsDataURL = function (this: FileReader, blob: Blob): void {
+      const reader = this;
+      window.setTimeout(() => originalRead.call(reader, blob), 1_000);
+    };
+  });
+  await signIn(page);
+  await openFixtureProject(page);
+  await page.locator(".scratch-panel summary").click();
+  await page.getByLabel("本文に含まれないメモ").fill("Attachment belongs to Scene One.");
+  await page.getByLabel("スクラッチ画像を添付").setInputFiles({
+    name: "delayed-capture.png",
+    mimeType: "image/png",
+    buffer: Buffer.from([137, 80, 78, 71, 13, 10, 26, 10]),
+  });
+  await page.getByRole("button", { name: "Chapter One: Scene Two" }).click();
+  await expect(page.getByRole("heading", { name: "Scene Two" })).toBeVisible();
+  await expect.poll(async () => (await readJournal(page)).some((entry) =>
+    entry.documentPath.startsWith("meta/scratch/") && entry.sceneId === "scene-1" && entry.attachmentWrites === 1,
+  )).toBe(true);
+  const scratch = (await readJournal(page)).find((entry) => entry.documentPath.startsWith("meta/scratch/"));
+  expect(scratch?.sceneId).toBe("scene-1");
+  expect(scratch?.text).toBe("Attachment belongs to Scene One.");
 });
