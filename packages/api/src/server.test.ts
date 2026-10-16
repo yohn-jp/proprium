@@ -1,20 +1,23 @@
 import assert from "node:assert/strict";
-import { mkdir, mkdtemp, rm, symlink, writeFile } from "node:fs/promises";
+import { execFile as execFileCallback } from "node:child_process";
+import { mkdir, mkdtemp, readFile, rm, symlink, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { resolve } from "node:path";
 import { afterEach, describe, it } from "node:test";
+import { promisify } from "node:util";
 import type { ActionResult, ChangeOperation, ChangeProposal, ModuleAction, ModuleDefinition, ModuleManifest, SnapshotId, ValueSchema } from "@scriptorium/contracts";
-import type { CoreStore } from "@scriptorium/core";
+import { CoreStore, type CoreStore as CoreStoreShape } from "@scriptorium/core";
 import { ModuleRuntime } from "@scriptorium/module-runtime";
 import { createServer } from "./server.js";
 
 const ACCESS_TOKEN = "test-access-token-which-is-longer-than-32-characters";
+const execFile = promisify(execFileCallback);
 const SNAPSHOT: SnapshotId = {
   repository: { provider: "github", repositoryId: "123", defaultBranch: "main", ownerScope: "owner-1", url: "https://github.com/owner/work.git" },
   remoteCommit: "a".repeat(40),
 };
 
-function makeStore(onSaveScene: () => void = () => undefined): CoreStore {
+function makeStore(onSaveScene: () => void = () => undefined): CoreStoreShape {
   const project = { id: "project-1", url: "https://github.com/owner/work.git", branch: "main" };
   const scene = { id: "scene-1", title: "Opening", text: "canonical draft", revision: "revision-1" };
   return {
@@ -40,6 +43,29 @@ function makeStore(onSaveScene: () => void = () => undefined): CoreStore {
     sync: async () => ({ branch: "main", head: "abc12345", ahead: 0, behind: 0, dirty: false }),
     status: async () => ({ branch: "main", head: "abc12345", ahead: 1, behind: 0, dirty: true }),
   } as unknown as CoreStore;
+}
+
+async function runGit(cwd: string, ...args: string[]): Promise<string> {
+  const { stdout } = await execFile("git", args, { cwd, maxBuffer: 4 * 1024 * 1024 });
+  return stdout.trim();
+}
+
+async function makeBareRemote(): Promise<{ root: string; remote: string }> {
+  const root = await mkdtemp(resolve(tmpdir(), "scriptorium-api-project-remote-"));
+  const remote = resolve(root, "remote.git");
+  const seed = resolve(root, "seed");
+  await mkdir(seed);
+  await runGit(root, "init", "--bare", "--initial-branch=main", remote);
+  await runGit(seed, "init", "--initial-branch=main");
+  await runGit(seed, "config", "user.name", "Scriptorium API Test");
+  await runGit(seed, "config", "user.email", "api-test@example.invalid");
+  await writeFile(resolve(seed, "README.md"), "Project workspace remains intact.\n", "utf8");
+  await runGit(seed, "add", ".");
+  await runGit(seed, "commit", "-m", "Initial project");
+  await runGit(seed, "remote", "add", "origin", remote);
+  await runGit(seed, "push", "-u", "origin", "main");
+  await runGit(root, "--git-dir", remote, "symbolic-ref", "HEAD", "refs/heads/main");
+  return { root, remote };
 }
 
 function makeSnapshotStore() {
@@ -528,6 +554,131 @@ describe("Scriptorium HTTP boundary", () => {
     closeCalled = true;
     assert.equal((await streamReader.read()).done, true, "shutdown must close the live event stream");
     assert.ok(Date.now() - shutdownAt < 5_000, "shutdown must not wait indefinitely for event-stream clients");
+  });
+
+  it("routes project reconstruction and detachment only through the guarded Core ports", async (t) => {
+    const staticDir = await mkdtemp(resolve(tmpdir(), "scriptorium-api-project-management-"));
+    tempDirs.push(staticDir);
+    const project = { id: "project-1", url: "https://github.com/owner/work.git", branch: "main" };
+    const reconstructed: string[] = [];
+    const detached: string[] = [];
+    let refuseDetach = true;
+    const store = Object.assign(makeStore(), {
+      async reconstructProject(projectId: string) { reconstructed.push(projectId); return project; },
+      async detachProject(projectId: string) {
+        detached.push(projectId);
+        if (refuseDetach) throw { status: 409, code: "pending_checkpoints", message: "Pending local checkpoint operations block detach" };
+      },
+    }) as unknown as CoreStore;
+    const apiServer = await startCustomApi(store, staticDir);
+    t.after(apiServer.close);
+    const owner = await login(apiServer.base);
+    const ownerJson = { Cookie: owner.cookie, Origin: apiServer.base, "Content-Type": "application/json" };
+    const ownerMutation = { Cookie: owner.cookie, Origin: apiServer.base };
+
+    const bearerPut = await fetch(`${apiServer.base}/api/projects/project-1`, {
+      method: "PUT", headers: { Authorization: `Bearer ${ACCESS_TOKEN}`, "Content-Type": "application/json" }, body: JSON.stringify({}),
+    });
+    assert.equal(bearerPut.status, 403);
+    assert.deepEqual(reconstructed, []);
+
+    const otherUrl = await fetch(`${apiServer.base}/api/projects/project-1`, {
+      method: "PUT", headers: ownerJson, body: JSON.stringify({ repoUrl: "https://github.com/other/repo.git" }),
+    });
+    assert.equal(otherUrl.status, 409);
+    assert.equal((await otherUrl.json() as { code: string }).code, "REGISTER_REPOSITORY_FIRST");
+    assert.deepEqual(reconstructed, [], "mismatched remote URLs must not reach Core reconstruction");
+
+    const credentialInput = await fetch(`${apiServer.base}/api/projects/project-1`, {
+      method: "PUT", headers: ownerJson, body: JSON.stringify({ url: project.url, token: "must-not-echo" }),
+    });
+    const credentialError = await credentialInput.json() as { code: string; error: string };
+    assert.equal(credentialInput.status, 400);
+    assert.equal(credentialError.code, "REGISTER_REPOSITORY_FIRST");
+    assert.equal(credentialError.error.includes("must-not-echo"), false);
+    assert.deepEqual(reconstructed, []);
+
+    const reconstruction = await fetch(`${apiServer.base}/api/projects/project-1`, {
+      method: "PUT", headers: ownerJson, body: JSON.stringify({ url: project.url, branch: "main" }),
+    });
+    assert.equal(reconstruction.status, 200);
+    assert.deepEqual(await reconstruction.json(), { project });
+    assert.deepEqual(reconstructed, ["project-1"]);
+
+    const branchOverride = await fetch(`${apiServer.base}/api/projects/project-1`, {
+      method: "PUT", headers: ownerJson, body: JSON.stringify({ branch: "feature" }),
+    });
+    assert.equal(branchOverride.status, 409);
+    assert.equal((await branchOverride.json() as { code: string }).code, "DEFAULT_BRANCH_MISMATCH");
+
+    const patch = await fetch(`${apiServer.base}/api/projects/project-1`, {
+      method: "PATCH", headers: ownerJson, body: JSON.stringify({ autoMerge: true }),
+    });
+    assert.equal(patch.status, 410);
+    assert.equal((await patch.json() as { code: string }).code, "AUTO_MERGE_RETIRED");
+
+    const bearerDelete = await fetch(`${apiServer.base}/api/projects/project-1`, {
+      method: "DELETE", headers: { Authorization: `Bearer ${ACCESS_TOKEN}` },
+    });
+    assert.equal(bearerDelete.status, 403);
+    assert.deepEqual(detached, []);
+
+    const blockedDetach = await fetch(`${apiServer.base}/api/projects/project-1`, { method: "DELETE", headers: ownerMutation });
+    assert.equal(blockedDetach.status, 409);
+    assert.equal((await blockedDetach.json() as { code: string }).code, "pending_checkpoints");
+    refuseDetach = false;
+    const detach = await fetch(`${apiServer.base}/api/projects/project-1`, { method: "DELETE", headers: ownerMutation });
+    assert.equal(detach.status, 204);
+    assert.deepEqual(detached, ["project-1", "project-1"]);
+  });
+
+  it("keeps the real Core clone unchanged on URL mismatch and honors its detach guard", async (t) => {
+    const { root, remote } = await makeBareRemote();
+    tempDirs.push(root);
+    const staticDir = await mkdtemp(resolve(tmpdir(), "scriptorium-api-real-project-"));
+    tempDirs.push(staticDir);
+    const dataDir = resolve(root, "state");
+    const store = new CoreStore({ dataDir, allowLocalRemotes: true });
+    const apiServer = await startCustomApi(store, staticDir);
+    t.after(apiServer.close);
+    const owner = await login(apiServer.base);
+    const headers = { Cookie: owner.cookie, Origin: apiServer.base, "Content-Type": "application/json" };
+
+    const registration = await fetch(`${apiServer.base}/api/projects`, {
+      method: "POST", headers, body: JSON.stringify({ url: remote }),
+    });
+    assert.equal(registration.status, 201);
+    const project = await registration.json() as { id: string; url: string; branch: string };
+    assert.equal(project.branch, "main");
+    const workspace = resolve(dataDir, "projects", project.id);
+    const originalFile = await readFile(resolve(workspace, "README.md"), "utf8");
+
+    const mismatch = await fetch(`${apiServer.base}/api/projects/${project.id}`, {
+      method: "PUT", headers, body: JSON.stringify({ url: resolve(root, "other.git") }),
+    });
+    assert.equal(mismatch.status, 409);
+    assert.equal((await mismatch.json() as { code: string }).code, "REGISTER_REPOSITORY_FIRST");
+    assert.equal(await readFile(resolve(workspace, "README.md"), "utf8"), originalFile);
+    assert.deepEqual(await store.listProjects(), [project]);
+
+    const reconstructedResponse = await fetch(`${apiServer.base}/api/projects/${project.id}`, {
+      method: "PUT", headers, body: JSON.stringify({ repoUrl: project.url, branch: "main" }),
+    });
+    assert.equal(reconstructedResponse.status, 200);
+    assert.deepEqual(await reconstructedResponse.json(), { project });
+    assert.equal(await readFile(resolve(workspace, "README.md"), "utf8"), originalFile);
+
+    const untrackedPath = resolve(workspace, "api-test-untracked.md");
+    await writeFile(untrackedPath, "uncommitted local content\n", "utf8");
+    const blocked = await fetch(`${apiServer.base}/api/projects/${project.id}`, { method: "DELETE", headers: { Cookie: owner.cookie, Origin: apiServer.base } });
+    assert.equal(blocked.status, 409);
+    assert.equal((await blocked.json() as { code: string }).code, "working_tree_dirty");
+    assert.deepEqual(await store.listProjects(), [project]);
+    await rm(untrackedPath, { force: true });
+
+    const detached = await fetch(`${apiServer.base}/api/projects/${project.id}`, { method: "DELETE", headers: { Cookie: owner.cookie, Origin: apiServer.base } });
+    assert.equal(detached.status, 204);
+    assert.deepEqual(await store.listProjects(), []);
   });
 
   it("allows bearer compute under runtime effect limits and host-assigns MCP proposal source", async (t) => {

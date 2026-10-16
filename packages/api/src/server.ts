@@ -7,7 +7,7 @@ import { extname, resolve, sep } from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
 import Fastify, { type FastifyInstance, type FastifyRequest } from "fastify";
 import { CONTRACT_VERSION, snapshotKey, type ActionDescriptor, type ActionResult, type ChangeOperation, type ChangeProposal, type HttpContribution, type ModuleAction, type ModuleActionContext, type ModuleId, type ModuleStatus, type ProposalEvidence, type SnapshotId, type ValueSchema } from "@scriptorium/contracts";
-import type { CoreStore, CreateHierarchyInput, HierarchyTarget, ReorderHierarchyInput } from "@scriptorium/core";
+import type { CoreStore, CreateHierarchyInput, HierarchyTarget, Project, ReorderHierarchyInput } from "@scriptorium/core";
 import { ModuleRuntime, type ActionHostContext, type ModuleLoader, type ModuleRuntimeOptions } from "@scriptorium/module-runtime";
 
 const SESSION_COOKIE = "scriptorium_session";
@@ -288,6 +288,8 @@ type ProjectSyncEvent = {
 };
 
 type CoreStoreApi = CoreStore & {
+  detachProject?: (projectId: string) => Promise<void>;
+  reconstructProject?: (projectId: string) => Promise<Project>;
   listManuscriptSnapshots?: (projectId: string, manuscriptId: string, sceneId?: string, view?: "remote" | "checkpoint", pinned?: SnapshotId | string) => Promise<{ snapshot: SnapshotId; snapshots: unknown[] }>;
   readManuscriptSnapshot?: (projectId: string, manuscriptId: string, snapshotId: string, view?: "remote" | "checkpoint", pinned?: SnapshotId | string) => Promise<{ snapshot: SnapshotId; manuscript: unknown } | null>;
   listProposals?: (projectId: string) => Promise<ProposalStatus[]>;
@@ -925,6 +927,52 @@ export function createServer(options: ApiServerOptions): Server {
         const observation = await options.store.observe(projectId);
         sendJson(response, 200, { project, observation });
         return;
+      }
+      if (suffix === "" && method === "PUT") {
+        if (!isCookie) { fail(response, 403, "AUTHOR_SESSION_REQUIRED", "Project reconstruction requires an owner session"); return; }
+        if (!coreStore.reconstructProject) throw httpFailure(503, "PROJECT_RECONSTRUCTION_UNAVAILABLE", "Core cannot safely reconstruct registered projects in this version");
+        const currentProject = (await options.store.listProjects()).find((candidate) => candidate.id === projectId);
+        if (!currentProject) throw httpFailure(404, "PROJECT_NOT_FOUND", "Project not found");
+        let requestedUrl: string | undefined;
+        let requestedBranch: string | undefined;
+        if (parsedBody !== undefined) {
+          const body = await readJson(request, parsedBody);
+          if (!isRecord(body)) throw httpFailure(400, "INVALID_PROJECT", "Project reconstruction accepts only an optional registered URL and default branch");
+          const unsupported = Object.keys(body).filter((key) => !["url", "repoUrl", "branch"].includes(key));
+          if (unsupported.length > 0) {
+            throw httpFailure(400, "REGISTER_REPOSITORY_FIRST", "Credentials and mutable repository settings are host-managed. Register a separate repository, then detach this project when safe.");
+          }
+          const urlFields = [body.url, body.repoUrl].filter((value) => value !== undefined);
+          if (urlFields.some((value) => typeof value !== "string" || !value.trim()) || (body.url !== undefined && body.repoUrl !== undefined && body.url !== body.repoUrl)) {
+            throw httpFailure(400, "INVALID_PROJECT", "The registered repository URL is invalid");
+          }
+          requestedUrl = typeof body.url === "string" ? body.url.trim() : typeof body.repoUrl === "string" ? body.repoUrl.trim() : undefined;
+          if (requestedUrl !== undefined && requestedUrl !== currentProject.url) {
+            throw httpFailure(409, "REGISTER_REPOSITORY_FIRST", "Project re-registration cannot replace its remote. Register the new repository separately, then detach this project when safe.");
+          }
+          if (body.branch !== undefined && (typeof body.branch !== "string" || !body.branch.trim())) {
+            throw httpFailure(400, "INVALID_PROJECT", "The default branch is invalid");
+          }
+          requestedBranch = typeof body.branch === "string" ? body.branch.trim() : undefined;
+        }
+        const project = await coreStore.reconstructProject(projectId);
+        if (requestedBranch !== undefined && requestedBranch !== project.branch) {
+          throw httpFailure(409, "DEFAULT_BRANCH_MISMATCH", "Reconstruction uses the repository's current default branch; branch overrides are not supported");
+        }
+        sendJson(response, 200, { project });
+        return;
+      }
+      if (suffix === "" && method === "DELETE") {
+        if (!isCookie) { fail(response, 403, "AUTHOR_SESSION_REQUIRED", "Project detachment requires an owner session"); return; }
+        if (!coreStore.detachProject) throw httpFailure(503, "PROJECT_DETACH_UNAVAILABLE", "Core cannot safely detach registered projects in this version");
+        await coreStore.detachProject(projectId);
+        response.writeHead(204);
+        response.end();
+        return;
+      }
+      if (suffix === "" && method === "PATCH") {
+        if (!isCookie) { fail(response, 403, "AUTHOR_SESSION_REQUIRED", "Project settings require an owner session"); return; }
+        throw httpFailure(410, "AUTO_MERGE_RETIRED", "Automatic merge settings are not supported. Synchronization and publication use the explicit Core workflow.");
       }
       if (suffix === "modules" && method === "GET") { sendJson(response, 200, await enabledStatuses()); return; }
       if (suffix === "contributions" && method === "GET") {
