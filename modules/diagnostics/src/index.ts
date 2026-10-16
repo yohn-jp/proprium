@@ -1,5 +1,5 @@
-import { randomUUID } from "node:crypto";
-import { assertProjectPath, MAX_JOB_INPUT_BYTES, type ActionResult, type ChangeOperation, type JobRequest, type ModuleAction, type ModuleActionContext, type ModuleContext, type ModuleDefinition, type ModuleManifest, type SnapshotId, type ValueSchema } from "@scriptorium/contracts";
+import { createHash, randomUUID } from "node:crypto";
+import { assertProjectPath, MAX_JOB_INPUT_BYTES, type ActionResult, type ChangeOperation, type ChangeProposal, type JobRequest, type ModuleAction, type ModuleActionContext, type ModuleContext, type ModuleDefinition, type ModuleManifest, type SnapshotId, type ValueSchema } from "@scriptorium/contracts";
 import type { NlpTokenizerCapability, MorphologyAnalysis } from "@scriptorium/module-nlp";
 import { NLP_MODEL_ID, NLP_MODEL_VERSION, NLP_TOKENIZER_CAPABILITY } from "@scriptorium/module-nlp";
 import { readCanonicalSnapshotEntities, splitIntoSentences } from "@scriptorium/module-nlp";
@@ -9,6 +9,8 @@ import { addSynonymDiagnosticIssues, DIAGNOSTICS_ENGINE_ID, DIAGNOSTICS_ENGINE_V
 import { loadLintRulesConfig, loadPlotLexiconConfig, loadToneLexiconConfig } from "./config.js";
 import { evaluateLintRules } from "./linter/rulesEvaluator.js";
 import { transformText } from "./linter/textTransformer.js";
+import { formatManuscript } from "./linter/manuscriptFormat.js";
+import { hashManuscriptText } from "./textHash.js";
 import type { LintRule, LintWarning } from "./linter/types.js";
 import type { PlotLexiconConfig } from "./plot/types.js";
 import type { ToneLexiconConfig } from "./tone/types.js";
@@ -117,6 +119,11 @@ function parseFix(value: unknown): { path: string; baseRevision?: string; operat
   if (input.baseRevision !== undefined && (typeof input.baseRevision !== "string" || input.baseRevision.length > 256)) throw new TypeError("baseRevision must be a revision string");
   if (input.operationId !== undefined && (typeof input.operationId !== "string" || !/^[A-Za-z0-9_-]{1,128}$/.test(input.operationId))) throw new TypeError("operationId must be a stable operation identifier");
   return { path: input.path, ...(typeof input.baseRevision === "string" ? { baseRevision: input.baseRevision } : {}), ...(typeof input.operationId === "string" ? { operationId: input.operationId } : {}) };
+}
+function parseFormatManuscript(value: unknown): { sceneId: string } {
+  const input = record(value, "input");
+  if (typeof input.sceneId !== "string" || !input.sceneId.trim() || input.sceneId.length > 256) throw new TypeError("sceneId must be a non-empty string of at most 256 characters");
+  return { sceneId: input.sceneId };
 }
 
 function parseVoice(value: unknown): { dialoguesByCharacter: Record<string, string[]> } {
@@ -529,6 +536,50 @@ function makeActions(moduleContext: ModuleContext): ModuleAction[] {
         paths: [{ path, revision: file.revision }], details: { warningCount: warnings.length, analyzerVersion: DIAGNOSTICS_MODULE_VERSION },
       }]);
       return { ok: true, snapshot: context.reader.snapshot, data: { path, warnings, fixed: true, body: transformed, operationId: proposedOperationId, baseRevision: file.revision, proposal } };
+    }),
+    action("diagnostics.formatManuscript", "propose", { parse: parseFormatManuscript }, async (value, context) => {
+      const { sceneId } = value as ReturnType<typeof parseFormatManuscript>;
+      if (context.signal.aborted) throw Object.assign(new Error("Manuscript formatting was cancelled"), { code: "job_cancelled" });
+      const entities = await readSnapshotAnalysisEntities(context);
+      const scene = entities.find((entity) => entity.id === sceneId && entity.kind === "scene");
+      if (!scene) throw Object.assign(new Error(`Scene not found: ${sceneId}`), { code: "not_found" });
+      const path = scene.data.manuscript;
+      if (typeof path !== "string") throw Object.assign(new Error(`Scene has no manuscript: ${sceneId}`), { code: "not_found" });
+      assertProjectPath(path);
+      if (!path.startsWith(LINT_PATH_PREFIX) || !path.endsWith(".md")) throw Object.assign(new Error("Scene manuscript path is invalid"), { code: "invalid_path" });
+      const manuscript = entities.find((entity) => entity.type === "manuscript" && entity.filePath === path);
+      if (!manuscript) throw Object.assign(new Error(`Scene manuscript not found: ${sceneId}`), { code: "not_found" });
+      const file = await context.reader.read(path);
+      if (!file) throw Object.assign(new Error(`Scene manuscript not found: ${sceneId}`), { code: "not_found" });
+      if (file.content.length > MAX_TEXT_LENGTH + 100_000) throw Object.assign(new Error("Manuscript exceeds the formatting size limit"), { code: "too_large" });
+
+      const { frontMatter, body } = extractFrontMatter(file.content);
+      if (body.length > 100_000) throw Object.assign(new Error("Manuscript exceeds the formatting input limit"), { code: "too_large" });
+      const formattedText = formatManuscript(body);
+      if (formattedText.length > 100_000) throw Object.assign(new Error("Formatted manuscript exceeds the output limit"), { code: "too_large" });
+      const resultIdentity = {
+        action: "format-manuscript",
+        projectId: context.projectId,
+        sceneId,
+        manuscriptId: manuscript.id,
+        manuscriptRevision: file.revision,
+        manuscriptContentHash: hashManuscriptText(body),
+        text: body,
+      };
+      const resultId = `na-${createHash("sha256").update(JSON.stringify(resultIdentity)).digest("hex")}`;
+      const proposalId = `cs-${resultId.slice(3)}`;
+      const updated = frontMatter + formattedText;
+      let proposal: ChangeProposal | null = null;
+      if (updated !== file.content) {
+        const operationId = `${proposalId}-replace`;
+        proposal = await context.propose([operation(context, path, file.revision, updated, operationId)], [{
+          id: `${proposalId}-source`, snapshot: context.reader.snapshot, module: "diagnostics", kind: "format_manuscript",
+          paths: [{ path, revision: file.revision }], details: { sceneId, manuscriptId: manuscript.id, resultId },
+        }], proposalId, context.signal);
+      }
+      return { ok: true, snapshot: context.reader.snapshot, data: {
+        actionId: "format-manuscript", resultId, proposalId: proposal?.id ?? null, formattedText, proposal,
+      } } as ActionResult;
     }),
     action("diagnostics.voiceProfiles", "compute", { parse: parseVoice }, async (value, context) => {
       const { dialoguesByCharacter } = value as ReturnType<typeof parseVoice>;

@@ -144,6 +144,45 @@ test("production modules lazily run the real Lindera child and preserve snapshot
   assert.deepEqual(runtime.workerSupervisor.activeWorkerPids, [], "shutdown terminates the tokenizer child process");
 });
 
+test("source manuscript formatter proposes a frontmatter-preserving edit without an external provider", async () => {
+  const files = new Map(initialFiles);
+  const frontMatter = "---\ntitle: 遺跡\nauthor_note: keep this\ncustom:\n  nested: true\n---\n";
+  const original = `${frontMatter}　地の文…\n\t「会話」\n\n`;
+  files.set("manuscript/v1/scene-1.md", { content: original, revision: "format-r1" });
+  const proposals: ChangeProposal[] = [];
+  const { runtime, host } = await createRuntime(files, proposals);
+  try {
+    const result = await runtime.invokeAction("diagnostics", "diagnostics.formatManuscript", { sceneId: "scene-1" }, host);
+    assert.equal(result.ok, true, JSON.stringify(result));
+    assert.deepEqual(result.snapshot, snapshot);
+    if (!result.ok) return;
+    const data = result.data as { actionId: string; resultId: string; proposalId: string | null; formattedText: string; proposal: ChangeProposal | null };
+    assert.equal(data.actionId, "format-manuscript");
+    assert.match(data.resultId, /^na-[a-f0-9]{64}$/u);
+    assert.equal(data.formattedText, "地の文……\n\n「会話」");
+    assert.equal(data.proposalId, data.proposal?.id);
+    assert.equal(proposals.length, 1);
+    assert.equal(data.proposal?.operations[0]?.id, `${data.proposalId}-replace`);
+    assert.deepEqual(data.proposal?.operations[0]?.reads, [{ path: "manuscript/v1/scene-1.md", revision: "format-r1" }]);
+    assert.equal(data.proposal?.operations[0]?.writes[0]?.content, `${frontMatter}${data.formattedText}`);
+    assert.equal(files.get("manuscript/v1/scene-1.md")?.content, original, "formatting is proposal-only");
+    assert.deepEqual(runtime.workerSupervisor.activeWorkerPids, [], "local formatting does not start tokenizer, semantic, or LLM workers");
+
+    files.set("manuscript/v1/scene-1.md", { content: `${frontMatter}${data.formattedText}`, revision: "format-r2" });
+    const unchanged = await runtime.invokeAction("diagnostics", "diagnostics.formatManuscript", { sceneId: "scene-1" }, host);
+    assert.equal(unchanged.ok, true, JSON.stringify(unchanged));
+    if (unchanged.ok) {
+      const noChange = unchanged.data as typeof data;
+      assert.equal(noChange.formattedText, data.formattedText);
+      assert.equal(noChange.proposalId, null);
+      assert.equal(noChange.proposal, null);
+    }
+    assert.equal(proposals.length, 1, "already formatted text produces no empty proposal");
+  } finally {
+    await runtime.shutdown();
+  }
+});
+
 test("corpus synonym suggestions acquire the optional snapshot-indexed provider and keep model identity", { timeout: 90_000 }, async () => {
   const files = new Map(initialFiles);
   const proposals: ChangeProposal[] = [];
