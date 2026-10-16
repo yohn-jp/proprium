@@ -110,20 +110,21 @@ async function makeLegacyRepository(root) {
 function insertStateProposal(database, { id, status, subject, token }) {
   database.prepare(`INSERT INTO state_proposals (
     id, scene_id, event_json, manuscript_hash, status, conflict_event_ids_json,
-    duplicate_of_proposal_id, history_json, created_at, updated_at, api_token
-  ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`)
+    duplicate_of_proposal_id, history_json, created_at, updated_at, api_token, vendor_extension
+  ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`)
     .run(id, "scene-legacy", JSON.stringify({ kind: "move", subject, object: "library" }), "source-hash",
       status, "[]", null, "[{\"action\":\"created\"}]", "2025-01-01T00:00:00.000Z",
-      "2025-01-02T00:00:00.000Z", token);
+      "2025-01-02T00:00:00.000Z", token, "preserve-state-extension:" + id);
 }
 
 function insertSuggestion(database, { id, status, text }) {
   database.prepare(`INSERT INTO zukan_suggestions (
     id, entity_id, block_path, proposed_text, evidence_json, status, source,
-    kind, source_session_id, source_turn_range_json, confidence, created_at, updated_at
-  ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`)
+    kind, source_session_id, source_turn_range_json, confidence, created_at, updated_at, plugin_payload
+  ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`)
     .run(id, "character-legacy", "facts/0", text, "[{\"quote\":\"author evidence\"}]", status,
-      "manuscript", "fact", null, null, "high", "2025-02-01T00:00:00.000Z", "2025-02-02T00:00:00.000Z");
+      "manuscript", "fact", null, null, "high", "2025-02-01T00:00:00.000Z", "2025-02-02T00:00:00.000Z",
+      "preserve-suggestion-extension:" + id);
 }
 
 function createLegacyDatabase(file, rows) {
@@ -134,13 +135,13 @@ function createLegacyDatabase(file, rows) {
       id TEXT PRIMARY KEY, scene_id TEXT NOT NULL, event_json TEXT NOT NULL,
       manuscript_hash TEXT NOT NULL, status TEXT NOT NULL, conflict_event_ids_json TEXT NOT NULL,
       duplicate_of_proposal_id TEXT, history_json TEXT NOT NULL, created_at TEXT NOT NULL,
-      updated_at TEXT NOT NULL, api_token TEXT
+      updated_at TEXT NOT NULL, api_token TEXT, vendor_extension TEXT
     );
     CREATE TABLE zukan_suggestions (
       id TEXT PRIMARY KEY, entity_id TEXT NOT NULL, block_path TEXT NOT NULL,
       proposed_text TEXT NOT NULL, evidence_json TEXT NOT NULL, status TEXT NOT NULL,
       source TEXT NOT NULL, kind TEXT, source_session_id TEXT, source_turn_range_json TEXT,
-      confidence TEXT, created_at TEXT NOT NULL, updated_at TEXT NOT NULL
+      confidence TEXT, created_at TEXT NOT NULL, updated_at TEXT NOT NULL, plugin_payload TEXT
     );
     CREATE TABLE entities (id TEXT PRIMARY KEY, payload TEXT);
     CREATE TABLE scene_state_events (id TEXT PRIMARY KEY, payload TEXT);
@@ -176,10 +177,12 @@ async function addLegacyProjectState(sourceRoot, workspaceRoot) {
     state: [
       { id: "state-approved-workspace", status: "rejected", subject: "workspace-version", token: null },
       { id: "state-conflict", status: "approved", subject: "workspace-version", token: null },
+      { id: "state-stale-workspace", status: "stale", subject: "stale-workspace", token: null },
     ],
     suggestions: [
       { id: "zukan-approved-workspace", status: "rejected", text: "preserved rejected workspace fact" },
       { id: "zukan-pending-workspace", status: "pending", text: "local review only" },
+      { id: "zukan-stale-workspace", status: "stale", text: "stale local suggestion" },
     ],
   });
   return [projectDatabase, workspaceDatabase];
@@ -287,8 +290,10 @@ test("legacy import survives author-approved publication and complete Core dataD
       "meta/scriptorium/modules/story/change-sets/applied.json",
       "meta/scriptorium/modules/story/local-snapshots/scene-before.md",
       "meta/scriptorium/modules/story/local-snapshots/attachments/diagram.bin",
-      "meta/scriptorium/modules/story/state-proposals.jsonl",
-      "meta/scriptorium/modules/story/zukan-suggestions.jsonl",
+      "meta/scriptorium/modules/story/legacy/sqlite/project-arcadia/state_proposals.jsonl",
+      "meta/scriptorium/modules/story/legacy/sqlite/project-arcadia/zukan_suggestions.jsonl",
+      "meta/scriptorium/modules/story/legacy/sqlite/workspace-index/state_proposals.jsonl",
+      "meta/scriptorium/modules/story/legacy/sqlite/workspace-index/zukan_suggestions.jsonl",
       "meta/scriptorium/modules/publishing/share-grants.jsonl",
       "notes/from-local-commit.md",
       "story/scene.md",
@@ -312,15 +317,28 @@ test("legacy import survives author-approved publication and complete Core dataD
       assert.ok(["rebuild", "excluded"].includes(entry.disposition), `unexpected durable import for ${sourcePath}`);
     }
     assert.ok(inspection.entries.some((entry) => entry.source.includes("#state_proposals") && entry.category === "provisional" && entry.disposition === "deferred"));
-    assert.ok(inspection.entries.some((entry) => entry.source.includes("state-conflict") && entry.disposition === "conflict"));
-    assert.ok(inspection.recovery.some((record) => record.source.includes("state-pending-project")));
+    assert.ok(inspection.entries.some((entry) => entry.source.includes("#zukan_suggestions") && entry.category === "provisional" && entry.disposition === "deferred"));
     assert.ok(!inspection.operations.some((operation) => operation.writes.some((write) => /entities|scene_state_events|reader_knowledge_events/u.test(write.path))));
-    const proposalRows = writeByPath.get("meta/scriptorium/modules/story/state-proposals.jsonl").content;
-    assert.ok(proposalRows.includes("state-approved-project"));
-    assert.ok(proposalRows.includes("state-approved-workspace"));
-    assert.ok(!proposalRows.includes("state-conflict"), "divergent rows must remain separate for review");
-    assert.ok(!proposalRows.includes("state-pending-project"), "unaccepted proposals must not be promoted to canonical decisions");
-    assert.ok(!proposalRows.includes("api_token"));
+    const projectProposalRows = writeByPath.get("meta/scriptorium/modules/story/legacy/sqlite/project-arcadia/state_proposals.jsonl").content;
+    const workspaceProposalRows = writeByPath.get("meta/scriptorium/modules/story/legacy/sqlite/workspace-index/state_proposals.jsonl").content;
+    const projectSuggestionRows = writeByPath.get("meta/scriptorium/modules/story/legacy/sqlite/project-arcadia/zukan_suggestions.jsonl").content;
+    const workspaceSuggestionRows = writeByPath.get("meta/scriptorium/modules/story/legacy/sqlite/workspace-index/zukan_suggestions.jsonl").content;
+    assert.deepEqual(projectProposalRows.trim().split("\n").map((line) => JSON.parse(line).id).sort(),
+      ["state-approved-project", "state-conflict", "state-pending-project"]);
+    assert.deepEqual(workspaceProposalRows.trim().split("\n").map((line) => JSON.parse(line).id).sort(),
+      ["state-approved-workspace", "state-conflict", "state-stale-workspace"]);
+    assert.deepEqual(projectSuggestionRows.trim().split("\n").map((line) => JSON.parse(line).status).sort(), ["approved"]);
+    assert.deepEqual(workspaceSuggestionRows.trim().split("\n").map((line) => JSON.parse(line).status).sort(), ["pending", "rejected", "stale"]);
+    assert.ok(projectProposalRows.includes('"vendor_extension":"preserve-state-extension:state-approved-project"'));
+    assert.ok(workspaceSuggestionRows.includes('"plugin_payload":"preserve-suggestion-extension:zukan-stale-workspace"'));
+    assert.ok(projectProposalRows.includes("state-pending-project"), "proposed workflow rows must remain in opaque preservation");
+    assert.ok(workspaceProposalRows.includes("state-stale-workspace"), "stale workflow rows must remain in opaque preservation");
+    for (const payload of [projectProposalRows, workspaceProposalRows, projectSuggestionRows, workspaceSuggestionRows]) {
+      assert.ok(!payload.includes("api_token"));
+      assert.ok(!payload.includes("DO_NOT_EXPORT_SQLITE_SECRET"));
+    }
+    assert.ok(!writeByPath.has("meta/scriptorium/modules/story/state-proposals.jsonl"), "generic SQLite preservation must not write canonical Story records");
+    assert.ok(!writeByPath.has("meta/scriptorium/modules/story/zukan-suggestions.jsonl"));
     assert.ok(!JSON.stringify(inspection).includes("DO_NOT_EXPORT_"), "synthetic credential/derived sentinels must not enter inspection output");
 
     const repeatedPlan = await inspect();
@@ -358,15 +376,16 @@ test("legacy import survives author-approved publication and complete Core dataD
     assert.ok(!grants.content.includes("synthetic-private-owner"));
     assert.ok(!grants.content.includes("DO_NOT_EXPORT_BEARER"));
 
-    const restoredStateRows = (await restoredReader.read("meta/scriptorium/modules/story/state-proposals.jsonl")).content;
-    assert.deepEqual(
-      restoredStateRows.trim().split("\n").map((line) => JSON.parse(line).id).sort(),
-      ["state-approved-project", "state-approved-workspace"],
-      "stable approved decision IDs must survive the real Git publication and fresh clone",
-    );
-    const conflicts = await restoredReader.list("meta/scriptorium/modules/story/legacy/sqlite-conflicts/state_proposals/");
-    assert.equal(conflicts.length, 2, "both divergent legacy records must survive for author review");
+    const restoredProjectRows = (await restoredReader.read("meta/scriptorium/modules/story/legacy/sqlite/project-arcadia/state_proposals.jsonl")).content;
+    const restoredWorkspaceRows = (await restoredReader.read("meta/scriptorium/modules/story/legacy/sqlite/workspace-index/state_proposals.jsonl")).content;
+    assert.deepEqual(restoredProjectRows, projectProposalRows, "all project database workflow rows and unknown fields survive a real clone");
+    assert.deepEqual(restoredWorkspaceRows, workspaceProposalRows, "all workspace database workflow rows and divergent IDs survive a real clone");
+    assert.ok(!restoredProjectRows.includes("api_token"));
+    assert.ok(!restoredWorkspaceRows.includes("DO_NOT_EXPORT_SQLITE_SECRET"));
     const allTargetPaths = await restoredReader.list("");
+    assert.ok(!allTargetPaths.includes("meta/scriptorium/modules/story/state-proposals.jsonl"));
+    assert.ok(!allTargetPaths.includes("meta/scriptorium/modules/story/zukan-suggestions.jsonl"));
+    assert.ok(!allTargetPaths.some((filePath) => filePath.startsWith("meta/scriptorium/modules/story/legacy/sqlite-conflicts/")));
     assert.ok(!allTargetPaths.some((filePath) => filePath === ".npmrc" || filePath.endsWith("/.ssh/id_ed25519")));
     assert.ok(!allTargetPaths.some((filePath) => /scene_state_events|reader_knowledge_events/u.test(filePath)));
     const exactFileMappings = [

@@ -144,14 +144,16 @@ function schema(db: DatabaseSync): void {
       id TEXT PRIMARY KEY, scene_id TEXT NOT NULL, event_json TEXT NOT NULL,
       manuscript_hash TEXT NOT NULL, status TEXT NOT NULL,
       conflict_event_ids_json TEXT NOT NULL, duplicate_of_proposal_id TEXT,
-      history_json TEXT NOT NULL, created_at TEXT NOT NULL, updated_at TEXT NOT NULL
+      history_json TEXT NOT NULL, created_at TEXT NOT NULL, updated_at TEXT NOT NULL,
+      vendor_extension TEXT
     );
     CREATE INDEX idx_state_proposals_scene_status ON state_proposals(scene_id, status, created_at);
     CREATE TABLE zukan_suggestions (
       id TEXT PRIMARY KEY, entity_id TEXT NOT NULL, block_path TEXT NOT NULL,
       proposed_text TEXT NOT NULL, evidence_json TEXT NOT NULL, status TEXT NOT NULL,
       source TEXT NOT NULL, kind TEXT, source_session_id TEXT,
-      source_turn_range_json TEXT, confidence TEXT, created_at TEXT NOT NULL, updated_at TEXT NOT NULL
+      source_turn_range_json TEXT, confidence TEXT, created_at TEXT NOT NULL, updated_at TEXT NOT NULL,
+      plugin_payload TEXT
     );
     CREATE INDEX idx_zukan_suggestions_status ON zukan_suggestions(status, created_at);
     CREATE TABLE scene_state_events (id TEXT PRIMARY KEY, payload TEXT NOT NULL);
@@ -173,6 +175,7 @@ async function createDatabaseFixtures(sourceRoot: string, workspaceRoot: string)
   insertSuggestion(projectDb, suggestionRow("zukan-pending", "pending"));
   projectDb.exec("ALTER TABLE state_proposals ADD COLUMN api_token TEXT;");
   projectDb.exec("UPDATE state_proposals SET api_token = 'DO_NOT_EXPORT_SQLITE_SECRET_SENTINEL';");
+  projectDb.exec("UPDATE state_proposals SET vendor_extension = 'preserve-unknown-state-field'; UPDATE zukan_suggestions SET plugin_payload = 'preserve-unknown-suggestion-field';");
   projectDb.exec(`CREATE TABLE private_tokens (id TEXT, token_value TEXT); INSERT INTO private_tokens VALUES ('secret-id', 'DO_NOT_EXPORT_TOKEN_SENTINEL');`);
   projectDb.exec(`CREATE TABLE unknown_plugin_state (id TEXT, payload TEXT); INSERT INTO unknown_plugin_state VALUES ('unknown-1', 'leave-unclassified');`);
   projectDb.exec("INSERT INTO scene_state_events VALUES ('derived-1', 'rebuild-me');");
@@ -385,8 +388,10 @@ test("legacy inspection preserves scoped data, both SQLite stores, and pending G
     "meta/scriptorium/modules/story/change-sets/applied.json",
     "meta/scriptorium/modules/story/local-snapshots/scene-before.md",
     "meta/scriptorium/modules/story/local-snapshots/attachments/audio.bin",
-    "meta/scriptorium/modules/story/state-proposals.jsonl",
-    "meta/scriptorium/modules/story/zukan-suggestions.jsonl",
+    "meta/scriptorium/modules/story/legacy/sqlite/project-arcadia/state_proposals.jsonl",
+    "meta/scriptorium/modules/story/legacy/sqlite/project-arcadia/zukan_suggestions.jsonl",
+    "meta/scriptorium/modules/story/legacy/sqlite/workspace-index/state_proposals.jsonl",
+    "meta/scriptorium/modules/story/legacy/sqlite/workspace-index/zukan_suggestions.jsonl",
     "meta/scriptorium/modules/publishing/share-grants.jsonl",
     "story/scene.md",
     "story/delete-me.md",
@@ -401,23 +406,37 @@ test("legacy inspection preserves scoped data, both SQLite stores, and pending G
   assert.ok(inspection.entries.some((entry) => entry.source === "meta/custom-extension.yaml" && entry.category === "provisional" && entry.disposition === "planned"));
   assert.ok(inspection.entries.some((entry) => entry.source === "app-state/projects.json" && entry.disposition === "relocated"));
   assert.ok(inspection.entries.some((entry) => entry.source === ".env" && entry.category === "secret" && entry.disposition === "excluded"));
-  assert.ok(inspection.entries.some((entry) => entry.source.includes("shared-conflict") && entry.disposition === "conflict"));
-  assert.ok(inspection.entries.some((entry) => entry.source.includes("zukan-conflict") && entry.disposition === "conflict"));
+  assert.ok(inspection.entries.some((entry) => entry.source.endsWith("#state_proposals") && entry.category === "provisional" && entry.disposition === "deferred"));
+  assert.ok(inspection.entries.some((entry) => entry.source.endsWith("#zukan_suggestions") && entry.category === "provisional" && entry.disposition === "deferred"));
   assert.ok(inspection.recovery.some((record) => record.content.includes("stable-pending-id")));
-  assert.ok(inspection.recovery.some((record) => record.source.includes("project-pending")));
-  assert.ok(inspection.recovery.some((record) => record.source.includes("external-stale")));
 
   const binaryWrites = writes.filter(({ path: writePath }) => writePath.endsWith("cover.jpg") || writePath.endsWith("audio.bin") || writePath.endsWith("attachment.bin"));
   assert.equal(binaryWrites.length, 3);
   assert.ok(binaryWrites.every((write) => write.encoding === "base64"));
-  const proposalRecords = operationContent(new Map(writes.map((write) => [write.path, { content: write.content ?? "", revision: "" }])), "meta/scriptorium/modules/story/state-proposals.jsonl");
-  assert.ok(proposalRecords.includes("project-approved"));
-  assert.ok(proposalRecords.includes("external-approved"));
-  assert.equal(proposalRecords.includes("shared-conflict"), false, "divergent records must not be auto-selected");
-  const identicalCount = proposalRecords.split("\n").filter((line) => line.includes("identical-proposal")).length;
-  assert.equal(identicalCount, 1, "identical records from both stores should deduplicate by stable ID");
-  assert.ok(!proposalRecords.includes("api_token"));
-  assert.ok(!proposalRecords.includes("DO_NOT_EXPORT_SQLITE_SECRET_SENTINEL"));
+  const operationFiles = new Map(writes.map((write) => [write.path, { content: write.content ?? "", revision: "" }]));
+  const projectProposalRecords = operationContent(operationFiles, "meta/scriptorium/modules/story/legacy/sqlite/project-arcadia/state_proposals.jsonl");
+  const workspaceProposalRecords = operationContent(operationFiles, "meta/scriptorium/modules/story/legacy/sqlite/workspace-index/state_proposals.jsonl");
+  const projectSuggestions = operationContent(operationFiles, "meta/scriptorium/modules/story/legacy/sqlite/project-arcadia/zukan_suggestions.jsonl");
+  const workspaceSuggestions = operationContent(operationFiles, "meta/scriptorium/modules/story/legacy/sqlite/workspace-index/zukan_suggestions.jsonl");
+  assert.deepEqual(projectProposalRecords.trim().split("\n").map((line) => JSON.parse(line).id).sort(),
+    ["identical-proposal", "project-approved", "project-pending", "shared-conflict"]);
+  assert.deepEqual(workspaceProposalRecords.trim().split("\n").map((line) => JSON.parse(line).id).sort(),
+    ["external-approved", "external-stale", "identical-proposal", "shared-conflict"]);
+  assert.ok(projectProposalRecords.includes('"status":"proposed"'), "proposed workflow status must remain in the raw snapshot");
+  assert.ok(workspaceProposalRecords.includes('"status":"stale"'), "stale workflow status must remain in the raw snapshot");
+  assert.ok(projectProposalRecords.includes('"vendor_extension":"preserve-unknown-state-field"'));
+  assert.ok(projectSuggestions.includes('"plugin_payload":"preserve-unknown-suggestion-field"'));
+  assert.ok(projectProposalRecords.includes("shared-conflict") && workspaceProposalRecords.includes("shared-conflict"),
+    "divergent IDs must remain distinct in their database-specific snapshots");
+  assert.ok(projectSuggestions.includes("zukan-conflict") && workspaceSuggestions.includes("zukan-conflict"));
+  assert.ok(projectSuggestions.includes('"status":"pending"'));
+  assert.ok(workspaceSuggestions.includes('"status":"stale"'));
+  for (const payload of [projectProposalRecords, workspaceProposalRecords, projectSuggestions, workspaceSuggestions]) {
+    assert.ok(!payload.includes("api_token"));
+    assert.ok(!payload.includes("DO_NOT_EXPORT_SQLITE_SECRET_SENTINEL"));
+  }
+  assert.ok(!writePaths.has("meta/scriptorium/modules/story/state-proposals.jsonl"));
+  assert.ok(!writePaths.has("meta/scriptorium/modules/story/zukan-suggestions.jsonl"));
   assert.equal(writes.find(({ path: writePath }) => writePath.endsWith("speaker/adopted-model.json"))?.content,
     '{"version":1,"featureNames":["manual"],"weights":[0.5],"bias":0,"highProbabilityThreshold":0.7,"trainedAt":"2025-01-01T00:00:00.000Z","vendorExtension":{"preserve":true}}\n');
   assert.equal(writes.find(({ path: writePath }) => writePath.endsWith("nlp/synonyms.yaml"))?.content,
@@ -477,7 +496,7 @@ test("legacy inspection preserves scoped data, both SQLite stores, and pending G
   });
   const disabledWrites = disabled.operations.flatMap((operation) => operation.writes);
   assert.ok(disabledWrites.some(({ path: writePath }) => writePath === "meta/scriptorium/modules/speaker/legacy/files/meta/speaker-corrections.jsonl"));
-  assert.ok(disabledWrites.some(({ path: writePath }) => writePath.startsWith("meta/scriptorium/modules/story/legacy/sqlite/")));
+  assert.ok(disabledWrites.some(({ path: writePath }) => writePath === "meta/scriptorium/modules/story/legacy/sqlite/project-arcadia/state_proposals.jsonl"));
   assert.ok(disabledWrites.some(({ path: writePath }) => writePath === "meta/scriptorium/modules/publishing/legacy/share-grants.jsonl"));
   assert.ok(disabled.entries.some((entry) => entry.source === "meta/speaker-corrections.jsonl" && entry.disposition === "preserved-unreadable"));
   assert.ok(disabled.entries.some((entry) => entry.source.endsWith("#state_proposals") && entry.disposition === "preserved-unreadable"));
