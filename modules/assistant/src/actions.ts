@@ -36,6 +36,7 @@ import {
   type AssistantModelSettings,
 } from "./model-settings.js";
 import { composePrompt, CUSTOM_PROMPT_VERSIONS, loadPromptTemplate, renderPromptTemplate } from "./prompts.js";
+import { normalizeAspectIds, runDeterministicAspectReview, type AspectId } from "./aspect-review.js";
 
 const ASSISTANT_MODULE_VERSION = "0.1.0";
 const USAGE_PATH = "meta/scriptorium/modules/assistant/usage.jsonl";
@@ -45,7 +46,6 @@ const EXTERNAL_FEATURES: Readonly<Record<string, string>> = {
   "chapter-summary": "chapter-summary",
   "setting-qa": "setting-qa",
   "continuation-options": "continuation-options",
-  "aspect-review": "aspect-review",
   "dialogue-sketch": "dialogue-sketch",
   "dialogue-sketch-turn": "dialogue-sketch",
   "first-read-reaction": "first-read-reaction",
@@ -124,10 +124,10 @@ function parseQaInput(value: unknown): { question: string; sceneId?: string } {
   const input = record(value);
   return { question: parseString(input.question, "question", 8_000), ...(optionalString(input, "sceneId", 256) ? { sceneId: optionalString(input, "sceneId", 256) } : {}) };
 }
-function parseAspectInput(value: unknown): { chapterId: string; aspects: string[] } {
+function parseAspectInput(value: unknown): { chapterId: string; aspects: AspectId[] } {
   const input = record(value);
-  if (!Array.isArray(input.aspects) || input.aspects.length < 1 || input.aspects.length > 3 || input.aspects.some((item) => !["tempo", "pov-shift", "over-explain"].includes(String(item)))) throw new TypeError("aspects must contain one to three supported aspect IDs");
-  return { chapterId: parseString(input.chapterId, "chapterId", 256), aspects: [...new Set(input.aspects as string[])] };
+  if (Array.isArray(input.aspects) && input.aspects.length > 100) throw new TypeError("aspects must contain at most 100 entries");
+  return { chapterId: parseString(input.chapterId, "chapterId", 256), aspects: normalizeAspectIds(input.aspects) };
 }
 function parseDialogueTurnInput(value: unknown): { sceneId: string; topic: string; participants: string[]; precedingLines: string[] } {
   const input = record(value);
@@ -584,7 +584,6 @@ const sceneSummarySchema = z.object({
 });
 const chapterSummarySchema = z.object({ summaryLines: z.array(z.string().min(1)).length(3) });
 const continuationSchema = z.object({ options: z.array(z.object({ direction: z.string().min(1), rationale: z.string().min(1) })).length(3) });
-const aspectSchema = z.object({ findings: z.array(z.object({ aspect: z.string().min(1), finding: z.string().min(1), quote: z.string().min(1), sceneId: z.string().min(1) })).max(100) });
 const topicsSchema = z.object({ topics: z.array(z.object({ title: z.string().min(1), situation: z.string().min(1) })).min(3).max(5) });
 const dialogueLinesSchema = z.object({ lines: z.array(z.object({ speakerEntityId: z.string().min(1), text: z.string().min(1) })).length(3) });
 const synonymSchema = z.object({ candidates: z.array(z.string().min(1)).min(3).max(5) });
@@ -785,31 +784,27 @@ async function runContinuation(moduleContext: ModuleContext, context: ModuleActi
   return { ...result, sceneId, model: generated.provenance.model, provider: generated.provenance.provider, promptVersion: generated.provenance.promptVersion, citations: [makeCitation(source.manuscript, source.body, source.scene.id, "scene manuscript")], provenance: generated.provenance };
 }
 
-async function runAspectReview(moduleContext: ModuleContext, context: ModuleActionContext, input: { chapterId: string; aspects: string[] }) {
+async function runAspectReview(context: ModuleActionContext, input: { chapterId: string; aspects: AspectId[] }) {
   const story = await readStorySnapshot(context.reader, { includeManuscripts: true });
   const { chapter, scenes } = chapterScenes(story, input.chapterId);
   if (!scenes.length) throw codeError("assistant_source_missing", `Chapter ${input.chapterId} has no manuscript scenes`);
-  if (scenes.length > 30 || scenes.reduce((size, scene) => size + scene.body.length, 0) > 80_000) throw codeError("assistant_scope_too_large", "Aspect review is limited to 30 scenes and 80000 characters");
-  const labels: Record<string, string> = { tempo: "テンポ", "pov-shift": "視点の揺れ", "over-explain": "説明過多" };
-  const sceneBlocks = scenes.map((item) => `## ${item.scene.name ?? item.scene.id} (${item.scene.id})\nPOV: ${String(item.scene.raw.pov ?? "不明")}\n${item.body}`).join("\n\n");
-  const template = await renderPromptTemplate("aspectReview", {
-    chapterId: input.chapterId, chapterName: chapter.name ?? input.chapterId,
-    aspectLines: input.aspects.map((aspect) => `- ${aspect}（${labels[aspect]}）`).join("\n"), sceneBlocks,
+  const reviewScenes = scenes.map(({ scene, body }) => {
+    const povId = story.links.find((link) => link.from === scene.id && link.kind === "pov")?.to;
+    const povName = povId ? story.entities.get(povId)?.name : undefined;
+    return {
+      sceneId: scene.id,
+      sceneTitle: typeof scene.raw.title === "string" ? scene.raw.title : scene.name ?? scene.id,
+      body,
+      ...(povId ? { povId } : {}),
+      ...(povName ? { povName } : {}),
+    };
   });
-  const prompt = `${await composePrompt(template.body)}${promptJson('{"findings":[{"aspect":"tempo|pov-shift|over-explain","finding":"...","quote":"exact source quote","sceneId":"..."}]}')}`;
-  const sourceRevisions = revisionList([...story.files.values()].filter((file) => scenes.some((item) => file.path === item.scene.filePath || file.path === item.manuscript.path)));
-  const generated = await generate(moduleContext, context, { feature: "aspect-review", prompt, promptVersion: template.version, sourceRevisions, outputTokens: 256 });
-  const parsed = parseStructured(generated.text, aspectSchema);
-  const verified: Array<RecordValue> = [];
-  const citations: SourceCitation[] = [];
-  for (const finding of parsed.findings) {
-    if (!input.aspects.includes(finding.aspect)) continue;
-    const source = scenes.find((item) => item.scene.id === finding.sceneId);
-    if (!source || !source.body.includes(finding.quote)) continue;
-    verified.push(finding);
-    citations.push(sourceCitation(source.manuscript, finding.quote, source.scene.id, finding.aspect));
-  }
-  return { findings: verified, chapterId: input.chapterId, model: generated.provenance.model, provider: generated.provenance.provider, promptVersion: generated.provenance.promptVersion, citations, provenance: generated.provenance };
+  return runDeterministicAspectReview(
+    input.chapterId,
+    chapter.name ?? (typeof chapter.raw.title === "string" ? chapter.raw.title : input.chapterId),
+    reviewScenes,
+    input.aspects,
+  );
 }
 
 async function runDialogueTopics(moduleContext: ModuleContext, context: ModuleActionContext, sceneId: string) {
@@ -1178,7 +1173,7 @@ export function createAssistantActions(moduleContext: ModuleContext): ModuleActi
     action("assistant.summary.chapter", "propose", (value) => parseIdInput(value, "chapterId"), async (input, context) => runChapterSummary(moduleContext, context, input.chapterId as string)),
     action("assistant.qa", "compute", parseQaInput, async (input, context) => runQa(moduleContext, context, input as ReturnType<typeof parseQaInput>)),
     action("assistant.continuation", "compute", parseIdInput, async (input, context) => runContinuation(moduleContext, context, input.sceneId as string)),
-    action("assistant.aspect.review", "compute", parseAspectInput, async (input, context) => runAspectReview(moduleContext, context, input as ReturnType<typeof parseAspectInput>)),
+    action("assistant.aspect.review", "compute", parseAspectInput, async (input, context) => runAspectReview(context, input as ReturnType<typeof parseAspectInput>)),
     action("assistant.dialogue.topics", "compute", parseIdInput, async (input, context) => runDialogueTopics(moduleContext, context, input.sceneId as string)),
     action("assistant.dialogue.turns", "compute", parseDialogueTurnInput, async (input, context) => runDialogueTurns(moduleContext, context, input as ReturnType<typeof parseDialogueTurnInput>)),
     action("assistant.reader.reaction", "compute", (value) => parseIdInput(value, "chapterId"), async (input, context) => runReaderReaction(moduleContext, context, input.chapterId as string)),
