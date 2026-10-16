@@ -4,7 +4,7 @@ import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { WebStandardStreamableHTTPServerTransport } from "@modelcontextprotocol/sdk/server/webStandardStreamableHttp.js";
 import { isInitializeRequest } from "@modelcontextprotocol/sdk/types.js";
 import type { HttpContribution } from "@scriptorium/contracts";
-import type { McpActionClient } from "./api-client.js";
+import { McpApiError, type McpActionClient } from "./api-client.js";
 import { registerMcpTools } from "./tools.js";
 
 interface McpSession {
@@ -39,7 +39,7 @@ function requestClient(storage: AsyncLocalStorage<ModuleActionContext>): McpActi
     forProject(projectId: string): McpActionClient {
       const context = current();
       if (context.projectId !== projectId) {
-        throw new Error("The requested project does not match this MCP session");
+        throw new McpApiError(403, "PROJECT_SCOPE_MISMATCH", "The requested project does not match this MCP session");
       }
       return {
         projectId,
@@ -47,7 +47,7 @@ function requestClient(storage: AsyncLocalStorage<ModuleActionContext>): McpActi
         invoke: (actionId, input) => context.invoke(actionId, input),
         propose: (operations, evidence, proposalId) => context.propose(operations, evidence, proposalId),
         forProject(requestedId) {
-          if (requestedId !== projectId) throw new Error("The requested project does not match this MCP session");
+          if (requestedId !== projectId) throw new McpApiError(403, "PROJECT_SCOPE_MISMATCH", "The requested project does not match this MCP session");
           return this;
         },
       };

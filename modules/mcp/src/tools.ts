@@ -1,3 +1,5 @@
+import { AsyncLocalStorage } from "node:async_hooks";
+import { createHash } from "node:crypto";
 import {
   type ActionResult,
 } from "@scriptorium/contracts";
@@ -16,6 +18,7 @@ const sceneIdSchema = z.string().min(1).max(256);
 const operationIdSchema = z.string().regex(/^[a-zA-Z0-9._:-]{1,128}$/);
 
 type JsonRecord = Record<string, unknown>;
+const toolCancellation = new AsyncLocalStorage<AbortSignal>();
 
 class ToolFailure extends Error {
   constructor(readonly code: string, message: string) {
@@ -86,14 +89,40 @@ function apiError(error: unknown) {
   return errorResult("INTERNAL_ERROR", "MCP tool failed");
 }
 
-function guarded<TArgs>(handler: (args: TArgs) => Promise<ReturnType<typeof errorResult> | ReturnType<typeof outputResult>>) {
-  return async (args: TArgs) => {
+function guarded<TArgs>(handler: (args: TArgs) => Promise<ReturnType<typeof errorResult> | ReturnType<typeof outputResult> | ReturnType<typeof structuredRecord>>) {
+  return async (args: TArgs, extra: { signal: AbortSignal }) => toolCancellation.run(extra.signal, async () => {
     try {
       return await handler(args);
     } catch (error) {
+      if (extra.signal.aborted) throw error;
       return apiError(error);
     }
+  });
+}
+
+function signalAwareClient(client: McpActionClient): McpActionClient {
+  const signal = () => toolCancellation.getStore();
+  const wrapped: McpActionClient = {
+    get projectId() {
+      return client.projectId;
+    },
+    listActions: () => client.listActions(signal()),
+    invoke: (actionId, input) => client.invoke(actionId, input, signal()),
+    propose: (operations, evidence, proposalId) => client.propose(operations, evidence, proposalId, signal()),
+    forProject(projectId) {
+      if (!client.forProject) {
+        if (client.projectId && client.projectId !== projectId) {
+          throw new ToolFailure("PROJECT_SCOPE_MISMATCH", "The requested project does not match this MCP session");
+        }
+        return wrapped;
+      }
+      return signalAwareClient(client.forProject(projectId));
+    },
   };
+  if (client.listProjects) {
+    wrapped.listProjects = () => client.listProjects!(signal());
+  }
+  return wrapped;
 }
 
 function scopedClient(client: McpActionClient, requestedProjectId?: string): McpActionClient {
@@ -108,6 +137,180 @@ function scopedClient(client: McpActionClient, requestedProjectId?: string): Mcp
 
 function byteLength(value: unknown): number {
   return new TextEncoder().encode(JSON.stringify(value)).length;
+}
+
+function coreProposalIdForChangeSet(sourceId: string): string {
+  if (/^[A-Za-z0-9_-]{1,128}$/u.test(sourceId)) return sourceId;
+  return `story-cs-${createHash("sha256").update(sourceId, "utf8").digest("hex")}`;
+}
+
+interface NarrativeChangeSetDetails {
+  sourceChangeSet: JsonRecord & { id: string; projectId: string; operations: JsonRecord[] };
+  sourceFingerprint: string;
+  submittedAt: string;
+  coreProposalId: string;
+  operationMap: Record<string, string>;
+  resultIds: Record<string, string>;
+  resultPaths: Record<string, string[]>;
+  resultRevisions: Record<string, string>;
+  affectedEntities: Record<string, Array<{ id: string; revision: string }>>;
+}
+
+function stringRecord(value: unknown): value is Record<string, string> {
+  return isRecord(value) && Object.values(value).every((item) => typeof item === "string");
+}
+
+function sourceChangeSetDetails(value: unknown): NarrativeChangeSetDetails | undefined {
+  if (!isRecord(value) || !isRecord(value.proposal) || !Array.isArray(value.proposal.evidence)) return undefined;
+  const identity = value.proposal.evidence.find(
+    (item) => isRecord(item) && item.kind === "source.narrative-change-set.v1",
+  );
+  if (!identity) return undefined;
+  if (!isRecord(identity) || !isRecord(identity.details)) {
+    throw new ToolFailure("INVALID_RESPONSE", "Story proposal source ChangeSet evidence is invalid");
+  }
+  const details = identity.details;
+  const changeSet = details.sourceChangeSet;
+  if (
+    !isRecord(changeSet) ||
+    typeof changeSet.id !== "string" ||
+    typeof changeSet.projectId !== "string" ||
+    !Array.isArray(changeSet.operations) ||
+    !changeSet.operations.every(isRecord) ||
+    typeof details.sourceFingerprint !== "string" ||
+    !/^[a-f0-9]{64}$/u.test(details.sourceFingerprint) ||
+    typeof details.submittedAt !== "string" ||
+    Number.isNaN(Date.parse(details.submittedAt)) ||
+    typeof details.coreProposalId !== "string" ||
+    !stringRecord(details.operationMap) ||
+    !stringRecord(details.resultIds) ||
+    !isRecord(details.resultPaths) ||
+    !isRecord(details.resultRevisions) ||
+    !isRecord(details.affectedEntities)
+  ) {
+    throw new ToolFailure("INVALID_RESPONSE", "Story proposal source ChangeSet evidence is invalid");
+  }
+  const resultPaths = details.resultPaths as Record<string, unknown>;
+  for (const operation of changeSet.operations) {
+    const operationPaths = resultPaths[operation.id as string];
+    if (
+      typeof operation.id !== "string" ||
+      typeof operation.kind !== "string" ||
+      typeof details.operationMap[operation.id] !== "string" ||
+      typeof details.resultIds[operation.id] !== "string" ||
+      typeof details.resultRevisions[operation.id] !== "string" ||
+      !Array.isArray(operationPaths) ||
+      !operationPaths.every((path: unknown) => typeof path === "string")
+    ) {
+      throw new ToolFailure("INVALID_RESPONSE", "Story proposal source operation identity is incomplete");
+    }
+  }
+  return details as unknown as NarrativeChangeSetDetails;
+}
+
+function changeSetRecordFromProposalStatus(value: unknown): Record<string, unknown> | undefined {
+  const details = sourceChangeSetDetails(value);
+  if (!details) return undefined;
+  if (!isRecord(value) || !isRecord(value.proposal)) {
+    throw new ToolFailure("INVALID_RESPONSE", "Core proposal status is invalid");
+  }
+  const proposal = value.proposal;
+  if (proposal.id !== details.coreProposalId || details.coreProposalId !== coreProposalIdForChangeSet(details.sourceChangeSet.id)) {
+    throw new ToolFailure("INVALID_RESPONSE", "Core proposal ID does not match its source ChangeSet identity");
+  }
+  if (!Array.isArray(proposal.operations) || !Array.isArray(value.approvedOperationIds) || !Array.isArray(value.checkpoints)) {
+    throw new ToolFailure("INVALID_RESPONSE", "Core proposal status is missing review details");
+  }
+
+  const sourceOperations = details.sourceChangeSet.operations;
+  const sourceByCoreId = new Map<string, JsonRecord>();
+  const coreOperations = new Map<string, JsonRecord>();
+  for (const operation of proposal.operations) {
+    if (isRecord(operation) && typeof operation.id === "string") coreOperations.set(operation.id, operation);
+  }
+  for (const sourceOperation of sourceOperations) {
+    const sourceId = sourceOperation.id as string;
+    const coreId = details.operationMap[sourceId]!;
+    const operation = coreOperations.get(coreId);
+    if (!operation || !Array.isArray(operation.writes)) {
+      throw new ToolFailure("INVALID_RESPONSE", "Core proposal does not preserve the source operation map");
+    }
+    const writes = operation.writes as unknown[];
+    const corePaths = writes.map((write) => isRecord(write) ? write.path : undefined);
+    const expectedPaths = details.resultPaths[sourceId]!;
+    if (corePaths.some((path) => typeof path !== "string") || JSON.stringify(corePaths) !== JSON.stringify(expectedPaths)) {
+      throw new ToolFailure("INVALID_RESPONSE", "Story source result paths do not match the Core proposal");
+    }
+    sourceByCoreId.set(coreId, sourceOperation);
+  }
+
+  const approved = new Set<string>();
+  for (const operationId of value.approvedOperationIds) {
+    if (typeof operationId !== "string" || !sourceByCoreId.has(operationId)) {
+      throw new ToolFailure("INVALID_RESPONSE", "Core proposal approval references an unknown source operation");
+    }
+    approved.add(operationId);
+  }
+  const checkpointed = new Map<string, JsonRecord>();
+  for (const receipt of value.checkpoints) {
+    if (!isRecord(receipt) || typeof receipt.operationId !== "string" || !sourceByCoreId.has(receipt.operationId) || !Array.isArray(receipt.revisions)) {
+      throw new ToolFailure("INVALID_RESPONSE", "Core checkpoint receipt does not match the source operation map");
+    }
+    const operation = coreOperations.get(receipt.operationId)!;
+    const paths = receipt.revisions.map((revision) => isRecord(revision) ? revision.path : undefined);
+    const writes = operation.writes as unknown[];
+    const expectedPaths = writes.map((write) => isRecord(write) ? write.path : undefined);
+    if (paths.some((path) => typeof path !== "string") || JSON.stringify(paths) !== JSON.stringify(expectedPaths)) {
+      throw new ToolFailure("INVALID_RESPONSE", "Core checkpoint receipt does not cover the source operation writes");
+    }
+    checkpointed.set(receipt.operationId, receipt);
+    approved.add(receipt.operationId);
+  }
+
+  const selectedSourceIds = sourceOperations
+    .filter((operation) => approved.has(details.operationMap[operation.id as string]!))
+    .map((operation) => operation.id as string);
+  const approvedOperationIds = selectedSourceIds;
+  let status = approvedOperationIds.length ? "approved" : "proposed";
+  let result: Record<string, unknown> | undefined;
+  if (approvedOperationIds.length > 0 && approvedOperationIds.every((sourceId) => checkpointed.has(details.operationMap[sourceId]!))) {
+    const appliedOperations = approvedOperationIds.map((sourceId) => {
+      const sourceOperation = sourceOperations.find((item) => item.id === sourceId)!;
+      const coreId = details.operationMap[sourceId]!;
+      const affectedEntities = details.affectedEntities[sourceId];
+      return {
+        operationId: sourceId,
+        kind: sourceOperation.kind,
+        precondition: sourceOperation.precondition,
+        resultingRevision: details.resultRevisions[sourceId],
+        resultId: details.resultIds[sourceId],
+        ...(Array.isArray(affectedEntities) && affectedEntities.length ? { affectedEntities } : {}),
+        _coreOperationId: coreId,
+      };
+    }).map(({ _coreOperationId: _ignored, ...operation }) => operation);
+    status = approvedOperationIds.length === sourceOperations.length ? "applied" : "partially-applied";
+    result = {
+      changeSetId: details.sourceChangeSet.id,
+      projectId: details.sourceChangeSet.projectId,
+      status,
+      operations: appliedOperations,
+    };
+  }
+  return {
+    changeSet: details.sourceChangeSet,
+    fingerprint: details.sourceFingerprint,
+    submittedAt: details.submittedAt,
+    status,
+    ...(approvedOperationIds.length ? { approvedOperationIds } : {}),
+    ...(result ? { result } : {}),
+  };
+}
+
+function structuredRecord(record: Record<string, unknown>) {
+  return {
+    structuredContent: record,
+    content: [{ type: "text" as const, text: JSON.stringify(record, null, 2) }],
+  };
 }
 
 async function invoke(client: McpActionClient, actionId: string, input: unknown) {
@@ -176,6 +379,7 @@ async function savedScene(client: McpActionClient, sceneId: string) {
 
 /** Register source-facing MCP tools against the same pinned host action API in both transports. */
 export function registerMcpTools(server: McpServer, baseClient: McpActionClient): void {
+  baseClient = signalAwareClient(baseClient);
   server.tool(
     "list_projects",
     "List projects registered to the authenticated owner; select a returned project_id for project tools",
@@ -419,18 +623,34 @@ export function registerMcpTools(server: McpServer, baseClient: McpActionClient)
       if (byteLength(change_set) > 1_048_576) {
         return errorResult("INVALID_INPUT", "ChangeSet proposal exceeds the 1 MiB MCP limit");
       }
+      if (change_set.status !== "proposed") {
+        return errorResult("INVALID_INPUT", "Only proposed ChangeSets can be submitted");
+      }
       const client = scopedClient(baseClient, project_id);
       if (client.projectId !== change_set.projectId) {
         return errorResult("INVALID_INPUT", "ChangeSet projectId does not match project_id");
       }
-      const result = await client.invoke("story.changes.propose", change_set);
-      if (result.ok) {
-        const proposalId = result.proposals?.[0]?.id;
-        if (proposalId !== change_set.id) {
-          return errorResult("INVALID_RESPONSE", "Story proposal did not preserve the ChangeSet ID");
-        }
+      const proposalResult = await client.invoke("story.changes.propose", change_set);
+      if (!proposalResult.ok) return actionResult(proposalResult);
+      const data = isRecord(proposalResult.data) ? proposalResult.data : {};
+      const coreProposalId = coreProposalIdForChangeSet(change_set.id);
+      if (
+        data.changeSetId !== change_set.id ||
+        data.coreProposalId !== coreProposalId ||
+        data.proposalId !== coreProposalId ||
+        proposalResult.proposals?.[0]?.id !== coreProposalId
+      ) {
+        return errorResult("INVALID_RESPONSE", "Story proposal did not preserve the source ChangeSet identity mapping");
       }
-      return actionResult(result);
+      const statusResult = await client.invoke("core.proposals.get", { proposalId: coreProposalId });
+      if (!statusResult.ok) return actionResult(statusResult);
+      requireSameSnapshot(proposalResult.snapshot, statusResult.snapshot);
+      const proposalStatus = isRecord(statusResult.data) ? statusResult.data.proposal : undefined;
+      const record = changeSetRecordFromProposalStatus(proposalStatus);
+      if (!record || !isRecord(record.changeSet) || record.changeSet.id !== change_set.id) {
+        return errorResult("INVALID_RESPONSE", "Core did not return the submitted source ChangeSet record");
+      }
+      return structuredRecord(record);
     }),
   );
 
@@ -438,8 +658,42 @@ export function registerMcpTools(server: McpServer, baseClient: McpActionClient)
     "list_change_sets",
     "List project proposals and their author review/checkpoint status",
     { project_id: projectIdSchema },
-    guarded(async ({ project_id }) =>
-      invoke(scopedClient(baseClient, project_id), "core.proposals.list", {})),
+    guarded(async ({ project_id }) => {
+      const result = await scopedClient(baseClient, project_id).invoke("core.proposals.list", {});
+      if (!result.ok) return actionResult(result);
+      const data = isRecord(result.data) ? result.data : {};
+      if (!Array.isArray(data.proposals)) return errorResult("INVALID_RESPONSE", "Core proposal list is invalid");
+      const records = data.proposals.flatMap((status) => {
+        const record = changeSetRecordFromProposalStatus(status);
+        return record ? [record] : [];
+      });
+      const changeSets = records.map((record) => {
+        const changeSet = record.changeSet as JsonRecord & { id: string; projectId: string; operations: JsonRecord[] };
+        const resultValue = isRecord(record.result) ? record.result : undefined;
+        return {
+          change_set_id: changeSet.id,
+          project_id: changeSet.projectId,
+          status: record.status,
+          submitted_at: record.submittedAt,
+          operation_ids: changeSet.operations.map((operation) => operation.id),
+          approved_operation_ids: record.approvedOperationIds,
+          ...(resultValue ? {
+            result: {
+              status: resultValue.status,
+              operations: Array.isArray(resultValue.operations)
+                ? resultValue.operations.map((operation) => isRecord(operation) ? {
+                    operation_id: operation.operationId,
+                    result_id: operation.resultId,
+                    resulting_revision: operation.resultingRevision,
+                  } : null).filter((operation) => operation !== null)
+                : [],
+              failure: resultValue.failure,
+            },
+          } : {}),
+        };
+      });
+      return structuredRecord({ change_sets: changeSets });
+    }),
   );
 
   server.tool(
@@ -449,8 +703,22 @@ export function registerMcpTools(server: McpServer, baseClient: McpActionClient)
       project_id: projectIdSchema,
       change_set_id: z.string().min(1).max(256),
     },
-    guarded(async ({ project_id, change_set_id }) =>
-      invoke(scopedClient(baseClient, project_id), "core.proposals.get", { proposalId: change_set_id })),
+    guarded(async ({ project_id, change_set_id }) => {
+      const coreProposalId = coreProposalIdForChangeSet(change_set_id);
+      const result = await scopedClient(baseClient, project_id).invoke("core.proposals.get", { proposalId: coreProposalId });
+      if (!result.ok) {
+        if (["PROPOSAL_NOT_FOUND", "proposal_not_found"].includes(result.error.code)) {
+          return errorResult("NOT_FOUND", `ChangeSet not found: ${change_set_id}`);
+        }
+        return actionResult(result);
+      }
+      const data = isRecord(result.data) ? result.data : {};
+      const record = changeSetRecordFromProposalStatus(data.proposal);
+      if (!record || !isRecord(record.changeSet) || record.changeSet.id !== change_set_id) {
+        return errorResult("NOT_FOUND", `ChangeSet not found: ${change_set_id}`);
+      }
+      return structuredRecord(record);
+    }),
   );
 
   server.tool(

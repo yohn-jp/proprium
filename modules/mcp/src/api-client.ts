@@ -9,13 +9,14 @@ import type {
 export interface McpActionClient {
   readonly projectId?: string;
   /** Available on the standalone owner bearer transport; an in-process MCP session is project-bound. */
-  listProjects?(): Promise<ProjectInfo[]>;
-  listActions(): Promise<ActionDescriptor[]>;
-  invoke(actionId: string, input: unknown): Promise<ActionResult>;
+  listProjects?(signal?: AbortSignal): Promise<ProjectInfo[]>;
+  listActions(signal?: AbortSignal): Promise<ActionDescriptor[]>;
+  invoke(actionId: string, input: unknown, signal?: AbortSignal): Promise<ActionResult>;
   propose(
     operations: ChangeProposal["operations"],
     evidence?: ProposalEvidence[],
     proposalId?: string,
+    signal?: AbortSignal,
   ): Promise<ChangeProposal>;
   forProject?(projectId: string): McpActionClient;
 }
@@ -98,7 +99,7 @@ export class ApiClient implements McpActionClient {
     return `/api/projects/${encodeURIComponent(this.options.projectId)}${path}`;
   }
 
-  private async requestPath<T>(method: "GET" | "POST", path: string, body?: unknown): Promise<T> {
+  private async requestPath<T>(method: "GET" | "POST", path: string, body?: unknown, signal?: AbortSignal): Promise<T> {
     const hasBody = body !== undefined;
     const response = await this.fetcher(`${this.baseUrl}${path}`, {
       method,
@@ -107,6 +108,7 @@ export class ApiClient implements McpActionClient {
         ...(hasBody ? { "Content-Type": "application/json" } : {}),
       },
       ...(hasBody ? { body: JSON.stringify(body) } : {}),
+      ...(signal ? { signal } : {}),
     });
     if (!response.ok) {
       const payload: unknown = await response.json().catch(() => undefined);
@@ -130,12 +132,12 @@ export class ApiClient implements McpActionClient {
     return (await response.json()) as T;
   }
 
-  private request<T>(method: "GET" | "POST", path: string, body?: unknown): Promise<T> {
-    return this.requestPath(method, this.projectPath(path), body);
+  private request<T>(method: "GET" | "POST", path: string, body?: unknown, signal?: AbortSignal): Promise<T> {
+    return this.requestPath(method, this.projectPath(path), body, signal);
   }
 
-  async listProjects(): Promise<ProjectInfo[]> {
-    const projects = await this.requestPath<unknown>("GET", "/api/projects");
+  async listProjects(signal?: AbortSignal): Promise<ProjectInfo[]> {
+    const projects = await this.requestPath<unknown>("GET", "/api/projects", undefined, signal);
     if (
       !Array.isArray(projects) ||
       projects.some(
@@ -151,20 +153,23 @@ export class ApiClient implements McpActionClient {
     return projects as ProjectInfo[];
   }
 
-  async listActions(): Promise<ActionDescriptor[]> {
+  async listActions(signal?: AbortSignal): Promise<ActionDescriptor[]> {
     const result = await this.request<{ actions: ActionDescriptor[] }>(
       "GET",
       "/actions",
+      undefined,
+      signal,
     );
     if (!Array.isArray(result.actions)) throw new McpApiError(502, "INVALID_RESPONSE", "Action catalog response is invalid");
     return result.actions;
   }
 
-  async invoke(actionId: string, input: unknown): Promise<ActionResult> {
+  async invoke(actionId: string, input: unknown, signal?: AbortSignal): Promise<ActionResult> {
     return this.request<ActionResult>(
       "POST",
       `/actions/${encodeURIComponent(actionId)}`,
       { input },
+      signal,
     );
   }
 
@@ -172,32 +177,34 @@ export class ApiClient implements McpActionClient {
     operations: ChangeProposal["operations"],
     evidence?: ProposalEvidence[],
     proposalId?: string,
+    signal?: AbortSignal,
   ): Promise<ChangeProposal> {
-    const observation = await this.request<RemoteObservation>("GET", "/observation");
+    const observation = await this.request<RemoteObservation>("GET", "/observation", undefined, signal);
     return this.request<ChangeProposal>("POST", "/proposals", {
       ...(proposalId ? { id: proposalId } : {}),
       snapshot: observation.snapshot,
       operations,
       ...(evidence ? { evidence } : {}),
-    });
+    }, signal);
   }
 }
 
 export function actionClientFromContext(context: {
   projectId: string;
-  invoke(actionId: string, input: unknown): Promise<ActionResult>;
-  listActions(): Promise<ActionDescriptor[]>;
+  invoke(actionId: string, input: unknown, signal?: AbortSignal): Promise<ActionResult>;
+  listActions(signal?: AbortSignal): Promise<ActionDescriptor[]>;
   propose(
     operations: ChangeProposal["operations"],
     evidence?: ProposalEvidence[],
     proposalId?: string,
+    signal?: AbortSignal,
   ): Promise<ChangeProposal>;
 }): McpActionClient {
   return {
     projectId: context.projectId,
-    invoke: (actionId, input) => context.invoke(actionId, input),
+    invoke: (actionId, input, signal) => context.invoke(actionId, input, signal),
     listActions: () => context.listActions(),
-    propose: (operations, evidence, proposalId) => context.propose(operations, evidence, proposalId),
+    propose: (operations, evidence, proposalId, signal) => context.propose(operations, evidence, proposalId, signal),
     forProject(projectId) {
       if (projectId !== context.projectId) {
         throw new McpApiError(403, "PROJECT_SCOPE_MISMATCH", "The requested project does not match this MCP session");

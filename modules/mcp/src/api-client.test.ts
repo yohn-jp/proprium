@@ -80,3 +80,21 @@ test("stdio API client can bind a requested owner project", async () => {
   const client = new ApiClient({ baseUrl: "http://127.0.0.1:3000", token: "token", projectId: "project-one" });
   assert.equal(client.forProject("project-two").projectId, "project-two");
 });
+
+test("stdio API client forwards MCP cancellation to each fetch", async () => {
+  const observed: Array<AbortSignal | null | undefined> = [];
+  const fetcher: typeof fetch = async (_input, init = {}) => {
+    observed.push(init.signal);
+    return Response.json({ actions: [] });
+  };
+  const client = new ApiClient({
+    baseUrl: "https://scriptorium.test",
+    token: "test-token",
+    projectId: "project-one",
+    fetch: fetcher,
+  });
+  const controller = new AbortController();
+  await client.listActions(controller.signal);
+  await client.invoke("core.status", {}, controller.signal);
+  assert.deepEqual(observed, [controller.signal, controller.signal]);
+});
