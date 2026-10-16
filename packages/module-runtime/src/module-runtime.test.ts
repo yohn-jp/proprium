@@ -249,6 +249,77 @@ test("module-owned capability shares one supervised worker across two consumers 
   await runtime.shutdown();
 });
 
+test("disabling a consumer cancels its provider-owned job and keeps the shared child until the final consumer releases", async () => {
+  const nlp = manifest("nlp", { provides: ["nlp.tokenizer"], workerEntry: "worker-service.mjs" });
+  const diagnostics = manifest("diagnostics", { dependencies: ["nlp"], requires: ["nlp.tokenizer"] });
+  const story = manifest("story", { dependencies: ["nlp"], requires: ["nlp.tokenizer"] });
+  const held = new Map<ModuleId, { release(): Promise<void> }>();
+  const providerDefinition: ModuleDefinition = {
+    manifest: nlp, actions: [], ui: [],
+    capabilities: [{
+      id: "nlp.tokenizer", version: "1.0.0",
+      async create(context) { return context.createWorkerService(); },
+      async dispose(service) { await service.dispose(); },
+    }],
+    async dispose() {},
+  };
+  const consumerLoader = (metadata: ModuleManifest, makeRequest: boolean) => async (context: import("@scriptorium/contracts").ModuleContext): Promise<ModuleDefinition> => definition(metadata, {
+    id: `${metadata.id}.tokenize`,
+    effect: "compute",
+    inputSchema: schema,
+    outputSchema: schema,
+    async invoke(_input, action) {
+      const lease = await context.acquireCapability<WorkerService>("nlp.tokenizer");
+      held.set(metadata.id, lease);
+      if (!makeRequest) return { ok: true, snapshot: action.reader.snapshot, data: { leased: true } };
+      const outcome = await lease.value.request(jobRequest("nlp", {
+        task: "hold", moduleVersion: nlp.version, deadline: Date.now() + 60_000,
+      }), action.signal);
+      if (!outcome.ok) return { ok: false, snapshot: action.reader.snapshot, error: outcome.error };
+      return { ok: true, snapshot: action.reader.snapshot, data: outcome.result.output };
+    },
+  });
+  const runtime = new ModuleRuntime({
+    manifests: [nlp, diagnostics, story], enabled: ["nlp", "diagnostics", "story"],
+    cacheDirectory: "/tmp/scriptorium-runtime-test",
+    workerEntries: { nlp: fileURLToPath(new URL("./fixtures/worker-service.mjs", import.meta.url)) },
+    loaders: {
+      nlp: async () => providerDefinition,
+      diagnostics: consumerLoader(diagnostics, false),
+      story: consumerLoader(story, true),
+    },
+  });
+  const host = readContext();
+  const diagnosticResult = await runtime.invokeAction("diagnostics", "diagnostics.tokenize", {}, host);
+  assert.equal(diagnosticResult.ok, true, JSON.stringify(diagnosticResult));
+  const pid = runtime.workerSupervisor.activeWorkerPids[0];
+  assert.ok(pid, "shared capability should own a live child process");
+
+  const storyInvocation = runtime.invokeAction("story", "story.tokenize", {}, host);
+  await new Promise<void>((resolve, reject) => {
+    let attempts = 0;
+    const check = () => {
+      if (runtime.workerSupervisor.activeJobCountFor("nlp") > 0) { resolve(); return; }
+      attempts += 1;
+      if (attempts > 100) { reject(new Error("provider-owned service job did not start")); return; }
+      setTimeout(check, 10);
+    };
+    check();
+  });
+  await runtime.disable("story");
+  const cancelled = await storyInvocation;
+  assert.equal(cancelled.ok, false);
+  if (!cancelled.ok) assert.equal(cancelled.error.code, "job_cancelled");
+  assert.equal(runtime.workerSupervisor.activeJobCountFor("nlp"), 0);
+  assert.doesNotThrow(() => process.kill(pid!, 0), "the other consumer still holds the shared service");
+
+  await runtime.disable("diagnostics");
+  await runtime.disable("nlp");
+  assert.throws(() => process.kill(pid!, 0), (error: unknown) => (error as NodeJS.ErrnoException).code === "ESRCH");
+  assert.equal(held.size, 2);
+  await runtime.shutdown();
+});
+
 test("runtime module version mismatch is rejected before the worker starts", async () => {
   const metadata = manifest("speaker", { workerEntry: "worker.mjs" });
   let imports = 0;
@@ -384,9 +455,29 @@ test("optional capabilities do not block profile resolution and cannot activate 
   const story = manifest("story", { optionalRequires: ["nlp.tokenizer"] });
   const plan = resolveModulePlan([nlp, story], ["story"]);
   assert.deepEqual([...plan.enabled], ["story"]);
+  assert.deepEqual([...resolveModulePlan([story], ["story"]).enabled], ["story"], "the optional package may be absent");
 
   let providerImports = 0;
   let held: { release(): Promise<void> } | undefined;
+  const storyLoader = async (context: import("@scriptorium/contracts").ModuleContext): Promise<ModuleDefinition> => definition(story, {
+    id: "suggest-tags",
+    effect: "compute",
+    inputSchema: schema,
+    outputSchema: schema,
+    async invoke(_input, action) {
+      held = await context.acquireCapability("nlp.tokenizer");
+      return { ok: true, snapshot: action.reader.snapshot, data: { ready: true } };
+    },
+  });
+  const missingRuntime = new ModuleRuntime({
+    manifests: [story], enabled: ["story"], cacheDirectory: "/tmp/scriptorium-runtime-test",
+    loaders: { story: storyLoader },
+  });
+  const missing = await missingRuntime.invokeAction("story", "suggest-tags", {}, readContext());
+  assert.equal(missing.ok, false);
+  if (!missing.ok) assert.equal(missing.error.code, "optional_capability_unavailable");
+  await missingRuntime.shutdown();
+
   const runtime = new ModuleRuntime({
     manifests: [nlp, story], enabled: ["story"], cacheDirectory: "/tmp/scriptorium-runtime-test",
     loaders: {
@@ -396,16 +487,7 @@ test("optional capabilities do not block profile resolution and cannot activate 
           id: "nlp.tokenizer", version: "1.0.0", async create() { return { tokens: true }; },
         }], async dispose() {} };
       },
-      story: async (context) => definition(story, {
-        id: "suggest-tags",
-        effect: "compute",
-        inputSchema: schema,
-        outputSchema: schema,
-        async invoke(_input, action) {
-          held = await context.acquireCapability("nlp.tokenizer");
-          return { ok: true, snapshot: action.reader.snapshot, data: { ready: true } };
-        },
-      }),
+      story: storyLoader,
     },
   });
   const host = readContext();

@@ -131,6 +131,7 @@ function invalidAction(action: ModuleAction): void {
 function validateDefinition(expected: ModuleManifest, definition: ModuleDefinition): void {
   if (!definition || typeof definition !== "object" || !definition.manifest || !sameManifest(expected, definition.manifest) ||
       !Array.isArray(definition.actions) || !Array.isArray(definition.ui) ||
+      (definition.http !== undefined && !Array.isArray(definition.http)) ||
       (definition.capabilities !== undefined && !Array.isArray(definition.capabilities)) || typeof definition.dispose !== "function") {
     throw new ModuleRuntimeError("module_version_mismatch", `Loaded module ${expected.id} does not match installed manifest version ${expected.version}`);
   }

@@ -107,19 +107,88 @@ test("cancel and deadline terminate the actual child process", async () => {
   await supervisor.shutdown();
 });
 
-test("shared worker service cancels one job and releases its persistent child on dispose", async () => {
-  const supervisor = new WorkerSupervisor({ cancellationGraceMs: 100 });
+test("one-shot admission bounds child processes and queued requests, then drains on cancellation and disable", async () => {
+  const supervisor = new WorkerSupervisor({ maxConcurrentJobs: 1, maxQueuedJobs: 1, cancellationGraceMs: 50 });
+  const activeRequest = request("hold", {}, { deadline: Date.now() + 4000 });
+  const active = supervisor.run(activeRequest, workerEntry);
+  const pid = await waitForPid(supervisor);
+
+  const queuedRequest = request("hold", {}, { deadline: Date.now() + 4000 });
+  const queuedController = new AbortController();
+  const queued = supervisor.run(queuedRequest, workerEntry, queuedController.signal);
+  const overloaded = await supervisor.run(request(), workerEntry);
+  assert.equal(overloaded.ok, false);
+  if (!overloaded.ok) {
+    assert.equal(overloaded.error.code, "worker_overloaded");
+    assert.equal(overloaded.error.retryable, true);
+  }
+  assert.equal(supervisor.activeWorkerPids.length, 1);
+  queuedController.abort();
+  const queuedResult = await queued;
+  assert.equal(queuedResult.ok, false);
+  if (!queuedResult.ok) assert.equal(queuedResult.error.code, "job_cancelled");
+  assert.equal(supervisor.activeWorkerPids.length, 1);
+
+  await supervisor.cancelModule("story");
+  const activeResult = await active;
+  assert.equal(activeResult.ok, false);
+  if (!activeResult.ok) assert.equal(activeResult.error.code, "job_cancelled");
+  assert.throws(() => process.kill(pid, 0), (error: unknown) => (error as NodeJS.ErrnoException).code === "ESRCH");
+  assert.equal(supervisor.activeJobCount, 0);
+  await supervisor.shutdown();
+});
+
+test("persistent service and per-service job admission are bounded and require consumer cancellation", async () => {
+  assert.throws(() => new WorkerSupervisor({ maxConcurrentJobs: Number.POSITIVE_INFINITY }), RangeError);
+  const supervisor = new WorkerSupervisor({
+    maxWorkerServices: 1,
+    maxConcurrentServiceJobs: 1,
+    maxQueuedServiceJobs: 1,
+    cancellationGraceMs: 100,
+  });
   const service = await supervisor.createService("story", "0.1.0", workerServiceEntry);
-  const holdRequest = request("hold", {}, { deadline: Date.now() + 4000 });
-  const running = service.request<{ pid: number }>(holdRequest);
+  await assert.rejects(
+    supervisor.createService("nlp", "0.1.0", workerServiceEntry),
+    (error: unknown) => (error as { code?: string }).code === "worker_overloaded",
+  );
+  const noSignal = await service.request(request());
+  assert.equal(noSignal.ok, false);
+  if (!noSignal.ok) assert.equal(noSignal.error.code, "job_cancellation_required");
+
+  const activeRequest = request("hold", {}, { deadline: Date.now() + 4000 });
+  const activeController = new AbortController();
+  const running = service.request<{ pid: number }>(activeRequest, activeController.signal);
   const pid = await waitForPid(supervisor);
   await waitForJob(supervisor);
-  assert.equal(service.cancel(holdRequest.id), true);
+
+  const queuedRequest = request("hold", {}, { deadline: Date.now() + 4000 });
+  const queuedController = new AbortController();
+  const queued = service.request(queuedRequest, queuedController.signal);
+  const overloaded = await service.request(request(), new AbortController().signal);
+  assert.equal(overloaded.ok, false);
+  if (!overloaded.ok) assert.equal(overloaded.error.code, "worker_overloaded");
+  assert.equal(supervisor.activeWorkerPids.length, 1);
+
+  queuedController.abort();
+  const queuedResult = await queued;
+  assert.equal(queuedResult.ok, false);
+  if (!queuedResult.ok) assert.equal(queuedResult.error.code, "job_cancelled");
+  activeController.abort();
   const outcome = await running;
   assert.equal(outcome.ok, false);
   if (!outcome.ok) assert.equal(outcome.error.code, "job_cancelled");
   assert.doesNotThrow(() => process.kill(pid, 0));
+
+  const disableActiveRequest = request("hold", {}, { deadline: Date.now() + 4000 });
+  const disableActive = service.request(disableActiveRequest, new AbortController().signal);
+  await waitForJob(supervisor);
+  const disableQueuedRequest = request();
+  const disableQueued = service.request(disableQueuedRequest, new AbortController().signal);
   await service.dispose();
+  for (const result of await Promise.all([disableActive, disableQueued])) {
+    assert.equal(result.ok, false);
+    if (!result.ok) assert.equal(result.error.code, "job_cancelled");
+  }
   assert.throws(() => process.kill(pid, 0), (error: unknown) => (error as NodeJS.ErrnoException).code === "ESRCH");
   await supervisor.shutdown();
 });

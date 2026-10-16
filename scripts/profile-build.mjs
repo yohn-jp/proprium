@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 
-import { mkdir, readFile, readdir, writeFile } from 'node:fs/promises';
+import { mkdir, readFile, readdir, realpath, stat, writeFile } from 'node:fs/promises';
 import path from 'node:path';
 import process from 'node:process';
 import { fileURLToPath, pathToFileURL } from 'node:url';
@@ -37,9 +37,11 @@ if (new Set(profile.modules).size !== profile.modules.length || profile.modules.
   throw new Error(`Profile ${profileName} has an unknown or duplicate module ID`);
 }
 
-const packageManifests = [];
 const packageById = new Map();
-for (const id of profile.modules) {
+const pendingIds = [...profile.modules];
+while (pendingIds.length > 0) {
+  const id = pendingIds.shift();
+  if (packageById.has(id)) continue;
   const packagePath = path.join(root, 'modules', id, 'package.json');
   let packageManifest;
   try {
@@ -56,15 +58,16 @@ for (const id of profile.modules) {
       (metadata.browserEntry !== undefined && !packageManifest.exports?.['./browser'])) {
     throw new Error(`${packagePath} must export the declared server and browser entry points`);
   }
-  const dependencies = { ...packageManifest.dependencies, ...packageManifest.optionalDependencies };
   for (const dependency of metadata.dependencies ?? []) {
-    if (dependencies[`${modulePackagePrefix}${dependency}`] === undefined) {
+    if (packageManifest.dependencies?.[`${modulePackagePrefix}${dependency}`] === undefined) {
       throw new Error(`${expectedName} metadata requires ${dependency}, but its package dependencies do not`);
     }
   }
-  packageManifests.push(metadata);
   packageById.set(id, { packageName: expectedName, metadata });
+  for (const dependency of metadata.dependencies ?? []) pendingIds.push(dependency);
 }
+
+const packageManifests = [...packageById.values()].map(({ metadata }) => metadata);
 
 const runtimePath = pathToFileURL(path.join(root, 'packages', 'module-runtime', 'dist', 'index.js')).href;
 let resolveModulePlan;
@@ -73,7 +76,9 @@ try {
 } catch (error) {
   throw new Error(`Build @scriptorium/module-runtime before generating profiles: ${error instanceof Error ? error.message : String(error)}`);
 }
-resolveModulePlan(packageManifests, profile.modules);
+const plan = resolveModulePlan(packageManifests, profile.modules);
+const includedIds = [...plan.order];
+const includedManifests = includedIds.map((id) => packageById.get(id).metadata);
 
 const profilePackagePath = path.join(root, 'profiles', profileName, 'package.json');
 try {
@@ -89,8 +94,8 @@ try {
 }
 
 const output = outputDirectory ?? path.join(root, 'profiles', profileName, 'generated');
-const metadataJson = JSON.stringify({ profile: profileName, modules: packageManifests }, null, 2) + '\n';
-const serverImports = profile.modules.map((id) => {
+const metadataJson = JSON.stringify({ profile: profileName, modules: includedManifests }, null, 2) + '\n';
+const serverImports = includedIds.map((id) => {
   const { packageName, metadata } = packageById.get(id);
   const loader = `  ${JSON.stringify(id)}: async (context) => {\n` +
     `    const module = await import(${JSON.stringify(packageName)});\n` +
@@ -106,7 +111,7 @@ const serverSource = [
   'import path from "node:path";',
   'import { fileURLToPath } from "node:url";',
   `export const profile = ${JSON.stringify(profileName)};`,
-  `export const moduleManifests = Object.freeze(${JSON.stringify(packageManifests, null, 2)});`,
+  `export const moduleManifests = Object.freeze(${JSON.stringify(includedManifests, null, 2)});`,
   'export const moduleLoaders = Object.freeze({',
   ...serverImports.map((entry) => entry.loader),
   '});',
@@ -119,7 +124,7 @@ const serverSource = [
   '',
 ].join('\n');
 
-const browserImports = profile.modules.flatMap((id) => {
+const browserImports = includedIds.flatMap((id) => {
   const item = packageById.get(id);
   if (!item.metadata.browserEntry) return [];
   const specifier = `${item.packageName}/browser`;
@@ -144,8 +149,8 @@ await Promise.all([
   writeFile(path.join(output, 'browser.mjs'), browserSource),
 ]);
 
-if (deployDirectory) await verifyDeploy(deployDirectory, profileName, profile.modules);
-console.log(`Generated ${profileName} module composition: ${profile.modules.length} module(s) in ${output}`);
+if (deployDirectory) await verifyDeploy(deployDirectory, profileName, includedIds);
+console.log(`Generated ${profileName} module composition: ${includedIds.length} module(s) in ${output}`);
 
 async function verifyDeploy(directory, selectedProfile, selectedIds) {
   const nodeModules = path.join(directory, 'node_modules');
@@ -166,19 +171,28 @@ async function readPackageManifest(packageDirectory) {
 
 async function findInstalledModulePackages(nodeModules) {
   const installedIds = new Set();
+  const rootDirectory = await realpath(nodeModules).catch(() => undefined);
+  if (!rootDirectory) return installedIds;
   const pending = [nodeModules];
   const visited = new Set();
   while (pending.length) {
     const directory = pending.pop();
-    if (visited.has(directory)) continue;
-    visited.add(directory);
+    const resolvedDirectory = await realpath(directory).catch(() => undefined);
+    if (!resolvedDirectory || !isWithin(rootDirectory, resolvedDirectory) || visited.has(resolvedDirectory)) continue;
+    visited.add(resolvedDirectory);
     for (const entry of await readdir(directory, { withFileTypes: true }).catch(() => [])) {
       const itemPath = path.join(directory, entry.name);
       if (path.basename(directory) === '@scriptorium' && entry.name.startsWith('module-')) {
         const manifest = await readPackageManifest(itemPath);
-        if (manifest?.name?.startsWith(modulePackagePrefix)) installedIds.add(manifest.name.slice(modulePackagePrefix.length));
+        if (manifest?.name?.startsWith(modulePackagePrefix)) {
+          const id = manifest.name.slice(modulePackagePrefix.length);
+          if (id !== 'runtime') installedIds.add(id);
+        }
       }
-      if (entry.isDirectory() && !entry.isSymbolicLink()) pending.push(itemPath);
+      if (entry.isDirectory() || entry.isSymbolicLink()) {
+        const target = await realpath(itemPath).catch(() => undefined);
+        if (target && isWithin(rootDirectory, target)) pending.push(itemPath);
+      }
     }
   }
   return installedIds;
@@ -186,15 +200,26 @@ async function findInstalledModulePackages(nodeModules) {
 
 async function scanImports(directory, selectedNames) {
   const ignored = new Set(['.git', 'coverage', 'test-results']);
+  const rootDirectory = await realpath(directory);
+  const visited = new Set();
+  await scanDirectory(directory, rootDirectory, selectedNames, ignored, visited);
+}
+
+async function scanDirectory(directory, rootDirectory, selectedNames, ignored, visited) {
+  const resolvedDirectory = await realpath(directory).catch(() => undefined);
+  if (!resolvedDirectory || !isWithin(rootDirectory, resolvedDirectory) || visited.has(resolvedDirectory)) return;
+  visited.add(resolvedDirectory);
   const entries = await readdir(directory, { withFileTypes: true }).catch(() => []);
   for (const entry of entries) {
-    if (entry.isSymbolicLink()) continue;
     const filePath = path.join(directory, entry.name);
-    if (entry.isDirectory()) {
-      if (!ignored.has(entry.name)) await scanImports(filePath, selectedNames);
+    const target = entry.isSymbolicLink() ? await realpath(filePath).catch(() => undefined) : filePath;
+    if (!target || !isWithin(rootDirectory, target)) continue;
+    const targetStats = await stat(target).catch(() => undefined);
+    if (targetStats?.isDirectory()) {
+      if (!ignored.has(entry.name)) await scanDirectory(filePath, rootDirectory, selectedNames, ignored, visited);
       continue;
     }
-    if (!entry.isFile() || !/\.(?:c?js|mjs|jsx)$/.test(entry.name)) continue;
+    if (!targetStats?.isFile() || !/\.(?:c?js|mjs|jsx)$/.test(entry.name)) continue;
     const source = await readFile(filePath, 'utf8');
     sourceSpecifier.lastIndex = 0;
     for (const match of source.matchAll(sourceSpecifier)) {
@@ -208,4 +233,9 @@ async function scanImports(directory, selectedNames) {
       }
     }
   }
+}
+
+function isWithin(rootDirectory, candidate) {
+  const relative = path.relative(rootDirectory, candidate);
+  return relative === '' || (!relative.startsWith(`..${path.sep}`) && relative !== '..' && !path.isAbsolute(relative));
 }

@@ -1,5 +1,6 @@
 import { fork, type ChildProcess } from "node:child_process";
 import { stat } from "node:fs/promises";
+import { availableParallelism } from "node:os";
 import path from "node:path";
 import { MAX_JOB_INPUT_BYTES, MAX_JOB_OUTPUT_BYTES, snapshotKey, type JobOutcome, type JobRequest, type JobResult, type MachineError, type ModuleId, type WorkerService } from "@scriptorium/contracts";
 import { isModuleId, ModuleRuntimeError } from "./runtime-error.js";
@@ -10,9 +11,11 @@ type WorkerResponse =
 
 interface WorkerRecord {
   request: JobRequest;
-  child: ChildProcess;
+  workerEntry: string;
+  child?: ChildProcess;
   promise: Promise<JobOutcome>;
   resolve(value: JobOutcome): void;
+  state: "queued" | "starting" | "running" | "settled";
   response?: WorkerResponse;
   stopError?: MachineError;
   exiting: boolean;
@@ -24,8 +27,28 @@ interface WorkerRecord {
 }
 
 export interface WorkerSupervisorOptions {
+  /** Maximum one-shot child processes at once; defaults to available CPUs, capped at 8. */
+  maxConcurrentJobs?: number;
+  /** Maximum one-shot requests waiting for a process slot; defaults to 8 (64 MiB at the input bound). */
+  maxQueuedJobs?: number;
+  /** Maximum live persistent worker processes; defaults to the eight installed module IDs. */
+  maxWorkerServices?: number;
+  /** Maximum jobs dispatched to one persistent service; defaults to 1 to serialize model access. */
+  maxConcurrentServiceJobs?: number;
+  /** Maximum jobs waiting for one persistent service; defaults to 4 (32 MiB at the input bound). */
+  maxQueuedServiceJobs?: number;
   maxJobDurationMs?: number;
   cancellationGraceMs?: number;
+}
+
+const DEFAULT_MAX_CONCURRENT_JOBS = Math.max(1, Math.min(availableParallelism(), 8));
+
+function boundedOption(name: string, value: number | undefined, fallback: number, allowZero = false): number {
+  const result = value ?? fallback;
+  if (!Number.isSafeInteger(result) || result < (allowZero ? 0 : 1)) {
+    throw new RangeError(`${name} must be a finite ${allowZero ? "non-negative" : "positive"} safe integer`);
+  }
+  return result;
 }
 
 function machineError(code: string, message: string, retryable = false): MachineError {
@@ -81,13 +104,24 @@ function workerEnvironment(mode: "job" | "service" = "job"): NodeJS.ProcessEnv {
 /** Starts one supervised child process per bounded job. */
 export class WorkerSupervisor {
   private readonly jobs = new Map<string, WorkerRecord>();
-  private readonly pending = new Set<string>();
+  private readonly queuedJobs = new Map<string, WorkerRecord>();
+  private readonly jobQueue: WorkerRecord[] = [];
   private readonly services = new Set<SupervisedWorkerService>();
+  private readonly maxConcurrentJobs: number;
+  private readonly maxQueuedJobs: number;
+  private readonly maxWorkerServices: number;
+  private readonly maxConcurrentServiceJobs: number;
+  private readonly maxQueuedServiceJobs: number;
   private readonly maxJobDurationMs: number;
   private readonly cancellationGraceMs: number;
   private closed = false;
 
   constructor(options: WorkerSupervisorOptions = {}) {
+    this.maxConcurrentJobs = boundedOption("maxConcurrentJobs", options.maxConcurrentJobs, DEFAULT_MAX_CONCURRENT_JOBS);
+    this.maxQueuedJobs = boundedOption("maxQueuedJobs", options.maxQueuedJobs, 8, true);
+    this.maxWorkerServices = boundedOption("maxWorkerServices", options.maxWorkerServices, 8);
+    this.maxConcurrentServiceJobs = boundedOption("maxConcurrentServiceJobs", options.maxConcurrentServiceJobs, 1);
+    this.maxQueuedServiceJobs = boundedOption("maxQueuedServiceJobs", options.maxQueuedServiceJobs, 4, true);
     this.maxJobDurationMs = options.maxJobDurationMs ?? 15 * 60_000;
     this.cancellationGraceMs = options.cancellationGraceMs ?? 250;
     if (!Number.isSafeInteger(this.maxJobDurationMs) || this.maxJobDurationMs < 1 || this.maxJobDurationMs > 24 * 60 * 60_000 ||
@@ -96,11 +130,14 @@ export class WorkerSupervisor {
     }
   }
 
-  get activeJobCount(): number { return this.jobs.size + [...this.services].reduce((total, service) => total + service.activeJobCount, 0); }
+  get activeJobCount(): number {
+    return this.jobs.size + this.queuedJobs.size + [...this.services].reduce((total, service) => total + service.activeJobCount, 0);
+  }
 
   activeJobCountFor(module: ModuleId): number {
     let count = 0;
     for (const job of this.jobs.values()) if (job.request.module === module) count += 1;
+    for (const job of this.queuedJobs.values()) if (job.request.module === module) count += 1;
     for (const service of this.services) if (service.module === module) count += service.activeJobCount;
     return count;
   }
@@ -108,13 +145,17 @@ export class WorkerSupervisor {
   /** Local process IDs support shutdown diagnostics and lifecycle acceptance checks. */
   get activeWorkerPids(): readonly number[] {
     return [
-      ...[...this.jobs.values()].map((job) => job.child.pid),
+      ...[...this.jobs.values()].map((job) => job.child?.pid),
       ...[...this.services].map((service) => service.pid),
     ].filter((pid): pid is number => pid !== undefined);
   }
 
   async createService(module: ModuleId, moduleVersion: string, workerEntry: string, signal?: AbortSignal): Promise<WorkerService> {
     if (this.closed) throw new ModuleRuntimeError("runtime_shutdown", "Worker supervisor is shut down", true);
+    if (signal?.aborted) throw new ModuleRuntimeError("module_disabled", "Worker service creation was cancelled", true);
+    if (this.services.size >= this.maxWorkerServices) {
+      throw new ModuleRuntimeError("worker_overloaded", `Worker service limit (${this.maxWorkerServices}) has been reached`, true);
+    }
     if (!path.isAbsolute(workerEntry)) throw new ModuleRuntimeError("invalid_worker_entry", "Worker entry point must be an absolute installed-module path");
     const service = new SupervisedWorkerService(
       module,
@@ -122,8 +163,10 @@ export class WorkerSupervisor {
       workerEntry,
       this.maxJobDurationMs,
       this.cancellationGraceMs,
+      this.maxConcurrentServiceJobs,
+      this.maxQueuedServiceJobs,
       () => this.services.delete(service),
-      (id) => this.jobs.has(id) || this.pending.has(id) || [...this.services].some((candidate) => candidate.hasJob(id)),
+      (id) => this.jobs.has(id) || this.queuedJobs.has(id) || [...this.services].some((candidate) => candidate.hasJob(id)),
     );
     this.services.add(service);
     try {
@@ -153,7 +196,7 @@ export class WorkerSupervisor {
     }
     if (this.closed) return failure<T>(request, machineError("runtime_shutdown", "Worker supervisor is shut down", true));
     if (signal?.aborted) return failure<T>(request, machineError("job_cancelled", "Job was cancelled"));
-    if (this.jobs.has(request.id) || this.pending.has(request.id) || [...this.services].some((service) => service.hasJob(request.id))) {
+    if (this.jobs.has(request.id) || this.queuedJobs.has(request.id) || [...this.services].some((service) => service.hasJob(request.id))) {
       return failure<T>(request, machineError("duplicate_job_id", "A job with this ID is already running"));
     }
     let serializedRequest: JobRequest;
@@ -164,69 +207,36 @@ export class WorkerSupervisor {
     } catch (error) {
       return failure<T>(request, machineError("invalid_job_request", error instanceof Error ? error.message : "Job request is not JSON serializable"));
     }
-    let remainingMs = request.deadline - Date.now();
+    const remainingMs = request.deadline - Date.now();
     if (remainingMs <= 0) return failure<T>(request, machineError("job_deadline_exceeded", "Job deadline has already expired", true));
     if (remainingMs > this.maxJobDurationMs) return failure<T>(request, machineError("job_deadline_out_of_bounds", `Job deadline exceeds the ${this.maxJobDurationMs} ms runtime bound`));
     if (!path.isAbsolute(workerEntry)) return failure<T>(request, machineError("invalid_worker_entry", "Worker entry point must be an absolute installed-module path"));
-    this.pending.add(request.id);
-    let workerAvailable = false;
-    try {
-      const workerStat = await stat(workerEntry);
-      workerAvailable = workerStat.isFile();
-    } catch {
-      workerAvailable = false;
-    }
-    if (!workerAvailable) {
-      this.pending.delete(request.id);
-      return failure<T>(request, machineError("worker_entry_missing", "Worker entry point is unavailable", true));
-    }
     const activeRequest = serializedRequest;
-    remainingMs = activeRequest.deadline - Date.now();
-    if (this.closed) { this.pending.delete(activeRequest.id); return failure<T>(activeRequest, machineError("runtime_shutdown", "Worker supervisor is shut down", true)); }
-    if (signal?.aborted) { this.pending.delete(activeRequest.id); return failure<T>(activeRequest, machineError("job_cancelled", "Job was cancelled")); }
-    if (remainingMs <= 0) { this.pending.delete(activeRequest.id); return failure<T>(activeRequest, machineError("job_deadline_exceeded", "Job deadline expired before the worker started", true)); }
-
-    let child: ChildProcess;
-    try {
-      child = fork(workerEntry, [], {
-        cwd: path.dirname(workerEntry),
-        env: workerEnvironment("job"),
-        execArgv: [],
-        stdio: ["ignore", "ignore", "inherit", "ipc"],
-      });
-    } catch (error) {
-      this.pending.delete(activeRequest.id);
-      return failure<T>(activeRequest, machineError("worker_start_failed", error instanceof Error ? error.message : "Worker could not start", true));
-    }
-
     let resolve!: (result: JobOutcome) => void;
     const promise = new Promise<JobOutcome>((done) => { resolve = done; });
-    const record: WorkerRecord = { request: activeRequest, child, promise, resolve, exiting: false };
-    this.pending.delete(activeRequest.id);
-    this.jobs.set(activeRequest.id, record);
+    const queued = this.jobs.size >= this.maxConcurrentJobs;
+    if (queued && this.queuedJobs.size >= this.maxQueuedJobs) {
+      return failure<T>(activeRequest, machineError("worker_overloaded", "Worker job queue is full", true));
+    }
+    const record: WorkerRecord = { request: activeRequest, workerEntry, promise, resolve, state: queued ? "queued" : "starting", exiting: false };
+    if (queued) {
+      this.queuedJobs.set(activeRequest.id, record);
+      this.jobQueue.push(record);
+    } else {
+      this.jobs.set(activeRequest.id, record);
+      void this.startJob(record);
+    }
     record.deadlineTimer = setTimeout(() => this.stop(record, machineError("job_deadline_exceeded", "Job exceeded its deadline", true)), remainingMs);
     if (signal) {
       record.abortSignal = signal;
       record.abortListener = () => this.stop(record, machineError("job_cancelled", "Job was cancelled"));
       signal.addEventListener("abort", record.abortListener, { once: true });
     }
-    child.on("message", (message: unknown) => this.receive(record, message));
-    child.once("error", (error) => {
-      if (!record.response && !record.stopError) record.stopError = machineError("worker_failed", error.message || "Worker process failed", true);
-      this.terminate(record);
-    });
-    child.once("exit", (code, signalName) => this.onExit(record, code, signalName));
-    child.send({ type: "job", request: serializedRequest }, (error) => {
-      if (error && !record.response && !record.stopError) {
-        record.stopError = machineError("worker_ipc_failed", error.message, true);
-        this.terminate(record);
-      }
-    });
     return (await promise) as JobOutcome<T>;
   }
 
   async cancel(id: string): Promise<boolean> {
-    const record = this.jobs.get(id);
+    const record = this.jobs.get(id) ?? this.queuedJobs.get(id);
     if (record && !record.response && !record.stopError) {
       this.stop(record, machineError("job_cancelled", "Job was cancelled"));
       await record.promise;
@@ -237,7 +247,7 @@ export class WorkerSupervisor {
   }
 
   async cancelModule(module: ModuleId): Promise<void> {
-    const records = [...this.jobs.values()].filter((job) => job.request.module === module);
+    const records = [...this.jobs.values(), ...this.queuedJobs.values()].filter((job) => job.request.module === module);
     for (const record of records) this.stop(record, machineError("job_cancelled", `Module ${module} was disabled`));
     await Promise.all([
       ...records.map((record) => record.promise),
@@ -248,12 +258,94 @@ export class WorkerSupervisor {
   async shutdown(): Promise<void> {
     if (this.closed) return;
     this.closed = true;
-    const records = [...this.jobs.values()];
+    const records = [...this.jobs.values(), ...this.queuedJobs.values()];
     for (const record of records) this.stop(record, machineError("runtime_shutdown", "Runtime shutdown cancelled the job", true));
     await Promise.all([
       ...records.map((record) => record.promise),
       ...[...this.services].map((service) => service.dispose()),
     ]);
+  }
+
+  private async startJob(record: WorkerRecord): Promise<void> {
+    if (this.jobs.get(record.request.id) !== record || record.state !== "starting") return;
+    let workerAvailable = false;
+    try { workerAvailable = (await stat(record.workerEntry)).isFile(); } catch { workerAvailable = false; }
+    if (this.jobs.get(record.request.id) !== record || record.state !== "starting") return;
+    if (this.closed) {
+      this.finishWithoutChild(record, machineError("runtime_shutdown", "Runtime shutdown cancelled the job", true));
+      return;
+    }
+    const remainingMs = record.request.deadline - Date.now();
+    if (remainingMs <= 0) {
+      this.finishWithoutChild(record, machineError("job_deadline_exceeded", "Job deadline expired before the worker started", true));
+      return;
+    }
+    if (!workerAvailable) {
+      this.finishWithoutChild(record, machineError("worker_entry_missing", "Worker entry point is unavailable", true));
+      return;
+    }
+
+    let child: ChildProcess;
+    try {
+      child = fork(record.workerEntry, [], {
+        cwd: path.dirname(record.workerEntry),
+        env: workerEnvironment("job"),
+        execArgv: [],
+        stdio: ["ignore", "ignore", "inherit", "ipc"],
+      });
+    } catch (error) {
+      this.finishWithoutChild(record, machineError("worker_start_failed", error instanceof Error ? error.message : "Worker could not start", true));
+      return;
+    }
+
+    record.child = child;
+    record.state = "running";
+    child.on("message", (message: unknown) => this.receive(record, message));
+    child.once("error", (error) => {
+      if (!record.response && !record.stopError) record.stopError = machineError("worker_failed", error.message || "Worker process failed", true);
+      this.terminate(record);
+    });
+    child.once("exit", (code, signalName) => this.onExit(record, code, signalName));
+    child.send({ type: "job", request: record.request }, (error) => {
+      if (error && !record.response && !record.stopError) {
+        record.stopError = machineError("worker_ipc_failed", error.message, true);
+        this.terminate(record);
+      }
+    });
+  }
+
+  private pumpJobs(): void {
+    if (this.closed) return;
+    while (this.jobs.size < this.maxConcurrentJobs && this.jobQueue.length > 0) {
+      const record = this.jobQueue.shift()!;
+      if (this.queuedJobs.get(record.request.id) !== record || record.state !== "queued") continue;
+      this.queuedJobs.delete(record.request.id);
+      record.state = "starting";
+      this.jobs.set(record.request.id, record);
+      void this.startJob(record);
+    }
+  }
+
+  private finishWithoutChild(record: WorkerRecord, error: MachineError): void {
+    if (record.state === "settled") return;
+    if (this.jobs.get(record.request.id) === record) this.jobs.delete(record.request.id);
+    if (this.queuedJobs.get(record.request.id) === record) this.queuedJobs.delete(record.request.id);
+    const queuedIndex = this.jobQueue.indexOf(record);
+    if (queuedIndex >= 0) this.jobQueue.splice(queuedIndex, 1);
+    record.state = "settled";
+    this.clearJobTimers(record);
+    record.resolve(failure(record.request, error));
+    this.pumpJobs();
+  }
+
+  private clearJobTimers(record: WorkerRecord): void {
+    if (record.deadlineTimer) clearTimeout(record.deadlineTimer);
+    if (record.graceTimer) clearTimeout(record.graceTimer);
+    if (record.killTimer) clearTimeout(record.killTimer);
+    record.deadlineTimer = undefined;
+    record.graceTimer = undefined;
+    record.killTimer = undefined;
+    if (record.abortSignal && record.abortListener) record.abortSignal.removeEventListener("abort", record.abortListener);
   }
 
   private receive(record: WorkerRecord, message: unknown): void {
@@ -307,13 +399,18 @@ export class WorkerSupervisor {
   }
 
   private stop(record: WorkerRecord, error: MachineError): void {
-    if (record.exiting || record.response || record.stopError) return;
+    if (record.exiting || record.state === "settled" || record.response || record.stopError) return;
     record.stopError = error;
     if (record.deadlineTimer) clearTimeout(record.deadlineTimer);
     record.deadlineTimer = undefined;
     if (record.abortSignal && record.abortListener) record.abortSignal.removeEventListener("abort", record.abortListener);
-    if (record.child.connected) {
-      record.child.send({ type: "cancel", id: record.request.id }, () => {});
+    if (record.state === "queued" || record.state === "starting") {
+      this.finishWithoutChild(record, error);
+      return;
+    }
+    const child = record.child;
+    if (child?.connected) {
+      child.send({ type: "cancel", id: record.request.id }, () => {});
       record.graceTimer = setTimeout(() => this.terminate(record), this.cancellationGraceMs);
     } else {
       this.terminate(record);
@@ -321,12 +418,13 @@ export class WorkerSupervisor {
   }
 
   private terminate(record: WorkerRecord): void {
-    if (record.exiting || record.child.killed) return;
+    const child = record.child;
+    if (record.exiting || !child || child.killed) return;
     if (record.graceTimer) clearTimeout(record.graceTimer);
     record.graceTimer = undefined;
-    record.child.kill("SIGTERM");
+    child.kill("SIGTERM");
     record.killTimer = setTimeout(() => {
-      if (!record.exiting) record.child.kill("SIGKILL");
+      if (!record.exiting) child.kill("SIGKILL");
     }, this.cancellationGraceMs);
   }
 
@@ -338,6 +436,7 @@ export class WorkerSupervisor {
     if (record.killTimer) clearTimeout(record.killTimer);
     if (record.abortSignal && record.abortListener) record.abortSignal.removeEventListener("abort", record.abortListener);
     if (this.jobs.get(record.request.id) === record) this.jobs.delete(record.request.id);
+    record.state = "settled";
     if (record.stopError) {
       record.resolve({ ok: false, id: record.request.id, snapshot: record.request.snapshot, error: record.stopError });
     } else if (record.response?.type === "error") {
@@ -348,6 +447,7 @@ export class WorkerSupervisor {
       record.resolve({ ok: false, id: record.request.id, snapshot: record.request.snapshot,
         error: machineError("worker_exited", `Worker exited without a result (code ${String(code)}, signal ${String(signal)})`, true) });
     }
+    this.pumpJobs();
   }
 }
 
@@ -355,6 +455,8 @@ interface ServiceJobRecord {
   request: JobRequest;
   promise: Promise<JobOutcome>;
   resolve(value: JobOutcome): void;
+  state: "queued" | "active";
+  dispatched: boolean;
   stopError?: MachineError;
   deadlineTimer?: NodeJS.Timeout;
   graceTimer?: NodeJS.Timeout;
@@ -369,10 +471,13 @@ class SupervisedWorkerService implements WorkerService {
   private readonly workerEntry: string;
   private readonly maxJobDurationMs: number;
   private readonly cancellationGraceMs: number;
+  private readonly maxConcurrentServiceJobs: number;
+  private readonly maxQueuedServiceJobs: number;
   private readonly onRemoved: () => void;
   private readonly isDuplicateJobId: (id: string) => boolean;
   private readonly jobs = new Map<string, ServiceJobRecord>();
-  private readonly pendingJobs = new Set<string>();
+  private readonly records = new Map<string, ServiceJobRecord>();
+  private readonly jobQueue: ServiceJobRecord[] = [];
   private child?: ChildProcess;
   private startPromise?: Promise<void>;
   private exitPromise?: Promise<void>;
@@ -392,6 +497,8 @@ class SupervisedWorkerService implements WorkerService {
     workerEntry: string,
     maxJobDurationMs: number,
     cancellationGraceMs: number,
+    maxConcurrentServiceJobs: number,
+    maxQueuedServiceJobs: number,
     onRemoved: () => void,
     isDuplicateJobId: (id: string) => boolean,
   ) {
@@ -400,13 +507,15 @@ class SupervisedWorkerService implements WorkerService {
     this.workerEntry = workerEntry;
     this.maxJobDurationMs = maxJobDurationMs;
     this.cancellationGraceMs = cancellationGraceMs;
+    this.maxConcurrentServiceJobs = maxConcurrentServiceJobs;
+    this.maxQueuedServiceJobs = maxQueuedServiceJobs;
     this.onRemoved = onRemoved;
     this.isDuplicateJobId = isDuplicateJobId;
   }
 
   get pid(): number | undefined { return this.exited ? undefined : this.child?.pid; }
-  get activeJobCount(): number { return this.jobs.size; }
-  hasJob(id: string): boolean { return this.jobs.has(id) || this.pendingJobs.has(id); }
+  get activeJobCount(): number { return this.records.size; }
+  hasJob(id: string): boolean { return this.records.has(id); }
 
   onDispose(callback: () => void): void {
     if (this.disposed) callback();
@@ -425,6 +534,7 @@ class SupervisedWorkerService implements WorkerService {
       return failure<T>(request, machineError("job_identity_mismatch", "Worker service accepts jobs only for its owning module and installed version"));
     }
     if (this.disposed) return failure<T>(request, machineError("worker_service_disposed", "Worker service is disposed", true));
+    if (!signal) return failure<T>(request, machineError("job_cancellation_required", "Shared worker requests require the consumer AbortSignal"));
     if (signal?.aborted) return failure<T>(request, machineError("job_cancelled", "Job was cancelled"));
     if (this.isDuplicateJobId(request.id)) return failure<T>(request, machineError("duplicate_job_id", "A job with this ID is already running"));
 
@@ -436,51 +546,36 @@ class SupervisedWorkerService implements WorkerService {
     } catch (error) {
       return failure<T>(request, machineError("invalid_job_request", error instanceof Error ? error.message : "Job request is not JSON serializable"));
     }
-    let remainingMs = serialized.deadline - Date.now();
+    const remainingMs = serialized.deadline - Date.now();
     if (remainingMs <= 0) return failure<T>(serialized, machineError("job_deadline_exceeded", "Job deadline has already expired", true));
     if (remainingMs > this.maxJobDurationMs) return failure<T>(serialized, machineError("job_deadline_out_of_bounds", `Job deadline exceeds the ${this.maxJobDurationMs} ms runtime bound`));
-    this.pendingJobs.add(serialized.id);
-    try {
-      await this.start();
-    } catch (error) {
-      this.pendingJobs.delete(serialized.id);
-      return failure<T>(serialized, this.terminalError ?? machineError("worker_start_failed", error instanceof Error ? error.message : "Worker service could not start", true));
-    }
-    this.pendingJobs.delete(serialized.id);
-    if (this.disposed || !this.child?.connected) return failure<T>(serialized, this.terminalError ?? machineError("worker_service_disposed", "Worker service is unavailable", true));
-    remainingMs = serialized.deadline - Date.now();
-    if (remainingMs <= 0) return failure<T>(serialized, machineError("job_deadline_exceeded", "Job deadline expired before the worker started", true));
-    if (signal?.aborted) return failure<T>(serialized, machineError("job_cancelled", "Job was cancelled"));
-
     let resolve!: (result: JobOutcome) => void;
     const promise = new Promise<JobOutcome>((done) => { resolve = done; });
-    const record: ServiceJobRecord = { request: serialized, promise, resolve };
-    this.jobs.set(serialized.id, record);
+    const queued = this.jobs.size >= this.maxConcurrentServiceJobs;
+    if (queued && this.jobQueue.length >= this.maxQueuedServiceJobs) {
+      return failure<T>(serialized, machineError("worker_overloaded", "Persistent worker service queue is full", true));
+    }
+    const record: ServiceJobRecord = { request: serialized, promise, resolve, state: queued ? "queued" : "active", dispatched: false };
+    this.records.set(serialized.id, record);
+    if (!queued) this.jobs.set(serialized.id, record);
     record.deadlineTimer = setTimeout(() => this.stopJob(record, machineError("job_deadline_exceeded", "Job exceeded its deadline", true)), remainingMs);
-    if (signal) {
-      record.abortSignal = signal;
-      record.abortListener = () => this.stopJob(record, machineError("job_cancelled", "Job was cancelled"));
-      signal.addEventListener("abort", record.abortListener, { once: true });
-    }
-    try {
-      this.child.send({ type: "job", request: serialized }, (error) => {
-        if (error && this.jobs.get(serialized.id) === record) this.killService(machineError("worker_ipc_failed", error.message, true));
-      });
-    } catch (error) {
-      this.killService(machineError("worker_ipc_failed", error instanceof Error ? error.message : "Worker service IPC failed", true));
-    }
+    record.abortSignal = signal;
+    record.abortListener = () => this.stopJob(record, machineError("job_cancelled", "Job was cancelled"));
+    signal.addEventListener("abort", record.abortListener, { once: true });
+    if (queued) this.jobQueue.push(record);
+    else void this.dispatch(record);
     return (await promise) as JobOutcome<T>;
   }
 
   cancel(jobId: string): boolean {
-    const record = this.jobs.get(jobId);
+    const record = this.records.get(jobId);
     if (!record || record.stopError) return false;
     this.stopJob(record, machineError("job_cancelled", "Job was cancelled"));
     return true;
   }
 
   async cancelAllJobs(message: string): Promise<void> {
-    const records = [...this.jobs.values()];
+    const records = [...this.records.values()];
     for (const record of records) this.stopJob(record, machineError("job_cancelled", message));
     await Promise.all(records.map((record) => record.promise));
   }
@@ -546,7 +641,7 @@ class SupervisedWorkerService implements WorkerService {
       if (this.readyTimer) clearTimeout(this.readyTimer);
       if (this.killTimer) clearTimeout(this.killTimer);
       this.terminalError ??= machineError("worker_service_exited", `Worker service exited (code ${String(code)}, signal ${String(signal)})`, true);
-      for (const record of [...this.jobs.values()]) this.finishJob(record, record.stopError ?? this.terminalError);
+      for (const record of [...this.records.values()]) this.finishJob(record, record.stopError ?? this.terminalError);
       this.resolveExit?.();
       this.finishDispose();
     });
@@ -561,6 +656,44 @@ class SupervisedWorkerService implements WorkerService {
     });
     if (this.readyTimer) clearTimeout(this.readyTimer);
     this.readyTimer = undefined;
+  }
+
+  private async dispatch(record: ServiceJobRecord): Promise<void> {
+    if (this.records.get(record.request.id) !== record || record.state !== "active" || record.dispatched) return;
+    try {
+      await this.start();
+    } catch (error) {
+      this.finishJob(record, this.terminalError ?? machineError("worker_start_failed", error instanceof Error ? error.message : "Worker service could not start", true));
+      return;
+    }
+    if (this.records.get(record.request.id) !== record || record.stopError) return;
+    if (this.disposed || !this.child?.connected) {
+      this.finishJob(record, this.terminalError ?? machineError("worker_service_disposed", "Worker service is unavailable", true));
+      return;
+    }
+    if (record.request.deadline <= Date.now()) {
+      this.stopJob(record, machineError("job_deadline_exceeded", "Job deadline expired before the worker started", true));
+      return;
+    }
+    record.dispatched = true;
+    try {
+      this.child.send({ type: "job", request: record.request }, (error) => {
+        if (error && this.records.get(record.request.id) === record) this.killService(machineError("worker_ipc_failed", error.message, true));
+      });
+    } catch (error) {
+      this.killService(machineError("worker_ipc_failed", error instanceof Error ? error.message : "Worker service IPC failed", true));
+    }
+  }
+
+  private pumpJobs(): void {
+    if (this.disposed || this.terminalError || this.exited) return;
+    while (this.jobs.size < this.maxConcurrentServiceJobs && this.jobQueue.length > 0) {
+      const record = this.jobQueue.shift()!;
+      if (this.records.get(record.request.id) !== record || record.state !== "queued") continue;
+      record.state = "active";
+      this.jobs.set(record.request.id, record);
+      void this.dispatch(record);
+    }
   }
 
   private receive(message: unknown): void {
@@ -619,11 +752,15 @@ class SupervisedWorkerService implements WorkerService {
   }
 
   private stopJob(record: ServiceJobRecord, error: MachineError): void {
-    if (this.jobs.get(record.request.id) !== record || record.stopError) return;
+    if (this.records.get(record.request.id) !== record || record.stopError) return;
     record.stopError = error;
     if (record.deadlineTimer) clearTimeout(record.deadlineTimer);
     record.deadlineTimer = undefined;
     if (record.abortSignal && record.abortListener) record.abortSignal.removeEventListener("abort", record.abortListener);
+    if (record.state === "queued" || !record.dispatched) {
+      this.finishJob(record, error);
+      return;
+    }
     if (this.child?.connected) {
       try { this.child.send({ type: "cancel", id: record.request.id }, () => {}); } catch { /* Grace timeout kills a broken service. */ }
       record.graceTimer = setTimeout(() => {
@@ -635,8 +772,11 @@ class SupervisedWorkerService implements WorkerService {
   }
 
   private finishJob(record: ServiceJobRecord, error?: MachineError, result?: JobResult): void {
-    if (this.jobs.get(record.request.id) !== record) return;
+    if (this.records.get(record.request.id) !== record) return;
     this.jobs.delete(record.request.id);
+    this.records.delete(record.request.id);
+    const queuedIndex = this.jobQueue.indexOf(record);
+    if (queuedIndex >= 0) this.jobQueue.splice(queuedIndex, 1);
     if (record.deadlineTimer) clearTimeout(record.deadlineTimer);
     if (record.graceTimer) clearTimeout(record.graceTimer);
     if (record.abortSignal && record.abortListener) record.abortSignal.removeEventListener("abort", record.abortListener);
@@ -644,6 +784,7 @@ class SupervisedWorkerService implements WorkerService {
     else if (error) record.resolve(failure(record.request, error));
     else if (result) record.resolve({ ok: true, result });
     else record.resolve(failure(record.request, machineError("worker_protocol_error", "Worker service returned no result")));
+    this.pumpJobs();
   }
 
   private killService(error: MachineError): void {
