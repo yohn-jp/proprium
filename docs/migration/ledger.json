@@ -1,0 +1,2195 @@
+{
+  "schemaVersion": 1,
+  "inventoryStatus": "producer-registration-freeze; caller/UI, handler-call and storage expansion pending",
+  "targetRepository": "yohn-jp/scriptorium",
+  "targetBaseCommit": "016a69cb924cbe1f9aed9af18f2f31143dff9676",
+  "sourceRepository": "yohn-jp/arcadia-loom",
+  "sourceCommit": "edc033c2c9466274a334299dadfa426661d957d9",
+  "sourceReadOnly": true,
+  "routeRegistrationCount": 48,
+  "registeredEndpointCount": 166,
+  "nonRouterGroupCount": 12,
+  "routeRegistrations": [
+    {
+      "id": "R01",
+      "source": "packages/api/src/routes/system.ts",
+      "registrationSymbol": "registerSystemRoutes",
+      "registrationOrder": 1,
+      "ownerDisposition": "API/Core lifecycle and runtime metadata",
+      "plannedSource": "routes/system.ts",
+      "registeredEndpoints": [
+        {
+          "method": "GET",
+          "path": "/health/live",
+          "sourceLine": 33,
+          "handlerSourceLine": 26,
+          "handlerForm": "registerProbe local route helper",
+          "handlerSymbol": "registerSystemRoutes.registerProbe handler"
+        },
+        {
+          "method": "GET",
+          "path": "/health/ready",
+          "sourceLine": 34,
+          "handlerSourceLine": 26,
+          "handlerForm": "registerProbe local route helper",
+          "handlerSymbol": "registerSystemRoutes.registerProbe handler"
+        },
+        {
+          "method": "GET",
+          "path": "/health/startup",
+          "sourceLine": 35,
+          "handlerSourceLine": 26,
+          "handlerForm": "registerProbe local route helper",
+          "handlerSymbol": "registerSystemRoutes.registerProbe handler"
+        },
+        {
+          "method": "GET",
+          "path": "/api/health",
+          "sourceLine": 37,
+          "handlerSourceLine": 46,
+          "handlerForm": "inline callback",
+          "handlerSymbol": "registerSystemRoutes inline handler"
+        },
+        {
+          "method": "GET",
+          "path": "/api/ready",
+          "sourceLine": 52,
+          "handlerSourceLine": 61,
+          "handlerForm": "inline callback",
+          "handlerSymbol": "registerSystemRoutes inline handler"
+        },
+        {
+          "method": "POST",
+          "path": "/api/reload",
+          "sourceLine": 73,
+          "handlerSourceLine": 81,
+          "handlerForm": "inline callback",
+          "handlerSymbol": "registerSystemRoutes inline handler"
+        }
+      ],
+      "callerAndUiSurfaceExpansion": "pending",
+      "handlerCallSymbolsExpansion": "pending",
+      "storageReaderWriterExpansion": "pending",
+      "migrationStatus": "pending",
+      "proofIds": []
+    },
+    {
+      "id": "R02",
+      "source": "packages/api/src/versionRoute.ts",
+      "registrationSymbol": "registerVersionRoute",
+      "registrationOrder": 2,
+      "ownerDisposition": "API version/build/module metadata",
+      "plannedSource": "versionRoute.ts",
+      "registeredEndpoints": [
+        {
+          "method": "GET",
+          "path": "/api/version",
+          "sourceLine": 14,
+          "handlerSourceLine": 22,
+          "handlerForm": "inline callback",
+          "handlerSymbol": "registerVersionRoute inline handler"
+        }
+      ],
+      "callerAndUiSurfaceExpansion": "pending",
+      "handlerCallSymbolsExpansion": "pending",
+      "storageReaderWriterExpansion": "pending",
+      "migrationStatus": "pending",
+      "proofIds": []
+    },
+    {
+      "id": "R03",
+      "source": "packages/api/src/routes/llmHealth.ts",
+      "registrationSymbol": "registerLlmHealthRoute",
+      "registrationOrder": 3,
+      "ownerDisposition": "assistant; never Core readiness prerequisite",
+      "plannedSource": "routes/llmHealth.ts",
+      "registeredEndpoints": [
+        {
+          "method": "GET",
+          "path": "/api/llm/health",
+          "sourceLine": 122,
+          "handlerSourceLine": 130,
+          "handlerForm": "inline callback",
+          "handlerSymbol": "registerLlmHealthRoute inline handler"
+        }
+      ],
+      "callerAndUiSurfaceExpansion": "pending",
+      "handlerCallSymbolsExpansion": "pending",
+      "storageReaderWriterExpansion": "pending",
+      "migrationStatus": "pending",
+      "proofIds": []
+    },
+    {
+      "id": "R04",
+      "source": "packages/api/src/routes/llmQueueStatus.ts",
+      "registrationSymbol": "registerLlmQueueStatusRoute",
+      "registrationOrder": 4,
+      "ownerDisposition": "assistant jobs, backed by shared bounded execution",
+      "plannedSource": "routes/llmQueueStatus.ts",
+      "registeredEndpoints": [
+        {
+          "method": "GET",
+          "path": "/api/llm/queue-status",
+          "sourceLine": 14,
+          "handlerSourceLine": 22,
+          "handlerForm": "inline callback",
+          "handlerSymbol": "registerLlmQueueStatusRoute inline handler"
+        }
+      ],
+      "callerAndUiSurfaceExpansion": "pending",
+      "handlerCallSymbolsExpansion": "pending",
+      "storageReaderWriterExpansion": "pending",
+      "migrationStatus": "pending",
+      "proofIds": []
+    },
+    {
+      "id": "R05",
+      "source": "packages/api/src/routes/tree.ts",
+      "registrationSymbol": "registerTreeRoutes",
+      "registrationOrder": 5,
+      "ownerDisposition": "Core hierarchy",
+      "plannedSource": "routes/tree.ts",
+      "registeredEndpoints": [
+        {
+          "method": "GET",
+          "path": "/api/tree",
+          "sourceLine": 10,
+          "handlerSourceLine": 18,
+          "handlerForm": "inline callback",
+          "handlerSymbol": "registerTreeRoutes inline handler"
+        }
+      ],
+      "callerAndUiSurfaceExpansion": "pending",
+      "handlerCallSymbolsExpansion": "pending",
+      "storageReaderWriterExpansion": "pending",
+      "migrationStatus": "pending",
+      "proofIds": []
+    },
+    {
+      "id": "R06",
+      "source": "packages/api/src/routes/entities.ts",
+      "registrationSymbol": "registerEntityRoutes",
+      "registrationOrder": 6,
+      "ownerDisposition": "story domain + Core mutation boundary",
+      "plannedSource": "routes/entities.ts",
+      "registeredEndpoints": [
+        {
+          "method": "GET",
+          "path": "/api/entities",
+          "sourceLine": 42,
+          "handlerSourceLine": 56,
+          "handlerForm": "inline callback",
+          "handlerSymbol": "registerEntityRoutes inline handler"
+        },
+        {
+          "method": "GET",
+          "path": "/api/entities/:id",
+          "sourceLine": 65,
+          "handlerSourceLine": 79,
+          "handlerForm": "inline callback",
+          "handlerSymbol": "registerEntityRoutes inline handler"
+        },
+        {
+          "method": "GET",
+          "path": "/api/entities/:id/voice-patterns",
+          "sourceLine": 91,
+          "handlerSourceLine": 105,
+          "handlerForm": "inline callback",
+          "handlerSymbol": "registerEntityRoutes inline handler"
+        },
+        {
+          "method": "GET",
+          "path": "/api/entities/:id/backlinks",
+          "sourceLine": 124,
+          "handlerSourceLine": 138,
+          "handlerForm": "inline callback",
+          "handlerSymbol": "registerEntityRoutes inline handler"
+        },
+        {
+          "method": "GET",
+          "path": "/api/entities/:id/appearances",
+          "sourceLine": 141,
+          "handlerSourceLine": 155,
+          "handlerForm": "inline callback",
+          "handlerSymbol": "registerEntityRoutes inline handler"
+        },
+        {
+          "method": "GET",
+          "path": "/api/entities/:id/freshness",
+          "sourceLine": 158,
+          "handlerSourceLine": 172,
+          "handlerForm": "inline callback",
+          "handlerSymbol": "registerEntityRoutes inline handler"
+        },
+        {
+          "method": "GET",
+          "path": "/api/entities/:id/suggested-tags",
+          "sourceLine": 179,
+          "handlerSourceLine": 193,
+          "handlerForm": "inline callback",
+          "handlerSymbol": "registerEntityRoutes inline handler"
+        },
+        {
+          "method": "POST",
+          "path": "/api/entities",
+          "sourceLine": 200,
+          "handlerSourceLine": 215,
+          "handlerForm": "inline callback",
+          "handlerSymbol": "registerEntityRoutes inline handler"
+        },
+        {
+          "method": "PUT",
+          "path": "/api/entities/:id",
+          "sourceLine": 255,
+          "handlerSourceLine": 272,
+          "handlerForm": "inline callback",
+          "handlerSymbol": "registerEntityRoutes inline handler"
+        },
+        {
+          "method": "POST",
+          "path": "/api/reorder",
+          "sourceLine": 349,
+          "handlerSourceLine": 365,
+          "handlerForm": "inline callback",
+          "handlerSymbol": "registerEntityRoutes inline handler"
+        }
+      ],
+      "callerAndUiSurfaceExpansion": "pending",
+      "handlerCallSymbolsExpansion": "pending",
+      "storageReaderWriterExpansion": "pending",
+      "migrationStatus": "pending",
+      "proofIds": []
+    },
+    {
+      "id": "R07",
+      "source": "packages/api/src/routes/zukanSuggestions.ts",
+      "registrationSymbol": "registerZukanSuggestionRoutes",
+      "registrationOrder": 7,
+      "ownerDisposition": "assistant proposal generation; story operations",
+      "plannedSource": "routes/zukanSuggestions.ts",
+      "registeredEndpoints": [
+        {
+          "method": "GET",
+          "path": "/api/entities/:id/zukan-suggestions",
+          "sourceLine": 62,
+          "handlerSourceLine": 75,
+          "handlerForm": "inline callback",
+          "handlerSymbol": "registerZukanSuggestionRoutes inline handler"
+        },
+        {
+          "method": "POST",
+          "path": "/api/entities/:id/zukan-suggestions/run",
+          "sourceLine": 89,
+          "handlerSourceLine": 102,
+          "handlerForm": "inline callback",
+          "handlerSymbol": "registerZukanSuggestionRoutes inline handler"
+        },
+        {
+          "method": "POST",
+          "path": "/api/zukan-suggestions/:id/approve",
+          "sourceLine": 131,
+          "handlerSourceLine": 147,
+          "handlerForm": "inline callback",
+          "handlerSymbol": "registerZukanSuggestionRoutes inline handler"
+        },
+        {
+          "method": "POST",
+          "path": "/api/zukan-suggestions/:id/reject",
+          "sourceLine": 176,
+          "handlerSourceLine": 192,
+          "handlerForm": "inline callback",
+          "handlerSymbol": "registerZukanSuggestionRoutes inline handler"
+        }
+      ],
+      "callerAndUiSurfaceExpansion": "pending",
+      "handlerCallSymbolsExpansion": "pending",
+      "storageReaderWriterExpansion": "pending",
+      "migrationStatus": "pending",
+      "proofIds": []
+    },
+    {
+      "id": "R08",
+      "source": "packages/api/src/routes/scenes.ts",
+      "registrationSymbol": "registerSceneRoutes",
+      "registrationOrder": 8,
+      "ownerDisposition": "Core scene/hierarchy operations; story metadata extension",
+      "plannedSource": "routes/scenes.ts",
+      "registeredEndpoints": [
+        {
+          "method": "GET",
+          "path": "/api/scenes/:id/context",
+          "sourceLine": 43,
+          "handlerSourceLine": 54,
+          "handlerForm": "inline callback",
+          "handlerSymbol": "registerSceneRoutes inline handler"
+        },
+        {
+          "method": "POST",
+          "path": "/api/suggest-rewrite",
+          "sourceLine": 69,
+          "handlerSourceLine": 80,
+          "handlerForm": "inline callback",
+          "handlerSymbol": "registerSceneRoutes inline handler"
+        },
+        {
+          "method": "POST",
+          "path": "/api/scenes/:id/attribute-speakers",
+          "sourceLine": 100,
+          "handlerSourceLine": 112,
+          "handlerForm": "inline callback",
+          "handlerSymbol": "registerSceneRoutes inline handler"
+        },
+        {
+          "method": "POST",
+          "path": "/api/scenes/:id/llm-speaker-attribution/prompt",
+          "sourceLine": 126,
+          "handlerSourceLine": 138,
+          "handlerForm": "inline callback",
+          "handlerSymbol": "registerSceneRoutes inline handler"
+        },
+        {
+          "method": "POST",
+          "path": "/api/scenes/:id/llm-speaker-attribution",
+          "sourceLine": 161,
+          "handlerSourceLine": 174,
+          "handlerForm": "inline callback",
+          "handlerSymbol": "registerSceneRoutes inline handler"
+        },
+        {
+          "method": "POST",
+          "path": "/api/scenes/:id/voice-check",
+          "sourceLine": 204,
+          "handlerSourceLine": 216,
+          "handlerForm": "inline callback",
+          "handlerSymbol": "registerSceneRoutes inline handler"
+        },
+        {
+          "method": "PUT",
+          "path": "/api/scenes/:id/speaker-override",
+          "sourceLine": 223,
+          "handlerSourceLine": 238,
+          "handlerForm": "inline callback",
+          "handlerSymbol": "registerSceneRoutes inline handler"
+        },
+        {
+          "method": "POST",
+          "path": "/api/scenes/:id/style-deviations",
+          "sourceLine": 286,
+          "handlerSourceLine": 298,
+          "handlerForm": "inline callback",
+          "handlerSymbol": "registerSceneRoutes inline handler"
+        },
+        {
+          "method": "POST",
+          "path": "/api/scenes/:id/plot-semantics",
+          "sourceLine": 305,
+          "handlerSourceLine": 317,
+          "handlerForm": "inline callback",
+          "handlerSymbol": "registerSceneRoutes inline handler"
+        },
+        {
+          "method": "POST",
+          "path": "/api/scenes/:id/stylometric-deviations",
+          "sourceLine": 324,
+          "handlerSourceLine": 336,
+          "handlerForm": "inline callback",
+          "handlerSymbol": "registerSceneRoutes inline handler"
+        },
+        {
+          "method": "POST",
+          "path": "/api/scenes/:id/lint",
+          "sourceLine": 344,
+          "handlerSourceLine": 359,
+          "handlerForm": "inline callback",
+          "handlerSymbol": "registerSceneRoutes inline handler"
+        },
+        {
+          "method": "POST",
+          "path": "/api/scenes/:id/diagnostics",
+          "sourceLine": 412,
+          "handlerSourceLine": 426,
+          "handlerForm": "inline callback",
+          "handlerSymbol": "registerSceneRoutes inline handler"
+        }
+      ],
+      "callerAndUiSurfaceExpansion": "pending",
+      "handlerCallSymbolsExpansion": "pending",
+      "storageReaderWriterExpansion": "pending",
+      "migrationStatus": "pending",
+      "proofIds": []
+    },
+    {
+      "id": "R09",
+      "source": "packages/api/src/routes/worldState.ts",
+      "registrationSymbol": "registerWorldStateRoutes",
+      "registrationOrder": 9,
+      "ownerDisposition": "story",
+      "plannedSource": "routes/worldState.ts",
+      "registeredEndpoints": [
+        {
+          "method": "GET",
+          "path": "/api/scenes/:id/world-state",
+          "sourceLine": 27,
+          "handlerSourceLine": 37,
+          "handlerForm": "inline callback",
+          "handlerSymbol": "registerWorldStateRoutes inline handler"
+        },
+        {
+          "method": "GET",
+          "path": "/api/scenes/:id/state-workbench",
+          "sourceLine": 44,
+          "handlerSourceLine": 51,
+          "handlerForm": "inline callback",
+          "handlerSymbol": "registerWorldStateRoutes inline handler"
+        },
+        {
+          "method": "GET",
+          "path": "/api/entities/:id/state-history",
+          "sourceLine": 91,
+          "handlerSourceLine": 101,
+          "handlerForm": "inline callback",
+          "handlerSymbol": "registerWorldStateRoutes inline handler"
+        }
+      ],
+      "callerAndUiSurfaceExpansion": "pending",
+      "handlerCallSymbolsExpansion": "pending",
+      "storageReaderWriterExpansion": "pending",
+      "migrationStatus": "pending",
+      "proofIds": []
+    },
+    {
+      "id": "R10",
+      "source": "packages/api/src/routes/stateProposals.ts",
+      "registrationSymbol": "registerStateProposalRoutes",
+      "registrationOrder": 10,
+      "ownerDisposition": "story proposal operations; Core approval",
+      "plannedSource": "routes/stateProposals.ts",
+      "registeredEndpoints": [
+        {
+          "method": "GET",
+          "path": "/api/state-proposals",
+          "sourceLine": 41,
+          "handlerSourceLine": 45,
+          "handlerForm": "inline callback",
+          "handlerSymbol": "registerStateProposalRoutes inline handler"
+        },
+        {
+          "method": "POST",
+          "path": "/api/state-proposals",
+          "sourceLine": 48,
+          "handlerSourceLine": 55,
+          "handlerForm": "inline callback",
+          "handlerSymbol": "registerStateProposalRoutes inline handler"
+        },
+        {
+          "method": "PUT",
+          "path": "/api/state-proposals/:id",
+          "sourceLine": 64,
+          "handlerSourceLine": 72,
+          "handlerForm": "inline callback",
+          "handlerSymbol": "registerStateProposalRoutes inline handler"
+        },
+        {
+          "method": "POST",
+          "path": "/api/state-proposals/:id/approve",
+          "sourceLine": 82,
+          "handlerSourceLine": 95,
+          "handlerForm": "inline callback",
+          "handlerSymbol": "registerStateProposalRoutes inline handler"
+        },
+        {
+          "method": "POST",
+          "path": "/api/state-proposals/:id/reject",
+          "sourceLine": 139,
+          "handlerSourceLine": 146,
+          "handlerForm": "inline callback",
+          "handlerSymbol": "registerStateProposalRoutes inline handler"
+        },
+        {
+          "method": "POST",
+          "path": "/api/state-proposals/stale",
+          "sourceLine": 156,
+          "handlerSourceLine": 163,
+          "handlerForm": "inline callback",
+          "handlerSymbol": "registerStateProposalRoutes inline handler"
+        }
+      ],
+      "callerAndUiSurfaceExpansion": "pending",
+      "handlerCallSymbolsExpansion": "pending",
+      "storageReaderWriterExpansion": "pending",
+      "migrationStatus": "pending",
+      "proofIds": []
+    },
+    {
+      "id": "R11",
+      "source": "packages/api/src/routes/changeSets.ts",
+      "registrationSymbol": "registerChangeSetRoutes",
+      "registrationOrder": 11,
+      "ownerDisposition": "Core generic ChangeSet/approval/apply/history",
+      "plannedSource": "routes/changeSets.ts",
+      "registeredEndpoints": [
+        {
+          "method": "POST",
+          "path": "/api/change-sets",
+          "sourceLine": 119,
+          "handlerSourceLine": 119,
+          "handlerForm": "inline callback",
+          "handlerSymbol": "registerChangeSetRoutes inline handler"
+        },
+        {
+          "method": "GET",
+          "path": "/api/change-sets",
+          "sourceLine": 134,
+          "handlerSourceLine": 134,
+          "handlerForm": "inline callback",
+          "handlerSymbol": "registerChangeSetRoutes inline handler"
+        },
+        {
+          "method": "GET",
+          "path": "/api/change-sets/:id",
+          "sourceLine": 136,
+          "handlerSourceLine": 136,
+          "handlerForm": "inline callback",
+          "handlerSymbol": "registerChangeSetRoutes inline handler"
+        },
+        {
+          "method": "POST",
+          "path": "/api/change-sets/:id/apply",
+          "sourceLine": 141,
+          "handlerSourceLine": 143,
+          "handlerForm": "inline callback",
+          "handlerSymbol": "registerChangeSetRoutes inline handler"
+        },
+        {
+          "method": "POST",
+          "path": "/api/change-sets/:id/restore",
+          "sourceLine": 260,
+          "handlerSourceLine": 262,
+          "handlerForm": "inline callback",
+          "handlerSymbol": "registerChangeSetRoutes inline handler"
+        },
+        {
+          "method": "POST",
+          "path": "/api/change-sets/:id/reject",
+          "sourceLine": 305,
+          "handlerSourceLine": 305,
+          "handlerForm": "inline callback",
+          "handlerSymbol": "registerChangeSetRoutes inline handler"
+        }
+      ],
+      "callerAndUiSurfaceExpansion": "pending",
+      "handlerCallSymbolsExpansion": "pending",
+      "storageReaderWriterExpansion": "pending",
+      "migrationStatus": "pending",
+      "proofIds": []
+    },
+    {
+      "id": "R12",
+      "source": "packages/api/src/routes/readerModel.ts",
+      "registrationSymbol": "registerReaderModelRoutes",
+      "registrationOrder": 12,
+      "ownerDisposition": "story reader/character knowledge; assistant only for generated reactions",
+      "plannedSource": "routes/readerModel.ts",
+      "registeredEndpoints": [
+        {
+          "method": "GET",
+          "path": "/api/chapters/:id/reader-model",
+          "sourceLine": 20,
+          "handlerSourceLine": 31,
+          "handlerForm": "inline callback",
+          "handlerSymbol": "registerReaderModelRoutes inline handler"
+        },
+        {
+          "method": "GET",
+          "path": "/api/chapters/:id/reader-model/prompt-preview",
+          "sourceLine": 49,
+          "handlerSourceLine": 59,
+          "handlerForm": "inline callback",
+          "handlerSymbol": "registerReaderModelRoutes inline handler"
+        }
+      ],
+      "callerAndUiSurfaceExpansion": "pending",
+      "handlerCallSymbolsExpansion": "pending",
+      "storageReaderWriterExpansion": "pending",
+      "migrationStatus": "pending",
+      "proofIds": []
+    },
+    {
+      "id": "R13",
+      "source": "packages/api/src/routes/search.ts",
+      "registrationSymbol": "registerSearchRoutes",
+      "registrationOrder": 13,
+      "ownerDisposition": "Core bounded literal/basic search; semantic enhanced search",
+      "plannedSource": "routes/search.ts",
+      "registeredEndpoints": [
+        {
+          "method": "GET",
+          "path": "/api/search",
+          "sourceLine": 16,
+          "handlerSourceLine": 25,
+          "handlerForm": "inline callback",
+          "handlerSymbol": "registerSearchRoutes inline handler"
+        },
+        {
+          "method": "GET",
+          "path": "/api/search/semantic",
+          "sourceLine": 35,
+          "handlerSourceLine": 44,
+          "handlerForm": "inline callback",
+          "handlerSymbol": "registerSearchRoutes inline handler"
+        },
+        {
+          "method": "GET",
+          "path": "/api/expressions/search",
+          "sourceLine": 55,
+          "handlerSourceLine": 64,
+          "handlerForm": "inline callback",
+          "handlerSymbol": "registerSearchRoutes inline handler"
+        }
+      ],
+      "callerAndUiSurfaceExpansion": "pending",
+      "handlerCallSymbolsExpansion": "pending",
+      "storageReaderWriterExpansion": "pending",
+      "migrationStatus": "pending",
+      "proofIds": []
+    },
+    {
+      "id": "R14",
+      "source": "packages/api/src/routes/summaries.ts",
+      "registrationSymbol": "registerSummaryRoutes",
+      "registrationOrder": 14,
+      "ownerDisposition": "assistant generation and source freshness",
+      "plannedSource": "routes/summaries.ts",
+      "registeredEndpoints": [
+        {
+          "method": "GET",
+          "path": "/api/summaries/:scope",
+          "sourceLine": 66,
+          "handlerSourceLine": 79,
+          "handlerForm": "inline callback",
+          "handlerSymbol": "registerSummaryRoutes inline handler"
+        },
+        {
+          "method": "GET",
+          "path": "/api/summaries/:scope/prompt-preview",
+          "sourceLine": 124,
+          "handlerSourceLine": 136,
+          "handlerForm": "inline callback",
+          "handlerSymbol": "registerSummaryRoutes inline handler"
+        },
+        {
+          "method": "POST",
+          "path": "/api/summaries/refresh",
+          "sourceLine": 171,
+          "handlerSourceLine": 184,
+          "handlerForm": "inline callback",
+          "handlerSymbol": "registerSummaryRoutes inline handler"
+        }
+      ],
+      "callerAndUiSurfaceExpansion": "pending",
+      "handlerCallSymbolsExpansion": "pending",
+      "storageReaderWriterExpansion": "pending",
+      "migrationStatus": "pending",
+      "proofIds": []
+    },
+    {
+      "id": "R15",
+      "source": "packages/api/src/routes/threads.ts",
+      "registrationSymbol": "registerThreadRoutes",
+      "registrationOrder": 15,
+      "ownerDisposition": "story",
+      "plannedSource": "routes/threads.ts",
+      "registeredEndpoints": [
+        {
+          "method": "GET",
+          "path": "/api/threads/status",
+          "sourceLine": 14,
+          "handlerSourceLine": 25,
+          "handlerForm": "inline callback",
+          "handlerSymbol": "registerThreadRoutes inline handler"
+        },
+        {
+          "method": "GET",
+          "path": "/api/threads",
+          "sourceLine": 48,
+          "handlerSourceLine": 58,
+          "handlerForm": "inline callback",
+          "handlerSymbol": "registerThreadRoutes inline handler"
+        }
+      ],
+      "callerAndUiSurfaceExpansion": "pending",
+      "handlerCallSymbolsExpansion": "pending",
+      "storageReaderWriterExpansion": "pending",
+      "migrationStatus": "pending",
+      "proofIds": []
+    },
+    {
+      "id": "R16",
+      "source": "packages/api/src/routes/characters.ts",
+      "registrationSymbol": "registerCharacterRoutes",
+      "registrationOrder": 16,
+      "ownerDisposition": "story roster; speaker dialogue/voice contributions",
+      "plannedSource": "routes/characters.ts",
+      "registeredEndpoints": [
+        {
+          "method": "GET",
+          "path": "/api/characters/:id/dialogue",
+          "sourceLine": 14,
+          "handlerSourceLine": 26,
+          "handlerForm": "inline callback",
+          "handlerSymbol": "registerCharacterRoutes inline handler"
+        }
+      ],
+      "callerAndUiSurfaceExpansion": "pending",
+      "handlerCallSymbolsExpansion": "pending",
+      "storageReaderWriterExpansion": "pending",
+      "migrationStatus": "pending",
+      "proofIds": []
+    },
+    {
+      "id": "R17",
+      "source": "packages/api/src/routes/tags.ts",
+      "registrationSymbol": "registerTagRoutes",
+      "registrationOrder": 17,
+      "ownerDisposition": "story",
+      "plannedSource": "routes/tags.ts",
+      "registeredEndpoints": [
+        {
+          "method": "GET",
+          "path": "/api/tags",
+          "sourceLine": 9,
+          "handlerSourceLine": 17,
+          "handlerForm": "inline callback",
+          "handlerSymbol": "registerTagRoutes inline handler"
+        }
+      ],
+      "callerAndUiSurfaceExpansion": "pending",
+      "handlerCallSymbolsExpansion": "pending",
+      "storageReaderWriterExpansion": "pending",
+      "migrationStatus": "pending",
+      "proofIds": []
+    },
+    {
+      "id": "R18",
+      "source": "packages/api/src/routes/graph.ts",
+      "registrationSymbol": "registerGraphRoutes",
+      "registrationOrder": 18,
+      "ownerDisposition": "story graph/relationship/map projections",
+      "plannedSource": "routes/graph.ts",
+      "registeredEndpoints": [
+        {
+          "method": "GET",
+          "path": "/api/graph",
+          "sourceLine": 10,
+          "handlerSourceLine": 19,
+          "handlerForm": "inline callback",
+          "handlerSymbol": "registerGraphRoutes inline handler"
+        }
+      ],
+      "callerAndUiSurfaceExpansion": "pending",
+      "handlerCallSymbolsExpansion": "pending",
+      "storageReaderWriterExpansion": "pending",
+      "migrationStatus": "pending",
+      "proofIds": []
+    },
+    {
+      "id": "R19",
+      "source": "packages/api/src/routes/timeline.ts",
+      "registrationSymbol": "registerTimelineRoutes",
+      "registrationOrder": 19,
+      "ownerDisposition": "story chronology",
+      "plannedSource": "routes/timeline.ts",
+      "registeredEndpoints": [
+        {
+          "method": "GET",
+          "path": "/api/timeline",
+          "sourceLine": 10,
+          "handlerSourceLine": 18,
+          "handlerForm": "inline callback",
+          "handlerSymbol": "registerTimelineRoutes inline handler"
+        }
+      ],
+      "callerAndUiSurfaceExpansion": "pending",
+      "handlerCallSymbolsExpansion": "pending",
+      "storageReaderWriterExpansion": "pending",
+      "migrationStatus": "pending",
+      "proofIds": []
+    },
+    {
+      "id": "R20",
+      "source": "packages/api/src/routes/inspection.ts",
+      "registrationSymbol": "registerInspectionRoutes",
+      "registrationOrder": 20,
+      "ownerDisposition": "shared inspection host; domains supply typed evidence",
+      "plannedSource": "routes/inspection.ts",
+      "registeredEndpoints": [
+        {
+          "method": "GET",
+          "path": "/api/validate",
+          "sourceLine": 25,
+          "handlerSourceLine": 35,
+          "handlerForm": "inline callback",
+          "handlerSymbol": "registerInspectionRoutes inline handler"
+        },
+        {
+          "method": "GET",
+          "path": "/api/continuity-check",
+          "sourceLine": 51,
+          "handlerSourceLine": 61,
+          "handlerForm": "inline callback",
+          "handlerSymbol": "registerInspectionRoutes inline handler"
+        },
+        {
+          "method": "GET",
+          "path": "/api/sentiment-continuity-hotspots",
+          "sourceLine": 78,
+          "handlerSourceLine": 87,
+          "handlerForm": "inline callback",
+          "handlerSymbol": "registerInspectionRoutes inline handler"
+        },
+        {
+          "method": "GET",
+          "path": "/api/cooccurrence",
+          "sourceLine": 90,
+          "handlerSourceLine": 100,
+          "handlerForm": "inline callback",
+          "handlerSymbol": "registerInspectionRoutes inline handler"
+        },
+        {
+          "method": "GET",
+          "path": "/api/voice-consistency",
+          "sourceLine": 117,
+          "handlerSourceLine": 128,
+          "handlerForm": "inline callback",
+          "handlerSymbol": "registerInspectionRoutes inline handler"
+        },
+        {
+          "method": "GET",
+          "path": "/api/style-deviations",
+          "sourceLine": 156,
+          "handlerSourceLine": 167,
+          "handlerForm": "inline callback",
+          "handlerSymbol": "registerInspectionRoutes inline handler"
+        }
+      ],
+      "callerAndUiSurfaceExpansion": "pending",
+      "handlerCallSymbolsExpansion": "pending",
+      "storageReaderWriterExpansion": "pending",
+      "migrationStatus": "pending",
+      "proofIds": []
+    },
+    {
+      "id": "R21",
+      "source": "packages/api/src/routes/diagnostics.ts",
+      "registrationSymbol": "registerDiagnosticsRoutes",
+      "registrationOrder": 21,
+      "ownerDisposition": "diagnostics aggregator; optional module contributions",
+      "plannedSource": "routes/diagnostics.ts",
+      "registeredEndpoints": [
+        {
+          "method": "GET",
+          "path": "/api/diagnostics/contradictions",
+          "sourceLine": 20,
+          "handlerSourceLine": 29,
+          "handlerForm": "inline callback",
+          "handlerSymbol": "registerDiagnosticsRoutes inline handler"
+        },
+        {
+          "method": "POST",
+          "path": "/api/diagnostics/contradictions/dismiss",
+          "sourceLine": 43,
+          "handlerSourceLine": 53,
+          "handlerForm": "inline callback",
+          "handlerSymbol": "registerDiagnosticsRoutes inline handler"
+        }
+      ],
+      "callerAndUiSurfaceExpansion": "pending",
+      "handlerCallSymbolsExpansion": "pending",
+      "storageReaderWriterExpansion": "pending",
+      "migrationStatus": "pending",
+      "proofIds": []
+    },
+    {
+      "id": "R22",
+      "source": "packages/api/src/routes/manuscript.ts",
+      "registrationSymbol": "registerManuscriptRoutes",
+      "registrationOrder": 22,
+      "ownerDisposition": "Core documents/checkpoint/publish/history",
+      "plannedSource": "routes/manuscript.ts",
+      "registeredEndpoints": [
+        {
+          "method": "PUT",
+          "path": "/api/manuscript/:id",
+          "sourceLine": 27,
+          "handlerSourceLine": 43,
+          "handlerForm": "inline callback",
+          "handlerSymbol": "registerManuscriptRoutes inline handler"
+        },
+        {
+          "method": "GET",
+          "path": "/api/manuscript/:id/snapshots",
+          "sourceLine": 82,
+          "handlerSourceLine": 95,
+          "handlerForm": "inline callback",
+          "handlerSymbol": "registerManuscriptRoutes inline handler"
+        },
+        {
+          "method": "POST",
+          "path": "/api/manuscript/:id/snapshots",
+          "sourceLine": 104,
+          "handlerSourceLine": 120,
+          "handlerForm": "inline callback",
+          "handlerSymbol": "registerManuscriptRoutes inline handler"
+        },
+        {
+          "method": "GET",
+          "path": "/api/manuscript/:id/snapshots/:snapshotId",
+          "sourceLine": 171,
+          "handlerSourceLine": 183,
+          "handlerForm": "inline callback",
+          "handlerSymbol": "registerManuscriptRoutes inline handler"
+        }
+      ],
+      "callerAndUiSurfaceExpansion": "pending",
+      "handlerCallSymbolsExpansion": "pending",
+      "storageReaderWriterExpansion": "pending",
+      "migrationStatus": "pending",
+      "proofIds": []
+    },
+    {
+      "id": "R23",
+      "source": "packages/api/src/routes/export.ts",
+      "registrationSymbol": "registerExportRoutes",
+      "registrationOrder": 23,
+      "ownerDisposition": "publishing",
+      "plannedSource": "routes/export.ts",
+      "registeredEndpoints": [
+        {
+          "method": "GET",
+          "path": "/api/export/plaintext",
+          "sourceLine": 40,
+          "handlerSourceLine": 50,
+          "handlerForm": "inline callback",
+          "handlerSymbol": "registerExportRoutes inline handler"
+        },
+        {
+          "method": "GET",
+          "path": "/api/export/epub",
+          "sourceLine": 97,
+          "handlerSourceLine": 107,
+          "handlerForm": "inline callback",
+          "handlerSymbol": "registerExportRoutes inline handler"
+        }
+      ],
+      "callerAndUiSurfaceExpansion": "pending",
+      "handlerCallSymbolsExpansion": "pending",
+      "storageReaderWriterExpansion": "pending",
+      "migrationStatus": "pending",
+      "proofIds": []
+    },
+    {
+      "id": "R24",
+      "source": "packages/api/src/routes/publishEpisodes.ts",
+      "registrationSymbol": "registerPublishEpisodeRoutes",
+      "registrationOrder": 24,
+      "ownerDisposition": "publishing",
+      "plannedSource": "routes/publishEpisodes.ts",
+      "registeredEndpoints": [
+        {
+          "method": "GET",
+          "path": "/api/publish-episodes",
+          "sourceLine": 15,
+          "handlerSourceLine": 24,
+          "handlerForm": "inline callback",
+          "handlerSymbol": "registerPublishEpisodeRoutes inline handler"
+        },
+        {
+          "method": "PUT",
+          "path": "/api/publish-episodes",
+          "sourceLine": 27,
+          "handlerSourceLine": 37,
+          "handlerForm": "inline callback",
+          "handlerSymbol": "registerPublishEpisodeRoutes inline handler"
+        }
+      ],
+      "callerAndUiSurfaceExpansion": "pending",
+      "handlerCallSymbolsExpansion": "pending",
+      "storageReaderWriterExpansion": "pending",
+      "migrationStatus": "pending",
+      "proofIds": []
+    },
+    {
+      "id": "R25",
+      "source": "packages/api/src/routes/candidates.ts",
+      "registrationSymbol": "registerCandidateRoutes",
+      "registrationOrder": 25,
+      "ownerDisposition": "diagnostics lexical candidates; semantic clustering extension",
+      "plannedSource": "routes/candidates.ts",
+      "registeredEndpoints": [
+        {
+          "method": "GET",
+          "path": "/api/candidates",
+          "sourceLine": 16,
+          "handlerSourceLine": 25,
+          "handlerForm": "inline callback",
+          "handlerSymbol": "registerCandidateRoutes inline handler"
+        },
+        {
+          "method": "GET",
+          "path": "/api/candidates/clusters",
+          "sourceLine": 28,
+          "handlerSourceLine": 38,
+          "handlerForm": "inline callback",
+          "handlerSymbol": "registerCandidateRoutes inline handler"
+        },
+        {
+          "method": "POST",
+          "path": "/api/candidates/ignore",
+          "sourceLine": 44,
+          "handlerSourceLine": 54,
+          "handlerForm": "inline callback",
+          "handlerSymbol": "registerCandidateRoutes inline handler"
+        }
+      ],
+      "callerAndUiSurfaceExpansion": "pending",
+      "handlerCallSymbolsExpansion": "pending",
+      "storageReaderWriterExpansion": "pending",
+      "migrationStatus": "pending",
+      "proofIds": []
+    },
+    {
+      "id": "R26",
+      "source": "packages/api/src/routes/analysis.ts",
+      "registrationSymbol": "registerAnalysisRoutes",
+      "registrationOrder": 26,
+      "ownerDisposition": "diagnostics and nlp capability",
+      "plannedSource": "routes/analysis.ts",
+      "registeredEndpoints": [
+        {
+          "method": "POST",
+          "path": "/api/analyze-manuscript",
+          "sourceLine": 15,
+          "handlerSourceLine": 24,
+          "handlerForm": "inline callback",
+          "handlerSymbol": "registerAnalysisRoutes inline handler"
+        },
+        {
+          "method": "GET",
+          "path": "/api/style-fingerprints",
+          "sourceLine": 32,
+          "handlerSourceLine": 40,
+          "handlerForm": "inline callback",
+          "handlerSymbol": "registerAnalysisRoutes inline handler"
+        },
+        {
+          "method": "GET",
+          "path": "/api/stylometric-profiles",
+          "sourceLine": 43,
+          "handlerSourceLine": 51,
+          "handlerForm": "inline callback",
+          "handlerSymbol": "registerAnalysisRoutes inline handler"
+        }
+      ],
+      "callerAndUiSurfaceExpansion": "pending",
+      "handlerCallSymbolsExpansion": "pending",
+      "storageReaderWriterExpansion": "pending",
+      "migrationStatus": "pending",
+      "proofIds": []
+    },
+    {
+      "id": "R27",
+      "source": "packages/api/src/routes/lint.ts",
+      "registrationSymbol": "registerLintRoutes",
+      "registrationOrder": 27,
+      "ownerDisposition": "diagnostics; fixes use approved Core operations",
+      "plannedSource": "routes/lint.ts",
+      "registeredEndpoints": [
+        {
+          "method": "POST",
+          "path": "/api/lint",
+          "sourceLine": 14,
+          "handlerSourceLine": 24,
+          "handlerForm": "inline callback",
+          "handlerSymbol": "registerLintRoutes inline handler"
+        }
+      ],
+      "callerAndUiSurfaceExpansion": "pending",
+      "handlerCallSymbolsExpansion": "pending",
+      "storageReaderWriterExpansion": "pending",
+      "migrationStatus": "pending",
+      "proofIds": []
+    },
+    {
+      "id": "R28",
+      "source": "packages/api/src/routes/synonyms.ts",
+      "registrationSymbol": "registerSynonymRoutes",
+      "registrationOrder": 28,
+      "ownerDisposition": "diagnostics dictionaries; assistant external suggestions",
+      "plannedSource": "routes/synonyms.ts",
+      "registeredEndpoints": [
+        {
+          "method": "POST",
+          "path": "/api/synonyms/groups",
+          "sourceLine": 22,
+          "handlerSourceLine": 32,
+          "handlerForm": "inline callback",
+          "handlerSymbol": "registerSynonymRoutes inline handler"
+        },
+        {
+          "method": "POST",
+          "path": "/api/suggest-synonyms/prompt",
+          "sourceLine": 42,
+          "handlerSourceLine": 52,
+          "handlerForm": "inline callback",
+          "handlerSymbol": "registerSynonymRoutes inline handler"
+        },
+        {
+          "method": "POST",
+          "path": "/api/suggest-synonyms",
+          "sourceLine": 65,
+          "handlerSourceLine": 76,
+          "handlerForm": "inline callback",
+          "handlerSymbol": "registerSynonymRoutes inline handler"
+        }
+      ],
+      "callerAndUiSurfaceExpansion": "pending",
+      "handlerCallSymbolsExpansion": "pending",
+      "storageReaderWriterExpansion": "pending",
+      "migrationStatus": "pending",
+      "proofIds": []
+    },
+    {
+      "id": "R29",
+      "source": "packages/api/src/routes/writingStats.ts",
+      "registrationSymbol": "registerWritingStatsRoutes",
+      "registrationOrder": 29,
+      "ownerDisposition": "Core basic counts; diagnostics richer metrics",
+      "plannedSource": "routes/writingStats.ts",
+      "registeredEndpoints": [
+        {
+          "method": "GET",
+          "path": "/api/writing-stats",
+          "sourceLine": 9,
+          "handlerSourceLine": 17,
+          "handlerForm": "inline callback",
+          "handlerSymbol": "registerWritingStatsRoutes inline handler"
+        }
+      ],
+      "callerAndUiSurfaceExpansion": "pending",
+      "handlerCallSymbolsExpansion": "pending",
+      "storageReaderWriterExpansion": "pending",
+      "migrationStatus": "pending",
+      "proofIds": []
+    },
+    {
+      "id": "R30",
+      "source": "packages/api/src/routes/llmUsage.ts",
+      "registrationSymbol": "registerLlmUsageRoutes",
+      "registrationOrder": 30,
+      "ownerDisposition": "assistant historical usage records, explicitly classified durability",
+      "plannedSource": "routes/llmUsage.ts",
+      "registeredEndpoints": [
+        {
+          "method": "GET",
+          "path": "/api/llm/usage",
+          "sourceLine": 11,
+          "handlerSourceLine": 20,
+          "handlerForm": "inline callback",
+          "handlerSymbol": "registerLlmUsageRoutes inline handler"
+        }
+      ],
+      "callerAndUiSurfaceExpansion": "pending",
+      "handlerCallSymbolsExpansion": "pending",
+      "storageReaderWriterExpansion": "pending",
+      "migrationStatus": "pending",
+      "proofIds": []
+    },
+    {
+      "id": "R31",
+      "source": "packages/api/src/routes/llmModelSettings.ts",
+      "registrationSymbol": "registerLlmModelSettingsRoutes",
+      "registrationOrder": 31,
+      "ownerDisposition": "assistant preferences and secret references",
+      "plannedSource": "routes/llmModelSettings.ts",
+      "registeredEndpoints": [
+        {
+          "method": "GET",
+          "path": "/api/llm/model-settings",
+          "sourceLine": 35,
+          "handlerSourceLine": 43,
+          "handlerForm": "inline callback",
+          "handlerSymbol": "registerLlmModelSettingsRoutes inline handler"
+        },
+        {
+          "method": "PATCH",
+          "path": "/api/llm/model-settings",
+          "sourceLine": 64,
+          "handlerSourceLine": 74,
+          "handlerForm": "inline callback",
+          "handlerSymbol": "registerLlmModelSettingsRoutes inline handler"
+        }
+      ],
+      "callerAndUiSurfaceExpansion": "pending",
+      "handlerCallSymbolsExpansion": "pending",
+      "storageReaderWriterExpansion": "pending",
+      "migrationStatus": "pending",
+      "proofIds": []
+    },
+    {
+      "id": "R32",
+      "source": "packages/api/src/routes/nlpFeatures.ts",
+      "registrationSymbol": "registerNlpFeaturesRoutes",
+      "registrationOrder": 32,
+      "ownerDisposition": "module availability/locality projection; old external-send consent preserved",
+      "plannedSource": "routes/nlpFeatures.ts",
+      "registeredEndpoints": [
+        {
+          "method": "GET",
+          "path": "/api/nlp/features",
+          "sourceLine": 22,
+          "handlerSourceLine": 30,
+          "handlerForm": "inline callback",
+          "handlerSymbol": "registerNlpFeaturesRoutes inline handler"
+        },
+        {
+          "method": "PATCH",
+          "path": "/api/nlp/features",
+          "sourceLine": 45,
+          "handlerSourceLine": 55,
+          "handlerForm": "inline callback",
+          "handlerSymbol": "registerNlpFeaturesRoutes inline handler"
+        }
+      ],
+      "callerAndUiSurfaceExpansion": "pending",
+      "handlerCallSymbolsExpansion": "pending",
+      "storageReaderWriterExpansion": "pending",
+      "migrationStatus": "pending",
+      "proofIds": []
+    },
+    {
+      "id": "R33",
+      "source": "packages/api/src/streaming/demoRoute.ts",
+      "registrationSymbol": "registerLlmStreamDemoRoutes",
+      "registrationOrder": 33,
+      "ownerDisposition": "Explicitly excluded production demo; retain necessary transport tests, not a public demo endpoint",
+      "plannedSource": "streaming/demoRoute.ts",
+      "registeredEndpoints": [
+        {
+          "method": "POST",
+          "path": "/api/llm/stream-demo",
+          "sourceLine": 46,
+          "handlerSourceLine": 46,
+          "handlerForm": "inline callback",
+          "handlerSymbol": "registerLlmStreamDemoRoutes inline handler"
+        }
+      ],
+      "callerAndUiSurfaceExpansion": "pending",
+      "handlerCallSymbolsExpansion": "pending",
+      "storageReaderWriterExpansion": "pending",
+      "migrationStatus": "pending",
+      "proofIds": []
+    },
+    {
+      "id": "R34",
+      "source": "packages/api/src/routes/qa.ts",
+      "registrationSymbol": "registerQaRoutes",
+      "registrationOrder": 34,
+      "ownerDisposition": "assistant setting QA and citations",
+      "plannedSource": "routes/qa.ts",
+      "registeredEndpoints": [
+        {
+          "method": "GET",
+          "path": "/api/qa/prompt-preview",
+          "sourceLine": 62,
+          "handlerSourceLine": 71,
+          "handlerForm": "inline callback",
+          "handlerSymbol": "registerQaRoutes inline handler"
+        },
+        {
+          "method": "POST",
+          "path": "/api/qa",
+          "sourceLine": 78,
+          "handlerSourceLine": 78,
+          "handlerForm": "inline callback",
+          "handlerSymbol": "registerQaRoutes inline handler"
+        }
+      ],
+      "callerAndUiSurfaceExpansion": "pending",
+      "handlerCallSymbolsExpansion": "pending",
+      "storageReaderWriterExpansion": "pending",
+      "migrationStatus": "pending",
+      "proofIds": []
+    },
+    {
+      "id": "R35",
+      "source": "packages/api/src/routes/continuationOptions.ts",
+      "registrationSymbol": "registerContinuationOptionsRoutes",
+      "registrationOrder": 35,
+      "ownerDisposition": "assistant",
+      "plannedSource": "routes/continuationOptions.ts",
+      "registeredEndpoints": [
+        {
+          "method": "POST",
+          "path": "/api/assist/continuation-options/prompt-preview",
+          "sourceLine": 96,
+          "handlerSourceLine": 105,
+          "handlerForm": "inline callback",
+          "handlerSymbol": "registerContinuationOptionsRoutes inline handler"
+        },
+        {
+          "method": "POST",
+          "path": "/api/assist/continuation-options",
+          "sourceLine": 112,
+          "handlerSourceLine": 112,
+          "handlerForm": "inline callback",
+          "handlerSymbol": "registerContinuationOptionsRoutes inline handler"
+        }
+      ],
+      "callerAndUiSurfaceExpansion": "pending",
+      "handlerCallSymbolsExpansion": "pending",
+      "storageReaderWriterExpansion": "pending",
+      "migrationStatus": "pending",
+      "proofIds": []
+    },
+    {
+      "id": "R36",
+      "source": "packages/api/src/routes/speakers.ts",
+      "registrationSymbol": "registerSpeakerRoutes",
+      "registrationOrder": 36,
+      "ownerDisposition": "speaker inference/corrections/evaluation/training",
+      "plannedSource": "routes/speakers.ts",
+      "registeredEndpoints": [
+        {
+          "method": "GET",
+          "path": "/api/speaker-rule-gates",
+          "sourceLine": 29,
+          "handlerSourceLine": 40,
+          "handlerForm": "inline callback",
+          "handlerSymbol": "registerSpeakerRoutes inline handler"
+        },
+        {
+          "method": "GET",
+          "path": "/api/speaker-eval",
+          "sourceLine": 52,
+          "handlerSourceLine": 63,
+          "handlerForm": "inline callback",
+          "handlerSymbol": "registerSpeakerRoutes inline handler"
+        },
+        {
+          "method": "POST",
+          "path": "/api/speaker-eval/run",
+          "sourceLine": 77,
+          "handlerSourceLine": 88,
+          "handlerForm": "inline callback",
+          "handlerSymbol": "registerSpeakerRoutes inline handler"
+        },
+        {
+          "method": "GET",
+          "path": "/api/speaker-eval/run/:jobId",
+          "sourceLine": 111,
+          "handlerSourceLine": 123,
+          "handlerForm": "inline callback",
+          "handlerSymbol": "registerSpeakerRoutes inline handler"
+        },
+        {
+          "method": "POST",
+          "path": "/api/speaker-retrain/run",
+          "sourceLine": 135,
+          "handlerSourceLine": 146,
+          "handlerForm": "inline callback",
+          "handlerSymbol": "registerSpeakerRoutes inline handler"
+        },
+        {
+          "method": "GET",
+          "path": "/api/speaker-retrain/run/:jobId",
+          "sourceLine": 174,
+          "handlerSourceLine": 186,
+          "handlerForm": "inline callback",
+          "handlerSymbol": "registerSpeakerRoutes inline handler"
+        }
+      ],
+      "callerAndUiSurfaceExpansion": "pending",
+      "handlerCallSymbolsExpansion": "pending",
+      "storageReaderWriterExpansion": "pending",
+      "migrationStatus": "pending",
+      "proofIds": []
+    },
+    {
+      "id": "R37",
+      "source": "packages/api/src/routes/aspectReview.ts",
+      "registrationSymbol": "registerAspectReviewRoutes",
+      "registrationOrder": 37,
+      "ownerDisposition": "assistant",
+      "plannedSource": "routes/aspectReview.ts",
+      "registeredEndpoints": [
+        {
+          "method": "POST",
+          "path": "/api/aspect-review/prompt-preview",
+          "sourceLine": 23,
+          "handlerSourceLine": 33,
+          "handlerForm": "inline callback",
+          "handlerSymbol": "registerAspectReviewRoutes inline handler"
+        },
+        {
+          "method": "POST",
+          "path": "/api/aspect-review/run",
+          "sourceLine": 49,
+          "handlerSourceLine": 61,
+          "handlerForm": "inline callback",
+          "handlerSymbol": "registerAspectReviewRoutes inline handler"
+        },
+        {
+          "method": "GET",
+          "path": "/api/aspect-review/run/:jobId",
+          "sourceLine": 86,
+          "handlerSourceLine": 99,
+          "handlerForm": "inline callback",
+          "handlerSymbol": "registerAspectReviewRoutes inline handler"
+        }
+      ],
+      "callerAndUiSurfaceExpansion": "pending",
+      "handlerCallSymbolsExpansion": "pending",
+      "storageReaderWriterExpansion": "pending",
+      "migrationStatus": "pending",
+      "proofIds": []
+    },
+    {
+      "id": "R38",
+      "source": "packages/api/src/routes/jobs.ts",
+      "registrationSymbol": "registerJobRoutes",
+      "registrationOrder": 38,
+      "ownerDisposition": "module-runtime shared jobs, domain-specific tasks owned by modules",
+      "plannedSource": "routes/jobs.ts",
+      "registeredEndpoints": [
+        {
+          "method": "GET",
+          "path": "/api/jobs",
+          "sourceLine": 20,
+          "handlerSourceLine": 29,
+          "handlerForm": "inline callback",
+          "handlerSymbol": "registerJobRoutes inline handler"
+        },
+        {
+          "method": "GET",
+          "path": "/api/jobs/:jobId",
+          "sourceLine": 32,
+          "handlerSourceLine": 42,
+          "handlerForm": "inline callback",
+          "handlerSymbol": "registerJobRoutes inline handler"
+        },
+        {
+          "method": "GET",
+          "path": "/api/jobs/events",
+          "sourceLine": 53,
+          "handlerSourceLine": 57,
+          "handlerForm": "inline callback",
+          "handlerSymbol": "registerJobRoutes inline handler"
+        },
+        {
+          "method": "GET",
+          "path": "/api/inbox",
+          "sourceLine": 86,
+          "handlerSourceLine": 96,
+          "handlerForm": "inline callback",
+          "handlerSymbol": "registerJobRoutes inline handler"
+        },
+        {
+          "method": "POST",
+          "path": "/api/inbox/:id/read",
+          "sourceLine": 107,
+          "handlerSourceLine": 117,
+          "handlerForm": "inline callback",
+          "handlerSymbol": "registerJobRoutes inline handler"
+        },
+        {
+          "method": "POST",
+          "path": "/api/inbox/read-all",
+          "sourceLine": 125,
+          "handlerSourceLine": 134,
+          "handlerForm": "inline callback",
+          "handlerSymbol": "registerJobRoutes inline handler"
+        }
+      ],
+      "callerAndUiSurfaceExpansion": "pending",
+      "handlerCallSymbolsExpansion": "pending",
+      "storageReaderWriterExpansion": "pending",
+      "migrationStatus": "pending",
+      "proofIds": []
+    },
+    {
+      "id": "R39",
+      "source": "packages/api/src/routes/workspace.ts",
+      "registrationSymbol": "registerWorkspaceRoutes",
+      "registrationOrder": 39,
+      "ownerDisposition": "Core Git operations/recovery",
+      "plannedSource": "routes/workspace.ts",
+      "registeredEndpoints": [
+        {
+          "method": "GET",
+          "path": "/api/workspace",
+          "sourceLine": 24,
+          "handlerSourceLine": 37,
+          "handlerForm": "inline callback",
+          "handlerSymbol": "registerWorkspaceRoutes inline handler"
+        },
+        {
+          "method": "POST",
+          "path": "/api/session/begin",
+          "sourceLine": 44,
+          "handlerSourceLine": 58,
+          "handlerForm": "inline callback",
+          "handlerSymbol": "registerWorkspaceRoutes inline handler"
+        },
+        {
+          "method": "POST",
+          "path": "/api/session/submit",
+          "sourceLine": 80,
+          "handlerSourceLine": 94,
+          "handlerForm": "inline callback",
+          "handlerSymbol": "registerWorkspaceRoutes inline handler"
+        }
+      ],
+      "callerAndUiSurfaceExpansion": "pending",
+      "handlerCallSymbolsExpansion": "pending",
+      "storageReaderWriterExpansion": "pending",
+      "migrationStatus": "pending",
+      "proofIds": []
+    },
+    {
+      "id": "R40",
+      "source": "packages/api/src/routes/projects.ts",
+      "registrationSymbol": "registerProjectRegistryRoutes",
+      "registrationOrder": 40,
+      "ownerDisposition": "Core repository registration/reconstruction",
+      "plannedSource": "routes/projects.ts",
+      "registeredEndpoints": [
+        {
+          "method": "GET",
+          "path": "/api/projects",
+          "sourceLine": 27,
+          "handlerSourceLine": 40,
+          "handlerForm": "inline callback",
+          "handlerSymbol": "registerProjectRegistryRoutes inline handler"
+        },
+        {
+          "method": "POST",
+          "path": "/api/projects",
+          "sourceLine": 51,
+          "handlerSourceLine": 65,
+          "handlerForm": "inline callback",
+          "handlerSymbol": "registerProjectRegistryRoutes inline handler"
+        },
+        {
+          "method": "PUT",
+          "path": "/api/projects/:id",
+          "sourceLine": 132,
+          "handlerSourceLine": 148,
+          "handlerForm": "inline callback",
+          "handlerSymbol": "registerProjectRegistryRoutes inline handler"
+        },
+        {
+          "method": "DELETE",
+          "path": "/api/projects/:id",
+          "sourceLine": 188,
+          "handlerSourceLine": 194,
+          "handlerForm": "inline callback",
+          "handlerSymbol": "registerProjectRegistryRoutes inline handler"
+        },
+        {
+          "method": "PATCH",
+          "path": "/api/projects/:id",
+          "sourceLine": 207,
+          "handlerSourceLine": 222,
+          "handlerForm": "inline callback",
+          "handlerSymbol": "registerProjectRegistryRoutes inline handler"
+        },
+        {
+          "method": "GET",
+          "path": "/api/projects/events",
+          "sourceLine": 239,
+          "handlerSourceLine": 243,
+          "handlerForm": "inline callback",
+          "handlerSymbol": "registerProjectRegistryRoutes inline handler"
+        },
+        {
+          "method": "GET",
+          "path": "/api/projects/:id",
+          "sourceLine": 278,
+          "handlerSourceLine": 292,
+          "handlerForm": "inline callback",
+          "handlerSymbol": "registerProjectRegistryRoutes inline handler"
+        },
+        {
+          "method": "POST",
+          "path": "/api/projects/:id/sync",
+          "sourceLine": 300,
+          "handlerSourceLine": 315,
+          "handlerForm": "inline callback",
+          "handlerSymbol": "registerProjectRegistryRoutes inline handler"
+        }
+      ],
+      "callerAndUiSurfaceExpansion": "pending",
+      "handlerCallSymbolsExpansion": "pending",
+      "storageReaderWriterExpansion": "pending",
+      "migrationStatus": "pending",
+      "proofIds": []
+    },
+    {
+      "id": "R41",
+      "source": "packages/api/src/routes/series.ts",
+      "registrationSymbol": "registerSeriesRoutes",
+      "registrationOrder": 41,
+      "ownerDisposition": "story multi-work bible overlay",
+      "plannedSource": "routes/series.ts",
+      "registeredEndpoints": [
+        {
+          "method": "GET",
+          "path": "/api/series",
+          "sourceLine": 29,
+          "handlerSourceLine": 40,
+          "handlerForm": "inline callback",
+          "handlerSymbol": "registerSeriesRoutes inline handler"
+        },
+        {
+          "method": "GET",
+          "path": "/api/series/:id",
+          "sourceLine": 46,
+          "handlerSourceLine": 58,
+          "handlerForm": "inline callback",
+          "handlerSymbol": "registerSeriesRoutes inline handler"
+        },
+        {
+          "method": "POST",
+          "path": "/api/series",
+          "sourceLine": 66,
+          "handlerSourceLine": 77,
+          "handlerForm": "inline callback",
+          "handlerSymbol": "registerSeriesRoutes inline handler"
+        },
+        {
+          "method": "PATCH",
+          "path": "/api/series/:id",
+          "sourceLine": 109,
+          "handlerSourceLine": 122,
+          "handlerForm": "inline callback",
+          "handlerSymbol": "registerSeriesRoutes inline handler"
+        },
+        {
+          "method": "DELETE",
+          "path": "/api/series/:id",
+          "sourceLine": 162,
+          "handlerSourceLine": 168,
+          "handlerForm": "inline callback",
+          "handlerSymbol": "registerSeriesRoutes inline handler"
+        },
+        {
+          "method": "GET",
+          "path": "/api/projects/:id/series-binding",
+          "sourceLine": 177,
+          "handlerSourceLine": 189,
+          "handlerForm": "inline callback",
+          "handlerSymbol": "registerSeriesRoutes inline handler"
+        },
+        {
+          "method": "PUT",
+          "path": "/api/projects/:id/series-binding",
+          "sourceLine": 205,
+          "handlerSourceLine": 218,
+          "handlerForm": "inline callback",
+          "handlerSymbol": "registerSeriesRoutes inline handler"
+        },
+        {
+          "method": "DELETE",
+          "path": "/api/projects/:id/series-binding",
+          "sourceLine": 247,
+          "handlerSourceLine": 253,
+          "handlerForm": "inline callback",
+          "handlerSymbol": "registerSeriesRoutes inline handler"
+        }
+      ],
+      "callerAndUiSurfaceExpansion": "pending",
+      "handlerCallSymbolsExpansion": "pending",
+      "storageReaderWriterExpansion": "pending",
+      "migrationStatus": "pending",
+      "proofIds": []
+    },
+    {
+      "id": "R42",
+      "source": "packages/api/src/routes/identity.ts",
+      "registrationSymbol": "registerIdentityRoutes",
+      "registrationOrder": 42,
+      "ownerDisposition": "Preserve owner access/credential connection through adapters; Platform user/OAuth/session authority is explicitly relocated, not cloned into Core",
+      "plannedSource": "routes/identity.ts",
+      "registeredEndpoints": [
+        {
+          "method": "GET",
+          "path": "/api/github/device/config",
+          "sourceLine": 58,
+          "handlerSourceLine": 71,
+          "handlerForm": "inline callback",
+          "handlerSymbol": "registerIdentityRoutes inline handler"
+        },
+        {
+          "method": "POST",
+          "path": "/api/github/device/start",
+          "sourceLine": 74,
+          "handlerSourceLine": 89,
+          "handlerForm": "inline callback",
+          "handlerSymbol": "registerIdentityRoutes inline handler"
+        },
+        {
+          "method": "POST",
+          "path": "/api/github/device/poll",
+          "sourceLine": 118,
+          "handlerSourceLine": 134,
+          "handlerForm": "inline callback",
+          "handlerSymbol": "registerIdentityRoutes inline handler"
+        },
+        {
+          "method": "GET",
+          "path": "/api/auth/me",
+          "sourceLine": 195,
+          "handlerSourceLine": 208,
+          "handlerForm": "inline callback",
+          "handlerSymbol": "registerIdentityRoutes inline handler"
+        },
+        {
+          "method": "POST",
+          "path": "/api/auth/logout",
+          "sourceLine": 224,
+          "handlerSourceLine": 228,
+          "handlerForm": "inline callback",
+          "handlerSymbol": "registerIdentityRoutes inline handler"
+        },
+        {
+          "method": "PUT",
+          "path": "/api/auth/policy",
+          "sourceLine": 236,
+          "handlerSourceLine": 250,
+          "handlerForm": "inline callback",
+          "handlerSymbol": "registerIdentityRoutes inline handler"
+        },
+        {
+          "method": "GET",
+          "path": "/api/auth/github/repos",
+          "sourceLine": 269,
+          "handlerSourceLine": 283,
+          "handlerForm": "inline callback",
+          "handlerSymbol": "registerIdentityRoutes inline handler"
+        },
+        {
+          "method": "GET",
+          "path": "/api/auth/tokens",
+          "sourceLine": 307,
+          "handlerSourceLine": 320,
+          "handlerForm": "inline callback",
+          "handlerSymbol": "registerIdentityRoutes inline handler"
+        },
+        {
+          "method": "POST",
+          "path": "/api/auth/tokens",
+          "sourceLine": 330,
+          "handlerSourceLine": 343,
+          "handlerForm": "inline callback",
+          "handlerSymbol": "registerIdentityRoutes inline handler"
+        },
+        {
+          "method": "DELETE",
+          "path": "/api/auth/tokens/:id",
+          "sourceLine": 355,
+          "handlerSourceLine": 361,
+          "handlerForm": "inline callback",
+          "handlerSymbol": "registerIdentityRoutes inline handler"
+        }
+      ],
+      "callerAndUiSurfaceExpansion": "pending",
+      "handlerCallSymbolsExpansion": "pending",
+      "storageReaderWriterExpansion": "pending",
+      "migrationStatus": "pending",
+      "proofIds": []
+    },
+    {
+      "id": "R43",
+      "source": "packages/api/src/routes/me.ts",
+      "registrationSymbol": "registerMeRoutes",
+      "registrationOrder": 43,
+      "ownerDisposition": "Same single-owner access projection; hosted account administration belongs to Platform",
+      "plannedSource": "routes/me.ts",
+      "registeredEndpoints": [
+        {
+          "method": "GET",
+          "path": "/api/me/recent-activity",
+          "sourceLine": 13,
+          "handlerSourceLine": 21,
+          "handlerForm": "inline callback",
+          "handlerSymbol": "registerMeRoutes inline handler"
+        },
+        {
+          "method": "PUT",
+          "path": "/api/me/recent-activity",
+          "sourceLine": 28,
+          "handlerSourceLine": 37,
+          "handlerForm": "inline callback",
+          "handlerSymbol": "registerMeRoutes inline handler"
+        }
+      ],
+      "callerAndUiSurfaceExpansion": "pending",
+      "handlerCallSymbolsExpansion": "pending",
+      "storageReaderWriterExpansion": "pending",
+      "migrationStatus": "pending",
+      "proofIds": []
+    },
+    {
+      "id": "R44",
+      "source": "packages/api/src/routes/reviewQueue.ts",
+      "registrationSymbol": "registerReviewQueueRoutes",
+      "registrationOrder": 44,
+      "ownerDisposition": "shared review host; speaker/story/assistant queue contributions",
+      "plannedSource": "routes/reviewQueue.ts",
+      "registeredEndpoints": [
+        {
+          "method": "GET",
+          "path": "/api/review-queue",
+          "sourceLine": 13,
+          "handlerSourceLine": 21,
+          "handlerForm": "inline callback",
+          "handlerSymbol": "registerReviewQueueRoutes inline handler"
+        }
+      ],
+      "callerAndUiSurfaceExpansion": "pending",
+      "handlerCallSymbolsExpansion": "pending",
+      "storageReaderWriterExpansion": "pending",
+      "migrationStatus": "pending",
+      "proofIds": []
+    },
+    {
+      "id": "R45",
+      "source": "packages/api/src/routes/scratch.ts",
+      "registrationSymbol": "registerScratchRoutes",
+      "registrationOrder": 45,
+      "ownerDisposition": "Core writing scratch/checkpoints and browser recovery",
+      "plannedSource": "routes/scratch.ts",
+      "registeredEndpoints": [
+        {
+          "method": "POST",
+          "path": "/api/scratch",
+          "sourceLine": 67,
+          "handlerSourceLine": 73,
+          "handlerForm": "inline callback",
+          "handlerSymbol": "registerScratchRoutes inline handler"
+        }
+      ],
+      "callerAndUiSurfaceExpansion": "pending",
+      "handlerCallSymbolsExpansion": "pending",
+      "storageReaderWriterExpansion": "pending",
+      "migrationStatus": "pending",
+      "proofIds": []
+    },
+    {
+      "id": "R46",
+      "source": "packages/api/src/routes/dialogueSketch.ts",
+      "registrationSymbol": "registerDialogueSketchRoutes",
+      "registrationOrder": 46,
+      "ownerDisposition": "assistant dialogue topics/lines with story/speaker context",
+      "plannedSource": "routes/dialogueSketch.ts",
+      "registeredEndpoints": [
+        {
+          "method": "POST",
+          "path": "/api/dialogue-sketches/suggest-line/prompt",
+          "sourceLine": 38,
+          "handlerSourceLine": 48,
+          "handlerForm": "inline callback",
+          "handlerSymbol": "registerDialogueSketchRoutes inline handler"
+        },
+        {
+          "method": "POST",
+          "path": "/api/dialogue-sketches/suggest-line",
+          "sourceLine": 67,
+          "handlerSourceLine": 79,
+          "handlerForm": "inline callback",
+          "handlerSymbol": "registerDialogueSketchRoutes inline handler"
+        },
+        {
+          "method": "POST",
+          "path": "/api/dialogue-sketches/suggest-lines/prompt",
+          "sourceLine": 110,
+          "handlerSourceLine": 120,
+          "handlerForm": "inline callback",
+          "handlerSymbol": "registerDialogueSketchRoutes inline handler"
+        },
+        {
+          "method": "POST",
+          "path": "/api/dialogue-sketches/suggest-lines",
+          "sourceLine": 139,
+          "handlerSourceLine": 151,
+          "handlerForm": "inline callback",
+          "handlerSymbol": "registerDialogueSketchRoutes inline handler"
+        },
+        {
+          "method": "POST",
+          "path": "/api/dialogue-sketches/suggest-topics/prompt",
+          "sourceLine": 183,
+          "handlerSourceLine": 193,
+          "handlerForm": "inline callback",
+          "handlerSymbol": "registerDialogueSketchRoutes inline handler"
+        },
+        {
+          "method": "POST",
+          "path": "/api/dialogue-sketches/suggest-topics",
+          "sourceLine": 206,
+          "handlerSourceLine": 218,
+          "handlerForm": "inline callback",
+          "handlerSymbol": "registerDialogueSketchRoutes inline handler"
+        },
+        {
+          "method": "POST",
+          "path": "/api/dialogue-sketches/:id/analyze-zukan/prompt",
+          "sourceLine": 243,
+          "handlerSourceLine": 255,
+          "handlerForm": "inline callback",
+          "handlerSymbol": "registerDialogueSketchRoutes inline handler"
+        },
+        {
+          "method": "POST",
+          "path": "/api/dialogue-sketches/:id/analyze-zukan",
+          "sourceLine": 275,
+          "handlerSourceLine": 288,
+          "handlerForm": "inline callback",
+          "handlerSymbol": "registerDialogueSketchRoutes inline handler"
+        }
+      ],
+      "callerAndUiSurfaceExpansion": "pending",
+      "handlerCallSymbolsExpansion": "pending",
+      "storageReaderWriterExpansion": "pending",
+      "migrationStatus": "pending",
+      "proofIds": []
+    },
+    {
+      "id": "R47",
+      "source": "packages/api/src/routes/share.ts",
+      "registrationSymbol": "registerShareRoutes",
+      "registrationOrder": 47,
+      "ownerDisposition": "publishing read-only, scope/expiry/revocation checked against persisted grant metadata",
+      "plannedSource": "routes/share.ts",
+      "registeredEndpoints": [
+        {
+          "method": "GET",
+          "path": "/api/shares",
+          "sourceLine": 81,
+          "handlerSourceLine": 92,
+          "handlerForm": "inline callback",
+          "handlerSymbol": "registerShareRoutes inline handler"
+        },
+        {
+          "method": "POST",
+          "path": "/api/shares",
+          "sourceLine": 105,
+          "handlerSourceLine": 116,
+          "handlerForm": "inline callback",
+          "handlerSymbol": "registerShareRoutes inline handler"
+        },
+        {
+          "method": "DELETE",
+          "path": "/api/shares/:id",
+          "sourceLine": 152,
+          "handlerSourceLine": 158,
+          "handlerForm": "inline callback",
+          "handlerSymbol": "registerShareRoutes inline handler"
+        },
+        {
+          "method": "GET",
+          "path": "/api/share/:token",
+          "sourceLine": 168,
+          "handlerSourceLine": 180,
+          "handlerForm": "inline callback",
+          "handlerSymbol": "registerShareRoutes inline handler"
+        },
+        {
+          "method": "GET",
+          "path": "/api/share/:token/scenes/:sceneId",
+          "sourceLine": 202,
+          "handlerSourceLine": 214,
+          "handlerForm": "inline callback",
+          "handlerSymbol": "registerShareRoutes inline handler"
+        }
+      ],
+      "callerAndUiSurfaceExpansion": "pending",
+      "handlerCallSymbolsExpansion": "pending",
+      "storageReaderWriterExpansion": "pending",
+      "migrationStatus": "pending",
+      "proofIds": []
+    },
+    {
+      "id": "R48",
+      "source": "packages/api/src/routes/mcp.ts",
+      "registrationSymbol": "registerMcpRoutes",
+      "registrationOrder": 48,
+      "ownerDisposition": "mcp HTTP transport; same actions as stdio package",
+      "plannedSource": "routes/mcp.ts",
+      "registeredEndpoints": [
+        {
+          "method": "POST",
+          "path": "/api/mcp",
+          "sourceLine": 26,
+          "handlerSourceLine": 26,
+          "handlerForm": "inline callback",
+          "handlerSymbol": "registerMcpRoutes inline handler"
+        },
+        {
+          "method": "GET",
+          "path": "/api/mcp",
+          "sourceLine": 69,
+          "handlerSourceLine": 69,
+          "handlerForm": "inline callback",
+          "handlerSymbol": "registerMcpRoutes inline handler"
+        },
+        {
+          "method": "DELETE",
+          "path": "/api/mcp",
+          "sourceLine": 80,
+          "handlerSourceLine": 80,
+          "handlerForm": "inline callback",
+          "handlerSymbol": "registerMcpRoutes inline handler"
+        }
+      ],
+      "callerAndUiSurfaceExpansion": "pending",
+      "handlerCallSymbolsExpansion": "pending",
+      "storageReaderWriterExpansion": "pending",
+      "migrationStatus": "pending",
+      "proofIds": []
+    }
+  ],
+  "nonRouterGroups": [
+    {
+      "group": "Writing",
+      "sourceStartingPoints": "`app/src/features/editor`, editor typography, draft hooks; Core loader/snapshots/scratch",
+      "requiredRetainedBehavior": "Editing/navigation; vertical preview/reading/print, ruby, 400-character conversion, zen/focus behavior, snapshots/scratch, mobile access and safe recovery",
+      "id": "N01",
+      "callerAndUiSurfaceExpansion": "pending",
+      "authoritativeStorageExpansion": "pending",
+      "migrationStatus": "pending",
+      "proofIds": []
+    },
+    {
+      "group": "Story",
+      "sourceStartingPoints": "source schema/core-shared; graph, timeline, worldState, readerKnowledge, seriesOverlay",
+      "requiredRetainedBehavior": "Entity CRUD/reference validation, nested notes, appearances/backlinks, tags, shared-series reads, thread lifecycle, maps/relationships/chronology, world and knowledge state",
+      "id": "N02",
+      "callerAndUiSurfaceExpansion": "pending",
+      "authoritativeStorageExpansion": "pending",
+      "migrationStatus": "pending",
+      "proofIds": []
+    },
+    {
+      "group": "Diagnostics",
+      "sourceStartingPoints": "linter, textAnalysis, sentimentArc, tone, proseBalance, phraseMining, plot, voice/style services",
+      "requiredRetainedBehavior": "Rules, evidence, severity, rhythm/tone/style/plot diagnostics, context-sensitive wording suggestions; current-source behavior not invented new heuristics",
+      "id": "N03",
+      "callerAndUiSurfaceExpansion": "pending",
+      "authoritativeStorageExpansion": "pending",
+      "migrationStatus": "pending",
+      "proofIds": []
+    },
+    {
+      "group": "NLP",
+      "sourceStartingPoints": "tokenizer/analyze, candidate discovery, synonyms/term variants",
+      "requiredRetainedBehavior": "Japanese token/sentence spans, analysis primitives and dictionary hooks",
+      "id": "N04",
+      "callerAndUiSurfaceExpansion": "pending",
+      "authoritativeStorageExpansion": "pending",
+      "migrationStatus": "pending",
+      "proofIds": []
+    },
+    {
+      "group": "Semantic",
+      "sourceStartingPoints": "embedding, search/reranker, term clustering, contradiction",
+      "requiredRetainedBehavior": "Embedding/hybrid/expression search, corpus similarity, reranking, candidate/evidence freshness; optional standalone capability",
+      "id": "N05",
+      "callerAndUiSurfaceExpansion": "pending",
+      "authoritativeStorageExpansion": "pending",
+      "migrationStatus": "pending",
+      "proofIds": []
+    },
+    {
+      "group": "Speaker",
+      "sourceStartingPoints": "attribution/clustering/count/group labeling/corrections/eval/retrain/reranker/style fingerprints",
+      "requiredRetainedBehavior": "Attribution confidence, corrections and grouping, character dialogue/voice comparison, evaluation, gated model adoption and repeatable training",
+      "id": "N06",
+      "callerAndUiSurfaceExpansion": "pending",
+      "authoritativeStorageExpansion": "pending",
+      "migrationStatus": "pending",
+      "proofIds": []
+    },
+    {
+      "group": "Assistant",
+      "sourceStartingPoints": "nlp/llm, qa, rewrite, continuationContext, dialogueSketch, zukanSuggestions",
+      "requiredRetainedBehavior": "Implemented provider integrations, model routing/sampling, queue/streaming/usage/privacy, cited QA/rewrite/summaries/continuation/review/proposals; none required by Core",
+      "id": "N07",
+      "callerAndUiSurfaceExpansion": "pending",
+      "authoritativeStorageExpansion": "pending",
+      "migrationStatus": "pending",
+      "proofIds": []
+    },
+    {
+      "group": "Changes and context",
+      "sourceStartingPoints": "narrativeChangeSetApply, mutationSafety, source action registry/writingContext/contextManifest",
+      "requiredRetainedBehavior": "Shared approvals/partial results/restore, source identity, selection context, bounded manifests and truthful errors",
+      "id": "N08",
+      "callerAndUiSurfaceExpansion": "pending",
+      "authoritativeStorageExpansion": "pending",
+      "migrationStatus": "pending",
+      "proofIds": []
+    },
+    {
+      "group": "MCP",
+      "sourceStartingPoints": "`packages/mcp-server` plus HTTP mcp routes",
+      "requiredRetainedBehavior": "Both transports, discovery/search/context/diagnostics/history/proposal/status; no external tool self-approval/direct persistent bypass",
+      "id": "N09",
+      "callerAndUiSurfaceExpansion": "pending",
+      "authoritativeStorageExpansion": "pending",
+      "migrationStatus": "pending",
+      "proofIds": []
+    },
+    {
+      "group": "Publishing",
+      "sourceStartingPoints": "epubExport/plaintextExport/publishEpisodeMap, share, print UI",
+      "requiredRetainedBehavior": "Text/EPUB/vertical export, episode mappings, bounded read-only share access",
+      "id": "N10",
+      "callerAndUiSurfaceExpansion": "pending",
+      "authoritativeStorageExpansion": "pending",
+      "migrationStatus": "pending",
+      "proofIds": []
+    },
+    {
+      "group": "UX system",
+      "sourceStartingPoints": "`app/src/components`, contexts, query, dock, panelHost, designTokens, styles and guards",
+      "requiredRetainedBehavior": "One coherent responsive shell, themes, accessibility, loading/empty/error states; do not port whole source navigation sprawl",
+      "id": "N11",
+      "callerAndUiSurfaceExpansion": "pending",
+      "authoritativeStorageExpansion": "pending",
+      "migrationStatus": "pending",
+      "proofIds": []
+    },
+    {
+      "group": "Legacy durable state",
+      "sourceStartingPoints": "workspace persistence stores, `.arcadia` files, index-db/schema definitions, model/correction/config/receipt stores",
+      "requiredRetainedBehavior": "Explicit classification/import of author decisions, settings, approvals, history and grants; derived indexes rebuilt only from retained inputs",
+      "id": "N12",
+      "callerAndUiSurfaceExpansion": "pending",
+      "authoritativeStorageExpansion": "pending",
+      "migrationStatus": "pending",
+      "proofIds": []
+    }
+  ],
+  "baseline": {
+    "status": "reported-by-coordinator; not independently rerun by P00 inventory producer",
+    "reportedChecks": {
+      "typecheck": "PASS",
+      "test": "PASS: 13 Core, 4 API/auth, 3 browser draft tests",
+      "build": "PASS",
+      "audit:core": "PASS",
+      "realChromium": "PASS"
+    },
+    "frozenInstall": "not reported"
+  }
+}
