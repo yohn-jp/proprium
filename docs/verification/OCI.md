@@ -21,7 +21,7 @@ docker run --rm --name scriptorium \
   scriptorium:local
 ```
 
-The host directory mounted at `/data` must be writable by the image's UID 1000. The image includes a health check at `/api/health`; the web UI is served at `/`.
+The host directory mounted at `/data` must be writable by the image's UID 1000. The API exposes readiness at `/api/health`; the web UI is served at `/`.
 
 For a complete local build and startup probe with either Docker or Podman, run:
 
