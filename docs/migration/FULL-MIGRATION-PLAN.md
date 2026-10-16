@@ -15,8 +15,8 @@ The planning review read the target Core/save/sync and browser paths, source rou
 
 Primary pinned evidence:
 
-- [Target Core](https://github.com/yohn-jp/scriptorium/blob/01403182e9f73dec29d04954e3091c235cd1aac0/packages/core/src/index.ts): `saveManuscript`, `syncStatus`, `syncProject`, project identity, locks and path guards.
-- [Target browser](https://github.com/yohn-jp/scriptorium/blob/01403182e9f73dec29d04954e3091c235cd1aac0/app/src/main.ts): checkpoint clears drafts; periodic status is not a fetch.
+- [Target Core](https://github.com/yohn-jp/scriptorium/blob/01403182e9f73dec29d04954e3091c235cd1aac0/packages/core/src/index.ts): `saveScene`, `status`/`statusUnlocked`, `sync`, project identity, locks and path guards.
+- [Target browser](https://github.com/yohn-jp/scriptorium/blob/01403182e9f73dec29d04954e3091c235cd1aac0/app/src/main.ts): `saveCurrentScene` clears an acknowledged draft at local save while retaining newer typing; `refreshStatus` is not a fetch.
 - [Source route catalogue](https://github.com/yohn-jp/arcadia-loom/blob/edc033c2c9466274a334299dadfa426661d957d9/packages/api/src/routes/index.ts): 48 registrations below.
 - [Source product](https://github.com/yohn-jp/arcadia-loom/blob/edc033c2c9466274a334299dadfa426661d957d9/PRODUCT.md), [UI manifest](https://github.com/yohn-jp/arcadia-loom/blob/edc033c2c9466274a334299dadfa426661d957d9/app/package.json), [Core exports](https://github.com/yohn-jp/arcadia-loom/blob/edc033c2c9466274a334299dadfa426661d957d9/packages/core/src/exports.ts).
 - [Speaker retraining](https://github.com/yohn-jp/arcadia-loom/blob/edc033c2c9466274a334299dadfa426661d957d9/packages/core/src/speakerRetrainRunner.ts): existing TypeScript model training. Remove private corpus-specific defaults from public code; preserve the algorithm with synthetic/project-supplied examples.
