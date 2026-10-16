@@ -1,0 +1,151 @@
+{
+  "schemaVersion": 1,
+  "task": "P06",
+  "sourceCommit": "edc033c2c9466274a334299dadfa426661d957d9",
+  "targetBranch": "work/7-p06",
+  "implementationCommits": [
+    "56a24294dc35153ca867345ce3d5409d647ed131",
+    "850e5217aff311cf9b44d4b71b198d1f090fac5b",
+    "66005242c4e7c2d01ac20ecd1030fe7ff0394519",
+    "6f24df4e3d27b63cf70d7859b276128eeb21d1d1",
+    "53b1cd63b7641b8166b95ba7230dd24627ff81ad",
+    "8f5be3a5fffb484d4506d5f81ca74d0f25d42dba",
+    "1b319e4bb20fb9c855ef1e92546448c3ecb701f4"
+  ],
+  "claims": [
+    {
+      "ledgerIds": ["N04", "R25", "R28", "R32"],
+      "sourceSymbols": [
+        "Tokenizer",
+        "analyzeText",
+        "discoverCandidateTermsFiltered",
+        "addToIgnoreList",
+        "appendSynonymGroup",
+        "registerNlpFeaturesRoutes"
+      ],
+      "targetActions": [
+        "nlp.analyze",
+        "nlp.discoverCandidates",
+        "nlp.termVariants",
+        "nlp.dictionary",
+        "nlp.saveSynonymGroup",
+        "nlp.ignoreCandidates",
+        "nlp.features",
+        "nlp.updateExternalConsent"
+      ],
+      "targetUi": ["nlp.analyzer", "nlp.candidates", "nlp.dictionary", "nlp.privacy"],
+      "dataMappings": [
+        "meta/synonyms.yaml -> meta/scriptorium/modules/nlp/synonyms.yaml",
+        "meta/candidate-ignore-list.yaml -> meta/scriptorium/modules/nlp/candidate-ignore-list.yaml",
+        ".arcadia/nlp-feature-settings.json -> meta/scriptorium/modules/nlp/feature-settings.json",
+        "Japanese tokens, UTF-16 spans, candidate terms, and term-variant suggestions are derived from the pinned SnapshotReader; dictionary and ignore changes are ChangeOperation proposals."
+      ],
+      "proofs": [
+        {
+          "id": "P06-NLP-PRODUCTION",
+          "command": "pnpm --filter @scriptorium/module-diagnostics test",
+          "result": "The public nlp.analyze and nlp.discoverCandidates actions run the real Lindera worker, preserve Japanese token/sentence offsets including an emoji prefix, read the pinned snapshot, and leave no worker process after releasing the capability. The idle-import regression confirms Lindera does not load in the parent process.",
+          "scope": "focused",
+          "testPath": "modules/diagnostics/src/production.test.ts",
+          "engineModelIdentity": {"id": "lindera-wasm-nodejs-ipadic", "version": "2.0.0"}
+        },
+        {
+          "id": "P06-NLP-ALGORITHMS",
+          "command": "pnpm --filter @scriptorium/module-nlp test",
+          "result": "Candidate aggregation preserves per-entity occurrence counts, source IDs, known-name exclusions, and reading data; term variants preserve known-term precedence and choose the most frequent cluster representative.",
+          "scope": "focused",
+          "testPath": "modules/nlp/src/candidateDiscovery.test.ts"
+        },
+        {
+          "id": "P06-NLP-AUTHOR-DECISIONS",
+          "command": "pnpm --filter @scriptorium/module-diagnostics test",
+          "result": "The public actions read the module-namespaced synonym dictionary, allow a single term to be merged into an existing group, preserve unknown YAML fields, propose candidate-ignore changes, and require explicit external-feature consent. A consent change is not effective before the selected snapshot changes.",
+          "scope": "focused",
+          "testPath": "modules/diagnostics/src/production.test.ts"
+        }
+      ]
+    },
+    {
+      "ledgerIds": ["N03", "R21", "R26", "R27", "R29"],
+      "sourceSymbols": [
+        "DiagnosticsService",
+        "QueryService.validate",
+        "QueryService.checkContinuity",
+        "analyzeText",
+        "computeSentimentArc",
+        "mineContextualHabitualPhrases",
+        "detectToneDeviation",
+        "computeProseBalance",
+        "detectPlotSemanticWarnings",
+        "lintManuscript"
+      ],
+      "targetActions": [
+        "diagnostics.analyze",
+        "diagnostics.checkConsistency",
+        "diagnostics.checkContinuity",
+        "diagnostics.checkPlotSemantics",
+        "diagnostics.lint",
+        "diagnostics.proposeLintFix",
+        "diagnostics.voiceConsistency",
+        "diagnostics.voiceProfiles",
+        "diagnostics.voiceDeviations",
+        "diagnostics.stylometricDeviations"
+      ],
+      "targetUi": [
+        "diagnostics.analysis",
+        "diagnostics.lint",
+        "diagnostics.voice",
+        "diagnostics.consistency",
+        "diagnostics.continuity"
+      ],
+      "dataMappings": [
+        "meta/lint-rules.yaml -> meta/scriptorium/modules/diagnostics/lint-rules.yaml",
+        "meta/tone-lexicon.yaml -> meta/scriptorium/modules/diagnostics/tone-lexicon.yaml",
+        "meta/plot-lexicon.yaml -> meta/scriptorium/modules/diagnostics/plot-lexicon.yaml",
+        "Canonical entity/manuscript files are read from one pinned snapshot; diagnostics and statistical profiles are derived; lint fixes are proposed through Core operations."
+      ],
+      "proofs": [
+        {
+          "id": "P06-DIAGNOSTICS-CPU",
+          "command": "pnpm --filter @scriptorium/module-diagnostics test",
+          "result": "The public diagnostics action uses the real supervised Lindera tokenizer and source-derived diagnostics worker, returns snapshot and engine identity, computes sentiment from the packaged source lexicon, and stops the child after the final lease is released.",
+          "scope": "focused",
+          "testPath": "modules/diagnostics/src/production.test.ts",
+          "engineModelIdentity": {"id": "lindera-wasm-nodejs-ipadic", "version": "2.0.0", "diagnosticsEngine": "scriptorium-diagnostics-cpu", "diagnosticsEngineVersion": "1.0.0"}
+        },
+        {
+          "id": "P06-PROJECT-CHECKS-VOICE-LINT",
+          "command": "pnpm --filter @scriptorium/module-diagnostics test",
+          "result": "Public action tests cover consistency and continuity findings, scene/chapter/volume scoping, declared/contextual voice profiles including low-confidence attributions, learned voice fingerprints, stylometric profile and outlier results, and lint-fix proposal-only behavior.",
+          "scope": "focused",
+          "testPath": "modules/diagnostics/src/production.test.ts"
+        }
+      ]
+    },
+    {
+      "ledgerIds": ["N03", "R28"],
+      "sourceSymbols": ["candidatesFromCorpus", "extractAlternatePhrasings", "suggestSynonyms"],
+      "targetActions": ["diagnostics.analyze"],
+      "targetUi": ["diagnostics.analysis"],
+      "dataMappings": [
+        "Snapshot-derived scene/manuscript/character/location/item/faction/event/thread/lore passages are sentence-split and sent to the optional semantic.embedding capability; cached embeddings and neighbor results remain provider-owned derived state.",
+        "Corpus synonym candidates retain the source 24-neighbor limit, score bands, POS-matched span extraction, deterministic ranking, current-scene exclusion, and source=corpus attribution."
+      ],
+      "proofs": [
+        {
+          "id": "P06-CORPUS-CONSUMER",
+          "command": "pnpm --filter @scriptorium/module-diagnostics test",
+          "result": "A public diagnostics.analyze action indexes passages from the selected snapshot through the optional capability, requests bounded nearest hits, applies source span/ranking rules, checks returned snapshot/model identity, and releases the provider lease. The consumer test uses a deterministic provider test double; P09 owns actual embedding-engine certification.",
+          "scope": "focused",
+          "testPath": "modules/diagnostics/src/production.test.ts"
+        }
+      ]
+    }
+  ],
+  "compositionLimits": [
+    "This is module-level public-action evidence using the actual supervised Lindera CPU engine. It does not certify the composed HTTP/API, browser, MCP, full-profile, or Core approval/checkpoint/publish paths.",
+    "The corpus-neighbor consumer is wired to semantic.embedding but its focused consumer test uses a provider test double. P09 must verify the actual pinned embedding model and worker before composed corpus search is claimed.",
+    "Contradiction candidate/rebuild/dismissal behavior from R21 is owned by P09 semantic rather than this P06 diagnostics module. R29's hierarchical snapshot writing-statistics aggregation is Core-owned; this module owns richer per-text prose and sentiment metrics.",
+    "P12 still owns composed legacy-import registration and the delete/reclone round trip for diagnostics/NLP settings. The module migration producers and namespaced runtime reads are present, but this evidence does not claim that end-to-end migration proof."
+  ]
+}
