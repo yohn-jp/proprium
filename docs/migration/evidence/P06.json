@@ -12,7 +12,8 @@
     "8f5be3a5fffb484d4506d5f81ca74d0f25d42dba",
     "1b319e4bb20fb9c855ef1e92546448c3ecb701f4",
     "a25285586f16c213c4f271ea32ea6aa0fb8d0ce4",
-    "6d85692935bafec64fc7be80034950993f38f704"
+    "6d85692935bafec64fc7be80034950993f38f704",
+    "4813b67bdc2d23a4917c6d235a2e39ddffbf9303"
   ],
   "claims": [
     {
@@ -181,6 +182,33 @@
           "scope": "integration",
           "testPath": "modules/diagnostics/tests/production.acceptance.mjs",
           "engineModelIdentity": {"id": "lindera-wasm-nodejs-ipadic", "version": "2.0.0", "diagnosticsEngine": "scriptorium-diagnostics-cpu", "diagnosticsEngineVersion": "1.0.0"}
+        }
+      ]
+    },
+    {
+      "ledgerIds": ["R35"],
+      "sourceSymbols": ["getTokenCounter", "createApproxTokenCounter", "approxTokenCount", "loadHfTokenizer"],
+      "targetActions": ["nlp.countTokens"],
+      "targetUi": [],
+      "dataMappings": [
+        "ARCADIA_TOKENIZER_MODEL takes precedence over ARCADIA_LLM_MODEL unless an explicit target model id is supplied; ARCADIA_TOKENIZER_BACKEND=approx and missing/unavailable tokenizer cases preserve the source fallback formula.",
+        "The public action and `nlp.token-counter` capability share the existing supervised NLP child. The Transformers tokenizer is lazy, local-files-only, bounded, and returns the pinned snapshot plus exact/approximate model and engine identity."
+      ],
+      "proofs": [
+        {
+          "id": "P06-NLP-TOKEN-COUNT",
+          "command": "pnpm --filter @scriptorium/module-nlp test",
+          "result": "Source CJK/three-character fallback counts, model-id precedence, explicit approximate mode, safe model identifiers, and UTF-8 batch limits pass focused tests.",
+          "scope": "focused",
+          "testPath": "modules/nlp/src/tokenCount.test.ts"
+        },
+        {
+          "id": "P06-NLP-TOKEN-COUNT-PRODUCTION",
+          "command": "pnpm --filter @scriptorium/contracts build && pnpm --filter @scriptorium/module-nlp build && pnpm --filter @scriptorium/module-diagnostics build && node --test modules/diagnostics/tests/production.acceptance.mjs",
+          "result": "The public nlp.countTokens action returned exact cached E5 counts [8, 6, 11] from the real Transformers.js 3.8.1 tokenizer in the supervised child, and an unavailable local tokenizer returned the source fallback counts [2, 2, 0] with an explicit approximate identity. Both action calls reported the selected Core snapshot; local-only loading prevented downloads and all NLP children exited after their capability leases and final consumer were disabled.",
+          "scope": "integration",
+          "testPath": "modules/diagnostics/tests/production.acceptance.mjs",
+          "engineModelIdentity": {"id": "Xenova/multilingual-e5-small", "tokenizerEngine": "@huggingface/transformers", "tokenizerEngineVersion": "3.8.1", "fallbackEngine": "source-approx-v1"}
         }
       ]
     }
