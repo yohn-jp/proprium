@@ -2,4 +2,11 @@ export { SharedCapabilityPool, type CapabilityLease, type CapabilityProvider } f
 export { ModuleRuntime, type ActionHostContext, type HttpContributionDescriptor, type ModuleActionRegistration, type ModuleLoader, type ModuleRuntimeOptions } from "./module-runtime.js";
 export { resolveModulePlan, type ResolvedModulePlan } from "./module-plan.js";
 export { isModuleId, MODULE_IDS, ModuleRuntimeError } from "./runtime-error.js";
-export { installWorkerHandler, WorkerSupervisor, type WorkerSupervisorOptions } from "./worker-supervisor.js";
+export {
+  installWorkerHandler,
+  WorkerSupervisor,
+  type WorkerJobLifecycleListener,
+  type WorkerJobLifecycleSnapshot,
+  type WorkerJobLifecycleState,
+  type WorkerSupervisorOptions,
+} from "./worker-supervisor.js";

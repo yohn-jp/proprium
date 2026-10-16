@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import { fileURLToPath } from "node:url";
 import { test } from "node:test";
 import { MAX_JOB_INPUT_BYTES, MAX_JOB_OUTPUT_BYTES, type JobRequest, type ModuleId, type SnapshotId } from "@scriptorium/contracts";
-import { WorkerSupervisor } from "./index.js";
+import { WorkerSupervisor, type WorkerJobLifecycleSnapshot } from "./index.js";
 
 const workerEntry = fileURLToPath(new URL("./fixtures/worker.mjs", import.meta.url));
 const workerServiceEntry = fileURLToPath(new URL("./fixtures/worker-service.mjs", import.meta.url));
@@ -45,6 +45,18 @@ async function waitForJob(supervisor: WorkerSupervisor): Promise<void> {
   assert.fail("worker service job did not start");
 }
 
+async function waitForLifecycle(
+  events: readonly WorkerJobLifecycleSnapshot[],
+  jobId: string,
+  state: WorkerJobLifecycleSnapshot["state"],
+): Promise<void> {
+  for (let attempt = 0; attempt < 100; attempt += 1) {
+    if (events.some((event) => event.jobId === jobId && event.state === state)) return;
+    await new Promise((resolve) => setTimeout(resolve, 10));
+  }
+  assert.fail(`job ${jobId} did not reach lifecycle state ${state}`);
+}
+
 function assertGone(pid: number): void {
   assert.throws(() => process.kill(pid, 0), (error: unknown) => (error as NodeJS.ErrnoException).code === "ESRCH");
 }
@@ -82,6 +94,97 @@ test("child job uses isolated IPC, strips injected credentials, and exits after 
       if (value === undefined) delete process.env[key];
       else process.env[key] = value;
     }
+    await supervisor.shutdown();
+  }
+});
+
+test("one-shot lifecycle subscription awaits ordered metadata and omits request and result payloads", async () => {
+  const supervisor = new WorkerSupervisor();
+  const events: WorkerJobLifecycleSnapshot[] = [];
+  let releaseQueued!: () => void;
+  let markQueuedSeen!: () => void;
+  const queuedGate = new Promise<void>((resolve) => { releaseQueued = resolve; });
+  const queuedSeen = new Promise<void>((resolve) => { markQueuedSeen = resolve; });
+  const job = request("echo", { privateText: "never store this input" }, { id: "lifecycle-one-shot" });
+  const unsubscribe = supervisor.subscribeJobLifecycle(async (event) => {
+    events.push(event);
+    if (event.jobId === job.id && event.state === "queued") {
+      markQueuedSeen();
+      await queuedGate;
+    }
+  });
+  try {
+    const running = supervisor.run(job, workerEntry);
+    let timeout: NodeJS.Timeout | undefined;
+    try {
+      await Promise.race([
+        queuedSeen,
+        new Promise<never>((_resolve, reject) => { timeout = setTimeout(() => reject(new Error("queued lifecycle event was not delivered")), 1000); }),
+      ]);
+    } finally {
+      if (timeout) clearTimeout(timeout);
+    }
+    assert.equal(supervisor.activeWorkerPids.length, 0, "the child must not receive work before queued metadata is persisted");
+    releaseQueued();
+    const outcome = await running;
+    assert.equal(outcome.ok, true);
+    const jobEvents = events.filter((event) => event.jobId === job.id);
+    assert.deepEqual(jobEvents.map((event) => event.state), ["queued", "running", "succeeded"]);
+    assert.equal(jobEvents[0]?.module, "story");
+    assert.equal(jobEvents[0]?.task, "echo");
+    assert.deepEqual(jobEvents[0]?.snapshot, snapshot);
+    assert.ok(jobEvents[0]?.createdAt && jobEvents[0]?.updatedAt);
+    assert.equal(jobEvents[0]?.startedAt, null);
+    assert.ok(jobEvents[1]?.startedAt);
+    assert.ok(jobEvents[2]?.finishedAt);
+    for (const event of jobEvents) {
+      assert.ok(Object.keys(event).every((key) => ["jobId", "module", "task", "snapshot", "state", "createdAt", "updatedAt", "startedAt", "finishedAt", "errorCode"].includes(key)));
+      assert.equal("input" in event, false);
+      assert.equal("output" in event, false);
+      assert.equal("error" in event, false);
+    }
+    const failedRequest = request("echo", {}, { id: "lifecycle-one-shot-failed" });
+    const failed = await supervisor.run(failedRequest, fileURLToPath(new URL("./fixtures/worker-missing.mjs", import.meta.url)));
+    assert.equal(failed.ok, false);
+    const failedEvents = events.filter((event) => event.jobId === failedRequest.id);
+    assert.deepEqual(failedEvents.map((event) => event.state), ["queued", "failed"]);
+    assert.equal(failedEvents.at(-1)?.errorCode, "worker_entry_missing");
+    assert.equal("error" in (failedEvents.at(-1) ?? {}), false);
+  } finally {
+    releaseQueued();
+    unsubscribe();
+    await supervisor.shutdown();
+  }
+});
+
+test("persistent worker requests publish successful and AbortSignal-cancelled lifecycle metadata", async () => {
+  const supervisor = new WorkerSupervisor({ cancellationGraceMs: 50 });
+  const events: WorkerJobLifecycleSnapshot[] = [];
+  const unsubscribe = supervisor.subscribeJobLifecycle((event) => { events.push(event); });
+  const service = await supervisor.createService("story", "0.1.0", workerServiceEntry);
+  try {
+    const successRequest = request("echo", { privateText: "service input" }, { id: "lifecycle-service-success" });
+    const success = await service.request(successRequest, new AbortController().signal);
+    assert.equal(success.ok, true);
+    assert.deepEqual(events.filter((event) => event.jobId === successRequest.id).map((event) => event.state), ["queued", "running", "succeeded"]);
+
+    const cancelRequest = request("hold", { privateText: "service input" }, { id: "lifecycle-service-cancel", deadline: Date.now() + 4000 });
+    const controller = new AbortController();
+    const cancelled = service.request(cancelRequest, controller.signal);
+    await waitForLifecycle(events, cancelRequest.id, "running");
+    controller.abort();
+    const cancelOutcome = await cancelled;
+    assert.equal(cancelOutcome.ok, false);
+    if (!cancelOutcome.ok) assert.equal(cancelOutcome.error.code, "job_cancelled");
+    const cancelEvents = events.filter((event) => event.jobId === cancelRequest.id);
+    assert.deepEqual(cancelEvents.map((event) => event.state), ["queued", "running", "cancelled"]);
+    assert.equal(cancelEvents.at(-1)?.errorCode, "job_cancelled");
+    assert.equal("input" in (cancelEvents.at(-1) ?? {}), false);
+    assert.equal("output" in (cancelEvents.at(-1) ?? {}), false);
+    assert.equal("error" in (cancelEvents.at(-1) ?? {}), false);
+  } finally {
+    unsubscribe();
+    await service.dispose();
     await supervisor.shutdown();
   }
 });

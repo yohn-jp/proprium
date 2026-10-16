@@ -3,7 +3,7 @@ import { fileURLToPath } from "node:url";
 import { test } from "node:test";
 import type { ActionResult, ChangeOperation, ChangeProposal, JobRequest, ModuleAction, ModuleActionContext, ModuleDefinition, ModuleId, ModuleManifest, SnapshotId, ValueSchema, WorkerService } from "@scriptorium/contracts";
 import { createStoryActions } from "../../../modules/story/src/actions.js";
-import { ModuleRuntime, ModuleRuntimeError, resolveModulePlan, SharedCapabilityPool } from "./index.js";
+import { ModuleRuntime, ModuleRuntimeError, resolveModulePlan, SharedCapabilityPool, type WorkerJobLifecycleSnapshot } from "./index.js";
 
 const snapshot: SnapshotId = {
   repository: { provider: "github", repositoryId: "repo-1", defaultBranch: "main", ownerScope: "owner", url: "https://github.com/owner/repo" },
@@ -337,6 +337,8 @@ test("disabling a consumer cancels its provider-owned job and keeps the shared c
       story: consumerLoader(story, true),
     },
   });
+  const lifecycle: WorkerJobLifecycleSnapshot[] = [];
+  const unsubscribe = runtime.subscribeJobLifecycle((event) => { lifecycle.push(event); });
   const host = readContext();
   const diagnosticResult = await runtime.invokeAction("diagnostics", "diagnostics.tokenize", {}, host);
   assert.equal(diagnosticResult.ok, true, JSON.stringify(diagnosticResult));
@@ -347,7 +349,7 @@ test("disabling a consumer cancels its provider-owned job and keeps the shared c
   await new Promise<void>((resolve, reject) => {
     let attempts = 0;
     const check = () => {
-      if (runtime.workerSupervisor.activeJobCountFor("nlp") > 0) { resolve(); return; }
+      if (runtime.workerSupervisor.activeJobCountFor("nlp") > 0 && lifecycle.some((event) => event.state === "running")) { resolve(); return; }
       attempts += 1;
       if (attempts > 100) { reject(new Error("provider-owned service job did not start")); return; }
       setTimeout(check, 10);
@@ -360,11 +362,15 @@ test("disabling a consumer cancels its provider-owned job and keeps the shared c
   if (!cancelled.ok) assert.equal(cancelled.error.code, "action_cancelled");
   assert.equal(runtime.workerSupervisor.activeJobCountFor("nlp"), 0);
   assert.doesNotThrow(() => process.kill(pid!, 0), "the other consumer still holds the shared service");
+  const jobLifecycle = lifecycle.filter((event) => event.task === "hold");
+  assert.deepEqual(jobLifecycle.map((event) => event.state), ["queued", "running", "cancelled"]);
+  assert.equal(jobLifecycle.at(-1)?.errorCode, "job_cancelled");
 
   await runtime.disable("diagnostics");
   await runtime.disable("nlp");
   assert.throws(() => process.kill(pid!, 0), (error: unknown) => (error as NodeJS.ErrnoException).code === "ESRCH");
   assert.equal(held.size, 2);
+  unsubscribe();
   await runtime.shutdown();
 });
 
@@ -530,6 +536,9 @@ test("disabling a module drains its real child process and leaves author data un
       },
     }, () => { disposed += 1; }) },
   });
+  const lifecycle: WorkerJobLifecycleSnapshot[] = [];
+  const unsubscribe = runtime.subscribeJobLifecycle((event) => { lifecycle.push(event); });
+  assert.equal(runtime.workerSupervisor.activeWorkerPids.length, 0, "subscribing must not activate a module worker");
   const invocation = runtime.invokeAction("speaker", "train", {}, readContext());
   const pid = await new Promise<number>((resolve, reject) => {
     let attempt = 0;
@@ -551,6 +560,10 @@ test("disabling a module drains its real child process and leaves author data un
   assert.equal(disposed, 1);
   assert.deepEqual(authorData, { correction: "keep this author-owned value" });
   assert.throws(() => process.kill(pid, 0), (error: unknown) => (error as NodeJS.ErrnoException).code === "ESRCH");
+  assert.deepEqual(lifecycle.map((event) => event.state), ["queued", "running", "cancelled"]);
+  assert.equal(lifecycle.at(-1)?.errorCode, "job_cancelled");
+  assert.equal("input" in (lifecycle.at(-1) ?? {}), false);
+  unsubscribe();
   await runtime.shutdown();
 });
 

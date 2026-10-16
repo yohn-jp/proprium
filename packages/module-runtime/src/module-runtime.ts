@@ -3,7 +3,7 @@ import { snapshotKey, type ActionDescriptor, type ActionResult, type CapabilityD
 import { CapabilityProvider, SharedCapabilityPool } from "./capability-pool.js";
 import { resolveModulePlan, type ResolvedModulePlan } from "./module-plan.js";
 import { isModuleId, MODULE_IDS, ModuleRuntimeError } from "./runtime-error.js";
-import { WorkerSupervisor, type WorkerSupervisorOptions } from "./worker-supervisor.js";
+import { WorkerSupervisor, type WorkerJobLifecycleListener, type WorkerSupervisorOptions } from "./worker-supervisor.js";
 
 export type ModuleLoader = (context: ModuleContext) => Promise<ModuleDefinition>;
 
@@ -235,6 +235,11 @@ export class ModuleRuntime {
   }
 
   get workerSupervisor(): WorkerSupervisor { return this.workers; }
+
+  /** Subscribe to host job metadata without activating any module or worker. */
+  subscribeJobLifecycle(listener: WorkerJobLifecycleListener): () => void {
+    return this.workers.subscribeJobLifecycle(listener);
+  }
 
   status(id: string): ModuleStatus {
     if (!isModuleId(id)) throw new ModuleRuntimeError("unknown_module_id", `Unknown module ID ${id}`);
