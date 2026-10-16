@@ -14,6 +14,7 @@ import {
 import { ApiError, api, type Project, type SceneRead, type Tree, type TreeRead } from "./api";
 import { ContributionHost } from "./contributions/ContributionHost";
 import { ProposalReview } from "./contributions/ProposalReview";
+import { PublicModuleView, publicModuleIdForPath } from "./contributions/PublicModuleView";
 import { SceneEditor, type ScratchDraftBinding, type ScratchDraftPayload } from "./editor/SceneEditor";
 import { replaceDocumentBody } from "./editor/ruby";
 import { clearDraft, loadDraft } from "./drafts";
@@ -267,6 +268,11 @@ function buildScratchOperation(read: SceneRead, draft: ScratchDraftPayload): { o
 }
 
 export function App() {
+  const publicModuleId = publicModuleIdForPath(window.location.pathname);
+  return publicModuleId ? <PublicModuleView moduleId={publicModuleId} /> : <AuthorWorkspace />;
+}
+
+function AuthorWorkspace() {
   const [authState, setAuthState] = useState<"checking" | "signed-out" | "ready">("checking");
   const [authorScope, setAuthorScope] = useState("owner");
   const authorScopeRef = useRef("owner");
