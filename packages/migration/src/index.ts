@@ -54,6 +54,13 @@ export async function inspectLegacyProject(options: InspectLegacyOptions): Promi
     repository: target.snapshot.repository,
     snapshot: target.snapshot,
     enabledModules: new Set(options.enabledModules ?? MODULE_IDS),
+    ...(options.legacyRepositoryMappings
+      ? {
+          legacyRepositoryMappings: Object.fromEntries(
+            Object.entries(options.legacyRepositoryMappings).map(([legacyId, repository]) => [legacyId, { ...repository }]),
+          ),
+        }
+      : {}),
     ...(options.workspaceProjectId ? { workspaceProjectId: options.workspaceProjectId } : {}),
   };
   const registry = options.registry ?? createMigrationProducerRegistry();

@@ -91,7 +91,20 @@ async function planFile(
     return result;
   }
 
-  const existing = await context.target.read(file.path);
+  let existing: Awaited<ReturnType<typeof context.target.read>>;
+  try {
+    existing = await context.target.read(file.path);
+  } catch (error) {
+    result.entries.push({
+      producerId: "git",
+      source: file.path,
+      target: file.path,
+      category: "provisional",
+      disposition: "blocked",
+      detail: `The target snapshot rejected this path during its safe read, so this pending Git change was withheld: ${error instanceof Error ? error.message : String(error)}`,
+    });
+    return result;
+  }
   if ((!decoded && !existing) || (decoded && existing?.content === decoded.content)) {
     result.entries.push({
       producerId: "git",

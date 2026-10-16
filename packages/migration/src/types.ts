@@ -117,6 +117,8 @@ export interface MigrationContext {
   repository: RepositoryIdentity;
   snapshot: SnapshotId;
   enabledModules: ReadonlySet<ModuleId>;
+  /** Explicit legacy workspace project ID -> verified current repository identity bindings. */
+  legacyRepositoryMappings?: Readonly<Record<string, RepositoryIdentity>>;
   workspaceProjectId?: string;
 }
 
@@ -145,8 +147,10 @@ export interface InspectLegacyOptions {
   target: SnapshotReader;
   /** Explicit legacy /data root. No home directory or environment default is read implicitly. */
   workspaceDataRoot?: string;
-  /** Old workspace project ID used only to select its share grant records. */
+  /** Old workspace project ID used to select its share grants and project-owned records. */
   workspaceProjectId?: string;
+  /** Explicitly resolved legacy project IDs; the host verifies mappings before inspection. */
+  legacyRepositoryMappings?: Readonly<Record<string, RepositoryIdentity>>;
   enabledModules?: readonly ModuleId[];
   registry?: MigrationProducerRegistryLike;
 }

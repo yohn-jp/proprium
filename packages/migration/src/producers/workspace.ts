@@ -4,8 +4,6 @@ import { planGeneratedFileImport, stableMigrationId } from "../operations.js";
 const WORKSPACE_FILES: Array<{ path: string; category: "relocated" | "secret"; detail: string }> = [
   { path: "app-state/projects.json", category: "relocated", detail: "Project bindings and clone locations are host configuration, not work metadata." },
   { path: "projects.json", category: "relocated", detail: "Legacy project registry alias; target host re-registers repositories." },
-  { path: "app-state/series.json", category: "relocated", detail: "Series registry includes host owner/project bindings; target host configuration owns it." },
-  { path: "series.json", category: "relocated", detail: "Legacy series registry alias; target host configuration owns it." },
   { path: "app-state/recent-activity.json", category: "relocated", detail: "Per-user recent-activity cursors are device/workspace state." },
   { path: "recent-activity.json", category: "relocated", detail: "Legacy recent-activity registry alias; it is device/workspace state." },
   { path: "app-state/users.json", category: "secret", detail: "User identities and login authority are host-managed and are not imported." },
@@ -239,6 +237,10 @@ export function createWorkspaceProducer(): MigrationProducer {
       const known = new Map(WORKSPACE_FILES.map((item) => [item.path, item]));
       for (const file of files) {
         if (file === "app-state/share-tokens.json" || file === "share-tokens.json") continue;
+        // Series membership is Story-owned work metadata. A registered Story
+        // producer consumes it through the explicit legacy repository mapping;
+        // the generic host workspace pass must not misclassify it as disposable.
+        if (file === "app-state/series.json" || file === "series.json") continue;
         const item = known.get(file);
         if (item) {
           result.entries.push({
