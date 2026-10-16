@@ -128,6 +128,51 @@ test("default-denied external consent stops generation before usage lease or pro
   assert.equal(capabilityAcquisitions, 0);
 });
 
+test("aspect review runs the deterministic local source implementation without consent or model access", async () => {
+  const previous = process.env.ARCADIA_LLM_PROVIDER;
+  process.env.ARCADIA_LLM_PROVIDER = "none";
+  let capabilityAcquisitions = 0;
+  let actionInvocations = 0;
+  let proposals = 0;
+  const chapterPath = "plot/volumes/vol-main/chapters/ch-1/chapter.yaml";
+  const sceneBase = "plot/volumes/vol-main/chapters/ch-1/scenes";
+  const files: Record<string, string> = {
+    [chapterPath]: "id: ch-1\ntype: chapter\nname: First chapter\nvolume: vol-main\norder: 1\n",
+    [`${sceneBase}/sc-1.yaml`]: "id: sc-1\ntype: scene\nchapter: ch-1\norder: 1\ntitle: Long scene\npov: char-one\nmanuscript: manuscript/vol-main/ch-1/sc-1.md\n",
+    [`${sceneBase}/sc-2.yaml`]: "id: sc-2\ntype: scene\nchapter: ch-1\norder: 2\ntitle: Short scene\npov: char-two\nmanuscript: manuscript/vol-main/ch-1/sc-2.md\n",
+    "bible/characters/char-one/profile.yaml": "id: char-one\ntype: character\nname: One\n",
+    "bible/characters/char-two/profile.yaml": "id: char-two\ntype: character\nname: Two\n",
+    "manuscript/vol-main/ch-1/sc-1.md": `${"a".repeat(600)} 私は振り返った。彼女は先へ進んだ。`,
+    "manuscript/vol-main/ch-1/sc-2.md": "短い場面。",
+  };
+  try {
+    const module = createAssistantActions(moduleContext(undefined, () => { capabilityAcquisitions += 1; }));
+    const action = getAction(module, "assistant.aspect.review");
+    const result = await action.invoke({ chapterId: "ch-1", aspects: ["tempo", "pov-shift"] }, context({
+      files,
+      async invoke() {
+        actionInvocations += 1;
+        return { ok: false, snapshot, error: { code: "unexpected", message: "No action should be needed", retryable: false } };
+      },
+      onPropose() { proposals += 1; },
+    }));
+    assert.equal(result.ok, true);
+    if (!result.ok) return;
+    const data = result.data as Record<string, unknown>;
+    assert.equal(data.proposal, true);
+    assert.equal(data.sceneCount, 2);
+    const findings = data.findings as Array<Record<string, unknown>>;
+    assert.ok(findings.some((finding) => finding.aspect === "tempo" && typeof finding.sceneId === "string"));
+    assert.ok(findings.some((finding) => finding.aspect === "pov-shift" && String(finding.finding).includes("POV")));
+    assert.equal(actionInvocations, 0);
+    assert.equal(capabilityAcquisitions, 0);
+    assert.equal(proposals, 0);
+  } finally {
+    if (previous === undefined) delete process.env.ARCADIA_LLM_PROVIDER;
+    else process.env.ARCADIA_LLM_PROVIDER = previous;
+  }
+});
+
 test("settings changes become a review proposal with snapshot preconditions", async () => {
   let submitted: ChangeOperation[] | undefined;
   const action = getAction(createAssistantActions(moduleContext()), "assistant.settings.propose");
