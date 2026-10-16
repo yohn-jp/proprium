@@ -1,14 +1,15 @@
 import assert from "node:assert/strict";
 import { execFile as execFileCallback } from "node:child_process";
-import { mkdir, mkdtemp, readFile, rm, symlink, writeFile } from "node:fs/promises";
+import { lstat, mkdir, mkdtemp, readFile, rm, symlink, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { resolve } from "node:path";
 import { afterEach, describe, it } from "node:test";
 import { promisify } from "node:util";
-import type { ActionResult, ChangeOperation, ChangeProposal, ModuleAction, ModuleDefinition, ModuleManifest, ProposalStatus, SnapshotId, ValueSchema } from "@scriptorium/contracts";
+import { MODEL_USAGE_CAPABILITY, type ActionResult, type ChangeOperation, type ChangeProposal, type ModelUsageEvent, type ModelUsageStore, type ModuleAction, type ModuleContext, type ModuleDefinition, type ModuleManifest, type ProposalStatus, type RepositoryIdentity, type SnapshotId, type ValueSchema } from "@scriptorium/contracts";
 import { CoreStore, type CoreStore as CoreStoreShape } from "@scriptorium/core";
-import { ModuleRuntime } from "@scriptorium/module-runtime";
-import { createServer } from "./server.js";
+import { ModuleRuntime, type ModuleLoader, type ModuleRuntimeOptions } from "@scriptorium/module-runtime";
+import { HistoricalModelUsageError, HistoricalModelUsageStore } from "./historical-store.js";
+import { createServer, type ApiServerOptions } from "./server.js";
 
 const ACCESS_TOKEN = "test-access-token-which-is-longer-than-32-characters";
 const execFile = promisify(execFileCallback);
@@ -222,7 +223,11 @@ function actionBoundaryRuntime(cacheDirectory: string): ModuleRuntime {
   });
 }
 
-async function startCustomApi(store: CoreStore, staticDir: string, options: { trustProxy?: boolean; runtime?: ModuleRuntime } = {}) {
+async function startCustomApi(
+  store: CoreStore,
+  staticDir: string,
+  options: Pick<ApiServerOptions, "trustProxy" | "runtime" | "runtimeOptions" | "usageDirectory"> = {},
+) {
   const server = createServer({ store, authToken: ACCESS_TOKEN, staticDir, ...options });
   await new Promise<void>((resolveListen) => server.listen(0, "127.0.0.1", resolveListen));
   const address = server.address();
@@ -236,6 +241,51 @@ async function startCustomApi(store: CoreStore, staticDir: string, options: { tr
 
 async function startApi(staticDir: string, trustProxy = false) {
   return startCustomApi(makeStore(), staticDir, { trustProxy });
+}
+
+function usageEvent(repository: RepositoryIdentity, id: string, startedAt: string, options: Partial<ModelUsageEvent> = {}): ModelUsageEvent {
+  return {
+    id, repository, feature: "assistant.story-draft", provider: "openai", model: "gpt-4o-mini",
+    startedAt, completedAt: new Date(Date.parse(startedAt) + 1_000).toISOString(), state: "completed",
+    inputTokens: 12, outputTokens: 8, cost: 0.00002, ...options,
+  };
+}
+
+function modelUsageRuntimeOptions(cacheDirectory: string): Omit<ModuleRuntimeOptions, "cacheDirectory"> & { cacheDirectory: string } {
+  const manifest: ModuleManifest = {
+    id: "assistant", version: "0.1.0", contractVersion: 1,
+    dependencies: [], provides: [], requires: [], optionalRequires: [MODEL_USAGE_CAPABILITY], statePaths: [], locality: "optional-external",
+  };
+  const schema: ValueSchema = { parse(value) { return value; } };
+  const loader: ModuleLoader = async (moduleContext: ModuleContext) => ({
+    manifest,
+    actions: [{
+      id: "assistant.model-usage-history", effect: "compute", inputSchema: schema, outputSchema: schema,
+      async invoke(rawInput, context): Promise<ActionResult> {
+        const input = rawInput as { event?: ModelUsageEvent; query?: { from?: string; to?: string; limit?: number; cursor?: string } };
+        const lease = await moduleContext.acquireCapability<ModelUsageStore>(MODEL_USAGE_CAPABILITY);
+        try {
+          if (input.event) await lease.value.append(input.event);
+          const history = await lease.value.list(context.reader.snapshot.repository, input.query);
+          return { ok: true, snapshot: context.reader.snapshot, data: history };
+        } catch (error) {
+          const candidate = error as { code?: unknown; message?: unknown };
+          return { ok: false, snapshot: context.reader.snapshot, error: {
+            code: typeof candidate?.code === "string" ? candidate.code : "model_usage_test_failed",
+            message: typeof candidate?.message === "string" ? candidate.message : "Model usage test action failed",
+            retryable: false,
+          } };
+        } finally {
+          await lease.release();
+        }
+      },
+    }],
+    ui: [],
+    async dispose() {},
+  });
+  return {
+    manifests: [manifest], enabled: ["assistant"], loaders: { assistant: loader }, cacheDirectory,
+  };
 }
 
 async function login(base: string): Promise<{ cookie: string; setCookie: string; body: unknown }> {
@@ -296,6 +346,112 @@ describe("Scriptorium HTTP boundary", () => {
     assert.match(chunk.headers.get("content-type") ?? "", /javascript/u);
     assert.equal(await (await fetch(`${apiServer.base}/assets/leak-a1b2.js`)).json().then((body: unknown) => (body as { code: string }).code), "NOT_FOUND");
     assert.equal((await fetch(`${apiServer.base}/server.test.js`)).status, 404);
+  });
+
+  it("stores bounded immutable model usage with complete paginated history and no symlink traversal", async () => {
+    const root = await mkdtemp(resolve(tmpdir(), "scriptorium-api-model-history-"));
+    tempDirs.push(root);
+    const usageDirectory = resolve(root, "host-history");
+    const coreDataDirectory = resolve(root, "core-data");
+    await mkdir(coreDataDirectory);
+    await writeFile(resolve(coreDataDirectory, "disposable-cache.json"), "temporary Core cache");
+    const unusedDirectory = resolve(root, "unused-history");
+    assert.deepEqual(await new HistoricalModelUsageStore(unusedDirectory).list(SNAPSHOT.repository), { events: [] });
+    await assert.rejects(lstat(unusedDirectory), (error: NodeJS.ErrnoException) => error.code === "ENOENT", "an empty history read must not create host storage");
+    const store = new HistoricalModelUsageStore(usageDirectory);
+    const first = usageEvent(SNAPSHOT.repository, "usage-1", "2026-10-17T00:00:00.000Z");
+    const second = usageEvent(SNAPSHOT.repository, "usage-2", "2026-10-17T00:00:02.000Z", { state: "aborted", errorCode: "request_cancelled" });
+    const third = usageEvent(SNAPSHOT.repository, "usage-3", "2026-10-17T00:00:04.000Z");
+    await Promise.all([store.append(first), store.append(first), store.append(second), store.append(third)]);
+
+    const pageOne = await store.list(SNAPSHOT.repository, { limit: 2 });
+    assert.deepEqual(pageOne.events.map(({ id }) => id), [first.id, second.id]);
+    assert.ok(pageOne.nextCursor);
+    const pageTwo = await store.list(SNAPSHOT.repository, { limit: 2, cursor: pageOne.nextCursor });
+    assert.deepEqual(pageTwo.events.map(({ id }) => id), [third.id]);
+    assert.equal(pageTwo.nextCursor, undefined);
+    const ranged = await store.list(SNAPSHOT.repository, { from: second.startedAt, to: third.startedAt, limit: 10 });
+    assert.deepEqual(ranged.events.map(({ id }) => id), [second.id, third.id]);
+    await assert.rejects(store.list(SNAPSHOT.repository, { limit: 1_001 }), (error: unknown) => error instanceof HistoricalModelUsageError && error.code === "model_usage_query_invalid");
+    await assert.rejects(store.append({ ...first, outputTokens: 9 }), (error: unknown) => error instanceof HistoricalModelUsageError && error.code === "model_usage_event_id_conflict");
+    await assert.rejects(store.append({
+      ...first, prompt: "private prompt", headers: { Authorization: "secret" }, key: "private key", body: "private body",
+    } as ModelUsageEvent), (error: unknown) => error instanceof HistoricalModelUsageError && error.code === "model_usage_event_invalid");
+
+    await rm(coreDataDirectory, { recursive: true, force: true });
+    await mkdir(coreDataDirectory);
+    const reopened = new HistoricalModelUsageStore(usageDirectory);
+    assert.deepEqual((await reopened.list(SNAPSHOT.repository, { limit: 10 })).events.map(({ id }) => id), [first.id, second.id, third.id]);
+
+    const alias = resolve(root, "history-alias");
+    await symlink(usageDirectory, alias, "dir");
+    await assert.rejects(new HistoricalModelUsageStore(alias).list(SNAPSHOT.repository), (error: unknown) => error instanceof HistoricalModelUsageError && error.code === "model_usage_path_invalid");
+  });
+
+  it("wires model usage lazily into the host and retains it after Core data-root deletion and reconstruction", async (t) => {
+    const { root, remote } = await makeBareRemote();
+    tempDirs.push(root);
+    const staticDir = await mkdtemp(resolve(tmpdir(), "scriptorium-api-model-history-app-"));
+    tempDirs.push(staticDir);
+    const coreDataDirectory = resolve(root, "core-data");
+    const usageDirectory = resolve(root, "history");
+    const cacheDirectory = resolve(root, "module-cache");
+    let coreStore = new CoreStore({ dataDir: coreDataDirectory, allowLocalRemotes: true });
+    let apiServer: Awaited<ReturnType<typeof startCustomApi>> | undefined;
+    t.after(async () => { if (apiServer) await apiServer.close(); });
+    const openApi = (store: CoreStore) => startCustomApi(store, staticDir, {
+      usageDirectory,
+      runtimeOptions: modelUsageRuntimeOptions(cacheDirectory),
+    });
+    apiServer = await openApi(coreStore);
+    let owner = await login(apiServer.base);
+    const ownerHeaders = () => ({ Cookie: owner.cookie, Origin: apiServer!.base, "Content-Type": "application/json" });
+    const register = async () => {
+      const response = await fetch(`${apiServer!.base}/api/projects`, { method: "POST", headers: ownerHeaders(), body: JSON.stringify({ url: remote }) });
+      assert.equal(response.status, 201);
+      return response.json() as Promise<{ id: string }>;
+    };
+    const invokeHistory = async (projectId: string, input: unknown) => fetch(
+      `${apiServer!.base}/api/projects/${projectId}/actions/assistant.model-usage-history`,
+      { method: "POST", headers: ownerHeaders(), body: JSON.stringify({ input }) },
+    );
+
+    assert.equal((await fetch(`${apiServer.base}/api/health`)).status, 200);
+    await assert.rejects(lstat(usageDirectory), (error: NodeJS.ErrnoException) => error.code === "ENOENT", "server startup must not touch unused usage history");
+    const project = await register();
+    const identity = (await coreStore.observe(project.id)).snapshot.repository;
+    const event = usageEvent(identity, "host-usage-1", "2026-10-17T01:00:00.000Z");
+    const descriptors = await fetch(`${apiServer.base}/api/projects/${project.id}/actions`, { headers: { Cookie: owner.cookie } });
+    assert.equal(descriptors.status, 200);
+    assert.ok((await descriptors.json() as { actions: Array<{ id: string }> }).actions.some(({ id }) => id === "assistant.model-usage-history"));
+    await assert.rejects(lstat(usageDirectory), (error: NodeJS.ErrnoException) => error.code === "ENOENT", "module activation alone must not create the history directory");
+    const saved = await invokeHistory(project.id, { event });
+    assert.equal(saved.status, 200);
+    const savedResult = await saved.json() as ActionResult<{ events: ModelUsageEvent[] }>;
+    assert.equal(savedResult.ok, true, JSON.stringify(savedResult));
+    if (!savedResult.ok) return;
+    assert.deepEqual(savedResult.data.events, [event]);
+    assert.ok((await lstat(usageDirectory)).isDirectory());
+
+    await apiServer.close();
+    apiServer = undefined;
+    await rm(coreDataDirectory, { recursive: true, force: true });
+    await assert.rejects(lstat(coreDataDirectory), (error: NodeJS.ErrnoException) => error.code === "ENOENT");
+    coreStore = new CoreStore({ dataDir: coreDataDirectory, allowLocalRemotes: true });
+    apiServer = await openApi(coreStore);
+    owner = await login(apiServer.base);
+    const reconstructed = await register();
+    const newIdentity = (await coreStore.observe(reconstructed.id)).snapshot.repository;
+    assert.equal(newIdentity.repositoryId, identity.repositoryId, "Core reconstructs stable repository identity independently of its ephemeral project ID");
+    assert.equal(newIdentity.ownerScope, identity.ownerScope);
+    const restored = await invokeHistory(reconstructed.id, { query: { limit: 10 } });
+    assert.equal(restored.status, 200);
+    const restoredResult = await restored.json() as ActionResult<{ events: ModelUsageEvent[] }>;
+    assert.equal(restoredResult.ok, true, JSON.stringify(restoredResult));
+    if (!restoredResult.ok) return;
+    assert.deepEqual(restoredResult.data.events, [event]);
+    assert.ok((await lstat(coreDataDirectory)).isDirectory(), "project registration recreates the disposable Core data root");
+    assert.ok((await lstat(usageDirectory)).isDirectory(), "host history remains available in its separately configured directory");
   });
 
   it("uses an HttpOnly same-site session and enforces same-origin writes", async (t) => {
