@@ -211,7 +211,7 @@ test("OpenAI-compatible SDK streams deltas with environment auth and observes ca
           preferences: environmentPreset,
           prompt: "Write a short answer.",
           system: "Stay concise.",
-          maxOutputTokens: 999,
+          maxOutputTokens: 40_000,
           signal: aborter.signal,
           onText: (delta) => {
             deltas.push(delta);
@@ -227,7 +227,7 @@ test("OpenAI-compatible SDK streams deltas with environment auth and observes ca
         assert.ok(capturedBody);
         const body = capturedBody as Record<string, unknown>;
         const maxTokens = body.max_tokens ?? body.max_completion_tokens ?? body.max_output_tokens;
-        assert.equal(maxTokens, 256);
+        assert.equal(maxTokens, 32_768);
         assert.equal(body.model, "environment-model");
         const didClose = await Promise.race([
           responseClosed.then(() => true),
