@@ -21,3 +21,5 @@ Git-controlled YAML/Markdown is canonical. Saves compare the loaded revision und
 Browser drafts are local recovery copies and may contain private text. They remain on the browser after logout; use a trusted browser profile and clear it deliberately when retiring the device. Private browsing, storage limits, or clearing site data can prevent recovery. The UI reports inability to store a draft; save or copy the text before leaving.
 
 Keep the data volume persistent, owned by the application user, and exclusively assigned to one running instance. Never mount unrelated host directories or user Git configuration into the container. Excluded analysis files may remain in work repositories; Core does not load models, run repository hooks, or initialize submodules.
+
+If a crash leaves `dataDir/.locks/<project-id>` behind, the Core fails closed rather than reclaiming it during another writer’s operation. Stop every process using that data directory, inspect the project’s Git status, and remove only the abandoned lock directory named by the error before restarting. Inspect any uncommitted files after interrupted saves before synchronizing.
