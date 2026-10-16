@@ -175,6 +175,8 @@ export interface ModuleActionContext {
   /** Explicit read-only composition with another registered repository of this owner. */
   linkedReader(repositoryId: string): Promise<SnapshotReader>;
   signal: AbortSignal;
+  /** Actual fractional progress of this host-tracked domain invocation. */
+  reportProgress?(progress: number): Promise<void>;
   /** Only proposes; approval remains an authenticated author action. */
   propose(operations: ChangeOperation[], evidence?: ProposalEvidence[], proposalId?: string, signal?: AbortSignal): Promise<ChangeProposal>;
   runJob<T = unknown>(request: JobRequest, signal?: AbortSignal): Promise<JobOutcome<T>>;
