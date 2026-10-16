@@ -128,10 +128,50 @@ function parseIdInput(value: unknown, label = "sceneId"): RecordValue {
   const input = record(value);
   return { ...input, [label]: parseString(input[label], label, 256) };
 }
+function parseSnapshotIdentity(value: unknown, label: string): SnapshotId {
+  const snapshot = record(value, label);
+  const repository = record(snapshot.repository, `${label}.repository`);
+  if (repository.provider !== "github" && repository.provider !== "local") {
+    throw new TypeError(`${label}.repository.provider must be github or local`);
+  }
+  const remoteCommit = snapshot.remoteCommit;
+  if (typeof remoteCommit !== "string" || remoteCommit.length > 64 ||
+      (remoteCommit !== "" && !/^(?:[a-f0-9]{40}|[a-f0-9]{64})$/u.test(remoteCommit))) {
+    throw new TypeError(`${label}.remoteCommit must be empty or a full Git object ID`);
+  }
+  const repositoryIdentity: SnapshotId["repository"] = {
+    provider: repository.provider,
+    repositoryId: parseString(repository.repositoryId, `${label}.repository.repositoryId`, 512),
+    defaultBranch: parseString(repository.defaultBranch, `${label}.repository.defaultBranch`, 512),
+    ownerScope: parseString(repository.ownerScope, `${label}.repository.ownerScope`, 512),
+    url: parseString(repository.url, `${label}.repository.url`, 2_048),
+  };
+  let overlayCommit: string | undefined;
+  if (snapshot.overlayCommit !== undefined) {
+    if (typeof snapshot.overlayCommit !== "string" || !/^(?:[a-f0-9]{40}|[a-f0-9]{64})$/u.test(snapshot.overlayCommit)) {
+      throw new TypeError(`${label}.overlayCommit must be a full Git object ID`);
+    }
+    overlayCommit = snapshot.overlayCommit;
+  }
+  return { repository: repositoryIdentity, remoteCommit, ...(overlayCommit ? { overlayCommit } : {}) };
+}
+
+function sameRemoteSnapshot(left: SnapshotId, right: SnapshotId): boolean {
+  return left.remoteCommit === right.remoteCommit
+    && left.repository.provider === right.repository.provider
+    && left.repository.ownerScope === right.repository.ownerScope
+    && left.repository.repositoryId === right.repository.repositoryId
+    && left.repository.defaultBranch === right.repository.defaultBranch;
+}
+
 function parseEditorDraft(value: unknown): BrowserEditorDocument {
   const draft = record(value, "editorDraft");
-  const snapshot = record(draft.snapshot, "editorDraft.snapshot") as unknown as SnapshotId;
-  const baseSnapshot = record(draft.baseSnapshot, "editorDraft.baseSnapshot") as unknown as SnapshotId;
+  const snapshot = parseSnapshotIdentity(draft.snapshot, "editorDraft.snapshot");
+  const baseSnapshot = parseSnapshotIdentity(draft.baseSnapshot, "editorDraft.baseSnapshot");
+  const sceneId = parseString(draft.sceneId, "editorDraft.sceneId", 256);
+  const documentPath = parseString(draft.documentPath, "editorDraft.documentPath", 1_024);
+  try { assertProjectPath(documentPath); }
+  catch { throw new TypeError("editorDraft.documentPath must be a safe project path"); }
   const documentRevision = draft.documentRevision;
   const baseSceneRevision = draft.baseSceneRevision;
   if (documentRevision !== null && (typeof documentRevision !== "string" || !documentRevision || documentRevision.length > 256)) {
@@ -146,12 +186,12 @@ function parseEditorDraft(value: unknown): BrowserEditorDocument {
   if (typeof draft.text !== "string" || draft.text.length > 256_000) {
     throw new TypeError("editorDraft.text must be a string of at most 256000 characters");
   }
-  // Validate the two identities before comparing them to the remote reader below.
-  try { snapshotKey(snapshot); snapshotKey(baseSnapshot); }
-  catch { throw new TypeError("editorDraft snapshot identities are invalid"); }
+  if (!sameRemoteSnapshot(snapshot, baseSnapshot)) {
+    throw codeError("assistant_editor_draft_stale", "The editor draft view does not belong to its recorded remote base");
+  }
   return {
-    sceneId: parseString(draft.sceneId, "editorDraft.sceneId", 256),
-    documentPath: parseString(draft.documentPath, "editorDraft.documentPath", 1_024),
+    sceneId,
+    documentPath,
     documentRevision: documentRevision as string | null,
     sceneRevision: draft.sceneRevision,
     text: draft.text,
@@ -2224,6 +2264,8 @@ async function runSpeakerAttribution(
       snapshot: editorDraft.snapshot,
       baseSnapshot: editorDraft.baseSnapshot,
       baseSceneRevision: editorDraft.baseSceneRevision,
+      textSource: "browser-editor-draft",
+      textHash: sha256(editorDraft.text),
     } } : {}),
   };
   return { sceneId, attributions: proposals, model: generated.provenance.model, provider: generated.provenance.provider, promptVersion: generated.provenance.promptVersion, citations, provenance };

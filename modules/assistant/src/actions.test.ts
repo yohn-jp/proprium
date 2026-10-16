@@ -208,6 +208,30 @@ test("speaker attribution uses the explicitly selected live editor text and pres
   try {
     const module = createAssistantActions(moduleContext(usageStore));
     const attribution = getAction(module, "assistant.speaker.attribute");
+    const malformedDrafts: unknown[] = [
+      { ...editorDraft, snapshot: { repository: {}, remoteCommit: snapshot.remoteCommit } },
+      { ...editorDraft, snapshot: { ...editorSnapshot, overlayCommit: "not-a-git-object-id" } },
+    ];
+    for (const invalidDraft of malformedDrafts) {
+      const invalidResult = await attribution.invoke({ sceneId: "sc-live", editorDraft: invalidDraft }, context({
+        files,
+        async invoke() { assert.fail("malformed editor identities must be rejected before consent/provider access"); },
+      }));
+      assert.equal(invalidResult.ok, false);
+      if (!invalidResult.ok) assert.equal(invalidResult.error.code, "invalid_input");
+    }
+    const foreignView = await attribution.invoke({
+      sceneId: "sc-live",
+      editorDraft: {
+        ...editorDraft,
+        snapshot: { ...editorSnapshot, repository: { ...repository, repositoryId: "another-repository" } },
+      },
+    }, context({
+      files,
+      async invoke() { assert.fail("editor snapshot from another repository must be rejected before consent/provider access"); },
+    }));
+    assert.equal(foreignView.ok, false);
+    if (!foreignView.ok) assert.equal(foreignView.error.code, "assistant_editor_draft_stale");
     const staleResult = await attribution.invoke({ sceneId: "sc-live", editorDraft: { ...editorDraft, baseSceneRevision: "b".repeat(64) } }, context({
       files,
       async invoke() { assert.fail("a stale editor base must be rejected before consent/provider access"); },
@@ -237,6 +261,8 @@ test("speaker attribution uses the explicitly selected live editor text and pres
     const provenance = data.provenance as Record<string, unknown>;
     assert.deepEqual((provenance.editorDraft as Record<string, unknown>).baseSnapshot, snapshot);
     assert.equal((provenance.editorDraft as Record<string, unknown>).baseSceneRevision, revision);
+    assert.equal((provenance.editorDraft as Record<string, unknown>).textSource, "browser-editor-draft");
+    assert.match(String((provenance.editorDraft as Record<string, unknown>).textHash), /^[a-f0-9]{64}$/u);
   } finally {
     server.closeAllConnections();
     await new Promise<void>((resolve) => server.close(() => resolve()));
