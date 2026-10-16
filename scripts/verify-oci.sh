@@ -57,7 +57,24 @@ if [[ "$ready" != 1 ]]; then
   exit 1
 fi
 
-curl --fail --silent --show-error "http://127.0.0.1:${port}/" >/dev/null
+check_mime() {
+  path="$1"
+  expected="$2"
+  content_type="$(curl --fail --silent --show-error --head --output /dev/null --write-out '%{content_type}' "http://127.0.0.1:${port}${path}")"
+  case "$content_type" in
+    "$expected"*) ;;
+    *)
+      echo "Expected $path to have MIME type $expected; got $content_type." >&2
+      exit 1
+      ;;
+  esac
+}
+
+check_mime / text/html
+check_mime /styles.css text/css
+check_mime /main.js text/javascript
+check_mime /api.js text/javascript
+check_mime /drafts.js text/javascript
 uid="$("$engine" exec "$container" node -p 'process.getuid()')"
 [[ "$uid" == 1000 ]] || {
   echo "Expected the application to run as UID 1000; got $uid." >&2
@@ -65,5 +82,5 @@ uid="$("$engine" exec "$container" node -p 'process.getuid()')"
 }
 "$engine" exec "$container" node -e "require('node:fs').writeFileSync('/data/.oci-smoke', 'ok'); require('node:fs').unlinkSync('/data/.oci-smoke')"
 
-echo "OCI startup checks passed: health API, static UI, nonroot UID, and writable /data."
+echo "OCI startup checks passed: health API, UI assets, nonroot UID, and writable /data."
 "$engine" image inspect --format 'Image ID: {{.Id}} ({{.Os}}/{{.Architecture}})' "$image"
