@@ -10,7 +10,7 @@ import { CONTRACT_VERSION, MODEL_USAGE_CAPABILITY, snapshotKey, type ActionDescr
 import type { CoreStore, CreateHierarchyInput, HierarchyTarget, Project, ReorderHierarchyInput } from "@scriptorium/core";
 import { ModuleRuntime, type ActionHostContext, type ModuleLoader, type ModuleRuntimeOptions, type WorkerJobLifecycleSnapshot } from "@scriptorium/module-runtime";
 import { HistoricalModelUsageStore } from "./historical-store.js";
-import { JobHistoryError, JobHistoryStore } from "./job-history-store.js";
+import { JobHistoryError, JobHistoryStore, type JobEvent } from "./job-history-store.js";
 
 export { importLegacyJobHistory, type LegacyJobHistoryImportOptions, type LegacyJobHistoryImportReport } from "./job-history-store.js";
 
@@ -21,9 +21,11 @@ const MAX_SNAPSHOT_FILES = 1000;
 const MAX_SNAPSHOT_BYTES = 8 * 1024 * 1024;
 const MAX_SCRATCH_ATTACHMENT_BYTES = 8 * 1024 * 1024;
 const API_DRAIN_TIMEOUT_MS = 5_000;
+const MAX_ACTIVE_DOMAIN_JOBS = 32;
 const API_VERSION = "0.1.0";
 const STYLE_NONCES = new WeakMap<IncomingMessage, string>();
 const PUBLIC_READER_MODULES = new Set(["story", "diagnostics", "nlp", "semantic", "speaker", "assistant", "publishing", "mcp"]);
+const SOURCE_DOMAIN_JOB_TYPES = new Set(["speaker-eval", "speaker-retrain", "aspect-review", "zukan-proposal", "summary-refresh"]);
 
 interface Session {
   expiresAt: number;
@@ -328,10 +330,19 @@ type RuntimeHttpHost = ModuleRuntime & {
 
 type HttpContributionDescriptor = Omit<HttpContribution, "handle">;
 
+type TrackedDomainAction = ActionDescriptor & { job: NonNullable<ActionDescriptor["job"]> };
+type DomainJobTracker = (
+  descriptor: TrackedDomainAction,
+  snapshot: SnapshotId,
+  signal: AbortSignal,
+  execute: () => Promise<ActionResult>,
+) => Promise<ActionResult>;
+
 type ApiActionHost = Omit<ActionHostContext, "propose"> & {
   actions?: readonly { module: ModuleId | "core"; action: ModuleAction }[];
   linkedReader?: (repositoryId: string) => Promise<ModuleActionContext["reader"]>;
   access?: "owner" | "public";
+  trackDomainJob?: DomainJobTracker;
   propose(operations: ChangeOperation[], evidence?: ProposalEvidence[], proposalId?: string, signal?: AbortSignal): Promise<ChangeProposal>;
 };
 
@@ -347,6 +358,8 @@ export function createServer(options: ApiServerOptions): Server {
   const jobHistory = new JobHistoryStore(usageDirectory);
   const sessions = new Map<string, Session>();
   const requestControllers = new Set<AbortController>();
+  const asyncDomainJobControllers = new Set<AbortController>();
+  const activeDomainJobIds = new Set<string>();
   const projectEventStreams = new Set<ServerResponse>();
   const jobEventStreams = new Set<ServerResponse>();
   const coreStore = options.store as CoreStoreApi;
@@ -378,8 +391,20 @@ export function createServer(options: ApiServerOptions): Server {
   let lastPendingLocalCheckpoints: number | null = null;
   let closed = false;
   let runtimeShutdownPromise: Promise<void> | undefined;
+  const publishJobEvent = (event: JobEvent): void => {
+    const frame = `data: ${JSON.stringify(event)}\n\n`;
+    for (const response of jobEventStreams) {
+      if (!response.destroyed && !response.writableEnded) {
+        try { response.write(frame); }
+        catch { jobEventStreams.delete(response); response.destroy(); }
+      }
+    }
+  };
   const shutdownRuntime = (): Promise<void> => {
-    runtimeShutdownPromise ??= Promise.resolve().then(() => runtime.shutdown()).finally(async () => {
+    runtimeShutdownPromise ??= Promise.resolve().then(() => {
+      for (const controller of asyncDomainJobControllers) controller.abort(new Error("The API server is shutting down"));
+      return runtime.shutdown();
+    }).finally(async () => {
       unsubscribeJobLifecycle();
       await jobHistory.flush();
     });
@@ -389,10 +414,7 @@ export function createServer(options: ApiServerOptions): Server {
   unsubscribeJobLifecycle = runtime.subscribeJobLifecycle(async (lifecycle: WorkerJobLifecycleSnapshot) => {
     try {
       const event = await jobHistory.record(lifecycle);
-      const frame = `data: ${JSON.stringify(event)}\n\n`;
-      for (const response of jobEventStreams) {
-        if (!response.destroyed && !response.writableEnded) response.write(frame);
-      }
+      publishJobEvent(event);
     } catch (error) {
       const code = error instanceof JobHistoryError ? error.code : "storage_failure";
       console.error(`Scriptorium worker lifecycle history was not retained (${code}).`);
@@ -690,12 +712,19 @@ export function createServer(options: ApiServerOptions): Server {
     id: requestedId ?? randomBytes(16).toString("hex"), snapshot, operations, source,
     ...(evidence?.length ? { evidence } : {}),
   });
+  const actionFailure = (snapshot: SnapshotId, error: unknown, fallbackCode: string): ActionResult => {
+    const candidate = error as { code?: unknown; message?: unknown; retryable?: unknown };
+    const code = typeof candidate?.code === "string" && /^[A-Za-z0-9_.-]{1,128}$/u.test(candidate.code) ? candidate.code : fallbackCode;
+    const message = typeof candidate?.message === "string" ? candidate.message.slice(0, 512) : "The domain job could not be completed";
+    return { ok: false, snapshot, error: { code, message, retryable: candidate?.retryable === true } };
+  };
   const actionHost = (
     projectId: string,
     reader: Awaited<ReturnType<typeof freshReader>>,
     signal: AbortSignal,
     source: ChangeProposal["source"],
     access: "owner" | "public" = "owner",
+    onDomainJobStarted?: (jobId: string) => void,
   ): ApiActionHost => {
     const host: ApiActionHost = {
       projectId,
@@ -714,6 +743,60 @@ export function createServer(options: ApiServerOptions): Server {
       access,
     };
     if (access !== "public") {
+      host.trackDomainJob = async (descriptor, snapshot, jobSignal, execute) => {
+        const type = descriptor.job.type;
+        if (!SOURCE_DOMAIN_JOB_TYPES.has(type)) {
+          return { ok: false, snapshot, error: { code: "domain_job_type_unsupported", message: "This domain job type is not registered by the host", retryable: false } };
+        }
+        if (activeDomainJobIds.size >= MAX_ACTIVE_DOMAIN_JOBS) {
+          return { ok: false, snapshot, error: { code: "domain_job_capacity", message: "The host is already tracking the maximum number of domain jobs", retryable: true } };
+        }
+        const id = randomBytes(16).toString("hex");
+        let registered = false;
+        try {
+          const event = await jobHistory.beginDomainJob({ id, type, repository: snapshot.repository });
+          registered = true;
+          activeDomainJobIds.add(id);
+          publishJobEvent(event);
+          onDomainJobStarted?.(id);
+          publishJobEvent(await jobHistory.markDomainJobRunning(id));
+        } catch (error) {
+          if (registered) {
+            try {
+              publishJobEvent(await jobHistory.finishDomainJob(id, actionFailure(snapshot, {
+                code: "job_history_unavailable", message: "The host could not safely start this task", retryable: true,
+              }, "job_history_unavailable")));
+            } catch { /* Keep the original storage failure as the useful boundary error. */ }
+            activeDomainJobIds.delete(id);
+          }
+          const code = error instanceof JobHistoryError ? error.code : "job_history_unavailable";
+          console.error(`Scriptorium domain job was not started (${code}).`);
+          return actionFailure(snapshot, { code: "job_history_unavailable", message: "The host could not safely register this job" }, "job_history_unavailable");
+        }
+        let result: ActionResult;
+        try {
+          result = jobSignal.aborted
+            ? actionFailure(snapshot, jobSignal.reason, "action_cancelled")
+            : await execute();
+        }
+        catch (error) { result = actionFailure(snapshot, error, "domain_job_failed"); }
+        try { publishJobEvent(await jobHistory.finishDomainJob(id, result)); }
+        catch (error) {
+          const code = error instanceof JobHistoryError ? error.code : "storage_failure";
+          console.error(`Scriptorium domain job result was not retained (${code}).`);
+          try {
+            const failed = actionFailure(snapshot, {
+              code: "domain_job_result_not_retained",
+              message: "The task finished, but its result could not be safely retained",
+              retryable: true,
+            }, "domain_job_result_not_retained");
+            publishJobEvent(await jobHistory.finishDomainJob(id, failed));
+          } catch { /* Startup recovery will mark any still-running record as interrupted. */ }
+        } finally {
+          activeDomainJobIds.delete(id);
+        }
+        return result;
+      };
       host.linkedReader = async (repositoryId: string) => {
         for (const project of await options.store.listProjects()) {
           const observation = await options.store.observe(project.id);
@@ -1253,7 +1336,28 @@ export function createServer(options: ApiServerOptions): Server {
         const source = descriptor.module === "core"
           ? isBearer ? "mcp" : "author"
           : isBearer || descriptor.module === "mcp" ? "mcp" : "module";
-        const host = actionHost(projectId, reader, signal, source);
+        const prefer = request.headers.prefer;
+        const respondAsyncRequested = isCookie && (Array.isArray(prefer) ? prefer : [prefer ?? ""])
+          .flatMap((value) => value.split(","))
+          .some((value) => value.trim().toLowerCase() === "respond-async");
+        const jobController = respondAsyncRequested && descriptor.module !== "core" ? new AbortController() : undefined;
+        let domainJobId: string | undefined;
+        let resolveDomainJobStart!: (id: string) => void;
+        const domainJobStarted = new Promise<string>((resolveStarted) => { resolveDomainJobStart = resolveStarted; });
+        const abortBeforeAcceptance = (): void => {
+          if (!domainJobId) jobController?.abort(signal.reason ?? new Error("The action request was cancelled before job registration"));
+        };
+        if (jobController) {
+          asyncDomainJobControllers.add(jobController);
+          if (signal.aborted) abortBeforeAcceptance();
+          else signal.addEventListener("abort", abortBeforeAcceptance, { once: true });
+        }
+        const actionSignal = jobController?.signal ?? signal;
+        const host = actionHost(projectId, reader, actionSignal, source, "owner", (id) => {
+          domainJobId = id;
+          signal.removeEventListener("abort", abortBeforeAcceptance);
+          resolveDomainJobStart(id);
+        });
         if (descriptor.module === "core") {
           const coreAction = host.actions?.find(({ action }) => action.id === descriptor.id)?.action;
           if (!coreAction) throw httpFailure(404, "ACTION_NOT_FOUND", `Action ${actionId} is unavailable`);
@@ -1283,8 +1387,40 @@ export function createServer(options: ApiServerOptions): Server {
           }
           sendJson(response, 200, result); return;
         }
-        const result = await runtime.invokeAction(descriptor.module, actionId, body.input, host);
-        sendJson(response, 200, result); return;
+        const invocation = runtime.invokeAction(descriptor.module, actionId, body.input, host);
+        const settledInvocation = invocation.then(
+          (result) => ({ kind: "result" as const, result }),
+          (error: unknown) => ({ kind: "error" as const, error }),
+        );
+        if (jobController) {
+          void settledInvocation.then(() => {
+            asyncDomainJobControllers.delete(jobController);
+            signal.removeEventListener("abort", abortBeforeAcceptance);
+          });
+        }
+        if (respondAsyncRequested) {
+          const outcome = await Promise.race([
+            domainJobStarted.then((id) => ({ kind: "started" as const, id })),
+            settledInvocation.then((settled) => ({ kind: "settled" as const, settled })),
+          ]);
+          if (outcome.kind === "started") {
+            const job = await jobHistory.getJob(outcome.id);
+            if (!job) throw httpFailure(503, "JOB_HISTORY_UNAVAILABLE", "The registered job could not be read back");
+            response.setHeader("X-Scriptorium-Job-Id", job.id);
+            response.setHeader("Location", `/api/jobs/${encodeURIComponent(job.id)}`);
+            response.setHeader("Preference-Applied", "respond-async");
+            sendJson(response, 202, job);
+            return;
+          }
+          if (outcome.settled.kind === "error") throw outcome.settled.error;
+          if (domainJobId) response.setHeader("X-Scriptorium-Job-Id", domainJobId);
+          sendJson(response, 200, outcome.settled.result);
+          return;
+        }
+        const outcome = await settledInvocation;
+        if (outcome.kind === "error") throw outcome.error;
+        if (domainJobId) response.setHeader("X-Scriptorium-Job-Id", domainJobId);
+        sendJson(response, 200, outcome.result); return;
       }
       const snapshotsMatch = suffix.match(/^manuscripts\/([^/]+)\/snapshots$/u);
       if (snapshotsMatch && method === "GET") {
@@ -1316,9 +1452,11 @@ export function createServer(options: ApiServerOptions): Server {
         if (!runtime.invokeHttp) throw httpFailure(503, "MODULE_HTTP_UNAVAILABLE", "The runtime does not support HTTP module contributions");
         if (contribution.effect === "read" && method !== "GET" && method !== "HEAD") throw httpFailure(405, "MODULE_HTTP_METHOD_DENIED", "Read-only module routes must use GET or HEAD");
         const reader = await freshReader(projectId, "remote");
-        const host = actionHost(projectId, reader, signal, isBearer || moduleId === "mcp" ? "mcp" : "module");
+        let domainJobId: string | undefined;
+        const host = actionHost(projectId, reader, signal, isBearer || moduleId === "mcp" ? "mcp" : "module", "owner", (id) => { domainJobId = id; });
         const webRequest = makeWebRequest(request, parsedBody, signal, moduleRoute[2] ?? "");
         const moduleResponse = await runtime.invokeHttp(moduleId, contribution.id, webRequest, host);
+        if (domainJobId) response.setHeader("X-Scriptorium-Job-Id", domainJobId);
         await serveModuleResponse(moduleResponse, response, signal);
         return;
       }

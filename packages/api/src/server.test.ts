@@ -257,6 +257,65 @@ function jobHistoryRuntime(cacheDirectory: string): ModuleRuntime {
   });
 }
 
+function sourceDomainJobRuntime(cacheDirectory: string): {
+  runtime: ModuleRuntime;
+  asyncStarted: Promise<void>;
+  releaseAsync(): void;
+} {
+  const schema: ValueSchema = { parse(value) { return value; } };
+  const speakerManifest: ModuleManifest = {
+    id: "speaker", version: "0.1.0", contractVersion: 1,
+    dependencies: [], provides: [], requires: [], statePaths: [], locality: "local",
+  };
+  const mcpManifest: ModuleManifest = {
+    id: "mcp", version: "0.1.0", contractVersion: 1,
+    dependencies: [], provides: [], requires: [], statePaths: [], locality: "local",
+  };
+  let resolveAsyncStarted!: () => void;
+  const asyncStarted = new Promise<void>((resolveStarted) => { resolveAsyncStarted = resolveStarted; });
+  let releaseAsync!: () => void;
+  const asyncGate = new Promise<void>((resolveGate) => { releaseAsync = resolveGate; });
+  const speakerAction: ModuleAction = {
+    id: "speaker.evaluation.run", effect: "compute", job: { type: "speaker-eval" },
+    inputSchema: schema, outputSchema: schema,
+    async invoke(rawInput, context): Promise<ActionResult> {
+      const input = rawInput as { fail?: boolean; wait?: boolean };
+      if (input.wait) {
+        resolveAsyncStarted();
+        await asyncGate;
+      }
+      if (input.fail) {
+        return { ok: false, snapshot: context.reader.snapshot, error: { code: "synthetic_evaluation_failed", message: "Synthetic evaluation failure", retryable: true } };
+      }
+      return {
+        ok: true, snapshot: context.reader.snapshot,
+        data: { report: { examples: 3, accuracy: 0.75 }, version: "synthetic-v1" },
+      };
+    },
+  };
+  const definition: ModuleDefinition = {
+    manifest: speakerManifest, actions: [speakerAction], ui: [], async dispose() {},
+  };
+  const mcpDefinition: ModuleDefinition = {
+    manifest: mcpManifest, actions: [], ui: [],
+    http: [{
+      id: "invoke", path: "invoke", methods: ["POST"], access: "owner", effect: "propose",
+      async handle(request, context) {
+        return Response.json(await context.invoke("speaker.evaluation.run", await request.json()));
+      },
+    }],
+    async dispose() {},
+  };
+  return {
+    runtime: new ModuleRuntime({
+      manifests: [speakerManifest, mcpManifest], enabled: ["speaker", "mcp"], cacheDirectory,
+      loaders: { speaker: async () => definition, mcp: async () => mcpDefinition },
+    }),
+    asyncStarted,
+    releaseAsync: () => releaseAsync(),
+  };
+}
+
 async function startCustomApi(
   store: CoreStore,
   staticDir: string,
@@ -334,6 +393,17 @@ async function login(base: string): Promise<{ cookie: string; setCookie: string;
   return { cookie: setCookie.split(";", 1)[0]!, setCookie, body: await response.json() };
 }
 
+async function waitForJob(base: string, cookie: string, id: string): Promise<{ status: string; result: unknown }> {
+  for (let attempt = 0; attempt < 100; attempt++) {
+    const response = await fetch(`${base}/api/jobs/${encodeURIComponent(id)}`, { headers: { Cookie: cookie } });
+    assert.equal(response.status, 200);
+    const job = await response.json() as { status: string; result: unknown };
+    if (job.status === "done" || job.status === "error") return job;
+    await new Promise((resolveDelay) => setTimeout(resolveDelay, 20));
+  }
+  assert.fail(`Job ${id} did not reach a terminal state`);
+}
+
 const tempDirs: string[] = [];
 afterEach(async () => {
   await Promise.all(tempDirs.splice(0).map((directory) => rm(directory, { recursive: true, force: true })));
@@ -406,7 +476,7 @@ describe("Scriptorium HTTP boundary", () => {
     await assert.rejects(lstat(unusedDirectory), (error: NodeJS.ErrnoException) => error.code === "ENOENT", "an empty history read must not create host storage");
     const store = new HistoricalModelUsageStore(usageDirectory);
     const first = usageEvent(SNAPSHOT.repository, "usage-1", "2026-10-17T00:00:00.000Z", {
-      cacheHit: true, promptVersion: "story-draft-v3", durationMs: 217, queueWaitMs: 18,
+      cacheHit: true, promptVersion: "rewrite@1", durationMs: 217, queueWaitMs: 18,
     });
     const second = usageEvent(SNAPSHOT.repository, "usage-2", "2026-10-17T00:00:02.000Z", { state: "aborted", errorCode: "request_cancelled" });
     const third = usageEvent(SNAPSHOT.repository, "usage-3", "2026-10-17T00:00:04.000Z");
@@ -505,6 +575,139 @@ describe("Scriptorium HTTP boundary", () => {
     assert.deepEqual(await new JobHistoryStore(usageDirectory).listInbox({ unreadOnly: true }), { items: [], unreadCount: 0 });
     await assert.rejects(reloaded.record({ ...queued, snapshot: { ...SNAPSHOT, repository: { ...SNAPSHOT.repository, repositoryId: "999" } } }),
       (error: unknown) => error instanceof JobHistoryError && error.code === "job_identity_conflict");
+  });
+
+  it("retains exact declared domain action data and machine errors across host-history reopen", async () => {
+    const root = await mkdtemp(resolve(tmpdir(), "scriptorium-api-domain-job-history-"));
+    tempDirs.push(root);
+    const usageDirectory = resolve(root, "history");
+    const store = new JobHistoryStore(usageDirectory);
+    const success: ActionResult = {
+      ok: true, snapshot: SNAPSHOT,
+      data: { report: { examples: 3, accuracy: 0.75 }, proposalId: "speaker-proposal-1" },
+    };
+    const queued = await store.beginDomainJob({ id: "domain-job-success", type: "speaker-eval", repository: SNAPSHOT.repository });
+    assert.equal(queued.status, "queued");
+    assert.equal(queued.progress, 0);
+    const running = await store.markDomainJobRunning("domain-job-success");
+    assert.equal(running.status, "running");
+    assert.equal((await store.finishDomainJob("domain-job-success", success)).status, "done");
+
+    const failed: ActionResult = {
+      ok: false, snapshot: SNAPSHOT,
+      error: { code: "aspect_scope_invalid", message: "The selected chapter has no scenes", retryable: false },
+    };
+    await store.beginDomainJob({ id: "domain-job-error", type: "aspect-review", repository: SNAPSHOT.repository });
+    await store.markDomainJobRunning("domain-job-error");
+    assert.equal((await store.finishDomainJob("domain-job-error", failed)).status, "error");
+
+    const reopened = new JobHistoryStore(usageDirectory);
+    assert.deepEqual(await reopened.getJob("domain-job-success"), {
+      id: "domain-job-success", type: "speaker-eval", status: "done", progress: 1,
+      result: success.data, error: null,
+      createdAt: (await store.getJob("domain-job-success"))!.createdAt,
+      updatedAt: (await store.getJob("domain-job-success"))!.updatedAt,
+      finishedAt: (await store.getJob("domain-job-success"))!.finishedAt,
+    });
+    assert.deepEqual(await reopened.getJob("domain-job-error"), await store.getJob("domain-job-error"));
+    const failedJob = await reopened.getJob("domain-job-error");
+    assert.equal(failedJob?.error, failed.error.message);
+    assert.equal(failedJob?.errorCode, failed.error.code);
+    assert.equal(failedJob?.retryable, false);
+    await store.beginDomainJob({ id: "domain-job-interrupted", type: "speaker-retrain", repository: SNAPSHOT.repository });
+    await store.markDomainJobRunning("domain-job-interrupted");
+    assert.equal((await reopened.listInbox()).unreadCount, 2);
+    const afterRestart = new JobHistoryStore(usageDirectory);
+    const interrupted = await afterRestart.getJob("domain-job-interrupted");
+    assert.equal(interrupted?.status, "error", "an active target task becomes a non-replayed interruption after a store restart");
+    assert.equal(interrupted?.errorCode, "worker_interrupted");
+  });
+
+  it("tracks exact source job results through direct actions and nested HTTP MCP invokes", async (t) => {
+    const root = await mkdtemp(resolve(tmpdir(), "scriptorium-api-domain-job-runtime-"));
+    tempDirs.push(root);
+    const staticDir = resolve(root, "static");
+    await mkdir(staticDir);
+    const usageDirectory = resolve(root, "history");
+    const domain = sourceDomainJobRuntime(resolve(root, "module-cache"));
+    const api = await startCustomApi(makeSnapshotStore().store, staticDir, {
+      runtime: domain.runtime,
+      usageDirectory,
+    });
+    t.after(async () => { domain.releaseAsync(); await api.close(); });
+    const owner = await login(api.base);
+    const ownerHeaders = { Cookie: owner.cookie, Origin: api.base, "Content-Type": "application/json" };
+    const expectedData = { report: { examples: 3, accuracy: 0.75 }, version: "synthetic-v1" };
+
+    const directResponse = await fetch(`${api.base}/api/projects/project-1/actions/speaker.evaluation.run`, {
+      method: "POST", headers: ownerHeaders, body: JSON.stringify({ input: { requestSecret: "must-not-be-captured" } }),
+    });
+    assert.equal(directResponse.status, 200);
+    const directJobId = directResponse.headers.get("x-scriptorium-job-id");
+    assert.ok(directJobId);
+    const directResult = await directResponse.json() as ActionResult;
+    assert.deepEqual(directResult, { ok: true, snapshot: SNAPSHOT, data: expectedData });
+    const directJobResponse = await fetch(`${api.base}/api/jobs/${directJobId}`, { headers: { Cookie: owner.cookie } });
+    assert.equal(directJobResponse.status, 200);
+    const directJob = await directJobResponse.json() as { status: string; result: unknown };
+    assert.equal(directJob.status, "done");
+    assert.deepEqual(directJob.result, expectedData);
+
+    const nestedResponse = await fetch(`${api.base}/api/projects/project-1/modules/mcp/invoke`, {
+      method: "POST", headers: ownerHeaders, body: JSON.stringify({ nested: true }),
+    });
+    assert.equal(nestedResponse.status, 200);
+    const nestedJobId = nestedResponse.headers.get("x-scriptorium-job-id");
+    assert.ok(nestedJobId);
+    assert.notEqual(nestedJobId, directJobId);
+    assert.deepEqual(await nestedResponse.json(), { ok: true, snapshot: SNAPSHOT, data: expectedData });
+    const nestedJobResponse = await fetch(`${api.base}/api/jobs/${nestedJobId}`, { headers: { Cookie: owner.cookie } });
+    assert.deepEqual((await nestedJobResponse.json() as { result: unknown }).result, expectedData);
+
+    const failedResponse = await fetch(`${api.base}/api/projects/project-1/actions/speaker.evaluation.run`, {
+      method: "POST", headers: ownerHeaders, body: JSON.stringify({ input: { fail: true } }),
+    });
+    assert.equal(failedResponse.status, 200);
+    const failedJobId = failedResponse.headers.get("x-scriptorium-job-id");
+    assert.ok(failedJobId);
+    const failedResult = await failedResponse.json() as Extract<ActionResult, { ok: false }>;
+    const failedJobResponse = await fetch(`${api.base}/api/jobs/${failedJobId}`, { headers: { Cookie: owner.cookie } });
+    const failedJob = await failedJobResponse.json() as { status: string; result: unknown; error: string; errorCode?: string; retryable?: boolean };
+    assert.equal(failedJob.status, "error");
+    assert.equal(failedJob.result, null);
+    assert.equal(failedJob.error, failedResult.error.message);
+    assert.equal(failedJob.errorCode, failedResult.error.code);
+    assert.equal(failedJob.retryable, true);
+
+    const asyncResponsePromise = fetch(`${api.base}/api/projects/project-1/actions/speaker.evaluation.run`, {
+      method: "POST", headers: { ...ownerHeaders, Prefer: "respond-async" },
+      body: JSON.stringify({ input: { wait: true } }),
+    });
+    const asyncResponse = await asyncResponsePromise;
+    assert.equal(asyncResponse.status, 202);
+    assert.equal(asyncResponse.headers.get("preference-applied"), "respond-async");
+    const asyncJobId = asyncResponse.headers.get("x-scriptorium-job-id");
+    assert.ok(asyncJobId);
+    assert.equal((await asyncResponse.json() as { id: string }).id, asyncJobId);
+    await domain.asyncStarted;
+    const runningJobResponse = await fetch(`${api.base}/api/jobs/${asyncJobId}`, { headers: { Cookie: owner.cookie } });
+    assert.equal(runningJobResponse.status, 200);
+    assert.equal((await runningJobResponse.json() as { status: string }).status, "running");
+    domain.releaseAsync();
+    const completedAsync = await waitForJob(api.base, owner.cookie, asyncJobId);
+    assert.equal(completedAsync.status, "done");
+    assert.deepEqual(completedAsync.result, expectedData);
+
+    const reopenedHistory = new JobHistoryStore(usageDirectory);
+    const retained = await reopenedHistory.listJobs();
+    assert.equal(retained.length, 4, "direct, nested, failed, and async actions each register exactly one host job");
+    assert.deepEqual((await reopenedHistory.getJob(directJobId))?.result, expectedData, "the exact action result remains owner-readable after host-history reopen");
+    assert.deepEqual((await reopenedHistory.getJob(nestedJobId))?.result, expectedData, "nested MCP results remain owner-readable after host-history reopen");
+    const inbox = await new JobHistoryStore(usageDirectory).listInbox();
+    assert.equal(inbox.items.length, 1, "unread completion inbox items coalesce by job type and repository");
+    assert.equal(inbox.items[0]?.jobId, asyncJobId);
+    const historyBytes = await readFile(resolve(usageDirectory, "jobs", "jobs-state.json"), "utf8");
+    assert.equal(historyBytes.includes("must-not-be-captured"), false, "action input is not retained as job history");
   });
 
   it("archives exact legacy jobs outside Core data and exposes only explicitly mapped owner history", async (t) => {

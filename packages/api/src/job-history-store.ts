@@ -2,18 +2,18 @@ import { createHash, randomBytes } from "node:crypto";
 import { constants } from "node:fs";
 import { link, lstat, mkdir, open, rename, unlink } from "node:fs/promises";
 import { join, relative, resolve, sep } from "node:path";
-import type { ModuleId, RepositoryIdentity } from "@scriptorium/contracts";
+import type { ActionResult, ModuleId, RepositoryIdentity } from "@scriptorium/contracts";
 import type { WorkerJobLifecycleSnapshot } from "@scriptorium/module-runtime";
 
 const MAX_RETAINED_JOBS = 500;
 const MAX_RETAINED_INBOX = 200;
 const MAX_STATE_BYTES = 32 * 1024 * 1024;
-const MAX_RESULT_BYTES = 1024 * 1024;
+const MAX_RESULT_BYTES = 8 * 1024 * 1024;
 const MAX_LEGACY_ARCHIVE_BYTES = 128 * 1024 * 1024;
 const JOB_STATUSES = new Set(["queued", "running", "done", "error"]);
 const MODULES = new Set(["story", "diagnostics", "nlp", "semantic", "speaker", "assistant", "publishing", "mcp"]);
-const PUBLIC_JOB_FIELDS = new Set(["id", "type", "status", "progress", "result", "error", "createdAt", "updatedAt", "finishedAt"]);
-const LEGACY_JOB_FIELDS = new Set([...PUBLIC_JOB_FIELDS, "projectKey", "userId"]);
+const PUBLIC_JOB_FIELDS = new Set(["id", "type", "status", "progress", "result", "error", "errorCode", "retryable", "createdAt", "updatedAt", "finishedAt"]);
+const LEGACY_JOB_FIELDS = new Set(["id", "type", "status", "progress", "result", "error", "createdAt", "updatedAt", "finishedAt", "projectKey", "userId"]);
 const INBOX_FIELDS = new Set(["id", "kind", "jobId", "jobType", "title", "body", "status", "read", "userId", "projectKey", "createdAt"]);
 
 /** Minimal internal metadata emitted by the runtime; request and result data never enter host history. */
@@ -28,6 +28,8 @@ export interface PublicJob {
   progress: number | null;
   result: unknown | null;
   error: string | null;
+  errorCode?: string;
+  retryable?: boolean;
   createdAt: string;
   updatedAt: string;
   finishedAt: string | null;
@@ -58,13 +60,14 @@ export interface InboxItem {
 }
 
 interface StoredJob {
+  kind: "worker" | "domain" | "legacy";
   ownerKey: string;
   projectKey: string;
   job: PublicJob;
 }
 
 interface PersistedState {
-  version: 2;
+  version: 3;
   jobs: StoredJob[];
   inbox: InboxItem[];
   legacySources: string[];
@@ -102,7 +105,7 @@ export class JobHistoryStore {
   private readonly directory: string;
   private readonly filePath: string;
   private loaded = false;
-  private state: PersistedState = { version: 2, jobs: [], inbox: [], legacySources: [] };
+  private state: PersistedState = { version: 3, jobs: [], inbox: [], legacySources: [] };
   private serial = Promise.resolve();
 
   constructor(usageDirectory: string) {
@@ -123,6 +126,9 @@ export class JobHistoryStore {
       const job = publicJob(normalized);
       const index = this.state.jobs.findIndex((entry) => entry.job.id === job.id);
       const current = index < 0 ? undefined : this.state.jobs[index];
+      if (current && current.kind !== "worker") {
+        throw new JobHistoryError("job_identity_conflict", "A worker lifecycle ID cannot replace a different host job record");
+      }
       if (current && (current.ownerKey !== ownerKey || current.projectKey !== projectKey || current.job.type !== job.type)) {
         throw new JobHistoryError("job_identity_conflict", "A worker job ID was reused for another owner, repository, or task");
       }
@@ -140,8 +146,8 @@ export class JobHistoryStore {
       }
       const next = cloneState(this.state);
       const nextIndex = next.jobs.findIndex((entry) => entry.job.id === job.id);
-      if (nextIndex >= 0 && nextIndex < next.jobs.length) next.jobs[nextIndex] = { ownerKey, projectKey, job };
-      else next.jobs.push({ ownerKey, projectKey, job });
+      if (nextIndex >= 0 && nextIndex < next.jobs.length) next.jobs[nextIndex] = { kind: current?.kind ?? "worker", ownerKey, projectKey, job };
+      else next.jobs.push({ kind: "worker", ownerKey, projectKey, job });
       pruneJobs(next.jobs);
       if (next.jobs.length > MAX_RETAINED_JOBS) throw new JobHistoryError("job_history_full", "Host job history cannot retain another active worker job");
       if (isTerminal(normalized.state) && current?.job.finishedAt == null) addInboxItem(next, job, ownerKey, projectKey);
@@ -151,14 +157,89 @@ export class JobHistoryStore {
     });
   }
 
+  /** Register a source domain task before invoking its action. No action input is retained. */
+  async beginDomainJob(input: { id: string; type: string; repository: RepositoryIdentity }): Promise<JobEvent> {
+    return this.exclusive(async () => {
+      await this.load();
+      const id = boundedText(input.id, 1, 128, /^[A-Za-z0-9_-]+$/u, "job ID");
+      const type = boundedText(input.type, 1, 64, /^[a-z][a-z0-9-]*$/u, "domain job type");
+      if (!isRepositoryIdentity(input.repository)) throw new JobHistoryError("job_identity_invalid", "Domain job repository identity is invalid");
+      const ownerKey = hash("owner");
+      const projectKey = repositoryKey({ provider: input.repository.provider, ownerScope: input.repository.ownerScope, repositoryId: input.repository.repositoryId });
+      const existing = this.state.jobs.find((entry) => entry.job.id === id);
+      if (existing) {
+        if (existing.kind !== "domain" || existing.ownerKey !== ownerKey || existing.projectKey !== projectKey || existing.job.type !== type) {
+          throw new JobHistoryError("job_identity_conflict", "A domain job ID was reused for another owner, repository, or task");
+        }
+        return jobEvent(existing.job);
+      }
+      const now = new Date().toISOString();
+      const job: PublicJob = {
+        id, type, status: "queued", progress: 0, result: null, error: null,
+        createdAt: now, updatedAt: now, finishedAt: null,
+      };
+      const next = cloneState(this.state);
+      next.jobs.push({ kind: "domain", ownerKey, projectKey, job });
+      pruneJobs(next.jobs);
+      if (next.jobs.length > MAX_RETAINED_JOBS) throw new JobHistoryError("job_history_full", "Host job history cannot retain another domain job");
+      const domainReservations = next.jobs.filter((entry) => entry.kind === "domain" && !isFinalStatus(entry.job.status)).length;
+      if (Buffer.byteLength(JSON.stringify(next), "utf8") + domainReservations * (MAX_RESULT_BYTES + 4096) > MAX_STATE_BYTES) {
+        throw new JobHistoryError("job_history_full", "Host job history has no reserved space for another domain result");
+      }
+      await this.persist(next);
+      this.state = next;
+      return jobEvent(job);
+    });
+  }
+
+  async markDomainJobRunning(id: string): Promise<JobEvent> {
+    return this.exclusive(async () => {
+      await this.load();
+      const current = this.state.jobs.find((entry) => entry.job.id === id);
+      if (!current || current.kind !== "domain") throw new JobHistoryError("job_not_found", "Domain job was not registered");
+      if (current.job.status === "running") return jobEvent(current.job);
+      if (current.job.status !== "queued") throw new JobHistoryError("job_lifecycle_conflict", "A finished domain job cannot start again");
+      const next = cloneState(this.state);
+      const record = next.jobs.find((entry) => entry.job.id === id)!;
+      const now = nextTimestamp(record.job.updatedAt);
+      record.job.status = "running";
+      record.job.updatedAt = now;
+      const event = jobEvent(record.job);
+      await this.persist(next);
+      this.state = next;
+      return event;
+    });
+  }
+
+  /** Retain the exact final ActionResult data or machine error for an owner-visible domain job. */
+  async finishDomainJob(id: string, result: ActionResult): Promise<JobEvent> {
+    return this.exclusive(async () => {
+      await this.load();
+      const current = this.state.jobs.find((entry) => entry.job.id === id);
+      if (!current || current.kind !== "domain") throw new JobHistoryError("job_not_found", "Domain job was not registered");
+      if (isFinalStatus(current.job.status)) {
+        const expected = domainResultJob(current.job, result);
+        if (JSON.stringify(expected) !== JSON.stringify(current.job)) throw new JobHistoryError("job_lifecycle_conflict", "A terminal domain job result cannot be changed");
+        return jobEvent(current.job);
+      }
+      if (current.job.status !== "queued" && current.job.status !== "running") throw new JobHistoryError("job_lifecycle_conflict", "Domain job state cannot finish");
+      const next = cloneState(this.state);
+      const record = next.jobs.find((entry) => entry.job.id === id)!;
+      const completed = domainResultJob(record.job, result);
+      completed.updatedAt = nextTimestamp(record.job.updatedAt);
+      completed.finishedAt = completed.updatedAt;
+      record.job = completed;
+      if (record.job.status === "done" || record.job.status === "error") addInboxItem(next, record.job, record.ownerKey, record.projectKey);
+      const event = jobEvent(record.job);
+      await this.persist(next);
+      this.state = next;
+      return event;
+    });
+  }
+
   async listJobs(): Promise<PublicJob[]> {
     return this.exclusive(async () => {
       await this.load();
-      const next = cloneState(this.state);
-      if (orphanRunningJobs(next)) {
-        await this.persist(next);
-        this.state = next;
-      }
       return this.state.jobs.map(({ job }) => clonePublicJob(job)).sort(newestFirst);
     });
   }
@@ -166,11 +247,6 @@ export class JobHistoryStore {
   async getJob(id: string): Promise<PublicJob | undefined> {
     return this.exclusive(async () => {
       await this.load();
-      const next = cloneState(this.state);
-      if (orphanRunningJobs(next)) {
-        await this.persist(next);
-        this.state = next;
-      }
       const record = this.state.jobs.find(({ job }) => job.id === id);
       return record ? clonePublicJob(record.job) : undefined;
     });
@@ -283,7 +359,7 @@ export class JobHistoryStore {
           if (duplicate) {
             if (duplicate.ownerKey !== mapping.ownerKey || duplicate.projectKey !== mapping.targetProjectKey ||
                 JSON.stringify(duplicate.job) !== JSON.stringify(job)) throw new JobHistoryError("legacy_job_conflict", "Legacy job ID conflicts with retained host history");
-          } else plannedJobs.push({ ownerKey: mapping.ownerKey, projectKey: mapping.targetProjectKey, job });
+          } else plannedJobs.push({ kind: "legacy", ownerKey: mapping.ownerKey, projectKey: mapping.targetProjectKey, job });
         } catch { invalidRecords += 1; }
       }
       const allInboxIds = decoded.inbox.flatMap((entry) => isRecord(entry) && typeof entry.id === "string" ? [entry.id] : []);
@@ -353,7 +429,9 @@ export class JobHistoryStore {
       const info = await handle.stat();
       if (!info.isFile() || info.size > MAX_STATE_BYTES || (info.mode & 0o077) !== 0) historyCorrupt();
       const decoded: unknown = JSON.parse(await handle.readFile("utf8"));
-      this.state = normalizeState(decoded);
+      const recovered = normalizeState(decoded);
+      if (orphanRunningJobs(recovered)) await this.persist(recovered);
+      this.state = recovered;
       this.loaded = true;
     } catch (error) {
       if (isCode(error, "ENOENT")) { this.loaded = true; return; }
@@ -516,9 +594,28 @@ function publicJob(event: ReturnType<typeof normalizeLifecycle>): PublicJob {
   };
 }
 
+function domainResultJob(current: PublicJob, result: ActionResult): PublicJob {
+  const next: PublicJob = { ...current };
+  delete next.errorCode;
+  delete next.retryable;
+  if (result.ok) {
+    next.status = "done";
+    next.progress = 1;
+    next.result = boundedJson(result.data);
+    next.error = null;
+    return next;
+  }
+  next.status = "error";
+  next.result = null;
+  next.error = boundedString(result.error.message, 0, 16_384, "domain job error");
+  next.errorCode = boundedText(result.error.code, 1, 128, /^[A-Za-z0-9_.-]+$/u, "domain job error code");
+  next.retryable = result.error.retryable;
+  return next;
+}
+
 function jobEvent(job: PublicJob): JobEvent {
   return {
-    type: "job-status", jobId: job.id, jobType: job.type, status: job.status, progress: null,
+    type: "job-status", jobId: job.id, jobType: job.type, status: job.status, progress: job.progress,
     ...(job.error ? { error: job.error } : {}), at: job.updatedAt,
   };
 }
@@ -549,16 +646,19 @@ function pruneJobs(jobs: StoredJob[]): void {
 
 function normalizeState(value: unknown): PersistedState {
   if (!isRecord(value) || !hasOnlyKeys(value, new Set(["version", "jobs", "inbox", "legacySources"])) ||
-      (value.version !== 1 && value.version !== 2) || !Array.isArray(value.jobs) || !Array.isArray(value.inbox) ||
+      (value.version !== 1 && value.version !== 2 && value.version !== 3) || !Array.isArray(value.jobs) || !Array.isArray(value.inbox) ||
       value.jobs.length > MAX_RETAINED_JOBS || value.inbox.length > MAX_RETAINED_INBOX ||
-      (value.version === 2 && !Array.isArray(value.legacySources))) historyCorrupt();
+      (value.version !== 1 && !Array.isArray(value.legacySources))) historyCorrupt();
   const jobs: StoredJob[] = value.jobs.map((entry) => {
-    if (!isRecord(entry) || !hasOnlyKeys(entry, new Set(["ownerKey", "projectKey", "job"])) ||
+    const fields = value.version === 3 ? new Set(["kind", "ownerKey", "projectKey", "job"]) : new Set(["ownerKey", "projectKey", "job"]);
+    if (!isRecord(entry) || !hasOnlyKeys(entry, fields) ||
         typeof entry.ownerKey !== "string" || !/^[a-f0-9]{64}$/u.test(entry.ownerKey) ||
         typeof entry.projectKey !== "string" || !/^[a-f0-9]{64}$/u.test(entry.projectKey) || !isRecord(entry.job) ||
         !hasOnlyKeys(entry.job, PUBLIC_JOB_FIELDS)) historyCorrupt();
+    const kind = value.version === 3 ? entry.kind : "worker";
+    if (kind !== "worker" && kind !== "domain" && kind !== "legacy") historyCorrupt();
     const job = normalizePublicJob(entry.job);
-    return { ownerKey: entry.ownerKey, projectKey: entry.projectKey, job };
+    return { kind, ownerKey: entry.ownerKey, projectKey: entry.projectKey, job };
   });
   const ids = new Set<string>();
   for (const record of jobs) {
@@ -567,19 +667,21 @@ function normalizeState(value: unknown): PersistedState {
   }
   const inbox = value.inbox.map((entry) => normalizeInboxItem(entry));
   if (new Set(inbox.map(({ id }) => id)).size !== inbox.length) historyCorrupt();
-  const legacySourcesRaw: unknown[] = value.version === 2 && Array.isArray(value.legacySources) ? value.legacySources : [];
-  const legacySources = value.version === 2 ? legacySourcesRaw.map((source) => {
+  const legacySourcesRaw: unknown[] = value.version !== 1 && Array.isArray(value.legacySources) ? value.legacySources : [];
+  const legacySources = value.version !== 1 ? legacySourcesRaw.map((source) => {
     if (typeof source !== "string" || !/^[a-f0-9]{64}$/u.test(source)) historyCorrupt();
     return source;
   }) : [];
   if (new Set(legacySources).size !== legacySources.length) historyCorrupt();
-  return { version: 2, jobs, inbox, legacySources };
+  return { version: 3, jobs, inbox, legacySources };
 }
 
 function normalizePublicJob(value: Record<string, unknown>): PublicJob {
   if (typeof value.status !== "string" || !JOB_STATUSES.has(value.status) ||
       (value.progress !== null && (typeof value.progress !== "number" || !Number.isFinite(value.progress) || value.progress < 0 || value.progress > 1)) ||
-      (value.error !== null && (typeof value.error !== "string" || value.error.length > 16_384))) historyCorrupt();
+      (value.error !== null && (typeof value.error !== "string" || value.error.length > 16_384)) ||
+      (value.errorCode !== undefined && (typeof value.errorCode !== "string" || !/^[A-Za-z0-9_.-]{1,128}$/u.test(value.errorCode))) ||
+      (value.retryable !== undefined && typeof value.retryable !== "boolean")) historyCorrupt();
   const status = value.status as PublicJobStatus;
   if ((status === "done" || status === "error") !== (value.finishedAt !== null)) historyCorrupt();
   return {
@@ -589,6 +691,8 @@ function normalizePublicJob(value: Record<string, unknown>): PublicJob {
     progress: value.progress as number | null,
     result: boundedJson(value.result),
     error: value.error as string | null,
+    ...(typeof value.errorCode === "string" ? { errorCode: value.errorCode } : {}),
+    ...(typeof value.retryable === "boolean" ? { retryable: value.retryable } : {}),
     createdAt: timestamp(value.createdAt, "createdAt"),
     updatedAt: timestamp(value.updatedAt, "updatedAt"),
     finishedAt: value.finishedAt === null ? null : timestamp(value.finishedAt, "finishedAt"),
@@ -618,7 +722,7 @@ function normalizeInboxItem(value: unknown): InboxItem {
 
 function cloneState(state: PersistedState): PersistedState {
   return {
-    version: 2, jobs: state.jobs.map((entry) => ({ ...entry, job: { ...entry.job } })),
+    version: 3, jobs: state.jobs.map((entry) => ({ ...entry, job: { ...entry.job } })),
     inbox: state.inbox.map((item) => ({ ...item })), legacySources: state.legacySources.slice(),
   };
 }
@@ -643,12 +747,16 @@ function canAdvance(current: PublicJobStatus, next: PublicJobStatus): boolean {
 }
 
 function orphanRunningJobs(state: PersistedState): boolean {
-  const now = new Date().toISOString();
   let changed = false;
   for (const record of state.jobs) {
+    // Imported source rows retain their exact source status; no old task is replayed here.
+    if (record.kind === "legacy") continue;
     if (record.job.status !== "queued" && record.job.status !== "running") continue;
+    const now = nextTimestamp(record.job.updatedAt);
     record.job.status = "error";
     record.job.error = "worker_interrupted";
+    record.job.errorCode = "worker_interrupted";
+    record.job.retryable = true;
     record.job.updatedAt = now;
     record.job.finishedAt = now;
     changed = true;
@@ -667,6 +775,12 @@ function timestamp(value: unknown, field: string): string {
   const parsed = new Date(value);
   if (!Number.isFinite(parsed.getTime())) throw new JobHistoryError("job_event_invalid", `Job ${field} timestamp is invalid`);
   return parsed.toISOString();
+}
+
+function nextTimestamp(previous: string): string {
+  const now = Date.now();
+  const prior = Date.parse(previous);
+  return new Date(Math.max(now, Number.isFinite(prior) ? prior + 1 : now)).toISOString();
 }
 
 function boundedText(value: unknown, min: number, max: number, pattern: RegExp, field: string): string {

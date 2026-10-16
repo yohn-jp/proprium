@@ -149,7 +149,7 @@ function normalizeEvent(value: unknown): ModelUsageEvent {
     ...(value.outputTokens === undefined ? {} : { outputTokens: boundedInteger(value.outputTokens, "outputTokens") }),
     ...(value.cost === undefined ? {} : { cost: boundedCost(value.cost) }),
     ...(value.cacheHit === undefined ? {} : { cacheHit: boundedBoolean(value.cacheHit, "cacheHit") }),
-    ...(value.promptVersion === undefined ? {} : { promptVersion: boundedText(value.promptVersion, 0, 128, /^[A-Za-z0-9._:-]*$/u, "prompt version") }),
+    ...(value.promptVersion === undefined ? {} : { promptVersion: boundedText(value.promptVersion, 0, 128, /^[A-Za-z0-9._:@-]*$/u, "prompt version") }),
     ...(value.durationMs === undefined ? {} : { durationMs: boundedDuration(value.durationMs, "durationMs") }),
     ...(value.queueWaitMs === undefined ? {} : { queueWaitMs: boundedDuration(value.queueWaitMs, "queueWaitMs") }),
     ...(value.errorCode === undefined ? {} : { errorCode: boundedText(value.errorCode, 1, 128, /^[A-Za-z0-9._:-]+$/u, "error code") }),
