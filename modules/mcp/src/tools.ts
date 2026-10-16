@@ -24,6 +24,7 @@ const AUTHOR_OPERATION_ACTIONS = new Set([
   "core.reconcile",
   "core.publish",
   "core.apply",
+  "core.sync",
 ]);
 const toolCancellation = new AsyncLocalStorage<AbortSignal>();
 
@@ -427,6 +428,26 @@ async function savedScene(client: McpActionClient, sceneId: string) {
   return { result, context };
 }
 
+async function sceneVoiceWarnings(
+  client: McpActionClient,
+  sceneId: string,
+  field: "warnings" | "styleDeviations" | "stylometricDeviations",
+  toolName: string,
+) {
+  const { result, context } = await savedScene(client, sceneId);
+  if (!context.manuscriptBody) return errorResult("NOT_FOUND", `Scene not found or has no manuscript body: ${sceneId}`);
+  const actions = await client.listActions();
+  if (!actions.some((action) => action.id === "speaker.voice.check")) {
+    return unavailableModuleAction(client, "speaker", toolName);
+  }
+  const voice = await client.invoke("speaker.voice.check", { sceneId });
+  if (!voice.ok) return actionResult(voice);
+  requireSameSnapshot(result.snapshot, voice.snapshot);
+  const data = isRecord(voice.data) ? voice.data : {};
+  if (!Array.isArray(data[field])) return errorResult("INVALID_RESPONSE", `Speaker voice result is missing ${field}`);
+  return outputResult(data[field], voice.snapshot);
+}
+
 /** Register source-facing MCP tools against the same pinned host action API in both transports. */
 export function registerMcpTools(server: McpServer, baseClient: McpActionClient): void {
   baseClient = signalAwareClient(baseClient);
@@ -579,14 +600,20 @@ export function registerMcpTools(server: McpServer, baseClient: McpActionClient)
 
   server.tool(
     "search",
-    "Run the source hybrid full-text and semantic search over project story content",
+    "Run source hybrid full-text and semantic search over project story content",
     {
       project_id: projectIdSchema,
       query: z.string().describe("Search query"),
       limit: z.number().optional().describe("Maximum result count (default 20)"),
     },
-    guarded(async ({ project_id }) =>
-      unavailableModuleAction(scopedClient(baseClient, project_id), "semantic", "search")),
+    guarded(async ({ project_id, query, limit }) => {
+      const client = scopedClient(baseClient, project_id);
+      const actions = await client.listActions();
+      if (!actions.some((action) => action.id === "semantic.search")) {
+        return unavailableModuleAction(client, "semantic", "search");
+      }
+      return invoke(client, "semantic.search", { query, ...(limit === undefined ? {} : { limit }) });
+    }),
   );
 
   server.tool(
@@ -944,8 +971,8 @@ export function registerMcpTools(server: McpServer, baseClient: McpActionClient)
     "check_stylometric_deviations",
     "Check saved scene dialogue for source-compatible stylometric outliers",
     { project_id: projectIdSchema, scene_id: z.string().describe("Scene ID") },
-    guarded(async ({ project_id }) =>
-      unavailableModuleAction(scopedClient(baseClient, project_id), "speaker", "check_stylometric_deviations")),
+    guarded(async ({ project_id, scene_id }) =>
+      sceneVoiceWarnings(scopedClient(baseClient, project_id), scene_id, "stylometricDeviations", "check_stylometric_deviations")),
   );
 
   server.tool(
@@ -1025,8 +1052,8 @@ export function registerMcpTools(server: McpServer, baseClient: McpActionClient)
       project_id: projectIdSchema,
       scene_id: z.string().describe("Scene ID"),
     },
-    guarded(async ({ project_id }) =>
-      unavailableModuleAction(scopedClient(baseClient, project_id), "speaker", "check_voice_consistency")),
+    guarded(async ({ project_id, scene_id }) =>
+      sceneVoiceWarnings(scopedClient(baseClient, project_id), scene_id, "warnings", "check_voice_consistency")),
   );
 
   server.tool(
@@ -1036,8 +1063,8 @@ export function registerMcpTools(server: McpServer, baseClient: McpActionClient)
       project_id: projectIdSchema,
       scene_id: z.string().describe("Scene ID"),
     },
-    guarded(async ({ project_id }) =>
-      unavailableModuleAction(scopedClient(baseClient, project_id), "speaker", "check_style_deviations")),
+    guarded(async ({ project_id, scene_id }) =>
+      sceneVoiceWarnings(scopedClient(baseClient, project_id), scene_id, "styleDeviations", "check_style_deviations")),
   );
 
   server.tool(
@@ -1050,8 +1077,23 @@ export function registerMcpTools(server: McpServer, baseClient: McpActionClient)
       scene_id: z.string().optional().describe("Optional scene filter"),
       min_confidence: z.enum(["high", "low"]).optional().describe("Minimum attribution confidence"),
     },
-    guarded(async ({ project_id }) =>
-      unavailableModuleAction(scopedClient(baseClient, project_id), "speaker", "get_dialogue")),
+    guarded(async ({ project_id, character_id, limit, scene_id, min_confidence }) => {
+      const client = scopedClient(baseClient, project_id);
+      const actions = await client.listActions();
+      if (!actions.some((action) => action.id === "speaker.dialogue.list")) {
+        return unavailableModuleAction(client, "speaker", "get_dialogue");
+      }
+      const result = await client.invoke("speaker.dialogue.list", {
+        characterId: character_id,
+        ...(limit === undefined ? {} : { limit }),
+        ...(scene_id === undefined ? {} : { sceneId: scene_id }),
+        ...(min_confidence === undefined ? {} : { minConfidence: min_confidence }),
+      });
+      if (!result.ok) return actionResult(result);
+      const data = isRecord(result.data) ? result.data : {};
+      if (!Array.isArray(data.lines)) return errorResult("INVALID_RESPONSE", "Speaker dialogue result is invalid");
+      return outputResult({ character_id, count: data.lines.length, lines: data.lines }, result.snapshot);
+    }),
   );
 
   server.tool(
