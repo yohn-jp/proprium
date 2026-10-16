@@ -4,7 +4,7 @@ import test from "node:test";
 import JSZip from "jszip";
 import YAML from "yaml";
 import type { ChangeOperation, ChangeProposal, ModuleActionContext, ModuleContext, SnapshotId, SnapshotReader } from "@scriptorium/contracts";
-import { createWorkspaceProducer, type LegacySourceReader, type MigrationContext } from "@scriptorium/migration";
+import { createWorkspaceProducer, proposeMigrationImport, type LegacySourceReader, type MigrationContext, type MigrationInspection } from "@scriptorium/migration";
 import { createModule } from "./index.js";
 import { readEpubBibleEntries } from "./bible.js";
 import { buildEpubExport } from "./epub.js";
@@ -349,4 +349,144 @@ test("publishing migration hook validates the exact-byte episode map and selecte
   const first = (episodes.episodes as Array<Record<string, unknown>>)[0]!;
   assert.equal(first.publishedAt, "2024-02-03");
   assert.equal(first.legacyNote, "keep-me");
+});
+
+test("publishing reactivation proposes retained episode bytes and safely merges hashed grants", async () => {
+  const episodeBytes = "# author comment stays byte-for-byte\nepisodes:\n  - id: ep-kept\n    number: 4\n    title: 保存された話\n    publishedAt: 2024-05-06\n    scope: chapter\n    scopeId: ch-1\n    vendorField: keep-me\n";
+  const grantRows = [
+    { id: "grant-z", projectId: repository.repositoryId, scope: "sc-1", label: "scene", tokenHash: "f".repeat(64), createdAt: "2024-01-01T00:00:00.000Z", expiresAt: "2030-01-01T00:00:00.000Z", revokedAt: "2024-02-01T00:00:00.000Z", ownerId: "must-not-return", tokenPrefix: "share_never-return", token: "raw-bearer-never-return" },
+    { id: "grant-a", projectId: repository.repositoryId, scope: "ch-1", label: "chapter", tokenHash: "e".repeat(64), createdAt: "2024-03-01T00:00:00.000Z", expiresAt: "2030-03-01T00:00:00.000Z", lastUsedAt: "2024-04-01T00:00:00.000Z" },
+  ];
+  const retainedEpisodePath = "meta/scriptorium/modules/publishing/legacy/files/meta/publish-episodes.yaml";
+  const retainedGrantPath = "meta/scriptorium/modules/publishing/legacy/share-grants.jsonl";
+  const retainedGrants = grantRows.map((grant) => JSON.stringify(grant)).join("\n") + "\n";
+  const target = new MemoryReader(new Map([
+    [retainedEpisodePath, episodeBytes],
+    [retainedGrantPath, retainedGrants],
+  ]));
+  const source = {
+    projectRoot: "/synthetic/legacy-project-gone",
+    workspaceDataRoot: "/synthetic/workspace-gone",
+    readProjectFile: async () => null,
+    listProjectFiles: async () => [],
+    readWorkspaceFile: async () => null,
+    listWorkspaceFiles: async () => [],
+  } as unknown as LegacySourceReader;
+  const migrationContext: MigrationContext = {
+    source,
+    target,
+    repository,
+    snapshot: target.snapshot,
+    enabledModules: new Set(["publishing"]),
+  };
+
+  const producer = createPublishingMigrationProducer();
+  const inspection = await producer.inspect(migrationContext);
+  assert.equal(inspection.operations.length, 2);
+  const episodeOperation = inspection.operations.find((operation) => operation.writes[0]?.path === EPISODES_PATH)!;
+  const grantsOperation = inspection.operations.find((operation) => operation.writes[0]?.path === SHARE_GRANTS_PATH)!;
+  assert.equal(episodeOperation.writes[0]!.content, episodeBytes, "episode YAML comments and unknown fields are restored as exact bytes");
+  for (const [operation, targetPath, retainedPath] of [
+    [episodeOperation, EPISODES_PATH, retainedEpisodePath],
+    [grantsOperation, SHARE_GRANTS_PATH, retainedGrantPath],
+  ] as const) {
+    assert.ok(operation.reads.some((read) => read.path === targetPath && read.revision === null), "new canonical file is guarded as absent");
+    assert.equal(operation.reads.find((read) => read.path === retainedPath)?.revision, (await target.read(retainedPath))!.revision, "retained source revision is part of the proposal precondition");
+  }
+  const mergedRows = grantsOperation.writes[0]!.content!.trim().split("\n").map((line) => JSON.parse(line) as Record<string, unknown>);
+  assert.deepEqual(mergedRows.map((grant) => grant.id), ["grant-a", "grant-z"], "new grants are appended in stable ID order");
+  assert.equal(mergedRows[0]!.projectId, repository.repositoryId);
+  assert.equal(mergedRows[0]!.lastUsedAt, "2024-04-01T00:00:00.000Z");
+  assert.equal(mergedRows[1]!.revokedAt, "2024-02-01T00:00:00.000Z");
+  const proposalJson = JSON.stringify(inspection);
+  for (const secret of ["must-not-return", "share_never-return", "raw-bearer-never-return"]) {
+    assert.ok(!proposalJson.includes(secret), `reactivation proposal excludes ${secret}`);
+  }
+  const repeatedPlan = await producer.inspect(migrationContext);
+  assert.deepEqual(repeatedPlan.operations.map((operation) => operation.id), inspection.operations.map((operation) => operation.id), "same retained revisions produce stable operation identities");
+
+  const coreProposal: MigrationInspection = {
+    snapshot: target.snapshot,
+    entries: inspection.entries,
+    operations: inspection.operations,
+    recovery: [],
+    pendingWorkspace: { repository: false, pendingCommitCount: 0, workingTreePaths: [], untrackedPaths: [], stagedPaths: [], blockers: [] },
+  };
+  let submitted: ChangeProposal | undefined;
+  await proposeMigrationImport({
+    async propose(projectId, proposal) {
+      assert.equal(projectId, "module-project-1");
+      submitted = proposal;
+      return proposal;
+    },
+  }, "module-project-1", coreProposal);
+  assert.equal(submitted?.source, "author");
+  assert.deepEqual(submitted?.operations.map((operation) => operation.id), inspection.operations.map((operation) => operation.id));
+
+  const appliedEpisodes = applyOperation(target, episodeOperation, NEXT_COMMIT);
+  const appliedAll = applyOperation(appliedEpisodes, grantsOperation, NEXT_COMMIT);
+  const alreadyRestored = await producer.inspect({ ...migrationContext, target: appliedAll, snapshot: appliedAll.snapshot });
+  assert.deepEqual(alreadyRestored.operations, [], "reinspection after applying the proposal is idempotent");
+  assert.ok(alreadyRestored.entries.some((entry) => entry.target === EPISODES_PATH && entry.disposition === "unchanged"));
+  assert.ok(alreadyRestored.entries.some((entry) => entry.target === SHARE_GRANTS_PATH && entry.disposition === "unchanged"));
+
+  const existingGrant = grantRows[0]!;
+  const existingContent = JSON.stringify({
+    id: existingGrant.id,
+    projectId: existingGrant.projectId,
+    scope: existingGrant.scope,
+    label: existingGrant.label,
+    tokenHash: existingGrant.tokenHash,
+    createdAt: existingGrant.createdAt,
+    expiresAt: existingGrant.expiresAt,
+    revokedAt: existingGrant.revokedAt,
+  }) + "\n";
+  const conflictTarget = new MemoryReader(new Map([
+    [retainedGrantPath, retainedGrants],
+    [SHARE_GRANTS_PATH, existingContent.replace('"label":"scene"', '"label":"edited"')],
+  ]));
+  const grantConflict = await producer.inspect({ ...migrationContext, target: conflictTarget, snapshot: conflictTarget.snapshot });
+  assert.ok(grantConflict.entries.some((entry) => entry.target === SHARE_GRANTS_PATH && entry.disposition === "conflict"));
+  assert.ok(!grantConflict.operations.some((operation) => operation.writes.some((write) => write.path === SHARE_GRANTS_PATH)), "divergent same-ID metadata is never overwritten");
+
+  const episodeConflictTarget = new MemoryReader(new Map([
+    [retainedEpisodePath, episodeBytes],
+    [EPISODES_PATH, "episodes: []\n"],
+  ]));
+  const episodeConflict = await producer.inspect({ ...migrationContext, target: episodeConflictTarget, snapshot: episodeConflictTarget.snapshot });
+  assert.ok(episodeConflict.entries.some((entry) => entry.target === EPISODES_PATH && entry.disposition === "conflict"));
+  assert.ok(!episodeConflict.operations.some((operation) => operation.writes.some((write) => write.path === EPISODES_PATH)), "different canonical episode bytes are never overwritten");
+});
+
+test("publishing reactivation defers to live stores and does nothing while disabled", async () => {
+  const retainedEpisodePath = "meta/scriptorium/modules/publishing/legacy/files/meta/publish-episodes.yaml";
+  const retainedGrantPath = "meta/scriptorium/modules/publishing/legacy/share-grants.jsonl";
+  const target = new MemoryReader(new Map([
+    [retainedEpisodePath, "episodes: []\n"],
+    [retainedGrantPath, JSON.stringify({ id: "grant-1", projectId: repository.repositoryId, scope: "ch-1", label: "chapter", tokenHash: "e".repeat(64), createdAt: "2024-01-01T00:00:00.000Z", expiresAt: "2030-01-01T00:00:00.000Z" }) + "\n"],
+  ]));
+  const projectFiles = new Map([["meta/publish-episodes.yaml", Buffer.from("episodes: []\n")]]);
+  const workspaceFiles = new Map([["share-tokens.json", Buffer.from("[]")]]);
+  const source = {
+    projectRoot: "/synthetic/live-source",
+    workspaceDataRoot: "/synthetic/live-workspace",
+    readProjectFile: async (path: string) => projectFiles.get(path) ?? null,
+    listProjectFiles: async () => [...projectFiles.keys()],
+    readWorkspaceFile: async (path: string) => workspaceFiles.get(path) ?? null,
+    listWorkspaceFiles: async () => [...workspaceFiles.keys()],
+  } as unknown as LegacySourceReader;
+  const producer = createPublishingMigrationProducer();
+  const live = await producer.inspect({ source, target, repository, snapshot: target.snapshot, enabledModules: new Set(["publishing"]) });
+  assert.ok(!live.operations.some((operation) => operation.writes.some((write) => write.path === EPISODES_PATH || write.path === SHARE_GRANTS_PATH)));
+  assert.ok(!live.entries.some((entry) => entry.source.startsWith("meta/scriptorium/modules/publishing/legacy/")), "live source keeps ownership with its importer");
+
+  const disabled = await producer.inspect({
+    source: { ...source, workspaceDataRoot: undefined, readProjectFile: async () => null, readWorkspaceFile: async () => null, listWorkspaceFiles: async () => [] } as LegacySourceReader,
+    target,
+    repository,
+    snapshot: target.snapshot,
+    enabledModules: new Set(),
+  });
+  assert.deepEqual(disabled.operations, [], "retained values stay unreadable until Publishing is enabled");
+  assert.deepEqual(disabled.entries, []);
 });
