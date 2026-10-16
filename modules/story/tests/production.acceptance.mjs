@@ -122,6 +122,7 @@ async function restoreDefaultBranch({ root, label, url, files, token, askpass })
   const generatedFiles = [
     "bible/locations/loc-p05-garden.yaml",
     "plot/volumes/vol-main/chapters/ch-main-1/scenes/sc-p05-garden.yaml",
+    "meta/scriptorium/modules/story/zukan-suggestions.jsonl",
     "meta/scriptorium/modules/story/v1/series.json",
   ];
   for (const relative of generatedFiles) {
@@ -296,7 +297,7 @@ test("Story actions compose with Core over GitHub snapshots, approvals, recovery
 
     const descriptors = await ownerJson(host, cookie, `/api/projects/${encodeURIComponent(projectId)}/actions`);
     const available = new Set(descriptors.actions.map((item) => item.id));
-    for (const actionId of ["story.entities.list", "story.entities.get", "story.changes.propose", "story.series.create", "story.series.binding.update", "story.series.overlay"]) {
+    for (const actionId of ["story.entities.list", "story.entities.get", "story.zukan-suggestions.create", "story.zukan-suggestions.list", "story.changes.propose", "story.series.create", "story.series.binding.update", "story.series.overlay"]) {
       assert.ok(available.has(actionId), `Composed host is missing ${actionId}`);
     }
 
@@ -318,6 +319,24 @@ test("Story actions compose with Core over GitHub snapshots, approvals, recovery
     const characterRead = await invoke(host, cookie, projectId, "story.entities.get", { id: "char-uma" });
     assert.equal(characterRead.ok, true, characterRead.ok ? undefined : characterRead.error.message);
     assert.equal(characterRead.data.revision, workCharacter.revision);
+
+    const zukanCreated = await invoke(host, cookie, projectId, "story.zukan-suggestions.create", {
+      entityId: "char-uma",
+      proposedText: "Uma enters the cafe.",
+      evidence: [{ quote: "Uma enters the cafe.", sceneId: "sc-1" }],
+      source: "manuscript",
+      kind: "fact",
+      confidence: "high",
+      operation_id: `p05-zukan-create-${randomUUID().replaceAll("-", "")}`,
+    });
+    assert.equal(zukanCreated.ok, true, zukanCreated.ok ? undefined : `${zukanCreated.error.code}: ${zukanCreated.error.message}`);
+    assert.equal(zukanCreated.data.created, true);
+    assert.equal(zukanCreated.data.suggestion.status, "pending", "assistant-created facts remain pending until a separate author decision");
+    assert.equal(zukanCreated.proposals?.length, 1, "Zukan creation must go through a reviewable Core proposal");
+    await publishProposal(host, cookie, projectId, zukanCreated.proposals[0], `p05_zukan_create_${randomUUID().replaceAll("-", "")}`);
+    const persistedZukan = await invoke(host, cookie, projectId, "story.zukan-suggestions.list", { entityId: "char-uma", status: "pending" });
+    assert.equal(persistedZukan.ok, true, persistedZukan.ok ? undefined : persistedZukan.error.message);
+    assert.ok(persistedZukan.data.suggestions.some((suggestion) => suggestion.id === zukanCreated.data.suggestion.id), "the checkpointed proposal persists the source-validated pending row");
 
     const seriesCreated = await invoke(host, cookie, projectId, "story.series.create", {
       name: "Synthetic Story Acceptance",

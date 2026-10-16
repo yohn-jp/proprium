@@ -463,7 +463,7 @@ async function existingZukanCreateProposal(
   if (!available.some((candidate) => candidate.id === "core.proposals.get")) return null;
   const result = await context.invoke("core.proposals.get", { proposalId });
   if (!result.ok) {
-    if (result.error.code === "proposal_not_found") return null;
+    if (new Set(["PROPOSAL_NOT_FOUND", "proposal_not_found"]).has(result.error.code)) return null;
     throw Object.assign(new Error(result.error.message), { code: result.error.code });
   }
   const data = result.data as { proposal: {
