@@ -95,23 +95,51 @@ function bibleFiles() {
   };
 }
 
-async function seedRemote({ root, label, url, branch, files, token, askpass }) {
+async function githubDefaultBranch(url, token) {
+  const parsed = new URL(url);
+  const [owner, repository] = parsed.pathname.split("/").filter(Boolean);
+  const response = await fetch(`https://api.github.com/repos/${encodeURIComponent(owner)}/${encodeURIComponent(repository)}`, {
+    headers: {
+      Accept: "application/vnd.github+json",
+      Authorization: `Bearer ${token}`,
+      "X-GitHub-Api-Version": "2022-11-28",
+    },
+  });
+  if (!response.ok) throw new Error(`Could not read synthetic GitHub repository metadata (HTTP ${response.status})`);
+  const metadata = await parseJson(response);
+  assert.equal(metadata.private, true, "Production acceptance fixtures must be private repositories");
+  assert.ok(typeof metadata.default_branch === "string" && metadata.default_branch.length > 0,
+    "Synthetic GitHub repository has no configured default branch");
+  return metadata.default_branch;
+}
+
+async function restoreDefaultBranch({ root, label, url, files, token, askpass }) {
+  const branch = await githubDefaultBranch(url, token);
   const directory = resolve(root, `seed-${label}`);
-  await mkdir(directory, { recursive: true });
-  await git(directory, ["init", "--initial-branch", branch]);
+  await git(root, ["clone", "--quiet", "--single-branch", "--branch", branch, url, directory], { token, askpass });
   await git(directory, ["config", "user.name", "Scriptorium Acceptance"]);
   await git(directory, ["config", "user.email", "scriptorium-acceptance@example.invalid"]);
-  await writeFile(resolve(directory, "README.md"), `Synthetic Story ${label} fixture.\n`);
+  const generatedFiles = [
+    "bible/locations/loc-p05-garden.yaml",
+    "plot/volumes/vol-main/chapters/ch-main-1/scenes/sc-p05-garden.yaml",
+    "meta/scriptorium/modules/story/v1/series.json",
+  ];
+  for (const relative of generatedFiles) {
+    if (Object.hasOwn(files, relative)) continue;
+    await rm(resolve(directory, relative), { force: true });
+  }
   for (const [relative, content] of Object.entries(files)) {
     const destination = resolve(directory, relative);
     await mkdir(resolve(destination, ".."), { recursive: true });
     await writeFile(destination, content);
   }
   await git(directory, ["add", "--all"]);
-  await git(directory, ["commit", "-m", `Create synthetic ${label} Story fixture`]);
-  await git(directory, ["remote", "add", "origin", url]);
-  await git(directory, ["push", "--set-upstream", "origin", branch], { token, askpass });
-  return directory;
+  const changes = await git(directory, ["status", "--porcelain", "--untracked-files=all"]);
+  if (changes) {
+    await git(directory, ["commit", "-m", `Restore owned synthetic ${label} Story fixture`]);
+    await git(directory, ["push", "origin", `HEAD:refs/heads/${branch}`], { token, askpass });
+  }
+  return { directory, branch };
 }
 
 async function parseJson(response) {
@@ -247,16 +275,17 @@ test("Story actions compose with Core over GitHub snapshots, approvals, recovery
   assert.notEqual(workUrl, bibleUrl, "Work and Bible fixtures must be separate repositories");
   const githubToken = await getGitHubToken();
   const root = await mkdtemp(resolve(tmpdir(), "scriptorium-p05-production-"));
-  const workBranch = `p05-${randomUUID().replaceAll("-", "").slice(0, 20)}`;
-  const bibleBranch = `p05-${randomUUID().replaceAll("-", "").slice(0, 20)}`;
   const dataDir = resolve(root, "core-data");
   const cacheDir = resolve(root, "module-cache");
   const staticDir = resolve(root, "static");
   const askpass = await makeAskpass(root);
   let host;
   try {
-    const workSeed = await seedRemote({ root, label: "work", url: workUrl, branch: workBranch, files: workFiles(), token: githubToken, askpass });
-    await seedRemote({ root, label: "bible", url: bibleUrl, branch: bibleBranch, files: bibleFiles(), token: githubToken, askpass });
+    const workFixture = await restoreDefaultBranch({ root, label: "work", url: workUrl, files: workFiles(), token: githubToken, askpass });
+    const bibleFixture = await restoreDefaultBranch({ root, label: "bible", url: bibleUrl, files: bibleFiles(), token: githubToken, askpass });
+    const workSeed = workFixture.directory;
+    const workBranch = workFixture.branch;
+    const bibleBranch = bibleFixture.branch;
     const bibleHeadBefore = await remoteHead(bibleUrl, bibleBranch, githubToken, askpass, workSeed);
 
     host = await startHost({ dataDir, cacheDir, staticDir, githubToken });
@@ -465,7 +494,7 @@ test("Story actions compose with Core over GitHub snapshots, approvals, recovery
     assert.equal(await remoteHead(bibleUrl, bibleBranch, githubToken, askpass, workSeed), bibleHeadBefore, "the complete data-root recovery still leaves the other repository untouched");
     assert.ok(recoveredBible.id && recoveredWork.id);
 
-    t.diagnostic(`Story production acceptance used separate private synthetic repositories; Core data root was removed and reconstructed from their remote snapshots.`);
+    t.diagnostic(`Story production acceptance used each private synthetic repository's configured default branch; Core data root was removed and reconstructed from their remote snapshots.`);
   } finally {
     if (host) await host.close().catch(() => {});
     await rm(root, { recursive: true, force: true });
