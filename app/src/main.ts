@@ -239,12 +239,12 @@ async function registerProject(form: HTMLFormElement): Promise<void> {
     projects = await api.projects();
     renderProjects();
     form.reset();
-    if (generation === navigationGeneration && activeProject?.id === projectIdAtStart) {
+    if (generation === navigationGeneration && (activeProject?.id ?? null) === projectIdAtStart) {
       setStatus("リポジトリを登録しました。", "success");
       await activateProject(project.id, true);
     }
   } catch (error) {
-    if (generation === navigationGeneration && activeProject?.id === projectIdAtStart) {
+    if (generation === navigationGeneration && (activeProject?.id ?? null) === projectIdAtStart) {
       setStatus(errorMessage(error), "error");
     }
   } finally {
