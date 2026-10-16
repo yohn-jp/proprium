@@ -319,7 +319,40 @@ test("public actions read namespaced dictionaries/settings and lint changes rema
       assert.ok(warnings.every((warning) => warning.issue === "unexpected-first-person" && warning.basis === "profile"));
       assert.deepEqual(warnings.map((warning) => warning.expected), [["僕"], ["私"]]);
     }
-    assert.deepEqual(runtime.workerSupervisor.activeWorkerPids, [], "project rule checks stay local and do not start NLP workers");
+
+    const profiles = await runtime.invokeAction("diagnostics", "diagnostics.voiceProfiles", {
+      dialoguesByCharacter: { "char-hero": ["『僕は行く』", "『僕が帰る』", "『僕は進む』"] },
+    }, host);
+    assert.equal(profiles.ok, true, JSON.stringify(profiles));
+    assert.deepEqual(profiles.snapshot, snapshot);
+    if (!profiles.ok) return;
+    const profileData = profiles.data as { fingerprints: Array<Record<string, unknown> & { entityId: string; dialogueCount: number; firstPersonDist: Record<string, number> }>; stylometricProfiles: Array<{ entityId: string; dialogueCount: number }> };
+    const fingerprint = profileData.fingerprints.find((item) => item.entityId === "char-hero");
+    assert.equal(fingerprint?.dialogueCount, 3);
+    assert.equal(fingerprint?.firstPersonDist["僕"], 1);
+    assert.equal(profileData.stylometricProfiles.find((item) => item.entityId === "char-hero")?.dialogueCount, 3);
+
+    const voiceDeviations = await runtime.invokeAction("diagnostics", "diagnostics.voiceDeviations", {
+      attributions: [{ speakerEntityId: "char-hero", confidence: "high", text: "『俺は走る』", sentenceIndex: 1 }],
+      fingerprints: [{ ...fingerprint, dialogueCount: 10 }],
+    }, host);
+    assert.equal(voiceDeviations.ok, true, JSON.stringify(voiceDeviations));
+    if (voiceDeviations.ok) {
+      const warnings = (voiceDeviations.data as { warnings: Array<{ issue: string; basis: string; found: string }> }).warnings;
+      assert.ok(warnings.some((warning) => warning.issue === "unusual-first-person" && warning.basis === "statistical" && warning.found === "俺"));
+    }
+
+    const metrics = { typeTokenRatio: 0, morphemeCount: 0, commaFrequency: 0, adjectiveRatio: 0, verbRatio: 0 };
+    const stylometricDeviations = await runtime.invokeAction("diagnostics", "diagnostics.stylometricDeviations", {
+      attributions: [{ speakerEntityId: "char-hero", confidence: "high", text: "『俺が走る』", sentenceIndex: 1 }],
+      profiles: [{ entityId: "char-hero", dialogueCount: 10, mean: metrics, stdDev: metrics }],
+    }, host);
+    assert.equal(stylometricDeviations.ok, true, JSON.stringify(stylometricDeviations));
+    if (stylometricDeviations.ok) {
+      const warnings = (stylometricDeviations.data as { warnings: Array<{ distance: number; threshold: number }> }).warnings;
+      assert.ok(warnings.some((warning) => warning.distance > warning.threshold), "source stylometric distance reports an out-of-profile utterance");
+    }
+    assert.deepEqual(runtime.workerSupervisor.activeWorkerPids, [], "all NLP and diagnostics worker leases are released after each action");
   } finally {
     await runtime.shutdown();
   }
