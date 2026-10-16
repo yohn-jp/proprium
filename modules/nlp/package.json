@@ -44,7 +44,8 @@
     "contractVersion": 1,
     "dependencies": [],
     "provides": [
-      "nlp.tokenizer"
+      "nlp.tokenizer",
+      "nlp.token-counter"
     ],
     "requires": [],
     "serverEntry": "./dist/index.js",
