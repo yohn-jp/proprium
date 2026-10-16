@@ -81,6 +81,14 @@ type SpeakerCacheIdentity = {
   tokenizerModelVersion: string;
   adoptedModelRevision: string | null;
 };
+type SpeakerPublicIdentity = {
+  speakerEngine: string;
+  speakerEngineVersion: string;
+  speakerModuleVersion: string;
+  adoptedModelIdentity: { revision: string } | null;
+  tokenizerModel: string;
+  tokenizerModelVersion: string;
+};
 type SceneContextDto = {
   scene: StoryEntity;
   appears?: StoryEntity[];
@@ -350,13 +358,32 @@ function sameCacheIdentity(actual: unknown, expected: SpeakerCacheIdentity): boo
 
 function cacheProvenance(identity: SpeakerCacheIdentity): RecordValue {
   return {
+    ...generatedResultIdentity(identity),
     moduleVersion: identity.moduleVersion,
     engineId: identity.engineId,
     engineVersion: identity.engineVersion,
-    tokenizerModel: identity.tokenizerModel,
-    tokenizerModelVersion: identity.tokenizerModelVersion,
     adoptedModelRevision: identity.adoptedModelRevision,
   };
+}
+
+function speakerIdentityFields(identity: SpeakerCacheIdentity): Pick<SpeakerPublicIdentity, "speakerEngine" | "speakerEngineVersion" | "speakerModuleVersion" | "adoptedModelIdentity"> {
+  return {
+    speakerEngine: identity.engineId,
+    speakerEngineVersion: identity.engineVersion,
+    speakerModuleVersion: identity.moduleVersion,
+    adoptedModelIdentity: identity.adoptedModelRevision === null ? null : { revision: identity.adoptedModelRevision },
+  };
+}
+
+function tokenizerIdentityFields(identity: SpeakerCacheIdentity): Pick<SpeakerPublicIdentity, "tokenizerModel" | "tokenizerModelVersion"> {
+  return {
+    tokenizerModel: identity.tokenizerModel,
+    tokenizerModelVersion: identity.tokenizerModelVersion,
+  };
+}
+
+function generatedResultIdentity(identity: SpeakerCacheIdentity): SpeakerPublicIdentity {
+  return { ...speakerIdentityFields(identity), ...tokenizerIdentityFields(identity) };
 }
 
 async function writeCache(cacheDirectory: string, filePath: string, value: unknown): Promise<void> {
@@ -371,24 +398,24 @@ async function writeCache(cacheDirectory: string, filePath: string, value: unkno
   }
 }
 
-async function readGateCache(cacheDirectory: string, snapshot: SnapshotId, identity: SpeakerCacheIdentity): Promise<{ gates: SpeakerRuleGates; exists: boolean; provenance: RecordValue }> {
+async function readGateCache(cacheDirectory: string, snapshot: SnapshotId, identity: SpeakerCacheIdentity): Promise<SpeakerPublicIdentity & { gates: SpeakerRuleGates; exists: boolean; provenance: RecordValue }> {
   try {
     const parsed = JSON.parse(await readFile(cacheFile(cacheDirectory, "rules", snapshot, identity), "utf8")) as { snapshot?: unknown; identity?: unknown; gates?: unknown };
-    if (parsed.snapshot !== snapshotKey(snapshot) || !sameCacheIdentity(parsed.identity, identity)) return { gates: emptySpeakerRuleGates(), exists: false, provenance: cacheProvenance(identity) };
-    return { gates: parseSpeakerRuleGates(parsed.gates), exists: true, provenance: cacheProvenance(identity) };
-  } catch { return { gates: emptySpeakerRuleGates(), exists: false, provenance: cacheProvenance(identity) }; }
+    if (parsed.snapshot !== snapshotKey(snapshot) || !sameCacheIdentity(parsed.identity, identity)) return { ...generatedResultIdentity(identity), gates: emptySpeakerRuleGates(), exists: false, provenance: cacheProvenance(identity) };
+    return { ...generatedResultIdentity(identity), gates: parseSpeakerRuleGates(parsed.gates), exists: true, provenance: cacheProvenance(identity) };
+  } catch { return { ...generatedResultIdentity(identity), gates: emptySpeakerRuleGates(), exists: false, provenance: cacheProvenance(identity) }; }
 }
 
 async function writeGateCache(cacheDirectory: string, snapshot: SnapshotId, identity: SpeakerCacheIdentity, gates: SpeakerRuleGates): Promise<void> {
   await writeCache(cacheDirectory, cacheFile(cacheDirectory, "rules", snapshot, identity), { version: 2, snapshot: snapshotKey(snapshot), identity, gates });
 }
 
-async function readEvaluationCache(cacheDirectory: string, snapshot: SnapshotId, identity: SpeakerCacheIdentity): Promise<{ report: SpeakerEvalReport | null; exists: boolean; provenance: RecordValue }> {
+async function readEvaluationCache(cacheDirectory: string, snapshot: SnapshotId, identity: SpeakerCacheIdentity): Promise<SpeakerPublicIdentity & { report: SpeakerEvalReport | null; exists: boolean; provenance: RecordValue }> {
   try {
     const parsed = JSON.parse(await readFile(cacheFile(cacheDirectory, "evaluation", snapshot, identity), "utf8")) as { snapshot?: unknown; identity?: unknown; report?: unknown };
-    if (parsed.snapshot !== snapshotKey(snapshot) || !sameCacheIdentity(parsed.identity, identity) || !isSpeakerEvalReport(parsed.report)) return { report: null, exists: false, provenance: cacheProvenance(identity) };
-    return { report: parsed.report, exists: true, provenance: cacheProvenance(identity) };
-  } catch { return { report: null, exists: false, provenance: cacheProvenance(identity) }; }
+    if (parsed.snapshot !== snapshotKey(snapshot) || !sameCacheIdentity(parsed.identity, identity) || !isSpeakerEvalReport(parsed.report)) return { ...generatedResultIdentity(identity), report: null, exists: false, provenance: cacheProvenance(identity) };
+    return { ...generatedResultIdentity(identity), report: parsed.report, exists: true, provenance: cacheProvenance(identity) };
+  } catch { return { ...generatedResultIdentity(identity), report: null, exists: false, provenance: cacheProvenance(identity) }; }
 }
 
 function isSpeakerEvalReport(value: unknown): value is SpeakerEvalReport {
@@ -528,6 +555,7 @@ async function speakerDialogueList(
   context: ModuleActionContext,
   moduleContext: ModuleContext,
 ): Promise<unknown> {
+  const identity = await cacheIdentityFor(context);
   const { entities, scenes } = await loadCorpusScenes(context);
   const character = entities.find((entity) => entity.id === input.characterId);
   if (character?.type !== "character") throw Object.assign(new Error(`Character not found: ${input.characterId}`), { code: "not_found" });
@@ -563,6 +591,7 @@ async function speakerDialogueList(
     }
   }));
   return {
+    ...generatedResultIdentity(identity),
     characterId: input.characterId,
     count: Math.min(lines.length, input.limit),
     minConfidence: input.minConfidence,
@@ -591,6 +620,7 @@ function proposalEvidence(context: ModuleActionContext, kind: string, paths: Arr
 }
 
 async function speakerOverrideAction(input: ReturnType<typeof parseOverrideInput>, context: ModuleActionContext, moduleContext: ModuleContext): Promise<unknown> {
+  const identity = await cacheIdentityFor(context);
   const { prepared, sceneContext, entities } = await loadScene(context, input.sceneId);
   if (!prepared.scene.filePath.startsWith("plot/volumes/") || !prepared.scene.filePath.endsWith(".yaml")) throw Object.assign(new Error("Scene is not stored at a canonical plot/volumes YAML path"), { code: "invalid_scene_path" });
   const { result, pipeline } = await runPipelineAction({ sceneId: input.sceneId }, context, moduleContext, { ignoreOverrides: true });
@@ -669,7 +699,7 @@ async function speakerOverrideAction(input: ReturnType<typeof parseOverrideInput
     predictedReason: attribution.reason,
   });
   const proposal = await context.propose([operation], evidence, `speaker-confirm-${randomUUID()}`, context.signal);
-  return { proposal, attribution, override };
+  return { ...generatedResultIdentity(identity), proposal, attribution, override };
 }
 
 function unresolvedRows(attributions: SpeakerAttribution[]): Array<{ attribution: SpeakerAttribution; unresolvedInGroup: number }> {
@@ -682,6 +712,12 @@ function unresolvedRows(attributions: SpeakerAttribution[]): Array<{ attribution
 }
 
 interface SpeakerEvaluationResult {
+  speakerEngine: string;
+  speakerEngineVersion: string;
+  speakerModuleVersion: string;
+  adoptedModelIdentity: { revision: string } | null;
+  tokenizerModel: string;
+  tokenizerModelVersion: string;
   report: SpeakerEvalReport;
   gates: SpeakerRuleGates;
   gatesUpdated: boolean;
@@ -700,10 +736,10 @@ async function runEvaluation(input: { writeGates: boolean }, context: ModuleActi
   let gates = await readGateCache(moduleContext.cacheDirectory, context.reader.snapshot, identity);
   if (input.writeGates) {
     const { records } = await readCorrections(context);
-    gates = { gates: computeSpeakerRuleGates(report.byReason, records), exists: true, provenance: cacheProvenance(identity) };
+    gates = { ...generatedResultIdentity(identity), gates: computeSpeakerRuleGates(report.byReason, records), exists: true, provenance: cacheProvenance(identity) };
     await writeGateCache(moduleContext.cacheDirectory, context.reader.snapshot, identity, gates.gates);
   }
-  return { report, gates: gates.gates, gatesUpdated: input.writeGates, provenance: cacheProvenance(identity) };
+  return { ...generatedResultIdentity(identity), report, gates: gates.gates, gatesUpdated: input.writeGates, provenance: cacheProvenance(identity) };
 }
 
 async function deterministicHoldoutIds(scenes: PreparedScene[]): Promise<string[]> {
@@ -762,7 +798,7 @@ async function speakerRetrainAction(input: ReturnType<typeof parseRetrainInput>,
       deltaPt: result.deltaPt,
     }), `speaker-model-adoption-${randomUUID()}`, context.signal);
   }
-  return { ...metrics, model, adoptionProposal, dryRun: input.dryRun, provenance: cacheProvenance(identity) };
+  return { ...generatedResultIdentity(identity), ...metrics, model, adoptionProposal, dryRun: input.dryRun, provenance: cacheProvenance(identity) };
 }
 
 interface VoiceProfileAnalysis {
@@ -823,9 +859,11 @@ async function analyzeVoiceProfiles(
 }
 
 async function speakerVoiceProfiles(_input: RecordValue, context: ModuleActionContext, moduleContext: ModuleContext): Promise<unknown> {
+  const identity = await cacheIdentityFor(context);
   const { entities, scenes } = await loadCorpusScenes(context);
   const profiles = await analyzeVoiceProfiles(entities, scenes, context, moduleContext);
   return {
+    ...generatedResultIdentity(identity),
     fingerprints: profiles.fingerprints,
     matrix: profiles.matrix,
     stylometricProfiles: profiles.stylometricProfiles,
@@ -837,6 +875,7 @@ async function speakerVoiceProfiles(_input: RecordValue, context: ModuleActionCo
 }
 
 async function speakerVoiceCheck(input: { sceneId: string }, context: ModuleActionContext, moduleContext: ModuleContext): Promise<unknown> {
+  const identity = await cacheIdentityFor(context);
   const { entities, scenes } = await loadCorpusScenes(context);
   const target = scenes.find((scene) => scene.scene.id === input.sceneId);
   if (!target) throw Object.assign(new Error(`Scene not found: ${input.sceneId}`), { code: "not_found" });
@@ -860,6 +899,7 @@ async function speakerVoiceCheck(input: { sceneId: string }, context: ModuleActi
     ...stylometricWarnings.map((warning) => displayStylometricWarning(warning)),
   ].sort((a, b) => Number(a.sentenceIndex) - Number(b.sentenceIndex));
   return {
+    ...generatedResultIdentity(identity),
     sceneId: input.sceneId,
     attributions: targetResult.attributions,
     warnings: declaredWarnings,
@@ -931,6 +971,7 @@ function makeActions(moduleContext: ModuleContext): ModuleAction[] {
     action("speaker.attribute", "compute", schema(parseSceneTextInput), async (input, context) => {
       const run = await runPipelineAction(input as ReturnType<typeof parseSceneTextInput>, context, moduleContext);
       return {
+        ...generatedResultIdentity(await cacheIdentityFor(context)),
         ...run.result,
         candidates: run.prepared.candidates.map(({ id, name }) => ({ id, name: name ?? id })),
         model: SPEAKER_ENGINE_ID,
@@ -941,6 +982,7 @@ function makeActions(moduleContext: ModuleContext): ModuleAction[] {
     }),
     action("speaker.voice.check", "compute", schema(parseIdInput), async (input, context) => speakerVoiceCheck(input as ReturnType<typeof parseIdInput>, context, moduleContext)),
     action("speaker.review.queue", "compute", schema(objectSchema), async (_input, context) => {
+      const identity = await cacheIdentityFor(context);
       const { entities, scenes } = await loadCorpusScenes(context);
       const rows: RecordValue[] = [];
       const speakerNames = new Map(entities.filter((entity) => entity.type === "character").map((entity) => [entity.id, entity.name ?? entity.id]));
@@ -963,7 +1005,7 @@ function makeActions(moduleContext: ModuleContext): ModuleAction[] {
         }
       }));
       if (rows.length > 10_000) throw Object.assign(new Error("Speaker review queue exceeds 10000 rows"), { code: "review_queue_too_large" });
-      return { rows };
+      return { ...generatedResultIdentity(identity), rows };
     }),
     action("speaker.override", "propose", schema(parseOverrideInput), async (input, context) => speakerOverrideAction(input as ReturnType<typeof parseOverrideInput>, context, moduleContext)),
     action("speaker.count.update", "propose", schema((value) => {

@@ -196,6 +196,15 @@ function dataOf(result: Awaited<ReturnType<ModuleRuntime["invokeAction"]>>): Rec
   return result.data as Record<string, unknown>;
 }
 
+function assertSpeakerIdentity(data: Record<string, unknown>, adoptedModelRevision: string | null): void {
+  assert.equal(data.speakerEngine, "scriptorium-speaker-cpu");
+  assert.equal(data.speakerEngineVersion, "1.0.0");
+  assert.equal(data.speakerModuleVersion, "0.1.0");
+  assert.equal(data.tokenizerModel, "lindera-wasm-nodejs-ipadic");
+  assert.equal(data.tokenizerModelVersion, "2.0.0");
+  assert.deepEqual(data.adoptedModelIdentity, adoptedModelRevision === null ? null : { revision: adoptedModelRevision });
+}
+
 test("loading the server entry does not install worker IPC listeners in the host", () => {
   const entry = pathToFileURL(fileURLToPath(new URL("./index.ts", import.meta.url))).href;
   const script = `const before = process.listenerCount("message"); await import(${JSON.stringify(entry)}); const after = process.listenerCount("message"); if (after !== before) { console.error(JSON.stringify({ before, after })); process.exitCode = 1; }`;
@@ -223,6 +232,7 @@ test("speaker actions run real CPU attribution, propose corrections/model adopti
     const sceneId = "sc-synthetic-01";
     const attributed = await runtime.invokeAction("speaker", "speaker.attribute", { sceneId }, host);
     const attributionData = dataOf(attributed);
+    assertSpeakerIdentity(attributionData, null);
     assert.deepEqual(attributed.snapshot, snapshot);
     const attributions = attributionData.attributions as Array<{ sentenceIndex: number; text: string; speakerEntityId: string | null; confidence: string; reason: string }>;
     assert.equal(attributions.length, 1, JSON.stringify(attributions));
@@ -233,6 +243,7 @@ test("speaker actions run real CPU attribution, propose corrections/model adopti
 
     const voice = await runtime.invokeAction("speaker", "speaker.voice.check", { sceneId: "sc-synthetic-voice-probe" }, host);
     const voiceData = dataOf(voice);
+    assertSpeakerIdentity(voiceData, null);
     const voiceWarnings = voiceData.warnings as Array<{ issue: string; basis: string }>;
     assert.ok(voiceWarnings.some((warning) => warning.issue === "unexpected-first-person" && warning.basis === "profile"), JSON.stringify(voiceData));
     const learnedVoiceWarnings = voiceData.styleDeviations as Array<{ issue: string; basis: string; sentenceIndex: number }>;
@@ -247,6 +258,7 @@ test("speaker actions run real CPU attribution, propose corrections/model adopti
 
     const dialogue = await runtime.invokeAction("speaker", "speaker.dialogue.list", { characterId: "char-hero", limit: 80, minConfidence: "low" }, host);
     const dialogueData = dataOf(dialogue);
+    assertSpeakerIdentity(dialogueData, null);
     assert.equal(dialogueData.count, 15);
     assert.ok((dialogueData.lines as Array<Record<string, unknown>>).some((line) => line.sceneId === "sc-synthetic-01"));
     assert.equal((dialogueData.lines as Array<Record<string, unknown>>)[0]?.confidence, "high");
@@ -254,11 +266,18 @@ test("speaker actions run real CPU attribution, propose corrections/model adopti
 
     const voiceProfiles = await runtime.invokeAction("speaker", "speaker.voice.profiles", {}, host);
     const voiceProfileData = dataOf(voiceProfiles);
+    assertSpeakerIdentity(voiceProfileData, null);
     const heroFingerprint = (voiceProfileData.fingerprints as Array<{ entityId: string; dialogueCount: number }>).find((row) => row.entityId === "char-hero");
     const heroStylometric = (voiceProfileData.stylometricProfiles as Array<{ entityId: string; dialogueCount: number }>).find((row) => row.entityId === "char-hero");
     assert.equal(heroFingerprint?.dialogueCount, 15);
     assert.equal(heroStylometric?.dialogueCount, 15);
     assert.equal(voiceProfileData.diagnosticsEngine, "scriptorium-diagnostics-cpu");
+    assert.deepEqual(runtime.workerSupervisor.activeWorkerPids, []);
+
+    const review = await runtime.invokeAction("speaker", "speaker.review.queue", {}, host);
+    const reviewData = dataOf(review);
+    assertSpeakerIdentity(reviewData, null);
+    assert.ok(Array.isArray(reviewData.rows));
     assert.deepEqual(runtime.workerSupervisor.activeWorkerPids, []);
 
     for (let index = 0; index < 14; index += 1) {
@@ -274,6 +293,7 @@ test("speaker actions run real CPU attribution, propose corrections/model adopti
         speakerEntityId: null,
       }, host);
       const proposalData = dataOf(proposed);
+      if (index === 0) assertSpeakerIdentity(proposalData, null);
       assert.equal(proposed.ok && proposed.proposals?.length, 1, JSON.stringify(proposed));
       const proposal = proposed.ok ? proposed.proposals?.[0] : undefined;
       assert.ok(proposal, JSON.stringify(proposalData));
@@ -293,6 +313,7 @@ test("speaker actions run real CPU attribution, propose corrections/model adopti
     const holdoutIds = ["sc-synthetic-13", "sc-synthetic-14"];
     const trained = await runtime.invokeAction("speaker", "speaker.retraining.run", { holdoutSceneIds: holdoutIds }, host);
     const trainingData = dataOf(trained);
+    assertSpeakerIdentity(trainingData, null);
     assert.equal(trainingData.adopted, true, JSON.stringify({ accuracyWithoutModel: trainingData.accuracyWithoutModel, accuracyWithModel: trainingData.accuracyWithModel, deltaPt: trainingData.deltaPt }));
     assert.ok(Number(trainingData.deltaPt) >= 5, JSON.stringify(trainingData));
     assert.ok(Number(trainingData.trainExampleCount) >= 10);
@@ -312,6 +333,8 @@ test("speaker actions run real CPU attribution, propose corrections/model adopti
     snapshot = snapshotFor(files);
     const applied = await runtime.invokeAction("speaker", "speaker.attribute", { sceneId: "sc-synthetic-model-probe" }, host);
     const appliedData = dataOf(applied);
+    const adoptedModelRevision = files.get("meta/scriptorium/modules/speaker/adopted-model.json")!.revision;
+    assertSpeakerIdentity(appliedData, adoptedModelRevision);
     const appliedRow = (appliedData.attributions as typeof attributions)[0]!;
     assert.equal(appliedRow.speakerEntityId, null, JSON.stringify(appliedRow));
     assert.equal(appliedRow.reason, "rerank", JSON.stringify(appliedRow));
@@ -319,8 +342,11 @@ test("speaker actions run real CPU attribution, propose corrections/model adopti
 
     const evaluation = await runtime.invokeAction("speaker", "speaker.evaluation.run", { writeGates: true }, host);
     const evaluationData = dataOf(evaluation);
+    assertSpeakerIdentity(evaluationData, adoptedModelRevision);
     assert.equal(evaluationData.gatesUpdated, true);
     const evaluationProvenance = evaluationData.provenance as Record<string, unknown>;
+    assert.equal(evaluationProvenance.speakerEngine, "scriptorium-speaker-cpu");
+    assert.deepEqual(evaluationProvenance.adoptedModelIdentity, { revision: adoptedModelRevision });
     assert.equal(evaluationProvenance.engineId, "scriptorium-speaker-cpu");
     assert.equal(evaluationProvenance.engineVersion, "1.0.0");
     assert.equal(evaluationProvenance.tokenizerModel, "lindera-wasm-nodejs-ipadic");
@@ -329,9 +355,13 @@ test("speaker actions run real CPU attribution, propose corrections/model adopti
     assert.equal(report.scenes.length, 14);
     assert.equal(report.metrics.attributionAccuracy, 1, JSON.stringify(report.metrics));
     const latest = await runtime.invokeAction("speaker", "speaker.evaluation.latest", {}, host);
-    assert.equal((dataOf(latest).exists), true);
+    const latestData = dataOf(latest);
+    assertSpeakerIdentity(latestData, adoptedModelRevision);
+    assert.equal(latestData.exists, true);
     const gates = await runtime.invokeAction("speaker", "speaker.ruleGates", {}, host);
-    assert.equal((dataOf(gates).exists), true);
+    const gatesData = dataOf(gates);
+    assertSpeakerIdentity(gatesData, adoptedModelRevision);
+    assert.equal(gatesData.exists, true);
 
     const cacheDirectoryForSpeaker = path.join(cacheDirectory, "speaker", "speaker");
     const cacheFiles = await readdir(cacheDirectoryForSpeaker);
