@@ -380,6 +380,138 @@ test("new typing survives an older in-flight checkpoint and exact publication ac
   expect(afterPublication[0]?.state).toBe("draft");
 });
 
+test("new typing survives a gated browser-draft rebase during checkpoint recovery", async ({ page }) => {
+  expect(authToken.length).toBeGreaterThanOrEqual(32);
+  expect(repositoryUrl).not.toBe("");
+  await page.addInitScript(() => {
+    type DraftGate = {
+      targetOperationId: string | null;
+      armed: boolean;
+      started: boolean;
+      release?: () => void;
+      matchedTransactions: string[];
+      heldOnce: boolean;
+    };
+    type GatedTransaction = IDBTransaction & { __scriptoriumHoldComplete?: boolean };
+    type GatedWindow = Window & { __scriptoriumDraftGate?: DraftGate };
+    const gate: DraftGate = { targetOperationId: null, armed: false, started: false, matchedTransactions: [], heldOnce: false };
+    (window as GatedWindow).__scriptoriumDraftGate = gate;
+
+    const requestDescriptor = Object.getOwnPropertyDescriptor(IDBRequest.prototype, "onsuccess");
+    const transactionDescriptor = Object.getOwnPropertyDescriptor(IDBTransaction.prototype, "oncomplete");
+    if (!requestDescriptor?.get || !requestDescriptor.set || !transactionDescriptor?.get || !transactionDescriptor.set) {
+      throw new Error("IndexedDB completion hooks are unavailable in this browser.");
+    }
+    Object.defineProperty(IDBRequest.prototype, "onsuccess", {
+      configurable: true,
+      enumerable: requestDescriptor.enumerable,
+      get() {
+        return requestDescriptor.get!.call(this);
+      },
+      set(handler: ((this: IDBRequest, event: Event) => unknown) | null) {
+        if (!handler) {
+          requestDescriptor.set!.call(this, handler);
+          return;
+        }
+        const request = this;
+        requestDescriptor.set!.call(this, function (this: IDBRequest, event: Event) {
+          const currentGate = (window as GatedWindow).__scriptoriumDraftGate;
+          const source = request.source;
+          const transaction = source instanceof IDBIndex
+            ? source.objectStore.transaction
+            : source instanceof IDBObjectStore ? source.transaction : null;
+          const records = request.result as Array<{ operation?: { id?: string } }> | undefined;
+          if (currentGate?.armed && !currentGate.heldOnce && Array.isArray(records) &&
+              records.some((record) => record.operation?.id === currentGate.targetOperationId)) {
+            currentGate.matchedTransactions.push(transaction?.mode ?? "unknown");
+            if (transaction?.mode === "readwrite") {
+              currentGate.heldOnce = true;
+              (transaction as GatedTransaction).__scriptoriumHoldComplete = true;
+            }
+          }
+          return handler.call(this, event);
+        });
+      },
+    });
+    Object.defineProperty(IDBTransaction.prototype, "oncomplete", {
+      configurable: true,
+      enumerable: transactionDescriptor.enumerable,
+      get() {
+        return transactionDescriptor.get!.call(this);
+      },
+      set(handler: ((this: IDBTransaction, event: Event) => unknown) | null) {
+        if (!handler) {
+          transactionDescriptor.set!.call(this, handler);
+          return;
+        }
+        const transaction = this as GatedTransaction;
+        transactionDescriptor.set!.call(this, function (this: IDBTransaction, event: Event) {
+          const currentGate = (window as GatedWindow).__scriptoriumDraftGate;
+          if (currentGate?.armed && transaction.__scriptoriumHoldComplete) {
+            currentGate.started = true;
+            currentGate.release = () => {
+              currentGate.armed = false;
+              handler.call(transaction, event);
+            };
+            return;
+          }
+          return handler.call(this, event);
+        });
+      },
+    });
+  });
+  await signIn(page);
+  await openFixtureProject(page);
+
+  const checkpointedText = "Checkpoint recovery baseline.";
+  const staleDraftText = "Draft written against the prior snapshot.";
+  const newestText = "Newest typing while recovery waits for IndexedDB.";
+  await page.locator(".cm-content").fill(checkpointedText);
+  await expect.poll(async () => (await readJournal(page)).some((entry) => entry.text === checkpointedText && entry.state === "draft")).toBe(true);
+
+  let releaseCheckpointRead!: () => void;
+  let signalCheckpointRead!: () => void;
+  const checkpointReadGate = new Promise<void>((resolve) => { releaseCheckpointRead = resolve; });
+  const checkpointReadStarted = new Promise<void>((resolve) => { signalCheckpointRead = resolve; });
+  await page.route((url) => url.pathname.endsWith("/scenes/scene-1") && url.searchParams.get("view") === "checkpoint", async (route) => {
+    signalCheckpointRead();
+    await checkpointReadGate;
+    await route.continue();
+  });
+
+  await page.getByRole("button", { name: "Checkpoint", exact: true }).click();
+  await checkpointReadStarted;
+  await page.locator(".cm-content").fill(staleDraftText);
+  await expect.poll(async () => (await readJournal(page)).some((entry) => entry.text === staleDraftText && entry.state === "draft")).toBe(true);
+  const staleDraft = (await readJournal(page)).find((entry) => entry.text === staleDraftText);
+  expect(staleDraft).toBeTruthy();
+  await page.evaluate((operationId) => {
+    const gate = (window as Window & { __scriptoriumDraftGate?: { targetOperationId: string | null; armed: boolean; started: boolean } }).__scriptoriumDraftGate;
+    if (!gate) throw new Error("Draft gate was not installed.");
+    gate.targetOperationId = operationId;
+    gate.armed = true;
+  }, staleDraft!.operationId);
+  releaseCheckpointRead();
+
+  await expect.poll(() => page.evaluate(() => JSON.stringify((window as Window & { __scriptoriumDraftGate?: { started: boolean; matchedTransactions: string[] } }).__scriptoriumDraftGate)))
+    .toContain('"started":true');
+  await page.locator(".cm-content").fill(newestText);
+  await expect.poll(async () => (await readJournal(page)).some((entry) => entry.text === newestText && entry.state === "draft")).toBe(true);
+  await page.evaluate(() => {
+    const gate = (window as Window & { __scriptoriumDraftGate?: { release?: () => void } }).__scriptoriumDraftGate;
+    if (!gate?.release) throw new Error("Draft rebase transaction was not held.");
+    gate.release();
+  });
+
+  await expect(page.locator(".cm-content")).toHaveText(newestText);
+  await expect(page.locator(".conflict")).toBeVisible();
+  await expect.poll(async () => (await readJournal(page)).some((entry) => entry.text === newestText && entry.state === "draft")).toBe(true);
+  const newest = (await readJournal(page)).find((entry) => entry.text === newestText);
+  expect(newest?.operationId).toBe(staleDraft?.operationId);
+  expect(newest?.generation).toBeGreaterThan(staleDraft?.generation ?? 0);
+  releaseCheckpointRead();
+});
+
 test("browser recovery is author-scoped and foreign records remain untouched", async ({ page }) => {
   expect(authToken.length).toBeGreaterThanOrEqual(32);
   expect(repositoryUrl).not.toBe("");

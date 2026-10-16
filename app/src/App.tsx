@@ -4,6 +4,7 @@ import {
   assertProjectPath,
   snapshotKey,
   type ChangeOperation,
+  type BrowserEditorDocument,
   type ChangeProposal,
   type ModuleStatus,
   type RemoteObservation,
@@ -338,6 +339,27 @@ function AuthorWorkspace({
     const next = updater(workRef.current);
     workRef.current = next;
     setWork(next);
+  }, []);
+
+  const readCurrentEditor = useCallback((): BrowserEditorDocument | null => {
+    const current = workRef.current;
+    const editor = current?.editor;
+    if (!current || !editor || current.loadingScene || current.selectedSceneId !== editor.read.scene.id ||
+        !sameRepository(current.observation.snapshot.repository, editor.read.snapshot.repository)) return null;
+    const cloneSnapshot = (snapshot: SnapshotId): SnapshotId => ({
+      ...snapshot,
+      repository: { ...snapshot.repository },
+    });
+    return {
+      sceneId: editor.read.scene.id,
+      documentPath: editor.read.document.path,
+      documentRevision: editor.read.document.revision,
+      sceneRevision: editor.read.scene.revision,
+      text: editor.text,
+      snapshot: cloneSnapshot(editor.read.snapshot),
+      baseSnapshot: cloneSnapshot(editor.remote.snapshot),
+      baseSceneRevision: editor.remote.metadata.revision,
+    };
   }, []);
 
   function isCurrentProject(nav: number, projectId: string, repository: RepositoryIdentity): boolean {
@@ -707,7 +729,9 @@ function AuthorWorkspace({
           );
           if (priorCheckpoint) {
             try {
-              const operation = buildOperation(effective, latest.text, latest.operation.id, latest.operation.generation);
+              const rebasedGeneration = Math.max(generationRef.current, latestGeneration) + 1;
+              generationRef.current = rebasedGeneration;
+              const operation = buildOperation(effective, latest.text, latest.operation.id, rebasedGeneration);
               latest = makeEntry(repository, authorScopeRef.current, sceneId, effective, latest.text, effective.scene.text, operation, "draft");
               if (!await journalRef.current?.putLatestDraft(latest)) throw new Error("A newer browser draft already exists.");
               entry = latest;
@@ -725,15 +749,44 @@ function AuthorWorkspace({
         if (latest.state === "conflict") conflict = remote;
       }
       if (navigationRef.current !== nav || sceneLoadRef.current !== sceneRequest) return;
+      // A draft can arrive while the prior-checkpoint rebase is waiting for IndexedDB.
+      // Re-read the live editor immediately before installation so that asynchronous
+      // storage completion cannot replace a newer in-memory generation.
+      const finalWork = workRef.current;
+      const finalEditor = finalWork?.project.id === projectId && finalWork.selectedSceneId === sceneId &&
+          finalWork.editor?.read.document.path === effective.document.path
+        ? finalWork.editor
+        : null;
+      let baseText = latest?.baseText ?? effective.scene.text;
+      let draftStored = Boolean(latest);
+      let journalError = "";
+      if (finalEditor?.entry && (!latest || finalEditor.entry.operation.generation > latest.operation.generation)) {
+        latest = finalEditor.entry;
+        entry = finalEditor.entry;
+        text = finalEditor.text;
+        baseText = finalEditor.baseText;
+        draftStored = finalEditor.draftStored;
+        journalError = finalEditor.journalError;
+        const currentRevision = finalEditor.entry.operation.reads.find((item) => item.path === effective.document.path)?.revision;
+        conflict = currentRevision !== effective.document.revision ||
+            finalEditor.entry.operation.baseRemoteCommit !== remote.snapshot.remoteCommit
+          ? remote
+          : finalEditor.conflict;
+      } else if (finalEditor?.entry && latest &&
+          finalEditor.entry.operation.id === latest.operation.id &&
+          finalEditor.entry.operation.generation === latest.operation.generation) {
+        draftStored = finalEditor.draftStored;
+        journalError = finalEditor.journalError;
+      }
       const next: EditorSession = {
         read: effective,
         remote,
         text,
-        baseText: latest?.baseText ?? effective.scene.text,
+        baseText,
         entry: latest,
         conflict,
-        draftStored: Boolean(latest),
-        journalError: "",
+        draftStored,
+        journalError,
       };
       generationRef.current = Math.max(generationRef.current, latest?.operation.generation ?? 0);
       updateWork((current) => current ? { ...current, selectedSceneId: sceneId, editor: next, loadingScene: false } : current);
@@ -1669,10 +1722,10 @@ function AuthorWorkspace({
                     scratchBusy={Boolean(busy)}
                     pendingCount={pendingCount}
                   />
-                    <ContributionHost projectId={work.project.id} authorScope={authorScope} slot="editor" contributions={contributions} modules={modules} snapshot={work.tree.snapshot} refresh={refreshContributionContext} journal={journal} onProposalStored={refreshProposals} />
+                    <ContributionHost projectId={work.project.id} authorScope={authorScope} slot="editor" contributions={contributions} modules={modules} snapshot={work.tree.snapshot} refresh={refreshContributionContext} journal={journal} onProposalStored={refreshProposals} readCurrentEditor={readCurrentEditor} />
                   <div className="contribution-dock">
                     {(["dock", "inspection", "review", "settings"] as const).map((slot) => (
-                      <ContributionHost key={slot} projectId={work.project.id} authorScope={authorScope} slot={slot} contributions={contributions} modules={modules} snapshot={work.tree.snapshot} refresh={refreshContributionContext} journal={journal} onProposalStored={refreshProposals} />
+                      <ContributionHost key={slot} projectId={work.project.id} authorScope={authorScope} slot={slot} contributions={contributions} modules={modules} snapshot={work.tree.snapshot} refresh={refreshContributionContext} journal={journal} onProposalStored={refreshProposals} readCurrentEditor={readCurrentEditor} />
                     ))}
                   </div>
                 </>

@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from "react";
-import { snapshotKey, type BrowserModuleContext, type BrowserModuleDefinition, type ChangeOperation, type ChangeProposal, type ModuleStatus, type SnapshotId, type UiContribution } from "@scriptorium/contracts";
+import { snapshotKey, type BrowserEditorDocument, type BrowserModuleContext, type BrowserModuleDefinition, type ChangeOperation, type ChangeProposal, type ModuleStatus, type SnapshotId, type UiContribution } from "@scriptorium/contracts";
 import { api } from "../api";
 import { moduleBrowserLoaders } from "../generated/browser-modules";
 import type { BrowserJournal } from "../storage/journal";
@@ -22,6 +22,7 @@ export function ContributionHost({
   refresh,
   journal,
   onProposalStored,
+  readCurrentEditor,
 }: {
   projectId: string;
   authorScope: string;
@@ -32,6 +33,7 @@ export function ContributionHost({
   refresh: () => Promise<void>;
   journal: BrowserJournal | null;
   onProposalStored: () => void;
+  readCurrentEditor: () => BrowserEditorDocument | null;
 }) {
   const allowedModules = useMemo(
     () => new Set(modules.filter((module) => module.availability === "enabled-idle" || module.availability === "active").map((module) => module.id)),
@@ -53,6 +55,7 @@ export function ContributionHost({
           refresh={refresh}
           journal={journal}
           onProposalStored={onProposalStored}
+          readCurrentEditor={readCurrentEditor}
         />
       ))}
     </section>
@@ -67,6 +70,7 @@ function MountedContribution({
   refresh,
   journal,
   onProposalStored,
+  readCurrentEditor,
 }: {
   item: UiContribution;
   projectId: string;
@@ -75,6 +79,7 @@ function MountedContribution({
   refresh: () => Promise<void>;
   journal: BrowserJournal | null;
   onProposalStored: () => void;
+  readCurrentEditor: () => BrowserEditorDocument | null;
 }) {
   const elementRef = useRef<HTMLDivElement>(null);
   const [error, setError] = useState("");
@@ -100,6 +105,7 @@ function MountedContribution({
           projectId,
           snapshot,
           signal: controller.signal,
+          readCurrentEditor,
           invoke: async (actionId, input) => {
             const result = await api.action(projectId, actionId, input);
             if (result.ok && result.proposals?.length) {
@@ -141,7 +147,7 @@ function MountedContribution({
       controller.abort();
       dispose?.();
     };
-  }, [authorScope, item.action, item.id, item.module, journal, onProposalStored, projectId, refresh, snapshot, snapshotId]);
+  }, [authorScope, item.action, item.id, item.module, journal, onProposalStored, projectId, readCurrentEditor, refresh, snapshot, snapshotId]);
 
   return (
     <article className="contribution-card" aria-label={item.title}>
