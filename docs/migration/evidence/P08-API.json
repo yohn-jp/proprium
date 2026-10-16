@@ -6,8 +6,8 @@
   },
   "target": {
     "branch": "branchwork/7-p08",
-    "implementationCommit": "7ddbc146519dd0772258e0055e18693fe253c7aa",
-    "testedHead": "7ddbc146519dd0772258e0055e18693fe253c7aa"
+    "implementationCommit": "35de381c44751889ca03d3ff31c1c2d86f5a9c4a",
+    "testedHead": "35de381c44751889ca03d3ff31c1c2d86f5a9c4a"
   },
   "ledger": {
     "R01": {
@@ -165,7 +165,8 @@
       ],
       "proofs": [
         "P08-owner-jobs-inbox",
-        "P08-domain-job-results"
+        "P08-domain-job-results",
+        "P08-domain-job-progress"
       ]
     }
   },
@@ -181,28 +182,29 @@
     "P08-public-module-attenuation": "The public module test verifies the handler gets a fresh remote reader, cannot invoke or enumerate composed actions or read linked repositories, receives no ambient cookie, bearer, or proxy-authorization headers, and can return only the explicitly allowed public Referrer-Policy and X-Robots-Tag headers. Runtime-side public-context rejection is implemented in P03.",
     "P08-owner-jobs-inbox": "Owner-cookie routes expose GET /api/jobs, GET /api/jobs/:jobId, GET /api/jobs/events, GET /api/inbox, POST /api/inbox/:id/read, and POST /api/inbox/read-all. Job and inbox state is stored under private host history outside Core data; worker lifecycle rows retain metadata only. Legacy jobs-state.json is archived byte-for-byte and source rows become readable only after explicit user and stable-repository mappings. Unmapped rows remain private and are reported as requiring mapping; nothing is replayed.",
     "P08-domain-job-results": "A real ModuleRuntime plus the HTTP API invokes a declared source domain action directly and through nested HTTP MCP context.invoke. The host durably registers one job before execution, retains the exact validated ActionResult data or machine error privately, and returns an owner-readable job ID. Prefer: respond-async returns a 202 receipt while the same tracked invocation continues; tests verify running and terminal status, inbox coalescing, history reopen, no input retention, and server cancellation/drain behavior. The capacity reservation is made synchronously before persistence awaits.",
-    "P08-historical-model-usage": "The historical usage store accepts the source prompt version format including rewrite@1 and preserves the validated cacheHit, prompt-version, duration, and queue-wait metadata through append, list, and reopen."
+    "P08-historical-model-usage": "The historical usage store accepts the source prompt version format including rewrite@1 and preserves the validated cacheHit, prompt-version, duration, and queue-wait metadata through append, list, and reopen.",
+    "P08-domain-job-progress": "The runtime exposes reportProgress only inside its host-tracked declared job invocation and carries it through nested action calls. The API persists bounded finite source progress fractions for the exact allocated job ID before emitting the source-compatible SSE JSON shape {type, jobId, jobType, status, progress, at}; job detail retains the latest progress across restart. Tests cover direct and nested HTTP MCP reporting, fractional phase regressions, finite clamping, duplicate coalescing, non-finite rejection, owner SSE events, and restart recovery."
   },
   "validation": [
     {
       "command": "pnpm --filter @scriptorium/contracts build",
-      "result": "passed on tested head 7ddbc146519dd0772258e0055e18693fe253c7aa"
+      "result": "passed on tested head 35de381c44751889ca03d3ff31c1c2d86f5a9c4a"
     },
     {
       "command": "pnpm --filter @scriptorium/module-runtime build && pnpm --filter @scriptorium/module-runtime typecheck && pnpm --filter @scriptorium/module-runtime test",
-      "result": "passed on tested head 7ddbc146519dd0772258e0055e18693fe253c7aa; 34 of 34 runtime tests passed on the final rerun"
+      "result": "passed on tested head 35de381c44751889ca03d3ff31c1c2d86f5a9c4a; 37 of 37 runtime tests passed, including job progress scoping, nested invocation, clamping, and cancellation"
     },
     {
       "command": "pnpm --filter @scriptorium/api typecheck",
-      "result": "passed on tested head 7ddbc146519dd0772258e0055e18693fe253c7aa"
+      "result": "passed on tested head 35de381c44751889ca03d3ff31c1c2d86f5a9c4a"
     },
     {
       "command": "pnpm --filter @scriptorium/api test",
-      "result": "passed on tested head 7ddbc146519dd0772258e0055e18693fe253c7aa; 22 of 22 API tests passed, including direct and nested module action job-result retention, async job status, explicit-mapping legacy history, and rewrite@1 usage history"
+      "result": "passed on tested head 35de381c44751889ca03d3ff31c1c2d86f5a9c4a; 22 of 22 API tests passed, including direct and nested job results/progress, owner SSE, explicit-mapping legacy history, and rewrite@1 usage history"
     },
     {
       "command": "git diff --check",
-      "result": "passed for the active-capacity reservation change before commit"
+      "result": "passed for the progress producer, API integration, and tests before commit"
     }
   ],
   "compositionLimits": [
