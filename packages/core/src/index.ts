@@ -1166,27 +1166,10 @@ export class CoreStore implements MutationCoordinator {
     return records;
   }
 
-  private async readOperationRecords(root: string, commit: string): Promise<StoredOperation[]> {
-    if (!commit) return [];
-    const operationVersions = await this.readHistoricalMetadataFiles(root, commit, OPERATION_DIRECTORY);
-    const publicationVersions = await this.readHistoricalMetadataFiles(root, commit, PUBLICATION_DIRECTORY);
-    const operationMetadata = new Map<string, { metadata: OperationMetadata; path: string; commit: string }>();
-    for (const version of operationVersions) {
-      if (version.content.length > 16 * 1024 * 1024) {
-        throw coreError(409, "operation_metadata_invalid", "The repository contains invalid Scriptorium operation metadata");
-      }
-      const metadata = parseOperationMetadata(version.content, version.path);
-      const existing = operationMetadata.get(metadata.operation.id);
-      if (existing && (
-        existing.metadata.digest !== metadata.digest || existing.metadata.sequence !== metadata.sequence ||
-        existing.metadata.authorScope !== metadata.authorScope || existing.metadata.operation.generation !== metadata.operation.generation
-      )) {
-        throw coreError(409, "operation_metadata_invalid", "An operation's immutable repository binding changed in Git history");
-      }
-      if (!existing) operationMetadata.set(metadata.operation.id, { metadata, path: version.path, commit: version.commit });
-    }
-
+  private async readPublicationRecords(root: string, commit: string): Promise<Map<string, PublicationMetadata>> {
     const publicationMetadata = new Map<string, PublicationMetadata>();
+    if (!commit) return publicationMetadata;
+    const publicationVersions = await this.readHistoricalMetadataFiles(root, commit, PUBLICATION_DIRECTORY);
     for (const version of publicationVersions) {
       let publication: PublicationMetadata;
       try { publication = JSON.parse(version.content) as PublicationMetadata; }
@@ -1204,6 +1187,28 @@ export class CoreStore implements MutationCoordinator {
         throw coreError(409, "batch_id_reused", "A publication batch's immutable repository binding changed in Git history");
       }
       if (!existing) publicationMetadata.set(publication.batchId, publication);
+    }
+    return publicationMetadata;
+  }
+
+  private async readOperationRecords(root: string, commit: string): Promise<StoredOperation[]> {
+    if (!commit) return [];
+    const operationVersions = await this.readHistoricalMetadataFiles(root, commit, OPERATION_DIRECTORY);
+    const publicationMetadata = await this.readPublicationRecords(root, commit);
+    const operationMetadata = new Map<string, { metadata: OperationMetadata; path: string; commit: string }>();
+    for (const version of operationVersions) {
+      if (version.content.length > 16 * 1024 * 1024) {
+        throw coreError(409, "operation_metadata_invalid", "The repository contains invalid Scriptorium operation metadata");
+      }
+      const metadata = parseOperationMetadata(version.content, version.path);
+      const existing = operationMetadata.get(metadata.operation.id);
+      if (existing && (
+        existing.metadata.digest !== metadata.digest || existing.metadata.sequence !== metadata.sequence ||
+        existing.metadata.authorScope !== metadata.authorScope || existing.metadata.operation.generation !== metadata.operation.generation
+      )) {
+        throw coreError(409, "operation_metadata_invalid", "An operation's immutable repository binding changed in Git history");
+      }
+      if (!existing) operationMetadata.set(metadata.operation.id, { metadata, path: version.path, commit: version.commit });
     }
 
     const publishedReceipts = new Map<string, { generation: number; digest: string; receipt: CheckpointReceipt }>();
@@ -2043,12 +2048,15 @@ export class CoreStore implements MutationCoordinator {
     }
     const total = proposal.operations.length;
     const checkpointedCount = checkpoints.length;
-    const approvedCount = approvedOperationIds.length;
+    const coveredOperationIds = new Set([
+      ...approvedOperationIds,
+      ...checkpoints.map((receipt) => receipt.operationId),
+    ]);
     const state: ProposalStatus["state"] = checkpointedCount === total
       ? "checkpointed"
-      : approvedCount + checkpointedCount === total
+      : coveredOperationIds.size === total
         ? "approved"
-        : approvedCount + checkpointedCount > 0
+        : coveredOperationIds.size > 0
           ? "partially_approved"
           : "proposed";
     return {
@@ -2304,6 +2312,8 @@ export class CoreStore implements MutationCoordinator {
       for (let attempt = 0; attempt < this.maxPushAttempts; attempt += 1) {
         const reconciled = await this.reconcileUnlocked(projectId);
         const remoteHead = reconciled.snapshot.remoteCommit;
+        const historicalBatches = remoteHead ? await this.readPublicationRecords(root, remoteHead) : new Map<string, PublicationMetadata>();
+        const historicalBatch = historicalBatches.get(batchId);
         const existing = remoteHead ? await this.snapshotFile(root, remoteHead, manifestPath) : null;
         if (existing) {
           let manifest: PublicationMetadata;
@@ -2325,7 +2335,14 @@ export class CoreStore implements MutationCoordinator {
         const toPublish = localOperations.filter((item) => pendingIds.has(item.operation.id) && !remoteById.has(item.operation.id));
         if (!toPublish.length) return { batchId, state: "confirmed", remoteCommit: remoteHead, acknowledged };
         const rows = toPublish.map((item) => ({ operationId: item.operation.id, generation: item.operation.generation, digest: item.digest, receipt: item.receipt }));
-        const manifest: PublicationMetadata = { version: 1, batchId, digest: publicationDigest(batchId, rows), operations: rows };
+        const digest = publicationDigest(batchId, rows);
+        if (historicalBatch) {
+          if (historicalBatch.digest !== digest) {
+            throw coreError(409, "batch_id_reused", "The publication batch ID is already bound to a different payload");
+          }
+          return { batchId, state: "confirmed", remoteCommit: remoteHead, acknowledged: historicalBatch.operations.map((item) => item.receipt) };
+        }
+        const manifest: PublicationMetadata = { version: 1, batchId, digest, operations: rows };
         const parent = reconciled.snapshot.overlayCommit ?? remoteHead;
         const commit = await this.createCommit(root, parent, [], [{ path: manifestPath, content: `${JSON.stringify(manifest, null, 2)}\n` }], `Publish checkpoint batch ${batchId}`);
         const publicationRef = `refs/scriptorium/publications/${batchId}`;

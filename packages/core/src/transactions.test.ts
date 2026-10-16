@@ -359,6 +359,46 @@ test("publication reports only unacknowledged operations across successive check
   }
 });
 
+test("deleted publication metadata cannot release a batch ID for different operations", async () => {
+  const fixture = await remoteFixture();
+  try {
+    const store = new CoreStore({ dataDir: path.join(fixture.root, "state"), allowLocalRemotes: true });
+    const project = await store.registerProject({ url: fixture.remote });
+    let snapshot = (await store.observe(project.id)).snapshot;
+    const first = operation(snapshot, "manuscript/first-batch.md", "First batch payload.\n", null, "deleted_batch_first_operation");
+    await approveAndCheckpoint(store, project.id, snapshot, first);
+    const firstPublication = await store.publish(project.id, "batch_deleted_metadata");
+    assert.equal(firstPublication.state, "confirmed");
+    assert.deepEqual(firstPublication.acknowledged.map((item) => item.operationId), [first.id]);
+
+    await git(fixture.seed, "fetch", "origin", "main");
+    await git(fixture.seed, "reset", "--hard", "origin/main");
+    await git(fixture.seed, "rm", "meta/scriptorium/publications/v1/batch_deleted_metadata.json");
+    await git(fixture.seed, "commit", "-m", "Remove visible publication metadata");
+    await git(fixture.seed, "push", "origin", "main");
+    const deletedMetadataHead = await git(fixture.root, "--git-dir", fixture.remote, "rev-parse", "refs/heads/main");
+
+    const sameBatchReplay = await store.publish(project.id, "batch_deleted_metadata");
+    assert.equal(sameBatchReplay.state, "confirmed");
+    assert.deepEqual(sameBatchReplay.acknowledged.map((item) => item.operationId), [first.id]);
+    assert.equal(await git(fixture.root, "--git-dir", fixture.remote, "rev-parse", "refs/heads/main"), deletedMetadataHead);
+
+    snapshot = (await store.observe(project.id)).snapshot;
+    const second = operation(snapshot, "manuscript/second-batch.md", "Second batch payload.\n", null, "deleted_batch_second_operation");
+    await approveAndCheckpoint(store, project.id, snapshot, second);
+    await assert.rejects(
+      store.publish(project.id, "batch_deleted_metadata"),
+      (error: unknown) => error instanceof CoreError && error.code === "batch_id_reused",
+    );
+    assert.equal(await git(fixture.root, "--git-dir", fixture.remote, "rev-parse", "refs/heads/main"), deletedMetadataHead);
+    const healthyObservation = await store.observe(project.id);
+    assert.equal(healthyObservation.state, "fresh");
+    assert.deepEqual(healthyObservation.pending.map((item) => item.operationId), [second.id]);
+  } finally {
+    await fs.rm(fixture.root, { recursive: true, force: true });
+  }
+});
+
 test("same-file remote updates remain conflicts while the local checkpoint remains readable", async () => {
   const fixture = await remoteFixture();
   try {
