@@ -359,13 +359,16 @@ describe("Scriptorium HTTP boundary", () => {
     assert.deepEqual(await new HistoricalModelUsageStore(unusedDirectory).list(SNAPSHOT.repository), { events: [] });
     await assert.rejects(lstat(unusedDirectory), (error: NodeJS.ErrnoException) => error.code === "ENOENT", "an empty history read must not create host storage");
     const store = new HistoricalModelUsageStore(usageDirectory);
-    const first = usageEvent(SNAPSHOT.repository, "usage-1", "2026-10-17T00:00:00.000Z");
+    const first = usageEvent(SNAPSHOT.repository, "usage-1", "2026-10-17T00:00:00.000Z", {
+      cacheHit: true, promptVersion: "story-draft-v3", durationMs: 217, queueWaitMs: 18,
+    });
     const second = usageEvent(SNAPSHOT.repository, "usage-2", "2026-10-17T00:00:02.000Z", { state: "aborted", errorCode: "request_cancelled" });
     const third = usageEvent(SNAPSHOT.repository, "usage-3", "2026-10-17T00:00:04.000Z");
     await Promise.all([store.append(first), store.append(first), store.append(second), store.append(third)]);
 
     const pageOne = await store.list(SNAPSHOT.repository, { limit: 2 });
     assert.deepEqual(pageOne.events.map(({ id }) => id), [first.id, second.id]);
+    assert.deepEqual(pageOne.events[0], first, "source cache and prompt/timing metadata survive append and list");
     assert.ok(pageOne.nextCursor);
     const pageTwo = await store.list(SNAPSHOT.repository, { limit: 2, cursor: pageOne.nextCursor });
     assert.deepEqual(pageTwo.events.map(({ id }) => id), [third.id]);
@@ -374,6 +377,21 @@ describe("Scriptorium HTTP boundary", () => {
     assert.deepEqual(ranged.events.map(({ id }) => id), [second.id, third.id]);
     await assert.rejects(store.list(SNAPSHOT.repository, { limit: 1_001 }), (error: unknown) => error instanceof HistoricalModelUsageError && error.code === "model_usage_query_invalid");
     await assert.rejects(store.append({ ...first, outputTokens: 9 }), (error: unknown) => error instanceof HistoricalModelUsageError && error.code === "model_usage_event_id_conflict");
+    await assert.rejects(store.append({ ...first, cacheHit: false }), (error: unknown) => error instanceof HistoricalModelUsageError && error.code === "model_usage_event_id_conflict");
+    for (const invalid of [
+      { cacheHit: "true" },
+      { promptVersion: "v1\nprivate prompt" },
+      { promptVersion: "v".repeat(129) },
+      { durationMs: Number.POSITIVE_INFINITY },
+      { durationMs: -1 },
+      { durationMs: 86_400_001 },
+      { queueWaitMs: Number.NaN },
+      { queueWaitMs: -1 },
+      { queueWaitMs: 86_400_001 },
+    ]) {
+      await assert.rejects(store.append({ ...first, id: `invalid-${Object.keys(invalid)[0]}`, ...invalid } as ModelUsageEvent),
+        (error: unknown) => error instanceof HistoricalModelUsageError && error.code === "model_usage_event_invalid");
+    }
     await assert.rejects(store.append({
       ...first, prompt: "private prompt", headers: { Authorization: "secret" }, key: "private key", body: "private body",
     } as ModelUsageEvent), (error: unknown) => error instanceof HistoricalModelUsageError && error.code === "model_usage_event_invalid");
@@ -381,7 +399,8 @@ describe("Scriptorium HTTP boundary", () => {
     await rm(coreDataDirectory, { recursive: true, force: true });
     await mkdir(coreDataDirectory);
     const reopened = new HistoricalModelUsageStore(usageDirectory);
-    assert.deepEqual((await reopened.list(SNAPSHOT.repository, { limit: 10 })).events.map(({ id }) => id), [first.id, second.id, third.id]);
+    assert.deepEqual((await reopened.list(SNAPSHOT.repository, { limit: 10 })).events, [first, second, third],
+      "source cache and prompt/timing metadata survive reopening the host-owned store after disposable Core data deletion");
 
     const alias = resolve(root, "history-alias");
     await symlink(usageDirectory, alias, "dir");
@@ -420,7 +439,9 @@ describe("Scriptorium HTTP boundary", () => {
     await assert.rejects(lstat(usageDirectory), (error: NodeJS.ErrnoException) => error.code === "ENOENT", "server startup must not touch unused usage history");
     const project = await register();
     const identity = (await coreStore.observe(project.id)).snapshot.repository;
-    const event = usageEvent(identity, "host-usage-1", "2026-10-17T01:00:00.000Z");
+    const event = usageEvent(identity, "host-usage-1", "2026-10-17T01:00:00.000Z", {
+      cacheHit: true, promptVersion: "assistant-story-v2", durationMs: 1_842, queueWaitMs: 73,
+    });
     const descriptors = await fetch(`${apiServer.base}/api/projects/${project.id}/actions`, { headers: { Cookie: owner.cookie } });
     assert.equal(descriptors.status, 200);
     assert.ok((await descriptors.json() as { actions: Array<{ id: string }> }).actions.some(({ id }) => id === "assistant.model-usage-history"));

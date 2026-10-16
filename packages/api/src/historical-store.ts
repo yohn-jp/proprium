@@ -7,9 +7,10 @@ import type { ModelUsageEvent, ModelUsageStore, RepositoryIdentity } from "@scri
 const DEFAULT_PAGE_SIZE = 100;
 const MAX_PAGE_SIZE = 1_000;
 const MAX_EVENT_BYTES = 8 * 1024;
+const MAX_TIMING_MS = 24 * 60 * 60 * 1_000;
 const EVENT_FIELDS = new Set([
   "id", "repository", "feature", "provider", "model", "startedAt", "completedAt", "state",
-  "inputTokens", "outputTokens", "cost", "errorCode",
+  "inputTokens", "outputTokens", "cost", "cacheHit", "promptVersion", "durationMs", "queueWaitMs", "errorCode",
 ]);
 const REPOSITORY_FIELDS = new Set(["provider", "repositoryId", "defaultBranch", "ownerScope", "url"]);
 
@@ -62,6 +63,9 @@ export class HistoricalModelUsageStore implements ModelUsageStore {
         if (JSON.stringify(existing) !== JSON.stringify(event)) {
           throw new HistoricalModelUsageError("model_usage_event_id_conflict", "A model usage event ID already has different immutable content");
         }
+        // An earlier writer may have linked the file but failed while syncing this directory.
+        // An exact retry is only acknowledged after the directory entry is durable.
+        await syncDirectory(directory);
       }
     } finally {
       await handle?.close().catch(() => undefined);
@@ -144,6 +148,10 @@ function normalizeEvent(value: unknown): ModelUsageEvent {
     ...(value.inputTokens === undefined ? {} : { inputTokens: boundedInteger(value.inputTokens, "inputTokens") }),
     ...(value.outputTokens === undefined ? {} : { outputTokens: boundedInteger(value.outputTokens, "outputTokens") }),
     ...(value.cost === undefined ? {} : { cost: boundedCost(value.cost) }),
+    ...(value.cacheHit === undefined ? {} : { cacheHit: boundedBoolean(value.cacheHit, "cacheHit") }),
+    ...(value.promptVersion === undefined ? {} : { promptVersion: boundedText(value.promptVersion, 0, 128, /^[A-Za-z0-9._:-]*$/u, "prompt version") }),
+    ...(value.durationMs === undefined ? {} : { durationMs: boundedDuration(value.durationMs, "durationMs") }),
+    ...(value.queueWaitMs === undefined ? {} : { queueWaitMs: boundedDuration(value.queueWaitMs, "queueWaitMs") }),
     ...(value.errorCode === undefined ? {} : { errorCode: boundedText(value.errorCode, 1, 128, /^[A-Za-z0-9._:-]+$/u, "error code") }),
   };
   if (Buffer.byteLength(JSON.stringify(event), "utf8") > MAX_EVENT_BYTES) invalidEvent("Model usage event exceeds the storage limit");
@@ -252,6 +260,18 @@ function boundedInteger(value: unknown, field: string): number {
 
 function boundedCost(value: unknown): number {
   if (typeof value !== "number" || !Number.isFinite(value) || value < 0 || value > 1_000_000_000) invalidEvent("Model usage cost is invalid");
+  return value;
+}
+
+function boundedBoolean(value: unknown, field: string): boolean {
+  if (typeof value !== "boolean") invalidEvent(`Model usage ${field} is invalid`);
+  return value;
+}
+
+function boundedDuration(value: unknown, field: string): number {
+  if (typeof value !== "number" || !Number.isFinite(value) || value < 0 || value > MAX_TIMING_MS) {
+    invalidEvent(`Model usage ${field} is invalid`);
+  }
   return value;
 }
 
