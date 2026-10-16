@@ -163,6 +163,68 @@ test("reports divergent local and remote histories without replacing the local d
   }
 });
 
+test("serializes simultaneous stale-revision saves through one CoreStore", async () => {
+  const { tempDir, remote } = await makeRemote();
+  try {
+    const store = new CoreStore({ dataDir: path.join(tempDir, "state"), allowLocalRemotes: true });
+    const project = await store.registerProject({ url: remote });
+    const scene = await store.readScene(project.id, "scene-1");
+    const historyLength = (await store.history(project.id)).length;
+    const outcomes = await Promise.allSettled([
+      store.saveScene(project.id, "scene-1", { text: "Concurrent winner A.\n", revision: scene.revision }),
+      store.saveScene(project.id, "scene-1", { text: "Concurrent winner B.\n", revision: scene.revision }),
+    ]);
+
+    const winners = outcomes.filter((outcome) => outcome.status === "fulfilled");
+    const losers = outcomes.filter((outcome) => outcome.status === "rejected");
+    assert.equal(winners.length, 1);
+    assert.equal(losers.length, 1);
+    assert.ok(losers[0]?.status === "rejected" && losers[0].reason instanceof CoreError);
+    if (losers[0]?.status === "rejected") {
+      assert.equal(losers[0].reason.code, "revision_conflict");
+    }
+    assert.equal((await store.readScene(project.id, "scene-1")).text, winners[0]?.status === "fulfilled" ? winners[0].value.text : "");
+    assert.equal((await store.history(project.id)).length, historyLength + 1);
+  } finally {
+    await fs.rm(tempDir, { recursive: true, force: true });
+  }
+});
+
+test("serializes saves from separate CoreStore instances sharing one data directory", async () => {
+  const { tempDir, remote } = await makeRemote();
+  const dataDir = path.join(tempDir, "state");
+  try {
+    const firstStore = new CoreStore({ dataDir, allowLocalRemotes: true });
+    const project = await firstStore.registerProject({ url: remote });
+    const secondStore = new CoreStore({ dataDir, allowLocalRemotes: true });
+    const scene = await firstStore.readScene(project.id, "scene-1");
+    const historyLength = (await firstStore.history(project.id)).length;
+    const outcomes = await Promise.allSettled([
+      firstStore.saveScene(project.id, "scene-1", { text: "Cross-instance winner A.\n", revision: scene.revision }),
+      secondStore.saveScene(project.id, "scene-1", { text: "Cross-instance winner B.\n", revision: scene.revision }),
+    ]);
+
+    const winners = outcomes.filter((outcome) => outcome.status === "fulfilled");
+    const losers = outcomes.filter((outcome) => outcome.status === "rejected");
+    assert.equal(winners.length, 1);
+    assert.equal(losers.length, 1);
+    assert.ok(losers[0]?.status === "rejected" && losers[0].reason instanceof CoreError);
+    if (losers[0]?.status === "rejected") {
+      assert.ok(
+        (losers[0].reason.code === "project_busy" && losers[0].reason.status === 423) ||
+        (losers[0].reason.code === "revision_conflict" && losers[0].reason.status === 409),
+      );
+    }
+
+    const winnerText = winners[0]?.status === "fulfilled" ? winners[0].value.text : "";
+    assert.match(winnerText, /^Cross-instance winner [AB]\.\n$/);
+    assert.equal((await new CoreStore({ dataDir, allowLocalRemotes: true }).readScene(project.id, "scene-1")).text, winnerText);
+    assert.equal((await firstStore.history(project.id)).length, historyLength + 1);
+  } finally {
+    await fs.rm(tempDir, { recursive: true, force: true });
+  }
+});
+
 test("loads a truly empty remote and protects project paths from traversal and symlinks", async () => {
   const tempDir = await fs.mkdtemp(path.join(os.tmpdir(), "scriptorium-empty-test-"));
   const remote = path.join(tempDir, "empty.git");
