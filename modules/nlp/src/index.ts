@@ -142,6 +142,8 @@ const featureRegistry = [
   { id: "continuation-options", label: "続きの相談", locality: "external" },
   { id: "contradiction-check", label: "矛盾照合", locality: "external" },
   { id: "zukan-proposal", label: "図鑑提案", locality: "external" },
+  { id: "state-event-draft", label: "状態イベント草案", locality: "external" },
+  { id: "first-read-reaction", label: "初読リアクション", locality: "external" },
 ] as const;
 const externalFeatures = featureRegistry.filter((feature) => feature.locality === "external");
 
