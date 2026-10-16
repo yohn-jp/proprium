@@ -38,6 +38,7 @@ export interface ActionHostContext {
     operations: ChangeOperation[],
     evidence?: Parameters<ModuleActionContext["propose"]>[1],
     proposalId?: Parameters<ModuleActionContext["propose"]>[2],
+    signal?: Parameters<ModuleActionContext["propose"]>[3],
   ): Promise<ChangeProposal>;
 }
 
@@ -624,9 +625,11 @@ export class ModuleRuntime {
       projectId: host.projectId,
       reader: host.reader,
       signal,
-      invoke: async (actionId, input) => {
-        if (signal.aborted) return actionFailure(host.reader.snapshot, machineError("action_cancelled", "Action was cancelled"));
-        const result = await this.invokeComposedAction(actionId, input, host, signal, depth + 1, inheritedEffect);
+      invoke: async (actionId, input, callSignal) => {
+        const invocationSignal = callSignal ? AbortSignal.any([signal, callSignal]) : signal;
+        if (invocationSignal.aborted) return actionFailure(host.reader.snapshot, machineError("action_cancelled", "Action was cancelled"));
+        const result = await this.invokeComposedAction(actionId, input, host, invocationSignal, depth + 1, inheritedEffect);
+        if (invocationSignal.aborted) return actionFailure(host.reader.snapshot, machineError("action_cancelled", "Action was cancelled"));
         if (result.ok && result.proposals?.length) proposals.push(...result.proposals);
         return result;
       },
@@ -644,11 +647,13 @@ export class ModuleRuntime {
         if (signal.aborted) throw new ModuleRuntimeError("action_cancelled", "Action was cancelled");
         return reader;
       },
-      propose: async (operations, evidence, proposalId) => {
-        if (signal.aborted) throw new ModuleRuntimeError("action_cancelled", "Action was cancelled");
+      propose: async (operations, evidence, proposalId, callSignal) => {
+        const proposalSignal = callSignal ? AbortSignal.any([signal, callSignal]) : signal;
+        if (proposalSignal.aborted) throw new ModuleRuntimeError("action_cancelled", "Action was cancelled");
         if (effect !== "propose" || inheritedEffect !== "propose") throw new ModuleRuntimeError("action_effect_denied", `Action ${moduleId} is not allowed to propose changes`);
         for (const operation of operations) this.assertOperationSnapshot(operation, host.reader.snapshot);
-        const proposal = await host.propose(operations, evidence, proposalId);
+        const proposal = await host.propose(operations, evidence, proposalId, proposalSignal);
+        if (proposalSignal.aborted) throw new ModuleRuntimeError("action_cancelled", "Action was cancelled");
         if (!sameSnapshot(proposal.snapshot, host.reader.snapshot)) throw new ModuleRuntimeError("action_snapshot_mismatch", "Proposal coordinator returned a different snapshot");
         proposals.push(proposal);
         return proposal;

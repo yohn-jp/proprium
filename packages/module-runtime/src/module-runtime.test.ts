@@ -147,6 +147,50 @@ test("enabled idle modules import no heavy capability; proposals are host-issued
   await runtime.shutdown();
 });
 
+test("per-call proposal cancellation reaches the host and prevents a late proposal result", async () => {
+  const metadata = manifest("story");
+  let startProposal!: () => void;
+  let finishProposal!: () => void;
+  let hostSignal: AbortSignal | undefined;
+  const proposalStarted = new Promise<void>((resolve) => { startProposal = resolve; });
+  const hostProposal = new Promise<void>((resolve) => { finishProposal = resolve; });
+  const callController = new AbortController();
+  const operation = proposalOperation();
+  const runtime = new ModuleRuntime({
+    manifests: [metadata], enabled: ["story"], cacheDirectory: "/tmp/scriptorium-runtime-test",
+    loaders: { story: async () => definition(metadata, {
+      id: "propose",
+      effect: "propose",
+      inputSchema: schema,
+      outputSchema: schema,
+      async invoke(_input, action) {
+        await action.propose([operation], undefined, "mcp-cancelled", callController.signal);
+        return { ok: true, snapshot, data: { accepted: false } };
+      },
+    }) },
+  });
+  const host = {
+    ...readContext(),
+    async propose(operations: ChangeOperation[], _evidence, proposalId, signal?: AbortSignal): Promise<ChangeProposal> {
+      hostSignal = signal;
+      startProposal();
+      await hostProposal;
+      return { id: proposalId ?? "proposal-1", snapshot, operations, source: "module" };
+    },
+  };
+
+  const invocation = runtime.invokeAction("story", "propose", {}, host);
+  await proposalStarted;
+  assert.ok(hostSignal, "the host receives a composed abort signal");
+  callController.abort();
+  assert.equal(hostSignal.aborted, true, "a per-call abort propagates into the host proposal operation");
+  finishProposal();
+  const result = await invocation;
+  assert.equal(result.ok, false);
+  if (!result.ok) assert.equal(result.error.code, "action_cancelled");
+  await runtime.shutdown();
+});
+
 test("two enabled consumers share one capability until the final module disables", async () => {
   const story = manifest("story", { requires: ["shared:model:v1"] });
   const diagnostics = manifest("diagnostics", { requires: ["shared:model:v1"] });
@@ -320,6 +364,87 @@ test("disabling a consumer cancels its provider-owned job and keeps the shared c
   await runtime.disable("nlp");
   assert.throws(() => process.kill(pid!, 0), (error: unknown) => (error as NodeJS.ErrnoException).code === "ESRCH");
   assert.equal(held.size, 2);
+  await runtime.shutdown();
+});
+
+test("a per-call abort cancels a real nested worker while its outer action remains active", async () => {
+  const nlp = manifest("nlp", { provides: ["nlp.tokenizer"], workerEntry: "worker-service.mjs" });
+  const story = manifest("story", { dependencies: ["nlp"], requires: ["nlp.tokenizer"] });
+  const perCall = new AbortController();
+  let finishOuter: (() => void) | undefined;
+  let markNestedFinished!: (value: { result: ActionResult; outerAborted: boolean }) => void;
+  const nestedFinished = new Promise<{ result: ActionResult; outerAborted: boolean }>((resolve) => { markNestedFinished = resolve; });
+  const runtime = new ModuleRuntime({
+    manifests: [nlp, story], enabled: ["nlp", "story"], cacheDirectory: "/tmp/scriptorium-runtime-test",
+    workerEntries: { nlp: fileURLToPath(new URL("./fixtures/worker-service.mjs", import.meta.url)) },
+    loaders: {
+      nlp: async (context) => ({
+        manifest: nlp, actions: [], ui: [],
+        capabilities: [{
+          id: "nlp.tokenizer", version: "1.0.0",
+          async create(providerContext) { return providerContext.createWorkerService(); },
+          async dispose(service) { await service.dispose(); },
+        }],
+        async dispose() {},
+      }),
+      story: async (context) => ({
+        manifest: story,
+        actions: [
+          {
+            id: "outer", effect: "compute", inputSchema: schema, outputSchema: schema,
+            async invoke(_input: unknown, action: ModuleActionContext) {
+              const result = await action.invoke("story.nested", {}, perCall.signal);
+              const hold = new Promise<void>((resolve) => { finishOuter = resolve; });
+              markNestedFinished({ result, outerAborted: action.signal.aborted });
+              await hold;
+              return { ok: true, snapshot: action.reader.snapshot, data: { nestedOk: result.ok } };
+            },
+          },
+          {
+            id: "nested", effect: "compute", inputSchema: schema, outputSchema: schema,
+            async invoke(_input: unknown, action: ModuleActionContext) {
+              const lease = await context.acquireCapability<WorkerService>("nlp.tokenizer");
+              const outcome = await lease.value.request(jobRequest("nlp", {
+                task: "hold", moduleVersion: nlp.version, deadline: Date.now() + 60_000,
+              }), action.signal);
+              if (!outcome.ok) return { ok: false, snapshot: action.reader.snapshot, error: outcome.error };
+              return { ok: true, snapshot: action.reader.snapshot, data: outcome.result.output };
+            },
+          },
+        ],
+        ui: [], async dispose() {},
+      }),
+    },
+  });
+
+  const invocation = runtime.invokeAction("story", "story.outer", {}, readContext());
+  await new Promise<void>((resolve, reject) => {
+    let attempts = 0;
+    const check = () => {
+      if (runtime.workerSupervisor.activeJobCountFor("nlp") > 0) { resolve(); return; }
+      attempts += 1;
+      if (attempts > 100) { reject(new Error("nested provider-owned worker job did not start")); return; }
+      setTimeout(check, 10);
+    };
+    check();
+  });
+  const pid = runtime.workerSupervisor.activeWorkerPids[0];
+  assert.ok(pid, "nested job should run in a real supervised child process");
+  perCall.abort();
+  const nested = await nestedFinished;
+  assert.equal(nested.outerAborted, false, "the parent action signal remains active");
+  assert.equal(nested.result.ok, false);
+  if (!nested.result.ok) assert.equal(nested.result.error.code, "action_cancelled");
+  assert.equal(runtime.workerSupervisor.activeJobCountFor("nlp"), 0, "the worker has settled its cancelled job");
+  assert.equal(runtime.status("story").availability, "active", "the outer action remains in flight");
+  assert.doesNotThrow(() => process.kill(pid!, 0), "the provider service remains alive for the outer action's module session");
+
+  finishOuter?.();
+  const result = await invocation;
+  assert.equal(result.ok, true, JSON.stringify(result));
+  await runtime.disable("story");
+  await runtime.disable("nlp");
+  assert.throws(() => process.kill(pid!, 0), (error: unknown) => (error as NodeJS.ErrnoException).code === "ESRCH");
   await runtime.shutdown();
 });
 
