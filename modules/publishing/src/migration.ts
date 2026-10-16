@@ -98,19 +98,22 @@ function canonicalJson(value: unknown): string {
 function safeRetainedGrant(value: unknown, repositoryId: string): Record<string, unknown> | null {
   if (!isRecord(value) || typeof value.id !== "string" || !value.id.trim() ||
       value.projectId !== repositoryId || typeof value.scope !== "string" && !isRecord(value.scope) ||
-      !normalizeShareScope(value.scope) || typeof value.label !== "string" ||
+      typeof value.label !== "string" ||
       typeof value.tokenHash !== "string" || !/^[a-f0-9]{64}$/i.test(value.tokenHash) ||
       typeof value.createdAt !== "string" || !Number.isFinite(Date.parse(value.createdAt)) ||
       typeof value.expiresAt !== "string" || !Number.isFinite(Date.parse(value.expiresAt)) ||
       (value.lastUsedAt !== undefined && typeof value.lastUsedAt !== "string") ||
       (value.revokedAt !== undefined && typeof value.revokedAt !== "string")) return null;
+  const normalizedScope = normalizeShareScope(value.scope);
+  if (!normalizedScope) return null;
 
   // The disabled producer stores only this descriptor. Re-apply its allowlist
-  // here so edited opaque data can never reactivate a bearer or host authority.
+  // here and rebuild object scopes so nested extension data cannot reactivate
+  // a bearer or host authority. Preserve legacy string scopes byte-for-byte.
   return {
     id: value.id,
     projectId: value.projectId,
-    scope: value.scope,
+    scope: typeof value.scope === "string" ? value.scope : normalizedScope,
     label: value.label,
     tokenHash: value.tokenHash,
     createdAt: value.createdAt,
