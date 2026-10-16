@@ -951,6 +951,9 @@ test("reconstruction can recover a lost clean clone but refuses a local proposal
     await fs.rm(clonePath, { recursive: true, force: true });
     await assert.rejects(store.reconstructProject(project.id), (error: unknown) => error instanceof CoreError && error.code === "local_proposals_present");
     await assert.rejects(fs.access(clonePath), (error: NodeJS.ErrnoException) => error.code === "ENOENT");
+    const cacheState = store as unknown as { historicalMetadataCache: Map<string, unknown>; historicalMetadataCacheBytes: number };
+    assert.equal(cacheState.historicalMetadataCache.size, 0, "failed reconstruction releases cache entries for its temporary clone");
+    assert.equal(cacheState.historicalMetadataCacheBytes, 0);
     assert.equal((await store.listProjects())[0]?.id, project.id);
   } finally {
     await fs.rm(fixture.root, { recursive: true, force: true });

@@ -3829,6 +3829,7 @@ export class CoreStore implements MutationCoordinator {
       if (workspaceStat && (!workspaceStat.isDirectory() || workspaceStat.isSymbolicLink())) {
         throw coreError(500, "project_workspace_invalid", "The project workspace is unsafe");
       }
+      if (!workspaceStat) this.clearHistoricalMetadataCache(root);
 
       const askpassDir = path.join(this.dataDir, `.askpass-reconstruct-${projectId}-${randomUUID()}`);
       const candidateRoot = path.join(this.projectsDir, `.reconstruct-${projectId}-${randomUUID()}`);
@@ -3955,6 +3956,7 @@ export class CoreStore implements MutationCoordinator {
         throw error;
       } finally {
         await fs.rm(candidateRoot, { recursive: true, force: true }).catch(() => undefined);
+        this.clearHistoricalMetadataCache(candidateRoot);
         await fs.rm(askpassDir, { recursive: true, force: true }).catch(() => undefined);
       }
     });
