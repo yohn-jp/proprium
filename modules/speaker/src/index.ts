@@ -733,6 +733,7 @@ async function runEvaluation(input: { writeGates: boolean }, context: ModuleActi
   const goldScenes = scenes.filter((scene) => correctionsFromScene(scene.scene.raw.speakerOverrides).length > 0);
   const report = await withTokenizer(moduleContext, context.signal, async (tokenizer) => {
     const pipelines = await prepareCorpusPipelines(goldScenes, entities, tokenizer, context, moduleContext);
+    await context.reportProgress?.(0.05);
     return runWorker<SpeakerEvalReport>(moduleContext, context, "evaluate", { kind: "evaluate", pipelines, generatedAt: new Date().toISOString() });
   });
   await writeEvaluationCache(moduleContext.cacheDirectory, context.reader.snapshot, identity, report);
@@ -742,6 +743,7 @@ async function runEvaluation(input: { writeGates: boolean }, context: ModuleActi
     gates = { ...generatedResultIdentity(identity), gates: computeSpeakerRuleGates(report.byReason, records), exists: true, provenance: cacheProvenance(identity) };
     await writeGateCache(moduleContext.cacheDirectory, context.reader.snapshot, identity, gates.gates);
   }
+  await context.reportProgress?.(1);
   return { ...generatedResultIdentity(identity), report, gates: gates.gates, gatesUpdated: input.writeGates, provenance: cacheProvenance(identity) };
 }
 
@@ -774,6 +776,7 @@ async function speakerRetrainAction(input: ReturnType<typeof parseRetrainInput>,
       prepareCorpusPipelines(holdoutScenes, entities, tokenizer, context, moduleContext, { ignoreOverrides: true, skipReranker: true }),
     ]);
     const reasonPrecision = Object.fromEntries(Object.entries(gates.gates.gates).map(([reason, gate]) => [reason, gate.measuredPrecision]));
+    await context.reportProgress?.(0.05);
     return runWorker<SpeakerTrainingResult>(moduleContext, context, "train", {
       kind: "train", trainPipelines, holdoutPipelines, corrections, reasonPrecision,
     });
@@ -801,6 +804,7 @@ async function speakerRetrainAction(input: ReturnType<typeof parseRetrainInput>,
       deltaPt: result.deltaPt,
     }), `speaker-model-adoption-${randomUUID()}`, context.signal);
   }
+  await context.reportProgress?.(1);
   return { ...generatedResultIdentity(identity), ...metrics, model, adoptionProposal, dryRun: input.dryRun, provenance: cacheProvenance(identity) };
 }
 

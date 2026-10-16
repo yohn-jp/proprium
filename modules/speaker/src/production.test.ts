@@ -119,7 +119,7 @@ async function createRuntime(
   files: Map<string, { content: string; revision: string }>,
   getSnapshot: () => SnapshotId,
   cacheDirectory: string,
-): Promise<{ runtime: ModuleRuntime; host: Parameters<ModuleRuntime["invokeAction"]>[3] }> {
+): Promise<{ runtime: ModuleRuntime; host: Parameters<ModuleRuntime["invokeAction"]>[3]; jobProgress: Map<string, number[][]> }> {
   const stub = moduleContext();
   const [storyDefinition, nlpDefinition, diagnosticsDefinition, speakerDefinition] = await Promise.all([
     createStoryModule(stub), createNlpModule(stub), createDiagnosticsModule(stub), createSpeakerModule(stub),
@@ -150,7 +150,8 @@ async function createRuntime(
       speaker: fileURLToPath(new URL("../dist/worker.js", import.meta.url)),
     },
   });
-  const host = {
+  const jobProgress = new Map<string, number[][]>();
+  const host: Parameters<ModuleRuntime["invokeAction"]>[3] = {
     projectId: repository.repositoryId,
     signal: new AbortController().signal,
     reader: {
@@ -166,8 +167,15 @@ async function createRuntime(
       const proposal: ChangeProposal = { id: proposalId ?? `p10-proposal-${Date.now()}`, snapshot, operations, source: "module", ...(evidence ? { evidence } : {}) };
       return proposal;
     },
+    async trackDomainJob(descriptor, _snapshot, _signal, execute) {
+      const invocations = jobProgress.get(descriptor.job.type) ?? [];
+      const progress: number[] = [];
+      invocations.push(progress);
+      jobProgress.set(descriptor.job.type, invocations);
+      return execute(async (value) => { progress.push(value); });
+    },
   };
-  return { runtime, host };
+  return { runtime, host, jobProgress };
 }
 
 function applyReviewedProposal(
@@ -231,7 +239,7 @@ test("speaker actions run real CPU attribution, propose corrections/model adopti
   try {
     const first = await createRuntime(files, () => snapshot, cacheDirectory);
     runtime = first.runtime;
-    const { host } = first;
+    const { host, jobProgress } = first;
 
     assert.equal(runtime.status("speaker").availability, "enabled-idle");
     assert.deepEqual(runtime.workerSupervisor.activeWorkerPids, [], "enabled-idle speaker allocates neither tokenizer nor speaker worker");
@@ -330,6 +338,7 @@ test("speaker actions run real CPU attribution, propose corrections/model adopti
 
     const holdoutIds = ["sc-synthetic-13", "sc-synthetic-14"];
     const trained = await runtime.invokeAction("speaker", "speaker.retraining.run", { holdoutSceneIds: holdoutIds }, host);
+    assert.deepEqual(jobProgress.get("speaker-retrain"), [[0.05, 1]], "retraining reports only its source preparation and successful completion phases");
     const trainingData = dataOf(trained);
     assertSpeakerIdentity(trainingData, null);
     assert.equal(trainingData.adopted, true, JSON.stringify({ accuracyWithoutModel: trainingData.accuracyWithoutModel, accuracyWithModel: trainingData.accuracyWithModel, deltaPt: trainingData.deltaPt }));
@@ -359,6 +368,7 @@ test("speaker actions run real CPU attribution, propose corrections/model adopti
     assert.deepEqual(runtime.workerSupervisor.activeWorkerPids, []);
 
     const evaluation = await runtime.invokeAction("speaker", "speaker.evaluation.run", { writeGates: true }, host);
+    assert.deepEqual(jobProgress.get("speaker-eval"), [[0.05, 1]], "evaluation reports only its source preparation and successful completion phases");
     const evaluationData = dataOf(evaluation);
     assertSpeakerIdentity(evaluationData, adoptedModelRevision);
     assert.equal(evaluationData.gatesUpdated, true);
@@ -394,6 +404,7 @@ test("speaker actions run real CPU attribution, propose corrections/model adopti
     assert.equal(dataOf(await runtime.invokeAction("speaker", "speaker.evaluation.latest", {}, host)).exists, false, "stored evaluation from an old engine is rejected despite matching snapshot and cache path");
     assert.equal(dataOf(await runtime.invokeAction("speaker", "speaker.ruleGates", {}, host)).exists, false, "stored rule gates from an old engine are rejected despite matching snapshot and cache path");
     const rebuilt = await runtime.invokeAction("speaker", "speaker.evaluation.run", { writeGates: true }, host);
+    assert.deepEqual(jobProgress.get("speaker-eval"), [[0.05, 1], [0.05, 1]], "cache rebuild keeps the same truthful progress phases");
     assert.equal(dataOf(rebuilt).gatesUpdated, true);
     assert.equal(dataOf(await runtime.invokeAction("speaker", "speaker.evaluation.latest", {}, host)).exists, true);
     assert.equal(dataOf(await runtime.invokeAction("speaker", "speaker.ruleGates", {}, host)).exists, true);
