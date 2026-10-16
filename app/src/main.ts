@@ -36,9 +36,14 @@ function setStatus(message: string, kind: "normal" | "error" | "success" = "norm
 }
 
 function showLogin(message = ""): void {
+  navigationGeneration++;
   activeProject = null;
   activeTree = null;
   activeScene = null;
+  currentText = "";
+  currentRevision = "";
+  conflictScene = null;
+  currentDraftPersisted = false;
   app!.innerHTML = `
     <section class="login-panel" aria-labelledby="login-title">
       <h1 id="login-title">Scriptorium</h1>
@@ -179,6 +184,7 @@ async function loadWorkspace(): Promise<void> {
     projects = await api.projects();
   } catch (error) {
     if (error instanceof ApiError && error.status === 401) {
+      if (!confirmLeavingScene()) return;
       showLogin("セッションが切れました。もう一度ログインしてください。");
       return;
     }
@@ -221,6 +227,8 @@ function renderProjects(): void {
 }
 
 async function registerProject(form: HTMLFormElement): Promise<void> {
+  const generation = navigationGeneration;
+  const projectIdAtStart = activeProject?.id ?? null;
   const data = new FormData(form);
   const url = String(data.get("url") ?? "").trim();
   const branch = String(data.get("branch") ?? "").trim();
@@ -231,10 +239,14 @@ async function registerProject(form: HTMLFormElement): Promise<void> {
     projects = await api.projects();
     renderProjects();
     form.reset();
-    setStatus("リポジトリを登録しました。", "success");
-    await activateProject(project.id, true);
+    if (generation === navigationGeneration && activeProject?.id === projectIdAtStart) {
+      setStatus("リポジトリを登録しました。", "success");
+      await activateProject(project.id, true);
+    }
   } catch (error) {
-    setStatus(errorMessage(error), "error");
+    if (generation === navigationGeneration && activeProject?.id === projectIdAtStart) {
+      setStatus(errorMessage(error), "error");
+    }
   } finally {
     setBusy(false);
   }
@@ -247,11 +259,22 @@ async function activateProject(projectId: string, openFirstScene: boolean): Prom
   const generation = ++navigationGeneration;
   activeProject = project;
   activeTree = null;
+  // Hide the prior scene before clearing its live editor state while the new project loads.
+  element<HTMLElement>("#editor")!.hidden = true;
+  element<HTMLElement>("#empty-state")!.hidden = false;
   activeScene = null;
   currentText = "";
   currentRevision = "";
   currentDraftPersisted = false;
   conflictScene = null;
+  const historyPanel = element<HTMLElement>("#history-panel");
+  const historyButton = element<HTMLButtonElement>("#history-toggle");
+  if (historyPanel) historyPanel.hidden = true;
+  if (historyButton) historyButton.setAttribute("aria-expanded", "false");
+  const historyList = element<HTMLOListElement>("#history-list");
+  historyList?.replaceChildren();
+  const syncLabel = element<HTMLElement>("#sync-status");
+  if (syncLabel) syncLabel.textContent = "同期状態を読み込んでいます…";
   try {
     browserStorage?.setItem(ACTIVE_PROJECT_KEY, project.id);
   } catch {
@@ -274,8 +297,10 @@ async function activateProject(projectId: string, openFirstScene: boolean): Prom
       if (firstScene) await openScene(firstScene.scene.id, firstScene.chapter.title, firstScene.volume.title);
     }
   } catch (error) {
-    if (generation === navigationGeneration) {
+    if (generation === navigationGeneration && activeProject?.id === projectId) {
       renderTree(null);
+      element<HTMLElement>("#editor")!.hidden = true;
+      element<HTMLElement>("#empty-state")!.hidden = false;
       setStatus(errorMessage(error), "error");
     }
   }
@@ -328,6 +353,8 @@ async function openScene(sceneId: string, chapterTitle = "", volumeTitle = ""): 
   if (activeScene?.id !== sceneId && !confirmLeavingScene()) return;
   const projectId = activeProject.id;
   const generation = ++navigationGeneration;
+  element<HTMLElement>("#editor")!.hidden = true;
+  element<HTMLElement>("#empty-state")!.hidden = activeScene !== null;
   setStatus("原稿を読み込んでいます…");
   try {
     const scene = await api.scene(projectId, sceneId);
@@ -357,7 +384,11 @@ async function openScene(sceneId: string, chapterTitle = "", volumeTitle = ""): 
     }
     updateSaveButton();
   } catch (error) {
-    setStatus(errorMessage(error), "error");
+    if (generation === navigationGeneration && activeProject?.id === projectId) {
+      element<HTMLElement>("#editor")!.hidden = activeScene === null;
+      element<HTMLElement>("#empty-state")!.hidden = activeScene !== null;
+      setStatus(errorMessage(error), "error");
+    }
   }
 }
 
@@ -409,6 +440,7 @@ async function saveCurrentScene(): Promise<void> {
   if (!activeProject || !activeScene || !isDirty() || busy) return;
   const projectId = activeProject.id;
   const sceneId = activeScene.id;
+  const sceneGeneration = navigationGeneration;
   const submittedText = currentText;
   const submittedRevision = currentRevision;
   setBusy(true);
@@ -444,19 +476,28 @@ async function saveCurrentScene(): Promise<void> {
       await refreshStatus();
     }
   } catch (error) {
-    if (activeProject?.id === projectId && activeScene?.id === sceneId) {
-      if (error instanceof ApiError && (error.status === 409 || error.status === 412)) {
-        try {
-          conflictScene = await api.scene(projectId, sceneId);
-        } catch {
-          conflictScene = null;
-        }
-        currentDraftPersisted = saveDraft(browserStorage, projectId, sceneId, currentText, submittedRevision);
-        renderConflict();
-        setStatus("競合を検出しました。下書きは保護され、保存内容は上書きされていません。", "error");
-      } else {
-        setStatus(errorMessage(error), "error");
+    if (error instanceof ApiError && (error.status === 409 || error.status === 412)) {
+      const activeView = navigationGeneration === sceneGeneration && activeProject?.id === projectId && activeScene?.id === sceneId;
+      // Prefer any newer autosaved text; otherwise retain the submitted snapshot under its original revision.
+      const storedDraft = loadDraft(browserStorage, projectId, sceneId);
+      const conflictDraftText = activeView
+        ? currentText
+        : storedDraft?.revision === submittedRevision ? storedDraft.text : submittedText;
+      const persisted = saveDraft(browserStorage, projectId, sceneId, conflictDraftText, submittedRevision);
+      if (activeView) currentDraftPersisted = persisted;
+      let latest: Scene | null = null;
+      try {
+        latest = await api.scene(projectId, sceneId);
+      } catch {
+        latest = null;
       }
+      if (navigationGeneration !== sceneGeneration || activeProject?.id !== projectId || activeScene?.id !== sceneId) return;
+      conflictScene = latest;
+      currentDraftPersisted = saveDraft(browserStorage, projectId, sceneId, currentText, submittedRevision);
+      renderConflict();
+      setStatus("競合を検出しました。下書きは保護され、保存内容は上書きされていません。", "error");
+    } else if (navigationGeneration === sceneGeneration && activeProject?.id === projectId && activeScene?.id === sceneId) {
+      setStatus(errorMessage(error), "error");
     }
   } finally {
     setBusy(false);
@@ -531,23 +572,28 @@ function renderSyncStatus(status: SyncStatus): void {
 
 async function refreshStatus(): Promise<void> {
   if (!activeProject) return;
+  const projectId = activeProject.id;
   try {
-    renderSyncStatus(await api.status(activeProject.id));
+    const status = await api.status(projectId);
+    if (activeProject?.id === projectId) renderSyncStatus(status);
   } catch (error) {
-    setStatus(errorMessage(error), "error");
+    if (activeProject?.id === projectId) setStatus(errorMessage(error), "error");
   }
 }
 
 async function syncProject(): Promise<void> {
   if (!activeProject || busy) return;
+  const projectId = activeProject.id;
   setBusy(true);
   setStatus("GitHub と同期しています…");
   try {
-    const status = await api.sync(activeProject.id);
-    renderSyncStatus(status);
-    setStatus("GitHub と同期しました。", "success");
+    const status = await api.sync(projectId);
+    if (activeProject?.id === projectId) {
+      renderSyncStatus(status);
+      setStatus("GitHub と同期しました。", "success");
+    }
   } catch (error) {
-    setStatus(errorMessage(error), "error");
+    if (activeProject?.id === projectId) setStatus(errorMessage(error), "error");
   } finally {
     setBusy(false);
   }
@@ -555,6 +601,7 @@ async function syncProject(): Promise<void> {
 
 async function toggleHistory(): Promise<void> {
   if (!activeProject) return;
+  const projectId = activeProject.id;
   const panel = element<HTMLElement>("#history-panel");
   const button = element<HTMLButtonElement>("#history-toggle");
   if (!panel || !button) return;
@@ -565,11 +612,13 @@ async function toggleHistory(): Promise<void> {
   }
   button.disabled = true;
   try {
-    renderHistory(await api.history(activeProject.id));
+    const commits = await api.history(projectId);
+    if (activeProject?.id !== projectId) return;
+    renderHistory(commits);
     panel.hidden = false;
     button.setAttribute("aria-expanded", "true");
   } catch (error) {
-    setStatus(errorMessage(error), "error");
+    if (activeProject?.id === projectId) setStatus(errorMessage(error), "error");
   } finally {
     button.disabled = false;
   }
@@ -598,6 +647,7 @@ function renderHistory(commits: Commit[]): void {
 }
 
 async function logout(): Promise<void> {
+  if (!confirmLeavingScene()) return;
   try {
     await api.logout();
   } finally {
