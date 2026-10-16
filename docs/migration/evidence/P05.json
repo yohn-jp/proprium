@@ -1,0 +1,100 @@
+{
+  "schemaVersion": 1,
+  "task": "P05",
+  "implementationStatus": "in_progress",
+  "acceptanceStatus": "pending",
+  "source": {
+    "repository": "yohn-jp/arcadia-loom",
+    "commit": "edc033c2c9466274a334299dadfa426661d957d9",
+    "readOnly": true,
+    "ledgerItem": "docs/migration/ledger.json#N02"
+  },
+  "target": {
+    "repository": "yohn-jp/scriptorium",
+    "baseCommit": "97b96bee11bd3b6202ac17cdc26a6a0beb95f38d",
+    "branch": "work/7-p05"
+  },
+  "sourceClassification": [
+    {
+      "source": [
+        "bible/**/*.yaml",
+        "plot/**/*.yaml",
+        "meta/**/*.yaml",
+        "manuscript/**/*.md"
+      ],
+      "category": "authoritative",
+      "target": "same work-repository paths; disabled Story data uses meta/scriptorium/modules/story/legacy/files/<source>",
+      "sourceProof": ["packages/core/src/loader.ts"],
+      "targetProof": ["modules/story/src/migration/producer.ts"],
+      "preservation": "The Story producer uses bounded exact-file operations and does not parse or rewrite YAML/Markdown, preserving source IDs, unknown fields, frontmatter, and formatting. When Story is re-enabled, opaque files are copied back only when the original source file is absent; target conflicts remain reviewable."
+    },
+    {
+      "source": [
+        ".arcadia/index.sqlite#state_proposals",
+        ".arcadia/index.sqlite#zukan_suggestions"
+      ],
+      "category": "authoritative decisions and provisional unresolved workflow rows",
+      "target": [
+        "meta/scriptorium/modules/story/state-proposals.jsonl",
+        "meta/scriptorium/modules/story/zukan-suggestions.jsonl",
+        "same-origin migration recovery for unresolved rows"
+      ],
+      "sourceProof": [
+        "packages/core/src/worldState/proposals.ts",
+        "packages/core/src/nlp/zukanSuggestions/store.ts"
+      ],
+      "targetProof": ["packages/migration/src/producers/sqlite.ts"],
+      "preservation": "Stable row IDs and complete row fields are retained for approved/rejected decisions; other statuses remain provisional for author review. Story does not duplicate the generic SQLite operations."
+    },
+    {
+      "source": [
+        ".arcadia/index.sqlite#scene_state_events",
+        ".arcadia/index.sqlite#reader_knowledge_events"
+      ],
+      "category": "derived",
+      "target": "rebuild from retained canonical manuscript/entity state",
+      "sourceProof": [
+        "packages/core/src/nlp/readerKnowledge/buildReaderModel.ts",
+        "packages/core/src/worldState/store.ts",
+        "packages/core/src/nlp/readerKnowledge/store.ts"
+      ],
+      "targetProof": ["packages/migration/src/producers/sqlite.ts"],
+      "preservation": "These projection tables are classified as rebuildable and their row contents are not imported as author decisions."
+    },
+    {
+      "source": ["<dataDir>/app-state/series.json"],
+      "category": "relocated",
+      "target": "host-owned series/project binding configuration",
+      "sourceProof": [
+        "packages/workspace/src/projects/seriesRegistry.ts",
+        "packages/api/src/projectContext.ts"
+      ],
+      "targetProof": ["packages/migration/src/producers/workspace.ts"],
+      "preservation": "Series registry and work bindings remain host configuration; Story does not copy them into work metadata."
+    }
+  ],
+  "proofs": [
+    {
+      "id": "P05-STORY-MIGRATION-UNIT",
+      "kind": "focused source-derived unit test",
+      "status": "pending-run",
+      "targetFiles": [
+        "modules/story/src/migration/producer.ts",
+        "modules/story/src/migration/producer.test.ts"
+      ],
+      "command": "node --import tsx --test modules/story/src/migration/producer.test.ts",
+      "scope": "Exact-byte canonical YAML/Markdown import, unknown-field and stable-ID preservation, conflict reporting, disabled opaque preservation, and re-enable restoration."
+    },
+    {
+      "id": "P05-INTEGRATED-MIGRATION",
+      "kind": "P04/P12 composed migration acceptance",
+      "status": "pending",
+      "targetFiles": [
+        "packages/migration/src/producers/filesystem.ts",
+        "packages/migration/src/producers/sqlite.ts",
+        "packages/migration/src/producers/workspace.ts"
+      ],
+      "scope": "Generic operation composition, idempotent import, author review, and recovery after data-root replacement have not been established by this evidence file."
+    }
+  ]
+}
