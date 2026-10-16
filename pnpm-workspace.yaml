@@ -2,5 +2,6 @@ packages:
   - packages/*
   - modules/*
   - app
+  - profiles/*
 allowBuilds:
   esbuild: true
