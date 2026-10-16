@@ -1,0 +1,147 @@
+{
+  "schemaVersion": 1,
+  "task": "P09",
+  "implementationStatus": "in_progress",
+  "acceptanceStatus": "pending",
+  "source": {
+    "repository": "yohn-jp/arcadia-loom",
+    "commit": "edc033c2c9466274a334299dadfa426661d957d9",
+    "readOnly": true,
+    "ledgerItem": "docs/migration/ledger.json#N05"
+  },
+  "target": {
+    "repository": "yohn-jp/scriptorium",
+    "baseCommit": "c8c4eb8de0dfee2b764e0aa5a62002bf5b0a9af9",
+    "branch": "work/7-p09",
+    "implementationCommits": [
+      "2bf9603589b8ad008c3ece07fc45c6920da8cfd6",
+      "6c112e1a8e6f313aa51f8e9cff3a48058570a4bd",
+      "433db234bb8eb4807cf6b2b3b20a681cae9ad932"
+    ],
+    "validationHead": "4dd7cc87bef856787b36dc681006c79bae06b0f6"
+  },
+  "dataClassification": [
+    {
+      "source": ".arcadia/index.sqlite#sentence_embeddings",
+      "category": "derived",
+      "target": "private local module cache under semantic/indexes/<repository-and-model-key>.json",
+      "sourceProof": [
+        "packages/core/src/nlp/embedding/store.ts",
+        "packages/core/src/nlp/embedding/syncEmbeddings.ts"
+      ],
+      "targetProof": [
+        "modules/semantic/src/passages.ts",
+        "modules/semantic/src/embedding.ts",
+        "modules/semantic/src/worker.ts"
+      ],
+      "preservation": "Passages are rebuilt only from canonical entities in the pinned SnapshotReader. The private cache keys vectors by entity, sentence index, text hash and pinned model revision, and stores separate memberships for each repository snapshot. It contains derived project text and vectors, is not in Git, and is invalidated/rebuilt when deleted or stale."
+    },
+    {
+      "source": ".arcadia/index.sqlite#contradiction_candidates",
+      "category": "derived",
+      "target": "recomputed rule and embedding candidates for the selected snapshot",
+      "sourceProof": [
+        "packages/core/src/nlp/contradiction/generate.ts",
+        "packages/core/src/nlp/contradiction/rebuild.ts",
+        "packages/core/src/nlp/contradiction/store.ts"
+      ],
+      "targetProof": [
+        "modules/semantic/src/actions.ts",
+        "modules/semantic/src/contradictions.ts",
+        "modules/semantic/src/worker.ts"
+      ],
+      "preservation": "Candidate records are regenerated from canonical snapshot entities and the selected snapshot's semantic index; no generated candidate table is treated as an author decision. Results carry source evidence and remain snapshot-bound."
+    },
+    {
+      "source": "meta/contradiction-dismissals.jsonl",
+      "category": "authoritative",
+      "target": "meta/scriptorium/modules/semantic/contradiction-dismissals.jsonl",
+      "disabledTarget": "meta/scriptorium/modules/semantic/legacy/files/meta/contradiction-dismissals.jsonl",
+      "sourceProof": ["packages/core/src/nlp/contradiction/dismissals.ts"],
+      "targetProof": [
+        "packages/migration/src/producers/filesystem.ts",
+        "modules/semantic/src/actions.ts",
+        "modules/semantic/src/migration.ts",
+        "modules/semantic/src/migration.test.ts"
+      ],
+      "preservation": "P04 maps the source file byte-for-byte when semantic is enabled and preserves it in the module legacy namespace when disabled. The semantic reactivation producer restores those bytes only when the canonical target is absent; a divergent target is reported as a conflict and is not overwritten. Dismissal actions propose revision-guarded updates through Core."
+    },
+    {
+      "source": "new author choice: semantic reranker preference",
+      "category": "authoritative",
+      "target": "meta/scriptorium/modules/semantic/settings.json",
+      "targetProof": ["modules/semantic/src/actions.ts", "modules/semantic/src/browser.ts"],
+      "preservation": "The read/update actions expose the reranker preference and pinned model identities. Updates are settings ChangeOperations with the observed revision and proposal evidence; the UI routes them to author review."
+    },
+    {
+      "source": "pinned embedding and reranker artifacts",
+      "category": "derived model cache",
+      "target": "private local module model cache",
+      "sourceProof": ["docs/verification/P13-MODEL-PREFLIGHT.md"],
+      "targetProof": ["modules/semantic/src/worker.ts"],
+      "preservation": "Embedding and reranker artifacts remain outside the repository. The worker loads the pinned Xenova/multilingual-e5-small revision and the source BGE reranker revision on demand; it does not send project content to an external inference provider. Artifacts may be fetched if absent."
+    }
+  ],
+  "implementedBehavior": [
+    "A lazy semantic.embedding capability provides supervised worker indexing, nearest search over a pinned snapshot, shared E5 embeddings for consumers, contradiction-pair scoring, status, and reranking. The worker is created only on a capability lease and disposed with its final lease.",
+    "Snapshot-pinned corpus indexing and reusable local vectors; source passage segmentation and E5 passage prefix; hybrid lexical/vector search with source known-term expansion, field weighting, short-token fallback and reciprocal-rank fusion; scene, sentence and expression modes.",
+    "Optional pinned BGE cross-encoder reranking on CPU, bounded to the top 30 candidates, with source-style RRF-order fallback and a warning when the model is unavailable.",
+    "Source string/reading term clustering and opt-in embedding-only edges; source scene-state ownership/location rules and mid-band mention-pair candidates; current dismissal filtering and revision-guarded author dismissal proposals.",
+    "Public semantic index/search/expression/term-cluster/contradiction/settings/task actions and dock/review/settings browser contributions, including progress, cancellation, privacy text and author-proposed reranker settings."
+  ],
+  "proofs": [
+    {
+      "id": "P09-SEMANTIC-CPU-AND-PUBLIC-ACTIONS",
+      "kind": "source-derived semantic tests with real CPU model artifacts",
+      "status": "passed",
+      "targetFiles": [
+        "modules/semantic/src/worker.ts",
+        "modules/semantic/src/embedding.ts",
+        "modules/semantic/src/actions.ts",
+        "modules/semantic/src/semantic.test.ts"
+      ],
+      "command": "pnpm --filter @scriptorium/module-nlp build && pnpm --filter @scriptorium/module-semantic typecheck && pnpm --filter @scriptorium/module-semantic build && SCRIPTORIUM_SEMANTIC_MODEL_CACHE=/tmp/scriptorium-model-runtime-edc033c/home/.arcadia/models pnpm --filter @scriptorium/module-semantic test",
+      "result": "11 passed, 0 failed, 0 skipped on validation HEAD 4dd7cc87bef856787b36dc681006c79bae06b0f6. The supervised CPU worker loaded the pinned 384-dimensional E5 model, indexed a synthetic canonical corpus through semantic.index.rebuild, returned expected semantic.search ordering and snapshot/model identity, reused unchanged vectors, kept two pinned snapshot texts/metadata isolated, ran the pinned BGE reranker with finite correctly ordered scores, detected deleted derived cache state, and rebuilt it. No model weights or private corpus were copied into Git.",
+      "scope": "focused module and actual model acceptance",
+      "testPath": "modules/semantic/src/semantic.test.ts",
+      "engineModelIdentity": {
+        "engine": "@huggingface/transformers",
+        "engineVersion": "3.8.1",
+        "device": "cpu",
+        "embedding": {
+          "id": "Xenova/multilingual-e5-small",
+          "revision": "761b726dd34fb83930e26aab4e9ac3899aa1fa78",
+          "dimensions": 384
+        },
+        "reranker": {
+          "id": "mogolloni/bge-reranker-v2-m3-onnx",
+          "revision": "e5023553f6c47f09057da7a19cdd79ef850a4985",
+          "dtype": "fp32",
+          "externalData": true
+        }
+      }
+    },
+    {
+      "id": "P09-MODULE-AND-MIGRATION-UNIT",
+      "kind": "module typecheck/build and migration/action unit tests",
+      "status": "passed",
+      "targetFiles": [
+        "modules/semantic/src/actions.ts",
+        "modules/semantic/src/browser.ts",
+        "modules/semantic/src/migration.ts",
+        "modules/semantic/src/migration.test.ts",
+        "modules/semantic/src/search.ts",
+        "modules/semantic/src/contradictions.ts"
+      ],
+      "command": "pnpm --filter @scriptorium/module-semantic typecheck && pnpm --filter @scriptorium/module-semantic build && pnpm --filter @scriptorium/module-semantic test",
+      "result": "The module typecheck and build passed; the pure semantic and migration assertions passed in the 11-test run above. These focused tests cover canonical source passage inputs, source query expansion and lexical fields/RRF, setting proposal revision preconditions, source term-clustering and contradiction rules, byte-exact semantic reactivation and conflict safety.",
+      "scope": "focused source-derived producer tests"
+    }
+  ],
+  "compositionLimits": [
+    "The semantic server and browser contributions have not yet been exercised through the final composed API, browser bundle, or real author review/checkpoint path. Run the documented browser acceptance after all modules are integrated.",
+    "The semantic dismissal reactivation producer has focused exact-byte and conflict tests, but its composition with the generic importer, P12 review flow, push and data-root-loss/reclone round trip is pending.",
+    "P06's corpus-neighbor consumer uses semantic.embedding, but its provider-consumer acceptance and the full P05/P06/P09 composition remain to be run with the integrated host.",
+    "The source external LLM verdict enrichment for contradiction candidates is not claimed here; P09 supplies local rule and embedding candidates and preserves author dismissal decisions."
+  ]
+}
