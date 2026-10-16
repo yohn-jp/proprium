@@ -10,6 +10,7 @@ import type {
   SnapshotId,
   ValueSchema,
 } from "@scriptorium/contracts";
+import { snapshotScopeRevision } from "@scriptorium/contracts";
 import {
   NLP_TOKENIZER_CAPABILITY,
   isAdjective,
@@ -358,7 +359,7 @@ export function createSemanticActions(moduleContext: ModuleContext): ModuleActio
           task.update("embedding_query");
           try {
             const result = await withCapability(moduleContext, (embedding) => embedding.nearest(input.query, context.reader.snapshot, {
-              limit: input.mode === "sentence" || input.mode === "expression" ? Math.max(input.limit * 3, 30) : Math.max(input.limit * 3, 30),
+              limit: Math.min(100, Math.max(input.limit * 3, 30)),
             }, task.signal));
             nearest = result.hits;
           } catch (error) {
@@ -457,12 +458,18 @@ export function createSemanticActions(moduleContext: ModuleContext): ModuleActio
         .map((entityId) => story.entities.get(entityId)?.filePath)
         .filter((path): path is string => typeof path === "string"))];
       const sourceReads = await Promise.all(uniquePaths.map(async (path) => ({ path, revision: (await context.reader.read(path))?.revision ?? null })));
+      const readScopes = await Promise.all(["bible", "plot"].map(async (prefix) => ({
+        prefix,
+        revision: await snapshotScopeRevision(context.reader, prefix),
+      })));
       const evidence: ProposalEvidence = {
         id: randomUUID(), snapshot: context.reader.snapshot, module: "semantic", kind: "contradiction_dismissal",
         paths: [{ path: DISMISSALS_PATH, revision }, ...sourceReads],
         details: { candidateId, kind: candidate.kind, score: candidate.score, evidenceA: candidate.evidenceA, evidenceB: candidate.evidenceB },
       };
-      const proposal = await context.propose([operation(context, DISMISSALS_PATH, revision, next, "Dismiss semantic contradiction candidate", sourceReads)], [evidence], undefined, context.signal);
+      const dismissal = operation(context, DISMISSALS_PATH, revision, next, "Dismiss semantic contradiction candidate", sourceReads);
+      dismissal.readScopes = readScopes;
+      const proposal = await context.propose([dismissal], [evidence], undefined, context.signal);
       return { ok: true, snapshot: context.reader.snapshot, data: { candidateId, dismissed: true, proposal } } as ActionResult;
     }),
     action("semantic.settings.read", "read", parseEmpty, async (_raw, context) => {

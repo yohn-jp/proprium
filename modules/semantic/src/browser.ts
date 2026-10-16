@@ -58,7 +58,8 @@ function mountSearch(root: HTMLElement, context: BrowserModuleContext, cleanup: 
         item.append(node("small", `${hit.type ?? "entity"} · RRF ${hit.score.toFixed(5)}`));
         results.append(item);
       }
-      status.textContent = `${hits.length} 件 · ${String(data.model ?? "index unavailable")} ${String(data.modelVersion ?? "")}${data.warning ? ` · ${String(data.warning)}` : ""}`;
+      const warnings = [data.warning, data.rerankWarning].filter((warning): warning is string => typeof warning === "string" && warning.length > 0);
+      status.textContent = `${hits.length} 件 · ${String(data.model ?? "index unavailable")} ${String(data.modelVersion ?? "")}${warnings.map((warning) => ` · ${warning}`).join("")}`;
     } catch (error) { status.textContent = error instanceof Error ? error.message : String(error); }
     finally { runningTask = null; run.disabled = false; cancel.disabled = true; }
   };

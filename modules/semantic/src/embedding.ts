@@ -79,7 +79,7 @@ function identity(snapshot: SnapshotId, requestId?: string, model = EMBEDDING_MO
     model,
     modelVersion,
     moduleVersion: SEMANTIC_MODULE_VERSION,
-    deadline: Date.now() + 30 * 60_000,
+    deadline: Date.now() + 10 * 60_000,
   };
 }
 

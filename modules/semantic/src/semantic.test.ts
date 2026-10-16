@@ -1,24 +1,22 @@
 import assert from "node:assert/strict";
-import { mkdtemp, mkdir, rm, symlink } from "node:fs/promises";
+import { createHash } from "node:crypto";
+import { mkdtemp, mkdir, readFile, rm, symlink } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { test } from "node:test";
-import type { ChangeOperation, ModuleActionContext, ModuleContext, SnapshotId } from "@scriptorium/contracts";
+import { assertChangeOperation, snapshotScopeRevision } from "@scriptorium/contracts";
+import type { ChangeOperation, ModuleActionContext, ModuleContext, ModuleManifest, SnapshotId } from "@scriptorium/contracts";
 import type { CandidateTerm, CanonicalSnapshotEntity } from "@scriptorium/module-nlp";
-import { WorkerSupervisor } from "@scriptorium/module-runtime";
+import { ModuleRuntime } from "@scriptorium/module-runtime";
 import type { StoryEntity } from "@scriptorium/module-story";
 import {
   EMBEDDING_DIMENSIONS,
   EMBEDDING_MODEL_ID,
   EMBEDDING_MODEL_VERSION,
-  RERANKER_MODEL_ID,
-  RERANKER_MODEL_VERSION,
   type SemanticEmbeddingCapability,
-  type SemanticPassage,
 } from "./contracts.js";
 import { collectMentionGroups, detectSourceRuleContradictions, embeddingContradictionsToCandidates } from "./contradictions.js";
-import { semanticEmbeddingCapability } from "./embedding.js";
 import { createSemanticActions } from "./actions.js";
 import { buildSemanticPassages } from "./passages.js";
 import { buildSearchDocuments, combineHybridScores, searchSnapshotLexically } from "./search.js";
@@ -55,6 +53,38 @@ test("snapshot lexical projection supplies source field weighting and classic RR
   assert.equal(lexical[0]?.field, "name");
   assert.equal(combineHybridScores(1, 1), 2 / 61);
   assert.equal(combineHybridScores(1, null), 1 / 61);
+});
+
+test("semantic search caps vector overfetch at the provider's 100-hit contract", async () => {
+  const requestedLimits: number[] = [];
+  const embedding: SemanticEmbeddingCapability = {
+    model: { id: EMBEDDING_MODEL_ID, version: EMBEDDING_MODEL_VERSION, dimensions: EMBEDDING_DIMENSIONS },
+    async index(): Promise<never> { throw new Error("unused"); },
+    async nearest(_query, readerSnapshot, options) {
+      requestedLimits.push(options.limit ?? 0);
+      return { snapshot: readerSnapshot, model: EMBEDDING_MODEL_ID, modelVersion: EMBEDDING_MODEL_VERSION, dimensions: EMBEDDING_DIMENSIONS, hits: [] };
+    },
+    async status(): Promise<never> { throw new Error("unused"); },
+    async contradictionPairs(): Promise<never> { throw new Error("unused"); },
+    async embed(): Promise<never> { throw new Error("unused"); },
+    async rerank(): Promise<never> { throw new Error("unused"); },
+  };
+  const moduleContext = {
+    async acquireCapability(id: string) {
+      assert.equal(id, "semantic.embedding");
+      return { value: embedding, async release() {} };
+    },
+  } as unknown as ModuleContext;
+  const search = createSemanticActions(moduleContext).find((action) => action.id === "semantic.search")!;
+  for (const limit of [34, 100]) {
+    const context = {
+      reader: makeSemanticReader(snapshot, new Map()),
+      signal: new AbortController().signal,
+    } as unknown as ModuleActionContext;
+    const result = await search.invoke({ query: "駅", mode: "scene", limit }, context);
+    assert.equal(result.ok, true);
+  }
+  assert.deepEqual(requestedLimits, [100, 100]);
 });
 
 test("term expansion uses NLP rules and preserves the source short-token LIKE behavior", () => {
@@ -116,6 +146,65 @@ test("semantic reranker setting is returned as a revision-guarded author proposa
   assert.equal(proposalSignal, controller.signal);
 });
 
+test("contradiction dismissal binds Bible and plot source scopes to its proposal", async () => {
+  const files = new Map([
+    ["bible/characters/owner/profile.yaml", "id: char-owner\ntype: character\nname: Owner\naliases: [Owner]",],
+    ["bible/characters/thief/profile.yaml", "id: char-thief\ntype: character\nname: Thief\naliases: [Thief]",],
+    ["plot/volumes/v/volume.yaml", "id: vol-v\ntype: volume\norder: 0",],
+    ["plot/volumes/v/chapters/c/chapter.yaml", "id: ch-c\ntype: chapter\nvolume: vol-v\norder: 0",],
+    ["plot/volumes/v/chapters/c/scenes/one.yaml", "id: sc-one\ntype: scene\nchapter: ch-c\norder: 0\neffects:\n  - action: acquire_item\n    itemId: sword\n    characterId: char-owner",],
+    ["plot/volumes/v/chapters/c/scenes/two.yaml", "id: sc-two\ntype: scene\nchapter: ch-c\norder: 1\neffects:\n  - action: use_item\n    itemId: sword\n    characterId: char-thief",],
+  ]);
+  const reader = makeSemanticReader(snapshot, files);
+  const embedding: SemanticEmbeddingCapability = {
+    model: { id: EMBEDDING_MODEL_ID, version: EMBEDDING_MODEL_VERSION, dimensions: EMBEDDING_DIMENSIONS },
+    async index(): Promise<never> { throw new Error("unused"); },
+    async nearest(): Promise<never> { throw new Error("unused"); },
+    async status(readerSnapshot) {
+      return { snapshot: readerSnapshot, model: EMBEDDING_MODEL_ID, modelVersion: EMBEDDING_MODEL_VERSION, dimensions: EMBEDDING_DIMENSIONS,
+        indexAvailable: false, passageCount: 0, modelLoaded: false, rerankerLoaded: false, indexUpdatedAt: null };
+    },
+    async contradictionPairs(): Promise<never> { throw new Error("unused"); },
+    async embed(): Promise<never> { throw new Error("unused"); },
+    async rerank(): Promise<never> { throw new Error("unused"); },
+  };
+  const moduleContext = {
+    async acquireCapability(id: string) {
+      assert.equal(id, "semantic.embedding");
+      return { value: embedding, async release() {} };
+    },
+  } as unknown as ModuleContext;
+  let proposed: ChangeOperation[] = [];
+  const actionContext = {
+    projectId: "semantic-scope-fixture",
+    reader,
+    signal: new AbortController().signal,
+    async propose(operations: ChangeOperation[]) {
+      proposed = operations;
+      return { id: "semantic-dismissal-scope", snapshot, operations, source: "module" as const };
+    },
+  } as unknown as ModuleActionContext;
+  const actions = createSemanticActions(moduleContext);
+  const rebuilt = await actions.find((action) => action.id === "semantic.contradictions.rebuild")!.invoke({}, actionContext);
+  assert.equal(rebuilt.ok, true);
+  const candidates = (rebuilt.data as { candidates: Array<{ id: string }> }).candidates;
+  assert.equal(candidates.length, 1);
+  const dismissed = await actions.find((action) => action.id === "semantic.contradictions.dismiss")!.invoke({ candidateId: candidates[0]!.id }, actionContext);
+  assert.equal(dismissed.ok, true);
+  assert.equal(proposed.length, 1);
+  assertChangeOperation(proposed[0]);
+  const scopes = proposed[0]!.readScopes ?? [];
+  assert.deepEqual(scopes.map((scope) => scope.prefix).sort(), ["bible", "plot"]);
+  assert.deepEqual(await Promise.all(scopes.map(async ({ prefix, revision }) => [prefix, revision, await snapshotScopeRevision(reader, prefix)])), [
+    ["bible", scopes.find((scope) => scope.prefix === "bible")!.revision, scopes.find((scope) => scope.prefix === "bible")!.revision],
+    ["plot", scopes.find((scope) => scope.prefix === "plot")!.revision, scopes.find((scope) => scope.prefix === "plot")!.revision],
+  ]);
+  const changedFiles = new Map(files);
+  changedFiles.set("bible/characters/owner/profile.yaml", "id: char-owner\ntype: character\nname: Owner\naliases: [Old Owner]");
+  assert.notEqual(await snapshotScopeRevision(makeSemanticReader(snapshot, changedFiles), "bible"), scopes.find((scope) => scope.prefix === "bible")!.revision,
+    "a canonical alias change must invalidate the dismissal's source scope");
+});
+
 test("term clustering retains source reading, edit distance, canonical ordering, and opt-in semantic edges", async () => {
   const candidates: CandidateTerm[] = [
     { term: "駅前", reading: "エキマエ", sourceEntityIds: ["a"], occurrenceCount: 2 },
@@ -168,121 +257,140 @@ test("source rule contradictions preserve pre-scene ownership boundaries and val
   assert.equal(contradictions[0]?.previousSceneId, "sc-1");
 });
 
-test("supervised CPU model indexes, retrieves, reranks, reuses, and rebuilds from deleted derived cache", {
+test("default ModuleRuntime composes semantic status, real CPU rebuild/search/rerank, and cache recovery", {
   skip: !process.env.SCRIPTORIUM_SEMANTIC_MODEL_CACHE,
+  timeout: 300_000,
 }, async () => {
   const modelCache = process.env.SCRIPTORIUM_SEMANTIC_MODEL_CACHE!;
   const cacheDirectory = await mkdtemp(path.join(os.tmpdir(), "scriptorium-semantic-p09-"));
-  const modelDirectory = path.join(cacheDirectory, "semantic", "models");
+  const modelDirectory = path.join(cacheDirectory, "semantic", "semantic", "models");
   await mkdir(path.dirname(modelDirectory), { recursive: true });
   await symlink(modelCache, modelDirectory, "dir");
-  const workerEntry = fileURLToPath(new URL("../dist/worker.js", import.meta.url));
-  const supervisor = new WorkerSupervisor({ maxWorkerServices: 1, maxConcurrentServiceJobs: 1, maxJobDurationMs: 30 * 60_000 });
-  const controller = new AbortController();
-  const service = await supervisor.createService("semantic", "0.1.0", workerEntry, controller.signal);
-  const capability = await semanticEmbeddingCapability.create({
+  const [storyPackage, nlpPackage, semanticPackage] = await Promise.all([
+    readFile(new URL("../../story/package.json", import.meta.url), "utf8").then((value) => JSON.parse(value) as { scriptoriumModule: ModuleManifest }),
+    readFile(new URL("../../nlp/package.json", import.meta.url), "utf8").then((value) => JSON.parse(value) as { scriptoriumModule: ModuleManifest }),
+    readFile(new URL("../package.json", import.meta.url), "utf8").then((value) => JSON.parse(value) as { scriptoriumModule: ModuleManifest }),
+  ]);
+  const storyEntry = new URL("../../story/dist/index.js", import.meta.url).href;
+  const nlpEntry = new URL("../../nlp/dist/index.js", import.meta.url).href;
+  const semanticEntry = new URL("../dist/index.js", import.meta.url).href;
+  const runtime = new ModuleRuntime({
+    manifests: [storyPackage.scriptoriumModule, nlpPackage.scriptoriumModule, semanticPackage.scriptoriumModule],
+    enabled: ["semantic"],
     cacheDirectory,
-    signal: controller.signal,
-    async acquireCapability() { throw new Error("unused"); },
-    async createWorkerService() { return service; },
+    workerEntries: {
+      nlp: fileURLToPath(new URL("../../nlp/dist/worker.js", import.meta.url)),
+      semantic: fileURLToPath(new URL("../dist/worker.js", import.meta.url)),
+    },
+    loaders: {
+      story: async (context) => (await import(storyEntry)).createModule(context),
+      nlp: async (context) => (await import(nlpEntry)).createModule(context),
+      semantic: async (context) => (await import(semanticEntry)).createModule(context),
+    },
   });
   try {
-    const passages: SemanticPassage[] = [
-      { entityId: "sc-station", sceneId: "sc-station", sentenceIndex: 0, type: "scene", name: "Station", text: "夜遅く駅に着き、青い切符を握りしめた。" },
-      { entityId: "sc-sea", sceneId: "sc-sea", sentenceIndex: 0, type: "scene", name: "Sea", text: "昼の海で泳ぎ、白い波を眺めた。" },
-      { entityId: "sc-market", sceneId: "sc-market", sentenceIndex: 0, type: "scene", name: "Market", text: "朝の市場で赤い林檎を買った。" },
-      { entityId: "sc-book", sceneId: "sc-book", sentenceIndex: 0, type: "scene", name: "Book", text: "静かな部屋で小説を読んだ。" },
-    ];
-    const first = await capability.index(passages, snapshot, controller.signal);
-    assert.equal(first.embedded, passages.length);
-    assert.equal(first.dimensions, 384);
-    const retrieved = await capability.nearest(passages[0]!.text, snapshot, { limit: 4 }, controller.signal);
-    assert.equal(retrieved.hits[0]?.entityId, "sc-station");
-    assert.ok(retrieved.hits[0]!.score > 0.98);
-    const second = await capability.index(passages, snapshot, controller.signal);
-    assert.equal(second.reused, passages.length);
-    assert.equal(second.embedded, 0);
-
-    const actionSnapshot: SnapshotId = { ...snapshot, remoteCommit: "c".repeat(40) };
-    const files = new Map([
+    const initialFiles = new Map([
       ["plot/volumes/v/scenes/station.yaml", "id: sc-station\ntype: scene\nname: Station\ndescription: 夜遅く駅に着き、青い切符を握りしめた。\n"],
       ["plot/volumes/v/scenes/sea.yaml", "id: sc-sea\ntype: scene\nname: Sea\ndescription: 昼の海で泳ぎ、白い波を眺めた。\n"],
+      ["plot/volumes/v/scenes/market.yaml", "id: sc-market\ntype: scene\nname: Market\ndescription: 朝の市場で赤い林檎を買った。\n"],
+      ["plot/volumes/v/scenes/book.yaml", "id: sc-book\ntype: scene\nname: Book\ndescription: 静かな部屋で小説を読んだ。\n"],
     ]);
-    const reader = {
-      snapshot: actionSnapshot,
-      async list(prefix: string) { return [...files.keys()].filter((file) => file.startsWith(`${prefix}/`)); },
-      async read(path: string) {
-        const content = files.get(path);
-        return content === undefined ? null : { content, revision: "revision-" + path };
-      },
-    };
-    const moduleContext = {
-      cacheDirectory,
-      signal: controller.signal,
-      async acquireCapability(id: string) {
-        assert.equal(id, "semantic.embedding");
-        return { value: capability, async release() {} };
-      },
-      async createWorkerService() { return service; },
-    } as unknown as ModuleContext;
-    const actionContext = {
-      projectId: "semantic-production-fixture",
-      reader,
-      signal: controller.signal,
-      async invoke() { throw new Error("unexpected nested action"); },
-      async listActions() { return []; },
-      async linkedReader() { throw new Error("unexpected linked reader"); },
-      async propose() { throw new Error("unexpected proposal"); },
-      async runJob() { throw new Error("unexpected job"); },
-    } as unknown as ModuleActionContext;
-    const actions = createSemanticActions(moduleContext);
-    const rebuild = actions.find((action) => action.id === "semantic.index.rebuild");
-    const search = actions.find((action) => action.id === "semantic.search");
-    assert.ok(rebuild && search);
-    const indexed = await rebuild.invoke({ taskId: "action-index" }, actionContext);
-    assert.equal(indexed.ok, true);
-    const indexedData = indexed.data as Record<string, unknown>;
+    const initialReader = makeSemanticReader(snapshot, initialFiles);
+    const initialHost = semanticActionHost(initialReader);
+    assert.equal(runtime.status("semantic").availability, "enabled-idle");
+    assert.deepEqual(runtime.workerSupervisor.activeWorkerPids, [], "enabling semantic must not start a worker or import a model");
+
+    const before = await runtime.invokeAction("semantic", "semantic.index.status", {}, initialHost);
+    assert.equal(before.ok, true, `semantic.index.status failed: ${JSON.stringify(before.error)}`);
+    const beforeData = before.data as { modelVersion: string; indexAvailable: boolean; modelLoaded: boolean };
+    assert.equal(before.snapshot.remoteCommit, snapshot.remoteCommit);
+    assert.equal(beforeData.modelVersion, EMBEDDING_MODEL_VERSION);
+    assert.equal(beforeData.indexAvailable, false);
+    assert.equal(beforeData.modelLoaded, false);
+
+    const indexed = await runtime.invokeAction("semantic", "semantic.index.rebuild", { taskId: "runtime-index" }, initialHost);
+    assert.equal(indexed.ok, true, `semantic.index.rebuild failed: ${JSON.stringify(indexed.error)}`);
+    const indexedData = indexed.data as { model: string; modelVersion: string; scanned: number; embedded: number; reused: number };
     assert.equal(indexedData.model, EMBEDDING_MODEL_ID);
     assert.equal(indexedData.modelVersion, EMBEDDING_MODEL_VERSION);
-    assert.equal(indexedData.scanned, 2);
-    const searched = await search.invoke({ query: "夜遅く 駅", mode: "scene", limit: 5 }, actionContext);
-    assert.equal(searched.ok, true);
-    const searchData = searched.data as { modelVersion: string; results: Array<{ sceneId: string; scores: { vectorRank?: number } }> };
+    assert.equal(indexedData.scanned, 4);
+    assert.equal(indexedData.embedded, 4);
+    assert.equal(indexedData.reused, 0);
+
+    const searched = await runtime.invokeAction("semantic", "semantic.search", { query: "夜遅く 駅", mode: "scene", limit: 5 }, initialHost);
+    assert.equal(searched.ok, true, `semantic.search failed: ${JSON.stringify(searched.error)}`);
+    const searchData = searched.data as { modelVersion: string; results: Array<{ sceneId: string; snippet?: string; scores: { vectorRank?: number } }> };
     assert.equal(searchData.modelVersion, EMBEDDING_MODEL_VERSION);
     assert.equal(searchData.results[0]?.sceneId, "sc-station");
     assert.equal(searchData.results[0]?.scores.vectorRank, 1);
+    assert.match(searchData.results[0]?.snippet ?? "", /青い切符/);
+
+    const reranked = await runtime.invokeAction("semantic", "semantic.search", {
+      query: "夜の駅の情景", mode: "scene", limit: 5, rerank: true,
+    }, initialHost);
+    assert.equal(reranked.ok, true, `semantic.search with reranker failed: ${JSON.stringify(reranked.error)}`);
+    const rerankedData = reranked.data as { reranker: { id: string; version: string } | null; results: Array<{ scores: { rerank?: number } }> };
+    assert.equal(rerankedData.reranker?.id, "mogolloni/bge-reranker-v2-m3-onnx");
+    assert.ok(rerankedData.results.length > 1);
+    assert.ok(rerankedData.results.every((result) => Number.isFinite(result.scores.rerank)));
+    assert.ok(rerankedData.results[0]!.scores.rerank! > rerankedData.results[1]!.scores.rerank!);
 
     const nextSnapshot: SnapshotId = { ...snapshot, remoteCommit: "b".repeat(40) };
-    const changedPassages = passages.map((passage) => passage.entityId === "sc-station"
-      ? { ...passage, name: "Updated Station", text: "夜明けに駅から遠ざかり、白い切符を手放した。" }
-      : passage);
-    const changed = await capability.index(changedPassages, nextSnapshot, controller.signal);
-    assert.equal(changed.embedded, 1);
-    assert.equal(changed.reused, passages.length - 1);
-    const oldSnapshotHit = (await capability.nearest("駅の切符", snapshot, { limit: 4 }, controller.signal)).hits.find((hit) => hit.entityId === "sc-station");
-    const newSnapshotHit = (await capability.nearest("駅の切符", nextSnapshot, { limit: 4 }, controller.signal)).hits.find((hit) => hit.entityId === "sc-station");
-    assert.equal(oldSnapshotHit?.text, passages[0]!.text);
-    assert.equal(oldSnapshotHit?.name, "Station");
-    assert.equal(newSnapshotHit?.text, changedPassages[0]!.text);
-    assert.equal(newSnapshotHit?.name, "Updated Station");
-    const reranked = await capability.rerank("夜の駅の情景", ["夜遅く駅に着いた。", "昼の海で泳いだ。"], snapshot, controller.signal);
-    assert.equal(reranked.model, RERANKER_MODEL_ID);
-    assert.equal(reranked.modelVersion, RERANKER_MODEL_VERSION);
-    assert.equal(reranked.scores.length, 2);
-    assert.ok(reranked.scores.every(Number.isFinite));
-    assert.ok(reranked.scores[0]! > reranked.scores[1]!);
+    const nextFiles = new Map(initialFiles);
+    nextFiles.set("plot/volumes/v/scenes/station.yaml", "id: sc-station\ntype: scene\nname: Updated Station\ndescription: 夜明けに駅から遠ざかり、白い切符を手放した。\n");
+    const nextReader = makeSemanticReader(nextSnapshot, nextFiles);
+    const changed = await runtime.invokeAction("semantic", "semantic.index.rebuild", { taskId: "runtime-index-next" }, semanticActionHost(nextReader));
+    assert.equal(changed.ok, true, `second semantic.index.rebuild failed: ${JSON.stringify(changed.error)}`);
+    const changedData = changed.data as { embedded: number; reused: number };
+    assert.equal(changedData.embedded, 1);
+    assert.equal(changedData.reused, 3);
+    const oldSnapshotHit = await runtime.invokeAction("semantic", "semantic.search", { query: "駅の切符", mode: "scene", limit: 10 }, initialHost);
+    const newSnapshotHit = await runtime.invokeAction("semantic", "semantic.search", { query: "駅の切符", mode: "scene", limit: 10 }, semanticActionHost(nextReader));
+    assert.equal(oldSnapshotHit.ok, true, `old snapshot search failed: ${JSON.stringify(oldSnapshotHit.error)}`);
+    assert.equal(newSnapshotHit.ok, true, `new snapshot search failed: ${JSON.stringify(newSnapshotHit.error)}`);
+    const oldStation = (oldSnapshotHit.data as { results: Array<{ sceneId: string; snippet?: string; name?: string }> }).results.find((hit) => hit.sceneId === "sc-station");
+    const newStation = (newSnapshotHit.data as { results: Array<{ sceneId: string; snippet?: string; name?: string }> }).results.find((hit) => hit.sceneId === "sc-station");
+    assert.equal(oldStation?.snippet, "夜遅く駅に着き、青い切符を握りしめた。");
+    assert.equal(oldStation?.name, "Station");
+    assert.equal(newStation?.snippet, "夜明けに駅から遠ざかり、白い切符を手放した。");
+    assert.equal(newStation?.name, "Updated Station");
 
     const { createHash } = await import("node:crypto");
     const repositoryKey = createHash("sha256").update(JSON.stringify([snapshot.repository.provider, snapshot.repository.ownerScope, snapshot.repository.repositoryId, snapshot.repository.defaultBranch])).digest("hex");
     const modelKey = createHash("sha256").update(`${EMBEDDING_MODEL_ID}@${EMBEDDING_MODEL_VERSION}`).digest("hex").slice(0, 24);
-    await rm(path.join(cacheDirectory, "semantic", "indexes", `${repositoryKey}-${modelKey}.json`));
-    assert.equal((await capability.status(snapshot, controller.signal)).indexAvailable, false);
-    const rebuilt = await capability.index(passages, snapshot, controller.signal);
-    assert.equal(rebuilt.embedded, passages.length);
-    assert.equal((await capability.status(snapshot, controller.signal)).indexAvailable, true);
+    await rm(path.join(cacheDirectory, "semantic", "semantic", "indexes", `${repositoryKey}-${modelKey}.json`));
+    const missing = await runtime.invokeAction("semantic", "semantic.index.status", {}, initialHost);
+    assert.equal(missing.ok, true, `semantic.index.status after cache deletion failed: ${JSON.stringify(missing.error)}`);
+    assert.equal((missing.data as { indexAvailable: boolean }).indexAvailable, false);
+    const rebuilt = await runtime.invokeAction("semantic", "semantic.index.rebuild", { taskId: "runtime-index-recovered" }, initialHost);
+    assert.equal(rebuilt.ok, true, `semantic.index.rebuild after cache deletion failed: ${JSON.stringify(rebuilt.error)}`);
+    assert.equal((rebuilt.data as { embedded: number }).embedded, 4);
+    const restored = await runtime.invokeAction("semantic", "semantic.index.status", {}, initialHost);
+    assert.equal(restored.ok, true);
+    assert.equal((restored.data as { indexAvailable: boolean }).indexAvailable, true);
   } finally {
-    await capability.dispose();
-    await supervisor.shutdown();
+    await runtime.shutdown();
     await rm(cacheDirectory, { recursive: true, force: true });
   }
 });
+
+function makeSemanticReader(readerSnapshot: SnapshotId, files: Map<string, string>) {
+  return {
+    snapshot: readerSnapshot,
+    async list(prefix: string) { return [...files.keys()].filter((file) => file.startsWith(`${prefix}/`)); },
+    async read(filePath: string) {
+      const content = files.get(filePath);
+      return content === undefined ? null : { content, revision: createHash("sha256").update(content).digest("hex") };
+    },
+  };
+}
+
+function semanticActionHost(reader: ReturnType<typeof makeSemanticReader>) {
+  return {
+    projectId: "semantic-production-fixture",
+    reader,
+    signal: new AbortController().signal,
+    access: "owner" as const,
+    async propose() { throw new Error("unexpected proposal"); },
+  };
+}

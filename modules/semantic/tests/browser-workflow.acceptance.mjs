@@ -43,7 +43,7 @@ try {
     calls.push({ actionId, input });
     if (actionId === "semantic.search") return {
       ok: true, snapshot,
-      data: { query: input.query, mode: input.mode, model: "Xenova/multilingual-e5-small", modelVersion: "761b726dd34fb83930e26aab4e9ac3899aa1fa78", results: [
+      data: { query: input.query, mode: input.mode, model: "Xenova/multilingual-e5-small", modelVersion: "761b726dd34fb83930e26aab4e9ac3899aa1fa78", ...(input.rerank ? { rerankWarning: "semantic_reranker_unavailable" } : {}), results: [
         { sceneId: "sc-station", sentenceIndex: 0, name: "Station", type: "scene", snippet: "夜遅く駅に着いた。", score: 0.04 },
       ] },
     };
@@ -120,6 +120,7 @@ try {
   assert.equal(searchCall?.input.rerank, true);
   assert.match(searchCall?.input.taskId ?? "", /^[0-9a-f-]{36}$/);
   assert.match(await page.locator("output").textContent(), /1 件/);
+  assert.match(await page.locator("output").textContent(), /semantic_reranker_unavailable/);
   await page.evaluate(() => window.semanticUnmount());
 
   await page.evaluate(() => window.semanticMount("semantic.expressions"));
