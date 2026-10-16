@@ -1032,7 +1032,6 @@ export function createServer(options: ApiServerOptions): Server {
         const result = await runtime.invokeAction(descriptor.module, actionId, body.input, host);
         sendJson(response, 200, result); return;
       }
-      if (suffix === "manuscripts" && method === "GET") { sendJson(response, 200, { manuscripts: [] }); return; }
       const snapshotsMatch = suffix.match(/^manuscripts\/([^/]+)\/snapshots$/u);
       if (snapshotsMatch && method === "GET") {
         if (!coreStore.listManuscriptSnapshots) throw httpFailure(503, "SNAPSHOT_HISTORY_UNAVAILABLE", "Manuscript snapshot history is not available in this Core version");
