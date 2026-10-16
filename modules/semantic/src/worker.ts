@@ -14,12 +14,15 @@ import {
   type SemanticPassageHit,
 } from "./contracts.js";
 
-const INDEX_FORMAT = 1;
+const INDEX_FORMAT = 2;
 const EMBEDDING_BATCH_SIZE = 32;
 const RERANK_BATCH_SIZE = 8;
 const MAX_PASSAGE_LENGTH = 1_000_000;
 
-interface CachedPassage extends SemanticPassage {
+interface CachedPassage {
+  entityId: string;
+  sceneId: string;
+  sentenceIndex: number;
   textHash: string;
   modelId: string;
   modelVersion: string;
@@ -27,9 +30,16 @@ interface CachedPassage extends SemanticPassage {
   embedding: number[];
 }
 
+interface SnapshotPassageReference {
+  key: string;
+  type?: string;
+  name?: string;
+  filePath?: string;
+}
+
 interface SnapshotMembership {
   snapshot: SnapshotId;
-  keys: string[];
+  passages: Array<{ entityId: string; sceneId: string; sentenceIndex: number; text: string; reference: SnapshotPassageReference }>;
   updatedAt: string;
 }
 
@@ -47,8 +57,9 @@ interface IndexBuild {
   snapshotKey: string;
   snapshot: SnapshotId;
   cacheFile: string;
-  entries: Map<string, CachedPassage>;
-  liveKeys: Set<string>;
+  vectors: Map<string, CachedPassage>;
+  liveLocations: Set<string>;
+  snapshotPassages: Map<string, SnapshotMembership["passages"][number]>;
   scanned: number;
   embedded: number;
   reused: number;
@@ -103,13 +114,18 @@ function stableKey(entityId: string, sentenceIndex: number): string {
   return `${entityId}\0${sentenceIndex}`;
 }
 
+function vectorKey(passage: Pick<SemanticPassage, "entityId" | "sentenceIndex" | "text">, textHash = fnv1aHash(passage.text)): string {
+  return `${stableKey(passage.entityId, passage.sentenceIndex)}\0${textHash}`;
+}
+
 function safePathPart(value: string): string {
   return createHash("sha256").update(value, "utf8").digest("hex");
 }
 
-function cacheFileFor(cacheDirectory: string, repositoryId: string): string {
+function cacheFileFor(cacheDirectory: string, repository: SnapshotId["repository"]): string {
   const modelPart = safePathPart(`${EMBEDDING_MODEL_ID}@${EMBEDDING_MODEL_VERSION}`).slice(0, 24);
-  return path.join(path.resolve(cacheDirectory), "semantic", "indexes", `${safePathPart(repositoryId)}-${modelPart}.json`);
+  const repositoryPart = safePathPart(JSON.stringify([repository.provider, repository.ownerScope, repository.repositoryId, repository.defaultBranch]));
+  return path.join(path.resolve(cacheDirectory), "semantic", "indexes", `${repositoryPart}-${modelPart}.json`);
 }
 
 function emptyStore(): IndexStore {
@@ -221,15 +237,16 @@ async function beginIndex(request: JobRequest, input: Record<string, unknown>): 
       typeof input.total !== "number" || !Number.isSafeInteger(input.total) || input.total < 0) {
     throw errorWithCode("invalid_semantic_index_request", "Index begin request is invalid");
   }
-  const cacheFile = cacheFileFor(input.cacheDirectory, request.snapshot.repository.repositoryId);
+  const cacheFile = cacheFileFor(input.cacheDirectory, request.snapshot.repository);
   const store = await loadStore(cacheFile);
   const build: IndexBuild = {
     store,
     snapshotKey: input.key,
     snapshot: request.snapshot,
     cacheFile,
-    entries: new Map(),
-    liveKeys: new Set(),
+    vectors: new Map(),
+    liveLocations: new Set(),
+    snapshotPassages: new Map(),
     scanned: input.total,
     embedded: 0,
     reused: 0,
@@ -246,14 +263,22 @@ async function indexBatch(input: Record<string, unknown>, signal: AbortSignal): 
   const pending: Array<{ key: string; passage: SemanticPassage; textHash: string }> = [];
   for (const passage of passages) {
     if (signal.aborted) throw errorWithCode("job_cancelled", "Semantic index rebuild was cancelled");
-    const key = stableKey(passage.entityId, passage.sentenceIndex);
-    if (build.liveKeys.has(key)) throw errorWithCode("duplicate_semantic_passage", `Duplicate passage key: ${passage.entityId}:${passage.sentenceIndex}`);
-    build.liveKeys.add(key);
+    const location = stableKey(passage.entityId, passage.sentenceIndex);
+    if (build.liveLocations.has(location)) throw errorWithCode("duplicate_semantic_passage", `Duplicate passage key: ${passage.entityId}:${passage.sentenceIndex}`);
+    build.liveLocations.add(location);
     const textHash = fnv1aHash(passage.text);
+    const key = vectorKey(passage, textHash);
+    build.snapshotPassages.set(location, {
+      entityId: passage.entityId,
+      sceneId: passage.sceneId,
+      sentenceIndex: passage.sentenceIndex,
+      text: passage.text,
+      reference: { key, ...(passage.type ? { type: passage.type } : {}), ...(passage.name ? { name: passage.name } : {}), ...(passage.filePath ? { filePath: passage.filePath } : {}) },
+    });
     const cached = build.store.passages[key];
     if (cached && cached.textHash === textHash && cached.modelId === EMBEDDING_MODEL_ID && cached.modelVersion === EMBEDDING_MODEL_VERSION &&
         cached.dimensions === EMBEDDING_DIMENSIONS && cached.embedding.length === EMBEDDING_DIMENSIONS) {
-      build.entries.set(key, { ...passage, textHash, modelId: EMBEDDING_MODEL_ID, modelVersion: EMBEDDING_MODEL_VERSION, dimensions: EMBEDDING_DIMENSIONS, embedding: cached.embedding });
+      build.vectors.set(key, { entityId: passage.entityId, sceneId: passage.sceneId, sentenceIndex: passage.sentenceIndex, textHash, modelId: EMBEDDING_MODEL_ID, modelVersion: EMBEDDING_MODEL_VERSION, dimensions: EMBEDDING_DIMENSIONS, embedding: cached.embedding });
       build.reused++;
     } else pending.push({ key, passage, textHash });
   }
@@ -263,8 +288,10 @@ async function indexBatch(input: Record<string, unknown>, signal: AbortSignal): 
     const vectors = await embedPassages(batch.map((entry) => entry.passage.text), String(input.cacheDirectory), signal);
     for (let index = 0; index < batch.length; index++) {
       const entry = batch[index]!;
-      build.entries.set(entry.key, {
-        ...entry.passage,
+      build.vectors.set(entry.key, {
+        entityId: entry.passage.entityId,
+        sceneId: entry.passage.sceneId,
+        sentenceIndex: entry.passage.sentenceIndex,
         textHash: entry.textHash,
         modelId: EMBEDDING_MODEL_ID,
         modelVersion: EMBEDDING_MODEL_VERSION,
@@ -287,15 +314,15 @@ async function commitIndex(input: Record<string, unknown>): Promise<{ scanned: n
   const build = builds.get(input.indexId);
   if (!build) throw errorWithCode("semantic_index_build_missing", "Index build session expired");
   try {
-    const previous = build.store.snapshots[build.snapshotKey]?.keys ?? [];
-    const removed = previous.filter((key) => !build.liveKeys.has(key)).length;
-    for (const [key, entry] of build.entries) build.store.passages[key] = entry;
+    const previous = build.store.snapshots[build.snapshotKey]?.passages ?? [];
+    const removed = previous.filter((passage) => !build.liveLocations.has(stableKey(passage.entityId, passage.sentenceIndex))).length;
+    for (const [key, entry] of build.vectors) build.store.passages[key] = entry;
     build.store.snapshots[build.snapshotKey] = {
       snapshot: build.snapshot,
-      keys: [...build.liveKeys],
+      passages: [...build.snapshotPassages.values()],
       updatedAt: new Date().toISOString(),
     };
-    const retained = new Set(Object.values(build.store.snapshots).flatMap((snapshot) => snapshot.keys));
+    const retained = new Set(Object.values(build.store.snapshots).flatMap((snapshot) => snapshot.passages.map(({ reference }) => reference.key)));
     for (const key of Object.keys(build.store.passages)) if (!retained.has(key)) delete build.store.passages[key];
     await saveStore(build.cacheFile, build.store);
     return { scanned: build.scanned, embedded: build.embedded, reused: build.reused, removed };
@@ -327,7 +354,7 @@ async function nearest(request: JobRequest, input: Record<string, unknown>, sign
     throw errorWithCode("invalid_semantic_query", "Nearest search request is invalid");
   }
   if (!input.query.trim()) return { hits: [] };
-  const cacheFile = cacheFileFor(input.cacheDirectory, request.snapshot.repository.repositoryId);
+  const cacheFile = cacheFileFor(input.cacheDirectory, request.snapshot.repository);
   const store = await loadStore(cacheFile);
   const membership = store.snapshots[input.key];
   if (!membership) throw errorWithCode("semantic_index_missing", "No semantic passage index exists for this snapshot; rebuild the index first");
@@ -335,22 +362,23 @@ async function nearest(request: JobRequest, input: Record<string, unknown>, sign
   const query = vectors[0]!;
   const excluded = new Set(input.excludeSceneIds as string[]);
   const hits: SemanticPassageHit[] = [];
-  for (const key of membership.keys) {
+  for (const passage of membership.passages) {
     if (signal.aborted) throw errorWithCode("job_cancelled", "Semantic nearest-neighbor query was cancelled");
-    const item = store.passages[key];
-    if (!item || item.modelId !== EMBEDDING_MODEL_ID || item.modelVersion !== EMBEDDING_MODEL_VERSION || item.dimensions !== EMBEDDING_DIMENSIONS) {
+    const item = store.passages[passage.reference.key];
+    if (!item || item.entityId !== passage.entityId || item.sceneId !== passage.sceneId || item.sentenceIndex !== passage.sentenceIndex ||
+        item.textHash !== fnv1aHash(passage.text) || item.modelId !== EMBEDDING_MODEL_ID || item.modelVersion !== EMBEDDING_MODEL_VERSION || item.dimensions !== EMBEDDING_DIMENSIONS) {
       throw errorWithCode("semantic_index_stale", "Semantic index has missing or mismatched passage vectors; rebuild the index");
     }
-    if (excluded.has(item.sceneId)) continue;
+    if (excluded.has(passage.sceneId)) continue;
     hits.push({
-      entityId: item.entityId,
-      sceneId: item.sceneId,
-      sentenceIndex: item.sentenceIndex,
-      text: item.text,
+      entityId: passage.entityId,
+      sceneId: passage.sceneId,
+      sentenceIndex: passage.sentenceIndex,
+      text: passage.text,
       score: cosineSimilarityDense(query, item.embedding),
-      ...(item.type ? { type: item.type } : {}),
-      ...(item.name ? { name: item.name } : {}),
-      ...(item.filePath ? { filePath: item.filePath } : {}),
+      ...(passage.reference.type ? { type: passage.reference.type } : {}),
+      ...(passage.reference.name ? { name: passage.reference.name } : {}),
+      ...(passage.reference.filePath ? { filePath: passage.reference.filePath } : {}),
     });
   }
   hits.sort((a, b) => b.score - a.score || a.entityId.localeCompare(b.entityId) || a.sentenceIndex - b.sentenceIndex);
@@ -362,10 +390,10 @@ async function contradictionPairs(request: JobRequest, input: Record<string, unk
       typeof input.minimum !== "number" || typeof input.maximum !== "number" || input.minimum > input.maximum) {
     throw errorWithCode("invalid_contradiction_pair_request", "Contradiction pair request is invalid");
   }
-  const store = await loadStore(cacheFileFor(input.cacheDirectory, request.snapshot.repository.repositoryId));
+  const store = await loadStore(cacheFileFor(input.cacheDirectory, request.snapshot.repository));
   const membership = store.snapshots[input.key];
   if (!membership) throw errorWithCode("semantic_index_missing", "No semantic passage index exists for this snapshot");
-  const memberKeys = new Set(membership.keys);
+  const memberByLocation = new Map(membership.passages.map((passage) => [stableKey(passage.entityId, passage.sentenceIndex), passage]));
   const output: Array<{ entityId: string; evidenceA: { sceneId: string; sentenceIndex: number; text: string }; evidenceB: { sceneId: string; sentenceIndex: number; text: string }; score: number }> = [];
   for (const groupValue of input.groups) {
     if (signal.aborted) throw errorWithCode("job_cancelled", "Contradiction candidate generation was cancelled");
@@ -380,11 +408,13 @@ async function contradictionPairs(request: JobRequest, input: Record<string, unk
     }
     const items: Array<{ sceneId: string; sentenceIndex: number; text: string; embedding: number[] }> = [];
     for (const anchor of unique.values()) {
-      const key = stableKey(anchor.sceneId, anchor.sentenceIndex);
-      if (!memberKeys.has(key)) continue;
-      const passage = store.passages[key];
+      const passage = memberByLocation.get(stableKey(anchor.sceneId, anchor.sentenceIndex));
       if (!passage) continue;
-      items.push({ sceneId: anchor.sceneId, sentenceIndex: anchor.sentenceIndex, text: passage.text, embedding: passage.embedding });
+      const vector = store.passages[passage.reference.key];
+      if (!vector || vector.textHash !== fnv1aHash(passage.text) || vector.modelId !== EMBEDDING_MODEL_ID || vector.modelVersion !== EMBEDDING_MODEL_VERSION || vector.dimensions !== EMBEDDING_DIMENSIONS) {
+        throw errorWithCode("semantic_index_stale", "Semantic index has missing or mismatched passage vectors; rebuild the index");
+      }
+      items.push({ sceneId: anchor.sceneId, sentenceIndex: anchor.sentenceIndex, text: passage.text, embedding: vector.embedding });
     }
     for (let left = 0; left < items.length; left++) for (let right = left + 1; right < items.length; right++) {
       const a = items[left]!;
@@ -457,14 +487,14 @@ async function rerank(query: string, texts: unknown, cacheDirectory: string, sig
 
 async function status(input: Record<string, unknown>, request: JobRequest): Promise<unknown> {
   if (typeof input.cacheDirectory !== "string") throw errorWithCode("invalid_semantic_status_request", "Status request has no cache directory");
-  const cacheFile = cacheFileFor(input.cacheDirectory, request.snapshot.repository.repositoryId);
+  const cacheFile = cacheFileFor(input.cacheDirectory, request.snapshot.repository);
   const store = await loadStore(cacheFile);
   if (typeof input.key !== "string") throw errorWithCode("invalid_semantic_status_request", "Status request has no snapshot key");
   const key = input.key;
   const membership = store.snapshots[key];
   return {
     indexAvailable: Boolean(membership),
-    passageCount: membership?.keys.length ?? 0,
+    passageCount: membership?.passages.length ?? 0,
     modelLoaded: Boolean(extractorPromise),
     rerankerLoaded: Boolean(rerankerPromise),
     indexUpdatedAt: membership?.updatedAt ?? null,
