@@ -2,7 +2,7 @@ import { randomUUID } from "node:crypto";
 import { assertProjectPath, MAX_JOB_INPUT_BYTES, type ActionResult, type ChangeOperation, type JobRequest, type ModuleAction, type ModuleActionContext, type ModuleContext, type ModuleDefinition, type ModuleManifest, type SnapshotId, type ValueSchema } from "@scriptorium/contracts";
 import type { NlpTokenizerCapability, MorphologyAnalysis } from "@scriptorium/module-nlp";
 import { NLP_MODEL_ID, NLP_MODEL_VERSION, NLP_TOKENIZER_CAPABILITY } from "@scriptorium/module-nlp";
-import { readCanonicalSnapshotEntities } from "@scriptorium/module-nlp";
+import { readCanonicalSnapshotEntities, splitIntoSentences } from "@scriptorium/module-nlp";
 import type { WorkerService } from "@scriptorium/contracts";
 import YAML from "yaml";
 import { addSynonymDiagnosticIssues, DIAGNOSTICS_ENGINE_ID, DIAGNOSTICS_ENGINE_VERSION, DIAGNOSTICS_MODULE_VERSION, type DiagnosticsWorkerInput, type DiagnosticsWorkerOutput, type PlotSemanticWorkerInput, type StylometricDeviationWorkerInput, type VoiceDeviationWorkerInput, type VoiceWorkerInput } from "./analysis.js";
@@ -14,7 +14,7 @@ import type { PlotLexiconConfig } from "./plot/types.js";
 import type { ToneLexiconConfig } from "./tone/types.js";
 import type { StylometricMetrics, StylometricProfile } from "./stylometry/types.js";
 import { removeDialogueBrackets, type StyleAttribution, type StyleFingerprint } from "./voiceStyle.js";
-import { suggestSynonyms, type SynonymsConfig } from "./synonymSuggestions.js";
+import { suggestSynonyms, type CorpusNeighbor, type SynonymsConfig } from "./synonymSuggestions.js";
 import { checkProjectConsistency, checkProjectContinuity } from "./projectDiagnostics.js";
 import { checkDeclaredVoiceConsistency, type DeclaredVoiceAttribution } from "./declaredVoice.js";
 
@@ -36,7 +36,7 @@ export * from "./declaredVoice.js";
 
 const manifest: ModuleManifest = {
   id: "diagnostics", version: DIAGNOSTICS_MODULE_VERSION, contractVersion: 1,
-  dependencies: ["nlp"], provides: [], requires: [NLP_TOKENIZER_CAPABILITY],
+  dependencies: ["nlp"], provides: [], requires: [NLP_TOKENIZER_CAPABILITY], optionalRequires: ["semantic.embedding"],
   serverEntry: "./dist/index.js", browserEntry: "./dist/browser.js", workerEntry: "./dist/worker.js",
   statePaths: ["meta/scriptorium/modules/diagnostics"], locality: "local",
 };
@@ -273,11 +273,13 @@ async function readYaml(context: ModuleActionContext, path: string): Promise<unk
 
 interface SnapshotAnalysisEntity {
   id: string;
+  type: string;
   name?: string;
   aliases?: string[];
   data: RecordValue;
   kind: "scene" | "other";
   filePath: string;
+  body?: string;
 }
 
 /**
@@ -289,12 +291,96 @@ async function readSnapshotAnalysisEntities(context: ModuleActionContext): Promi
   const entities = await readCanonicalSnapshotEntities(context.reader, context.signal);
   return entities.map((entity) => ({
     id: entity.id,
+    type: entity.type,
     ...(entity.name ? { name: entity.name } : {}),
     ...(entity.aliases ? { aliases: entity.aliases } : {}),
     data: entity.raw,
     kind: entity.type === "scene" ? "scene" : "other",
     filePath: entity.filePath,
+    ...(entity.body !== undefined ? { body: entity.body } : {}),
   }));
+}
+
+const SEMANTIC_EMBEDDING_CAPABILITY = "semantic.embedding";
+interface SemanticPassage { entityId: string; sceneId: string; sentenceIndex: number; text: string; type?: string; name?: string; filePath?: string }
+interface SemanticEmbeddingIdentity { snapshot: SnapshotId; model: string; modelVersion: string; dimensions: number }
+interface SemanticEmbeddingCapability {
+  readonly model: { readonly id: string; readonly version: string; readonly dimensions: number };
+  index(passages: SemanticPassage[], snapshot: SnapshotId, signal: AbortSignal): Promise<SemanticEmbeddingIdentity & { scanned: number; embedded: number; reused: number; removed: number }>;
+  nearest(query: string, snapshot: SnapshotId, options: { limit?: number; excludeSceneIds?: readonly string[] }, signal: AbortSignal): Promise<SemanticEmbeddingIdentity & { hits: CorpusNeighbor[] }>;
+}
+
+const EMBEDDABLE_TYPES = new Set(["scene", "manuscript", "character", "location", "item", "faction", "event", "thread", "lore"]);
+function collectSemanticPassages(entities: SnapshotAnalysisEntity[]): SemanticPassage[] {
+  const passages: SemanticPassage[] = [];
+  for (const entity of entities) {
+    if (!EMBEDDABLE_TYPES.has(entity.type)) continue;
+    const parts: string[] = [];
+    if (entity.body?.trim()) parts.push(entity.body.trim());
+    if (typeof entity.data.description === "string" && entity.data.description.trim()) parts.push(entity.data.description.trim());
+    if (typeof entity.data.notes === "string" && entity.data.notes.trim()) parts.push(entity.data.notes.trim());
+    const text = parts.join("\n");
+    if (!text) continue;
+    const sentences = splitIntoSentences(text).map((sentence) => sentence.trim()).filter((sentence) => sentence.length > 0);
+    for (let sentenceIndex = 0; sentenceIndex < sentences.length; sentenceIndex += 1) {
+      // Source nearest hits identify the indexed entity in their sceneId field.
+      passages.push({ entityId: entity.id, sceneId: entity.id, sentenceIndex, text: sentences[sentenceIndex]!, type: entity.type, ...(entity.name ? { name: entity.name } : {}), filePath: entity.filePath });
+    }
+  }
+  return passages;
+}
+
+function sameSnapshot(left: SnapshotId, right: SnapshotId): boolean { return JSON.stringify(left) === JSON.stringify(right); }
+
+async function createCorpusNeighborLookup(
+  moduleContext: ModuleContext,
+  context: ModuleActionContext,
+  entities: SnapshotAnalysisEntity[],
+  excludeSceneIds: ReadonlySet<string>,
+): Promise<{ neighbors?: (query: string) => Promise<CorpusNeighbor[]>; identity?: { model: string; modelVersion: string; dimensions: number }; release?: () => Promise<void> }> {
+  if (context.signal.aborted) throw Object.assign(new Error("Corpus synonym mining was cancelled"), { code: "job_cancelled" });
+  const passages = collectSemanticPassages(entities);
+  if (passages.length === 0) return {};
+  let lease: { value: SemanticEmbeddingCapability; release(): Promise<void> };
+  try {
+    lease = await moduleContext.acquireCapability<SemanticEmbeddingCapability>(SEMANTIC_EMBEDDING_CAPABILITY);
+  } catch (error) {
+    if ((error as { code?: string })?.code === "optional_capability_unavailable") return {};
+    throw error;
+  }
+  try {
+    const indexed = await lease.value.index(passages, context.reader.snapshot, context.signal);
+    if (indexed.model !== lease.value.model.id || indexed.modelVersion !== lease.value.model.version || indexed.dimensions !== lease.value.model.dimensions) {
+      throw Object.assign(new Error("Semantic index model identity differs from its capability"), { code: "model_identity_mismatch" });
+    }
+    if (!sameSnapshot(indexed.snapshot, context.reader.snapshot)) throw Object.assign(new Error("Semantic index returned a different source snapshot"), { code: "snapshot_mismatch" });
+    const identity = { model: indexed.model, modelVersion: indexed.modelVersion, dimensions: indexed.dimensions };
+    return {
+      identity,
+      neighbors: async (query) => {
+        if (context.signal.aborted) throw Object.assign(new Error("Corpus synonym mining was cancelled"), { code: "job_cancelled" });
+        try {
+          const result = await lease.value.nearest(query, context.reader.snapshot, { limit: 24, excludeSceneIds: [...excludeSceneIds] }, context.signal);
+          if (!sameSnapshot(result.snapshot, context.reader.snapshot)) throw Object.assign(new Error("Semantic lookup returned a different source snapshot"), { code: "snapshot_mismatch" });
+          if (result.model !== identity.model || result.modelVersion !== identity.modelVersion || result.dimensions !== identity.dimensions) {
+            throw Object.assign(new Error("Semantic lookup model identity differs from its index"), { code: "model_identity_mismatch" });
+          }
+          return result.hits;
+        } catch (error) {
+          const code = (error as { code?: string })?.code;
+          if (context.signal.aborted || code !== "semantic_index_missing" && code !== "semantic_model_unavailable") throw error;
+          // Corpus mining is optional when the installed model/index is unavailable.
+          return [];
+        }
+      },
+      release: () => lease.release(),
+    };
+  } catch (error) {
+    await lease.release();
+    const code = (error as { code?: string })?.code;
+    if (context.signal.aborted || code !== "semantic_model_unavailable") throw error;
+    return {};
+  }
 }
 
 function extractGoalConflictText(data: RecordValue): string | undefined {
@@ -338,22 +424,32 @@ async function analyzeAction(value: unknown, context: ModuleActionContext, modul
       ...(goalMorphology ? { goalMorphology } : {}),
     };
     const data: DiagnosticsWorkerOutput = await runDiagnosticsWorker(moduleContext, context, "diagnostics.analyze", workerInput);
-    const synonyms = await suggestSynonyms(input.text, data.analysis.rhythmWarnings, data.analysis.habitualPhraseWarnings, {
-      snapshot: context.reader.snapshot,
-      signal: context.signal,
-      tokenizer,
-      toneLexicon,
-      synonymsConfig: { groups: parseSynonymGroups(synonymData) } as SynonymsConfig,
-    });
-    return { ok: true, snapshot: context.reader.snapshot, data: {
-      ...data,
-      synonymSuggestions: synonyms,
-      issues: addSynonymDiagnosticIssues(data.issues, synonyms),
-      model: NLP_MODEL_ID,
-      modelVersion: NLP_MODEL_VERSION,
-      diagnosticsEngine: DIAGNOSTICS_ENGINE_ID,
-      diagnosticsEngineVersion: DIAGNOSTICS_ENGINE_VERSION,
-    } };
+    const corpus = data.analysis.habitualPhraseWarnings.length > 0
+      ? await createCorpusNeighborLookup(moduleContext, context, entities, new Set(input.sceneId ? [input.sceneId] : []))
+      : {};
+    try {
+      const synonyms = await suggestSynonyms(input.text, data.analysis.rhythmWarnings, data.analysis.habitualPhraseWarnings, {
+        snapshot: context.reader.snapshot,
+        signal: context.signal,
+        tokenizer,
+        toneLexicon,
+        synonymsConfig: { groups: parseSynonymGroups(synonymData) } as SynonymsConfig,
+        ...(corpus.neighbors ? { corpusNeighbors: corpus.neighbors } : {}),
+        ...(input.sceneId ? { excludeSceneIds: new Set([input.sceneId]) } : {}),
+      });
+      return { ok: true, snapshot: context.reader.snapshot, data: {
+        ...data,
+        synonymSuggestions: synonyms,
+        issues: addSynonymDiagnosticIssues(data.issues, synonyms),
+        model: NLP_MODEL_ID,
+        modelVersion: NLP_MODEL_VERSION,
+        ...(corpus.identity ? { semanticEmbedding: corpus.identity } : {}),
+        diagnosticsEngine: DIAGNOSTICS_ENGINE_ID,
+        diagnosticsEngineVersion: DIAGNOSTICS_ENGINE_VERSION,
+      } };
+    } finally {
+      await corpus.release?.();
+    }
   });
 }
 

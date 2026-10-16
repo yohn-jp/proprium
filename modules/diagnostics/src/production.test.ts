@@ -29,7 +29,7 @@ const initialFiles = new Map<string, { content: string; revision: string }>([
   ["meta/scriptorium/modules/nlp/feature-settings.json", { content: "{\"externalEnabled\":{\"setting-qa\":false}}\n", revision: "features-r1" }],
 ]);
 
-async function createRuntime(files: Map<string, { content: string; revision: string }>, proposals: ChangeProposal[]) {
+async function createRuntime(files: Map<string, { content: string; revision: string }>, proposals: ChangeProposal[], capabilityProviders: Record<string, { create(): unknown; dispose?(value: unknown): void | Promise<void> }> = {}) {
   const stub = moduleContext();
   const nlpDefinition = await createNlpModule(stub);
   const diagnosticsDefinition = await createDiagnosticsModule(stub);
@@ -44,6 +44,7 @@ async function createRuntime(files: Map<string, { content: string; revision: str
   const runtime = new ModuleRuntime({
     manifests,
     enabled: ["diagnostics"],
+    capabilityProviders,
     cacheDirectory: "/tmp/scriptorium-p06-test-cache",
     loaders: {
       nlp: (context) => createNlpModule(context),
@@ -140,6 +141,60 @@ test("production modules lazily run the real Lindera child and preserve snapshot
     await runtime.shutdown();
   }
   assert.deepEqual(runtime.workerSupervisor.activeWorkerPids, [], "shutdown terminates the tokenizer child process");
+});
+
+test("corpus synonym suggestions acquire the optional snapshot-indexed provider and keep model identity", { timeout: 90_000 }, async () => {
+  const files = new Map(initialFiles);
+  const proposals: ChangeProposal[] = [];
+  const providerCalls: Array<{ kind: string; values: unknown[] }> = [];
+  const model = { id: "p06-test-semantic", version: "test-model-v1", dimensions: 3 };
+  const capabilityProviders = {
+    "semantic.embedding": {
+      create: () => ({
+        model,
+        async index(passages: Array<{ entityId: string; sceneId: string; sentenceIndex: number; text: string; type?: string }>, target: SnapshotId, signal: AbortSignal) {
+          assert.equal(signal.aborted, false);
+          assert.deepEqual(target, snapshot);
+          providerCalls.push({ kind: "index", values: passages });
+          assert.ok(passages.some((passage) => passage.entityId === "ms-v1-scene-1" && passage.type === "manuscript"));
+          assert.ok(passages.some((passage) => passage.entityId === "char-hero" && passage.text.includes("星の剣士")));
+          return { snapshot: target, model: model.id, modelVersion: model.version, dimensions: model.dimensions, scanned: passages.length, embedded: passages.length, reused: 0, removed: 0 };
+        },
+        async nearest(query: string, target: SnapshotId, options: { limit?: number; excludeSceneIds?: readonly string[] }, signal: AbortSignal) {
+          assert.equal(signal.aborted, false);
+          assert.equal(target.remoteCommit, snapshot.remoteCommit);
+          providerCalls.push({ kind: "nearest", values: [query, options] });
+          return {
+            snapshot: target, model: model.id, modelVersion: model.version, dimensions: model.dimensions,
+            hits: [{ entityId: "neighbor-1", sceneId: "neighbor-1", sentenceIndex: 0, text: "彼は寂しい。", score: 0.8 }],
+          };
+        },
+      }),
+      dispose: () => { providerCalls.push({ kind: "dispose", values: [] }); },
+    },
+  };
+  const { runtime, host } = await createRuntime(files, proposals, capabilityProviders);
+  try {
+    assert.equal(runtime.status("diagnostics").availability, "enabled-idle");
+    assert.deepEqual(providerCalls, [], "declared optional provider remains idle until a corpus suggestion is needed");
+    const result = await runtime.invokeAction("diagnostics", "diagnostics.analyze", {
+      text: "彼は悲しい。彼は悲しい。彼は悲しい。", sceneId: "scene-1",
+    }, host);
+    assert.equal(result.ok, true, `${JSON.stringify(result)}\n${JSON.stringify(providerCalls)}`);
+    assert.deepEqual(result.snapshot, snapshot);
+    if (!result.ok) return;
+    const data = result.data as { analysis: { habitualPhraseWarnings: Array<{ phrase: string }> }; semanticEmbedding?: { model: string; modelVersion: string; dimensions: number }; synonymSuggestions: Array<{ candidates: Array<{ source: string; text: string }> }> };
+    assert.ok(data.analysis.habitualPhraseWarnings.some((warning) => warning.phrase === "彼は悲しい"));
+    assert.deepEqual(data.semanticEmbedding, { model: model.id, modelVersion: model.version, dimensions: model.dimensions }, JSON.stringify(providerCalls));
+    assert.ok(data.synonymSuggestions.some((suggestion) => suggestion.candidates.some((candidate) => candidate.source === "corpus" && candidate.text === "彼は寂しい")));
+    const nearest = providerCalls.find((call) => call.kind === "nearest");
+    assert.ok(nearest);
+    assert.equal(nearest.values[0], "彼は悲しい");
+    assert.deepEqual(nearest.values[1], { limit: 24, excludeSceneIds: ["scene-1"] });
+    assert.ok(providerCalls.some((call) => call.kind === "dispose"), "the provider lease is released after the action");
+  } finally {
+    await runtime.shutdown();
+  }
 });
 
 test("public actions read namespaced dictionaries/settings and lint changes remain proposals", { timeout: 90_000 }, async () => {

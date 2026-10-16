@@ -23,7 +23,12 @@ export interface SynonymSuggestionOptions {
   tokenizer: NlpTokenizerCapability;
   toneLexicon: ToneLexiconConfig;
   synonymsConfig: SynonymsConfig;
+  /** Snapshot-indexed semantic neighbors supplied by the optional semantic module. */
+  corpusNeighbors?: (query: string) => Promise<CorpusNeighbor[]>;
+  excludeSceneIds?: ReadonlySet<string>;
 }
+
+export interface CorpusNeighbor { entityId: string; sceneId: string; sentenceIndex: number; text: string; score: number }
 
 interface SentenceEndingToken {
   surface: string;
@@ -44,6 +49,55 @@ function sourceCandidatesFromProjectDict(warning: HabitualPhraseWarning, config:
   const group = config.groups.find((candidate) => candidate.words.includes(warning.phrase) && (!candidate.context || candidate.context === warning.band));
   if (!group) return [];
   return group.words.filter((word) => word !== warning.phrase).map((text) => ({ text, rewrittenSentence: "", source: "project-dict" }));
+}
+
+const CORPUS_SKIP_POS_EXTRA = new Set(["句点", "読点", "空白"]);
+function isCorpusSkipPos(token: Token): boolean {
+  return isParticle(token) || isAuxiliaryVerb(token) || isSymbol(token) || CORPUS_SKIP_POS_EXTRA.has(token.pos);
+}
+
+/** Port of source synonymSuggest/sources/corpus.ts span extraction. */
+async function extractAlternatePhrasings(phrase: string, sentence: string, options: SynonymSuggestionOptions): Promise<string[]> {
+  const trimmedPhrase = phrase.trim();
+  const trimmedSentence = sentence.trim();
+  if (!trimmedPhrase || !trimmedSentence || trimmedSentence === trimmedPhrase) return [];
+  const phraseTokens = (await options.tokenizer.analyze(trimmedPhrase, options.snapshot, options.signal)).tokens;
+  if (!phraseTokens.length) return [];
+  const headPos = phraseTokens.at(-1)?.pos ?? phraseTokens[0]?.pos;
+  const sentenceTokens = (await options.tokenizer.analyze(trimmedSentence, options.snapshot, options.signal)).tokens;
+  if (!sentenceTokens.length) return [];
+  const output: string[] = [];
+  const seen = new Set<string>();
+  const lengths = new Set([phraseTokens.length, Math.max(1, phraseTokens.length - 1), phraseTokens.length + 1]);
+  for (const length of lengths) {
+    if (length > sentenceTokens.length) continue;
+    for (let start = 0; start <= sentenceTokens.length - length; start += 1) {
+      const span = sentenceTokens.slice(start, start + length);
+      if (!span.some((token) => !isCorpusSkipPos(token)) || span.at(-1)?.pos !== headPos) continue;
+      const surface = span.map((token) => token.surface).join("");
+      if (surface === trimmedPhrase || surface.length < 2 || surface.length > trimmedPhrase.length * 4 || seen.has(surface)) continue;
+      seen.add(surface);
+      output.push(surface);
+    }
+  }
+  return output;
+}
+
+async function candidatesFromCorpus(warning: HabitualPhraseWarning, options: SynonymSuggestionOptions): Promise<SynonymCandidate[]> {
+  if (!options.corpusNeighbors || !warning.phrase.trim()) return [];
+  const minScore = Math.max(0.15, warning.band ? 0.25 : 0);
+  const hits = await options.corpusNeighbors(warning.phrase);
+  const scored = new Map<string, number>();
+  for (const hit of hits.slice(0, 24)) {
+    if (hit.score < minScore || options.excludeSceneIds?.has(hit.sceneId) || !hit.text) continue;
+    for (const text of await extractAlternatePhrasings(warning.phrase, hit.text, options)) {
+      scored.set(text, Math.max(scored.get(text) ?? 0, hit.score));
+    }
+  }
+  return [...scored.entries()]
+    .sort((a, b) => b[1] - a[1] || a[0].localeCompare(b[0], "ja"))
+    .slice(0, 3)
+    .map(([text, score]) => ({ text, rewrittenSentence: "", score, source: "corpus" as const }));
 }
 
 function dedupeCandidates(candidates: SynonymCandidate[]): SynonymCandidate[] {
@@ -213,8 +267,9 @@ export async function suggestSynonyms(
       const range = findTextRange(text, warning.phrase, sentenceIndex);
       if (!range) continue;
       const project = sourceCandidatesFromProjectDict(warning, options.synonymsConfig);
+      const corpus = await candidatesFromCorpus(warning, options);
       const tone = project.length > 0 ? [] : candidatesFromToneLexicon(warning.phrase, options.toneLexicon);
-      const candidates = dedupeCandidates([...project, ...tone]).map((candidate) => ({
+      const candidates = dedupeCandidates([...project, ...corpus, ...tone]).map((candidate) => ({
         ...candidate,
         rewrittenSentence: buildRewrittenSentence(text, range, candidate.text),
       }));
