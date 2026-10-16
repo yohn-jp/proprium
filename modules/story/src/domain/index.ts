@@ -21,6 +21,10 @@ export type {
 } from "./graph.js";
 export { buildLocationMap } from "./locationMap.js";
 export type { LocationMapData, LocationMapEdge } from "./locationMap.js";
+export { buildStoryCooccurrence, computeCooccurrence, detectRelationGaps } from "./cooccurrence.js";
+export type { CooccurrenceEdge, RelationGapWarning, SceneCharacterOccurrence } from "./cooccurrence.js";
+export { buildMentionDictionary, findMentions } from "./mentionIndex.js";
+export type { MentionDictionary } from "./mentionIndex.js";
 export { mergeSeriesOverlay } from "./seriesOverlay.js";
 export {
   analyzeThreadLifecycles,

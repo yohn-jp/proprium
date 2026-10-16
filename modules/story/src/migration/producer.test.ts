@@ -9,14 +9,17 @@ const revision = "a".repeat(64);
 
 function contextFor(input: {
   files?: Record<string, string>;
+  workspaceFiles?: Record<string, string>;
   targets?: Record<string, string>;
   targetFiles?: string[];
   enabled?: boolean;
+  legacyRepositoryMappings?: Record<string, { provider: "github"; repositoryId: string; defaultBranch: string; ownerScope: string; url: string }>;
 }): MigrationContext {
   const files = new Map(
     Object.entries(input.files ?? {}).map(([path, content]) => [path, Buffer.from(content)]),
   );
   const targets = new Map(Object.entries(input.targets ?? {}));
+  const workspaceFiles = new Map(Object.entries(input.workspaceFiles ?? {}).map(([path, content]) => [path, Buffer.from(content)]));
   const repository = {
     provider: "local" as const,
     repositoryId: "story-migration-test",
@@ -35,6 +38,8 @@ function contextFor(input: {
       async listProjectFiles(prefix) {
         return [...files.keys()].filter((path) => path.startsWith(`${prefix}/`)).sort();
       },
+      async readWorkspaceFile(path) { return workspaceFiles.get(path) ?? null; },
+      async listWorkspaceFiles(prefix) { return [...workspaceFiles.keys()].filter((path) => path.startsWith(`${prefix}/`)).sort(); },
     } as MigrationContext["source"],
     target: {
       snapshot,
@@ -49,6 +54,7 @@ function contextFor(input: {
     repository,
     snapshot,
     enabledModules: new Set(input.enabled === false ? [] : ["story"]),
+    ...(input.legacyRepositoryMappings ? { legacyRepositoryMappings: input.legacyRepositoryMappings } : {}),
   };
 }
 
@@ -147,4 +153,58 @@ test("reports a canonical target conflict without overwriting it", async () => {
 
   assert.equal(result.entries[0]?.disposition, "conflict");
   assert.equal(result.operations.length, 0);
+});
+
+test("maps legacy series project IDs to stable repository IDs and preserves source and unknown fields", async () => {
+  const source = JSON.stringify({
+    version: 1,
+    series: [{ id: "series-one", name: "One", ownerId: "author", bibleProjectId: "old-bible", memberProjectIds: ["old-work"], createdAt: "2026-01-01T00:00:00.000Z", futureField: { keep: true } }],
+    bindings: [{ projectId: "old-work", seriesId: "series-one", bibleRev: "abc", futureBinding: "keep" }],
+    futureTopLevel: ["keep"],
+  });
+  const result = await createStoryMigrationProducer().inspect(contextFor({
+    workspaceFiles: { "app-state/series.json": source },
+    legacyRepositoryMappings: {
+      "old-bible": { provider: "github", repositoryId: "123", defaultBranch: "main", ownerScope: "owner", url: "https://github.com/o/bible" },
+      "old-work": { provider: "github", repositoryId: "456", defaultBranch: "main", ownerScope: "owner", url: "https://github.com/o/work" },
+    },
+  }));
+  const write = result.operations.flatMap((operation) => operation.writes).find((item) => item.path === "meta/scriptorium/modules/story/v1/series.json");
+  assert.ok(write);
+  const settings = JSON.parse(write.content!) as Record<string, unknown>;
+  assert.deepEqual(settings.futureTopLevel, ["keep"]);
+  const series = (settings.series as Array<Record<string, unknown>>)[0]!;
+  assert.equal(series.bibleRepositoryId, "123");
+  assert.equal(series.bibleProjectId, "old-bible", "original source ID is retained for review/audit");
+  assert.deepEqual(series.memberRepositoryIds, ["456"]);
+  assert.deepEqual(series.futureField, { keep: true });
+  const binding = (settings.bindings as Array<Record<string, unknown>>)[0]!;
+  assert.equal(binding.repositoryId, "456");
+  assert.equal(binding.projectId, "old-work");
+  assert.equal(binding.futureBinding, "keep");
+  assert.equal(result.entries.find((entry) => entry.source === "app-state/series.json")?.category, "authoritative");
+});
+
+test("retains unresolved series IDs with an explicit author-review marker", async () => {
+  const result = await createStoryMigrationProducer().inspect(contextFor({
+    workspaceFiles: { "app-state/series.json": JSON.stringify({ version: 1, series: [{ id: "series-one", name: "One", ownerId: "author", bibleProjectId: "old-bible", memberProjectIds: ["old-work"], createdAt: "2026-01-01T00:00:00.000Z" }], bindings: [{ projectId: "old-work", seriesId: "series-one" }] }) },
+  }));
+  const write = result.operations.flatMap((operation) => operation.writes).find((item) => item.path === "meta/scriptorium/modules/story/v1/series.json");
+  assert.ok(write);
+  const settings = JSON.parse(write.content!) as { series: Array<Record<string, unknown>>; bindings: Array<Record<string, unknown>>; migration: { storySeriesReview: string[] } };
+  assert.equal(settings.series[0]?.bibleProjectId, "old-bible");
+  assert.equal(settings.series[0]?.requiresAuthorReview, true);
+  assert.equal(settings.bindings[0]?.projectId, "old-work");
+  assert.equal(settings.bindings[0]?.requiresAuthorReview, true);
+  assert.deepEqual(settings.migration.storySeriesReview, ["series[0].bibleProjectId=old-bible", "series[0].memberProjectIds=old-work", "bindings[0].projectId=old-work"]);
+  assert.match(result.entries.find((entry) => entry.source === "app-state/series.json")?.detail ?? "", /author review/i);
+});
+
+test("preserves disabled series registry bytes in Story's opaque legacy namespace", async () => {
+  const content = '{"version":1,"series":[],"bindings":[],"future":true}\n';
+  const result = await createStoryMigrationProducer().inspect(contextFor({ workspaceFiles: { "app-state/series.json": content }, enabled: false }));
+  assert.deepEqual(result.operations.flatMap((operation) => operation.writes).find((item) => item.path === "meta/scriptorium/modules/story/legacy/files/app-state/series.json"), {
+    path: "meta/scriptorium/modules/story/legacy/files/app-state/series.json", revision: null, content,
+  });
+  assert.equal(result.entries.find((entry) => entry.source === "app-state/series.json")?.disposition, "preserved-unreadable");
 });
