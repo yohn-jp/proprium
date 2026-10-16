@@ -1,4 +1,5 @@
 import assert from "node:assert/strict";
+import { readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import { test } from "node:test";
 import type { ChangeOperation, ChangeProposal, ModuleContext, SnapshotId } from "@scriptorium/contracts";
@@ -32,7 +33,12 @@ async function createRuntime(files: Map<string, { content: string; revision: str
   const stub = moduleContext();
   const nlpDefinition = await createNlpModule(stub);
   const diagnosticsDefinition = await createDiagnosticsModule(stub);
-  const manifests = [nlpDefinition.manifest, diagnosticsDefinition.manifest];
+  const packageManifest = (url: URL) => JSON.parse(readFileSync(url, "utf8")).scriptoriumModule;
+  const nlpManifest = packageManifest(new URL("../../nlp/package.json", import.meta.url));
+  const diagnosticsManifest = packageManifest(new URL("../package.json", import.meta.url));
+  assert.deepEqual(nlpDefinition.manifest, nlpManifest, "NLP factory metadata must match installed package metadata");
+  assert.deepEqual(diagnosticsDefinition.manifest, diagnosticsManifest, "diagnostics factory metadata must match installed package metadata");
+  const manifests = [nlpManifest, diagnosticsManifest];
   const runtime = new ModuleRuntime({
     manifests,
     enabled: ["diagnostics"],

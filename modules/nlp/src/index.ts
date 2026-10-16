@@ -26,7 +26,7 @@ export { NLP_TOKENIZER_CAPABILITY, NLP_TOKENIZER_CAPABILITY_VERSION, NLP_MODEL_I
 const manifest: ModuleManifest = {
   id: "nlp", version: NLP_MODULE_VERSION, contractVersion: 1,
   dependencies: [], provides: [NLP_TOKENIZER_CAPABILITY], requires: [],
-  serverEntry: "dist/index.js", browserEntry: "dist/browser.js", workerEntry: "dist/worker.js",
+  serverEntry: "./dist/index.js", browserEntry: "./dist/browser.js", workerEntry: "./dist/worker.js",
   statePaths: ["meta/scriptorium/modules/nlp"], locality: "local",
 };
 

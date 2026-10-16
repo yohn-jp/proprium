@@ -34,7 +34,7 @@ export * from "./textHash.js";
 const manifest: ModuleManifest = {
   id: "diagnostics", version: DIAGNOSTICS_MODULE_VERSION, contractVersion: 1,
   dependencies: ["nlp"], provides: [], requires: [NLP_TOKENIZER_CAPABILITY],
-  serverEntry: "dist/index.js", browserEntry: "dist/browser.js", workerEntry: "dist/worker.js",
+  serverEntry: "./dist/index.js", browserEntry: "./dist/browser.js", workerEntry: "./dist/worker.js",
   statePaths: ["meta/scriptorium/modules/diagnostics"], locality: "local",
 };
 
