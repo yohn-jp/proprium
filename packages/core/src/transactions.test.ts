@@ -1426,6 +1426,11 @@ exec "$SCRIPTORIUM_TEST_REAL_GIT" "$@"
     assert.deepEqual(repeated, recovered);
     const repeatedReadCommands = (await fs.readFile(gitLog, "utf8")).trim().split(/\r?\n/).filter(Boolean);
     assert.deepEqual(repeatedReadCommands, [], "the same immutable commit/directory history is served from the bounded cache");
+    const cacheState = restarted as unknown as { historicalMetadataCache: Map<string, unknown>; historicalMetadataCacheBytes: number };
+    assert.ok(cacheState.historicalMetadataCache.size > 0);
+    await restarted.detachProject(project.id);
+    assert.equal(cacheState.historicalMetadataCache.size, 0, "detaching releases cached repository metadata");
+    assert.equal(cacheState.historicalMetadataCacheBytes, 0);
   } finally {
     if (originalPath === undefined) delete process.env.PATH;
     else process.env.PATH = originalPath;

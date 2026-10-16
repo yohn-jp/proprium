@@ -1677,6 +1677,15 @@ export class CoreStore implements MutationCoordinator {
     this.historicalMetadataCacheBytes += bytes;
   }
 
+  private clearHistoricalMetadataCache(root: string): void {
+    const prefix = `${path.resolve(root)}\0`;
+    for (const [key, cached] of this.historicalMetadataCache) {
+      if (!key.startsWith(prefix)) continue;
+      this.historicalMetadataCache.delete(key);
+      this.historicalMetadataCacheBytes -= cached.bytes;
+    }
+  }
+
   private mergeProposal(proposals: Map<string, ChangeProposal>, proposal: ChangeProposal): void {
     const existing = proposals.get(proposal.id);
     if (existing && canonicalJson(existing) !== canonicalJson(proposal)) {
@@ -3802,6 +3811,7 @@ export class CoreStore implements MutationCoordinator {
       this.approvals.delete(projectId);
       this.readObservations.delete(projectId);
       if (detached) {
+        this.clearHistoricalMetadataCache(root);
         await fs.rm(detachedRoot, { recursive: true, force: true }).catch(() => undefined);
         if (movedJournal) await fs.rm(detachedJournal, { force: true }).catch(() => undefined);
       }
@@ -3934,6 +3944,7 @@ export class CoreStore implements MutationCoordinator {
         this.proposals.delete(projectId);
         this.durableProposalIds.delete(projectId);
         this.readObservations.delete(projectId);
+        this.clearHistoricalMetadataCache(root);
         if (backedUp) await fs.rm(backupRoot, { recursive: true, force: true }).catch(() => undefined);
         return { id: projectId, url: updated.url, branch: updated.branch };
       } catch (error) {
