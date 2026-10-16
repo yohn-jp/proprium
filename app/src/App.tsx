@@ -17,6 +17,7 @@ import { ContributionHost } from "./contributions/ContributionHost";
 import { ProposalReview } from "./contributions/ProposalReview";
 import { PublicModuleView, publicModuleIdForPath } from "./contributions/PublicModuleView";
 import { ThemeControl } from "./components/ThemeControl";
+import { JobInbox } from "./components/JobInbox";
 import { SceneEditor, type ScratchDraftBinding, type ScratchDraftPayload } from "./editor/SceneEditor";
 import { replaceDocumentBody } from "./editor/ruby";
 import { loadThemeMode, persistThemeMode, type ThemeMode } from "./theme";
@@ -1589,6 +1590,7 @@ function AuthorWorkspace({
       <header className="topbar">
         <a className="brand" href="/" aria-label="Scriptorium ホーム">Scriptorium</a>
         <div className="topbar-status" role="status" aria-live="polite" data-kind={status.kind}>{status.message || "作品を選択してください"}</div>
+        <JobInbox />
         <ThemeControl mode={themeMode} onChange={onThemeChange} error={themeError} />
         <button type="button" className="quiet-button" onClick={() => void signOut()}>ログアウト</button>
       </header>
