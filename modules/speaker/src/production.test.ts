@@ -216,6 +216,13 @@ test("loading the server entry does not install worker IPC listeners in the host
   assert.equal(result.status, 0, result.stderr || result.stdout);
 });
 
+test("evaluation and retraining actions advertise their source job types", async () => {
+  const definition = await createSpeakerModule(moduleContext());
+  const actions = new Map(definition.actions.map((action) => [action.id, action]));
+  assert.deepEqual(actions.get("speaker.evaluation.run")?.job, { type: "speaker-eval" });
+  assert.deepEqual(actions.get("speaker.retraining.run")?.job, { type: "speaker-retrain" });
+});
+
 test("speaker actions run real CPU attribution, propose corrections/model adoption, and reload from the reviewed snapshot", { timeout: 180_000 }, async () => {
   const files = initialFiles();
   let snapshot = snapshotFor(files);

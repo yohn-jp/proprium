@@ -129,12 +129,14 @@ function action(
   effect: ModuleAction["effect"],
   inputSchema: ValueSchema,
   handler: (input: RecordValue, context: ModuleActionContext) => Promise<unknown>,
+  job?: ModuleAction["job"],
 ): ModuleAction {
   return {
     id,
     effect,
     inputSchema,
     outputSchema: passThrough,
+    ...(job ? { job } : {}),
     async invoke(value, context) {
       const proposals: NonNullable<Extract<ActionResult, { ok: true }>['proposals']> = [];
       const scopedContext: ModuleActionContext = {
@@ -1026,8 +1028,8 @@ function makeActions(moduleContext: ModuleContext): ModuleAction[] {
     }),
     action("speaker.evaluation.latest", "read", schema(objectSchema), async (_input, context) => readEvaluationCache(moduleContext.cacheDirectory, context.reader.snapshot, await cacheIdentityFor(context))),
     action("speaker.ruleGates", "read", schema(objectSchema), async (_input, context) => readGateCache(moduleContext.cacheDirectory, context.reader.snapshot, await cacheIdentityFor(context))),
-    action("speaker.evaluation.run", "compute", schema(parseEvaluationInput), async (input, context) => runEvaluation(input as ReturnType<typeof parseEvaluationInput>, context, moduleContext)),
-    action("speaker.retraining.run", "propose", schema(parseRetrainInput), async (input, context) => speakerRetrainAction(input as ReturnType<typeof parseRetrainInput>, context, moduleContext)),
+    action("speaker.evaluation.run", "compute", schema(parseEvaluationInput), async (input, context) => runEvaluation(input as ReturnType<typeof parseEvaluationInput>, context, moduleContext), { type: "speaker-eval" }),
+    action("speaker.retraining.run", "propose", schema(parseRetrainInput), async (input, context) => speakerRetrainAction(input as ReturnType<typeof parseRetrainInput>, context, moduleContext), { type: "speaker-retrain" }),
   ];
 }
 
