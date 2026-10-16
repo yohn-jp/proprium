@@ -17,6 +17,8 @@ export interface SnapshotId {
   overlayCommit?: string;
 }
 export interface FileRevision { path: string; revision: string | null }
+/** Binds a directory membership and every listed file revision, including absent members. */
+export interface ScopeRevision { prefix: string; revision: string }
 /** Contents are full UTF-8 or base64; null is an explicit deletion. */
 export interface FileChange extends FileRevision { content: string | null; encoding?: "utf8" | "base64" }
 export type EffectClass = "manuscript" | "structure" | "metadata" | "settings" | "migration";
@@ -27,6 +29,7 @@ export interface ChangeOperation {
   baseRemoteCommit: string;
   effect: EffectClass;
   reads: FileRevision[];
+  readScopes?: ScopeRevision[];
   writes: FileChange[];
   message: string;
   evidenceIds?: string[];
@@ -223,6 +226,26 @@ export function snapshotKey(snapshot: SnapshotId): string {
   return JSON.stringify([snapshot.repository.provider, snapshot.repository.ownerScope,
     snapshot.repository.repositoryId, snapshot.repository.defaultBranch, snapshot.remoteCommit, snapshot.overlayCommit ?? null]);
 }
+/** Content-neutral semantic read-set guard; callers choose the relevant project subtree. */
+export async function snapshotScopeRevision(reader: SnapshotReader, prefix: string): Promise<string> {
+  assertProjectPath(prefix);
+  const paths = await reader.list(prefix);
+  const seen = new Set<string>();
+  const entries: Array<[string, string]> = [];
+  for (const path of paths) {
+    assertProjectPath(path);
+    if ((path !== prefix && !path.startsWith(`${prefix}/`)) || seen.has(path)) {
+      throw new ContractError("Invalid snapshot scope listing");
+    }
+    seen.add(path);
+    const file = await reader.read(path);
+    if (!file || !/^[a-f0-9]{64}$/.test(file.revision)) throw new ContractError("Snapshot scope contains an unavailable file");
+    entries.push([path, file.revision]);
+  }
+  entries.sort(([left], [right]) => left < right ? -1 : left > right ? 1 : 0);
+  const digest = await crypto.subtle.digest("SHA-256", new TextEncoder().encode(JSON.stringify(entries)));
+  return Array.from(new Uint8Array(digest), byte => byte.toString(16).padStart(2, "0")).join("");
+}
 /** Runtime boundary, also used for recovered browser payloads. Symlink checks remain Core-owned. */
 export function assertChangeOperation(value: unknown): asserts value is ChangeOperation {
   const v = value as ChangeOperation | null;
@@ -235,6 +258,18 @@ export function assertChangeOperation(value: unknown): asserts value is ChangeOp
       [v.repository.repositoryId, v.repository.defaultBranch, v.repository.ownerScope, v.repository.url].some(x => typeof x !== "string" || !x) ||
       !Array.isArray(v.reads) || !Array.isArray(v.writes) || v.reads.length > 512 || !v.writes.length || v.writes.length > 256) {
     throw new ContractError("Invalid change operation");
+  }
+  if (v.readScopes !== undefined) {
+    if (!Array.isArray(v.readScopes) || v.readScopes.length > 32) throw new ContractError("Invalid scope preconditions");
+    const prefixes = new Set<string>();
+    for (const scope of v.readScopes) {
+      if (!scope || typeof scope !== "object") throw new ContractError("Invalid scope precondition");
+      assertProjectPath(scope.prefix);
+      if (prefixes.has(scope.prefix) || typeof scope.revision !== "string" || !/^[a-f0-9]{64}$/.test(scope.revision)) {
+        throw new ContractError("Invalid scope revision");
+      }
+      prefixes.add(scope.prefix);
+    }
   }
   const seen = new Set<string>();
   let size = 0;
