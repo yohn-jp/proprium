@@ -203,6 +203,16 @@
             "The integrated provider-NONE MCP acceptance is candidate-scoped; final frozen-campaign/profile acceptance remains pending."
           ]
         }
+      ],
+      "compositionProofRefs": [
+        {
+          "id": "P13-FROZEN-COMPOSITION-R01",
+          "path": "docs/migration/evidence/P13.json",
+          "testName": "pnpm verify",
+          "scope": "Frozen P00-P13 composed acceptance reference for R01; global proof P13-FROZEN-COMPOSITION is pending and must not be used for closure until its status is passed.",
+          "jsonPointer": "#/proofs/0",
+          "evidenceKind": "composition"
+        }
       ]
     },
     {
@@ -305,6 +315,16 @@
           "limitations": [
             "This is target runtime metadata, not legacy Loom version parity."
           ]
+        }
+      ],
+      "compositionProofRefs": [
+        {
+          "id": "P13-FROZEN-COMPOSITION-R02",
+          "path": "docs/migration/evidence/P13.json",
+          "testName": "pnpm verify",
+          "scope": "Frozen P00-P13 composed acceptance reference for R02; global proof P13-FROZEN-COMPOSITION is pending and must not be used for closure until its status is passed.",
+          "jsonPointer": "#/proofs/0",
+          "evidenceKind": "composition"
         }
       ]
     },
@@ -424,6 +444,16 @@
             "A fresh bounded local-provider reference flow passed through both production MCP transports on candidate c9aece8; it exercises selected health/provider paths only. Full-profile health and campaign composition remain pending."
           ]
         }
+      ],
+      "compositionProofRefs": [
+        {
+          "id": "P13-FROZEN-COMPOSITION-R03",
+          "path": "docs/migration/evidence/P13.json",
+          "testName": "pnpm verify",
+          "scope": "Frozen P00-P13 composed acceptance reference for R03; global proof P13-FROZEN-COMPOSITION is pending and must not be used for closure until its status is passed.",
+          "jsonPointer": "#/proofs/0",
+          "evidenceKind": "composition"
+        }
       ]
     },
     {
@@ -523,6 +553,16 @@
           "limitations": [
             "This bounded provider queue does not replace retained source job detail, inbox, read-state, event, or cross-process semantics; those remain mapped to R38."
           ]
+        }
+      ],
+      "compositionProofRefs": [
+        {
+          "id": "P13-FROZEN-COMPOSITION-R04",
+          "path": "docs/migration/evidence/P13.json",
+          "testName": "pnpm verify",
+          "scope": "Frozen P00-P13 composed acceptance reference for R04; global proof P13-FROZEN-COMPOSITION is pending and must not be used for closure until its status is passed.",
+          "jsonPointer": "#/proofs/0",
+          "evidenceKind": "composition"
         }
       ]
     },
@@ -732,6 +772,16 @@
           "limitations": [
             "The target uses project-scoped pinned routes; it does not expose the legacy `/api/tree` path."
           ]
+        }
+      ],
+      "compositionProofRefs": [
+        {
+          "id": "P13-FROZEN-COMPOSITION-R05",
+          "path": "docs/migration/evidence/P13.json",
+          "testName": "pnpm verify",
+          "scope": "Frozen P00-P13 composed acceptance reference for R05; global proof P13-FROZEN-COMPOSITION is pending and must not be used for closure until its status is passed.",
+          "jsonPointer": "#/proofs/0",
+          "evidenceKind": "composition"
         }
       ]
     },
@@ -1045,6 +1095,16 @@
             "These action-level tests do not establish all ten legacy route payloads or a mounted browser contribution; source migration remains pending."
           ]
         }
+      ],
+      "compositionProofRefs": [
+        {
+          "id": "P13-FROZEN-COMPOSITION-R06",
+          "path": "docs/migration/evidence/P13.json",
+          "testName": "pnpm verify",
+          "scope": "Frozen P00-P13 composed acceptance reference for R06; global proof P13-FROZEN-COMPOSITION is pending and must not be used for closure until its status is passed.",
+          "jsonPointer": "#/proofs/0",
+          "evidenceKind": "composition"
+        }
       ]
     },
     {
@@ -1273,6 +1333,16 @@
           "limitations": [
             "Focused Assistant and Story tests cover grounding, source range checks and proposal creation; composed importer/review/reclone remains P12 acceptance."
           ]
+        }
+      ],
+      "compositionProofRefs": [
+        {
+          "id": "P13-FROZEN-COMPOSITION-R07",
+          "path": "docs/migration/evidence/P13.json",
+          "testName": "pnpm verify",
+          "scope": "Frozen P00-P13 composed acceptance reference for R07; global proof P13-FROZEN-COMPOSITION is pending and must not be used for closure until its status is passed.",
+          "jsonPointer": "#/proofs/0",
+          "evidenceKind": "composition"
         }
       ]
     },
@@ -1732,6 +1802,16 @@
             "Source prompt-preview handlers now have local Assistant actions. The fresh bounded run passed the R35 owner-API host preview path, and the fresh local-Qwen reference exercised rewrite through both transports; these selected proofs do not establish composition for every preview action or the full browser/API profile."
           ]
         }
+      ],
+      "compositionProofRefs": [
+        {
+          "id": "P13-FROZEN-COMPOSITION-R08",
+          "path": "docs/migration/evidence/P13.json",
+          "testName": "pnpm verify",
+          "scope": "Frozen P00-P13 composed acceptance reference for R08; global proof P13-FROZEN-COMPOSITION is pending and must not be used for closure until its status is passed.",
+          "jsonPointer": "#/proofs/0",
+          "evidenceKind": "composition"
+        }
       ]
     },
     {
@@ -1871,6 +1951,16 @@
           "limitations": [
             "The test covers projection rules, not a full workflow import or composed review/checkpoint flow."
           ]
+        }
+      ],
+      "compositionProofRefs": [
+        {
+          "id": "P13-FROZEN-COMPOSITION-R09",
+          "path": "docs/migration/evidence/P13.json",
+          "testName": "pnpm verify",
+          "scope": "Frozen P00-P13 composed acceptance reference for R09; global proof P13-FROZEN-COMPOSITION is pending and must not be used for closure until its status is passed.",
+          "jsonPointer": "#/proofs/0",
+          "evidenceKind": "composition"
         }
       ]
     },
@@ -2063,6 +2153,16 @@
           "limitations": [
             "Story has action and producer coverage; source workflow data still requires the composed P12 semantic migration and author review."
           ]
+        }
+      ],
+      "compositionProofRefs": [
+        {
+          "id": "P13-FROZEN-COMPOSITION-R10",
+          "path": "docs/migration/evidence/P13.json",
+          "testName": "pnpm verify",
+          "scope": "Frozen P00-P13 composed acceptance reference for R10; global proof P13-FROZEN-COMPOSITION is pending and must not be used for closure until its status is passed.",
+          "jsonPointer": "#/proofs/0",
+          "evidenceKind": "composition"
         }
       ]
     },
@@ -2321,6 +2421,16 @@
             "This generic Core lifecycle is not source ChangeSet history parity; Story/MCP own bounded adaptation and full import remains pending."
           ]
         }
+      ],
+      "compositionProofRefs": [
+        {
+          "id": "P13-FROZEN-COMPOSITION-R11",
+          "path": "docs/migration/evidence/P13.json",
+          "testName": "pnpm verify",
+          "scope": "Frozen P00-P13 composed acceptance reference for R11; global proof P13-FROZEN-COMPOSITION is pending and must not be used for closure until its status is passed.",
+          "jsonPointer": "#/proofs/0",
+          "evidenceKind": "composition"
+        }
       ]
     },
     {
@@ -2494,6 +2604,16 @@
           "limitations": [
             "Reader-reaction action output has no focused real-provider acceptance; browser bridge tests use a stub action transport. This is an evidence limit, not a known missing action; final P12/campaign composition remains pending."
           ]
+        }
+      ],
+      "compositionProofRefs": [
+        {
+          "id": "P13-FROZEN-COMPOSITION-R12",
+          "path": "docs/migration/evidence/P13.json",
+          "testName": "pnpm verify",
+          "scope": "Frozen P00-P13 composed acceptance reference for R12; global proof P13-FROZEN-COMPOSITION is pending and must not be used for closure until its status is passed.",
+          "jsonPointer": "#/proofs/0",
+          "evidenceKind": "composition"
         }
       ]
     },
@@ -2697,6 +2817,16 @@
             "Composed P12 importer/review/publish/reclone coverage is now present on synthetic source/workspace data; this historical model test does not certify the current campaign head, provider-consumer coverage for every route, final full-profile composition, or final OCI acceptance."
           ]
         }
+      ],
+      "compositionProofRefs": [
+        {
+          "id": "P13-FROZEN-COMPOSITION-R13",
+          "path": "docs/migration/evidence/P13.json",
+          "testName": "pnpm verify",
+          "scope": "Frozen P00-P13 composed acceptance reference for R13; global proof P13-FROZEN-COMPOSITION is pending and must not be used for closure until its status is passed.",
+          "jsonPointer": "#/proofs/0",
+          "evidenceKind": "composition"
+        }
       ]
     },
     {
@@ -2871,6 +3001,16 @@
             "Summary action has focused local tests, but no per-action real-provider output-quality claim is made. Final profile/API/browser composition remains pending."
           ]
         }
+      ],
+      "compositionProofRefs": [
+        {
+          "id": "P13-FROZEN-COMPOSITION-R14",
+          "path": "docs/migration/evidence/P13.json",
+          "testName": "pnpm verify",
+          "scope": "Frozen P00-P13 composed acceptance reference for R14; global proof P13-FROZEN-COMPOSITION is pending and must not be used for closure until its status is passed.",
+          "jsonPointer": "#/proofs/0",
+          "evidenceKind": "composition"
+        }
       ]
     },
     {
@@ -3014,6 +3154,16 @@
             "No claim is made for assistant summary generation or all legacy thread endpoint behavior."
           ]
         }
+      ],
+      "compositionProofRefs": [
+        {
+          "id": "P13-FROZEN-COMPOSITION-R15",
+          "path": "docs/migration/evidence/P13.json",
+          "testName": "pnpm verify",
+          "scope": "Frozen P00-P13 composed acceptance reference for R15; global proof P13-FROZEN-COMPOSITION is pending and must not be used for closure until its status is passed.",
+          "jsonPointer": "#/proofs/0",
+          "evidenceKind": "composition"
+        }
       ]
     },
     {
@@ -3134,6 +3284,16 @@
             "The browser proof covers the contribution with a stubbed action transport; the CPU module test covers the actual dialogue action. Final host composition remains pending."
           ]
         }
+      ],
+      "compositionProofRefs": [
+        {
+          "id": "P13-FROZEN-COMPOSITION-R16",
+          "path": "docs/migration/evidence/P13.json",
+          "testName": "pnpm verify",
+          "scope": "Frozen P00-P13 composed acceptance reference for R16; global proof P13-FROZEN-COMPOSITION is pending and must not be used for closure until its status is passed.",
+          "jsonPointer": "#/proofs/0",
+          "evidenceKind": "composition"
+        }
       ]
     },
     {
@@ -3247,6 +3407,16 @@
           "limitations": [
             "The module contribution is not yet mounted in the final profile."
           ]
+        }
+      ],
+      "compositionProofRefs": [
+        {
+          "id": "P13-FROZEN-COMPOSITION-R17",
+          "path": "docs/migration/evidence/P13.json",
+          "testName": "pnpm verify",
+          "scope": "Frozen P00-P13 composed acceptance reference for R17; global proof P13-FROZEN-COMPOSITION is pending and must not be used for closure until its status is passed.",
+          "jsonPointer": "#/proofs/0",
+          "evidenceKind": "composition"
         }
       ]
     },
@@ -3367,6 +3537,16 @@
             "Full contribution mounting and browser navigation acceptance remain pending."
           ]
         }
+      ],
+      "compositionProofRefs": [
+        {
+          "id": "P13-FROZEN-COMPOSITION-R18",
+          "path": "docs/migration/evidence/P13.json",
+          "testName": "pnpm verify",
+          "scope": "Frozen P00-P13 composed acceptance reference for R18; global proof P13-FROZEN-COMPOSITION is pending and must not be used for closure until its status is passed.",
+          "jsonPointer": "#/proofs/0",
+          "evidenceKind": "composition"
+        }
       ]
     },
     {
@@ -3479,6 +3659,16 @@
           "limitations": [
             "Timeline inference is an implementation slice; final browser composition and source-data migration remain pending."
           ]
+        }
+      ],
+      "compositionProofRefs": [
+        {
+          "id": "P13-FROZEN-COMPOSITION-R19",
+          "path": "docs/migration/evidence/P13.json",
+          "testName": "pnpm verify",
+          "scope": "Frozen P00-P13 composed acceptance reference for R19; global proof P13-FROZEN-COMPOSITION is pending and must not be used for closure until its status is passed.",
+          "jsonPointer": "#/proofs/0",
+          "evidenceKind": "composition"
         }
       ]
     },
@@ -3751,6 +3941,16 @@
             "P10 tests cover the named speaker actions and warning composition; they do not establish every source inspection route or full HTTP composition."
           ]
         }
+      ],
+      "compositionProofRefs": [
+        {
+          "id": "P13-FROZEN-COMPOSITION-R20",
+          "path": "docs/migration/evidence/P13.json",
+          "testName": "pnpm verify",
+          "scope": "Frozen P00-P13 composed acceptance reference for R20; global proof P13-FROZEN-COMPOSITION is pending and must not be used for closure until its status is passed.",
+          "jsonPointer": "#/proofs/0",
+          "evidenceKind": "composition"
+        }
       ]
     },
     {
@@ -3889,6 +4089,16 @@
           "limitations": [
             "A synthetic CoreStore test verifies Bible/plot scope conflict behavior, but full imported decision history and composed P12 reactivation/reclone acceptance remain pending."
           ]
+        }
+      ],
+      "compositionProofRefs": [
+        {
+          "id": "P13-FROZEN-COMPOSITION-R21",
+          "path": "docs/migration/evidence/P13.json",
+          "testName": "pnpm verify",
+          "scope": "Frozen P00-P13 composed acceptance reference for R21; global proof P13-FROZEN-COMPOSITION is pending and must not be used for closure until its status is passed.",
+          "jsonPointer": "#/proofs/0",
+          "evidenceKind": "composition"
         }
       ]
     },
@@ -4174,6 +4384,16 @@
             "Legacy snapshot sidecar migration and full manuscript handler parity remain P12 migration acceptance."
           ]
         }
+      ],
+      "compositionProofRefs": [
+        {
+          "id": "P13-FROZEN-COMPOSITION-R22",
+          "path": "docs/migration/evidence/P13.json",
+          "testName": "pnpm verify",
+          "scope": "Frozen P00-P13 composed acceptance reference for R22; global proof P13-FROZEN-COMPOSITION is pending and must not be used for closure until its status is passed.",
+          "jsonPointer": "#/proofs/0",
+          "evidenceKind": "composition"
+        }
       ]
     },
     {
@@ -4319,6 +4539,16 @@
             "Module action and browser contribution tests do not establish final profile activation or the composed API/browser download path."
           ]
         }
+      ],
+      "compositionProofRefs": [
+        {
+          "id": "P13-FROZEN-COMPOSITION-R23",
+          "path": "docs/migration/evidence/P13.json",
+          "testName": "pnpm verify",
+          "scope": "Frozen P00-P13 composed acceptance reference for R23; global proof P13-FROZEN-COMPOSITION is pending and must not be used for closure until its status is passed.",
+          "jsonPointer": "#/proofs/0",
+          "evidenceKind": "composition"
+        }
       ]
     },
     {
@@ -4450,6 +4680,16 @@
           "limitations": [
             "The source compatibility API paths are replaced by module action routing; mounted profile and end-to-end proposal approval/publish acceptance remain pending."
           ]
+        }
+      ],
+      "compositionProofRefs": [
+        {
+          "id": "P13-FROZEN-COMPOSITION-R24",
+          "path": "docs/migration/evidence/P13.json",
+          "testName": "pnpm verify",
+          "scope": "Frozen P00-P13 composed acceptance reference for R24; global proof P13-FROZEN-COMPOSITION is pending and must not be used for closure until its status is passed.",
+          "jsonPointer": "#/proofs/0",
+          "evidenceKind": "composition"
         }
       ]
     },
@@ -4641,6 +4881,16 @@
             "Semantic clustering is optional P09 enrichment. The source literal candidate discovery and ignore workflow maps separately to P06 `nlp.discoverCandidates` and `nlp.ignoreCandidates`; final API/profile composition remains separate."
           ]
         }
+      ],
+      "compositionProofRefs": [
+        {
+          "id": "P13-FROZEN-COMPOSITION-R25",
+          "path": "docs/migration/evidence/P13.json",
+          "testName": "pnpm verify",
+          "scope": "Frozen P00-P13 composed acceptance reference for R25; global proof P13-FROZEN-COMPOSITION is pending and must not be used for closure until its status is passed.",
+          "jsonPointer": "#/proofs/0",
+          "evidenceKind": "composition"
+        }
       ]
     },
     {
@@ -4794,6 +5044,16 @@
             "Profile payload parity and the full speaker evaluation/training lifecycle remain P10 or composed acceptance."
           ]
         }
+      ],
+      "compositionProofRefs": [
+        {
+          "id": "P13-FROZEN-COMPOSITION-R26",
+          "path": "docs/migration/evidence/P13.json",
+          "testName": "pnpm verify",
+          "scope": "Frozen P00-P13 composed acceptance reference for R26; global proof P13-FROZEN-COMPOSITION is pending and must not be used for closure until its status is passed.",
+          "jsonPointer": "#/proofs/0",
+          "evidenceKind": "composition"
+        }
       ]
     },
     {
@@ -4904,6 +5164,16 @@
           "limitations": [
             "Source lint endpoint routing, payload parity, and composed author approval/checkpoint acceptance remain pending."
           ]
+        }
+      ],
+      "compositionProofRefs": [
+        {
+          "id": "P13-FROZEN-COMPOSITION-R27",
+          "path": "docs/migration/evidence/P13.json",
+          "testName": "pnpm verify",
+          "scope": "Frozen P00-P13 composed acceptance reference for R27; global proof P13-FROZEN-COMPOSITION is pending and must not be used for closure until its status is passed.",
+          "jsonPointer": "#/proofs/0",
+          "evidenceKind": "composition"
         }
       ]
     },
@@ -5119,6 +5389,16 @@
             "The source prompt endpoint has a read-only local action replacement; actual external synonym quality remains provider-specific, while P09 owns real semantic-engine acceptance for corpus neighbors."
           ]
         }
+      ],
+      "compositionProofRefs": [
+        {
+          "id": "P13-FROZEN-COMPOSITION-R28",
+          "path": "docs/migration/evidence/P13.json",
+          "testName": "pnpm verify",
+          "scope": "Frozen P00-P13 composed acceptance reference for R28; global proof P13-FROZEN-COMPOSITION is pending and must not be used for closure until its status is passed.",
+          "jsonPointer": "#/proofs/0",
+          "evidenceKind": "composition"
+        }
       ]
     },
     {
@@ -5271,6 +5551,16 @@
             "This proves target basic writing stats only; it does not establish parity for all source hierarchical or richer prose statistics."
           ]
         }
+      ],
+      "compositionProofRefs": [
+        {
+          "id": "P13-FROZEN-COMPOSITION-R29",
+          "path": "docs/migration/evidence/P13.json",
+          "testName": "pnpm verify",
+          "scope": "Frozen P00-P13 composed acceptance reference for R29; global proof P13-FROZEN-COMPOSITION is pending and must not be used for closure until its status is passed.",
+          "jsonPointer": "#/proofs/0",
+          "evidenceKind": "composition"
+        }
       ]
     },
     {
@@ -5384,6 +5674,16 @@
           "limitations": [
             "Usage history tests are focused module tests; data-root replacement and final host integration remain P12/P13 acceptance."
           ]
+        }
+      ],
+      "compositionProofRefs": [
+        {
+          "id": "P13-FROZEN-COMPOSITION-R30",
+          "path": "docs/migration/evidence/P13.json",
+          "testName": "pnpm verify",
+          "scope": "Frozen P00-P13 composed acceptance reference for R30; global proof P13-FROZEN-COMPOSITION is pending and must not be used for closure until its status is passed.",
+          "jsonPointer": "#/proofs/0",
+          "evidenceKind": "composition"
         }
       ]
     },
@@ -5512,6 +5812,16 @@
           "limitations": [
             "R31 covers model-settings read/propose behavior and has no separate source prompt-preview route. P12 imported-state reactivation and composed profile acceptance remain pending; no provider-generated output is claimed for this row."
           ]
+        }
+      ],
+      "compositionProofRefs": [
+        {
+          "id": "P13-FROZEN-COMPOSITION-R31",
+          "path": "docs/migration/evidence/P13.json",
+          "testName": "pnpm verify",
+          "scope": "Frozen P00-P13 composed acceptance reference for R31; global proof P13-FROZEN-COMPOSITION is pending and must not be used for closure until its status is passed.",
+          "jsonPointer": "#/proofs/0",
+          "evidenceKind": "composition"
         }
       ]
     },
@@ -5677,6 +5987,16 @@
             "Provider availability is not source feature-settings parity; P06 records the module consent actions."
           ]
         }
+      ],
+      "compositionProofRefs": [
+        {
+          "id": "P13-FROZEN-COMPOSITION-R32",
+          "path": "docs/migration/evidence/P13.json",
+          "testName": "pnpm verify",
+          "scope": "Frozen P00-P13 composed acceptance reference for R32; global proof P13-FROZEN-COMPOSITION is pending and must not be used for closure until its status is passed.",
+          "jsonPointer": "#/proofs/0",
+          "evidenceKind": "composition"
+        }
       ]
     },
     {
@@ -5746,7 +6066,17 @@
         ],
         "directCoreCalls": [],
         "injectedManagerCalls": []
-      }
+      },
+      "compositionProofRefs": [
+        {
+          "id": "P13-FROZEN-COMPOSITION-R33",
+          "path": "docs/migration/evidence/P13.json",
+          "testName": "pnpm verify",
+          "scope": "Frozen P00-P13 composed acceptance reference for R33; global proof P13-FROZEN-COMPOSITION is pending and must not be used for closure until its status is passed.",
+          "jsonPointer": "#/proofs/0",
+          "evidenceKind": "composition"
+        }
+      ]
     },
     {
       "id": "R34",
@@ -5896,6 +6226,16 @@
           "limitations": [
             "QA answer action tests use a local test provider; the bounded local-Qwen reference flow does not cover this action. Real-provider answer quality and final full-profile/API/browser composition remain unverified."
           ]
+        }
+      ],
+      "compositionProofRefs": [
+        {
+          "id": "P13-FROZEN-COMPOSITION-R34",
+          "path": "docs/migration/evidence/P13.json",
+          "testName": "pnpm verify",
+          "scope": "Frozen P00-P13 composed acceptance reference for R34; global proof P13-FROZEN-COMPOSITION is pending and must not be used for closure until its status is passed.",
+          "jsonPointer": "#/proofs/0",
+          "evidenceKind": "composition"
         }
       ]
     },
@@ -6117,6 +6457,16 @@
           "limitations": [
             "Focused counter and producer evidence does not certify the final real-provider continuation reference flow; campaign-level model acceptance remains pending."
           ]
+        }
+      ],
+      "compositionProofRefs": [
+        {
+          "id": "P13-FROZEN-COMPOSITION-R35",
+          "path": "docs/migration/evidence/P13.json",
+          "testName": "pnpm verify",
+          "scope": "Frozen P00-P13 composed acceptance reference for R35; global proof P13-FROZEN-COMPOSITION is pending and must not be used for closure until its status is passed.",
+          "jsonPointer": "#/proofs/0",
+          "evidenceKind": "composition"
         }
       ]
     },
@@ -6346,6 +6696,16 @@
             "The P10 module workflow and its producer tests are focused tests; source jobId polling and retained inbox/job event parity remain R38 gaps. Real Core approval, import composition, provider/profile composition and data-root deletion/reclone acceptance remain P12/P13 gates."
           ]
         }
+      ],
+      "compositionProofRefs": [
+        {
+          "id": "P13-FROZEN-COMPOSITION-R36",
+          "path": "docs/migration/evidence/P13.json",
+          "testName": "pnpm verify",
+          "scope": "Frozen P00-P13 composed acceptance reference for R36; global proof P13-FROZEN-COMPOSITION is pending and must not be used for closure until its status is passed.",
+          "jsonPointer": "#/proofs/0",
+          "evidenceKind": "composition"
+        }
       ]
     },
     {
@@ -6497,6 +6857,16 @@
           "limitations": [
             "The source prompt-preview handler returns a no-provider skeleton only; its separate prompt builder marks the LLM path as future work, which is excluded. The deterministic local action has focused tests; composed browser/API acceptance remains pending."
           ]
+        }
+      ],
+      "compositionProofRefs": [
+        {
+          "id": "P13-FROZEN-COMPOSITION-R37",
+          "path": "docs/migration/evidence/P13.json",
+          "testName": "pnpm verify",
+          "scope": "Frozen P00-P13 composed acceptance reference for R37; global proof P13-FROZEN-COMPOSITION is pending and must not be used for closure until its status is passed.",
+          "jsonPointer": "#/proofs/0",
+          "evidenceKind": "composition"
         }
       ]
     },
@@ -6774,6 +7144,16 @@
           "limitations": [
             "This rendered UI proof uses a stub API/event transport; live API composition and the final campaign browser gate remain separate acceptance."
           ]
+        }
+      ],
+      "compositionProofRefs": [
+        {
+          "id": "P13-FROZEN-COMPOSITION-R38",
+          "path": "docs/migration/evidence/P13.json",
+          "testName": "pnpm verify",
+          "scope": "Frozen P00-P13 composed acceptance reference for R38; global proof P13-FROZEN-COMPOSITION is pending and must not be used for closure until its status is passed.",
+          "jsonPointer": "#/proofs/0",
+          "evidenceKind": "composition"
         }
       ]
     },
@@ -7080,6 +7460,16 @@
           "limitations": [
             "Legacy `/api/session/begin` and `/api/session/submit` payload parity is not retained; final browser and provider composition remain separate acceptance."
           ]
+        }
+      ],
+      "compositionProofRefs": [
+        {
+          "id": "P13-FROZEN-COMPOSITION-R39",
+          "path": "docs/migration/evidence/P13.json",
+          "testName": "pnpm verify",
+          "scope": "Frozen P00-P13 composed acceptance reference for R39; global proof P13-FROZEN-COMPOSITION is pending and must not be used for closure until its status is passed.",
+          "jsonPointer": "#/proofs/0",
+          "evidenceKind": "composition"
         }
       ]
     },
@@ -7431,6 +7821,16 @@
             "Source auto-merge PATCH semantics are intentionally retired; event stream covers manual sync outcomes handled by this API instance, not a cross-process or durable event bus."
           ]
         }
+      ],
+      "compositionProofRefs": [
+        {
+          "id": "P13-FROZEN-COMPOSITION-R40",
+          "path": "docs/migration/evidence/P13.json",
+          "testName": "pnpm verify",
+          "scope": "Frozen P00-P13 composed acceptance reference for R40; global proof P13-FROZEN-COMPOSITION is pending and must not be used for closure until its status is passed.",
+          "jsonPointer": "#/proofs/0",
+          "evidenceKind": "composition"
+        }
       ]
     },
     {
@@ -7628,6 +8028,16 @@
           "limitations": [
             "Optional full-profile mounting, linked-repository access, and composed review flow remain integration acceptance."
           ]
+        }
+      ],
+      "compositionProofRefs": [
+        {
+          "id": "P13-FROZEN-COMPOSITION-R41",
+          "path": "docs/migration/evidence/P13.json",
+          "testName": "pnpm verify",
+          "scope": "Frozen P00-P13 composed acceptance reference for R41; global proof P13-FROZEN-COMPOSITION is pending and must not be used for closure until its status is passed.",
+          "jsonPointer": "#/proofs/0",
+          "evidenceKind": "composition"
         }
       ]
     },
@@ -7916,6 +8326,16 @@
           "limitations": [
             "GitHub device flow, multi-user administration, and source personal-token management are not implemented as Core owner features."
           ]
+        }
+      ],
+      "compositionProofRefs": [
+        {
+          "id": "P13-FROZEN-COMPOSITION-R42",
+          "path": "docs/migration/evidence/P13.json",
+          "testName": "pnpm verify",
+          "scope": "Frozen P00-P13 composed acceptance reference for R42; global proof P13-FROZEN-COMPOSITION is pending and must not be used for closure until its status is passed.",
+          "jsonPointer": "#/proofs/0",
+          "evidenceKind": "composition"
         }
       ]
     },
@@ -8287,7 +8707,17 @@
           }
         ],
         "acceptanceStatus": "pending"
-      }
+      },
+      "compositionProofRefs": [
+        {
+          "id": "P13-FROZEN-COMPOSITION-R43",
+          "path": "docs/migration/evidence/P13.json",
+          "testName": "pnpm verify",
+          "scope": "Frozen P00-P13 composed acceptance reference for R43; global proof P13-FROZEN-COMPOSITION is pending and must not be used for closure until its status is passed.",
+          "jsonPointer": "#/proofs/0",
+          "evidenceKind": "composition"
+        }
+      ]
     },
     {
       "id": "R44",
@@ -8560,6 +8990,16 @@
             "These are separate module review panels, not entries in the source ReviewQueueResponse DTO; full-profile host mounting and Core proposal/reclone workflow remain pending."
           ]
         }
+      ],
+      "compositionProofRefs": [
+        {
+          "id": "P13-FROZEN-COMPOSITION-R44",
+          "path": "docs/migration/evidence/P13.json",
+          "testName": "pnpm verify",
+          "scope": "Frozen P00-P13 composed acceptance reference for R44; global proof P13-FROZEN-COMPOSITION is pending and must not be used for closure until its status is passed.",
+          "jsonPointer": "#/proofs/0",
+          "evidenceKind": "composition"
+        }
       ]
     },
     {
@@ -8747,6 +9187,16 @@
           "limitations": [
             "This HTTP test verifies the separate project scratch adapter; browser editor scratch uses its IndexedDB recovery journal and generic proposal/approval/checkpoint calls, as covered by the P02 browser test."
           ]
+        }
+      ],
+      "compositionProofRefs": [
+        {
+          "id": "P13-FROZEN-COMPOSITION-R45",
+          "path": "docs/migration/evidence/P13.json",
+          "testName": "pnpm verify",
+          "scope": "Frozen P00-P13 composed acceptance reference for R45; global proof P13-FROZEN-COMPOSITION is pending and must not be used for closure until its status is passed.",
+          "jsonPointer": "#/proofs/0",
+          "evidenceKind": "composition"
         }
       ]
     },
@@ -8961,6 +9411,16 @@
             "Dialogue action has browser bridge and context-builder coverage but no focused real-provider action test. Provider-backed dialogue output is unverified; this is an evidence limit rather than a known missing source action. Final provider/profile composition remains pending."
           ]
         }
+      ],
+      "compositionProofRefs": [
+        {
+          "id": "P13-FROZEN-COMPOSITION-R46",
+          "path": "docs/migration/evidence/P13.json",
+          "testName": "pnpm verify",
+          "scope": "Frozen P00-P13 composed acceptance reference for R46; global proof P13-FROZEN-COMPOSITION is pending and must not be used for closure until its status is passed.",
+          "jsonPointer": "#/proofs/0",
+          "evidenceKind": "composition"
+        }
       ]
     },
     {
@@ -9163,6 +9623,16 @@
           "limitations": [
             "The anonymous API/browser lifecycle passed on the historical P07 candidate recorded above; it does not certify later integrated browser recovery, the current full-profile backend, final campaign-head behavior, or OCI packaging."
           ]
+        }
+      ],
+      "compositionProofRefs": [
+        {
+          "id": "P13-FROZEN-COMPOSITION-R47",
+          "path": "docs/migration/evidence/P13.json",
+          "testName": "pnpm verify",
+          "scope": "Frozen P00-P13 composed acceptance reference for R47; global proof P13-FROZEN-COMPOSITION is pending and must not be used for closure until its status is passed.",
+          "jsonPointer": "#/proofs/0",
+          "evidenceKind": "composition"
         }
       ]
     },
@@ -9637,6 +10107,16 @@
             "Provider-NONE formatter/full-diagnostics/reload/rewrite transport composition passed on candidate 90d5fc8. The real local-Qwen rewrite through both transports passed in the fresh bounded root run on c9aece8; final frozen campaign/API/browser/OCI acceptance remains pending."
           ]
         }
+      ],
+      "compositionProofRefs": [
+        {
+          "id": "P13-FROZEN-COMPOSITION-R48",
+          "path": "docs/migration/evidence/P13.json",
+          "testName": "pnpm verify",
+          "scope": "Frozen P00-P13 composed acceptance reference for R48; global proof P13-FROZEN-COMPOSITION is pending and must not be used for closure until its status is passed.",
+          "jsonPointer": "#/proofs/0",
+          "evidenceKind": "composition"
+        }
       ]
     }
   ],
@@ -9870,6 +10350,16 @@
             "Full legacy IndexedDB import, source snapshots/scratch semantic preservation, and final remote-provider browser acceptance remain pending."
           ]
         }
+      ],
+      "compositionProofRefs": [
+        {
+          "id": "P13-FROZEN-COMPOSITION-N01",
+          "path": "docs/migration/evidence/P13.json",
+          "testName": "pnpm verify",
+          "scope": "Frozen P00-P13 composed acceptance reference for N01; global proof P13-FROZEN-COMPOSITION is pending and must not be used for closure until its status is passed.",
+          "jsonPointer": "#/proofs/0",
+          "evidenceKind": "composition"
+        }
       ]
     },
     {
@@ -10020,6 +10510,16 @@
           "limitations": [
             "Story action and migration producer tests pass; final profile/browser composition and P12 end-to-end migration acceptance remain pending."
           ]
+        }
+      ],
+      "compositionProofRefs": [
+        {
+          "id": "P13-FROZEN-COMPOSITION-N02",
+          "path": "docs/migration/evidence/P13.json",
+          "testName": "pnpm verify",
+          "scope": "Frozen P00-P13 composed acceptance reference for N02; global proof P13-FROZEN-COMPOSITION is pending and must not be used for closure until its status is passed.",
+          "jsonPointer": "#/proofs/0",
+          "evidenceKind": "composition"
         }
       ]
     },
@@ -10211,6 +10711,16 @@
             "Diagnostics/P09 producer coverage exists at module level; P12 composed import, recovery, and full-profile acceptance are pending."
           ]
         }
+      ],
+      "compositionProofRefs": [
+        {
+          "id": "P13-FROZEN-COMPOSITION-N03",
+          "path": "docs/migration/evidence/P13.json",
+          "testName": "pnpm verify",
+          "scope": "Frozen P00-P13 composed acceptance reference for N03; global proof P13-FROZEN-COMPOSITION is pending and must not be used for closure until its status is passed.",
+          "jsonPointer": "#/proofs/0",
+          "evidenceKind": "composition"
+        }
       ]
     },
     {
@@ -10373,6 +10883,16 @@
             }
           ]
         }
+      ],
+      "compositionProofRefs": [
+        {
+          "id": "P13-FROZEN-COMPOSITION-N04",
+          "path": "docs/migration/evidence/P13.json",
+          "testName": "pnpm verify",
+          "scope": "Frozen P00-P13 composed acceptance reference for N04; global proof P13-FROZEN-COMPOSITION is pending and must not be used for closure until its status is passed.",
+          "jsonPointer": "#/proofs/0",
+          "evidenceKind": "composition"
+        }
       ]
     },
     {
@@ -10506,6 +11026,16 @@
             "The source has two SQLite index roots; this slice classifies only the semantic artifacts it owns. Complete source store inspection and composed import/reclone proof remain P12."
           ]
         }
+      ],
+      "compositionProofRefs": [
+        {
+          "id": "P13-FROZEN-COMPOSITION-N05",
+          "path": "docs/migration/evidence/P13.json",
+          "testName": "pnpm verify",
+          "scope": "Frozen P00-P13 composed acceptance reference for N05; global proof P13-FROZEN-COMPOSITION is pending and must not be used for closure until its status is passed.",
+          "jsonPointer": "#/proofs/0",
+          "evidenceKind": "composition"
+        }
       ]
     },
     {
@@ -10631,6 +11161,16 @@
           "limitations": [
             "The composed P12 test source now includes canonical scene YAML at `plot/volumes/volume-1/chapters/chapter-1/scenes/sc-speaker-override-stable.yaml` with `speakerOverrides` in pending local Git work. Its frozen-tree run must still verify byte identity through read-only import planning, Core publication, module reactivation, and data-root replacement; this is pending proof rather than a reported production data-loss bug."
           ]
+        }
+      ],
+      "compositionProofRefs": [
+        {
+          "id": "P13-FROZEN-COMPOSITION-N06",
+          "path": "docs/migration/evidence/P13.json",
+          "testName": "pnpm verify",
+          "scope": "Frozen P00-P13 composed acceptance reference for N06; global proof P13-FROZEN-COMPOSITION is pending and must not be used for closure until its status is passed.",
+          "jsonPointer": "#/proofs/0",
+          "evidenceKind": "composition"
         }
       ]
     },
@@ -10803,6 +11343,16 @@
             "Assistant action/context helpers and browser contributions have focused tests; browser action transports are stubbed. A bounded real-provider reference flow passed on candidate c9aece8, while campaign acceptance remains pending.",
             "Source prompt previews have local compute actions and focused provider-NONE tests. The owner-API host preview proof covers R35 only; browser/API composition across all previews is not established. P12’s composed import fixture now includes speaker-override assertions whose execution on the final tree remains pending."
           ]
+        }
+      ],
+      "compositionProofRefs": [
+        {
+          "id": "P13-FROZEN-COMPOSITION-N07",
+          "path": "docs/migration/evidence/P13.json",
+          "testName": "pnpm verify",
+          "scope": "Frozen P00-P13 composed acceptance reference for N07; global proof P13-FROZEN-COMPOSITION is pending and must not be used for closure until its status is passed.",
+          "jsonPointer": "#/proofs/0",
+          "evidenceKind": "composition"
         }
       ]
     },
@@ -10977,6 +11527,16 @@
             "The linked tests are component-level; complete host composition and real imported ChangeSet history remain pending."
           ]
         }
+      ],
+      "compositionProofRefs": [
+        {
+          "id": "P13-FROZEN-COMPOSITION-N08",
+          "path": "docs/migration/evidence/P13.json",
+          "testName": "pnpm verify",
+          "scope": "Frozen P00-P13 composed acceptance reference for N08; global proof P13-FROZEN-COMPOSITION is pending and must not be used for closure until its status is passed.",
+          "jsonPointer": "#/proofs/0",
+          "evidenceKind": "composition"
+        }
       ]
     },
     {
@@ -11099,6 +11659,16 @@
           "limitations": [
             "P09 semantic search and P10 speaker/diagnostics actions are present in the optional module composition. Final full-profile and running-API stdio acceptance remain separate campaign gates."
           ]
+        }
+      ],
+      "compositionProofRefs": [
+        {
+          "id": "P13-FROZEN-COMPOSITION-N09",
+          "path": "docs/migration/evidence/P13.json",
+          "testName": "pnpm verify",
+          "scope": "Frozen P00-P13 composed acceptance reference for N09; global proof P13-FROZEN-COMPOSITION is pending and must not be used for closure until its status is passed.",
+          "jsonPointer": "#/proofs/0",
+          "evidenceKind": "composition"
         }
       ]
     },
@@ -11238,6 +11808,16 @@
           "limitations": [
             "The module is optional/profile-loaded. This evidence does not certify the final full-profile mount, composed API routing, author approval/checkpoint/push, or end-to-end legacy data-root migration."
           ]
+        }
+      ],
+      "compositionProofRefs": [
+        {
+          "id": "P13-FROZEN-COMPOSITION-N10",
+          "path": "docs/migration/evidence/P13.json",
+          "testName": "pnpm verify",
+          "scope": "Frozen P00-P13 composed acceptance reference for N10; global proof P13-FROZEN-COMPOSITION is pending and must not be used for closure until its status is passed.",
+          "jsonPointer": "#/proofs/0",
+          "evidenceKind": "composition"
         }
       ]
     },
@@ -11389,6 +11969,16 @@
           "limitations": [
             "Theme behavior has focused browser and unit coverage; the final campaign browser/OCI certification remains pending."
           ]
+        }
+      ],
+      "compositionProofRefs": [
+        {
+          "id": "P13-FROZEN-COMPOSITION-N11",
+          "path": "docs/migration/evidence/P13.json",
+          "testName": "pnpm verify",
+          "scope": "Frozen P00-P13 composed acceptance reference for N11; global proof P13-FROZEN-COMPOSITION is pending and must not be used for closure until its status is passed.",
+          "jsonPointer": "#/proofs/0",
+          "evidenceKind": "composition"
         }
       ]
     },
@@ -11647,6 +12237,16 @@
           "limitations": [
             "Story producer behavior has prior composed P12 source-root coverage for the tested opaque files, snapshots, scratch attachments, and provisional workflow rows. Canonical scene `speakerOverrides` YAML round-trip assertions are now in the test source but await a frozen-tree rerun; broader final profile/import campaign gates remain pending."
           ]
+        }
+      ],
+      "compositionProofRefs": [
+        {
+          "id": "P13-FROZEN-COMPOSITION-N12",
+          "path": "docs/migration/evidence/P13.json",
+          "testName": "pnpm verify",
+          "scope": "Frozen P00-P13 composed acceptance reference for N12; global proof P13-FROZEN-COMPOSITION is pending and must not be used for closure until its status is passed.",
+          "jsonPointer": "#/proofs/0",
+          "evidenceKind": "composition"
         }
       ]
     }

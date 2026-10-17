@@ -2,7 +2,9 @@
 
 This ledger freezes source registrations at `edc033c2c9466274a334299dadfa426661d957d9` against target base `016a69cb924cbe1f9aed9af18f2f31143dff9676`. It records 48 imported router registration owners, 166 concrete HTTP handler registrations, and 12 non-router capability/data groups. Source rows remain pending; separate target implementation slices identify bounded code and test evidence without claiming migration completion.
 
-At closure, `verified` and `relocated` rows must point to row-local, passed composition evidence; focused tests alone are insufficient. `excluded` and `relocated` rows also require an explicit rationale and a reference to their fixed-plan row. A resolved failure finding retains its observed failure and needs a rationale plus a passed replacement proof.
+At closure, `verified` and `relocated` rows must point to a passed row-scoped proof and the passed P13 composed proof; focused tests alone are insufficient. `excluded` and `relocated` rows also require an explicit rationale and a reference to their fixed-plan row. A resolved failure finding retains its observed failure and needs a rationale plus a passed replacement proof.
+
+Every source row has a unique row-local pointer to `P13-FROZEN-COMPOSITION` at `docs/migration/evidence/P13.json#/proofs/0`. That shared pointer is not closure evidence while the P13 proof remains pending.
 
 The standard ledger check permits pending inventory during migration; the final gate adds `--require-closed` to reject pending rows and unresolved acceptance findings.
 

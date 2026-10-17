@@ -197,10 +197,31 @@ for (const row of rows) {
       }
     }
   }
+  for (const proof of row.compositionProofRefs ?? []) {
+    registerEvidenceId(row, proof, `${row.id} composition evidence`);
+    check(typeof proof.testName === "string" && proof.testName.length > 0, `${proof.id} needs an exact composition test name`);
+    check(typeof proof.scope === "string" && proof.scope.length > 0, `${proof.id} needs a composition-evidence scope`);
+    check(proof.path === "docs/migration/evidence/P13.json", `${proof.id} must reference the final P13 composition artifact`);
+    check(proof.jsonPointer === "#/proofs/0", `${proof.id} must reference P13 proofs[0]`);
+    check(proof.evidenceKind === "composition", `${proof.id} must be marked as composition evidence`);
+    if (proof.result !== undefined) check(proof.result === "passed", `${proof.id} result must be passed when specified`);
+    await exists(root, proof.path, proof.id);
+    try {
+      const evidence = JSON.parse(await readFile(path.resolve(root, proof.path), "utf8"));
+      const pointed = jsonPointerValue(evidence, proof.jsonPointer);
+      check(pointed !== undefined, `${proof.id} JSON pointer does not resolve: ${proof.jsonPointer}`);
+      check(pointed?.id === "P13-FROZEN-COMPOSITION", `${proof.id} does not resolve to P13-FROZEN-COMPOSITION`);
+      if (proof.result === "passed") check(pointed?.status === "passed", `${proof.id} passed result disagrees with P13 composition status`);
+    } catch (error) {
+      failures.push(`${proof.id} JSON pointer failed: ${error instanceof Error ? error.message : String(error)}`);
+    }
+  }
   const closureIds = row.proofIds ?? [];
   check(new Set(closureIds).size === closureIds.length, `${row.id} proofIds must not contain duplicates`);
   const rowEvidence = closureEvidenceByRow.get(row.id);
   let hasCompositionProof = false;
+  let hasScopedProof = false;
+  let hasFinalCompositionProof = false;
   for (const id of closureIds) {
     const proof = rowEvidence?.get(id);
     check(proof !== undefined, `${row.id} proofId does not resolve to row-local evidence: ${String(id)}`);
@@ -214,10 +235,17 @@ for (const row of rows) {
     } else {
       check(proof.result === "passed", `${row.id}/${id} must identify evidence explicitly marked result passed`);
       if (proof.evidenceKind === "composition") hasCompositionProof = true;
+      if (proof.evidenceKind === "focused" && (row.targetImplementationSlices ?? []).some((slice) =>
+        [...(slice.proofRefs ?? []), ...(slice.runtimeEvidenceRefs ?? [])].some((ref) => ref.id === id))) {
+        hasScopedProof = true;
+      }
+      if ((row.compositionProofRefs ?? []).some((ref) => ref.id === id)) hasFinalCompositionProof = true;
     }
   }
   if (row.migrationStatus === "verified" || row.migrationStatus === "relocated") {
-    check(hasCompositionProof, `${row.id} requires at least one passed row-local composition proof`);
+    check(hasScopedProof, `${row.id} requires at least one passed row-scoped proof`);
+    check(hasCompositionProof && hasFinalCompositionProof,
+      `${row.id} requires its passed P13 composition proof reference in proofIds`);
   }
   if (row.migrationStatus === "relocated") {
     check(closureIds.some((id) => (row.dispositionEvidenceRefs ?? []).some((ref) => ref.id === id
