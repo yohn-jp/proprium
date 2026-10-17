@@ -8176,7 +8176,7 @@
           ],
           "limitations": [
             "The endpoint and store are scoped to the configured single API owner and registered stable repository identity. GET /api/projects/events is separate manual-sync telemetry and is not recent-activity data.",
-            "Legacy import is a host API helper, not an HTTP endpoint. P12 is the composed proof: its first frozen-tree run failed at an unauthenticated GET expectation (401 actual, 403 expected); the P04 test-only expected-status correction is integrated on current main 539375c925754c6ec6f5c445051a32b7293a0724. The corrected full fixture result is not recorded yet, so source import/reclone acceptance remains pending."
+            "Legacy import is a host API helper, not an HTTP endpoint. P12 is the composed proof: its first frozen-tree run failed at an unauthenticated GET expectation (401 actual, 403 expected); the P04 test-only expected-status correction is integrated on current main 539375c925754c6ec6f5c445051a32b7293a0724. The corrected whole run stopped during full-profile Chromium at 16/18 before P12, so source import/reclone acceptance remains pending."
           ]
         },
         {
@@ -8238,7 +8238,7 @@
           "finding": "The current target has the owner-cookie project API, host-private per-device store and explicit-mapping legacy importer, plus a React resume hook, local fallback, editor cursor/page restore, and ContinuePanel handoff surface. The target has implementation coverage for the fixed R43 behavior; the ledger row remains pending until composed P12 source-import/recovery evidence and final campaign acceptance are recorded.",
           "storage": "API persistence is <usageDirectory>/recent-activity/recent-activity-state.json, partitioned by the configured owner and Core-registered RepositoryIdentity; it is outside the disposable Core data root. The importer archives exact source bytes at a content-addressed private host-history path before mapped adoption.",
           "ui": "App uses useRecentActivityResume and ContinuePanel; ManuscriptInput captures/applies writing sentence offsets and SceneEditor captures/applies reading page positions. Local fallback keys are scoped to author, repository and scene.",
-          "pendingAcceptance": "The first frozen-tree pnpm verify attempt on f3ef4d34 reached the composed P12 fixture and failed after 205.9s at the unauthenticated GET /api/projects/:projectId/recent-activity assertion (actual 401, expected 403). The P04 test-only expected-status correction is integrated on current main 539375c925754c6ec6f5c445051a32b7293a0724; its complete frozen-tree rerun has no recorded terminal result yet. Do not claim P12 retention acceptance or close the source row until the result passes.",
+          "pendingAcceptance": "The first frozen-tree pnpm verify attempt on f3ef4d34 reached the composed P12 fixture and failed after 205.9s at the unauthenticated GET /api/projects/:projectId/recent-activity assertion (actual 401, expected 403). The P04 test-only expected-status correction is integrated on current main 539375c925754c6ec6f5c445051a32b7293a0724; the corrected whole run stopped during full-profile Chromium at 16/18 and did not execute P12. Resolve the browser failures and rerun the complete frozen-tree verification before claiming P12 retention acceptance or closing the source row.",
           "searchedTargetPaths": [
             "packages/api/src/server.ts",
             "packages/api/src/server.test.ts",
@@ -8391,7 +8391,7 @@
           ],
           "proofRefs": [],
           "limitations": [
-            "There is no focused API response assertion for the supplemental target Core-proposal list; do not claim it is a one-to-one source queue endpoint."
+            "The supplemental target Core-proposal history list is not the source speaker/Zukan queue DTO; its lack of a focused response assertion is not a missing source queue behavior."
           ]
         },
         {
@@ -8418,9 +8418,16 @@
               "persistence": "Review decisions are submitted through source-module actions as Core proposals. The host itself does not own review data."
             }
           ],
-          "proofRefs": [],
+          "proofRefs": [
+            {
+              "id": "P02-R44-composed-review-host",
+              "path": "tests/e2e/review-contributions.acceptance.spec.ts",
+              "testName": "full profile renders Story and Speaker review queues and turns both author decisions into unapproved Core proposals",
+              "scope": "Passed in the full-profile Chromium run on current main 539375c925754c6ec6f5c445051a32b7293a0724 (test 18/18, 5.6s), although the complete browser suite had two other failures. Against a temporary local bare Git project and the real API/module host, it verifies pending Story suggestions and unresolved Speaker attributions render in the shared host, both author decisions create unapproved Core proposals, and the remote remains unchanged. It does not claim one-to-one ReviewQueueResponse DTO parity or P12 import/reclone completion."
+            }
+          ],
           "limitations": [
-            "No current browser acceptance mounts the composed Review slot with Story, Speaker, and Assistant modules together; module panels and actions have separate focused evidence."
+            "The composed host test asserts the Story and Speaker contributions and their proposal boundary; Assistant review panels have separate focused evidence. Legacy queue import/reclone and final composition remain P12 gates."
           ]
         },
         {
