@@ -8077,7 +8077,7 @@
               "id": "P02-R43-resume-handoff-browser",
               "path": "tests/e2e/recent-activity.acceptance.spec.ts",
               "testName": "recent activity hands off only numeric positions across devices, projects, and API restart",
-              "scope": "Focused real-browser acceptance covers separate desktop/mobile/reader contexts, cross-device writing and reading handoff, project isolation, owner privacy, API restart durability, cursor-only payloads, and no manuscript mutation requests. This is a scoped R43 browser proof, not P12 migration or campaign acceptance."
+              "scope": "Fresh full-profile Chromium subgate on exact tree f3ef4d34b5e603885ec2cbf204446b6becef3071 passed 18/18; this test passed in 21.0s. It covers separate desktop/mobile/reader contexts, cross-device writing and reading handoff, project isolation, owner privacy, API restart durability, cursor-only payloads, and no manuscript mutation requests. This is scoped R43 browser evidence, not P12 migration or final campaign acceptance."
             },
             {
               "id": "P02-R43-handoff-hint",
@@ -8176,7 +8176,7 @@
           ],
           "limitations": [
             "The endpoint and store are scoped to the configured single API owner and registered stable repository identity. GET /api/projects/events is separate manual-sync telemetry and is not recent-activity data.",
-            "Legacy import is a host API helper, not an HTTP endpoint; P12 must exercise its explicit mapping and retention contract through the complete disabled-data/review/checkpoint/root-replacement/reclone flow before R43 source migration is accepted."
+            "Legacy import is a host API helper, not an HTTP endpoint. P12 is the composed proof: its first frozen-tree run failed at an unauthenticated GET expectation (401 actual, 403 expected), so the source import/reclone acceptance remains pending until the test-only correction is integrated and the full fixture passes."
           ]
         },
         {
@@ -8238,7 +8238,7 @@
           "finding": "The current target has the owner-cookie project API, host-private per-device store and explicit-mapping legacy importer, plus a React resume hook, local fallback, editor cursor/page restore, and ContinuePanel handoff surface. The target has implementation coverage for the fixed R43 behavior; the ledger row remains pending until composed P12 source-import/recovery evidence and final campaign acceptance are recorded.",
           "storage": "API persistence is <usageDirectory>/recent-activity/recent-activity-state.json, partitioned by the configured owner and Core-registered RepositoryIdentity; it is outside the disposable Core data root. The importer archives exact source bytes at a content-addressed private host-history path before mapped adoption.",
           "ui": "App uses useRecentActivityResume and ContinuePanel; ManuscriptInput captures/applies writing sentence offsets and SceneEditor captures/applies reading page positions. Local fallback keys are scoped to author, repository and scene.",
-          "pendingAcceptance": "Run and record the updated composed P12 fixture against the frozen tree, including exact-byte archive, explicit mapping, cursor timestamp preservation, API recreation, Core data-root replacement/reclone and enabled reactivation. Do not mark the source row complete from unit or browser tests alone.",
+          "pendingAcceptance": "The first frozen-tree pnpm verify attempt on f3ef4d34 reached the composed P12 fixture and failed after 205.9s at the unauthenticated GET /api/projects/:projectId/recent-activity assertion (actual 401, expected 403). The P04 owner prepared a test-only expected-status correction; rerun the complete frozen-tree verification before claiming P12 retention acceptance or closing the source row.",
           "searchedTargetPaths": [
             "packages/api/src/server.ts",
             "packages/api/src/server.test.ts",
