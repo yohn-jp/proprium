@@ -1,0 +1,123 @@
+{
+  "schemaVersion": 1,
+  "task": "P11",
+  "implementationStatus": "in_progress",
+  "acceptanceStatus": "pending",
+  "source": {
+    "repository": "yohn-jp/arcadia-loom",
+    "commit": "edc033c2c9466274a334299dadfa426661d957d9",
+    "readOnly": true,
+    "ledgerItems": [
+      "docs/migration/ledger.json#N07",
+      "docs/migration/ledger.json#R03",
+      "docs/migration/ledger.json#R04",
+      "docs/migration/ledger.json#R07",
+      "docs/migration/ledger.json#R12",
+      "docs/migration/ledger.json#R14",
+      "docs/migration/ledger.json#R28",
+      "docs/migration/ledger.json#R30",
+      "docs/migration/ledger.json#R31",
+      "docs/migration/ledger.json#R34",
+      "docs/migration/ledger.json#R35",
+      "docs/migration/ledger.json#R37",
+      "docs/migration/ledger.json#R46"
+    ]
+  },
+  "target": {
+    "repository": "yohn-jp/scriptorium",
+    "baseCommit": "6341ae359bdb08fba9b6248fdc7bac4a1795a630",
+    "branch": "branchwork/7-p11",
+    "implementationCommits": [
+      "6804424cdd2d4357bf335ed09877f3e4f02f81d9",
+      "8f105e62cd105daaf6001616ab3ba73e95f7741b",
+      "abea31a7beaa10bbac5fc23bb4860287e89329ff",
+      "6cd4b271b39f3d314dcd99d28bd1dafae41e0201",
+      "4f9f7ec99cf11e7cd37a983af940d75f442f6649",
+      "1901a0595fea1037fd75b77c28afb7ce19a6b6fd",
+      "891e426b7053c0cbd87843979080b1f7626a3d87",
+      "b4b8404c367ad906fe61c1f6f51921b4cf2bfcd2",
+      "279cf774f5fa3e46ba9508ee7b914bd5ab56e190",
+      "8909213453eaa9bde2a5f682e6b72f17c0aa2196",
+      "9825caf28805b71afca10d965a8f8ba26aec7b93",
+      "b1d10f36001a143bd52ad2bb4eb3884d8c09055f"
+    ],
+    "testedHead": "b1d10f36001a143bd52ad2bb4eb3884d8c09055f"
+  },
+  "implementedBehavior": [
+    "Assistant is an optional module: importing, activating, and checking health with provider NONE does not initialize a provider or acquire model capabilities. External generation is disabled until the project feature-consent action explicitly enables it; credentials remain environment/host configuration.",
+    "Source-supported rewrite, setting QA, summaries, continuation, dialogue sketch, reader reaction, synonym, Zukan, state-event draft and deterministic aspect-review flows are exposed through snapshot-bound actions and the React contribution. Generated results retain model/provider/prompt identity and verified source citations where the source feature supplies them.",
+    "Rewrite choices remain unapproved until the author selects one and submits a separate Core proposal. Summary refresh and chapter/scene summary writes use source-freshness preconditions and one ordered proposal. Zukan proposals preserve validated manuscript or sandbox dialogue-sketch provenance and are created through Story. No Assistant handler writes canonical files, approves, checkpoints, publishes, or commits directly.",
+    "Source prompt previews return the actual source-context prompts locally. The continuation preview shares context assembly with generation, uses the selected scene/chapter/recent-sentence context and source token-budget calculation, and is classified as owner compute because it invokes bounded NLP and semantic actions.",
+    "Project model preferences are non-secret, versioned state submitted as a Core proposal. Imported historical usage JSONL bytes remain preserved under their existing owner; new provider-call usage goes to the host-owned durable usage store. New usage records preserve call identity/status/model/timing/cache metadata while omitting prompts, manuscript text and credentials."
+  ],
+  "proofs": [
+    {
+      "id": "P11-ASSISTANT-ACTIONS-AND-PRIVACY",
+      "kind": "focused module tests and typecheck",
+      "status": "passed",
+      "targetFiles": [
+        "modules/assistant/src/actions.test.ts",
+        "modules/assistant/src/provider.test.ts",
+        "modules/assistant/src/migration.test.ts",
+        "modules/assistant/src/actions.ts",
+        "modules/assistant/src/provider.ts"
+      ],
+      "command": "pnpm --filter @scriptorium/module-assistant typecheck && pnpm --filter @scriptorium/module-assistant test",
+      "result": "Typecheck passed and 42/42 tests passed on testedHead b1d10f36001a143bd52ad2bb4eb3884d8c09055f.",
+      "scope": "Covers idle provider NONE and default-denied consent, rewrite parsing/fallback and source context, author choice and Core proposal preconditions, selected live-editor draft provenance, deterministic provider-free aspect review, source QA tool rounds and verified scene/Bible citations, all registered source prompt previews with no provider/usage/proposal effects, continuation token budgeting and context order, dialogue DTO/context, grounded manuscript/sandbox Zukan proposals, summary freshness and atomic chapter/scene proposals, usage-history privacy and exact-byte reactivation. The tool-round test uses a local synthetic model server and stubbed public action results; the real configured provider/API path is evidenced separately."
+    },
+    {
+      "id": "P11-ASSISTANT-BROWSER-CONTRIBUTIONS",
+      "kind": "rendered Chromium browser workflow",
+      "status": "passed",
+      "targetFiles": [
+        "modules/assistant/src/browser.ts",
+        "modules/assistant/tests/browser-workflow.acceptance.mjs"
+      ],
+      "command": "SCRIPTORIUM_E2E_CHROMIUM=/nix/store/ini1ifgvcsvw48x4mxawrv9jvbdwn70p-chromium-155.0.8059.79/bin/chromium node modules/assistant/tests/browser-workflow.acceptance.mjs",
+      "result": "The browser acceptance passed on testedHead b1d10f36001a143bd52ad2bb4eb3884d8c09055f.",
+      "scope": "Mounts the actual Assistant browser contribution and exercises rendered settings/queue, QA conversation, continuation, rewrite alternatives and cancellation, summary/aspect/reaction, dialogue, synonym, Zukan and usage views. Its action bridge is stubbed; production API/Core/provider behavior is covered by the owner-HTTP reference proof."
+    },
+    {
+      "id": "P11-CONTINUATION-PREVIEW-OWNER-HTTP",
+      "kind": "production API and ModuleRuntime action acceptance",
+      "status": "passed",
+      "targetFiles": [
+        "modules/assistant/src/actions.ts",
+        "modules/assistant/src/actions.test.ts",
+        "tests/integration/mcp-acceptance.test.mjs"
+      ],
+      "testName": "Assistant continuation prompt preview runs as a host-owned compute action without provider usage",
+      "command": "SCRIPTORIUM_MCP_ACCEPTANCE_MODULES=assistant,story,nlp,diagnostics,semantic,speaker,publishing,mcp ARCADIA_LLM_PROVIDER=none node --test --test-name-pattern='Assistant continuation prompt preview runs as a host-owned compute action without provider usage' tests/integration/mcp-acceptance.test.mjs",
+      "result": "Passed 1/1 on testedHead b1d10f36001a143bd52ad2bb4eb3884d8c09055f. The authenticated owner action returned the selected saved-scene context and the same Core snapshot as core.status, while the before/after host-usage IDs were identical. Runtime effect metadata is compute, and ModuleRuntime accepts the nested local token-count/semantic calls without weakening the read policy.",
+      "scope": "One synthetic project, provider NONE; this proves the selected R35 preview through the actual host action boundary, not full-profile or OCI behavior."
+    },
+    {
+      "id": "P11-LOCAL-QWEN-CORE-REVIEW-AND-RECONSTRUCTION",
+      "kind": "configured real-provider Assistant/API/Core acceptance",
+      "status": "passed",
+      "targetFiles": [
+        "tests/integration/mcp-acceptance.test.mjs",
+        "modules/assistant/src/actions.ts",
+        "modules/assistant/src/provider.ts",
+        "packages/api/src/server.ts",
+        "packages/core/src/store.ts"
+      ],
+      "testName": "P11 local provider streams, records usage, proposes through Core review, publishes and reconstructs",
+      "command": "SCRIPTORIUM_ASSISTANT_REFERENCE_PROVIDER=qwen-local SCRIPTORIUM_MCP_ACCEPTANCE_MODULES=assistant,story,nlp,diagnostics,semantic,speaker,publishing,mcp ARCADIA_LLM_PROVIDER=openai-compatible ARCADIA_LLM_MODEL=Qwen3-0.6B-Q4_K_M ARCADIA_LLM_BASE_URL=http://127.0.0.1:18088/v1 ARCADIA_LLM_API_KEY=local-only-placeholder node --test --test-name-pattern='P11 local provider streams, records usage, proposes through Core review, publishes and reconstructs' tests/integration/mcp-acceptance.test.mjs",
+      "result": "Passed 1/1 in 21.1 seconds on exact testedHead b1d10f36001a143bd52ad2bb4eb3884d8c09055f. The production owner API/runtime streamed real local Qwen rewrite deltas, cancelled after a received delta, durably retained the aborted call, streamed a QA response and surfaced its actual citation-schema validation error (the 0.6B model emitted string citations where objects are required), then returned three real rewrite alternatives. No proposal or manuscript write occurred before choice. The author-selected candidate entered Core as a one-operation manuscript proposal with source revision reads; owner approval and checkpoint preceded publication. The test confirmed published bytes through a new CoreStore reconstruction and confirmed the host-owned usage event IDs survived that reload without retaining prompts or manuscript text. QA did not fabricate a schema-valid answer.",
+      "scope": "Local loopback CPU model only, synthetic content, bounded calls and placeholder local key. This verifies configured provider/API/stream/cancellation/usage/Core wiring; it is not a model-quality evaluation or external-provider certification.",
+      "modelIdentity": {
+        "provider": "openai-compatible",
+        "model": "Qwen3-0.6B-Q4_K_M",
+        "endpoint": "http://127.0.0.1:18088/v1",
+        "hosting": "local loopback llama.cpp CPU server"
+      }
+    }
+  ],
+  "compositionLimits": [
+    "This candidate evidence is scoped to Assistant unit/action tests, the Assistant browser contribution, one production owner-action preview, and one local-provider API/Core synthetic repository flow. The preview and browser tests do not substitute for the provider reference test.",
+    "The real QA stream produced a truthful schema error from the deliberately small local model. Source tool-loop and citation validation behavior is covered by the focused Assistant test; this acceptance does not claim generative QA answer quality.",
+    "This artifact does not certify final full-profile browser/API composition, P12 legacy import/reactivation/reclone composition, final root acceptance, or OCI lifecycle. Those are recorded and gated by the campaign owners."
+  ]
+}
