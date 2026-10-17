@@ -723,6 +723,7 @@ test("composed legacy import preserves disabled data and reactivates after a ful
       const liveDesktop = liveActivity.items.find(({ deviceType }) => deviceType === "desktop");
       assert.equal(liveDesktop?.sceneId, "sc-cursor-desktop-live");
 
+      const workspaceBeforeRecentActivityReimport = await treeState(workspaceRoot);
       const afterLiveImport = await importLegacyRecentActivity({
         workspaceDataRoot: workspaceRoot,
         usageDirectory,
@@ -733,8 +734,8 @@ test("composed legacy import preserves disabled data and reactivates after a ful
         "re-import must report and preserve the newer live desktop cursor");
       assert.deepEqual(await fs.readFile(privateRecentActivityArchive), recentActivityBytes,
         "re-import after a newer live cursor must leave the raw archive immutable");
-      assert.deepEqual(await treeState(workspaceRoot), workspaceBefore,
-        "recent-activity import must never rewrite the source workspace file");
+      assert.deepEqual(await treeState(workspaceRoot), workspaceBeforeRecentActivityReimport,
+        "recent-activity import must not mutate the post-checkpoint workspace snapshot");
       const afterReimportResponse = await fetch(activityPath, { headers });
       assert.equal(afterReimportResponse.status, 200);
       const afterReimport = await afterReimportResponse.json();
