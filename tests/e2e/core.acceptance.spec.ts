@@ -190,6 +190,59 @@ test("appearance modes follow system preference initially and persist explicit l
   await expect.poll(() => page.locator("body").evaluate((element) => getComputedStyle(element).backgroundColor)).toBe("rgb(242, 238, 231)");
 });
 
+test("history keeps its pinned response through an equal-snapshot foreground observation", async ({ page }) => {
+  expect(authToken.length).toBeGreaterThanOrEqual(32);
+  expect(repositoryUrl).not.toBe("");
+  await signIn(page);
+  await openFixtureProject(page);
+
+  let releaseHistory!: () => void;
+  let signalHistory!: () => void;
+  const historyGate = new Promise<void>((resolve) => { releaseHistory = resolve; });
+  const historyStarted = new Promise<void>((resolve) => { signalHistory = resolve; });
+  let historyListRequests = 0;
+  let actualHistoryStatus = 0;
+  await page.route((url) => url.pathname.endsWith("/manuscripts/scene-1/snapshots") && url.searchParams.get("sceneId") === "scene-1", async (route) => {
+    historyListRequests++;
+    if (historyListRequests === 1) {
+      const response = await route.fetch();
+      actualHistoryStatus = response.status();
+      signalHistory();
+      await historyGate;
+      await route.fulfill({ response });
+      return;
+    }
+    await route.continue();
+  });
+
+  await page.getByRole("button", { name: "履歴", exact: true }).click();
+  await historyStarted;
+  const observationResponse = page.waitForResponse((response) =>
+    response.request().method() === "GET" && new URL(response.url()).pathname.endsWith("/observation"),
+  );
+  const treeResponse = page.waitForResponse((response) => {
+    const url = new URL(response.url());
+    return response.request().method() === "GET" && url.pathname.endsWith("/tree") && url.searchParams.get("view") === "remote";
+  });
+  await page.evaluate(() => window.dispatchEvent(new Event("online")));
+  const [observed, tree] = await Promise.all([observationResponse, treeResponse]);
+  expect(observed.ok()).toBe(true);
+  expect(tree.ok()).toBe(true);
+  const remote = await observed.json() as { state: string; observedAt: string; snapshot: { remoteCommit: string } };
+  const expectedStatus = remote.state === "fresh"
+    ? `リモート ${remote.snapshot.remoteCommit.slice(0, 12)} · ${new Date(remote.observedAt).toLocaleTimeString("ja-JP")} に確認`
+    : `リモート確認状態: ${remote.state}`;
+  await expect(page.locator(".topbar-status")).toContainText(expectedStatus);
+
+  releaseHistory();
+  const history = page.locator(".manuscript-history");
+  await expect(history.getByRole("heading", { name: "改稿の履歴" })).toBeVisible();
+  await expect(history.locator('[role="status"]')).toHaveCount(0);
+  await expect(history.getByRole("alert")).toHaveCount(0);
+  expect(actualHistoryStatus).toBe(200);
+  expect(historyListRequests).toBe(1);
+});
+
 test("writing UI recovers multi-document drafts and separates Draft, Checkpoint, and GitHub publication", async ({ page }) => {
   expect(authToken.length).toBeGreaterThanOrEqual(32);
   expect(repositoryUrl).not.toBe("");

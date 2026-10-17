@@ -885,7 +885,15 @@ function AuthorWorkspace({
       if (navigationRef.current !== nav || snapshotKey(tree.snapshot) !== snapshotKey(observed.snapshot)) return;
       const latestBeforeUpdate = workRef.current;
       const changedTree = snapshotKey(latestBeforeUpdate?.tree.snapshot ?? current.tree.snapshot) !== snapshotKey(tree.snapshot);
-      updateWork((latest) => latest?.project.id === projectId ? { ...latest, observation: observed, tree } : latest);
+      updateWork((latest) => {
+        if (latest?.project.id !== projectId) return latest;
+        const stableSnapshot = snapshotKey(latest.observation.snapshot) === snapshotKey(observed.snapshot)
+          ? latest.observation.snapshot
+          : observed.snapshot;
+        const stableObservation = stableSnapshot === observed.snapshot ? observed : { ...observed, snapshot: stableSnapshot };
+        const stableTree = snapshotKey(latest.tree.snapshot) === snapshotKey(tree.snapshot) ? latest.tree : tree;
+        return { ...latest, observation: stableObservation, tree: stableTree };
+      });
       setStatus({
         message: observed.state === "fresh"
           ? `リモート ${observed.snapshot.remoteCommit.slice(0, 12)} · ${new Date(observed.observedAt).toLocaleTimeString("ja-JP")} に確認`

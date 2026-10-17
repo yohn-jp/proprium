@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { snapshotKey, type SnapshotId } from "@scriptorium/contracts";
 import { api, type ManuscriptSnapshot, type ManuscriptSnapshotMeta } from "../api";
 
@@ -61,6 +61,8 @@ export function ManuscriptHistoryPanel({
   onClose: () => void;
 }) {
   const pinnedKey = snapshotKey(snapshot);
+  const pinnedSnapshotRef = useRef(snapshot);
+  if (snapshotKey(pinnedSnapshotRef.current) !== pinnedKey) pinnedSnapshotRef.current = snapshot;
   const [versions, setVersions] = useState<ManuscriptSnapshotMeta[]>([]);
   const [selectedId, setSelectedId] = useState("");
   const [selected, setSelected] = useState<ManuscriptSnapshot | null>(null);
@@ -74,7 +76,7 @@ export function ManuscriptHistoryPanel({
     setVersions([]);
     setSelectedId("");
     setSelected(null);
-    void api.manuscriptSnapshots(projectId, manuscriptId, sceneId, snapshot)
+    void api.manuscriptSnapshots(projectId, manuscriptId, sceneId, pinnedSnapshotRef.current)
       .then((result) => {
         if (!current) return;
         if (snapshotKey(result.snapshot) !== pinnedKey) throw new Error("履歴一覧のスナップショットが現在の原稿と一致しません。再読み込みしてください。");
@@ -84,14 +86,14 @@ export function ManuscriptHistoryPanel({
       .catch((caught: unknown) => { if (current) setError(caught instanceof Error ? caught.message : "履歴を読み込めませんでした。"); })
       .finally(() => { if (current) setLoading(false); });
     return () => { current = false; };
-  }, [projectId, manuscriptId, sceneId, snapshot, pinnedKey]);
+  }, [projectId, manuscriptId, sceneId, pinnedKey]);
 
   useEffect(() => {
     if (!selectedId) { setSelected(null); return; }
     let current = true;
     setSelected(null);
     setError("");
-    void api.manuscriptSnapshot(projectId, manuscriptId, selectedId, snapshot)
+    void api.manuscriptSnapshot(projectId, manuscriptId, selectedId, pinnedSnapshotRef.current)
       .then((result) => {
         if (!current) return;
         if (snapshotKey(result.snapshot) !== pinnedKey) throw new Error("履歴本文のスナップショットが一覧と一致しません。再読み込みしてください。");
@@ -100,7 +102,7 @@ export function ManuscriptHistoryPanel({
       })
       .catch((caught: unknown) => { if (current) setError(caught instanceof Error ? caught.message : "履歴本文を読み込めませんでした。"); });
     return () => { current = false; };
-  }, [projectId, manuscriptId, sceneId, selectedId, snapshot, pinnedKey]);
+  }, [projectId, manuscriptId, sceneId, selectedId, pinnedKey]);
 
   const diff = useMemo(() => selected ? diffLines(selected.body, currentBody) : [], [selected, currentBody]);
   const added = diff.filter((line) => line.type === "add").length;
