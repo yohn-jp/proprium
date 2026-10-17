@@ -1227,29 +1227,101 @@ test("public compute HTTP contribution definitions are rejected", async () => {
   }
 });
 
-test("owner compute and propose HTTP contributions cannot use GET or HEAD", async () => {
-  for (const effect of ["compute", "propose"] as const) {
-    for (const method of ["GET", "HEAD"] as const) {
-      const metadata = manifest("publishing");
-      const runtime = new ModuleRuntime({
-        manifests: [metadata], enabled: ["publishing"], cacheDirectory: "/tmp/scriptorium-runtime-test",
-        loaders: { publishing: async () => ({
-          manifest: metadata, actions: [], ui: [],
-          http: [{
-            id: `${effect}-${method.toLowerCase()}`, path: `unsafe/${effect}-${method.toLowerCase()}`,
-            methods: [method], access: "owner", effect, async handle() { return Response.json({}); },
-          }],
-          async dispose() {},
-        }) },
-      });
-      try {
-        await assert.rejects(runtime.activate("publishing"), (error: unknown) =>
-          error instanceof ModuleRuntimeError && error.code === "invalid_module_definition",
-          `${effect} ${method} must not bypass write-method CSRF checks`);
-      } finally {
-        await runtime.shutdown();
-      }
+test("owner compute HTTP contributions cannot use GET or HEAD", async () => {
+  for (const method of ["GET", "HEAD"] as const) {
+    const metadata = manifest("publishing");
+    const runtime = new ModuleRuntime({
+      manifests: [metadata], enabled: ["publishing"], cacheDirectory: "/tmp/scriptorium-runtime-test",
+      loaders: { publishing: async () => ({
+        manifest: metadata, actions: [], ui: [],
+        http: [{
+          id: `compute-${method.toLowerCase()}`, path: `unsafe/compute-${method.toLowerCase()}`,
+          methods: [method], access: "owner", effect: "compute", async handle() { return Response.json({}); },
+        }],
+        async dispose() {},
+      }) },
+    });
+    try {
+      await assert.rejects(runtime.activate("publishing"), (error: unknown) =>
+        error instanceof ModuleRuntimeError && error.code === "invalid_module_definition",
+        `compute ${method} must not bypass write-method CSRF checks`);
+    } finally {
+      await runtime.shutdown();
     }
+  }
+});
+
+async function readMcpSseResult(response: Response): Promise<{
+  result: { serverInfo?: { name: string }; tools?: Array<{ name: string }> };
+}> {
+  const reader = response.body?.getReader();
+  assert.ok(reader, "MCP request should return an event stream");
+  const decoder = new TextDecoder();
+  let event = "";
+  try {
+    while (!event.includes("\n\n")) {
+      const chunk = await reader.read();
+      assert.equal(chunk.done, false, "MCP event stream ended before returning the request result");
+      event += decoder.decode(chunk.value, { stream: true });
+    }
+    const data = event.split("\n").find((line) => line.startsWith("data: "))?.slice(6);
+    assert.ok(data, "MCP event stream should contain a JSON-RPC result");
+    return JSON.parse(data);
+  } finally {
+    await reader.cancel().catch(() => undefined);
+  }
+}
+
+test("the production MCP module activates and serves tools through Streamable HTTP", async () => {
+  const metadata = manifest("mcp", { serverEntry: "./dist/index.js" });
+  const runtime = new ModuleRuntime({
+    manifests: [metadata], enabled: ["mcp"], cacheDirectory: "/tmp/scriptorium-runtime-test",
+    loaders: { mcp: async (context) => {
+      const { createModule } = await import("../../../modules/mcp/src/index.js");
+      return createModule(context);
+    } },
+  });
+  const host = { ...readContext(), access: "owner" as const, actions: [] };
+  try {
+    await runtime.activate("mcp");
+    assert.deepEqual(runtime.httpContributions("mcp"), [{
+      id: "streamable", path: "streamable", methods: ["GET", "POST", "DELETE"], access: "owner", effect: "propose",
+    }]);
+    const endpoint = "http://scriptorium.test/api/projects/project-1/modules/mcp/streamable";
+    const post = (message: unknown, sessionId?: string) => runtime.invokeHttp("mcp", "streamable", new Request(endpoint, {
+      method: "POST",
+      headers: {
+        accept: "application/json, text/event-stream", "content-type": "application/json",
+        ...(sessionId ? { "mcp-session-id": sessionId, "mcp-protocol-version": "2025-03-26" } : {}),
+      },
+      body: JSON.stringify(message),
+    }), host);
+    const initialize = await post({
+      jsonrpc: "2.0", id: 1, method: "initialize",
+      params: { protocolVersion: "2025-03-26", capabilities: {}, clientInfo: { name: "module-runtime-test", version: "0.1.0" } },
+    });
+    assert.equal(initialize.status, 200);
+    const sessionId = initialize.headers.get("mcp-session-id");
+    assert.ok(sessionId);
+    const initialization = await readMcpSseResult(initialize);
+    assert.equal(initialization.result.serverInfo?.name, "scriptorium-mcp");
+
+    const initialized = await post({ jsonrpc: "2.0", method: "notifications/initialized" }, sessionId);
+    assert.equal(initialized.status, 202);
+    const listed = await post({ jsonrpc: "2.0", id: 2, method: "tools/list", params: {} }, sessionId);
+    assert.equal(listed.status, 200);
+    const toolList = await readMcpSseResult(listed);
+    assert.ok(toolList.result.tools?.some(({ name }) => name === "get_status"));
+
+    const eventStream = await runtime.invokeHttp("mcp", "streamable", new Request(endpoint, {
+      method: "GET", headers: {
+        accept: "text/event-stream", "mcp-session-id": sessionId, "mcp-protocol-version": "2025-03-26",
+      },
+    }), host);
+    assert.equal(eventStream.status, 200);
+    await eventStream.body?.cancel();
+  } finally {
+    await runtime.shutdown();
   }
 });
 

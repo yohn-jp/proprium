@@ -213,7 +213,7 @@ function validateDefinition(expected: ModuleManifest, definition: ModuleDefiniti
         methods.some((method) => !["GET", "HEAD", "POST", "DELETE"].includes(method)) || new Set(methods).size !== methods.length ||
         !["owner", "public"].includes(contribution.access) || !["read", "compute", "propose"].includes(contribution.effect) ||
         (contribution.access === "public" && contribution.effect !== "read") ||
-        (contribution.effect !== "read" && methods.some((method) => method === "GET" || method === "HEAD")) ||
+        (contribution.effect === "compute" && methods.some((method) => method === "GET" || method === "HEAD")) ||
         typeof contribution.handle !== "function" ||
         httpIds.has(contribution.id)) {
       throw new ModuleRuntimeError("invalid_module_definition", `Module ${expected.id} declares an invalid HTTP contribution`);
