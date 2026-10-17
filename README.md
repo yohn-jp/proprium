@@ -55,7 +55,7 @@ pnpm build
 pnpm audit:core
 ```
 
-For browser verification, install Chromium with `pnpm exec playwright install chromium` and run `pnpm test:e2e`. Browser and image acceptance evidence is recorded under [docs/verification/ACCEPTANCE.md](docs/verification/ACCEPTANCE.md). CI and GitHub Actions are intentionally outside this initial recovery; local results do not imply remote CI success.
+For browser verification, install Chromium with `pnpm exec playwright install chromium` and run `pnpm test:e2e`. The full migration acceptance report is [docs/verification/FINAL-MIGRATION.md](docs/verification/FINAL-MIGRATION.md); [docs/verification/ACCEPTANCE.md](docs/verification/ACCEPTANCE.md) retains the historical Core evidence. CI and GitHub Actions are intentionally outside this initial recovery; local results do not imply remote CI success.
 
 `pnpm verify` runs the frozen install, type and test checks, then builds and checks both Core and full profiles in Chromium and OCI. It also exercises both MCP transports, the NLP/Diagnostics persistence round trip, and the composed legacy migration through approval, publication, recloning, and module reactivation. It requires an OCI engine, Chromium, and the tokenizer artifacts used by that acceptance. The separate real-provider, model-lifecycle, GitHub, and container-recovery gates have reproduction instructions under `docs/verification`; the local command alone does not certify those gates.
 
