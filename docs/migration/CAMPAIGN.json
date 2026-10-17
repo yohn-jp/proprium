@@ -26,7 +26,8 @@
       "implementation": "complete",
       "acceptance": "passed",
       "proofs": [
-        "docs/verification/P01-GITHUB.md"
+        "docs/verification/P01-GITHUB.md",
+        "docs/migration/evidence/P13.json"
       ]
     },
     {
@@ -36,7 +37,11 @@
       ],
       "implementation": "complete",
       "acceptance": "passed",
-      "proofs": []
+      "proofs": [
+        "docs/migration/ledger.json",
+        "docs/migration/evidence/P13.json",
+        "docs/verification/P13-BROWSER-RECOVERY.md"
+      ]
     },
     {
       "id": "P03",
@@ -45,7 +50,12 @@
       ],
       "implementation": "complete",
       "acceptance": "passed",
-      "proofs": []
+      "proofs": [
+        "docs/migration/ledger.json",
+        "docs/migration/evidence/P13.json",
+        "docs/verification/P13-PACKAGING.md",
+        "docs/verification/P13-MODEL-OCI-LIFECYCLE.md"
+      ]
     },
     {
       "id": "P04",
@@ -54,7 +64,10 @@
       ],
       "implementation": "complete",
       "acceptance": "passed",
-      "proofs": []
+      "proofs": [
+        "docs/migration/ledger.json",
+        "docs/migration/evidence/P12.json"
+      ]
     },
     {
       "id": "P05",
@@ -191,7 +204,8 @@
         "docs/verification/P13-BROWSER-RECOVERY.md",
         "docs/verification/P13-MODEL-OCI-LIFECYCLE.md",
         "docs/verification/FINAL-MIGRATION.md",
-        "docs/verification/P13-FINAL-REVIEW.md"
+        "docs/verification/P13-FINAL-REVIEW.md",
+        "docs/migration/evidence/P13.json"
       ]
     }
   ],
