@@ -100,8 +100,18 @@
     }
   ],
   "compositionLimits": [
-    "The MCP module itself has no model, embedding, NLP, or auth-service dependency. Production acceptance uses local CPU module workers, an empty semantic vector index with source lexical fallback, and synthetic content only; it does not certify downloaded model quality or a full-profile provider configuration.",
-    "format_manuscript uses the local source-compatible formatter and returns a NarrativeChangeSet for the existing Story submission flow without an external model provider. get_diagnostics invokes the full diagnostics.scene aggregate and requires Speaker actions; it returns component_unavailable rather than fabricating a partial result when that composition is absent. suggest_rewrite invokes assistant.rewrite, preserves the source prompt/context/candidate fields, and returns the typed provider-unavailable result when no provider is configured; the configured local Qwen response passed through both real transports with no proposal or repository write. This single pinned-model run verifies integration behavior, not general model quality. `reload` now uses the read-only Story materializer; no persistent target FTS projection exists, so it only reports counts from its pinned canonical snapshot.",
-    "After Core data loss, MCP reports PROPOSAL_PAYLOAD_UNAVAILABLE when only accepted operation payloads survive in Git. Recovery requires the original full Core proposal retained by the private browser record; the production integration verifies exact restore through the owner proposal API."
-  ]
+    "The MCP module itself has no model, embedding, NLP, or auth-service dependency. Focused production acceptance uses local CPU module workers, an empty semantic vector index with source lexical fallback, and synthetic content. P13 separately records configured local-Qwen through both real transports and actual CPU model lifecycle; no downloaded model quality or general answer-quality claim is made.",
+    "format_manuscript uses the local source-compatible formatter and returns a NarrativeChangeSet for the existing Story submission flow without an external model provider. get_diagnostics invokes the full diagnostics.scene aggregate and requires Speaker actions; it returns component_unavailable rather than fabricating a partial result when that composition is absent. suggest_rewrite invokes assistant.rewrite, preserves the source prompt/context/candidate fields, and returns the typed provider-unavailable result when no provider is configured. The configured local Qwen response passed through both real transports with no proposal or repository write. `reload` uses the read-only Story materializer; no persistent target FTS projection exists, so it only reports counts from its pinned canonical snapshot.",
+    "After Core data loss, MCP reports PROPOSAL_PAYLOAD_UNAVAILABLE when only accepted operation payloads survive in Git. Recovery requires the original full Core proposal retained by the private browser record; final P13 browser recovery verifies exact restore through the owner proposal API."
+  ],
+  "implementationStatus": "complete",
+  "acceptanceStatus": "passed",
+  "finalComposition": {
+    "proofId": "P13-FROZEN-COMPOSITION",
+    "artifact": "docs/migration/evidence/P13.json",
+    "jsonPointer": "#/proofs/0",
+    "status": "passed",
+    "testedRuntimeHead": "fc4eea880ef895decf6161bf4f45cc958e9700b3",
+    "result": "All required stages passed. pnpm verify exited 125 only at the final full OCI build because of execution-host ENOSPC; after capacity repair the unchanged final OCI stage was retried and exited 0. This is composed acceptance, not a zero exit from the original pnpm verify process."
+  }
 }

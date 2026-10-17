@@ -1,8 +1,8 @@
 {
   "schemaVersion": 1,
   "task": "P09",
-  "implementationStatus": "in_progress",
-  "acceptanceStatus": "pending",
+  "implementationStatus": "complete",
+  "acceptanceStatus": "passed",
   "source": {
     "repository": "yohn-jp/arcadia-loom",
     "commit": "edc033c2c9466274a334299dadfa426661d957d9",
@@ -58,7 +58,9 @@
       "category": "authoritative",
       "target": "meta/scriptorium/modules/semantic/contradiction-dismissals.jsonl",
       "disabledTarget": "meta/scriptorium/modules/semantic/legacy/files/meta/contradiction-dismissals.jsonl",
-      "sourceProof": ["packages/core/src/nlp/contradiction/dismissals.ts"],
+      "sourceProof": [
+        "packages/core/src/nlp/contradiction/dismissals.ts"
+      ],
       "targetProof": [
         "packages/migration/src/producers/filesystem.ts",
         "modules/semantic/src/actions.ts",
@@ -71,15 +73,22 @@
       "source": "new author choice: semantic reranker preference",
       "category": "authoritative",
       "target": "meta/scriptorium/modules/semantic/settings.json",
-      "targetProof": ["modules/semantic/src/actions.ts", "modules/semantic/src/browser.ts"],
+      "targetProof": [
+        "modules/semantic/src/actions.ts",
+        "modules/semantic/src/browser.ts"
+      ],
       "preservation": "The read/update actions expose the reranker preference and pinned model identities. Updates are settings ChangeOperations with the observed revision and proposal evidence; the UI routes them to author review."
     },
     {
       "source": "pinned embedding and reranker artifacts",
       "category": "derived model cache",
       "target": "private local module model cache",
-      "sourceProof": ["docs/verification/P13-MODEL-PREFLIGHT.md"],
-      "targetProof": ["modules/semantic/src/worker.ts"],
+      "sourceProof": [
+        "docs/verification/P13-MODEL-PREFLIGHT.md"
+      ],
+      "targetProof": [
+        "modules/semantic/src/worker.ts"
+      ],
       "preservation": "Embedding and reranker artifacts remain outside the repository. The worker loads the pinned Xenova/multilingual-e5-small revision and the source BGE reranker revision on demand; it does not send project content to an external inference provider. Artifacts may be fetched if absent."
     }
   ],
@@ -165,9 +174,17 @@
     }
   ],
   "compositionLimits": [
-    "The semantic server contribution has passed default ModuleRuntime acceptance and the browser contribution has passed focused Chromium acceptance; the final composed API, profile browser bundle, and full product E2E acceptance remain pending.",
-    "Dismissal scope freshness passed an actual synthetic CoreStore checkpoint conflict. Composition with the generic importer, P12 review/push flow, and data-root-loss/reclone round trip remains pending.",
-    "P06's corpus-neighbor consumer uses semantic.embedding, but its provider-consumer acceptance and the full P05/P06/P09 composition remain to be run with the integrated host.",
-    "The source external LLM verdict enrichment for contradiction candidates is not claimed here; P09 supplies local rule and embedding candidates and preserves author dismissal decisions."
-  ]
+    "The semantic server contribution passed default ModuleRuntime acceptance and the browser contribution passed focused Chromium acceptance. Final P13 composition additionally passed the full-profile browser and production API/module host checks.",
+    "Dismissal scope freshness passed an actual synthetic CoreStore checkpoint conflict. P12 passed the importer, review/push flow, and data-root-loss/reclone round trip with retained semantic decisions.",
+    "P06's corpus-neighbor consumer uses semantic.embedding. Final P13 actual model lifecycle verified shared Diagnostics/Semantic E5 provider use, derived-index rebuild, cancellation, release, and replacement; the P06 provider-test-double is not used to claim that behavior.",
+    "The source external LLM verdict enrichment for contradiction candidates is not claimed; P09 supplies local rule and embedding candidates and preserves author dismissal decisions. The synthetic acceptance makes no generated verdict-quality claim."
+  ],
+  "finalComposition": {
+    "proofId": "P13-FROZEN-COMPOSITION",
+    "artifact": "docs/migration/evidence/P13.json",
+    "jsonPointer": "#/proofs/0",
+    "status": "passed",
+    "testedRuntimeHead": "fc4eea880ef895decf6161bf4f45cc958e9700b3",
+    "result": "All required stages passed. pnpm verify exited 125 only at the final full OCI build because of execution-host ENOSPC; after capacity repair the unchanged final OCI stage was retried and exited 0. This is composed acceptance, not a zero exit from the original pnpm verify process."
+  }
 }

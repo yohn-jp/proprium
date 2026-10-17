@@ -17,7 +17,11 @@
         "modules/publishing/src/actions.ts",
         "modules/publishing/src/browser.tsx"
       ],
-      "proofs": ["P07-plaintext-vertical", "P07-epub-zip", "P07-epub-source-bible-parity"]
+      "proofs": [
+        "P07-plaintext-vertical",
+        "P07-epub-zip",
+        "P07-epub-source-bible-parity"
+      ]
     },
     "R24": {
       "target": [
@@ -25,7 +29,10 @@
         "modules/publishing/src/actions.ts",
         "modules/publishing/src/browser.tsx"
       ],
-      "proofs": ["P07-episode-proposal-preservation", "P07-episode-clear-ui-roundtrip"]
+      "proofs": [
+        "P07-episode-proposal-preservation",
+        "P07-episode-clear-ui-roundtrip"
+      ]
     },
     "R47": {
       "target": [
@@ -34,11 +41,21 @@
         "modules/publishing/src/actions.ts",
         "modules/publishing/src/browser.tsx"
       ],
-      "proofs": ["P07-share-remote-activation-revocation", "P07-share-privacy-metadata", "P07-anonymous-browser-share-lifecycle"]
+      "proofs": [
+        "P07-share-remote-activation-revocation",
+        "P07-share-privacy-metadata",
+        "P07-anonymous-browser-share-lifecycle"
+      ]
     },
     "N10": {
-      "target": ["modules/publishing/src/migration.ts", "modules/publishing/src/publishing.test.ts"],
-      "proofs": ["P07-migration-semantic-validation", "P07-retained-reactivation"]
+      "target": [
+        "modules/publishing/src/migration.ts",
+        "modules/publishing/src/publishing.test.ts"
+      ],
+      "proofs": [
+        "P07-migration-semantic-validation",
+        "P07-retained-reactivation"
+      ]
     }
   },
   "proofs": {
@@ -96,8 +113,18 @@
     }
   ],
   "compositionLimits": [
-    "The P07 integration acceptance uses the publishing-integration API runtime and full-profile browser bundle; it does not certify full-profile backend composition, browser recovery, optional workers, or OCI packaging.",
-    "The OCI acceptance remains pending as a separate follow-up.",
+    "P07 integration acceptance is scoped to publishing integration and its full-profile browser bundle. Final Core/full browser, recovery, full OCI, and real model lifecycle evidence is separately recorded in P13; this artifact does not expand those scoped assertions.",
+    "The final full OCI stage passed after a capacity-only retry on the unchanged frozen runtime tree. The original pnpm verify process exited 125 at that final stage due ENOSPC; the retry result is documented in P13 and is not reported as a zero exit from pnpm verify.",
     "The fresh GitHub acceptance emitted: Scriptorium could not determine whether local checkpoints remain pending during shutdown. This records an unknown pending-scan result at shutdown; the process exited successfully and the acceptance separately verified the confirmed published remote heads and reconstruction. No implicit shutdown publication is claimed."
-  ]
+  ],
+  "implementationStatus": "complete",
+  "acceptanceStatus": "passed",
+  "finalComposition": {
+    "proofId": "P13-FROZEN-COMPOSITION",
+    "artifact": "docs/migration/evidence/P13.json",
+    "jsonPointer": "#/proofs/0",
+    "status": "passed",
+    "testedRuntimeHead": "fc4eea880ef895decf6161bf4f45cc958e9700b3",
+    "result": "All required stages passed. pnpm verify exited 125 only at the final full OCI build because of execution-host ENOSPC; after capacity repair the unchanged final OCI stage was retried and exited 0. This is composed acceptance, not a zero exit from the original pnpm verify process."
+  }
 }

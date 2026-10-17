@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-import { readFile, stat } from "node:fs/promises";
+import { readFile, realpath, stat } from "node:fs/promises";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { execFileSync } from "node:child_process";
@@ -19,6 +19,9 @@ for (let index = 0; index < args.length; index += 1) {
     throw new Error(`Unknown or incomplete argument: ${args[index]}`);
   }
 }
+if (requireClosed && !sourceRoot) {
+  throw new Error("--require-closed requires --source-root with the exact pinned source checkout");
+}
 
 const ledger = JSON.parse(await readFile(ledgerPath, "utf8"));
 const failures = [];
@@ -31,13 +34,35 @@ function expectedIds(prefix, count) {
 function equalIds(actual, expected, label) {
   check(JSON.stringify(actual) === JSON.stringify(expected), `${label} IDs must be ${expected[0]}–${expected.at(-1)} in order`);
 }
-async function exists(base, relative, label) {
+async function exists(base, relative, label, expectedKind = "file") {
   if (typeof relative !== "string" || !relative || relative.includes("*")) {
     check(false, `${label} has an invalid path: ${String(relative)}`);
     return false;
   }
+  if (path.isAbsolute(relative)) {
+    check(false, `${label} path must be repository-relative: ${relative}`);
+    return false;
+  }
+  const basePath = path.resolve(base);
+  const resolvedPath = path.resolve(basePath, relative);
+  const lexicalRelative = path.relative(basePath, resolvedPath);
+  if (lexicalRelative === ".." || lexicalRelative.startsWith(`..${path.sep}`) || path.isAbsolute(lexicalRelative)) {
+    check(false, `${label} path escapes its repository root: ${relative}`);
+    return false;
+  }
   try {
-    await stat(path.resolve(base, relative));
+    const [realBase, realPath] = await Promise.all([realpath(basePath), realpath(resolvedPath)]);
+    const realRelative = path.relative(realBase, realPath);
+    if (realRelative === ".." || realRelative.startsWith(`..${path.sep}`) || path.isAbsolute(realRelative)) {
+      check(false, `${label} resolves outside its repository root: ${relative}`);
+      return false;
+    }
+    const metadata = await stat(realPath);
+    if (expectedKind === "file") {
+      check(metadata.isFile(), `${label} must resolve to a regular file: ${relative}`);
+    } else {
+      check(metadata.isFile() || metadata.isDirectory(), `${label} must resolve to a file or directory: ${relative}`);
+    }
     return true;
   } catch {
     check(false, `${label} path does not exist: ${relative}`);
@@ -140,8 +165,19 @@ for (const row of rows) {
   for (const slice of row.targetImplementationSlices ?? []) {
     sliceCount += 1;
     check(typeof slice.owner === "string" && /^P\d{2}$/u.test(slice.owner), `${row.id} target slice needs a campaign owner`);
-    check(slice.status === "implementation-present; integration-acceptance-pending", `${row.id}/${slice.owner} must remain integration-acceptance-pending`);
-    for (const target of [...(slice.targetPaths ?? []), ...(slice.uiSurfaces ?? [])]) await exists(root, target, `${row.id}/${slice.owner} target`);
+    check(["implementation-present; integration-acceptance-pending", "implementation-present; integration-acceptance-passed"].includes(slice.status),
+      `${row.id}/${slice.owner} has an unsupported implementation slice status: ${String(slice.status)}`);
+    if (requireClosed && slice.status !== "implementation-present; integration-acceptance-passed") {
+      check(false, `${row.id}/${slice.owner} remains integration-acceptance-pending`);
+    }
+    for (const target of [...(slice.targetPaths ?? []), ...(slice.uiSurfaces ?? [])]) {
+      await exists(root, target, `${row.id}/${slice.owner} target`, "target");
+    }
+    if (slice.status === "implementation-present; integration-acceptance-passed") {
+      check([...(slice.proofRefs ?? []), ...(slice.runtimeEvidenceRefs ?? [])].some((ref) =>
+        ref.result === "passed" && ["focused", "composition"].includes(ref.evidenceKind)),
+      `${row.id}/${slice.owner} passed slice requires its own passed focused/composition evidence`);
+    }
     for (const proof of slice.proofRefs ?? []) {
       registerEvidenceId(row, proof, `${row.id}/${slice.owner} proof reference`);
       check(typeof proof.testName === "string" && proof.testName.length > 0, `${proof.id} needs an exact test name`);
@@ -219,6 +255,14 @@ for (const row of rows) {
   const closureIds = row.proofIds ?? [];
   check(new Set(closureIds).size === closureIds.length, `${row.id} proofIds must not contain duplicates`);
   const rowEvidence = closureEvidenceByRow.get(row.id);
+  if (requireClosed) {
+    for (const slice of row.targetImplementationSlices ?? []) {
+      const refs = [...(slice.proofRefs ?? []), ...(slice.runtimeEvidenceRefs ?? [])];
+      const linkedPassedEvidence = refs.some((ref) => closureIds.includes(ref.id)
+        && ref.result === "passed" && ["focused", "composition"].includes(ref.evidenceKind));
+      check(linkedPassedEvidence, `${row.id}/${slice.owner} passed slice must be linked from row proofIds`);
+    }
+  }
   let hasCompositionProof = false;
   let hasScopedProof = false;
   let hasFinalCompositionProof = false;
@@ -265,6 +309,18 @@ for (const row of rows) {
         }
       }
     }
+  }
+}
+
+if (requireClosed) {
+  check(sliceCount === 96, `closed ledger must contain exactly 96 implementation slices (found ${sliceCount})`);
+  try {
+    const finalComposition = JSON.parse(await readFile(path.join(root, "docs/migration/evidence/P13.json"), "utf8"));
+    check(finalComposition?.proofs?.[0]?.id === "P13-FROZEN-COMPOSITION"
+      && finalComposition?.proofs?.[0]?.status === "passed",
+    "closed ledger requires the final P13-FROZEN-COMPOSITION proof to be passed");
+  } catch (error) {
+    failures.push(`Final P13 composition evidence failed: ${error instanceof Error ? error.message : String(error)}`);
   }
 }
 

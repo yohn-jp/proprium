@@ -1,13 +1,17 @@
 {
   "schemaVersion": 1,
   "task": "P10",
-  "implementationStatus": "in_progress",
-  "acceptanceStatus": "pending",
+  "implementationStatus": "complete",
+  "acceptanceStatus": "passed",
   "source": {
     "repository": "yohn-jp/arcadia-loom",
     "commit": "edc033c2c9466274a334299dadfa426661d957d9",
     "readOnly": true,
-    "ledgerItems": ["docs/migration/ledger.json#N06", "docs/migration/ledger.json#R16", "docs/migration/ledger.json#R36"]
+    "ledgerItems": [
+      "docs/migration/ledger.json#N06",
+      "docs/migration/ledger.json#R16",
+      "docs/migration/ledger.json#R36"
+    ]
   },
   "target": {
     "repository": "yohn-jp/scriptorium",
@@ -28,27 +32,69 @@
   },
   "sourceClassification": [
     {
-      "source": ["meta/speaker-corrections.jsonl", "scene-level speakerOverrides in canonical plot/volumes/**/*.yaml"],
+      "source": [
+        "meta/speaker-corrections.jsonl",
+        "scene-level speakerOverrides in canonical plot/volumes/**/*.yaml"
+      ],
       "category": "authoritative author corrections",
-      "target": ["meta/scriptorium/modules/speaker/corrections.jsonl", "the existing canonical plot/volumes scene YAML path"],
-      "sourceProof": ["packages/core/src/speakerService.ts", "packages/core/src/speakerCorrectionLog.ts"],
-      "targetProof": ["modules/speaker/src/index.ts", "modules/speaker/src/migration.ts", "modules/speaker/package.json", "packages/migration/src/producers/filesystem.ts"],
+      "target": [
+        "meta/scriptorium/modules/speaker/corrections.jsonl",
+        "the existing canonical plot/volumes scene YAML path"
+      ],
+      "sourceProof": [
+        "packages/core/src/speakerService.ts",
+        "packages/core/src/speakerCorrectionLog.ts"
+      ],
+      "targetProof": [
+        "modules/speaker/src/index.ts",
+        "modules/speaker/src/migration.ts",
+        "modules/speaker/package.json",
+        "packages/migration/src/producers/filesystem.ts"
+      ],
       "preservation": "Corrections update the canonical scene override and namespaced correction log through a pinned Core ChangeOperation proposal. P04's generic file producer owns still-present source files and the legacy path mapping. When the module is re-enabled after the source file is absent, the speaker reactivation producer restores retained bytes only if the canonical target is absent; identical targets are unchanged and divergent targets are reported as conflicts."
     },
     {
-      "source": ["meta/speaker-model.json"],
+      "source": [
+        "meta/speaker-model.json"
+      ],
       "category": "authoritative adopted model",
-      "target": ["meta/scriptorium/modules/speaker/adopted-model.json"],
-      "sourceProof": ["packages/core/src/speakerReranker.ts", "packages/core/src/speakerRetrainRunner.ts"],
-      "targetProof": ["modules/speaker/src/index.ts", "modules/speaker/src/migration.ts", "modules/speaker/package.json", "modules/speaker/src/algorithms/speakerReranker.ts"],
+      "target": [
+        "meta/scriptorium/modules/speaker/adopted-model.json"
+      ],
+      "sourceProof": [
+        "packages/core/src/speakerReranker.ts",
+        "packages/core/src/speakerRetrainRunner.ts"
+      ],
+      "targetProof": [
+        "modules/speaker/src/index.ts",
+        "modules/speaker/src/migration.ts",
+        "modules/speaker/package.json",
+        "modules/speaker/src/algorithms/speakerReranker.ts"
+      ],
       "preservation": "Only a model that improves the deterministic held-out score by at least five percentage points is proposed, with the canonical model file revision as a read precondition. The model is author state; the worker never writes it. P04's generic file producer owns still-present source files and the legacy path mapping; the speaker reactivation producer later restores retained bytes with absent-only writes and unchanged/conflict reporting."
     },
     {
-      "source": [".arcadia/speaker-eval-latest.json", "meta/speaker-rule-gates.json", "shared evaluation/retraining job status"],
+      "source": [
+        ".arcadia/speaker-eval-latest.json",
+        "meta/speaker-rule-gates.json",
+        "shared evaluation/retraining job status"
+      ],
       "category": "derived and ephemeral",
-      "target": ["ModuleContext.cacheDirectory/speaker/evaluation-<identity>.json", "ModuleContext.cacheDirectory/speaker/rules-<identity>.json", "per-action supervised worker result"],
-      "sourceProof": ["packages/core/src/speakerEval.ts", "packages/core/src/speakerRuleStats.ts", "packages/api/src/jobs/jobManager.ts"],
-      "targetProof": ["modules/speaker/src/index.ts", "modules/speaker/src/engine.ts", "modules/speaker/src/worker.ts"],
+      "target": [
+        "ModuleContext.cacheDirectory/speaker/evaluation-<identity>.json",
+        "ModuleContext.cacheDirectory/speaker/rules-<identity>.json",
+        "per-action supervised worker result"
+      ],
+      "sourceProof": [
+        "packages/core/src/speakerEval.ts",
+        "packages/core/src/speakerRuleStats.ts",
+        "packages/api/src/jobs/jobManager.ts"
+      ],
+      "targetProof": [
+        "modules/speaker/src/index.ts",
+        "modules/speaker/src/engine.ts",
+        "modules/speaker/src/worker.ts"
+      ],
       "preservation": "Reports and gates are rebuilt from the pinned canonical snapshot. Cache path and stored envelope identity include the snapshot, speaker module and engine versions, shared tokenizer model/version, and adopted-model revision; stale identities are rejected. Training status and outputs are not committed author data."
     }
   ],
@@ -68,7 +114,11 @@
       "id": "P10-SPEAKER-CPU-WORKFLOW",
       "kind": "focused production module test",
       "status": "passed",
-      "targetFiles": ["modules/speaker/src/production.test.ts", "modules/speaker/src/index.ts", "modules/speaker/src/worker.ts"],
+      "targetFiles": [
+        "modules/speaker/src/production.test.ts",
+        "modules/speaker/src/index.ts",
+        "modules/speaker/src/worker.ts"
+      ],
       "command": "pnpm --filter @scriptorium/module-speaker test",
       "result": "6 passed, 0 failed on tested head 29d8f5e5cef2a41407d91a402594a0e617f7cedc. The composed ModuleRuntime loads the real Story, NLP, diagnostics, and speaker actions, uses the actual Lindera tokenizer and compiled CPU workers, and exercises synthetic Japanese scenes. It verifies attribution, registered/learned/stylometric warning composition, unsaved draft text flowing through profile-informed voice attribution with estimatedN/evidence/clusterTrails, character dialogue and profile actions, generated-result identity across attribution, override, dialogue, voice, review, training, evaluation, and cache reads (including the actual adopted-model file revision after approval), 14 author correction proposals, 12 training examples with a two-scene holdout, a passing adoption gate, proposal-only model persistence, reranking after simulated author approval, evaluation and rule gates, stale cache-identity rejection/rebuild, and model reload after runtime restart. Legacy provenance keys remain available. The real CPU retraining and evaluation actions report exactly [0.05, 1] through the job-scoped ModuleRuntime sink, including a second evaluation during cache rebuild. The test also checks that workers and shared capability processes are released after actions.",
       "scope": "focused composed CPU workflow; author review is simulated by applying the Core proposal in the in-memory snapshot harness",
@@ -83,7 +133,10 @@
       "id": "P10-SPEAKER-REACTIVATION",
       "kind": "focused migration producer test",
       "status": "passed",
-      "targetFiles": ["modules/speaker/src/migration.ts", "modules/speaker/src/migration.test.ts"],
+      "targetFiles": [
+        "modules/speaker/src/migration.ts",
+        "modules/speaker/src/migration.test.ts"
+      ],
       "command": "pnpm --filter @scriptorium/module-speaker test; pnpm --filter @scriptorium/module-speaker build; pnpm --filter @scriptorium/module-speaker exec node --input-type=module -e 'import { createSpeakerMigrationProducer } from \"@scriptorium/module-speaker/migration\"; ...'",
       "result": "Three synthetic migration tests passed on tested head 82672602ba4979265af4920fcd45000e7b74d090. They verify exact retained bytes and stable IDs, absent-only operations, unchanged/conflict behavior, generic-producer precedence while source files remain, and no reactivation reads while speaker is disabled. The public package subpath resolves to `speaker-reactivation-v1` after compilation.",
       "scope": "focused reactivation hook; full migration and re-enable composition remain with P12"
@@ -92,7 +145,10 @@
       "id": "P10-SOURCE-JOB-METADATA",
       "kind": "focused action descriptor test",
       "status": "passed",
-      "targetFiles": ["modules/speaker/src/index.ts", "modules/speaker/src/production.test.ts"],
+      "targetFiles": [
+        "modules/speaker/src/index.ts",
+        "modules/speaker/src/production.test.ts"
+      ],
       "command": "pnpm --filter @scriptorium/module-speaker test",
       "result": "The production module test passes on tested head 29d8f5e5cef2a41407d91a402594a0e617f7cedc and asserts the public evaluation and retraining actions declare source-compatible job types `speaker-eval` and `speaker-retrain`.",
       "scope": "static descriptors only; runtime/API history persistence is verified by the host acceptance owner"
@@ -101,7 +157,11 @@
       "id": "P10-SPEAKER-JOB-PROGRESS",
       "kind": "focused production module test",
       "status": "passed",
-      "targetFiles": ["modules/speaker/src/index.ts", "modules/speaker/src/production.test.ts", "packages/module-runtime/src/module-runtime.ts"],
+      "targetFiles": [
+        "modules/speaker/src/index.ts",
+        "modules/speaker/src/production.test.ts",
+        "packages/module-runtime/src/module-runtime.ts"
+      ],
       "command": "pnpm --filter @scriptorium/module-runtime test; pnpm --filter @scriptorium/module-speaker typecheck && pnpm --filter @scriptorium/module-speaker build && pnpm --filter @scriptorium/module-speaker test",
       "result": "Runtime tests pass 37/37 and speaker production tests pass 6/6 on tested head 29d8f5e5cef2a41407d91a402594a0e617f7cedc. Against the committed scoped reporter producer 85051665cc1e038e0fcb8e8fb1d927a054e1c933, actual compiled CPU retraining and evaluation emit exactly the source's 0.05 pre-run and 1 post-success phases through the tracked job sink; a cache rebuild emits the same evaluation phases. No child worker progress protocol was added.",
       "scope": "source-compatible speaker progress callbacks within the runtime scope; durable API job storage is covered by P08"
@@ -110,7 +170,12 @@
       "id": "P10-SERVER-WORKER-ISOLATION",
       "kind": "server import regression",
       "status": "passed",
-      "targetFiles": ["modules/speaker/src/engine.ts", "modules/speaker/src/index.ts", "modules/speaker/src/worker.ts", "modules/speaker/src/production.test.ts"],
+      "targetFiles": [
+        "modules/speaker/src/engine.ts",
+        "modules/speaker/src/index.ts",
+        "modules/speaker/src/worker.ts",
+        "modules/speaker/src/production.test.ts"
+      ],
       "command": "pnpm --filter @scriptorium/module-speaker test",
       "result": "A fresh subprocess imports the server entry and confirms its process message-listener count does not change; the production workflow separately verifies that the worker is launched only for real jobs and is stopped after completion.",
       "scope": "production module test"
@@ -119,7 +184,11 @@
       "id": "P10-BROWSER-CONTRIBUTIONS",
       "kind": "rendered browser workflow",
       "status": "passed",
-      "targetFiles": ["modules/speaker/src/browser.ts", "modules/speaker/tests/browser-workflow.acceptance.mjs", "modules/speaker/tests/browser-workflow.html"],
+      "targetFiles": [
+        "modules/speaker/src/browser.ts",
+        "modules/speaker/tests/browser-workflow.acceptance.mjs",
+        "modules/speaker/tests/browser-workflow.html"
+      ],
       "command": "SCRIPTORIUM_E2E_CHROMIUM=/nix/store/ini1ifgvcsvw48x4mxawrv9jvbdwn70p-chromium-155.0.8059.79/bin/chromium node modules/speaker/tests/browser-workflow.acceptance.mjs",
       "result": "Passed on tested head 82672602ba4979265af4920fcd45000e7b74d090 with actual Chromium/Playwright DOM mounting through Vite. It selects scenes and characters, runs attribution/voice diagnostics, submits correction and count proposals, renders the confirmation queue, filters character dialogue, displays voice similarity/stylometry and peer comparison, expands evaluation rows, toggles mismatch-only display, updates gates, and starts retraining. The browser test stubs only the action transport; CPU behavior is verified by P10-SPEAKER-CPU-WORKFLOW.",
       "scope": "focused browser UI/action-boundary test"
@@ -128,7 +197,10 @@
       "id": "P10-TYPECHECK-AND-BUILD",
       "kind": "module compilation",
       "status": "passed",
-      "targetFiles": ["modules/speaker/src/**/*.ts", "modules/speaker/src/**/*.tsx"],
+      "targetFiles": [
+        "modules/speaker/src/**/*.ts",
+        "modules/speaker/src/**/*.tsx"
+      ],
       "command": "pnpm --filter @scriptorium/module-speaker typecheck && pnpm --filter @scriptorium/module-speaker build",
       "result": "Typecheck and build both passed on tested head 29d8f5e5cef2a41407d91a402594a0e617f7cedc.",
       "scope": "focused module compilation"
@@ -137,16 +209,27 @@
       "id": "P10-DIFF-CHECK",
       "kind": "patch hygiene",
       "status": "passed",
-      "targetFiles": ["modules/speaker/src/", "modules/speaker/tests/"],
+      "targetFiles": [
+        "modules/speaker/src/",
+        "modules/speaker/tests/"
+      ],
       "command": "git diff --check",
       "result": "Passed on the tested implementation tree.",
       "scope": "focused"
     }
   ],
   "compositionLimits": [
-    "The production module test uses a synthetic in-memory repository and simulates a reviewed proposal by applying the proposal to its pinned snapshot. It does not certify real Core approval, checkpoint, publish, migration import, data-root deletion, or Git reclone; those composed durability checks remain with P12.",
-    "The Chromium browser acceptance uses a deterministic action-transport stub to exercise actual DOM behavior. It does not certify the full API/React host, session review screen, or proposal approval flow.",
+    "The focused production module test uses a synthetic in-memory repository and simulates reviewed proposal application to its pinned snapshot. The final P12/P13 proofs separately cover real Core approval/checkpoint/publication, migration import, Core-root deletion/reclone, the actual CPU speaker worker, and model replacement lifecycle.",
+    "The focused Chromium contribution test uses a deterministic action-transport stub to exercise DOM behavior. Final P13 full-profile browser acceptance and P02 shared review-host acceptance separately cover real API/React composition and proposal boundaries.",
     "The model preflight at docs/verification/P13-MODEL-PREFLIGHT.md reports only a finite-weight synthetic trainer smoke for its original runtime preflight; it is not evidence of P10 feature acceptance. P10-SPEAKER-CPU-WORKFLOW runs the actual speaker worker and source algorithm on a small public synthetic corpus. No private corpus, saved model, or provider call is used.",
-    "Root owns integrated whole-repository frozen install, typecheck, tests, build, and Core audit on the final composed tree. Acceptance remains pending that composed integration and the P12 durability proof."
-  ]
+    "Final frozen install, typecheck, test, build, Core audit, browser, composed migration and OCI results are recorded in P13. The synthetic fixtures do not certify private-corpus model quality or production deployment."
+  ],
+  "finalComposition": {
+    "proofId": "P13-FROZEN-COMPOSITION",
+    "artifact": "docs/migration/evidence/P13.json",
+    "jsonPointer": "#/proofs/0",
+    "status": "passed",
+    "testedRuntimeHead": "fc4eea880ef895decf6161bf4f45cc958e9700b3",
+    "result": "All required stages passed. pnpm verify exited 125 only at the final full OCI build because of execution-host ENOSPC; after capacity repair the unchanged final OCI stage was retried and exited 0. This is composed acceptance, not a zero exit from the original pnpm verify process."
+  }
 }

@@ -1,8 +1,8 @@
 {
   "schemaVersion": 1,
   "task": "P05",
-  "implementationStatus": "in_progress",
-  "acceptanceStatus": "pending",
+  "implementationStatus": "complete",
+  "acceptanceStatus": "passed",
   "source": {
     "repository": "yohn-jp/arcadia-loom",
     "commit": "edc033c2c9466274a334299dadfa426661d957d9",
@@ -25,8 +25,12 @@
       ],
       "category": "authoritative",
       "target": "same work-repository paths; disabled Story data uses meta/scriptorium/modules/story/legacy/files/<source>",
-      "sourceProof": ["packages/core/src/loader.ts"],
-      "targetProof": ["modules/story/src/migration/producer.ts"],
+      "sourceProof": [
+        "packages/core/src/loader.ts"
+      ],
+      "targetProof": [
+        "modules/story/src/migration/producer.ts"
+      ],
       "preservation": "The Story producer uses bounded exact-file operations and does not parse or rewrite YAML/Markdown, preserving source IDs, unknown fields, frontmatter, and formatting. When Story is re-enabled, opaque files are copied back only when the original source file is absent; target conflicts remain reviewable."
     },
     {
@@ -62,11 +66,15 @@
         "packages/core/src/worldState/store.ts",
         "packages/core/src/nlp/readerKnowledge/store.ts"
       ],
-      "targetProof": ["packages/migration/src/producers/sqlite.ts"],
+      "targetProof": [
+        "packages/migration/src/producers/sqlite.ts"
+      ],
       "preservation": "These projection tables are classified as rebuildable and their row contents are not imported as author decisions."
     },
     {
-      "source": ["<dataDir>/app-state/series.json"],
+      "source": [
+        "<dataDir>/app-state/series.json"
+      ],
       "category": "authoritative author settings",
       "target": "meta/scriptorium/modules/story/v1/series.json",
       "sourceProof": [
@@ -112,7 +120,10 @@
       "id": "P05-STORY-BUILD",
       "kind": "module typecheck and production build",
       "status": "passed",
-      "targetFiles": ["modules/story/src/**/*.ts", "modules/story/src/**/*.tsx"],
+      "targetFiles": [
+        "modules/story/src/**/*.ts",
+        "modules/story/src/**/*.tsx"
+      ],
       "command": "pnpm install --frozen-lockfile && pnpm build",
       "result": "Frozen install and full workspace build passed on final frozen-runtime HEAD 9c5a5022a5ea7d9a0c95bafbe9f76e83294658e7 (tree 480aadf546cd28944c5a242ef9cd0ac55b215616).",
       "scope": "Compiles the Story server action producer, migration producer and React browser entry together with all workspace packages and the application."
@@ -222,20 +233,41 @@
     {
       "id": "P05-INTEGRATED-BROWSER-ACTIONS",
       "kind": "P02/P03/P08 composed Story runtime and browser acceptance",
-      "status": "pending",
-      "targetFiles": ["modules/story/src/index.ts", "modules/story/src/browser.tsx", "packages/module-runtime/src/", "packages/api/src/"],
-      "scope": "The Story server and React contribution entries compile, but final composed runtime mounting, real browser interactions, proposal review/checkpoint, and full action registry verification remain to be run on the integrated host."
+      "status": "passed",
+      "targetFiles": [
+        "modules/story/src/index.ts",
+        "modules/story/src/browser.tsx",
+        "packages/module-runtime/src/",
+        "packages/api/src/"
+      ],
+      "scope": "This focused browser flow covers the shared Story/Speaker review contribution behavior. It does not assert one-to-one parity for the supplemental Core proposal-history DTO.",
+      "testName": "full profile renders Story and Speaker review queues and turns both author decisions into unapproved Core proposals",
+      "testPath": "tests/e2e/review-contributions.acceptance.spec.ts",
+      "result": "The final full-profile Chromium suite passed 18/18 on the frozen runtime tree. The real API/module host rendered Story and Speaker queues and submitted both decisions as unapproved Core proposals.",
+      "compositionRef": "docs/migration/evidence/P13.json#/proofs/0"
     },
     {
       "id": "P05-INTEGRATED-MIGRATION",
       "kind": "P04/P12 composed migration acceptance",
-      "status": "pending",
+      "status": "passed",
       "targetFiles": [
         "packages/migration/src/producers/filesystem.ts",
         "packages/migration/src/producers/sqlite.ts",
         "packages/migration/src/producers/workspace.ts"
       ],
-      "scope": "Generic operation composition, idempotent import, author review, and recovery after data-root replacement have not been established by this evidence file."
+      "scope": "Synthetic composed migration fixture only; no private project corpus or credentials.",
+      "testName": "composed legacy import preserves disabled data and reactivates after a full Core data-root replacement",
+      "testPath": "tests/integration/migration-acceptance.test.mjs",
+      "result": "P12 passed 1/1 on the frozen runtime tree, including disabled Story data, opaque files and workflow state, speakerOverrides YAML byte identity, author review/checkpoint/publication, and reactivation after Core-root replacement/reclone.",
+      "compositionRef": "docs/migration/evidence/P12.json#/proofs/1"
     }
-  ]
+  ],
+  "finalComposition": {
+    "proofId": "P13-FROZEN-COMPOSITION",
+    "artifact": "docs/migration/evidence/P13.json",
+    "jsonPointer": "#/proofs/0",
+    "status": "passed",
+    "testedRuntimeHead": "fc4eea880ef895decf6161bf4f45cc958e9700b3",
+    "result": "All required stages passed. pnpm verify exited 125 only at the final full OCI build because of execution-host ENOSPC; after capacity repair the unchanged final OCI stage was retried and exited 0. This is composed acceptance, not a zero exit from the original pnpm verify process."
+  }
 }

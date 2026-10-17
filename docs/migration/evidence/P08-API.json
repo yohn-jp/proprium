@@ -208,7 +208,17 @@
     }
   ],
   "compositionLimits": [
-    "The source /api/reload rebuilt a derived SQLite projection. The target reads pinned Core snapshots and has no equivalent persistent author-data index to reload, so P08 does not expose a misleading reload endpoint; the final ledger records that projection maintenance disposition.",
-    "The isolated P08 checks do not certify the full browser, configured external Qwen MCP, real authorized GitHub checkpoint/publish, full-workspace, or OCI acceptance. Those require their composed integration runs. The API suite uses a synthetic declared domain module over the actual runtime and HTTP server; legacy import tests use explicit synthetic mappings and verify that host history survives Core data deletion."
-  ]
+    "The source /api/reload rebuilt a derived SQLite projection. The target reads pinned Core snapshots and has no equivalent persistent author-data index to reload, so P08 does not expose a misleading reload endpoint; the final ledger records that projection-maintenance disposition.",
+    "The API suite uses a synthetic declared domain module over the actual runtime and HTTP server; legacy import tests use explicit synthetic mappings and verify host history survives Core data deletion. Final browser, configured local-Qwen MCP, real GitHub checkpoint/publish, workspace, and OCI gates are separately recorded as passed in the P12/P13 composition artifacts."
+  ],
+  "implementationStatus": "complete",
+  "acceptanceStatus": "passed",
+  "finalComposition": {
+    "proofId": "P13-FROZEN-COMPOSITION",
+    "artifact": "docs/migration/evidence/P13.json",
+    "jsonPointer": "#/proofs/0",
+    "status": "passed",
+    "testedRuntimeHead": "fc4eea880ef895decf6161bf4f45cc958e9700b3",
+    "result": "All required stages passed. pnpm verify exited 125 only at the final full OCI build because of execution-host ENOSPC; after capacity repair the unchanged final OCI stage was retried and exited 0. This is composed acceptance, not a zero exit from the original pnpm verify process."
+  }
 }

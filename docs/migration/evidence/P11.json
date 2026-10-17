@@ -1,8 +1,8 @@
 {
   "schemaVersion": 1,
   "task": "P11",
-  "implementationStatus": "in_progress",
-  "acceptanceStatus": "pending",
+  "implementationStatus": "complete",
+  "acceptanceStatus": "passed",
   "source": {
     "repository": "yohn-jp/arcadia-loom",
     "commit": "edc033c2c9466274a334299dadfa426661d957d9",
@@ -135,8 +135,16 @@
     }
   ],
   "compositionLimits": [
-    "This candidate evidence is scoped to Assistant unit/action tests, the Assistant browser contribution, one production owner-action preview, and one local-provider API/Core synthetic repository flow. The preview and browser tests do not substitute for the provider reference test.",
+    "This artifact contains scoped Assistant unit/action tests, the Assistant browser contribution, owner-action preview, and a local-provider API/Core synthetic repository flow. The P13 configured-provider proof separately passed three tests without skips through stdio MCP, SDK HTTP MCP, and owner API/Core on the frozen runtime tree.",
     "The real QA stream produced a truthful schema error from the deliberately small local model. Source tool-loop and citation validation behavior is covered by the focused Assistant test; the provider acceptance allows only recognized JSON parse errors or structured Zod validation issues, and does not claim generative QA answer quality.",
-    "This artifact does not certify final full-profile browser/API composition, P12 legacy import/reactivation/reclone composition, final root acceptance, or OCI lifecycle. Those are recorded and gated by the campaign owners."
-  ]
+    "Final full-profile browser/API composition, P12 legacy import/reactivation/reclone, final root acceptance, and OCI lifecycle passed in the separately scoped P12/P13 artifacts; the local candidate proofs in this file do not replace those composition proofs."
+  ],
+  "finalComposition": {
+    "proofId": "P13-FROZEN-COMPOSITION",
+    "artifact": "docs/migration/evidence/P13.json",
+    "jsonPointer": "#/proofs/0",
+    "status": "passed",
+    "testedRuntimeHead": "fc4eea880ef895decf6161bf4f45cc958e9700b3",
+    "result": "All required stages passed. pnpm verify exited 125 only at the final full OCI build because of execution-host ENOSPC; after capacity repair the unchanged final OCI stage was retried and exited 0. This is composed acceptance, not a zero exit from the original pnpm verify process."
+  }
 }

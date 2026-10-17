@@ -9,8 +9,8 @@
     {
       "id": "P00",
       "dependencies": [],
-      "implementation": "in_progress",
-      "acceptance": "pending",
+      "implementation": "complete",
+      "acceptance": "passed",
       "proofs": [
         "docs/verification/P00-BASELINE.md",
         "docs/verification/P00-ENVIRONMENT.md",
@@ -23,8 +23,8 @@
       "dependencies": [
         "P00"
       ],
-      "implementation": "in_progress",
-      "acceptance": "pending",
+      "implementation": "complete",
+      "acceptance": "passed",
       "proofs": [
         "docs/verification/P01-GITHUB.md"
       ]
@@ -34,8 +34,8 @@
       "dependencies": [
         "P00"
       ],
-      "implementation": "in_progress",
-      "acceptance": "pending",
+      "implementation": "complete",
+      "acceptance": "passed",
       "proofs": []
     },
     {
@@ -43,8 +43,8 @@
       "dependencies": [
         "P00"
       ],
-      "implementation": "in_progress",
-      "acceptance": "pending",
+      "implementation": "complete",
+      "acceptance": "passed",
       "proofs": []
     },
     {
@@ -52,8 +52,8 @@
       "dependencies": [
         "P00"
       ],
-      "implementation": "in_progress",
-      "acceptance": "pending",
+      "implementation": "complete",
+      "acceptance": "passed",
       "proofs": []
     },
     {
@@ -64,8 +64,8 @@
         "P03",
         "P04"
       ],
-      "implementation": "in_progress",
-      "acceptance": "pending",
+      "implementation": "complete",
+      "acceptance": "passed",
       "proofs": [
         "docs/migration/evidence/P05.json"
       ]
@@ -77,8 +77,8 @@
         "P02",
         "P03"
       ],
-      "implementation": "in_progress",
-      "acceptance": "pending",
+      "implementation": "complete",
+      "acceptance": "passed",
       "proofs": [
         "docs/migration/evidence/P06.json"
       ]
@@ -91,8 +91,8 @@
         "P03",
         "P04"
       ],
-      "implementation": "in_progress",
-      "acceptance": "pending",
+      "implementation": "complete",
+      "acceptance": "passed",
       "proofs": [
         "docs/migration/evidence/P07.json"
       ]
@@ -104,8 +104,8 @@
         "P02",
         "P03"
       ],
-      "implementation": "in_progress",
-      "acceptance": "pending",
+      "implementation": "complete",
+      "acceptance": "passed",
       "proofs": [
         "docs/migration/evidence/P08-API.json",
         "docs/migration/evidence/P08-MCP.json"
@@ -117,8 +117,8 @@
         "P05",
         "P06"
       ],
-      "implementation": "in_progress",
-      "acceptance": "pending",
+      "implementation": "complete",
+      "acceptance": "passed",
       "proofs": [
         "docs/migration/evidence/P09.json"
       ]
@@ -129,8 +129,8 @@
         "P05",
         "P06"
       ],
-      "implementation": "in_progress",
-      "acceptance": "pending",
+      "implementation": "complete",
+      "acceptance": "passed",
       "proofs": [
         "docs/migration/evidence/P10.json"
       ]
@@ -144,8 +144,8 @@
         "P09",
         "P10"
       ],
-      "implementation": "pending",
-      "acceptance": "pending",
+      "implementation": "complete",
+      "acceptance": "passed",
       "proofs": [
         "docs/migration/evidence/P11.json"
       ]
@@ -162,8 +162,8 @@
         "P10",
         "P11"
       ],
-      "implementation": "in_progress",
-      "acceptance": "pending",
+      "implementation": "complete",
+      "acceptance": "passed",
       "proofs": [
         "docs/migration/evidence/P12.json"
       ]
@@ -184,12 +184,14 @@
         "P11",
         "P12"
       ],
-      "implementation": "in_progress",
-      "acceptance": "pending",
+      "implementation": "complete",
+      "acceptance": "passed",
       "proofs": [
         "docs/verification/P13-PACKAGING.md",
         "docs/verification/P13-BROWSER-RECOVERY.md",
-        "docs/verification/P13-MODEL-OCI-LIFECYCLE.md"
+        "docs/verification/P13-MODEL-OCI-LIFECYCLE.md",
+        "docs/verification/FINAL-MIGRATION.md",
+        "docs/verification/P13-FINAL-REVIEW.md"
       ]
     }
   ],
@@ -197,14 +199,25 @@
     {
       "gate": "real-provider-reference-flow",
       "status": "passed-scoped",
-      "reason": "A fresh root run passed all three selected MCP/Assistant production acceptance tests on exact source tree f3ef4d34b5e603885ec2cbf204446b6becef3071: real local Qwen through both MCP transports, owner-compute continuation preview, and the P11 API/Core review-publication-reconstruction flow. The raw run recorded 3 passed, 0 failed, 0 skipped in 57.6 seconds; the scoped result is recorded in docs/migration/evidence/P11.json. The relevant production and integration-test files are unchanged on current main 539375c925754c6ec6f5c445051a32b7293a0724. This is scoped synthetic/local-provider evidence, not campaign or OCI completion.",
-      "unblock": "Integrate the semantic browser status-poll singleflight/settle fix for the two full-profile browser failures recorded on 539375c9 and rerun that suite; then record the direct P12 result, rerun the full-image lifecycle after the production change, and complete root final-composition verification."
+      "reason": "The final configured-provider proof in docs/migration/evidence/P13.json passed all three selected real local-Qwen tests without skips on the frozen runtime tree: stdio MCP, SDK HTTP MCP, and owner API/Core continuation preview plus review/publication/reconstruction. The provider is a bounded synthetic integration fixture; no general answer-quality claim is made.",
+      "history": [
+        "A whole run on 539375c9 reached the full-profile browser with 16/18 passing because overlapping semantic.task.status polls starved browser-origin approval requests; production singleflight/settle handling fixed this, and the final frozen-tree browser suite passed 18/18.",
+        "The first whole P12 run reached the R43 unauthenticated cursor-read assertion and observed 401 where the test expected 403; P04 corrected the test expectation. The corrected run stopped before P12 during the browser failure above; final P12 passed on the frozen runtime tree."
+      ]
     },
     {
       "gate": "R43-recent-activity-cursor-and-handoff",
-      "status": "acceptance-pending",
-      "reason": "Target implementation is present: P08 exposes owner-cookie GET/PUT /api/projects/:projectId/recent-activity over private host history and exports an explicit-mapping exact-byte legacy importer; P02 restores writing/reading positions and cross-device ContinuePanel handoff. The API suite passed 27/27 on candidate 216b8dc with relevant API/Core/contracts files unchanged through f3ef4d34; the R43 handoff test passed in the full-profile Chromium run on current main 539375c925754c6ec6f5c445051a32b7293a0724. The first frozen-tree P12 run failed after 205.9 seconds at the unauthenticated recent-activity GET assertion (expected 403, actual 401). The P04 test-only expectation correction is integrated on 539375c9, but the corrected whole verification stopped before P12 when full-profile Chromium finished 16/18. Root traced the two failures to overlapping `semantic.task.status` polling starving browser-origin approval requests; a production singleflight/settle fix is in progress. A separate direct P12 run on 539375c9 is in progress without a terminal result, so P12 remains unaccepted.",
-      "unblock": "Resolve and rerun full-profile browser acceptance, then record a passing complete frozen-tree P12 composed migration result, including explicit user/repository mapping, exact-byte private archive, cursor timestamp preservation and retention after Core data-root replacement/reclone. Keep R43 source migration pending until that proof and final campaign verification pass."
+      "status": "passed",
+      "reason": "Final frozen-tree evidence closes the source-to-target cursor flow: P02 full-profile Chromium verifies cross-device writing/reading handoff, project isolation, API restart and cursor-only payloads; P08 verifies owner-cookie/private host storage, explicit legacy mappings and exact archives; P12 passes 1/1 and verifies cursor timestamps, source immutability, idempotence and retention after two complete Core-root replacements/reclones. P13 records the composed acceptance sequence. The fixture is synthetic and contains no private project data.",
+      "history": [
+        "The API suite passed 27/27 on candidate 216b8dc and the relevant API/Core/contracts files remained unchanged through the frozen runtime tree.",
+        "The first frozen-tree P12 attempt failed at an unauthenticated recent-activity GET assertion (401 actual, 403 expected). P04 corrected the test expectation; a later corrected whole run then stopped before P12 when two overlapping semantic status polls caused the full browser suite to pass 16/18. The production singleflight/settle repair is covered by the final full-browser 18/18 result."
+      ]
     }
-  ]
+  ],
+  "finalLedgerReview": {
+    "status": "pending",
+    "reason": "P00 has closed all source rows and 96 implementation slices with row-local evidence, and the three independent runtime reviews accepted their scopes. The final read-only review of the closed ledger/CAMPAIGN mapping is the only outstanding campaign status.",
+    "requiredAction": "Complete independent review of the final ledger closure commit; resolve any concrete finding, then update the campaign status."
+  }
 }

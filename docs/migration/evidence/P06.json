@@ -17,7 +17,12 @@
   ],
   "claims": [
     {
-      "ledgerIds": ["N04", "R25", "R28", "R32"],
+      "ledgerIds": [
+        "N04",
+        "R25",
+        "R28",
+        "R32"
+      ],
       "sourceSymbols": [
         "Tokenizer",
         "analyzeText",
@@ -37,7 +42,12 @@
         "nlp.features",
         "nlp.updateExternalConsent"
       ],
-      "targetUi": ["nlp.analyzer", "nlp.candidates", "nlp.dictionary", "nlp.privacy"],
+      "targetUi": [
+        "nlp.analyzer",
+        "nlp.candidates",
+        "nlp.dictionary",
+        "nlp.privacy"
+      ],
       "dataMappings": [
         "meta/synonyms.yaml -> meta/scriptorium/modules/nlp/synonyms.yaml",
         "meta/candidate-ignore-list.yaml -> meta/scriptorium/modules/nlp/candidate-ignore-list.yaml",
@@ -51,7 +61,10 @@
           "result": "The public nlp.analyze and nlp.discoverCandidates actions run the real Lindera worker, preserve Japanese token/sentence offsets including an emoji prefix, read the pinned snapshot, and leave no worker process after releasing the capability. The idle-import regression confirms Lindera does not load in the parent process.",
           "scope": "focused",
           "testPath": "modules/diagnostics/src/production.test.ts",
-          "engineModelIdentity": {"id": "lindera-wasm-nodejs-ipadic", "version": "2.0.0"}
+          "engineModelIdentity": {
+            "id": "lindera-wasm-nodejs-ipadic",
+            "version": "2.0.0"
+          }
         },
         {
           "id": "P06-NLP-ALGORITHMS",
@@ -70,7 +83,13 @@
       ]
     },
     {
-      "ledgerIds": ["N03", "R21", "R26", "R27", "R29"],
+      "ledgerIds": [
+        "N03",
+        "R21",
+        "R26",
+        "R27",
+        "R29"
+      ],
       "sourceSymbols": [
         "DiagnosticsService",
         "QueryService.validate",
@@ -115,7 +134,12 @@
           "result": "The public diagnostics action uses the real supervised Lindera tokenizer and source-derived diagnostics worker, returns snapshot and engine identity, computes sentiment from the packaged source lexicon, and stops the child after the final lease is released.",
           "scope": "focused",
           "testPath": "modules/diagnostics/src/production.test.ts",
-          "engineModelIdentity": {"id": "lindera-wasm-nodejs-ipadic", "version": "2.0.0", "diagnosticsEngine": "scriptorium-diagnostics-cpu", "diagnosticsEngineVersion": "1.0.0"}
+          "engineModelIdentity": {
+            "id": "lindera-wasm-nodejs-ipadic",
+            "version": "2.0.0",
+            "diagnosticsEngine": "scriptorium-diagnostics-cpu",
+            "diagnosticsEngineVersion": "1.0.0"
+          }
         },
         {
           "id": "P06-PROJECT-CHECKS-VOICE-LINT",
@@ -127,10 +151,21 @@
       ]
     },
     {
-      "ledgerIds": ["N03", "R28"],
-      "sourceSymbols": ["candidatesFromCorpus", "extractAlternatePhrasings", "suggestSynonyms"],
-      "targetActions": ["diagnostics.analyze"],
-      "targetUi": ["diagnostics.analysis"],
+      "ledgerIds": [
+        "N03",
+        "R28"
+      ],
+      "sourceSymbols": [
+        "candidatesFromCorpus",
+        "extractAlternatePhrasings",
+        "suggestSynonyms"
+      ],
+      "targetActions": [
+        "diagnostics.analyze"
+      ],
+      "targetUi": [
+        "diagnostics.analysis"
+      ],
       "dataMappings": [
         "Snapshot-derived scene/manuscript/character/location/item/faction/event/thread/lore passages are sentence-split and sent to the optional semantic.embedding capability; cached embeddings and neighbor results remain provider-owned derived state.",
         "Corpus synonym candidates retain the source 24-neighbor limit, score bands, POS-matched span extraction, deterministic ranking, current-scene exclusion, and source=corpus attribution."
@@ -146,7 +181,17 @@
       ]
     },
     {
-      "ledgerIds": ["N03", "N04", "R21", "R25", "R26", "R27", "R28", "R29", "R32"],
+      "ledgerIds": [
+        "N03",
+        "N04",
+        "R21",
+        "R25",
+        "R26",
+        "R27",
+        "R28",
+        "R29",
+        "R32"
+      ],
       "sourceSymbols": [
         "Tokenizer.analyze",
         "discoverCandidateTermsFiltered",
@@ -181,14 +226,28 @@
           "result": "The integration test uses CoreStore, a local bare Git remote, compiled NLP and diagnostics module factories, and the real Lindera WASM/IPADIC child. It checks Japanese token, sentence, and UTF-16 offsets; synonym/feature reads; continuity, declared-voice, sentiment, and lint behavior; no direct workspace edits before approval; four proposal approve/checkpoint/publish operations; complete Core data-root deletion; Git reclone and proposal reconstruction; preserved namespaced settings; and post-reclone public-action recomputation. No semantic embedding result is asserted.",
           "scope": "integration",
           "testPath": "modules/diagnostics/tests/production.acceptance.mjs",
-          "engineModelIdentity": {"id": "lindera-wasm-nodejs-ipadic", "version": "2.0.0", "diagnosticsEngine": "scriptorium-diagnostics-cpu", "diagnosticsEngineVersion": "1.0.0"}
+          "engineModelIdentity": {
+            "id": "lindera-wasm-nodejs-ipadic",
+            "version": "2.0.0",
+            "diagnosticsEngine": "scriptorium-diagnostics-cpu",
+            "diagnosticsEngineVersion": "1.0.0"
+          }
         }
       ]
     },
     {
-      "ledgerIds": ["R35"],
-      "sourceSymbols": ["getTokenCounter", "createApproxTokenCounter", "approxTokenCount", "loadHfTokenizer"],
-      "targetActions": ["nlp.countTokens"],
+      "ledgerIds": [
+        "R35"
+      ],
+      "sourceSymbols": [
+        "getTokenCounter",
+        "createApproxTokenCounter",
+        "approxTokenCount",
+        "loadHfTokenizer"
+      ],
+      "targetActions": [
+        "nlp.countTokens"
+      ],
       "targetUi": [],
       "dataMappings": [
         "ARCADIA_TOKENIZER_MODEL takes precedence over ARCADIA_LLM_MODEL unless an explicit target model id is supplied; ARCADIA_TOKENIZER_BACKEND=approx and missing/unavailable tokenizer cases preserve the source fallback formula.",
@@ -208,15 +267,30 @@
           "result": "The public nlp.countTokens action returned exact cached E5 counts [8, 6, 11] from the real Transformers.js 3.8.1 tokenizer in the supervised child, and an unavailable local tokenizer returned the source fallback counts [2, 2, 0] with an explicit approximate identity. Both action calls reported the selected Core snapshot; local-only loading prevented downloads and all NLP children exited after their capability leases and final consumer were disabled.",
           "scope": "integration",
           "testPath": "modules/diagnostics/tests/production.acceptance.mjs",
-          "engineModelIdentity": {"id": "Xenova/multilingual-e5-small", "tokenizerEngine": "@huggingface/transformers", "tokenizerEngineVersion": "3.8.1", "fallbackEngine": "source-approx-v1"}
+          "engineModelIdentity": {
+            "id": "Xenova/multilingual-e5-small",
+            "tokenizerEngine": "@huggingface/transformers",
+            "tokenizerEngineVersion": "3.8.1",
+            "fallbackEngine": "source-approx-v1"
+          }
         }
       ]
     }
   ],
   "compositionLimits": [
-    "The synthetic local-bare-Git integration proves Core approval/checkpoint/publish and delete/reclone for module-authored NLP/diagnostics changes with the actual supervised Lindera CPU engine. It does not certify the composed HTTP/API, browser, MCP, full-profile, or a private project corpus.",
-    "The corpus-neighbor consumer is wired to semantic.embedding but its focused consumer test uses a provider test double. P09 must verify the actual pinned embedding model and worker before composed corpus search is claimed.",
+    "The synthetic local-bare-Git integration proves Core approval/checkpoint/publish and delete/reclone for module-authored NLP/diagnostics changes with the actual supervised Lindera CPU engine. The separate final P13 composition records full-profile API/browser/MCP and Core/full OCI acceptance; the fixture contains no private project corpus.",
+    "The corpus-neighbor unit consumer uses a provider test double. P09 and final P13 model lifecycle acceptance separately verify actual pinned CPU embedding, shared provider use, derived-index rebuild, and worker release; this test alone does not prove model behavior.",
     "Contradiction candidate/rebuild/dismissal behavior from R21 is owned by P09 semantic rather than this P06 diagnostics module. R29's hierarchical snapshot writing-statistics aggregation is Core-owned; this module owns richer per-text prose and sentiment metrics.",
-    "P12 still owns composed legacy-import registration and legacy-import/delete-reclone proof. This integration test reconstructs module-produced author settings; it does not claim the P12 migration-import proof."
-  ]
+    "P12 passed the composed legacy-import and delete/reclone proof. This P06 integration test remains scoped to module-produced author settings; it is not the migration-import proof."
+  ],
+  "implementationStatus": "complete",
+  "acceptanceStatus": "passed",
+  "finalComposition": {
+    "proofId": "P13-FROZEN-COMPOSITION",
+    "artifact": "docs/migration/evidence/P13.json",
+    "jsonPointer": "#/proofs/0",
+    "status": "passed",
+    "testedRuntimeHead": "fc4eea880ef895decf6161bf4f45cc958e9700b3",
+    "result": "All required stages passed. pnpm verify exited 125 only at the final full OCI build because of execution-host ENOSPC; after capacity repair the unchanged final OCI stage was retried and exited 0. This is composed acceptance, not a zero exit from the original pnpm verify process."
+  }
 }
