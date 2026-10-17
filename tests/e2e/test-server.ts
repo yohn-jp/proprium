@@ -135,6 +135,7 @@ async function startTestServer(): Promise<void> {
       store,
       authToken,
       staticDir: resolve("app/dist"),
+      usageDirectory: join(stateDir, "host-history"),
       profile,
       ...(runtimeOptions ? { runtimeOptions } : {}),
     });
@@ -149,10 +150,11 @@ async function startTestServer(): Promise<void> {
       response.writeHead(403).end();
       return;
     }
-    if (request.method !== "POST" || request.url !== "/__e2e/reset-core") {
+    if (request.method !== "POST" || (request.url !== "/__e2e/reset-core" && request.url !== "/__e2e/restart-api")) {
       response.writeHead(404).end();
       return;
     }
+    const resetCore = request.url === "/__e2e/reset-core";
     request.resume();
     if (resetting) {
       response.writeHead(409).end("Core reset is already in progress");
@@ -162,8 +164,10 @@ async function startTestServer(): Promise<void> {
     void (async () => {
       try {
         await close(apiServer);
-        // The disposable Git remote lives beside this directory and is intentionally preserved.
-        await rm(join(stateDir, "store"), { recursive: true, force: true });
+        if (resetCore) {
+          // The disposable Git remote and private host usage store intentionally survive Core loss.
+          await rm(join(stateDir, "store"), { recursive: true, force: true });
+        }
         apiServer = await startApi();
         response.writeHead(204).end();
       } catch (error) {
