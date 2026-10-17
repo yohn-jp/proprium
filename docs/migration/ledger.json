@@ -143,12 +143,21 @@
           "owner": "P08",
           "targetPaths": [
             "packages/api/src/server.ts",
-            "packages/api/src/server.test.ts"
+            "packages/api/src/server.test.ts",
+            "modules/mcp/src/tools.ts",
+            "modules/mcp/src/http.test.ts",
+            "modules/story/src/actions.ts",
+            "modules/story/tests/zukan-core.acceptance.mjs",
+            "tests/integration/mcp-acceptance.test.mjs"
           ],
           "publicActions": [
             {
               "action": "GET /api/health, /api/ready, /health/live, /health/ready, /health/startup",
               "implementation": "Expose target API liveness/readiness/startup and health probes"
+            },
+            {
+              "action": "MCP reload -> story.snapshot.materialize",
+              "implementation": "Materialize the selected canonical Story snapshot as a read action and return its entity/link counts; the old persistent SQLite projection rebuild is not reproduced."
             }
           ],
           "uiSurfaces": [],
@@ -157,6 +166,16 @@
               "source": "Source health and reload endpoints",
               "target": "Target health probes with Core startup/readiness metadata",
               "persistence": "There is no target persistent author-data SQLite index to reload; `/api/reload` is not exposed."
+            },
+            {
+              "source": "Source POST /api/reload reads canonical YAML/Markdown and rebuilds the configured SQLite projection.",
+              "target": "The target MCP reload tool invokes Story `story.snapshot.materialize` over the selected pinned Core snapshot and returns `{ entities, links }`.",
+              "persistence": "The target has no persistent author-data index to reload. Materialization is a request-time read and does not write proposals, project files, or an index."
+            },
+            {
+              "source": "Source GET /api/health, /api/ready, and lifecycle probes.",
+              "target": "Target API liveness/readiness/startup health probes.",
+              "persistence": "Health and readiness are host metadata; no author project data is read."
             }
           ],
           "proofRefs": [
@@ -165,10 +184,23 @@
               "path": "packages/api/src/server.test.ts",
               "testName": "keeps health public, protects project data, and serves the app shell",
               "scope": "HTTP test checks public health response and protected project data."
+            },
+            {
+              "id": "P08-R01-reload-materializer",
+              "path": "modules/mcp/src/http.test.ts",
+              "testName": "reload delegates to Story's pinned canonical snapshot materializer",
+              "scope": "MCP transport unit test verifies that reload requires Story’s read-effect action, calls `story.snapshot.materialize`, and returns counts with the selected snapshot."
+            },
+            {
+              "id": "P08-R01-reload-composed-current",
+              "path": "tests/integration/mcp-acceptance.test.mjs",
+              "testName": "spawned stdio and production HTTP MCP preserve Core review boundaries through publish and restart",
+              "scope": "Provider-NONE production acceptance passed on exact candidate tree 90d5fc822faba247cc40266dddaa60ca2facc23d; both spawned stdio and HTTP reload returned 7 entities/2 links at the same pinned snapshot as get_status. This candidate-scoped result is not final-campaign certification."
             }
           ],
           "limitations": [
-            "Source POST /api/reload only rebuilt a derived index projection; no misleading reload endpoint is exposed."
+            "The source SQLite projection rebuild has no persistent target index equivalent; the source MCP `reload` behavior is covered by read-only `story.snapshot.materialize`, not a replacement `/api/reload` endpoint.",
+            "The integrated provider-NONE MCP acceptance is candidate-scoped; final frozen-campaign/profile acceptance remains pending."
           ]
         }
       ]
@@ -460,8 +492,9 @@
           "owner": "P11",
           "targetPaths": [
             "modules/assistant/src/actions.ts",
-            "modules/assistant/src/provider.ts",
-            "modules/assistant/src/browser.ts"
+            "modules/assistant/src/actions.test.ts",
+            "modules/assistant/src/browser.ts",
+            "modules/assistant/src/provider.ts"
           ],
           "publicActions": [
             {
@@ -1696,7 +1729,7 @@
             }
           ],
           "limitations": [
-            "The production MCP adapter also exposes compute-only `suggest_rewrite`; actual real-provider output remains an opt-in P13 acceptance gate. Source prompt-preview routes for other features remain uncovered."
+            "The source prompt-preview handlers in R12/R14/R28/R34/R35/R46 now have local Assistant preview actions; their focused action evidence does not certify current browser/API composition. R35 preview/run context now shares one action assembler, but owner-API host verification and real-provider output remain pending."
           ]
         }
       ]
@@ -2416,12 +2449,17 @@
           "targetPaths": [
             "modules/assistant/src/actions.ts",
             "modules/assistant/src/browser.ts",
-            "modules/story/src/actions.ts"
+            "modules/story/src/actions.ts",
+            "modules/assistant/src/actions.test.ts"
           ],
           "publicActions": [
             {
               "action": "assistant.reader.reaction",
               "implementation": "Generate a chapter first-read reaction from pinned Story chapter/manuscript context."
+            },
+            {
+              "action": "assistant.reader.reaction.preview",
+              "implementation": "Return the actual reader-reaction prompt assembled from the selected Story chapter context without invoking a model or writing author data."
             }
           ],
           "uiSurfaces": [
@@ -2432,6 +2470,11 @@
               "source": "Reader-model disclosure/context projection plus generated first-read questions, expectations, and confusions",
               "target": "Story snapshot-derived context and Assistant response with verified source citations",
               "persistence": "Reader model is derived/request-time; generated reaction remains reviewable UI output and does not write author data."
+            },
+            {
+              "source": "Source GET /api/chapters/:id/reader-model/prompt-preview.",
+              "target": "Read-only `assistant.reader.reaction.preview` using the same chapter-context builder as the generated reader-reaction action.",
+              "persistence": "Prompt preview is transient and uses only the pinned snapshot; it acquires no model capability and creates no proposal."
             }
           ],
           "proofRefs": [
@@ -2440,10 +2483,16 @@
               "path": "modules/assistant/tests/browser-workflow.acceptance.mjs",
               "testName": "PASS: assistant panels render safely, invoke approved actions, stream and cancel rewrite, and keep generated changes in review proposals",
               "scope": "Rendered reader-reaction contribution/action boundary with a stubbed action transport."
+            },
+            {
+              "id": "P11-R12-reader-preview",
+              "path": "modules/assistant/src/actions.test.ts",
+              "testName": "implemented prompt previews return their actual prompts locally without consent, usage, or proposal effects",
+              "scope": "Focused action test invokes `assistant.reader.reaction.preview` against a synthetic pinned chapter and verifies a prompt is returned with provider NONE, no feature-consent read, no capability acquisition, and no proposal."
             }
           ],
           "limitations": [
-            "Prompt-preview handler parity and action-level real-provider reader-reaction acceptance remain pending; P12 composition is not established."
+            "Reader-reaction action output still lacks a focused real-provider acceptance; browser bridge tests use a stub action transport, and final P12/campaign composition remains pending."
           ]
         }
       ]
@@ -2597,7 +2646,9 @@
             "modules/semantic/src/actions.ts",
             "modules/semantic/src/search.ts",
             "modules/semantic/src/worker.ts",
-            "modules/semantic/src/semantic.test.ts"
+            "modules/semantic/src/semantic.test.ts",
+            "tests/integration/model-lifecycle.acceptance.mjs",
+            "docs/verification/P13-MODEL-LIFECYCLE.md"
           ],
           "publicActions": [
             {
@@ -2634,10 +2685,16 @@
               "path": "modules/semantic/src/semantic.test.ts",
               "testName": "default ModuleRuntime composes semantic status, real CPU rebuild/search/rerank, and cache recovery",
               "scope": "Composes the real semantic module through default ModuleRuntime with pinned CPU embedding/reranker artifacts, snapshot-bound search, cache reuse, deletion, and rebuild."
+            },
+            {
+              "id": "P13-R13-historical-real-model-lifecycle",
+              "path": "tests/integration/model-lifecycle.acceptance.mjs",
+              "testName": "P13 actual module consumers share and release pinned CPU model workers",
+              "scope": "Historical integrated candidate `55cecfa5af73982d2b98009c125928f1ab3126c5` passed with pinned E5/BGE artifacts through CoreStore/ModuleRuntime and actual Diagnostics/Semantic capability consumers; it predates the current final campaign tree and does not certify current OCI or full-profile composition."
             }
           ],
           "limitations": [
-            "This is a module action replacement slice; final HTTP/profile composition, full source endpoint parity, provider-consumer integration, and P12 data-root migration/reclone acceptance remain pending."
+            "Composed P12 importer/review/publish/reclone coverage is now present on synthetic source/workspace data; this historical model test does not certify the current campaign head, provider-consumer coverage for every route, final full-profile composition, or final OCI acceptance."
           ]
         }
       ]
@@ -2762,12 +2819,17 @@
           "targetPaths": [
             "modules/assistant/src/actions.ts",
             "modules/assistant/src/prompts.ts",
-            "modules/assistant/src/browser.ts"
+            "modules/assistant/src/browser.ts",
+            "modules/assistant/src/actions.test.ts"
           ],
           "publicActions": [
             {
               "action": "assistant.summary.scene / assistant.summary.chapter",
               "implementation": "Read snapshot summaries when fresh or generate summary proposals with source hash/revision evidence."
+            },
+            {
+              "action": "assistant.summary.scene.preview / assistant.summary.chapter.preview",
+              "implementation": "Return the source-shaped scene or chapter summary prompt locally without triggering generation."
             }
           ],
           "uiSurfaces": [
@@ -2778,6 +2840,11 @@
               "source": "Source tracked scene-summary YAML keyed to canonical manuscript freshness and refresh jobs",
               "target": "Snapshot-hash-aware Assistant summary records proposed as metadata changes under Core",
               "persistence": "A summary update is not written until author review/approval/checkpoint; existing stale records are recomputed from snapshot source."
+            },
+            {
+              "source": "Source GET /api/summaries/:scope/prompt-preview for supported scene/chapter scopes.",
+              "target": "Read-only `assistant.summary.scene.preview` and `assistant.summary.chapter.preview` prompt actions.",
+              "persistence": "Prompt assembly is transient; summary records remain unchanged until the separate generation action submits a revision-bound Core proposal."
             }
           ],
           "proofRefs": [
@@ -2792,10 +2859,16 @@
               "path": "modules/assistant/src/actions.test.ts",
               "testName": "chapter summary proposes fresh child and parent summaries in one Core operation",
               "scope": "Assistant action test verifies scene and chapter summary proposals are source-hash/revision-bound and submitted as one Core operation."
+            },
+            {
+              "id": "P11-R14-summary-preview",
+              "path": "modules/assistant/src/actions.test.ts",
+              "testName": "implemented prompt previews return their actual prompts locally without consent, usage, or proposal effects",
+              "scope": "Focused action test invokes both scene and chapter summary preview actions and verifies prompts are returned without model capability acquisition, consent reads, or proposal writes."
             }
           ],
           "limitations": [
-            "The source prompt-preview-only contract still has no target action/API. Summary actions declare and use the API host domain-job tracker, then return revision-bound Core proposals; fresh real-provider and campaign composition acceptance remains pending."
+            "The prompt-only handlers now have local read-action replacements; real-provider summary generation and final profile/API/browser composition remain pending."
           ]
         }
       ]
@@ -4996,12 +5069,17 @@
           "targetPaths": [
             "modules/assistant/src/actions.ts",
             "modules/assistant/src/provider.ts",
-            "modules/assistant/src/browser.ts"
+            "modules/assistant/src/browser.ts",
+            "modules/assistant/src/actions.test.ts"
           ],
           "publicActions": [
             {
               "action": "assistant.synonyms.suggestions",
               "implementation": "Generate external synonym candidates from explicit terms/context without writing the project dictionary."
+            },
+            {
+              "action": "assistant.synonyms.preview",
+              "implementation": "Return the synonym prompt for the explicit term/sentence/reason input without provider invocation or dictionary writes."
             }
           ],
           "uiSurfaces": [
@@ -5012,6 +5090,11 @@
               "source": "Source optional-provider synonym prompt/suggestion endpoints",
               "target": "Optional Assistant generation result; dictionary writes remain separately owned by `nlp.saveSynonymGroup` proposal action",
               "persistence": "Suggestions are transient until separately selected and proposed through the NLP dictionary action."
+            },
+            {
+              "source": "Source POST /api/suggest-synonyms/prompt.",
+              "target": "Read-only `assistant.synonyms.preview`; candidate generation is separate and dictionary updates remain `nlp.saveSynonymGroup` proposal actions.",
+              "persistence": "The prompt is transient; no model usage is recorded and no project dictionary is mutated."
             }
           ],
           "proofRefs": [
@@ -5020,10 +5103,16 @@
               "path": "modules/assistant/tests/browser-workflow.acceptance.mjs",
               "testName": "PASS: assistant panels render safely, invoke approved actions, stream and cancel rewrite, and keep generated changes in review proposals",
               "scope": "Rendered synonym suggestion control invokes its registered action with a stubbed bridge."
+            },
+            {
+              "id": "P11-R28-synonyms-preview",
+              "path": "modules/assistant/src/actions.test.ts",
+              "testName": "implemented prompt previews return their actual prompts locally without consent, usage, or proposal effects",
+              "scope": "Focused action test invokes `assistant.synonyms.preview` with explicit source-like inputs and verifies a prompt without consent read, model capability acquisition, or proposal."
             }
           ],
           "limitations": [
-            "The source prompt-preview route is not represented; actual provider/semantic quality and composed UI acceptance remain pending."
+            "The source prompt endpoint has a read-only local action replacement; actual external synonym quality remains provider-specific, while P09 owns real semantic-engine acceptance for corpus neighbors."
           ]
         }
       ]
@@ -5414,7 +5503,7 @@
             }
           ],
           "limitations": [
-            "The source prompt-preview routes remain unrepresented; final real-provider and composed reactivation acceptance remain pending."
+            "R31 covers model-settings read/propose behavior and has no separate source prompt-preview route. Final real-provider and composed reactivation acceptance remain pending."
           ]
         }
       ]
@@ -5738,6 +5827,10 @@
             {
               "action": "assistant.qa",
               "implementation": "Answer a setting question using snapshot-bound semantic/source evidence and return citations."
+            },
+            {
+              "action": "assistant.qa.preview",
+              "implementation": "Return the read-only QA system prompt, including the selected scene body when the supplied scene ID resolves; a missing/non-scene ID yields the source-compatible empty manuscript context."
             }
           ],
           "uiSurfaces": [
@@ -5748,6 +5841,11 @@
               "source": "Source project-scoped QA question and generated cited response",
               "target": "Pinned semantic search plus Assistant response with verified citations",
               "persistence": "Request-time output; no project writer is called."
+            },
+            {
+              "source": "Source GET /api/qa/prompt-preview.",
+              "target": "Read-only `assistant.qa.preview`; actual question answering is a separate compute action using bounded read tools and verified citations.",
+              "persistence": "Preview reads pinned Story text only and has no consent, usage, or proposal side effects."
             }
           ],
           "proofRefs": [
@@ -5768,10 +5866,16 @@
               "path": "modules/assistant/src/qa-tools.test.ts",
               "testName": "search tools call only their read capabilities and keep bounded source citations",
               "scope": "Tool tests verify read-only capabilities and bounded, revision-backed source citations."
+            },
+            {
+              "id": "P11-R34-qa-preview",
+              "path": "modules/assistant/src/actions.test.ts",
+              "testName": "implemented prompt previews return their actual prompts locally without consent, usage, or proposal effects",
+              "scope": "Focused action test verifies the valid-scene and missing-scene `assistant.qa.preview` variants return prompts with provider NONE and no consent, capability, or proposal effects."
             }
           ],
           "limitations": [
-            "The source preview-only endpoint still has no target action/API. Action tests use a local test provider; real-provider output and full profile/API/UI composition remain pending."
+            "QA answer action tests use a local test provider; real-provider answer quality and final full-profile/API/browser composition remain pending."
           ]
         }
       ]
@@ -5868,12 +5972,18 @@
             "modules/assistant/src/browser.ts",
             "modules/assistant/src/continuation-context.ts",
             "modules/assistant/src/continuation-context.test.ts",
-            "modules/nlp/src/index.ts"
+            "modules/nlp/src/index.ts",
+            "modules/assistant/src/actions.test.ts",
+            "tests/integration/mcp-acceptance.test.mjs"
           ],
           "publicActions": [
             {
               "action": "assistant.continuation",
               "implementation": "Generate bounded continuation options from pinned scene/manuscript context, optional chapter summary and up to five semantic hits; prefer the source-selected model tokenizer through `nlp.countTokens` and label approximate fallback explicitly."
+            },
+            {
+              "action": "assistant.continuation.preview",
+              "implementation": "Return the prompt produced by the same pinned Story/context, retrieval, chapter-summary, and tokenizer assembly used by continuation generation; the action is compute-only and does not invoke the model."
             }
           ],
           "uiSurfaces": [
@@ -5884,6 +5994,11 @@
               "source": "Source chapter/scene continuation-options generated response",
               "target": "Pinned Story snapshot plus Assistant continuation result",
               "persistence": "Suggestions are transient; context sections are trimmed to the requested token budget. Exact NLP counts are accepted only when model identity and snapshot match; otherwise the source-approved approximation is labeled approximate."
+            },
+            {
+              "source": "Source POST /api/assist/continuation-options/prompt-preview accepts recent sentence context and returns the assembled prompt without invoking the model.",
+              "target": "`assistant.continuation.preview` and generation share `prepareContinuationContext`; browser sends scene/chapter, matching editor draft or manual recent sentences, and k to both.",
+              "persistence": "Preview is a non-persistent compute action that uses the selected pinned scene/editor draft, chapter summary, best-effort semantic retrieval, and `nlp.countTokens` before rendering the prompt; it does not invoke the model or create a proposal. Owner-API host acceptance for this effect path is tracked separately and remains pending."
             }
           ],
           "proofRefs": [
@@ -5904,10 +6019,23 @@
               "path": "modules/assistant/src/continuation-context.test.ts",
               "testName": "approximate fallback is explicitly labeled and is not presented as model-token measurement",
               "scope": "Context test verifies fallback counts are clearly marked as approximate."
+            },
+            {
+              "id": "P11-R35-continuation-preview",
+              "path": "modules/assistant/src/actions.test.ts",
+              "testName": "implemented prompt previews return their actual prompts locally without consent, usage, or proposal effects",
+              "scope": "Focused provider-NONE action test verifies the text-input preview returns a prompt without consent, model-capability acquisition, or proposal effects; this fixture-only input does not establish preview/run context parity."
+            },
+            {
+              "id": "P11-R35-context-preview-parity",
+              "path": "modules/assistant/src/actions.test.ts",
+              "testName": "continuation uses only a matching live editor draft after checking its remote scene base",
+              "scope": "Focused Assistant action test passed on exact candidate 67ff5c57b35e680d23f5ea11445528d9c72fdf2b and independently in a targeted rerun. It checks stale-base rejection, selected live draft and explicit chapter summary, semantic retrieval and token-count action results, and that the generated provider request contains the exact prompt returned by preview. The token-count and retrieval results are test doubles; production owner-API host proof is pending."
             }
           ],
           "limitations": [
-            "The source prompt-preview contract is not represented; real-provider output and composed acceptance remain pending."
+            "The shared continuation context now backs both preview and generation; the focused action parity test is recorded above. The browser request now carries scene/chapter, live draft or recent sentences, and k, and the preview effect is classified compute so it can invoke token counting.",
+            "The owner-API host test for compute-only preview without provider usage was added on current target tree bc2b0936d418d1d8f5dcd8b16e74d1f9f3d65c0f but has not yet run. Current browser transport and semantic/tokenizer dependencies still need composed frozen-campaign verification; real-provider continuation quality and final browser/OCI campaign gates remain pending."
           ]
         },
         {
@@ -6568,10 +6696,54 @@
               "path": "packages/api/src/server.test.ts",
               "testName": "tracks exact source job results through direct actions and nested HTTP MCP invokes",
               "scope": "Real ModuleRuntime/API test verifies durable domain-job registration, exact result/error retention, owner job readback, nested MCP action tracking, Prefer: respond-async receipts, running/terminal state, inbox updates and cancellation/drain."
+            },
+            {
+              "id": "P12-R38-mapped-job-history",
+              "path": "tests/integration/migration-acceptance.test.mjs",
+              "testName": "composed legacy import preserves disabled data and reactivates after a full Core data-root replacement",
+              "scope": "Composed synthetic import verifies exact private jobs-state archive, explicit repository/user mapping, durable mapped job/inbox readback after Core-root replacement, and source immutability. This does not make unmapped private history owner-readable."
             }
           ],
           "limitations": [
-            "No target app component currently calls the jobs/inbox routes or restores the source InboxButton/job detail UI. Legacy job import remains an explicit host helper with identity maps, not yet part of the composed P12 migration/restart/reclone acceptance. SSE delivery is process-local while durable status/results remain host-persisted."
+            "The P12 test covers source history archive/adoption through the composed importer, but the jobs/inbox UI test uses stubbed API responses; final live browser/API composition remains pending."
+          ]
+        },
+        {
+          "status": "implementation-present; integration-acceptance-pending",
+          "owner": "P02",
+          "targetPaths": [
+            "app/src/App.tsx",
+            "app/src/api.ts",
+            "app/src/components/JobInbox.tsx",
+            "tests/e2e/job-inbox.acceptance.spec.ts"
+          ],
+          "publicActions": [
+            {
+              "action": "Authenticated JobInbox",
+              "implementation": "Mount owner job history and completion inbox in the authenticated shell; refresh from owner jobs/inbox routes and update retained job status from SSE."
+            }
+          ],
+          "uiSurfaces": [
+            "app/src/App.tsx",
+            "app/src/components/JobInbox.tsx"
+          ],
+          "dataMappings": [
+            {
+              "source": "Source InboxButton, job detail, progress, and completion notification surfaces.",
+              "target": "Authenticated `JobInbox` over host-owned job history and inbox APIs.",
+              "persistence": "The component reads and changes host-owned records; it does not store job results in the project repository."
+            }
+          ],
+          "proofRefs": [
+            {
+              "id": "P02-R38-job-inbox-browser",
+              "path": "tests/e2e/job-inbox.acceptance.spec.ts",
+              "testName": "authenticated inbox preserves owner job history and updates it from SSE",
+              "scope": "Rendered authenticated-app browser test verifies owner history, inbox actions, SSE status updates, and terminal refresh using a stubbed API/event transport."
+            }
+          ],
+          "limitations": [
+            "This rendered UI proof uses a stub API/event transport; live API composition and the final campaign browser gate remain separate acceptance."
           ]
         }
       ]
@@ -8322,12 +8494,17 @@
           "targetPaths": [
             "modules/assistant/src/actions.ts",
             "modules/assistant/src/prompts.ts",
-            "modules/assistant/src/browser.ts"
+            "modules/assistant/src/browser.ts",
+            "modules/assistant/src/actions.test.ts"
           ],
           "publicActions": [
             {
               "action": "assistant.dialogue.topics / assistant.dialogue.turns",
               "implementation": "Generate dialogue topics and either one speaker-specific line or a bounded multi-line turn set from pinned Story characters, saved sketch context, source-shaped voice notes, speaker fingerprints and confirmed dialogue examples."
+            },
+            {
+              "action": "assistant.dialogue.topics.preview / assistant.dialogue.turn.preview / assistant.dialogue.turns.preview / assistant.zukan.sandbox.preview",
+              "implementation": "Return locally assembled, read-only prompts for topic, single-line, bulk-line, and saved-dialogue Zukan analysis actions."
             }
           ],
           "uiSurfaces": [
@@ -8338,6 +8515,11 @@
               "source": "Source dialogue-sketch topic, single-line and multi-line generation handlers over canonical characters and saved dialogue-sketch sessions",
               "target": "Pinned Story reads and transient Assistant dialogue suggestions",
               "persistence": "Generated topics and lines are transient; saved-sketch/session and character/manuscript evidence is read from the pinned snapshot. Persistent author changes remain a separate Core proposal operation."
+            },
+            {
+              "source": "Source R46 dialogue-sketch `/prompt` handlers for suggest-topics, suggest-line, suggest-lines, and saved-sketch analyze-zukan.",
+              "target": "Read-only Assistant preview actions `assistant.dialogue.topics.preview`, `assistant.dialogue.turn.preview`, `assistant.dialogue.turns.preview`, and `assistant.zukan.sandbox.preview`.",
+              "persistence": "Prompts and source dialogue context are request-time reads; previews do not invoke a model, write Zukan rows, or create Core proposals."
             }
           ],
           "proofRefs": [
@@ -8352,11 +8534,17 @@
               "path": "modules/assistant/src/dialogue-context.test.ts",
               "testName": "builds source-shaped voice, fingerprint, notes, blank headings, and high-confidence examples",
               "scope": "Context builder test verifies source-shaped voice and dialogue evidence inputs used by generated single/multiple lines."
+            },
+            {
+              "id": "P11-R46-dialogue-previews",
+              "path": "modules/assistant/src/actions.test.ts",
+              "testName": "implemented prompt previews return their actual prompts locally without consent, usage, or proposal effects",
+              "scope": "Focused action test invokes topic, single-line, bulk-line, and saved-dialogue Zukan previews against synthetic Story records with provider NONE and no capability/consent/proposal side effects."
             }
           ],
           "limitations": [
-            "Topic and single/bulk line generation are represented; the source line/lines/topics/Zukan prompt-preview handlers remain without a preview-only target action. Generation actions may return their assembled prompt only after generation; they do not provide the source preview-only contract.",
-            "The Dialogue action itself has browser bridge and context-builder coverage, but no focused real-provider action test; provider-backed dialogue output remains unverified."
+            "The Dialogue action itself has browser bridge and context-builder coverage, but no focused real-provider action test; provider-backed dialogue output remains unverified.",
+            "Dialogue generation still lacks focused real-provider action acceptance; browser contribution tests use a stub action transport, and final provider/profile composition remains pending."
           ]
         }
       ]
@@ -8516,7 +8704,8 @@
             "modules/publishing/src/grants.ts",
             "modules/publishing/src/http.ts",
             "modules/publishing/src/browser.tsx",
-            "modules/publishing/src/index.ts"
+            "modules/publishing/src/index.ts",
+            "tests/integration/publishing-acceptance.test.mjs"
           ],
           "publicActions": [
             {
@@ -8549,10 +8738,16 @@
               "path": "modules/publishing/src/publishing.test.ts",
               "testName": "a share activates only on the remote published snapshot and revocation is checked on every public read",
               "scope": "Module test invokes public HTTP contributions with remote/checkpoint readers and checks unpublished/overlay denial, scope filtering, expiry, token-hash privacy, and remote revocation."
+            },
+            {
+              "id": "P07-R47-anonymous-browser-candidate",
+              "path": "tests/integration/publishing-acceptance.test.mjs",
+              "testName": "Publishing exports and share lifecycle survive real GitHub publication and a complete Core data-root replacement",
+              "scope": "Historical P07 candidate acceptance on leaf `643dd15d0a0dd95e11cbacff675d47881c86da75` (integrated main then `7df1ecabd48b9333b72b8604d0d4f5b45b1b5500`) passed with full-profile Chromium and a synthetic GitHub repository; anonymous reader displayed only scoped content, requested no owner session, and enforced expiry and remote revocation after publication. This is not a fresh final campaign run."
             }
           ],
           "limitations": [
-            "Tests invoke module HTTP contributions directly; the integrated public API router, anonymous browser mount, and full-profile exposure still require acceptance."
+            "The anonymous API/browser lifecycle passed on the historical P07 candidate recorded above; it does not certify later integrated browser recovery, the current full-profile backend, final campaign-head behavior, or OCI packaging."
           ]
         }
       ]
@@ -8927,9 +9122,15 @@
             "modules/diagnostics/src/index.ts",
             "modules/diagnostics/src/linter/manuscriptFormat.ts",
             "modules/assistant/src/actions.ts",
-            "tests/integration/mcp-acceptance.test.mjs"
+            "tests/integration/mcp-acceptance.test.mjs",
+            "modules/story/src/actions.ts",
+            "modules/story/src/actions.test.ts"
           ],
           "publicActions": [
+            {
+              "action": "reload",
+              "implementation": "Delegate both stdio and HTTP reload to read-only `story.snapshot.materialize` and return exact entity/link counts at the selected Core snapshot."
+            },
             {
               "action": "get_diagnostics",
               "implementation": "Invoke canonical `diagnostics.scene` and preserve the source full-tier DTO at one selected snapshot; require Diagnostics and Speaker components instead of silently returning partial results."
@@ -9001,12 +9202,19 @@
               "id": "P08-R48-composed-rewrite",
               "path": "tests/integration/mcp-acceptance.test.mjs",
               "testName": "spawned stdio and production HTTP MCP preserve Core review boundaries through publish and restart",
-              "scope": "Composed production integration checks typed no-provider behavior by default; its explicit qwen-local mode checks real Assistant rewrite output and no Core proposal/write through both transports."
+              "scope": "Production MCP integration has typed provider-NONE behavior through both transports on its recorded test tree; the real Qwen response and no-proposal/write check is historical candidate evidence on exact testedHead 7564420aa3cdd94f4bf45cb194df0a8ad1d1c910, not a run on the current campaign head."
+            },
+            {
+              "id": "P08-R48-reload-current",
+              "path": "tests/integration/mcp-acceptance.test.mjs",
+              "testName": "spawned stdio and production HTTP MCP preserve Core review boundaries through publish and restart",
+              "scope": "Provider-NONE production acceptance passed on exact candidate tree 90d5fc822faba247cc40266dddaa60ca2facc23d; real stdio and HTTP transports returned `{entities:7,links:2}` at the same pinned snapshot as get_status. This scoped candidate result is not final campaign certification."
             }
           ],
           "limitations": [
             "The P08 integration source supports the full Story/NLP/Diagnostics/Semantic/Speaker/Publishing/MCP composition, but this ledger update does not certify a fresh run at the final campaign head. The Assistant rewrite Qwen path is opt-in and real-provider acceptance remains pending.",
-            "The target keeps source direct mutation paths behind reviewable proposals; the formatter result itself remains transient until the author submits it. Profile closure and campaign final acceptance remain pending."
+            "The target keeps source direct mutation paths behind reviewable proposals; the formatter result itself remains transient until the author submits it. Profile closure and campaign final acceptance remain pending.",
+            "The provider-NONE formatter/full-diagnostics/reload/rewrite transport composition passed on candidate 90d5fc8; real Qwen rewrite output is recorded only on historical candidate 7564420, and final frozen campaign/API/browser/OCI acceptance remains pending."
           ]
         }
       ]
@@ -10001,7 +10209,7 @@
             }
           ],
           "limitations": [
-            "The producer test proves focused byte restoration/conflict behavior; final P04-to-P10 importer orchestration and reactivation through real proposal/checkpoint/reclone remain pending P12."
+            "The composed P12 test source now includes canonical scene YAML at `plot/volumes/volume-1/chapters/chapter-1/scenes/sc-speaker-override-stable.yaml` with `speakerOverrides` in pending local Git work. Its frozen-tree run must still verify byte identity through read-only import planning, Core publication, module reactivation, and data-root replacement; this is pending proof rather than a reported production data-loss bug."
           ]
         }
       ]
@@ -10106,7 +10314,9 @@
             "modules/assistant/src/provider.ts",
             "modules/assistant/src/model-settings.ts",
             "modules/assistant/src/migration.ts",
-            "modules/assistant/src/migration.test.ts"
+            "modules/assistant/src/migration.test.ts",
+            "modules/assistant/src/actions.test.ts",
+            "modules/assistant/src/browser.ts"
           ],
           "publicActions": [
             {
@@ -10116,6 +10326,10 @@
             {
               "action": "assistant.rewrite / assistant.rewrite.propose / assistant.summary.scene / assistant.summary.chapter / assistant.qa / assistant.continuation / assistant.dialogue.topics / assistant.dialogue.turns / assistant.reader.reaction / assistant.synonyms.suggestions / assistant.zukan.suggestions / assistant.aspect.review / assistant.stateEvents.draft",
               "implementation": "Generate source-covered writing assistance from pinned Story context; keep generated outputs transient except explicit Story/Core proposal actions and expose provider provenance."
+            },
+            {
+              "action": "assistant.reader.reaction.preview / assistant.summary.scene.preview / assistant.summary.chapter.preview / assistant.synonyms.preview / assistant.qa.preview / assistant.continuation.preview / assistant.dialogue.topics.preview / assistant.dialogue.turn.preview / assistant.dialogue.turns.preview / assistant.zukan.sandbox.preview",
+              "implementation": "Return local, read-only prompt previews for the corresponding source prompt-preview handlers without model invocation or author-data writes; R35 uses the shared context assembler, with owner-API host verification pending."
             }
           ],
           "uiSurfaces": [
@@ -10130,10 +10344,16 @@
             {
               "source": "Provider credentials, model calls, response cache, summary sidecars, and source background-job state",
               "target": "Environment-only credentials, lazy optional Assistant provider, proposal-based outputs, private cache/request-time results, and API-owned bounded worker lifecycle history",
-              "persistence": "Secrets are not migrated and generated model responses do not write canonical prose directly. P08 R38 owns bounded host job/inbox metadata and explicit source-history archive/adoption; Assistant does not persist request/result payloads. Source prompt-preview-only contracts and composed P12 importer acceptance remain pending."
+              "persistence": "Secrets are not migrated and generated model responses do not write canonical prose directly. P08 R38 owns bounded host job/inbox metadata and explicit source-history archive/adoption; Assistant does not persist request/result payloads. Local Assistant preview actions now cover source reader, summary, synonym, QA, continuation, and dialogue-sketch prompt handlers; focused action evidence does not establish browser/API composition. The R35 shared-context action parity is covered by a focused test; its current owner-API host test and frozen P12 importer execution remain pending."
             }
           ],
           "proofRefs": [
+            {
+              "id": "P11-N07-prompt-preview-actions",
+              "path": "modules/assistant/src/actions.test.ts",
+              "testName": "implemented prompt previews return their actual prompts locally without consent, usage, or proposal effects",
+              "scope": "Provider-NONE action test invokes local scene/chapter summary, valid and missing-scene QA, text-only continuation, dialogue topic/single/bulk/Zukan, reader reaction, and synonym previews and verifies populated prompts without consent reads, model capability acquisition, or proposals. R35 selected-context parity has a separate action test; owner-API verification is pending."
+            },
             {
               "id": "P11-ASSISTANT-IDLE-AND-HEALTH",
               "path": "modules/assistant/src/actions.test.ts",
@@ -10161,7 +10381,7 @@
           ],
           "limitations": [
             "Assistant action/context helpers and browser contributions have focused tests; browser action transports are stubbed, and the real-provider reference flow remains pending.",
-            "Source prompt-preview-only routes for reader model, summaries, synonyms, QA, continuation, and dialogue sketch are not exposed as target preview actions. P12 reactivation/import/reclone composition and final product acceptance remain pending."
+            "Local Assistant preview actions cover the source reader, summary, synonym, QA, continuation, and dialogue-sketch prompt handlers, with focused provider-NONE action tests. Browser/API composition remains unverified; R35 action-level prompt parity is implemented, with owner-API proof and final campaign acceptance pending. P12’s prior composed import run predates the added speaker-override assertions, which await a frozen-tree rerun."
           ]
         }
       ]
@@ -10899,7 +11119,8 @@
             "packages/migration/src/producers/sqlite.ts",
             "packages/migration/src/producers/workspace.ts",
             "packages/migration/src/producers/git.ts",
-            "packages/migration/src/migration.test.ts"
+            "packages/migration/src/migration.test.ts",
+            "tests/integration/migration-acceptance.test.mjs"
           ],
           "publicActions": [
             {
@@ -10930,10 +11151,16 @@
               "path": "packages/migration/src/migration.test.ts",
               "testName": "legacy inspection preserves scoped data, both SQLite stores, and pending Git work without source writes",
               "scope": "Synthetic source/workspace fixture verifies both SQLite paths, durable provisional decisions, pending Git operations, secret-path filtering, proposal submission, idempotence, and no source filesystem changes."
+            },
+            {
+              "id": "P12-N12-composed-import",
+              "path": "tests/integration/migration-acceptance.test.mjs",
+              "testName": "composed legacy import preserves disabled data and reactivates after a full Core data-root replacement",
+              "scope": "Composed synthetic source/workspace fixture exercises all eight module producers, disabled-module preservation, pending/staged Git work, explicit proposal approval/checkpoint/publication, Core data-root deletion/reclone, reactivation, owner job/inbox history adoption, and idempotent reinspection. It is not a private-project data run or final OCI/profile gate."
             }
           ],
           "limitations": [
-            "This is the generic producer boundary and synthetic fixture coverage; module-specific semantic conversions, final importer composition, author review, checkpoint, and publication are P12 integration acceptance."
+            "The composed P12 test source includes a canonical `speakerOverrides` YAML fixture in pending local Git work, with byte-identity assertions across disabled import, publication, Core-root replacement, module reactivation, and a second publication. This updated test has not run on the frozen tree; final campaign gates remain pending."
           ]
         },
         {
@@ -10943,7 +11170,8 @@
             "modules/story/src/migration/producer.ts",
             "modules/story/src/migration/workflowRows.ts",
             "modules/story/src/migration/producer.test.ts",
-            "modules/story/src/index.ts"
+            "modules/story/src/index.ts",
+            "tests/integration/migration-acceptance.test.mjs"
           ],
           "publicActions": [
             {
@@ -10988,10 +11216,16 @@
               "path": "modules/story/src/migration/producer.test.ts",
               "testName": "withholds divergent workflow IDs and emits explicit local review recovery",
               "scope": "Synthetic duplicate-table fixture verifies divergent records are not selected automatically and recovery retains them."
+            },
+            {
+              "id": "P12-N12-story-opaque-reactivation",
+              "path": "tests/integration/migration-acceptance.test.mjs",
+              "testName": "composed legacy import preserves disabled data and reactivates after a full Core data-root replacement",
+              "scope": "Previously verified composed test checks disabled Story opaque canonical files, scratch bytes, committed ChangeSet/snapshot history, and SQLite state_proposals/zukan_suggestions; re-enabled Story converts workflow rows and restores/publishes canonical state before another Core data-root deletion/reclone. Canonical scene `speakerOverrides` assertions were added to the test source on target tree 0e32b028 and await a frozen-tree rerun."
             }
           ],
           "limitations": [
-            "These are isolated Story producer fixtures. P12 still must register and run the composed source-root importer with disabled/re-enabled modules through review, checkpoint, publication, data-root deletion, and reclone."
+            "Story producer behavior has prior composed P12 source-root coverage for the tested opaque files, snapshots, scratch attachments, and provisional workflow rows. Canonical scene `speakerOverrides` YAML round-trip assertions are now in the test source but await a frozen-tree rerun; broader final profile/import campaign gates remain pending."
           ]
         }
       ]
