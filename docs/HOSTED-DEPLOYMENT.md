@@ -2,7 +2,7 @@
 
 This guide describes how to build the standalone Core/Full profiles and the hosted Runtime Base, Build Kit, and selected composition using the existing Scriptorium build entry points. Hosted deployment consumes the canonical `scriptorium-build/v1` and `scriptorium-platform/v1` contracts. Praetorium remains the owner of instance lifecycle, Gateway/Instance Access, GitHub App credentials, and the BuildKit worker.
 
-The hosted source changes and S01 Build Kit are still being integrated. The commands below describe the checked-in recipe shape, but no clean integrated OCI build, registry round-trip, real GitHub App session, or deployed browser acceptance is recorded here. The build record at the end must be filled only from a clean committed source checkout and actual artifact metadata.
+Hosted S01–S05 source is committed at `008d5c429ec279a424cafd5b8c4cbee70a613b8e`. Runtime Base, Build Kit, Core, Story and MCP candidates were built from that clean source and published to the owned disposable registry; all three compositions passed Praetorium production unsigned artifact inspection and startup smoke. See the [campaign evidence](verification/HOSTED-CAMPAIGN-2026-10-17.md) and [immutable artifact record](verification/HOSTED-ARTIFACTS-008d5c4.json). Signed source admission and real GitHub App/Hosted browser/lifecycle acceptance remain unverified. The blank build record at the end is a reusable operator template, not current results.
 
 ## Core and Full standalone images
 
@@ -60,8 +60,8 @@ Read `containerimage.digest` from each metadata file and use those `sha256:` val
 RUNTIME_BASE_DIGEST='<sha256:64-lowercase-hex>'
 BUILD_KIT_DIGEST='<sha256:64-lowercase-hex>'
 
-pnpm install --frozen-lockfile
-pnpm build
+corepack pnpm@12.10.1 install --frozen-lockfile
+corepack pnpm@12.10.1 build
 node scripts/hosted-build.mjs catalog \
   --producer-revision "$REVISION" \
   --runtime-base-digest "$RUNTIME_BASE_DIGEST" \
@@ -97,9 +97,9 @@ The BuildKit metadata file's `containerimage.digest` is the candidate image dige
 
 Core and Full remain standalone presets. Hosted selections use the same shipped module manifests and `resolveBuildCatalogSelection` resolver; dependency modules are included automatically, incompatible or unknown selections fail. The resulting image stores runtime metadata, the composition manifest, the build catalog, and the package lock under `/usr/share/scriptorium`, with the selected runtime under `/app`.
 
-### Local deploy-package verification
+### Historical local deploy-package verification
 
-The current S01 package outputs were prepared in the isolated `hosted/build` worktree based on `3f7b174ef6667b004c21e24a9ed89b8329d04c04`. I reran the deployed-profile verifier against Core, a `story`-only selection, and an `mcp`-only selection. Core resolved 53 production packages, story resolved 58, and MCP resolved 140; each deployed pnpm package-root set exactly matched its production dependency closure. The story-only Vite manifest contained only `../modules/story/dist/browser.js`; MCP had no browser dynamic entries. Recheck these outputs with:
+The following package-only observation predates the committed Hosted implementation and actual registry artifacts linked above. These historical S01 package outputs were prepared in the isolated `hosted/build` worktree based on `3f7b174ef6667b004c21e24a9ed89b8329d04c04`. I reran the deployed-profile verifier against Core, a `story`-only selection, and an `mcp`-only selection. Core resolved 53 production packages, story resolved 58, and MCP resolved 140; each deployed pnpm package-root set exactly matched its production dependency closure. The story-only Vite manifest contained only `../modules/story/dist/browser.js`; MCP had no browser dynamic entries. Recheck these outputs with:
 
 ```sh
 node scripts/profile-build.mjs --profile core --verify-deploy /tmp/scriptorium-s01-current-core
@@ -131,9 +131,11 @@ Writing follows the existing Scriptorium proposal transaction: the browser keeps
 
 GitHub is the durable shared project history. The composition declares readable/writable persistence versions for Core's Git operations v1, proposal bindings/completions v2, publications v1, and browser recovery IndexedDB v3, plus the formats declared by selected modules. Core's operation, proposal, checkpoint, and publication records are committed under `meta/scriptorium`; browser drafts and replay state remain in the versioned browser recovery journal and are reconciled on the same repository origin after restart or redeploy. A successful checkpoint alone does not mean the change is on GitHub: publish must report a confirmed result. Pending checkpoints or an unknown push result must remain available for reconciliation and block destructive replacement. The runtime persistence scan reports the remote Git formats it has verified; it does not claim to inspect browser IndexedDB.
 
-## Build and deployment record
+## Build and deployment record template
 
-Populate this record from the final clean source commit and actual registry/image inspections. Leave a value empty until the corresponding operation has been performed; a catalog, test fixture, local startup smoke, or command example does not establish an OCI digest or hosted acceptance.
+Use [the attestation command](hosted-producer-attestation.md) to generate and verify the canonical Sigstore bundle from actual immutable inputs. Its statement-only mode does not sign or admit a release.
+
+Populate this reusable record from the final clean source commit and actual registry/image inspections. Leave a value empty until the corresponding operation has been performed; a catalog, test fixture, local startup smoke, or command example does not establish an OCI digest or hosted acceptance.
 
 ```text
 SCRIPTORIUM_PRODUCER_REVISION=
