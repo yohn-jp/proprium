@@ -1,62 +1,77 @@
-# P13 full-profile OCI model lifecycle candidate
+# P13 frozen-runtime OCI model lifecycle evidence
 
-This record covers the full-profile model and worker lifecycle inside the OCI image. It is candidate evidence for the exact source and image below, not final P13 certification: the coordinator's main branch advanced beyond this isolated leaf, so the final composed tree still needs a fresh full-image run.
+Status: **PASS for the focused full-profile model/worker OCI acceptance.** This is evidence for the P13 model lifecycle gate only. It does not certify the other P13 gates or the composed Epic #7 result.
 
-## Exact candidate
+## Exact source and image
 
-| Field | Value |
+| Field | Result |
 | --- | --- |
-| Source commit and tree | e85c173a318e17eed084bbfb4dde2411a2abc2cf; tree 1e90e4dd15942cbbab76cc71787de2ce6369e6be |
+| Test source commit and tree | `8804edc9afb17fcd66b605ebfb70589007519dfa`; `45809bd25cfb888a1f3aa15531458adfc0d74f0f` |
+| Compared frozen main head | `539375c925754c6ec6f5c445051a32b7293a0724` |
+| Difference from frozen main | Only `tests/integration/model-oci-lifecycle.container.mjs`; no production or Docker build inputs changed |
 | OCI engine | Rootless Podman 5.8.9 on NixOS x86_64 |
-| Profile and platform | Full, linux/amd64 |
-| Local image tag | localhost/scriptorium:p13-full-e85c173 |
-| Image ID | af3c2fa2ed49be418e15f1dea5e3ffdc6afae079d5a1a8fb4b727a89f4eb7c62 |
-| Local manifest digest | sha256:7a2e4fd5d00b36f90a19cfe90b30c6c0c5e01df4f922650696be813abd006b07 |
-| Image bytes | 1,213,503,794 |
-| Node base | Official Node 24 bookworm-slim, pinned in Dockerfile to sha256:a5f4366e834695d5f363b920c104953a535d3a9864d1bdf74566a0ebe01daee5 |
+| Profile and platform | Full, `linux/amd64` |
+| Local image tag | `localhost/scriptorium:p13-full-8804edc` |
+| Image ID | `f5def569f7fa98e0c71807730afb999c42c057a86c71557f812b41eae3755172` |
+| Local manifest digest | `sha256:510d8398fcee71015bcd3be2489ff69fd7976bb4c06d0e852c47579c81e427bf` |
+| `Podman image inspect .Size` reported in the test result | `778,036,163` bytes, read after the startup verifier and before the lifecycle containers |
+| Fresh `.Size` after the test | `1,320,435,651` bytes; direct Podman inspection between `2026-10-17T01:27:29.962980417Z` and `2026-10-17T01:27:30.018965728Z` |
 
-The image remained local. The temporary Podman policy used for the build rejected images by default and allowed only the pinned official Node repository and local container storage; the policy file was removed after verification.
+The later direct and wrapper inspections returned the same image ID, manifest digest, platform, and `.Size`. The two `.Size` observations disagree for that same ID and digest. Both observations are retained here; no cause is inferred and no image-size reduction is claimed. The image remained local and was not published.
 
-## What ran
+The verifier passed full-profile startup, HTTP probes, nonroot UID and writable `/data` checks, and SIGTERM-driven API drain. At startup it measured 37.99 MB cgroup memory, 12 PIDs, two processes, and `87,676 KiB` aggregate process RSS (measurement helper excluded).
 
-The acceptance test first runs the existing full-profile OCI verifier. That builds the Dockerfile image and exercises the production launcher, HTTP readiness and static assets, UID 1000, writable data, startup process/cgroup measurements, and SIGTERM drain.
+## Model and worker checks
 
-It then runs the same image with networking disabled, a synthetic local Git repository mounted read-only, the model cache mounted read-only, and only a random test API token. The container starts the production API and the generated full-profile manifests/loaders with the real CoreStore, ModuleRuntime, and compiled module factories. NLP, Speaker, Diagnostics, and Semantic are exercised through authenticated production action routes. A test barrier holds an actual Diagnostics capability lease until ModuleRuntime cancellation; it does not replace the capability or model.
+The test ran the production CoreStore, ModuleRuntime, compiled modules, API actions, full-profile launcher and OCI image. It used a disposable synthetic Git repository, random temporary API token, network-disabled model containers, `HF_HUB_OFFLINE=1`, and a read-only bind of the existing host cache. No model weights were added to the image or worktree, and no LLM/provider calls were made.
 
-The pinned artifacts were read from the host cache at /tmp/scriptorium-model-runtime-edc033c/home/.arcadia/models:
+The pinned artifacts in `/tmp/scriptorium-model-runtime-edc033c/home/.arcadia/models` were:
 
-- Xenova/multilingual-e5-small at 761b726dd34fb83930e26aab4e9ac3899aa1fa78
-- mogolloni/bge-reranker-v2-m3-onnx at e5023553f6c47f09057da7a19cdd79ef850a4985
+- E5: `Xenova/multilingual-e5-small`, revision `761b726dd34fb83930e26aab4e9ac3899aa1fa78`.
+- BGE reranker: `mogolloni/bge-reranker-v2-m3-onnx`, revision `e5023553f6c47f09057da7a19cdd79ef850a4985`.
 
-The test ran with network access disabled and HF_HUB_OFFLINE enabled. It made no provider or LLM calls. After lifecycle checks, it started a replacement container with the production launch.mjs entry point and the same data/cache mounts, confirmed all eight full-profile modules were enabled-idle, checked the derived index survived replacement, and ran a real E5+BGE search.
+Actual `nlp.countTokens` reported the pinned E5 tokenizer, Transformers.js `3.8.1`, and exact counts `8, 6, 11` for the three synthetic strings. An unavailable requested tokenizer returned the explicit `approx` counter (`source-approx-v1`, reason `tokenizer_unavailable`) with counts `2, 2, 0`. The production Lindera API returned nine tokens; speaker attribution selected synthetic character `char-hero` using `scriptorium-speaker-cpu` and Lindera.
 
-## Results
+Diagnostics and Semantic both completed real nearest-neighbor calls with the same pinned E5 model revision and 384 dimensions, on one Semantic child PID during the overlapping lease. Diagnostics returned 24 synthetic-corpus hits and Semantic returned 30; Semantic returned five results without a fallback warning. The cancellation phase requested Diagnostics disable while the Semantic rebuild job was active, observed that rebuild settle afterward on the same pending child, and confirmed disabling one consumer preserved the other. The final lease release stopped the child. The test then deleted the derived index, observed it missing, rebuilt it with the real CPU model, and observed recovery.
 
-The existing verifier passed the full-profile startup and SIGTERM drain. It measured 35.66 MB cgroup memory, 12 PIDs, two processes, and 85,924 KiB aggregate process RSS at startup.
+The production-launcher replacement container started all eight modules enabled-idle with no worker. It saw the persisted derived index and completed a real E5+BGE search with five results and no rerank warning. The test settings and author dismissals were verified byte-for-byte after the lifecycle run.
 
-The in-container sampler recorded the following representative peaks. RSS totals sum process RSS and can exceed cgroup memory because shared pages are counted in multiple processes; the cgroup figures are reported independently.
+## Resource observations
 
-| Phase | Process and worker observation | Peak aggregate process RSS | Cgroup memory at peak | PIDs |
-| --- | --- | ---: | ---: | ---: |
-| Enabled-idle with selected modules disabled | No compiled worker; 2 processes | 102.1 MiB | 53,686,272 bytes | 12 |
-| NLP action | One Lindera worker | 251.7 MiB | 163,176,448 bytes | 19 |
-| Speaker attribution | Lindera and Speaker workers; two supervised children | 473.1 MiB | 348,868,608 bytes | 26 |
-| Overlapping Diagnostics and Semantic leases | Both consumers received the same real capability instance; one Semantic child PID | 1,364.3 MiB; Semantic child 1,100 MiB | 1,325,998,080 bytes | 38 |
-| Replacement production E5+BGE inference | One Semantic child PID; search returned five results with no rerank warning | 1,975.1 MiB; Semantic child 1,709.5 MiB | 1,857,511,424 bytes | 49 |
+The table reports the sampler's aggregate process-RSS peak for each lifecycle phase and the cgroup values captured in that same sample. Aggregate RSS sums process RSS and can exceed cgroup memory because shared pages are counted more than once. Worker maxima are observed separately within the phase.
 
-Disabling Diagnostics cancelled its blocked action while Semantic's real model job and child continued. The Semantic child exited after its last lease was released and the module was disabled. The test deleted the derived index, verified the missing state, rebuilt it with the real CPU model, then confirmed the index remained available in the replacement production-launcher container. NLP feature consent, Semantic settings, and author dismissals retained their original bytes.
+| Phase | Peak aggregate RSS | Cgroup memory at that sample | PIDs | Worker observation |
+| --- | ---: | ---: | ---: | --- |
+| Full profile, disabled and enabled-idle baseline | 100.6 MiB | 53,141,504 bytes | 12 | No workers |
+| Actual NLP tokenizer | 259.8 MiB | 173,916,160 bytes | 19 | One NLP child |
+| Actual E5 token counter | 493.4 MiB | 409,075,712 bytes | 23 | One NLP child |
+| Speaker attribution and Lindera | 523.9 MiB | 402,395,136 bytes | 26 | NLP and Speaker children |
+| Diagnostics/Semantic lease cancellation | 1,433.9 MiB | 1,400,410,112 bytes | 38 | One Semantic child; up to two compiled workers sampled |
+| Shared Diagnostics/Semantic real inference | 1,885.8 MiB | 1,824,194,560 bytes | 45 | One shared Semantic child; up to two workers sampled |
+| Delete and rebuild derived index | 1,417.8 MiB | 1,383,206,912 bytes | 38 | One Semantic child |
+| After disable, before replacement | 272.9 MiB | 253,341,696 bytes | 12 | No workers |
+| Re-enabled E5+BGE search | 2,034.6 MiB | 2,068,406,272 bytes | 38 | One Semantic child |
+| After replacement action release | 272.7 MiB | 353,435,648 bytes | 12 | No workers |
 
-During the replacement probe, the in-container health loop recorded 125 successful requests and no failures; p95 response latency was 3.78 ms and the maximum was 60.37 ms. The observed cgroup limits were memory.max=max, cpu.max=max 100000, and pids.max=2048. These are measurements of this local Podman host, not deployment quota claims.
+The replacement container's separate sampler measured its production E5+BGE inference at `2,087.4 MiB` aggregate process RSS, `2,002,239,488` cgroup bytes, and 49 PIDs; its Semantic child reached `1,823.1 MiB` RSS. Across the lifecycle container, the health loop recorded 773 successful requests and no failures (p95 `26.72 ms`, maximum `53.23 ms`). Across replacement, it recorded 101 successful requests and no failures (p95 `3.69 ms`, maximum `108.37 ms`). The observed limits were `memory.max=max`, `cpu.max=max 100000`, and `pids.max=2048`; these are local host measurements, not deployment quota claims.
 
-## Reproduction
+## Reproduction and captured output
 
-Build the workspace, then run the acceptance from the repository root with the pinned model cache available. For this NixOS host, use the temporary reject-default policy procedure in [OCI verification](OCI.md) while the test runs; it cleans up the policy on exit.
+From the repository root, with the pinned cache available and the temporary reject-default Podman policy procedure in [OCI verification](OCI.md) in effect:
 
-    pnpm build
-    nix shell nixpkgs#podman -c node --test tests/integration/model-oci-lifecycle.acceptance.mjs
+```sh
+pnpm install --frozen-lockfile
+pnpm build
+nix shell nixpkgs#podman -c env \
+  OCI_ENGINE=/tmp/scriptorium-oci-no-intermediate/podman \
+  SCRIPTORIUM_P13_IMAGE=localhost/scriptorium:p13-full-8804edc \
+  SCRIPTORIUM_P13_MODEL_CACHE=/tmp/scriptorium-model-runtime-edc033c/home/.arcadia/models \
+  SCRIPTORIUM_P13_KEEP_FAILED=1 \
+  node --test tests/integration/model-oci-lifecycle.acceptance.mjs
+```
 
-Set SCRIPTORIUM_P13_MODEL_CACHE if the read-only host model cache is stored elsewhere. The test creates and removes its synthetic repository, test containers, and temporary data on success.
+For this run, the outside-repository engine wrapper serialized image builds and set `BUILDAH_LAYERS=false`; it forwarded the verifier and test's actual Podman commands without skipping checks. The acceptance passed `1/1`, with zero failures, in `159,242.4 ms`.
 
-## Scope
+The full raw output was captured at `/tmp/scriptorium-p13-final-full-oci-8804edc.log` (70,380 bytes, SHA-256 `1310b6e6f37ddc5bd63762a15038bb1fa248d2e0e1f0648521ca002eb0eb4692`). Its exact candidate JSON is `/tmp/scriptorium-p13-final-full-oci-8804edc-candidate.json` (SHA-256 `1ffd3049c67728f28674ea1d10efa4913a852491e416abf821e85e43d3c48452`). These host-local artifacts preserve the detailed phase samples and assertions; the committed record above contains the reviewed acceptance summary.
 
-This run verifies model, worker, resource, and replacement behavior for the exact candidate source and image digest above. It does not certify later changes on main, the browser acceptance, the configured external-provider gate, or final P13 composition. Those checks require evidence from the final frozen source tree and image.
+This focused result does not claim completion of the browser recovery, P12 migration, configured external-provider, or whole-repository verification gates.
