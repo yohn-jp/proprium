@@ -321,7 +321,10 @@ test("full OCI runs actual tokenizer, speaker, E5 and BGE lifecycle and survives
     const candidateEvidence = {
       sourceCommit: commit,
       sourceTree: tree,
-      image: { tag: image, id: imageId, digest: imageDigest, platform, bytes: Number(imageBytes) },
+      image: {
+        tag: image, id: imageId, digest: imageDigest, platform,
+        sizeBytes: Number(imageBytes), sizeField: "Podman image inspect .Size",
+      },
       verificationLines,
       modelCache,
       modelRefs,
