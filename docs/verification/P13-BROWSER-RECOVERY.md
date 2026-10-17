@@ -59,3 +59,22 @@ The coordinator reran the actual container/browser/GitHub acceptance on 2026-10-
 | Final fixture commit | `fe37be1e6f25d473c49144de3c318610669551ac` |
 
 The image remained local. This proves the listed Core recovery paths for the composed runtime inputs. Full-profile model lifecycle, the root verification command, source-feature/data-ledger closure, and final campaign acceptance are recorded separately; this result does not claim those gates passed.
+
+### Final frozen-runtime recovery rerun
+
+The final Core recovery run passed against source checkout `f3ef4d34b5e603885ec2cbf204446b6becef3071` (tree `41c3027768948392b8f9a43815c86fa680d636f3`). It built and ran the local `linux/amd64` image with Podman 5.8.9. Only safe result fields are recorded here; the private fixture URL, credentials, and browser journal selection key are omitted.
+
+| Field | Observed result |
+| --- | --- |
+| Result | `PASS` |
+| Image ID | `b33526e4325684b8cf068ec1a442c4c71d9801ac395c75f71053ca598ed9af45` |
+| Manifest digest | `sha256:79d59260c436dfa98b9e250eba9ee616058a756b7d62935b71d5dd5740b7f0b0` |
+| Platform | `linux/amd64` |
+| Seed / confirmed publication | `9f736f5657d9335760aa42dd54979f429c2aa65c` / `eaf00f5a43f105d83193dd57e7c536538c9a5023` |
+| Recovered operation | `46155896-88b5-488e-bab2-75b18489d852`; exactly one remote operation commit |
+| Browser and container replacement | IndexedDB retained across Chromium restart; data volume deleted and recreated; operation recovered and explicitly published |
+| External update | An unedited scene followed remote commit `f4890e712ba48292944f069dc05b419dd3fff50d` |
+| Same-file conflict | Author input was preserved; publish returned `conflict`; the conflicting operation was not published |
+| Final fixture commit | `e7256bd8aa285ded76a5ea17d6822cc3c9e2a6a6` |
+
+The run used the restored six-file seed and preserved fixture history. The image remains local. This result covers the listed Core recovery, publication, external-follow, and conflict paths on the recorded frozen source tree; it does not certify optional modules or other final campaign gates.
