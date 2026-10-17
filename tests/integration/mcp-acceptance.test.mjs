@@ -51,11 +51,11 @@ function fixtureFiles() {
       "id: char-haru", "name: Haru", "type: character", "aliases: []", "tags: []", "relations: []", "",
     ].join("\n"),
     "bible/locations/loc-cafe.yaml": "id: loc-cafe\nname: Cafe\ntype: location\n",
-    "meta/scriptorium/modules/nlp/feature-settings.json": JSON.stringify({ externalEnabled: { rewrite: true } }) + "\n",
+    "meta/scriptorium/modules/nlp/feature-settings.json": JSON.stringify({ externalEnabled: { rewrite: true, "setting-qa": true } }) + "\n",
     "meta/scriptorium/modules/assistant/model-settings.json": JSON.stringify({
       defaultPresetId: "env-default",
       presets: [{ id: "env-default", label: "Acceptance provider", model: "" }],
-      featurePresetIds: { rewrite: "env-default" },
+      featurePresetIds: { rewrite: "env-default", "setting-qa": "env-default" },
     }) + "\n",
     "plot/volumes/vol-main/volume.yaml": "id: vol-main\ntitle: Main\ntype: volume\norder: 1\n",
     "plot/volumes/vol-main/chapters/ch-main-1/chapter.yaml": "id: ch-main-1\nvolume: vol-main\ntitle: Opening\ntype: chapter\norder: 1\n",
@@ -136,8 +136,8 @@ async function runtimeOptions(cacheDirectory, usageDirectory) {
   });
 }
 
-async function startHost({ dataDirectory, cacheDirectory, store: suppliedStore }) {
-  const usageDirectory = resolve(dataDirectory, "host-history");
+async function startHost({ dataDirectory, cacheDirectory, store: suppliedStore, usageDirectory: suppliedUsageDirectory }) {
+  const usageDirectory = suppliedUsageDirectory ?? resolve(dataDirectory, "host-history");
   const runtime = await runtimeOptions(cacheDirectory, usageDirectory);
   const store = suppliedStore ?? new CoreStore({ dataDir: dataDirectory, allowLocalRemotes: true });
   const server = createServer({
@@ -196,6 +196,33 @@ async function ownerJson(host, cookie, path, { method = "GET", body, status = 20
   const response = await apiRequest(host, path, { method, body, cookie });
   assert.equal(response.status, status, `${method} ${path} should return HTTP ${status}, got ${response.status}`);
   return response.status === 204 ? undefined : responseJson(response, `${method} ${path}`);
+}
+
+async function ownerAction(host, cookie, projectId, actionId, input) {
+  const result = await ownerJson(host, cookie,
+    `/api/projects/${encodeURIComponent(projectId)}/actions/${encodeURIComponent(actionId)}`,
+    { method: "POST", body: { input } });
+  assert.equal(result.ok, true, `${actionId} failed: ${JSON.stringify(result.error)}`);
+  return result;
+}
+
+function parseSseEvents(text) {
+  return text.split(/\r?\n\r?\n/u).flatMap((block) => {
+    const event = block.match(/^event:\s*([^\r\n]+)$/mu)?.[1];
+    const data = block.split(/\r?\n/u).find((line) => line.startsWith("data: "))?.slice(6);
+    if (!event || !data) return [];
+    try { return [{ event, data: JSON.parse(data) }]; }
+    catch { return [{ event, data: null }]; }
+  });
+}
+
+function ownerModuleStream(host, cookie, projectId, route, input, signal) {
+  return fetch(`${host.base}/api/projects/${encodeURIComponent(projectId)}/modules/assistant/${route}`, {
+    method: "POST",
+    headers: { Cookie: cookie, "Content-Type": "application/json", Origin: host.base },
+    body: JSON.stringify(input),
+    ...(signal ? { signal } : {}),
+  });
 }
 
 async function login(host) {
@@ -921,4 +948,199 @@ test("Assistant continuation prompt preview runs as a host-owned compute action 
   const after = await action("assistant.usage.read", { limit: 200 });
   assert.deepEqual(after.data.events.map((event) => event.id), before.data.events.map((event) => event.id),
     "local context preparation must not create an external model usage event");
+});
+
+test("P11 local provider streams, records usage, proposes through Core review, publishes and reconstructs", {
+  skip: !RUN_ASSISTANT_REFERENCE,
+  timeout: 240_000,
+}, async (t) => {
+  assert.ok(READY_MODULES.includes("assistant") && READY_MODULES.includes("story") && READY_MODULES.includes("nlp") && READY_MODULES.includes("semantic"),
+    "The P11 reference composition requires Assistant, Story, NLP, and Semantic modules");
+  assert.equal(process.env.ARCADIA_LLM_PROVIDER, "openai-compatible");
+  assert.equal(process.env.ARCADIA_LLM_MODEL, "Qwen3-0.6B-Q4_K_M");
+  assert.match(process.env.ARCADIA_LLM_BASE_URL ?? "", /^http:\/\/127\.0\.0\.1:\d+\/v1$/u,
+    "P11 provider reference must use the pinned loopback endpoint");
+  assert.equal(process.env.ARCADIA_LLM_API_KEY, "local-only-placeholder");
+
+  const rootDir = await mkdtemp(resolve(tmpdir(), "scriptorium-p11-assistant-reference-"));
+  const dataDirectory = resolve(rootDir, "core-data");
+  const usageDirectory = resolve(rootDir, "host-history");
+  const fixture = await createSyntheticRemote(rootDir);
+  let host;
+  t.after(async () => {
+    await host?.close().catch(() => undefined);
+    await rm(rootDir, { recursive: true, force: true });
+  });
+
+  host = await startHost({ dataDirectory, cacheDirectory: resolve(rootDir, "module-cache-first"), usageDirectory });
+  let cookie = await login(host);
+  const project = await ownerJson(host, cookie, "/api/projects", {
+    method: "POST", status: 201, body: { url: fixture.url },
+  });
+  const projectId = project.id;
+  assert.ok(projectId);
+
+  const manuscriptPath = "manuscript/vol-main/ch-main-1/sc-1.md";
+  const initialManuscript = await readRemoteFile(fixture.remote, manuscriptPath);
+  const status = await ownerAction(host, cookie, projectId, "core.status", {});
+
+  const continuationPreview = await ownerAction(host, cookie, projectId, "assistant.continuation.preview", {
+    sceneId: "sc-1", chapterId: "ch-main-1", k: 8,
+  });
+  assert.equal(typeof continuationPreview.data.prompt, "string");
+  assert.ok(continuationPreview.data.prompt.includes("Uma enters the cafe at dusk."),
+    "the production owner-action preview must load the selected scene when no recent sentences are typed");
+  assert.equal(continuationPreview.snapshot.remoteCommit, status.snapshot.remoteCommit,
+    "continuation preview must remain bound to the production action's selected repository snapshot");
+
+  // Abort only after a real model delta has reached the production SSE route.
+  const cancellation = new AbortController();
+  const cancelledResponse = await ownerModuleStream(host, cookie, projectId, "rewrite/stream", {
+    sceneId: "sc-1", sentenceIndex: 2,
+    instruction: "Write several distinct, complete alternatives while preserving the exact meaning and point of view.",
+  }, cancellation.signal);
+  assert.equal(cancelledResponse.status, 200);
+  const cancelledReader = cancelledResponse.body.getReader();
+  const decoder = new TextDecoder();
+  let cancelledBuffer = "";
+  let receivedProviderDelta = false;
+  while (!receivedProviderDelta) {
+    const chunk = await cancelledReader.read();
+    if (chunk.done) break;
+    cancelledBuffer += decoder.decode(chunk.value, { stream: true });
+    if (/event: delta\r?\ndata: \{"delta":".+?"/su.test(cancelledBuffer)) {
+      receivedProviderDelta = true;
+      cancellation.abort(new Error("P11 real-provider stream cancellation acceptance"));
+    }
+  }
+  assert.equal(receivedProviderDelta, true, "The production rewrite stream returned no real model delta to cancel");
+  await cancelledReader.cancel().catch(() => undefined);
+
+  const readUsage = () => ownerAction(host, cookie, projectId, "assistant.usage.read", { limit: 200 });
+  let usageAfterAbort;
+  const abortDeadline = Date.now() + 20_000;
+  while (Date.now() < abortDeadline) {
+    usageAfterAbort = await readUsage();
+    if (usageAfterAbort.data.events.some((event) => event.feature === "rewrite" && event.state === "aborted")) break;
+    await delay(100);
+  }
+  assert.ok(usageAfterAbort.data.events.some((event) => event.feature === "rewrite" && event.state === "aborted"),
+    "Cancelling the real provider stream did not durably record its aborted usage event");
+
+  const qaResponse = await ownerModuleStream(host, cookie, projectId, "qa/stream", {
+    sceneId: "sc-1",
+    messages: [{ role: "user", content: "Use the read-only searchScenes tool with exactly this query: Uma enters the cafe at dusk. After it returns, answer where Uma enters. Return JSON only with answer, citations, and confidence, copying the exact scene id and quote from the tool result." }],
+  });
+  assert.equal(qaResponse.status, 200, `QA compute stream failed: ${await qaResponse.clone().text()}`);
+  const qaEvents = parseSseEvents(await qaResponse.text());
+  assert.ok(qaEvents.some((event) => event.event === "delta"), "QA produced no real provider stream chunks");
+  const qa = qaEvents.find((event) => event.event === "final")?.data;
+  const qaError = qaEvents.find((event) => event.event === "error")?.data;
+  assert.ok((qa && typeof qa === "object") || (qaError && typeof qaError === "object"),
+    `QA returned neither a schema-valid final nor an honest stream error; output ${JSON.stringify(qaEvents.filter((event) => event.event === "delta").map((event) => event.data?.delta ?? "").join("").slice(-320))}`);
+  if (qa) {
+    assert.ok(Array.isArray(qa.citations), "A finalized QA answer must satisfy the citation array schema");
+    if (qa.citations.length > 0) {
+      assert.ok(qa.citations.some((citation) => citation.sceneId === "sc-1" && citation.path === manuscriptPath && citation.revision),
+        "QA citations were not bound to the actual semantic tool result and current manuscript revision");
+    } else {
+      assert.equal(qa.answer, "このスナップショット内の読み取り専用ツール結果からは裏付けられませんでした。",
+        "QA must not present an unsupported answer when the provider returns no verified tool citation");
+      assert.equal(qa.confidence, "low");
+    }
+  } else {
+    assert.equal(qaError.code, "assistant_action_failed", "Invalid provider output must remain a schema error, not a fabricated answer");
+    assert.match(qaError.message, /JSON|character|Unexpected|Expected object|invalid_type/u,
+      "The SSE error should explain the actual schema/JSON failure");
+  }
+
+  const rewriteResponse = await ownerModuleStream(host, cookie, projectId, "rewrite/stream", {
+    sceneId: "sc-1", sentenceIndex: 2,
+  });
+  assert.equal(rewriteResponse.status, 200);
+  const rewriteEvents = parseSseEvents(await rewriteResponse.text());
+  assert.ok(rewriteEvents.some((event) => event.event === "delta"), "Rewrite produced no real provider stream chunks");
+  const rewrite = rewriteEvents.find((event) => event.event === "final")?.data;
+  assert.ok(rewrite && rewrite.sceneId === "sc-1" && rewrite.sentenceIndex === 2);
+  assert.equal(rewrite.originalSentence, "Uma enters the cafe at dusk.");
+  assert.equal(rewrite.provider, "openai-compatible");
+  assert.equal(rewrite.model, process.env.ARCADIA_LLM_MODEL);
+  assert.equal(rewrite.suggestions.length, 3);
+  assert.equal(rewrite.proposals.length, 0, "Streaming rewrite computation must not create proposals itself");
+  assert.equal(await readRemoteFile(fixture.remote, manuscriptPath), initialManuscript,
+    "Read/compute stream changed the canonical manuscript before author review");
+
+  const proposalsBeforeChoice = await ownerJson(host, cookie, `/api/projects/${encodeURIComponent(projectId)}/proposals`);
+  assert.equal(proposalsBeforeChoice.proposals.length, 0, "Compute-only rewrite or QA registered a Core proposal");
+  const candidate = rewrite.suggestions.find((item) => item.text !== rewrite.originalSentence && item.text.trim());
+  assert.ok(candidate, "The real model did not return a distinct author-selectable rewrite candidate");
+  const choice = await ownerAction(host, cookie, projectId, "assistant.rewrite.propose", {
+    sceneId: rewrite.sceneId,
+    sentenceIndex: rewrite.sentenceIndex,
+    selectedText: rewrite.originalSentence,
+    replacementText: candidate.text,
+  });
+  assert.equal(choice.data.selectedText, rewrite.originalSentence);
+  assert.equal(choice.data.replacementText, candidate.text);
+  const proposal = choice.data.proposal;
+  assert.ok(proposal && proposal.source === "module" && proposal.operations.length === 1,
+    "Assistant did not submit the author-selected text through the actual host Core proposal port");
+  const operation = proposal.operations[0];
+  assert.equal(operation.effect, "manuscript");
+  assert.ok(operation.reads.some((item) => item.path === manuscriptPath));
+  const pending = await ownerJson(host, cookie, `/api/projects/${encodeURIComponent(projectId)}/proposals`);
+  assert.ok(pending.proposals.some((item) => item.proposal?.id === proposal.id), "Core did not persist the selected rewrite proposal");
+  assert.equal(await readRemoteFile(fixture.remote, manuscriptPath), initialManuscript,
+    "Core proposal creation wrote canonical manuscript bytes before review");
+
+  await ownerJson(host, cookie, `/api/projects/${encodeURIComponent(projectId)}/approvals`, {
+    method: "POST", status: 204, body: { proposalId: proposal.id, operationIds: [operation.id] },
+  });
+  await ownerJson(host, cookie, `/api/projects/${encodeURIComponent(projectId)}/checkpoints`, {
+    method: "POST", status: 201, body: operation,
+  });
+  assert.equal(await readRemoteFile(fixture.remote, manuscriptPath), initialManuscript,
+    "Checkpointing the reviewed rewrite changed the remote before publication");
+  const publication = await ownerJson(host, cookie, `/api/projects/${encodeURIComponent(projectId)}/publish`, {
+    method: "POST", body: { batchId: `p11-${randomUUID().replaceAll("-", "")}` },
+  });
+  assert.equal(publication.state, "confirmed");
+  assert.ok(publication.acknowledged.some((item) => item.operationId === operation.id));
+  const publishedManuscript = await readRemoteFile(fixture.remote, manuscriptPath);
+  assert.ok(publishedManuscript.includes(candidate.text), "The author-approved Qwen candidate did not reach the published remote");
+
+  const usageBeforeReclone = await readUsage();
+  assert.equal(usageBeforeReclone.data.hasHostHistory, true);
+  assert.ok(usageBeforeReclone.data.events.some((event) => event.feature === "setting-qa" && event.state === "completed"));
+  assert.ok(usageBeforeReclone.data.events.some((event) => event.feature === "rewrite" && event.state === "completed"));
+  assert.ok(usageBeforeReclone.data.events.some((event) => event.feature === "rewrite" && event.state === "aborted"));
+  const retainedEventIds = usageBeforeReclone.data.events.map((event) => event.id);
+  for (const event of usageBeforeReclone.data.events) {
+    assert.equal(event.source, "host-owned-store");
+    assert.equal(Object.hasOwn(event, "prompt"), false);
+    assert.equal(JSON.stringify(event).includes("Uma enters the cafe"), false,
+      "Host usage history must not retain prompt or manuscript text");
+  }
+
+  await host.close();
+  host = undefined;
+  const recreatedDataDirectory = resolve(rootDir, "core-data-recreated");
+  await mkdir(recreatedDataDirectory, { recursive: true });
+  await writeFile(resolve(recreatedDataDirectory, "projects.json"), await readFile(resolve(dataDirectory, "projects.json"), "utf8"), "utf8");
+  const recreatedStore = new CoreStore({ dataDir: recreatedDataDirectory, allowLocalRemotes: true });
+  await recreatedStore.reconstructProject(projectId);
+  host = await startHost({
+    dataDirectory: recreatedDataDirectory,
+    cacheDirectory: resolve(rootDir, "module-cache-recreated"),
+    store: recreatedStore,
+    usageDirectory,
+  });
+  cookie = await login(host);
+  const recoveredUsage = await ownerAction(host, cookie, projectId, "assistant.usage.read", { limit: 200 });
+  assert.equal(recoveredUsage.data.hasHostHistory, true);
+  assert.ok(retainedEventIds.every((id) => recoveredUsage.data.events.some((event) => event.id === id)),
+    "Assistant history did not read the same host-owned events after Core repository reconstruction");
+  const recoveredScene = await ownerAction(host, cookie, projectId, "story.scene.context", { sceneId: "sc-1" });
+  assert.ok(recoveredScene.data.manuscriptBody.includes(candidate.text),
+    "A fresh CoreStore reconstruction did not load the approved rewrite from the published remote");
 });
