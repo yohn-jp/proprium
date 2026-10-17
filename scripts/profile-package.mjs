@@ -189,7 +189,7 @@ async function main() {
     }
 
     deployStarted = true;
-    run('pnpm', ['--filter', packageManifest.name, 'deploy', '--prod', '--frozen-lockfile', outputDirectory]);
+    run('pnpm', ['--filter', packageManifest.name, 'deploy', '--prod', ...(hostedComposition ? ['--offline'] : []), '--frozen-lockfile', outputDirectory]);
     await cp(path.join(root, 'profiles/launch.mjs'), path.join(outputDirectory, 'launch.mjs'));
     await cp(path.join(root, 'app/dist'), path.join(outputDirectory, 'app/dist'), { recursive: true });
     if (hostedComposition) {
