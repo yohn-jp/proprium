@@ -4,6 +4,8 @@ This ledger freezes source registrations at `edc033c2c9466274a334299dadfa426661d
 
 At closure, `verified` and `relocated` rows must point to row-local, passed composition evidence; focused tests alone are insufficient. `excluded` and `relocated` rows also require an explicit rationale and a reference to their fixed-plan row. A resolved failure finding retains its observed failure and needs a rationale plus a passed replacement proof.
 
+The standard ledger check permits pending inventory during migration; the final gate adds `--require-closed` to reject pending rows and unresolved acceptance findings.
+
 ## Router registrations
 
 IDs R01–R48 are the fixed IDs in `FULL-MIGRATION-PLAN.md`. The machine-readable `ledger.json` records each imported registration symbol, its source file, exact HTTP method/path, source line and inline-handler locator. The system health probe helper is expanded into its three concrete GET paths. `R33` retains the source demo endpoint only as an explicitly excluded production demo per the plan.

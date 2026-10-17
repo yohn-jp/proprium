@@ -8,10 +8,13 @@ const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 const ledgerPath = path.join(root, "docs/migration/ledger.json");
 const args = process.argv.slice(2);
 let sourceRoot;
+let requireClosed = false;
 for (let index = 0; index < args.length; index += 1) {
   if (args[index] === "--source-root" && args[index + 1]) {
     sourceRoot = path.resolve(args[index + 1]);
     index += 1;
+  } else if (args[index] === "--require-closed") {
+    requireClosed = true;
   } else {
     throw new Error(`Unknown or incomplete argument: ${args[index]}`);
   }
@@ -101,6 +104,7 @@ for (const row of rows) {
   check(Array.isArray(row.proofIds), `${row.id} proofIds must be an array`);
   if (row.migrationStatus === "pending") {
     check(row.proofIds?.length === 0, `${row.id} must keep proofIds empty while migrationStatus is pending`);
+    if (requireClosed) check(false, `${row.id} remains pending`);
   } else {
     check(row.proofIds?.length > 0, `${row.id} terminal migration status requires proofIds`);
     if (row.migrationStatus === "excluded" || row.migrationStatus === "relocated") {
@@ -173,6 +177,8 @@ for (const row of rows) {
           `${finding.id} resolved finding needs resolutionRationale`);
         check(Array.isArray(finding.resolutionProofIds) && finding.resolutionProofIds.length > 0,
           `${finding.id} resolved finding needs resolutionProofIds`);
+      } else if (requireClosed) {
+        check(false, `${finding.id} remains unresolved`);
       }
       await exists(root, finding.path, finding.id);
     }
