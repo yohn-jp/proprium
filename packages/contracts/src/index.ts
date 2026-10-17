@@ -237,7 +237,7 @@ export interface HttpContribution {
   path: string;
   methods: Array<"GET" | "HEAD" | "POST" | "DELETE">;
   access: "owner" | "public";
-  effect: "read" | "propose";
+  effect: "read" | "compute" | "propose";
   handle(request: Request, context: ModuleActionContext): Promise<Response>;
 }
 export interface ModuleDefinition {
