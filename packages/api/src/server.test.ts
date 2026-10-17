@@ -1791,13 +1791,28 @@ describe("Scriptorium HTTP boundary", () => {
     await mkdir(staticDir);
     tempDirs.push(root);
     const fixture = makeSnapshotStore();
-    let apiServer = await startCustomApi(fixture.store, staticDir, { usageDirectory });
+    let observeCalls = 0;
+    const identityLookups: string[] = [];
+    const apiStore = Object.assign(fixture.store, {
+      async registeredRepositoryIdentity(projectId: string) {
+        identityLookups.push(projectId);
+        if (projectId === "legacy-project") throw { status: 409, code: "repository_identity_unavailable", message: "Registered repository identity is unavailable" };
+        if (projectId === "unknown-project") throw { status: 404, code: "project_not_found", message: "Project not found" };
+        return SNAPSHOT.repository;
+      },
+      async observe() {
+        observeCalls += 1;
+        throw new Error("simulated unavailable remote observation");
+      },
+    });
+    let apiServer = await startCustomApi(apiStore, staticDir, { usageDirectory });
     t.after(() => apiServer.close().catch(() => undefined));
     let owner = await login(apiServer.base);
     const ownerJson = { Cookie: owner.cookie, Origin: apiServer.base, "Content-Type": "application/json" };
 
     const empty = await fetch(`${apiServer.base}/api/projects/project-1/recent-activity`, { headers: { Cookie: owner.cookie } });
     assert.deepEqual(await empty.json(), { items: [] });
+    assert.equal(observeCalls, 0, "cursor reads use the registered identity without triggering remote observation");
     const desktopFirst = await fetch(`${apiServer.base}/api/projects/project-1/recent-activity`, {
       method: "PUT", headers: ownerJson,
       body: JSON.stringify({ sceneId: "scene-one", sentenceOffset: 3, pageIndex: 7, deviceType: "desktop" }),
@@ -1830,15 +1845,26 @@ describe("Scriptorium HTTP boundary", () => {
       body: JSON.stringify({ sceneId: "scene-one", sentenceOffset: 0.5, deviceType: "desktop" }),
     });
     assert.equal(malformed.status, 400);
+    assert.equal(observeCalls, 0, "cursor writes do not depend on remote availability");
+    assert.deepEqual(identityLookups, ["project-1", "project-1", "project-1", "project-1", "project-1"]);
+    const legacyIdentity = await fetch(`${apiServer.base}/api/projects/legacy-project/recent-activity`, { headers: { Cookie: owner.cookie } });
+    assert.equal(legacyIdentity.status, 409);
+    assert.equal((await legacyIdentity.json() as { code: string }).code, "repository_identity_unavailable");
+    const unknownProject = await fetch(`${apiServer.base}/api/projects/unknown-project/recent-activity`, { headers: { Cookie: owner.cookie } });
+    assert.equal(unknownProject.status, 404);
+    assert.equal((await unknownProject.json() as { code: string }).code, "project_not_found");
+    assert.deepEqual(identityLookups.slice(-2), ["legacy-project", "unknown-project"]);
 
     await apiServer.close();
-    apiServer = await startCustomApi(fixture.store, staticDir, { usageDirectory });
+    apiServer = await startCustomApi(apiStore, staticDir, { usageDirectory });
     owner = await login(apiServer.base);
+    observeCalls = 0;
     const afterRestart = await fetch(`${apiServer.base}/api/projects/project-1/recent-activity`, { headers: { Cookie: owner.cookie } });
     const restored = await afterRestart.json() as { items: Array<{ sceneId: string; pageIndex: number | null; deviceType: string }> };
     assert.equal(restored.items.length, 2);
     assert.equal(restored.items.find((item) => item.deviceType === "desktop")?.sceneId, "scene-two");
     assert.equal(restored.items.find((item) => item.deviceType === "desktop")?.pageIndex, 7);
     assert.equal(restored.items.find((item) => item.deviceType === "mobile")?.sceneId, "scene-mobile");
+    assert.equal(observeCalls, 0, "persisted cursors remain available while remote observation is unavailable after restart");
   });
 });

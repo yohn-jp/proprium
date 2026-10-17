@@ -6,7 +6,7 @@ import { lstat, readFile, realpath } from "node:fs/promises";
 import { extname, resolve, sep } from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
 import Fastify, { type FastifyInstance, type FastifyRequest } from "fastify";
-import { CONTRACT_VERSION, MODEL_USAGE_CAPABILITY, snapshotKey, type ActionDescriptor, type ActionResult, type ChangeOperation, type ChangeProposal, type HttpContribution, type ModelUsageStore, type ModuleAction, type ModuleActionContext, type ModuleId, type ModuleStatus, type ProposalEvidence, type RecentActivityInput, type SnapshotId, type ValueSchema } from "@scriptorium/contracts";
+import { CONTRACT_VERSION, MODEL_USAGE_CAPABILITY, snapshotKey, type ActionDescriptor, type ActionResult, type ChangeOperation, type ChangeProposal, type HttpContribution, type ModelUsageStore, type ModuleAction, type ModuleActionContext, type ModuleId, type ModuleStatus, type ProposalEvidence, type RecentActivityInput, type RepositoryIdentity, type SnapshotId, type ValueSchema } from "@scriptorium/contracts";
 import type { CoreStore, CreateHierarchyInput, HierarchyTarget, Project, ReorderHierarchyInput } from "@scriptorium/core";
 import { ModuleRuntime, type ActionHostContext, type DomainJobActionExecutor, type ModuleLoader, type ModuleRuntimeOptions, type WorkerJobLifecycleSnapshot } from "@scriptorium/module-runtime";
 import { HistoricalModelUsageStore } from "./historical-store.js";
@@ -338,6 +338,7 @@ type ProjectSyncEvent = {
 };
 
 type CoreStoreApi = CoreStore & {
+  registeredRepositoryIdentity: (projectId: string) => Promise<RepositoryIdentity>;
   detachProject?: (projectId: string) => Promise<void>;
   reconstructProject?: (projectId: string) => Promise<Project>;
   listManuscriptSnapshots?: (projectId: string, manuscriptId: string, sceneId?: string, view?: "remote" | "checkpoint", pinned?: SnapshotId | string) => Promise<{ snapshot: SnapshotId; snapshots: unknown[] }>;
@@ -1160,14 +1161,14 @@ export function createServer(options: ApiServerOptions): Server {
       const suffix = projectRoot[2] ?? "";
       if (suffix === "recent-activity" && (method === "GET" || method === "PUT")) {
         if (!isCookie) { fail(response, 403, "AUTHOR_SESSION_REQUIRED", "Recent activity requires an owner session"); return; }
-        const observation = await options.store.observe(projectId);
+        const repository = await coreStore.registeredRepositoryIdentity(projectId);
         try {
           if (method === "GET") {
-            sendJson(response, 200, { items: await recentActivity.list("owner", observation.snapshot.repository) });
+            sendJson(response, 200, { items: await recentActivity.list("owner", repository) });
             return;
           }
           const input = parseRecentActivityInput(await readJson(request, parsedBody));
-          sendJson(response, 200, { items: await recentActivity.upsert("owner", observation.snapshot.repository, input) });
+          sendJson(response, 200, { items: await recentActivity.upsert("owner", repository, input) });
           return;
         } catch (error) {
           if (isHttpFailure(error)) throw error;
