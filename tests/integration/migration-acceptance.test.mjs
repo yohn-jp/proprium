@@ -7,7 +7,7 @@ import path from "node:path";
 import { DatabaseSync } from "node:sqlite";
 import { test } from "node:test";
 
-import { createServer as createApiServer, importLegacyJobHistory } from "@scriptorium/api";
+import { createServer as createApiServer, importLegacyJobHistory, importLegacyRecentActivity } from "@scriptorium/api";
 import { CoreStore } from "../../packages/core/dist/index.js";
 import {
   createMigrationProducerRegistry,
@@ -313,9 +313,54 @@ async function addLegacyFiles(sourceRoot, workspaceRoot) {
   };
   const jobsStateBytes = Buffer.from(`${JSON.stringify(jobsState)}\n`, "utf8");
   await writeFile(workspaceRoot, "app-state/jobs-state.json", jobsStateBytes);
+  const recentActivity = {
+    byKey: {
+      "legacy-user:legacy-project-id": [
+        {
+          sceneId: "sc-cursor-desktop",
+          sentenceOffset: 29,
+          pageIndex: 4,
+          deviceType: "desktop",
+          updatedAt: "2025-04-03T10:00:00.000Z",
+          extensionCursorField: "DO_NOT_PUBLISH_CURSOR_EXTENSION",
+        },
+        {
+          sceneId: "sc-cursor-mobile",
+          sentenceOffset: 11,
+          pageIndex: 2,
+          deviceType: "mobile",
+          updatedAt: "2025-04-03T11:00:00.000Z",
+        },
+      ],
+      "unmapped-user:legacy-project-id": [
+        {
+          sceneId: "sc-cursor-unmapped-user",
+          sentenceOffset: 7,
+          pageIndex: 1,
+          deviceType: "mobile",
+          updatedAt: "2025-04-03T12:00:00.000Z",
+          extensionCursorField: "DO_NOT_PUBLISH_CURSOR_EXTENSION",
+        },
+      ],
+      "legacy-user:foreign-project-id": [
+        {
+          sceneId: "sc-cursor-unmapped-project",
+          sentenceOffset: 3,
+          pageIndex: 0,
+          deviceType: "desktop",
+          updatedAt: "2025-04-03T13:00:00.000Z",
+        },
+      ],
+    },
+    extensionRecentActivityField: "DO_NOT_PUBLISH_RAW_CURSOR_EXTENSION",
+  };
+  const recentActivityBytes = Buffer.from(`${JSON.stringify(recentActivity)}\n`, "utf8");
+  await writeFile(workspaceRoot, "app-state/recent-activity.json", recentActivityBytes);
   await fs.chmod(path.join(workspaceRoot, "app-state"), 0o700);
   await fs.chmod(path.join(workspaceRoot, "app-state/jobs-state.json"), 0o600);
-  return jobsStateBytes;
+  await fs.chmod(path.join(workspaceRoot, "app-state/recent-activity.json"), 0o600);
+  await fs.chmod(workspaceRoot, 0o700);
+  return { jobsStateBytes, recentActivityBytes };
 }
 
 function createComposedRegistry(observedModuleSets) {
@@ -361,6 +406,27 @@ async function inspect(core, projectId, sourceRoot, workspaceRoot, registry, rea
   });
 }
 
+async function withOwnerApi(core, apiToken, staticDir, usageDirectory, callback) {
+  const api = createApiServer({ store: core, authToken: apiToken, staticDir, usageDirectory });
+  await new Promise((resolveListen) => api.listen(0, "127.0.0.1", resolveListen));
+  try {
+    const address = api.address();
+    assert.ok(address && typeof address !== "string");
+    const base = `http://127.0.0.1:${address.port}`;
+    const login = await fetch(`${base}/api/login`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json", Origin: base },
+      body: JSON.stringify({ token: apiToken }),
+    });
+    assert.equal(login.status, 200);
+    const cookie = login.headers.get("set-cookie")?.split(";", 1)[0];
+    assert.ok(cookie);
+    return await callback({ api, base, headers: { Cookie: cookie } });
+  } finally {
+    await new Promise((resolveClose, rejectClose) => api.close((error) => error ? rejectClose(error) : resolveClose()));
+  }
+}
+
 async function approveCheckpointPublish(core, projectId, inspection, batchId) {
   const writes = writesOf(inspection);
   assert.equal(new Set(writes.map(({ path: target }) => target)).size, writes.length,
@@ -399,7 +465,7 @@ test("composed legacy import preserves disabled data and reactivates after a ful
     const { remote } = await makeLegacyRepository(temporary);
     await fs.mkdir(workspaceRoot, { recursive: true });
     databases.push(...await addLegacyDatabases(sourceRoot, workspaceRoot));
-    const jobsStateBytes = await addLegacyFiles(sourceRoot, workspaceRoot);
+    const { jobsStateBytes, recentActivityBytes } = await addLegacyFiles(sourceRoot, workspaceRoot);
 
     const sourceBefore = await treeState(sourceRoot);
     const workspaceBefore = await treeState(workspaceRoot);
@@ -471,6 +537,12 @@ test("composed legacy import preserves disabled data and reactivates after a ful
     assert.equal(legacyJobsEntry?.target, `/history/jobs/legacy/${hash(jobsStateBytes)}.json`);
     assert.match(legacyJobsEntry?.detail ?? "", /API-owned legacy job import hook/u,
       "the generic Core plan must distinguish private host history from data it actually preserves");
+    const legacyRecentActivityEntry = disabled.entries.find((entry) => entry.source === "app-state/recent-activity.json");
+    assert.equal(legacyRecentActivityEntry?.category, "authoritative");
+    assert.equal(legacyRecentActivityEntry?.disposition, "relocated");
+    assert.equal(legacyRecentActivityEntry?.target, `/history/recent-activity/legacy/${hash(recentActivityBytes)}.json`);
+    assert.match(legacyRecentActivityEntry?.detail ?? "", /API-owned recent-activity import hook/u,
+      "the Core review report must identify the explicit private archive import required before source removal");
     assert.ok(disabled.entries.some((entry) => entry.source === ".arcadia/index.sqlite#state_proposals" && entry.category === "provisional" && entry.disposition === "preserved-unreadable"));
     assert.ok(disabled.entries.some((entry) => entry.source === ".arcadia/llm-cache/summary.json" && entry.category === "derived" && entry.disposition === "rebuild"));
     assert.ok(disabled.entries.some((entry) => entry.source === ".npmrc" && entry.category === "secret" && entry.disposition === "excluded"));
@@ -480,6 +552,11 @@ test("composed legacy import preserves disabled data and reactivates after a ful
       "disabled modules must not receive canonical state writes");
     assert.ok(!JSON.stringify(disabled).includes("DO_NOT_EXPORT_"), "secret and derived sentinel bytes must not enter the import plan");
     assert.ok(!JSON.stringify(disabled).includes("DO_NOT_PUBLISH_"), "derived index rows must never enter the import plan");
+    assert.ok(!JSON.stringify(disabled).includes("sc-cursor-"), "private reader cursors must stay outside repository import operations");
+    assert.ok(!JSON.stringify(disabled).includes("DO_NOT_PUBLISH_CURSOR_EXTENSION"),
+      "unknown host cursor fields must stay outside repository import operations");
+    assert.ok(!JSON.stringify(disabled).includes("DO_NOT_PUBLISH_RAW_CURSOR_EXTENSION"),
+      "unknown host source fields must stay outside repository import operations");
 
     const projectRows = disabledByPath.get("meta/scriptorium/modules/story/legacy/sqlite/project-arcadia/state_proposals.jsonl").content;
     const workspaceRows = disabledByPath.get("meta/scriptorium/modules/story/legacy/sqlite/workspace-index/state_proposals.jsonl").content;
@@ -508,6 +585,7 @@ test("composed legacy import preserves disabled data and reactivates after a ful
       "the manual scene override must survive the first confirmed publication byte-for-byte");
 
     const usageDirectory = path.join(temporary, "host-history");
+    const apiToken = "synthetic-p12-owner-token-with-32-bytes";
     const jobImport = await importLegacyJobHistory({
       workspaceDataRoot: workspaceRoot,
       usageDirectory,
@@ -539,16 +617,52 @@ test("composed legacy import preserves disabled data and reactivates after a ful
     });
     assert.equal(repeatedJobImport.sourceHash, jobImport.sourceHash, "job archive import identity must be deterministic");
     assert.deepEqual(await fs.readFile(privateJobArchive), jobsStateBytes, "repeated job import must not overwrite the immutable archive");
-    assert.deepEqual(await treeState(workspaceRoot), workspaceBefore, "the private job importer must leave the source workspace untouched");
+
+    const recentActivityImport = await importLegacyRecentActivity({
+      workspaceDataRoot: workspaceRoot,
+      usageDirectory,
+      legacyRepositoryMappings: { "legacy-project-id": identity },
+      legacyUserMappings: { "legacy-user": "owner" },
+    });
+    assert.equal(recentActivityImport.sourceHash, hash(recentActivityBytes));
+    assert.equal(recentActivityImport.bytes, recentActivityBytes.byteLength);
+    assert.equal(recentActivityImport.archived, true);
+    assert.equal(recentActivityImport.adoptedItems, 2, "both explicitly mapped device cursors should enter owner history");
+    assert.equal(recentActivityImport.preservedNewerItems, 0);
+    assert.ok(recentActivityImport.mappingRequired.some((row) => row.userId === "unmapped-user" && row.projectKey === "legacy-project-id" && row.itemCount === 1));
+    assert.ok(recentActivityImport.mappingRequired.some((row) => row.userId === "legacy-user" && row.projectKey === "foreign-project-id" && row.itemCount === 1));
+    assert.ok(!JSON.stringify(recentActivityImport).includes("sc-cursor-"), "the migration report must not expose cursor rows");
+    assert.ok(!JSON.stringify(recentActivityImport).includes("DO_NOT_PUBLISH_CURSOR_EXTENSION"),
+      "unknown legacy fields must stay in the private raw archive, not the report");
+    assert.ok(!JSON.stringify(recentActivityImport).includes("DO_NOT_PUBLISH_RAW_CURSOR_EXTENSION"));
+    const privateRecentActivityArchive = path.join(usageDirectory, "recent-activity", "legacy", `${recentActivityImport.sourceHash}.json`);
+    const recentActivityArchiveBytes = await fs.readFile(privateRecentActivityArchive);
+    assert.deepEqual(recentActivityArchiveBytes, recentActivityBytes,
+      "the private host archive must preserve the exact source bytes including unknown fields and unmapped rows");
+    assert.ok(recentActivityArchiveBytes.includes("DO_NOT_PUBLISH_CURSOR_EXTENSION"));
+    assert.ok(recentActivityArchiveBytes.includes("DO_NOT_PUBLISH_RAW_CURSOR_EXTENSION"));
+    assert.equal((await fs.stat(privateRecentActivityArchive)).mode & 0o077, 0, "the cursor archive must be private host storage");
+    for (const directory of [usageDirectory, path.join(usageDirectory, "recent-activity"), path.join(usageDirectory, "recent-activity", "legacy")]) {
+      assert.equal((await fs.stat(directory)).mode & 0o077, 0, `${directory} must be private host storage`);
+    }
+    const repeatedRecentActivityImport = await importLegacyRecentActivity({
+      workspaceDataRoot: workspaceRoot,
+      usageDirectory,
+      legacyRepositoryMappings: { "legacy-project-id": identity },
+      legacyUserMappings: { "legacy-user": "owner" },
+    });
+    assert.equal(repeatedRecentActivityImport.sourceHash, recentActivityImport.sourceHash,
+      "recent activity archive identity must be deterministic");
+    assert.deepEqual(await fs.readFile(privateRecentActivityArchive), recentActivityBytes,
+      "repeated recent activity import must not overwrite the immutable source archive");
+    assert.deepEqual(await treeState(workspaceRoot), workspaceBefore, "private host history imports must leave the source workspace untouched");
 
     for (const database of databases) database.close();
     databases.length = 0;
 
     await fs.rm(targetDataDir, { recursive: true, force: true });
     await fs.rm(sourceRoot, { recursive: true, force: true });
-    await fs.rm(workspaceRoot, { recursive: true, force: true });
     await fs.mkdir(sourceRoot, { recursive: true });
-    await fs.mkdir(workspaceRoot, { recursive: true });
 
     const replacement = new CoreStore({ dataDir: targetDataDir, allowLocalRemotes: true });
     const restoredProject = await replacement.registerProject({ url: remote });
@@ -557,6 +671,69 @@ test("composed legacy import preserves disabled data and reactivates after a ful
     assert.equal(restoredIdentity.repositoryId, identity.repositoryId);
     assert.equal((await restoredReader.read(SPEAKER_OVERRIDE_SCENE_PATH))?.content, SPEAKER_OVERRIDE_SCENE,
       "the manual scene override must survive full Core data-root loss and a fresh clone");
+
+    await withOwnerApi(replacement, apiToken, temporary, usageDirectory, async ({ base, headers }) => {
+      const activityPath = `${base}/api/projects/${restoredProject.id}/recent-activity`;
+      assert.equal((await fetch(activityPath)).status, 403, "recent activity must remain owner-cookie private");
+      const response = await fetch(activityPath, { headers });
+      assert.equal(response.status, 200);
+      const activity = await response.json();
+      assert.equal(activity.items.length, 2, "repeated import must not duplicate either device cursor");
+      const byDevice = Object.fromEntries(activity.items.map((item) => [item.deviceType, item]));
+      assert.deepEqual(Object.keys(byDevice).sort(), ["desktop", "mobile"],
+        "the remapped owner/project sees only the two explicitly mapped device cursors");
+      assert.deepEqual(
+        { sceneId: byDevice.desktop.sceneId, sentenceOffset: byDevice.desktop.sentenceOffset, pageIndex: byDevice.desktop.pageIndex },
+        { sceneId: "sc-cursor-desktop", sentenceOffset: 29, pageIndex: 4 },
+      );
+      assert.deepEqual(
+        { sceneId: byDevice.mobile.sceneId, sentenceOffset: byDevice.mobile.sentenceOffset, pageIndex: byDevice.mobile.pageIndex },
+        { sceneId: "sc-cursor-mobile", sentenceOffset: 11, pageIndex: 2 },
+      );
+      assert.ok(!JSON.stringify(activity).includes("unmapped-user"));
+      assert.ok(!JSON.stringify(activity).includes("foreign-project-id"));
+      assert.ok(!JSON.stringify(activity).includes("DO_NOT_PUBLISH_CURSOR_EXTENSION"),
+        "the owner API must expose only validated cursor fields, not the raw legacy archive");
+      assert.ok(!JSON.stringify(activity).includes("DO_NOT_PUBLISH_RAW_CURSOR_EXTENSION"));
+
+      const liveUpdate = await fetch(activityPath, {
+        method: "PUT",
+        headers: { ...headers, "Content-Type": "application/json", Origin: base },
+        body: JSON.stringify({ sceneId: "sc-cursor-desktop-live", sentenceOffset: 91, pageIndex: 8, deviceType: "desktop" }),
+      });
+      assert.equal(liveUpdate.status, 200);
+      const liveBeforeReimport = await fetch(activityPath, { headers });
+      const liveActivity = await liveBeforeReimport.json();
+      const liveDesktop = liveActivity.items.find(({ deviceType }) => deviceType === "desktop");
+      assert.equal(liveDesktop?.sceneId, "sc-cursor-desktop-live");
+
+      const afterLiveImport = await importLegacyRecentActivity({
+        workspaceDataRoot: workspaceRoot,
+        usageDirectory,
+        legacyRepositoryMappings: { "legacy-project-id": restoredIdentity },
+        legacyUserMappings: { "legacy-user": "owner" },
+      });
+      assert.ok(afterLiveImport.preservedNewerItems >= 1,
+        "re-import must report and preserve the newer live desktop cursor");
+      assert.deepEqual(await fs.readFile(privateRecentActivityArchive), recentActivityBytes,
+        "re-import after a newer live cursor must leave the raw archive immutable");
+      assert.deepEqual(await treeState(workspaceRoot), workspaceBefore,
+        "recent-activity import must never rewrite the source workspace file");
+      const afterReimportResponse = await fetch(activityPath, { headers });
+      assert.equal(afterReimportResponse.status, 200);
+      const afterReimport = await afterReimportResponse.json();
+      assert.equal(afterReimport.items.length, 2, "re-import after a newer live cursor must remain idempotent");
+      const desktopAfterReimport = afterReimport.items.find(({ deviceType }) => deviceType === "desktop");
+      const mobileAfterReimport = afterReimport.items.find(({ deviceType }) => deviceType === "mobile");
+      assert.deepEqual(
+        { sceneId: desktopAfterReimport?.sceneId, sentenceOffset: desktopAfterReimport?.sentenceOffset, pageIndex: desktopAfterReimport?.pageIndex },
+        { sceneId: "sc-cursor-desktop-live", sentenceOffset: 91, pageIndex: 8 },
+      );
+      assert.equal(mobileAfterReimport?.sceneId, "sc-cursor-mobile");
+    });
+
+    await fs.rm(workspaceRoot, { recursive: true, force: true });
+    await fs.mkdir(workspaceRoot, { recursive: true });
 
     const enabled = await inspect(replacement, restoredProject.id, sourceRoot, workspaceRoot, registry, restoredReader, ALL_MODULES, restoredIdentity);
     assert.deepEqual(observedModuleSets.at(-1), ALL_MODULES.slice().sort(), "the second pass enables all eight installed modules");
@@ -666,6 +843,8 @@ test("composed legacy import preserves disabled data and reactivates after a ful
     assert.ok(!allPaths.includes("notes/author-note.md"));
     assert.ok(!allPaths.some((file) => /scene_state_events|reader_knowledge_events|private_tokens/u.test(file)));
     assert.ok(!allPaths.includes(".npmrc") && !allPaths.includes(".ssh/id_ed25519"));
+    assert.ok(!allPaths.some((file) => /recent-activity|sc-cursor/u.test(file)),
+      "private cross-device cursor state must never be published to repository Git");
 
     const finalState = (await finalReader.read("meta/scriptorium/modules/story/state-proposals.jsonl")).content;
     assert.equal(finalState, stateProposals, "canonical workflow IDs and rows survive a second complete Core data-root replacement");
@@ -679,7 +858,6 @@ test("composed legacy import preserves disabled data and reactivates after a ful
     const afterRecovery = await inspect(finalCore, finalProject.id, sourceRoot, workspaceRoot, registry, finalReader, ALL_MODULES, finalReader.snapshot.repository);
     assert.deepEqual(afterRecovery.operations, [], "the enabled semantic migration is idempotent after clone recovery");
 
-    const apiToken = "synthetic-p12-owner-token-with-32-bytes";
     const api = createApiServer({ store: finalCore, authToken: apiToken, staticDir: temporary, usageDirectory });
     await new Promise((resolveListen) => api.listen(0, "127.0.0.1", resolveListen));
     try {
@@ -711,6 +889,29 @@ test("composed legacy import preserves disabled data and reactivates after a ful
       assert.equal(inbox.items[0].body, "Mapped result details retained.");
       assert.ok(!JSON.stringify({ jobs, inbox }).includes("Unmapped details stay private."));
       assert.deepEqual(await fs.readFile(privateJobArchive), jobsStateBytes, "owner-readable adoption must not alter the exact private source archive");
+
+      const activityPath = `${base}/api/projects/${finalProject.id}/recent-activity`;
+      assert.equal((await fetch(activityPath)).status, 403, "recent activity must remain owner-cookie private after the second clone");
+      const activityResponse = await fetch(activityPath, { headers });
+      assert.equal(activityResponse.status, 200);
+      const activity = await activityResponse.json();
+      const desktop = activity.items.find(({ deviceType }) => deviceType === "desktop");
+      const mobile = activity.items.find(({ deviceType }) => deviceType === "mobile");
+      assert.deepEqual(
+        { sceneId: desktop?.sceneId, sentenceOffset: desktop?.sentenceOffset, pageIndex: desktop?.pageIndex },
+        { sceneId: "sc-cursor-desktop-live", sentenceOffset: 91, pageIndex: 8 },
+        "the host-private live cursor must survive the second full Core data-root replacement",
+      );
+      assert.deepEqual(
+        { sceneId: mobile?.sceneId, sentenceOffset: mobile?.sentenceOffset, pageIndex: mobile?.pageIndex },
+        { sceneId: "sc-cursor-mobile", sentenceOffset: 11, pageIndex: 2 },
+      );
+      assert.ok(!JSON.stringify(activity).includes("unmapped-user"));
+      assert.ok(!JSON.stringify(activity).includes("foreign-project-id"));
+      assert.ok(!JSON.stringify(activity).includes("DO_NOT_PUBLISH_CURSOR_EXTENSION"));
+      assert.ok(!JSON.stringify(activity).includes("DO_NOT_PUBLISH_RAW_CURSOR_EXTENSION"));
+      assert.deepEqual(await fs.readFile(privateRecentActivityArchive), recentActivityBytes,
+        "the exact private source archive must survive both Core data-root replacements unchanged");
     } finally {
       await new Promise((resolveClose, rejectClose) => api.close((error) => error ? rejectClose(error) : resolveClose()));
     }
