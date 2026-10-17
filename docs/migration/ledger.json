@@ -8034,46 +8034,149 @@
       "targetImplementationSlices": [
         {
           "status": "implementation-present; integration-acceptance-pending",
+          "owner": "P02",
+          "targetPaths": [
+            "app/src/App.tsx",
+            "app/src/api.ts",
+            "app/src/resume/continueCandidates.ts",
+            "app/src/resume/useRecentActivityResume.ts",
+            "app/src/editor/ManuscriptInput.tsx",
+            "app/src/editor/SceneEditor.tsx",
+            "app/src/continueCandidates.test.ts",
+            "tests/e2e/recent-activity.acceptance.spec.ts"
+          ],
+          "publicActions": [
+            {
+              "action": "api.recentActivity / api.putRecentActivity",
+              "implementation": "Owner-cookie GET/PUT /api/projects/:projectId/recent-activity; App binds cursor reads/writes to the active project, stable repository identity, and owner scope."
+            },
+            {
+              "action": "ContinuePanel / SceneEditor resume actions",
+              "implementation": "The browser merges device cursors with the current browser cursor, shows a cross-device handoff hint, and applies the selected writing sentence or reading page position to the editor."
+            }
+          ],
+          "uiSurfaces": [
+            "app/src/App.tsx",
+            "app/src/editor/ManuscriptInput.tsx",
+            "app/src/editor/SceneEditor.tsx"
+          ],
+          "dataMappings": [
+            {
+              "source": "Source owner/project/device writing sentence offset and reading page cursor; source stores it under app-state/recent-activity.json.",
+              "target": "P02 sends only sceneId, sentenceOffset, pageIndex, and deviceType through the API client; browser-local writing and reading fallback keys are partitioned by owner, repository, and scene as applicable.",
+              "persistence": "The remote cursor is owner-cookie state in the API host-history store, separate from the IndexedDB manuscript journal. The browser sends no manuscript body or prose for this feature."
+            },
+            {
+              "source": "MobileHomeView continue-reading candidates and source resume callers.",
+              "target": "App ContinuePanel merges local and server candidates, labels the other device and last activity, and passes the chosen scene/page/sentence position to SceneEditor.",
+              "persistence": "An owner/project scope change clears the current remote candidate set; local browser fallback remains isolated by owner and repository."
+            }
+          ],
+          "proofRefs": [
+            {
+              "id": "P02-R43-resume-handoff-browser",
+              "path": "tests/e2e/recent-activity.acceptance.spec.ts",
+              "testName": "recent activity hands off only numeric positions across devices, projects, and API restart",
+              "scope": "Focused real-browser acceptance covers separate desktop/mobile/reader contexts, cross-device writing and reading handoff, project isolation, owner privacy, API restart durability, cursor-only payloads, and no manuscript mutation requests. This is a scoped R43 browser proof, not P12 migration or campaign acceptance."
+            },
+            {
+              "id": "P02-R43-handoff-hint",
+              "path": "app/src/continueCandidates.test.ts",
+              "testName": "handoff hints identify the other device without displaying prose",
+              "scope": "Focused resume helper test checks device and time labeling while keeping the handoff display free of manuscript prose."
+            },
+            {
+              "id": "P02-R43-candidate-isolation",
+              "path": "app/src/continueCandidates.test.ts",
+              "testName": "continue candidates keep distinct device scenes and prefer the local cursor for the same scene",
+              "scope": "Focused resume helper test checks per-device candidates and local-cursor precedence for the current browser."
+            }
+          ],
+          "limitations": [
+            "The browser implementation preserves a browser-local fallback and keeps that state separate from the manuscript recovery journal; P12 remains responsible for proving legacy cursor import through source deletion and Core data-root replacement/reclone.",
+            "The source route used a source user/project key; the target binds the one configured API owner to a Core-registered stable repository identity. Hosted multi-account administration remains outside Core."
+          ]
+        },
+        {
+          "status": "implementation-present; integration-acceptance-pending",
           "owner": "P08",
           "targetPaths": [
             "packages/contracts/src/index.ts",
             "packages/api/src/server.ts",
-            "packages/api/src/server.test.ts"
+            "packages/api/src/server.test.ts",
+            "packages/api/src/recent-activity-store.ts",
+            "packages/api/src/recent-activity-store.test.ts",
+            "packages/core/src/index.ts",
+            "packages/core/src/index.test.ts"
           ],
           "publicActions": [
             {
-              "action": "GET /api/projects/events",
-              "implementation": "Adjacent target behavior only: stream request-time project manual-sync outcomes. It does not implement either source recent-activity endpoint."
+              "action": "GET /api/projects/:projectId/recent-activity",
+              "implementation": "Requires an owner cookie, resolves the already registered Core repository identity without a remote observation, and returns that owner/repository scope’s desktop/mobile cursor rows."
             },
             {
-              "action": "RecentActivityInput / RecentActivityItem / RecentActivityResponse DTO types",
-              "implementation": "Partial contract foundation only: defines desktop/mobile cursors, optional pageIndex semantics and response shape. It adds no route, durable store, owner authorization, caller, or browser surface."
+              "action": "PUT /api/projects/:projectId/recent-activity",
+              "implementation": "Requires an owner cookie and a validated cursor DTO; upserts the matching device row and preserves its prior pageIndex when pageIndex is omitted."
+            },
+            {
+              "action": "importLegacyRecentActivity(options) (host API package export; no HTTP import route)",
+              "implementation": "Archives exact canonical and root-alias source bytes in private host history, adopts only rows with explicit legacy user-to-owner and project-to-verified-RepositoryIdentity mappings, reports unmapped rows, and does not modify the source workspace."
             }
           ],
           "uiSurfaces": [],
           "dataMappings": [
             {
-              "source": "GET/PUT /api/me/recent-activity owner/project/device cursor projection.",
-              "target": "No current target recent-activity API or durable store. GET /api/projects/events is a separate request-time manual-sync event stream.",
-              "persistence": "Source atomically stores owner/project/device cursor rows in app-state/recent-activity.json. Target manual-sync events are in-memory and carry no reading/writing cursor; no source-data migration is claimed."
+              "source": "GET/PUT /api/me/recent-activity and <dataDir>/app-state/recent-activity.json, keyed by source user/project with one row per device.",
+              "target": "GET/PUT /api/projects/:projectId/recent-activity and <usageDirectory>/recent-activity/recent-activity-state.json, keyed by the configured API owner and Core-registered RepositoryIdentity.",
+              "persistence": "Host-owned private history is outside the disposable Core data root; the default usage directory is SCRIPTORIUM_USAGE_DIR or <SCRIPTORIUM_DATA_DIR>/host-history. The API rejects bearer access for this owner cursor state."
             },
             {
-              "source": "GET/PUT /api/me/recent-activity owner/project/device cursor projection.",
-              "target": "packages/contracts DTO types only; no matching API route, persistent owner state, or browser caller/UI exists.",
-              "persistence": "DTO declarations do not persist cursor values. The neighboring manual-sync event stream remains request-time telemetry and is not a data mapping."
+              "source": "Canonical app-state/recent-activity.json and legacy root alias recent-activity.json.",
+              "target": "API helper importLegacyRecentActivity archives exact bytes under <usageDirectory>/recent-activity/legacy/<sha256>.json and adopts only explicitly mapped, validated cursor fields into the host store.",
+              "persistence": "The importer requires source user and project mappings, retains unmapped bytes privately, is idempotent by source hash, and does not expose an import HTTP endpoint. The updated P12 fixture covers data-root replacement/reclone but its current frozen-tree execution remains a separate acceptance gate."
             }
           ],
           "proofRefs": [
             {
-              "id": "P08-R43-sync-events",
+              "id": "P08-R43-owner-api-restart",
               "path": "packages/api/src/server.test.ts",
-              "testName": "streams owner-scoped events only for actual manual sync outcomes and closes streams on shutdown",
-              "scope": "Focused test checks manual sync event stream behavior only."
+              "testName": "stores project recent activity for cookie owners across API restarts and rejects bearer or cross-origin writes",
+              "scope": "Fresh @scriptorium/api suite passed 27/27 on candidate 216b8dc9579ca0fb3cd7d8ce84b870efb1538c24. The HTTP test checks owner-cookie GET/PUT, validation, bearer and cross-origin denial, registered-identity lookup without remote observation, unavailable/unknown project handling, and persistence after API restart. The API/Core/contracts production and test files referenced here are unchanged through frozen tree f3ef4d34b5e603885ec2cbf204446b6becef3071."
+            },
+            {
+              "id": "P08-R43-private-store-scope",
+              "path": "packages/api/src/recent-activity-store.test.ts",
+              "testName": "keeps per-device cursors private, owner/repository scoped, and durable across store instances",
+              "scope": "Included in the fresh API 27/27 run on candidate 216b8dc9579ca0fb3cd7d8ce84b870efb1538c24; verifies desktop/mobile separation, owner and repository partitioning, restart durability, and private host directory/file modes."
+            },
+            {
+              "id": "P08-R43-private-import-mappings",
+              "path": "packages/api/src/recent-activity-store.test.ts",
+              "testName": "archives exact canonical bytes and adopts only explicitly mapped rows without regressing live cursors",
+              "scope": "Included in the fresh API 27/27 run on candidate 216b8dc9579ca0fb3cd7d8ce84b870efb1538c24; checks exact private archive bytes, explicit owner/repository mapping, unmapped row reporting, source immutability, idempotent import, and protection of newer live cursors."
+            },
+            {
+              "id": "P08-R43-private-import-alias",
+              "path": "packages/api/src/recent-activity-store.test.ts",
+              "testName": "uses the root alias when canonical is absent and imports both archived sources by their cursor timestamps",
+              "scope": "Included in the fresh API 27/27 run on candidate 216b8dc9579ca0fb3cd7d8ce84b870efb1538c24; checks the legacy alias, canonical-plus-alias exact archives, timestamp ordering, and retention of the newest per-device cursor."
+            },
+            {
+              "id": "P08-R43-private-import-conflict",
+              "path": "packages/api/src/recent-activity-store.test.ts",
+              "testName": "archives equal-time conflicting aliases and blocks adoption",
+              "scope": "Included in the fresh API 27/27 run on candidate 216b8dc9579ca0fb3cd7d8ce84b870efb1538c24; conflicting same-time source rows are archived exactly and are not adopted."
+            },
+            {
+              "id": "P08-R43-registered-identity",
+              "path": "packages/core/src/index.test.ts",
+              "testName": "registered repository identity is a defensive registry-only read after the checkout and remote disappear",
+              "scope": "Fresh Core test passed 1/1 on candidate 216b8dc9579ca0fb3cd7d8ce84b870efb1538c24; verifies API identity binding uses the defensive registered value without requiring the checkout or contacting the remote. This test does not prove P12 cursor import retention."
             }
           ],
           "limitations": [
-            "Confirmed fixed-scope source behavior gap: durable per-device writing/reading cursors and the cross-device continue-reading/handoff path are not implemented in target. Assigned producers are P08 (owner store/API), P02 (browser callers and UI), and P04/P12 (legacy data mapping and retention proof).",
-            "The implemented GET /api/projects/events path is unrelated manual-sync telemetry and must not be treated as recent-activity coverage."
+            "The endpoint and store are scoped to the configured single API owner and registered stable repository identity. GET /api/projects/events is separate manual-sync telemetry and is not recent-activity data.",
+            "Legacy import is a host API helper, not an HTTP endpoint; P12 must exercise its explicit mapping and retention contract through the complete disabled-data/review/checkpoint/root-replacement/reclone flow before R43 source migration is accepted."
           ]
         },
         {
@@ -8081,15 +8184,17 @@
           "owner": "P04",
           "targetPaths": [
             "packages/migration/src/producers/workspace.ts",
-            "packages/migration/src/migration.test.ts"
+            "packages/migration/src/migration.test.ts",
+            "packages/api/src/recent-activity-store.ts",
+            "packages/api/src/recent-activity-store.test.ts"
           ],
           "publicActions": [],
           "uiSurfaces": [],
           "dataMappings": [
             {
               "source": "app-state/recent-activity.json and the legacy recent-activity.json alias.",
-              "target": "Inspection output identifies /history/recent-activity/legacy/<sha256-of-exact-bytes>.json as the private archive destination.",
-              "persistence": "The generic inspector emits only the content-addressed destination and authoritative/relocated disposition. It does not write/copy the source bytes or map owner/repository keys into target API state."
+              "target": "The generic workspace inspector classifies the files as authoritative/relocated and emits a content-addressed private archive destination; the API-owned importer materializes the exact-byte archive and adopts only explicitly mapped rows.",
+              "persistence": "The generic Core importer emits no recent-activity Git/Core writes. API import requires explicit mappings and keeps archive/state in private host history; P12 composed data-root loss/reclone acceptance remains pending."
             }
           ],
           "proofRefs": [
@@ -8097,19 +8202,20 @@
               "id": "P04-R43-recent-activity-classification",
               "path": "packages/migration/src/migration.test.ts",
               "testName": "legacy inspection preserves scoped data, both SQLite stores, and pending Git work without source writes",
-              "scope": "Fresh `pnpm --filter @scriptorium/migration test` passed 1/1 on leaf candidate 11cbaeb33826c1ae0ee2276bccafc723fad0e7a7, which includes current main 271d7b28. Fixture assertions cover canonical and alias recent-activity files: inspection reports authoritative/relocated disposition and a SHA-256 private-history target, excludes cursor sentinels from inspection output, emits no canonical Core write, and leaves the alias source tree unchanged with no Core write. The test does not prove archive materialization, owner/repository mapping, unreadable-file handling, or P12 retention."
+              "scope": "Fresh migration test passed 1/1 on candidate 11cbaeb33826c1ae0ee2276bccafc723fad0e7a7, including main 271d7b28. Fixture assertions cover canonical and alias recent-activity files: inspection reports authoritative/relocated disposition and SHA-256 private-history destinations, excludes cursor sentinels from inspection output, emits no canonical Core write, and leaves the alias source tree unchanged with no Core write. This test is classification evidence only."
             }
           ],
           "limitations": [
-            "This producer establishes source data classification and a private archive identity only. It does not materialize the archive or restore the recent-activity API/UI; API-owned mapping and P12 deletion/reclone retention proof remain pending."
+            "The migration producer classifies legacy cursor files but does not materialize them. The separate API helper handles exact-byte archive and explicit mapping; P12 verifies that behavior in the composed lifecycle and remains pending."
           ]
         }
       ],
       "fixedScopeImplementationGap": {
-        "status": "confirmed-unimplemented",
+        "status": "implementation-present; integration-acceptance-pending",
         "sourceBehavior": [
           "GET /api/me/recent-activity returns the current owner and project’s per-device cursor rows.",
-          "PUT /api/me/recent-activity upserts one desktop/mobile row keyed by owner and project; omitted pageIndex preserves that device row’s previous value."
+          "PUT /api/me/recent-activity upserts one desktop/mobile row keyed by owner and project; omitted pageIndex preserves that device row’s previous value.",
+          "Writing and reading resume callers persist numeric sentence/page positions and expose the other device’s continue-reading/handoff candidate."
         ],
         "sourceData": {
           "file": "<dataDir>/app-state/recent-activity.json",
@@ -8129,34 +8235,47 @@
           "app/src/features/home/MobileHomeView.tsx (reads activity for cross-device continue and handoff hints)"
         ],
         "targetCoverage": {
-          "finding": "The integrated target has only the RecentActivityInput/RecentActivityItem/RecentActivityResponse contract types (packages/contracts/src/index.ts, added at 556df656). It has no matching route, owner-scoped recent-activity store, or cross-device resume caller/UI. SceneEditor local readingPage localStorage is a per-browser reading page and does not preserve the source owner/project/device projection.",
-          "adjacentBehavior": "GET /api/projects/events streams in-memory manual-sync outcomes; it has different data and lifetime and is not a replacement.",
+          "finding": "The current target has the owner-cookie project API, host-private per-device store and explicit-mapping legacy importer, plus a React resume hook, local fallback, editor cursor/page restore, and ContinuePanel handoff surface. The target has implementation coverage for the fixed R43 behavior; the ledger row remains pending until composed P12 source-import/recovery evidence and final campaign acceptance are recorded.",
+          "storage": "API persistence is <usageDirectory>/recent-activity/recent-activity-state.json, partitioned by the configured owner and Core-registered RepositoryIdentity; it is outside the disposable Core data root. The importer archives exact source bytes at a content-addressed private host-history path before mapped adoption.",
+          "ui": "App uses useRecentActivityResume and ContinuePanel; ManuscriptInput captures/applies writing sentence offsets and SceneEditor captures/applies reading page positions. Local fallback keys are scoped to author, repository and scene.",
+          "pendingAcceptance": "Run and record the updated composed P12 fixture against the frozen tree, including exact-byte archive, explicit mapping, cursor timestamp preservation, API recreation, Core data-root replacement/reclone and enabled reactivation. Do not mark the source row complete from unit or browser tests alone.",
           "searchedTargetPaths": [
             "packages/api/src/server.ts",
             "packages/api/src/server.test.ts",
+            "packages/api/src/recent-activity-store.ts",
+            "packages/api/src/recent-activity-store.test.ts",
+            "packages/core/src/index.ts",
+            "packages/core/src/index.test.ts",
             "app/src/App.tsx",
+            "app/src/editor/ManuscriptInput.tsx",
             "app/src/editor/SceneEditor.tsx",
             "app/src/api.ts",
+            "app/src/resume/continueCandidates.ts",
+            "app/src/resume/useRecentActivityResume.ts",
+            "app/src/continueCandidates.test.ts",
+            "tests/e2e/recent-activity.acceptance.spec.ts",
             "packages/migration/src/producers/workspace.ts",
+            "packages/migration/src/migration.test.ts",
+            "tests/integration/migration-acceptance.test.mjs",
             "packages/contracts/src/index.ts"
           ]
         },
         "requiredProducerSlices": [
           {
             "owner": "P08",
-            "behavior": "owner-scoped durable read/upsert API and persistent store with source schema semantics"
+            "behavior": "Implemented owner-cookie durable read/upsert, private per-device storage, registry identity binding and API-owned explicit-mapping exact-byte import; focused API and Core tests are recorded in this row."
           },
           {
             "owner": "P02",
-            "behavior": "use reading/writing cursor persistence and continue-reading handoff through the target browser UI"
+            "behavior": "Implemented browser-local writing/reading fallback, project-scoped remote cursors, cross-device ContinuePanel handoff and cursor/page restoration; focused browser proof is recorded in this row."
           },
           {
             "owner": "P04",
-            "behavior": "The generic workspace inspector now classifies the canonical file and legacy alias as authoritative and emits a content-addressed private-history archive identity without exposing cursor payloads or writing them through Core. This is inspection only: it does not materialize the archive or map user/repository identities."
+            "behavior": "Implemented generic workspace classification for both authoritative recent-activity files with no payload write through Core; classification test is recorded in this row."
           },
           {
             "owner": "P12",
-            "behavior": "Compose the API-owned archive/import with explicit user/repository mapping; prove cursor history remains retained through source deletion, data-root replacement and reclone, or block removal when mapping/read fails."
+            "behavior": "Execute the composed legacy-import fixture and record current frozen-tree proof that exact-byte archive, explicit identity mapping, cursor timestamps and host retention survive API recreation plus Core data-root replacement/reclone."
           }
         ],
         "acceptanceStatus": "pending"

@@ -200,9 +200,9 @@
     },
     {
       "gate": "R43-recent-activity-cursor-and-handoff",
-      "status": "implementation-gap",
-      "reason": "The fixed source contract provides owner/project/device reading and writing cursors through GET/PUT /api/me/recent-activity and browser resume/handoff callers. Current target adds only DTO types; it has no matching route, durable owner store, or browser handoff. P04 inspection now correctly classifies legacy cursor files as authoritative and emits the inspection target `/history/recent-activity/legacy/<sha256-of-exact-source-bytes>.json`, but no API owner/repository mapping or source-data materialization has been demonstrated.",
-      "unblock": "P08 implements owner-scoped durable read/upsert and API-owned history import; P02 reconnects writing/reading resume and cross-device handoff; P12 verifies explicit identity mapping and retention through data-root replacement/reclone. Keep source removal blocked if bytes cannot be read or mapped."
+      "status": "acceptance-pending",
+      "reason": "Target implementation is present: P08 exposes owner-cookie GET/PUT /api/projects/:projectId/recent-activity over private host history and exports an explicit-mapping exact-byte legacy importer; P02 restores writing/reading positions and cross-device ContinuePanel handoff. The focused API and browser proofs are scoped evidence only. The updated P12 fixture must be executed and its exact frozen-tree result recorded for composed legacy import and retention through Core data-root replacement/reclone before the source row can close.",
+      "unblock": "Record the updated P12 composed migration acceptance against the frozen tree, including explicit user/repository mapping, exact-byte private archive, cursor timestamp preservation and retention after Core data-root replacement/reclone. Keep R43 source migration pending until that proof and final campaign verification are recorded."
     }
   ]
 }
