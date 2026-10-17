@@ -1033,6 +1033,10 @@ function makeActions(moduleContext: StoryCapabilityContext): ModuleAction[] {
         replayed: false,
       };
     }),
+    action("story.snapshot.materialize", read, objectSchema, async (_input, context) => {
+      const snapshot = await readStorySnapshot(context.reader);
+      return { entities: snapshot.entities.size, links: snapshot.links.length };
+    }),
     action("story.entities.list", read, fieldSchema([], ["type", "tag"]), async (input, context) => {
       const story = await readStorySnapshot(context.reader);
       return [...story.entities.values()].filter((entity) => (!input.type || entity.type === input.type) && (!input.tag || entity.tags?.includes(String(input.tag)))).sort((a, b) => (a.name ?? a.id).localeCompare(b.name ?? b.id, "ja")).map((entity) => entityWithRevision(entity, story));
@@ -1280,7 +1284,7 @@ function makeActions(moduleContext: StoryCapabilityContext): ModuleAction[] {
       const ids = typeof input.threadId === "string" ? new Set([input.threadId]) : null;
       return { snapshots: lifecycle.data.snapshots.filter((item) => !ids || ids.has(item.threadId)), warnings: lifecycle.data.warnings.filter((item) => !ids || ids.has(item.threadId)) };
     }),
-    action("story.graph.query", read, fieldSchema([], ["types"]), async (input, context) => {
+    action("story.graph.query", read, objectSchema, async (input, context) => {
       if (input.types !== undefined && (!Array.isArray(input.types) || !input.types.every((type) => typeof type === "string"))) throw new TypeError("types must be a string array");
       const graph = getGraphData({ ...await readStorySnapshot(context.reader), types: input.types as StoryEntityType[] | undefined }).data;
       const maxNodes = typeof input.maxNodes === "number" && Number.isInteger(input.maxNodes) ? Math.max(1, Math.min(2000, input.maxNodes)) : 1000;

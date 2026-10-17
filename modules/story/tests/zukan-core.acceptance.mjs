@@ -135,6 +135,24 @@ test("Zukan suggestion creation runs through Story, Core review, checkpoint, pub
     const { cookie, project } = await registerAndLogin(host, authToken, remote);
     const actions = await owner(host, cookie, `/api/projects/${encodeURIComponent(project.id)}/actions`);
     assert.ok(actions.actions.some((action) => action.id === "story.zukan-suggestions.create"));
+    assert.ok(actions.actions.some((action) => action.id === "story.snapshot.materialize"));
+    const headBeforeReads = await git(resolve(root, "remote.git"), ["rev-parse", "refs/heads/main"]);
+    const entityList = await invoke(host, cookie, project.id, "story.entities.list", {});
+    assert.equal(entityList.ok, true, JSON.stringify(entityList.error));
+    const materialized = await invoke(host, cookie, project.id, "story.snapshot.materialize", {});
+    assert.equal(materialized.ok, true, JSON.stringify(materialized.error));
+    assert.deepEqual(materialized.data, { entities: entityList.data.length, links: 2 });
+    assert.deepEqual(materialized.snapshot, entityList.snapshot, "the action reports counts from its pinned Core reader snapshot");
+    assert.equal(materialized.snapshot.remoteCommit, headBeforeReads);
+    assert.equal(materialized.proposals, undefined, "materialization is a read action");
+    const graph = await invoke(host, cookie, project.id, "story.graph.query", { types: ["character"] });
+    assert.equal(graph.ok, true, JSON.stringify(graph.error));
+    assert.deepEqual(graph.data.nodes.map((node) => node.type), ["character"]);
+    const invalidGraph = await invoke(host, cookie, project.id, "story.graph.query", { types: "character" });
+    assert.equal(invalidGraph.ok, false);
+    assert.equal(invalidGraph.error.code, "invalid_input");
+    assert.equal(await git(resolve(root, "remote.git"), ["rev-parse", "refs/heads/main"]), headBeforeReads,
+      "read actions do not mutate the real Git remote");
     const input = {
       entityId: "char-uma",
       proposedText: "Uma enters the cafe.",

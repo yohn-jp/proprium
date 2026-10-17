@@ -117,6 +117,61 @@ test("entity reads expose source revision and preserve nested notes and characte
   assert.equal((await invoke<{ revision: string } | null>("story.entities.get", { id: "char-uma" }, context)).data?.revision, character.revision);
 });
 
+test("snapshot materialization reads each pinned Story snapshot without proposing writes", async () => {
+  const counted = (files: Map<string, string>, repositoryId: string, remoteCommit: string) => {
+    const base = makeReader(files, repositoryId);
+    const counts = { reads: 0, lists: 0 };
+    const reader: SnapshotReader = {
+      ...base,
+      snapshot: { ...base.snapshot, remoteCommit },
+      async read(path, encoding) { counts.reads += 1; return base.read(path, encoding); },
+      async list(prefix) { counts.lists += 1; return base.list(prefix); },
+    };
+    return { reader, counts };
+  };
+  const firstFiles = fixtureFiles();
+  const first = counted(firstFiles, "repo-materialize", "a".repeat(40));
+  const firstProposals: Array<{ id: string; operations: ChangeOperation[] }> = [];
+  const firstContext = makeActionContext(first.reader, { proposals: firstProposals });
+  const materialize = actionById("story.snapshot.materialize");
+  assert.equal(materialize.effect, "read");
+  const firstResult = await invoke<{ entities: number; links: number }>("story.snapshot.materialize", {}, firstContext);
+  const firstEntities = await invoke<Array<{ id: string }>>("story.entities.list", {}, firstContext);
+  assert.deepEqual(firstResult.data, { entities: firstEntities.data.length, links: 3 });
+  assert.deepEqual(firstResult.snapshot, first.reader.snapshot);
+  assert.ok(first.counts.lists > 0 && first.counts.reads > 0);
+  assert.deepEqual(firstProposals, []);
+
+  const secondFiles = fixtureFiles({
+    "bible/items/item-key.yaml": yaml({ id: "item-key", name: "Key", type: "item", related: ["loc-cafe"] }),
+  });
+  const second = counted(secondFiles, "repo-materialize", "b".repeat(40));
+  const secondProposals: Array<{ id: string; operations: ChangeOperation[] }> = [];
+  const secondContext = makeActionContext(second.reader, { proposals: secondProposals });
+  const secondResult = await invoke<{ entities: number; links: number }>("story.snapshot.materialize", {}, secondContext);
+  const secondEntities = await invoke<Array<{ id: string }>>("story.entities.list", {}, secondContext);
+  assert.deepEqual(secondResult.data, { entities: secondEntities.data.length, links: 4 });
+  assert.equal(secondResult.data.entities, firstResult.data.entities + 1);
+  assert.deepEqual(secondResult.snapshot, second.reader.snapshot);
+  assert.notDeepEqual(secondResult.snapshot, firstResult.snapshot);
+  assert.ok(second.counts.lists > 0 && second.counts.reads > 0);
+  assert.deepEqual(secondProposals, []);
+});
+
+test("graph query accepts the browser string-array filter and rejects scalar filters", async () => {
+  const context = makeActionContext(makeReader(fixtureFiles()));
+  const graph = await invoke<{ nodes: Array<{ id: string; type: string }>; edges: unknown[] }>(
+    "story.graph.query", { types: ["character"] }, context,
+  );
+  assert.deepEqual(graph.data.nodes.map((node) => node.type), ["character"]);
+  const invalid = await actionById("story.graph.query").invoke({ types: "character" }, context);
+  assert.equal(invalid.ok, false);
+  if (!invalid.ok) {
+    assert.equal(invalid.error.code, "invalid_input");
+    assert.match(invalid.error.message, /types must be a string array/u);
+  }
+});
+
 test("entity updates validate source revisions and return a reviewable Core proposal", async () => {
   const files = fixtureFiles();
   const reader = makeReader(files);
