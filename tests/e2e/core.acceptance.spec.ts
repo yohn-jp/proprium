@@ -783,8 +783,9 @@ test("external MCP proposals enter owner review before approval, then checkpoint
   expect(remoteBeforeApproval.ok()).toBe(true);
   expect(await remoteBeforeApproval.json()).toMatchObject({ state: "proposed", approvedOperationIds: [], checkpoints: [] });
 
-  await page.getByRole("button", { name: "承認して Checkpoint" }).click();
   const proposalCard = page.locator(".proposal-card").filter({ hasText: proposalId });
+  await expect(proposalCard).toHaveCount(1);
+  await proposalCard.getByRole("button", { name: "承認して Checkpoint" }).click();
   await expect(proposalCard.getByText(/ローカル Checkpoint 済み/u)).toBeVisible();
   await expect.poll(async () => (await readJournal(page)).some((record) =>
     record.operationId === operationId && record.generation === 1 && record.state === "checkpointed" && record.authorScope === "owner",

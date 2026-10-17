@@ -17,16 +17,39 @@ async function invoke(context: BrowserModuleContext, id: string, input: unknown)
   return result.data as Data;
 }
 
-function startProgress(context: BrowserModuleContext, taskId: string, status: HTMLOutputElement, cleanup: Array<() => void>): void {
-  const timer = window.setInterval(async () => {
+function startProgress(context: BrowserModuleContext, taskId: string, status: HTMLOutputElement, cleanup: Array<() => void>): () => void {
+  let timer: number | undefined;
+  let stopped = false;
+  let inFlight = false;
+  const stop = () => {
+    stopped = true;
+    if (timer !== undefined) window.clearTimeout(timer);
+    timer = undefined;
+  };
+  const poll = async () => {
+    timer = undefined;
+    if (stopped || context.signal.aborted || inFlight) return;
+    inFlight = true;
     try {
       const data = await invoke(context, "semantic.task.status", {});
+      if (stopped || context.signal.aborted) return;
       const active = (data.activeTasks as Array<{ taskId: string; phase: string; completed: number; total: number }>).find((task) => task.taskId === taskId);
       if (active) status.textContent = `${active.phase}${active.total ? ` · ${active.completed}/${active.total}` : ""}`;
-      else window.clearInterval(timer);
-    } catch { window.clearInterval(timer); }
-  }, 600);
-  cleanup.push(() => window.clearInterval(timer));
+      else { stop(); return; }
+    } catch {
+      stop();
+      return;
+    } finally {
+      inFlight = false;
+      if (!stopped && !context.signal.aborted) timer = window.setTimeout(() => { void poll(); }, 600);
+    }
+  };
+  const onAbort = () => stop();
+  if (context.signal.aborted) stop();
+  else context.signal.addEventListener("abort", onAbort, { once: true });
+  timer = window.setTimeout(() => { void poll(); }, 600);
+  cleanup.push(() => { stop(); context.signal.removeEventListener("abort", onAbort); });
+  return stop;
 }
 
 function mountSearch(root: HTMLElement, context: BrowserModuleContext, cleanup: Array<() => void>, expressionOnly = false): void {
@@ -44,7 +67,7 @@ function mountSearch(root: HTMLElement, context: BrowserModuleContext, cleanup: 
   };
   const onSearch = async () => {
     const taskId = crypto.randomUUID(); runningTask = taskId; run.disabled = true; cancel.disabled = false;
-    results.replaceChildren(); status.textContent = "検索しています…"; startProgress(context, taskId, status, cleanup);
+    results.replaceChildren(); status.textContent = "検索しています…"; const stopProgress = startProgress(context, taskId, status, cleanup);
     try {
       const data = await invoke(context, expressionOnly ? "semantic.expressions.search" : "semantic.search", {
         query: query.value, mode: expressionOnly ? "expression" : mode.value, limit: 20,
@@ -61,7 +84,7 @@ function mountSearch(root: HTMLElement, context: BrowserModuleContext, cleanup: 
       const warnings = [data.warning, data.rerankWarning].filter((warning): warning is string => typeof warning === "string" && warning.length > 0);
       status.textContent = `${hits.length} 件 · ${String(data.model ?? "index unavailable")} ${String(data.modelVersion ?? "")}${warnings.map((warning) => ` · ${warning}`).join("")}`;
     } catch (error) { status.textContent = error instanceof Error ? error.message : String(error); }
-    finally { runningTask = null; run.disabled = false; cancel.disabled = true; }
+    finally { stopProgress(); runningTask = null; run.disabled = false; cancel.disabled = true; }
   };
   run.addEventListener("click", onSearch); cancel.addEventListener("click", onCancel);
   cleanup.push(() => run.removeEventListener("click", onSearch), () => cancel.removeEventListener("click", onCancel));
@@ -88,7 +111,7 @@ function mountContradictions(root: HTMLElement, context: BrowserModuleContext, c
   const onRefresh = async () => {
     const taskId = crypto.randomUUID(); runningTask = taskId;
     refresh.disabled = true; cancel.disabled = false; status.textContent = "現在のスナップショットを確認しています…"; results.replaceChildren();
-    startProgress(context, taskId, status, cleanup);
+    const stopProgress = startProgress(context, taskId, status, cleanup);
     try {
       const data = await invoke(context, "semantic.contradictions.rebuild", { taskId });
       const candidates = data.candidates as Array<{ id: string; kind: string; score: number; suspicion: string; evidenceA: { sceneId: string; quote: string }; evidenceB: { sceneId: string; quote: string } }>;
@@ -106,7 +129,7 @@ function mountContradictions(root: HTMLElement, context: BrowserModuleContext, c
       }
       status.textContent = `${candidates.length} 件 · ${data.indexAvailable ? "埋め込み候補を含む" : "ルール候補（インデックスなし）"}`;
     } catch (error) { status.textContent = error instanceof Error ? error.message : String(error); }
-    finally { runningTask = null; refresh.disabled = false; cancel.disabled = true; }
+    finally { stopProgress(); runningTask = null; refresh.disabled = false; cancel.disabled = true; }
   };
   refresh.addEventListener("click", onRefresh); cancel.addEventListener("click", onCancel);
   cleanup.push(() => refresh.removeEventListener("click", onRefresh), () => cancel.removeEventListener("click", onCancel));
@@ -129,12 +152,12 @@ function mountIndex(root: HTMLElement, context: BrowserModuleContext, cleanup: A
     } catch (error) { status.textContent = error instanceof Error ? error.message : String(error); }
   };
   const onRebuild = async () => {
-    const taskId = crypto.randomUUID(); runningTask = taskId; rebuild.disabled = true; cancel.disabled = false; status.textContent = "インデックスを再構築しています…"; startProgress(context, taskId, status, cleanup);
+    const taskId = crypto.randomUUID(); runningTask = taskId; rebuild.disabled = true; cancel.disabled = false; status.textContent = "インデックスを再構築しています…"; const stopProgress = startProgress(context, taskId, status, cleanup);
     try {
       const data = await invoke(context, "semantic.index.rebuild", { taskId });
       status.textContent = `${String(data.scanned)} 文 · 新規 ${String(data.embedded)} · 再利用 ${String(data.reused)} · 削除 ${String(data.removed)}`;
     } catch (error) { status.textContent = error instanceof Error ? error.message : String(error); }
-    finally { runningTask = null; rebuild.disabled = false; cancel.disabled = true; }
+    finally { stopProgress(); runningTask = null; rebuild.disabled = false; cancel.disabled = true; }
   };
   const onCancel = () => runningTask ? invoke(context, "semantic.task.cancel", { taskId: runningTask }).catch(() => undefined) : undefined;
   const onSave = async () => {
