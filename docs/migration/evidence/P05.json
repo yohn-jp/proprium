@@ -13,7 +13,7 @@
     "repository": "yohn-jp/scriptorium",
     "baseCommit": "c90e95d9711e859799f9674138b2db42efad6bc3",
     "branch": "work/7-p05",
-    "implementationCommit": "1c6831ea8a204936af536a068d34c93aab8339db"
+    "implementationCommit": "9c5a5022a5ea7d9a0c95bafbe9f76e83294658e7"
   },
   "sourceClassification": [
     {
@@ -105,7 +105,7 @@
         "modules/story/src/migration/producer.test.ts"
       ],
       "command": "pnpm --filter @scriptorium/module-story test",
-      "result": "50 passed, 0 failed on implementation commit 1c6831ea8a204936af536a068d34c93aab8339db.",
+      "result": "62 passed, 0 failed on final frozen-runtime HEAD 9c5a5022a5ea7d9a0c95bafbe9f76e83294658e7.",
       "scope": "Entity and scene proposals, referenced-file and membership-scope preconditions, thread relation direction/lifecycle, Zukan creation and lifecycle including provenance validation, source freshness, stable identity and nested-note preservation, optional NLP absence, all nine source ChangeSet kinds and retry identity, source FNV manuscript identity, state-proposal event/conflict/manuscript freshness and JSONL revision precondition, source-to-Core ID mapping, series binding and read-only overlay, co-occurrence, domain graph/chronology/thread/world/knowledge algorithms, exact-byte migration, workflow semantic migration and explicit series repository mapping."
     },
     {
@@ -113,9 +113,9 @@
       "kind": "module typecheck and production build",
       "status": "passed",
       "targetFiles": ["modules/story/src/**/*.ts", "modules/story/src/**/*.tsx"],
-      "command": "pnpm --filter @scriptorium/module-story typecheck && pnpm --filter @scriptorium/module-story build",
-      "result": "Both commands passed on implementation commit 1c6831ea8a204936af536a068d34c93aab8339db.",
-      "scope": "Compiles the server action producer, migration producer and React browser entry."
+      "command": "pnpm install --frozen-lockfile && pnpm build",
+      "result": "Frozen install and full workspace build passed on final frozen-runtime HEAD 9c5a5022a5ea7d9a0c95bafbe9f76e83294658e7 (tree 480aadf546cd28944c5a242ef9cd0ac55b215616).",
+      "scope": "Compiles the Story server action producer, migration producer and React browser entry together with all workspace packages and the application."
     },
     {
       "id": "P05-STORY-ZUKAN-FRESHNESS",
@@ -140,13 +140,13 @@
         "modules/story/tests/production.acceptance.mjs"
       ],
       "command": "pnpm --filter @scriptorium/module-story build && pnpm --filter @scriptorium/contracts build && pnpm --filter @scriptorium/module-runtime build && pnpm --filter @scriptorium/core build && pnpm --filter @scriptorium/api build && node --test modules/story/tests/zukan-core.acceptance.mjs",
-      "result": "1 passed, 0 failed on implementation commit 1c6831ea8a204936af536a068d34c93aab8339db.",
-      "scope": "The composed Story action validates manuscript evidence, creates a pending-only suggestion, retries with the same Core proposal identity, and persists through owner approval, checkpoint, publish and a fresh Core-data root that reclones the same bare Git remote."
+      "result": "1 passed, 0 failed on final frozen-runtime HEAD 9c5a5022a5ea7d9a0c95bafbe9f76e83294658e7.",
+      "scope": "The compiled Story module runs through the real API, Core and ModuleRuntime with a local bare Git remote. It verifies fresh pinned story.snapshot.materialize counts with no proposals or remote writes; graph string-array filtering and typed invalid-input handling; pending-only Zukan creation/replay; owner approval, checkpoint, publish, and a fresh Core-data root that reclones the same remote."
     },
     {
       "id": "P05-STORY-CORE-PRODUCTION-ACCEPTANCE",
       "kind": "compiled Story module with live Core, ModuleRuntime, API, and GitHub repositories",
-      "status": "candidate_passed",
+      "status": "passed",
       "targetFiles": [
         "modules/story/tests/production.acceptance.mjs",
         "modules/story/src/narrativeChangeSet.ts",
@@ -155,7 +155,7 @@
         "packages/api/src/server.ts"
       ],
       "command": "node --test modules/story/tests/production.acceptance.mjs (authenticated fixture values supplied via environment; private URLs and credentials omitted)",
-      "result": "1 passed, 0 failed; 449311 ms (7m29s), exit 0 at candidate HEAD abeac4c928d2eff1fb73f8c5d0f9dc7595de52c9.",
+      "result": "Fresh final frozen-runtime run: 1 passed, 0 failed; 491495 ms (8m11s), exit 0 at HEAD 9c5a5022a5ea7d9a0c95bafbe9f76e83294658e7, tree 480aadf546cd28944c5a242ef9cd0ac55b215616. The earlier candidate result remains recorded separately below.",
       "scope": "Compiled Story module exercised through the live owner action API, Core, and ModuleRuntime against two distinct GitHub repository identities on each repository’s API-reported default branch. Verified pending-only Zukan create; exact-operation replay after an unrelated default-branch advance without rebasing; changed-meaning same-ID rejection; distinct new operation identity after row removal; series create/bind and a separately browsable read-only Bible overlay carrying both snapshot identities; an atomic three-operation NarrativeChangeSet with virtual membership scopes and target-file read preconditions; full-payload replay and changed-goal conflict; partial owner approval/checkpoint followed by ordered completion and publish; a changed referenced target rejected after approval; unchanged Bible remote head; deletion of the complete Core data root followed by clean project registration/reclone and restored work/Bible overlay reads.",
       "candidate": {
         "head": "abeac4c928d2eff1fb73f8d5c0f9dc7595de52c9",
@@ -185,8 +185,38 @@
         "impact": "Non-fatal; the acceptance exited 0 and every assertion passed."
       },
       "finalGate": {
-        "status": "pending",
-        "description": "This is a candidate-leaf actual-GitHub acceptance result, not the final frozen-runtime gate. Root will rerun the full composed actual-GitHub acceptance on the final integrated runtime."
+        "status": "passed",
+        "description": "The final frozen-runtime Core/API/GitHub production acceptance passed at the exact HEAD/tree recorded in finalRuntime. Integrated browser and migration proofs remain tracked separately below."
+      },
+      "finalRuntime": {
+        "head": "9c5a5022a5ea7d9a0c95bafbe9f76e83294658e7",
+        "tree": "480aadf546cd28944c5a242ef9cd0ac55b215616",
+        "branch": "work/7-p05",
+        "durationMs": 491495,
+        "exitCode": 0,
+        "status": "passed",
+        "command": "pnpm install --frozen-lockfile && pnpm build; node --test modules/story/tests/production.acceptance.mjs",
+        "scope": "Fresh compiled Story/Core/ModuleRuntime/API roundtrip against the two existing private synthetic GitHub repositories on their API-reported configured default branches. Verified Zukan same-ID replay and changed-intent identity, series binding and read-only overlay, one atomic three-operation NarrativeChangeSet with virtual scopes and referenced-file guards, partial approval/checkpoint then ordered completion/publish, stale referenced-source conflict, unchanged Bible head, and deletion/recreation of the complete Core data root followed by successful remote reclone and overlay reads.",
+        "fixtureIdentity": {
+          "work": {
+            "alias": "p05-story-acceptance-work-20261017-01",
+            "visibility": "private synthetic repository",
+            "branch": "p05-11464a944e964be5a249",
+            "branchSelection": "GitHub API-reported configured default branch"
+          },
+          "bible": {
+            "alias": "p05-story-acceptance-bible-20261017-01",
+            "visibility": "private synthetic repository",
+            "branch": "p05-e71c07659acb470a95e9",
+            "branchSelection": "GitHub API-reported configured default branch"
+          },
+          "urlsAndCredentials": "omitted"
+        },
+        "shutdownWarning": {
+          "count": 1,
+          "message": "Scriptorium could not determine whether local checkpoints remain pending during shutdown.",
+          "impact": "Non-fatal; the acceptance exited 0 and every assertion passed."
+        }
       }
     },
     {
