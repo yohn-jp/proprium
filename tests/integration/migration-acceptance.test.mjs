@@ -681,7 +681,7 @@ test("composed legacy import preserves disabled data and reactivates after a ful
     let liveDesktopUpdatedAt;
     await withOwnerApi(replacement, apiToken, temporary, usageDirectory, async ({ base, headers }) => {
       const activityPath = `${base}/api/projects/${restoredProject.id}/recent-activity`;
-      assert.equal((await fetch(activityPath)).status, 403, "recent activity must remain owner-cookie private");
+      assert.equal((await fetch(activityPath)).status, 401, "unauthenticated recent-activity reads must be rejected");
       const response = await fetch(activityPath, { headers });
       assert.equal(response.status, 200);
       const activity = await response.json();
@@ -909,7 +909,7 @@ test("composed legacy import preserves disabled data and reactivates after a ful
       assert.deepEqual(await fs.readFile(privateJobArchive), jobsStateBytes, "owner-readable adoption must not alter the exact private source archive");
 
       const activityPath = `${base}/api/projects/${finalProject.id}/recent-activity`;
-      assert.equal((await fetch(activityPath)).status, 403, "recent activity must remain owner-cookie private after the second clone");
+      assert.equal((await fetch(activityPath)).status, 401, "unauthenticated recent-activity reads must be rejected after the second clone");
       const activityResponse = await fetch(activityPath, { headers });
       assert.equal(activityResponse.status, 200);
       const activity = await activityResponse.json();
