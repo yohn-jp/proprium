@@ -6,7 +6,7 @@
   },
   "target": {
     "branch": "work/7-p07",
-    "implementationCommit": "308118876b7c4abe3b64f8b6496e8b9baa62576d"
+    "implementationCommit": "025cca0ada6c8791e366545439ac8cb13459580a"
   },
   "ledger": {
     "R23": {
@@ -34,11 +34,11 @@
         "modules/publishing/src/actions.ts",
         "modules/publishing/src/browser.tsx"
       ],
-      "proofs": ["P07-share-remote-activation-revocation", "P07-share-privacy-metadata"]
+      "proofs": ["P07-share-remote-activation-revocation", "P07-share-privacy-metadata", "P07-anonymous-browser-share-lifecycle"]
     },
     "N10": {
       "target": ["modules/publishing/src/migration.ts", "modules/publishing/src/publishing.test.ts"],
-      "proofs": ["P07-migration-semantic-validation"]
+      "proofs": ["P07-migration-semantic-validation", "P07-retained-reactivation"]
     }
   },
   "proofs": {
@@ -49,7 +49,9 @@
     "P07-episode-clear-ui-roundtrip": "A Playwright browser mounts the real publishing browser module, clears the rendered publication date and last selected scene, routes calls through the real publishing actions, and verifies the resulting proposal YAML omits both fields while retaining unknown data.",
     "P07-share-remote-activation-revocation": "The bearer is absent from operation content; the public read adapter rejects unpublished and overlay snapshots, filters scope, checks expiry and current remote revocation, and exposes no token hash in the owner list.",
     "P07-share-privacy-metadata": "Public share JSON responses carry X-Robots-Tag: noindex, nofollow and Referrer-Policy: no-referrer; the anonymous browser view applies matching robots/referrer meta tags and removes them on unmount.",
-    "P07-migration-semantic-validation": "The module migration producer validates source episode YAML and selected workspace grants; the generic filesystem/workspace producer owns exact-byte/map and grant writes, avoiding duplicate operations. The test checks selected-project isolation, hash/date/revocation retention, host-field exclusion, and map round-trip."
+    "P07-anonymous-browser-share-lifecycle": "A full-profile Chromium browser loads the real anonymous /r/publishing/:repositoryId/:token page against the composed API after confirmed GitHub publication. It displays only the scoped synthetic scene, reads its text without requesting an owner session, shows the expired state, and denies the link after remote revocation.",
+    "P07-migration-semantic-validation": "The module migration producer validates source episode YAML and selected workspace grants; the generic filesystem/workspace producer owns exact-byte/map and grant writes, avoiding duplicate operations. The test checks selected-project isolation, hash/date/revocation retention, host-field exclusion, and map round-trip.",
+    "P07-retained-reactivation": "After live source/workspace stores are absent, enabled Publishing proposes an exact-byte retained episode map and deterministic sanitized grant merge. Tests verify target and retained-source revision guards, stable proposal IDs, Core proposal submission, unknown YAML retention, hash/scope/expiry/revocation preservation, no raw/nested secrets, conflict handling, live-source deferral, disabled behavior, and reinspection idempotence."
   },
   "validation": [
     {
@@ -62,15 +64,15 @@
     },
     {
       "command": "pnpm --filter @scriptorium/module-publishing typecheck",
-      "result": "passed on implementation commit 308118876b7c4abe3b64f8b6496e8b9baa62576d"
+      "result": "passed on merged leaf HEAD 7df6c0271daeb9aef67a4687d7f7a50cd06d1d18"
     },
     {
       "command": "pnpm --filter @scriptorium/module-publishing test",
-      "result": "passed, 6 of 6 tests on implementation commit 308118876b7c4abe3b64f8b6496e8b9baa62576d"
+      "result": "passed, 8 of 8 tests on merged leaf HEAD 7df6c0271daeb9aef67a4687d7f7a50cd06d1d18"
     },
     {
       "command": "pnpm --filter @scriptorium/module-publishing build",
-      "result": "passed on implementation commit 308118876b7c4abe3b64f8b6496e8b9baa62576d"
+      "result": "passed on merged leaf HEAD 419032da52a3e136396ece3d4a4ab6f039c67fa3"
     },
     {
       "command": "SCRIPTORIUM_E2E_CHROMIUM=/nix/store/ini1ifgvcsvw48x4mxawrv9jvbdwn70p-chromium-155.0.8059.79/bin/chromium node modules/publishing/tests/browser-clear.acceptance.mjs",
@@ -78,11 +80,19 @@
     },
     {
       "command": "git diff --check",
-      "result": "passed on implementation commit 308118876b7c4abe3b64f8b6496e8b9baa62576d"
+      "result": "passed on the final P07 acceptance changes"
+    },
+    {
+      "command": "SCRIPTORIUM_PROFILE=full pnpm build",
+      "result": "passed on merged leaf HEAD 7df6c0271daeb9aef67a4687d7f7a50cd06d1d18; generated the full 8-module browser composition and built API/app bundles"
+    },
+    {
+      "command": "SCRIPTORIUM_ACCEPTANCE_GITHUB_URL=https://github.com/OWNER/SYNTHETIC-PRIVATE-REPOSITORY SCRIPTORIUM_E2E_CHROMIUM=/nix/store/ini1ifgvcsvw48x4mxawrv9jvbdwn70p-chromium-155.0.8059.79/bin/chromium node --test tests/integration/publishing-acceptance.test.mjs",
+      "result": "passed 1 of 1 in 267.3 seconds on leaf base 643dd15d0a0dd95e11cbacff675d47881c86da75 (main 7df1ecabd48b9333b72b8604d0d4f5b45b1b5500); confirmed default-branch receipts, synthetic metadata re-clone after Core data-root removal, anonymous rendered scope/expiry/revocation checks, and no owner-session request"
     }
   ],
   "compositionLimits": [
-    "The module HTTP contributions are tested directly with remote and overlay snapshot readers; the P08 composed HTTP route and anonymous browser mount still require integrated acceptance.",
-    "The complete Core approval, checkpoint, confirmed push, data-root deletion, and reclone round trip remains an integrated P12 acceptance; this evidence does not claim that composed lifecycle."
+    "The P07 integration acceptance uses the publishing-integration API runtime and full-profile browser bundle; it does not certify full-profile backend composition, browser recovery, optional workers, or OCI packaging.",
+    "The OCI acceptance remains pending as a separate follow-up."
   ]
 }

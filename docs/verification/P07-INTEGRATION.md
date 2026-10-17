@@ -1,8 +1,8 @@
 # Focused Publishing HTTP acceptance
 
-This check composes the compiled Core store, Fastify API, module runtime, and the real compiled Publishing module through a lazy profile loader. It exercises Publishing actions over authenticated HTTP, approves and checkpoints their Core proposals, and confirms pushes against a private synthetic GitHub repository. It also removes the complete Core data root and registers the same repository again to verify that GitHub retains the episode and share-grant bytes and remains the public reader's source.
+This check composes the compiled Core store, Fastify API, module runtime, and the real compiled Publishing module through a lazy profile loader. It exercises Publishing actions over authenticated HTTP, approves and checkpoints their Core proposals, and confirms pushes against a private synthetic GitHub repository. It also renders the actual anonymous `/r/publishing/:repositoryId/:token` reader in Chromium and verifies scoped scene reads, expiry, privacy headers, and pushed revocation without an owner session. Finally, it removes the complete Core data root and registers the same repository again to verify that GitHub retains the episode and share-grant bytes and remains the public reader's source.
 
-This is a focused Publishing composition check. Its `publishing-integration` profile contains only Publishing and does not certify the full image or full profile, browser acceptance, optional workers, or OCI packaging. A skipped run is `NOT_CHECKED`, never a pass.
+This is a focused Publishing composition check. The API runtime contains only Publishing; the full browser bundle is built so the public page can mount its real module view. It does not certify full-profile API composition, browser recovery, optional workers, or OCI packaging. A skipped run is `NOT_CHECKED`, never a pass.
 
 ## Fixture and safety
 
@@ -15,8 +15,9 @@ Provide the repository URL through `SCRIPTORIUM_ACCEPTANCE_GITHUB_URL`. Supply a
 Build the current checkout first so Core, API, module runtime, and Publishing have fresh compiled output, then run the focused test:
 
 ```sh
-pnpm build
+SCRIPTORIUM_PROFILE=full pnpm build
 SCRIPTORIUM_ACCEPTANCE_GITHUB_URL=https://github.com/OWNER/SYNTHETIC-PRIVATE-REPOSITORY \
+  SCRIPTORIUM_E2E_CHROMIUM=/nix/store/ini1ifgvcsvw48x4mxawrv9jvbdwn70p-chromium-155.0.8059.79/bin/chromium \
   node --test tests/integration/publishing-acceptance.test.mjs
 ```
 

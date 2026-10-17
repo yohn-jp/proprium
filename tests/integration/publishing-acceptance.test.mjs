@@ -6,7 +6,9 @@ import { tmpdir } from "node:os";
 import { resolve } from "node:path";
 import { execFile as execFileCallback } from "node:child_process";
 import { promisify } from "node:util";
+import { fileURLToPath } from "node:url";
 import { test } from "node:test";
+import { chromium } from "@playwright/test";
 
 import { createServer } from "../../packages/api/dist/server.js";
 import { CoreStore } from "../../packages/core/dist/index.js";
@@ -22,6 +24,7 @@ const publishingEntryUrl = new URL("../../modules/publishing/dist/index.js", imp
 const publishingRequire = createRequire(modulePackageUrl);
 const JSZip = publishingRequire("jszip");
 const YAML = publishingRequire("yaml");
+const appStaticDirectory = resolve(fileURLToPath(new URL("../../app/dist", import.meta.url)));
 
 const profileName = "publishing-integration";
 const episodePath = "meta/scriptorium/modules/publishing/episodes.yaml";
@@ -151,9 +154,8 @@ async function githubBranchHead(url, branch, token) {
   return payload.object.sha;
 }
 
-async function startHost({ dataDir, cacheDir, staticDir, token }) {
+async function startHost({ dataDir, cacheDir, token }) {
   await mkdir(cacheDir, { recursive: true });
-  await mkdir(staticDir, { recursive: true });
   let loaderCalls = 0;
   const runtime = new ModuleRuntime({
     manifests: [publishingManifest],
@@ -176,7 +178,7 @@ async function startHost({ dataDir, cacheDir, staticDir, token }) {
   const server = createServer({
     store,
     authToken: accessToken,
-    staticDir,
+    staticDir: appStaticDirectory,
     runtime,
     profile: profileName,
   });
@@ -423,6 +425,23 @@ async function publicJson(host, route, expectedStatus) {
   return { response, ...(expectedStatus === 204 ? {} : { body: await parseResponse(response) }) };
 }
 
+async function openBrowserShare(browser, host, repositoryId, token) {
+  const context = await browser.newContext();
+  const page = await context.newPage();
+  const ownerSessionRequests = [];
+  const publicReadRequests = [];
+  page.on("request", (request) => {
+    const pathname = new URL(request.url()).pathname;
+    if (pathname === "/api/session") ownerSessionRequests.push(pathname);
+    if (pathname.startsWith("/api/public/repos/")) publicReadRequests.push(pathname);
+  });
+  const response = await page.goto(`${host.base}/r/publishing/${encodeURIComponent(repositoryId)}/${encodeURIComponent(token)}`, {
+    waitUntil: "domcontentloaded",
+  });
+  assert.ok(response, "The anonymous browser did not receive a public reader page response");
+  return { context, page, response, ownerSessionRequests, publicReadRequests };
+}
+
 test("Publishing exports and share lifecycle survive real GitHub publication and a complete Core data-root replacement", {
   skip: repositoryUrl ? false : "NOT_CHECKED: set SCRIPTORIUM_ACCEPTANCE_GITHUB_URL to the authorized synthetic repository",
   timeout: 600_000,
@@ -444,7 +463,10 @@ test("Publishing exports and share lifecycle survive real GitHub publication and
     await rm(root, { recursive: true, force: true });
   });
 
-  host = await startHost({ dataDir, cacheDir: resolve(root, "module-cache-first"), staticDir: resolve(root, "static-first"), token });
+  let browser;
+  t.after(async () => { await browser?.close().catch(() => undefined); });
+
+  host = await startHost({ dataDir, cacheDir: resolve(root, "module-cache-first"), token });
   let cookie = await login(host);
   let project = await registerProject(host, cookie, repositoryUrl);
   let observation = await observe(host, cookie, project.id);
@@ -573,10 +595,43 @@ test("Publishing exports and share lifecycle survive real GitHub publication and
     "Public share response did not carry its privacy and indexing headers");
   await publicJson(host, `${publicRoute}/scenes/${encodeURIComponent(secondaryScene.scene.id)}`, 404);
 
+  browser = await chromium.launch({
+    headless: true,
+    ...(process.env.SCRIPTORIUM_E2E_CHROMIUM ? { executablePath: process.env.SCRIPTORIUM_E2E_CHROMIUM } : {}),
+  });
+  const browserShare = await openBrowserShare(browser, host, identity.repositoryId, shareToken);
+  try {
+    assert.equal(browserShare.response.status(), 200, "The anonymous browser route did not serve its public reader shell");
+    assert.equal(browserShare.response.headers()["referrer-policy"], "no-referrer");
+    assert.equal(browserShare.response.headers()["x-robots-tag"], "noindex, nofollow");
+    await browserShare.page.getByRole("heading", { name: "P13 synthetic scene share" }).waitFor({ state: "visible" });
+    await browserShare.page.getByRole("button", { name: primaryScene.scene.title, exact: true }).waitFor({ state: "visible" });
+    assert.equal(await browserShare.page.getByRole("button", { name: secondaryScene.scene.title, exact: true }).count(), 0,
+      "The rendered anonymous reader exposed a scene outside the grant scope");
+    assert.equal(await browserShare.page.locator('meta[name="robots"]').getAttribute("content"), "noindex, nofollow");
+    assert.equal(await browserShare.page.locator('meta[name="referrer"]').getAttribute("content"), "no-referrer");
+    await browserShare.page.getByRole("button", { name: primaryScene.scene.title, exact: true }).click();
+    await browserShare.page.getByText(manuscriptMarker, { exact: false }).waitFor({ state: "visible" });
+    assert.deepEqual(browserShare.ownerSessionRequests, [], "Public browser reads did not request an owner session");
+    assert.ok(browserShare.publicReadRequests.includes(`/api/public/repos/${identity.repositoryId}/modules/publishing/share/${shareToken}`));
+    assert.ok(browserShare.publicReadRequests.includes(`/api/public/repos/${identity.repositoryId}/modules/publishing/share/${shareToken}/scenes/${primaryScene.scene.id}`));
+  } finally {
+    await browserShare.context.close();
+  }
+
   const actualNow = Date.now;
   Date.now = () => actualNow() + 25 * 60 * 60 * 1000;
   try {
     await publicJson(host, publicRoute, 404);
+    const expiredBrowserShare = await openBrowserShare(browser, host, identity.repositoryId, shareToken);
+    try {
+      await expiredBrowserShare.page.getByRole("alert").waitFor({ state: "visible" });
+      assert.match(await expiredBrowserShare.page.getByRole("alert").innerText(), /期限切れ/u,
+        "The anonymous browser did not show the expired-link state");
+      assert.deepEqual(expiredBrowserShare.ownerSessionRequests, [], "Expired public views did not request an owner session");
+    } finally {
+      await expiredBrowserShare.context.close();
+    }
   } finally {
     Date.now = actualNow;
   }
@@ -594,7 +649,7 @@ test("Publishing exports and share lifecycle survive real GitHub publication and
   await host.close();
   host = undefined;
   await rm(dataDir, { recursive: true, force: true });
-  host = await startHost({ dataDir, cacheDir: resolve(root, "module-cache-reclone"), staticDir: resolve(root, "static-reclone"), token });
+  host = await startHost({ dataDir, cacheDir: resolve(root, "module-cache-reclone"), token });
   cookie = await login(host);
   const restoredProject = await registerProject(host, cookie, repositoryUrl);
   const restoredObservation = await observe(host, cookie, restoredProject.id);
@@ -625,6 +680,15 @@ test("Publishing exports and share lifecycle survive real GitHub publication and
   assert.ok(revokePublication.remoteHead !== sharePublication.remoteHead,
     "Revocation publication did not advance the actual GitHub default branch");
   await publicJson(host, publicRoute, 404);
+  const revokedBrowserShare = await openBrowserShare(browser, host, identity.repositoryId, shareToken);
+  try {
+    await revokedBrowserShare.page.getByRole("alert").waitFor({ state: "visible" });
+    assert.match(await revokedBrowserShare.page.getByRole("alert").innerText(), /無効/u,
+      "The anonymous browser did not display the pushed revocation");
+    assert.deepEqual(revokedBrowserShare.ownerSessionRequests, [], "Revoked public views did not request an owner session");
+  } finally {
+    await revokedBrowserShare.context.close();
+  }
   const afterRevoke = await observe(host, cookie, restoredProject.id);
   assert.ok(afterRevoke.snapshot?.remoteCommit === revokePublication.remoteHead,
     "Core did not freshly observe the confirmed revocation commit");
