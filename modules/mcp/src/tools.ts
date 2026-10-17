@@ -1047,10 +1047,17 @@ export function registerMcpTools(server: McpServer, baseClient: McpActionClient)
 
   server.tool(
     "reload",
-    "Refresh derived project reads and indexes without changing project files",
+    "Materialize the selected canonical project snapshot and return its entity and link counts",
     { project_id: projectIdSchema },
-    guarded(async ({ project_id }) =>
-      unavailableModuleAction(scopedClient(baseClient, project_id), "core", "reload")),
+    guarded(async ({ project_id }) => {
+      const client = scopedClient(baseClient, project_id);
+      const materialize = (await client.listActions()).find((action) => action.id === "story.snapshot.materialize");
+      if (!materialize) {
+        return unavailableModuleAction(client, "story", "reload");
+      }
+      if (materialize.effect !== "read") return errorResult("ACTION_EFFECT_DENIED", "The Story snapshot materializer must be read-only");
+      return invoke(client, "story.snapshot.materialize", {});
+    }),
   );
 
   server.tool(

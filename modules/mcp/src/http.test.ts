@@ -28,6 +28,7 @@ function actionContext(
 ) {
   const actions: ActionDescriptor[] = [
     { id: "core.status", module: "core", effect: "read" },
+    { id: "story.snapshot.materialize", module: "story", effect: "read" },
     { id: "story.changes.propose", module: "story", effect: "propose" },
     ...extraActions,
   ];
@@ -55,6 +56,9 @@ function actionContext(
           }
         }
         return { ok: true, snapshot, data: { status: "ready" } };
+      }
+      if (actionId === "story.snapshot.materialize") {
+        return { ok: true, snapshot, data: { entities: 7, links: 11 } };
       }
       if (actionId === "story.changes.propose") {
         const changeSet = input as { id: string; projectId: string; operations: Array<{ id: string }> };
@@ -222,6 +226,31 @@ test("SDK Streamable HTTP transport lists and invokes tools through the host act
       data: { status: "ready" },
     });
     assert.deepEqual(calls, ["core.status"]);
+  } finally {
+    await transport.terminateSession().catch(() => undefined);
+    await client.close().catch(() => undefined);
+  }
+});
+
+test("reload delegates to Story's pinned canonical snapshot materializer", async () => {
+  const calls: string[] = [];
+  const host = actionContext(calls);
+  const contribution = createMcpHttpContribution(new Map());
+  const fetch: FetchLike = async (url, init) => contribution.handle(new Request(url, init), host);
+  const transport = new StreamableHTTPClientTransport(
+    new URL("http://scriptorium.test/api/projects/project-one/modules/mcp/streamable"),
+    { fetch },
+  );
+  const client = new Client({ name: "mcp-module-test", version: "1.0.0" });
+
+  try {
+    await client.connect(transport);
+    const result = await client.callTool({ name: "reload", arguments: { project_id: "project-one" } });
+    assert.deepEqual(result.structuredContent, {
+      snapshot,
+      data: { entities: 7, links: 11 },
+    });
+    assert.deepEqual(calls, ["story.snapshot.materialize"]);
   } finally {
     await transport.terminateSession().catch(() => undefined);
     await client.close().catch(() => undefined);
