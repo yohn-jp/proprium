@@ -205,6 +205,20 @@ function actionBoundaryRuntime(cacheDirectory: string): ModuleRuntime {
         const proposal = await context.propose([await request.json() as ChangeOperation]);
         return Response.json({ source: proposal.source });
       },
+    }, {
+      id: "compute", path: "compute", methods: ["POST"], access: "owner", effect: "compute",
+      async handle(request, context) {
+        const input = await request.json() as { operation?: ChangeOperation };
+        const document = await context.reader.read("manuscript/ms-one/scene-one.md");
+        const nested = await context.invoke("nlp.analyze", {});
+        let proposalCode: string | null = null;
+        try {
+          await context.propose([input.operation as ChangeOperation]);
+        } catch (error) {
+          proposalCode = typeof error === "object" && error !== null && "code" in error ? String(error.code) : "unknown";
+        }
+        return Response.json({ document: document?.content ?? null, nested, proposalCode });
+      },
     }],
     async dispose() {},
   };
@@ -1618,6 +1632,22 @@ describe("Scriptorium HTTP boundary", () => {
     assert.equal(computeResult.ok && computeResult.data.nested.ok, false);
     assert.equal(computeResult.ok && !computeResult.data.nested.ok && computeResult.data.nested.error.code, "action_effect_denied");
     assert.equal(fixture.proposed.length, 0, "compute must not reach a host proposal port");
+
+    const httpCompute = await fetch(`${apiServer.base}/api/projects/project-1/modules/mcp/compute`, {
+      method: "POST", headers: bearer, body: JSON.stringify({ operation: { id: "must-not-propose" } }),
+    });
+    assert.equal(httpCompute.status, 200);
+    const httpComputeResult = await httpCompute.json() as {
+      document: string | null;
+      nested: ActionResult<{ nested: ActionResult }>;
+      proposalCode: string | null;
+    };
+    assert.equal(httpComputeResult.document, "---\nid: scene-one\n---\n\nA harbor at night.\n", "bearer compute contributions receive the selected snapshot reader");
+    assert.equal(httpComputeResult.nested.ok, true);
+    assert.equal(httpComputeResult.nested.ok && httpComputeResult.nested.data.nested.ok, false);
+    assert.equal(httpComputeResult.nested.ok && !httpComputeResult.nested.data.nested.ok && httpComputeResult.nested.data.nested.error.code, "action_effect_denied");
+    assert.equal(httpComputeResult.proposalCode, "action_effect_denied", "HTTP compute may not use the host proposal capability");
+    assert.equal(fixture.proposed.length, 0, "bearer HTTP compute must not reach the proposal coordinator");
 
     const operation: ChangeOperation = {
       id: "mcp-cookie-operation", generation: 0, repository: SNAPSHOT.repository, baseRemoteCommit: SNAPSHOT.remoteCommit,

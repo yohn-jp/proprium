@@ -1453,7 +1453,7 @@ export function createServer(options: ApiServerOptions): Server {
         const moduleId = parseProjectId(moduleRoute[1]!);
         const contribution = await contributionFor(moduleId, moduleRoute[2] ?? "", method);
         if (!contribution || contribution.access !== "owner") throw httpFailure(404, "MODULE_ROUTE_UNAVAILABLE", "Module route is unavailable");
-        if (isBearer && !["read", "propose"].includes(contribution.effect)) throw httpFailure(403, "BEARER_EFFECT_DENIED", "Bearer credentials may only use read and propose module routes");
+        if (isBearer && !["read", "compute", "propose"].includes(contribution.effect)) throw httpFailure(403, "BEARER_EFFECT_DENIED", "Bearer credentials may only use read, compute, and propose module routes");
         if (!runtime.invokeHttp) throw httpFailure(503, "MODULE_HTTP_UNAVAILABLE", "The runtime does not support HTTP module contributions");
         if (contribution.effect === "read" && method !== "GET" && method !== "HEAD") throw httpFailure(405, "MODULE_HTTP_METHOD_DENIED", "Read-only module routes must use GET or HEAD");
         const reader = await freshReader(projectId, "remote");
