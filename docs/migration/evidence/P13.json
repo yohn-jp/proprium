@@ -1,0 +1,230 @@
+{
+  "schemaVersion": 1,
+  "task": "P13",
+  "implementationStatus": "in_progress",
+  "acceptanceStatus": "pending",
+  "source": {
+    "repository": "yohn-jp/arcadia-loom",
+    "commit": "edc033c2c9466274a334299dadfa426661d957d9",
+    "readOnly": true
+  },
+  "target": {
+    "repository": "yohn-jp/scriptorium",
+    "frozenHead": "fc4eea880ef895decf6161bf4f45cc958e9700b3",
+    "frozenTree": "7a56bd432597b7f31588af69f12a4e3a14243b46"
+  },
+  "proofs": [
+    {
+      "id": "P13-FROZEN-COMPOSITION",
+      "kind": "final local composed acceptance",
+      "status": "pending",
+      "command": "pnpm verify",
+      "testedHead": "fc4eea880ef895decf6161bf4f45cc958e9700b3",
+      "logArtifact": "scriptorium-root-final-fc4eea88-verify.log",
+      "result": "The process is running. P12 and the final full-profile OCI check are not yet recorded as passed."
+    },
+    {
+      "id": "P13-CORE-GITHUB-BROWSER-RECOVERY",
+      "kind": "actual GitHub, Chromium IndexedDB and OCI recovery",
+      "status": "passed",
+      "testedHead": "f3ef4d34b5e603885ec2cbf204446b6becef3071",
+      "command": "node tests/e2e/container-recovery.acceptance.mjs",
+      "logArtifact": "scriptorium-root-f3ef4d34-core-recovery.log",
+      "logSha256": "4ae6bc4a7ba39bbc991c91267ab6730d1848bcd5ce53c57d07a492931cfcff27",
+      "image": {
+        "id": "b33526e4325684b8cf068ec1a442c4c71d9801ac395c75f71053ca598ed9af45",
+        "digest": "sha256:79d59260c436dfa98b9e250eba9ee616058a756b7d62935b71d5dd5740b7f0b0",
+        "platform": "linux/amd64",
+        "sizeBytes": 353929156,
+        "sizeField": "Podman image inspect .Size"
+      },
+      "result": "IndexedDB survives browser restart and container data-volume replacement; full operation replay publishes exactly once only after owner action; unedited content follows fetched updates; same-file conflict retains author input and rejects publication.",
+      "coreRuntimeEquivalence": {
+        "comparedImageId": "31da2af987034e2f5be8778508c34189956ac3a93dad32ebb5cabd55793fe562",
+        "regularFilesCompared": 2369,
+        "differentFiles": [
+          "node_modules/.modules.yaml",
+          "node_modules/.pnpm-workspace-state-v1.json",
+          "pnpm-workspace.yaml"
+        ],
+        "differences": "Only pnpm prunedAt, lastValidatedTimestamp, and allowBuilds mapping key order differ. All other /app bytes, modes and symlink targets match. The semantic browser change is absent from the Core profile."
+      }
+    },
+    {
+      "id": "P13-FULL-MODEL-LIFECYCLE",
+      "kind": "actual supported CPU models and process lifecycle in the full OCI image",
+      "status": "passed",
+      "testedHead": "95711fb4b00df7cf20ee24aaa3a00fbe909194e5",
+      "testedTree": "7a56bd432597b7f31588af69f12a4e3a14243b46",
+      "command": "node --test tests/integration/model-oci-lifecycle.acceptance.mjs",
+      "runtimeInputEquivalence": "The complete tested source tree equals frozen main fc4eea88.",
+      "logArtifact": "scriptorium-p13-final-full-oci-95711fb.log",
+      "logSha256": "3c25e81121513bc31f61bd181811b7233b4c6e5cb5098f51718e3c4288bd08fe",
+      "candidateSha256": "a7c075d134fca408333b112f1ba9fad6bdf281dd4387d840f1474394a42e6339",
+      "durationMs": 158877.273077,
+      "image": {
+        "tag": "localhost/scriptorium:p13-full-95711fb",
+        "id": "4333fbe0b2bf2f41cda5bfc78402f5eeb67f32e3b9aa3a5924ff69a9b898402e",
+        "digest": "sha256:ac8aaf8f17843b91b3168c69e02bfdf9169deef8895c6ae5093cbb83c5edde48",
+        "platform": "linux/amd64",
+        "sizeBytes": 778039748,
+        "sizeField": "Podman image inspect .Size",
+        "postRunSizeBytes": 1320442820,
+        "postRunSizeField": "Podman image inspect .Size",
+        "sizeObservationNote": "The test-time and post-run .Size readings differ for the same immutable ID/digest. Both observations are retained; no size reduction or cause is claimed."
+      },
+      "modelRefs": {
+        "embedding": {
+          "id": "Xenova/multilingual-e5-small",
+          "revision": "761b726dd34fb83930e26aab4e9ac3899aa1fa78"
+        },
+        "reranker": {
+          "id": "mogolloni/bge-reranker-v2-m3-onnx",
+          "revision": "e5023553f6c47f09057da7a19cdd79ef850a4985"
+        }
+      },
+      "result": {
+        "exactTokenCounts": [
+          8,
+          6,
+          11
+        ],
+        "fallbackTokenCounts": [
+          2,
+          2,
+          0
+        ],
+        "sharedProviderIdentity": 2,
+        "sharedWorkerPid": 14788,
+        "completedNearestHits": [
+          {
+            "module": "diagnostics",
+            "hits": 24,
+            "model": "Xenova/multilingual-e5-small",
+            "revision": "761b726dd34fb83930e26aab4e9ac3899aa1fa78",
+            "dimensions": 384
+          },
+          {
+            "module": "semantic",
+            "hits": 30,
+            "model": "Xenova/multilingual-e5-small",
+            "revision": "761b726dd34fb83930e26aab4e9ac3899aa1fa78",
+            "dimensions": 384
+          }
+        ],
+        "disableOneConsumerPreservesOther": true,
+        "lastLeaseStopsWorker": true,
+        "derivedIndexRecovered": true,
+        "replacementResults": 5
+      },
+      "phases": [
+        {
+          "name": "full-installed-disabled-and-enabled-idle-baseline",
+          "aggregateRssMiB": 101.5,
+          "cgroupMemoryBytes": 53428224,
+          "pids": 12,
+          "compiledWorkerCount": 0,
+          "semanticWorkerCount": 0,
+          "maxEventLoopDelayMs": 35.13
+        },
+        {
+          "name": "actual-nlp-tokenizer-child",
+          "aggregateRssMiB": 243.1,
+          "cgroupMemoryBytes": 160780288,
+          "pids": 19,
+          "compiledWorkerCount": 1,
+          "semanticWorkerCount": 0,
+          "maxEventLoopDelayMs": 20.61
+        },
+        {
+          "name": "actual-nlp-token-counter-child",
+          "aggregateRssMiB": 492.3,
+          "cgroupMemoryBytes": 407977984,
+          "pids": 23,
+          "compiledWorkerCount": 1,
+          "semanticWorkerCount": 0,
+          "maxEventLoopDelayMs": 21.15
+        },
+        {
+          "name": "actual-speaker-and-lindera-children",
+          "aggregateRssMiB": 503.7,
+          "cgroupMemoryBytes": 395247616,
+          "pids": 26,
+          "compiledWorkerCount": 2,
+          "semanticWorkerCount": 0,
+          "maxEventLoopDelayMs": 61.87
+        },
+        {
+          "name": "gated-diagnostics-semantic-lease-cancellation",
+          "aggregateRssMiB": 1412.4,
+          "cgroupMemoryBytes": 1433948160,
+          "pids": 38,
+          "compiledWorkerCount": 1,
+          "semanticWorkerCount": 1,
+          "maxEventLoopDelayMs": 36.83
+        },
+        {
+          "name": "shared-diagnostics-semantic-real-inference",
+          "aggregateRssMiB": 1886.3,
+          "cgroupMemoryBytes": 1911222272,
+          "pids": 45,
+          "compiledWorkerCount": 2,
+          "semanticWorkerCount": 1,
+          "maxEventLoopDelayMs": 31.54
+        },
+        {
+          "name": "delete-derived-index-and-rebuild-from-synthetic-git",
+          "aggregateRssMiB": 1383.2,
+          "cgroupMemoryBytes": 1437556736,
+          "pids": 38,
+          "compiledWorkerCount": 1,
+          "semanticWorkerCount": 1,
+          "maxEventLoopDelayMs": 31
+        },
+        {
+          "name": "after-disable-before-replacement",
+          "aggregateRssMiB": 274.4,
+          "cgroupMemoryBytes": 337469440,
+          "pids": 12,
+          "compiledWorkerCount": 0,
+          "semanticWorkerCount": 0,
+          "maxEventLoopDelayMs": 0
+        },
+        {
+          "name": "replacement-e5-bge-search",
+          "aggregateRssMiB": 1999.8,
+          "cgroupMemoryBytes": 2093592576,
+          "pids": 38,
+          "compiledWorkerCount": 1,
+          "semanticWorkerCount": 1,
+          "maxEventLoopDelayMs": 25.77
+        },
+        {
+          "name": "after-replacement-worker-release",
+          "aggregateRssMiB": 274,
+          "cgroupMemoryBytes": 442023936,
+          "pids": 12,
+          "compiledWorkerCount": 0,
+          "semanticWorkerCount": 0,
+          "maxEventLoopDelayMs": 0
+        }
+      ]
+    },
+    {
+      "id": "P13-CONFIGURED-LOCAL-PROVIDER",
+      "kind": "real local Qwen through both MCP transports and owner API/Core",
+      "status": "passed",
+      "testedHead": "34fd9d1039140af50a133a73e2174be0221d4e33",
+      "logArtifact": "scriptorium-p11-final-three-tests-34fd9d1.log",
+      "logSha256": "02a45a9ef7934a66e6bb40baef1c059110ca856c294ac0595a1bbf9ec47c83d5",
+      "durationMs": 57593.919179,
+      "result": "Three tests passed without skips: stdio and SDK HTTP MCP; owner-compute continuation preview; streaming/cancellation/usage and author-selected rewrite through Core approval, checkpoint, publication and reconstruction. QA preserves recognized schema/JSON failures; no generated schema-valid answer is fabricated.",
+      "evidence": "docs/migration/evidence/P11.json"
+    }
+  ],
+  "limitations": [
+    "Whole-command acceptance and P12 remain pending until their current processes complete.",
+    "Measurements describe this local host without deployment resource quotas.",
+    "The local provider reference is a bounded wiring check, not a model-quality evaluation."
+  ]
+}
