@@ -140,6 +140,42 @@ async function readPublicationReceipts(page: Page): Promise<PublicationReceiptSu
   });
 }
 
+async function readRemoteSceneContent(page: Page, sceneId: string): Promise<string | null> {
+  const projectId = await page.evaluate(() => localStorage.getItem("scriptorium:active-project"));
+  if (!projectId) return null;
+  const origin = new URL(page.url()).origin;
+  const projectPath = "/api/projects/" + encodeURIComponent(projectId);
+  const observationResponse = await page.request.get(new URL(projectPath + "/observation", origin).toString());
+  if (!observationResponse.ok()) return null;
+  const observation = await observationResponse.json() as { snapshot?: { remoteCommit?: string } };
+  const remoteCommit = observation.snapshot?.remoteCommit;
+  if (!remoteCommit) return null;
+  const sceneResponse = await page.request.get(new URL(
+    projectPath + "/scenes/" + encodeURIComponent(sceneId) + "?view=remote&snapshot=" + encodeURIComponent(remoteCommit),
+    origin,
+  ).toString());
+  if (!sceneResponse.ok()) return null;
+  const sceneRead = await sceneResponse.json() as { document?: { content?: string } };
+  return typeof sceneRead.document?.content === "string" ? sceneRead.document.content : null;
+}
+
+async function expectPublishedOperation(
+  page: Page,
+  operationId: string,
+  generation: number,
+  sceneId: string,
+  expectedRemoteText: string,
+): Promise<void> {
+  await expect.poll(async () => (await readPublicationReceipts(page)).some((receipt) =>
+    receipt.state === "confirmed" && receipt.acknowledged.some((item) => item.operationId === operationId && item.generation === generation),
+  ), { timeout: 30_000 }).toBe(true);
+  await expect.poll(async () => (await readJournal(page)).some((entry) =>
+    entry.operationId === operationId && entry.generation === generation,
+  ), { timeout: 30_000 }).toBe(false);
+  await expect.poll(async () => (await readRemoteSceneContent(page, sceneId))?.includes(expectedRemoteText) ?? false,
+    { timeout: 30_000 }).toBe(true);
+}
+
 async function readProposalJournal(page: Page): Promise<ProposalJournalSummary[]> {
   return page.evaluate(async () => {
     const database = await new Promise<IDBDatabase>((resolve, reject) => {
@@ -348,8 +384,10 @@ test("writing UI recovers multi-document drafts and separates Draft, Checkpoint,
   const checkpointed = await readJournal(page);
   expect(checkpointed).toHaveLength(3);
   expect(checkpointed.find((entry) => entry.text === sceneOneDraft)?.state).toBe("checkpointed");
-  const checkpointBatchId = checkpointed.find((entry) => entry.text === sceneOneDraft)?.operationId;
-  const scratchBatchId = checkpointed.find((entry) => entry.documentPath.startsWith("meta/scratch/"))?.operationId;
+  const checkpointedScene = checkpointed.find((entry) => entry.text === sceneOneDraft);
+  const checkpointedScratch = checkpointed.find((entry) => entry.documentPath.startsWith("meta/scratch/"));
+  expect(checkpointedScene).toBeTruthy();
+  expect(checkpointedScratch).toBeTruthy();
   await page.getByRole("button", { name: "履歴", exact: true }).click();
   const checkpointHistory = page.locator(".manuscript-history");
   await expect(checkpointHistory.getByRole("heading", { name: "改稿の履歴" })).toBeVisible();
@@ -357,14 +395,18 @@ test("writing UI recovers multi-document drafts and separates Draft, Checkpoint,
   await expect(checkpointHistory).toContainText("確認済みリモート版");
   await checkpointHistory.getByRole("button", { name: "閉じる" }).click();
   await page.getByRole("button", { name: "Save to GitHub" }).click();
-  await expect(page.locator(".topbar-status")).toContainText("GitHub への保存を確認しました。");
+  await expectPublishedOperation(page, checkpointedScene!.operationId, checkpointedScene!.generation, "scene-1", sceneOneDraft);
+  await expect.poll(async () => (await readPublicationReceipts(page)).some((receipt) =>
+    receipt.state === "confirmed" && receipt.acknowledged.some((item) =>
+      item.operationId === checkpointedScratch!.operationId && item.generation === checkpointedScratch!.generation,
+    ),
+  ), { timeout: 30_000 }).toBe(true);
   await expect(page.getByText("Saved to GitHub", { exact: true })).toBeVisible();
   await expect.poll(async () => (await readJournal(page)).map((entry) => `${entry.documentPath}:${entry.state}`)).toEqual([
     "manuscript/vol-1/ch-1/scene-2.md:draft",
   ]);
   expect((await readPublicationReceipts(page)).some((receipt) => receipt.state === "confirmed" &&
-    receipt.acknowledged.some((item) => item.operationId === checkpointBatchId) &&
-    receipt.acknowledged.some((item) => item.operationId === scratchBatchId))).toBe(true);
+    receipt.acknowledged.some((item) => item.operationId === checkpointedScene!.operationId && item.generation === checkpointedScene!.generation))).toBe(true);
   const laterDraft = "A later draft compared with the published version.";
   await editor.fill(laterDraft);
   await expect.poll(async () => (await readJournal(page)).some((entry) => entry.text === laterDraft && entry.state === "draft")).toBe(true);
@@ -424,9 +466,11 @@ test("new typing survives an older in-flight checkpoint and exact publication ac
   const afterCheckpoint = await readJournal(page);
   expect(afterCheckpoint.find((entry) => entry.text === firstGeneration)?.state).toBe("checkpointed");
   expect(afterCheckpoint.find((entry) => entry.text === newerGeneration)?.state).toBe("draft");
+  const publishedGeneration = afterCheckpoint.find((entry) => entry.text === firstGeneration);
+  expect(publishedGeneration).toBeTruthy();
 
   await page.getByRole("button", { name: "Save to GitHub" }).click();
-  await expect(page.locator(".topbar-status")).toContainText("GitHub への保存を確認しました。");
+  await expectPublishedOperation(page, publishedGeneration!.operationId, publishedGeneration!.generation, "scene-1", firstGeneration);
   const afterPublication = await readJournal(page);
   expect(afterPublication).toHaveLength(1);
   expect(afterPublication[0]?.text).toBe(newerGeneration);
@@ -563,6 +607,13 @@ test("new typing survives a gated browser-draft rebase during checkpoint recover
   expect(newest?.operationId).toBe(staleDraft?.operationId);
   expect(newest?.generation).toBeGreaterThan(staleDraft?.generation ?? 0);
   releaseCheckpointRead();
+
+  const ownedCheckpoint = (await readJournal(page)).find((entry) => entry.text === checkpointedText && entry.state === "checkpointed");
+  expect(ownedCheckpoint).toBeTruthy();
+  await expect(page.getByRole("button", { name: "Save to GitHub" })).toBeEnabled();
+  await page.getByRole("button", { name: "Save to GitHub" }).click();
+  await expectPublishedOperation(page, ownedCheckpoint!.operationId, ownedCheckpoint!.generation, "scene-1", checkpointedText);
+  await expect.poll(async () => (await readJournal(page)).some((entry) => entry.text === newestText)).toBe(true);
 });
 
 test("browser recovery is author-scoped and foreign records remain untouched", async ({ page }) => {
@@ -740,7 +791,6 @@ test("external MCP proposals enter owner review before approval, then checkpoint
   )).toBe(true);
   await expect(page.getByRole("button", { name: "Save to GitHub" })).toBeEnabled();
   await page.getByRole("button", { name: "Save to GitHub" }).click();
-  await expect(page.locator(".topbar-status")).toContainText("GitHub への保存を確認しました。");
   await expect.poll(async () => (await readJournal(page)).some((record) => record.operationId === operationId)).toBe(false);
   expect((await readPublicationReceipts(page)).some((receipt) => receipt.state === "confirmed" &&
     receipt.acknowledged.some((item) => item.operationId === operationId && item.generation === 1))).toBe(true);
@@ -1119,8 +1169,9 @@ test("project details, reconstruction, and guarded removal preserve browser reco
   try {
     page.once("dialog", (dialog) => dialog.accept());
     await page.getByRole("button", { name: "作品の登録を解除" }).click();
-    await expect(page.getByRole("alert")).toHaveAttribute("data-code", "working_tree_dirty");
-    await expect(page.getByRole("alert")).toContainText("working_tree_dirty");
+    const dirtyWorkspaceError = page.locator('[role="alert"][data-code="working_tree_dirty"]');
+    await expect(dirtyWorkspaceError).toBeVisible();
+    await expect(dirtyWorkspaceError).toContainText("working_tree_dirty");
     await expect(page.getByRole("button", { name: projectLabel(repositoryUrl), exact: true })).toBeVisible();
     expect((await readJournal(page)).some((entry) => entry.text === recoverableText && entry.state === "draft")).toBe(true);
   } finally {
