@@ -14,6 +14,7 @@ const commands = [
   ["pnpm", ["exec", "playwright", "test", "--config", "tests/e2e/playwright.config.ts"], { SCRIPTORIUM_PROFILE: "full" }],
   ["node", ["--test", "tests/integration/mcp-acceptance.test.mjs"], { SCRIPTORIUM_MCP_ACCEPTANCE_MODULES: "story,nlp,diagnostics,semantic,speaker,assistant,publishing,mcp" }],
   ["node", ["--test", "modules/diagnostics/tests/production.acceptance.mjs"]],
+  ["node", ["--test", "tests/integration/migration-acceptance.test.mjs"]],
   ["bash", ["scripts/verify-oci.sh"], { SCRIPTORIUM_PROFILE: "full", SCRIPTORIUM_OCI_IMAGE: process.env.SCRIPTORIUM_OCI_FULL_IMAGE ?? "scriptorium:verification-full" }],
 ];
 for (const [command, args, overrides = {}] of commands) {
