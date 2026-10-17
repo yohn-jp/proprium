@@ -46,6 +46,30 @@ async function waitFor(predicate, message, timeoutMs = 90_000, pollIntervalMs = 
   throw new Error(message);
 }
 
+async function waitForGateOrAbort(gate, signal, timeoutMs, message) {
+  const timeoutController = new AbortController();
+  let abortHandler;
+  const aborted = new Promise((_, reject) => {
+    abortHandler = () => reject(signal.reason instanceof Error
+      ? signal.reason
+      : Object.assign(new Error(message), { code: "action_cancelled" }));
+    if (signal.aborted) abortHandler();
+    else signal.addEventListener("abort", abortHandler, { once: true });
+  });
+  try {
+    await Promise.race([
+      gate.promise,
+      delay(timeoutMs, undefined, { signal: timeoutController.signal }).then(() => {
+        throw new Error(message);
+      }),
+      aborted,
+    ]);
+  } finally {
+    timeoutController.abort();
+    if (abortHandler) signal.removeEventListener("abort", abortHandler);
+  }
+}
+
 async function readProcess(pid) {
   try {
     const [status, rawCommand] = await Promise.all([
@@ -253,7 +277,7 @@ function createObservationGate(id, context, gate, events, valueIds, sharedUseObs
       if (capabilityId !== "semantic.embedding") return lease;
       let identity = valueIds.get(lease.value);
       if (identity === undefined) {
-        identity = valueIds.size + 1;
+        identity = ++nextValueIdentity;
         valueIds.set(lease.value, identity);
       }
       events.push({ module: id, phase: "acquired", identity, value: lease.value });
@@ -280,10 +304,49 @@ function createObservationGate(id, context, gate, events, valueIds, sharedUseObs
             const member = Reflect.get(target, property, target);
             if (typeof member !== "function") return member;
             return (...args) => {
-              if (sharedUseObservation?.enabled && (property === "index" || property === "nearest")) {
+              const observe = sharedUseObservation?.enabled && (property === "index" || property === "nearest");
+              if (observe) {
                 sharedUseObservation.calls.push({ module: id, method: property, identity });
               }
-              return Reflect.apply(member, target, args);
+              const result = Reflect.apply(member, target, args);
+              if (!observe) return result;
+              if (id === "semantic" && property === "nearest") {
+                sharedUseObservation.semanticNearestStarted = true;
+                sharedUseObservation.semanticNearestWorkerState = sharedUseObservation.captureWorkerState?.() ?? null;
+              }
+              return Promise.resolve(result).then((value) => {
+                sharedUseObservation.completions.push({
+                  module: id,
+                  method: property,
+                  model: value?.model ?? null,
+                  modelVersion: value?.modelVersion ?? null,
+                  dimensions: value?.dimensions ?? null,
+                  snapshot: value?.snapshot ? JSON.stringify(value.snapshot) : null,
+                  hitCount: Array.isArray(value?.hits) ? value.hits.length : null,
+                  embedded: Number.isFinite(value?.embedded) ? value.embedded : null,
+                });
+                return value;
+              }).finally(() => {
+                if (id === "semantic" && property === "nearest") {
+                  sharedUseObservation.semanticNearestSettled.open();
+                }
+              }).then(async (value) => {
+                if (id === "diagnostics" && property === "nearest" && !sharedUseObservation.semanticNearestStarted) {
+                  sharedUseObservation.diagnosticsNearestResultWasHeld = true;
+                  sharedUseObservation.diagnosticsNearestResultHeld = true;
+                  try {
+                    await waitForGateOrAbort(
+                      sharedUseObservation.semanticNearestSettled,
+                      context.signal,
+                      90_000,
+                      "Semantic did not complete its real nearest call before the shared-use rendezvous expired",
+                    );
+                  } finally {
+                    sharedUseObservation.diagnosticsNearestResultHeld = false;
+                  }
+                }
+                return value;
+              });
             };
           },
         }),
@@ -314,7 +377,16 @@ async function runLifecycle() {
   diagnosticGate.used = false;
   const capabilityEvents = [];
   const valueIds = new WeakMap();
-  const sharedUseObservation = { enabled: false, calls: [] };
+  let nextValueIdentity = 0;
+  const sharedUseObservation = {
+    enabled: false,
+    calls: [],
+    completions: [],
+    semanticNearestStarted: false,
+    semanticNearestSettled: waitGate(),
+    diagnosticsNearestResultHeld: false,
+    diagnosticsNearestResultWasHeld: false,
+  };
   const loaders = {
     ...composition.moduleLoaders,
     diagnostics: async (context) => composition.moduleLoaders.diagnostics(createObservationGate("diagnostics", context, diagnosticGate, capabilityEvents, valueIds, sharedUseObservation)),
@@ -333,6 +405,10 @@ async function runLifecycle() {
     capabilityProviders: {
       [MODEL_USAGE_CAPABILITY]: { create: () => usageStore },
     },
+  });
+  sharedUseObservation.captureWorkerState = () => ({
+    semanticPids: workerPids(runtime, composition.moduleWorkerEntries.semantic),
+    semanticActiveJobs: runtime.workerSupervisor.activeJobCountFor("semantic"),
   });
   assert.equal(await readlink("/data/module-cache/semantic/semantic/models"), "/models");
   const fs = await import("node:fs/promises");
@@ -525,15 +601,40 @@ async function runLifecycle() {
       workerPids(runtime, composition.moduleWorkerEntries.semantic).length === 1,
     "Diagnostics did not use the real semantic nearest provider with one Semantic child");
     const sharedSemanticPid = workerPids(runtime, composition.moduleWorkerEntries.semantic)[0];
+    let actualSemanticSettlement = null;
     const actualSemanticPromise = invoke("semantic.search", {
       query: "夜遅く駅に着き、青い切符を握りしめた。", mode: "scene", limit: 5, rerank: false,
+    }).then((response) => {
+      actualSemanticSettlement = { kind: "response", ok: response?.ok, error: response?.error ?? null };
+      return response;
+    }, (error) => {
+      actualSemanticSettlement = { kind: "rejected", message: error instanceof Error ? error.message : String(error) };
+      return null;
     });
-    await waitFor(() => sharedUseObservation.calls.slice(sharedUseCallStart).some((event) => event.module === "semantic" && event.method === "nearest") &&
-      workerPids(runtime, composition.moduleWorkerEntries.semantic).length === 1 &&
-      workerPids(runtime, composition.moduleWorkerEntries.semantic)[0] === sharedSemanticPid,
-    "Semantic search did not use the same real provider and Semantic child as Diagnostics");
+    const semanticNearestObserved = () => sharedUseObservation.calls.slice(sharedUseCallStart)
+      .some((event) => event.module === "semantic" && event.method === "nearest");
+    const sharedUseTrace = () => JSON.stringify({
+      settlement: actualSemanticSettlement,
+      calls: sharedUseObservation.calls.slice(sharedUseCallStart),
+      completions: sharedUseObservation.completions,
+      capabilityEvents: capabilityEvents.slice(sharedUseEventStart).map(({ module, phase, identity }) => ({ module, phase, identity })),
+      semanticPids: workerPids(runtime, composition.moduleWorkerEntries.semantic),
+      semanticActiveJobs: runtime.workerSupervisor.activeJobCountFor("semantic"),
+      semanticNearestWorkerState: sharedUseObservation.semanticNearestWorkerState,
+    });
+    try {
+      await waitFor(() => semanticNearestObserved() || actualSemanticSettlement !== null,
+        "Semantic action did not reach or settle its real nearest provider call", 90_000, 10);
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error);
+      throw new Error(message + "; final shared-use trace=" + sharedUseTrace());
+    }
+    assert.ok(semanticNearestObserved(), "Semantic search did not invoke its real nearest provider: " + sharedUseTrace());
+    assert.deepEqual(sharedUseObservation.semanticNearestWorkerState?.semanticPids, [sharedSemanticPid],
+      "Semantic nearest inference must use the same live child PID held by Diagnostics");
     const [actualDiagnosticsResponse, actualSemanticResponse] = await Promise.all([actualDiagnosticsPromise, actualSemanticPromise]);
     sharedUseObservation.enabled = false;
+    assert.ok(actualSemanticResponse, "semantic.search request must complete successfully");
     const actualDiagnostics = actionData(actualDiagnosticsResponse, "diagnostics.analyze");
     const actualSemantic = actionData(actualSemanticResponse, "semantic.search");
     assert.ok(actualDiagnostics.analysis.habitualPhraseWarnings.some((warning) => warning.phrase === "彼は悲しい"),
@@ -541,6 +642,7 @@ async function runLifecycle() {
     assert.deepEqual(actualDiagnostics.semanticEmbedding, {
       model: MODEL_IDS.embedding.id, modelVersion: MODEL_IDS.embedding.revision, dimensions: 384,
     }, "Diagnostics must report the real shared model identity");
+    assert.equal(actualSemantic.warning, undefined, "Semantic search must complete the real E5 nearest inference without fallback");
     assert.equal(actualSemantic.model, MODEL_IDS.embedding.id);
     assert.equal(actualSemantic.modelVersion, MODEL_IDS.embedding.revision);
     assert.ok(actualSemantic.results?.length > 0, "Semantic search must return results from the synthetic corpus");
@@ -555,6 +657,44 @@ async function runLifecycle() {
     assert.ok(sharedUseCalls.some((event) => event.module === "diagnostics" && event.method === "index"));
     assert.ok(sharedUseCalls.some((event) => event.module === "diagnostics" && event.method === "nearest"));
     assert.ok(sharedUseCalls.some((event) => event.module === "semantic" && event.method === "nearest"));
+    const diagnosticsNearestCompletion = sharedUseObservation.completions.find((event) => event.module === "diagnostics" && event.method === "nearest");
+    const semanticNearestCompletion = sharedUseObservation.completions.find((event) => event.module === "semantic" && event.method === "nearest");
+    assert.deepEqual(
+      {
+        model: diagnosticsNearestCompletion?.model,
+        modelVersion: diagnosticsNearestCompletion?.modelVersion,
+        dimensions: diagnosticsNearestCompletion?.dimensions,
+        snapshot: diagnosticsNearestCompletion?.snapshot,
+      },
+      {
+        model: MODEL_IDS.embedding.id,
+        modelVersion: MODEL_IDS.embedding.revision,
+        dimensions: 384,
+        snapshot: JSON.stringify(actualDiagnosticsResponse.snapshot),
+      },
+      "Diagnostics must complete an actual nearest call with the pinned E5 result identity",
+    );
+    assert.ok((diagnosticsNearestCompletion?.hitCount ?? 0) > 0, "Diagnostics nearest inference must return real synthetic-corpus hits");
+    assert.deepEqual(
+      {
+        model: semanticNearestCompletion?.model,
+        modelVersion: semanticNearestCompletion?.modelVersion,
+        dimensions: semanticNearestCompletion?.dimensions,
+        snapshot: semanticNearestCompletion?.snapshot,
+      },
+      {
+        model: MODEL_IDS.embedding.id,
+        modelVersion: MODEL_IDS.embedding.revision,
+        dimensions: 384,
+        snapshot: JSON.stringify(actualSemanticResponse.snapshot),
+      },
+      "Semantic search must complete an actual nearest call with the pinned E5 result identity",
+    );
+    assert.ok((semanticNearestCompletion?.hitCount ?? 0) > 0, "Semantic nearest inference must return real synthetic-corpus hits");
+    const semanticLeaseIndex = sharedUseEvents.findIndex((event) => event.module === "semantic" && event.phase === "acquired");
+    const diagnosticsReleaseIndex = sharedUseEvents.findIndex((event) => event.module === "diagnostics" && event.phase === "released");
+    assert.ok(semanticLeaseIndex >= 0 && diagnosticsReleaseIndex > semanticLeaseIndex,
+      "the real Semantic lease must overlap Diagnostics' real nearest result lease");
     const sharedUsePhase = await sampler.mark();
     assert.equal(sharedUsePhase.peakSemantic?.semanticWorkerCount, 1,
       "actual shared use must observe exactly one Semantic child");
@@ -564,6 +704,8 @@ async function runLifecycle() {
       identity: diagnosticsUseLease.identity,
       workerPid: sharedSemanticPid,
       calls: sharedUseCalls.map(({ module, method }) => ({ module, method })),
+      completions: sharedUseObservation.completions,
+      diagnosticsNearestResultWasHeld: sharedUseObservation.diagnosticsNearestResultWasHeld,
       diagnosticsModel: actualDiagnostics.semanticEmbedding,
       diagnosticsWarnings: actualDiagnostics.analysis.habitualPhraseWarnings.length,
       semanticModel: { id: actualSemantic.model, revision: actualSemantic.modelVersion },
@@ -641,6 +783,7 @@ async function runLifecycle() {
     await writeFile(OUTPUT_DIRECTORY + "/lifecycle.json", JSON.stringify(outcome, null, 2) + "\n", { mode: 0o600 });
   } finally {
     diagnosticGate.open();
+    sharedUseObservation.semanticNearestSettled.open();
     if (server.listening) {
       await new Promise((resolve, reject) => server.close((error) => error ? reject(error) : resolve()));
     }
