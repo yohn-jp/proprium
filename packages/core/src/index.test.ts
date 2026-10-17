@@ -470,6 +470,63 @@ test("requires a GitHub HTTPS URL in production mode", async () => {
   }
 });
 
+test("hosted CoreStore has no shared-token or local-remote fallback and rejects unassigned repositories before network access", async () => {
+  const tempDir = await fs.mkdtemp(path.join(os.tmpdir(), "scriptorium-hosted-core-test-"));
+  const binding = {
+    repositoryId: 342_100_801,
+    repositoryLocator: "https://github.com/yohn-jp/assigned-work",
+    instanceId: "instance_hosted_test",
+    runtimeEpoch: 7,
+  };
+  let credentialRequests = 0;
+  const provider = {
+    async getCredential() {
+      credentialRequests += 1;
+      return {
+        username: "x-access-token" as const,
+        token: "test-scoped-token",
+        repositoryId: binding.repositoryId,
+        permission: "read" as const,
+        runtimeEpoch: binding.runtimeEpoch,
+        expiresAt: new Date(Date.now() + 60_000).toISOString(),
+      };
+    },
+  };
+  const previousToken = process.env.SCRIPTORIUM_GITHUB_TOKEN;
+  try {
+    delete process.env.SCRIPTORIUM_GITHUB_TOKEN;
+    assert.throws(
+      () => new CoreStore({ dataDir: path.join(tempDir, "missing-provider"), hostedRepository: binding }),
+      /requires a GitCredentialProvider/u,
+    );
+    assert.throws(
+      () => new CoreStore({ dataDir: path.join(tempDir, "static-option"), hostedRepository: binding, githubToken: "static-token", gitCredentialProvider: provider }),
+      /Shared GitHub tokens are forbidden/u,
+    );
+    process.env.SCRIPTORIUM_GITHUB_TOKEN = "static-environment-token";
+    assert.throws(
+      () => new CoreStore({ dataDir: path.join(tempDir, "static-environment"), hostedRepository: binding, gitCredentialProvider: provider }),
+      /Shared GitHub tokens are forbidden/u,
+    );
+    delete process.env.SCRIPTORIUM_GITHUB_TOKEN;
+    assert.throws(
+      () => new CoreStore({ dataDir: path.join(tempDir, "local-remote"), hostedRepository: binding, gitCredentialProvider: provider, allowLocalRemotes: true }),
+      /Local remotes are forbidden/u,
+    );
+
+    const store = new CoreStore({ dataDir: path.join(tempDir, "assigned-only"), hostedRepository: binding, gitCredentialProvider: provider });
+    await assert.rejects(
+      store.registerProject({ url: "https://github.com/yohn-jp/other-work" }),
+      (error: unknown) => error instanceof CoreError && error.status === 403 && error.code === "hosted_repository_mismatch",
+    );
+    assert.equal(credentialRequests, 0);
+  } finally {
+    if (previousToken === undefined) delete process.env.SCRIPTORIUM_GITHUB_TOKEN;
+    else process.env.SCRIPTORIUM_GITHUB_TOKEN = previousToken;
+    await fs.rm(tempDir, { recursive: true, force: true });
+  }
+});
+
 test("search and writing statistics read one pinned remote snapshot", async () => {
   const { tempDir, remote, seed } = await makeRemote();
   const sceneOnePath = path.join(seed, "manuscript/vol-1/ch-1/scene-1.md");

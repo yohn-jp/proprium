@@ -4,6 +4,20 @@ import { promisify } from "node:util";
 import fs from "node:fs/promises";
 import path from "node:path";
 import YAML from "yaml";
+import type {
+  GitCredentialProvider,
+  HostedRepositoryBinding,
+  PublicationAuthorization,
+  PublicationAuthorizationRequest,
+} from "./hosted-git-credentials.js";
+export type {
+  GitCredentialProvider,
+  GitCredentialRequest,
+  HostedGitCredential,
+  HostedRepositoryBinding,
+  PublicationAuthorization,
+  PublicationAuthorizationRequest,
+} from "./hosted-git-credentials.js";
 import {
   MAX_PROPOSAL_EVIDENCE_BYTES,
   assertChangeOperation,
@@ -189,6 +203,10 @@ export class CoreError extends Error {
 export interface CoreStoreOptions {
   dataDir: string;
   githubToken?: string;
+  /** Assignment-bound repository identity. When present, shared credentials are forbidden. */
+  hostedRepository?: HostedRepositoryBinding;
+  /** Renews a repository-scoped App credential for each remote Git operation. */
+  gitCredentialProvider?: GitCredentialProvider;
   /** Allows local filesystem remotes for isolated tests and development. */
   allowLocalRemotes?: boolean;
   /** Optional fetch implementation for controlled GitHub API tests. */
@@ -1034,6 +1052,8 @@ export class CoreStore implements MutationCoordinator {
   private readonly locksDir: string;
   private readonly registryPath: string;
   private readonly token?: string;
+  private readonly hostedRepository?: HostedRepositoryBinding;
+  private readonly gitCredentialProvider?: GitCredentialProvider;
   private readonly allowLocalRemotes: boolean;
   private readonly fetcher: typeof fetch;
   private readonly maxPushAttempts: number;
@@ -1051,12 +1071,29 @@ export class CoreStore implements MutationCoordinator {
 
   constructor(options: CoreStoreOptions) {
     if (!options?.dataDir) throw new TypeError("CoreStore requires dataDir");
+    const configuredToken = options.githubToken ?? process.env.SCRIPTORIUM_GITHUB_TOKEN;
+    if (options.hostedRepository) {
+      const binding = options.hostedRepository;
+      if (!Number.isSafeInteger(binding.repositoryId) || binding.repositoryId <= 0 ||
+          !Number.isSafeInteger(binding.runtimeEpoch) || binding.runtimeEpoch <= 0 ||
+          !binding.instanceId || !binding.repositoryLocator) {
+        throw new TypeError("CoreStore hosted repository binding is invalid");
+      }
+      if (!options.gitCredentialProvider) throw new TypeError("Hosted CoreStore requires a GitCredentialProvider");
+      if (configuredToken !== undefined) throw new TypeError("Shared GitHub tokens are forbidden in hosted mode");
+      if (options.allowLocalRemotes) throw new TypeError("Local remotes are forbidden in hosted mode");
+      normalizeGitHubUrl(binding.repositoryLocator);
+      this.hostedRepository = structuredClone(binding);
+      this.gitCredentialProvider = options.gitCredentialProvider;
+    } else if (options.gitCredentialProvider) {
+      throw new TypeError("GitCredentialProvider requires a hosted repository binding");
+    }
     this.dataDir = path.resolve(options.dataDir);
     this.projectsDir = path.join(this.dataDir, "projects");
     this.proposalsDir = path.join(this.dataDir, "proposal-journal");
     this.locksDir = path.join(this.dataDir, ".locks");
     this.registryPath = path.join(this.dataDir, "projects.json");
-    this.token = options.githubToken ?? process.env.SCRIPTORIUM_GITHUB_TOKEN;
+    this.token = this.hostedRepository ? undefined : configuredToken;
     this.allowLocalRemotes = options.allowLocalRemotes ?? false;
     this.fetcher = options.fetch ?? fetch;
     this.maxPushAttempts = Math.min(MAX_PUSH_ATTEMPTS, Math.max(1, options.maxPushRetries ?? MAX_PUSH_ATTEMPTS));
@@ -1192,18 +1229,103 @@ export class CoreStore implements MutationCoordinator {
     validateProjectId(projectId);
     const record = (await this.readRegistry()).find((item) => item.id === projectId);
     if (!record) throw coreError(404, "project_not_found", "Project not found");
+    this.assertHostedRepository(record);
     return record;
+  }
+
+  private assertHostedRepository(record: ProjectRecord): void {
+    const binding = this.hostedRepository;
+    if (!binding) return;
+    let expectedUrl: string;
+    try { expectedUrl = normalizeGitHubUrl(binding.repositoryLocator); }
+    catch { throw coreError(503, "hosted_repository_binding_invalid", "The hosted repository assignment is invalid"); }
+    if (record.url !== expectedUrl || (record.identity &&
+        (record.identity.provider !== "github" || record.identity.repositoryId !== String(binding.repositoryId)))) {
+      throw coreError(403, "hosted_repository_mismatch", "This runtime is assigned to a different repository");
+    }
+  }
+
+  private async gitCredential(
+    record: ProjectRecord | undefined,
+    operation: "fetch" | "publish",
+    authorization?: PublicationAuthorization,
+  ): Promise<string | undefined> {
+    const binding = this.hostedRepository;
+    if (!binding) return this.token;
+    if (!this.gitCredentialProvider) throw coreError(503, "git_credential_unavailable", "The repository credential service is unavailable");
+    if (record) this.assertHostedRepository(record);
+    if (operation === "publish" && !authorization) {
+      throw coreError(403, "publication_authorization_required", "A current author publication authorization is required");
+    }
+    let credential;
+    try {
+      const request = operation === "fetch"
+        ? {
+            operation,
+            repositoryId: binding.repositoryId,
+            instanceId: binding.instanceId,
+            runtimeEpoch: binding.runtimeEpoch,
+          } as const
+        : {
+            operation,
+            repositoryId: binding.repositoryId,
+            instanceId: binding.instanceId,
+            runtimeEpoch: binding.runtimeEpoch,
+            mutationReceipt: authorization!.receipt,
+            operationId: authorization!.operationId,
+            payloadDigest: authorization!.payloadDigest,
+          } as const;
+      credential = await this.gitCredentialProvider.getCredential(request);
+    } catch (error) {
+      if (error instanceof CoreError) throw error;
+      const status = error && typeof error === "object" && "status" in error ? error.status : undefined;
+      if (status === 401 || status === 403) {
+        throw coreError(status, status === 403 ? "git_credential_denied" : "git_credential_unavailable",
+          status === 403 ? "The repository credential request was denied" : "The repository credential service is unavailable");
+      }
+      throw coreError(503, "git_credential_unavailable", "A repository-scoped Git credential could not be issued");
+    }
+    const expectedPermission = operation === "fetch" ? "read" : "write";
+    if (!credential || credential.username !== "x-access-token" ||
+        typeof credential.token !== "string" || !credential.token || /[\s\u0000-\u001f\u007f]/u.test(credential.token) ||
+        credential.repositoryId !== binding.repositoryId || credential.runtimeEpoch !== binding.runtimeEpoch ||
+        credential.permission !== expectedPermission || !Number.isFinite(Date.parse(credential.expiresAt)) ||
+        Date.parse(credential.expiresAt) <= Date.now()) {
+      throw coreError(503, "git_credential_invalid", "The repository credential service returned an invalid credential");
+    }
+    return credential.token;
+  }
+
+  private async authenticatedGit(
+    record: ProjectRecord | undefined,
+    cwd: string,
+    args: string[],
+    askpass: string,
+    operation: "fetch" | "publish" = "fetch",
+    authorization?: PublicationAuthorization,
+  ): Promise<string> {
+    const token = await this.gitCredential(record, operation, authorization);
+    return git(cwd, args, { token, askpass });
+  }
+
+  private async githubIdentityFor(url: string, record?: ProjectRecord): Promise<RepositoryIdentity> {
+    const token = await this.gitCredential(record, "fetch");
+    const identity = await githubIdentity(url, token, this.fetcher);
+    if (this.hostedRepository && identity.repositoryId !== String(this.hostedRepository.repositoryId)) {
+      throw coreError(403, "hosted_repository_mismatch", "The GitHub repository identity does not match this runtime assignment");
+    }
+    return identity;
   }
 
   private async discoverRepositoryIdentity(record: ProjectRecord, askpass: string): Promise<RepositoryIdentity> {
     if (/^https:\/\//i.test(record.url) || record.identity?.provider === "github") {
-      const identity = await githubIdentity(record.url, this.token, this.fetcher);
+      const identity = await this.githubIdentityFor(record.url, record);
       if (record.identity && (record.identity.provider !== identity.provider || record.identity.repositoryId !== identity.repositoryId)) {
         throw coreError(409, "repository_replaced", "The registered repository identity changed; mutations are paused");
       }
       return identity;
     }
-    const headInfo = await git(this.dataDir, ["ls-remote", "--symref", record.url, "HEAD"], { token: this.token, askpass });
+    const headInfo = await this.authenticatedGit(record, this.dataDir, ["ls-remote", "--symref", record.url, "HEAD"], askpass);
     const defaultBranch = headInfo.match(/^ref: refs\/heads\/(.+)\tHEAD$/m)?.[1] ?? record.identity?.defaultBranch ?? record.branch;
     const identity = localIdentity(record.url, branchName(defaultBranch));
     if (record.identity && (record.identity.provider !== identity.provider || record.identity.repositoryId !== identity.repositoryId)) {
@@ -1212,9 +1334,9 @@ export class CoreStore implements MutationCoordinator {
     return identity;
   }
 
-  private async remoteBranchCommit(cwd: string, remote: string, branch: string, askpass: string): Promise<string> {
+  private async remoteBranchCommit(cwd: string, remote: string, branch: string, askpass: string, record?: ProjectRecord): Promise<string> {
     const ref = `refs/heads/${branch}`;
-    const output = await git(cwd, ["ls-remote", "--heads", remote, ref], { token: this.token, askpass });
+    const output = await this.authenticatedGit(record, cwd, ["ls-remote", "--heads", remote, ref], askpass);
     const line = output.split(/\r?\n/).find((item) => item.endsWith(`\t${ref}`));
     const commit = line?.split(/\s+/, 1)[0] ?? "";
     return /^(?:[a-f0-9]{40}|[a-f0-9]{64})$/.test(commit) ? commit : "";
@@ -1286,6 +1408,7 @@ export class CoreStore implements MutationCoordinator {
     const records = await this.readRegistry();
     const record = records.find((item) => item.id === projectId);
     if (!record) throw coreError(404, "project_not_found", "Project not found");
+    this.assertHostedRepository(record);
     const root = path.join(this.projectsDir, record.directory);
     const stat = await fs.lstat(root).catch(() => null);
     if (!stat?.isDirectory() || stat.isSymbolicLink()) {
@@ -1503,9 +1626,9 @@ export class CoreStore implements MutationCoordinator {
   private async getRepositoryIdentity(record: ProjectRecord, root: string, askpass: string): Promise<RepositoryIdentity> {
     let identity: RepositoryIdentity;
     if (record.identity?.provider === "github" || /^https:\/\//i.test(record.url)) {
-      identity = await githubIdentity(record.url, this.token, this.fetcher);
+      identity = await this.githubIdentityFor(record.url, record);
     } else {
-      const head = await git(root, ["ls-remote", "--symref", "origin", "HEAD"], { token: this.token, askpass });
+      const head = await this.authenticatedGit(record, root, ["ls-remote", "--symref", "origin", "HEAD"], askpass);
       const defaultBranch = head.match(/^ref: refs\/heads\/(.+)\tHEAD$/m)?.[1] ?? record.identity?.defaultBranch ?? record.branch;
       identity = localIdentity(record.url, branchName(defaultBranch));
     }
@@ -1536,13 +1659,13 @@ export class CoreStore implements MutationCoordinator {
     try {
       const askpass = await makeAskpassScript(askpassDir);
       const identity = await this.getRepositoryIdentity(record, root, askpass);
-      const remote = await git(root, ["ls-remote", "--heads", "origin", `refs/heads/${record.branch}`], { token: this.token, askpass });
+      const remote = await this.authenticatedGit(record, root, ["ls-remote", "--heads", "origin", `refs/heads/${record.branch}`], askpass);
       const exists = remote.split(/\r?\n/).some((line) => line.endsWith(`\trefs/heads/${record.branch}`));
       if (!exists) {
         if (record.emptyRemote) return { identity, remoteCommit: "" };
         throw coreError(409, "remote_branch_missing", "The registered GitHub branch no longer exists");
       }
-      await git(root, ["fetch", "--no-tags", "origin", record.branch], { token: this.token, askpass });
+      await this.authenticatedGit(record, root, ["fetch", "--no-tags", "origin", record.branch], askpass);
       const remoteCommit = await this.getRef(root, `refs/remotes/origin/${record.branch}`);
       if (!remoteCommit) throw coreError(409, "remote_branch_missing", "The registered GitHub branch no longer exists");
       if (record.emptyRemote) {
@@ -3258,7 +3381,36 @@ export class CoreStore implements MutationCoordinator {
     return this.withProjectLock(projectId, () => this.reconcileUnlocked(projectId));
   }
 
-  async publish(projectId: string, batchId: string): Promise<import("@scriptorium/contracts").PublishReceipt> {
+  /** Returns the exact Gateway authorization binding for the pending rows in this batch. */
+  async getPublicationAuthorizationRequest(projectId: string, batchId: string): Promise<PublicationAuthorizationRequest | null> {
+    return this.withProjectLock(projectId, async () => {
+      if (typeof batchId !== "string" || !/^[A-Za-z0-9_-]{1,128}$/.test(batchId))
+        throw coreError(400, "invalid_batch_id", "The publication batch ID is invalid");
+      const { root } = await this.getProject(projectId);
+      const reconciled = await this.reconcileUnlocked(projectId);
+      const remoteHead = reconciled.snapshot.remoteCommit;
+      const historicalBatches = remoteHead
+        ? await this.readPublicationRecords(root, remoteHead)
+        : new Map<string, PublicationMetadata>();
+      if (historicalBatches.has(batchId)) return null;
+      const observation = await this.requireObservation(projectId);
+      if (reconciled.operations.some((item) => item.state === "conflict")) return null;
+      const pendingIds = new Set(observation.pending.map((receipt) => receipt.operationId));
+      const localOperations = await this.readLocalOperationRecords(root);
+      const remoteOperations = remoteHead ? await this.readOperationRecords(root, remoteHead) : [];
+      const remoteIds = new Set(remoteOperations.map((item) => item.operation.id));
+      const toPublish = localOperations.filter((item) => pendingIds.has(item.operation.id) && !remoteIds.has(item.operation.id));
+      if (!toPublish.length) return null;
+      const rows = toPublish.map((item) => ({ operationId: item.operation.id, generation: item.operation.generation, digest: item.digest, receipt: item.receipt }));
+      return { operationId: batchId, payloadDigest: `sha256:${publicationDigest(batchId, rows)}` };
+    });
+  }
+
+  async publish(
+    projectId: string,
+    batchId: string,
+    authorization?: PublicationAuthorization,
+  ): Promise<import("@scriptorium/contracts").PublishReceipt> {
     return this.withProjectLock(projectId, async () => {
       if (typeof batchId !== "string" || !/^[A-Za-z0-9_-]{1,128}$/.test(batchId)) throw coreError(400, "invalid_batch_id", "The publication batch ID is invalid");
       const { record, root } = await this.getProject(projectId);
@@ -3299,6 +3451,11 @@ export class CoreStore implements MutationCoordinator {
           }
           return { batchId, state: "confirmed", remoteCommit: remoteHead, acknowledged: historicalBatch.operations.map((item) => item.receipt) };
         }
+        if (this.hostedRepository && (!authorization || authorization.operationId !== batchId ||
+            authorization.payloadDigest !== `sha256:${digest}` || authorization.receipt.length < 16 ||
+            authorization.receipt.length > 16_384)) {
+          throw coreError(403, "publication_authorization_stale", "A current authorization for this exact publication is required");
+        }
         const manifest: PublicationMetadata = { version: 1, batchId, digest, operations: rows };
         const parent = reconciled.snapshot.overlayCommit ?? remoteHead;
         const commit = await this.createCommit(root, parent, [], [{ path: manifestPath, content: `${JSON.stringify(manifest, null, 2)}\n` }], `Publish checkpoint batch ${batchId}`);
@@ -3309,9 +3466,12 @@ export class CoreStore implements MutationCoordinator {
         await fs.mkdir(askpassDir, { recursive: true, mode: 0o700 });
         try {
           const askpass = await makeAskpassScript(askpassDir);
+          const token = await this.gitCredential(record, "publish", authorization);
           this.readObservations.delete(projectId);
-          await git(root, ["push", "origin", `${commit}:refs/heads/${record.branch}`], { token: this.token, askpass });
-        } catch { /* A fresh remote observation below distinguishes rejection from a lost response. */ }
+          try {
+            await git(root, ["push", "origin", `${commit}:refs/heads/${record.branch}`], { token, askpass });
+          } catch { /* A fresh remote observation below distinguishes rejection from a lost response. */ }
+        }
         finally { await fs.rm(askpassDir, { recursive: true, force: true }).catch(() => undefined); }
 
         let after: RemoteObservation;
@@ -3684,7 +3844,11 @@ export class CoreStore implements MutationCoordinator {
 
   async listProjects(): Promise<Project[]> {
     const records = await this.readRegistry();
-    return records.map(({ id, url, branch }) => ({ id, url, branch }));
+    return records.filter((record) => {
+      if (!this.hostedRepository) return true;
+      try { this.assertHostedRepository(record); return true; }
+      catch { return false; }
+    }).map(({ id, url, branch }) => ({ id, url, branch }));
   }
 
   /** Returns the repository identity recorded at registration without contacting GitHub or opening the checkout. */
@@ -3692,6 +3856,7 @@ export class CoreStore implements MutationCoordinator {
     validateProjectId(projectId);
     const record = (await this.readRegistry()).find((item) => item.id === projectId);
     if (!record) throw coreError(404, "project_not_found", "Project not found");
+    this.assertHostedRepository(record);
     if (!record.identity) {
       throw coreError(409, "repository_identity_unavailable", "The registered repository identity is unavailable until the project is observed or reconstructed");
     }
@@ -3704,6 +3869,12 @@ export class CoreStore implements MutationCoordinator {
     }
     const explicitBranch = input.branch === undefined ? undefined : branchName(input.branch);
     const url = this.allowLocalRemotes ? await this.normalizeRemote(input.url.trim()) : normalizeGitHubUrl(input.url.trim());
+    if (this.hostedRepository) {
+      this.assertHostedRepository({
+        id: randomUUID(), url, branch: explicitBranch ?? DEFAULT_BRANCH,
+        directory: "", emptyRemote: false,
+      });
+    }
     const id = randomUUID();
     const directory = id;
     const root = path.join(this.projectsDir, directory);
@@ -3715,18 +3886,19 @@ export class CoreStore implements MutationCoordinator {
     let identity: RepositoryIdentity;
     try {
       const askpass = await makeAskpassScript(askpassDir);
-      const headInfo = await git(this.dataDir, ["ls-remote", "--symref", url, "HEAD"], { token: this.token, askpass });
+      const githubRepoIdentity = /^https:\/\//i.test(url) ? await this.githubIdentityFor(url) : null;
+      const headInfo = await this.authenticatedGit(undefined, this.dataDir, ["ls-remote", "--symref", url, "HEAD"], askpass);
       const remoteHead = headInfo.match(/^ref: refs\/heads\/(.+)\tHEAD$/m)?.[1];
-      const remoteHeads = (await git(this.dataDir, ["ls-remote", "--heads", url], { token: this.token, askpass }))
+      const remoteHeads = (await this.authenticatedGit(undefined, this.dataDir, ["ls-remote", "--heads", url], askpass))
         .split(/\r?\n/)
         .map((line) => line.split("\t")[1])
         .filter((ref): ref is string => typeof ref === "string" && ref.startsWith("refs/heads/"))
         .map((ref) => ref.slice("refs/heads/".length));
       remoteWasEmpty = remoteHeads.length === 0;
-      const discoveredDefault = remoteHead ?? (remoteHeads.includes(DEFAULT_BRANCH) ? DEFAULT_BRANCH : remoteHeads[0] ?? DEFAULT_BRANCH);
-      identity = /^https:\/\//i.test(url)
-        ? await githubIdentity(url, this.token, this.fetcher)
-        : localIdentity(url, branchName(discoveredDefault));
+      const discoveredDefault = githubRepoIdentity
+        ? githubRepoIdentity.defaultBranch
+        : remoteHead ?? (remoteHeads.includes(DEFAULT_BRANCH) ? DEFAULT_BRANCH : remoteHeads[0] ?? DEFAULT_BRANCH);
+      identity = githubRepoIdentity ?? localIdentity(url, branchName(discoveredDefault));
       if (explicitBranch && explicitBranch !== identity.defaultBranch) {
         throw coreError(409, "non_default_branch", "New projects must use the repository default branch");
       }
@@ -3736,11 +3908,11 @@ export class CoreStore implements MutationCoordinator {
         throw coreError(404, "branch_not_found", `Branch "${branch}" was not found in the repository`);
       }
       if (branchExists) {
-        await git(this.dataDir, [
+        await this.authenticatedGit(undefined, this.dataDir, [
           "clone", "--no-recurse-submodules", "--branch", branch, "--single-branch", "--", url, root,
-        ], { token: this.token, askpass });
+        ], askpass);
       } else {
-        await git(this.dataDir, ["clone", "--no-recurse-submodules", "--", url, root], { token: this.token, askpass });
+        await this.authenticatedGit(undefined, this.dataDir, ["clone", "--no-recurse-submodules", "--", url, root], askpass);
         await git(root, ["symbolic-ref", "HEAD", `refs/heads/${branch}`]);
       }
     } catch (error) {
@@ -3853,22 +4025,22 @@ export class CoreStore implements MutationCoordinator {
         const askpass = await makeAskpassScript(askpassDir);
         const identity = await this.discoverRepositoryIdentity(record, askpass);
         const branch = identity.defaultBranch;
-        const targetHead = await this.remoteBranchCommit(this.dataDir, record.url, branch, askpass);
-        const allHeads = await git(this.dataDir, ["ls-remote", "--heads", record.url], { token: this.token, askpass });
+        const targetHead = await this.remoteBranchCommit(this.dataDir, record.url, branch, askpass, record);
+        const allHeads = await this.authenticatedGit(record, this.dataDir, ["ls-remote", "--heads", record.url], askpass);
         if (!targetHead && allHeads.trim()) {
           throw coreError(409, "default_branch_missing", "The current default branch is missing from the repository");
         }
 
         if (workspaceStat) {
           let guardBranch = record.branch;
-          let guardHead = await this.remoteBranchCommit(this.dataDir, record.url, guardBranch, askpass);
+          let guardHead = await this.remoteBranchCommit(this.dataDir, record.url, guardBranch, askpass, record);
           if (!guardHead) {
             guardBranch = branch;
             guardHead = targetHead;
           }
-          if (guardHead) await git(root, ["fetch", "--no-tags", record.url, guardBranch], { token: this.token, askpass });
+          if (guardHead) await this.authenticatedGit(record, root, ["fetch", "--no-tags", record.url, guardBranch], askpass);
           const fetchedHead = guardHead ? await this.getRef(root, "FETCH_HEAD") : "";
-          if (guardHead && (!fetchedHead || !(await this.isAncestor(root, fetchedHead, await this.remoteBranchCommit(this.dataDir, record.url, guardBranch, askpass))))) {
+          if (guardHead && (!fetchedHead || !(await this.isAncestor(root, fetchedHead, await this.remoteBranchCommit(this.dataDir, record.url, guardBranch, askpass, record))))) {
             throw coreError(409, "repository_changed_during_reconstruction", "The repository branch changed while the workspace was being verified; retry reconstruction");
           }
           record.identity ??= identity;
@@ -3876,11 +4048,11 @@ export class CoreStore implements MutationCoordinator {
         }
 
         if (targetHead) {
-          await git(this.dataDir, [
+          await this.authenticatedGit(record, this.dataDir, [
             "clone", "--no-recurse-submodules", "--branch", branch, "--single-branch", "--", record.url, candidateRoot,
-          ], { token: this.token, askpass });
+          ], askpass);
         } else {
-          await git(this.dataDir, ["clone", "--no-recurse-submodules", "--", record.url, candidateRoot], { token: this.token, askpass });
+          await this.authenticatedGit(record, this.dataDir, ["clone", "--no-recurse-submodules", "--", record.url, candidateRoot], askpass);
           await git(candidateRoot, ["symbolic-ref", "HEAD", `refs/heads/${branch}`]);
         }
         const secondIdentity = await this.discoverRepositoryIdentity(record, askpass);
@@ -3888,12 +4060,12 @@ export class CoreStore implements MutationCoordinator {
             secondIdentity.defaultBranch !== branch) {
           throw coreError(409, "default_branch_changed", "The repository identity or default branch changed while reconstruction was in progress");
         }
-        const currentTargetHead = await this.remoteBranchCommit(this.dataDir, record.url, branch, askpass);
+        const currentTargetHead = await this.remoteBranchCommit(this.dataDir, record.url, branch, askpass, record);
         if (currentTargetHead !== targetHead) {
           throw coreError(409, "repository_changed_during_reconstruction", "The repository branch changed while the replacement workspace was being cloned; retry reconstruction");
         }
         if (targetHead) {
-          await git(candidateRoot, ["fetch", "--no-tags", "origin", branch], { token: this.token, askpass });
+          await this.authenticatedGit(record, candidateRoot, ["fetch", "--no-tags", "origin", branch], askpass);
           const clonedHead = await this.getRef(candidateRoot, "HEAD");
           const fetchedTarget = await this.getRef(candidateRoot, `refs/remotes/origin/${branch}`);
           if (!fetchedTarget || (clonedHead !== fetchedTarget && !(await this.isAncestor(candidateRoot, clonedHead, fetchedTarget)))) {
@@ -3912,10 +4084,10 @@ export class CoreStore implements MutationCoordinator {
           if (latestIdentity.repositoryId !== identity.repositoryId || latestIdentity.defaultBranch !== branch) {
             throw coreError(409, "default_branch_changed", "The repository identity or default branch changed while reconstruction was in progress");
           }
-          const registeredBranchHead = await this.remoteBranchCommit(this.dataDir, record.url, record.branch, askpass);
+          const registeredBranchHead = await this.remoteBranchCommit(this.dataDir, record.url, record.branch, askpass, record);
           const latestGuardBranch = registeredBranchHead ? record.branch : branch;
           const latestGuardHead = registeredBranchHead || currentTargetHead;
-          if (workspaceStat && latestGuardHead) await git(root, ["fetch", "--no-tags", record.url, latestGuardBranch], { token: this.token, askpass });
+          if (workspaceStat && latestGuardHead) await this.authenticatedGit(record, root, ["fetch", "--no-tags", record.url, latestGuardBranch], askpass);
           const fetchedGuardHead = latestGuardHead ? await this.getRef(root, "FETCH_HEAD") : "";
           if (latestGuardHead && fetchedGuardHead !== latestGuardHead) {
             throw coreError(409, "repository_changed_during_reconstruction", "The registered branch changed while reconstruction was in progress; retry reconstruction");
