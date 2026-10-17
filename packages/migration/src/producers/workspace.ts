@@ -2,11 +2,11 @@ import { createHash } from "node:crypto";
 import type { MigrationContext, MigrationContribution, MigrationProducer } from "../types.js";
 import { planGeneratedFileImport, stableMigrationId } from "../operations.js";
 
-const WORKSPACE_FILES: Array<{ path: string; category: "relocated" | "secret"; detail: string }> = [
+const WORKSPACE_FILES: Array<{ path: string; category: "authoritative" | "relocated" | "secret"; detail: string }> = [
   { path: "app-state/projects.json", category: "relocated", detail: "Project bindings and clone locations are host configuration, not work metadata." },
   { path: "projects.json", category: "relocated", detail: "Legacy project registry alias; target host re-registers repositories." },
-  { path: "app-state/recent-activity.json", category: "relocated", detail: "Per-user recent-activity cursors are device/workspace state." },
-  { path: "recent-activity.json", category: "relocated", detail: "Legacy recent-activity registry alias; it is device/workspace state." },
+  { path: "app-state/recent-activity.json", category: "authoritative", detail: "Per-user writing and reading cursors are author data. The API-owned recent-activity import hook must archive the exact bytes under private host history and report explicit user/repository mappings before the source workspace can be removed; this generic Core importer does not copy the payload." },
+  { path: "recent-activity.json", category: "authoritative", detail: "Legacy recent-activity file alias; the API-owned recent-activity import hook must archive the exact bytes under private host history and report explicit user/repository mappings before the source workspace can be removed; this generic Core importer does not copy the payload." },
   { path: "app-state/users.json", category: "secret", detail: "User identities and login authority are host-managed and are not imported." },
   { path: "users.json", category: "secret", detail: "Legacy user identity registry; target authentication is reissued by the host." },
   { path: "app-state/sessions.json", category: "secret", detail: "Session identifiers are host credentials and are not imported." },
@@ -238,6 +238,29 @@ export function createWorkspaceProducer(): MigrationProducer {
       const known = new Map(WORKSPACE_FILES.map((item) => [item.path, item]));
       for (const file of files) {
         if (file === "app-state/share-tokens.json" || file === "share-tokens.json") continue;
+        if (file === "app-state/recent-activity.json" || file === "recent-activity.json") {
+          const bytes = await context.source.readWorkspaceFile(file);
+          if (!bytes) {
+            result.entries.push({
+              producerId: "workspace-recent-activity",
+              source: file,
+              category: "authoritative",
+              disposition: "blocked",
+              detail: "Legacy recent-activity history was listed but could not be read for its private archive identity; preserve the source workspace until the API history import confirms retention.",
+            });
+            continue;
+          }
+          const sourceHash = createHash("sha256").update(bytes).digest("hex");
+          result.entries.push({
+            producerId: "workspace-recent-activity",
+            source: file,
+            target: `/history/recent-activity/legacy/${sourceHash}.json`,
+            category: "authoritative",
+            disposition: "relocated",
+            detail: known.get(file)!.detail,
+          });
+          continue;
+        }
         if (file === "app-state/jobs-state.json") {
           const bytes = await context.source.readWorkspaceFile(file);
           if (!bytes) {

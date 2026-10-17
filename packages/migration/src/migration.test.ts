@@ -277,7 +277,7 @@ async function seedGitHistory(sourceRoot: string): Promise<void> {
   runGit(sourceRoot, ["add", "-f", ".ssh/id_ed25519", ".ssh/id_rsa", ".git-credentials", ".config/git/credentials", ".config/gh/hosts.yml", "gcloud/credentials.db", ".config/gcloud/legacy_credentials/user/adc.json", ".aws/credentials", ".azure/accessTokens.json", ".docker/config.json", ".kube/config"]);
 }
 
-async function createProjectStores(sourceRoot: string, workspaceRoot: string): Promise<Buffer> {
+async function createProjectStores(sourceRoot: string, workspaceRoot: string): Promise<{ jobHistory: Buffer; recentActivity: Buffer }> {
   await writeFile(sourceRoot, "meta/speaker-corrections.jsonl", '{"id":"correction-1","entityId":"speaker-a","chosen":"speaker-b"}\n');
   await writeFile(sourceRoot, "meta/speaker-model.json", '{"version":1,"featureNames":["manual"],"weights":[0.5],"bias":0,"highProbabilityThreshold":0.7,"trainedAt":"2025-01-01T00:00:00.000Z","vendorExtension":{"preserve":true}}\n');
   await writeFile(sourceRoot, "meta/synonyms.yaml", "groups:\n  - canonical: lantern\n    variants: [lamp, light]\nlegacy-extension: keep-this-field\n");
@@ -309,7 +309,21 @@ async function createProjectStores(sourceRoot: string, workspaceRoot: string): P
   await fs.symlink("app-state/share-tokens.json", path.join(workspaceRoot, "share-tokens.json"));
   const jobHistory = Buffer.from('{"jobs":[{"id":"private-job","result":{"text":"PRIVATE_JOB_RESULT_SENTINEL"}}],"inbox":[]}\n');
   await fs.writeFile(path.join(workspaceRoot, "app-state/jobs-state.json"), jobHistory, { mode: 0o600 });
-  return jobHistory;
+  const recentActivity = Buffer.from(`${JSON.stringify({
+    byKey: {
+      "legacy-user:old-project": [{
+        sceneId: "scene-cursor-private",
+        sentenceOffset: 12,
+        pageIndex: 2,
+        deviceType: "desktop",
+        updatedAt: "2025-01-03T00:00:00.000Z",
+        unknownItemField: "PRIVATE_CURSOR_EXTENSION_SENTINEL",
+      }],
+    },
+    unknownRootField: "PRIVATE_CURSOR_RAW_SENTINEL",
+  })}\n`);
+  await fs.writeFile(path.join(workspaceRoot, "app-state/recent-activity.json"), recentActivity, { mode: 0o600 });
+  return { jobHistory, recentActivity };
 }
 
 function operationContent(files: TargetFiles, target: string): string {
@@ -328,7 +342,7 @@ test("legacy inspection preserves scoped data, both SQLite stores, and pending G
   await seedGitHistory(sourceRoot);
   await fs.mkdir(path.join(sourceRoot, ".arcadia"), { recursive: true });
   await fs.mkdir(workspaceRoot, { recursive: true });
-  const jobHistory = await createProjectStores(sourceRoot, workspaceRoot);
+  const { jobHistory, recentActivity } = await createProjectStores(sourceRoot, workspaceRoot);
   const databases = await createDatabaseFixtures(sourceRoot, workspaceRoot);
   t.after(async () => {
     for (const db of databases) db.close();
@@ -414,6 +428,35 @@ test("legacy inspection preserves scoped data, both SQLite stores, and pending G
   assert.equal(jobsEntry?.target, `/history/jobs/legacy/${digest(jobHistory)}.json`);
   assert.match(jobsEntry?.detail ?? "", /API-owned legacy job import hook/u);
   assert.ok(!JSON.stringify(inspection).includes("PRIVATE_JOB_RESULT_SENTINEL"), "legacy job result bodies stay outside Core inspection output");
+  const recentActivityEntry = inspection.entries.find((entry) => entry.source === "app-state/recent-activity.json");
+  assert.equal(recentActivityEntry?.category, "authoritative");
+  assert.equal(recentActivityEntry?.disposition, "relocated");
+  assert.equal(recentActivityEntry?.target, `/history/recent-activity/legacy/${digest(recentActivity)}.json`);
+  assert.match(recentActivityEntry?.detail ?? "", /API-owned recent-activity import hook/u);
+  assert.ok(!JSON.stringify(inspection).includes("scene-cursor-private"), "private cursor values stay outside Core migration output");
+  assert.ok(!JSON.stringify(inspection).includes("PRIVATE_CURSOR_RAW_SENTINEL"));
+  assert.ok(!JSON.stringify(inspection).includes("PRIVATE_CURSOR_EXTENSION_SENTINEL"));
+  assert.ok(!writePaths.has("app-state/recent-activity.json"), "private cursors must never become Core Git operations");
+
+  const aliasWorkspaceRoot = path.join(temporary, "legacy-activity-alias");
+  await fs.mkdir(aliasWorkspaceRoot, { recursive: true });
+  const aliasActivity = Buffer.from('{"byKey":{"legacy-user:old-project":[{"sceneId":"alias-cursor-private","sentenceOffset":1,"pageIndex":0,"deviceType":"mobile","updatedAt":"2025-01-04T00:00:00.000Z"}]}}\n');
+  await fs.writeFile(path.join(aliasWorkspaceRoot, "recent-activity.json"), aliasActivity, { mode: 0o600 });
+  const aliasWorkspaceBefore = await sourceTreeState(aliasWorkspaceRoot);
+  const aliasInspection = await inspectLegacyProject({
+    sourceRoot,
+    workspaceDataRoot: aliasWorkspaceRoot,
+    workspaceProjectId: "old-project",
+    target: targetReader(originalTarget),
+  });
+  const aliasEntry = aliasInspection.entries.find((entry) => entry.source === "recent-activity.json");
+  assert.equal(aliasEntry?.category, "authoritative");
+  assert.equal(aliasEntry?.disposition, "relocated");
+  assert.equal(aliasEntry?.target, `/history/recent-activity/legacy/${digest(aliasActivity)}.json`);
+  assert.match(aliasEntry?.detail ?? "", /API-owned recent-activity import hook/u);
+  assert.ok(!JSON.stringify(aliasInspection).includes("alias-cursor-private"));
+  assert.ok(!aliasInspection.operations.flatMap((operation) => operation.writes).some((write) => write.path.includes("recent-activity")));
+  assert.deepEqual(await sourceTreeState(aliasWorkspaceRoot), aliasWorkspaceBefore, "legacy cursor alias inspection must remain read-only");
   assert.ok(inspection.entries.some((entry) => entry.source === ".env" && entry.category === "secret" && entry.disposition === "excluded"));
   assert.ok(inspection.entries.some((entry) => entry.source.endsWith("#state_proposals") && entry.category === "provisional" && entry.disposition === "deferred"));
   assert.ok(inspection.entries.some((entry) => entry.source.endsWith("#zukan_suggestions") && entry.category === "provisional" && entry.disposition === "deferred"));
