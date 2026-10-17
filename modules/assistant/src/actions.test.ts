@@ -113,6 +113,8 @@ test("module activation and provider health stay idle without provider or capabi
       ],
       "model streams are compute-only; the separate rewrite proposal action retains author review",
     );
+    assert.equal(getAction(definition.actions, "assistant.continuation.preview").effect, "compute",
+      "continuation preview invokes snapshot-bound context/token-count actions but never a provider");
     assert.equal(getAction(definition.actions, "assistant.rewrite.propose").effect, "propose");
     await definition.dispose();
   } finally {

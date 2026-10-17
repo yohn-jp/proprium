@@ -2400,7 +2400,7 @@ export function createAssistantActions(moduleContext: ModuleContext): ModuleActi
     action("assistant.summary.scene.preview", "read", (value) => parsePreviewIdInput(value, "sceneId"), async (input, context) => previewSceneSummaryPrompt(context, input.id as string)),
     action("assistant.summary.chapter.preview", "read", (value) => parsePreviewIdInput(value, "chapterId"), async (input, context) => previewChapterSummaryPrompt(context, input.id as string)),
     action("assistant.qa.preview", "read", parseQaPreviewInput, async (input, context) => previewQaPrompt(context, input.sceneId as string | undefined)),
-    action("assistant.continuation.preview", "read", parseContinuationPreviewInput, async (input, context) => {
+    action("assistant.continuation.preview", "compute", parseContinuationPreviewInput, async (input, context) => {
       const parsed = input as unknown as ReturnType<typeof parseContinuationPreviewInput>;
       const prepared = await prepareContinuationContext(context, parsed);
       return { prompt: prepared.prepared.prompt };
