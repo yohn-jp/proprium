@@ -1227,6 +1227,32 @@ test("public compute HTTP contribution definitions are rejected", async () => {
   }
 });
 
+test("owner compute and propose HTTP contributions cannot use GET or HEAD", async () => {
+  for (const effect of ["compute", "propose"] as const) {
+    for (const method of ["GET", "HEAD"] as const) {
+      const metadata = manifest("publishing");
+      const runtime = new ModuleRuntime({
+        manifests: [metadata], enabled: ["publishing"], cacheDirectory: "/tmp/scriptorium-runtime-test",
+        loaders: { publishing: async () => ({
+          manifest: metadata, actions: [], ui: [],
+          http: [{
+            id: `${effect}-${method.toLowerCase()}`, path: `unsafe/${effect}-${method.toLowerCase()}`,
+            methods: [method], access: "owner", effect, async handle() { return Response.json({}); },
+          }],
+          async dispose() {},
+        }) },
+      });
+      try {
+        await assert.rejects(runtime.activate("publishing"), (error: unknown) =>
+          error instanceof ModuleRuntimeError && error.code === "invalid_module_definition",
+          `${effect} ${method} must not bypass write-method CSRF checks`);
+      } finally {
+        await runtime.shutdown();
+      }
+    }
+  }
+});
+
 test("module disable bounds a non-cooperative action drain and rejects late proposals", async () => {
   const metadata = manifest("assistant");
   let proposalCalls = 0;
