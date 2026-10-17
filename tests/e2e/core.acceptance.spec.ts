@@ -1139,7 +1139,17 @@ test("project details, reconstruction, and guarded removal preserve browser reco
   expect(repositoryUrl).not.toBe("");
   const isolatedDirectory = await mkdtemp(join(tmpdir(), "scriptorium-e2e-lifecycle-"));
   const isolatedRepository = join(isolatedDirectory, "origin.git");
-  execFileSync("git", ["clone", "--quiet", "--bare", repositoryUrl, isolatedRepository], { stdio: "ignore" });
+  const isolatedWorktree = join(isolatedDirectory, "worktree");
+  execFileSync("git", ["clone", "--quiet", repositoryUrl, isolatedWorktree], { stdio: "ignore" });
+  execFileSync("git", ["checkout", "--quiet", "--orphan", "lifecycle-clean"], { cwd: isolatedWorktree, stdio: "ignore" });
+  execFileSync("git", ["add", "--all"], { cwd: isolatedWorktree, stdio: "ignore" });
+  execFileSync("git", [
+    "-c", "user.name=Scriptorium E2E", "-c", "user.email=scriptorium-e2e@example.invalid",
+    "commit", "--quiet", "-m", "Create isolated lifecycle fixture",
+  ], { cwd: isolatedWorktree, stdio: "ignore" });
+  execFileSync("git", ["init", "--quiet", "--bare", "--initial-branch=main", isolatedRepository], { stdio: "ignore" });
+  execFileSync("git", ["remote", "add", "lifecycle", isolatedRepository], { cwd: isolatedWorktree, stdio: "ignore" });
+  execFileSync("git", ["push", "--quiet", "lifecycle", "lifecycle-clean:main"], { cwd: isolatedWorktree, stdio: "ignore" });
   const isolatedRepositoryUrl = pathToFileURL(isolatedRepository).href;
 
   try {
