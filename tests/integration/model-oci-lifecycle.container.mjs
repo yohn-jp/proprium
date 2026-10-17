@@ -245,7 +245,7 @@ function workerPids(runtime, workerEntry) {
   });
 }
 
-function createObservationGate(id, context, gate, events, valueIds) {
+function createObservationGate(id, context, gate, events, valueIds, sharedUseObservation) {
   return {
     ...context,
     async acquireCapability(capabilityId) {
@@ -275,7 +275,18 @@ function createObservationGate(id, context, gate, events, valueIds) {
       }
       events.push({ module: id, phase: "returned", identity });
       return {
-        value: lease.value,
+        value: new Proxy(lease.value, {
+          get(target, property) {
+            const member = Reflect.get(target, property, target);
+            if (typeof member !== "function") return member;
+            return (...args) => {
+              if (sharedUseObservation?.enabled && (property === "index" || property === "nearest")) {
+                sharedUseObservation.calls.push({ module: id, method: property, identity });
+              }
+              return Reflect.apply(member, target, args);
+            };
+          },
+        }),
         async release() {
           events.push({ module: id, phase: "released", identity });
           await lease.release();
@@ -303,10 +314,11 @@ async function runLifecycle() {
   diagnosticGate.used = false;
   const capabilityEvents = [];
   const valueIds = new WeakMap();
+  const sharedUseObservation = { enabled: false, calls: [] };
   const loaders = {
     ...composition.moduleLoaders,
-    diagnostics: async (context) => composition.moduleLoaders.diagnostics(createObservationGate("diagnostics", context, diagnosticGate, capabilityEvents, valueIds)),
-    semantic: async (context) => composition.moduleLoaders.semantic(createObservationGate("semantic", context, undefined, capabilityEvents, valueIds)),
+    diagnostics: async (context) => composition.moduleLoaders.diagnostics(createObservationGate("diagnostics", context, diagnosticGate, capabilityEvents, valueIds, sharedUseObservation)),
+    semantic: async (context) => composition.moduleLoaders.semantic(createObservationGate("semantic", context, undefined, capabilityEvents, valueIds, sharedUseObservation)),
   };
   const apiUrl = new URL("file:///app/node_modules/@scriptorium/api/dist/server.js");
   const { HistoricalModelUsageStore } = await import(new URL("./historical-store.js", apiUrl).href);
@@ -434,7 +446,7 @@ async function runLifecycle() {
     await runtime.disable("speaker");
     assert.equal(runtime.status("speaker").availability, "disabled");
 
-    sampler.setPhase("overlapping-diagnostics-and-semantic-real-capability");
+    sampler.setPhase("gated-diagnostics-semantic-lease-cancellation");
     const diagnosticPromise = invoke("diagnostics.analyze", {
       text: "彼は悲しい。彼は悲しい。彼は悲しい。", sceneId: "sc-synthetic-01",
     });
@@ -474,6 +486,67 @@ async function runLifecycle() {
     outcome.phases.push(await sampler.mark());
     outcome.assertions.disableOneConsumerPreservesOther = true;
     outcome.assertions.lastLeaseStopsWorker = true;
+
+    runtime.enable("diagnostics");
+    assert.equal(runtime.status("diagnostics").availability, "enabled-idle");
+    assert.equal(diagnosticGate.used, true, "the one-shot cancellation gate must remain consumed before actual shared use");
+    sampler.setPhase("shared-diagnostics-semantic-real-inference");
+    const sharedUseEventStart = capabilityEvents.length;
+    const sharedUseCallStart = sharedUseObservation.calls.length;
+    sharedUseObservation.enabled = true;
+    const actualDiagnosticsPromise = invoke("diagnostics.analyze", {
+      text: "彼は悲しい。彼は悲しい。彼は悲しい。", sceneId: "sc-synthetic-01",
+    });
+    await waitFor(() => sharedUseObservation.calls.slice(sharedUseCallStart).some((event) => event.module === "diagnostics" && event.method === "nearest") &&
+      workerPids(runtime, composition.moduleWorkerEntries.semantic).length === 1,
+    "Diagnostics did not use the real semantic nearest provider with one Semantic child");
+    const sharedSemanticPid = workerPids(runtime, composition.moduleWorkerEntries.semantic)[0];
+    const actualSemanticPromise = invoke("semantic.search", {
+      query: "夜遅く駅に着き、青い切符を握りしめた。", mode: "scene", limit: 5, rerank: false,
+    });
+    await waitFor(() => sharedUseObservation.calls.slice(sharedUseCallStart).some((event) => event.module === "semantic" && event.method === "nearest") &&
+      workerPids(runtime, composition.moduleWorkerEntries.semantic).length === 1 &&
+      workerPids(runtime, composition.moduleWorkerEntries.semantic)[0] === sharedSemanticPid,
+    "Semantic search did not use the same real provider and Semantic child as Diagnostics");
+    const [actualDiagnosticsResponse, actualSemanticResponse] = await Promise.all([actualDiagnosticsPromise, actualSemanticPromise]);
+    sharedUseObservation.enabled = false;
+    const actualDiagnostics = actionData(actualDiagnosticsResponse, "diagnostics.analyze");
+    const actualSemantic = actionData(actualSemanticResponse, "semantic.search");
+    assert.ok(actualDiagnostics.analysis.habitualPhraseWarnings.some((warning) => warning.phrase === "彼は悲しい"),
+      "Diagnostics input must exercise the corpus-neighbor path");
+    assert.deepEqual(actualDiagnostics.semanticEmbedding, {
+      model: MODEL_IDS.embedding.id, modelVersion: MODEL_IDS.embedding.revision, dimensions: 384,
+    }, "Diagnostics must report the real shared model identity");
+    assert.equal(actualSemantic.model, MODEL_IDS.embedding.id);
+    assert.equal(actualSemantic.modelVersion, MODEL_IDS.embedding.revision);
+    assert.ok(actualSemantic.results?.length > 0, "Semantic search must return results from the synthetic corpus");
+
+    const sharedUseEvents = capabilityEvents.slice(sharedUseEventStart);
+    const diagnosticsUseLease = sharedUseEvents.find((event) => event.module === "diagnostics" && event.phase === "acquired");
+    const semanticUseLease = sharedUseEvents.find((event) => event.module === "semantic" && event.phase === "acquired");
+    assert.ok(diagnosticsUseLease && semanticUseLease, "both real actions must acquire the shared capability");
+    assert.equal(diagnosticsUseLease.value, semanticUseLease.value, "actual Diagnostics and Semantic use must share one capability provider instance");
+    assert.equal(diagnosticsUseLease.identity, semanticUseLease.identity);
+    const sharedUseCalls = sharedUseObservation.calls.slice(sharedUseCallStart);
+    assert.ok(sharedUseCalls.some((event) => event.module === "diagnostics" && event.method === "index"));
+    assert.ok(sharedUseCalls.some((event) => event.module === "diagnostics" && event.method === "nearest"));
+    assert.ok(sharedUseCalls.some((event) => event.module === "semantic" && event.method === "nearest"));
+    const sharedUsePhase = await sampler.mark();
+    assert.equal(sharedUsePhase.peakSemantic?.semanticWorkerCount, 1,
+      "actual shared use must observe exactly one Semantic child");
+    assert.deepEqual(sharedUsePhase.peakSemantic?.semanticWorkerPids, [sharedSemanticPid]);
+    outcome.phases.push(sharedUsePhase);
+    outcome.assertions.sharedProviderActualUse = {
+      identity: diagnosticsUseLease.identity,
+      workerPid: sharedSemanticPid,
+      calls: sharedUseCalls.map(({ module, method }) => ({ module, method })),
+      diagnosticsModel: actualDiagnostics.semanticEmbedding,
+      diagnosticsWarnings: actualDiagnostics.analysis.habitualPhraseWarnings.length,
+      semanticModel: { id: actualSemantic.model, revision: actualSemantic.modelVersion },
+      semanticResults: actualSemantic.results.length,
+    };
+    await waitFor(() => runtime.workerSupervisor.activeWorkerPids.length === 0,
+      "shared Diagnostics and Semantic actions did not release their final Semantic worker lease");
 
     const firstStatusResult = await invoke("semantic.index.status", {});
     const firstStatus = actionData(firstStatusResult, "semantic.index.status");
