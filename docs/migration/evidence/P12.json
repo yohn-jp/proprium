@@ -1,8 +1,8 @@
 {
   "schemaVersion": 1,
   "task": "P12",
-  "implementationStatus": "in_progress",
-  "acceptanceStatus": "pending",
+  "implementationStatus": "complete",
+  "acceptanceStatus": "passed",
   "source": {
     "repository": "yohn-jp/arcadia-loom",
     "commit": "edc033c2c9466274a334299dadfa426661d957d9",
@@ -14,7 +14,8 @@
   },
   "target": {
     "repository": "yohn-jp/scriptorium",
-    "candidateHead": "f3ef4d34b5e603885ec2cbf204446b6becef3071",
+    "testedHead": "fc4eea880ef895decf6161bf4f45cc958e9700b3",
+    "testedTree": "7a56bd432597b7f31588af69f12a4e3a14243b46",
     "branch": "main"
   },
   "sourceClassification": [
@@ -50,7 +51,7 @@
     {
       "id": "P12-N12-COMPOSED-IMPORT-AND-R43-RECLONE",
       "kind": "composed migration, Core review/publication, API history and reclone acceptance",
-      "status": "pending",
+      "status": "passed",
       "targetFiles": [
         "tests/integration/migration-acceptance.test.mjs",
         "packages/core/src/",
@@ -59,14 +60,16 @@
         "modules/*/src/migration/"
       ],
       "testName": "composed legacy import preserves disabled data and reactivates after a full Core data-root replacement",
-      "command": "pnpm verify",
-      "result": "Awaiting the root's fresh verification run on candidateHead f3ef4d34b5e603885ec2cbf204446b6becef3071. Test-source assertions are not recorded as a passing runtime result until that command completes.",
+      "testedHead": "fc4eea880ef895decf6161bf4f45cc958e9700b3",
+      "testedTree": "7a56bd432597b7f31588af69f12a4e3a14243b46",
+      "command": "node --test tests/integration/migration-acceptance.test.mjs",
+      "result": "Passed 1/1, 0 failed, 0 skipped; test duration 462244.406498 ms and file duration 462412.681332 ms. This ran as the P12 integration step of `pnpm verify` after the current full-profile build on the exact tested head.",
       "scope": "One synthetic fixture; no private source corpus or credentials. Covers full Core root deletion/reclone, second publication/reclone, explicit mapping and privacy for host-owned history, and exact initial/live cursor timestamp preservation."
     }
   ],
   "compositionLimits": [
-    "P12 implementation and acceptance remain pending until the coordinator records the fresh frozen-tree verification result and tested head. This draft documents fixture assertions only.",
+    "This pass certifies only the fixed synthetic P12 migration composition. The enclosing `pnpm verify` later failed during the final full-profile OCI build with ENOSPC (exit 125); the final full OCI retry is tracked separately, so this artifact does not claim P13 acceptance.",
     "The P04 source classification proof is retained by reference and is not altered or represented as the API-owned archive import proof.",
-    "The synthetic fixture does not certify private-project data migration or final OCI/profile acceptance."
+    "The synthetic fixture does not certify private-project data migration."
   ]
 }
