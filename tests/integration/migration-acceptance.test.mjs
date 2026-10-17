@@ -627,6 +627,10 @@ test("composed legacy import preserves disabled data and reactivates after a ful
     assert.equal(recentActivityImport.sourceHash, hash(recentActivityBytes));
     assert.equal(recentActivityImport.bytes, recentActivityBytes.byteLength);
     assert.equal(recentActivityImport.archived, true);
+    assert.equal(recentActivityImport.sourcePath, "app-state/recent-activity.json");
+    assert.deepEqual(recentActivityImport.sourceFiles, [
+      { sourcePath: "app-state/recent-activity.json", sourceHash: hash(recentActivityBytes), bytes: recentActivityBytes.byteLength },
+    ]);
     assert.equal(recentActivityImport.adoptedItems, 2, "both explicitly mapped device cursors should enter owner history");
     assert.equal(recentActivityImport.preservedNewerItems, 0);
     assert.ok(recentActivityImport.mappingRequired.some((row) => row.userId === "unmapped-user" && row.projectKey === "legacy-project-id" && row.itemCount === 1));
