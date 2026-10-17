@@ -277,7 +277,7 @@ function createObservationGate(id, context, gate, events, valueIds, sharedUseObs
       if (capabilityId !== "semantic.embedding") return lease;
       let identity = valueIds.get(lease.value);
       if (identity === undefined) {
-        identity = ++nextValueIdentity;
+        identity = valueIds.size + 1;
         valueIds.set(lease.value, identity);
       }
       events.push({ module: id, phase: "acquired", identity, value: lease.value });
@@ -376,8 +376,7 @@ async function runLifecycle() {
   const diagnosticGate = waitGate();
   diagnosticGate.used = false;
   const capabilityEvents = [];
-  const valueIds = new WeakMap();
-  let nextValueIdentity = 0;
+  const valueIds = new Map();
   const sharedUseObservation = {
     enabled: false,
     calls: [],
