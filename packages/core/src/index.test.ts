@@ -9,6 +9,7 @@ import YAML from "yaml";
 import { CoreError, CoreStore } from "./index.js";
 
 const execFile = promisify(execFileCallback);
+const READ_OBSERVATION_MAX_AGE_MS_FOR_TEST = 15_001;
 
 async function runGit(cwd: string, ...args: string[]): Promise<string> {
   const { stdout } = await execFile("git", args, { cwd, maxBuffer: 4 * 1024 * 1024 });
@@ -140,6 +141,67 @@ test("registers a Git project, preserves frontmatter, rejects stale saves, and s
 
     const freshStore = new CoreStore({ dataDir, allowLocalRemotes: true });
     assert.deepEqual(await freshStore.listProjects(), [project]);
+  } finally {
+    await fs.rm(tempDir, { recursive: true, force: true });
+  }
+});
+
+test("local durability census reuses only a recent remote observation and catches later checkpoints without fetching", async () => {
+  const { tempDir, remote } = await makeRemote();
+  const dataDir = path.join(tempDir, "state");
+  try {
+    const store = new CoreStore({ dataDir, allowLocalRemotes: true });
+    const project = await store.registerProject({ url: remote });
+    const observed = await store.observe(project.id);
+    const workspace = await projectWorkspace(dataDir, project.id);
+    const clean = await store.localDurabilityCensus(project.id);
+    assert.equal(clean.observation.observedAt, observed.observedAt, "the local census preserves the actual remote observation time");
+    assert.equal(clean.pendingCheckpoints.length, 0);
+    assert.equal(clean.localWorkspaceDirty, false);
+
+    const scene = await store.readScene(project.id, "scene-1");
+    await store.saveScene(project.id, "scene-1", { text: "A checkpoint after the status preflight.\n", revision: scene.revision });
+    const checkpointObservation = await store.observe(project.id);
+    const unavailableRemote = path.join(tempDir, "remote-unavailable.git");
+    await fs.rename(remote, unavailableRemote);
+
+    const dirty = await store.localDurabilityCensus(project.id);
+    assert.equal(dirty.observation.observedAt, checkpointObservation.observedAt, "a local census cannot relabel local work as a remote observation");
+    assert.equal(dirty.observation.snapshot.remoteCommit, checkpointObservation.snapshot.remoteCommit);
+    assert.equal(dirty.pendingCheckpoints.length, 1);
+    assert.equal(dirty.observation.pending.length, 1, "pending receipts are recomputed from current local refs");
+    assert.equal(dirty.localWorkspaceDirty, true);
+    assert.equal(await runGit(workspace, "rev-parse", "refs/remotes/origin/main"), checkpointObservation.snapshot.remoteCommit);
+  } finally {
+    await fs.rm(tempDir, { recursive: true, force: true });
+  }
+});
+
+test("local durability census rejects stale observations and changed remote refs without refreshing", async () => {
+  const { tempDir, remote } = await makeRemote();
+  const dataDir = path.join(tempDir, "state");
+  try {
+    const store = new CoreStore({ dataDir, allowLocalRemotes: true });
+    const project = await store.registerProject({ url: remote });
+    const observed = await store.observe(project.id);
+    const workspace = await projectWorkspace(dataDir, project.id);
+    const realNow = Date.now;
+    Date.now = () => realNow() + READ_OBSERVATION_MAX_AGE_MS_FOR_TEST;
+    try {
+      await assert.rejects(store.localDurabilityCensus(project.id), (error: unknown) =>
+        error instanceof CoreError && error.code === "local_observation_stale");
+    } finally {
+      Date.now = realNow;
+    }
+
+    const oldCommit = observed.snapshot.remoteCommit;
+    const tree = await runGit(workspace, "rev-parse", `${oldCommit}^{tree}`);
+    const changedCommit = await runGit(workspace, "commit-tree", tree, "-p", oldCommit, "-m", "simulated changed tracking ref");
+    await runGit(workspace, "update-ref", "refs/remotes/origin/main", changedCommit);
+    await assert.rejects(store.localDurabilityCensus(project.id), (error: unknown) =>
+      error instanceof CoreError && error.code === "local_observation_ref_changed");
+    assert.equal(await runGit(workspace, "rev-parse", "refs/remotes/origin/main"), changedCommit,
+      "a failed local census must not fetch and replace the observed tracking ref");
   } finally {
     await fs.rm(tempDir, { recursive: true, force: true });
   }
@@ -520,6 +582,94 @@ test("hosted CoreStore has no shared-token or local-remote fallback and rejects 
       (error: unknown) => error instanceof CoreError && error.status === 403 && error.code === "hosted_repository_mismatch",
     );
     assert.equal(credentialRequests, 0);
+  } finally {
+    if (previousToken === undefined) delete process.env.SCRIPTORIUM_GITHUB_TOKEN;
+    else process.env.SCRIPTORIUM_GITHUB_TOKEN = previousToken;
+    await fs.rm(tempDir, { recursive: true, force: true });
+  }
+});
+
+test("hosted clones omit remote tags but keep manually created tags unsafe", async () => {
+  const { tempDir, remote, seed } = await makeRemote();
+  const hostedUrl = "https://github.com/yohn-jp/tagged-work.git";
+  const binding = {
+    repositoryId: 342_100_802,
+    repositoryLocator: hostedUrl,
+    instanceId: "instance_tagged_test",
+    runtimeEpoch: 8,
+  };
+  const previousToken = process.env.SCRIPTORIUM_GITHUB_TOKEN;
+  try {
+    delete process.env.SCRIPTORIUM_GITHUB_TOKEN;
+    await runGit(seed, "tag", "remote-release-v1");
+    await runGit(seed, "push", "origin", "refs/tags/remote-release-v1");
+
+    const standaloneStore = new CoreStore({ dataDir: path.join(tempDir, "standalone"), allowLocalRemotes: true });
+    const standaloneProject = await standaloneStore.registerProject({ url: remote });
+    const standaloneWorkspace = await projectWorkspace(standaloneStore.dataDir, standaloneProject.id);
+    assert.equal(await runGit(standaloneWorkspace, "for-each-ref", "--format=%(refname)", "refs/tags"), "refs/tags/remote-release-v1");
+
+    const credentialProvider = {
+      async getCredential() {
+        return {
+          username: "x-access-token" as const,
+          token: "test-scoped-token",
+          repositoryId: binding.repositoryId,
+          permission: "read" as const,
+          runtimeEpoch: binding.runtimeEpoch,
+          expiresAt: new Date(Date.now() + 60_000).toISOString(),
+        };
+      },
+    };
+    const store = new CoreStore({
+      dataDir: path.join(tempDir, "hosted"),
+      hostedRepository: binding,
+      gitCredentialProvider: credentialProvider,
+      fetch: async () => Response.json({
+        id: binding.repositoryId,
+        default_branch: "main",
+        owner: { id: 100_200_300, login: "yohn-jp" },
+      }),
+    });
+    const originalAuthenticatedGit = Reflect.get(store, "authenticatedGit");
+    assert.equal(typeof originalAuthenticatedGit, "function");
+    Reflect.set(store, "authenticatedGit", async (...values: unknown[]): Promise<string> => {
+      const args = values[2];
+      if (!Array.isArray(args) || !args.every((argument) => typeof argument === "string")) {
+        throw new Error("Core passed invalid arguments to authenticatedGit");
+      }
+      const gitArgs = args as string[];
+      if (gitArgs[0] === "clone") {
+        assert.ok(gitArgs.includes("--no-tags"), "every Hosted clone must suppress implicit remote-tag fetches");
+      }
+      const localArgs = gitArgs.map((argument) => argument === hostedUrl ? remote : argument);
+      const output: unknown = await Reflect.apply(originalAuthenticatedGit, store, [
+        values[0], values[1], localArgs, ...values.slice(3),
+      ]);
+      if (typeof output !== "string") throw new Error("authenticatedGit returned an invalid result");
+      return output;
+    });
+
+    const project = await store.registerProject({ url: binding.repositoryLocator });
+    let workspace = await projectWorkspace(store.dataDir, project.id);
+    assert.equal(await runGit(workspace, "for-each-ref", "--format=%(refname)", "refs/tags"), "",
+      "the initial Hosted clone must not import ordinary remote tags as local refs");
+    await store.observe(project.id);
+    const initialCensus = await store.localDurabilityCensus(project.id);
+    assert.equal(initialCensus.localWorkspaceDirty, false, "remote tags alone must not block Hosted safe stop");
+
+    await store.reconstructProject(project.id);
+    workspace = await projectWorkspace(store.dataDir, project.id);
+    assert.equal(await runGit(workspace, "for-each-ref", "--format=%(refname)", "refs/tags"), "",
+      "the verified replacement clone must also omit remote tags");
+    await store.observe(project.id);
+    assert.equal((await store.localDurabilityCensus(project.id)).localWorkspaceDirty, false,
+      "the replacement workspace with remote tags must remain quiesce-safe");
+    const head = await runGit(workspace, "rev-parse", "HEAD");
+    await runGit(workspace, "tag", "manual-unverified", head);
+    const manualTagCensus = await store.localDurabilityCensus(project.id);
+    assert.equal(manualTagCensus.localWorkspaceDirty, true,
+      "a user-created tag remains an unknown local durability reference");
   } finally {
     if (previousToken === undefined) delete process.env.SCRIPTORIUM_GITHUB_TOKEN;
     else process.env.SCRIPTORIUM_GITHUB_TOKEN = previousToken;

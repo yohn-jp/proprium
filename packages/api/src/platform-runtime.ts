@@ -84,6 +84,7 @@ export interface PersistenceFormat {
 export interface PersistenceObservation {
   state: "verified" | "unknown";
   observedRemoteCommit: string | null;
+  remoteObservedAt?: string | null;
   formats: PersistenceFormat[];
 }
 

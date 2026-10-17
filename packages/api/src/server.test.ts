@@ -10,7 +10,7 @@ import { afterEach, describe, it } from "node:test";
 import { promisify } from "node:util";
 import { MODEL_USAGE_CAPABILITY, type ActionResult, type ChangeOperation, type ChangeProposal, type JobRequest, type ModelUsageEvent, type ModelUsageStore, type ModuleAction, type ModuleContext, type ModuleDefinition, type ModuleManifest, type ProposalStatus, type RepositoryIdentity, type SnapshotId, type ValueSchema } from "@scriptorium/contracts";
 import { CoreStore, type CoreStore as CoreStoreShape } from "@scriptorium/core";
-import { ModuleRuntime, type ModuleLoader, type ModuleRuntimeOptions } from "@scriptorium/module-runtime";
+import { ModuleRuntime, type ModuleLoader, type ModuleRuntimeOptions, type WorkerJobLifecycleListener, type WorkerJobLifecycleSnapshot } from "@scriptorium/module-runtime";
 import { HistoricalModelUsageError, HistoricalModelUsageStore } from "./historical-store.js";
 import { JobHistoryError, JobHistoryStore, type WorkerJobLifecycle } from "./job-history-store.js";
 import "./recent-activity-store.test.js";
@@ -409,15 +409,32 @@ function hostedTestPolicy(): HostedAuthorizationPolicy {
   };
 }
 
+class InterleavingLifecycleRuntime extends ModuleRuntime {
+  private lifecycleListener: WorkerJobLifecycleListener | undefined;
+
+  override subscribeJobLifecycle(listener: WorkerJobLifecycleListener): () => void {
+    this.lifecycleListener = listener;
+    return () => { if (this.lifecycleListener === listener) this.lifecycleListener = undefined; };
+  }
+
+  async emitLifecycle(snapshot: WorkerJobLifecycleSnapshot): Promise<void> {
+    await this.lifecycleListener?.(snapshot);
+  }
+}
+
 async function startHostedApi(
   store: CoreStore,
   staticDir: string,
   authorization: HostedAuthorizationPolicy,
   controlFetch?: typeof fetch,
+  runtime?: ModuleRuntime,
+  usageDirectory?: string,
 ) {
   const server = createServer({
     store, staticDir,
     trustProxy: true,
+    ...(runtime ? { runtime } : {}),
+    ...(usageDirectory ? { usageDirectory } : {}),
     hosted: { assignment: HOSTED_ASSIGNMENT, projectId: "project-1", authorization, ...(controlFetch ? { controlFetch } : {}) },
   });
   await new Promise<void>((resolveListen) => server.listen(0, "127.0.0.1", resolveListen));
@@ -555,19 +572,36 @@ describe("Scriptorium HTTP boundary", () => {
   it("binds hosted API access and signed lifecycle controls to one repository and runtime epoch", async (t) => {
     const staticDir = await mkdtemp(resolve(tmpdir(), "scriptorium-hosted-api-"));
     tempDirs.push(staticDir);
-    let pending: Array<{ operationId: string }> = [];
+    let pending: Awaited<ReturnType<CoreStore["observe"]>>["pending"] = [];
     let pendingProposalCount = 0;
+    let localWorkspaceDirty = false;
+    let remoteObservationCalls = 0;
+    let latestObservation: Awaited<ReturnType<CoreStore["observe"]>> | undefined;
     const fixture = makeSnapshotStore();
     const store = Object.assign(fixture.store, {
       async registeredRepositoryIdentity() { return SNAPSHOT.repository; },
       async observe() {
-        return {
+        remoteObservationCalls++;
+        latestObservation = {
           snapshot: SNAPSHOT, checkpointHead: SNAPSHOT.remoteCommit,
           observedAt: new Date().toISOString(), state: "fresh" as const, pending,
         };
+        return latestObservation;
       },
       async listProposals() {
         return Array.from({ length: pendingProposalCount }, () => ({ state: "pending" }) as unknown as ProposalStatus);
+      },
+      async localDurabilityCensus() {
+        assert.ok(latestObservation, "a signed status preflight seeded the bounded local census");
+        const observation = { ...latestObservation, pending };
+        const reader = await fixture.store.reader("project-1", "remote", observation.snapshot.remoteCommit || undefined);
+        return {
+          observation,
+          reader,
+          pendingCheckpoints: observation.pending,
+          pendingProposals: pendingProposalCount,
+          localWorkspaceDirty,
+        };
       },
     }) as CoreStore;
     const controlFetch: typeof fetch = async (input) => {
@@ -618,10 +652,15 @@ describe("Scriptorium HTTP boundary", () => {
     assert.equal(statusResponse.status, 200);
     const status = await statusResponse.json() as {
       instanceId: string; repositoryId: number; runtimeEpoch: number;
-      persistence: { state: string; observedRemoteCommit: string | null };
+      persistence: { state: string; observedRemoteCommit: string | null; remoteObservedAt?: string | null };
     };
     assert.deepEqual([status.instanceId, status.repositoryId, status.runtimeEpoch], ["instance-1", 123, 3]);
-    assert.deepEqual(status.persistence, { state: "verified", observedRemoteCommit: SNAPSHOT.remoteCommit, formats: [] });
+    assert.equal(status.persistence.state, "verified");
+    assert.equal(status.persistence.observedRemoteCommit, SNAPSHOT.remoteCommit);
+    assert.equal(status.persistence.remoteObservedAt, latestObservation?.observedAt,
+      "verified persistence is bound to Core's successful observation time, not the API scan time");
+    assert.ok(Number.isFinite(Date.parse(status.persistence.remoteObservedAt ?? "")));
+    const observationsAfterPreflight = remoteObservationCalls;
 
     const quiesceRequest = {
       operationId: "quiesce-safe",
@@ -641,6 +680,7 @@ describe("Scriptorium HTTP boundary", () => {
     assert.equal(safeReceipt.disposition, "safe");
     assert.equal(safeReceipt.activeMutations, 0);
     assert.equal(safeReceipt.pendingCheckpoints, 0);
+    assert.equal(remoteObservationCalls, observationsAfterPreflight, "quiesce must use the local census after closing admission");
     const blockedByGate = await fetch(`${apiServer.base}/api/projects/project-1/proposals`, {
       method: "POST", headers: { Authorization: "Bearer write-grant", "Content-Type": "application/json" }, body: proposalBody,
     });
@@ -667,8 +707,9 @@ describe("Scriptorium HTTP boundary", () => {
     });
     assert.equal(allowedProposal.status, 201);
 
-    pending = [{ operationId: "local-checkpoint" }];
+    pending = [{ operationId: "local-checkpoint", generation: 0, localCommit: "c".repeat(40), remoteBase: SNAPSHOT.remoteCommit, revisions: [] }];
     pendingProposalCount = 1;
+    localWorkspaceDirty = true;
     const blockedRequest = {
       ...quiesceRequest,
       operationId: "quiesce-blocked",
@@ -684,6 +725,7 @@ describe("Scriptorium HTTP boundary", () => {
     assert.equal(blockedReceipt.disposition, "blocked");
     assert.ok(blockedReceipt.reasonCodes.includes("PENDING_CHECKPOINTS"));
     assert.ok(blockedReceipt.reasonCodes.includes("PENDING_PROPOSALS"));
+    assert.ok(blockedReceipt.reasonCodes.includes("LOCAL_WORKSPACE_DIRTY"));
     const blockedResumeToken = runtimeControlToken("resume", blockedRequest.operationId, sha256Digest(exactBlockedBody));
     const blockedResume = await fetch(`${apiServer.base}${RUNTIME_RESUME_PATH}`, {
       method: "POST", headers: { Authorization: `Bearer ${blockedResumeToken}`, "Content-Type": "application/json" }, body: exactBlockedBody,
@@ -695,14 +737,120 @@ describe("Scriptorium HTTP boundary", () => {
     assert.equal(gateReleasedAfterBlock.status, 201);
   });
 
+  it("keeps a quiesce census unverified when a worker job starts and finishes during its local scan, then permits a stable retry", async (t) => {
+    const staticDir = await mkdtemp(resolve(tmpdir(), "scriptorium-hosted-activity-race-"));
+    tempDirs.push(staticDir);
+    const fixture = makeSnapshotStore();
+    const runtime = new InterleavingLifecycleRuntime({ manifests: [], enabled: [], cacheDirectory: resolve(staticDir, "module-cache") });
+    let latestObservation: Awaited<ReturnType<CoreStore["observe"]>> | undefined;
+    let remoteObservationCalls = 0;
+    let interleaveNextCensus = true;
+    const lifecycleCreatedAt = new Date().toISOString();
+    let lifecycleUpdatedAt = lifecycleCreatedAt;
+    let lifecycleStartedAt: string | null = null;
+    const lifecycle = async (state: WorkerJobLifecycleSnapshot["state"]): Promise<void> => {
+      lifecycleUpdatedAt = new Date(Date.parse(lifecycleUpdatedAt) + 1).toISOString();
+      if (state === "running") lifecycleStartedAt = lifecycleUpdatedAt;
+      await runtime.emitLifecycle({
+        jobId: "job-interleaving", module: "story", task: "runtime-activity-interleaving", snapshot: SNAPSHOT,
+        state, createdAt: lifecycleCreatedAt, updatedAt: lifecycleUpdatedAt,
+        startedAt: lifecycleStartedAt,
+        finishedAt: state === "succeeded" || state === "failed" || state === "cancelled" ? lifecycleUpdatedAt : null,
+      });
+    };
+    const store = Object.assign(fixture.store, {
+      async registeredRepositoryIdentity() { return SNAPSHOT.repository; },
+      async observe() {
+        remoteObservationCalls++;
+        latestObservation = {
+          snapshot: SNAPSHOT, checkpointHead: SNAPSHOT.remoteCommit,
+          observedAt: new Date().toISOString(), state: "fresh" as const, pending: [],
+        };
+        return latestObservation;
+      },
+      async listProposals() { return []; },
+      async localDurabilityCensus() {
+        assert.ok(latestObservation, "the signed preflight must seed the local census");
+        if (interleaveNextCensus) {
+          interleaveNextCensus = false;
+          await lifecycle("queued");
+          await lifecycle("running");
+          await lifecycle("succeeded");
+        }
+        const observation = latestObservation;
+        const reader = await fixture.store.reader("project-1", "remote", observation.snapshot.remoteCommit);
+        return {
+          observation, reader, pendingCheckpoints: observation.pending,
+          pendingProposals: 0, localWorkspaceDirty: false,
+        };
+      },
+    }) as CoreStore;
+    const controlFetch: typeof fetch = async (input) => {
+      assert.equal(String(input), HOSTED_ASSIGNMENT.controlServicePolicy.jwksUrl);
+      return Response.json({ keys: [RUNTIME_CONTROL_PUBLIC_JWK] });
+    };
+    const apiServer = await startHostedApi(store, staticDir, hostedTestPolicy(), controlFetch, runtime, resolve(staticDir, "usage"));
+    t.after(apiServer.close);
+
+    const preflight = await fetch(`${apiServer.base}${RUNTIME_STATUS_PATH}`, {
+      headers: { Authorization: `Bearer ${runtimeControlToken("status", "race-preflight", sha256Digest(""))}` },
+    });
+    assert.equal(preflight.status, 200);
+    assert.equal((await preflight.json() as { persistence: { state: string } }).persistence.state, "verified");
+    const remoteCallsAfterPreflight = remoteObservationCalls;
+
+    const request = {
+      operationId: "quiesce-activity-race",
+      instanceId: HOSTED_ASSIGNMENT.instanceId,
+      runtimeEpoch: HOSTED_ASSIGNMENT.runtimeEpoch,
+      reason: "redeploy",
+      contractVersion: "scriptorium-platform/v1",
+      deadline: new Date(Date.now() + 60_000).toISOString(),
+    };
+    const body = JSON.stringify(request);
+    const quiesceHeaders = {
+      Authorization: `Bearer ${runtimeControlToken("quiesce", request.operationId, sha256Digest(body))}`,
+      "Content-Type": "application/json",
+    };
+    const first = await fetch(`${apiServer.base}${RUNTIME_QUIESCE_PATH}`, { method: "POST", headers: quiesceHeaders, body });
+    assert.equal(first.status, 200);
+    const firstReceipt = await first.json() as { disposition: string; activeJobs: number; reasonCodes: string[] };
+    assert.equal(firstReceipt.activeJobs, 0, "the worker has already finished by the time the census returns");
+    assert.equal(firstReceipt.disposition, "unknown", "the monotonic activity version detects the completed job");
+    assert.ok(firstReceipt.reasonCodes.includes("PERSISTENCE_UNVERIFIED"));
+    assert.equal(remoteObservationCalls, remoteCallsAfterPreflight, "the local census must not refetch after the gate closes");
+
+    const stableStatus = await fetch(`${apiServer.base}${RUNTIME_STATUS_PATH}`, {
+      headers: { Authorization: `Bearer ${runtimeControlToken("status", "race-stable-status", sha256Digest(""))}` },
+    });
+    assert.equal(stableStatus.status, 200);
+    assert.equal((await stableStatus.json() as { persistence: { state: string } }).persistence.state, "verified");
+
+    const retry = await fetch(`${apiServer.base}${RUNTIME_QUIESCE_PATH}`, { method: "POST", headers: quiesceHeaders, body });
+    assert.equal(retry.status, 200);
+    assert.equal((await retry.json() as { disposition: string }).disposition, "safe");
+    assert.equal(remoteObservationCalls, remoteCallsAfterPreflight);
+
+    const resumed = await fetch(`${apiServer.base}${RUNTIME_RESUME_PATH}`, {
+      method: "POST",
+      headers: { Authorization: `Bearer ${runtimeControlToken("resume", request.operationId, sha256Digest(body))}`, "Content-Type": "application/json" },
+      body,
+    });
+    assert.equal(resumed.status, 204);
+  });
+
   it("safely quiesces an untouched empty remote using the lifecycle request property order", async (t) => {
     const staticDir = await mkdtemp(resolve(tmpdir(), "scriptorium-hosted-empty-remote-"));
     tempDirs.push(staticDir);
     const fixture = makeSnapshotStore();
     const emptySnapshot: SnapshotId = { ...SNAPSHOT, remoteCommit: "" };
+    let remoteObservationCalls = 0;
+    let latestEmptyObservation: Awaited<ReturnType<CoreStore["observe"]>> | undefined;
     const store = Object.assign(fixture.store, {
       async observe() {
-        return { snapshot: emptySnapshot, checkpointHead: "", observedAt: new Date().toISOString(), state: "fresh" as const, pending: [] };
+        remoteObservationCalls++;
+        latestEmptyObservation = { snapshot: emptySnapshot, checkpointHead: "", observedAt: new Date().toISOString(), state: "fresh" as const, pending: [] };
+        return latestEmptyObservation;
       },
       async reader(_projectId: string, _view = "remote", pinned?: string) {
         assert.equal(pinned, undefined, "the empty remote is represented by the unpinned reader");
@@ -714,6 +862,18 @@ describe("Scriptorium HTTP boundary", () => {
       },
       async registeredRepositoryIdentity() { return SNAPSHOT.repository; },
       async listProposals() { return []; },
+      async localDurabilityCensus() {
+        assert.ok(latestEmptyObservation, "the signed status preflight seeds an empty-remote observation");
+        return {
+          observation: latestEmptyObservation,
+          reader: {
+            snapshot: emptySnapshot,
+            async read() { return null; },
+            async list(prefix: string) { assert.equal(prefix, "meta/scriptorium"); return []; },
+          },
+          pendingCheckpoints: [], pendingProposals: 0, localWorkspaceDirty: false,
+        };
+      },
     }) as CoreStore;
     const controlFetch: typeof fetch = async (input) => {
       assert.equal(String(input), HOSTED_ASSIGNMENT.controlServicePolicy.jwksUrl);
@@ -725,9 +885,14 @@ describe("Scriptorium HTTP boundary", () => {
     const statusToken = runtimeControlToken("status", "empty-status", sha256Digest(""));
     const statusResponse = await fetch(`${apiServer.base}${RUNTIME_STATUS_PATH}`, { headers: { Authorization: `Bearer ${statusToken}` } });
     assert.equal(statusResponse.status, 200);
-    const status = await statusResponse.json() as { lastConfirmedRemoteRevision: string | null; persistence: { state: string; observedRemoteCommit: string | null; formats: unknown[] } };
+    const status = await statusResponse.json() as { lastConfirmedRemoteRevision: string | null; persistence: { state: string; observedRemoteCommit: string | null; remoteObservedAt: string | null; formats: unknown[] } };
     assert.equal(status.lastConfirmedRemoteRevision, null);
-    assert.deepEqual(status.persistence, { state: "verified", observedRemoteCommit: null, formats: [] });
+    assert.equal(status.persistence.state, "verified");
+    assert.equal(status.persistence.observedRemoteCommit, null);
+    assert.equal(status.persistence.remoteObservedAt, latestEmptyObservation?.observedAt,
+      "an empty remote retains the successful observation time from Core");
+    assert.ok(Number.isFinite(Date.parse(status.persistence.remoteObservedAt ?? "")));
+    const observationsAfterPreflight = remoteObservationCalls;
 
     // This matches Praetorium ControlHttpClient's insertion order exactly.
     const request = {
@@ -745,6 +910,7 @@ describe("Scriptorium HTTP boundary", () => {
     });
     assert.equal(quiesced.status, 200);
     assert.equal((await quiesced.json() as { disposition: string; lastConfirmedRemoteRevision: string | null }).disposition, "safe");
+    assert.equal(remoteObservationCalls, observationsAfterPreflight, "untouched empty remote quiesce must not perform a fresh remote observation");
 
     const resumeToken = runtimeControlToken("resume", request.operationId, sha256Digest(body));
     const resumed = await fetch(`${apiServer.base}${RUNTIME_RESUME_PATH}`, {

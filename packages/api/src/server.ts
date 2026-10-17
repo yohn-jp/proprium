@@ -490,6 +490,7 @@ export function createServer(options: ApiServerOptions): Server {
   const asyncDomainJobControllers = new Set<AbortController>();
   const activeDomainJobIds = new Set<string>();
   const activeWorkerJobIds = new Set<string>();
+  const workerJobLifecycleStates = new Map<string, WorkerJobLifecycleSnapshot["state"]>();
   const uncertainPublicationBatches = new Set<string>();
   const projectEventStreams = new Set<ServerResponse>();
   const jobEventStreams = new Set<ServerResponse>();
@@ -498,11 +499,16 @@ export function createServer(options: ApiServerOptions): Server {
   let quiesceOperationId: string | undefined;
   let lastQuiesceOperationId: string | undefined;
   let lastResumedOperationId: string | undefined;
-  let hostedRuntimeCensus: Promise<{ status: RuntimeStatus; pendingProposals: number; complete: boolean }> | undefined;
+  let hostedRuntimeCensus: {
+    mode: "remote" | "local";
+    promise: Promise<{ status: RuntimeStatus; pendingProposals: number; complete: boolean; localWorkspaceDirty: boolean }>;
+  } | undefined;
   let activeApiRequests = 0;
   let activeMcpRequests = 0;
   let activeMutations = 0;
+  let runtimeActivityVersion = 0;
   let lastMeaningfulActivityAt: string | null = null;
+  const recordRuntimeActivity = (): void => { runtimeActivityVersion += 1; };
   const listProjects = async (): Promise<Project[]> => {
     const projects = await options.store.listProjects();
     if (!hosted) return projects;
@@ -572,8 +578,15 @@ export function createServer(options: ApiServerOptions): Server {
   };
 
   unsubscribeJobLifecycle = runtime.subscribeJobLifecycle(async (lifecycle: WorkerJobLifecycleSnapshot) => {
-    if (lifecycle.state === "queued" || lifecycle.state === "running") activeWorkerJobIds.add(lifecycle.jobId);
-    else activeWorkerJobIds.delete(lifecycle.jobId);
+    const previousState = workerJobLifecycleStates.get(lifecycle.jobId);
+    if (previousState !== lifecycle.state) recordRuntimeActivity();
+    if (lifecycle.state === "queued" || lifecycle.state === "running") {
+      workerJobLifecycleStates.set(lifecycle.jobId, lifecycle.state);
+      activeWorkerJobIds.add(lifecycle.jobId);
+    } else {
+      workerJobLifecycleStates.delete(lifecycle.jobId);
+      activeWorkerJobIds.delete(lifecycle.jobId);
+    }
     try {
       const event = await jobHistory.record(lifecycle);
       publishJobEvent(event);
@@ -922,13 +935,16 @@ export function createServer(options: ApiServerOptions): Server {
         // Reserve synchronously, before the durable registration awaits, so
         // concurrent invokes cannot all observe the same free capacity.
         activeDomainJobIds.add(id);
+        recordRuntimeActivity();
         let registered = false;
         try {
           const event = await jobHistory.beginDomainJob({ id, type, repository: snapshot.repository });
           registered = true;
+          recordRuntimeActivity();
           publishJobEvent(event);
           onDomainJobStarted?.(id);
           publishJobEvent(await jobHistory.markDomainJobRunning(id));
+          recordRuntimeActivity();
         } catch (error) {
           if (registered) {
             try {
@@ -937,7 +953,7 @@ export function createServer(options: ApiServerOptions): Server {
               }, "job_history_unavailable")));
             } catch { /* Keep the original storage failure as the useful boundary error. */ }
           }
-          activeDomainJobIds.delete(id);
+          if (activeDomainJobIds.delete(id)) recordRuntimeActivity();
           const code = error instanceof JobHistoryError ? error.code : "job_history_unavailable";
           console.error(`Scriptorium domain job was not started (${code}).`);
           return actionFailure(snapshot, { code: "job_history_unavailable", message: "The host could not safely register this job" }, "job_history_unavailable");
@@ -965,7 +981,7 @@ export function createServer(options: ApiServerOptions): Server {
             publishJobEvent(await jobHistory.finishDomainJob(id, failed));
           } catch { /* Startup recovery will mark any still-running record as interrupted. */ }
         } finally {
-          activeDomainJobIds.delete(id);
+          if (activeDomainJobIds.delete(id)) recordRuntimeActivity();
         }
         return result;
       };
@@ -1104,40 +1120,65 @@ export function createServer(options: ApiServerOptions): Server {
     });
   };
 
-  const collectHostedRuntimeStatus = async (): Promise<{ status: RuntimeStatus; pendingProposals: number; complete: boolean }> => {
+  const collectHostedRuntimeStatus = async (mode: "remote" | "local"): Promise<{ status: RuntimeStatus; pendingProposals: number; complete: boolean; localWorkspaceDirty: boolean }> => {
     if (!hosted || !assignment) throw httpFailure(404, "PLATFORM_CONTROL_UNAVAILABLE", "Hosted runtime controls are unavailable");
     let remoteRevision: string | null = null;
+    let remoteObservedAt: string | null = null;
     let pendingCheckpoints = 0;
     let pendingProposals = 0;
     let complete = false;
-    let persistence: PersistenceObservation = { state: "unknown", observedRemoteCommit: null, formats: [] };
+    let localWorkspaceDirty = false;
+    let persistence: PersistenceObservation = { state: "unknown", observedRemoteCommit: null, remoteObservedAt: null, formats: [] };
     const uncertainPublication = uncertainPublicationBatches.size > 0;
-    const mutationsAtScanStart = activeMutations;
+    const activityVersionAtScanStart = runtimeActivityVersion;
     try {
-      const before = await options.store.observe(hosted.projectId);
-      const beforeRevision = normalizeRemoteRevision(before.snapshot.remoteCommit);
-      if (before.state !== "fresh" || beforeRevision === undefined) throw new Error("remote observation is not fresh");
-      remoteRevision = beforeRevision;
-      pendingCheckpoints = before.pending.length;
-      const reader = await options.store.reader(hosted.projectId, "remote", remoteRevision ?? undefined);
-      if (normalizeRemoteRevision(reader.snapshot.remoteCommit) !== remoteRevision) throw new Error("remote reader was not pinned to the observed commit");
-      persistence = await scanRemotePersistence(reader, remoteRevision);
-      if (!coreStore.listProposals) throw new Error("proposal status is unavailable");
-      const after = await options.store.observe(hosted.projectId);
-      const afterRevision = normalizeRemoteRevision(after.snapshot.remoteCommit);
-      if (after.state !== "fresh" || afterRevision !== remoteRevision) {
-        if (afterRevision !== undefined) remoteRevision = afterRevision;
-        persistence = { state: "unknown", observedRemoteCommit: remoteRevision, formats: [] };
-        throw new Error("remote changed during persistence scan");
+      if (mode === "local") {
+        const census = await coreStore.localDurabilityCensus(hosted.projectId);
+        const observation = census.observation;
+        const localRevision = normalizeRemoteRevision(observation.snapshot.remoteCommit);
+        if (observation.state !== "fresh" || localRevision === undefined) {
+          throw new Error("recent local durability observation is unavailable");
+        }
+        remoteRevision = localRevision;
+        remoteObservedAt = observation.observedAt;
+        if (!Number.isFinite(Date.parse(remoteObservedAt))) throw new Error("remote observation time is invalid");
+        pendingCheckpoints = census.pendingCheckpoints.length;
+        pendingProposals = census.pendingProposals;
+        localWorkspaceDirty = census.localWorkspaceDirty;
+        if (normalizeRemoteRevision(census.reader.snapshot.remoteCommit) !== remoteRevision) {
+          throw new Error("local durability reader was not pinned to the observed commit");
+        }
+        persistence = await scanRemotePersistence(census.reader, remoteRevision);
+      } else {
+        const before = await options.store.observe(hosted.projectId);
+        const beforeRevision = normalizeRemoteRevision(before.snapshot.remoteCommit);
+        if (before.state !== "fresh" || beforeRevision === undefined) throw new Error("remote observation is not fresh");
+        remoteRevision = beforeRevision;
+        pendingCheckpoints = before.pending.length;
+        const reader = await options.store.reader(hosted.projectId, "remote", remoteRevision ?? undefined);
+        if (normalizeRemoteRevision(reader.snapshot.remoteCommit) !== remoteRevision) throw new Error("remote reader was not pinned to the observed commit");
+        persistence = await scanRemotePersistence(reader, remoteRevision);
+        if (!coreStore.listProposals) throw new Error("proposal status is unavailable");
+        const after = await options.store.observe(hosted.projectId);
+        const afterRevision = normalizeRemoteRevision(after.snapshot.remoteCommit);
+        if (after.state === "fresh" && afterRevision !== undefined) remoteObservedAt = after.observedAt;
+        if (after.state !== "fresh" || afterRevision !== remoteRevision) {
+          if (afterRevision !== undefined) remoteRevision = afterRevision;
+          persistence = { state: "unknown", observedRemoteCommit: remoteRevision, remoteObservedAt, formats: [] };
+          throw new Error("remote changed during persistence scan");
+        }
+        pendingCheckpoints = after.pending.length;
+        const proposals = await coreStore.listProposals(hosted.projectId);
+        pendingProposals = proposals.filter((proposal) => proposal.state !== "checkpointed").length;
       }
-      pendingCheckpoints = after.pending.length;
-      const proposals = await coreStore.listProposals(hosted.projectId);
-      pendingProposals = proposals.filter((proposal) => proposal.state !== "checkpointed").length;
+      if (!remoteObservedAt || !Number.isFinite(Date.parse(remoteObservedAt)) || Date.now() - Date.parse(remoteObservedAt) < 0 ||
+          Date.now() - Date.parse(remoteObservedAt) >= 15_000) throw new Error("remote observation expired during persistence scan");
+      persistence = { ...persistence, remoteObservedAt };
       complete = persistence.state === "verified" && persistence.observedRemoteCommit === remoteRevision &&
-        mutationsAtScanStart === activeMutations;
-      if (!complete) persistence = { state: "unknown", observedRemoteCommit: remoteRevision, formats: [] };
+        activityVersionAtScanStart === runtimeActivityVersion;
+      if (!complete) persistence = { state: "unknown", observedRemoteCommit: remoteRevision, remoteObservedAt, formats: [] };
     } catch {
-      persistence = { state: "unknown", observedRemoteCommit: remoteRevision, formats: [] };
+      persistence = { state: "unknown", observedRemoteCommit: remoteRevision, remoteObservedAt, formats: [] };
     }
     const observedAt = new Date().toISOString();
     const activeJobs = new Set([...activeWorkerJobIds, ...activeDomainJobIds]).size;
@@ -1164,10 +1205,10 @@ export function createServer(options: ApiServerOptions): Server {
       persistence,
       observedAt,
     };
-    return { status, pendingProposals, complete };
+    return { status, pendingProposals, complete, localWorkspaceDirty };
   };
 
-  const unavailableHostedRuntimeStatus = (): { status: RuntimeStatus; pendingProposals: number; complete: false } => {
+  const unavailableHostedRuntimeStatus = (): { status: RuntimeStatus; pendingProposals: number; complete: false; localWorkspaceDirty: false } => {
     if (!hosted || !assignment) throw httpFailure(404, "PLATFORM_CONTROL_UNAVAILABLE", "Hosted runtime controls are unavailable");
     const status: RuntimeStatus = {
       contractVersion: "scriptorium-platform/v1",
@@ -1189,17 +1230,31 @@ export function createServer(options: ApiServerOptions): Server {
         uncertainPublication: uncertainPublicationBatches.size > 0,
       },
       lastConfirmedRemoteRevision: null,
-      persistence: { state: "unknown", observedRemoteCommit: null, formats: [] },
+      persistence: { state: "unknown", observedRemoteCommit: null, remoteObservedAt: null, formats: [] },
       observedAt: new Date().toISOString(),
     };
-    return { status, pendingProposals: 0, complete: false };
+    return { status, pendingProposals: 0, complete: false, localWorkspaceDirty: false };
   };
 
-  const readHostedRuntimeStatus = async (maximumWaitMs?: number): Promise<{ status: RuntimeStatus; pendingProposals: number; complete: boolean }> => {
-    const scan = hostedRuntimeCensus ??= collectHostedRuntimeStatus().finally(() => { hostedRuntimeCensus = undefined; });
+  const readHostedRuntimeStatus = async (maximumWaitMs?: number, requestedMode?: "remote" | "local"): Promise<{ status: RuntimeStatus; pendingProposals: number; complete: boolean; localWorkspaceDirty: boolean }> => {
+    const mode = requestedMode ?? (quiesceGate ? "local" : "remote");
+    let scan: Promise<{ status: RuntimeStatus; pendingProposals: number; complete: boolean; localWorkspaceDirty: boolean }>;
+    if (hostedRuntimeCensus?.mode === mode) {
+      scan = hostedRuntimeCensus.promise;
+    } else {
+      const entry: NonNullable<typeof hostedRuntimeCensus> = {
+        mode,
+        promise: Promise.resolve(unavailableHostedRuntimeStatus()),
+      };
+      entry.promise = collectHostedRuntimeStatus(mode).finally(() => {
+        if (hostedRuntimeCensus === entry) hostedRuntimeCensus = undefined;
+      });
+      hostedRuntimeCensus = entry;
+      scan = entry.promise;
+    }
     if (maximumWaitMs === undefined) return scan;
     let timer: NodeJS.Timeout | undefined;
-    const timeout = new Promise<{ status: RuntimeStatus; pendingProposals: number; complete: false }>((resolveTimeout) => {
+    const timeout = new Promise<{ status: RuntimeStatus; pendingProposals: number; complete: false; localWorkspaceDirty: false }>((resolveTimeout) => {
       timer = setTimeout(() => resolveTimeout(unavailableHostedRuntimeStatus()), Math.max(0, maximumWaitMs));
       timer.unref();
     });
@@ -1289,19 +1344,20 @@ export function createServer(options: ApiServerOptions): Server {
     quiesceOperationId = body.operationId;
     lastQuiesceOperationId = body.operationId;
     const censusWaitMs = Math.max(0, Math.min(RUNTIME_CONTROL_CENSUS_TIMEOUT_MS, Date.parse(body.deadline) - Date.now()));
-    const census = await readHostedRuntimeStatus(censusWaitMs);
-    const { status, pendingProposals, complete } = census;
+    const census = await readHostedRuntimeStatus(censusWaitMs, "local");
+    const { status, pendingProposals, complete, localWorkspaceDirty } = census;
     const reasonCodes: string[] = [];
     if (status.activity.activeMutations > 0) reasonCodes.push("ACTIVE_MUTATIONS");
     if (status.activity.activeJobs > 0) reasonCodes.push("ACTIVE_JOBS");
     if (status.activity.pendingCheckpoints > 0) reasonCodes.push("PENDING_CHECKPOINTS");
     if (pendingProposals > 0) reasonCodes.push("PENDING_PROPOSALS");
     if (status.activity.uncertainPublication) reasonCodes.push("UNCERTAIN_PUBLICATION");
+    if (localWorkspaceDirty) reasonCodes.push("LOCAL_WORKSPACE_DIRTY");
     if (!complete || status.persistence.state !== "verified") reasonCodes.push("PERSISTENCE_UNVERIFIED");
     if (Date.parse(body.deadline) <= Date.now()) reasonCodes.push("QUIESCE_DEADLINE_EXPIRED");
     const unknown = !complete || status.activity.uncertainPublication;
     const blocked = status.activity.activeMutations > 0 || status.activity.activeJobs > 0 ||
-      status.activity.pendingCheckpoints > 0 || pendingProposals > 0;
+      status.activity.pendingCheckpoints > 0 || pendingProposals > 0 || localWorkspaceDirty;
     const disposition = Date.parse(body.deadline) <= Date.now() ? "unknown" : unknown ? "unknown" : blocked ? "blocked" : "safe";
     if (disposition === "blocked") {
       quiesceGate = false;
@@ -2109,14 +2165,20 @@ export function createServer(options: ApiServerOptions): Server {
     const isActiveMutation = hosted && trackedApiRequest && !["GET", "HEAD", "OPTIONS"].includes(method);
     if (trackedApiRequest) activeApiRequests += 1;
     if (isMcpRequest) activeMcpRequests += 1;
-    if (isActiveMutation) activeMutations += 1;
+    if (isActiveMutation) {
+      activeMutations += 1;
+      recordRuntimeActivity();
+    }
     try { await handle(request.raw, reply.raw, request.body); }
     catch (error) { if (!reply.raw.headersSent) sendError(reply.raw, error); else reply.raw.destroy(error instanceof Error ? error : undefined); }
     finally {
       activeRequests = Math.max(0, activeRequests - 1);
       if (trackedApiRequest) activeApiRequests = Math.max(0, activeApiRequests - 1);
       if (isMcpRequest) activeMcpRequests = Math.max(0, activeMcpRequests - 1);
-      if (isActiveMutation) activeMutations = Math.max(0, activeMutations - 1);
+      if (isActiveMutation) {
+        activeMutations = Math.max(0, activeMutations - 1);
+        recordRuntimeActivity();
+      }
     }
   };
   const methods = ["GET", "HEAD", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"] as const;

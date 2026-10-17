@@ -118,6 +118,15 @@ export interface ProposalStatus {
   stale: boolean;
 }
 
+/** A bounded, no-network snapshot of local checkpoint durability for Hosted quiesce. */
+export interface LocalDurabilityCensus {
+  observation: RemoteObservation;
+  reader: SnapshotReader;
+  pendingCheckpoints: CheckpointReceipt[];
+  pendingProposals: number;
+  localWorkspaceDirty: boolean;
+}
+
 export interface LiteralSearchResult {
   id: string;
   type: "scene" | "chapter" | "volume" | "manuscript";
@@ -2123,6 +2132,115 @@ export class CoreStore implements MutationCoordinator {
     return [...byId.values()].sort((a, b) => a.sequence - b.sequence || a.operation.id.localeCompare(b.operation.id));
   }
 
+  private async readLocalOperationRecordsForDurability(root: string): Promise<StoredOperation[]> {
+    const refs = (await git(root, ["for-each-ref", "--format=%(refname)", "refs/scriptorium/checkpoints/"]))
+      .trim().split(/\r?\n/).filter(Boolean);
+    const byId = new Map<string, StoredOperation>();
+    for (const ref of refs) {
+      const id = ref.slice("refs/scriptorium/checkpoints/".length);
+      if (!ref.startsWith("refs/scriptorium/checkpoints/") || !/^[A-Za-z0-9_-]{1,128}$/.test(id)) {
+        throw coreError(409, "local_durability_unknown", "A local checkpoint reference cannot be classified safely");
+      }
+      const commit = await this.getRef(root, ref);
+      if (!commit) throw coreError(409, "local_durability_unknown", "A local checkpoint reference has no valid commit");
+      const matches = (await this.readOperationRecords(root, commit)).filter((item) => item.operation.id === id);
+      if (matches.length !== 1 || matches[0]!.commit !== commit) {
+        throw coreError(409, "local_durability_unknown", "A local checkpoint reference does not bind exactly one operation record");
+      }
+      if (byId.has(id)) throw coreError(409, "local_durability_unknown", "A local checkpoint operation is referenced more than once");
+      byId.set(id, matches[0]!);
+    }
+    return [...byId.values()].sort((a, b) => a.sequence - b.sequence || a.operation.id.localeCompare(b.operation.id));
+  }
+
+  private async isRecoverableAcknowledgedOperationCommit(
+    root: string,
+    commit: string,
+    acknowledged: Map<string, StoredOperation>,
+    remoteCommit: string,
+  ): Promise<boolean> {
+    let parentLine: string[];
+    try { parentLine = (await git(root, ["rev-list", "--parents", "-n1", commit])).trim().split(/\s+/); }
+    catch { return false; }
+    if (parentLine[0] !== commit || parentLine.length > 2) return false;
+
+    let introduced: StoredOperation[];
+    try {
+      introduced = (await this.readOperationRecords(root, commit)).filter((stored) => stored.commit === commit);
+    } catch { return false; }
+    if (introduced.length !== 1) return false;
+    const stored = introduced[0]!;
+    const source = acknowledged.get(stored.operation.id);
+    if (!source || source.digest !== stored.digest ||
+        source.operation.generation !== stored.operation.generation ||
+        source.sequence !== stored.sequence || source.authorScope !== stored.authorScope ||
+        source.hierarchyRevision !== stored.hierarchyRevision || source.proposalId !== stored.proposalId ||
+        canonicalJson(source.operation) !== canonicalJson(stored.operation) ||
+        canonicalJson(source.receipt) !== canonicalJson(stored.receipt) ||
+        !receiptMatchesOperation(stored.receipt, stored.operation)) return false;
+
+    const changedPaths = (await git(root, [
+      "diff-tree", "--root", "--no-commit-id", "--name-only", "-r", "--no-renames", commit,
+    ])).trim().split(/\r?\n/).filter(Boolean);
+    if (!changedPaths.includes(operationMetadataPath(stored.operation.id))) return false;
+    const allowedPaths = new Set([
+      ...stored.operation.writes.map((write) => write.path),
+      operationMetadataPath(stored.operation.id),
+      ...(stored.proposalId ? [
+        legacyProposalMetadataPath(stored.proposalId),
+        proposalMetadataPath(stored.proposalId),
+        completeProposalMetadataPath(stored.proposalId),
+      ] : []),
+    ]);
+    if (changedPaths.some((filePath) => !allowedPaths.has(filePath))) return false;
+
+    if (stored.proposalId && remoteCommit) {
+      for (const filePath of changedPaths.filter((candidate) => candidate.startsWith(`${PROPOSAL_V1_DIRECTORY}/`) ||
+          candidate.startsWith(`${PROPOSAL_BINDING_DIRECTORY}/`) || candidate.startsWith(`${PROPOSAL_COMPLETE_DIRECTORY}/`))) {
+        const local = await this.snapshotFile(root, commit, filePath);
+        const remote = await this.snapshotFile(root, remoteCommit, filePath);
+        if (local?.content !== remote?.content || local?.revision !== remote?.revision) return false;
+      }
+    }
+
+    for (const write of stored.operation.writes) {
+      const content = write.content === null ? null : write.encoding === "base64"
+        ? Buffer.from(write.content, "base64").toString("base64")
+        : write.content;
+      const actual = await this.snapshotFile(root, commit, write.path, write.encoding === "base64" ? "base64" : "utf8");
+      if (content === null ? actual !== null : actual?.content !== content) return false;
+    }
+    return true;
+  }
+
+  private async hasUnknownLocalDurabilityRefs(
+    root: string,
+    branch: string,
+    localOperations: StoredOperation[],
+    remoteCommit: string,
+  ): Promise<boolean> {
+    const refs = (await git(root, ["for-each-ref", "--format=%(refname)"])).trim().split(/\r?\n/).filter(Boolean);
+    const localOperationIds = new Set(localOperations.map((stored) => stored.operation.id));
+    const remoteBatches = remoteCommit ? await this.readPublicationRecords(root, remoteCommit) : new Map<string, PublicationMetadata>();
+    for (const ref of refs) {
+      if (ref === `refs/heads/${branch}` || ref === `refs/remotes/origin/${branch}` ||
+          ref === "refs/scriptorium/checkpoint-head" || ref === "refs/scriptorium/reconciled-head") continue;
+      if (ref === "refs/remotes/origin/HEAD") {
+        const target = await git(root, ["symbolic-ref", "-q", ref]).catch(() => "");
+        if (target === `refs/remotes/origin/${branch}`) continue;
+        return true;
+      }
+      const checkpoint = ref.match(/^refs\/scriptorium\/checkpoints\/([A-Za-z0-9_-]{1,128})$/u);
+      if (checkpoint && localOperationIds.has(checkpoint[1]!)) continue;
+      const reconciliation = ref.match(/^refs\/scriptorium\/reconciliations\/([A-Za-z0-9_-]{1,128})$/u);
+      if (reconciliation && localOperationIds.has(reconciliation[1]!)) continue;
+      const publication = ref.match(/^refs\/scriptorium\/publications\/([A-Za-z0-9_-]{1,128})$/u);
+      if (publication && remoteBatches.has(publication[1]!)) continue;
+      return true;
+    }
+    return false;
+  }
+
   private async checkpointHead(root: string): Promise<string> {
     const tracked = await this.getRef(root, "refs/scriptorium/checkpoint-head");
     if (tracked) return tracked;
@@ -2246,6 +2364,100 @@ export class CoreStore implements MutationCoordinator {
 
   async observe(projectId: string): Promise<RemoteObservation> {
     return this.withProjectLock(projectId, () => this.requireObservation(projectId));
+  }
+
+  /**
+   * Re-censuses the current local writer state against a recent successful
+   * remote observation. This method never fetches or falls back to observe().
+   */
+  async localDurabilityCensus(projectId: string): Promise<LocalDurabilityCensus> {
+    return this.withProjectLock(projectId, async () => {
+      const { record, root } = await this.getProject(projectId);
+      const cached = this.readObservations.get(projectId);
+      const remoteCommit = cached?.snapshot.remoteCommit;
+      if (!cached || cached.state !== "fresh" || !record.identity ||
+          remoteCommit === undefined ||
+          snapshotKey({ repository: cached.snapshot.repository, remoteCommit: "" }) !==
+            snapshotKey({ repository: record.identity, remoteCommit: "" }) ||
+          (remoteCommit !== "" && !/^(?:[a-f0-9]{40}|[a-f0-9]{64})$/u.test(remoteCommit))) {
+        throw coreError(503, "local_observation_unavailable", "A successful observation for this repository is unavailable");
+      }
+      const age = Date.now() - Date.parse(cached.observedAt);
+      if (!Number.isFinite(age) || age < 0 || age >= READ_OBSERVATION_MAX_AGE_MS) {
+        throw coreError(503, "local_observation_stale", "The last successful remote observation is too old for a local durability census");
+      }
+      const latestFetchedRemote = await this.getRef(root, `refs/remotes/origin/${record.branch}`) ?? "";
+      if (latestFetchedRemote !== remoteCommit) {
+        throw coreError(409, "local_observation_ref_changed", "The tracked remote reference changed after the last successful observation");
+      }
+
+      const remoteOperations = remoteCommit ? await this.readOperationRecords(root, remoteCommit) : [];
+      const localOperations = await this.readLocalOperationRecordsForDurability(root);
+      const remoteById = new Map(remoteOperations.map((item) => [item.operation.id, item]));
+      const pendingCheckpoints: CheckpointReceipt[] = [];
+      const acknowledgedLocalOperations = new Map<string, StoredOperation>();
+      for (const local of localOperations) {
+        const published = remoteById.get(local.operation.id);
+        if (!published) pendingCheckpoints.push(local.receipt);
+        else if (published.digest !== local.digest) {
+          throw coreError(409, "operation_id_reused", "An operation ID is already bound to a different payload");
+        } else if (published.operation.generation === local.operation.generation &&
+            published.sequence === local.sequence && published.authorScope === local.authorScope &&
+            published.hierarchyRevision === local.hierarchyRevision && published.proposalId === local.proposalId &&
+            canonicalJson(published.operation) === canonicalJson(local.operation) &&
+            canonicalJson(published.receipt) === canonicalJson(local.receipt) &&
+            receiptMatchesOperation(published.receipt, published.operation)) {
+          acknowledgedLocalOperations.set(local.operation.id, local);
+        }
+      }
+
+      const branch = (await git(root, ["branch", "--show-current"])).trim();
+      let localWorkspaceDirty = !branch || branch !== record.branch;
+      if (await this.hasUnknownLocalDurabilityRefs(root, record.branch, localOperations, remoteCommit)) {
+        localWorkspaceDirty = true;
+      }
+      if ((await git(root, ["status", "--porcelain", "--untracked-files=all", "--ignored=matching"])).length) {
+        localWorkspaceDirty = true;
+      }
+      const head = await this.getRef(root, "HEAD");
+      if (head && (!remoteCommit || !(await this.isAncestor(root, head, remoteCommit))) &&
+          !(await this.isRecoverableAcknowledgedOperationCommit(root, head, acknowledgedLocalOperations, remoteCommit))) {
+        localWorkspaceDirty = true;
+      }
+      const unremoteHistory = (await git(root, [
+        "rev-list", "--all", "--reflog", ...(remoteCommit ? [`^${remoteCommit}`] : []),
+      ])).trim();
+      for (const commit of unremoteHistory.split(/\r?\n/).filter(Boolean)) {
+        if (!(await this.isRecoverableAcknowledgedOperationCommit(root, commit, acknowledgedLocalOperations, remoteCommit))) {
+          localWorkspaceDirty = true;
+          break;
+        }
+      }
+
+      const observation: RemoteObservation = {
+        ...structuredClone(cached),
+        checkpointHead: await this.checkpointHead(root),
+        pending: pendingCheckpoints,
+      };
+      const records = new Map<string, StoredOperation>();
+      for (const stored of localOperations) records.set(stored.operation.id, stored);
+      for (const stored of remoteOperations) records.set(stored.operation.id, stored);
+      const proposals = await this.loadProjectProposals(record, root, observation, {
+        records,
+        publishedOperationIds: new Set(remoteOperations.map((stored) => stored.operation.id)),
+      });
+      const pendingProposals = [...proposals.values()].filter((proposal) => this.buildProposalStatus(
+        record.id, proposal, observation, records, new Set(remoteOperations.map((stored) => stored.operation.id)),
+      ).state !== "checkpointed").length;
+
+      return {
+        observation,
+        reader: await this.makeReader(root, observation.snapshot, remoteCommit),
+        pendingCheckpoints,
+        pendingProposals,
+        localWorkspaceDirty,
+      };
+    });
   }
 
   async reader(
@@ -3909,10 +4121,13 @@ export class CoreStore implements MutationCoordinator {
       }
       if (branchExists) {
         await this.authenticatedGit(undefined, this.dataDir, [
-          "clone", "--no-recurse-submodules", "--branch", branch, "--single-branch", "--", url, root,
+          "clone", "--no-recurse-submodules", ...(this.hostedRepository ? ["--no-tags"] : []),
+          "--branch", branch, "--single-branch", "--", url, root,
         ], askpass);
       } else {
-        await this.authenticatedGit(undefined, this.dataDir, ["clone", "--no-recurse-submodules", "--", url, root], askpass);
+        await this.authenticatedGit(undefined, this.dataDir, [
+          "clone", "--no-recurse-submodules", ...(this.hostedRepository ? ["--no-tags"] : []), "--", url, root,
+        ], askpass);
         await git(root, ["symbolic-ref", "HEAD", `refs/heads/${branch}`]);
       }
     } catch (error) {
@@ -4049,10 +4264,13 @@ export class CoreStore implements MutationCoordinator {
 
         if (targetHead) {
           await this.authenticatedGit(record, this.dataDir, [
-            "clone", "--no-recurse-submodules", "--branch", branch, "--single-branch", "--", record.url, candidateRoot,
+            "clone", "--no-recurse-submodules", ...(this.hostedRepository ? ["--no-tags"] : []),
+            "--branch", branch, "--single-branch", "--", record.url, candidateRoot,
           ], askpass);
         } else {
-          await this.authenticatedGit(record, this.dataDir, ["clone", "--no-recurse-submodules", "--", record.url, candidateRoot], askpass);
+          await this.authenticatedGit(record, this.dataDir, [
+            "clone", "--no-recurse-submodules", ...(this.hostedRepository ? ["--no-tags"] : []), "--", record.url, candidateRoot,
+          ], askpass);
           await git(candidateRoot, ["symbolic-ref", "HEAD", `refs/heads/${branch}`]);
         }
         const secondIdentity = await this.discoverRepositoryIdentity(record, askpass);

@@ -550,6 +550,87 @@ test("disjoint remote changes replay as an explicit overlay and publish without 
   }
 });
 
+test("local durability recognizes confirmed checkpoints and replay receipts while rejecting unknown local refs", async () => {
+  const fixture = await remoteFixture();
+  try {
+    const dataDir = path.join(fixture.root, "state");
+    const store = new CoreStore({ dataDir, allowLocalRemotes: true });
+    const project = await store.registerProject({ url: fixture.remote });
+
+    let snapshot = (await store.observe(project.id)).snapshot;
+    const first = operation(snapshot, "manuscript/first-published.md", "First published checkpoint.\n", null, "durability_first_published");
+    await approveAndCheckpoint(store, project.id, snapshot, first);
+    const firstPublication = await store.publish(project.id, "durability_first_batch");
+    assert.equal(firstPublication.state, "confirmed");
+    const firstCensus = await store.localDurabilityCensus(project.id);
+    assert.deepEqual(firstCensus.pendingCheckpoints, []);
+    assert.equal(firstCensus.localWorkspaceDirty, false);
+
+    snapshot = (await store.observe(project.id)).snapshot;
+    const second = operation(snapshot, "manuscript/replayed.md", "Checkpoint replayed after a disjoint remote update.\n", null, "durability_replayed_checkpoint");
+    await approveAndCheckpoint(store, project.id, snapshot, second);
+    await git(fixture.seed, "fetch", "origin", "main");
+    await git(fixture.seed, "reset", "--hard", "origin/main");
+    await fs.writeFile(path.join(fixture.seed, "remote-disjoint.txt"), "Disjoint remote update.\n");
+    await git(fixture.seed, "add", "remote-disjoint.txt");
+    await git(fixture.seed, "commit", "-m", "Disjoint remote update before checkpoint publication");
+    await git(fixture.seed, "push", "origin", "main");
+
+    const reconciliation = await store.reconcile(project.id);
+    assert.equal(reconciliation.operations.find(({ operationId }) => operationId === second.id)?.state, "replayed");
+    const replayPublication = await store.publish(project.id, "durability_replay_batch");
+    assert.equal(replayPublication.state, "confirmed");
+    const replayCensus = await store.localDurabilityCensus(project.id);
+    assert.deepEqual(replayCensus.pendingCheckpoints, []);
+    assert.equal(replayCensus.localWorkspaceDirty, false);
+
+    const clonePath = path.join(dataDir, "projects", project.id);
+    await git(clonePath, "branch", "manual-retained-ref", replayPublication.remoteCommit);
+    const unknownRefCensus = await store.localDurabilityCensus(project.id);
+    assert.equal(unknownRefCensus.localWorkspaceDirty, true, "a manual local branch remains unsafe even when it points at a remote commit");
+  } finally {
+    await fs.rm(fixture.root, { recursive: true, force: true });
+  }
+});
+
+test("local durability does not hide a manual parent of an acknowledged replay checkpoint", async () => {
+  const fixture = await remoteFixture();
+  try {
+    const dataDir = path.join(fixture.root, "state");
+    const store = new CoreStore({ dataDir, allowLocalRemotes: true });
+    const project = await store.registerProject({ url: fixture.remote });
+    const snapshot = (await store.observe(project.id)).snapshot;
+    const clonePath = path.join(dataDir, "projects", project.id);
+    await git(clonePath, "config", "user.name", "Manual Local Writer");
+    await git(clonePath, "config", "user.email", "manual@example.test");
+    await fs.writeFile(path.join(clonePath, "manual-only.txt"), "This local commit is outside the checkpoint operation.\n");
+    await git(clonePath, "add", "manual-only.txt");
+    await git(clonePath, "commit", "-m", "Keep unrelated local work");
+    const manualCommit = await git(clonePath, "rev-parse", "HEAD");
+    await git(clonePath, "update-ref", "refs/scriptorium/checkpoint-head", manualCommit);
+
+    const op = operation(snapshot, "manuscript/acknowledged-replay.md", "This exact operation is later published.\n", null, "manual_parent_replay_operation");
+    const receipt = await approveAndCheckpoint(store, project.id, snapshot, op);
+    const parentLine = (await git(clonePath, "rev-list", "--parents", "-n1", receipt.localCommit)).split(/\s+/);
+    assert.equal(parentLine[1], manualCommit, "the local checkpoint intentionally retains the unrelated manual commit as its parent");
+
+    await fs.writeFile(path.join(fixture.seed, "remote-disjoint.txt"), "Disjoint upstream work.\n");
+    await git(fixture.seed, "add", "remote-disjoint.txt");
+    await git(fixture.seed, "commit", "-m", "Disjoint remote update");
+    await git(fixture.seed, "push", "origin", "main");
+    assert.equal((await store.reconcile(project.id)).operations.find(({ operationId }) => operationId === op.id)?.state, "replayed");
+    const publication = await store.publish(project.id, "manual_parent_replay_batch");
+    assert.equal(publication.state, "confirmed");
+    await assert.rejects(git(fixture.root, "--git-dir", fixture.remote, "cat-file", "-e", `${publication.remoteCommit}:manual-only.txt`));
+
+    const census = await store.localDurabilityCensus(project.id);
+    assert.deepEqual(census.pendingCheckpoints, [], "the checkpoint operation itself is acknowledged");
+    assert.equal(census.localWorkspaceDirty, true, "its unrelated manual parent must remain unsafe to discard");
+  } finally {
+    await fs.rm(fixture.root, { recursive: true, force: true });
+  }
+});
+
 test("publication reports only unacknowledged operations across successive checkpoint batches", async () => {
   const fixture = await remoteFixture();
   try {
