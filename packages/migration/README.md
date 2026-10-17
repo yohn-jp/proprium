@@ -53,7 +53,7 @@ const inspection = await inspectLegacyProject({
 });
 ```
 
-The producer owns its source classification and must preserve stable IDs and unknown data. A disabled module's generic records are copied under `meta/scriptorium/modules/<module-id>/legacy/` with disposition `preserved-unreadable`; they are not imported to the module's canonical readable paths. The owning module migration must consume that namespace when enabled. This generic package does not claim semantic conversion of every module's opaque legacy records; final composition belongs to P12.
+The producer owns its source classification and must preserve stable IDs and unknown data. A disabled module's generic records are copied under `meta/scriptorium/modules/<module-id>/legacy/` with disposition `preserved-unreadable`; they are not imported to the module's canonical readable paths. The owning module migration consumes that namespace when enabled. The P12 integration check composes these producers with Core's normal author approval, checkpoint, and publication flow.
 
 ## Generic source coverage
 
@@ -70,20 +70,19 @@ The producer owns its source classification and must preserve stable IDs and unk
 | SQLite derived tables such as `entities`, `links`, `scene_state_events`, `reader_knowledge_events`, embeddings, and fingerprints | Reported as derived/rebuild-only; row contents are not imported. Tables with secret-like names or columns are excluded without reading rows. Unknown tables are reported unclassified and left untouched. |
 | Pending Git commits and worktree changes | Final file contents/deletions are represented as provisional guarded operations; credential-like paths are excluded. Git history and the old checkout remain intact. |
 | Explicit workspace `app-state` stores | Share grant descriptors are selected by the supplied legacy project ID; only hashed, non-owner descriptors are migrated. Story owns `app-state/series.json` and its root alias using the verified mapping; host project/user/session/token records remain host-owned or excluded. |
+| `app-state/jobs-state.json` | Authoritative historical job results/errors and inbox bodies are archived byte-for-byte under private host `/history/jobs/legacy/<sha256>.json` by the API-owned `importLegacyJobHistory` hook. Readable owner history requires explicit source-user and source-project mappings; unmapped rows remain only in the private archive and are reported as mapping-required. This data never enters Core Git operations. |
 
 All roots are caller-supplied; the package never scans the user's home directory or infers a data root from environment variables. Filesystem symlinks are not followed or copied. Git credential filtering is path-only and runs before reading file contents; it covers common SSH private-key names, `.npmrc`, Git credential files, and conventional AWS, gcloud, GitHub CLI, Azure, Docker, and Kubernetes credential stores. Manuscript and note bodies are not scanned for secret-like text. SQLite databases and any WAL/SHM sidecars are copied to a temporary directory and opened read-only there. Git status disables optional index refreshes so the source checkout metadata remains unchanged.
 
 The migration package uses the Node 24 built-in `node:sqlite` API and the host Git executable. It adds no SQLite or Git library dependency.
 
-## Real Core persistence-boundary check
+## Composed P12 persistence-boundary check
 
-Build the packages and run the integration test with:
+Build the real packages and run the integration test from the repository root:
 
 ```sh
-pnpm --filter @scriptorium/contracts build
-pnpm --filter @scriptorium/core build
-pnpm --filter @scriptorium/migration build
-node --test packages/migration/tests/import-recovery.mjs
+pnpm build
+node --test tests/integration/migration-acceptance.test.mjs
 ```
 
-This test creates synthetic legacy Git, SQLite, workspace, settings, dictionary, scratch, binary-asset, and grant data. It inspects through the producer registry, submits the plan to `CoreStore`, approves and checkpoints the operations, pushes to a real local bare Git remote, deletes the full Core data directory, and verifies the imported bytes and stable IDs from a fresh clone. It also verifies source-tree metadata and bytes remain unchanged and that a repeated import produces no writes. The generic SQLite copy is physical record preservation only; final module semantics and recovery-journal composition remain P12 work. Target paths that Core refuses to read safely (including a symlink replacement) stay explicitly blocked for author review while unrelated Git changes remain importable.
+The fixture includes both legacy SQLite stores/WAL files, authoritative and provisional module inputs, binary attachments, foreign grants, synthetic credentials, and a pending local Git commit. It verifies read-only source metadata/bytes, opaque preservation while modules are disabled, semantic module reactivation, private API-owned job-history restoration with explicit mappings, real Core author approval/checkpoint/push, complete Core data-directory removal, fresh remote clone recovery, and deterministic reinspection. No private manuscript or real credential is used.
