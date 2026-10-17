@@ -1,0 +1,72 @@
+{
+  "schemaVersion": 1,
+  "task": "P12",
+  "implementationStatus": "in_progress",
+  "acceptanceStatus": "pending",
+  "source": {
+    "repository": "yohn-jp/arcadia-loom",
+    "commit": "edc033c2c9466274a334299dadfa426661d957d9",
+    "readOnly": true,
+    "ledgerItems": [
+      "docs/migration/ledger.json#N12",
+      "docs/migration/ledger.json#R43"
+    ]
+  },
+  "target": {
+    "repository": "yohn-jp/scriptorium",
+    "candidateHead": "f3ef4d34b5e603885ec2cbf204446b6becef3071",
+    "branch": "main"
+  },
+  "sourceClassification": [
+    {
+      "source": [
+        "app-state/recent-activity.json",
+        "recent-activity.json"
+      ],
+      "category": "authoritative cross-device reading and writing cursors",
+      "sourceProofRef": "docs/migration/ledger.json#P04-R43-recent-activity-classification",
+      "preservation": "The unchanged P04 inspection proof classifies both source paths and identifies the exact-byte private archive destination. The composed fixture exercises the API-owned importer with explicit source-user and source-project mappings; unmapped cursor rows remain private and are not exposed by the owner API."
+    }
+  ],
+  "implementedBehavior": [
+    "The composed synthetic fixture exercises the seven domain migration producers under the eight-module enabled profile over a legacy Git repository and workspace data. It includes both project and workspace SQLite stores, representatives of authoritative and provisional records, notes and scratch assets, user overrides, dictionaries, selected model/settings and usage history, publishing metadata, Story history, and pending/staged local Git work. Secret-like paths and unmapped private rows are checked for exclusion from public proposals and repository Git.",
+    "The fixture submits actual producer operations through Core author approval, per-operation checkpointing, and confirmed push to a synthetic bare remote. It removes the complete Core data root, registers a fresh clone, enables modules, reviews and publishes reactivation operations, removes the root again, and verifies exact recovered bytes and stable IDs through another clone. It also checks source-tree immutability and idempotent reinspection.",
+    "The R43 fixture starts with exact desktop and mobile source `updatedAt` values, captures the desktop `updatedAt` returned by a newer live owner API PUT, and asserts those exact timestamps after reimport and the second complete Core data-root replacement. Private cursor state is not published to Git; the raw source archive remains exact and owner-cookie protected."
+  ],
+  "proofs": [
+    {
+      "id": "P04-N12-read-only-import",
+      "kind": "existing scoped migration producer proof",
+      "status": "passed",
+      "targetFiles": [
+        "packages/migration/src/migration.test.ts",
+        "packages/migration/src/producers/workspace.ts"
+      ],
+      "testedHead": "11cbaeb33826c1ae0ee2276bccafc723fad0e7a7",
+      "command": "pnpm --filter @scriptorium/migration test",
+      "result": "The existing ledger proof remains unchanged. It covers synthetic legacy source/workspace inspection, both SQLite stores, pending Git work, secret-path filtering, reviewable operations, idempotence, and source immutability. This scoped result does not claim composed P12 retention or R43 archive materialization.",
+      "scope": "Referenced from docs/migration/ledger.json#P04-N12-read-only-import; no new test result is claimed here."
+    },
+    {
+      "id": "P12-N12-COMPOSED-IMPORT-AND-R43-RECLONE",
+      "kind": "composed migration, Core review/publication, API history and reclone acceptance",
+      "status": "pending",
+      "targetFiles": [
+        "tests/integration/migration-acceptance.test.mjs",
+        "packages/core/src/",
+        "packages/migration/src/",
+        "packages/api/src/recent-activity-store.ts",
+        "modules/*/src/migration/"
+      ],
+      "testName": "composed legacy import preserves disabled data and reactivates after a full Core data-root replacement",
+      "command": "pnpm verify",
+      "result": "Awaiting the root's fresh verification run on candidateHead f3ef4d34b5e603885ec2cbf204446b6becef3071. Test-source assertions are not recorded as a passing runtime result until that command completes.",
+      "scope": "One synthetic fixture; no private source corpus or credentials. Covers full Core root deletion/reclone, second publication/reclone, explicit mapping and privacy for host-owned history, and exact initial/live cursor timestamp preservation."
+    }
+  ],
+  "compositionLimits": [
+    "P12 implementation and acceptance remain pending until the coordinator records the fresh frozen-tree verification result and tested head. This draft documents fixture assertions only.",
+    "The P04 source classification proof is retained by reference and is not altered or represented as the API-owned archive import proof.",
+    "The synthetic fixture does not certify private-project data migration or final OCI/profile acceptance."
+  ]
+}
