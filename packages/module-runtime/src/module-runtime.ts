@@ -211,7 +211,7 @@ function validateDefinition(expected: ModuleManifest, definition: ModuleDefiniti
     if (!contribution || typeof contribution.id !== "string" || !/^[A-Za-z0-9._:-]{1,128}$/.test(contribution.id) ||
         !safeHttpPath(contribution.path) || !Array.isArray(methods) || methods.length === 0 || methods.length > 4 ||
         methods.some((method) => !["GET", "HEAD", "POST", "DELETE"].includes(method)) || new Set(methods).size !== methods.length ||
-        !["owner", "public"].includes(contribution.access) || !["read", "propose"].includes(contribution.effect) ||
+        !["owner", "public"].includes(contribution.access) || !["read", "compute", "propose"].includes(contribution.effect) ||
         (contribution.access === "public" && contribution.effect !== "read") || typeof contribution.handle !== "function" ||
         httpIds.has(contribution.id)) {
       throw new ModuleRuntimeError("invalid_module_definition", `Module ${expected.id} declares an invalid HTTP contribution`);

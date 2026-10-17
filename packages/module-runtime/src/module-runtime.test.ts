@@ -1130,6 +1130,103 @@ test("HTTP contributions are hidden until activation and public reads cannot pro
   await runtime.shutdown();
 });
 
+test("owner compute HTTP contributions can compose reads, compute, and jobs but cannot propose", async () => {
+  const publishing = manifest("publishing");
+  const story = manifest("story");
+  let proposeActionCalls = 0;
+  let hostProposalCalls = 0;
+  // Exercise the registered module HTTP contribution through the production context ports.
+  const handlerRuntime = new ModuleRuntime({
+    manifests: [publishing, story], enabled: ["publishing", "story"], cacheDirectory: "/tmp/scriptorium-runtime-test",
+    workerEntries: { publishing: workerEntry },
+    loaders: {
+      story: async () => ({
+        manifest: story,
+        actions: [
+          { id: "read", effect: "read", inputSchema: schema, outputSchema: schema,
+            async invoke(_input, context) { return { ok: true, snapshot: context.reader.snapshot, data: { source: "read" } }; } },
+          { id: "compute", effect: "compute", inputSchema: schema, outputSchema: schema,
+            async invoke(_input, context) { return { ok: true, snapshot: context.reader.snapshot, data: { source: "compute" } }; } },
+          { id: "propose", effect: "propose", inputSchema: schema, outputSchema: schema,
+            async invoke(_input, context) {
+              proposeActionCalls += 1;
+              return { ok: true, snapshot: context.reader.snapshot, data: { source: "propose" } };
+            } },
+        ],
+        ui: [], async dispose() {},
+      }),
+      publishing: async () => ({
+        manifest: publishing, actions: [], ui: [],
+        http: [{ id: "qa-stream", path: "qa/stream", methods: ["POST"], access: "owner", effect: "compute", async handle(_request, context) {
+          const read = await context.invoke("story.read", {});
+          const compute = await context.invoke("story.compute", {});
+          const nestedProposal = await context.invoke("story.propose", {});
+          let directProposalCode: string | undefined;
+          try { await context.propose([proposalOperation()]); }
+          catch (error) { directProposalCode = (error as { code?: string }).code; }
+          const jobRequest: JobRequest = {
+            id: "http-compute-job", module: "publishing", task: "echo", snapshot: context.reader.snapshot,
+            model: "test-model", modelVersion: "1", moduleVersion: publishing.version,
+            deadline: Date.now() + 5_000, input: { source: "http-compute" },
+          };
+          const job = await context.runJob(jobRequest);
+          return Response.json({
+            read: read.ok ? read.data : read.error.code,
+            compute: compute.ok ? compute.data : compute.error.code,
+            nestedProposalCode: nestedProposal.ok ? null : nestedProposal.error.code,
+            directProposalCode: directProposalCode ?? null,
+            jobEcho: job.ok ? job.result.output.echo : job.error.code,
+          });
+        } }],
+        async dispose() {},
+      }),
+    },
+  });
+  const host = {
+    ...readContext(), access: "owner" as const,
+    async propose(operations: ChangeOperation[]): Promise<ChangeProposal> {
+      hostProposalCalls += 1;
+      return { id: "unexpected-proposal", snapshot, operations, source: "module" };
+    },
+  };
+  try {
+    assert.deepEqual(handlerRuntime.httpContributions("publishing"), []);
+    await handlerRuntime.activate("publishing");
+    assert.equal(handlerRuntime.httpContributions("publishing")[0]?.effect, "compute");
+    const response = await handlerRuntime.invokeHttp("publishing", "qa-stream", new Request("http://localhost/qa/stream", { method: "POST" }), host);
+    assert.equal(response.status, 200);
+    assert.deepEqual(await response.json(), {
+      read: { source: "read" },
+      compute: { source: "compute" },
+      nestedProposalCode: "action_effect_denied",
+      directProposalCode: "action_effect_denied",
+      jobEcho: { source: "http-compute" },
+    });
+    assert.equal(proposeActionCalls, 0, "compute HTTP cannot dispatch propose actions");
+    assert.equal(hostProposalCalls, 0, "compute HTTP cannot use the proposal coordinator");
+  } finally {
+    await handlerRuntime.shutdown();
+  }
+});
+
+test("public compute HTTP contribution definitions are rejected", async () => {
+  const metadata = manifest("publishing");
+  const runtime = new ModuleRuntime({
+    manifests: [metadata], enabled: ["publishing"], cacheDirectory: "/tmp/scriptorium-runtime-test",
+    loaders: { publishing: async () => ({
+      manifest: metadata, actions: [], ui: [],
+      http: [{ id: "public-compute", path: "public/qa", methods: ["POST"], access: "public", effect: "compute", async handle() { return Response.json({}); } }],
+      async dispose() {},
+    }) },
+  });
+  try {
+    await assert.rejects(runtime.activate("publishing"), (error: unknown) =>
+      error instanceof ModuleRuntimeError && error.code === "invalid_module_definition");
+  } finally {
+    await runtime.shutdown();
+  }
+});
+
 test("module disable bounds a non-cooperative action drain and rejects late proposals", async () => {
   const metadata = manifest("assistant");
   let proposalCalls = 0;
