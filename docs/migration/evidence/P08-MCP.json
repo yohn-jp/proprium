@@ -83,7 +83,7 @@
       "result": "passed, 1 of 1 on exact testedHead d0033c3e211f4c50f0709e85212adb884e78f1cd with the real Story/NLP/Diagnostics/Semantic/Speaker/Publishing/MCP runtime and live API. Spawned stdio and SDK HTTP verified all 27 tools, full scene diagnostics, formatter NarrativeChangeSet submission/replay/readback, owner approval/checkpoint/publication, no-op formatting, cancellation, privacy-safe reconstruction, exact proposal restoration, and no-duplicate recovery."
     },
     {
-      "command": "SCRIPTORIUM_MCP_ACCEPTANCE_MODULES=story,nlp,diagnostics,semantic,speaker,assistant,publishing,mcp env -u ARCADIA_LLM_PROVIDER -u ARCADIA_LLM_BASE_URL -u ARCADIA_LLM_MODEL -u ARCADIA_LLM_API_KEY node --test --test-name-pattern='spawned stdio and production HTTP MCP preserve Core review boundaries' tests/integration/mcp-acceptance.test.mjs",
+      "command": "SCRIPTORIUM_LLM_PROVIDER=none SCRIPTORIUM_MCP_ACCEPTANCE_MODULES=story,nlp,diagnostics,semantic,speaker,assistant,publishing,mcp node --test tests/integration/mcp-acceptance.test.mjs",
       "result": "passed, 1 of 1 (46.9 seconds; 49.7 seconds total test process) on exact root HEAD 90d5fc822faba247cc40266dddaa60ca2facc23d. The production API/Core acceptance verified both transports return the exact materialized counts `{entities:7,links:2}` and the same selected snapshot, alongside the existing proposal approval, checkpoint, publish, and reconstruction flow. This is scoped production evidence, not final migration campaign certification."
     },
     {
