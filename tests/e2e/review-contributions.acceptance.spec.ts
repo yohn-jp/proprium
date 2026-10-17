@@ -151,6 +151,9 @@ async function readProposalStatus(page: Page, projectId: string, proposalId: str
 
 test("full profile renders Story and Speaker review queues and turns both author decisions into unapproved Core proposals", async ({ page }) => {
   test.setTimeout(180_000);
+  test.skip(process.env.SCRIPTORIUM_PROFILE !== "full", "Story and Speaker review contributions are selected by the full profile.");
+  test.skip(Boolean(process.env.SCRIPTORIUM_E2E_EXTERNAL_REPOSITORY === "1" || process.env.SCRIPTORIUM_E2E_BASE_URL || process.env.SCRIPTORIUM_BASE_URL),
+    "This acceptance registers and writes only to an owned temporary local bare Git fixture.");
   expect(authToken.length).toBeGreaterThanOrEqual(32);
   const fixture = await createReviewProject();
   let projectId: string | null = null;
