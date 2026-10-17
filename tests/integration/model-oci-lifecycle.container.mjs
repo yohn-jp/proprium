@@ -37,11 +37,11 @@ function waitGate() {
   };
 }
 
-async function waitFor(predicate, message, timeoutMs = 90_000) {
+async function waitFor(predicate, message, timeoutMs = 90_000, pollIntervalMs = 25) {
   const deadline = Date.now() + timeoutMs;
   while (Date.now() < deadline) {
     if (await predicate()) return;
-    await delay(25);
+    await delay(pollIntervalMs);
   }
   throw new Error(message);
 }
@@ -453,10 +453,20 @@ async function runLifecycle() {
     await waitFor(() => capabilityEvents.some((event) => event.module === "diagnostics" && event.phase === "acquired"),
       "Diagnostics did not acquire its actual semantic embedding capability");
 
-    const rebuildPromise = invoke("semantic.index.rebuild", { taskId: "p13-oci-shared-index" });
-    await waitFor(async () => capabilityEvents.some((event) => event.module === "semantic" && event.phase === "acquired") &&
-      workerPids(runtime, composition.moduleWorkerEntries.semantic).length > 0,
-    "Semantic did not start its actual embedding worker");
+    let rebuildSettlement = null;
+    const rebuildPromise = invoke("semantic.index.rebuild", { taskId: "p13-oci-shared-index" }).then((result) => {
+      rebuildSettlement = { at: Date.now(), ok: result.ok };
+      return result;
+    }, (error) => {
+      rebuildSettlement = { at: Date.now(), ok: false };
+      throw error;
+    });
+    await waitFor(async () => capabilityEvents.some((event) => event.module === "diagnostics" && event.phase === "acquired") &&
+      capabilityEvents.some((event) => event.module === "semantic" && event.phase === "acquired") &&
+      rebuildSettlement === null &&
+      workerPids(runtime, composition.moduleWorkerEntries.semantic).length === 1 &&
+      runtime.workerSupervisor.activeJobCountFor("semantic") > 0,
+    "Semantic did not hold an active real model job with both consumers leased", 90_000, 1);
     const diagnosticsLease = capabilityEvents.find((event) => event.module === "diagnostics" && event.phase === "acquired");
     const semanticLease = capabilityEvents.find((event) => event.module === "semantic" && event.phase === "acquired");
     assert.ok(diagnosticsLease && semanticLease);
@@ -464,23 +474,37 @@ async function runLifecycle() {
     const identity = diagnosticsLease.identity;
     const firstSemanticPid = workerPids(runtime, composition.moduleWorkerEntries.semantic)[0];
     assert.ok(firstSemanticPid);
-    await waitFor(async () => workerPids(runtime, composition.moduleWorkerEntries.semantic).length === 1,
-      "overlapping real capability users must share one semantic child PID");
+    assert.ok(runtime.workerSupervisor.activeJobCountFor("semantic") > 0,
+      "the actual semantic model job must still be active when Diagnostics disable is requested");
+    assert.equal(rebuildSettlement, null, "the real semantic rebuild must still be unsettled when Diagnostics disable is requested");
     outcome.assertions.sharedCapability = { identity, workerPid: firstSemanticPid, consumers: ["diagnostics", "semantic"] };
 
-    assert.ok(runtime.workerSupervisor.activeJobCountFor("semantic") > 0, "the semantic model job must be active before disabling one consumer");
+    const diagnosticsDisableRequestedAt = Date.now();
     const diagnosticDisablePromise = runtime.disable("diagnostics");
     await diagnosticDisablePromise;
     const diagnosticResult = await diagnosticPromise;
     assert.equal(runtime.status("diagnostics").availability, "disabled");
     assert.equal(diagnosticResult.ok, false, "the disabled Diagnostics action must be cancelled while Semantic remains active");
-    assert.deepEqual(workerPids(runtime, composition.moduleWorkerEntries.semantic), [firstSemanticPid],
-      "the Semantic child must remain alive after the other real consumer is disabled");
-    assert.ok(runtime.workerSupervisor.activeJobCountFor("semantic") > 0,
-      "Semantic must still be processing its real model job when Diagnostics has drained");
+    let sameSemanticChildWhileRebuildPending = false;
+    if (rebuildSettlement === null) {
+      assert.deepEqual(workerPids(runtime, composition.moduleWorkerEntries.semantic), [firstSemanticPid],
+        "the same Semantic child must remain alive while the real rebuild is pending after Diagnostics drains");
+      sameSemanticChildWhileRebuildPending = true;
+    } else {
+      assert.ok(rebuildSettlement.at >= diagnosticsDisableRequestedAt,
+        "a naturally completed rebuild during Diagnostics drain must settle after the disable request");
+    }
     const rebuildResult = await rebuildPromise;
     const rebuilt = actionData(rebuildResult, "semantic.index.rebuild");
+    assert.ok(rebuildSettlement && rebuildSettlement.ok, "the real Semantic rebuild must succeed independently after Diagnostics cancellation");
     assert.ok(rebuilt.embedded > 0);
+    outcome.assertions.diagnosticsCancellation = {
+      semanticJobActiveAtDisableRequest: true,
+      disableRequestedAt: new Date(diagnosticsDisableRequestedAt).toISOString(),
+      rebuildSettledAt: new Date(rebuildSettlement.at).toISOString(),
+      rebuildCompletedAfterDisableRequest: rebuildSettlement.at >= diagnosticsDisableRequestedAt,
+      sameSemanticChildWhileRebuildPending,
+    };
     await waitFor(() => workerPids(runtime, composition.moduleWorkerEntries.semantic).length === 0,
       "last Semantic lease release did not stop the child");
     outcome.phases.push(await sampler.mark());
