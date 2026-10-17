@@ -216,6 +216,25 @@ function parseSseEvents(text) {
   });
 }
 
+function isStructuredQaValidationError(message) {
+  const zodIssueCodes = new Set([
+    "invalid_type", "invalid_literal", "custom", "invalid_union", "invalid_union_discriminator",
+    "invalid_enum_value", "unrecognized_keys", "invalid_arguments", "invalid_return_type",
+    "invalid_date", "invalid_string", "too_small", "too_big", "not_multiple_of", "not_finite",
+    "invalid_intersection_types",
+  ]);
+  try {
+    const issues = JSON.parse(message);
+    return Array.isArray(issues) && issues.length > 0 && issues.every((issue) =>
+      issue !== null && typeof issue === "object" && !Array.isArray(issue) &&
+      zodIssueCodes.has(issue.code) && Array.isArray(issue.path) && issue.path.length > 0 &&
+      issue.path.every((part) => typeof part === "string" || typeof part === "number") &&
+      typeof issue.message === "string" && issue.message.trim().length > 0);
+  } catch {
+    return /^(?:Unexpected character .+ at position \d+|Unexpected end of JSON input|Unexpected token .*(?:not valid JSON|JSON at position \d+)|Expected .+ in JSON at position \d+)$/u.test(message);
+  }
+}
+
 function ownerModuleStream(host, cookie, projectId, route, input, signal) {
   return fetch(`${host.base}/api/projects/${encodeURIComponent(projectId)}/modules/assistant/${route}`, {
     method: "POST",
@@ -1050,8 +1069,9 @@ test("P11 local provider streams, records usage, proposes through Core review, p
     }
   } else {
     assert.equal(qaError.code, "assistant_action_failed", "Invalid provider output must remain a schema error, not a fabricated answer");
-    assert.match(qaError.message, /JSON|character|Unexpected|Expected object|invalid_type/u,
-      "The SSE error should explain the actual schema/JSON failure");
+    assert.equal(typeof qaError.message, "string");
+    assert.ok(isStructuredQaValidationError(qaError.message),
+      `The SSE error should be a recognized JSON parse failure or a complete Zod validation issue array; received ${qaError.message}`);
   }
 
   const rewriteResponse = await ownerModuleStream(host, cookie, projectId, "rewrite/stream", {
