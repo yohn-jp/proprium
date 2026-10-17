@@ -1,7 +1,8 @@
 #!/usr/bin/env node
 
 import { createHash } from 'node:crypto';
-import { mkdir, readFile, readdir, rm, writeFile } from 'node:fs/promises';
+import { mkdir, readFile, rm, writeFile } from 'node:fs/promises';
+import { createRequire } from 'node:module';
 import path from 'node:path';
 import process from 'node:process';
 import { spawnSync } from 'node:child_process';
@@ -63,25 +64,11 @@ function buildWorkspace() {
 }
 
 async function loadEsbuild() {
-  const packageStore = path.join(root, 'node_modules/.pnpm');
-  const candidates = (await readdir(packageStore)).filter((name) => /^esbuild@[0-9]/u.test(name));
-  candidates.sort((left, right) => {
-    const a = left.match(/^esbuild@([0-9]+(?:\.[0-9]+){0,2})/u)?.[1]?.split('.').map(Number) ?? [];
-    const b = right.match(/^esbuild@([0-9]+(?:\.[0-9]+){0,2})/u)?.[1]?.split('.').map(Number) ?? [];
-    for (let index = 0; index < 3; index += 1) {
-      if ((a[index] ?? 0) !== (b[index] ?? 0)) return (b[index] ?? 0) - (a[index] ?? 0);
-    }
-    return left.localeCompare(right);
-  });
-  for (const candidate of candidates) {
-    const modulePath = path.join(packageStore, candidate, 'node_modules/esbuild/lib/main.js');
-    try {
-      return await import(pathToFileURL(modulePath).href);
-    } catch (error) {
-      if (error?.code !== 'ERR_MODULE_NOT_FOUND') throw error;
-    }
-  }
-  throw new Error('The locked workspace does not contain esbuild');
+  const requireFromApp = createRequire(path.join(root, 'app/package.json'));
+  const requireFromVite = createRequire(requireFromApp.resolve('vite/package.json'));
+  // Resolve the compiler through the frozen app toolchain, never an orphaned
+  // highest-version directory left in a package store by another installation.
+  return import(pathToFileURL(requireFromVite.resolve('esbuild')).href);
 }
 
 async function createBundle(outputDirectory, producerRevision, sourceTreeClean) {
@@ -93,9 +80,14 @@ async function createBundle(outputDirectory, producerRevision, sourceTreeClean) 
   const trustedLiteral = JSON.stringify(trustedModuleBytes.toString('utf8'));
   const entry = [
     'import { resolveBuildCatalogSelection as resolveTrustedCatalog } from "../packages/module-runtime/src/build-catalog.ts";',
+    'import { persistenceForModules } from "../scripts/composition-persistence.mjs";',
+    'import { MODULE_PERSISTENCE_FORMATS } from "../packages/module-runtime/src/persistence-formats.ts";',
     `const trustedModules = JSON.parse(${trustedLiteral});`,
     'export function resolveBuildCatalogSelection(catalog, requestedModuleIds) {',
     '  return resolveTrustedCatalog(catalog, requestedModuleIds, trustedModules);',
+    '}',
+    'export function resolveCompositionPersistence(selectedModuleIds) {',
+    '  return persistenceForModules(selectedModuleIds, MODULE_PERSISTENCE_FORMATS);',
     '}',
     '',
   ].join('\n');
@@ -145,6 +137,11 @@ async function createBundle(outputDirectory, producerRevision, sourceTreeClean) 
       '  catalog: unknown,',
       '  requestedModuleIds: readonly string[],',
       '): ProducerBuildCatalogSelection;',
+      'export declare function resolveCompositionPersistence(selectedModuleIds: readonly string[]): {',
+      '  contractVersion: "scriptorium-persistence/v1";',
+      '  readable: { formatId: string; versions: number[] }[];',
+      '  writable: { formatId: string; version: number }[];',
+      '};',
       '',
     ].join('\n');
     const declarationBytes = Buffer.from(declaration, 'utf8');
@@ -156,6 +153,9 @@ async function createBundle(outputDirectory, producerRevision, sourceTreeClean) 
       'packages/module-runtime/src/runtime-error.ts',
       'packages/contracts/src/index.ts',
       'scripts/hosted-build.mjs',
+      'scripts/build-catalog-bundle.mjs',
+      'scripts/composition-persistence.mjs',
+      'packages/module-runtime/src/persistence-formats.ts',
     ];
     const sourceDigests = await Promise.all(sourcePaths.map(async (sourcePath) => ({
       path: sourcePath,
