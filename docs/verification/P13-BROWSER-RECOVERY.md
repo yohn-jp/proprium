@@ -41,3 +41,21 @@ Record the exact source HEAD, OCI engine/version, image ID, manifest digest, pla
 The 2026-10-17 run passed on source checkout `4ed8ffd0cfa8e3a247a63d40754a12a23e9cadc5`, whose source tree matched the P02 candidate `f1e621a`. The actual `PROFILE=core` image was built locally with rootless Podman 5.8.9 for `linux/amd64`; image ID `08a863354c46e26a5be168c5f3275c58468ac32fb2fda84491ad8c5f2964f1d2`, manifest `sha256:7f721e9253216e4d4f5ecb914e046126904c8ffcc8ae7cd50811b63e39176e31`.
 
 The run confirmed checkpoint retention in Chromium IndexedDB across browser restart and `/data` deletion/recreation, Core replay of the complete operation, explicit publication with one remote operation commit, observation of an external update to an unedited scene, retention of author text in the latest `Journal.getDocument` row after a same-file conflict, and rejection of the conflicting publish. Before this run, the synthetic fixture tree was restored to its exact six generic seed files through ordinary commits; prior fixture history remains intact. The successful run's remote commits remain preserved. This evidence applies to the recorded source tree only and does not certify later commits or the final composed Epic #7 tree.
+
+### Composed runtime rerun
+
+The coordinator reran the actual container/browser/GitHub acceptance on 2026-10-17 from clean checkout `bc2b0936d418d1d8f5dcd8b16e74d1f9f3d65c0f` (tree `480aadf546cd28944c5a242ef9cd0ac55b215616`). Frozen install and the acceptance process exited successfully. This run built the root Dockerfile with `PROFILE=core`, rootless Podman 5.8.9 and the configured Nix Chromium; it used the dedicated private synthetic fixture after restoring its six seed files through an ordinary commit. No remote history was rewritten.
+
+| Field | Observed result |
+| --- | --- |
+| Image ID | `93521116f542d3fc3f9fda63ef2411c69dc83f897c54886bc3dc379ed35b3254` |
+| Manifest digest | `sha256:cb6d9d3e792fba6020c561946b07c07aa4f7c7043aaed3597cefbeab586d6a05` |
+| Platform | `linux/amd64` |
+| Seed / confirmed publication | `9ad11f57c50422fdf0c4417a5e17a01cf457e5cd` / `e13aa439bb7c4f33c8ffc8177851c5e94ca4f3e7` |
+| Recovered operation | `ec784e0a-c1d2-49d6-ad1c-8352e71d7131`; exactly one remote operation commit |
+| Browser and container replacement | IndexedDB retained across Chromium restart; container data volume deleted and recreated; complete operation restored and explicitly published |
+| External update | Unedited Scene Two followed remote commit `6f968fef014c2e93b67e9bdc26e91c9fb64fde93` |
+| Same-file conflict | Author input and complete operation content retained in the conflict journal; publish returned `conflict`; conflicting operation was absent from GitHub |
+| Final fixture commit | `fe37be1e6f25d473c49144de3c318610669551ac` |
+
+The image remained local. This proves the listed Core recovery paths for the composed runtime inputs. Full-profile model lifecycle, the root verification command, source-feature/data-ledger closure, and final campaign acceptance are recorded separately; this result does not claim those gates passed.
