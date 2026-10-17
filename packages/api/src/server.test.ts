@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import { execFile as execFileCallback } from "node:child_process";
-import { createHash } from "node:crypto";
+import { createHash, generateKeyPairSync, sign as signJwt } from "node:crypto";
+import { request as httpRequest } from "node:http";
 import { lstat, mkdir, mkdtemp, readFile, rm, symlink, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { resolve } from "node:path";
@@ -13,13 +14,44 @@ import { ModuleRuntime, type ModuleLoader, type ModuleRuntimeOptions } from "@sc
 import { HistoricalModelUsageError, HistoricalModelUsageStore } from "./historical-store.js";
 import { JobHistoryError, JobHistoryStore, type WorkerJobLifecycle } from "./job-history-store.js";
 import "./recent-activity-store.test.js";
-import { createServer, importLegacyJobHistory, type ApiServerOptions } from "./server.js";
+import "./platform-runtime.test.js";
+import { createServer, importLegacyJobHistory, type ApiServerOptions, type HostedAuthorizationPolicy, type HostedPrincipal } from "./server.js";
+import { RUNTIME_QUIESCE_PATH, RUNTIME_RESUME_PATH, RUNTIME_STATUS_PATH, sha256Digest, type RuntimeAssignment } from "./platform-runtime.js";
 
 const ACCESS_TOKEN = "test-access-token-which-is-longer-than-32-characters";
 const execFile = promisify(execFileCallback);
 const SNAPSHOT: SnapshotId = {
   repository: { provider: "github", repositoryId: "123", defaultBranch: "main", ownerScope: "owner-1", url: "https://github.com/owner/work.git" },
   remoteCommit: "a".repeat(40),
+};
+const HOSTED_ASSIGNMENT: RuntimeAssignment = {
+  contractVersion: "scriptorium-platform/v1",
+  instanceId: "instance-1",
+  repositoryId: 123,
+  repositoryLocator: "https://github.com/owner/work",
+  defaultBranchPolicy: "repository-default",
+  runtimeEpoch: 3,
+  imageDigest: `sha256:${"a".repeat(64)}`,
+  compositionManifestDigest: `sha256:${"b".repeat(64)}`,
+  enabledModuleIds: ["story", "mcp"],
+  credentialBrokerLocator: "https://praetorium.example/internal/github/credential",
+  controlServicePolicy: {
+    issuer: "https://praetorium.example",
+    jwksUrl: "https://praetorium.example/.well-known/control-jwks.json",
+    audience: "praetorium-runtime-control",
+  },
+  grantPolicy: {
+    issuer: "https://praetorium.example",
+    jwksUrl: "https://praetorium.example/.well-known/grant-jwks.json",
+    audience: "https://instance-1.instances.example",
+  },
+};
+const RUNTIME_CONTROL_KEY = generateKeyPairSync("ec", { namedCurve: "prime256v1" });
+const RUNTIME_CONTROL_PUBLIC_JWK = {
+  ...RUNTIME_CONTROL_KEY.publicKey.export({ format: "jwk" }),
+  use: "sig",
+  alg: "ES256",
+  kid: "runtime-control-test-key",
 };
 
 function makeStore(onSaveScene: () => void = () => undefined): CoreStoreShape {
@@ -351,6 +383,97 @@ async function startCustomApi(
   return { server, base, close };
 }
 
+function hostedTestPolicy(): HostedAuthorizationPolicy {
+  const principals = new Map<string, HostedPrincipal>([
+    ["read-grant", {
+      userId: "reader-1", permissions: ["read"], repositoryId: HOSTED_ASSIGNMENT.repositoryId,
+      instanceId: HOSTED_ASSIGNMENT.instanceId, runtimeEpoch: HOSTED_ASSIGNMENT.runtimeEpoch,
+      sessionRevision: 1, authorizationRevision: 1, expiresAt: Date.now() + 60_000,
+    }],
+    ["write-grant", {
+      userId: "writer-1", permissions: ["read", "write"], repositoryId: HOSTED_ASSIGNMENT.repositoryId,
+      instanceId: HOSTED_ASSIGNMENT.instanceId, runtimeEpoch: HOSTED_ASSIGNMENT.runtimeEpoch,
+      sessionRevision: 1, authorizationRevision: 1, expiresAt: Date.now() + 60_000,
+    }],
+  ]);
+  return {
+    async authenticate(token, requiredPermission = "read") {
+      const principal = principals.get(token);
+      if (!principal) throw Object.assign(new Error("grant invalid"), { status: 401 });
+      if (!principal.permissions.includes(requiredPermission)) throw Object.assign(new Error("permission denied"), { status: 403 });
+      return principal;
+    },
+    async authorizePublication() {
+      throw Object.assign(new Error("publication is not part of this server-boundary test"), { status: 503 });
+    },
+  };
+}
+
+async function startHostedApi(
+  store: CoreStore,
+  staticDir: string,
+  authorization: HostedAuthorizationPolicy,
+  controlFetch?: typeof fetch,
+) {
+  const server = createServer({
+    store, staticDir,
+    trustProxy: true,
+    hosted: { assignment: HOSTED_ASSIGNMENT, projectId: "project-1", authorization, ...(controlFetch ? { controlFetch } : {}) },
+  });
+  await new Promise<void>((resolveListen) => server.listen(0, "127.0.0.1", resolveListen));
+  const address = server.address();
+  assert.ok(address && typeof address !== "string");
+  const base = `http://127.0.0.1:${address.port}`;
+  const close = () => new Promise<void>((resolveClose, reject) => {
+    server.close((error) => error ? reject(error) : resolveClose());
+  });
+  return { server, base, close };
+}
+
+function rawHostedRequestStatus(urlValue: string, headers: Record<string, string>): Promise<number> {
+  const url = new URL(urlValue);
+  return new Promise((resolveStatus, reject) => {
+    const request = httpRequest({
+      hostname: "127.0.0.1",
+      port: Number(url.port),
+      path: `${url.pathname}${url.search}`,
+      method: "POST",
+      headers,
+    }, (response) => {
+      response.resume();
+      response.once("end", () => resolveStatus(response.statusCode ?? 0));
+    });
+    request.once("error", reject);
+    request.end();
+  });
+}
+
+function runtimeControlToken(action: "status" | "quiesce" | "resume", operationId: string, payloadDigest: string): string {
+  const now = Math.floor(Date.now() / 1000);
+  const encode = (value: unknown): string => Buffer.from(JSON.stringify(value), "utf8").toString("base64url");
+  const unsigned = `${encode({ alg: "ES256", kid: "runtime-control-test-key", typ: "JWT" })}.${encode({
+    contractVersion: "praetorium-runtime-control/v1",
+    iss: HOSTED_ASSIGNMENT.controlServicePolicy.issuer,
+    sub: "test-control-plane",
+    aud: HOSTED_ASSIGNMENT.controlServicePolicy.audience,
+    instanceId: HOSTED_ASSIGNMENT.instanceId,
+    repositoryId: HOSTED_ASSIGNMENT.repositoryId,
+    runtimeEpoch: HOSTED_ASSIGNMENT.runtimeEpoch,
+    operationId,
+    action,
+    payloadDigest,
+    iat: now,
+    nbf: now,
+    exp: now + 30,
+    jti: `${action}-${operationId}`,
+  })}`;
+  const signature = signJwt("sha256", Buffer.from(unsigned, "ascii"), {
+    key: RUNTIME_CONTROL_KEY.privateKey,
+    dsaEncoding: "ieee-p1363",
+  });
+  return `${unsigned}.${signature.toString("base64url")}`;
+}
+
 async function startApi(staticDir: string, trustProxy = false) {
   return startCustomApi(makeStore(), staticDir, { trustProxy });
 }
@@ -429,6 +552,207 @@ afterEach(async () => {
 });
 
 describe("Scriptorium HTTP boundary", () => {
+  it("binds hosted API access and signed lifecycle controls to one repository and runtime epoch", async (t) => {
+    const staticDir = await mkdtemp(resolve(tmpdir(), "scriptorium-hosted-api-"));
+    tempDirs.push(staticDir);
+    let pending: Array<{ operationId: string }> = [];
+    let pendingProposalCount = 0;
+    const fixture = makeSnapshotStore();
+    const store = Object.assign(fixture.store, {
+      async registeredRepositoryIdentity() { return SNAPSHOT.repository; },
+      async observe() {
+        return {
+          snapshot: SNAPSHOT, checkpointHead: SNAPSHOT.remoteCommit,
+          observedAt: new Date().toISOString(), state: "fresh" as const, pending,
+        };
+      },
+      async listProposals() {
+        return Array.from({ length: pendingProposalCount }, () => ({ state: "pending" }) as unknown as ProposalStatus);
+      },
+    }) as CoreStore;
+    const controlFetch: typeof fetch = async (input) => {
+      assert.equal(String(input), HOSTED_ASSIGNMENT.controlServicePolicy.jwksUrl);
+      return Response.json({ keys: [RUNTIME_CONTROL_PUBLIC_JWK] });
+    };
+    const apiServer = await startHostedApi(store, staticDir, hostedTestPolicy(), controlFetch);
+    t.after(apiServer.close);
+
+    const noGrant = await fetch(`${apiServer.base}/api/projects`);
+    assert.equal(noGrant.status, 401);
+    const readerHeaders = { Authorization: "Bearer read-grant" };
+    const projects = await fetch(`${apiServer.base}/api/projects`, { headers: readerHeaders });
+    assert.equal(projects.status, 200);
+    assert.deepEqual(await projects.json(), [{ id: "project-1", url: "https://github.com/owner/work.git", branch: "main" }]);
+    const otherRepository = await fetch(`${apiServer.base}/api/projects/another-project/tree`, { headers: readerHeaders });
+    assert.equal(otherRepository.status, 404);
+    const ambiguous = await fetch(`${apiServer.base}/api/projects`, {
+      headers: { Authorization: "Bearer read-grant", Cookie: "__Host-praetorium_access=write-grant" },
+    });
+    assert.equal(ambiguous.status, 400);
+
+    const readAction = await fetch(`${apiServer.base}/api/projects/project-1/actions/core.repositories.list`, {
+      method: "POST", headers: { ...readerHeaders, "Content-Type": "application/json" }, body: JSON.stringify({ input: {} }),
+    });
+    assert.equal(readAction.status, 200, "read-only MCP grants may invoke POST actions whose declared effect is read");
+    const proposalBody = JSON.stringify({ snapshot: SNAPSHOT, operations: [{ id: "operation-1" }] });
+    const deniedProposal = await fetch(`${apiServer.base}/api/projects/project-1/proposals`, {
+      method: "POST", headers: { ...readerHeaders, "Content-Type": "application/json" }, body: proposalBody,
+    });
+    assert.equal(deniedProposal.status, 403);
+    assert.equal((await deniedProposal.json() as { code: string }).code, "WRITE_PERMISSION_REQUIRED");
+    const cookieHeaders = {
+      Host: "instance-1.instances.example", "X-Forwarded-Proto": "https", Origin: HOSTED_ASSIGNMENT.grantPolicy.audience,
+      Cookie: "__Host-praetorium_access=write-grant; __Host-praetorium_csrf=csrf-value",
+    };
+    const missingCsrf = await rawHostedRequestStatus(`${apiServer.base}/api/inbox/read-all`, cookieHeaders);
+    assert.equal(missingCsrf, 403);
+    const cookieWrite = await rawHostedRequestStatus(`${apiServer.base}/api/inbox/read-all`, {
+      ...cookieHeaders, "X-CSRF-Token": "csrf-value",
+    });
+    assert.equal(cookieWrite, 200);
+
+    const statusWithoutControl = await fetch(`${apiServer.base}${RUNTIME_STATUS_PATH}`);
+    assert.equal(statusWithoutControl.status, 401);
+    const statusToken = runtimeControlToken("status", "status-operation", sha256Digest(""));
+    const statusResponse = await fetch(`${apiServer.base}${RUNTIME_STATUS_PATH}`, { headers: { Authorization: `Bearer ${statusToken}` } });
+    assert.equal(statusResponse.status, 200);
+    const status = await statusResponse.json() as {
+      instanceId: string; repositoryId: number; runtimeEpoch: number;
+      persistence: { state: string; observedRemoteCommit: string | null };
+    };
+    assert.deepEqual([status.instanceId, status.repositoryId, status.runtimeEpoch], ["instance-1", 123, 3]);
+    assert.deepEqual(status.persistence, { state: "verified", observedRemoteCommit: SNAPSHOT.remoteCommit, formats: [] });
+
+    const quiesceRequest = {
+      operationId: "quiesce-safe",
+      instanceId: HOSTED_ASSIGNMENT.instanceId,
+      runtimeEpoch: HOSTED_ASSIGNMENT.runtimeEpoch,
+      reason: "redeploy",
+      contractVersion: "scriptorium-platform/v1",
+      deadline: new Date(Date.now() + 60_000).toISOString(),
+    };
+    const exactQuiesceBody = JSON.stringify(quiesceRequest);
+    const quiesceToken = runtimeControlToken("quiesce", quiesceRequest.operationId, sha256Digest(exactQuiesceBody));
+    const quiesceResponse = await fetch(`${apiServer.base}${RUNTIME_QUIESCE_PATH}`, {
+      method: "POST", headers: { Authorization: `Bearer ${quiesceToken}`, "Content-Type": "application/json" }, body: exactQuiesceBody,
+    });
+    assert.equal(quiesceResponse.status, 200);
+    const safeReceipt = await quiesceResponse.json() as { disposition: string; activeMutations: number; pendingCheckpoints: number };
+    assert.equal(safeReceipt.disposition, "safe");
+    assert.equal(safeReceipt.activeMutations, 0);
+    assert.equal(safeReceipt.pendingCheckpoints, 0);
+    const blockedByGate = await fetch(`${apiServer.base}/api/projects/project-1/proposals`, {
+      method: "POST", headers: { Authorization: "Bearer write-grant", "Content-Type": "application/json" }, body: proposalBody,
+    });
+    assert.equal(blockedByGate.status, 503);
+    assert.equal((await blockedByGate.json() as { code: string }).code, "RUNTIME_QUIESCED");
+
+    const resumeToken = runtimeControlToken("resume", quiesceRequest.operationId, sha256Digest(exactQuiesceBody));
+    const resumed = await fetch(`${apiServer.base}${RUNTIME_RESUME_PATH}`, {
+      method: "POST", headers: { Authorization: `Bearer ${resumeToken}`, "Content-Type": "application/json" }, body: exactQuiesceBody,
+    });
+    assert.equal(resumed.status, 204);
+    const resumedAgain = await fetch(`${apiServer.base}${RUNTIME_RESUME_PATH}`, {
+      method: "POST", headers: { Authorization: `Bearer ${resumeToken}`, "Content-Type": "application/json" }, body: exactQuiesceBody,
+    });
+    assert.equal(resumedAgain.status, 204, "the same epoch and completed operation may resume idempotently");
+    const unrelatedResumeBody = JSON.stringify({ ...quiesceRequest, operationId: "unrelated-resume" });
+    const unrelatedResumeToken = runtimeControlToken("resume", "unrelated-resume", sha256Digest(unrelatedResumeBody));
+    const unrelatedResume = await fetch(`${apiServer.base}${RUNTIME_RESUME_PATH}`, {
+      method: "POST", headers: { Authorization: `Bearer ${unrelatedResumeToken}`, "Content-Type": "application/json" }, body: unrelatedResumeBody,
+    });
+    assert.equal(unrelatedResume.status, 409);
+    const allowedProposal = await fetch(`${apiServer.base}/api/projects/project-1/proposals`, {
+      method: "POST", headers: { Authorization: "Bearer write-grant", "Content-Type": "application/json" }, body: proposalBody,
+    });
+    assert.equal(allowedProposal.status, 201);
+
+    pending = [{ operationId: "local-checkpoint" }];
+    pendingProposalCount = 1;
+    const blockedRequest = {
+      ...quiesceRequest,
+      operationId: "quiesce-blocked",
+      deadline: new Date(Date.now() + 60_000).toISOString(),
+    };
+    const exactBlockedBody = JSON.stringify(blockedRequest);
+    const blockedToken = runtimeControlToken("quiesce", blockedRequest.operationId, sha256Digest(exactBlockedBody));
+    const blockedResponse = await fetch(`${apiServer.base}${RUNTIME_QUIESCE_PATH}`, {
+      method: "POST", headers: { Authorization: `Bearer ${blockedToken}`, "Content-Type": "application/json" }, body: exactBlockedBody,
+    });
+    assert.equal(blockedResponse.status, 200);
+    const blockedReceipt = await blockedResponse.json() as { disposition: string; reasonCodes: string[] };
+    assert.equal(blockedReceipt.disposition, "blocked");
+    assert.ok(blockedReceipt.reasonCodes.includes("PENDING_CHECKPOINTS"));
+    assert.ok(blockedReceipt.reasonCodes.includes("PENDING_PROPOSALS"));
+    const blockedResumeToken = runtimeControlToken("resume", blockedRequest.operationId, sha256Digest(exactBlockedBody));
+    const blockedResume = await fetch(`${apiServer.base}${RUNTIME_RESUME_PATH}`, {
+      method: "POST", headers: { Authorization: `Bearer ${blockedResumeToken}`, "Content-Type": "application/json" }, body: exactBlockedBody,
+    });
+    assert.equal(blockedResume.status, 204, "resuming the exact blocked operation is an idempotent no-op");
+    const gateReleasedAfterBlock = await fetch(`${apiServer.base}/api/projects/project-1/proposals`, {
+      method: "POST", headers: { Authorization: "Bearer write-grant", "Content-Type": "application/json" }, body: proposalBody,
+    });
+    assert.equal(gateReleasedAfterBlock.status, 201);
+  });
+
+  it("safely quiesces an untouched empty remote using the lifecycle request property order", async (t) => {
+    const staticDir = await mkdtemp(resolve(tmpdir(), "scriptorium-hosted-empty-remote-"));
+    tempDirs.push(staticDir);
+    const fixture = makeSnapshotStore();
+    const emptySnapshot: SnapshotId = { ...SNAPSHOT, remoteCommit: "" };
+    const store = Object.assign(fixture.store, {
+      async observe() {
+        return { snapshot: emptySnapshot, checkpointHead: "", observedAt: new Date().toISOString(), state: "fresh" as const, pending: [] };
+      },
+      async reader(_projectId: string, _view = "remote", pinned?: string) {
+        assert.equal(pinned, undefined, "the empty remote is represented by the unpinned reader");
+        return {
+          snapshot: emptySnapshot,
+          async read() { return null; },
+          async list(prefix: string) { assert.equal(prefix, "meta/scriptorium"); return []; },
+        };
+      },
+      async registeredRepositoryIdentity() { return SNAPSHOT.repository; },
+      async listProposals() { return []; },
+    }) as CoreStore;
+    const controlFetch: typeof fetch = async (input) => {
+      assert.equal(String(input), HOSTED_ASSIGNMENT.controlServicePolicy.jwksUrl);
+      return Response.json({ keys: [RUNTIME_CONTROL_PUBLIC_JWK] });
+    };
+    const apiServer = await startHostedApi(store, staticDir, hostedTestPolicy(), controlFetch);
+    t.after(apiServer.close);
+
+    const statusToken = runtimeControlToken("status", "empty-status", sha256Digest(""));
+    const statusResponse = await fetch(`${apiServer.base}${RUNTIME_STATUS_PATH}`, { headers: { Authorization: `Bearer ${statusToken}` } });
+    assert.equal(statusResponse.status, 200);
+    const status = await statusResponse.json() as { lastConfirmedRemoteRevision: string | null; persistence: { state: string; observedRemoteCommit: string | null; formats: unknown[] } };
+    assert.equal(status.lastConfirmedRemoteRevision, null);
+    assert.deepEqual(status.persistence, { state: "verified", observedRemoteCommit: null, formats: [] });
+
+    // This matches Praetorium ControlHttpClient's insertion order exactly.
+    const request = {
+      operationId: "empty-quiesce",
+      instanceId: HOSTED_ASSIGNMENT.instanceId,
+      runtimeEpoch: HOSTED_ASSIGNMENT.runtimeEpoch,
+      reason: "redeploy",
+      contractVersion: "scriptorium-platform/v1",
+      deadline: new Date(Date.now() + 60_000).toISOString(),
+    };
+    const body = JSON.stringify(request);
+    const quiesceToken = runtimeControlToken("quiesce", request.operationId, sha256Digest(body));
+    const quiesced = await fetch(`${apiServer.base}${RUNTIME_QUIESCE_PATH}`, {
+      method: "POST", headers: { Authorization: `Bearer ${quiesceToken}`, "Content-Type": "application/json" }, body,
+    });
+    assert.equal(quiesced.status, 200);
+    assert.equal((await quiesced.json() as { disposition: string; lastConfirmedRemoteRevision: string | null }).disposition, "safe");
+
+    const resumeToken = runtimeControlToken("resume", request.operationId, sha256Digest(body));
+    const resumed = await fetch(`${apiServer.base}${RUNTIME_RESUME_PATH}`, {
+      method: "POST", headers: { Authorization: `Bearer ${resumeToken}`, "Content-Type": "application/json" }, body,
+    });
+    assert.equal(resumed.status, 204);
+  });
+
   it("keeps health public, protects project data, and serves the app shell", async (t) => {
     const staticDir = await mkdtemp(resolve(tmpdir(), "scriptorium-api-"));
     tempDirs.push(staticDir);
@@ -1177,6 +1501,32 @@ describe("Scriptorium HTTP boundary", () => {
 
   it("rejects short access tokens before opening a listener", () => {
     assert.throws(() => createServer({ store: makeStore(), authToken: "too-short" }), /at least 32/u);
+  });
+
+  it("serves immutable runtime metadata publicly in standalone mode", async (t) => {
+    const staticDir = await mkdtemp(resolve(tmpdir(), "scriptorium-api-metadata-"));
+    tempDirs.push(staticDir);
+    const previousRevision = process.env.SCRIPTORIUM_PRODUCER_REVISION;
+    process.env.SCRIPTORIUM_PRODUCER_REVISION = "a".repeat(40);
+    const apiServer = await startCustomApi(makeStore(), staticDir);
+    t.after(async () => {
+      await apiServer.close();
+      if (previousRevision === undefined) delete process.env.SCRIPTORIUM_PRODUCER_REVISION;
+      else process.env.SCRIPTORIUM_PRODUCER_REVISION = previousRevision;
+    });
+    const response = await fetch(`${apiServer.base}/api/platform/v1/metadata`);
+    assert.equal(response.status, 200);
+    const metadata = await response.json() as {
+      contractVersion: string; producerRevision: string; listener: { port: number };
+      paths: { metadata: string; shutdown: string; status: string; quiesce: string; resume: string };
+    };
+    assert.equal(metadata.producerRevision, "a".repeat(40));
+    assert.ok(metadata.listener.port > 0 && metadata.listener.port <= 65_535);
+    assert.deepEqual(metadata.paths, {
+      liveness: "/health/live", readiness: "/health/ready", metadata: "/api/platform/v1/metadata",
+      shutdown: "/api/platform/v1/quiesce", status: "/api/platform/v1/status",
+      quiesce: "/api/platform/v1/quiesce", resume: "/api/platform/v1/resume",
+    });
   });
 
   it("exposes the source Core read surface through pinned routes and composed host actions", async (t) => {

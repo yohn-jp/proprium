@@ -17,6 +17,7 @@ export function ProposalReview({
   authorScope,
   journal,
   proposals,
+  canWrite = true,
   onChange,
   onStatus,
 }: {
@@ -25,6 +26,7 @@ export function ProposalReview({
   authorScope: string;
   journal: BrowserJournal;
   proposals: JournalProposal[];
+  canWrite?: boolean;
   onChange: () => void;
   onStatus: (message: string, kind?: "normal" | "error" | "success") => void;
 }) {
@@ -32,7 +34,7 @@ export function ProposalReview({
   const [error, setError] = useState("");
 
   async function approve(record: JournalProposal): Promise<void> {
-    if (busyId || record.authorScope !== authorScope) return;
+    if (!canWrite || busyId || record.authorScope !== authorScope) return;
     setBusyId(record.proposal.id);
     setError("");
     try {
@@ -187,8 +189,8 @@ export function ProposalReview({
                   </details>
                 ) : null}
                 <div className="proposal-actions">
-                  <button type="button" onClick={() => void approve(record)} disabled={Boolean(busyId) || completed || unacceptedPayloadMissing}>
-                    {busyId === record.proposal.id ? "承認内容を保存中…" : unacceptedPayloadMissing ? "未承認分を回復できません" : completed ? "Checkpoint 完了" : needsApproval ? status?.payloadComplete === false ? "元の提案を照合して承認" : "承認して Checkpoint" : "承認済みを Checkpoint"}
+                  <button type="button" onClick={() => void approve(record)} disabled={!canWrite || Boolean(busyId) || completed || unacceptedPayloadMissing}>
+                    {!canWrite ? "閲覧専用" : busyId === record.proposal.id ? "承認内容を保存中…" : unacceptedPayloadMissing ? "未承認分を回復できません" : completed ? "Checkpoint 完了" : needsApproval ? status?.payloadComplete === false ? "元の提案を照合して承認" : "承認して Checkpoint" : "承認済みを Checkpoint"}
                   </button>
                   <button type="button" className="quiet-button" onClick={() => void dismiss(record)} disabled={Boolean(busyId) || unacceptedPayloadMissing || (status?.approvedOperationIds.length ?? 0) > 0 || (status?.checkpoints.length ?? 0) > 0}>
                     この提案を隠す

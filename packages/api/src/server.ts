@@ -12,12 +12,42 @@ import { ModuleRuntime, type ActionHostContext, type DomainJobActionExecutor, ty
 import { HistoricalModelUsageStore } from "./historical-store.js";
 import { JobHistoryError, JobHistoryStore, type JobEvent } from "./job-history-store.js";
 import { RecentActivityStore } from "./recent-activity-store.js";
+import {
+  createHostedAuthorizationPolicy,
+  createHostedGitCredentialProvider,
+  verifyCompactJwt,
+} from "./hosted-policy.js";
+import {
+  HOSTED_ACCESS_COOKIE,
+  HOSTED_ASSIGNMENT_PATH,
+  HOSTED_CSRF_COOKIE,
+  HOSTED_RUNTIME_IDENTITY_PATH,
+  RUNTIME_METADATA_PATH,
+  RUNTIME_QUIESCE_PATH,
+  RUNTIME_RESUME_PATH,
+  RUNTIME_STATUS_PATH,
+  metadataForRuntime,
+  normalizeRemoteRevision,
+  parseQuiesceRequest,
+  parseRuntimeAssignment,
+  parseRuntimeControlCredential,
+  readRuntimeAssignment,
+  scanRemotePersistence,
+  sha256Digest,
+  type QuiesceRequest,
+  type QuiesceResult,
+  type PersistenceObservation,
+  type RuntimeAssignment,
+  type RuntimeStatus,
+} from "./platform-runtime.js";
 
 export { importLegacyJobHistory, type LegacyJobHistoryImportOptions, type LegacyJobHistoryImportReport } from "./job-history-store.js";
 export { importLegacyRecentActivity, type LegacyRecentActivityImportOptions, type LegacyRecentActivityImportReport } from "./recent-activity-store.js";
 
 const SESSION_COOKIE = "scriptorium_session";
 const SESSION_TTL_MS = 8 * 60 * 60 * 1000;
+const RUNTIME_CONTROL_CENSUS_TIMEOUT_MS = 3_500;
+const RUNTIME_CONTROL_JWKS_TIMEOUT_MS = 1_000;
 const MAX_JSON_BYTES = 12 * 1024 * 1024;
 const MAX_SNAPSHOT_FILES = 1000;
 const MAX_SNAPSHOT_BYTES = 8 * 1024 * 1024;
@@ -35,7 +65,7 @@ interface Session {
 
 export interface ApiServerOptions {
   store: CoreStore;
-  authToken: string;
+  authToken?: string;
   /** Defaults to `<cwd>/app/dist`. */
   staticDir?: string;
   /** Trust X-Forwarded-Proto when TLS terminates at a reverse proxy. */
@@ -47,6 +77,33 @@ export interface ApiServerOptions {
   /** Host-owned historical model usage, independent from Core's disposable cache. */
   usageDirectory?: string;
   profile?: string;
+  hosted?: {
+    assignment: RuntimeAssignment;
+    projectId: string;
+    authorization: HostedAuthorizationPolicy;
+    controlFetch?: typeof fetch;
+    producerRevision?: string;
+  };
+}
+
+export type HostedPermission = "read" | "write" | "maintain" | "admin";
+export interface HostedPrincipal {
+  userId: string;
+  permissions: readonly HostedPermission[];
+  repositoryId: number;
+  instanceId: string;
+  runtimeEpoch: number;
+  sessionRevision: number;
+  authorizationRevision: number;
+  expiresAt: number;
+}
+export interface HostedAuthorizationPolicy {
+  authenticate(token: string, requiredPermission?: HostedPermission): Promise<HostedPrincipal>;
+  authorizePublication(token: string, input: { operationId: string; payloadDigest: string }): Promise<{
+    receipt: string;
+    operationId: string;
+    payloadDigest: string;
+  }>;
 }
 
 interface HttpFailure {
@@ -88,6 +145,19 @@ function cookieValue(request: IncomingMessage, name: string): string | undefined
   return undefined;
 }
 
+function cookieValues(request: IncomingMessage, name: string): string[] {
+  const cookieHeader = request.headers.cookie;
+  if (typeof cookieHeader !== "string") return [];
+  const values: string[] = [];
+  for (const part of cookieHeader.split(";")) {
+    const separator = part.indexOf("=");
+    if (separator < 0 || part.slice(0, separator).trim() !== name) continue;
+    try { values.push(decodeURIComponent(part.slice(separator + 1).trim())); }
+    catch { return [""]; }
+  }
+  return values;
+}
+
 function requestProtocol(request: IncomingMessage, trustProxy: boolean): "http:" | "https:" {
   if (trustProxy) {
     const forwarded = request.headers["x-forwarded-proto"];
@@ -105,6 +175,22 @@ function sameOrigin(request: IncomingMessage, trustProxy: boolean): boolean {
     const parsed = new URL(origin);
     const target = new URL(`${requestProtocol(request, trustProxy)}//${host}`);
     return parsed.origin === target.origin && parsed.pathname === "/" && !parsed.search && !parsed.hash;
+  } catch {
+    return false;
+  }
+}
+
+function sameHostedOrigin(request: IncomingMessage, trustProxy: boolean, audience: string): boolean {
+  const origin = request.headers.origin;
+  const host = request.headers.host;
+  if (typeof origin !== "string" || typeof host !== "string") return false;
+  try {
+    const assigned = new URL(audience);
+    const parsed = new URL(origin);
+    const target = new URL(`${requestProtocol(request, trustProxy)}//${host}`);
+    return assigned.protocol === "https:" && assigned.origin === audience &&
+      parsed.origin === audience && parsed.pathname === "/" && !parsed.search && !parsed.hash &&
+      target.origin === audience;
   } catch {
     return false;
   }
@@ -142,6 +228,12 @@ async function readJson(request: IncomingMessage, parsedBody?: unknown): Promise
   } catch {
     throw httpFailure(400, "INVALID_JSON", "Request body must be valid JSON");
   }
+}
+
+function serializeParsedJson(value: unknown): string {
+  const serialized = JSON.stringify(value);
+  if (typeof serialized !== "string") throw httpFailure(400, "INVALID_JSON", "Request body must be a JSON value");
+  return serialized;
 }
 
 function isHttpFailure(error: unknown): error is HttpFailure {
@@ -347,6 +439,7 @@ type CoreStoreApi = CoreStore & {
   getProposal?: (projectId: string, proposalId: string) => Promise<ProposalStatus | null>;
   searchSnapshot?: (projectId: string, query: string, limit?: number, view?: "remote" | "checkpoint", pinned?: SnapshotId | string) => Promise<{ snapshot: SnapshotId; results: unknown[] }>;
   writingStatsSnapshot?: (projectId: string, view?: "remote" | "checkpoint", pinned?: SnapshotId | string) => Promise<{ snapshot: SnapshotId; stats: unknown }>;
+  getPublicationAuthorizationRequest?: (projectId: string, batchId: string) => Promise<{ operationId: string; payloadDigest: string } | null>;
 };
 
 type RuntimeHttpHost = ModuleRuntime & {
@@ -374,8 +467,16 @@ type ApiActionHost = Omit<ActionHostContext, "propose"> & {
 };
 
 export function createServer(options: ApiServerOptions): Server {
-  if (options.authToken.length < 32 || options.authToken.trim() !== options.authToken) {
+  const hosted = options.hosted;
+  if (!hosted && (!options.authToken || options.authToken.length < 32 || options.authToken.trim() !== options.authToken)) {
     throw new Error("SCRIPTORIUM_AUTH_TOKEN must contain at least 32 characters");
+  }
+  if (hosted && (options.authToken !== undefined || !hosted.projectId || hosted.authorization === undefined)) {
+    throw new Error("Hosted runtime requires an assignment, assigned project, and grant policy without a standalone token");
+  }
+  const assignment = hosted?.assignment;
+  if (assignment && parseRuntimeAssignment(assignment).instanceId !== assignment.instanceId) {
+    throw new Error("Hosted runtime assignment is invalid");
   }
   const staticDir = options.staticDir ?? resolve(process.cwd(), "app/dist");
   const trustProxy = options.trustProxy ?? false;
@@ -388,9 +489,40 @@ export function createServer(options: ApiServerOptions): Server {
   const requestControllers = new Set<AbortController>();
   const asyncDomainJobControllers = new Set<AbortController>();
   const activeDomainJobIds = new Set<string>();
+  const activeWorkerJobIds = new Set<string>();
+  const uncertainPublicationBatches = new Set<string>();
   const projectEventStreams = new Set<ServerResponse>();
   const jobEventStreams = new Set<ServerResponse>();
   const coreStore = options.store as CoreStoreApi;
+  let quiesceGate = false;
+  let quiesceOperationId: string | undefined;
+  let lastQuiesceOperationId: string | undefined;
+  let lastResumedOperationId: string | undefined;
+  let hostedRuntimeCensus: Promise<{ status: RuntimeStatus; pendingProposals: number; complete: boolean }> | undefined;
+  let activeApiRequests = 0;
+  let activeMcpRequests = 0;
+  let activeMutations = 0;
+  let lastMeaningfulActivityAt: string | null = null;
+  const listProjects = async (): Promise<Project[]> => {
+    const projects = await options.store.listProjects();
+    if (!hosted) return projects;
+    if (projects.length !== 1 || projects[0]?.id !== hosted.projectId) {
+      throw httpFailure(503, "HOSTED_REPOSITORY_BINDING_INVALID", "Hosted project registry does not match its runtime assignment");
+    }
+    if (!coreStore.registeredRepositoryIdentity) {
+      throw httpFailure(503, "HOSTED_REPOSITORY_BINDING_UNAVAILABLE", "Core cannot verify the assigned repository identity");
+    }
+    const identity = await coreStore.registeredRepositoryIdentity(hosted.projectId);
+    if (identity.provider !== "github" || identity.repositoryId !== String(assignment!.repositoryId)) {
+      throw httpFailure(503, "HOSTED_REPOSITORY_BINDING_INVALID", "Registered repository identity does not match the runtime assignment");
+    }
+    return projects;
+  };
+  const assertAssignedProject = (projectId: string): void => {
+    if (hosted && projectId !== hosted.projectId) {
+      throw httpFailure(404, "PROJECT_NOT_FOUND", "Project was not found");
+    }
+  };
   const capabilityProviders = {
     ...(options.runtimeOptions?.capabilityProviders ?? {}),
     [MODEL_USAGE_CAPABILITY]: { create: (): ModelUsageStore => new HistoricalModelUsageStore(usageDirectory) },
@@ -440,6 +572,8 @@ export function createServer(options: ApiServerOptions): Server {
   };
 
   unsubscribeJobLifecycle = runtime.subscribeJobLifecycle(async (lifecycle: WorkerJobLifecycleSnapshot) => {
+    if (lifecycle.state === "queued" || lifecycle.state === "running") activeWorkerJobIds.add(lifecycle.jobId);
+    else activeWorkerJobIds.delete(lifecycle.jobId);
     try {
       const event = await jobHistory.record(lifecycle);
       publishJobEvent(event);
@@ -710,7 +844,7 @@ export function createServer(options: ApiServerOptions): Server {
       }) },
       { module: "core", action: make("core.repositories.list", emptyInput, async () => {
         const repositories = [];
-        for (const project of await options.store.listProjects()) {
+        for (const project of await listProjects()) {
           const observation = await options.store.observe(project.id);
           repositories.push({ projectId: project.id, repository: observation.snapshot.repository, snapshot: observation.snapshot });
         }
@@ -753,6 +887,7 @@ export function createServer(options: ApiServerOptions): Server {
     source: ChangeProposal["source"],
     access: "owner" | "public" = "owner",
     onDomainJobStarted?: (jobId: string) => void,
+    authorizeProposal?: () => Promise<void>,
   ): ApiActionHost => {
     const host: ApiActionHost = {
       projectId,
@@ -761,6 +896,10 @@ export function createServer(options: ApiServerOptions): Server {
       actions: access === "public" ? [] : buildCoreActions(projectId),
       propose: async (operations: ChangeOperation[], evidence?: ProposalEvidence[], proposalId?: string, proposalSignal?: AbortSignal) => {
         if (access === "public") throw httpFailure(403, "PUBLIC_PROPOSAL_DENIED", "Public module requests cannot propose changes");
+        if (hosted) {
+          if (!authorizeProposal) throw httpFailure(403, "WRITE_PERMISSION_REQUIRED", "Current repository write permission is required to propose changes");
+          await authorizeProposal();
+        }
         if (proposalId !== undefined && !/^[A-Za-z0-9_-]{1,128}$/u.test(proposalId)) throw httpFailure(400, "INVALID_PROPOSAL_ID", "Proposal ID must contain 1 to 128 letters, numbers, underscores, or hyphens");
         const requestSignal = proposalSignal ?? signal;
         if (signal.aborted || requestSignal.aborted) throw httpFailure(499, "ACTION_CANCELLED", "Proposal request was cancelled");
@@ -831,7 +970,10 @@ export function createServer(options: ApiServerOptions): Server {
         return result;
       };
       host.linkedReader = async (repositoryId: string) => {
-        for (const project of await options.store.listProjects()) {
+        if (hosted && repositoryId !== String(assignment!.repositoryId)) {
+          throw httpFailure(404, "REPOSITORY_NOT_FOUND", "Linked repository is not assigned to this runtime");
+        }
+        for (const project of await listProjects()) {
           const observation = await options.store.observe(project.id);
           if (observation.snapshot.repository.repositoryId === repositoryId) return freshReader(project.id, "remote", observation.snapshot.remoteCommit);
         }
@@ -898,8 +1040,7 @@ export function createServer(options: ApiServerOptions): Server {
     return contributions.find((contribution) => contribution.methods.includes(method as HttpContribution["methods"][number]) && matchTemplate(contribution.path, relative));
   };
 
-  const createScratch = async (projectId: string, value: unknown, isCookie: boolean, response: ServerResponse): Promise<void> => {
-    if (!isCookie) throw httpFailure(403, "AUTHOR_SESSION_REQUIRED", "Scratch checkpoints require an owner session");
+  const createScratch = async (projectId: string, value: unknown, authorScope: string, response: ServerResponse): Promise<void> => {
     if (!isRecord(value) || typeof value.text !== "string" || value.text.length > 100_000 ||
         (value.source !== undefined && !["voice", "camera", "text"].includes(String(value.source))) ||
         (value.sceneId !== undefined && (typeof value.sceneId !== "string" || !value.sceneId || value.sceneId.length > 256)) ||
@@ -955,12 +1096,260 @@ export function createServer(options: ApiServerOptions): Server {
       effect: "metadata", reads: writes.map(({ path, revision }) => ({ path, revision })), writes, message: `scratch: ${id}`,
     };
     const proposal = await options.store.propose(projectId, { id: randomBytes(16).toString("hex"), snapshot: reader.snapshot, operations: [operation], source: "author" });
-    await options.store.approve(projectId, { proposalId: proposal.id, operationIds: [operation.id], authorScope: "owner" });
+    await options.store.approve(projectId, { proposalId: proposal.id, operationIds: [operation.id], authorScope });
     const receipt = await options.store.checkpoint(projectId, operation);
     sendJson(response, 201, {
       id, path: filePath, createdAt, ...(source ? { source } : {}), sceneId: sceneId ?? null,
       attachments: attachments.map(({ filename, path, mimeType }) => ({ filename, path, mimeType })), proposal, receipt,
     });
+  };
+
+  const collectHostedRuntimeStatus = async (): Promise<{ status: RuntimeStatus; pendingProposals: number; complete: boolean }> => {
+    if (!hosted || !assignment) throw httpFailure(404, "PLATFORM_CONTROL_UNAVAILABLE", "Hosted runtime controls are unavailable");
+    let remoteRevision: string | null = null;
+    let pendingCheckpoints = 0;
+    let pendingProposals = 0;
+    let complete = false;
+    let persistence: PersistenceObservation = { state: "unknown", observedRemoteCommit: null, formats: [] };
+    const uncertainPublication = uncertainPublicationBatches.size > 0;
+    const mutationsAtScanStart = activeMutations;
+    try {
+      const before = await options.store.observe(hosted.projectId);
+      const beforeRevision = normalizeRemoteRevision(before.snapshot.remoteCommit);
+      if (before.state !== "fresh" || beforeRevision === undefined) throw new Error("remote observation is not fresh");
+      remoteRevision = beforeRevision;
+      pendingCheckpoints = before.pending.length;
+      const reader = await options.store.reader(hosted.projectId, "remote", remoteRevision ?? undefined);
+      if (normalizeRemoteRevision(reader.snapshot.remoteCommit) !== remoteRevision) throw new Error("remote reader was not pinned to the observed commit");
+      persistence = await scanRemotePersistence(reader, remoteRevision);
+      if (!coreStore.listProposals) throw new Error("proposal status is unavailable");
+      const after = await options.store.observe(hosted.projectId);
+      const afterRevision = normalizeRemoteRevision(after.snapshot.remoteCommit);
+      if (after.state !== "fresh" || afterRevision !== remoteRevision) {
+        if (afterRevision !== undefined) remoteRevision = afterRevision;
+        persistence = { state: "unknown", observedRemoteCommit: remoteRevision, formats: [] };
+        throw new Error("remote changed during persistence scan");
+      }
+      pendingCheckpoints = after.pending.length;
+      const proposals = await coreStore.listProposals(hosted.projectId);
+      pendingProposals = proposals.filter((proposal) => proposal.state !== "checkpointed").length;
+      complete = persistence.state === "verified" && persistence.observedRemoteCommit === remoteRevision &&
+        mutationsAtScanStart === activeMutations;
+      if (!complete) persistence = { state: "unknown", observedRemoteCommit: remoteRevision, formats: [] };
+    } catch {
+      persistence = { state: "unknown", observedRemoteCommit: remoteRevision, formats: [] };
+    }
+    const observedAt = new Date().toISOString();
+    const activeJobs = new Set([...activeWorkerJobIds, ...activeDomainJobIds]).size;
+    const status: RuntimeStatus = {
+      contractVersion: "scriptorium-platform/v1",
+      instanceId: assignment.instanceId,
+      repositoryId: assignment.repositoryId,
+      runtimeEpoch: assignment.runtimeEpoch,
+      imageDigest: assignment.imageDigest,
+      compositionManifestDigest: assignment.compositionManifestDigest,
+      enabledModuleIds: [...assignment.enabledModuleIds],
+      ready: started && !closed && !shuttingDown && !quiesceGate,
+      activity: {
+        lastMeaningfulActivityAt,
+        activeApiRequests,
+        activeMcpRequests,
+        activeMutations,
+        activeJobs,
+        restartableJobs: 0,
+        pendingCheckpoints,
+        uncertainPublication,
+      },
+      lastConfirmedRemoteRevision: remoteRevision,
+      persistence,
+      observedAt,
+    };
+    return { status, pendingProposals, complete };
+  };
+
+  const unavailableHostedRuntimeStatus = (): { status: RuntimeStatus; pendingProposals: number; complete: false } => {
+    if (!hosted || !assignment) throw httpFailure(404, "PLATFORM_CONTROL_UNAVAILABLE", "Hosted runtime controls are unavailable");
+    const status: RuntimeStatus = {
+      contractVersion: "scriptorium-platform/v1",
+      instanceId: assignment.instanceId,
+      repositoryId: assignment.repositoryId,
+      runtimeEpoch: assignment.runtimeEpoch,
+      imageDigest: assignment.imageDigest,
+      compositionManifestDigest: assignment.compositionManifestDigest,
+      enabledModuleIds: [...assignment.enabledModuleIds],
+      ready: started && !closed && !shuttingDown && !quiesceGate,
+      activity: {
+        lastMeaningfulActivityAt,
+        activeApiRequests,
+        activeMcpRequests,
+        activeMutations,
+        activeJobs: new Set([...activeWorkerJobIds, ...activeDomainJobIds]).size,
+        restartableJobs: 0,
+        pendingCheckpoints: 0,
+        uncertainPublication: uncertainPublicationBatches.size > 0,
+      },
+      lastConfirmedRemoteRevision: null,
+      persistence: { state: "unknown", observedRemoteCommit: null, formats: [] },
+      observedAt: new Date().toISOString(),
+    };
+    return { status, pendingProposals: 0, complete: false };
+  };
+
+  const readHostedRuntimeStatus = async (maximumWaitMs?: number): Promise<{ status: RuntimeStatus; pendingProposals: number; complete: boolean }> => {
+    const scan = hostedRuntimeCensus ??= collectHostedRuntimeStatus().finally(() => { hostedRuntimeCensus = undefined; });
+    if (maximumWaitMs === undefined) return scan;
+    let timer: NodeJS.Timeout | undefined;
+    const timeout = new Promise<{ status: RuntimeStatus; pendingProposals: number; complete: false }>((resolveTimeout) => {
+      timer = setTimeout(() => resolveTimeout(unavailableHostedRuntimeStatus()), Math.max(0, maximumWaitMs));
+      timer.unref();
+    });
+    try { return await Promise.race([scan, timeout]); }
+    finally { if (timer) clearTimeout(timer); }
+  };
+
+  const authorizeRuntimeControl = async (
+    request: IncomingMessage,
+    action: "status" | "quiesce" | "resume",
+    operationId: string,
+    payloadDigest: string,
+  ) => {
+    if (!hosted || !assignment) throw httpFailure(404, "PLATFORM_CONTROL_UNAVAILABLE", "Hosted runtime controls are unavailable");
+    const accessCookies = cookieValues(request, HOSTED_ACCESS_COOKIE);
+    if (accessCookies.length > 0) throw httpFailure(400, "AMBIGUOUS_CREDENTIALS", "Runtime controls require a control-service bearer credential only");
+    const header = request.headers.authorization;
+    const token = typeof header === "string" && /^Bearer [A-Za-z0-9_.-]+$/u.test(header) ? header.slice(7) : "";
+    if (!token) throw httpFailure(401, "RUNTIME_CONTROL_UNAUTHORIZED", "A signed runtime-control credential is required");
+    try {
+      const fetcher: typeof fetch = (input, init) => {
+        const boundedSignal = AbortSignal.timeout(RUNTIME_CONTROL_JWKS_TIMEOUT_MS);
+        const signal = init?.signal ? AbortSignal.any([init.signal, boundedSignal]) : boundedSignal;
+        return (hosted.controlFetch ?? fetch)(input, { ...init, signal });
+      };
+      const verified = await verifyCompactJwt(
+        token,
+        assignment.controlServicePolicy.jwksUrl,
+        assignment.controlServicePolicy.issuer,
+        assignment.controlServicePolicy.audience,
+        Date.now(),
+        fetcher,
+      );
+      const claims = isRecord(verified) ? verified : null;
+      const boundOperationId = action === "status" ? claims?.operationId : operationId;
+      if (typeof boundOperationId !== "string") throw new TypeError("runtime control operation is missing");
+      return parseRuntimeControlCredential(verified, {
+        issuer: assignment.controlServicePolicy.issuer,
+        audience: assignment.controlServicePolicy.audience,
+        instanceId: assignment.instanceId,
+        repositoryId: assignment.repositoryId,
+        runtimeEpoch: assignment.runtimeEpoch,
+        operationId: boundOperationId,
+        action,
+        payloadDigest,
+        nowSeconds: Math.floor(Date.now() / 1000),
+      });
+    } catch {
+      throw httpFailure(401, "RUNTIME_CONTROL_UNAUTHORIZED", "Runtime-control credential binding is invalid or expired");
+    }
+  };
+
+  const bindQuiesceRequest = (request: QuiesceRequest, credential: { operationId: string }): void => {
+    if (!assignment || request.instanceId !== assignment.instanceId || request.runtimeEpoch !== assignment.runtimeEpoch ||
+        request.operationId !== credential.operationId) {
+      throw httpFailure(403, "RUNTIME_CONTROL_BINDING_MISMATCH", "Quiesce request does not match its runtime-control credential");
+    }
+  };
+
+  const platformStatus = async (request: IncomingMessage, response: ServerResponse): Promise<void> => {
+    await authorizeRuntimeControl(request, "status", "status", sha256Digest(""));
+    const { status } = await readHostedRuntimeStatus(RUNTIME_CONTROL_CENSUS_TIMEOUT_MS);
+    sendJson(response, 200, status);
+  };
+
+  const platformQuiesce = async (request: IncomingMessage, response: ServerResponse, parsedBody?: unknown): Promise<void> => {
+    if (!hosted) throw httpFailure(404, "PLATFORM_CONTROL_UNAVAILABLE", "Hosted runtime controls are unavailable");
+    let rawBody: unknown;
+    let body: QuiesceRequest;
+    try {
+      rawBody = await readJson(request, parsedBody);
+      body = parseQuiesceRequest(rawBody);
+    }
+    catch { throw httpFailure(400, "QUIESCE_REQUEST_INVALID", "Quiesce request does not match the runtime-control contract"); }
+    bindQuiesceRequest(body, { operationId: body.operationId });
+    // Praetorium signs JSON.stringify(requestBody); preserve the parsed wire
+    // object's property insertion order instead of hashing the parser's rebuilt
+    // contract object, whose order is intentionally different.
+    const serialized = serializeParsedJson(rawBody);
+    const credential = await authorizeRuntimeControl(request, "quiesce", body.operationId, sha256Digest(serialized));
+    bindQuiesceRequest(body, credential);
+    if (Date.parse(body.deadline) <= Date.now()) throw httpFailure(409, "QUIESCE_DEADLINE_EXPIRED", "Quiesce deadline has expired");
+    if (quiesceGate && quiesceOperationId !== body.operationId) {
+      throw httpFailure(409, "QUIESCE_ALREADY_ACTIVE", "A different runtime operation already owns quiesce admission");
+    }
+    quiesceGate = true;
+    quiesceOperationId = body.operationId;
+    lastQuiesceOperationId = body.operationId;
+    const censusWaitMs = Math.max(0, Math.min(RUNTIME_CONTROL_CENSUS_TIMEOUT_MS, Date.parse(body.deadline) - Date.now()));
+    const census = await readHostedRuntimeStatus(censusWaitMs);
+    const { status, pendingProposals, complete } = census;
+    const reasonCodes: string[] = [];
+    if (status.activity.activeMutations > 0) reasonCodes.push("ACTIVE_MUTATIONS");
+    if (status.activity.activeJobs > 0) reasonCodes.push("ACTIVE_JOBS");
+    if (status.activity.pendingCheckpoints > 0) reasonCodes.push("PENDING_CHECKPOINTS");
+    if (pendingProposals > 0) reasonCodes.push("PENDING_PROPOSALS");
+    if (status.activity.uncertainPublication) reasonCodes.push("UNCERTAIN_PUBLICATION");
+    if (!complete || status.persistence.state !== "verified") reasonCodes.push("PERSISTENCE_UNVERIFIED");
+    if (Date.parse(body.deadline) <= Date.now()) reasonCodes.push("QUIESCE_DEADLINE_EXPIRED");
+    const unknown = !complete || status.activity.uncertainPublication;
+    const blocked = status.activity.activeMutations > 0 || status.activity.activeJobs > 0 ||
+      status.activity.pendingCheckpoints > 0 || pendingProposals > 0;
+    const disposition = Date.parse(body.deadline) <= Date.now() ? "unknown" : unknown ? "unknown" : blocked ? "blocked" : "safe";
+    if (disposition === "blocked") {
+      quiesceGate = false;
+      quiesceOperationId = undefined;
+    }
+    const result: QuiesceResult = {
+      contractVersion: "scriptorium-platform/v1",
+      operationId: body.operationId,
+      instanceId: hosted.assignment.instanceId,
+      runtimeEpoch: hosted.assignment.runtimeEpoch,
+      quiesceRevision: status.lastConfirmedRemoteRevision ?? `q-${body.operationId}`,
+      disposition,
+      activeMutations: status.activity.activeMutations,
+      activeJobs: status.activity.activeJobs,
+      restartableJobs: status.activity.restartableJobs,
+      pendingCheckpoints: status.activity.pendingCheckpoints,
+      uncertainPublication: status.activity.uncertainPublication,
+      lastConfirmedRemoteRevision: status.lastConfirmedRemoteRevision,
+      reasonCodes,
+      observedAt: status.observedAt,
+    };
+    sendJson(response, 200, result);
+  };
+
+  const platformResume = async (request: IncomingMessage, response: ServerResponse, parsedBody?: unknown): Promise<void> => {
+    if (!hosted) throw httpFailure(404, "PLATFORM_CONTROL_UNAVAILABLE", "Hosted runtime controls are unavailable");
+    let rawBody: unknown;
+    let body: QuiesceRequest;
+    try {
+      rawBody = await readJson(request, parsedBody);
+      body = parseQuiesceRequest(rawBody);
+    }
+    catch { throw httpFailure(400, "RESUME_REQUEST_INVALID", "Resume request does not match the runtime-control contract"); }
+    const credential = await authorizeRuntimeControl(request, "resume", body.operationId, sha256Digest(serializeParsedJson(rawBody)));
+    bindQuiesceRequest(body, credential);
+    if (quiesceOperationId !== undefined && quiesceOperationId !== body.operationId) {
+      throw httpFailure(409, "RESUME_BINDING_MISMATCH", "Resume request does not own the active quiesce operation");
+    }
+    if (quiesceOperationId === undefined && body.operationId !== lastQuiesceOperationId && body.operationId !== lastResumedOperationId) {
+      throw httpFailure(409, "RESUME_BINDING_MISMATCH", "Resume request does not match a known quiesce operation");
+    }
+    if (quiesceOperationId !== undefined) {
+      quiesceGate = false;
+      quiesceOperationId = undefined;
+      lastResumedOperationId = body.operationId;
+    }
+    response.writeHead(204);
+    response.end();
   };
 
   const handle = async (request: IncomingMessage, response: ServerResponse, parsedBody?: unknown): Promise<void> => {
@@ -971,7 +1360,29 @@ export function createServer(options: ApiServerOptions): Server {
     const query = queryOf(request);
     const isRead = method === "GET" || method === "HEAD";
     const publicRead = isRead && ["/api/health", "/api/ready", "/api/version", "/health/live", "/health/ready", "/health/startup"].includes(routePath);
-    const publicModuleRoute = routePath.startsWith("/api/public/repos/") && routePath.includes("/modules/");
+    const publicModuleRoute = !hosted && routePath.startsWith("/api/public/repos/") && routePath.includes("/modules/");
+
+    if (hosted && routePath === "/api/login" && method === "POST") {
+      fail(response, 410, "HOSTED_LOGIN_RETIRED", "Hosted access is issued by Praetorium. Open this instance through Praetorium.");
+      return;
+    }
+    if (hosted && routePath === "/api/logout" && method === "POST") {
+      fail(response, 410, "HOSTED_LOGOUT_RETIRED", "Hosted logout is handled by Instance Access.");
+      return;
+    }
+    if (routePath === RUNTIME_METADATA_PATH && method === "GET") {
+      try {
+        sendJson(response, 200, metadataForRuntime({
+          producerRevision: hosted?.producerRevision ?? process.env.SCRIPTORIUM_PRODUCER_REVISION ?? "",
+          port: parsePositivePort(process.env.PORT),
+          shutdownTimeoutSeconds: 25,
+        }));
+      } catch { throw httpFailure(503, "RUNTIME_METADATA_UNAVAILABLE", "Immutable producer runtime metadata is unavailable"); }
+      return;
+    }
+    if (hosted && routePath === RUNTIME_STATUS_PATH && method === "GET") { await platformStatus(request, response); return; }
+    if (hosted && routePath === RUNTIME_QUIESCE_PATH && method === "POST") { await platformQuiesce(request, response, parsedBody); return; }
+    if (hosted && routePath === RUNTIME_RESUME_PATH && method === "POST") { await platformResume(request, response, parsedBody); return; }
 
     if (method === "OPTIONS") {
       response.writeHead(204, { Allow: "GET, HEAD, POST, PUT, PATCH, DELETE, OPTIONS" });
@@ -988,7 +1399,7 @@ export function createServer(options: ApiServerOptions): Server {
       if (!sameOrigin(request, trustProxy)) { fail(response, 403, "CROSS_ORIGIN_REQUEST", "Request origin must match this application"); return; }
       const body = await readJson(request, parsedBody);
       const token = isRecord(body) && typeof body.token === "string" ? body.token : "";
-      if (!constantTimeEqual(token, options.authToken)) { fail(response, 401, "UNAUTHORIZED", "Invalid access token"); return; }
+      if (!constantTimeEqual(token, options.authToken ?? "")) { fail(response, 401, "UNAUTHORIZED", "Invalid access token"); return; }
       for (const [id, session] of sessions) if (session.expiresAt <= Date.now()) sessions.delete(id);
       const sessionId = randomBytes(32).toString("base64url");
       sessions.set(sessionId, { expiresAt: Date.now() + SESSION_TTL_MS });
@@ -999,6 +1410,7 @@ export function createServer(options: ApiServerOptions): Server {
     if (routePath === "/api/version" && isRead) {
       sendJson(response, 200, {
         name: "scriptorium", version: API_VERSION, contractVersion: CONTRACT_VERSION,
+        hosted: Boolean(hosted),
         profile, auth: ["cookie-owner", "bearer-read-compute-propose"], runtime: { name: "@scriptorium/module-runtime", contractVersion: CONTRACT_VERSION, ...(runtime.metadata ? { metadata: runtime.metadata() } : {}) },
         modules: await enabledStatuses(),
       });
@@ -1006,25 +1418,75 @@ export function createServer(options: ApiServerOptions): Server {
     }
     const sessionId = cookieValue(request, SESSION_COOKIE);
     const session = sessionId ? sessions.get(sessionId) : undefined;
-    const isCookie = Boolean(session && session.expiresAt > Date.now());
-    if (sessionId && !isCookie) sessions.delete(sessionId);
+    const accessCookies = hosted ? cookieValues(request, HOSTED_ACCESS_COOKIE) : [];
+    const accessToken = accessCookies.length === 1 ? accessCookies[0] : undefined;
     const authHeader = request.headers.authorization;
     const bearer = typeof authHeader === "string" && authHeader.startsWith("Bearer ") ? authHeader.slice(7) : "";
-    const isBearer = !isCookie && bearer.length > 0 && constantTimeEqual(bearer, options.authToken);
-    const hasAuth = isCookie || isBearer;
+    if (hosted && accessCookies.length > 1) { fail(response, 401, "UNAUTHORIZED", "Hosted access cookie is ambiguous"); return; }
+    if (hosted && accessToken && bearer) { fail(response, 400, "AMBIGUOUS_CREDENTIALS", "Send either a hosted browser grant or a bearer grant"); return; }
+    let hostedPrincipal: HostedPrincipal | undefined;
+    const presentedHostedToken = hosted ? accessToken ?? (bearer || undefined) : undefined;
+    if (hosted && presentedHostedToken) {
+      try { hostedPrincipal = await hosted.authorization.authenticate(presentedHostedToken, "read"); }
+      catch (error) {
+        const candidate = error as { status?: unknown };
+        const status = candidate?.status === 403 ? 403 : 401;
+        fail(response, status, status === 403 ? "FORBIDDEN" : "UNAUTHORIZED", "Hosted repository access is invalid or expired");
+        return;
+      }
+    }
+    const isCookie = hosted ? Boolean(accessToken && hostedPrincipal) : Boolean(session && session.expiresAt > Date.now());
+    if (sessionId && !isCookie) sessions.delete(sessionId);
+    const isBearer = hosted ? Boolean(bearer && hostedPrincipal) : !isCookie && bearer.length > 0 && constantTimeEqual(bearer, options.authToken!);
+    const hasAuth = hosted ? Boolean(hostedPrincipal) : isCookie || isBearer;
     if (routePath.startsWith("/api/") && !publicRead && !publicModuleRoute && !hasAuth) {
       response.setHeader("WWW-Authenticate", 'Bearer realm="scriptorium", Cookie realm="scriptorium"');
       fail(response, 401, "UNAUTHORIZED", "Authentication required");
       return;
     }
-    if (isCookie) session!.expiresAt = Date.now() + SESSION_TTL_MS;
-    if (isCookie && !isRead && routePath.startsWith("/api/") && !sameOrigin(request, trustProxy)) {
+    if (!hosted && isCookie) session!.expiresAt = Date.now() + SESSION_TTL_MS;
+    if (hosted && accessToken && !isRead && routePath.startsWith("/api/")) {
+      const csrfCookies = cookieValues(request, HOSTED_CSRF_COOKIE);
+      const csrfHeader = request.headers["x-csrf-token"];
+      const originMatches = hosted
+        ? sameHostedOrigin(request, trustProxy, assignment!.grantPolicy.audience)
+        : sameOrigin(request, trustProxy);
+      if (!originMatches || csrfCookies.length !== 1 || !csrfCookies[0] ||
+          typeof csrfHeader !== "string" || !constantTimeEqual(csrfHeader, csrfCookies[0])) {
+        fail(response, 403, "CSRF_INVALID", "Hosted browser mutations require same-origin CSRF validation");
+        return;
+      }
+    }
+    if (!hosted && isCookie && !isRead && routePath.startsWith("/api/") && !sameOrigin(request, trustProxy)) {
       fail(response, 403, "CROSS_ORIGIN_REQUEST", "Request origin must match this application");
       return;
     }
+    const requireWritePermission = async (): Promise<HostedPrincipal | undefined> => {
+      if (hosted) {
+        if (!presentedHostedToken) throw httpFailure(401, "UNAUTHORIZED", "A hosted user grant is required");
+        try {
+          const principal = await hosted.authorization.authenticate(presentedHostedToken, "write");
+          hostedPrincipal = principal;
+          return principal;
+        }
+        catch { throw httpFailure(403, "WRITE_PERMISSION_REQUIRED", "Current repository write permission is required"); }
+      }
+      if (!isCookie) throw httpFailure(403, "AUTHOR_SESSION_REQUIRED", "An owner session is required");
+      return undefined;
+    };
     if (shuttingDown && routePath.startsWith("/api/") && !isRead) {
       fail(response, 503, "SHUTTING_DOWN", "The server is draining and is not accepting new mutations");
       return;
+    }
+    if (hosted && quiesceGate && routePath.startsWith("/api/") && !isRead &&
+        routePath !== RUNTIME_QUIESCE_PATH && routePath !== RUNTIME_RESUME_PATH) {
+      fail(response, 503, "RUNTIME_QUIESCED", "This runtime is quiescing and is not accepting mutations");
+      return;
+    }
+    if (hasAuth && hosted && routePath.startsWith("/api/") &&
+        !["/api/health", "/api/ready", "/api/version", RUNTIME_STATUS_PATH, RUNTIME_QUIESCE_PATH, RUNTIME_RESUME_PATH, RUNTIME_METADATA_PATH].includes(routePath) &&
+        ((method !== "GET" && method !== "HEAD" && method !== "OPTIONS") || routePath.endsWith("/recent-activity"))) {
+      lastMeaningfulActivityAt = new Date().toISOString();
     }
 
     const signal = abortSignalFor(request, response);
@@ -1045,7 +1507,11 @@ export function createServer(options: ApiServerOptions): Server {
       return;
     }
     if (routePath === "/api/session" && method === "GET") {
-      sendJson(response, 200, { authenticated: true, authorScope: isCookie ? "owner" : "" });
+      sendJson(response, 200, {
+        authenticated: true,
+        authorScope: hosted ? `hosted:${hostedPrincipal!.userId}` : isCookie ? "owner" : "",
+        ...(hosted ? { permissions: [...hostedPrincipal!.permissions] } : {}),
+      });
       return;
     }
     if (routePath === "/api/logout" && method === "POST") {
@@ -1115,14 +1581,14 @@ export function createServer(options: ApiServerOptions): Server {
       return;
     }
     if (routePath === "/api/inbox/read-all" && method === "POST") {
-      if (!isCookie) { fail(response, 403, "AUTHOR_SESSION_REQUIRED", "Inbox updates require an owner session"); return; }
+      await requireWritePermission();
       try { sendJson(response, 200, { marked: await jobHistory.markAllInboxRead() }); }
       catch { throw httpFailure(503, "JOB_HISTORY_UNAVAILABLE", "Inbox is temporarily unavailable"); }
       return;
     }
     const inboxReadMatch = routePath.match(/^\/api\/inbox\/([^/]+)\/read$/u);
     if (inboxReadMatch && method === "POST") {
-      if (!isCookie) { fail(response, 403, "AUTHOR_SESSION_REQUIRED", "Inbox updates require an owner session"); return; }
+      await requireWritePermission();
       const inboxId = parseProjectId(inboxReadMatch[1]!);
       try {
         const item = await jobHistory.markInboxRead(inboxId);
@@ -1134,9 +1600,10 @@ export function createServer(options: ApiServerOptions): Server {
       }
       return;
     }
-    if (routePath === "/api/projects" && method === "GET") { sendJson(response, 200, await options.store.listProjects()); return; }
+    if (routePath === "/api/projects" && method === "GET") { sendJson(response, 200, await listProjects()); return; }
     if (routePath === "/api/projects" && method === "POST") {
-      if (!isCookie) { fail(response, 403, "AUTHOR_SESSION_REQUIRED", "Repository registration requires an owner session"); return; }
+      if (hosted) throw httpFailure(403, "HOSTED_ASSIGNMENT_IMMUTABLE", "Hosted runtimes can only use their assigned repository");
+      await requireWritePermission();
       const body = await readJson(request, parsedBody);
       if (!isRecord(body) || typeof body.url !== "string" || !body.url.trim()) throw httpFailure(400, "INVALID_PROJECT", "Repository URL is required");
       if (body.branch !== undefined && typeof body.branch !== "string") throw httpFailure(400, "INVALID_PROJECT", "Branch must be a string");
@@ -1146,7 +1613,7 @@ export function createServer(options: ApiServerOptions): Server {
     if (routePath === "/api/review-queue" && method === "GET") {
       if (!coreStore.listProposals) throw httpFailure(503, "PROPOSAL_STATUS_UNAVAILABLE", "Proposal review is not available in this Core version");
       const items: Array<{ projectId: string; proposal: ProposalStatus }> = [];
-      for (const project of await options.store.listProjects()) {
+      for (const project of await listProjects()) {
         for (const proposal of await coreStore.listProposals(project.id)) {
           if (proposal.state !== "checkpointed") items.push({ projectId: project.id, proposal });
         }
@@ -1158,17 +1625,20 @@ export function createServer(options: ApiServerOptions): Server {
     const projectRoot = routePath.match(/^\/api\/projects\/([^/]+)(?:\/(.*))?$/u);
     if (projectRoot) {
       const projectId = projectPathId(projectRoot[1]!);
+      assertAssignedProject(projectId);
       const suffix = projectRoot[2] ?? "";
       if (suffix === "recent-activity" && (method === "GET" || method === "PUT")) {
-        if (!isCookie) { fail(response, 403, "AUTHOR_SESSION_REQUIRED", "Recent activity requires an owner session"); return; }
+        if (!hosted && !isCookie) { fail(response, 403, "AUTHOR_SESSION_REQUIRED", "Recent activity requires an owner session"); return; }
+        if (method === "PUT") await requireWritePermission();
+        const activityAuthorScope = hosted ? `hosted:${hostedPrincipal!.userId}` : "owner";
         const repository = await coreStore.registeredRepositoryIdentity(projectId);
         try {
           if (method === "GET") {
-            sendJson(response, 200, { items: await recentActivity.list("owner", repository) });
+            sendJson(response, 200, { items: await recentActivity.list(activityAuthorScope, repository) });
             return;
           }
           const input = parseRecentActivityInput(await readJson(request, parsedBody));
-          sendJson(response, 200, { items: await recentActivity.upsert("owner", repository, input) });
+          sendJson(response, 200, { items: await recentActivity.upsert(activityAuthorScope, repository, input) });
           return;
         } catch (error) {
           if (isHttpFailure(error)) throw error;
@@ -1176,16 +1646,17 @@ export function createServer(options: ApiServerOptions): Server {
         }
       }
       if (suffix === "" && method === "GET") {
-        const project = (await options.store.listProjects()).find((candidate) => candidate.id === projectId);
+        const project = (await listProjects()).find((candidate) => candidate.id === projectId);
         if (!project) throw httpFailure(404, "PROJECT_NOT_FOUND", "Project not found");
         const observation = await options.store.observe(projectId);
         sendJson(response, 200, { project, observation });
         return;
       }
       if (suffix === "" && method === "PUT") {
-        if (!isCookie) { fail(response, 403, "AUTHOR_SESSION_REQUIRED", "Project reconstruction requires an owner session"); return; }
+        if (hosted) throw httpFailure(403, "HOSTED_ASSIGNMENT_IMMUTABLE", "Hosted project reconstruction is controlled by Praetorium");
+        await requireWritePermission();
         if (!coreStore.reconstructProject) throw httpFailure(503, "PROJECT_RECONSTRUCTION_UNAVAILABLE", "Core cannot safely reconstruct registered projects in this version");
-        const currentProject = (await options.store.listProjects()).find((candidate) => candidate.id === projectId);
+        const currentProject = (await listProjects()).find((candidate) => candidate.id === projectId);
         if (!currentProject) throw httpFailure(404, "PROJECT_NOT_FOUND", "Project not found");
         let requestedUrl: string | undefined;
         let requestedBranch: string | undefined;
@@ -1217,7 +1688,8 @@ export function createServer(options: ApiServerOptions): Server {
         return;
       }
       if (suffix === "" && method === "DELETE") {
-        if (!isCookie) { fail(response, 403, "AUTHOR_SESSION_REQUIRED", "Project detachment requires an owner session"); return; }
+        if (hosted) throw httpFailure(403, "HOSTED_ASSIGNMENT_IMMUTABLE", "Hosted project detachment is controlled by Praetorium");
+        await requireWritePermission();
         if (!coreStore.detachProject) throw httpFailure(503, "PROJECT_DETACH_UNAVAILABLE", "Core cannot safely detach registered projects in this version");
         await coreStore.detachProject(projectId);
         response.writeHead(204);
@@ -1225,7 +1697,8 @@ export function createServer(options: ApiServerOptions): Server {
         return;
       }
       if (suffix === "" && method === "PATCH") {
-        if (!isCookie) { fail(response, 403, "AUTHOR_SESSION_REQUIRED", "Project settings require an owner session"); return; }
+        if (hosted) throw httpFailure(403, "HOSTED_ASSIGNMENT_IMMUTABLE", "Hosted runtime settings are controlled by Praetorium");
+        await requireWritePermission();
         throw httpFailure(410, "AUTO_MERGE_RETIRED", "Automatic merge settings are not supported. Synchronization and publication use the explicit Core workflow.");
       }
       if (suffix === "modules" && method === "GET") { sendJson(response, 200, await enabledStatuses()); return; }
@@ -1272,7 +1745,7 @@ export function createServer(options: ApiServerOptions): Server {
       if (suffix === "status" && method === "GET") { sendJson(response, 200, await options.store.status(projectId)); return; }
       if (suffix === "observation" && method === "GET") { sendJson(response, 200, await options.store.observe(projectId)); return; }
       if (suffix === "sync" && method === "POST") {
-        if (!isCookie) { fail(response, 403, "AUTHOR_SESSION_REQUIRED", "Workspace synchronization requires an owner session"); return; }
+        await requireWritePermission();
         const id = randomBytes(16).toString("hex");
         emitProjectEvent({ id, type: "project-sync", projectId, reason: "manual", phase: "started", at: new Date().toISOString() });
         try {
@@ -1309,16 +1782,43 @@ export function createServer(options: ApiServerOptions): Server {
         return;
       }
       if (suffix === "reconcile" && method === "POST") {
-        if (!isCookie) { fail(response, 403, "AUTHOR_SESSION_REQUIRED", "Checkpoint reconciliation requires an owner session"); return; }
+        await requireWritePermission();
         sendJson(response, 200, await options.store.reconcile(projectId)); return;
       }
       if (suffix === "publish" && method === "POST") {
-        if (!isCookie) { fail(response, 403, "AUTHOR_SESSION_REQUIRED", "Publishing requires an owner session"); return; }
+        const publishPrincipal = await requireWritePermission();
         const body = await readJson(request, parsedBody);
         if (!isRecord(body) || typeof body.batchId !== "string" || !body.batchId) throw httpFailure(400, "INVALID_BATCH", "A publish batch ID is required");
-        sendJson(response, 200, await options.store.publish(projectId, body.batchId)); return;
+        if (!hosted) { sendJson(response, 200, await options.store.publish(projectId, body.batchId)); return; }
+        if (!presentedHostedToken || !coreStore.getPublicationAuthorizationRequest) {
+          throw httpFailure(503, "PUBLISH_AUTHORIZATION_UNAVAILABLE", "Hosted publication authorization is not available");
+        }
+        const publicationRequest = await coreStore.getPublicationAuthorizationRequest(projectId, body.batchId);
+        let authorization: { receipt: string; operationId: string; payloadDigest: string } | undefined;
+        if (publicationRequest) {
+          const current = await hosted.authorization.authenticate(presentedHostedToken, "write");
+          if (current.userId !== publishPrincipal?.userId) {
+            throw httpFailure(403, "PUBLISH_PRINCIPAL_CHANGED", "The hosted user authorization changed during publication");
+          }
+          authorization = await hosted.authorization.authorizePublication(presentedHostedToken, publicationRequest);
+          if (authorization.operationId !== publicationRequest.operationId || authorization.payloadDigest !== publicationRequest.payloadDigest) {
+            throw httpFailure(403, "PUBLISH_AUTHORIZATION_MISMATCH", "Publication authorization did not bind the exact pending checkpoint batch");
+          }
+        }
+        uncertainPublicationBatches.add(body.batchId);
+        try {
+          const result = await options.store.publish(projectId, body.batchId, authorization);
+          if (result.state === "confirmed" || result.state === "conflict") uncertainPublicationBatches.delete(body.batchId);
+          sendJson(response, 200, result);
+        } catch (error) {
+          const candidate = error as { status?: unknown };
+          if (typeof candidate?.status === "number" && candidate.status < 500) uncertainPublicationBatches.delete(body.batchId);
+          throw error;
+        }
+        return;
       }
       if (suffix === "proposals" && method === "POST") {
+        if (hosted) await requireWritePermission();
         const body = await readJson(request, parsedBody);
         if (!isRecord(body) || !isRecord(body.snapshot) || !Array.isArray(body.operations) || !body.operations.length) throw httpFailure(400, "INVALID_PROPOSAL", "A proposal snapshot and at least one operation are required");
         if (signal.aborted) throw httpFailure(499, "ACTION_CANCELLED", "Proposal request was cancelled");
@@ -1358,14 +1858,14 @@ export function createServer(options: ApiServerOptions): Server {
         sendJson(response, 200, proposal); return;
       }
       if (suffix === "approvals" && method === "POST") {
-        if (!isCookie) { fail(response, 403, "AUTHOR_SESSION_REQUIRED", "Proposal approval requires an owner session"); return; }
+        const approver = await requireWritePermission();
         const body = await readJson(request, parsedBody);
         if (!isRecord(body) || typeof body.proposalId !== "string" || !body.proposalId || !Array.isArray(body.operationIds) || !body.operationIds.every((id) => typeof id === "string")) throw httpFailure(400, "INVALID_APPROVAL", "Proposal and operation IDs are required");
-        await options.store.approve(projectId, { proposalId: body.proposalId, operationIds: body.operationIds as string[], authorScope: "owner" });
+        await options.store.approve(projectId, { proposalId: body.proposalId, operationIds: body.operationIds as string[], authorScope: hosted ? `hosted:${approver!.userId}` : "owner" });
         response.writeHead(204); response.end(); return;
       }
       if (suffix === "checkpoints" && method === "POST") {
-        if (!isCookie) { fail(response, 403, "AUTHOR_SESSION_REQUIRED", "Checkpoint creation requires an owner session"); return; }
+        await requireWritePermission();
         const body = await readJson(request, parsedBody);
         sendJson(response, 201, await options.store.checkpoint(projectId, body as ChangeOperation)); return;
       }
@@ -1381,6 +1881,7 @@ export function createServer(options: ApiServerOptions): Server {
         const descriptor = descriptors.find((item) => item.id === actionId);
         if (!descriptor) throw httpFailure(404, "ACTION_NOT_FOUND", `Action ${actionId} is unavailable`);
         if (isBearer && !["read", "compute", "propose"].includes(descriptor.effect)) throw httpFailure(403, "BEARER_EFFECT_DENIED", "Bearer credentials may only invoke read, compute, and propose actions");
+        if (hosted && descriptor.effect !== "read") await requireWritePermission();
         const reader = await freshReader(projectId, "remote");
         const source = descriptor.module === "core"
           ? isBearer ? "mcp" : "author"
@@ -1406,7 +1907,7 @@ export function createServer(options: ApiServerOptions): Server {
           domainJobId = id;
           signal.removeEventListener("abort", abortBeforeAcceptance);
           resolveDomainJobStart(id);
-        });
+        }, async () => { await requireWritePermission(); });
         if (descriptor.module === "core") {
           const coreAction = host.actions?.find(({ action }) => action.id === descriptor.id)?.action;
           if (!coreAction) throw httpFailure(404, "ACTION_NOT_FOUND", `Action ${actionId} is unavailable`);
@@ -1498,11 +1999,12 @@ export function createServer(options: ApiServerOptions): Server {
         const contribution = await contributionFor(moduleId, moduleRoute[2] ?? "", method);
         if (!contribution || contribution.access !== "owner") throw httpFailure(404, "MODULE_ROUTE_UNAVAILABLE", "Module route is unavailable");
         if (isBearer && !["read", "compute", "propose"].includes(contribution.effect)) throw httpFailure(403, "BEARER_EFFECT_DENIED", "Bearer credentials may only use read, compute, and propose module routes");
+        if (hosted && contribution.effect !== "read") await requireWritePermission();
         if (!runtime.invokeHttp) throw httpFailure(503, "MODULE_HTTP_UNAVAILABLE", "The runtime does not support HTTP module contributions");
         if (contribution.effect === "read" && method !== "GET" && method !== "HEAD") throw httpFailure(405, "MODULE_HTTP_METHOD_DENIED", "Read-only module routes must use GET or HEAD");
         const reader = await freshReader(projectId, "remote");
         let domainJobId: string | undefined;
-        const host = actionHost(projectId, reader, signal, isBearer || moduleId === "mcp" ? "mcp" : "module", "owner", (id) => { domainJobId = id; });
+        const host = actionHost(projectId, reader, signal, isBearer || moduleId === "mcp" ? "mcp" : "module", "owner", (id) => { domainJobId = id; }, async () => { await requireWritePermission(); });
         const webRequest = makeWebRequest(request, parsedBody, signal, moduleRoute[2] ?? "");
         const moduleResponse = await runtime.invokeHttp(moduleId, contribution.id, webRequest, host);
         if (domainJobId) response.setHeader("X-Scriptorium-Job-Id", domainJobId);
@@ -1524,7 +2026,8 @@ export function createServer(options: ApiServerOptions): Server {
         sendJson(response, 200, await writingStatsSnapshot(projectId, selected)); return;
       }
       if (suffix === "scratch" && method === "POST") {
-        await createScratch(projectId, await readJson(request, parsedBody), isCookie, response); return;
+        const author = hosted ? await requireWritePermission() : (await requireWritePermission(), undefined);
+        await createScratch(projectId, await readJson(request, parsedBody), hosted ? `hosted:${author!.userId}` : "owner", response); return;
       }
       if (suffix === "review-queue" && method === "GET") {
         if (!coreStore.listProposals) throw httpFailure(503, "PROPOSAL_STATUS_UNAVAILABLE", "Proposal review is not available in this Core version");
@@ -1538,6 +2041,7 @@ export function createServer(options: ApiServerOptions): Server {
     if (routePath === "/api/search" && method === "GET") {
       const projectId = query.get("projectId");
       if (!projectId) throw httpFailure(400, "PROJECT_REQUIRED", "projectId is required");
+      assertAssignedProject(projectId);
       const term = query.get("q") ?? "";
       if (!term.trim() || term.length > 512) throw httpFailure(400, "INVALID_QUERY", "A search query from 1 to 512 characters is required");
       const limit = boundedInt(query.get("limit"), 20, 1, 100);
@@ -1547,13 +2051,16 @@ export function createServer(options: ApiServerOptions): Server {
     if (routePath === "/api/writing-stats" && method === "GET") {
       const projectId = query.get("projectId");
       if (!projectId) throw httpFailure(400, "PROJECT_REQUIRED", "projectId is required");
+      assertAssignedProject(projectId);
       sendJson(response, 200, await writingStatsSnapshot(projectId, optionalSnapshot(query)));
       return;
     }
     if (routePath === "/api/scratch" && method === "POST") {
       const projectId = query.get("projectId");
       if (!projectId) throw httpFailure(400, "PROJECT_REQUIRED", "projectId is required");
-      await createScratch(projectId, await readJson(request, parsedBody), isCookie, response);
+      assertAssignedProject(projectId);
+      const author = hosted ? await requireWritePermission() : (await requireWritePermission(), undefined);
+      await createScratch(projectId, await readJson(request, parsedBody), hosted ? `hosted:${author!.userId}` : "owner", response);
       return;
     }
     if (routePath.startsWith("/api/public/repos/") && routePath.includes("/modules/")) {
@@ -1562,7 +2069,10 @@ export function createServer(options: ApiServerOptions): Server {
       const repositoryId = parseProjectId(publicMatch[1]!);
       if (!/^\d{1,32}$/u.test(repositoryId)) throw httpFailure(404, "REPOSITORY_NOT_FOUND", "Public repository was not found");
       const moduleId = parseProjectId(publicMatch[2]!);
-      const projectList = await options.store.listProjects();
+      const projectList = await listProjects();
+      if (hosted && repositoryId !== String(assignment!.repositoryId)) {
+        throw httpFailure(404, "REPOSITORY_NOT_FOUND", "Public repository was not found");
+      }
       let projectId: string | undefined;
       let snapshot: SnapshotId | undefined;
       for (const project of projectList) {
@@ -1588,9 +2098,26 @@ export function createServer(options: ApiServerOptions): Server {
   const routeHandler = async (request: FastifyRequest, reply: import("fastify").FastifyReply): Promise<void> => {
     reply.hijack();
     activeRequests += 1;
+    const routePath = requestPath(request.raw);
+    const method = request.raw.method ?? "GET";
+    const isNonActivityRoute = [
+      RUNTIME_STATUS_PATH, RUNTIME_QUIESCE_PATH, RUNTIME_RESUME_PATH, RUNTIME_METADATA_PATH,
+      "/api/health", "/api/ready", "/api/version",
+    ].includes(routePath);
+    const trackedApiRequest = routePath.startsWith("/api/") && !isNonActivityRoute;
+    const isMcpRequest = trackedApiRequest && typeof request.raw.headers.authorization === "string" && request.raw.headers.authorization.startsWith("Bearer ");
+    const isActiveMutation = hosted && trackedApiRequest && !["GET", "HEAD", "OPTIONS"].includes(method);
+    if (trackedApiRequest) activeApiRequests += 1;
+    if (isMcpRequest) activeMcpRequests += 1;
+    if (isActiveMutation) activeMutations += 1;
     try { await handle(request.raw, reply.raw, request.body); }
     catch (error) { if (!reply.raw.headersSent) sendError(reply.raw, error); else reply.raw.destroy(error instanceof Error ? error : undefined); }
-    finally { activeRequests = Math.max(0, activeRequests - 1); }
+    finally {
+      activeRequests = Math.max(0, activeRequests - 1);
+      if (trackedApiRequest) activeApiRequests = Math.max(0, activeApiRequests - 1);
+      if (isMcpRequest) activeMcpRequests = Math.max(0, activeMcpRequests - 1);
+      if (isActiveMutation) activeMutations = Math.max(0, activeMutations - 1);
+    }
   };
   const methods = ["GET", "HEAD", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"] as const;
   app.route({ method: [...methods], url: "/", handler: routeHandler });
@@ -1649,7 +2176,7 @@ export function createServer(options: ApiServerOptions): Server {
         let pending = 0;
         let unknown = deadlineExpired;
         const checkPending = async (): Promise<void> => {
-          const projects = await options.store.listProjects();
+          const projects = await listProjects();
           for (const project of projects) pending += (await options.store.observe(project.id)).pending.length;
         };
         if (!deadlineExpired) {
@@ -1690,13 +2217,72 @@ function parsePositivePort(value: string | undefined): number {
 
 export async function start(options?: ApiServerOptions): Promise<Server> {
   if (options) return startServer(options);
+  const { CoreStore } = await import("@scriptorium/core");
+  const cacheDirectory = resolve(process.env.SCRIPTORIUM_MODULE_CACHE_DIR ?? "./data/module-cache");
+  const dataDirectory = process.env.SCRIPTORIUM_DATA_DIR ?? "./data";
+  const hostedModeValue = process.env.SCRIPTORIUM_HOSTED_MODE;
+  if (hostedModeValue !== undefined && hostedModeValue !== "0" && hostedModeValue !== "1") {
+    throw new Error("SCRIPTORIUM_HOSTED_MODE must be 1 or 0");
+  }
+  const hostedMode = hostedModeValue === "1";
+  if (hostedMode) {
+    if (process.env.SCRIPTORIUM_AUTH_TOKEN !== undefined || process.env.SCRIPTORIUM_GITHUB_TOKEN !== undefined) {
+      throw new Error("Static Scriptorium access and GitHub tokens are forbidden in hosted mode");
+    }
+    const assignment = await readRuntimeAssignment(process.env.SCRIPTORIUM_RUNTIME_ASSIGNMENT_PATH ?? HOSTED_ASSIGNMENT_PATH);
+    const profile = process.env.SCRIPTORIUM_PROFILE ?? "hosted";
+    if (profile !== "hosted") throw new Error("Hosted runtime requires the generated hosted profile");
+    const runtimeOptions = await loadProfileRuntimeOptions(profile, cacheDirectory, assignment.enabledModuleIds);
+    const manifestIds = new Set<string>(runtimeOptions.manifests.map((manifest) => manifest.id));
+    if (assignment.enabledModuleIds.some((id) => !manifestIds.has(id))) {
+      throw new Error("Hosted assignment enables modules absent from the immutable composition");
+    }
+    const authorization = createHostedAuthorizationPolicy({ assignment });
+    const gitCredentialProvider = createHostedGitCredentialProvider({ assignment, runtimeIdentityPath: HOSTED_RUNTIME_IDENTITY_PATH });
+    const store = new CoreStore({
+      dataDir: dataDirectory,
+      hostedRepository: {
+        repositoryId: assignment.repositoryId,
+        repositoryLocator: assignment.repositoryLocator,
+        instanceId: assignment.instanceId,
+        runtimeEpoch: assignment.runtimeEpoch,
+      },
+      gitCredentialProvider,
+    });
+    let projects = await store.listProjects();
+    if (projects.length > 1) throw new Error("Hosted data directory contains multiple repository registrations");
+    let project = projects[0];
+    if (!project) {
+      project = await store.registerProject({ url: assignment.repositoryLocator });
+      projects = [project];
+    }
+    if (projects.length !== 1 || !project) throw new Error("Hosted repository registration is unavailable");
+    let identity;
+    try { identity = await store.registeredRepositoryIdentity(project.id); }
+    catch {
+      await store.observe(project.id);
+      identity = await store.registeredRepositoryIdentity(project.id);
+    }
+    if (identity.provider !== "github" || identity.repositoryId !== String(assignment.repositoryId)) {
+      throw new Error("Hosted Core repository identity does not match the signed assignment");
+    }
+    const producerRevision = process.env.SCRIPTORIUM_PRODUCER_REVISION;
+    if (!producerRevision || !/^[a-f0-9]{40}$/u.test(producerRevision)) {
+      throw new Error("SCRIPTORIUM_PRODUCER_REVISION must be an immutable 40-character source revision");
+    }
+    return startServer({
+      store,
+      hosted: { assignment, projectId: project.id, authorization, producerRevision },
+      trustProxy: process.env.SCRIPTORIUM_TRUST_PROXY === "1",
+      runtimeOptions,
+      usageDirectory: process.env.SCRIPTORIUM_USAGE_DIR ?? resolve(dataDirectory, "host-history"),
+      profile,
+    });
+  }
   const authToken = process.env.SCRIPTORIUM_AUTH_TOKEN?.trim();
   if (!authToken || authToken.length < 32) throw new Error("SCRIPTORIUM_AUTH_TOKEN is required and must contain at least 32 characters");
-  const { CoreStore } = await import("@scriptorium/core");
   const profile = process.env.SCRIPTORIUM_PROFILE ?? "core";
-  const cacheDirectory = resolve(process.env.SCRIPTORIUM_MODULE_CACHE_DIR ?? "./data/module-cache");
   const runtimeOptions = await loadProfileRuntimeOptions(profile, cacheDirectory);
-  const dataDirectory = process.env.SCRIPTORIUM_DATA_DIR ?? "./data";
   const store = new CoreStore({
     dataDir: dataDirectory,
     ...(process.env.SCRIPTORIUM_GITHUB_TOKEN ? { githubToken: process.env.SCRIPTORIUM_GITHUB_TOKEN } : {}),
@@ -1714,6 +2300,7 @@ export async function start(options?: ApiServerOptions): Promise<Server> {
 async function loadProfileRuntimeOptions(
   profile: string,
   cacheDirectory: string,
+  assignedEnabledModuleIds?: readonly string[],
 ): Promise<Omit<ModuleRuntimeOptions, "cacheDirectory"> & { cacheDirectory: string }> {
   if (!/^[a-z][a-z0-9-]{0,31}$/u.test(profile)) throw new Error("SCRIPTORIUM_PROFILE must be a valid profile name");
   const generated = process.env.SCRIPTORIUM_MODULE_PROFILE_PATH ?? resolve(process.cwd(), "profiles", profile, "generated/server.mjs");
@@ -1734,9 +2321,14 @@ async function loadProfileRuntimeOptions(
   }
   if (composition?.profile !== profile || !Array.isArray(composition.moduleManifests)) throw new Error(`Generated composition does not match profile ${profile}`);
   const enabledByEnvironment = process.env.SCRIPTORIUM_ENABLED_MODULES;
-  const enabled = enabledByEnvironment === undefined
+  const enabled = assignedEnabledModuleIds !== undefined
+    ? [...assignedEnabledModuleIds]
+    : enabledByEnvironment === undefined
     ? composition.moduleManifests.map((manifest) => manifest.id)
     : enabledByEnvironment.split(",").map((id) => id.trim()).filter(Boolean);
+  if (new Set(enabled).size !== enabled.length || enabled.some((id) => !composition!.moduleManifests!.some((manifest) => manifest.id === id))) {
+    throw new Error("Requested enabled module set does not match the immutable composition");
+  }
   return {
     manifests: composition.moduleManifests,
     enabled,

@@ -1,8 +1,9 @@
 #!/usr/bin/env node
 
-import { lstat, readdir, readFile, realpath } from 'node:fs/promises';
+import { lstat, readdir, readFile } from 'node:fs/promises';
 import path from 'node:path';
 import process from 'node:process';
+import { productionClosure } from './runtime-package-closure.mjs';
 
 const deniedCorePackage = /(?:^|[/.+@_-])(?:onnx(?:runtime(?:-(?:node|web))?)?|transformers?|tokenizers?|gpt-tokenizer|tiktoken|sentencepiece|fastembed|embedding|reranker|nlp|wink-nlp|natural|compromise|speaker(?:-attribution)?|diarization|pyannote|speechbrain|whisper|openai|anthropic|langchain|ollama)(?:$|[/.+@_-])/i;
 const deniedBuildPackage = /(?:^|[/.+@_-])(?:typescript|tsx|@types|playwright|vitest|jest|eslint|prettier|turbo|vite|esbuild)(?:$|[/.+@_-])/i;
@@ -76,53 +77,14 @@ if (installed.size === 0) {
 // A development workspace may contain optional modules without putting them in
 // Core's production closure. Walk the actual installed dependency graph from
 // the Core application roots; production mode still audits the entire image.
-async function resolveDependency(directory, name) {
-  let current = directory;
-  while (true) {
-    const candidate = path.join(current, 'node_modules', name);
-    const resolved = await realpath(candidate).catch(() => null);
-    if (resolved) return resolved;
-    const parent = path.dirname(current);
-    if (parent === current) throw new Error(`missing runtime dependency ${name} from ${directory}`);
-    current = parent;
-  }
-}
-async function productionClosure(roots) {
-  const closure = new Map();
-  const seen = new Set();
-  async function visit(directory) {
-    const resolved = await realpath(directory);
-    if (seen.has(resolved)) return;
-    seen.add(resolved);
-    const manifest = JSON.parse(await readFile(path.join(resolved, 'package.json'), 'utf8'));
-    closure.set(`${manifest.name}@${manifest.version}`, manifest.name);
-    for (const dependency of Object.keys(manifest.dependencies ?? {})) {
-      await visit(await resolveDependency(resolved, dependency));
-    }
-    for (const dependency of Object.keys(manifest.peerDependencies ?? {})) {
-      const optional = manifest.peerDependenciesMeta?.[dependency]?.optional === true;
-      const location = await resolveDependency(resolved, dependency).catch(error => {
-        if (!optional) throw error;
-        return null;
-      });
-      if (location) await visit(location);
-    }
-    for (const dependency of Object.keys(manifest.optionalDependencies ?? {})) {
-      const location = await resolveDependency(resolved, dependency).catch(() => null);
-      if (location) await visit(location);
-    }
-  }
-  for (const root of roots) await visit(root);
-  return closure;
-}
-const checkedPackages = production ? installed : await productionClosure([
+const productionPackages = production ? [...installed].map(([identity, name]) => ({ identity, name })) : await productionClosure([
   path.resolve('packages/core'), path.resolve('packages/api'), path.resolve('app'),
-]);
+]).then(closure => [...closure.values()].map(({ name, version }) => ({ identity: `${name}@${version}`, name })));
 const forbidden = name => deniedCorePackage.test(name) || /^@scriptorium\/module-(?!runtime$)/.test(name);
 const violations = [];
-for (const [id, name] of checkedPackages) {
+for (const { identity, name } of productionPackages) {
   if (forbidden(name) || (production && deniedBuildPackage.test(name))) {
-    violations.push(`runtime dependency ${id}`);
+    violations.push(`runtime dependency ${identity}`);
   }
 }
 
@@ -160,5 +122,5 @@ if (violations.length > 0) {
   process.exit(1);
 }
 
-console.log(`${production ? 'Production runtime' : 'Core'} dependency audit passed: ${checkedPackages.size} production dependency versions scanned.`);
-console.log(`Packages: ${[...checkedPackages.keys()].sort().join(', ')}`);
+console.log(`${production ? 'Production runtime' : 'Core'} dependency audit passed: ${productionPackages.length} production dependency versions scanned.`);
+console.log(`Packages: ${productionPackages.map(({ identity }) => identity).sort().join(', ')}`);

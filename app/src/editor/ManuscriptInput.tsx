@@ -23,6 +23,7 @@ export interface ManuscriptInputHandle {
 
 export interface ManuscriptInputProps {
   value: string;
+  readOnly?: boolean;
   onChange: (value: string) => void;
   onSelectionLengthChange?: (length: number) => void;
   onCursorPositionChange?: (cursorSentenceIndex: number | null, scrollTop: number) => void;
@@ -34,6 +35,7 @@ export interface ManuscriptInputProps {
 /** CodeMirror adapter retaining IME-safe editing, source bracket/ellipsis rules and history keymaps. */
 export const ManuscriptInput = forwardRef<ManuscriptInputHandle, ManuscriptInputProps>(function ManuscriptInput({
   value,
+  readOnly = false,
   onChange,
   onSelectionLengthChange,
   onCursorPositionChange,
@@ -99,6 +101,8 @@ export const ManuscriptInput = forwardRef<ManuscriptInputHandle, ManuscriptInput
       doc: value,
       extensions: [
         history(),
+        EditorState.readOnly.of(readOnly),
+        EditorView.editable.of(!readOnly),
         drawSelection(),
         highlightActiveLine(),
         keymap.of([...defaultKeymap, ...historyKeymap]),

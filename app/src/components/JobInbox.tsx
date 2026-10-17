@@ -132,7 +132,7 @@ async function readJobEventStream(stream: ReadableStream<Uint8Array>, signal: Ab
 }
 
 /** Owner-only job completion inbox and bounded host job history. */
-export function JobInbox() {
+export function JobInbox({ canWrite = true }: { canWrite?: boolean }) {
   const [open, setOpen] = useState(false);
   const [jobs, setJobs] = useState<PublicJob[]>([]);
   const [items, setItems] = useState<InboxItem[]>([]);
@@ -289,6 +289,7 @@ export function JobInbox() {
   }, [open]);
 
   const markRead = async (itemId: string) => {
+    if (!canWrite) return;
     setBusyInboxAction(itemId);
     try {
       await api.markInboxRead(itemId);
@@ -301,6 +302,7 @@ export function JobInbox() {
   };
 
   const markAllRead = async () => {
+    if (!canWrite) return;
     setBusyInboxAction("all");
     try {
       await api.markAllInboxRead();
@@ -389,7 +391,7 @@ export function JobInbox() {
                         type="button"
                         className="quiet-button compact-button"
                         onClick={() => void markRead(item.id)}
-                        disabled={busyInboxAction !== null}
+                        disabled={!canWrite || busyInboxAction !== null}
                       >
                         既読
                       </button>
@@ -402,7 +404,7 @@ export function JobInbox() {
         </section>
 
         <div style={{ display: "flex", justifyContent: "space-between", gap: "0.5rem", marginTop: "1rem" }}>
-          <button type="button" className="quiet-button compact-button" onClick={() => void markAllRead()} disabled={unreadCount === 0 || busyInboxAction !== null}>
+          <button type="button" className="quiet-button compact-button" onClick={() => void markAllRead()} disabled={!canWrite || unreadCount === 0 || busyInboxAction !== null}>
             すべて既読
           </button>
           <button type="button" className="compact-button" onClick={() => dialogRef.current?.close()}>

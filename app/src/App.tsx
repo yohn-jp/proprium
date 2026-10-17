@@ -302,6 +302,8 @@ function AuthorWorkspace({
   themeError: string;
 }) {
   const [authState, setAuthState] = useState<"checking" | "signed-out" | "ready">("checking");
+  const [hostedMode, setHostedMode] = useState(false);
+  const [canWrite, setCanWrite] = useState(false);
   const [authorScope, setAuthorScope] = useState("owner");
   const authorScopeRef = useRef("owner");
   const [token, setToken] = useState("");
@@ -339,7 +341,7 @@ function AuthorWorkspace({
   const activeRepositoryKey = work ? repositoryKey(work.observation.snapshot.repository) : "";
   const recentResume = useRecentActivityResume({
     binding: work ? { projectId: work.project.id, authorScope, repositoryKey: activeRepositoryKey } : null,
-    enabled: authState === "ready",
+    enabled: authState === "ready" && canWrite,
   });
 
   const registerScratchFlush = useCallback((flush: (() => Promise<JournalEntry | null>) | null) => {
@@ -568,9 +570,15 @@ function AuthorWorkspace({
     }).catch((error) => {
       if (!cancelled) setJournalOpenError(messageOf(error));
     });
-    void api.session().then(async (session) => {
+    void api.version().then(async (version) => {
+      if (cancelled) return null;
+      setHostedMode(version.hosted);
+      return api.session();
+    }).then(async (session) => {
+      if (!session) return;
       if (cancelled) return;
       const scope = session.authorScope || "owner";
+      setCanWrite(session.permissions ? session.permissions.includes("write") : true);
       authorScopeRef.current = scope;
       setAuthorScope(scope);
       void refreshJournal();
@@ -978,6 +986,7 @@ function AuthorWorkspace({
       const result = await api.login(token);
       setToken("");
       const session = await api.session();
+      setCanWrite(session.permissions ? session.permissions.includes("write") : true);
       const scope = session.authorScope || "owner";
       authorScopeRef.current = scope;
       setAuthorScope(scope);
@@ -1605,9 +1614,9 @@ function AuthorWorkspace({
   const tree = work?.tree.tree ?? null;
   const scene = work?.editor?.read.scene ?? null;
   const editor = work?.editor ?? null;
-  const canCheckpoint = Boolean(editor?.entry && work && !work.loadingScene && work.selectedSceneId === editor.read.scene.id && (editor.entry.state === "draft" || editor.entry.state === "checkpointing") && editor.draftStored && !editor.conflict && editor.text !== editor.read.scene.text && !busy);
-  const canResolveDraft = Boolean(editor?.conflict && (!editor.entry || editor.entry.state === "draft"));
-  const canPublish = pendingCount > 0 && currentRepoEntries.some((entry) => (entry.state === "checkpointed" || entry.state === "publication_unknown") && !publishedOperationIds.has(entry.operation.id)) && !busy;
+  const canCheckpoint = Boolean(canWrite && editor?.entry && work && !work.loadingScene && work.selectedSceneId === editor.read.scene.id && (editor.entry.state === "draft" || editor.entry.state === "checkpointing") && editor.draftStored && !editor.conflict && editor.text !== editor.read.scene.text && !busy);
+  const canResolveDraft = Boolean(canWrite && editor?.conflict && (!editor.entry || editor.entry.state === "draft"));
+  const canPublish = canWrite && pendingCount > 0 && currentRepoEntries.some((entry) => (entry.state === "checkpointed" || entry.state === "publication_unknown") && !publishedOperationIds.has(entry.operation.id)) && !busy;
   const continueCandidates = work && tree && recentResume.projectKey === JSON.stringify([authorScope, activeRepositoryKey, work.project.id])
     ? mergeContinueCandidates(recentResume.localWriting, recentResume.items, tree).slice(0, 2)
     : [];
@@ -1617,14 +1626,20 @@ function AuthorWorkspace({
     return (
       <main className="login-panel">
         <p className="eyebrow">Scriptorium · 執筆ワークスペース</p>
-        <h1>ログイン</h1>
-        <p>登録済みのアクセス資格情報で作品を開きます。</p>
-        <form onSubmit={(event) => void signIn(event)}>
-          <label htmlFor="auth-token">アクセストークン</label>
-          <input id="auth-token" type="password" autoComplete="current-password" minLength={32} value={token} onChange={(event) => setToken(event.currentTarget.value)} required />
-          <button type="submit">ログイン</button>
-          {loginError && <p className="status" data-kind="error" role="alert">{loginError}</p>}
-        </form>
+        {hostedMode ? <>
+          <h1>Praetorium から開いてください</h1>
+          <p>この Hosted ワークスペースへのアクセスは Praetorium が管理しています。</p>
+          <button type="button" onClick={() => window.location.assign("/_platform/reauth")}>Praetorium でアクセスを更新</button>
+        </> : <>
+          <h1>ログイン</h1>
+          <p>登録済みのアクセス資格情報で作品を開きます。</p>
+          <form onSubmit={(event) => void signIn(event)}>
+            <label htmlFor="auth-token">アクセストークン</label>
+            <input id="auth-token" type="password" autoComplete="current-password" minLength={32} value={token} onChange={(event) => setToken(event.currentTarget.value)} required />
+            <button type="submit">ログイン</button>
+            {loginError && <p className="status" data-kind="error" role="alert">{loginError}</p>}
+          </form>
+        </>}
         {journalOpenError && <p className="status" data-kind="error" role="alert">{journalOpenError}</p>}
       </main>
     );
@@ -1635,18 +1650,18 @@ function AuthorWorkspace({
       <header className="topbar">
         <a className="brand" href="/" aria-label="Scriptorium ホーム">Scriptorium</a>
         <div className="topbar-status" role="status" aria-live="polite" data-kind={status.kind}>{status.message || "作品を選択してください"}</div>
-        <JobInbox />
+        <JobInbox canWrite={canWrite} />
         <ThemeControl mode={themeMode} onChange={onThemeChange} error={themeError} />
         <button type="button" className="quiet-button" onClick={() => void signOut()}>ログアウト</button>
       </header>
       <div className="workspace-grid">
         <aside className="sidebar" aria-label="作品と構成">
-          <form onSubmit={(event) => void registerProject(event)} className="project-form">
+          {!hostedMode && <form onSubmit={(event) => void registerProject(event)} className="project-form">
             <h2>作品を追加</h2>
             <label htmlFor="repo-url">GitHub リポジトリ URL</label>
             <input id="repo-url" name="url" type="url" placeholder="https://github.com/owner/work" required />
             <button type="submit" disabled={busy === "register"}>{busy === "register" ? "登録中…" : "リポジトリを登録"}</button>
-          </form>
+          </form>}
           <section className="project-list-section" aria-labelledby="projects-title">
             <h2 id="projects-title">作品</h2>
             <ul className="plain-list">
@@ -1660,7 +1675,7 @@ function AuthorWorkspace({
               {projects.length === 0 && <li className="muted-list-item">登録された作品はありません</li>}
             </ul>
           </section>
-          {work && (
+          {work && !hostedMode && (
             <section className="project-management" aria-labelledby="project-management-title">
               <h2 id="project-management-title">選択中のリポジトリ</h2>
               <dl className="project-facts">
@@ -1719,6 +1734,7 @@ function AuthorWorkspace({
               authorScope={authorScope}
               journal={journal}
               proposals={currentRepoProposals}
+              canWrite={canWrite}
               onChange={() => {
                 if (isCurrentProject(renderedNavigation, work.project.id, work.observation.snapshot.repository)) {
                   void importRemoteProposals(work.project.id, work.observation.snapshot.repository, authorScope, renderedNavigation);
@@ -1737,7 +1753,7 @@ function AuthorWorkspace({
               {recoverableEntries.length > 0 && <><h2>保存された回復記録</h2><RecoveryList entries={recoverableEntries} /></>}
             </section>
           )}
-          {work && (
+        {work && (
             <>
               {globalError && <p className="status" data-kind="error" role="alert">{globalError}</p>}
               {work.observation.state !== "fresh" && <p className="status" data-kind="error" role="alert">リモート確認状態: {work.observation.state}。最後に確認できた原稿を表示しています。</p>}
@@ -1746,7 +1762,7 @@ function AuthorWorkspace({
               {editor && scene && (
                 <>
                   <SceneEditor
-                    key={JSON.stringify([authorScope, repositoryKey(editor.read.snapshot.repository), editor.read.document.path])}
+                    key={JSON.stringify([authorScope, repositoryKey(editor.read.snapshot.repository), editor.read.document.path, canWrite])}
                     projectId={work.project.id}
                     authorScope={authorScope}
                     repositoryKey={repositoryKey(editor.read.snapshot.repository)}
@@ -1756,6 +1772,7 @@ function AuthorWorkspace({
                     path={editor.read.document.path}
                     breadcrumb={breadcrumbFor(tree, scene.id)}
                     text={editor.text}
+                    readOnly={!canWrite}
                     onTextChange={editText}
                     onCursorPositionChange={recentResume.onWritingPosition}
                     onReadingPageChange={recentResume.onReadingPage}

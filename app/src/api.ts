@@ -173,6 +173,14 @@ export interface SyncStatus {
 export interface Session {
   authenticated: true;
   authorScope: string;
+  permissions?: Array<"read" | "write" | "maintain" | "admin">;
+}
+
+export interface RuntimeVersion {
+  name: string;
+  version: string;
+  hosted: boolean;
+  profile: string;
 }
 
 export class ApiError extends Error {
@@ -186,16 +194,62 @@ export class ApiError extends Error {
   }
 }
 
+let hostedMode: boolean | undefined;
+let hostedRefresh: Promise<boolean> | undefined;
+
+function csrfToken(): string | undefined {
+  if (typeof document === "undefined") return undefined;
+  const prefix = "__Host-praetorium_csrf=";
+  const item = document.cookie.split(";").map((part) => part.trim()).find((part) => part.startsWith(prefix));
+  if (!item) return undefined;
+  try { return decodeURIComponent(item.slice(prefix.length)); }
+  catch { return undefined; }
+}
+
+function refreshHostedGrant(): Promise<boolean> {
+  // The Gateway rotates the refresh secret atomically. Parallel API requests
+  // must share one exchange so a losing refresh cannot trigger reauthentication.
+  hostedRefresh ??= performHostedRefresh().finally(() => { hostedRefresh = undefined; });
+  return hostedRefresh;
+}
+
+async function performHostedRefresh(): Promise<boolean> {
+  const headers = new Headers();
+  const csrf = csrfToken();
+  if (csrf) headers.set("X-CSRF-Token", csrf);
+  const response = await fetch("/_platform/refresh", { method: "POST", headers, credentials: "same-origin" });
+  if (response.status === 401) {
+    window.location.assign("/_platform/reauth");
+    return false;
+  }
+  if (!response.ok) {
+    const body: unknown = await response.json().catch(() => null);
+    const details = body && typeof body === "object" ? (body as Record<string, unknown>) : {};
+    throw new ApiError(typeof details.error === "string" ? details.error : `Session refresh failed (${response.status})`, response.status,
+      typeof details.code === "string" ? details.code : "SESSION_REFRESH_FAILED");
+  }
+  return true;
+}
+
+async function fetchWithHostedRefresh(path: string, init: RequestInit, retry = true): Promise<Response> {
+  const headers = new Headers(init.headers);
+  if (init.body !== undefined && !headers.has("Content-Type")) headers.set("Content-Type", "application/json");
+  const csrf = csrfToken();
+  const method = (init.method ?? "GET").toUpperCase();
+  if (csrf && !["GET", "HEAD", "OPTIONS"].includes(method)) headers.set("X-CSRF-Token", csrf);
+  const response = await fetch(path, { ...init, headers, credentials: "same-origin" });
+  if (response.status === 401 && retry && hostedMode === true && !path.startsWith("/_platform/")) {
+    if (await refreshHostedGrant()) return fetchWithHostedRefresh(path, init, false);
+  }
+  return response;
+}
+
 async function request<T>(path: string, init: RequestInit = {}): Promise<T> {
   const headers = new Headers(init.headers);
   if (init.body !== undefined && !headers.has("Content-Type")) {
     headers.set("Content-Type", "application/json");
   }
-  const response = await fetch(path, {
-    ...init,
-    headers,
-    credentials: "same-origin",
-  });
+  const response = await fetchWithHostedRefresh(path, { ...init, headers });
   if (response.status === 204) return undefined as T;
   const body: unknown = await response.json().catch(() => null);
   if (!response.ok) {
@@ -210,11 +264,7 @@ async function request<T>(path: string, init: RequestInit = {}): Promise<T> {
 }
 
 async function requestEventStream(path: string, signal: AbortSignal): Promise<Response> {
-  const response = await fetch(path, {
-    headers: { Accept: "text/event-stream" },
-    credentials: "same-origin",
-    signal,
-  });
+  const response = await fetchWithHostedRefresh(path, { headers: { Accept: "text/event-stream" }, signal });
   if (!response.ok) {
     const body: unknown = await response.json().catch(() => null);
     const details = body && typeof body === "object" ? (body as Record<string, unknown>) : {};
@@ -240,9 +290,27 @@ function pinnedQuery(view: "remote" | "checkpoint", pinned?: SnapshotId): string
 
 /** The browser talks only to the public HTTP adapter and the shared contracts. */
 export const api = {
+  version: async () => {
+    const version = await request<RuntimeVersion>("/api/version");
+    hostedMode = version.hosted;
+    return version;
+  },
   login: (token: string) => request<{ authenticated: true }>("/api/login", { method: "POST", body: JSON.stringify({ token }) }),
   session: () => request<Session>("/api/session"),
-  logout: () => request<{ authenticated: false }>("/api/logout", { method: "POST", body: "{}" }),
+  logout: async () => {
+    if (hostedMode === true) {
+      const response = await fetchWithHostedRefresh("/_platform/logout", { method: "POST" }, false);
+      if (response.status === 204) return { authenticated: false as const };
+      const body: unknown = await response.json().catch(() => null);
+      if (!response.ok) {
+        const details = body && typeof body === "object" ? (body as Record<string, unknown>) : {};
+        throw new ApiError(typeof details.error === "string" ? details.error : `Logout failed (${response.status})`, response.status,
+          typeof details.code === "string" ? details.code : "LOGOUT_FAILED");
+      }
+      return (body ?? { authenticated: false }) as { authenticated: false };
+    }
+    return request<{ authenticated: false }>("/api/logout", { method: "POST", body: "{}" });
+  },
   jobs: (signal?: AbortSignal) => request<PublicJob[]>("/api/jobs", { signal }),
   job: (jobId: string, signal?: AbortSignal) =>
     request<PublicJob>(`/api/jobs/${encodeURIComponent(jobId)}`, { signal }),

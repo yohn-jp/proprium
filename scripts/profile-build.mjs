@@ -11,34 +11,51 @@ const moduleIds = ['story', 'diagnostics', 'nlp', 'semantic', 'speaker', 'assist
 const sourceSpecifier = /\b(?:from\s*|import\s*(?:\(\s*)?|require\s*\(\s*)["'](@scriptorium\/module-[^"']+)["']/g;
 
 function usage() {
-  console.error('Usage: node scripts/profile-build.mjs --profile <core|full> [--out <dir>] [--verify-deploy <dir>]');
+  console.error('Usage: node scripts/profile-build.mjs (--profile <core|full> | --modules-json <json-array>) [--out <dir>] [--verify-deploy <dir>]');
   process.exit(2);
 }
 
 const args = process.argv.slice(2);
 let profileName;
+let requestedModuleIds;
 let outputDirectory;
 let deployDirectory;
 for (let index = 0; index < args.length; index += 1) {
   if (args[index] === '--profile' && args[index + 1]) profileName = args[++index];
+  else if (args[index] === '--modules-json' && args[index + 1]) {
+    try { requestedModuleIds = JSON.parse(args[++index]); }
+    catch { usage(); }
+  }
   else if (args[index] === '--out' && args[index + 1]) outputDirectory = path.resolve(args[++index]);
   else if (args[index] === '--verify-deploy' && args[index + 1]) deployDirectory = path.resolve(args[++index]);
   else if (args[index] === '--help') usage();
   else usage();
 }
-if (!profileName || !['core', 'full'].includes(profileName)) usage();
+if ((profileName === undefined) === (requestedModuleIds === undefined) ||
+    (profileName !== undefined && !['core', 'full'].includes(profileName)) ||
+    (requestedModuleIds !== undefined && (!Array.isArray(requestedModuleIds) ||
+      requestedModuleIds.some((id) => typeof id !== 'string' || !moduleIds.includes(id)) ||
+      new Set(requestedModuleIds).size !== requestedModuleIds.length))) usage();
+const hostedComposition = requestedModuleIds !== undefined;
+const selectedProfileName = hostedComposition ? 'hosted' : profileName;
 
-const profilePath = path.join(root, 'profiles', `${profileName}.json`);
-const profile = JSON.parse(await readFile(profilePath, 'utf8'));
-if (profile.profile !== profileName || !Array.isArray(profile.modules) || profile.modules.some((id) => typeof id !== 'string')) {
-  throw new Error(`Invalid profile manifest: ${profilePath}`);
+let requestedIds;
+if (hostedComposition) {
+  requestedIds = requestedModuleIds;
+} else {
+  const profilePath = path.join(root, 'profiles', `${profileName}.json`);
+  const profile = JSON.parse(await readFile(profilePath, 'utf8'));
+  if (profile.profile !== profileName || !Array.isArray(profile.modules) || profile.modules.some((id) => typeof id !== 'string')) {
+    throw new Error(`Invalid profile manifest: ${profilePath}`);
+  }
+  requestedIds = profile.modules;
 }
-if (new Set(profile.modules).size !== profile.modules.length || profile.modules.some((id) => !moduleIds.includes(id))) {
-  throw new Error(`Profile ${profileName} has an unknown or duplicate module ID`);
+if (new Set(requestedIds).size !== requestedIds.length || requestedIds.some((id) => !moduleIds.includes(id))) {
+  throw new Error(`Profile ${selectedProfileName} has an unknown or duplicate module ID`);
 }
 
 const packageById = new Map();
-const pendingIds = [...profile.modules];
+const pendingIds = [...requestedIds];
 while (pendingIds.length > 0) {
   const id = pendingIds.shift();
   if (packageById.has(id)) continue;
@@ -47,7 +64,7 @@ while (pendingIds.length > 0) {
   try {
     packageManifest = JSON.parse(await readFile(packagePath, 'utf8'));
   } catch {
-    throw new Error(`Profile ${profileName} selects ${id}, but ${packagePath} is not installed`);
+    throw new Error(`Profile ${selectedProfileName} selects ${id}, but ${packagePath} is not installed`);
   }
   const expectedName = `${modulePackagePrefix}${id}`;
   if (packageManifest.name !== expectedName || !packageManifest.scriptoriumModule || packageManifest.scriptoriumModule.id !== id) {
@@ -76,25 +93,28 @@ try {
 } catch (error) {
   throw new Error(`Build @scriptorium/module-runtime before generating profiles: ${error instanceof Error ? error.message : String(error)}`);
 }
-const plan = resolveModulePlan(packageManifests, profile.modules);
+const plan = resolveModulePlan(packageManifests, requestedIds);
 const includedIds = [...plan.order];
 const includedManifests = includedIds.map((id) => packageById.get(id).metadata);
 
-const profilePackagePath = path.join(root, 'profiles', profileName, 'package.json');
-try {
-  const profilePackage = JSON.parse(await readFile(profilePackagePath, 'utf8'));
-  const directModuleDependencies = Object.keys({ ...profilePackage.dependencies, ...profilePackage.optionalDependencies })
-    .filter((name) => name.startsWith(modulePackagePrefix) && moduleIds.includes(name.slice(modulePackagePrefix.length))).sort();
-  const expectedDependencies = profile.modules.map((id) => `${modulePackagePrefix}${id}`).sort();
-  if (JSON.stringify(directModuleDependencies) !== JSON.stringify(expectedDependencies)) {
-    throw new Error(`Profile package ${profilePackage.name} module dependencies do not match ${profileName}.json`);
+if (!hostedComposition) {
+  const profilePackagePath = path.join(root, 'profiles', profileName, 'package.json');
+  try {
+    const profilePackage = JSON.parse(await readFile(profilePackagePath, 'utf8'));
+    const directModuleDependencies = Object.keys({ ...profilePackage.dependencies, ...profilePackage.optionalDependencies })
+      .filter((name) => name.startsWith(modulePackagePrefix) && moduleIds.includes(name.slice(modulePackagePrefix.length))).sort();
+    const expectedDependencies = requestedIds.map((id) => `${modulePackagePrefix}${id}`).sort();
+    if (JSON.stringify(directModuleDependencies) !== JSON.stringify(expectedDependencies)) {
+      throw new Error(`Profile package ${profilePackage.name} module dependencies do not match ${profileName}.json`);
+    }
+  } catch (error) {
+    if (error?.code !== 'ENOENT') throw error;
   }
-} catch (error) {
-  if (error?.code !== 'ENOENT') throw error;
 }
 
-const output = outputDirectory ?? path.join(root, 'profiles', profileName, 'generated');
-const metadataJson = JSON.stringify({ profile: profileName, modules: includedManifests }, null, 2) + '\n';
+if (hostedComposition && !outputDirectory && !deployDirectory) throw new Error('Hosted composition generation requires --out');
+const output = outputDirectory ?? (hostedComposition ? undefined : path.join(root, 'profiles', profileName, 'generated'));
+const metadataJson = JSON.stringify({ profile: selectedProfileName, modules: includedManifests }, null, 2) + '\n';
 const serverImports = includedIds.map((id) => {
   const { packageName, metadata } = packageById.get(id);
   const loader = `  ${JSON.stringify(id)}: async (context) => {\n` +
@@ -110,7 +130,7 @@ const serverImports = includedIds.map((id) => {
 const serverSource = [
   'import path from "node:path";',
   'import { fileURLToPath } from "node:url";',
-  `export const profile = ${JSON.stringify(profileName)};`,
+  `export const profile = ${JSON.stringify(selectedProfileName)};`,
   `export const moduleManifests = Object.freeze(${JSON.stringify(includedManifests, null, 2)});`,
   'export const moduleLoaders = Object.freeze({',
   ...serverImports.map((entry) => entry.loader),
@@ -135,22 +155,26 @@ const browserImports = includedIds.flatMap((id) => {
     '  },'];
 });
 const browserSource = [
-  `export const profile = ${JSON.stringify(profileName)};`,
+  `export const profile = ${JSON.stringify(selectedProfileName)};`,
   'export const moduleBrowserLoaders = Object.freeze({',
   ...browserImports,
   '});',
   '',
 ].join('\n');
 
-await mkdir(output, { recursive: true });
-await Promise.all([
-  writeFile(path.join(output, 'module-manifests.json'), metadataJson),
-  writeFile(path.join(output, 'server.mjs'), serverSource),
-  writeFile(path.join(output, 'browser.mjs'), browserSource),
-]);
+if (output) {
+  await mkdir(output, { recursive: true });
+  await Promise.all([
+    writeFile(path.join(output, 'module-manifests.json'), metadataJson),
+    writeFile(path.join(output, 'server.mjs'), serverSource),
+    writeFile(path.join(output, 'browser.mjs'), browserSource),
+  ]);
+}
 
-if (deployDirectory) await verifyDeploy(deployDirectory, profileName, includedIds);
-console.log(`Generated ${profileName} module composition: ${includedIds.length} module(s) in ${output}`);
+if (deployDirectory) await verifyDeploy(deployDirectory, selectedProfileName, includedIds);
+console.log(output
+  ? `Generated ${selectedProfileName} module composition: ${includedIds.length} module(s) in ${output}`
+  : `Verified ${selectedProfileName} deployed module composition: ${includedIds.length} module(s)`);
 
 async function verifyDeploy(directory, selectedProfile, selectedIds) {
   const nodeModules = path.join(directory, 'node_modules');

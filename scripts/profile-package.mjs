@@ -1,17 +1,18 @@
 #!/usr/bin/env node
 
-import { access, cp, readFile, readdir, realpath, rm } from 'node:fs/promises';
+import { access, cp, mkdtemp, readFile, readdir, realpath, rm } from 'node:fs/promises';
 import path from 'node:path';
 import process from 'node:process';
 import { spawnSync } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
+import { productionClosure, pruneToProductionClosure } from './runtime-package-closure.mjs';
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const modulePackagePrefix = '@scriptorium/module-';
 const knownModules = ['story', 'diagnostics', 'nlp', 'semantic', 'speaker', 'assistant', 'publishing', 'mcp'];
 
 function usage() {
-  console.error('Usage: node scripts/profile-package.mjs --profile <core|full> --out <new-directory>');
+  console.error('Usage: node scripts/profile-package.mjs (--profile <core|full> | --modules-json <json-array>) --out <new-directory> [--prebuilt]');
   process.exit(2);
 }
 
@@ -63,15 +64,27 @@ export function createBuildCommands(profileName, profile) {
 
 function parseArgs(argv) {
   let profileName;
+  let requestedModuleIds;
+  let prebuilt = false;
   let outputDirectory;
   for (let index = 0; index < argv.length; index += 1) {
     if (argv[index] === '--profile' && argv[index + 1]) profileName = argv[++index];
+    else if (argv[index] === '--modules-json' && argv[index + 1]) {
+      try { requestedModuleIds = JSON.parse(argv[++index]); }
+      catch { usage(); }
+    }
     else if (argv[index] === '--out' && argv[index + 1]) outputDirectory = path.resolve(argv[++index]);
+    else if (argv[index] === '--prebuilt') prebuilt = true;
     else if (argv[index] === '--help') usage();
     else usage();
   }
-  if (!profileName || !outputDirectory) usage();
-  return { profileName, outputDirectory };
+  if ((profileName === undefined) === (requestedModuleIds === undefined) || !outputDirectory ||
+      (profileName !== undefined && !['core', 'full'].includes(profileName)) ||
+      (requestedModuleIds !== undefined && (!Array.isArray(requestedModuleIds) ||
+        requestedModuleIds.some((id) => typeof id !== 'string' || !knownModules.includes(id)) ||
+        new Set(requestedModuleIds).size !== requestedModuleIds.length)) ||
+      (prebuilt && requestedModuleIds === undefined)) usage();
+  return { profileName, requestedModuleIds, prebuilt, outputDirectory };
 }
 
 async function readJson(filename) {
@@ -98,6 +111,31 @@ function run(command, args, env = process.env) {
   if (result.status !== 0) throw new Error(`${command} exited with status ${String(result.status)}`);
 }
 
+function isWithin(rootDirectory, candidate) {
+  const relative = path.relative(rootDirectory, candidate);
+  return relative === '' || (!relative.startsWith(`..${path.sep}`) && relative !== '..' && !path.isAbsolute(relative));
+}
+
+export async function pruneRuntimeDependencies(directory, selectedIds) {
+  const nodeModules = path.join(directory, 'node_modules');
+  const roots = [path.join(nodeModules, '@scriptorium/api'),
+    ...[...selectedIds].map((id) => path.join(nodeModules, '@scriptorium', `module-${id}`))];
+  const expected = await productionClosure(roots);
+  const rootDirectory = await realpath(nodeModules);
+  for (const item of expected.values()) {
+    if (!isWithin(rootDirectory, item.directory)) {
+      throw new Error(`Runtime package escapes the production deployment: ${item.name}@${item.version}`);
+    }
+  }
+  await pruneToProductionClosure(nodeModules, expected);
+  const actual = await productionClosure(roots);
+  if (JSON.stringify([...actual.keys()].sort()) !== JSON.stringify([...expected.keys()].sort())) {
+    throw new Error('Runtime package graph changed while pruning the hosted composition');
+  }
+  await rm(path.join(nodeModules, '.pnpm', 'lock.yaml'), { force: true });
+  return actual;
+}
+
 async function ensureNewOutputDirectory(directory) {
   const relative = path.relative(root, directory);
   if (relative === '' || (!relative.startsWith(`..${path.sep}`) && relative !== '..' && !path.isAbsolute(relative))) {
@@ -112,27 +150,60 @@ async function ensureNewOutputDirectory(directory) {
 }
 
 async function main() {
-  const { profileName, outputDirectory } = parseArgs(process.argv.slice(2));
-  const profile = await readJson(path.join(root, 'profiles', `${profileName}.json`));
-  const packageManifest = await readJson(path.join(root, 'profiles', profileName, 'package.json'));
-  validateProfilePackage(profileName, profile, packageManifest, await installedModuleIds());
+  const { profileName, requestedModuleIds, prebuilt, outputDirectory } = parseArgs(process.argv.slice(2));
+  const hostedComposition = requestedModuleIds !== undefined;
+  const sourceProfile = hostedComposition ? 'full' : profileName;
+  const profile = await readJson(path.join(root, 'profiles', `${sourceProfile}.json`));
+  const packageManifest = await readJson(path.join(root, 'profiles', sourceProfile, 'package.json'));
+  const installed = await installedModuleIds();
+  validateProfilePackage(sourceProfile, profile, packageManifest, installed);
+  if (hostedComposition) {
+    const missing = requestedModuleIds.filter((id) => !installed.has(id));
+    if (missing.length) throw new Error(`Hosted composition selects unbuilt modules: ${missing.join(', ')}`);
+  }
   await ensureNewOutputDirectory(outputDirectory);
 
   let deployStarted = false;
+  let temporaryDirectory;
+  let selectedModuleIds;
   try {
-    for (const step of createBuildCommands(profileName, profile)) {
-      run(step.command, step.args, step.env);
+    if (hostedComposition) {
+      if (!prebuilt) {
+        for (const step of createBuildCommands(sourceProfile, profile)) run(step.command, step.args, step.env);
+      }
+      temporaryDirectory = await mkdtemp(path.join(root, '.scriptorium-hosted-profile-'));
+      const generatedDirectory = path.join(temporaryDirectory, 'generated');
+      run(process.execPath, [
+        path.join(root, 'scripts/profile-build.mjs'), '--modules-json', JSON.stringify(requestedModuleIds),
+        '--out', generatedDirectory,
+      ]);
+      selectedModuleIds = JSON.parse(await readFile(path.join(generatedDirectory, 'module-manifests.json'), 'utf8'))
+        .modules.map(({ id }) => id);
+      run('pnpm', ['--filter', '@scriptorium/app', 'run', 'build'], {
+        SCRIPTORIUM_PROFILE: 'hosted',
+        SCRIPTORIUM_BROWSER_MODULE_PROFILE_PATH: path.join(generatedDirectory, 'browser.mjs'),
+      });
+      if (!prebuilt) run('pnpm', ['--filter', '@scriptorium/api...', 'run', 'build']);
+    } else {
+      for (const step of createBuildCommands(profileName, profile)) run(step.command, step.args, step.env);
     }
 
     deployStarted = true;
     run('pnpm', ['--filter', packageManifest.name, 'deploy', '--prod', '--frozen-lockfile', outputDirectory]);
     await cp(path.join(root, 'profiles/launch.mjs'), path.join(outputDirectory, 'launch.mjs'));
     await cp(path.join(root, 'app/dist'), path.join(outputDirectory, 'app/dist'), { recursive: true });
+    if (hostedComposition) {
+      await cp(path.join(temporaryDirectory, 'generated'), path.join(outputDirectory, 'generated'), { recursive: true });
+      await pruneRuntimeDependencies(outputDirectory, new Set(selectedModuleIds));
+    }
 
+    const verifyArgs = hostedComposition
+      ? ['--modules-json', JSON.stringify(requestedModuleIds)]
+      : ['--profile', profileName];
     run(process.execPath, [
-      path.join(root, 'scripts/profile-build.mjs'), '--profile', profileName, '--verify-deploy', outputDirectory,
+      path.join(root, 'scripts/profile-build.mjs'), ...verifyArgs, '--verify-deploy', outputDirectory,
     ]);
-    if (profileName === 'core') {
+    if (sourceProfile === 'core') {
       const apiPackage = await realpath(path.join(outputDirectory, 'node_modules/@scriptorium/api'));
       const runtimeDists = [
         path.join(apiPackage, 'dist'),
@@ -149,10 +220,12 @@ async function main() {
         ...runtimeDists.flatMap((directory) => ['--dist', directory]),
       ]);
     }
-    console.log(`Prepared ${profileName} production package at ${outputDirectory}`);
+    console.log(`Prepared ${hostedComposition ? 'hosted' : profileName} production package at ${outputDirectory}`);
   } catch (error) {
     if (deployStarted) await rm(outputDirectory, { recursive: true, force: true });
     throw error;
+  } finally {
+    if (temporaryDirectory) await rm(temporaryDirectory, { recursive: true, force: true });
   }
 }
 

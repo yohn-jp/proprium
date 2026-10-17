@@ -53,6 +53,7 @@ export function SceneEditor({
   path,
   breadcrumb,
   text,
+  readOnly,
   onTextChange,
   onCursorPositionChange,
   onReadingPageChange,
@@ -91,6 +92,7 @@ export function SceneEditor({
   path: string;
   breadcrumb: string;
   text: string;
+  readOnly?: boolean;
   onTextChange: (next: string) => void;
   onCursorPositionChange: (sceneId: string, cursorSentenceIndex: number | null, scrollTop: number) => void;
   onReadingPageChange: (sceneId: string, pageIndex: number) => void;
@@ -128,6 +130,7 @@ export function SceneEditor({
   const [readingPage, setReadingPage] = useState(() => loadReadingPage(authorScope, repositoryKey, scene.id));
   const [selectionLength, setSelectionLength] = useState(0);
   const [printing, setPrinting] = useState(false);
+  const editorReadOnly = readOnly ?? false;
 
   useEffect(() => {
     if (!zen) return;
@@ -226,8 +229,8 @@ export function SceneEditor({
             <pre>{conflict.scene.text}</pre>
           </details>
           <div className="conflict-actions">
-            <button type="button" onClick={onRebase} disabled={!canResolveDraft}>比較して下書きを最新の版に結び直す</button>
-            <button type="button" className="quiet-button" onClick={onRestoreRemote} disabled={!canResolveDraft}>この文書の未チェックポイント下書きを削除して GitHub 版に戻す</button>
+            <button type="button" onClick={onRebase} disabled={!canResolveDraft || editorReadOnly}>比較して下書きを最新の版に結び直す</button>
+            <button type="button" className="quiet-button" onClick={onRestoreRemote} disabled={!canResolveDraft || editorReadOnly}>この文書の未チェックポイント下書きを削除して GitHub 版に戻す</button>
           </div>
         </section>
       )}
@@ -286,6 +289,7 @@ export function SceneEditor({
             <ManuscriptInput
               ref={editorRef}
               value={text}
+              readOnly={editorReadOnly}
               onChange={onTextChange}
               onCursorPositionChange={(cursorSentenceIndex, scrollTop) => onCursorPositionChange(scene.id, cursorSentenceIndex, scrollTop)}
               onSelectionLengthChange={setSelectionLength}
@@ -306,11 +310,11 @@ export function SceneEditor({
             <p className="editor-hint">{text.length} 字 · 400字詰め換算 {text.length === 0 ? 0 : Math.ceil(text.length / 400)} 枚{selectionLength > 0 ? ` · 選択 ${selectionLength} 字 / 400字詰め換算 ${Math.ceil(selectionLength / 400)} 枚` : ""}。入力は IndexedDB に自動記録されます。</p>
             <div className="mobile-keyboard" aria-label="日本語入力補助">
               {WRITING_SYMBOLS.map(({ id, label, ariaLabel }) => (
-                <button type="button" key={id} aria-label={ariaLabel} onClick={() => editorRef.current?.insert(id)}>{label}</button>
+                <button type="button" key={id} aria-label={ariaLabel} onClick={() => editorRef.current?.insert(id)} disabled={editorReadOnly}>{label}</button>
               ))}
             </div>
             <ScratchPanel
-              disabled={scratchBusy}
+              disabled={scratchBusy || editorReadOnly}
               entries={scratchEntries}
               binding={{ repositoryKey, snapshot, sceneId: scene.id, documentPath: path }}
               onCheckpoint={onCheckpointScratch}
@@ -589,6 +593,7 @@ function ScratchPanel({
       <textarea
         id="scratch"
         value={draft.text}
+        disabled={disabled}
         onChange={(event) => editText(event.currentTarget.value)}
         onBlur={() => void flush().catch(() => undefined)}
         placeholder="台詞候補・没文など。本文には入りません"
