@@ -6,8 +6,8 @@
   },
   "target": {
     "branch": "work/7-p08-mcp",
-    "implementationCommit": "0d5fa4020e1542b68d4b3859068f235906f89675",
-    "testedHead": "7564420aa3cdd94f4bf45cb194df0a8ad1d1c910"
+    "implementationCommit": "664220de20921fb1ccf29818012245f56c9d7327",
+    "testedHead": "90d5fc822faba247cc40266dddaa60ca2facc23d"
   },
   "ledger": {
     "R48": {
@@ -48,6 +48,7 @@
     "P08-mutation-boundary": "Persistent MCP changes route through canonical proposal actions. create_scene invokes story.entities.create, update_entity invokes story.entities.update, lint fixes invoke diagnostics.proposeLintFix, format_manuscript returns the source NarrativeChangeSet without registering it, and submit_change_set submits the complete source record through Story. No MCP tool approves, checkpoints, reconciles, applies, or publishes. The production test verifies formatter and source edits do not change the remote until owner approval, checkpoint, and publish. A bearer cannot use author API routes or invoke core.checkpoint.",
     "P08-source-tools-registered": "The production stdio and Streamable HTTP SDK clients discover all 27 pinned source tool names. The integration exercises Story reads, saved scene context, bounded writing context and its text-free manifest, full diagnostics.scene with real Speaker and NLP producers, semantic.search with the real lexical fallback when no local vector index exists, speaker.dialogue.list, speaker.voice.check output arrays, and publishing.export.plaintext. It compares get_diagnostics analysis and normalized issue identities across transports at the selected Core snapshot.",
     "P08-context-manifest-parity": "The context-manifest tests verify source-compatible FNV-1a selection identity, Unicode character bounds and title truncation, the 50,000-character manuscript cap, 5,000-character selection limit, source revisions, manifest-only omission, and provenance fields.",
+    "P08-reload-materialization": "Source POST /api/reload reloads canonical entities and links, rebuilds a configured FTS SQLite projection, invalidates its cached database handle, and advances corpusVersion. Target `reload` invokes read-only Story action `story.snapshot.materialize`, which reparses canonical files from the pinned SnapshotReader and returns the real `{entities, links}` counts. Production acceptance verified both spawned stdio and SDK Streamable HTTP return `{entities:7,links:2}` for the synthetic fixture and the same selected Core snapshot. The target has no persistent FTS projection or ProjectStore cache, so this does not claim to rebuild one or force a newer upstream observation.",
     "P08-proposal-only-mutations": "Source HTTP create_scene and lint-fix direct-write paths and source stdio lint persistence are replaced by proposal actions. No MCP handler writes project files or commits directly.",
     "P08-core-review-publish-recovery": "Using a temporary bare Git repository with synthetic story data, the production acceptance proposes two operations and verifies the remote is unchanged. An owner approves and checkpoints only one operation; the proposal reports actual partial status, publication changes only that accepted file, and the unapproved operation text is absent from all reachable Git history. A new Core data directory reconstructs the project from Git alone; MCP returns PROPOSAL_PAYLOAD_UNAVAILABLE with digest and operation/review/checkpoint/publication IDs, while list_change_sets reports safe incomplete metadata. The test restores the exact original full Core proposal from a retained private browser record through the owner API, verifies source-level partial status returns, and confirms no accepted operation or checkpoint is duplicated.",
     "P08-assistant-rewrite-provider-none": "With the real Assistant/NLP/Story producers composed and no provider configured, the source suggest_rewrite tool is discovered and returns the producer's typed assistant_provider_unavailable error. The adapter does not claim the tool itself is unavailable when its source action exists."
@@ -63,19 +64,27 @@
     },
     {
       "command": "SCRIPTORIUM_PROFILE=full pnpm build",
-      "result": "passed on exact testedHead 7564420aa3cdd94f4bf45cb194df0a8ad1d1c910; generated the full eight-module composition after merging root commit 2a2b2f042bb9f8575f55d14c6e33d574f6144988."
+      "result": "passed on exact P08 implementation commit 664220de20921fb1ccf29818012245f56c9d7327; generated the full eight-module composition including the Story materializer and MCP reload adapter."
     },
     {
       "command": "pnpm --filter @scriptorium/module-mcp typecheck",
-      "result": "passed on exact testedHead 7564420aa3cdd94f4bf45cb194df0a8ad1d1c910"
+      "result": "passed on exact P08 implementation commit 664220de20921fb1ccf29818012245f56c9d7327"
     },
     {
       "command": "pnpm --filter @scriptorium/module-mcp test",
-      "result": "passed, 17 of 17 tests on exact testedHead 7564420aa3cdd94f4bf45cb194df0a8ad1d1c910, including SDK HTTP protocol and cancellation checks"
+      "result": "passed, 18 of 18 tests on exact P08 implementation commit 664220de20921fb1ccf29818012245f56c9d7327, including the SDK HTTP reload delegation and cancellation checks"
+    },
+    {
+      "command": "pnpm --filter @scriptorium/module-story test && pnpm --filter @scriptorium/module-story typecheck",
+      "result": "passed, 62 of 62 tests plus typecheck on exact P08 implementation commit 664220de20921fb1ccf29818012245f56c9d7327; includes a regression for pinned snapshot materialization counts and no proposal writes"
     },
     {
       "command": "node --test tests/integration/mcp-acceptance.test.mjs",
       "result": "passed, 1 of 1 on exact testedHead d0033c3e211f4c50f0709e85212adb884e78f1cd with the real Story/NLP/Diagnostics/Semantic/Speaker/Publishing/MCP runtime and live API. Spawned stdio and SDK HTTP verified all 27 tools, full scene diagnostics, formatter NarrativeChangeSet submission/replay/readback, owner approval/checkpoint/publication, no-op formatting, cancellation, privacy-safe reconstruction, exact proposal restoration, and no-duplicate recovery."
+    },
+    {
+      "command": "SCRIPTORIUM_MCP_ACCEPTANCE_MODULES=story,nlp,diagnostics,semantic,speaker,assistant,publishing,mcp env -u ARCADIA_LLM_PROVIDER -u ARCADIA_LLM_BASE_URL -u ARCADIA_LLM_MODEL -u ARCADIA_LLM_API_KEY node --test --test-name-pattern='spawned stdio and production HTTP MCP preserve Core review boundaries' tests/integration/mcp-acceptance.test.mjs",
+      "result": "passed, 1 of 1 (46.9 seconds; 49.7 seconds total test process) on exact root HEAD 90d5fc822faba247cc40266dddaa60ca2facc23d. The production API/Core acceptance verified both transports return the exact materialized counts `{entities:7,links:2}` and the same selected snapshot, alongside the existing proposal approval, checkpoint, publish, and reconstruction flow. This is scoped production evidence, not final migration campaign certification."
     },
     {
       "command": "SCRIPTORIUM_MCP_ACCEPTANCE_MODULES=story,nlp,diagnostics,semantic,speaker,assistant,publishing,mcp env -u ARCADIA_LLM_PROVIDER -u ARCADIA_LLM_BASE_URL -u ARCADIA_LLM_MODEL -u ARCADIA_LLM_API_KEY node --test tests/integration/mcp-acceptance.test.mjs",
@@ -92,7 +101,7 @@
   ],
   "compositionLimits": [
     "The MCP module itself has no model, embedding, NLP, or auth-service dependency. Production acceptance uses local CPU module workers, an empty semantic vector index with source lexical fallback, and synthetic content only; it does not certify downloaded model quality or a full-profile provider configuration.",
-    "format_manuscript uses the local source-compatible formatter and returns a NarrativeChangeSet for the existing Story submission flow without an external model provider. get_diagnostics invokes the full diagnostics.scene aggregate and requires Speaker actions; it returns component_unavailable rather than fabricating a partial result when that composition is absent. suggest_rewrite invokes assistant.rewrite, preserves the source prompt/context/candidate fields, and returns the typed provider-unavailable result when no provider is configured; the configured local Qwen response passed through both real transports with no proposal or repository write. This single pinned-model run verifies integration behavior, not general model quality. reload remains unavailable until a source-equivalent derived-refresh action exists.",
+    "format_manuscript uses the local source-compatible formatter and returns a NarrativeChangeSet for the existing Story submission flow without an external model provider. get_diagnostics invokes the full diagnostics.scene aggregate and requires Speaker actions; it returns component_unavailable rather than fabricating a partial result when that composition is absent. suggest_rewrite invokes assistant.rewrite, preserves the source prompt/context/candidate fields, and returns the typed provider-unavailable result when no provider is configured; the configured local Qwen response passed through both real transports with no proposal or repository write. This single pinned-model run verifies integration behavior, not general model quality. `reload` now uses the read-only Story materializer; no persistent target FTS projection exists, so it only reports counts from its pinned canonical snapshot.",
     "After Core data loss, MCP reports PROPOSAL_PAYLOAD_UNAVAILABLE when only accepted operation payloads survive in Git. Recovery requires the original full Core proposal retained by the private browser record; the production integration verifies exact restore through the owner proposal API."
   ]
 }
