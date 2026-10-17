@@ -28,6 +28,8 @@ const ALL_MODULES = ["story", "diagnostics", "nlp", "semantic", "speaker", "assi
 const SPEAKER_OVERRIDE_SCENE_PATH = "plot/volumes/volume-1/chapters/chapter-1/scenes/sc-speaker-override-stable.yaml";
 const SPEAKER_OVERRIDE_MANUSCRIPT_PATH = "manuscript/v1/sc-speaker-override-stable.md";
 const SPEAKER_OVERRIDE_DIALOGUE = "『俺が行く。』";
+const LEGACY_DESKTOP_CURSOR_UPDATED_AT = "2025-04-03T10:00:00.000Z";
+const LEGACY_MOBILE_CURSOR_UPDATED_AT = "2025-04-03T11:00:00.000Z";
 const SPEAKER_OVERRIDE_SCENE = [
   "id: sc-speaker-override-stable",
   "type: scene",
@@ -321,7 +323,7 @@ async function addLegacyFiles(sourceRoot, workspaceRoot) {
           sentenceOffset: 29,
           pageIndex: 4,
           deviceType: "desktop",
-          updatedAt: "2025-04-03T10:00:00.000Z",
+          updatedAt: LEGACY_DESKTOP_CURSOR_UPDATED_AT,
           extensionCursorField: "DO_NOT_PUBLISH_CURSOR_EXTENSION",
         },
         {
@@ -329,7 +331,7 @@ async function addLegacyFiles(sourceRoot, workspaceRoot) {
           sentenceOffset: 11,
           pageIndex: 2,
           deviceType: "mobile",
-          updatedAt: "2025-04-03T11:00:00.000Z",
+          updatedAt: LEGACY_MOBILE_CURSOR_UPDATED_AT,
         },
       ],
       "unmapped-user:legacy-project-id": [
@@ -676,6 +678,7 @@ test("composed legacy import preserves disabled data and reactivates after a ful
     assert.equal((await restoredReader.read(SPEAKER_OVERRIDE_SCENE_PATH))?.content, SPEAKER_OVERRIDE_SCENE,
       "the manual scene override must survive full Core data-root loss and a fresh clone");
 
+    let liveDesktopUpdatedAt;
     await withOwnerApi(replacement, apiToken, temporary, usageDirectory, async ({ base, headers }) => {
       const activityPath = `${base}/api/projects/${restoredProject.id}/recent-activity`;
       assert.equal((await fetch(activityPath)).status, 403, "recent activity must remain owner-cookie private");
@@ -687,12 +690,14 @@ test("composed legacy import preserves disabled data and reactivates after a ful
       assert.deepEqual(Object.keys(byDevice).sort(), ["desktop", "mobile"],
         "the remapped owner/project sees only the two explicitly mapped device cursors");
       assert.deepEqual(
-        { sceneId: byDevice.desktop.sceneId, sentenceOffset: byDevice.desktop.sentenceOffset, pageIndex: byDevice.desktop.pageIndex },
-        { sceneId: "sc-cursor-desktop", sentenceOffset: 29, pageIndex: 4 },
+        { sceneId: byDevice.desktop.sceneId, sentenceOffset: byDevice.desktop.sentenceOffset, pageIndex: byDevice.desktop.pageIndex,
+          updatedAt: byDevice.desktop.updatedAt },
+        { sceneId: "sc-cursor-desktop", sentenceOffset: 29, pageIndex: 4, updatedAt: LEGACY_DESKTOP_CURSOR_UPDATED_AT },
       );
       assert.deepEqual(
-        { sceneId: byDevice.mobile.sceneId, sentenceOffset: byDevice.mobile.sentenceOffset, pageIndex: byDevice.mobile.pageIndex },
-        { sceneId: "sc-cursor-mobile", sentenceOffset: 11, pageIndex: 2 },
+        { sceneId: byDevice.mobile.sceneId, sentenceOffset: byDevice.mobile.sentenceOffset, pageIndex: byDevice.mobile.pageIndex,
+          updatedAt: byDevice.mobile.updatedAt },
+        { sceneId: "sc-cursor-mobile", sentenceOffset: 11, pageIndex: 2, updatedAt: LEGACY_MOBILE_CURSOR_UPDATED_AT },
       );
       assert.ok(!JSON.stringify(activity).includes("unmapped-user"));
       assert.ok(!JSON.stringify(activity).includes("foreign-project-id"));
@@ -706,6 +711,13 @@ test("composed legacy import preserves disabled data and reactivates after a ful
         body: JSON.stringify({ sceneId: "sc-cursor-desktop-live", sentenceOffset: 91, pageIndex: 8, deviceType: "desktop" }),
       });
       assert.equal(liveUpdate.status, 200);
+      const liveUpdateActivity = await liveUpdate.json();
+      const liveUpdateDesktop = liveUpdateActivity.items.find(({ deviceType }) => deviceType === "desktop");
+      assert.equal(liveUpdateDesktop?.sceneId, "sc-cursor-desktop-live");
+      assert.equal(typeof liveUpdateDesktop?.updatedAt, "string");
+      liveDesktopUpdatedAt = liveUpdateDesktop.updatedAt;
+      assert.ok(Date.parse(liveDesktopUpdatedAt) > Date.parse(LEGACY_DESKTOP_CURSOR_UPDATED_AT),
+        "the live desktop update must carry a timestamp newer than the imported source cursor");
       const liveBeforeReimport = await fetch(activityPath, { headers });
       const liveActivity = await liveBeforeReimport.json();
       const liveDesktop = liveActivity.items.find(({ deviceType }) => deviceType === "desktop");
@@ -730,10 +742,12 @@ test("composed legacy import preserves disabled data and reactivates after a ful
       const desktopAfterReimport = afterReimport.items.find(({ deviceType }) => deviceType === "desktop");
       const mobileAfterReimport = afterReimport.items.find(({ deviceType }) => deviceType === "mobile");
       assert.deepEqual(
-        { sceneId: desktopAfterReimport?.sceneId, sentenceOffset: desktopAfterReimport?.sentenceOffset, pageIndex: desktopAfterReimport?.pageIndex },
-        { sceneId: "sc-cursor-desktop-live", sentenceOffset: 91, pageIndex: 8 },
+        { sceneId: desktopAfterReimport?.sceneId, sentenceOffset: desktopAfterReimport?.sentenceOffset, pageIndex: desktopAfterReimport?.pageIndex,
+          updatedAt: desktopAfterReimport?.updatedAt },
+        { sceneId: "sc-cursor-desktop-live", sentenceOffset: 91, pageIndex: 8, updatedAt: liveDesktopUpdatedAt },
       );
       assert.equal(mobileAfterReimport?.sceneId, "sc-cursor-mobile");
+      assert.equal(mobileAfterReimport?.updatedAt, LEGACY_MOBILE_CURSOR_UPDATED_AT);
     });
 
     await fs.rm(workspaceRoot, { recursive: true, force: true });
@@ -902,13 +916,15 @@ test("composed legacy import preserves disabled data and reactivates after a ful
       const desktop = activity.items.find(({ deviceType }) => deviceType === "desktop");
       const mobile = activity.items.find(({ deviceType }) => deviceType === "mobile");
       assert.deepEqual(
-        { sceneId: desktop?.sceneId, sentenceOffset: desktop?.sentenceOffset, pageIndex: desktop?.pageIndex },
-        { sceneId: "sc-cursor-desktop-live", sentenceOffset: 91, pageIndex: 8 },
+        { sceneId: desktop?.sceneId, sentenceOffset: desktop?.sentenceOffset, pageIndex: desktop?.pageIndex,
+          updatedAt: desktop?.updatedAt },
+        { sceneId: "sc-cursor-desktop-live", sentenceOffset: 91, pageIndex: 8, updatedAt: liveDesktopUpdatedAt },
         "the host-private live cursor must survive the second full Core data-root replacement",
       );
       assert.deepEqual(
-        { sceneId: mobile?.sceneId, sentenceOffset: mobile?.sentenceOffset, pageIndex: mobile?.pageIndex },
-        { sceneId: "sc-cursor-mobile", sentenceOffset: 11, pageIndex: 2 },
+        { sceneId: mobile?.sceneId, sentenceOffset: mobile?.sentenceOffset, pageIndex: mobile?.pageIndex,
+          updatedAt: mobile?.updatedAt },
+        { sceneId: "sc-cursor-mobile", sentenceOffset: 11, pageIndex: 2, updatedAt: LEGACY_MOBILE_CURSOR_UPDATED_AT },
       );
       assert.ok(!JSON.stringify(activity).includes("unmapped-user"));
       assert.ok(!JSON.stringify(activity).includes("foreign-project-id"));
