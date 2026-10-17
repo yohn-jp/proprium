@@ -21,10 +21,22 @@ function startProgress(context: BrowserModuleContext, taskId: string, status: HT
   let timer: number | undefined;
   let stopped = false;
   let inFlight = false;
+  let cleanupEntry: (() => void) | undefined;
+  let abortListenerAttached = false;
   const stop = () => {
+    if (stopped) return;
     stopped = true;
     if (timer !== undefined) window.clearTimeout(timer);
     timer = undefined;
+    if (abortListenerAttached) {
+      context.signal.removeEventListener("abort", onAbort);
+      abortListenerAttached = false;
+    }
+    if (cleanupEntry) {
+      const index = cleanup.indexOf(cleanupEntry);
+      if (index !== -1) cleanup.splice(index, 1);
+      cleanupEntry = undefined;
+    }
   };
   const poll = async () => {
     timer = undefined;
@@ -45,10 +57,15 @@ function startProgress(context: BrowserModuleContext, taskId: string, status: HT
     }
   };
   const onAbort = () => stop();
-  if (context.signal.aborted) stop();
-  else context.signal.addEventListener("abort", onAbort, { once: true });
+  if (context.signal.aborted) {
+    stop();
+    return stop;
+  }
+  context.signal.addEventListener("abort", onAbort, { once: true });
+  abortListenerAttached = true;
+  cleanupEntry = () => stop();
+  cleanup.push(cleanupEntry);
   timer = window.setTimeout(() => { void poll(); }, 600);
-  cleanup.push(() => { stop(); context.signal.removeEventListener("abort", onAbort); });
   return stop;
 }
 
@@ -182,6 +199,6 @@ export const browserModule: BrowserModuleDefinition = {
     if (contributionId === "semantic.contradictions") mountContradictions(root, context, cleanup);
     else if (contributionId === "semantic.index") mountIndex(root, context, cleanup);
     else mountSearch(root, context, cleanup, contributionId === "semantic.expressions");
-    return () => { for (const dispose of cleanup.reverse()) dispose(); root.replaceChildren(); };
+    return () => { for (const dispose of cleanup.splice(0).reverse()) dispose(); root.replaceChildren(); };
   },
 };
