@@ -375,7 +375,7 @@ test("spawned stdio and production HTTP MCP preserve Core review boundaries thro
   assert.ok(projects.data.projects.some((item) => item.id === projectId), "Bearer stdio project discovery omitted its owner project");
   const actions = success(await stdio.client.callTool({ name: "discover_actions", arguments: { project_id: projectId } }), "discover_actions");
   const actionIds = new Set(actions.data.actions.map((item) => item.id));
-  for (const action of ["core.status", "core.history", "story.entities.get", "story.scene.context", "diagnostics.analyze", "publishing.export.plaintext"]) {
+  for (const action of ["core.status", "core.history", "story.entities.get", "story.scene.context", "story.snapshot.materialize", "diagnostics.analyze", "publishing.export.plaintext"]) {
     assert.ok(actionIds.has(action), `Composed runtime omitted ${action}`);
   }
   if (READY_MODULES.includes("semantic")) assert.ok(actionIds.has("semantic.search"));
@@ -393,6 +393,20 @@ test("spawned stdio and production HTTP MCP preserve Core review boundaries thro
     name: "get_status", arguments: { project_id: projectId },
   }), "HTTP get_status");
   assert.ok(status.snapshot.remoteCommit && status.data);
+  const fixtureCounts = { entities: 7, links: 2 };
+  const materializedSnapshots = [];
+  for (const [name, connection] of [["stdio", stdio], ["HTTP", http]]) {
+    const reloaded = success(await connection.client.callTool({
+      name: "reload", arguments: { project_id: projectId },
+    }), `${name} reload`);
+    assert.deepEqual(reloaded.data, fixtureCounts,
+      `${name} reload must return exact Story entity/link counts for the synthetic canonical fixture`);
+    assert.deepEqual(reloaded.snapshot, status.snapshot,
+      `${name} reload must remain bound to the same selected Core snapshot as get_status`);
+    materializedSnapshots.push(reloaded.snapshot);
+  }
+  assert.deepEqual(materializedSnapshots[0], materializedSnapshots[1],
+    "stdio and HTTP reload must materialize the same selected snapshot");
   const history = success(await stdio.client.callTool({
     name: "get_history", arguments: { project_id: projectId },
   }), "stdio get_history");
