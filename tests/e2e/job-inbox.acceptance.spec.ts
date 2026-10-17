@@ -25,10 +25,9 @@ async function assertOwnerCookie(route: Route): Promise<void> {
 
 async function emitJobEvent(page: Page, event: Record<string, unknown>): Promise<void> {
   await page.evaluate(async (payload) => {
-    const testWindow = window as Window & { __emitJobInboxEvent?: (event: object) => void };
+    const testWindow = window as Window & { __emitJobInboxEvent?: (event: object) => Promise<void> };
     if (!testWindow.__emitJobInboxEvent) throw new Error("The inbox test event stream is not connected");
-    testWindow.__emitJobInboxEvent(payload);
-    await new Promise((resolve) => window.setTimeout(resolve, 0));
+    await testWindow.__emitJobInboxEvent(payload);
   }, event);
 }
 
@@ -124,15 +123,22 @@ test("authenticated inbox preserves owner job history and updates it from SSE", 
 
   await page.addInitScript(() => {
     let controller: ReadableStreamDefaultController<Uint8Array> | null = null;
+    let acknowledgeAfterRead: (() => void) | null = null;
     const eventStream = new ReadableStream<Uint8Array>({
       start(nextController) { controller = nextController; },
+      pull() {
+        const acknowledge = acknowledgeAfterRead;
+        acknowledgeAfterRead = null;
+        acknowledge?.();
+      },
       cancel() { controller = null; },
-    });
-    const testWindow = window as Window & { __emitJobInboxEvent?: (event: object) => void };
-    testWindow.__emitJobInboxEvent = (event) => {
+    }, { highWaterMark: 0 });
+    const testWindow = window as Window & { __emitJobInboxEvent?: (event: object) => Promise<void> };
+    testWindow.__emitJobInboxEvent = (event) => new Promise<void>((resolve) => {
       if (!controller) throw new Error("The inbox event stream is not readable");
+      acknowledgeAfterRead = resolve;
       controller.enqueue(new TextEncoder().encode(`data: ${JSON.stringify(event)}\n\n`));
-    };
+    });
 
     const originalFetch = window.fetch.bind(window);
     window.fetch = async (input: RequestInfo | URL, init?: RequestInit) => {
@@ -220,6 +226,7 @@ test("authenticated inbox preserves owner job history and updates it from SSE", 
 
   const dialog = page.getByRole("dialog", { name: "受信箱とジョブ履歴" });
   await expect(dialog).toBeVisible();
+  await expect(dialog.getByText("進行状況をリアルタイムで受信しています。")).toBeVisible();
   await expect(dialog.getByRole("button", { name: "更新" })).toBeEnabled();
   await emitJobEvent(page, {
     type: "job-progress",
@@ -262,7 +269,7 @@ test("authenticated inbox preserves owner job history and updates it from SSE", 
     progress: 1,
     at: "2026-10-17T00:03:00.000Z",
   });
-  inboxItems.push(raceCompletionItem);
+  if (!inboxItems.some((item) => item.id === raceCompletionItem.id)) inboxItems.push(raceCompletionItem);
   releaseQueuedRead?.();
   const racedJob = dialog.getByRole("listitem").filter({ hasText: "speaker-evaluation-race" });
   await expect(racedJob).toContainText("完了");
