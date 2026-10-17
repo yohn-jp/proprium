@@ -880,3 +880,45 @@ test("spawned stdio and production HTTP MCP preserve Core review boundaries thro
   }), "final source ChangeSet status");
   assert.equal(finalRecord.status, "partially-applied");
 });
+
+const RUN_ASSISTANT_REFERENCE = process.env.SCRIPTORIUM_ASSISTANT_REFERENCE_PROVIDER === "qwen-local";
+
+test("Assistant continuation prompt preview runs as a host-owned compute action without provider usage", {
+  skip: !READY_MODULES.includes("assistant") || !READY_MODULES.includes("story") || !READY_MODULES.includes("nlp") || !READY_MODULES.includes("semantic"),
+  timeout: 120_000,
+}, async (t) => {
+  const rootDir = await mkdtemp(resolve(tmpdir(), "scriptorium-p11-continuation-preview-"));
+  const dataDirectory = resolve(rootDir, "core-data");
+  const fixture = await createSyntheticRemote(rootDir);
+  let host;
+  t.after(async () => {
+    await host?.close().catch(() => undefined);
+    await rm(rootDir, { recursive: true, force: true });
+  });
+
+  host = await startHost({ dataDirectory, cacheDirectory: resolve(rootDir, "module-cache") });
+  const cookie = await login(host);
+  const project = await ownerJson(host, cookie, "/api/projects", {
+    method: "POST", status: 201, body: { url: fixture.url },
+  });
+  const projectId = project.id;
+  assert.ok(projectId);
+  const action = async (actionId, input) => {
+    const result = await ownerJson(host, cookie,
+      `/api/projects/${encodeURIComponent(projectId)}/actions/${encodeURIComponent(actionId)}`,
+      { method: "POST", body: { input } });
+    assert.equal(result.ok, true, `${actionId} failed: ${JSON.stringify(result.error)}`);
+    return result;
+  };
+  const before = await action("assistant.usage.read", { limit: 200 });
+  const selected = await action("core.status", {});
+  const preview = await action("assistant.continuation.preview", {
+    sceneId: "sc-1", chapterId: "ch-main-1", k: 8,
+  });
+  assert.equal(preview.snapshot.remoteCommit, selected.snapshot.remoteCommit);
+  assert.ok(preview.data.prompt.includes("Uma enters the cafe at dusk."),
+    "the API/runtime preview must use the selected saved-scene body when no manual text is provided");
+  const after = await action("assistant.usage.read", { limit: 200 });
+  assert.deepEqual(after.data.events.map((event) => event.id), before.data.events.map((event) => event.id),
+    "local context preparation must not create an external model usage event");
+});
