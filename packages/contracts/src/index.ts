@@ -361,3 +361,20 @@ export interface BrowserModuleDefinition {
   /** Public read-only source views receive no author or private-work capability. */
   mountPublic?(viewId: string, element: HTMLElement, request: Request): Promise<() => void>;
 }
+
+/** Private owner state for continuing a work on another device; never manuscript content. */
+export type RecentActivityDeviceType = "desktop" | "mobile";
+export interface RecentActivityInput {
+  sceneId: string;
+  /** Source-compatible 1-based UI sentence position, or null when unknown. */
+  sentenceOffset: number | null;
+  /** Omission preserves this device's previous reading page; null clears it. */
+  pageIndex?: number | null;
+  deviceType: RecentActivityDeviceType;
+}
+export interface RecentActivityItem extends RecentActivityInput {
+  updatedAt: string;
+}
+export interface RecentActivityResponse {
+  items: RecentActivityItem[];
+}
