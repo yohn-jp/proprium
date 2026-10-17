@@ -97,6 +97,7 @@
   ],
   "compositionLimits": [
     "The P07 integration acceptance uses the publishing-integration API runtime and full-profile browser bundle; it does not certify full-profile backend composition, browser recovery, optional workers, or OCI packaging.",
-    "The OCI acceptance remains pending as a separate follow-up."
+    "The OCI acceptance remains pending as a separate follow-up.",
+    "The fresh GitHub acceptance emitted: Scriptorium could not determine whether local checkpoints remain pending during shutdown. This records an unknown pending-scan result at shutdown; the process exited successfully and the acceptance separately verified the confirmed published remote heads and reconstruction. No implicit shutdown publication is claimed."
   ]
 }
