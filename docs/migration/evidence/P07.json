@@ -56,7 +56,7 @@
   "validation": [
     {
       "command": "pnpm install --frozen-lockfile",
-      "result": "passed on implementation commit 308118876b7c4abe3b64f8b6496e8b9baa62576d"
+      "result": "passed on P07 leaf HEAD b948a7b9d80ffed468c3d67fd45e2eb45c148af5 (tree 480aadf546cd28944c5a242ef9cd0ac55b215616)"
     },
     {
       "command": "pnpm --filter @scriptorium/contracts build",
@@ -64,11 +64,11 @@
     },
     {
       "command": "pnpm --filter @scriptorium/module-publishing typecheck",
-      "result": "passed on merged leaf HEAD 7df6c0271daeb9aef67a4687d7f7a50cd06d1d18"
+      "result": "passed on P07 leaf HEAD b948a7b9d80ffed468c3d67fd45e2eb45c148af5 (tree 480aadf546cd28944c5a242ef9cd0ac55b215616)"
     },
     {
       "command": "pnpm --filter @scriptorium/module-publishing test",
-      "result": "passed, 8 of 8 tests on merged leaf HEAD 7df6c0271daeb9aef67a4687d7f7a50cd06d1d18"
+      "result": "passed, 8 of 8 tests on P07 leaf HEAD b948a7b9d80ffed468c3d67fd45e2eb45c148af5 (tree 480aadf546cd28944c5a242ef9cd0ac55b215616)"
     },
     {
       "command": "pnpm --filter @scriptorium/module-publishing build",
@@ -84,11 +84,15 @@
     },
     {
       "command": "SCRIPTORIUM_PROFILE=full pnpm build",
-      "result": "passed on merged leaf HEAD 7df6c0271daeb9aef67a4687d7f7a50cd06d1d18; generated the full 8-module browser composition and built API/app bundles"
+      "result": "passed on P07 leaf HEAD b948a7b9d80ffed468c3d67fd45e2eb45c148af5 (tree 480aadf546cd28944c5a242ef9cd0ac55b215616); generated the full 8-module browser composition and built API/app bundles. The tree exactly matches frozen runtime input bc2b0936d418d1d8f5dcd8b16e74d1f9f3d65c0f."
     },
     {
       "command": "SCRIPTORIUM_ACCEPTANCE_GITHUB_URL=https://github.com/OWNER/SYNTHETIC-PRIVATE-REPOSITORY SCRIPTORIUM_E2E_CHROMIUM=/nix/store/ini1ifgvcsvw48x4mxawrv9jvbdwn70p-chromium-155.0.8059.79/bin/chromium node --test tests/integration/publishing-acceptance.test.mjs",
-      "result": "passed 1 of 1 in 267.3 seconds on leaf base 643dd15d0a0dd95e11cbacff675d47881c86da75 (main 7df1ecabd48b9333b72b8604d0d4f5b45b1b5500); confirmed default-branch receipts, synthetic metadata re-clone after Core data-root removal, anonymous rendered scope/expiry/revocation checks, and no owner-session request"
+      "result": "fresh run passed 1 of 1 in 288.8 seconds on P07 leaf HEAD b948a7b9d80ffed468c3d67fd45e2eb45c148af5 (tree 480aadf546cd28944c5a242ef9cd0ac55b215616), the exact frozen runtime input tree; exercised the owned private P07 fixture, confirmed default-branch receipts, synthetic metadata re-clone after Core data-root removal, anonymous rendered scope/expiry/pushed-revocation checks, and no owner-session request"
+    },
+    {
+      "command": "git diff --stat b948a7b9d80ffed468c3d67fd45e2eb45c148af5..0260831d5d45672c997ceef374ee2214c60bde9d",
+      "result": "current main had advanced after the frozen acceptance run; its diff from the tested source tree is limited to P00/P11 migration docs/evidence/ledger and MCP/P13 acceptance files, with no P07 production-path changes"
     }
   ],
   "compositionLimits": [
