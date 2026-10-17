@@ -12,16 +12,20 @@ import { bracketPairsExtension } from "./cm/bracketPairs";
 import { editorCompositionExtension } from "./cm/compositionGuard";
 import { ellipsisNormalizeExtension } from "./cm/ellipsisNormalize";
 import { planWritingSymbol, type WritingSymbolId } from "./writingSymbols";
+import { offsetAtUiSentenceIndex, uiSentenceIndexAtOffset } from "../resume/continueCandidates";
 
 export interface ManuscriptInputHandle {
   focus(): void;
   insert(symbol: WritingSymbolId): void;
+  restorePosition(position: { cursorSentenceIndex: number | null; scrollTop: number }): void;
+  getScrollTop(): number;
 }
 
 export interface ManuscriptInputProps {
   value: string;
   onChange: (value: string) => void;
   onSelectionLengthChange?: (length: number) => void;
+  onCursorPositionChange?: (cursorSentenceIndex: number | null, scrollTop: number) => void;
   placeholder?: string;
   labelledBy: string;
   style?: CSSProperties;
@@ -32,6 +36,7 @@ export const ManuscriptInput = forwardRef<ManuscriptInputHandle, ManuscriptInput
   value,
   onChange,
   onSelectionLengthChange,
+  onCursorPositionChange,
   placeholder,
   labelledBy,
   style,
@@ -39,8 +44,18 @@ export const ManuscriptInput = forwardRef<ManuscriptInputHandle, ManuscriptInput
   const containerRef = useRef<HTMLDivElement>(null);
   const viewRef = useRef<EditorView | null>(null);
   const externalSyncRef = useRef(false);
-  const latestRef = useRef({ onChange, onSelectionLengthChange });
-  latestRef.current = { onChange, onSelectionLengthChange };
+  const suppressPositionRef = useRef(false);
+  const latestRef = useRef({ onChange, onSelectionLengthChange, onCursorPositionChange });
+  latestRef.current = { onChange, onSelectionLengthChange, onCursorPositionChange };
+
+  function reportPosition(view: EditorView): void {
+    if (suppressPositionRef.current) return;
+    const selection = view.state.selection.main;
+    latestRef.current.onCursorPositionChange?.(
+      uiSentenceIndexAtOffset(view.state.doc.toString(), selection.head),
+      Math.max(0, view.scrollDOM.scrollTop),
+    );
+  }
 
   useImperativeHandle(ref, () => ({
     focus() {
@@ -57,6 +72,23 @@ export const ManuscriptInput = forwardRef<ManuscriptInputHandle, ManuscriptInput
         userEvent: "input.type",
       });
       view.focus();
+    },
+    restorePosition(position) {
+      const view = viewRef.current;
+      if (!view) return;
+      const offset = offsetAtUiSentenceIndex(view.state.doc.toString(), position.cursorSentenceIndex);
+      suppressPositionRef.current = true;
+      if (offset !== null) {
+        view.dispatch({
+          selection: { anchor: Math.max(0, Math.min(offset, view.state.doc.length)) },
+          annotations: Transaction.addToHistory.of(false),
+        });
+      }
+      view.scrollDOM.scrollTop = Math.max(0, position.scrollTop);
+      requestAnimationFrame(() => { suppressPositionRef.current = false; });
+    },
+    getScrollTop() {
+      return Math.max(0, viewRef.current?.scrollDOM.scrollTop ?? 0);
     },
   }), []);
 
@@ -92,6 +124,12 @@ export const ManuscriptInput = forwardRef<ManuscriptInputHandle, ManuscriptInput
           if (update.docChanged || update.selectionSet) {
             const selection = update.state.selection.main;
             latestRef.current.onSelectionLengthChange?.(selection.empty ? 0 : Math.abs(selection.to - selection.from));
+            if (!externalSyncRef.current) {
+              latestRef.current.onCursorPositionChange?.(
+                uiSentenceIndexAtOffset(update.state.doc.toString(), selection.head),
+                Math.max(0, viewRef.current?.scrollDOM.scrollTop ?? 0),
+              );
+            }
           }
         }),
         placeholder ? cmPlaceholder(placeholder) : [],
@@ -99,7 +137,10 @@ export const ManuscriptInput = forwardRef<ManuscriptInputHandle, ManuscriptInput
     });
     const view = new EditorView({ state, parent });
     viewRef.current = view;
+    const onScroll = () => reportPosition(view);
+    view.scrollDOM.addEventListener("scroll", onScroll, { passive: true });
     return () => {
+      view.scrollDOM.removeEventListener("scroll", onScroll);
       view.destroy();
       viewRef.current = null;
     };

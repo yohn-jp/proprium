@@ -181,6 +181,14 @@ textarea { padding: 0.9rem; }
 .project-facts code { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 0.78rem; }
 .project-management-help { margin: 0; color: var(--muted); font-size: 0.78rem; line-height: 1.5; }
 .project-management-actions { display: grid; gap: 0.4rem; }
+.continue-panel { display: grid; gap: 0.55rem; padding: 1rem 0; border-bottom: 1px solid var(--line); }
+.continue-panel h2 { margin: 0; font-size: 1rem; }
+.continue-list { display: grid; gap: 0.75rem; margin: 0; padding: 0; list-style: none; }
+.continue-list li { display: grid; gap: 0.3rem; min-width: 0; }
+.continue-list strong { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.continue-list small, .continue-error { margin: 0; color: var(--muted); font-size: 0.78rem; line-height: 1.45; }
+.continue-list button { justify-self: start; }
+.continue-error { color: var(--error); }
 .danger-button { border-color: var(--danger-border); background: var(--danger-bg); }
 .danger-button:hover:not(:disabled) { background: var(--danger-hover); }
 .plain-list, .scene-list, .proposal-list, .recovery-list { padding: 0; margin: 0; list-style: none; }

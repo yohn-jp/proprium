@@ -7,6 +7,8 @@ import type {
   ModuleStatus,
   PublishReceipt,
   ProposalStatus,
+  RecentActivityInput,
+  RecentActivityResponse,
   RemoteObservation,
   RepositoryIdentity,
   ReconcileResult,
@@ -291,6 +293,14 @@ export const api = {
   },
   status: (projectId: string) => request<SyncStatus>(projectPath(projectId, "status")),
   observation: (projectId: string) => request<RemoteObservation>(projectPath(projectId, "observation")),
+  recentActivity: (projectId: string, signal?: AbortSignal) =>
+    request<RecentActivityResponse>(projectPath(projectId, "recent-activity"), { signal }),
+  putRecentActivity: (projectId: string, input: RecentActivityInput, options: { signal?: AbortSignal; keepalive?: boolean } = {}) =>
+    request<RecentActivityResponse>(projectPath(projectId, "recent-activity"), {
+      method: "PUT",
+      body: JSON.stringify(input),
+      ...options,
+    }),
   proposalStatuses: (projectId: string) => request<{ proposals: ProposalStatus[] }>(projectPath(projectId, "proposals")),
   propose: (projectId: string, proposal: ChangeProposal) => request<ChangeProposal>(projectPath(projectId, "proposals"), {
     method: "POST",

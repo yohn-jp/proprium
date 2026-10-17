@@ -7,6 +7,7 @@ import {
   type BrowserEditorDocument,
   type ChangeProposal,
   type ModuleStatus,
+  type RecentActivityDeviceType,
   type RemoteObservation,
   type RepositoryIdentity,
   type SnapshotId,
@@ -18,8 +19,10 @@ import { ProposalReview } from "./contributions/ProposalReview";
 import { PublicModuleView, publicModuleIdForPath } from "./contributions/PublicModuleView";
 import { ThemeControl } from "./components/ThemeControl";
 import { JobInbox } from "./components/JobInbox";
-import { SceneEditor, type ScratchDraftBinding, type ScratchDraftPayload } from "./editor/SceneEditor";
+import { SceneEditor, type ResumeRequest, type ScratchDraftBinding, type ScratchDraftPayload } from "./editor/SceneEditor";
 import { replaceDocumentBody } from "./editor/ruby";
+import { formatHandoffHint, mergeContinueCandidates, sceneExistsInTree, sceneTitleInTree, type ContinueCandidate } from "./resume/continueCandidates";
+import { useRecentActivityResume } from "./resume/useRecentActivityResume";
 import { loadThemeMode, persistThemeMode, type ThemeMode } from "./theme";
 import { clearDraft, loadDraft } from "./drafts";
 import {
@@ -307,6 +310,7 @@ function AuthorWorkspace({
   const [journalOpenError, setJournalOpenError] = useState("");
   const [projects, setProjects] = useState<Project[]>([]);
   const [work, setWork] = useState<WorkState | null>(null);
+  const [resumeRequest, setResumeRequest] = useState<ResumeRequest | null>(null);
   const [status, setStatus] = useState<{ message: string; kind: "normal" | "error" | "success" }>({ message: "", kind: "normal" });
   const [globalError, setGlobalError] = useState("");
   const [projectActionError, setProjectActionError] = useState<{ projectId: string; code?: string; message: string } | null>(null);
@@ -331,6 +335,12 @@ function AuthorWorkspace({
   const sceneLoadRef = useRef(0);
   const recoveredProjectsRef = useRef(new Set<string>());
   const proposalPollsRef = useRef(new Map<string, Promise<void>>());
+  const resumeRequestSequenceRef = useRef(0);
+  const activeRepositoryKey = work ? repositoryKey(work.observation.snapshot.repository) : "";
+  const recentResume = useRecentActivityResume({
+    binding: work ? { projectId: work.project.id, authorScope, repositoryKey: activeRepositoryKey } : null,
+    enabled: authState === "ready",
+  });
 
   const registerScratchFlush = useCallback((flush: (() => Promise<JournalEntry | null>) | null) => {
     scratchFlushRef.current = flush ?? (async () => null);
@@ -662,6 +672,7 @@ function AuthorWorkspace({
     const sceneRequest = ++sceneLoadRef.current;
     const nav = navigationRef.current;
     try {
+      recentResume.flush();
       await flushDraft();
     } catch (error) {
       if (navigationRef.current === nav && sceneLoadRef.current === sceneRequest) setStatus({ message: messageOf(error), kind: "error" });
@@ -796,7 +807,7 @@ function AuthorWorkspace({
       updateWork((current) => current ? { ...current, loadingScene: false, editor: null } : current);
       setStatus({ message: messageOf(error), kind: "error" });
     }
-  }, [refreshJournal, updateWork]);
+  }, [refreshJournal, recentResume.flush, updateWork]);
 
   const activateProject = useCallback(async (project: Project, persistSelection = true, scopeOverride?: string) => {
     const nav = ++navigationRef.current;
@@ -804,6 +815,7 @@ function AuthorWorkspace({
     setProjectActionError(null);
     setStatus({ message: "リモートの状態を確認しています…", kind: "normal" });
     try {
+      recentResume.flush();
       await flushDraft();
       if (navigationRef.current !== nav) return;
       updateWork(() => null);
@@ -910,7 +922,7 @@ function AuthorWorkspace({
     } finally {
       observationBusyRef.current = false;
     }
-  }, [authorScope, importRemoteProposals, loadScene, reconcileProject, updateWork]);
+  }, [authorScope, importRemoteProposals, loadScene, recentResume.flush, reconcileProject, updateWork]);
   refreshRef.current = refreshRemote;
 
   const refreshForeground = useCallback(() => {
@@ -982,6 +994,7 @@ function AuthorWorkspace({
 
   async function signOut(): Promise<void> {
     try {
+      recentResume.flush(true);
       await flushDraft();
       await api.logout();
       navigationRef.current++;
@@ -1562,6 +1575,27 @@ function AuthorWorkspace({
     setHistoryOpen((open) => !open);
   }
 
+  function continueFrom(candidate: ReturnType<typeof mergeContinueCandidates>[number], reading = false): void {
+    const current = workRef.current;
+    if (!current || !sceneExistsInTree(current.tree.tree, candidate.sceneId)) return;
+    const targetRepositoryKey = repositoryKey(current.observation.snapshot.repository);
+    const id = ++resumeRequestSequenceRef.current;
+    setResumeRequest({
+      id,
+      repositoryKey: targetRepositoryKey,
+      sceneId: candidate.sceneId,
+      cursorSentenceIndex: candidate.sentenceOffset,
+      scrollTop: candidate.scrollTop ?? 0,
+      ...(reading && candidate.pageIndex !== null ? { pageIndex: candidate.pageIndex } : {}),
+    });
+    if (current.selectedSceneId === candidate.sceneId && current.editor?.read.scene.id === candidate.sceneId && !current.loadingScene) return;
+    void loadScene(current.project.id, candidate.sceneId, current.tree, current.observation.snapshot.repository);
+  }
+
+  function completeResumeRequest(requestId: number): void {
+    setResumeRequest((current) => current?.id === requestId ? null : current);
+  }
+
   const currentRepoEntries = useMemo(() => work ? entries.filter((entry) => sameRepository(entry.repository, work.observation.snapshot.repository)) : [], [entries, work]);
   const currentRepoProposals = useMemo(() => work ? proposals.filter((proposal) => sameRepository(proposal.repository, work.observation.snapshot.repository)) : [], [proposals, work]);
   const renderedNavigation = navigationRef.current;
@@ -1574,6 +1608,9 @@ function AuthorWorkspace({
   const canCheckpoint = Boolean(editor?.entry && work && !work.loadingScene && work.selectedSceneId === editor.read.scene.id && (editor.entry.state === "draft" || editor.entry.state === "checkpointing") && editor.draftStored && !editor.conflict && editor.text !== editor.read.scene.text && !busy);
   const canResolveDraft = Boolean(editor?.conflict && (!editor.entry || editor.entry.state === "draft"));
   const canPublish = pendingCount > 0 && currentRepoEntries.some((entry) => (entry.state === "checkpointed" || entry.state === "publication_unknown") && !publishedOperationIds.has(entry.operation.id)) && !busy;
+  const continueCandidates = work && tree && recentResume.projectKey === JSON.stringify([authorScope, activeRepositoryKey, work.project.id])
+    ? mergeContinueCandidates(recentResume.localWriting, recentResume.items, tree).slice(0, 2)
+    : [];
 
   if (authState === "checking") return <main className="loading" role="status">Scriptorium を開いています…</main>;
   if (authState === "signed-out") {
@@ -1649,6 +1686,16 @@ function AuthorWorkspace({
               )}
             </section>
           )}
+          {work && tree && (
+            <ContinuePanel
+              candidates={continueCandidates}
+              tree={tree}
+              deviceType={recentResume.deviceType}
+              error={recentResume.error}
+              onContinue={(candidate) => continueFrom(candidate)}
+              onRead={(candidate) => continueFrom(candidate, true)}
+            />
+          )}
           {tree && <TreeNav tree={tree} selectedSceneId={work?.selectedSceneId ?? ""} disabled={Boolean(busy)} onSelect={(sceneId) => work && void loadScene(work.project.id, sceneId, work.tree, work.observation.snapshot.repository)} />}
           {legacyDrafts.length > 0 && <LegacyRecoveryPanel drafts={legacyDrafts} selectedSceneId={work && !work.loadingScene && work.editor?.read.scene.id === work.selectedSceneId ? work.selectedSceneId : ""} onExport={exportLegacyDrafts} onMap={(draft) => void mapLegacyDraft(draft)} />}
           {!work && recoverableEntries.length > 0 && (
@@ -1699,8 +1746,9 @@ function AuthorWorkspace({
               {editor && scene && (
                 <>
                   <SceneEditor
-                    key={JSON.stringify([repositoryKey(editor.read.snapshot.repository), editor.read.document.path])}
+                    key={JSON.stringify([authorScope, repositoryKey(editor.read.snapshot.repository), editor.read.document.path])}
                     projectId={work.project.id}
+                    authorScope={authorScope}
                     repositoryKey={repositoryKey(editor.read.snapshot.repository)}
                     snapshot={editor.read.snapshot}
                     historySnapshot={work.observation.snapshot}
@@ -1709,6 +1757,10 @@ function AuthorWorkspace({
                     breadcrumb={breadcrumbFor(tree, scene.id)}
                     text={editor.text}
                     onTextChange={editText}
+                    onCursorPositionChange={recentResume.onWritingPosition}
+                    onReadingPageChange={recentResume.onReadingPage}
+                    resumeRequest={resumeRequest}
+                    onResumeRequestApplied={completeResumeRequest}
                     durability={editorDurability(editor)}
                     draftStored={editor.draftStored}
                     journalError={editor.journalError || journalOpenError}
@@ -1763,6 +1815,52 @@ function breadcrumbFor(tree: Tree | null, sceneId: string): string {
     }
   }
   return tree.title;
+}
+
+function ContinuePanel({
+  candidates,
+  tree,
+  deviceType,
+  error,
+  onContinue,
+  onRead,
+}: {
+  candidates: ContinueCandidate[];
+  tree: Tree;
+  deviceType: RecentActivityDeviceType;
+  error: string;
+  onContinue: (candidate: ContinueCandidate) => void;
+  onRead: (candidate: ContinueCandidate) => void;
+}) {
+  return (
+    <section className="continue-panel" aria-labelledby="continue-title">
+      <h2 id="continue-title">続きから</h2>
+      {error && <p className="continue-error" role="status">再開位置を同期できません: {error}</p>}
+      {candidates.length === 0 ? <p className="muted-list-item">再開できるシーンがまだありません</p> : (
+        <ul className="continue-list">
+          {candidates.map((candidate, index) => {
+            const handoff = candidate.source === "server"
+              ? formatHandoffHint(candidate.deviceType, candidate.updatedAt, Date.now(), deviceType)
+              : null;
+            return (
+              <li key={candidate.sceneId}>
+                <strong>{sceneTitleInTree(tree, candidate.sceneId)}</strong>
+                {handoff && <small>{handoff}</small>}
+                <button type="button" className="quiet-button compact-button" onClick={() => onContinue(candidate)}>
+                  {index === 0 ? "続きを書く" : "こちらを開く"}
+                </button>
+                {candidate.pageIndex !== null && (
+                  <button type="button" className="quiet-button compact-button" onClick={() => onRead(candidate)}>
+                    読書位置を開く
+                  </button>
+                )}
+              </li>
+            );
+          })}
+        </ul>
+      )}
+    </section>
+  );
 }
 
 function TreeNav({ tree, selectedSceneId, disabled, onSelect }: { tree: Tree; selectedSceneId: string; disabled: boolean; onSelect: (id: string) => void }) {

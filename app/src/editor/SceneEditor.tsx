@@ -8,8 +8,18 @@ import { ManuscriptInput, type ManuscriptInputHandle } from "./ManuscriptInput";
 import { RubyText } from "./ruby";
 import { loadTypographySettings, storeTypographySettings, typographyPresetValues, TYPOGRAPHY_PRESETS, type TypographySettings, type TypographyPresetId } from "./typography";
 import { WRITING_SYMBOLS } from "./writingSymbols";
+import { loadReadingPage, saveReadingPage } from "../resume/continueCandidates";
 
 type Durability = "draft" | "checkpointing" | "checkpointed" | "publication_unknown" | "saved";
+
+export interface ResumeRequest {
+  id: number;
+  repositoryKey: string;
+  sceneId: string;
+  cursorSentenceIndex: number | null;
+  scrollTop: number;
+  pageIndex?: number | null;
+}
 
 export interface ScratchAttachmentDraft {
   filename: string;
@@ -35,6 +45,7 @@ export interface ScratchDraftBinding {
 
 export function SceneEditor({
   projectId,
+  authorScope,
   repositoryKey,
   snapshot,
   historySnapshot,
@@ -43,6 +54,10 @@ export function SceneEditor({
   breadcrumb,
   text,
   onTextChange,
+  onCursorPositionChange,
+  onReadingPageChange,
+  resumeRequest,
+  onResumeRequestApplied,
   durability,
   draftStored,
   journalError,
@@ -67,6 +82,7 @@ export function SceneEditor({
   pendingCount,
 }: {
   projectId: string;
+  authorScope: string;
   repositoryKey: string;
   snapshot: SnapshotId;
   /** Manuscript history is GitHub history and must remain pinned to the observed remote HEAD. */
@@ -76,6 +92,10 @@ export function SceneEditor({
   breadcrumb: string;
   text: string;
   onTextChange: (next: string) => void;
+  onCursorPositionChange: (sceneId: string, cursorSentenceIndex: number | null, scrollTop: number) => void;
+  onReadingPageChange: (sceneId: string, pageIndex: number) => void;
+  resumeRequest: ResumeRequest | null;
+  onResumeRequestApplied: (requestId: number) => void;
   durability: Durability;
   draftStored: boolean;
   journalError: string;
@@ -105,7 +125,7 @@ export function SceneEditor({
   const [zen, setZen] = useState(false);
   const [typewriterDim, setTypewriterDim] = useState(true);
   const [typography, setTypography] = useState<TypographySettings>(loadTypographySettings);
-  const [readingPage, setReadingPage] = useState(() => loadReadingPage(repositoryKey, scene.id));
+  const [readingPage, setReadingPage] = useState(() => loadReadingPage(authorScope, repositoryKey, scene.id));
   const [selectionLength, setSelectionLength] = useState(0);
   const [printing, setPrinting] = useState(false);
 
@@ -121,10 +141,34 @@ export function SceneEditor({
   useEffect(() => storeTypographySettings(typography), [typography]);
 
   useEffect(() => {
-    storeReadingPage(repositoryKey, scene.id, readingPage);
-  }, [repositoryKey, scene.id, readingPage]);
+    saveReadingPage(authorScope, repositoryKey, scene.id, readingPage);
+  }, [authorScope, repositoryKey, scene.id, readingPage]);
 
-  useEffect(() => setReadingPage(loadReadingPage(repositoryKey, scene.id)), [repositoryKey, scene.id]);
+  useEffect(() => setReadingPage(loadReadingPage(authorScope, repositoryKey, scene.id)), [authorScope, repositoryKey, scene.id]);
+
+  useEffect(() => {
+    if (!resumeRequest || resumeRequest.repositoryKey !== repositoryKey || resumeRequest.sceneId !== scene.id) return;
+    if (resumeRequest.pageIndex !== undefined && resumeRequest.pageIndex !== null) {
+      setReadingPage(resumeRequest.pageIndex);
+      setReading(true);
+      onResumeRequestApplied(resumeRequest.id);
+      return;
+    }
+    const frame = requestAnimationFrame(() => {
+      editorRef.current?.restorePosition({
+        cursorSentenceIndex: resumeRequest.cursorSentenceIndex,
+        scrollTop: resumeRequest.scrollTop,
+      });
+      editorRef.current?.focus();
+      onResumeRequestApplied(resumeRequest.id);
+    });
+    return () => cancelAnimationFrame(frame);
+  }, [repositoryKey, scene.id, resumeRequest, onResumeRequestApplied]);
+
+  const changeReadingPage = useCallback((pageIndex: number) => {
+    setReadingPage(pageIndex);
+    onReadingPageChange(scene.id, pageIndex);
+  }, [onReadingPageChange, scene.id]);
 
   const statusText = durability === "draft"
     ? draftStored ? "下書きはこのブラウザーに保護されています。" : "この下書きのブラウザー保存を確認できていません。"
@@ -231,7 +275,7 @@ export function SceneEditor({
           tabIndex={-1}
           style={readerStyle(typography)}
         >
-          <MobileReadingPager mode={vertical ? "vertical" : "horizontal"} pageIndex={readingPage} onPageIndexChange={setReadingPage}>
+          <MobileReadingPager mode={vertical ? "vertical" : "horizontal"} pageIndex={readingPage} onPageIndexChange={changeReadingPage}>
             <RubyText text={text} />
           </MobileReadingPager>
         </section>
@@ -243,6 +287,7 @@ export function SceneEditor({
               ref={editorRef}
               value={text}
               onChange={onTextChange}
+              onCursorPositionChange={(cursorSentenceIndex, scrollTop) => onCursorPositionChange(scene.id, cursorSentenceIndex, scrollTop)}
               onSelectionLengthChange={setSelectionLength}
               labelledBy="manuscript-label"
               placeholder="物語の続きを書く"
@@ -304,23 +349,6 @@ function readerStyle(settings: TypographySettings): CSSProperties {
     "--reader-font-family": settings.fontFamily === "mincho" ? "var(--manuscript-serif)" : "var(--manuscript-sans)",
     "--reader-max-width": `${settings.maxWidth}px`,
   } as CSSProperties;
-}
-
-function readingStorageKey(repositoryKey: string, sceneId: string): string {
-  return `scriptorium:reading-resume:${repositoryKey}:${sceneId}`;
-}
-
-function loadReadingPage(repositoryKey: string, sceneId: string): number {
-  try {
-    const page = Number(window.localStorage.getItem(readingStorageKey(repositoryKey, sceneId)));
-    return Number.isSafeInteger(page) && page >= 0 ? page : 0;
-  } catch {
-    return 0;
-  }
-}
-
-function storeReadingPage(repositoryKey: string, sceneId: string, page: number): void {
-  try { window.localStorage.setItem(readingStorageKey(repositoryKey, sceneId), String(page)); } catch { /* Resume is best-effort. */ }
 }
 
 function attachmentDrafts(entry: JournalEntry): ScratchAttachmentDraft[] {
