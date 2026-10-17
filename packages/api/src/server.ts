@@ -6,13 +6,15 @@ import { lstat, readFile, realpath } from "node:fs/promises";
 import { extname, resolve, sep } from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
 import Fastify, { type FastifyInstance, type FastifyRequest } from "fastify";
-import { CONTRACT_VERSION, MODEL_USAGE_CAPABILITY, snapshotKey, type ActionDescriptor, type ActionResult, type ChangeOperation, type ChangeProposal, type HttpContribution, type ModelUsageStore, type ModuleAction, type ModuleActionContext, type ModuleId, type ModuleStatus, type ProposalEvidence, type SnapshotId, type ValueSchema } from "@scriptorium/contracts";
+import { CONTRACT_VERSION, MODEL_USAGE_CAPABILITY, snapshotKey, type ActionDescriptor, type ActionResult, type ChangeOperation, type ChangeProposal, type HttpContribution, type ModelUsageStore, type ModuleAction, type ModuleActionContext, type ModuleId, type ModuleStatus, type ProposalEvidence, type RecentActivityInput, type SnapshotId, type ValueSchema } from "@scriptorium/contracts";
 import type { CoreStore, CreateHierarchyInput, HierarchyTarget, Project, ReorderHierarchyInput } from "@scriptorium/core";
 import { ModuleRuntime, type ActionHostContext, type DomainJobActionExecutor, type ModuleLoader, type ModuleRuntimeOptions, type WorkerJobLifecycleSnapshot } from "@scriptorium/module-runtime";
 import { HistoricalModelUsageStore } from "./historical-store.js";
 import { JobHistoryError, JobHistoryStore, type JobEvent } from "./job-history-store.js";
+import { RecentActivityStore } from "./recent-activity-store.js";
 
 export { importLegacyJobHistory, type LegacyJobHistoryImportOptions, type LegacyJobHistoryImportReport } from "./job-history-store.js";
+export { importLegacyRecentActivity, type LegacyRecentActivityImportOptions, type LegacyRecentActivityImportReport } from "./recent-activity-store.js";
 
 const SESSION_COOKIE = "scriptorium_session";
 const SESSION_TTL_MS = 8 * 60 * 60 * 1000;
@@ -269,6 +271,30 @@ function queryOf(request: IncomingMessage): URLSearchParams {
   return new URL(request.url ?? "/", `http://${request.headers.host ?? "localhost"}`).searchParams;
 }
 
+function parseRecentActivityInput(value: unknown): RecentActivityInput {
+  if (!isRecord(value) || !hasOnlyKeys(value, new Set(["sceneId", "sentenceOffset", "pageIndex", "deviceType"]))) {
+    throw httpFailure(400, "INVALID_RECENT_ACTIVITY", "Recent activity input is invalid");
+  }
+  if (typeof value.sceneId !== "string" || value.sceneId.length < 1 || value.sceneId.length > 512 ||
+      /[\x00-\x1f\x7f]/u.test(value.sceneId) ||
+      (value.sentenceOffset !== null && !Number.isSafeInteger(value.sentenceOffset)) ||
+      (value.deviceType !== "desktop" && value.deviceType !== "mobile") ||
+      (value.pageIndex !== undefined && value.pageIndex !== null &&
+        (!Number.isSafeInteger(value.pageIndex) || (value.pageIndex as number) < 0))) {
+    throw httpFailure(400, "INVALID_RECENT_ACTIVITY", "Recent activity cursor fields are invalid");
+  }
+  return {
+    sceneId: value.sceneId,
+    sentenceOffset: value.sentenceOffset as number | null,
+    ...(value.pageIndex === undefined ? {} : { pageIndex: value.pageIndex as number | null }),
+    deviceType: value.deviceType,
+  };
+}
+
+function hasOnlyKeys(value: Record<string, unknown>, allowed: ReadonlySet<string>): boolean {
+  return Reflect.ownKeys(value).every((key) => typeof key === "string" && allowed.has(key));
+}
+
 function projectPathId(value: string): string { return parseProjectId(value); }
 
 function optionalSnapshot(query: URLSearchParams): { view: "remote" | "checkpoint"; pinned?: string } {
@@ -356,6 +382,7 @@ export function createServer(options: ApiServerOptions): Server {
   if (!configuredUsageDirectory.trim()) throw new Error("Model usage history requires a non-empty usage directory");
   const usageDirectory = resolve(configuredUsageDirectory);
   const jobHistory = new JobHistoryStore(usageDirectory);
+  const recentActivity = new RecentActivityStore(usageDirectory);
   const sessions = new Map<string, Session>();
   const requestControllers = new Set<AbortController>();
   const asyncDomainJobControllers = new Set<AbortController>();
@@ -1131,6 +1158,22 @@ export function createServer(options: ApiServerOptions): Server {
     if (projectRoot) {
       const projectId = projectPathId(projectRoot[1]!);
       const suffix = projectRoot[2] ?? "";
+      if (suffix === "recent-activity" && (method === "GET" || method === "PUT")) {
+        if (!isCookie) { fail(response, 403, "AUTHOR_SESSION_REQUIRED", "Recent activity requires an owner session"); return; }
+        const observation = await options.store.observe(projectId);
+        try {
+          if (method === "GET") {
+            sendJson(response, 200, { items: await recentActivity.list("owner", observation.snapshot.repository) });
+            return;
+          }
+          const input = parseRecentActivityInput(await readJson(request, parsedBody));
+          sendJson(response, 200, { items: await recentActivity.upsert("owner", observation.snapshot.repository, input) });
+          return;
+        } catch (error) {
+          if (isHttpFailure(error)) throw error;
+          throw httpFailure(503, "RECENT_ACTIVITY_UNAVAILABLE", "Recent activity history is temporarily unavailable");
+        }
+      }
       if (suffix === "" && method === "GET") {
         const project = (await options.store.listProjects()).find((candidate) => candidate.id === projectId);
         if (!project) throw httpFailure(404, "PROJECT_NOT_FOUND", "Project not found");

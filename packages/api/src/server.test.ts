@@ -12,6 +12,7 @@ import { CoreStore, type CoreStore as CoreStoreShape } from "@scriptorium/core";
 import { ModuleRuntime, type ModuleLoader, type ModuleRuntimeOptions } from "@scriptorium/module-runtime";
 import { HistoricalModelUsageError, HistoricalModelUsageStore } from "./historical-store.js";
 import { JobHistoryError, JobHistoryStore, type WorkerJobLifecycle } from "./job-history-store.js";
+import "./recent-activity-store.test.js";
 import { createServer, importLegacyJobHistory, type ApiServerOptions } from "./server.js";
 
 const ACCESS_TOKEN = "test-access-token-which-is-longer-than-32-characters";
@@ -1781,5 +1782,63 @@ describe("Scriptorium HTTP boundary", () => {
     assert.equal(Buffer.from(attachment.content ?? "", "base64").toString("hex"), raw.toString("hex"));
     assert.ok(writes.some((write) => write.path.endsWith(".md") && write.content?.includes("![")));
     assert.equal(fixture.approvals[0]?.authorScope, "owner");
+  });
+
+  it("stores project recent activity for cookie owners across API restarts and rejects bearer or cross-origin writes", async (t) => {
+    const root = await mkdtemp(resolve(tmpdir(), "scriptorium-api-recent-activity-"));
+    const staticDir = resolve(root, "static");
+    const usageDirectory = resolve(root, "host-history");
+    await mkdir(staticDir);
+    tempDirs.push(root);
+    const fixture = makeSnapshotStore();
+    let apiServer = await startCustomApi(fixture.store, staticDir, { usageDirectory });
+    t.after(() => apiServer.close().catch(() => undefined));
+    let owner = await login(apiServer.base);
+    const ownerJson = { Cookie: owner.cookie, Origin: apiServer.base, "Content-Type": "application/json" };
+
+    const empty = await fetch(`${apiServer.base}/api/projects/project-1/recent-activity`, { headers: { Cookie: owner.cookie } });
+    assert.deepEqual(await empty.json(), { items: [] });
+    const desktopFirst = await fetch(`${apiServer.base}/api/projects/project-1/recent-activity`, {
+      method: "PUT", headers: ownerJson,
+      body: JSON.stringify({ sceneId: "scene-one", sentenceOffset: 3, pageIndex: 7, deviceType: "desktop" }),
+    });
+    assert.equal(desktopFirst.status, 200);
+    const desktopFirstBody = await desktopFirst.json() as { items: Array<{ pageIndex: number | null; deviceType: string }> };
+    assert.equal(desktopFirstBody.items[0]?.pageIndex, 7);
+
+    const desktopUpdate = await fetch(`${apiServer.base}/api/projects/project-1/recent-activity`, {
+      method: "PUT", headers: ownerJson,
+      body: JSON.stringify({ sceneId: "scene-two", sentenceOffset: null, deviceType: "desktop" }),
+    });
+    const desktopUpdateBody = await desktopUpdate.json() as { items: Array<{ pageIndex: number | null; deviceType: string }> };
+    assert.equal(desktopUpdateBody.items.find((item) => item.deviceType === "desktop")?.pageIndex, 7);
+    const mobileUpdate = await fetch(`${apiServer.base}/api/projects/project-1/recent-activity`, {
+      method: "PUT", headers: ownerJson,
+      body: JSON.stringify({ sceneId: "scene-mobile", sentenceOffset: 1, pageIndex: null, deviceType: "mobile" }),
+    });
+    assert.equal((await mobileUpdate.json() as { items: unknown[] }).items.length, 2);
+
+    const bearerRead = await fetch(`${apiServer.base}/api/projects/project-1/recent-activity`, { headers: { Authorization: `Bearer ${ACCESS_TOKEN}` } });
+    assert.equal(bearerRead.status, 403, "recent activity is owner-cookie state, not bearer project data");
+    const crossOriginWrite = await fetch(`${apiServer.base}/api/projects/project-1/recent-activity`, {
+      method: "PUT", headers: { ...ownerJson, Origin: "https://foreign.example" },
+      body: JSON.stringify({ sceneId: "foreign", sentenceOffset: 0, deviceType: "mobile" }),
+    });
+    assert.equal(crossOriginWrite.status, 403);
+    const malformed = await fetch(`${apiServer.base}/api/projects/project-1/recent-activity`, {
+      method: "PUT", headers: ownerJson,
+      body: JSON.stringify({ sceneId: "scene-one", sentenceOffset: 0.5, deviceType: "desktop" }),
+    });
+    assert.equal(malformed.status, 400);
+
+    await apiServer.close();
+    apiServer = await startCustomApi(fixture.store, staticDir, { usageDirectory });
+    owner = await login(apiServer.base);
+    const afterRestart = await fetch(`${apiServer.base}/api/projects/project-1/recent-activity`, { headers: { Cookie: owner.cookie } });
+    const restored = await afterRestart.json() as { items: Array<{ sceneId: string; pageIndex: number | null; deviceType: string }> };
+    assert.equal(restored.items.length, 2);
+    assert.equal(restored.items.find((item) => item.deviceType === "desktop")?.sceneId, "scene-two");
+    assert.equal(restored.items.find((item) => item.deviceType === "desktop")?.pageIndex, 7);
+    assert.equal(restored.items.find((item) => item.deviceType === "mobile")?.sceneId, "scene-mobile");
   });
 });
