@@ -232,6 +232,7 @@ test("full OCI runs actual tokenizer, speaker, E5 and BGE lifecycle and survives
       "--env", "SCRIPTORIUM_DATA_DIR=/data",
       "--env", "SCRIPTORIUM_USAGE_DIR=/history",
       "--env", "SCRIPTORIUM_MODULE_CACHE_DIR=/data/module-cache",
+      "--env", "ARCADIA_TOKENIZER_BACKEND=auto",
       "--env", "HF_HUB_OFFLINE=1",
     ];
 
@@ -261,7 +262,7 @@ test("full OCI runs actual tokenizer, speaker, E5 and BGE lifecycle and survives
     assert.ok(lifecycle.resourceMeasurements.healthProbe.successfulRequests > 0);
     assert.equal(lifecycle.resourceMeasurements.healthProbe.failures, 0);
     const lifecyclePhases = new Map(lifecycle.phases.map((phase) => [phase.name, phase]));
-    for (const phase of ["actual-nlp-tokenizer-child", "actual-speaker-and-lindera-children", "overlapping-diagnostics-and-semantic-real-capability", "replacement-e5-bge-search"]) {
+    for (const phase of ["actual-nlp-tokenizer-child", "actual-nlp-token-counter-child", "actual-speaker-and-lindera-children", "overlapping-diagnostics-and-semantic-real-capability", "replacement-e5-bge-search"]) {
       assert.ok(lifecyclePhases.has(phase), "missing lifecycle resource phase " + phase);
       assert.ok(lifecyclePhases.get(phase).peakCompiled.compiledWorkerCount > 0, "no compiled child was measured during " + phase);
     }

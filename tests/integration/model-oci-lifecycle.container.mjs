@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { createHash } from "node:crypto";
-import { readFile, readlink, writeFile } from "node:fs/promises";
+import { mkdir, readFile, readlink, symlink, writeFile } from "node:fs/promises";
 import { readFileSync } from "node:fs";
 import { monitorEventLoopDelay, performance } from "node:perf_hooks";
 import { setTimeout as delay } from "node:timers/promises";
@@ -286,6 +286,9 @@ function createObservationGate(id, context, gate, events, valueIds) {
 }
 
 async function runLifecycle() {
+  await mkdir("/data/.arcadia", { recursive: true });
+  await symlink("/models", "/data/.arcadia/models", "dir");
+
   const [{ CoreStore }, { ModuleRuntime }, { start }, { MODEL_USAGE_CAPABILITY }, composition] = await Promise.all([
     import("/app/node_modules/.pnpm/node_modules/@scriptorium/core/dist/index.js"),
     import("/app/node_modules/.pnpm/node_modules/@scriptorium/module-runtime/dist/index.js"),
@@ -369,6 +372,44 @@ async function runLifecycle() {
     outcome.phases.push(await sampler.mark());
     assert.deepEqual(runtime.workerSupervisor.activeWorkerPids, [], "NLP tokenizer child must release after the actual API action");
     outcome.assertions.nlpEngine = { id: nlp.engine, version: nlp.engineVersion, tokens: nlp.analysis.tokens.length };
+
+    sampler.setPhase("actual-nlp-token-counter-child");
+    const exactTokenResult = await invoke("nlp.countTokens", {
+      texts: ["駅で別れた。", "A quiet station.", "星野は遺跡へ向かう。"],
+      modelId: MODEL_IDS.embedding.id,
+    });
+    const exactTokens = actionData(exactTokenResult, "nlp.countTokens exact E5");
+    assert.deepEqual(exactTokens.counts, [8, 6, 11], "the public API must return cached E5 AutoTokenizer counts");
+    assert.deepEqual(exactTokens.snapshot, exactTokenResult.snapshot);
+    assert.deepEqual(exactTokens.counter, {
+      modelId: MODEL_IDS.embedding.id,
+      exact: true,
+      engine: "huggingface-transformers",
+      engineVersion: "3.8.1",
+    });
+    assert.deepEqual(runtime.workerSupervisor.activeWorkerPids, [], "the exact token-counter child must release after its API lease");
+
+    const fallbackTokenResult = await invoke("nlp.countTokens", {
+      texts: ["駅abc", "abcdef", ""],
+      modelId: "scriptorium-p13/no-such-tokenizer",
+    });
+    const fallbackTokens = actionData(fallbackTokenResult, "nlp.countTokens unavailable fallback");
+    assert.deepEqual(fallbackTokens.counts, [2, 2, 0], "an unavailable local tokenizer must report the source approximation");
+    assert.deepEqual(fallbackTokens.snapshot, fallbackTokenResult.snapshot);
+    assert.deepEqual(fallbackTokens.counter, {
+      modelId: "approx",
+      exact: false,
+      engine: "source-approx",
+      engineVersion: "source-approx-v1",
+      requestedModelId: "scriptorium-p13/no-such-tokenizer",
+      fallbackReason: "tokenizer_unavailable",
+    });
+    assert.deepEqual(runtime.workerSupervisor.activeWorkerPids, [], "the approximate token-counter child must release after its API lease");
+    outcome.phases.push(await sampler.mark());
+    outcome.assertions.tokenCounter = {
+      exact: { counter: exactTokens.counter, counts: exactTokens.counts },
+      fallback: { counter: fallbackTokens.counter, counts: fallbackTokens.counts },
+    };
 
     runtime.enable("speaker");
     assert.equal(runtime.status("speaker").availability, "enabled-idle");
