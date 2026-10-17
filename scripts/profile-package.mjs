@@ -12,7 +12,7 @@ const modulePackagePrefix = '@scriptorium/module-';
 const knownModules = ['story', 'diagnostics', 'nlp', 'semantic', 'speaker', 'assistant', 'publishing', 'mcp'];
 
 function usage() {
-  console.error('Usage: node scripts/profile-package.mjs (--profile <core|full> | --modules-json <json-array>) --out <new-directory> [--prebuilt]');
+  console.error('Usage: node scripts/profile-package.mjs (--profile <core|full> | --modules-json <json-array>) --out <new-directory> [--prebuilt] [--prime-deploy-cache]');
   process.exit(2);
 }
 
@@ -66,6 +66,7 @@ function parseArgs(argv) {
   let profileName;
   let requestedModuleIds;
   let prebuilt = false;
+  let primeDeployCache = false;
   let outputDirectory;
   for (let index = 0; index < argv.length; index += 1) {
     if (argv[index] === '--profile' && argv[index + 1]) profileName = argv[++index];
@@ -75,6 +76,7 @@ function parseArgs(argv) {
     }
     else if (argv[index] === '--out' && argv[index + 1]) outputDirectory = path.resolve(argv[++index]);
     else if (argv[index] === '--prebuilt') prebuilt = true;
+    else if (argv[index] === '--prime-deploy-cache') primeDeployCache = true;
     else if (argv[index] === '--help') usage();
     else usage();
   }
@@ -83,8 +85,9 @@ function parseArgs(argv) {
       (requestedModuleIds !== undefined && (!Array.isArray(requestedModuleIds) ||
         requestedModuleIds.some((id) => typeof id !== 'string' || !knownModules.includes(id)) ||
         new Set(requestedModuleIds).size !== requestedModuleIds.length)) ||
-      (prebuilt && requestedModuleIds === undefined)) usage();
-  return { profileName, requestedModuleIds, prebuilt, outputDirectory };
+      (prebuilt && requestedModuleIds === undefined) ||
+      (primeDeployCache && (!prebuilt || requestedModuleIds === undefined))) usage();
+  return { profileName, requestedModuleIds, prebuilt, primeDeployCache, outputDirectory };
 }
 
 async function readJson(filename) {
@@ -150,7 +153,7 @@ async function ensureNewOutputDirectory(directory) {
 }
 
 async function main() {
-  const { profileName, requestedModuleIds, prebuilt, outputDirectory } = parseArgs(process.argv.slice(2));
+  const { profileName, requestedModuleIds, prebuilt, primeDeployCache, outputDirectory } = parseArgs(process.argv.slice(2));
   const hostedComposition = requestedModuleIds !== undefined;
   const sourceProfile = hostedComposition ? 'full' : profileName;
   const profile = await readJson(path.join(root, 'profiles', `${sourceProfile}.json`));
@@ -189,7 +192,7 @@ async function main() {
     }
 
     deployStarted = true;
-    run('pnpm', ['--filter', packageManifest.name, 'deploy', '--prod', ...(hostedComposition ? ['--offline'] : []), '--frozen-lockfile', outputDirectory]);
+    run('pnpm', ['--filter', packageManifest.name, 'deploy', '--prod', ...(hostedComposition && !primeDeployCache ? ['--offline'] : []), '--frozen-lockfile', outputDirectory]);
     await cp(path.join(root, 'profiles/launch.mjs'), path.join(outputDirectory, 'launch.mjs'));
     await cp(path.join(root, 'app/dist'), path.join(outputDirectory, 'app/dist'), { recursive: true });
     if (hostedComposition) {
