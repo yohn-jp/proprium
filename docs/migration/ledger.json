@@ -5731,6 +5731,14 @@
       },
       "migrationStatus": "pending",
       "proofIds": [],
+      "dispositionEvidenceRefs": [
+        {
+          "id": "P00-R33-fixed-plan-exclusion",
+          "path": "docs/migration/FULL-MIGRATION-PLAN.md",
+          "locator": "R33",
+          "scope": "The fixed plan explicitly excludes the source test-only public stream demo endpoint from production migration."
+        }
+      ],
       "sourceSymbols": {
         "registration": "registerLlmStreamDemoRoutes",
         "inlineHandlerLocators": [

@@ -94,10 +94,23 @@ check(endpointCount === 166 && ledger.registeredEndpointCount === 166, `ledger e
 
 const sourceFiles = new Set();
 const rows = [...(ledger.routeRegistrations ?? []), ...(ledger.nonRouterGroups ?? [])];
+const migrationStatuses = new Set(["pending", "verified", "excluded", "relocated"]);
 for (const row of rows) {
   collectSourceFile(row, sourceFiles);
-  check(row.migrationStatus === "pending", `${row.id} must keep migrationStatus pending`);
-  check(Array.isArray(row.proofIds) && row.proofIds.length === 0, `${row.id} must not claim completed proof IDs`);
+  check(migrationStatuses.has(row.migrationStatus), `${row.id} has an unsupported migrationStatus: ${String(row.migrationStatus)}`);
+  check(Array.isArray(row.proofIds), `${row.id} proofIds must be an array`);
+  if (row.migrationStatus === "pending") {
+    check(row.proofIds?.length === 0, `${row.id} must keep proofIds empty while migrationStatus is pending`);
+  } else {
+    check(row.proofIds?.length > 0, `${row.id} terminal migration status requires proofIds`);
+    if (row.migrationStatus === "excluded" || row.migrationStatus === "relocated") {
+      check(typeof row.closureRationale === "string" && row.closureRationale.trim().length > 0,
+        `${row.id} ${row.migrationStatus} disposition requires closureRationale`);
+      check((row.dispositionEvidenceRefs ?? []).some((ref) => ref.path === "docs/migration/FULL-MIGRATION-PLAN.md"
+        && typeof ref.locator === "string" && ref.locator.includes(row.id)),
+      `${row.id} ${row.migrationStatus} disposition requires a reference to its canonical plan row`);
+    }
+  }
 }
 for (const value of ledger.storageModel?.indexPathSplit?.evidence ?? []) sourceFiles.add(value.split(":")[0]);
 for (const table of Object.values(ledger.storageModel?.indexPathSplit?.tableClassifications ?? {}).flat()) {
@@ -110,8 +123,15 @@ if (sourceRoot) {
   for (const file of sourceFiles) await exists(sourceRoot, file, "Source evidence");
 }
 
-const proofIds = new Set();
+const evidenceRefIds = new Set();
+const closureEvidenceByRow = new Map(rows.map((row) => [row.id, new Map()]));
 let sliceCount = 0;
+function registerEvidenceId(row, ref, label) {
+  check(typeof ref.id === "string" && ref.id.length > 0, `${label} needs an ID`);
+  if (evidenceRefIds.has(ref.id)) failures.push(`Duplicate evidence reference ID: ${ref.id}`);
+  evidenceRefIds.add(ref.id);
+  if (typeof ref.id === "string") closureEvidenceByRow.get(row.id)?.set(ref.id, ref);
+}
 for (const row of rows) {
   for (const slice of row.targetImplementationSlices ?? []) {
     sliceCount += 1;
@@ -119,11 +139,11 @@ for (const row of rows) {
     check(slice.status === "implementation-present; integration-acceptance-pending", `${row.id}/${slice.owner} must remain integration-acceptance-pending`);
     for (const target of [...(slice.targetPaths ?? []), ...(slice.uiSurfaces ?? [])]) await exists(root, target, `${row.id}/${slice.owner} target`);
     for (const proof of slice.proofRefs ?? []) {
-      check(typeof proof.id === "string" && proof.id.length > 0, `${row.id}/${slice.owner} proof reference needs an ID`);
-      if (proofIds.has(proof.id)) failures.push(`Duplicate proof reference ID: ${proof.id}`);
-      proofIds.add(proof.id);
+      registerEvidenceId(row, proof, `${row.id}/${slice.owner} proof reference`);
       check(typeof proof.testName === "string" && proof.testName.length > 0, `${proof.id} needs an exact test name`);
       check(typeof proof.scope === "string" && proof.scope.length > 0, `${proof.id} needs an acceptance scope`);
+      if (proof.result !== undefined) check(proof.result === "passed", `${proof.id} result must be passed when specified`);
+      if (proof.evidenceKind !== undefined) check(["focused", "composition"].includes(proof.evidenceKind), `${proof.id} has an unsupported evidenceKind`);
       await exists(root, proof.path, proof.id);
       if (proof.jsonPointer) {
         try {
@@ -135,22 +155,81 @@ for (const row of rows) {
       }
     }
     for (const proof of slice.runtimeEvidenceRefs ?? []) {
-      check(typeof proof.id === "string" && proof.id.length > 0, `${row.id}/${slice.owner} runtime evidence needs an ID`);
-      if (proofIds.has(proof.id)) failures.push(`Duplicate proof reference ID: ${proof.id}`);
-      proofIds.add(proof.id);
+      registerEvidenceId(row, proof, `${row.id}/${slice.owner} runtime evidence`);
       check(typeof proof.scope === "string" && proof.scope.length > 0, `${proof.id} needs a runtime-evidence scope`);
       check(typeof proof.locator === "string" && proof.locator.length > 0, `${proof.id} needs a locator`);
+      if (proof.result !== undefined) check(proof.result === "passed", `${proof.id} result must be passed when specified`);
+      if (proof.evidenceKind !== undefined) check(["focused", "composition"].includes(proof.evidenceKind), `${proof.id} has an unsupported evidenceKind`);
       await exists(root, proof.path, proof.id);
     }
     for (const finding of slice.acceptanceFindings ?? []) {
-      check(typeof finding.id === "string" && finding.id.length > 0, `${row.id}/${slice.owner} acceptance finding needs an ID`);
-      if (proofIds.has(finding.id)) failures.push(`Duplicate evidence reference ID: ${finding.id}`);
-      proofIds.add(finding.id);
+      registerEvidenceId(row, finding, `${row.id}/${slice.owner} acceptance finding`);
       check(typeof finding.testName === "string" && finding.testName.length > 0, `${finding.id} needs an exact test name`);
-      check(finding.result === "failed-at-current-ledger-head", `${finding.id} must preserve its observed failing result`);
+      check(["failed-at-current-ledger-head", "resolved"].includes(finding.result), `${finding.id} must preserve its failure or record a resolved state`);
       check(typeof finding.failure === "string" && finding.failure.length > 0, `${finding.id} needs the observed failure`);
       check(typeof finding.observedScope === "string" && finding.observedScope.length > 0, `${finding.id} needs the observed test scope`);
+      if (finding.result === "resolved") {
+        check(typeof finding.resolutionRationale === "string" && finding.resolutionRationale.trim().length > 0,
+          `${finding.id} resolved finding needs resolutionRationale`);
+        check(Array.isArray(finding.resolutionProofIds) && finding.resolutionProofIds.length > 0,
+          `${finding.id} resolved finding needs resolutionProofIds`);
+      }
       await exists(root, finding.path, finding.id);
+    }
+  }
+  for (const proof of row.dispositionEvidenceRefs ?? []) {
+    registerEvidenceId(row, proof, `${row.id} disposition evidence`);
+    check(typeof proof.scope === "string" && proof.scope.trim().length > 0, `${proof.id} needs a disposition-evidence scope`);
+    check(typeof proof.locator === "string" && proof.locator.trim().length > 0, `${proof.id} needs a disposition-evidence locator`);
+    await exists(root, proof.path, proof.id);
+    if (proof.jsonPointer) {
+      try {
+        const evidence = JSON.parse(await readFile(path.resolve(root, proof.path), "utf8"));
+        check(jsonPointerValue(evidence, proof.jsonPointer) !== undefined, `${proof.id} JSON pointer does not resolve: ${proof.jsonPointer}`);
+      } catch (error) {
+        failures.push(`${proof.id} JSON pointer failed: ${error instanceof Error ? error.message : String(error)}`);
+      }
+    }
+  }
+  const closureIds = row.proofIds ?? [];
+  check(new Set(closureIds).size === closureIds.length, `${row.id} proofIds must not contain duplicates`);
+  const rowEvidence = closureEvidenceByRow.get(row.id);
+  let hasCompositionProof = false;
+  for (const id of closureIds) {
+    const proof = rowEvidence?.get(id);
+    check(proof !== undefined, `${row.id} proofId does not resolve to row-local evidence: ${String(id)}`);
+    if (!proof) continue;
+    const isDispositionProof = (row.dispositionEvidenceRefs ?? []).some((ref) => ref.id === id);
+    if (row.migrationStatus === "excluded") {
+      check(isDispositionProof,
+        `${row.id}/${id} excluded proofId must resolve to explicit disposition evidence`);
+    } else if (row.migrationStatus === "relocated" && isDispositionProof) {
+      // Canonical-plan references explain the relocation; product proof remains separately required below.
+    } else {
+      check(proof.result === "passed", `${row.id}/${id} must identify evidence explicitly marked result passed`);
+      if (proof.evidenceKind === "composition") hasCompositionProof = true;
+    }
+  }
+  if (row.migrationStatus === "verified" || row.migrationStatus === "relocated") {
+    check(hasCompositionProof, `${row.id} requires at least one passed row-local composition proof`);
+  }
+  if (row.migrationStatus === "relocated") {
+    check(closureIds.some((id) => (row.dispositionEvidenceRefs ?? []).some((ref) => ref.id === id
+      && ref.path === "docs/migration/FULL-MIGRATION-PLAN.md")),
+    `${row.id} relocation proofIds must include its canonical plan disposition evidence`);
+  }
+  for (const slice of row.targetImplementationSlices ?? []) {
+    for (const finding of slice.acceptanceFindings ?? []) {
+      if (finding.result !== "resolved") continue;
+      const resolutionIds = finding.resolutionProofIds ?? [];
+      check(new Set(resolutionIds).size === resolutionIds.length, `${finding.id} resolutionProofIds must not contain duplicates`);
+      for (const id of resolutionIds) {
+        const proof = rowEvidence?.get(id);
+        check(proof !== undefined, `${finding.id} resolution proof does not resolve to row-local evidence: ${String(id)}`);
+        if (proof) {
+          check(proof.result === "passed", `${finding.id}/${id} resolution proof must be marked passed`);
+        }
+      }
     }
   }
 }
@@ -159,5 +238,5 @@ if (failures.length) {
   for (const failure of failures) console.error(`FAIL ${failure}`);
   process.exitCode = 1;
 } else {
-  console.log(`Verified ${ledger.routeRegistrationCount} registrations, ${endpointCount} handlers, ${ledger.nonRouterGroupCount} non-router groups, ${sourceFiles.size} pinned source files, ${sliceCount} implementation slices and ${proofIds.size} unique evidence references.`);
+  console.log(`Verified ${ledger.routeRegistrationCount} registrations, ${endpointCount} handlers, ${ledger.nonRouterGroupCount} non-router groups, ${sourceFiles.size} pinned source files, ${sliceCount} implementation slices and ${evidenceRefIds.size} unique evidence references.`);
 }
