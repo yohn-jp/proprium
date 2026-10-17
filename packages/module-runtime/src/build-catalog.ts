@@ -58,6 +58,7 @@ export type ResolvedBuildCatalogSelection = {
 const DIGEST = /^sha256:[a-f0-9]{64}$/u;
 const REVISION = /^[a-f0-9]{40}$/u;
 const CONTRACT_RANGE = /^\^1(?:\.0(?:\.0)?)?$/u;
+const RESOURCE_ID = /^[a-z][a-z0-9-]{0,63}$/u;
 
 function fail(message: string): never {
   throw new ModuleRuntimeError("invalid_build_catalog", message);
@@ -65,6 +66,10 @@ function fail(message: string): never {
 
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null && !Array.isArray(value);
+}
+
+function isResourceId(value: unknown): value is string {
+  return typeof value === "string" && RESOURCE_ID.test(value);
 }
 
 function hasExactKeys(value: Record<string, unknown>, keys: readonly string[]): boolean {
@@ -167,7 +172,8 @@ export function resolveBuildCatalogSelection(
         !DIGEST.test(module.artifactDigest) || !Array.isArray(module.requires) ||
         !Array.isArray(module.conflicts) || !Array.isArray(module.sharedResourceGroupIds) ||
         module.requires.length > 256 || module.conflicts.length > 256 ||
-        module.sharedResourceGroupIds.length > 256 || !isRecord(module.workerLimits) ||
+        module.sharedResourceGroupIds.length > 256 || module.sharedResourceGroupIds.some((id) => !isResourceId(id)) ||
+        !isRecord(module.workerLimits) ||
         Object.entries(module.workerLimits).some(([id, limit]) => !/^[a-z][a-zA-Z0-9]{0,63}$/u.test(id) ||
           !Number.isSafeInteger(limit) || (limit as number) < 0)) {
       fail("Build catalog contains an invalid module descriptor");
@@ -196,7 +202,7 @@ export function resolveBuildCatalogSelection(
 
   for (const group of catalog.sharedResourceGroups) {
     if (!isRecord(group) || !hasExactKeys(group, ["id", "resources"]) ||
-        typeof group.id !== "string" || !isModuleId(group.id)) {
+        !isResourceId(group.id)) {
       fail("Build catalog shared resource group is invalid");
     }
     resourceAmounts(group.resources, `shared group ${group.id}`);
@@ -206,7 +212,7 @@ export function resolveBuildCatalogSelection(
   }
   if (catalog.resourceProfiles.some((profile) => !isRecord(profile) ||
       !hasExactKeys(profile, ["id", "cpuMilli", "memoryMiB", "ephemeralStorageMiB"]) ||
-      typeof profile.id !== "string" || !isModuleId(profile.id)) ||
+      !isResourceId(profile.id)) ||
       new Set(catalog.resourceProfiles.map(({ id }) => id)).size !== catalog.resourceProfiles.length) {
     fail("Build catalog resource profiles are duplicated");
   }

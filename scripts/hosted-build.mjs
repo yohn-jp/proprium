@@ -16,6 +16,32 @@ const modulePrefix = '@scriptorium/module-';
 const sha256Pattern = /^sha256:[a-f0-9]{64}$/u;
 const revisionPattern = /^[a-f0-9]{40}$/u;
 const zeroResources = Object.freeze({ cpuMilli: 0, memoryMiB: 0, ephemeralStorageMiB: 0 });
+// These are admission allocation tiers used by the owned Praetorium disposable
+// cluster configuration, not measured workload minima. Base allocation covers
+// the API and modules without worker processes; bounded workers and the local
+// semantic model pool are charged once through shared groups.
+const baseResources = Object.freeze({ cpuMilli: 250, memoryMiB: 256, ephemeralStorageMiB: 512 });
+const workerResourceGroup = Object.freeze({ id: 'worker-runtime', resources: Object.freeze({
+  cpuMilli: 1000, memoryMiB: 4096, ephemeralStorageMiB: 512,
+}) });
+const semanticResourceGroup = Object.freeze({ id: 'semantic-models', resources: Object.freeze({
+  cpuMilli: 1000, memoryMiB: 2048, ephemeralStorageMiB: 4096,
+}) });
+const resourceProfiles = Object.freeze([
+  Object.freeze({ id: 'small', cpuMilli: 500, memoryMiB: 512, ephemeralStorageMiB: 1024 }),
+  Object.freeze({ id: 'balanced', cpuMilli: 2000, memoryMiB: 4096, ephemeralStorageMiB: 8192 }),
+  Object.freeze({ id: 'large', cpuMilli: 4000, memoryMiB: 8192, ephemeralStorageMiB: 16384 }),
+]);
+// WorkerSupervisor applies these shared runtime-wide limits. The producer ABI
+// stores the limits on each worker module descriptor, so the same defaults are
+// repeated there as provenance; they are not per-module worker pools.
+const workerLimits = Object.freeze({
+  maxConcurrentJobs: 8,
+  maxQueuedJobs: 8,
+  maxWorkerServices: 8,
+  maxConcurrentServiceJobs: 1,
+  maxQueuedServiceJobs: 4,
+});
 const sourceRoots = ['app', 'packages', 'modules', 'profiles', 'scripts', 'buildkit'];
 const sourceFilesAtRoot = ['LICENSE', 'package.json', 'pnpm-workspace.yaml', 'tsconfig.base.json'];
 const recipeFiles = [
@@ -151,6 +177,20 @@ async function walkPackageDist(directory, relativeDirectory, output) {
   }
 }
 
+export function resourceDeclarationFor(manifest) {
+  const sharedResourceGroupIds = [];
+  if (manifest.workerEntry) sharedResourceGroupIds.push(workerResourceGroup.id);
+  if (manifest.id === 'semantic' && manifest.workerEntry) sharedResourceGroupIds.push(semanticResourceGroup.id);
+  return {
+    // No module-specific memory estimate is present in shipped manifests; the
+    // API floor and shared worker/model allocations cover the closure without
+    // claiming a measured per-module minimum.
+    exclusiveResources: { ...zeroResources },
+    sharedResourceGroupIds,
+    workerLimits: manifest.workerEntry ? { ...workerLimits } : {},
+  };
+}
+
 export async function trustedModuleData() {
   const trusted = [];
   for (const id of moduleIds) {
@@ -165,9 +205,7 @@ export async function trustedModuleData() {
       artifactDigest: await packageArtifactDigest(packageDirectory),
       contractRange: '^1',
       conflicts: [],
-      exclusiveResources: { ...zeroResources },
-      sharedResourceGroupIds: [],
-      workerLimits: {},
+      ...resourceDeclarationFor(manifest),
     });
   }
   return trusted;
@@ -184,7 +222,7 @@ async function moduleRuntimeResolver() {
   }
 }
 
-function catalogFor(input, trustedModules) {
+export function catalogFor(input, trustedModules) {
   return {
     contractVersion: 'scriptorium-build/v1',
     producerRevision: input.producerRevision,
@@ -205,9 +243,12 @@ function catalogFor(input, trustedModules) {
       sharedResourceGroupIds: [...sharedResourceGroupIds].sort(),
       workerLimits,
     })).sort((left, right) => left.id < right.id ? -1 : left.id > right.id ? 1 : 0),
-    baseResources: { ...zeroResources },
-    sharedResourceGroups: [],
-    resourceProfiles: [],
+    baseResources: { ...baseResources },
+    sharedResourceGroups: [
+      { id: workerResourceGroup.id, resources: { ...workerResourceGroup.resources } },
+      { id: semanticResourceGroup.id, resources: { ...semanticResourceGroup.resources } },
+    ],
+    resourceProfiles: resourceProfiles.map((profile) => ({ ...profile })),
   };
 }
 

@@ -111,3 +111,28 @@ test("producer catalog rejects changed trusted identities and unknown ABI fields
   const withUnknownField = { ...catalog, unrecognized: true };
   assert.throws(() => resolveBuildCatalogSelection(withUnknownField, [], trustedModules), /identity or collections are invalid/);
 });
+
+test("producer catalog accepts resource IDs from the shared contract slug namespace", () => {
+  const modules = structuredClone(trustedModules);
+  modules[1]!.sharedResourceGroupIds = ["worker-runtime"];
+  const catalog = catalogFor(modules);
+  catalog.sharedResourceGroups = [{
+    id: "worker-runtime",
+    resources: { cpuMilli: 10, memoryMiB: 20, ephemeralStorageMiB: 30 },
+  }];
+  catalog.resourceProfiles = [{ id: "small", cpuMilli: 100, memoryMiB: 200, ephemeralStorageMiB: 300 }];
+  const selected = resolveBuildCatalogSelection(catalog, ["nlp"], modules);
+  assert.deepEqual(selected.resourceRequirements, { cpuMilli: 10, memoryMiB: 20, ephemeralStorageMiB: 30 });
+
+  const invalidGroup = structuredClone(catalog);
+  invalidGroup.sharedResourceGroups[0]!.id = "Worker-runtime";
+  assert.throws(() => resolveBuildCatalogSelection(invalidGroup, ["nlp"], modules), /shared resource group is invalid/u);
+
+  const invalidProfile = structuredClone(catalog);
+  invalidProfile.resourceProfiles[0]!.id = "small_profile";
+  assert.throws(() => resolveBuildCatalogSelection(invalidProfile, ["nlp"], modules), /resource profiles are duplicated/u);
+
+  const invalidReferenceModules = structuredClone(modules);
+  invalidReferenceModules[1]!.sharedResourceGroupIds = ["Worker-runtime"];
+  assert.throws(() => resolveBuildCatalogSelection(catalogFor(invalidReferenceModules), ["nlp"], invalidReferenceModules), /invalid module descriptor/u);
+});
