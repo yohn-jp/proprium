@@ -107,7 +107,7 @@ function MountedContribution({
           signal: controller.signal,
           readCurrentEditor,
           invoke: async (actionId, input) => {
-            const result = await api.action(projectId, actionId, input);
+            const result = await api.action(projectId, actionId, input, controller.signal);
             if (result.ok && result.proposals?.length) {
               if (!journal) throw new Error("Browser recovery storage is unavailable; the module proposal was not delivered to its panel.");
               for (const proposal of result.proposals) await journal.putProposal(snapshot.repository, authorScope, proposal);

@@ -1133,58 +1133,106 @@ test("IndexedDB quota failures remain visible and block checkpointing", async ({
 test("project details, reconstruction, and guarded removal preserve browser recovery", async ({ page }) => {
   test.skip(Boolean(process.env.SCRIPTORIUM_E2E_BASE_URL || process.env.SCRIPTORIUM_BASE_URL),
     "This lifecycle acceptance mutates only the local disposable Core data directory.");
+  test.skip(/^(?:https?|file):/u.test(repositoryUrl),
+    "The lifecycle acceptance needs a disposable local bare-repository fixture.");
   expect(authToken.length).toBeGreaterThanOrEqual(32);
   expect(repositoryUrl).not.toBe("");
-  await signIn(page);
-  await openFixtureProject(page);
+  const isolatedDirectory = await mkdtemp(join(tmpdir(), "scriptorium-e2e-lifecycle-"));
+  const isolatedRepository = join(isolatedDirectory, "origin.git");
+  execFileSync("git", ["clone", "--quiet", "--bare", repositoryUrl, isolatedRepository], { stdio: "ignore" });
+  const isolatedRepositoryUrl = pathToFileURL(isolatedRepository).href;
 
-  const projectsResponse = await page.request.get(new URL("/api/projects", page.url()).toString());
-  expect(projectsResponse.ok()).toBe(true);
-  const projects = await projectsResponse.json() as Array<{ id: string }>;
-  const projectId = projects[0]?.id;
-  expect(projectId).toBeTruthy();
-  const projectDetailsResponse = await page.request.get(new URL(`/api/projects/${encodeURIComponent(projectId!)}`, page.url()).toString());
-  expect(projectDetailsResponse.ok()).toBe(true);
-  const projectDetails = await projectDetailsResponse.json() as {
-    project: { url: string; branch: string };
-    observation: { snapshot: { repository: { provider: string; repositoryId: string; defaultBranch: string } } };
-  };
-  const facts = page.locator(".project-facts");
-  await expect(facts).toContainText(projectDetails.project.url);
-  await expect(facts).toContainText(projectDetails.observation.snapshot.repository.repositoryId);
-  await expect(facts).toContainText(projectDetails.observation.snapshot.repository.defaultBranch);
-
-  const recoverableText = "Lifecycle recovery remains in the browser journal.";
-  await page.locator(".cm-content").fill(recoverableText);
-  await expect.poll(async () => (await readJournal(page)).some((entry) => entry.text === recoverableText && entry.state === "draft")).toBe(true);
-  page.once("dialog", (dialog) => dialog.accept());
-  await page.getByRole("button", { name: "ローカルクローンを再構築" }).click();
-  await expect(page.locator(".topbar-status")).toContainText("に確認");
-  await expect.poll(async () => (await readJournal(page)).some((entry) => entry.text === recoverableText && entry.state === "draft")).toBe(true);
-
-  const stateDir = process.env.SCRIPTORIUM_E2E_STATE_DIR;
-  expect(stateDir).toBeTruthy();
-  const dirtyMarker = join(stateDir!, "store", "projects", projectId!, "e2e-dirty-guard.md");
-  await writeFile(dirtyMarker, "preserve local data\n", "utf8");
   try {
+    await signIn(page);
+    await page.getByLabel("GitHub リポジトリ URL").fill(isolatedRepositoryUrl);
+    await page.getByRole("button", { name: "リポジトリを登録" }).click();
+    await expect(page.getByRole("heading", { name: "Volume One" })).toBeVisible();
+    await page.getByRole("button", { name: "Chapter One: Scene One" }).click();
+    await expect(page.getByRole("heading", { name: "Scene One" })).toBeVisible();
+    await expect(page.locator(".cm-content")).toBeVisible();
+
+    const projectsResponse = await page.request.get(new URL("/api/projects", page.url()).toString());
+    expect(projectsResponse.ok()).toBe(true);
+    const projects = await projectsResponse.json() as Array<{ id: string; url: string }>;
+    const projectId = projects.find((project) => project.url === isolatedRepository)?.id;
+    expect(projectId).toBeTruthy();
+    const projectDetailsResponse = await page.request.get(new URL(`/api/projects/${encodeURIComponent(projectId!)}`, page.url()).toString());
+    expect(projectDetailsResponse.ok()).toBe(true);
+    const projectDetails = await projectDetailsResponse.json() as {
+      project: { url: string; branch: string };
+      observation: { snapshot: { repository: { provider: string; repositoryId: string; defaultBranch: string } } };
+    };
+    const facts = page.locator(".project-facts");
+    await expect(facts).toContainText(projectDetails.project.url);
+    await expect(facts).toContainText(projectDetails.observation.snapshot.repository.repositoryId);
+    await expect(facts).toContainText(projectDetails.observation.snapshot.repository.defaultBranch);
+
+    const recoverableText = "Lifecycle recovery remains in the browser journal.";
+    await page.locator(".cm-content").fill(recoverableText);
+    await expect.poll(async () => (await readJournal(page)).some((entry) => entry.text === recoverableText && entry.state === "draft")).toBe(true);
+    page.once("dialog", (dialog) => dialog.accept());
+    await page.getByRole("button", { name: "ローカルクローンを再構築" }).click();
+    await expect(page.locator(".topbar-status")).toContainText("に確認");
+    await expect.poll(async () => (await readJournal(page)).some((entry) => entry.text === recoverableText && entry.state === "draft")).toBe(true);
+
+    const stateDir = process.env.SCRIPTORIUM_E2E_STATE_DIR;
+    expect(stateDir).toBeTruthy();
+    const dirtyMarker = join(stateDir!, "store", "projects", projectId!, "e2e-dirty-guard.md");
+    await writeFile(dirtyMarker, "preserve local data\n", "utf8");
+    try {
+      page.once("dialog", (dialog) => dialog.accept());
+      await page.getByRole("button", { name: "作品の登録を解除" }).click();
+      const dirtyWorkspaceError = page.locator('[role="alert"][data-code="working_tree_dirty"]');
+      await expect(dirtyWorkspaceError).toBeVisible();
+      await expect(dirtyWorkspaceError).toContainText("working_tree_dirty");
+      await expect(page.getByRole("button", { name: projectLabel(isolatedRepository), exact: true })).toBeVisible();
+      expect((await readJournal(page)).some((entry) => entry.text === recoverableText && entry.state === "draft")).toBe(true);
+    } finally {
+      await rm(dirtyMarker, { force: true });
+    }
+
     page.once("dialog", (dialog) => dialog.accept());
     await page.getByRole("button", { name: "作品の登録を解除" }).click();
-    const dirtyWorkspaceError = page.locator('[role="alert"][data-code="working_tree_dirty"]');
-    await expect(dirtyWorkspaceError).toBeVisible();
-    await expect(dirtyWorkspaceError).toContainText("working_tree_dirty");
-    await expect(page.getByRole("button", { name: projectLabel(repositoryUrl), exact: true })).toBeVisible();
+    await expect(page.getByRole("button", { name: projectLabel(isolatedRepository), exact: true })).toHaveCount(0);
+    const recoveryPanel = page.locator(".sidebar .recovery-panel");
+    await expect(recoveryPanel.getByRole("heading", { name: "ブラウザーの回復記録" })).toBeVisible();
+    await expect(recoveryPanel.locator(".recovery-list")).toContainText("manuscript/vol-1/ch-1/scene-1.md");
     expect((await readJournal(page)).some((entry) => entry.text === recoverableText && entry.state === "draft")).toBe(true);
   } finally {
-    await rm(dirtyMarker, { force: true });
+    await rm(isolatedDirectory, { recursive: true, force: true });
   }
+});
 
-  page.once("dialog", (dialog) => dialog.accept());
-  await page.getByRole("button", { name: "作品の登録を解除" }).click();
-  await expect(page.getByRole("button", { name: projectLabel(repositoryUrl), exact: true })).toHaveCount(0);
-  const recoveryPanel = page.locator(".sidebar .recovery-panel");
-  await expect(recoveryPanel.getByRole("heading", { name: "ブラウザーの回復記録" })).toBeVisible();
-  await expect(recoveryPanel.locator(".recovery-list")).toContainText("manuscript/vol-1/ch-1/scene-1.md");
-  expect((await readJournal(page)).some((entry) => entry.text === recoverableText && entry.state === "draft")).toBe(true);
+test("unmounting a contribution aborts its in-flight action request", async ({ page }) => {
+  test.skip(process.env.SCRIPTORIUM_PROFILE !== "full", "The publishing contribution is selected by the full profile.");
+  expect(authToken.length).toBeGreaterThanOrEqual(32);
+  expect(repositoryUrl).not.toBe("");
+
+  let resolveObserved!: (request: import("@playwright/test").Request) => void;
+  const observed = new Promise<import("@playwright/test").Request>((resolve) => { resolveObserved = resolve; });
+  let releaseRoute!: () => void;
+  const routeGate = new Promise<void>((resolve) => { releaseRoute = resolve; });
+  await page.route("**/api/projects/*/actions/publishing.project.tree", async (route) => {
+    resolveObserved(route.request());
+    await routeGate;
+    try {
+      await route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify({ ok: false }) });
+    } catch { /* the browser should already have canceled this intercepted fetch */ }
+  });
+
+  try {
+    await signIn(page);
+    await openFixtureProject(page);
+    const actionRequest = await observed;
+    const failedRequest = page.waitForEvent("requestfailed", (request) => request === actionRequest);
+    await page.getByRole("button", { name: "ログアウト" }).click();
+    await expect(page.getByRole("heading", { name: "ログイン" })).toBeVisible();
+    const canceled = await failedRequest;
+    expect(canceled.failure()?.errorText).toMatch(/ERR_ABORTED/u);
+  } finally {
+    releaseRoute();
+    await page.unroute("**/api/projects/*/actions/publishing.project.tree");
+  }
 });
 
 test("a pending scratch image read is flushed to its captured scene before navigation", async ({ page }) => {
