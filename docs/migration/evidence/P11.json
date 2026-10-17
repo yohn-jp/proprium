@@ -40,9 +40,12 @@
       "8909213453eaa9bde2a5f682e6b72f17c0aa2196",
       "9825caf28805b71afca10d965a8f8ba26aec7b93",
       "b1d10f36001a143bd52ad2bb4eb3884d8c09055f",
-      "6781ef6fecc976d17cc2719514bfc090a2ab7e5f"
+      "6781ef6fecc976d17cc2719514bfc090a2ab7e5f",
+      "34fd9d1039140af50a133a73e2174be0221d4e33"
     ],
-    "testedHead": "6781ef6fecc976d17cc2719514bfc090a2ab7e5f"
+    "composedRootCommit": "f3ef4d34b5e603885ec2cbf204446b6becef3071",
+    "testedHead": "34fd9d1039140af50a133a73e2174be0221d4e33",
+    "testedTree": "41c3027768948392b8f9a43815c86fa680d636f3"
   },
   "implementedBehavior": [
     "Assistant is an optional module: importing, activating, and checking health with provider NONE does not initialize a provider or acquire model capabilities. External generation is disabled until the project feature-consent action explicitly enables it; credentials remain environment/host configuration.",
@@ -114,6 +117,21 @@
         "endpoint": "http://127.0.0.1:18088/v1",
         "hosting": "local loopback llama.cpp CPU server"
       }
+    },
+    {
+      "id": "P11-COMPOSED-ROOT-CANDIDATE-THREE-GATES",
+      "kind": "composed root-tree MCP, preview, and Assistant provider acceptance",
+      "status": "passed",
+      "targetFiles": [
+        "tests/integration/mcp-acceptance.test.mjs",
+        "modules/assistant/src/actions.ts",
+        "modules/assistant/src/provider.ts",
+        "packages/api/src/server.ts",
+        "packages/core/src/store.ts"
+      ],
+      "command": "SCRIPTORIUM_MCP_ACCEPTANCE_MODULES=assistant,story,nlp,diagnostics,semantic,speaker,publishing,mcp SCRIPTORIUM_MCP_ACCEPTANCE_REWRITE_PROVIDER=qwen-local SCRIPTORIUM_ASSISTANT_REFERENCE_PROVIDER=qwen-local ARCADIA_LLM_PROVIDER=openai-compatible ARCADIA_LLM_MODEL=Qwen3-0.6B-Q4_K_M ARCADIA_LLM_BASE_URL=http://127.0.0.1:18088/v1 ARCADIA_LLM_API_KEY=local-only-placeholder node --test --test-name-pattern='spawned stdio and production HTTP MCP preserve Core review boundaries through publish and restart|Assistant continuation prompt preview runs as a host-owned compute action without provider usage|P11 local provider streams, records usage, proposes through Core review, publishes and reconstructs' tests/integration/mcp-acceptance.test.mjs",
+      "result": "Passed all 3 selected production integration tests in 57.6 seconds on exact merged leaf HEAD 34fd9d1039140af50a133a73e2174be0221d4e33, tree 41c3027768948392b8f9a43815c86fa680d636f3. The P08 test exercised real Qwen rewrite calls through both spawned stdio and SDK Streamable HTTP while preserving the no-proposal/no-write boundary; the production owner-action continuation preview passed; and the P11 owner-HTTP reference completed cancellation, QA schema-error handling, selected rewrite proposal, Core approval/checkpoint/publication, and Core reconstruction with durable usage history. Root `main` f3ef4d34b5e603885ec2cbf204446b6becef3071 has the same tree hash. `git diff main HEAD -- modules/assistant modules/story/src/index.ts modules/nlp/src/index.ts packages/api/src packages/core/src tests/integration/mcp-acceptance.test.mjs` was empty. The full raw test log is retained at `/tmp/scriptorium-p11-final-three-tests-34fd9d1.log`.",
+      "scope": "Exact root candidate tree, synthetic repository, bounded local loopback model calls. This scoped three-test rerun is not final campaign or OCI certification; root-owned full verification remains separate."
     }
   ],
   "compositionLimits": [
