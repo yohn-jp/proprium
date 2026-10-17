@@ -22,8 +22,30 @@ import { createSemanticMigrationProducer } from "@scriptorium/module-semantic/mi
 import { createSpeakerMigrationProducer } from "@scriptorium/module-speaker/migration";
 import { createAssistantMigrationProducer } from "@scriptorium/module-assistant/migration";
 import { createPublishingMigrationProducer } from "@scriptorium/module-publishing/migration";
+import { hashDialogueText } from "@scriptorium/module-speaker";
 
 const ALL_MODULES = ["story", "diagnostics", "nlp", "semantic", "speaker", "assistant", "publishing", "mcp"];
+const SPEAKER_OVERRIDE_SCENE_PATH = "plot/volumes/volume-1/chapters/chapter-1/scenes/sc-speaker-override-stable.yaml";
+const SPEAKER_OVERRIDE_MANUSCRIPT_PATH = "manuscript/v1/sc-speaker-override-stable.md";
+const SPEAKER_OVERRIDE_DIALOGUE = "『俺が行く。』";
+const SPEAKER_OVERRIDE_SCENE = [
+  "id: sc-speaker-override-stable",
+  "type: scene",
+  "name: Synthetic manual speaker override",
+  "volume: volume-1",
+  "chapter: chapter-1",
+  "appears: [char-hero]",
+  "speakerCount: 1",
+  `manuscript: ${SPEAKER_OVERRIDE_MANUSCRIPT_PATH}`,
+  "speakerOverrides:",
+  "  - sentenceIndex: 1",
+  `    textHash: ${hashDialogueText(SPEAKER_OVERRIDE_DIALOGUE)}`,
+  `    dialogueText: "${SPEAKER_OVERRIDE_DIALOGUE}"`,
+  "    speakerEntityId: char-hero",
+  "    source: direct",
+  "unknown-scene-field: retain exactly",
+  "",
+].join("\n");
 const FIXTURE_GIT_ENV = {
   ...process.env,
   GIT_CONFIG_GLOBAL: "/dev/null",
@@ -90,6 +112,19 @@ async function makeLegacyRepository(root) {
   await writeFile(seed, "meta/project.yaml", "id: legacy-project\ntitle: Synthetic Work\nunknown-project-field: keep\n");
   await writeFile(seed, "meta/scratch/idea-stable.md", "A synthetic published scratch note.\n");
   await writeFile(seed, "meta/scratch/files/idea-stable/diagram.bin", Buffer.from([7, 0, 249, 33]));
+  await writeFile(seed, SPEAKER_OVERRIDE_SCENE_PATH, [
+    "id: sc-speaker-override-stable",
+    "type: scene",
+    "name: Synthetic manual speaker override",
+    "volume: volume-1",
+    "chapter: chapter-1",
+    "appears: [char-hero]",
+    "speakerCount: 1",
+    `manuscript: ${SPEAKER_OVERRIDE_MANUSCRIPT_PATH}`,
+    "unknown-scene-field: retain exactly",
+    "",
+  ].join("\n"));
+  await writeFile(seed, SPEAKER_OVERRIDE_MANUSCRIPT_PATH, `星野は灯りを見た。${SPEAKER_OVERRIDE_DIALOGUE}\n`);
   await writeFile(seed, "story/scene.md", "published scene\n");
   await writeFile(seed, "notes/author-note.md", "Synthetic author note, retained exactly.\n");
   git(seed, "add", ".");
@@ -106,8 +141,9 @@ async function makeLegacyRepository(root) {
   await writeFile(sourceRoot, ".ssh/id_ed25519", "DO_NOT_EXPORT_SYNTHETIC_PRIVATE_KEY\n");
   git(sourceRoot, "add", ".npmrc", ".ssh/id_ed25519");
 
+  await writeFile(sourceRoot, SPEAKER_OVERRIDE_SCENE_PATH, SPEAKER_OVERRIDE_SCENE);
   await writeFile(sourceRoot, "notes/from-unpublished-commit.md", "A committed local note that has not reached the remote.\n");
-  git(sourceRoot, "add", "notes/from-unpublished-commit.md");
+  git(sourceRoot, "add", "notes/from-unpublished-commit.md", SPEAKER_OVERRIDE_SCENE_PATH);
   git(sourceRoot, "commit", "-m", "unpublished author work");
   await writeFile(sourceRoot, "story/scene.md", "staged author version\n");
   git(sourceRoot, "add", "story/scene.md");
@@ -392,6 +428,11 @@ test("composed legacy import preserves disabled data and reactivates after a ful
     assert.equal(disabledByPath.get("notes/story-clue.md")?.content,
       "This fictional note uses the word secret as part of its plot.\n",
       "credential filtering must not scan manuscript or note bodies");
+    assert.equal(disabledByPath.get(SPEAKER_OVERRIDE_SCENE_PATH)?.content, SPEAKER_OVERRIDE_SCENE,
+      "the pending local commit must carry exact canonical YAML bytes containing the stable manual Speaker override");
+    assert.ok(disabled.entries.some((entry) => entry.source === SPEAKER_OVERRIDE_SCENE_PATH &&
+      entry.target === SPEAKER_OVERRIDE_SCENE_PATH && entry.category === "provisional" && entry.disposition === "planned"),
+    "the existing pending-Git producer must expose the scene-level override as a reviewable operation");
     for (const target of [
       "meta/scriptorium/modules/speaker/legacy/files/meta/speaker-corrections.jsonl",
       "meta/scriptorium/modules/speaker/legacy/files/meta/speaker-model.json",
@@ -463,6 +504,8 @@ test("composed legacy import preserves disabled data and reactivates after a ful
 
     const disabledPublishedReader = await approveCheckpointPublish(core, project.id, disabled, "p12-disabled-legacy-preservation");
     await assertPublishedWrites(disabledPublishedReader, disabledWrites);
+    assert.equal((await disabledPublishedReader.read(SPEAKER_OVERRIDE_SCENE_PATH))?.content, SPEAKER_OVERRIDE_SCENE,
+      "the manual scene override must survive the first confirmed publication byte-for-byte");
 
     const usageDirectory = path.join(temporary, "host-history");
     const jobImport = await importLegacyJobHistory({
@@ -512,9 +555,13 @@ test("composed legacy import preserves disabled data and reactivates after a ful
     const restoredReader = await replacement.reader(restoredProject.id);
     const restoredIdentity = restoredReader.snapshot.repository;
     assert.equal(restoredIdentity.repositoryId, identity.repositoryId);
+    assert.equal((await restoredReader.read(SPEAKER_OVERRIDE_SCENE_PATH))?.content, SPEAKER_OVERRIDE_SCENE,
+      "the manual scene override must survive full Core data-root loss and a fresh clone");
 
     const enabled = await inspect(replacement, restoredProject.id, sourceRoot, workspaceRoot, registry, restoredReader, ALL_MODULES, restoredIdentity);
     assert.deepEqual(observedModuleSets.at(-1), ALL_MODULES.slice().sort(), "the second pass enables all eight installed modules");
+    assert.equal((await restoredReader.read(SPEAKER_OVERRIDE_SCENE_PATH))?.content, SPEAKER_OVERRIDE_SCENE,
+      "enabling modules must leave the canonical manual override unchanged");
     const enabledWrites = writesOf(enabled);
     const enabledByPath = new Map(enabledWrites.map((write) => [write.path, write]));
     for (const target of [
@@ -595,6 +642,8 @@ test("composed legacy import preserves disabled data and reactivates after a ful
 
     const enabledPublishedReader = await approveCheckpointPublish(replacement, restoredProject.id, enabled, "p12-module-reactivation");
     await assertPublishedWrites(enabledPublishedReader, enabledWrites);
+    assert.equal((await enabledPublishedReader.read(SPEAKER_OVERRIDE_SCENE_PATH))?.content, SPEAKER_OVERRIDE_SCENE,
+      "the manual scene override must remain exact after the reactivation publication");
     const secondDataDir = targetDataDir;
     await fs.rm(secondDataDir, { recursive: true, force: true });
     const finalCore = new CoreStore({ dataDir: secondDataDir, allowLocalRemotes: true });
@@ -602,6 +651,8 @@ test("composed legacy import preserves disabled data and reactivates after a ful
     const finalReader = await finalCore.reader(finalProject.id);
     await assertPublishedWrites(finalReader, disabledWrites);
     await assertPublishedWrites(finalReader, enabledWrites);
+    assert.equal((await finalReader.read(SPEAKER_OVERRIDE_SCENE_PATH))?.content, SPEAKER_OVERRIDE_SCENE,
+      "the manual scene override must survive the second complete Core data-root replacement");
     const allPaths = await finalReader.list("");
     assert.ok(allPaths.includes("meta/scriptorium/modules/story/state-proposals.jsonl"));
     assert.ok(allPaths.includes("meta/scriptorium/modules/story/zukan-suggestions.jsonl"));
