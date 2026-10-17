@@ -39,9 +39,10 @@
       "279cf774f5fa3e46ba9508ee7b914bd5ab56e190",
       "8909213453eaa9bde2a5f682e6b72f17c0aa2196",
       "9825caf28805b71afca10d965a8f8ba26aec7b93",
-      "b1d10f36001a143bd52ad2bb4eb3884d8c09055f"
+      "b1d10f36001a143bd52ad2bb4eb3884d8c09055f",
+      "6781ef6fecc976d17cc2719514bfc090a2ab7e5f"
     ],
-    "testedHead": "b1d10f36001a143bd52ad2bb4eb3884d8c09055f"
+    "testedHead": "6781ef6fecc976d17cc2719514bfc090a2ab7e5f"
   },
   "implementedBehavior": [
     "Assistant is an optional module: importing, activating, and checking health with provider NONE does not initialize a provider or acquire model capabilities. External generation is disabled until the project feature-consent action explicitly enables it; credentials remain environment/host configuration.",
@@ -105,7 +106,7 @@
       ],
       "testName": "P11 local provider streams, records usage, proposes through Core review, publishes and reconstructs",
       "command": "SCRIPTORIUM_ASSISTANT_REFERENCE_PROVIDER=qwen-local SCRIPTORIUM_MCP_ACCEPTANCE_MODULES=assistant,story,nlp,diagnostics,semantic,speaker,publishing,mcp ARCADIA_LLM_PROVIDER=openai-compatible ARCADIA_LLM_MODEL=Qwen3-0.6B-Q4_K_M ARCADIA_LLM_BASE_URL=http://127.0.0.1:18088/v1 ARCADIA_LLM_API_KEY=local-only-placeholder node --test --test-name-pattern='P11 local provider streams, records usage, proposes through Core review, publishes and reconstructs' tests/integration/mcp-acceptance.test.mjs",
-      "result": "Passed 1/1 in 21.1 seconds on exact testedHead b1d10f36001a143bd52ad2bb4eb3884d8c09055f. The production owner API/runtime streamed real local Qwen rewrite deltas, cancelled after a received delta, durably retained the aborted call, streamed a QA response and surfaced its actual citation-schema validation error (the 0.6B model emitted string citations where objects are required), then returned three real rewrite alternatives. No proposal or manuscript write occurred before choice. The author-selected candidate entered Core as a one-operation manuscript proposal with source revision reads; owner approval and checkpoint preceded publication. The test confirmed published bytes through a new CoreStore reconstruction and confirmed the host-owned usage event IDs survived that reload without retaining prompts or manuscript text. QA did not fabricate a schema-valid answer.",
+      "result": "Passed 1/1 in 19.3 seconds on exact testedHead 6781ef6fecc976d17cc2719514bfc090a2ab7e5f. The production owner API/runtime streamed real local Qwen rewrite deltas, cancelled after a received delta, durably retained the aborted call, streamed QA deltas and preserved a nonconforming citation result as a schema error, then returned three real rewrite alternatives. Repeated loopback runs exposed string citations and an unsupported citation kind; the assertion accepts only a nonempty array of recognized Zod issue objects with typed paths/messages or a recognized JSON syntax error, so arbitrary provider/network errors cannot satisfy it. No proposal or manuscript write occurred before choice. The author-selected candidate entered Core as a one-operation manuscript proposal with source revision reads; owner approval and checkpoint preceded publication. The test confirmed published bytes through a new CoreStore reconstruction and confirmed the host-owned usage event IDs survived that reload without retaining prompts or manuscript text. QA did not fabricate a schema-valid answer.",
       "scope": "Local loopback CPU model only, synthetic content, bounded calls and placeholder local key. This verifies configured provider/API/stream/cancellation/usage/Core wiring; it is not a model-quality evaluation or external-provider certification.",
       "modelIdentity": {
         "provider": "openai-compatible",
@@ -117,7 +118,7 @@
   ],
   "compositionLimits": [
     "This candidate evidence is scoped to Assistant unit/action tests, the Assistant browser contribution, one production owner-action preview, and one local-provider API/Core synthetic repository flow. The preview and browser tests do not substitute for the provider reference test.",
-    "The real QA stream produced a truthful schema error from the deliberately small local model. Source tool-loop and citation validation behavior is covered by the focused Assistant test; this acceptance does not claim generative QA answer quality.",
+    "The real QA stream produced a truthful schema error from the deliberately small local model. Source tool-loop and citation validation behavior is covered by the focused Assistant test; the provider acceptance allows only recognized JSON parse errors or structured Zod validation issues, and does not claim generative QA answer quality.",
     "This artifact does not certify final full-profile browser/API composition, P12 legacy import/reactivation/reclone composition, final root acceptance, or OCI lifecycle. Those are recorded and gated by the campaign owners."
   ]
 }
