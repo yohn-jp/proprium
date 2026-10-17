@@ -257,6 +257,18 @@ test("full OCI runs actual tokenizer, speaker, E5 and BGE lifecycle and survives
     assert.equal(lifecycle.assertions.noWorkerAtEnabledIdle, true);
     assert.equal(lifecycle.assertions.disableOneConsumerPreservesOther, true);
     assert.equal(lifecycle.assertions.lastLeaseStopsWorker, true);
+    assert.equal(lifecycle.assertions.diagnosticsCancellation.semanticJobActiveAtDisableRequest, true);
+    assert.equal(lifecycle.assertions.diagnosticsCancellation.rebuildCompletedAfterDisableRequest, true);
+    const sharedProviderUse = lifecycle.assertions.sharedProviderActualUse;
+    assert.ok(sharedProviderUse);
+    assert.equal(sharedProviderUse.diagnosticsModel.model, modelRefs.embedding.id);
+    assert.equal(sharedProviderUse.diagnosticsModel.modelVersion, modelRefs.embedding.revision);
+    assert.equal(sharedProviderUse.semanticModel.id, modelRefs.embedding.id);
+    assert.equal(sharedProviderUse.semanticModel.revision, modelRefs.embedding.revision);
+    assert.ok(sharedProviderUse.semanticResults > 0);
+    assert.ok(sharedProviderUse.calls.some((call) => call.module === "diagnostics" && call.method === "index"));
+    assert.ok(sharedProviderUse.calls.some((call) => call.module === "diagnostics" && call.method === "nearest"));
+    assert.ok(sharedProviderUse.calls.some((call) => call.module === "semantic" && call.method === "nearest"));
     assert.equal(lifecycle.assertions.derivedCacheDeletionAndRebuild.recovered, true);
     assert.equal(lifecycle.assertions.replacementSearch.reranker.revision, modelRefs.reranker.revision);
     assert.ok(lifecycle.resourceMeasurements.healthProbe.successfulRequests > 0);
@@ -268,6 +280,7 @@ test("full OCI runs actual tokenizer, speaker, E5 and BGE lifecycle and survives
     }
     assert.equal(lifecyclePhases.get("after-disable-before-replacement").last.compiledWorkerCount, 0);
     assert.ok(lifecyclePhases.get("replacement-e5-bge-search").peakSemantic.semanticWorkerCount > 0);
+    assert.equal(lifecyclePhases.get("shared-diagnostics-semantic-real-inference").peakSemantic.semanticWorkerCount, 1);
 
     const projectDirectory = join(dataDirectory, "projects", project.id);
     const preserved = {
