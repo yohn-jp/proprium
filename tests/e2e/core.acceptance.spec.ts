@@ -1142,6 +1142,7 @@ test("project details, reconstruction, and guarded removal preserve browser reco
   const isolatedWorktree = join(isolatedDirectory, "worktree");
   execFileSync("git", ["clone", "--quiet", repositoryUrl, isolatedWorktree], { stdio: "ignore" });
   execFileSync("git", ["checkout", "--quiet", "--orphan", "lifecycle-clean"], { cwd: isolatedWorktree, stdio: "ignore" });
+  await rm(join(isolatedWorktree, "meta", "scriptorium"), { recursive: true, force: true });
   execFileSync("git", ["add", "--all"], { cwd: isolatedWorktree, stdio: "ignore" });
   execFileSync("git", [
     "-c", "user.name=Scriptorium E2E", "-c", "user.email=scriptorium-e2e@example.invalid",
