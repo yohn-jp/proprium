@@ -105,7 +105,15 @@ test("module activation and provider health stay idle without provider or capabi
     if (!result.ok) return;
     assert.deepEqual(result.data, { available: false, providerKind: "none", configuredModel: null, locality: "optional-external" });
     assert.equal(capabilityAcquisitions, 0);
-    assert.deepEqual(definition.http?.map((item) => item.path).sort(), ["qa/stream", "rewrite/stream"]);
+    assert.deepEqual(
+      definition.http?.map(({ path, effect }) => ({ path, effect })).sort((a, b) => a.path.localeCompare(b.path)),
+      [
+        { path: "qa/stream", effect: "compute" },
+        { path: "rewrite/stream", effect: "compute" },
+      ],
+      "model streams are compute-only; the separate rewrite proposal action retains author review",
+    );
+    assert.equal(getAction(definition.actions, "assistant.rewrite.propose").effect, "propose");
     await definition.dispose();
   } finally {
     if (previous === undefined) delete process.env.ARCADIA_LLM_PROVIDER;

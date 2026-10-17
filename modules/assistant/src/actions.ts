@@ -2446,7 +2446,7 @@ export function createRewriteStreamHttpContribution(moduleContext: ModuleContext
     path: "rewrite/stream",
     methods: ["POST"],
     access: "owner",
-    effect: "propose",
+    effect: "compute",
     async handle(request, context) {
       if (!request.headers.get("content-type")?.toLowerCase().includes("application/json")) return jsonFailure(415, "Content-Type must be application/json");
       let input: ReturnType<typeof parseRewriteInput>;
@@ -2496,7 +2496,7 @@ export function createAssistantQaStreamHttpContribution(moduleContext: ModuleCon
     path: "qa/stream",
     methods: ["POST"],
     access: "owner",
-    effect: "read",
+    effect: "compute",
     async handle(request, context) {
       if (!request.headers.get("content-type")?.toLowerCase().includes("application/json")) return jsonFailure(415, "Content-Type must be application/json");
       let input: ReturnType<typeof parseQaInput>;
