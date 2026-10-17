@@ -63,7 +63,7 @@ const recipeFiles = [
   'buildkit/frontend/go.sum',
 ];
 
-function canonicalJson(value) {
+export function canonicalJson(value) {
   if (value === null || typeof value !== 'object') return JSON.stringify(value);
   if (Array.isArray(value)) return `[${value.map(canonicalJson).join(',')}]`;
   const keys = Object.keys(value).sort();
@@ -132,7 +132,7 @@ async function fileDigest(relative) {
   return sha256(await readFile(path.join(root, relative)));
 }
 
-async function calculateBuildDigests() {
+export async function calculateBuildDigests() {
   const sourceDigest = await inventoryDigest(await sourceInventory());
   const recipeEntries = await Promise.all(recipeFiles.map(async (relative) => {
     const absolute = path.join(root, relative);
@@ -336,11 +336,18 @@ function buildInputForCatalog(args, digests) {
   return { contractVersion: 'scriptorium-build/v1', producerRevision, runtimeBaseDigest, buildKitDigest, ...digests };
 }
 
-async function assertCleanRevision(producerRevision) {
+export function assertCleanRevisionSnapshot({ head, status, producerRevision }) {
+  if (!revisionPattern.test(producerRevision ?? '') || head !== producerRevision) {
+    throw new Error('Catalog producerRevision must equal the checked out Git HEAD');
+  }
+  if (status !== '') throw new Error('Catalog must be generated from a clean producer checkout');
+}
+
+export async function assertCleanRevision(producerRevision) {
   const head = spawnSync('git', ['rev-parse', 'HEAD'], { cwd: root, encoding: 'utf8' });
-  if (head.status !== 0 || head.stdout.trim() !== producerRevision) throw new Error('Catalog producerRevision must equal the checked out Git HEAD');
   const status = spawnSync('git', ['status', '--porcelain'], { cwd: root, encoding: 'utf8' });
-  if (status.status !== 0 || status.stdout !== '') throw new Error('Catalog must be generated from a clean producer checkout');
+  if (head.status !== 0 || status.status !== 0) throw new Error('Could not inspect the producer Git checkout');
+  assertCleanRevisionSnapshot({ head: head.stdout.trim(), status: status.stdout, producerRevision });
 }
 
 async function writeCatalog(args) {
