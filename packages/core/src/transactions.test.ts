@@ -92,6 +92,41 @@ async function addRemoteScene(fixture: { seed: string }, chapterId: string, scen
   await git(fixture.seed, "push", "origin", "main");
 }
 
+test("registered repository identity is a defensive registry-only read after the checkout and remote disappear", async () => {
+  const fixture = await remoteFixture();
+  const dataDir = path.join(fixture.root, "state");
+  const store = new CoreStore({ dataDir, allowLocalRemotes: true });
+  try {
+    const project = await store.registerProject({ url: fixture.remote });
+    const registered = await store.registeredRepositoryIdentity(project.id);
+    const registryPath = path.join(dataDir, "projects.json");
+    const registryBefore = await fs.readFile(registryPath, "utf8");
+    const clonePath = path.join(dataDir, "projects", project.id);
+    await fs.rename(fixture.remote, `${fixture.remote}.offline`);
+    await fs.rm(clonePath, { recursive: true, force: true });
+
+    const detachedRead = await store.registeredRepositoryIdentity(project.id);
+    assert.deepEqual(detachedRead, registered);
+    assert.deepEqual(JSON.parse(await fs.readFile(registryPath, "utf8")), JSON.parse(registryBefore));
+    assert.equal(await fs.stat(clonePath).then(() => true, () => false), false);
+
+    detachedRead.repositoryId = "caller-mutation";
+    assert.deepEqual(await store.registeredRepositoryIdentity(project.id), registered);
+    await assert.rejects(store.registeredRepositoryIdentity("00000000-0000-4000-8000-000000000000"),
+      (error: unknown) => error instanceof CoreError && error.status === 404 && error.code === "project_not_found");
+
+    const legacyRegistry = JSON.parse(await fs.readFile(registryPath, "utf8")) as Array<Record<string, unknown>>;
+    const legacyRecord = legacyRegistry.find((item) => item.id === project.id);
+    assert.ok(legacyRecord);
+    delete legacyRecord.identity;
+    await fs.writeFile(registryPath, `${JSON.stringify(legacyRegistry, null, 2)}\n`);
+    await assert.rejects(store.registeredRepositoryIdentity(project.id),
+      (error: unknown) => error instanceof CoreError && error.status === 409 && error.code === "repository_identity_unavailable");
+  } finally {
+    await fs.rm(fixture.root, { recursive: true, force: true });
+  }
+});
+
 test("manuscript snapshots enumerate and read exact documents at a pinned reachable commit", async () => {
   const fixture = await remoteFixture();
   try {

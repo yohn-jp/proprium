@@ -3687,6 +3687,17 @@ export class CoreStore implements MutationCoordinator {
     return records.map(({ id, url, branch }) => ({ id, url, branch }));
   }
 
+  /** Returns the repository identity recorded at registration without contacting GitHub or opening the checkout. */
+  async registeredRepositoryIdentity(projectId: string): Promise<RepositoryIdentity> {
+    validateProjectId(projectId);
+    const record = (await this.readRegistry()).find((item) => item.id === projectId);
+    if (!record) throw coreError(404, "project_not_found", "Project not found");
+    if (!record.identity) {
+      throw coreError(409, "repository_identity_unavailable", "The registered repository identity is unavailable until the project is observed or reconstructed");
+    }
+    return structuredClone(record.identity);
+  }
+
   async registerProject(input: { url: string; branch?: string }): Promise<Project> {
     if (!input || typeof input.url !== "string" || !input.url.trim()) {
       throw coreError(400, "invalid_repository_url", "A repository URL is required");
