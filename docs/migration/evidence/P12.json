@@ -68,7 +68,7 @@
     }
   ],
   "compositionLimits": [
-    "This pass certifies only the fixed synthetic P12 migration composition. The enclosing `pnpm verify` later failed during the final full-profile OCI build with ENOSPC (exit 125); the final full OCI retry is tracked separately, so this artifact does not claim P13 acceptance.",
+    "This pass certifies the fixed synthetic P12 migration composition. The enclosing pnpm verify later exited 125 at the final full-profile OCI build because of execution-host ENOSPC. That unchanged final stage subsequently passed after capacity repair; docs/migration/evidence/P13.json records the separate composed P13 acceptance. This P12 proof does not by itself certify the other P13 gates.",
     "The P04 source classification proof is retained by reference and is not altered or represented as the API-owned archive import proof.",
     "The synthetic fixture does not certify private-project data migration."
   ]
