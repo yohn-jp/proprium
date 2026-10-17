@@ -322,6 +322,8 @@ test("continuation uses only a matching live editor draft after checking its rem
     [scenePath]: `id: sc-live-cont\ntype: scene\nchapter: ch-live-cont\norder: 1\ntitle: Station\nmanuscript: ${manuscriptPath}\n`,
     [manuscriptPath]: "保存済み本文の文。",
     "plot/volumes/vol-main/chapters/ch-live-cont/chapter-summary.yaml": "scope: chapter\nid: ch-live-cont\nsummaryLines:\n  - 承認済み要約。\n",
+    "plot/volumes/vol-main/chapters/ch-selected/chapter.yaml": "id: ch-selected\ntype: chapter\nname: Selected continuation context\nvolume: vol-main\norder: 2\n",
+    "plot/volumes/vol-main/chapters/ch-selected/chapter-summary.yaml": "scope: chapter\nid: ch-selected\nsummaryLines:\n  - 選択した章の承認済み要約。\n",
   };
   const draftSnapshot: SnapshotId = { repository, remoteCommit: "c".repeat(40), overlayCommit: "e".repeat(40) };
   const draftText = Array.from({ length: 13 }, (_, index) => `編集中${index + 1}。`).join("");
@@ -343,18 +345,20 @@ test("continuation uses only a matching live editor draft after checking its rem
     assert.equal(requestPrompt, "");
 
     const expectedRetrievalQuery = ["編集中11。", "編集中12。", "編集中13。"].join(" ");
-    const result = await continuation.invoke({ sceneId: "sc-live-cont", editorDraft, recentSentences: ["must be ignored"], k: 8 }, context({
+    const retrievalSearchInputs: unknown[] = [];
+    const continuationInput = { sceneId: "sc-live-cont", chapterId: "ch-selected", editorDraft, recentSentences: ["must be ignored"], k: 8 };
+    const makeContinuationContext = () => context({
       files,
       async invoke(actionId, input) {
         if (actionId === "nlp.features") return { ok: true, snapshot, data: { features: [{ id: "continuation-options", locality: "external", enabled: true }] } };
         if (actionId === "semantic.search") {
-          assert.deepEqual(input, { query: expectedRetrievalQuery, mode: "scene", limit: 5, rerank: false });
+          retrievalSearchInputs.push(input);
           return { ok: true, snapshot, data: { results: [{ sceneId: "sc-neighbor", entityId: "sc-neighbor", snippet: "別の場面の根拠。" }] } };
         }
         if (actionId === "nlp.countTokens") {
           const request = input as { texts: string[]; modelId?: string };
           assert.ok(request.texts.some((text) => text.includes("編集中13。")));
-          assert.ok(request.texts.some((text) => text.includes("承認済み要約。")));
+          assert.ok(request.texts.some((text) => text.includes("選択した章の承認済み要約。")));
           return { ok: true, snapshot, data: {
             snapshot, counts: request.texts.map(() => 1),
             counter: { modelId: "source-fallback", exact: false, engine: "source-approximation", engineVersion: "1", fallbackReason: "test tokenizer absent" },
@@ -362,11 +366,24 @@ test("continuation uses only a matching live editor draft after checking its rem
         }
         assert.fail(`unexpected action ${actionId}`);
       },
-    }));
+    });
+    const preview = await getAction(createAssistantActions(moduleContext(usageStore)), "assistant.continuation.preview").invoke(continuationInput, makeContinuationContext());
+    assert.equal(preview.ok, true);
+    if (!preview.ok) return;
+    assert.deepEqual(retrievalSearchInputs.at(-1), { query: expectedRetrievalQuery, mode: "scene", limit: 5, rerank: false });
+    const previewPrompt = (preview.data as Record<string, unknown>).prompt as string;
+    assert.match(previewPrompt, /別の場面の根拠。/u, "preview must include the same best-effort semantic context as generation");
+    assert.match(previewPrompt, /選択した章の承認済み要約。/u, "preview must include the explicitly selected fresh chapter summary");
+    assert.doesNotMatch(previewPrompt, /(?<!選択した章の)承認済み要約。/u, "an explicit chapter choice must not be replaced by the scene's chapter");
+
+    const result = await continuation.invoke(continuationInput, makeContinuationContext());
+    assert.deepEqual(retrievalSearchInputs.at(-1), { query: expectedRetrievalQuery, mode: "scene", limit: 5, rerank: false });
     assert.equal(result.ok, true);
     assert.match(requestPrompt, /編集中13。/u);
     assert.doesNotMatch(requestPrompt, /保存済み本文の文/u);
     assert.doesNotMatch(requestPrompt, /must be ignored/u);
+    const sentMessages = JSON.parse(requestPrompt) as Array<{ content?: unknown }>;
+    assert.ok(sentMessages.some((message) => message.content === previewPrompt), "the live continuation must send the exact prompt shown by its preview");
     if (!result.ok) return;
     const data = result.data as Record<string, unknown>;
     const citations = data.citations as Array<Record<string, unknown>>;
@@ -675,8 +692,16 @@ test("implemented prompt previews return their actual prompts locally without co
     const actions = createAssistantActions(moduleContext(undefined, () => { capabilityAcquisitions += 1; }));
     const actionContext = context({
       files,
-      async invoke(actionId) {
+      async invoke(actionId, payload) {
         if (actionId === "nlp.features") consentReads += 1;
+        if (actionId === "semantic.search") return { ok: true, snapshot, data: { results: [] } };
+        if (actionId === "nlp.countTokens") {
+          const request = payload as { texts: string[] };
+          return { ok: true, snapshot, data: {
+            snapshot, counts: request.texts.map(() => 1),
+            counter: { modelId: "test", exact: false, engine: "test", engineVersion: "1" },
+          } };
+        }
         return { ok: false, snapshot, error: { code: "not_available", message: "Preview must not need domain actions", retryable: false } };
       },
       onPropose() { proposals += 1; },
@@ -697,8 +722,14 @@ test("implemented prompt previews return their actual prompts locally without co
     ];
     for (const [id, input] of previews) {
       const result = await getAction(actions, id).invoke(input, actionContext);
-      assert.equal(result.ok, true, `${id} should be available with provider NONE`);
+      assert.equal(result.ok, true, `${id} should be available with provider NONE: ${JSON.stringify(result)}`);
       if (result.ok) assert.equal(typeof (result.data as Record<string, unknown>).prompt, "string", `${id} should return a populated prompt`);
+    }
+    const savedSceneContinuation = await getAction(actions, "assistant.continuation.preview").invoke({ sceneId: "sc-preview", chapterId: "ch-preview", k: 8 }, actionContext);
+    assert.equal(savedSceneContinuation.ok, true);
+    if (savedSceneContinuation.ok) {
+      const prompt = (savedSceneContinuation.data as Record<string, unknown>).prompt as string;
+      assert.match(prompt, /彼女は駅へ来た。/u, "saved-scene preview must use the same manuscript fallback as generation");
     }
     assert.equal(capabilityAcquisitions, 0);
     assert.equal(consentReads, 0);

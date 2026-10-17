@@ -1043,9 +1043,7 @@ function mountContinuation(root: HTMLElement, context: BrowserModuleContext, cle
       promptPreviewStatus.textContent = editorDraftRequiredMessage;
       return;
     }
-    const inputValue = editorDraft
-      ? { editorText: editorDraft.text }
-      : { recentSentences: recentSentences.value.split(/\r?\n/u).map((line) => line.trim()).filter(Boolean) };
+    const inputValue = requestInput(editorDraft);
     void runAction(context, "assistant.continuation.preview", inputValue, promptPreview, promptPreviewStatus, promptPreviewResult, "送信前のプロンプトを組み立てています…", "実際の送信内容をプレビューしています。");
   }, cleanup);
   root.append(intro, field("シーン ID（任意）", sceneId), loadEditorScene, useEditorDraftLabel, editorStatus, field("章 ID（任意）", chapterId), field("直近の文（各行を1文として扱います。編集本文を使う場合は直近12文を自動選択）", recentSentences), field("使用する直近文数 k（0〜40）", k), promptPreview, promptPreviewStatus, promptPreviewResult, run, status, result);

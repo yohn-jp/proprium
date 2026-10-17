@@ -316,9 +316,11 @@ try {
 
   await page.evaluate(() => window.assistantMount("assistant.continuation"));
   await page.getByLabel("シーン ID").fill("sc-1");
+  await page.getByLabel("章 ID（任意）").fill("ch-1");
+  await page.getByLabel("使用する直近文数 k（0〜40）").fill("5");
   await page.getByRole("button", { name: "続きを考えるプロンプトを確認" }).click();
   await page.getByText("実際の続きプロンプト", { exact: false }).waitFor();
-  assert.deepEqual(calls.find((call) => call.actionId === "assistant.continuation.preview").input, { editorText: editorDraft.text });
+  assert.deepEqual(calls.find((call) => call.actionId === "assistant.continuation.preview").input, { sceneId: "sc-1", chapterId: "ch-1", editorDraft, k: 5 });
   const continuationCallsBeforeLostEditor = calls.filter((call) => call.actionId === "assistant.continuation.preview").length;
   await page.evaluate(() => { window.assistantContext.readCurrentEditor = () => null; });
   await page.getByRole("button", { name: "続きを考えるプロンプトを確認" }).click();
@@ -327,7 +329,7 @@ try {
   await page.evaluate(() => { window.assistantContext.readCurrentEditor = () => structuredClone(window.assistantEditorDraft); });
   await page.getByRole("button", { name: "続きの候補を作る" }).click();
   await page.getByText("列車が動き出した。", { exact: true }).waitFor();
-  assert.deepEqual(calls.find((call) => call.actionId === "assistant.continuation").input, { sceneId: "sc-1", editorDraft, k: 8 });
+  assert.deepEqual(calls.find((call) => call.actionId === "assistant.continuation").input, { sceneId: "sc-1", chapterId: "ch-1", editorDraft, k: 5 });
 
   await page.evaluate(() => window.assistantMount("assistant.aspect-review"));
   await page.getByLabel("章 ID").fill("ch-1");

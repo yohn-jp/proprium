@@ -277,17 +277,9 @@ function parseQaPreviewInput(value: unknown): { sceneId?: string } {
   const sceneId = optionalString(input, "sceneId", 256);
   return sceneId ? { sceneId } : {};
 }
-function parseContinuationPreviewInput(value: unknown): { recentSentences: string[] } {
+function parseContinuationPreviewInput(value: unknown): ContinuationInput {
   const input = record(value);
-  if (input.editorText !== undefined) {
-    if (typeof input.editorText !== "string" || input.editorText.length > 256_000) throw new TypeError("editorText must be a string of at most 256000 characters");
-    return { recentSentences: splitIntoSentences(input.editorText).slice(-12) };
-  }
-  const recentSentences = input.recentSentences ?? [];
-  if (!Array.isArray(recentSentences) || recentSentences.length > 2_000 || recentSentences.some((sentence) => typeof sentence !== "string" || sentence.length > 8_000)) {
-    throw new TypeError("recentSentences must contain at most 2000 bounded strings");
-  }
-  return { recentSentences: (recentSentences as string[]).map((sentence) => sentence.trim()).filter(Boolean) };
+  return parseContinuationInput({ ...input, k: input.k ?? 8 });
 }
 function parseSynonymPreviewInput(value: unknown): SynonymRequest {
   const input = record(value);
@@ -1390,6 +1382,70 @@ async function buildContinuationPrompt(contextBlock: string) {
   };
 }
 
+async function prepareContinuationContext(context: ModuleActionContext, input: ContinuationInput) {
+  const story = await readStorySnapshot(context.reader, { includeManuscripts: true });
+  const source = input.sceneId ? sceneContext(story, input.sceneId) : undefined;
+  const sceneFile = source ? story.files.get(source.scene.filePath) : undefined;
+  if (source && input.editorDraft) assertEditorDraftBase(context, source, sceneFile?.revision ?? null, input.editorDraft);
+  const recentSentences = input.editorDraft
+    ? splitIntoSentences(input.editorDraft.text).map((sentence) => sentence.trim()).filter(Boolean).slice(-12)
+    : input.recentSentences?.length ? input.recentSentences : source ? splitIntoSentences(source.body).map((sentence) => sentence.trim()).filter(Boolean) : [];
+  let chapter = input.chapterId ? story.entities.get(input.chapterId) : undefined;
+  if (source) {
+    const sourceChapterId = typeof source.scene.raw.chapter === "string" ? source.scene.raw.chapter : story.links.find((link) => link.from === source.scene.id && link.kind === "chapter")?.to;
+    if (!input.chapterId && sourceChapterId) chapter = story.entities.get(sourceChapterId);
+  }
+  const chapterSummary = chapter?.type === "chapter" ? await readAssistantSummary(context, "chapter", chapter.id) : null;
+  let retrievalHits: ReturnType<typeof normalizeContinuationRetrievalHits> = [];
+  const retrievalQuery = buildContinuationRetrievalQuery(recentSentences);
+  if (retrievalQuery) {
+    try {
+      const result = await invokeData(context, "semantic.search", { query: retrievalQuery, mode: "scene", limit: 5, rerank: false });
+      retrievalHits = normalizeContinuationRetrievalHits((Array.isArray(result.results) ? result.results : []).map((value) => record(value) as { sceneId: string; entityId?: string | null; snippet?: string | null; text?: string | null }));
+    } catch { /* The pinned route treats retrieval as best-effort. */ }
+  }
+  const tokenTexts = new Set<string>(["\n\n", ...(chapterSummary ? [String(chapterSummary.summaryLines instanceof Array ? chapterSummary.summaryLines.join("\n").trim() : "")] : []), ...retrievalHits.map((hit) => hit.text)]);
+  for (let count = 1; count <= Math.min(input.k, recentSentences.length); count += 1) tokenTexts.add(recentSentences.slice(-count).join("\n"));
+  let tokenizerModelId: string | undefined;
+  try {
+    const preferences = (await readAssistantSettings(context.reader)).settings;
+    tokenizerModelId = resolveAssistantModel("continuation-options", preferences)?.model;
+  } catch { /* The provider settings remain optional and contain no credentials. */ }
+  const tokenTextsInOrder = [...tokenTexts];
+  const counted = await invokeData(context, "nlp.countTokens", { texts: tokenTextsInOrder, ...(tokenizerModelId ? { modelId: tokenizerModelId } : {}) });
+  const counts = counted.counts;
+  const counter = record(counted.counter, "NLP token counter identity");
+  if (!counted.snapshot || snapshotKey(counted.snapshot as SnapshotId) !== snapshotKey(context.reader.snapshot)) {
+    throw codeError("assistant_token_counter_snapshot_mismatch", "The NLP token counter returned a result for a different snapshot");
+  }
+  if (!Array.isArray(counts) || counts.length !== tokenTextsInOrder.length || counts.some((item) => !Number.isSafeInteger(item) || (item as number) < 0)) {
+    throw codeError("assistant_token_counter_invalid", "The NLP token counter returned invalid counts");
+  }
+  if (typeof counter.exact !== "boolean" || typeof counter.modelId !== "string" || !counter.modelId || typeof counter.engine !== "string" || typeof counter.engineVersion !== "string") {
+    throw codeError("assistant_token_counter_invalid", "The NLP token counter returned an invalid identity");
+  }
+  if (counter.exact && tokenizerModelId !== undefined && counter.modelId !== tokenizerModelId) {
+    throw codeError("assistant_token_counter_model_mismatch", "The NLP token counter measured a different model than the selected continuation model");
+  }
+  const tokenCounts = new Map(tokenTextsInOrder.map((text, index) => [text, counts[index] as number]));
+  const built = buildContinuationContext({
+    recentSentences, k: input.k, chapterSummary: chapterSummary ? { chapterId: String(chapterSummary.id), text: Array.isArray(chapterSummary.summaryLines) ? chapterSummary.summaryLines.join("\n") : "" } : null,
+    retrievalHits, tokenBudget: input.tokenBudget,
+    countTokens: (text) => {
+      const count = tokenCounts.get(text);
+      if (count === undefined) throw new Error("Token counter response did not include an assembled continuation section");
+      return count;
+    },
+  });
+  const prepared = await buildContinuationPrompt(built.text);
+  const sourceRevisions = revisionList([
+    ...(source ? [sceneFile!, source.manuscript] : []),
+    ...(chapter?.type === "chapter" && typeof chapterSummary?.path === "string" && typeof chapterSummary.revision === "string" ? [{ path: chapterSummary.path, revision: chapterSummary.revision, content: "" }] : []),
+    ...retrievalHits.flatMap((hit) => { const row = story.entities.get(hit.entityId); const file = row ? story.files.get(row.filePath) : undefined; return file ? [file] : []; }),
+  ]);
+  return { story, source, chapter, chapterSummary, recentSentences, built, prepared, sourceRevisions, counter };
+}
+
 async function buildQaSystemPrompt(manuscriptBody: string) {
   const template = await renderPromptTemplate("settingQa", { manuscriptBody: manuscriptBody || "（関連シーンは指定されていません）" });
   return {
@@ -1464,69 +1520,7 @@ async function runQa(
 }
 
 async function runContinuation(moduleContext: ModuleContext, context: ModuleActionContext, input: ContinuationInput) {
-  const story = await readStorySnapshot(context.reader, { includeManuscripts: true });
-  const source = input.sceneId ? sceneContext(story, input.sceneId) : undefined;
-  const sceneFile = source ? story.files.get(source.scene.filePath) : undefined;
-  if (source && input.editorDraft) assertEditorDraftBase(context, source, sceneFile?.revision ?? null, input.editorDraft);
-  const recentSentences = input.editorDraft
-    ? splitIntoSentences(input.editorDraft.text).slice(-12)
-    : input.recentSentences?.length ? input.recentSentences : source ? splitIntoSentences(source.body) : [];
-  let chapter = input.chapterId ? story.entities.get(input.chapterId) : undefined;
-  if (source) {
-    const sourceChapterId = typeof source.scene.raw.chapter === "string" ? source.scene.raw.chapter : story.links.find((link) => link.from === source.scene.id && link.kind === "chapter")?.to;
-    if (input.editorDraft && input.chapterId && sourceChapterId && input.chapterId !== sourceChapterId) {
-      throw codeError("assistant_editor_draft_stale", "The selected chapter does not match the current editor scene");
-    }
-    if (sourceChapterId) chapter = story.entities.get(sourceChapterId);
-  }
-  const chapterSummary = chapter?.type === "chapter" ? await readAssistantSummary(context, "chapter", chapter.id) : null;
-  let retrievalHits: ReturnType<typeof normalizeContinuationRetrievalHits> = [];
-  const retrievalQuery = buildContinuationRetrievalQuery(recentSentences);
-  if (retrievalQuery) {
-    try {
-      const result = await invokeData(context, "semantic.search", { query: retrievalQuery, mode: "scene", limit: 5, rerank: false });
-      retrievalHits = normalizeContinuationRetrievalHits((Array.isArray(result.results) ? result.results : []).map((value) => record(value) as { sceneId: string; entityId?: string | null; snippet?: string | null; text?: string | null }));
-    } catch { /* The pinned route treats retrieval as best-effort. */ }
-  }
-  const tokenTexts = new Set<string>(["\n\n", ...(chapterSummary ? [String(chapterSummary.summaryLines instanceof Array ? chapterSummary.summaryLines.join("\n").trim() : "")] : []), ...retrievalHits.map((hit) => hit.text)]);
-  for (let count = 1; count <= Math.min(input.k, recentSentences.length); count += 1) tokenTexts.add(recentSentences.slice(-count).join("\n"));
-  let tokenizerModelId: string | undefined;
-  try {
-    const preferences = (await readAssistantSettings(context.reader)).settings;
-    tokenizerModelId = resolveAssistantModel("continuation-options", preferences)?.model;
-  } catch { /* The provider settings remain optional and contain no credentials. */ }
-  const tokenTextsInOrder = [...tokenTexts];
-  const counted = await invokeData(context, "nlp.countTokens", { texts: tokenTextsInOrder, ...(tokenizerModelId ? { modelId: tokenizerModelId } : {}) });
-  const counts = counted.counts;
-  const counter = record(counted.counter, "NLP token counter identity");
-  if (!counted.snapshot || snapshotKey(counted.snapshot as SnapshotId) !== snapshotKey(context.reader.snapshot)) {
-    throw codeError("assistant_token_counter_snapshot_mismatch", "The NLP token counter returned a result for a different snapshot");
-  }
-  if (!Array.isArray(counts) || counts.length !== tokenTextsInOrder.length || counts.some((item) => !Number.isSafeInteger(item) || (item as number) < 0)) {
-    throw codeError("assistant_token_counter_invalid", "The NLP token counter returned invalid counts");
-  }
-  if (typeof counter.exact !== "boolean" || typeof counter.modelId !== "string" || !counter.modelId || typeof counter.engine !== "string" || typeof counter.engineVersion !== "string") {
-    throw codeError("assistant_token_counter_invalid", "The NLP token counter returned an invalid identity");
-  }
-  if (counter.exact && tokenizerModelId !== undefined && counter.modelId !== tokenizerModelId) {
-    throw codeError("assistant_token_counter_model_mismatch", "The NLP token counter measured a different model than the selected continuation model");
-  }
-  const tokenCounts = new Map(tokenTextsInOrder.map((text, index) => [text, counts[index] as number]));
-  const built = buildContinuationContext({
-    recentSentences, k: input.k, chapterSummary: chapterSummary ? { chapterId: String(chapterSummary.id), text: Array.isArray(chapterSummary.summaryLines) ? chapterSummary.summaryLines.join("\n") : "" } : null,
-    retrievalHits, tokenBudget: input.tokenBudget,
-    countTokens: (text) => {
-      const count = tokenCounts.get(text);
-      if (count === undefined) throw new Error("Token counter response did not include an assembled continuation section");
-      return count;
-    },
-  });
-  const prepared = await buildContinuationPrompt(built.text);
-  const sourceRevisions = revisionList([
-    ...(source ? [sceneFile!, source.manuscript] : []),
-    ...(chapter?.type === "chapter" && typeof chapterSummary?.path === "string" && typeof chapterSummary.revision === "string" ? [{ path: chapterSummary.path, revision: chapterSummary.revision, content: "" }] : []),
-    ...retrievalHits.flatMap((hit) => { const row = story.entities.get(hit.entityId); const file = row ? story.files.get(row.filePath) : undefined; return file ? [file] : []; }),
-  ]);
+  const { story, source, chapter, recentSentences, built, prepared, sourceRevisions, counter } = await prepareContinuationContext(context, input);
   const generated = await generate(moduleContext, context, { feature: "continuation-options", prompt: prepared.prompt, promptVersion: prepared.promptVersion, sourceRevisions, outputTokens: 768 });
   const result = parseStructured(generated.text, continuationSchema);
   const editorQuote = recentSentences.join("\n").slice(-1_200);
@@ -2406,9 +2400,10 @@ export function createAssistantActions(moduleContext: ModuleContext): ModuleActi
     action("assistant.summary.scene.preview", "read", (value) => parsePreviewIdInput(value, "sceneId"), async (input, context) => previewSceneSummaryPrompt(context, input.id as string)),
     action("assistant.summary.chapter.preview", "read", (value) => parsePreviewIdInput(value, "chapterId"), async (input, context) => previewChapterSummaryPrompt(context, input.id as string)),
     action("assistant.qa.preview", "read", parseQaPreviewInput, async (input, context) => previewQaPrompt(context, input.sceneId as string | undefined)),
-    action("assistant.continuation.preview", "read", parseContinuationPreviewInput, async (input) => {
-      const parsed = input as ReturnType<typeof parseContinuationPreviewInput>;
-      return { prompt: (await buildContinuationPrompt(parsed.recentSentences.join("\n"))).prompt };
+    action("assistant.continuation.preview", "read", parseContinuationPreviewInput, async (input, context) => {
+      const parsed = input as unknown as ReturnType<typeof parseContinuationPreviewInput>;
+      const prepared = await prepareContinuationContext(context, parsed);
+      return { prompt: prepared.prepared.prompt };
     }),
     action("assistant.aspect.review.preview", "read", parseAspectInput, async (input, context) => previewAspectPrompt(context, input as ReturnType<typeof parseAspectInput>)),
     action("assistant.dialogue.topics.preview", "read", parseDialogueTopicsInput, async (input, context) => {
