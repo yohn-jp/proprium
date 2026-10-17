@@ -88,7 +88,7 @@ The passed P12 proof verifies the fixed synthetic migration across eight module 
 
 R40 preserves explicit author control rather than automatic merge. R37 maps the implemented deterministic aspect review; the source-marked future LLM preview is not part of this fixed route contract. These are plan-scoped boundaries, not open implementation gaps.
 
-The three independent runtime reviews in [P13 final review](../verification/P13-FINAL-REVIEW.md) accepted persistence/concurrency/UX, P13 evidence, and module/data behavior. The final ledger-closure review remains pending, so `CAMPAIGN.json` remains `in_progress` until that read-only review is resolved. Other limitations—synthetic fixtures, no private works, no production deployment, no CI/Actions or organization-template synchronization—are recorded in [the final report](../verification/FINAL-MIGRATION.md).
+The three independent runtime reviews in [P13 final review](../verification/P13-FINAL-REVIEW.md) accepted persistence/concurrency/UX, P13 evidence, and module/data behavior. The final ledger-closure review independently passed at `eab0fad7c811aeedabe29fcd214598dc5207c178`; the reviewer reran both validator modes against the pinned source and accepted the terminal mappings and scope limits. `CAMPAIGN.json` records the completed campaign. Other limitations—synthetic fixtures, no private works, no production deployment, no CI/Actions or organization-template synchronization—are recorded in [the final report](../verification/FINAL-MIGRATION.md).
 
 ## Source persistence facts
 

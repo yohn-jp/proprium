@@ -4,7 +4,7 @@
   "canonicalPlan": "docs/migration/FULL-MIGRATION-PLAN.md",
   "targetBaseline": "01403182e9f73dec29d04954e3091c235cd1aac0",
   "sourceBaseline": "edc033c2c9466274a334299dadfa426661d957d9",
-  "status": "in_progress",
+  "status": "complete",
   "tasks": [
     {
       "id": "P00",
@@ -230,8 +230,10 @@
     }
   ],
   "finalLedgerReview": {
-    "status": "pending",
-    "reason": "P00 has closed all source rows and 96 implementation slices with row-local evidence, and the three independent runtime reviews accepted their scopes. The final read-only review of the closed ledger/CAMPAIGN mapping is the only outstanding campaign status.",
-    "requiredAction": "Complete independent review of the final ledger closure commit; resolve any concrete finding, then update the campaign status."
+    "status": "passed",
+    "reviewer": "p03_review",
+    "reviewedHead": "eab0fad7c811aeedabe29fcd214598dc5207c178",
+    "evidence": "docs/verification/P13-FINAL-REVIEW.md",
+    "result": "Independent read-only audit accepted the final source/data ledger, all 96 slice proofs, explicit exclusion/relocation, historical failures and passed replacements, evidence scope and strict validator guards. Default and strict source-aware checks passed. No unresolved acceptance defect remains."
   }
 }
