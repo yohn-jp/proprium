@@ -421,7 +421,7 @@
             }
           ],
           "limitations": [
-            "The real-provider reference workflow and full-profile health integration remain pending."
+            "A fresh bounded local-provider reference flow passed through both production MCP transports on candidate c9aece8; it exercises selected health/provider paths only. Full-profile health and campaign composition remain pending."
           ]
         }
       ]
@@ -1729,7 +1729,7 @@
             }
           ],
           "limitations": [
-            "The source prompt-preview handlers in R12/R14/R28/R34/R35/R46 now have local Assistant preview actions; their focused action evidence does not certify current browser/API composition. R35 preview/run context now shares one action assembler, but owner-API host verification and real-provider output remain pending."
+            "Source prompt-preview handlers now have local Assistant actions. The fresh bounded run passed the R35 owner-API host preview path, and the fresh local-Qwen reference exercised rewrite through both transports; these selected proofs do not establish composition for every preview action or the full browser/API profile."
           ]
         }
       ]
@@ -2492,7 +2492,7 @@
             }
           ],
           "limitations": [
-            "Reader-reaction action output still lacks a focused real-provider acceptance; browser bridge tests use a stub action transport, and final P12/campaign composition remains pending."
+            "Reader-reaction action output has no focused real-provider acceptance; browser bridge tests use a stub action transport. This is an evidence limit, not a known missing action; final P12/campaign composition remains pending."
           ]
         }
       ]
@@ -2636,7 +2636,7 @@
             }
           ],
           "limitations": [
-            "Semantic search and expression search are not covered by this target Core action; P09 owns semantic retrieval."
+            "This Core action supplies bounded literal search; optional P09 actions separately implement semantic and expression search. The endpoint replacement path is action-based rather than a legacy HTTP alias."
           ]
         },
         {
@@ -2868,7 +2868,7 @@
             }
           ],
           "limitations": [
-            "The prompt-only handlers now have local read-action replacements; real-provider summary generation and final profile/API/browser composition remain pending."
+            "Summary action has focused local tests, but no per-action real-provider output-quality claim is made. Final profile/API/browser composition remains pending."
           ]
         }
       ]
@@ -2915,9 +2915,13 @@
             "callMechanism": "direct apiFetch in the component"
           }
         ],
-        "observedUiCallsitePaths": [],
+        "observedUiCallsitePaths": [
+          "app/src/features/zukan/ThreadsView.tsx"
+        ],
         "absenceInterpretation": "No direct browser wrapper/reference found is recorded as an observation only, not evidence that a route or behavior is dead.",
-        "observedUiSurfaceAreas": [],
+        "observedUiSurfaceAreas": [
+          "app/src/features/zukan/ThreadsView.tsx"
+        ],
         "uiEvidenceMethod": "Paths contain call-expression references to one of the recorded wrapper/component symbols; this is source reference evidence, not proof of runtime reachability or completion."
       },
       "handlerCallSymbolsExpansion": {
@@ -3703,7 +3707,7 @@
             }
           ],
           "limitations": [
-            "Core API does not replace all six source inspection handlers; P05/P06 module slices cover only named domain actions."
+            "The Core API does not recreate the six legacy route aliases. Their inspection behavior is implemented through the named Story, Diagnostics, NLP, and Speaker module actions in the adjacent slices; final composed host acceptance remains separate."
           ]
         },
         {
@@ -4634,7 +4638,7 @@
             }
           ],
           "limitations": [
-            "This adds semantic cluster enrichment only; it does not replace the Diagnostics-owned literal candidate list/ignore workflow or certify HTTP route composition."
+            "Semantic clustering is optional P09 enrichment. The source literal candidate discovery and ignore workflow maps separately to P06 `nlp.discoverCandidates` and `nlp.ignoreCandidates`; final API/profile composition remains separate."
           ]
         }
       ]
@@ -5144,10 +5148,13 @@
             ]
           }
         ],
-        "observedUiCallsitePaths": [],
+        "observedUiCallsitePaths": [
+          "app/src/hooks/useSceneEditing.ts"
+        ],
         "absenceInterpretation": "No direct browser wrapper/reference found is recorded as an observation only, not evidence that a route or behavior is dead.",
         "observedUiSurfaceAreas": [
-          "app/src/features/editor/**"
+          "app/src/features/editor/**",
+          "app/src/hooks/useSceneEditing.ts"
         ],
         "uiEvidenceMethod": "Paths contain call-expression references to one of the recorded wrapper/component symbols; this is source reference evidence, not proof of runtime reachability or completion."
       },
@@ -5503,7 +5510,7 @@
             }
           ],
           "limitations": [
-            "R31 covers model-settings read/propose behavior and has no separate source prompt-preview route. Final real-provider and composed reactivation acceptance remain pending."
+            "R31 covers model-settings read/propose behavior and has no separate source prompt-preview route. P12 imported-state reactivation and composed profile acceptance remain pending; no provider-generated output is claimed for this row."
           ]
         }
       ]
@@ -5770,9 +5777,13 @@
             "callMechanism": "prompt preview via direct apiFetch; streamed response via useLlmChat"
           }
         ],
-        "observedUiCallsitePaths": [],
+        "observedUiCallsitePaths": [
+          "app/src/components/SettingQaPanel.tsx"
+        ],
         "absenceInterpretation": "No direct browser wrapper/reference found is recorded as an observation only, not evidence that a route or behavior is dead.",
-        "observedUiSurfaceAreas": [],
+        "observedUiSurfaceAreas": [
+          "app/src/components/SettingQaPanel.tsx"
+        ],
         "uiEvidenceMethod": "Paths contain call-expression references to one of the recorded wrapper/component symbols; this is source reference evidence, not proof of runtime reachability or completion."
       },
       "handlerCallSymbolsExpansion": {
@@ -5875,7 +5886,7 @@
             }
           ],
           "limitations": [
-            "QA answer action tests use a local test provider; real-provider answer quality and final full-profile/API/browser composition remain pending."
+            "QA answer action tests use a local test provider; the bounded local-Qwen reference flow does not cover this action. Real-provider answer quality and final full-profile/API/browser composition remain unverified."
           ]
         }
       ]
@@ -5917,9 +5928,13 @@
             "callMechanism": "prompt preview via direct apiFetch; streamed response via useLlmObject"
           }
         ],
-        "observedUiCallsitePaths": [],
+        "observedUiCallsitePaths": [
+          "app/src/components/ContinuationOptionsPanel.tsx"
+        ],
         "absenceInterpretation": "No direct browser wrapper/reference found is recorded as an observation only, not evidence that a route or behavior is dead.",
-        "observedUiSurfaceAreas": [],
+        "observedUiSurfaceAreas": [
+          "app/src/components/ContinuationOptionsPanel.tsx"
+        ],
         "uiEvidenceMethod": "Paths contain call-expression references to one of the recorded wrapper/component symbols; this is source reference evidence, not proof of runtime reachability or completion."
       },
       "handlerCallSymbolsExpansion": {
@@ -5998,7 +6013,7 @@
             {
               "source": "Source POST /api/assist/continuation-options/prompt-preview accepts recent sentence context and returns the assembled prompt without invoking the model.",
               "target": "`assistant.continuation.preview` and generation share `prepareContinuationContext`; browser sends scene/chapter, matching editor draft or manual recent sentences, and k to both.",
-              "persistence": "Preview is a non-persistent compute action that uses the selected pinned scene/editor draft, chapter summary, best-effort semantic retrieval, and `nlp.countTokens` before rendering the prompt; it does not invoke the model or create a proposal. Owner-API host acceptance for this effect path is tracked separately and remains pending."
+              "persistence": "Preview is a non-persistent owner compute action using selected pinned scene/editor draft, chapter summary, best-effort semantic retrieval, and nlp.countTokens. The owner-API test now verifies the host permits this compute effect without provider usage; it neither invokes the model nor creates a proposal."
             }
           ],
           "proofRefs": [
@@ -6030,12 +6045,18 @@
               "id": "P11-R35-context-preview-parity",
               "path": "modules/assistant/src/actions.test.ts",
               "testName": "continuation uses only a matching live editor draft after checking its remote scene base",
-              "scope": "Focused Assistant action test passed on exact candidate 67ff5c57b35e680d23f5ea11445528d9c72fdf2b and independently in a targeted rerun. It checks stale-base rejection, selected live draft and explicit chapter summary, semantic retrieval and token-count action results, and that the generated provider request contains the exact prompt returned by preview. The token-count and retrieval results are test doubles; production owner-API host proof is pending."
+              "scope": "Focused Assistant action test passed on candidate 67ff5c57b35e680d23f5ea11445528d9c72fdf2b and in a targeted rerun. It checks stale-base rejection, selected live draft and explicit chapter summary, semantic retrieval and token-count action results, and that the generated provider request contains the exact prompt returned by preview. The token-count and retrieval results are test doubles; the production owner-API host proof is recorded separately as P11-R35-preview-owner-api-current."
+            },
+            {
+              "id": "P11-R35-preview-owner-api-current",
+              "path": "tests/integration/mcp-acceptance.test.mjs",
+              "testName": "Assistant continuation prompt preview runs as a host-owned compute action without provider usage",
+              "scope": "Fresh root provider-reference rerun passed this selected test (1/1) on candidate c9aece82806dad93532fd6d585d6bcdafc506427. The production package paths and integration test file are byte-identical to current main 271d7b28. This verifies selected-context preview through the owner action boundary without provider usage; the overall campaign still awaits full frozen-tree and migration acceptance."
             }
           ],
           "limitations": [
-            "The shared continuation context now backs both preview and generation; the focused action parity test is recorded above. The browser request now carries scene/chapter, live draft or recent sentences, and k, and the preview effect is classified compute so it can invoke token counting.",
-            "The owner-API host test for compute-only preview without provider usage was added on current target tree bc2b0936d418d1d8f5dcd8b16e74d1f9f3d65c0f but has not yet run. Current browser transport and semantic/tokenizer dependencies still need composed frozen-campaign verification; real-provider continuation quality and final browser/OCI campaign gates remain pending."
+            "The shared assembler and browser payload parity have focused action/browser evidence; the owner-API host test passed in the fresh bounded root run on candidate c9aece8, whose relevant production and integration-test blobs match current main.",
+            "The host preview proof covers one selected compute action only; full-profile browser, P12 import/reclone, and final OCI/campaign acceptance remain pending. No continuation model-quality claim is made."
           ]
         },
         {
@@ -7895,7 +7916,7 @@
       "source": "packages/api/src/routes/me.ts",
       "registrationSymbol": "registerMeRoutes",
       "registrationOrder": 43,
-      "ownerDisposition": "Same single-owner access projection; hosted account administration belongs to Platform",
+      "ownerDisposition": "Single-owner, per-project/device cursor projection; hosted account administration belongs to Platform",
       "plannedSource": "routes/me.ts",
       "registeredEndpoints": [
         {
@@ -7936,15 +7957,24 @@
             "functions": [
               "useReadingResume"
             ]
+          },
+          {
+            "module": "app/src/features/home/MobileHomeView.tsx",
+            "functions": [
+              "fetchRecentActivity"
+            ],
+            "callMechanism": "loads persisted per-user/per-project recent activity to merge server cursors into continue-reading candidates"
           }
         ],
         "observedUiCallsitePaths": [
           "app/src/features/editor/ReadingView.tsx",
+          "app/src/features/home/MobileHomeView.tsx",
           "app/src/hooks/useAppWorkspace.ts"
         ],
         "absenceInterpretation": "No direct browser wrapper/reference found is recorded as an observation only, not evidence that a route or behavior is dead.",
         "observedUiSurfaceAreas": [
-          "app/src/features/home/**"
+          "app/src/features/home/**",
+          "app/src/features/home/MobileHomeView.tsx"
         ],
         "uiEvidenceMethod": "Paths contain call-expression references to one of the recorded wrapper/component symbols; this is source reference evidence, not proof of runtime reachability or completion."
       },
@@ -8006,21 +8036,31 @@
           "status": "implementation-present; integration-acceptance-pending",
           "owner": "P08",
           "targetPaths": [
+            "packages/contracts/src/index.ts",
             "packages/api/src/server.ts",
             "packages/api/src/server.test.ts"
           ],
           "publicActions": [
             {
               "action": "GET /api/projects/events",
-              "implementation": "Stream request-time project sync event observations"
+              "implementation": "Adjacent target behavior only: stream request-time project manual-sync outcomes. It does not implement either source recent-activity endpoint."
+            },
+            {
+              "action": "RecentActivityInput / RecentActivityItem / RecentActivityResponse DTO types",
+              "implementation": "Partial contract foundation only: defines desktop/mobile cursors, optional pageIndex semantics and response shape. It adds no route, durable store, owner authorization, caller, or browser surface."
             }
           ],
           "uiSurfaces": [],
           "dataMappings": [
             {
-              "source": "Persistent source recent-activity records and route CRUD",
-              "target": "Target in-memory owner-scoped manual sync event stream",
-              "persistence": "No durable recent-activity record is claimed by the event stream."
+              "source": "GET/PUT /api/me/recent-activity owner/project/device cursor projection.",
+              "target": "No current target recent-activity API or durable store. GET /api/projects/events is a separate request-time manual-sync event stream.",
+              "persistence": "Source atomically stores owner/project/device cursor rows in app-state/recent-activity.json. Target manual-sync events are in-memory and carry no reading/writing cursor; no source-data migration is claimed."
+            },
+            {
+              "source": "GET/PUT /api/me/recent-activity owner/project/device cursor projection.",
+              "target": "packages/contracts DTO types only; no matching API route, persistent owner state, or browser caller/UI exists.",
+              "persistence": "DTO declarations do not persist cursor values. The neighboring manual-sync event stream remains request-time telemetry and is not a data mapping."
             }
           ],
           "proofRefs": [
@@ -8032,10 +8072,95 @@
             }
           ],
           "limitations": [
-            "Source recent-activity list/upsert semantics remain absent; API events are neither durable nor a substitute for that store."
+            "Confirmed fixed-scope source behavior gap: durable per-device writing/reading cursors and the cross-device continue-reading/handoff path are not implemented in target. Assigned producers are P08 (owner store/API), P02 (browser callers and UI), and P04/P12 (legacy data mapping and retention proof).",
+            "The implemented GET /api/projects/events path is unrelated manual-sync telemetry and must not be treated as recent-activity coverage."
+          ]
+        },
+        {
+          "status": "implementation-present; integration-acceptance-pending",
+          "owner": "P04",
+          "targetPaths": [
+            "packages/migration/src/producers/workspace.ts",
+            "packages/migration/src/migration.test.ts"
+          ],
+          "publicActions": [],
+          "uiSurfaces": [],
+          "dataMappings": [
+            {
+              "source": "app-state/recent-activity.json and the legacy recent-activity.json alias.",
+              "target": "Inspection output identifies /history/recent-activity/legacy/<sha256-of-exact-bytes>.json as the private archive destination.",
+              "persistence": "The generic inspector emits only the content-addressed destination and authoritative/relocated disposition. It does not write/copy the source bytes or map owner/repository keys into target API state."
+            }
+          ],
+          "proofRefs": [
+            {
+              "id": "P04-R43-recent-activity-classification",
+              "path": "packages/migration/src/migration.test.ts",
+              "testName": "legacy inspection preserves scoped data, both SQLite stores, and pending Git work without source writes",
+              "scope": "Fresh `pnpm --filter @scriptorium/migration test` passed 1/1 on leaf candidate 11cbaeb33826c1ae0ee2276bccafc723fad0e7a7, which includes current main 271d7b28. Fixture assertions cover canonical and alias recent-activity files: inspection reports authoritative/relocated disposition and a SHA-256 private-history target, excludes cursor sentinels from inspection output, emits no canonical Core write, and leaves the alias source tree unchanged with no Core write. The test does not prove archive materialization, owner/repository mapping, unreadable-file handling, or P12 retention."
+            }
+          ],
+          "limitations": [
+            "This producer establishes source data classification and a private archive identity only. It does not materialize the archive or restore the recent-activity API/UI; API-owned mapping and P12 deletion/reclone retention proof remain pending."
           ]
         }
-      ]
+      ],
+      "fixedScopeImplementationGap": {
+        "status": "confirmed-unimplemented",
+        "sourceBehavior": [
+          "GET /api/me/recent-activity returns the current owner and project’s per-device cursor rows.",
+          "PUT /api/me/recent-activity upserts one desktop/mobile row keyed by owner and project; omitted pageIndex preserves that device row’s previous value."
+        ],
+        "sourceData": {
+          "file": "<dataDir>/app-state/recent-activity.json",
+          "key": "${userId}:${projectId}",
+          "fields": [
+            "sceneId",
+            "sentenceOffset",
+            "pageIndex?",
+            "deviceType",
+            "updatedAt"
+          ],
+          "writer": "RecentActivityStore.upsert atomically replaces only the matching deviceType row."
+        },
+        "sourceCallers": [
+          "app/src/hooks/useWritingResume.ts (debounced writing cursor writes; localStorage remains a fallback)",
+          "app/src/hooks/useReadingResume.ts (debounced reading-page and sentence cursor writes)",
+          "app/src/features/home/MobileHomeView.tsx (reads activity for cross-device continue and handoff hints)"
+        ],
+        "targetCoverage": {
+          "finding": "The integrated target has only the RecentActivityInput/RecentActivityItem/RecentActivityResponse contract types (packages/contracts/src/index.ts, added at 556df656). It has no matching route, owner-scoped recent-activity store, or cross-device resume caller/UI. SceneEditor local readingPage localStorage is a per-browser reading page and does not preserve the source owner/project/device projection.",
+          "adjacentBehavior": "GET /api/projects/events streams in-memory manual-sync outcomes; it has different data and lifetime and is not a replacement.",
+          "searchedTargetPaths": [
+            "packages/api/src/server.ts",
+            "packages/api/src/server.test.ts",
+            "app/src/App.tsx",
+            "app/src/editor/SceneEditor.tsx",
+            "app/src/api.ts",
+            "packages/migration/src/producers/workspace.ts",
+            "packages/contracts/src/index.ts"
+          ]
+        },
+        "requiredProducerSlices": [
+          {
+            "owner": "P08",
+            "behavior": "owner-scoped durable read/upsert API and persistent store with source schema semantics"
+          },
+          {
+            "owner": "P02",
+            "behavior": "use reading/writing cursor persistence and continue-reading handoff through the target browser UI"
+          },
+          {
+            "owner": "P04",
+            "behavior": "The generic workspace inspector now classifies the canonical file and legacy alias as authoritative and emits a content-addressed private-history archive identity without exposing cursor payloads or writing them through Core. This is inspection only: it does not materialize the archive or map user/repository identities."
+          },
+          {
+            "owner": "P12",
+            "behavior": "Compose the API-owned archive/import with explicit user/repository mapping; prove cursor history remains retained through source deletion, data-root replacement and reclone, or block removal when mapping/read fails."
+          }
+        ],
+        "acceptanceStatus": "pending"
+      }
     },
     {
       "id": "R44",
@@ -8070,10 +8195,15 @@
             ]
           }
         ],
-        "observedUiCallsitePaths": [],
+        "observedUiCallsitePaths": [
+          "app/src/features/home/MobileHomeView.tsx",
+          "app/src/features/review/ReviewView.tsx"
+        ],
         "absenceInterpretation": "No direct browser wrapper/reference found is recorded as an observation only, not evidence that a route or behavior is dead.",
         "observedUiSurfaceAreas": [
-          "app/src/features/home/**"
+          "app/src/features/home/**",
+          "app/src/features/home/MobileHomeView.tsx",
+          "app/src/features/review/ReviewView.tsx"
         ],
         "uiEvidenceMethod": "Paths contain call-expression references to one of the recorded wrapper/component symbols; this is source reference evidence, not proof of runtime reachability or completion."
       },
@@ -8128,21 +8258,172 @@
           ],
           "publicActions": [
             {
-              "action": "GET /api/review-queue / GET /api/projects/:projectId/review-queue",
-              "implementation": "List unresolved Core proposal review/status records globally or for one project"
+              "action": "GET /api/review-queue and GET /api/projects/:projectId/review-queue",
+              "implementation": "List unresolved Core proposal review/status records. This is supplemental proposal history, not the source speaker/Zukan queue DTO."
             }
           ],
           "uiSurfaces": [],
           "dataMappings": [
             {
-              "source": "Source story/speaker/assistant review queue contributions",
-              "target": "Core proposal review/status list; module-specific contributions may be added by enabled modules",
-              "persistence": "Review records remain linked to Core proposal evidence; no source queue database is imported."
+              "source": "Source GET /api/review-queue returns unresolved speaker-attribution rows plus pending Zukan suggestion rows.",
+              "target": "Core proposal review/status endpoints remain separate; source domain queue behaviors are provided by module review contributions through the shared React review slot.",
+              "persistence": "Source reads speaker attribution and pending zukan_suggestions from project-local SQLite. Target Speaker and Story actions read the selected Core snapshot and module-owned correction/workflow data; source SQLite is not imported by the queue endpoint."
             }
           ],
           "proofRefs": [],
           "limitations": [
-            "The handler returns unresolved Core proposals, but the current API test suite has no focused assertion for its response; source story/speaker/assistant queue contributors and composed review remain unverified."
+            "There is no focused API response assertion for the supplemental target Core-proposal list; do not claim it is a one-to-one source queue endpoint."
+          ]
+        },
+        {
+          "status": "implementation-present; integration-acceptance-pending",
+          "owner": "P02",
+          "targetPaths": [
+            "app/src/App.tsx",
+            "app/src/contributions/ContributionHost.tsx",
+            "app/src/generated/browser-modules.ts"
+          ],
+          "publicActions": [
+            {
+              "action": "Shared UI `slot: review` contribution host",
+              "implementation": "Render enabled modules’ registered review contributions in the React workspace using one shared slot host."
+            }
+          ],
+          "uiSurfaces": [
+            "app/src/contributions/ContributionHost.tsx"
+          ],
+          "dataMappings": [
+            {
+              "source": "Source ReviewView and mobile review-count surfaces.",
+              "target": "Enabled module review contributions share the React `review` slot; each action owns its typed data and mutation boundary.",
+              "persistence": "Review decisions are submitted through source-module actions as Core proposals. The host itself does not own review data."
+            }
+          ],
+          "proofRefs": [],
+          "limitations": [
+            "No current browser acceptance mounts the composed Review slot with Story, Speaker, and Assistant modules together; module panels and actions have separate focused evidence."
+          ]
+        },
+        {
+          "status": "implementation-present; integration-acceptance-pending",
+          "owner": "P05",
+          "targetPaths": [
+            "modules/story/src/index.ts",
+            "modules/story/src/browser.tsx",
+            "modules/story/src/actions.test.ts"
+          ],
+          "publicActions": [
+            {
+              "action": "story.zukan-suggestions.list / approve / reject",
+              "implementation": "Expose pending Story Zukan suggestions in the review contribution and route decisions through snapshot-bound proposals."
+            }
+          ],
+          "uiSurfaces": [
+            "modules/story/src/browser.tsx"
+          ],
+          "dataMappings": [
+            {
+              "source": "Pending Zukan suggestion rows returned by the source queue.",
+              "target": "Story Zukan review contribution reads pending Story suggestions and emits Core proposals for explicit author decisions.",
+              "persistence": "Provisional suggestion status and canonical entity YAML remain in guarded project operations; migration/reclone composition remains P12."
+            }
+          ],
+          "proofRefs": [
+            {
+              "id": "P05-R44-zukan-list-review",
+              "path": "modules/story/src/actions.test.ts",
+              "testName": "Zukan suggestions list by status and approve/reject as snapshot-bound proposals",
+              "scope": "Focused Story test returns only pending suggestion rows and checks approve/reject as revision-guarded Core proposals; it does not verify the composed review host."
+            }
+          ],
+          "limitations": [
+            "The shared Review slot and imported legacy queue rows still need composed P12/current-profile acceptance."
+          ]
+        },
+        {
+          "status": "implementation-present; integration-acceptance-pending",
+          "owner": "P10",
+          "targetPaths": [
+            "modules/speaker/src/index.ts",
+            "modules/speaker/src/browser.ts",
+            "modules/speaker/src/production.test.ts",
+            "modules/speaker/tests/browser-workflow.acceptance.mjs"
+          ],
+          "publicActions": [
+            {
+              "action": "speaker.review.queue",
+              "implementation": "List unresolved snapshot-bound speaker attribution rows in the Speaker review contribution; corrections use proposal actions."
+            }
+          ],
+          "uiSurfaces": [
+            "modules/speaker/src/browser.ts"
+          ],
+          "dataMappings": [
+            {
+              "source": "Unresolved source speaker attribution rows.",
+              "target": "Speaker review action derives unresolved rows from the selected Core snapshot and the Speaker correction projection.",
+              "persistence": "Corrections are reviewable Core operations; source correction history import and reactivation remain P12."
+            }
+          ],
+          "proofRefs": [
+            {
+              "id": "P10-R44-speaker-production",
+              "path": "modules/speaker/src/production.test.ts",
+              "testName": "speaker actions run real CPU attribution, propose corrections/model adoption, and reload from the reviewed snapshot",
+              "scope": "Composed Speaker test invokes speaker.review.queue and checks a typed rows response while using actual CPU workers for adjacent speaker behavior; it does not assert the queue’s full source row parity."
+            },
+            {
+              "id": "P10-R44-speaker-browser",
+              "path": "modules/speaker/tests/browser-workflow.acceptance.mjs",
+              "testName": "PASS: rendered speaker attribution, review, character dialogue, voice profiles, diagnostics, evaluation, and retraining controls invoke their registered action boundary",
+              "scope": "Rendered module browser acceptance displays unresolved speaker rows and invokes the Speaker review action through a stubbed action transport; it does not mount the app-wide multi-module review host."
+            }
+          ],
+          "limitations": [
+            "Historical correction import and app-wide Review-slot composition remain P12/current-profile acceptance."
+          ]
+        },
+        {
+          "status": "implementation-present; integration-acceptance-pending",
+          "owner": "P11",
+          "targetPaths": [
+            "modules/assistant/src/index.ts",
+            "modules/assistant/src/browser.ts",
+            "modules/assistant/src/actions.test.ts",
+            "modules/assistant/tests/browser-workflow.acceptance.mjs"
+          ],
+          "publicActions": [
+            {
+              "action": "Assistant review-slot contributions (aspect review, reader reaction, and state-event proposal)",
+              "implementation": "Provide optional source-supported Assistant review panels as independent actions; generated changes remain proposals."
+            }
+          ],
+          "uiSurfaces": [
+            "modules/assistant/src/browser.ts"
+          ],
+          "dataMappings": [
+            {
+              "source": "Fixed-plan Assistant review contribution surfaces; the source GET /api/review-queue itself does not include Assistant rows.",
+              "target": "Optional Assistant actions are mounted in the same shared review slot and use Core proposal review where a mutation is requested.",
+              "persistence": "Analysis/reaction output is request-time; proposed state events use snapshot-bound Core proposal operations and are never approved by the module."
+            }
+          ],
+          "proofRefs": [
+            {
+              "id": "P11-R44-deterministic-aspect",
+              "path": "modules/assistant/src/actions.test.ts",
+              "testName": "aspect review runs the deterministic local source implementation without consent or model access",
+              "scope": "Focused action test covers the provider-free source-supported aspect-review contribution; the unfinished source LLM aspect prompt path is outside scope."
+            },
+            {
+              "id": "P11-R44-browser-review-panels",
+              "path": "modules/assistant/tests/browser-workflow.acceptance.mjs",
+              "testName": "PASS: assistant panels render safely, invoke approved actions, stream and cancel rewrite, and keep generated changes in review proposals",
+              "scope": "Rendered Assistant browser workflow visits review-slot aspect and proposal panels and checks only approved action IDs through a stub action bridge; not a composed app host test."
+            }
+          ],
+          "limitations": [
+            "These are separate module review panels, not entries in the source ReviewQueueResponse DTO; full-profile host mounting and Core proposal/reclone workflow remain pending."
           ]
         }
       ]
@@ -8543,8 +8824,7 @@
             }
           ],
           "limitations": [
-            "The Dialogue action itself has browser bridge and context-builder coverage, but no focused real-provider action test; provider-backed dialogue output remains unverified.",
-            "Dialogue generation still lacks focused real-provider action acceptance; browser contribution tests use a stub action transport, and final provider/profile composition remains pending."
+            "Dialogue action has browser bridge and context-builder coverage but no focused real-provider action test. Provider-backed dialogue output is unverified; this is an evidence limit rather than a known missing source action. Final provider/profile composition remains pending."
           ]
         }
       ]
@@ -9202,19 +9482,25 @@
               "id": "P08-R48-composed-rewrite",
               "path": "tests/integration/mcp-acceptance.test.mjs",
               "testName": "spawned stdio and production HTTP MCP preserve Core review boundaries through publish and restart",
-              "scope": "Production MCP integration has typed provider-NONE behavior through both transports on its recorded test tree; the real Qwen response and no-proposal/write check is historical candidate evidence on exact testedHead 7564420aa3cdd94f4bf45cb194df0a8ad1d1c910, not a run on the current campaign head."
+              "scope": "Provider-NONE behavior through both transports is recorded on the earlier focused candidate; fresh bounded local-Qwen rewrite behavior through both transports is separately recorded as P08-R48-qwen-both-transports-current."
             },
             {
               "id": "P08-R48-reload-current",
               "path": "tests/integration/mcp-acceptance.test.mjs",
               "testName": "spawned stdio and production HTTP MCP preserve Core review boundaries through publish and restart",
               "scope": "Provider-NONE production acceptance passed on exact candidate tree 90d5fc822faba247cc40266dddaa60ca2facc23d; real stdio and HTTP transports returned `{entities:7,links:2}` at the same pinned snapshot as get_status. This scoped candidate result is not final campaign certification."
+            },
+            {
+              "id": "P08-R48-qwen-both-transports-current",
+              "path": "tests/integration/mcp-acceptance.test.mjs",
+              "testName": "spawned stdio and production HTTP MCP preserve Core review boundaries through publish and restart",
+              "scope": "Fresh root rerun passed 1/1 on candidate c9aece82806dad93532fd6d585d6bcdafc506427 with the bounded local Qwen rewrite branch enabled. Both spawned stdio and production Streamable HTTP returned source-shaped candidates from the local provider and preserved the proposal/no-write boundary; the production package paths and test file are byte-identical to current main 271d7b28. This is synthetic/local-provider integration evidence, not a model-quality or campaign-completion claim."
             }
           ],
           "limitations": [
-            "The P08 integration source supports the full Story/NLP/Diagnostics/Semantic/Speaker/Publishing/MCP composition, but this ledger update does not certify a fresh run at the final campaign head. The Assistant rewrite Qwen path is opt-in and real-provider acceptance remains pending.",
+            "The fresh bounded root run exercised the opt-in real local-Qwen rewrite path through both MCP transports on candidate c9aece8; the production and integration-test blobs match current main. It does not certify final full-profile, P12, OCI, or campaign acceptance.",
             "The target keeps source direct mutation paths behind reviewable proposals; the formatter result itself remains transient until the author submits it. Profile closure and campaign final acceptance remain pending.",
-            "The provider-NONE formatter/full-diagnostics/reload/rewrite transport composition passed on candidate 90d5fc8; real Qwen rewrite output is recorded only on historical candidate 7564420, and final frozen campaign/API/browser/OCI acceptance remains pending."
+            "Provider-NONE formatter/full-diagnostics/reload/rewrite transport composition passed on candidate 90d5fc8. The real local-Qwen rewrite through both transports passed in the fresh bounded root run on c9aece8; final frozen campaign/API/browser/OCI acceptance remains pending."
           ]
         }
       ]
@@ -10329,7 +10615,7 @@
             },
             {
               "action": "assistant.reader.reaction.preview / assistant.summary.scene.preview / assistant.summary.chapter.preview / assistant.synonyms.preview / assistant.qa.preview / assistant.continuation.preview / assistant.dialogue.topics.preview / assistant.dialogue.turn.preview / assistant.dialogue.turns.preview / assistant.zukan.sandbox.preview",
-              "implementation": "Return local, read-only prompt previews for the corresponding source prompt-preview handlers without model invocation or author-data writes; R35 uses the shared context assembler, with owner-API host verification pending."
+              "implementation": "Return local, read-only prompt previews for the corresponding source prompt-preview handlers without model invocation or author-data writes. R35 shares the generation context assembler, and its selected owner-API compute path has a focused passing host test; host composition for the other preview actions remains unverified."
             }
           ],
           "uiSurfaces": [
@@ -10344,7 +10630,7 @@
             {
               "source": "Provider credentials, model calls, response cache, summary sidecars, and source background-job state",
               "target": "Environment-only credentials, lazy optional Assistant provider, proposal-based outputs, private cache/request-time results, and API-owned bounded worker lifecycle history",
-              "persistence": "Secrets are not migrated and generated model responses do not write canonical prose directly. P08 R38 owns bounded host job/inbox metadata and explicit source-history archive/adoption; Assistant does not persist request/result payloads. Local Assistant preview actions now cover source reader, summary, synonym, QA, continuation, and dialogue-sketch prompt handlers; focused action evidence does not establish browser/API composition. The R35 shared-context action parity is covered by a focused test; its current owner-API host test and frozen P12 importer execution remain pending."
+              "persistence": "Secrets are not migrated and generated model responses do not write canonical prose directly. P08 R38 owns bounded host job/inbox metadata and explicit source-history archive/adoption; Assistant does not persist request/result payloads. Local Assistant preview actions now cover source reader, summary, synonym, QA, continuation, and dialogue-sketch prompt handlers; focused action evidence does not establish browser/API composition. The R35 shared-context action parity and its owner-API compute preview are covered by focused tests; frozen P12 importer execution remains pending."
             }
           ],
           "proofRefs": [
@@ -10380,8 +10666,8 @@
             }
           ],
           "limitations": [
-            "Assistant action/context helpers and browser contributions have focused tests; browser action transports are stubbed, and the real-provider reference flow remains pending.",
-            "Local Assistant preview actions cover the source reader, summary, synonym, QA, continuation, and dialogue-sketch prompt handlers, with focused provider-NONE action tests. Browser/API composition remains unverified; R35 action-level prompt parity is implemented, with owner-API proof and final campaign acceptance pending. P12’s prior composed import run predates the added speaker-override assertions, which await a frozen-tree rerun."
+            "Assistant action/context helpers and browser contributions have focused tests; browser action transports are stubbed. A bounded real-provider reference flow passed on candidate c9aece8, while campaign acceptance remains pending.",
+            "Source prompt previews have local compute actions and focused provider-NONE tests. The owner-API host preview proof covers R35 only; browser/API composition across all previews is not established. P12’s composed import fixture now includes speaker-override assertions whose execution on the final tree remains pending."
           ]
         }
       ]
@@ -10673,11 +10959,11 @@
               "id": "P08-N09-unavailable",
               "path": "modules/mcp/src/http.test.ts",
               "testName": "hybrid search and full diagnostics fail closed instead of returning partial substitutes",
-              "scope": "MCP unavailable semantic/diagnostics paths fail closed until exact producer actions exist."
+              "scope": "When optional semantic or diagnostics components are absent, MCP fails closed instead of returning a partial substitute. P09/P10 actions are present in the optional module composition."
             }
           ],
           "limitations": [
-            "MCP target is partial: P09/P10 actions remain unavailable where exact source behavior is not implemented; full profile and running-API stdio acceptance remain pending."
+            "P09 semantic search and P10 speaker/diagnostics actions are present in the optional module composition. Final full-profile and running-API stdio acceptance remain separate campaign gates."
           ]
         }
       ]

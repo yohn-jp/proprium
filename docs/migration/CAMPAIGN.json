@@ -25,7 +25,9 @@
       ],
       "implementation": "in_progress",
       "acceptance": "pending",
-      "proofs": []
+      "proofs": [
+        "docs/verification/P01-GITHUB.md"
+      ]
     },
     {
       "id": "P02",
@@ -64,7 +66,9 @@
       ],
       "implementation": "in_progress",
       "acceptance": "pending",
-      "proofs": []
+      "proofs": [
+        "docs/migration/evidence/P05.json"
+      ]
     },
     {
       "id": "P06",
@@ -75,7 +79,9 @@
       ],
       "implementation": "in_progress",
       "acceptance": "pending",
-      "proofs": []
+      "proofs": [
+        "docs/migration/evidence/P06.json"
+      ]
     },
     {
       "id": "P07",
@@ -87,7 +93,9 @@
       ],
       "implementation": "in_progress",
       "acceptance": "pending",
-      "proofs": []
+      "proofs": [
+        "docs/migration/evidence/P07.json"
+      ]
     },
     {
       "id": "P08",
@@ -98,7 +106,10 @@
       ],
       "implementation": "in_progress",
       "acceptance": "pending",
-      "proofs": []
+      "proofs": [
+        "docs/migration/evidence/P08-API.json",
+        "docs/migration/evidence/P08-MCP.json"
+      ]
     },
     {
       "id": "P09",
@@ -108,7 +119,9 @@
       ],
       "implementation": "in_progress",
       "acceptance": "pending",
-      "proofs": []
+      "proofs": [
+        "docs/migration/evidence/P09.json"
+      ]
     },
     {
       "id": "P10",
@@ -118,7 +131,9 @@
       ],
       "implementation": "in_progress",
       "acceptance": "pending",
-      "proofs": []
+      "proofs": [
+        "docs/migration/evidence/P10.json"
+      ]
     },
     {
       "id": "P11",
@@ -131,7 +146,9 @@
       ],
       "implementation": "pending",
       "acceptance": "pending",
-      "proofs": []
+      "proofs": [
+        "docs/migration/evidence/P11.json"
+      ]
     },
     {
       "id": "P12",
@@ -168,16 +185,24 @@
       "implementation": "in_progress",
       "acceptance": "pending",
       "proofs": [
-        "docs/verification/P13-PACKAGING.md"
+        "docs/verification/P13-PACKAGING.md",
+        "docs/verification/P13-BROWSER-RECOVERY.md",
+        "docs/verification/P13-MODEL-OCI-LIFECYCLE.md"
       ]
     }
   ],
   "limitations": [
     {
       "gate": "real-provider-reference-flow",
-      "status": "NOT_CHECKED",
-      "reason": "Local CPU OpenAI-compatible provider preflight passed through the source adapter; migrated P11 reference flow is pending.",
-      "unblock": "Execute migrated P11 reference flow against the bounded loopback endpoint recorded in P13-PROVIDER-PREFLIGHT.md."
+      "status": "passed-scoped",
+      "reason": "A fresh bounded root run passed all three selected MCP/Assistant acceptance tests (including real local Qwen through both MCP transports, owner-compute continuation preview, and the P11 API/Core review-publication-reconstruction flow) on candidate c9aece82806dad93532fd6d585d6bcdafc506427. Relevant Assistant, MCP, API, Core, Story, Diagnostics, and integration-test blobs are identical to current main 271d7b28. This is scoped synthetic/local-provider evidence, not a campaign completion claim; the coordinator has not promoted this exact rerun into P11.json.",
+      "unblock": "Record the scoped rerun in its owner evidence artifact and complete final frozen-tree P12, full-profile/model-consumer/OCI and integrated browser verification."
+    },
+    {
+      "gate": "R43-recent-activity-cursor-and-handoff",
+      "status": "implementation-gap",
+      "reason": "The fixed source contract provides owner/project/device reading and writing cursors through GET/PUT /api/me/recent-activity and browser resume/handoff callers. Current target adds only DTO types; it has no matching route, durable owner store, or browser handoff. P04 inspection now correctly classifies legacy cursor files as authoritative and emits the inspection target `/history/recent-activity/legacy/<sha256-of-exact-source-bytes>.json`, but no API owner/repository mapping or source-data materialization has been demonstrated.",
+      "unblock": "P08 implements owner-scoped durable read/upsert and API-owned history import; P02 reconnects writing/reading resume and cross-device handoff; P12 verifies explicit identity mapping and retention through data-root replacement/reclone. Keep source removal blocked if bytes cannot be read or mapped."
     }
   ]
 }
