@@ -223,6 +223,9 @@ importers:
       '@codemirror/view':
         specifier: ^6.43.6
         version: 6.43.14
+      '@ionic/core':
+        specifier: 9.0.8
+        version: 9.0.8
       '@ionic/react':
         specifier: 9.0.8
         version: 9.0.8(@stencil/core@4.45.2)(@types/react@19.3.0)(react-dom@19.3.1(react@19.3.1))(react@19.3.1)

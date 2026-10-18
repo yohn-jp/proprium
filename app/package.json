@@ -12,6 +12,7 @@
     "@codemirror/commands": "^6.10.4",
     "@codemirror/state": "^6.7.1",
     "@codemirror/view": "^6.43.6",
+    "@ionic/core": "9.0.8",
     "@ionic/react": "9.0.8",
     "@radix-ui/react-separator": "1.2.0",
     "@radix-ui/react-tabs": "1.2.1",
