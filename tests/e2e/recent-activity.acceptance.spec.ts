@@ -22,7 +22,7 @@ function projectLabel(value: string): string {
 }
 
 async function signIn(page: Page): Promise<void> {
-  await page.goto("/");
+  await page.goto("/desktop/");
   await page.getByLabel("アクセストークン").fill(authToken);
   await page.getByRole("button", { name: "ログイン" }).click();
   await expect(page.getByRole("heading", { name: "作品を追加" })).toBeVisible();

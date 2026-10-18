@@ -54,7 +54,7 @@ function projectLabel(value: string): string {
 }
 
 async function signIn(page: Page): Promise<void> {
-  await page.goto("/");
+  await page.goto("/desktop/");
   await page.getByLabel("アクセストークン").fill(authToken);
   await page.getByRole("button", { name: "ログイン" }).click();
   await expect(page.getByRole("heading", { name: "作品を追加" })).toBeVisible();
@@ -950,7 +950,7 @@ test("full browser MCP proposal payload is restored after Core data loss before 
   });
   expect(partial?.proposal.evidence).toBeUndefined();
 
-  await page.goto(new URL("/", origin).toString());
+  await page.goto(new URL("/desktop/", origin).toString());
   await expect(page.locator(".project-button")).toHaveCount(1);
   await page.getByRole("button", { name: projectLabel(repositoryUrl), exact: true }).click();
   await expect(page.getByRole("heading", { name: "Volume One" })).toBeVisible();

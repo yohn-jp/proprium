@@ -632,7 +632,17 @@ async function main() {
       else void dialog.dismiss();
     });
     await page.goto(baseUrl);
+    await page.getByRole("heading", { name: "執筆画面を選ぶ" }).waitFor({ state: "visible", timeout: 30_000 });
+    await page.getByRole("button", { name: /Desktop/u }).click();
+    await page.waitForURL(/\/desktop\//u, { timeout: 30_000 });
     await openProject(page, baseUrl);
+
+    await page.getByRole("button", { name: "モバイルUIへ" }).click();
+    await page.waitForURL(/\/mobile\/projects\//u, { timeout: 30_000 });
+    await page.getByRole("navigation", { name: "モバイル画面" }).getByRole("button", { name: "設定", exact: true }).click();
+    await page.getByRole("button", { name: "Desktop版へ切り替え" }).click();
+    await page.waitForURL(/\/desktop\/projects\//u, { timeout: 30_000 });
+    await page.locator(".cm-content").waitFor({ state: "visible" });
 
     const authorText = `P13 browser recovery ${randomUUID()}`;
     diagnosticSecrets.push(authorText);
@@ -667,7 +677,7 @@ async function main() {
       if (dialog.type() === "beforeunload") void dialog.accept();
       else void dialog.dismiss();
     });
-    await recoveredPage.goto(baseUrl);
+    await recoveredPage.goto(baseUrl + "/desktop/");
     await signIn(recoveredPage);
     const persistedDraft = await waitFor("the checkpointed entry in the reopened browser profile", () => readJournal(recoveredPage), (entries) => entries.some((entry) => entry.operationId === operationId && entry.state === "checkpointed" && entry.text === authorText));
     assert.equal(persistedDraft.filter((entry) => entry.operationId === operationId).length, 1, "The browser journal must contain one copy of the operation.");
