@@ -27,7 +27,7 @@ import { loadThemeMode, persistThemeMode, type ThemeMode } from "../theme";
 import { clearDraft, loadDraft } from "../drafts";
 import type { ApplicationShell, ApplicationShellProps, UiMode } from "./contracts";
 import { applicationPath, parseApplicationLocation, readUiModePreference, rememberUiMode, type ApplicationResource } from "./navigation";
-import { isTextRepresentedByRecoveryRecord, isUnchangedEntryConfirmedByReceipt } from "./recovery";
+import { isNonDraftEntryAcknowledgedByReceipt, isTextRepresentedByRecoveryRecord, isUnchangedEntryConfirmedByReceipt } from "./recovery";
 import {
   BrowserJournal,
   documentKey,
@@ -822,12 +822,46 @@ function AuthorWorkspace({
       if (!sameRemoteSnapshot(effective.snapshot, remote.snapshot)) throw new Error("チェックポイントとリモート原稿の基準が異なります。同期状態を確認してください。");
       const repository = preferredRepository ?? effective.snapshot.repository;
       const currentJournal = journalRef.current;
-      const [localEntries, publicationReceipts] = currentJournal
-        ? await Promise.all([
-          currentJournal.getDocument(repository, effective.document.path, authorScopeRef.current),
-          currentJournal.getPublicationReceipts(repository, authorScopeRef.current),
-        ])
-        : [[], []] as const;
+      let localEntries = currentJournal
+        ? await currentJournal.getDocument(repository, effective.document.path, authorScopeRef.current)
+        : [];
+      let publicationReceipts: Awaited<ReturnType<BrowserJournal["getPublicationReceipts"]>> = [];
+      let cleanupError: unknown;
+      if (currentJournal) {
+        try {
+          publicationReceipts = await currentJournal.getPublicationReceipts(repository, authorScopeRef.current);
+        } catch (error) {
+          cleanupError = error;
+        }
+      }
+      if (cleanupError && navigationRef.current === nav && sceneLoadRef.current === sceneRequest) {
+        setStatus({ message: `公開確認記録を読めないため、回復記録を整理できませんでした。記録を保持しています。${messageOf(cleanupError)}`, kind: "error" });
+      }
+      if (currentJournal) {
+        const receiptsToRetry = publicationReceipts.filter((receipt) =>
+          localEntries.some((candidate) => isNonDraftEntryAcknowledgedByReceipt(candidate, receipt)));
+        for (const receipt of receiptsToRetry) {
+          try {
+            await currentJournal.acknowledge(repository, authorScopeRef.current, receipt);
+          } catch (error) {
+            cleanupError ??= error;
+          }
+        }
+        if (receiptsToRetry.length > 0) {
+          try {
+            localEntries = await currentJournal.getDocument(repository, effective.document.path, authorScopeRef.current);
+          } catch (error) {
+            cleanupError ??= error;
+          }
+          await refreshJournal(repository, nav);
+          const acknowledgedEntriesRemain = localEntries.some((candidate) =>
+            receiptsToRetry.some((receipt) => isNonDraftEntryAcknowledgedByReceipt(candidate, receipt)));
+          if (acknowledgedEntriesRemain && navigationRef.current === nav && sceneLoadRef.current === sceneRequest) {
+            const detail = cleanupError ? messageOf(cleanupError) : "確認済み操作の回復記録がまだ残っています。";
+            setStatus({ message: `GitHub への保存は確認済みですが、ブラウザー回復記録を整理できませんでした。記録を保持しています。${detail}`, kind: "error" });
+          }
+        }
+      }
       if (navigationRef.current !== nav || sceneLoadRef.current !== sceneRequest) return;
       let latest = localEntries.at(-1) ?? null;
       let text = effective.scene.text;
