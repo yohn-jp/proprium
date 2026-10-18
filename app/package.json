@@ -6,7 +6,7 @@
   "scripts": {
     "build": "tsc --noEmit -p tsconfig.json && vite build && SCRIPTORIUM_UI=desktop vite build && SCRIPTORIUM_UI=mobile vite build",
     "typecheck": "tsc -p tsconfig.json --noEmit",
-    "test": "node --import tsx --test src/*.test.ts"
+    "test": "node --import tsx --test 'src/**/*.test.ts'"
   },
   "dependencies": {
     "@codemirror/commands": "^6.10.4",
