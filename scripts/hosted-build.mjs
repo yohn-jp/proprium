@@ -528,12 +528,14 @@ export async function browserArtifactRecords(deployedDirectory, browserIds) {
   const records = await Promise.all(['', 'desktop', 'mobile'].map((ui) =>
     browserUiArtifactRecords(path.join(deployedDirectory, 'app/dist', ui), browserIds, ui)));
   return {
-    files: records.flatMap(({ files }) => files).sort((a, b) => a.path.localeCompare(b.path)),
+    files: records.flatMap(({ files }) => files).sort((a, b) => a.path < b.path ? -1 : a.path > b.path ? 1 : 0),
     manifestPath: '/app/app/dist/.vite/manifest.json',
   };
 }
 
 async function browserUiArtifactRecords(distDirectory, browserIds, ui) {
+  const directory = await lstat(distDirectory);
+  if (!directory.isDirectory() || directory.isSymbolicLink()) throw new Error(`Browser build directory is not a real directory: ${distDirectory}`);
   const manifestPath = path.join(distDirectory, '.vite/manifest.json');
   const manifest = JSON.parse(await readFile(manifestPath, 'utf8'));
   if (!manifest || typeof manifest !== 'object' || Array.isArray(manifest)) {
