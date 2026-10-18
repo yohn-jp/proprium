@@ -39,6 +39,9 @@ async function signIn(page: Page, mode: "desktop" | "mobile"): Promise<void> {
   await page.goto("/" + mode + "/");
   await page.getByLabel("アクセストークン").fill(authToken);
   await page.getByRole("button", { name: "ログイン" }).click();
+  if (mode === "mobile") {
+    await page.getByRole("navigation", { name: "モバイル画面" }).getByRole("button", { name: "作品", exact: true }).click();
+  }
   await expect(page.getByRole("heading", { name: "作品を追加" })).toBeVisible();
 }
 
@@ -223,28 +226,34 @@ test("both production Shells preserve recoverable Japanese drafts and the Mobile
   await expect(mobileEditor).toHaveText(beforeFailedSwitch);
   await expectJournalDraft(page, "scene-1", beforeFailedSwitch);
   await assertNoHorizontalOverflow(page);
-
-  await page.getByRole("navigation", { name: "モバイル画面" }).getByRole("button", { name: "設定", exact: true }).click();
   await page.evaluate(() => {
-    localStorage.setItem("scriptorium:e2e:fail-journal", "1");
+    (window as Window & { __failRecoveryJournalWrites?: boolean }).__failRecoveryJournalWrites = true;
     const originalPut = IDBObjectStore.prototype.put;
     IDBObjectStore.prototype.put = function (this: IDBObjectStore, value: unknown, key?: IDBValidKey): IDBRequest<IDBValidKey> {
-      if (this.transaction.db.name === "scriptorium-recovery" && this.name === "operations" && localStorage.getItem("scriptorium:e2e:fail-journal") === "1") {
+      if (this.transaction.db.name === "scriptorium-recovery" && this.name === "operations" && (window as Window & { __failRecoveryJournalWrites?: boolean }).__failRecoveryJournalWrites) {
+        const testWindow = window as Window & { __failedRecoveryJournalPuts?: number };
+        testWindow.__failedRecoveryJournalPuts = (testWindow.__failedRecoveryJournalPuts ?? 0) + 1;
         throw new DOMException("Synthetic quota limit", "QuotaExceededError");
       }
       return originalPut.call(this, value, key);
     };
   });
+  const protectedDraft = beforeFailedSwitch + " 回復記録の障害";
+  await mobileEditor.fill(protectedDraft);
+  await expect(mobileEditor).toHaveText(protectedDraft);
+  await page.waitForFunction(() => ((window as Window & { __failedRecoveryJournalPuts?: number }).__failedRecoveryJournalPuts ?? 0) > 0);
+  await page.getByRole("navigation", { name: "モバイル画面" }).getByRole("button", { name: "設定", exact: true }).click();
   await page.getByRole("button", { name: "Desktop版へ切り替え" }).click();
   await expect(page.getByRole("alert")).toBeVisible();
   await expect(page).toHaveURL(new RegExp("/mobile/projects/.+/scenes/scene-1"));
-  await expect(mobileEditor).toHaveText(beforeFailedSwitch);
-  await page.evaluate(() => localStorage.removeItem("scriptorium:e2e:fail-journal"));
+  await expect(mobileEditor).toHaveText(protectedDraft);
+  await expectJournalDraft(page, "scene-1", beforeFailedSwitch);
+  await page.evaluate(() => { (window as Window & { __failRecoveryJournalWrites?: boolean }).__failRecoveryJournalWrites = false; });
 
   await page.getByRole("button", { name: "Desktop版へ切り替え" }).click();
   await expect(page).toHaveURL(new RegExp("/desktop/projects/.+/scenes/scene-1"));
   const desktopEditor = page.locator(".cm-content");
-  await expect(desktopEditor).toHaveText(beforeFailedSwitch);
+  await expect(desktopEditor).toHaveText(protectedDraft);
   const desktopAppearance = page.getByLabel("外観");
   for (const mode of ["dark", "paper", "light"] as const) {
     await desktopAppearance.selectOption(mode);
@@ -272,7 +281,7 @@ test("both production Shells preserve recoverable Japanese drafts and the Mobile
   await desktopEditor.fill(desktopDraft);
   await expectJournalDraft(page, "scene-1", desktopDraft);
   await desktopEditor.press("Control+z");
-  await expect(desktopEditor).toHaveText(beforeFailedSwitch);
+  await expect(desktopEditor).toHaveText(protectedDraft);
   await desktopEditor.press("Control+Shift+z");
   await expect(desktopEditor).toHaveText(desktopDraft);
   await expect(page.locator(".manuscript-preview rt")).toContainText("かぜ");
