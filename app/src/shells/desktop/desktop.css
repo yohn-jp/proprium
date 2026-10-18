@@ -161,6 +161,10 @@
   overscroll-behavior: contain;
 }
 
+.st-desktop-tab-content[data-state="inactive"] {
+  display: none;
+}
+
 .st-desktop-slot {
   min-width: 0;
   min-height: 100%;
