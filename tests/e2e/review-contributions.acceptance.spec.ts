@@ -244,6 +244,10 @@ test("full profile renders Story and Speaker review queues and turns both author
     expect(remoteScene).not.toMatch(/^speakerOverrides:/mu);
     expect(() => git(fixture.remote, "cat-file", "-e", `refs/heads/${branch}:meta/scriptorium/modules/speaker/corrections.jsonl`)).toThrow();
 
+    await page.getByRole("tab", { name: "作品ライブラリ" }).click();
+    await page.getByRole("navigation", { name: "作品構成" })
+      .getByRole("button", { name: "Review Chapter: Review Scene", exact: true }).click();
+    await expect(page.getByRole("heading", { name: "Review Scene" })).toBeVisible();
     await page.getByRole("button", { name: "モバイルUIへ" }).click();
     await expect(page).toHaveURL(new RegExp("/mobile/projects/" + encodeURIComponent(project.id) + "/scenes/scene-review"));
     await page.getByRole("navigation", { name: "モバイル画面" }).getByRole("button", { name: "道具", exact: true }).click();
