@@ -13,6 +13,18 @@ interface JournalDraft {
   text: string;
 }
 
+interface JournalEntryRecord extends JournalDraft {
+  key: string;
+  publicationBatchId?: string;
+  operation: { id: string; generation: number };
+}
+
+interface ConfirmedPublicationReceipt {
+  batchId: string;
+  state: "confirmed";
+  acknowledged: Array<{ operationId: string; generation: number }>;
+}
+
 interface ModuleStatus {
   id: string;
   availability: string;
@@ -109,6 +121,96 @@ async function expectJournalState(page: Page, sceneId: string, text: string, sta
   await expect.poll(async () => (await readJournal(page)).some((draft) =>
     draft.sceneId === sceneId && draft.text === text && draft.state === state,
   ), { timeout: 30_000 }).toBe(true);
+}
+
+async function readJournalEntry(page: Page, sceneId: string, text: string): Promise<JournalEntryRecord> {
+  return page.evaluate(async ({ sceneId, text }) => {
+    const database = await new Promise<IDBDatabase>((resolve, reject) => {
+      const request = indexedDB.open("scriptorium-recovery", 3);
+      request.onsuccess = () => resolve(request.result);
+      request.onerror = () => reject(request.error ?? new Error("IndexedDB open failed"));
+    });
+    try {
+      const transaction = database.transaction("operations", "readonly");
+      const records = await new Promise<JournalEntryRecord[]>((resolve, reject) => {
+        const request = transaction.objectStore("operations").getAll();
+        request.onsuccess = () => resolve(request.result as JournalEntryRecord[]);
+        request.onerror = () => reject(request.error ?? new Error("IndexedDB journal read failed"));
+      });
+      const entry = records.find((record) => record.sceneId === sceneId && record.text === text);
+      if (!entry) throw new Error("Expected recovery journal entry was not present");
+      return entry;
+    } finally {
+      database.close();
+    }
+  }, { sceneId, text });
+}
+
+async function readConfirmedPublicationReceipt(page: Page, entry: JournalEntryRecord): Promise<ConfirmedPublicationReceipt> {
+  return page.evaluate(async ({ operationId, generation }) => {
+    const database = await new Promise<IDBDatabase>((resolve, reject) => {
+      const request = indexedDB.open("scriptorium-recovery", 3);
+      request.onsuccess = () => resolve(request.result);
+      request.onerror = () => reject(request.error ?? new Error("IndexedDB open failed"));
+    });
+    try {
+      const transaction = database.transaction("publicationReceipts", "readonly");
+      const records = await new Promise<Array<{ receipt: ConfirmedPublicationReceipt }>>((resolve, reject) => {
+        const request = transaction.objectStore("publicationReceipts").getAll();
+        request.onsuccess = () => resolve(request.result as Array<{ receipt: ConfirmedPublicationReceipt }>);
+        request.onerror = () => reject(request.error ?? new Error("IndexedDB receipt read failed"));
+      });
+      const matched = records.map((record) => record.receipt).find((receipt) => receipt.state === "confirmed" &&
+        receipt.acknowledged.some((item) => item.operationId === operationId && item.generation === generation));
+      if (!matched) throw new Error("Confirmed receipt for the exact operation was not present");
+      return matched;
+    } finally {
+      database.close();
+    }
+  }, { operationId: entry.operation.id, generation: entry.operation.generation });
+}
+
+async function restorePublicationUnknownEntry(page: Page, entry: JournalEntryRecord, receipt: ConfirmedPublicationReceipt): Promise<void> {
+  await page.evaluate(async ({ entry, batchId }) => {
+    const database = await new Promise<IDBDatabase>((resolve, reject) => {
+      const request = indexedDB.open("scriptorium-recovery", 3);
+      request.onsuccess = () => resolve(request.result);
+      request.onerror = () => reject(request.error ?? new Error("IndexedDB open failed"));
+    });
+    try {
+      const transaction = database.transaction("operations", "readwrite");
+      const done = new Promise<void>((resolve, reject) => {
+        transaction.oncomplete = () => resolve();
+        transaction.onerror = () => reject(transaction.error ?? new Error("IndexedDB recovery seed failed"));
+        transaction.onabort = () => reject(transaction.error ?? new Error("IndexedDB recovery seed aborted"));
+      });
+      transaction.objectStore("operations").put({ ...entry, state: "publication_unknown", publicationBatchId: batchId, updatedAt: Date.now() });
+      await done;
+    } finally {
+      database.close();
+    }
+  }, { entry, batchId: receipt.batchId });
+}
+
+async function hasJournalEntryForOperation(page: Page, operationId: string, generation: number): Promise<boolean> {
+  return page.evaluate(async ({ operationId, generation }) => {
+    const database = await new Promise<IDBDatabase>((resolve, reject) => {
+      const request = indexedDB.open("scriptorium-recovery", 3);
+      request.onsuccess = () => resolve(request.result);
+      request.onerror = () => reject(request.error ?? new Error("IndexedDB open failed"));
+    });
+    try {
+      const transaction = database.transaction("operations", "readonly");
+      const records = await new Promise<JournalEntryRecord[]>((resolve, reject) => {
+        const request = transaction.objectStore("operations").getAll();
+        request.onsuccess = () => resolve(request.result as JournalEntryRecord[]);
+        request.onerror = () => reject(request.error ?? new Error("IndexedDB journal read failed"));
+      });
+      return records.some((entry) => entry.operation.id === operationId && entry.operation.generation === generation);
+    } finally {
+      database.close();
+    }
+  }, { operationId, generation });
 }
 
 function readLocalRemoteDocument(path: string): string | null {
@@ -310,8 +412,14 @@ test("both production Shells preserve recoverable Japanese drafts and the Mobile
       if (this.transaction.db.name === "scriptorium-recovery" && this.name === "operations" && draftText.includes("回復記録の障害") && (window as Window & { __failRecoveryJournalWrites?: boolean }).__failRecoveryJournalWrites) {
         const testWindow = window as Window & { __failedRecoveryJournalPuts?: number };
         testWindow.__failedRecoveryJournalPuts = (testWindow.__failedRecoveryJournalPuts ?? 0) + 1;
-        this.transaction.abort();
-        throw new DOMException("Synthetic quota limit", "QuotaExceededError");
+        const transaction = this.transaction;
+        const request = originalPut.call(this, value, key);
+        Object.defineProperty(transaction, "error", {
+          configurable: true,
+          get: () => new DOMException("Synthetic quota limit", "QuotaExceededError"),
+        });
+        queueMicrotask(() => transaction.abort());
+        return request;
       }
       return originalPut.call(this, value, key);
     };
@@ -339,15 +447,20 @@ test("both production Shells preserve recoverable Japanese drafts and the Mobile
   await page.getByRole("button", { name: "Checkpoint", exact: true }).click();
   await expect(page.locator(".durability-message")).toContainText("ローカルチェックポイント");
   await expectJournalState(page, "scene-2", protectedDraft, "checkpointed");
+  const desktopCheckpoint = await readJournalEntry(page, "scene-2", protectedDraft);
   const remoteBeforeDesktopPublish = readLocalRemoteDocument("manuscript/vol-1/ch-1/scene-2.md");
   await page.getByRole("button", { name: "Save to GitHub", exact: true }).click();
   await expect(page.locator(".durability-message")).toContainText("確認済みの GitHub 版");
   if (remoteBeforeDesktopPublish !== null) {
     expect(readLocalRemoteDocument("manuscript/vol-1/ch-1/scene-2.md")).toContain(protectedDraft);
   }
+  const desktopReceipt = await readConfirmedPublicationReceipt(page, desktopCheckpoint);
+  await restorePublicationUnknownEntry(page, desktopCheckpoint, desktopReceipt);
   await page.reload();
   await expect(page).toHaveURL(new RegExp("/desktop/projects/.+/scenes/scene-2"));
   await expect(page.locator(".cm-content")).toHaveText(protectedDraft);
+  await expect(page.locator(".durability-message")).toContainText("確認済みの GitHub 版");
+  await expect.poll(() => hasJournalEntryForOperation(page, desktopCheckpoint.operation.id, desktopCheckpoint.operation.generation)).toBe(false);
   await page.getByRole("button", { name: "履歴", exact: true }).click();
   const desktopHistory = page.locator(".manuscript-history");
   await expect(desktopHistory.getByRole("heading", { name: "改稿の履歴" })).toBeVisible();
