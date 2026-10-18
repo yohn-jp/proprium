@@ -27,7 +27,7 @@ import { loadThemeMode, persistThemeMode, type ThemeMode } from "../theme";
 import { clearDraft, loadDraft } from "../drafts";
 import type { ApplicationShell, ApplicationShellProps, UiMode } from "./contracts";
 import { applicationPath, parseApplicationLocation, readUiModePreference, rememberUiMode, type ApplicationResource } from "./navigation";
-import { isTextRepresentedByRecoveryRecord } from "./recovery";
+import { isTextRepresentedByRecoveryRecord, isUnchangedEntryConfirmedByReceipt } from "./recovery";
 import {
   BrowserJournal,
   documentKey,
@@ -821,7 +821,13 @@ function AuthorWorkspace({
       if (navigationRef.current !== nav || sceneLoadRef.current !== sceneRequest) return;
       if (!sameRemoteSnapshot(effective.snapshot, remote.snapshot)) throw new Error("チェックポイントとリモート原稿の基準が異なります。同期状態を確認してください。");
       const repository = preferredRepository ?? effective.snapshot.repository;
-      const localEntries = await journalRef.current?.getDocument(repository, effective.document.path, authorScopeRef.current) ?? [];
+      const currentJournal = journalRef.current;
+      const [localEntries, publicationReceipts] = currentJournal
+        ? await Promise.all([
+          currentJournal.getDocument(repository, effective.document.path, authorScopeRef.current),
+          currentJournal.getPublicationReceipts(repository, authorScopeRef.current),
+        ])
+        : [[], []] as const;
       if (navigationRef.current !== nav || sceneLoadRef.current !== sceneRequest) return;
       let latest = localEntries.at(-1) ?? null;
       let text = effective.scene.text;
@@ -854,7 +860,10 @@ function AuthorWorkspace({
         ? inMemory.editor
         : null;
       const inMemoryEntry = inMemoryEditor?.entry;
-      if (inMemoryEditor && inMemoryEntry &&
+      const inMemoryEntryWasPublished = Boolean(inMemoryEditor && inMemoryEntry &&
+        inMemoryEntry.state !== "draft" &&
+        isUnchangedEntryConfirmedByReceipt(inMemoryEntry, inMemoryEditor.text, publicationReceipts));
+      if (inMemoryEditor && inMemoryEntry && !inMemoryEntryWasPublished &&
           (!latest || inMemoryEntry.operation.generation > latest.operation.generation)) {
         latest = inMemoryEntry;
         entry = inMemoryEntry;
@@ -905,7 +914,11 @@ function AuthorWorkspace({
       let baseText = latest?.baseText ?? effective.scene.text;
       let draftStored = Boolean(latest);
       let journalError = "";
-      if (finalEditor?.entry && (!latest || finalEditor.entry.operation.generation > latest.operation.generation)) {
+      const finalEditorEntryWasPublished = Boolean(finalEditor?.entry &&
+        finalEditor.entry.state !== "draft" &&
+        isUnchangedEntryConfirmedByReceipt(finalEditor.entry, finalEditor.text, publicationReceipts));
+      if (finalEditor?.entry && !finalEditorEntryWasPublished &&
+          (!latest || finalEditor.entry.operation.generation > latest.operation.generation)) {
         latest = finalEditor.entry;
         entry = finalEditor.entry;
         text = finalEditor.text;
@@ -1656,6 +1669,17 @@ function AuthorWorkspace({
     const nav = navigationRef.current;
     const projectId = current.project.id;
     const initialRepository = current.observation.snapshot.repository;
+    const syncEditorEntryState = (previous: JournalEntry, updated: JournalEntry): void => {
+      updateWork((latest) => {
+        const editor = latest?.editor;
+        const entry = editor?.entry;
+        if (!latest || !editor || !entry || entry.operation.id !== previous.operation.id ||
+            entry.operation.generation !== previous.operation.generation || entry.authorScope !== previous.authorScope ||
+            editor.read.document.path !== previous.documentPath || editor.read.scene.id !== previous.sceneId ||
+            !sameRepository(latest.observation.snapshot.repository, previous.repository)) return latest;
+        return { ...latest, editor: { ...editor, entry: updated } };
+      });
+    };
     setBusy("publish");
     try {
       await scratchFlushRef.current();
@@ -1680,12 +1704,18 @@ function AuthorWorkspace({
       }
       for (const [existingBatch, group] of groups) {
         const batchId = existingBatch || crypto.randomUUID();
-        for (const entry of group) await currentJournal.updateState({ ...entry, publicationBatchId: batchId }, "publication_unknown");
+        for (const entry of group) {
+          const pending = await currentJournal.updateState({ ...entry, publicationBatchId: batchId }, "publication_unknown");
+          syncEditorEntryState(entry, pending);
+        }
         const receipt = await api.publish(projectId, batchId);
         if (receipt.state === "confirmed") {
           await currentJournal.acknowledge(repository, authorScopeRef.current, receipt);
         } else if (receipt.state === "conflict") {
-          for (const entry of group) await currentJournal.updateState(entry, "conflict");
+          for (const entry of group) {
+            const conflict = await currentJournal.updateState({ ...entry, publicationBatchId: batchId }, "conflict");
+            syncEditorEntryState(entry, conflict);
+          }
           throw new Error("GitHub に別の更新がありました。チェックポイントは保持し、競合を確認してください。");
         } else {
           if (isCurrentProject(nav, projectId, repository)) setStatus({ message: "GitHub への保存結果を確認できませんでした。同じバッチ ID を保持して再確認します。", kind: "error" });
