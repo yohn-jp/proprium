@@ -1,6 +1,6 @@
 # UI Modernization V1 OCI and Hosted Profile Evidence
 
-Status: **in progress; exact final-HEAD OCI acceptance is not yet checked**.
+This file retains **historical diagnostic evidence**. Final candidate gate statuses, exact tested commits and image identities belong to the [PR #10 verification record](https://github.com/yohn-jp/scriptorium/pull/10), as described in [the acceptance map](UI-V1-ACCEPTANCE.md). None of the tables below certify a later commit.
 
 The evidence below records the first integrated production run on `141a2319cb8de34a005e638a4e33aafb64d4b927`. The later integrated HEAD `0a339a9a940b52984ec38f7357f3d32516b0fe7a` changed acceptance tests only, but this report does not treat the earlier results as tests of that later HEAD. The coordinator will rerun the required image checks on the final frozen HEAD. No release image was published.
 
@@ -43,7 +43,7 @@ The smoke verifies the real package's module dependency closure, generated serve
 
 Logs and package directories are under `/data/scriptorium-ui-oci-evidence/` with the `141a2319cb8de34a005e638a4e33aafb64d4b927-hosted-` prefix and `packages-141a2319cb8de34a005e638a4e33aafb64d4b927/` directory. The tracked smoke checker SHA-256 in the tested worktree was `8cbd8928c3e98f13ee8b696ce1173ddbc33dfaef3958fe3a4ddfab5e02beba45`.
 
-## Remaining final checks
+## Required final checks
 
 - Core and Full image acceptance with a clean, final code SHA and the canonical Podman wrapper basename so `verify-oci.sh` explicitly requests OCI output.
 - Selected Hosted package/smoke rerun at that same final code SHA.
