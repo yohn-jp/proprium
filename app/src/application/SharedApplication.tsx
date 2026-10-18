@@ -801,6 +801,9 @@ function AuthorWorkspace({
   const loadScene = useCallback(async (projectId: string, sceneId: string, tree: TreeRead, preferredRepository?: RepositoryIdentity) => {
     const sceneRequest = ++sceneLoadRef.current;
     const nav = navigationRef.current;
+    const journalAuthorScope = authorScopeRef.current;
+    const isCurrentLoadContext = () => navigationRef.current === nav &&
+      sceneLoadRef.current === sceneRequest && authorScopeRef.current === journalAuthorScope;
     try {
       const composedText = await editorFlushRef.current();
       const activeEditor = workRef.current?.editor;
@@ -808,61 +811,67 @@ function AuthorWorkspace({
       recentResume.flush();
       await flushDraft();
     } catch (error) {
-      if (navigationRef.current === nav && sceneLoadRef.current === sceneRequest) setStatus({ message: messageOf(error), kind: "error" });
+      if (isCurrentLoadContext()) setStatus({ message: messageOf(error), kind: "error" });
       return;
     }
-    if (navigationRef.current !== nav || sceneLoadRef.current !== sceneRequest) return;
+    if (!isCurrentLoadContext()) return;
     updateWork((current) => current ? { ...current, selectedSceneId: sceneId, loadingScene: true } : current);
     try {
       const remote = await api.readScene(projectId, sceneId, "remote", tree.snapshot);
-      if (navigationRef.current !== nav || sceneLoadRef.current !== sceneRequest) return;
+      if (!isCurrentLoadContext()) return;
       if (snapshotKey(remote.snapshot) !== snapshotKey(tree.snapshot)) throw new Error("作品構成と原稿が異なるリモートスナップショットから返されました。再読み込みしてください。");
       const effective = await api.readScene(projectId, sceneId, "checkpoint");
-      if (navigationRef.current !== nav || sceneLoadRef.current !== sceneRequest) return;
+      if (!isCurrentLoadContext()) return;
       if (!sameRemoteSnapshot(effective.snapshot, remote.snapshot)) throw new Error("チェックポイントとリモート原稿の基準が異なります。同期状態を確認してください。");
       const repository = preferredRepository ?? effective.snapshot.repository;
       const currentJournal = journalRef.current;
       let localEntries = currentJournal
-        ? await currentJournal.getDocument(repository, effective.document.path, authorScopeRef.current)
+        ? await currentJournal.getDocument(repository, effective.document.path, journalAuthorScope)
         : [];
+      if (!isCurrentLoadContext()) return;
       let publicationReceipts: Awaited<ReturnType<BrowserJournal["getPublicationReceipts"]>> = [];
       let cleanupError: unknown;
       if (currentJournal) {
         try {
-          publicationReceipts = await currentJournal.getPublicationReceipts(repository, authorScopeRef.current);
+          publicationReceipts = await currentJournal.getPublicationReceipts(repository, journalAuthorScope);
         } catch (error) {
           cleanupError = error;
         }
       }
-      if (cleanupError && navigationRef.current === nav && sceneLoadRef.current === sceneRequest) {
+      if (!isCurrentLoadContext()) return;
+      if (cleanupError) {
         setStatus({ message: `公開確認記録を読めないため、回復記録を整理できませんでした。記録を保持しています。${messageOf(cleanupError)}`, kind: "error" });
       }
       if (currentJournal) {
         const receiptsToRetry = publicationReceipts.filter((receipt) =>
           localEntries.some((candidate) => isNonDraftEntryAcknowledgedByReceipt(candidate, receipt)));
         for (const receipt of receiptsToRetry) {
+          if (!isCurrentLoadContext()) return;
           try {
-            await currentJournal.acknowledge(repository, authorScopeRef.current, receipt);
+            await currentJournal.acknowledge(repository, journalAuthorScope, receipt);
           } catch (error) {
             cleanupError ??= error;
           }
+          if (!isCurrentLoadContext()) return;
         }
         if (receiptsToRetry.length > 0) {
           try {
-            localEntries = await currentJournal.getDocument(repository, effective.document.path, authorScopeRef.current);
+            localEntries = await currentJournal.getDocument(repository, effective.document.path, journalAuthorScope);
           } catch (error) {
             cleanupError ??= error;
           }
+          if (!isCurrentLoadContext()) return;
           await refreshJournal(repository, nav);
+          if (!isCurrentLoadContext()) return;
           const acknowledgedEntriesRemain = localEntries.some((candidate) =>
             receiptsToRetry.some((receipt) => isNonDraftEntryAcknowledgedByReceipt(candidate, receipt)));
-          if (acknowledgedEntriesRemain && navigationRef.current === nav && sceneLoadRef.current === sceneRequest) {
+          if (acknowledgedEntriesRemain) {
             const detail = cleanupError ? messageOf(cleanupError) : "確認済み操作の回復記録がまだ残っています。";
             setStatus({ message: `GitHub への保存は確認済みですが、ブラウザー回復記録を整理できませんでした。記録を保持しています。${detail}`, kind: "error" });
           }
         }
       }
-      if (navigationRef.current !== nav || sceneLoadRef.current !== sceneRequest) return;
+      if (!isCurrentLoadContext()) return;
       let latest = localEntries.at(-1) ?? null;
       let text = effective.scene.text;
       let entry = latest;
@@ -871,7 +880,7 @@ function AuthorWorkspace({
         const legacy = loadDraft(localStorageIfAvailable(), projectId, sceneId);
         if (legacy && legacy.text !== effective.scene.text) {
           const operation = buildOperation(effective, legacy.text, crypto.randomUUID(), 1);
-          const migrated = makeEntry(repository, authorScopeRef.current, sceneId, effective, legacy.text, effective.scene.text, operation, "draft");
+          const migrated = makeEntry(repository, journalAuthorScope, sceneId, effective, legacy.text, effective.scene.text, operation, "draft");
           try {
             if (!await journalRef.current.putLatestDraft(migrated)) throw new Error("A newer browser draft already exists.");
             clearDraft(localStorageIfAvailable(), projectId, sceneId);
@@ -879,7 +888,7 @@ function AuthorWorkspace({
             if (legacy.revision !== effective.scene.revision) conflict = remote;
             setLegacyDrafts(readLegacyDrafts());
             generationRef.current = Math.max(generationRef.current, 1);
-            void refreshJournal(repository);
+            void refreshJournal(repository, nav);
           } catch (error) {
             setGlobalError(`古いブラウザー下書きを IndexedDB に移せませんでした。古い記録は残しました。${messageOf(error)}`);
           }
@@ -920,7 +929,7 @@ function AuthorWorkspace({
               const rebasedGeneration = Math.max(generationRef.current, latestGeneration) + 1;
               generationRef.current = rebasedGeneration;
               const operation = buildOperation(effective, latest.text, latest.operation.id, rebasedGeneration);
-              latest = makeEntry(repository, authorScopeRef.current, sceneId, effective, latest.text, effective.scene.text, operation, "draft");
+              latest = makeEntry(repository, journalAuthorScope, sceneId, effective, latest.text, effective.scene.text, operation, "draft");
               if (!await journalRef.current?.putLatestDraft(latest)) throw new Error("A newer browser draft already exists.");
               entry = latest;
             } catch (error) {
@@ -936,7 +945,7 @@ function AuthorWorkspace({
         }
         if (latest.state === "conflict") conflict = remote;
       }
-      if (navigationRef.current !== nav || sceneLoadRef.current !== sceneRequest) return;
+      if (!isCurrentLoadContext()) return;
       // A draft can arrive while the prior-checkpoint rebase is waiting for IndexedDB.
       // Re-read the live editor immediately before installation so that asynchronous
       // storage completion cannot replace a newer in-memory generation.
@@ -987,7 +996,7 @@ function AuthorWorkspace({
         updateApplicationLocation(resourceForWork(loadedWork));
       }
     } catch (error) {
-      if (navigationRef.current !== nav || sceneLoadRef.current !== sceneRequest) return;
+      if (!isCurrentLoadContext()) return;
       updateWork((current) => current ? { ...current, loadingScene: false, editor: null } : current);
       setStatus({ message: messageOf(error), kind: "error" });
     }
