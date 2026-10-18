@@ -308,7 +308,7 @@ async function serveStatic(
   const uiMatch = /^\/(desktop|mobile)(?:\/(.*))?$/u.exec(path);
   const ui = uiMatch?.[1];
   const uiPath = uiMatch?.[2] ?? "";
-  const uiEntry = ui && /^(?:(?:|library|writing|reading|inspection|review|tools|settings)\/?|projects\/[^/.\\]+(?:\/scenes\/[^/.\\]+)?\/?)$/u.test(uiPath);
+  const uiEntry = ui && /^(?:(?:|library|writing|reading|inspection|review|tools|settings)\/?|projects\/(?!\.{1,2}(?:\/|$))[^/\\]+(?:\/scenes\/(?!\.{1,2}(?:\/|$))[^/\\]+)?\/?)$/u.test(uiPath);
   let file = files[path] ?? (publicReaderPath ? files["/"] : undefined);
   if (uiEntry) file = { filename: `${ui}/index.html`, contentType: "text/html; charset=utf-8" };
   if (ui && /^(?:main\.js|styles\.css)$/u.test(uiPath)) {

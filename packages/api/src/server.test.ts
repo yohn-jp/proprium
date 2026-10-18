@@ -938,7 +938,7 @@ describe("Scriptorium HTTP boundary", () => {
     t.after(apiServer.close);
 
     for (const ui of ["desktop", "mobile"]) {
-      for (const route of [`/${ui}`, `/${ui}/`, `/${ui}/writing?project=fixture&scene=s1`]) {
+      for (const route of [`/${ui}`, `/${ui}/`, `/${ui}/writing?project=fixture&scene=s1`, `/${ui}/projects/project.1/scenes/scene.1?volume=volume.1&chapter=chapter.1`]) {
         const page = await fetch(`${apiServer.base}${route}`);
         assert.equal(page.status, 200);
         assert.match(await page.text(), new RegExp(`<h1>${ui}</h1>`));
