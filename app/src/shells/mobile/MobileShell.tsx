@@ -19,15 +19,16 @@ import "@ionic/react/css/normalize.css";
 import "@ionic/react/css/structure.css";
 import "@ionic/react/css/typography.css";
 import "./mobile.css";
+import "../editorial.css";
 
 export type MobileView = "library" | "writing" | "inspection" | "tools" | "settings";
 
-const VIEWS: ReadonlyArray<{ id: MobileView; label: string; title: string }> = [
-  { id: "library", label: "作品", title: "作品ライブラリ" },
-  { id: "writing", label: "書く", title: "執筆・読書" },
-  { id: "inspection", label: "確認", title: "状態と回復" },
-  { id: "tools", label: "道具", title: "ツールとレビュー" },
-  { id: "settings", label: "設定", title: "設定" },
+const VIEWS: ReadonlyArray<{ id: MobileView; label: string; title: string; mark: string }> = [
+  { id: "library", label: "作品", title: "作品ライブラリ", mark: "▤" },
+  { id: "writing", label: "書く", title: "執筆・読書", mark: "✎" },
+  { id: "inspection", label: "確認", title: "状態と回復", mark: "◎" },
+  { id: "tools", label: "道具", title: "ツールとレビュー", mark: "◇" },
+  { id: "settings", label: "設定", title: "設定", mark: "⚙" },
 ];
 
 const MOBILE_VIEW_PARAM = "view";
@@ -224,7 +225,10 @@ export function MobileShell({ header, library, editor, tools, status, onSwitchMo
                 aria-current={activeView === view.id ? "page" : undefined}
                 onClick={() => navigate(view.id)}
               >
-                {view.label}
+                <span className="mobile-shell-nav-content">
+                  <span className="mobile-shell-nav-mark" aria-hidden="true">{view.mark}</span>
+                  <span>{view.label}</span>
+                </span>
               </IonButton>
             ))}
           </nav>

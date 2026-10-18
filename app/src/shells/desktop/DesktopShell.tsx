@@ -4,6 +4,7 @@ import * as Tabs from "@radix-ui/react-tabs";
 import { Panel, PanelGroup, PanelResizeHandle, setNonce } from "react-resizable-panels";
 import type { ApplicationShellProps } from "../../application/contracts";
 import "./desktop.css";
+import "../editorial.css";
 
 const styleNonce = document.querySelector<HTMLMetaElement>('meta[name="scriptorium-style-nonce"]')?.content;
 if (styleNonce) setNonce(styleNonce);
