@@ -200,6 +200,9 @@
 .st-desktop-shell .project-form { padding-top: 0; }
 .st-desktop-shell .project-form label { color: var(--st-rail-muted); }
 .st-desktop-shell .project-form input { border-radius: 0.5rem; }
+.st-desktop-shell .st-desktop-navigation .danger-button {
+  color: #fffefa;
+}
 .st-desktop-shell .project-button,
 .st-desktop-shell .scene-button {
   min-height: 2.75rem;
