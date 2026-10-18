@@ -44,22 +44,28 @@ assert.deepEqual(included, [...profile.modules].sort(), 'runtime module metadata
 assert.ok(version.modules.every((module) => module.availability === 'not-included' || module.availability === 'enabled-idle'),
   'image starts with included modules idle');
 
-const htmlResponse = await get('/');
-assert.match(htmlResponse.headers.get('content-type') ?? '', /^text\/html(?:;|$)/u);
-const html = await htmlResponse.text();
-assert.match(html, /<title>Scriptorium<\/title>/u);
-const nonce = html.match(/<meta name="scriptorium-style-nonce" content="([^"]+)"/u)?.[1];
-assert.ok(nonce && nonce !== '__SCRIPTORIUM_STYLE_NONCE__', 'served HTML has a request-specific style nonce');
 const assetUrls = new Set();
-for (const match of html.matchAll(/<(?:script|link)\b[^>]*>/gu)) {
-  const tag = match[0];
-  const src = tag.match(/\bsrc="([^"]+)"/u)?.[1];
-  const href = tag.match(/\bhref="([^"]+)"/u)?.[1];
-  if (src) assetUrls.add(src);
-  if (href && /\brel="stylesheet"/u.test(tag)) assetUrls.add(href);
+for (const entry of ['/', '/desktop/', '/mobile/']) {
+  const htmlResponse = await get(entry);
+  assert.match(htmlResponse.headers.get('content-type') ?? '', /^text\/html(?:;|$)/u);
+  const html = await htmlResponse.text();
+  assert.match(html, /<title>Scriptorium<\/title>/u);
+  const nonce = html.match(/<meta name="scriptorium-style-nonce" content="([^"]+)"/u)?.[1];
+  assert.ok(nonce && nonce !== '__SCRIPTORIUM_STYLE_NONCE__', `${entry} has a request-specific style nonce`);
+  assert.ok(htmlResponse.headers.get('content-security-policy')?.includes(`'nonce-${nonce}'`));
+  const entryAssets = [];
+  for (const match of html.matchAll(/<(?:script|link)\b[^>]*>/gu)) {
+    const tag = match[0];
+    const src = tag.match(/\bsrc="([^"]+)"/u)?.[1];
+    const href = tag.match(/\bhref="([^"]+)"/u)?.[1];
+    if (src) entryAssets.push(src);
+    if (href && /\brel="stylesheet"/u.test(tag)) entryAssets.push(href);
+  }
+  assert.ok(entryAssets.some((asset) => /\.js(?:\?|$)/u.test(asset)), `${entry} references JavaScript`);
+  assert.ok(entryAssets.some((asset) => /\.css(?:\?|$)/u.test(asset)), `${entry} references CSS`);
+  if (entry !== '/') assert.ok(entryAssets.every((asset) => asset.startsWith(entry)), `${entry} assets are isolated`);
+  for (const asset of entryAssets) assetUrls.add(asset);
 }
-assert.ok([...assetUrls].some((asset) => /\.js(?:\?|$)/u.test(asset)), 'built app references JavaScript');
-assert.ok([...assetUrls].some((asset) => /\.css(?:\?|$)/u.test(asset)), 'built app references CSS');
 
 const checkedAssets = new Set();
 const pendingAssets = [...assetUrls].map((url) => ({ url, from: baseUrl }));
@@ -86,9 +92,9 @@ while (pendingAssets.length > 0) {
   assert.match(contentType, expectedType, `${assetPath} has the expected MIME type`);
   const body = await response.text();
   assert.ok(body.length > 0, `${assetPath} is non-empty`);
-  for (const match of body.matchAll(/["']((?:\/assets\/|\.{1,2}\/)[A-Za-z0-9._/-]{1,220}\.(?:m?js|css|svg|png|jpe?g|webp|avif|gif|woff2?|ttf|otf|ico)(?:\?[^"']*)?)["']/gu)) {
+  for (const match of body.matchAll(/["']((?:\/(?:desktop\/|mobile\/)?assets\/|\.{1,2}\/)[A-Za-z0-9._/-]{1,220}\.(?:m?js|css|svg|png|jpe?g|webp|avif|gif|woff2?|ttf|otf|ico)(?:\?[^"']*)?)["']/gu)) {
     pendingAssets.push({ url: match[1], from: assetUrl });
   }
 }
 
-console.info(`OCI HTTP checks passed: ${profileName} profile, ${included.length} included module(s) idle, health/readiness, HTML nonce, and ${checkedAssets.size} built asset(s).`);
+console.info(`OCI HTTP checks passed: ${profileName} profile, ${included.length} included module(s) idle, health/readiness, launcher/Desktop/Mobile HTML nonces, and ${checkedAssets.size} built asset(s).`);
