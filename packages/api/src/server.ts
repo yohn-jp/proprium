@@ -305,9 +305,18 @@ async function serveStatic(
     "/drafts.js": { filename: "drafts.js", contentType: "text/javascript; charset=utf-8" },
     "/styles.css": { filename: "styles.css", contentType: "text/css; charset=utf-8" },
   };
+  const uiMatch = /^\/(desktop|mobile)(?:\/(.*))?$/u.exec(path);
+  const ui = uiMatch?.[1];
+  const uiPath = uiMatch?.[2] ?? "";
+  const uiEntry = ui && /^(?:(?:|library|writing|reading|inspection|review|tools|settings)\/?|projects\/[^/.\\]+(?:\/scenes\/[^/.\\]+)?\/?)$/u.test(uiPath);
   let file = files[path] ?? (publicReaderPath ? files["/"] : undefined);
-  if (!file && path.startsWith("/assets/")) {
-    const name = path.slice("/assets/".length);
+  if (uiEntry) file = { filename: `${ui}/index.html`, contentType: "text/html; charset=utf-8" };
+  if (ui && /^(?:main\.js|styles\.css)$/u.test(uiPath)) {
+    file = { filename: `${ui}/${uiPath}`, contentType: uiPath.endsWith(".js") ? "text/javascript; charset=utf-8" : "text/css; charset=utf-8" };
+  }
+  const assetPrefix = ui ? `/${ui}/assets/` : "/assets/";
+  if (!file && path.startsWith(assetPrefix)) {
+    const name = path.slice(assetPrefix.length);
     if (!name || name.includes("/") || name.includes("\\") || name === "." || name === "..") return false;
     const extension = extname(name).toLowerCase();
     const contentTypes: Record<string, string> = {
@@ -317,13 +326,17 @@ async function serveStatic(
       ".ttf": "font/ttf", ".otf": "font/otf", ".ico": "image/x-icon",
     };
     if (!contentTypes[extension] || !/^[A-Za-z0-9._-]{1,180}$/u.test(name)) return false;
-    file = { filename: resolve(staticDir, "assets", name), contentType: contentTypes[extension] };
+    file = { filename: resolve(staticDir, ...(ui ? [ui] : []), "assets", name), contentType: contentTypes[extension] };
   }
   if (!file) return false;
   try {
     const target = file.filename.startsWith(sep) ? file.filename : resolve(staticDir, file.filename);
     const root = await realpath(staticDir);
-    const assetsDirectory = path.startsWith("/assets/") ? resolve(staticDir, "assets") : undefined;
+    const assetsDirectory = path.startsWith(assetPrefix) ? resolve(staticDir, ...(ui ? [ui] : []), "assets") : undefined;
+    if (ui && (await lstat(resolve(staticDir, ui))).isSymbolicLink()) {
+      sendJson(response, 404, { error: "Page not found", code: "NOT_FOUND" });
+      return true;
+    }
     if (assetsDirectory && (await lstat(assetsDirectory)).isSymbolicLink()) {
       sendJson(response, 404, { error: "Page not found", code: "NOT_FOUND" });
       return true;
@@ -339,7 +352,7 @@ async function serveStatic(
       return true;
     }
     const original = await readFile(resolvedTarget);
-    const content = path === "/" || resolvedTarget === resolve(staticDir, "index.html")
+    const content = file.contentType.startsWith("text/html")
       ? Buffer.from(original.toString("utf8").replaceAll("__SCRIPTORIUM_STYLE_NONCE__", styleNonce))
       : original;
     if (publicReaderPath) {
@@ -350,7 +363,7 @@ async function serveStatic(
     response.end(request.method === "HEAD" ? undefined : content);
   } catch (error) {
     const code = (error as NodeJS.ErrnoException).code;
-    if (path.startsWith("/assets/") && (code === "ENOENT" || code === "ENOTDIR")) {
+    if (path.startsWith(assetPrefix) && (code === "ENOENT" || code === "ENOTDIR")) {
       sendJson(response, 404, { error: "Page not found", code: "NOT_FOUND" });
     } else {
       sendJson(response, 503, { error: "Writing application is not built", code: "APP_NOT_BUILT" });

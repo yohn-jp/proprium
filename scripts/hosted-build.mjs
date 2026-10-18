@@ -525,7 +525,15 @@ export async function runtimePackageRecords(deployedDirectory, serverIds) {
 }
 
 export async function browserArtifactRecords(deployedDirectory, browserIds) {
-  const distDirectory = path.join(deployedDirectory, 'app/dist');
+  const records = await Promise.all(['', 'desktop', 'mobile'].map((ui) =>
+    browserUiArtifactRecords(path.join(deployedDirectory, 'app/dist', ui), browserIds, ui)));
+  return {
+    files: records.flatMap(({ files }) => files).sort((a, b) => a.path.localeCompare(b.path)),
+    manifestPath: '/app/app/dist/.vite/manifest.json',
+  };
+}
+
+async function browserUiArtifactRecords(distDirectory, browserIds, ui) {
   const manifestPath = path.join(distDirectory, '.vite/manifest.json');
   const manifest = JSON.parse(await readFile(manifestPath, 'utf8'));
   if (!manifest || typeof manifest !== 'object' || Array.isArray(manifest)) {
@@ -570,7 +578,7 @@ export async function browserArtifactRecords(deployedDirectory, browserIds) {
   const actualFiles = [];
   async function walk(directory, relative = '') {
     for (const entry of await readdir(directory, { withFileTypes: true })) {
-      if (relative === '' && entry.name === '.vite') continue;
+      if (relative === '' && (entry.name === '.vite' || (!ui && ['desktop', 'mobile'].includes(entry.name)))) continue;
       const relativePath = path.posix.join(relative, entry.name);
       const absolute = path.join(directory, entry.name);
       const info = await lstat(absolute);
@@ -591,7 +599,7 @@ export async function browserArtifactRecords(deployedDirectory, browserIds) {
     if (!isWithin(distDirectory, absolute)) throw new Error(`Vite manifest path escapes browser output: ${relative}`);
     const info = await lstat(absolute);
     if (!info.isFile() || info.isSymbolicLink()) throw new Error(`Vite browser output is not a regular file: ${relative}`);
-    files.push({ path: `/app/app/dist/${relative}`, sha256: sha256(await readFile(absolute)) });
+    files.push({ path: `/app/app/dist/${ui ? `${ui}/` : ""}${relative}`, sha256: sha256(await readFile(absolute)) });
   }
   return { files, manifestPath: '/app/app/dist/.vite/manifest.json' };
 }

@@ -13,10 +13,20 @@ const generatedBrowserModules = process.env.SCRIPTORIUM_BROWSER_MODULE_PROFILE_P
   ? resolve(process.env.SCRIPTORIUM_BROWSER_MODULE_PROFILE_PATH)
   : resolve(workspaceRoot, "profiles", profile, "generated", "browser.mjs");
 
+const ui = process.env.SCRIPTORIUM_UI ?? "launcher";
+if (!["launcher", "desktop", "mobile"].includes(ui)) throw new Error("Invalid SCRIPTORIUM_UI");
+const uiDirectory = ui === "launcher" ? "" : ui;
+
 export default defineConfig({
   root: appRoot,
-  plugins: [react()],
-  base: "/",
+  plugins: [react(), {
+    name: "scriptorium-ui-entry",
+    transformIndexHtml: {
+      order: "pre",
+      handler: (html: string) => ui === "launcher" ? html : html.replace("/src/launcher.tsx", `/src/entries/${ui}.tsx`),
+    },
+  }],
+  base: uiDirectory ? `/${uiDirectory}/` : "/",
   resolve: {
     alias: [{
       find: /^(?:\.\/|\.\.\/)+generated\/browser-modules$/u,
@@ -24,11 +34,12 @@ export default defineConfig({
     }],
   },
   build: {
-    outDir: resolve(appRoot, "dist"),
+    outDir: resolve(appRoot, "dist", uiDirectory),
     emptyOutDir: true,
     manifest: true,
     cssCodeSplit: false,
     rollupOptions: {
+      input: resolve(appRoot, "index.html"),
       output: {
         entryFileNames: "main.js",
         chunkFileNames: "assets/[name]-[hash].js",
