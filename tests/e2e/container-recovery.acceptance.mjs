@@ -481,11 +481,14 @@ async function readPublicationReceipts(page) {
 }
 
 async function signIn(page) {
-  if (await page.getByLabel("アクセストークン").isVisible().catch(() => false)) {
-    await page.getByLabel("アクセストークン").fill(appToken);
+  const tokenInput = page.getByLabel("アクセストークン");
+  const addHeading = page.getByRole("heading", { name: "作品を追加" });
+  await expect(tokenInput.or(addHeading)).toBeVisible({ timeout: 30_000 });
+  if (await tokenInput.isVisible()) {
+    await tokenInput.fill(appToken);
     await page.getByRole("button", { name: "ログイン" }).click();
   }
-  await page.getByRole("heading", { name: "作品を追加" }).waitFor({ state: "visible", timeout: 30_000 });
+  await addHeading.waitFor({ state: "visible", timeout: 30_000 });
 }
 
 async function openProject(page, baseUrl) {
