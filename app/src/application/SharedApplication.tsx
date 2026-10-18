@@ -27,6 +27,7 @@ import { loadThemeMode, persistThemeMode, type ThemeMode } from "../theme";
 import { clearDraft, loadDraft } from "../drafts";
 import type { ApplicationShell, ApplicationShellProps, UiMode } from "./contracts";
 import { applicationPath, parseApplicationLocation, readUiModePreference, rememberUiMode, type ApplicationResource } from "./navigation";
+import { isTextRepresentedByRecoveryRecord } from "./recovery";
 import {
   BrowserJournal,
   documentKey,
@@ -1390,12 +1391,15 @@ function AuthorWorkspace({
 
   async function flushDraft(): Promise<JournalEntry | null> {
     await scratchFlushRef.current();
+    const requireRecoverableEditorText = (editor: EditorSession): void => {
+      if (!isTextRepresentedByRecoveryRecord(editor.text, editor.entry?.text ?? null, editor.read.scene.text)) {
+        throw new Error(editor.journalError || "現在の入力がブラウザー回復記録に含まれていないため、移動できません。");
+      }
+    };
     for (let attempt = 0; attempt < 8; attempt++) {
       const editor = workRef.current?.editor;
       if (!editor) return null;
-      if (!editor.entry && editor.text !== editor.read.scene.text) {
-        throw new Error(editor.journalError || "下書きの回復記録を作成できません。ブラウザーの保存領域を確認してください。");
-      }
+      requireRecoverableEditorText(editor);
       if (!editor.entry || editor.entry.state !== "draft") return editor.entry ?? null;
       const entry = editor.entry;
       const timerKey = draftTimerKey(entry);
@@ -1405,8 +1409,12 @@ function AuthorWorkspace({
       await draftQueueRef.current;
 
       const currentEditor = workRef.current?.editor;
+      if (currentEditor) requireRecoverableEditorText(currentEditor);
       const pending = pendingDraftsRef.current.get(timerKey);
       const target = pending && pending.operation.generation > entry.operation.generation ? pending : currentEditor?.entry ?? entry;
+      if (currentEditor && target.text !== currentEditor.text) {
+        throw new Error(currentEditor.journalError || "現在の入力とブラウザー回復記録が一致しないため、移動できません。");
+      }
       if (target.state !== "draft") return target;
       const currentIsTarget = currentEditor?.entry?.operation.id === target.operation.id && currentEditor.entry.operation.generation === target.operation.generation;
       if (currentIsTarget && currentEditor.draftStored && !pendingDraftsRef.current.has(timerKey)) return target;
@@ -1414,6 +1422,7 @@ function AuthorWorkspace({
       const stored = await persistDraft(target);
       if (!stored) throw new Error(workRef.current?.editor?.journalError || "下書きをブラウザーに保存できませんでした。");
       const latest = workRef.current?.editor;
+      if (latest) requireRecoverableEditorText(latest);
       if (latest?.entry?.state === "draft" && draftTimerKey(latest.entry) === timerKey &&
           (!latest.draftStored || pendingDraftsRef.current.has(timerKey))) continue;
       return latest?.entry ?? target;
