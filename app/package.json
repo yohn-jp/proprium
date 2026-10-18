@@ -4,22 +4,26 @@
   "version": "0.1.0",
   "type": "module",
   "scripts": {
-    "build": "tsc --noEmit -p tsconfig.json && vite build",
+    "build": "tsc --noEmit -p tsconfig.json && vite build && SCRIPTORIUM_UI=desktop vite build && SCRIPTORIUM_UI=mobile vite build",
     "typecheck": "tsc -p tsconfig.json --noEmit",
     "test": "node --import tsx --test src/*.test.ts"
   },
   "dependencies": {
+    "@codemirror/commands": "^6.10.4",
+    "@codemirror/state": "^6.7.1",
+    "@codemirror/view": "^6.43.6",
+    "@ionic/react": "9.0.8",
+    "@radix-ui/react-separator": "1.2.0",
+    "@radix-ui/react-tabs": "1.2.1",
     "@scriptorium/contracts": "workspace:*",
     "react": "^19.1.0",
     "react-dom": "^19.1.0",
-    "@codemirror/commands": "^6.10.4",
-    "@codemirror/state": "^6.7.1",
-    "@codemirror/view": "^6.43.6"
+    "react-resizable-panels": "2.1.9"
   },
   "devDependencies": {
-    "vite": "^6.3.4",
-    "@vitejs/plugin-react": "^4.4.1",
     "@types/react": "^19.1.2",
-    "@types/react-dom": "^19.1.2"
+    "@types/react-dom": "^19.1.2",
+    "@vitejs/plugin-react": "^4.4.1",
+    "vite": "^6.3.4"
   }
 }
