@@ -1,9 +1,12 @@
 import { useRef, useState } from "react";
 import * as Separator from "@radix-ui/react-separator";
 import * as Tabs from "@radix-ui/react-tabs";
-import { Panel, PanelGroup, PanelResizeHandle } from "react-resizable-panels";
+import { Panel, PanelGroup, PanelResizeHandle, setNonce } from "react-resizable-panels";
 import type { ApplicationShellProps } from "../../application/contracts";
 import "./desktop.css";
+
+const styleNonce = document.querySelector<HTMLMetaElement>('meta[name="scriptorium-style-nonce"]')?.content;
+if (styleNonce) setNonce(styleNonce);
 
 function describeFailure(reason: unknown): string {
   return reason instanceof Error && reason.message.trim()
