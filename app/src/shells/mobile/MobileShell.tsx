@@ -156,7 +156,8 @@ export function MobileShell({ header, library, editor, tools, status, onSwitchMo
   ) : null;
 
   return (
-    <IonPage className="mobile-shell-page">
+    <IonApp className="mobile-shell">
+      <IonPage className="mobile-shell-page">
         <IonHeader className="mobile-shell-ion-header">
           <IonToolbar className="mobile-shell-toolbar">
             <IonButtons slot="start">
@@ -228,6 +229,7 @@ export function MobileShell({ header, library, editor, tools, status, onSwitchMo
             ))}
           </nav>
         </IonFooter>
-    </IonPage>
+      </IonPage>
+    </IonApp>
   );
 }
