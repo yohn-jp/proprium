@@ -1,5 +1,6 @@
 import { expect, test, type Page } from "@playwright/test";
-import { pathToFileURL } from "node:url";
+import { execFileSync } from "node:child_process";
+import { fileURLToPath, pathToFileURL } from "node:url";
 
 const authToken = process.env.SCRIPTORIUM_E2E_AUTH_TOKEN ?? "";
 const repositoryUrl = process.env.SCRIPTORIUM_E2E_REPOSITORY_URL ?? "";
@@ -61,10 +62,10 @@ async function openFixtureScene(page: Page, mode: "desktop" | "mobile", sceneId 
   await expect(page.getByRole("heading", { name: "Volume One" })).toBeVisible();
   const sceneTitle = sceneId === "scene-1" ? "Chapter One: Scene One" : "Chapter One: Scene Two";
   await page.getByRole("button", { name: sceneTitle, exact: true }).click();
-  await expect(page.getByRole("heading", { name: sceneId === "scene-1" ? "Scene One" : "Scene Two" })).toBeVisible();
   if (mode === "mobile") {
     await page.getByRole("navigation", { name: "モバイル画面" }).getByRole("button", { name: "書く", exact: true }).click();
   }
+  await expect(page.getByRole("heading", { name: sceneId === "scene-1" ? "Scene One" : "Scene Two" })).toBeVisible();
   await expect(page.locator(".cm-content")).toBeVisible();
 
   const response = await page.request.get(new URL("/api/projects", page.url()).toString());
@@ -100,6 +101,19 @@ async function expectJournalDraft(page: Page, sceneId: string, text: string): Pr
   await expect.poll(async () => (await readJournal(page)).some((draft) =>
     draft.sceneId === sceneId && draft.text === text && draft.state === "draft",
   ), { timeout: 20_000 }).toBe(true);
+}
+
+async function expectJournalState(page: Page, sceneId: string, text: string, state: string): Promise<void> {
+  await expect.poll(async () => (await readJournal(page)).some((draft) =>
+    draft.sceneId === sceneId && draft.text === text && draft.state === state,
+  ), { timeout: 30_000 }).toBe(true);
+}
+
+function readLocalRemoteDocument(path: string): string | null {
+  if (repositoryUrl.startsWith("https://") || repositoryUrl.startsWith("http://")) return null;
+  const repositoryPath = repositoryUrl.startsWith("file://") ? fileURLToPath(repositoryUrl) : repositoryUrl;
+  const branch = process.env.SCRIPTORIUM_E2E_REPOSITORY_BRANCH ?? "main";
+  return execFileSync("git", ["--git-dir", repositoryPath, "show", `refs/heads/${branch}:${path}`], { encoding: "utf8" });
 }
 
 async function assertNoHorizontalOverflow(page: Page): Promise<void> {
@@ -250,6 +264,13 @@ test("both production Shells preserve recoverable Japanese drafts and the Mobile
   await expectJournalDraft(page, "scene-1", beforeFailedSwitch);
   await page.evaluate(() => { (window as Window & { __failRecoveryJournalWrites?: boolean }).__failRecoveryJournalWrites = false; });
 
+  await mobileEditor.evaluate((element) => element.dispatchEvent(new CompositionEvent("compositionstart", { data: "にほんご", bubbles: true })));
+  await page.getByRole("button", { name: "Desktop版へ切り替え" }).click();
+  await expect(page).toHaveURL(new RegExp("/mobile/projects/.+/scenes/scene-1"));
+  await expect(page.getByRole("status").filter({ hasText: "変換が完了していません" })).toBeVisible();
+  await expect(mobileEditor).toHaveText(protectedDraft);
+  await mobileEditor.evaluate((element) => element.dispatchEvent(new CompositionEvent("compositionend", { data: "日本語", bubbles: true })));
+
   await page.getByRole("button", { name: "Desktop版へ切り替え" }).click();
   await expect(page).toHaveURL(new RegExp("/desktop/projects/.+/scenes/scene-1"));
   const desktopEditor = page.locator(".cm-content");
@@ -259,7 +280,7 @@ test("both production Shells preserve recoverable Japanese drafts and the Mobile
     await desktopAppearance.selectOption(mode);
     await expect(page.locator("html")).toHaveAttribute("data-zp-theme", mode);
   }
-  await expectJournalDraft(page, "scene-1", beforeFailedSwitch);
+  await expectJournalDraft(page, "scene-1", protectedDraft);
   await expect.poll(() => page.evaluate(() => localStorage.getItem("scriptorium:ui-mode"))).toBe("desktop");
   expect(await page.locator("script[src]").evaluateAll((scripts) => scripts.map((script) => (script as HTMLScriptElement).src)))
     .toContain(new URL("/desktop/main.js", page.url()).toString());
@@ -286,15 +307,53 @@ test("both production Shells preserve recoverable Japanese drafts and the Mobile
   await expect(desktopEditor).toHaveText(desktopDraft);
   await expect(page.locator(".manuscript-preview rt")).toContainText("かぜ");
 
+  await page.getByRole("button", { name: "Checkpoint", exact: true }).click();
+  await expect(page.locator(".durability-message")).toContainText("ローカルチェックポイント");
+  await expectJournalState(page, "scene-1", desktopDraft, "checkpointed");
+  await page.getByRole("button", { name: "履歴", exact: true }).click();
+  const desktopHistory = page.locator(".manuscript-history");
+  await expect(desktopHistory.getByRole("heading", { name: "改稿の履歴" })).toBeVisible();
+  const desktopHistorySource = desktopHistory.locator("details summary");
+  await expect(desktopHistorySource).toBeVisible();
+  await desktopHistorySource.click();
+  await expect(desktopHistory.locator("details pre")).toContainText(desktopDraft);
+  await page.getByRole("button", { name: "閉じる", exact: true }).click();
+  const remoteBeforeDesktopPublish = readLocalRemoteDocument("manuscript/vol-1/ch-1/scene-1.md");
+  await page.getByRole("button", { name: "Save to GitHub", exact: true }).click();
+  await expect(page.locator(".durability-message")).toContainText("確認済みの GitHub 版");
+  if (remoteBeforeDesktopPublish !== null) {
+    expect(readLocalRemoteDocument("manuscript/vol-1/ch-1/scene-1.md")).toContain(desktopDraft);
+  }
+
   await page.getByRole("button", { name: "モバイルUIへ" }).click();
   await expect(page).toHaveURL(new RegExp("/mobile/projects/.+/scenes/scene-1"));
   await expect(page.locator(".cm-content")).toHaveText(desktopDraft);
-  await expectJournalDraft(page, "scene-1", desktopDraft);
+  await expect(page.locator(".durability-message")).toContainText("確認済みの GitHub 版");
   await page.reload();
   await expect(page).toHaveURL(new RegExp("/mobile/projects/.+/scenes/scene-1"));
   await expect(page.locator(".cm-content")).toHaveText(desktopDraft);
   await expect(page.getByLabel("外観")).toHaveValue("light");
   await expect.poll(() => page.evaluate(() => localStorage.getItem("scriptorium:ui-mode"))).toBe("mobile");
+
+  const mobilePublishedDraft = "Mobile checkpoint, history, and explicit publication.";
+  await page.locator(".cm-content").fill(mobilePublishedDraft);
+  await expectJournalDraft(page, "scene-1", mobilePublishedDraft);
+  await page.getByRole("button", { name: "Checkpoint", exact: true }).click();
+  await expect(page.locator(".durability-message")).toContainText("ローカルチェックポイント");
+  await expectJournalState(page, "scene-1", mobilePublishedDraft, "checkpointed");
+  await page.getByRole("button", { name: "履歴", exact: true }).click();
+  const mobileHistory = page.locator(".manuscript-history");
+  await expect(mobileHistory.getByRole("heading", { name: "改稿の履歴" })).toBeVisible();
+  const mobileHistorySource = mobileHistory.locator("details summary");
+  await expect(mobileHistorySource).toBeVisible();
+  await mobileHistorySource.click();
+  await expect(mobileHistory.locator("details pre")).toContainText(mobilePublishedDraft);
+  await page.getByRole("button", { name: "閉じる", exact: true }).click();
+  await page.getByRole("button", { name: "Save to GitHub", exact: true }).click();
+  await expect(page.locator(".durability-message")).toContainText("確認済みの GitHub 版");
+  if (remoteBeforeDesktopPublish !== null) {
+    expect(readLocalRemoteDocument("manuscript/vol-1/ch-1/scene-1.md")).toContain(mobilePublishedDraft);
+  }
 
   const health = await page.request.get(new URL("/api/health", page.url()).toString());
   expect(health.status()).toBe(200);
@@ -346,7 +405,9 @@ test("profile-selected contributions stay discoverable and mount one at a time i
     const mounted: string[] = [];
     const editorItems = expectedContributions.filter((item) => item.slot === "editor");
     if (mode === "mobile") {
-      await page.getByRole("navigation", { name: "モバイル画面" }).getByRole("button", { name: "書く", exact: true }).click();
+      await page.getByRole("navigation", { name: "モバイル画面" }).getByRole("button", { name: "道具", exact: true }).click();
+    } else {
+      await page.getByRole("tab", { name: "ツールと履歴" }).click();
     }
     for (const item of editorItems) {
       const selector = page.locator(".contribution-host-editor").getByLabel("機能を選択");
@@ -359,11 +420,6 @@ test("profile-selected contributions stay discoverable and mount one at a time i
     }
 
     const otherItems = expectedContributions.filter((item) => item.slot !== "editor");
-    if (mode === "mobile") {
-      await page.getByRole("navigation", { name: "モバイル画面" }).getByRole("button", { name: "道具", exact: true }).click();
-    } else {
-      await page.getByRole("tab", { name: "ツールと履歴" }).click();
-    }
     for (const item of otherItems) {
       const selector = page.locator(".contribution-host-" + item.slot).getByLabel("機能を選択");
       await expect(selector.locator('option[value="' + item.id + '"]')).toHaveCount(1);
@@ -380,8 +436,6 @@ test("profile-selected contributions stay discoverable and mount one at a time i
   expect(mountedByShell.mobile.sort()).toEqual(mountedByShell.desktop.sort());
 
   if (enabledIds.length === 0) {
-    await page.getByRole("button", { name: "モバイルUIへ" }).click();
-    await page.getByRole("navigation", { name: "モバイル画面" }).getByRole("button", { name: "道具", exact: true }).click();
     await expect(page.locator(".contribution-host")).toHaveCount(0);
   }
 });

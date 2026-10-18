@@ -1235,6 +1235,8 @@ test("unmounting a contribution aborts its in-flight action request", async ({ p
   try {
     await signIn(page);
     await openFixtureProject(page);
+    await page.getByRole("tab", { name: "ツールと履歴" }).click();
+    await page.locator(".contribution-host-settings").getByLabel("機能を選択").selectOption("publishing.export.epub");
     const actionRequest = await observed;
     const failedRequest = page.waitForEvent("requestfailed", (request) => request === actionRequest);
     await page.getByRole("button", { name: "ログアウト" }).click();
