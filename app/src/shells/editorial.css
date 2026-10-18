@@ -137,6 +137,8 @@
   --surface-selected: var(--st-rail-selected);
   --surface-selected-border: #c49b67;
   --input-border: #728079;
+  --placeholder: #bdc8c1;
+  --error: #ffb6af;
   --badge-bg: #34423d;
   color: var(--st-rail-ink);
   background: var(--st-rail);
