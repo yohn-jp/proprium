@@ -129,7 +129,7 @@ async function createReviewProject(): Promise<{ root: string; remote: string; re
 }
 
 async function signIn(page: Page): Promise<void> {
-  await page.goto("/");
+  await page.goto("/desktop/");
   await page.getByLabel("アクセストークン").fill(authToken);
   await page.getByRole("button", { name: "ログイン" }).click();
   await expect(page.getByRole("heading", { name: "作品を追加" })).toBeVisible();
@@ -171,32 +171,20 @@ test("full profile renders Story and Speaker review queues and turns both author
     expect(project, "the app must register the owned local bare repository through its real API").toBeDefined();
     projectId = project!.id;
 
+    await page.getByRole("tab", { name: "ツールと履歴" }).click();
+    const reviewSelector = page.locator(".contribution-host-review").getByLabel("機能を選択");
     const zukanListResponse = page.waitForResponse((response) => actionResponse(response, "story.zukan-suggestions.list"), { timeout: 60_000 });
-    const speakerQueueResponse = page.waitForResponse((response) => actionResponse(response, "speaker.review.queue"), { timeout: 120_000 });
-    await page.getByRole("button", { name: "Review Chapter: Review Scene", exact: true }).click();
-    await expect(page.getByRole("heading", { name: "Review Scene" })).toBeVisible();
-
-    const [zukanResponse, speakerResponse] = await Promise.all([zukanListResponse, speakerQueueResponse]);
+    await reviewSelector.selectOption("story.zukan-review");
+    const zukanResponse = await zukanListResponse;
     expect(zukanResponse.ok()).toBe(true);
-    expect(speakerResponse.ok()).toBe(true);
     const zukanResult = await zukanResponse.json() as { ok: boolean; data?: { pendingCount?: number; suggestions?: Array<Record<string, unknown>> } };
-    const speakerResult = await speakerResponse.json() as { ok: boolean; data?: { rows?: Array<{ sceneId?: string; attribution?: { text?: string; confidence?: string } }> } };
     expect(zukanResult.ok).toBe(true);
     expect(zukanResult.data?.pendingCount).toBe(1);
     expect(zukanResult.data?.suggestions?.some((item) => item.id === "zukan-review-queue-item" && item.status === "pending")).toBe(true);
-    expect(speakerResult.ok).toBe(true);
-    const unresolved = speakerResult.data?.rows?.filter((row) => row.sceneId === "scene-review" && row.attribution?.confidence !== "high") ?? [];
-    expect(unresolved.length).toBeGreaterThan(0);
-    expect(unresolved.some((row) => row.attribution?.text === "『この古地図を探している。』")).toBe(true);
-
     const zukanPanel = page.locator('[data-contribution="story.zukan-review"]');
-    const speakerPanel = page.locator('[data-contribution="speaker.review"]');
     await expect(zukanPanel.getByRole("heading", { name: "Zukan suggestions" })).toBeVisible();
     await expect(zukanPanel.getByText("1 pending suggestion(s)")).toBeVisible();
     await expect(zukanPanel.getByText("Akari collects old maps.")).toBeVisible();
-    await expect(speakerPanel.getByRole("heading", { name: "未確定・低信頼の話者帰属" })).toBeVisible();
-    await expect(speakerPanel.getByText("『この古地図を探している。』")).toBeVisible();
-    await expect(speakerPanel.getByText(new RegExp(`${unresolved.length} 件。`))).toBeVisible();
 
     const zukanProposalResponse = page.waitForResponse((response) => actionResponse(response, "story.zukan-suggestions.reject"), { timeout: 30_000 });
     await zukanPanel.getByRole("button", { name: "Propose rejection" }).click();
@@ -213,6 +201,21 @@ test("full profile renders Story and Speaker review queues and turns both author
     expect(zukanStatus.checkpoints).toEqual([]);
     expect(zukanStatus.proposal.operations[0]?.writes.map((write) => write.path)).toContain(zukanPath);
     await expect(zukanPanel.getByText("A review proposal is pending checkpoint; this suggestion remains pending in the selected snapshot.")).toBeVisible();
+
+    const speakerQueueResponse = page.waitForResponse((response) => actionResponse(response, "speaker.review.queue"), { timeout: 120_000 });
+    await reviewSelector.selectOption("speaker.review");
+    const speakerResponse = await speakerQueueResponse;
+    expect(speakerResponse.ok()).toBe(true);
+    const speakerResult = await speakerResponse.json() as { ok: boolean; data?: { rows?: Array<{ sceneId?: string; attribution?: { text?: string; confidence?: string } }> } };
+    expect(speakerResult.ok).toBe(true);
+    const unresolved = speakerResult.data?.rows?.filter((row) => row.sceneId === "scene-review" && row.attribution?.confidence !== "high") ?? [];
+    expect(unresolved.length).toBeGreaterThan(0);
+    expect(unresolved.some((row) => row.attribution?.text === "『この古地図を探している。』")).toBe(true);
+
+    const speakerPanel = page.locator('[data-contribution="speaker.review"]');
+    await expect(speakerPanel.getByRole("heading", { name: "未確定・低信頼の話者帰属" })).toBeVisible();
+    await expect(speakerPanel.getByText("『この古地図を探している。』")).toBeVisible();
+    await expect(speakerPanel.getByText(new RegExp(`${unresolved.length} 件。`))).toBeVisible();
 
     const speakerRow = speakerPanel.locator("article").filter({ hasText: "『この古地図を探している。』" }).first();
     await speakerRow.getByLabel("話者").selectOption("char-akari");
@@ -240,6 +243,35 @@ test("full profile renders Story and Speaker review queues and turns both author
     const remoteScene = git(fixture.remote, "show", `refs/heads/${branch}:${scenePath}`);
     expect(remoteScene).not.toMatch(/^speakerOverrides:/mu);
     expect(() => git(fixture.remote, "cat-file", "-e", `refs/heads/${branch}:meta/scriptorium/modules/speaker/corrections.jsonl`)).toThrow();
+
+    await page.getByRole("tab", { name: "作品ライブラリ" }).click();
+    await page.getByRole("navigation", { name: "作品構成" })
+      .getByRole("button", { name: "Review Chapter: Review Scene", exact: true }).click();
+    await expect(page.getByRole("heading", { name: "Review Scene" })).toBeVisible();
+    await page.getByRole("button", { name: "モバイルUIへ" }).click();
+    await expect(page).toHaveURL(new RegExp("/mobile/projects/" + encodeURIComponent(project.id) + "/scenes/scene-review"));
+    await page.getByRole("navigation", { name: "モバイル画面" }).getByRole("button", { name: "道具", exact: true }).click();
+    await expect(page.locator(".proposal-review").getByRole("heading", { name: "確認待ちの提案" })).toBeVisible();
+    await page.reload();
+    await page.getByRole("navigation", { name: "モバイル画面" }).getByRole("button", { name: "道具", exact: true }).click();
+    const mobileZukanCard = page.locator(".proposal-card").filter({ hasText: zukanProposalId! });
+    const mobileSpeakerCard = page.locator(".proposal-card").filter({ hasText: speakerProposalId! });
+    await expect(mobileZukanCard).toContainText("承認待ち");
+    await expect(mobileSpeakerCard).toContainText("承認待ち");
+    await mobileZukanCard.getByRole("button", { name: "承認して Checkpoint" }).click();
+    await expect(mobileZukanCard).toContainText("ローカル Checkpoint 済み");
+    const mobileApprovedZukanStatus = await readProposalStatus(page, project.id, zukanProposalId!);
+    const mobileZukanOperationIds = zukanProposalResult.proposals?.[0]?.operations.map((operation) => operation.id) ?? [];
+    expect(mobileApprovedZukanStatus.approvedOperationIds).toEqual(mobileZukanOperationIds);
+    expect(mobileApprovedZukanStatus.checkpoints).toHaveLength(mobileZukanOperationIds.length);
+
+    await page.getByRole("navigation", { name: "モバイル画面" }).getByRole("button", { name: "設定", exact: true }).click();
+    await page.getByRole("button", { name: "Desktop版へ切り替え" }).click();
+    await expect(page).toHaveURL(new RegExp("/desktop/projects/" + encodeURIComponent(project.id) + "/scenes/scene-review"));
+    await page.getByRole("tab", { name: "ツールと履歴" }).click();
+    await expect(page.locator(".proposal-card").filter({ hasText: zukanProposalId! })).toContainText("ローカル Checkpoint 済み");
+    await expect(page.locator(".proposal-card").filter({ hasText: speakerProposalId! })).toContainText("承認待ち");
+    expect(git(fixture.remote, "rev-parse", `refs/heads/${branch}`)).toBe(fixture.initialHead);
   } finally {
     if (projectId) {
       const origin = new URL(page.url()).origin;

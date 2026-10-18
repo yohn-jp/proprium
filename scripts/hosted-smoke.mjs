@@ -73,6 +73,13 @@ try {
   const bundle = Buffer.from(await bundleResponse.arrayBuffer());
   const expectedBundle = await readFile('/app/app/dist/main.js');
   if (!bundle.equals(expectedBundle)) throw new Error('Runtime browser route does not serve the built browser bundle');
+  for (const ui of ['desktop', 'mobile']) {
+    const page = await request(`/${ui}/`);
+    if (!page.ok || !(await page.text()).includes(`/${ui}/main.js`)) throw new Error(`${ui} entry is unavailable`);
+    const response = await request(`/${ui}/main.js`);
+    const bytes = Buffer.from(await response.arrayBuffer());
+    if (!response.ok || !bytes.equals(await readFile(`/app/app/dist/${ui}/main.js`))) throw new Error(`${ui} browser bundle differs from packaged bytes`);
+  }
   console.log(`Hosted runtime startup smoke passed (${expectedModules.length} modules, ${bundle.length} browser bytes)`);
 } finally {
   child.kill('SIGTERM');

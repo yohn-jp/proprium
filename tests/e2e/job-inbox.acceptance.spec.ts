@@ -213,7 +213,7 @@ test("authenticated inbox preserves owner job history and updates it from SSE", 
     await route.fulfill({ json: { item: inboxItems.find((candidate) => candidate.id === itemId) } });
   });
 
-  await page.goto("/");
+  await page.goto("/desktop/");
   await expect(page.getByLabel("アクセストークン")).toBeVisible();
   expect(apiRequestsBeforeLogin).toEqual([]);
   await page.getByLabel("アクセストークン").fill(authToken);

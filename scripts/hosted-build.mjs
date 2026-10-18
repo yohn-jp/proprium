@@ -525,7 +525,17 @@ export async function runtimePackageRecords(deployedDirectory, serverIds) {
 }
 
 export async function browserArtifactRecords(deployedDirectory, browserIds) {
-  const distDirectory = path.join(deployedDirectory, 'app/dist');
+  const records = await Promise.all(['', 'desktop', 'mobile'].map((ui) =>
+    browserUiArtifactRecords(path.join(deployedDirectory, 'app/dist', ui), browserIds, ui)));
+  return {
+    files: records.flatMap(({ files }) => files).sort((a, b) => a.path < b.path ? -1 : a.path > b.path ? 1 : 0),
+    manifestPath: '/app/app/dist/.vite/manifest.json',
+  };
+}
+
+async function browserUiArtifactRecords(distDirectory, browserIds, ui) {
+  const directory = await lstat(distDirectory);
+  if (!directory.isDirectory() || directory.isSymbolicLink()) throw new Error(`Browser build directory is not a real directory: ${distDirectory}`);
   const manifestPath = path.join(distDirectory, '.vite/manifest.json');
   const manifest = JSON.parse(await readFile(manifestPath, 'utf8'));
   if (!manifest || typeof manifest !== 'object' || Array.isArray(manifest)) {
@@ -536,12 +546,15 @@ export async function browserArtifactRecords(deployedDirectory, browserIds) {
     throw new Error('Vite browser manifest has no canonical application entry');
   }
   const expectedDynamicSources = browserIds.map((id) => `../modules/${id}/dist/browser.js`).sort();
-  const actualDynamicSources = [...(applicationEntry.dynamicImports ?? [])].sort();
+  const appManifest = JSON.parse(await readFile(path.join(root, 'app/package.json'), 'utf8'));
+  const ionicPrefix = `../node_modules/.pnpm/@ionic+core@${appManifest.dependencies['@ionic/core']}/node_modules/@ionic/core/components/`;
+  const isIonicRuntime = (source) => ui === 'mobile' && source.startsWith(ionicPrefix) && /^p-[A-Za-z0-9_-]+\.js$/u.test(source.slice(ionicPrefix.length));
+  const actualDynamicSources = [...new Set(applicationEntry.dynamicImports ?? [])].filter((source) => !isIonicRuntime(source)).sort();
   if (canonicalJson(actualDynamicSources) !== canonicalJson(expectedDynamicSources)) {
     throw new Error('Vite application entry imports a different browser module closure');
   }
   const dynamicEntries = Object.entries(manifest).filter(([, item]) => item?.isDynamicEntry === true);
-  const dynamicSources = dynamicEntries.map(([key, item]) => item.src ?? key).sort();
+  const dynamicSources = dynamicEntries.map(([key, item]) => item.src ?? key).filter((source) => !isIonicRuntime(source)).sort();
   if (canonicalJson(dynamicSources) !== canonicalJson(expectedDynamicSources)) {
     throw new Error('Vite manifest contains an unexpected browser module chunk');
   }
@@ -570,7 +583,7 @@ export async function browserArtifactRecords(deployedDirectory, browserIds) {
   const actualFiles = [];
   async function walk(directory, relative = '') {
     for (const entry of await readdir(directory, { withFileTypes: true })) {
-      if (relative === '' && entry.name === '.vite') continue;
+      if (relative === '' && (entry.name === '.vite' || (!ui && ['desktop', 'mobile'].includes(entry.name)))) continue;
       const relativePath = path.posix.join(relative, entry.name);
       const absolute = path.join(directory, entry.name);
       const info = await lstat(absolute);
@@ -591,7 +604,7 @@ export async function browserArtifactRecords(deployedDirectory, browserIds) {
     if (!isWithin(distDirectory, absolute)) throw new Error(`Vite manifest path escapes browser output: ${relative}`);
     const info = await lstat(absolute);
     if (!info.isFile() || info.isSymbolicLink()) throw new Error(`Vite browser output is not a regular file: ${relative}`);
-    files.push({ path: `/app/app/dist/${relative}`, sha256: sha256(await readFile(absolute)) });
+    files.push({ path: `/app/app/dist/${ui ? `${ui}/` : ""}${relative}`, sha256: sha256(await readFile(absolute)) });
   }
   return { files, manifestPath: '/app/app/dist/.vite/manifest.json' };
 }

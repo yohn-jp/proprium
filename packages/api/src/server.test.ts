@@ -928,8 +928,28 @@ describe("Scriptorium HTTP boundary", () => {
     await mkdir(resolve(staticDir, "assets"));
     await writeFile(resolve(staticDir, "assets", "main-a1b2.js"), "compiled lazy chunk");
     await symlink(resolve(staticDir, "server.test.js"), resolve(staticDir, "assets", "leak-a1b2.js"));
+    for (const ui of ["desktop", "mobile"]) {
+      await mkdir(resolve(staticDir, ui, "assets"), { recursive: true });
+      await writeFile(resolve(staticDir, ui, "index.html"), `<meta name="scriptorium-style-nonce" content="__SCRIPTORIUM_STYLE_NONCE__"><h1>${ui}</h1>`);
+      await writeFile(resolve(staticDir, ui, "main.js"), `${ui} bundle`);
+      await writeFile(resolve(staticDir, ui, "assets", "chunk.js"), `${ui} chunk`);
+    }
     const apiServer = await startApi(staticDir);
     t.after(apiServer.close);
+
+    for (const ui of ["desktop", "mobile"]) {
+      for (const route of [`/${ui}`, `/${ui}/`, `/${ui}/writing?project=fixture&scene=s1`, `/${ui}/projects/project.1/scenes/scene.1?volume=volume.1&chapter=chapter.1`]) {
+        const page = await fetch(`${apiServer.base}${route}`);
+        assert.equal(page.status, 200);
+        assert.match(await page.text(), new RegExp(`<h1>${ui}</h1>`));
+        assert.ok(!page.headers.get("content-security-policy")?.includes("unsafe-inline"));
+      }
+      assert.equal(await (await fetch(`${apiServer.base}/${ui}/main.js`)).text(), `${ui} bundle`);
+      assert.equal(await (await fetch(`${apiServer.base}/${ui}/assets/chunk.js`)).text(), `${ui} chunk`);
+      assert.equal((await fetch(`${apiServer.base}/${ui}/assets/missing.js`)).status, 404);
+      assert.equal((await fetch(`${apiServer.base}/${ui}/unknown-route`)).status, 404);
+      assert.equal((await fetch(`${apiServer.base}/${ui}/server.test.js`)).status, 404);
+    }
 
     const health = await fetch(`${apiServer.base}/api/health`);
     assert.equal(health.status, 200);

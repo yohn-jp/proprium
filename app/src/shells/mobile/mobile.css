@@ -1,0 +1,203 @@
+.mobile-shell {
+  --ion-background-color: var(--page-bg);
+  --ion-text-color: var(--ink);
+  --ion-border-color: var(--line);
+  --ion-font-family: "Hiragino Sans", "Yu Gothic", Meiryo, sans-serif;
+  --ion-color-primary: var(--accent);
+  --ion-color-primary-rgb: 112, 69, 47;
+  --ion-color-primary-contrast: var(--button-foreground);
+  --ion-color-primary-contrast-rgb: 255, 254, 250;
+  --ion-color-primary-shade: var(--accent-strong);
+  --ion-color-primary-tint: var(--surface-selected);
+  --ion-toolbar-background: var(--paper);
+  --ion-toolbar-color: var(--ink);
+  --ion-tab-bar-background: var(--paper);
+  --ion-tab-bar-color: var(--muted);
+  --ion-tab-bar-color-selected: var(--accent-strong);
+  width: 100%;
+  min-width: 320px;
+  height: 100vh;
+  height: 100dvh;
+  color: var(--ink);
+  background: var(--page-bg);
+  font-family: "Hiragino Sans", "Yu Gothic", Meiryo, sans-serif;
+  color-scheme: light;
+}
+
+:root[data-zp-theme="dark"] .mobile-shell { color-scheme: dark; }
+:root[data-zp-theme="paper"] .mobile-shell { color-scheme: light; }
+:root[data-zp-theme="dark"] .mobile-shell {
+  --ion-color-primary-rgb: 79, 195, 176;
+  --ion-color-primary-contrast-rgb: 8, 18, 15;
+}
+:root[data-zp-theme="paper"] .mobile-shell {
+  --ion-color-primary-rgb: 61, 52, 41;
+  --ion-color-primary-contrast-rgb: 255, 255, 255;
+}
+
+.mobile-shell .mobile-shell-page {
+  width: 100%;
+  min-width: 320px;
+  height: 100%;
+  background: var(--page-bg);
+}
+
+.mobile-shell .mobile-shell-ion-header {
+  flex: 0 0 auto;
+  padding-top: env(safe-area-inset-top, 0px);
+  box-shadow: 0 1px 0 var(--line);
+}
+
+.mobile-shell .mobile-shell-toolbar {
+  --min-height: 3.25rem;
+  --padding-start: 0.25rem;
+  --padding-end: 0.35rem;
+}
+
+.mobile-shell ion-title {
+  min-width: 0;
+  color: var(--ink);
+  font-size: 1.05rem;
+  font-weight: 700;
+}
+
+.mobile-shell .mobile-shell-shared-header {
+  min-width: 0;
+  max-width: 100%;
+  padding: 0.25rem 0.65rem 0.45rem;
+  border-top: 1px solid var(--line);
+  color: var(--ink);
+  background: var(--paper);
+}
+
+.mobile-shell-shared-header > * { min-width: 0; max-width: 100%; }
+.mobile-shell-shared-header .topbar {
+  position: static;
+  display: flex;
+  min-height: 2.8rem;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.35rem 0.55rem;
+  padding: 0;
+  border: 0;
+  background: transparent;
+}
+.mobile-shell-shared-header .topbar .brand { display: none; }
+.mobile-shell-shared-header .topbar-status { order: 5; flex: 1 1 100%; min-height: 1.25rem; }
+.mobile-shell-shared-header .theme-control { margin-left: 0; }
+.mobile-shell-shared-header .theme-error { position: static; }
+.mobile-shell-shared-header :is(button, input, select, textarea) { max-width: 100%; }
+.mobile-shell-shared-header .quiet-button { min-height: 2.75rem; }
+
+.mobile-shell-content {
+  --background: var(--page-bg);
+  --padding-start: 0;
+  --padding-end: 0;
+  --padding-top: 0;
+  --padding-bottom: 0.75rem;
+  color: var(--ink);
+  background: var(--page-bg);
+  overscroll-behavior-y: contain;
+}
+
+.mobile-shell-content::part(scroll) {
+  overscroll-behavior-y: contain;
+  scrollbar-gutter: stable;
+}
+
+.mobile-shell-view-stack { width: 100%; min-width: 0; }
+.mobile-shell-view-stack > .mobile-shell-view[hidden] { display: none !important; }
+.mobile-shell-view { width: 100%; min-width: 0; max-width: 100%; padding: 0.7rem 0.65rem 1.25rem; overflow-wrap: anywhere; }
+.mobile-shell-page-title { margin: 0 0 0.65rem; color: var(--ink); font-size: 1.2rem; line-height: 1.35; }
+.mobile-shell-slot { width: 100%; min-width: 0; max-width: 100%; }
+.mobile-shell-slot :is(article, aside, div, form, main, section, ul, ol) { min-width: 0; max-width: 100%; }
+.mobile-shell-slot :is(input, select, textarea, pre, code, table, img, video, canvas) { max-width: 100%; }
+.mobile-shell-slot :is(pre, code, dd, p, li) { overflow-wrap: anywhere; }
+.mobile-shell-slot .reading-pager-content.is-vertical,
+.mobile-shell-slot .reading-pager-content.is-vertical > div,
+.mobile-shell-slot .manuscript-preview.is-vertical,
+.mobile-shell-slot .reading-view.is-vertical { max-width: none; }
+.mobile-shell-slot .writing-area { min-width: 0; padding: 0; }
+.mobile-shell-slot .editor { width: 100%; max-width: 100%; margin: 0; }
+.mobile-shell-slot .editor-header { align-items: flex-start; flex-direction: column; gap: 0.6rem; }
+.mobile-shell-slot .editor-actions { width: 100%; justify-content: flex-start; }
+.mobile-shell-slot .editor-columns { grid-template-columns: minmax(0, 1fr); gap: 0.7rem; }
+.mobile-shell-slot .manuscript-column,
+.mobile-shell-slot .preview-column { padding: 0.65rem; }
+.mobile-shell-slot .manuscript-input,
+.mobile-shell-slot .cm-scroller,
+.mobile-shell-slot .cm-content { min-height: 48vh; }
+.mobile-shell-slot .editor-actions button,
+.mobile-shell-slot .typography-toolbar button,
+.mobile-shell-slot .mobile-keyboard button,
+.mobile-shell-slot .scene-button,
+.mobile-shell-slot .project-button { min-height: 2.75rem; }
+.mobile-shell-slot .typography-toolbar { align-items: flex-start; }
+.mobile-shell-slot .reading-view { width: 100%; max-width: 100%; }
+.mobile-shell-slot .proposal-dock { grid-template-columns: minmax(0, 1fr); }
+.mobile-shell-slot .manuscript-history-layout { grid-template-columns: minmax(0, 1fr); max-height: none; }
+.mobile-shell-slot .manuscript-history-layout > ol,
+.mobile-shell-slot .manuscript-history-detail { max-height: 20rem; }
+.mobile-shell-slot .proposal-actions,
+.mobile-shell-slot .conflict-actions { flex-wrap: wrap; }
+
+.mobile-shell-review-hint { margin: 0.75rem 0; color: var(--muted); font-size: 0.9rem; line-height: 1.55; }
+.mobile-shell-primary-action { display: block; width: 100%; min-height: 2.9rem; margin: 0.5rem 0; }
+.mobile-shell .mobile-shell-primary-action::part(native) { min-height: 2.9rem; border-radius: 0.45rem; font-weight: 650; }
+.mobile-shell-settings-card { padding: 0.85rem; border: 1px solid var(--line); border-radius: 0.6rem; color: var(--ink); background: var(--paper); }
+.mobile-shell-settings-card h2 { margin: 0; font-size: 1rem; }
+.mobile-shell-settings-card p { color: var(--muted); font-size: 0.9rem; line-height: 1.55; }
+.mobile-shell-switch-error { padding: 0.65rem; border: 1px solid var(--error-border); border-radius: 0.45rem; color: var(--error-text); background: var(--error-bg); line-height: 1.5; }
+
+.mobile-shell-footer {
+  flex: 0 0 auto;
+  border-top: 1px solid var(--line);
+  background: var(--paper);
+  padding-bottom: env(safe-area-inset-bottom, 0px);
+}
+
+.mobile-shell-navigation {
+  display: grid;
+  grid-template-columns: repeat(5, minmax(0, 1fr));
+  width: 100%;
+  min-height: 3.45rem;
+  padding: 0.2rem 0.35rem 0.25rem;
+  gap: 0.15rem;
+}
+
+.mobile-shell-navigation ion-button {
+  min-width: 0;
+  min-height: 2.75rem;
+  margin: 0;
+  font-size: 0.78rem;
+  --padding-start: 0.25rem;
+  --padding-end: 0.25rem;
+  --border-radius: 0.45rem;
+}
+
+.mobile-shell-navigation ion-button::part(native) {
+  min-width: 0;
+  min-height: 2.75rem;
+  padding-inline: 0.25rem;
+  white-space: nowrap;
+}
+
+.mobile-shell-navigation ion-button[aria-current="page"] { font-weight: 700; }
+.mobile-shell ion-button:focus-visible { outline: 3px solid var(--focus-ring); outline-offset: 2px; }
+.mobile-shell ion-button::part(native):focus-visible { outline: 3px solid var(--focus-ring); outline-offset: 2px; }
+.mobile-shell :is(button, a, input, select, textarea, summary, [tabindex]):focus-visible { outline: 3px solid var(--focus-ring); outline-offset: 2px; }
+
+@media (min-width: 640px) {
+  .mobile-shell .mobile-shell-shared-header { padding-inline: 1rem; }
+  .mobile-shell-view { padding: 1rem 1.25rem 1.5rem; }
+  .mobile-shell-slot .editor-columns { grid-template-columns: minmax(0, 1fr) minmax(0, 0.9fr); }
+  .mobile-shell-slot .manuscript-history-layout { grid-template-columns: minmax(12rem, 0.35fr) minmax(0, 1fr); }
+  .mobile-shell-navigation { max-width: 48rem; margin-inline: auto; gap: 0.4rem; }
+  .mobile-shell-navigation ion-button { font-size: 0.9rem; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .mobile-shell *,
+  .mobile-shell *::before,
+  .mobile-shell *::after { scroll-behavior: auto !important; animation-duration: 0.01ms !important; animation-iteration-count: 1 !important; transition-duration: 0.01ms !important; }
+}

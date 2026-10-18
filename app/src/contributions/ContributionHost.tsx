@@ -1,8 +1,9 @@
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useId, useRef, useState } from "react";
 import { snapshotKey, type BrowserEditorDocument, type BrowserModuleContext, type BrowserModuleDefinition, type ChangeOperation, type ChangeProposal, type ModuleStatus, type SnapshotId, type UiContribution } from "@scriptorium/contracts";
 import { api } from "../api";
 import { moduleBrowserLoaders } from "../generated/browser-modules";
 import type { BrowserJournal } from "../storage/journal";
+import { discoverableContributions } from "./catalog";
 
 const SLOT_LABELS = {
   editor: "執筆ツール",
@@ -35,20 +36,32 @@ export function ContributionHost({
   onProposalStored: () => void;
   readCurrentEditor: () => BrowserEditorDocument | null;
 }) {
-  const allowedModules = useMemo(
-    () => new Set(modules.filter((module) => module.availability === "enabled-idle" || module.availability === "active").map((module) => module.id)),
-    [modules],
-  );
-  const visible = contributions.filter((item) => item.slot === slot && allowedModules.has(item.module));
+  const visible = discoverableContributions(contributions, modules, slot);
+  const [selection, setSelection] = useState("");
+  const headingId = useId();
+  const selectorId = useId();
+  const selected = visible.find((item) => item.id === selection);
+  useEffect(() => {
+    if (selection && !selected) setSelection("");
+  }, [selection, selected]);
   if (visible.length === 0) return null;
 
   return (
-    <section className={`contribution-host contribution-host-${slot}`} aria-label={SLOT_LABELS[slot]}>
-      <h2>{SLOT_LABELS[slot]}</h2>
-      {visible.map((item) => (
+    <section className={`contribution-host contribution-host-${slot}`} aria-labelledby={headingId}>
+      <h2 id={headingId}>{SLOT_LABELS[slot]}</h2>
+      <label className="contribution-selector" htmlFor={selectorId}>
+        <span>機能を選択</span>
+        <select id={selectorId} value={selected?.id ?? ""} onChange={(event) => setSelection(event.currentTarget.value)}>
+          <option value="">選択してください</option>
+          {visible.map((item) => (
+            <option key={item.id} value={item.id}>{item.title}（{item.module}）</option>
+          ))}
+        </select>
+      </label>
+      {selected && (
         <MountedContribution
-          key={item.id}
-          item={item}
+          key={selected.id}
+          item={selected}
           projectId={projectId}
           authorScope={authorScope}
           snapshot={snapshot}
@@ -57,7 +70,7 @@ export function ContributionHost({
           onProposalStored={onProposalStored}
           readCurrentEditor={readCurrentEditor}
         />
-      ))}
+      )}
     </section>
   );
 }

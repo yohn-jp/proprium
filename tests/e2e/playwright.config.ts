@@ -35,13 +35,30 @@ export default defineConfig({
   reporter: "list",
   use: {
     baseURL,
-    browserName: "chromium",
     headless: true,
-    launchOptions: process.env.SCRIPTORIUM_E2E_CHROMIUM
-      ? { executablePath: process.env.SCRIPTORIUM_E2E_CHROMIUM }
-      : undefined,
     trace: "retain-on-failure",
   },
+  projects: [
+    {
+      name: "chromium",
+      use: {
+        browserName: "chromium",
+        launchOptions: process.env.SCRIPTORIUM_E2E_CHROMIUM
+          ? { executablePath: process.env.SCRIPTORIUM_E2E_CHROMIUM }
+          : undefined,
+      },
+    },
+    {
+      name: "webkit",
+      testMatch: "**/ui-v1.acceptance.spec.ts",
+      use: {
+        browserName: "webkit",
+        launchOptions: process.env.SCRIPTORIUM_E2E_WEBKIT
+          ? { executablePath: process.env.SCRIPTORIUM_E2E_WEBKIT }
+          : undefined,
+      },
+    },
+  ],
   webServer: externalServer
     ? undefined
     : {

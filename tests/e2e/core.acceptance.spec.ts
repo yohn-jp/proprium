@@ -54,7 +54,7 @@ function projectLabel(value: string): string {
 }
 
 async function signIn(page: Page): Promise<void> {
-  await page.goto("/");
+  await page.goto("/desktop/");
   await page.getByLabel("アクセストークン").fill(authToken);
   await page.getByRole("button", { name: "ログイン" }).click();
   await expect(page.getByRole("heading", { name: "作品を追加" })).toBeVisible();
@@ -68,7 +68,7 @@ async function openFixtureProject(page: Page): Promise<void> {
     await page.getByLabel("GitHub リポジトリ URL").fill(repositoryInputValue(repositoryUrl));
     await page.getByRole("button", { name: "リポジトリを登録" }).click();
   }
-  await expect(page.getByRole("heading", { name: "Volume One" })).toBeVisible();
+  await expect(page.getByRole("heading", { name: "Volume One" })).toBeVisible({ timeout: 30_000 });
   await page.getByRole("button", { name: "Chapter One: Scene One" }).click();
   await expect(page.getByRole("heading", { name: "Scene One" })).toBeVisible();
   await expect(page.locator(".cm-content")).toBeVisible();
@@ -756,6 +756,7 @@ test("external MCP proposals enter owner review before approval, then checkpoint
   expect(proposed.status).toBe(201);
   const storedProposal = await proposed.json() as { id: string; source: string };
   expect(storedProposal).toMatchObject({ id: proposalId, source: "mcp" });
+  await page.getByRole("tab", { name: "ツールと履歴" }).click();
   const foregroundReads: Array<{ path: string; at: number }> = [];
   page.on("request", (request) => {
     if (request.method() !== "GET") return;
@@ -885,6 +886,7 @@ test("full browser MCP proposal payload is restored after Core data loss before 
   });
   expect(bearerProposal.status).toBe(201);
   expect(await bearerProposal.json()).toMatchObject({ id: proposalId, source: "mcp" });
+  await page.getByRole("tab", { name: "ツールと履歴" }).click();
   await expect.poll(async () => {
     await page.evaluate(() => window.dispatchEvent(new Event("online")));
     return page.getByText(proposalId, { exact: false }).isVisible().catch(() => false);
@@ -950,7 +952,7 @@ test("full browser MCP proposal payload is restored after Core data loss before 
   });
   expect(partial?.proposal.evidence).toBeUndefined();
 
-  await page.goto(new URL("/", origin).toString());
+  await page.goto(new URL("/desktop/", origin).toString());
   await expect(page.locator(".project-button")).toHaveCount(1);
   await page.getByRole("button", { name: projectLabel(repositoryUrl), exact: true }).click();
   await expect(page.getByRole("heading", { name: "Volume One" })).toBeVisible();
@@ -989,6 +991,7 @@ test("full browser MCP proposal payload is restored after Core data loss before 
   expect(restoredStatus.publishedOperationIds).toContain(firstOperationId);
   expect(restoredStatus.approvedOperationIds).not.toContain(remainingOperationId);
 
+  await page.getByRole("tab", { name: "ツールと履歴" }).click();
   const proposalCard = page.locator(".proposal-card").filter({ hasText: proposalId });
   await expect(proposalCard).toBeVisible();
   await expect(proposalCard.getByText(/基準リモートが現在の HEAD より古くなっています/u)).toBeVisible();
@@ -1235,6 +1238,8 @@ test("unmounting a contribution aborts its in-flight action request", async ({ p
   try {
     await signIn(page);
     await openFixtureProject(page);
+    await page.getByRole("tab", { name: "ツールと履歴" }).click();
+    await page.locator(".contribution-host-settings").getByLabel("機能を選択").selectOption("publishing.export.epub");
     const actionRequest = await observed;
     const failedRequest = page.waitForEvent("requestfailed", (request) => request === actionRequest);
     await page.getByRole("button", { name: "ログアウト" }).click();
