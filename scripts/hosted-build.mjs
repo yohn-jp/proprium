@@ -546,12 +546,15 @@ async function browserUiArtifactRecords(distDirectory, browserIds, ui) {
     throw new Error('Vite browser manifest has no canonical application entry');
   }
   const expectedDynamicSources = browserIds.map((id) => `../modules/${id}/dist/browser.js`).sort();
-  const actualDynamicSources = [...(applicationEntry.dynamicImports ?? [])].sort();
+  const appManifest = JSON.parse(await readFile(path.join(root, 'app/package.json'), 'utf8'));
+  const ionicPrefix = `../node_modules/.pnpm/@ionic+core@${appManifest.dependencies['@ionic/core']}/node_modules/@ionic/core/components/`;
+  const isIonicRuntime = (source) => ui === 'mobile' && source.startsWith(ionicPrefix) && /^p-[A-Za-z0-9_-]+\.js$/u.test(source.slice(ionicPrefix.length));
+  const actualDynamicSources = [...new Set(applicationEntry.dynamicImports ?? [])].filter((source) => !isIonicRuntime(source)).sort();
   if (canonicalJson(actualDynamicSources) !== canonicalJson(expectedDynamicSources)) {
     throw new Error('Vite application entry imports a different browser module closure');
   }
   const dynamicEntries = Object.entries(manifest).filter(([, item]) => item?.isDynamicEntry === true);
-  const dynamicSources = dynamicEntries.map(([key, item]) => item.src ?? key).sort();
+  const dynamicSources = dynamicEntries.map(([key, item]) => item.src ?? key).filter((source) => !isIonicRuntime(source)).sort();
   if (canonicalJson(dynamicSources) !== canonicalJson(expectedDynamicSources)) {
     throw new Error('Vite manifest contains an unexpected browser module chunk');
   }
