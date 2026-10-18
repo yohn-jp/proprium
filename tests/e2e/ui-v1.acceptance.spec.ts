@@ -388,6 +388,17 @@ test("both production Shells preserve recoverable Japanese drafts and the Mobile
   await expect(mobileEditor).toHaveText(mobileCompositionDraft);
   await expectJournalDraft(page, "scene-2", mobileCompositionDraft);
 
+  await page.getByRole("navigation", { name: "モバイル画面" }).getByRole("button", { name: "設定", exact: true }).click();
+  await page.getByRole("button", { name: "Desktop版へ切り替え" }).click();
+  await expect(page).toHaveURL(new RegExp("/desktop/projects/.+/scenes/scene-2"));
+  await expect(desktopEditor).toHaveText(mobileCompositionDraft);
+  await expectJournalDraft(page, "scene-2", mobileCompositionDraft);
+  await page.getByRole("button", { name: "モバイルUIへ" }).click();
+  await expect(page).toHaveURL(new RegExp("/mobile/projects/.+/scenes/scene-2"));
+  await page.getByRole("navigation", { name: "モバイル画面" }).getByRole("button", { name: "書く", exact: true }).click();
+  await expect(mobileEditor).toHaveText(mobileCompositionDraft);
+  await expectJournalDraft(page, "scene-2", mobileCompositionDraft);
+
   const mobilePublishedDraft = "Mobile checkpoint, history, and explicit publication.";
   await mobileEditor.fill(mobilePublishedDraft);
   await expectJournalDraft(page, "scene-2", mobilePublishedDraft);
