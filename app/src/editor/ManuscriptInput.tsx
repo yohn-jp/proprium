@@ -9,13 +9,14 @@ import {
 } from "@codemirror/view";
 import { forwardRef, useEffect, useImperativeHandle, useRef, type CSSProperties } from "react";
 import { bracketPairsExtension } from "./cm/bracketPairs";
-import { editorCompositionExtension } from "./cm/compositionGuard";
+import { editorCompositionExtension, isViewComposing } from "./cm/compositionGuard";
 import { ellipsisNormalizeExtension } from "./cm/ellipsisNormalize";
 import { planWritingSymbol, type WritingSymbolId } from "./writingSymbols";
 import { offsetAtUiSentenceIndex, uiSentenceIndexAtOffset } from "../resume/continueCandidates";
 
 export interface ManuscriptInputHandle {
   focus(): void;
+  flushComposition(): Promise<string>;
   insert(symbol: WritingSymbolId): void;
   restorePosition(position: { cursorSentenceIndex: number | null; scrollTop: number }): void;
   getScrollTop(): number;
@@ -62,6 +63,19 @@ export const ManuscriptInput = forwardRef<ManuscriptInputHandle, ManuscriptInput
   useImperativeHandle(ref, () => ({
     focus() {
       viewRef.current?.focus();
+    },
+    async flushComposition() {
+      const view = viewRef.current;
+      if (!view) return "";
+      if (isViewComposing(view)) {
+        view.contentDOM.blur();
+        await new Promise<void>((resolve) => window.setTimeout(resolve, 0));
+        await new Promise<void>((resolve) => window.setTimeout(resolve, 0));
+        if (isViewComposing(view)) {
+          throw new Error("日本語入力の変換が完了していません。変換を確定してから画面を切り替えてください。");
+        }
+      }
+      return view.state.doc.toString();
     },
     insert(symbol) {
       const view = viewRef.current;

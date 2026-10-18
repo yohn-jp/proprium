@@ -79,6 +79,7 @@ export function SceneEditor({
   onDraftScratch,
   onCheckpointScratch,
   registerScratchFlush,
+  registerNavigationFlush,
   scratchBusy,
   pendingCount,
 }: {
@@ -118,6 +119,7 @@ export function SceneEditor({
   onDraftScratch: (draft: ScratchDraftPayload, binding: ScratchDraftBinding) => Promise<JournalEntry | null>;
   onCheckpointScratch: (entry: JournalEntry) => Promise<void>;
   registerScratchFlush: (flush: (() => Promise<JournalEntry | null>) | null) => void;
+  registerNavigationFlush: (flush: (() => Promise<string | null>) | null) => void;
   scratchBusy: boolean;
   pendingCount: number;
 }) {
@@ -142,6 +144,11 @@ export function SceneEditor({
   }, [zen]);
 
   useEffect(() => storeTypographySettings(typography), [typography]);
+
+  useEffect(() => {
+    registerNavigationFlush(() => editorRef.current?.flushComposition() ?? Promise.resolve(null));
+    return () => registerNavigationFlush(null);
+  }, [registerNavigationFlush]);
 
   useEffect(() => {
     saveReadingPage(authorScope, repositoryKey, scene.id, readingPage);
@@ -270,7 +277,7 @@ export function SceneEditor({
         <button type="button" className="quiet-button" onClick={printManuscript}>印刷</button>
       </nav>
 
-      {reading ? (
+      {reading && (
         <section
           className={`reading-view ${vertical ? "is-vertical" : ""}`}
           aria-label={vertical ? "縦書き読書モード" : "読書モード"}
@@ -282,8 +289,8 @@ export function SceneEditor({
             <RubyText text={text} />
           </MobileReadingPager>
         </section>
-      ) : (
-        <div className="editor-columns">
+      )}
+      <div className="editor-columns" hidden={reading} style={reading ? { display: "none" } : undefined}>
           <div className="manuscript-column">
             <label id="manuscript-label" htmlFor="manuscript">原稿 Markdown</label>
             <ManuscriptInput
@@ -328,8 +335,7 @@ export function SceneEditor({
               <RubyText text={text} />
             </div>
           </section>
-        </div>
-      )}
+      </div>
       <div className={`print-view ${vertical ? "is-vertical" : ""}`} aria-hidden={!printing} style={readerStyle(typography)}>
         <RubyText text={text} className="print-manuscript" />
       </div>

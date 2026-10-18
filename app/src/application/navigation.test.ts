@@ -17,9 +17,9 @@ test("application paths retain resource identity when switching shells", () => {
     sceneId: "scene/3",
   };
   const mobilePath = applicationPath("mobile", resource);
-  assert.equal(mobilePath, "/mobile/projects/owner%2Fwork%20one/volumes/volume-1/chapters/chapter-2/scenes/scene%2F3");
+  assert.equal(mobilePath, "/mobile/projects/owner%2Fwork%20one/scenes/scene%2F3?volume=volume-1&chapter=chapter-2");
   assert.deepEqual(parseApplicationLocation(mobilePath), { mode: "mobile", resource });
-  assert.equal(switchApplicationPath(mobilePath, "desktop"), applicationPath("desktop", resource));
+  assert.equal(switchApplicationPath(`${mobilePath}&view=library`, "desktop"), applicationPath("desktop", resource, "?view=library"));
   assert.deepEqual(parseApplicationLocation("/desktop"), { mode: "desktop", resource: null });
 });
 

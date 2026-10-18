@@ -50,39 +50,56 @@ export function rememberUiMode(mode: UiMode, storage: StorageWriter | null = bro
 }
 
 export function parseApplicationLocation(pathname: string): ApplicationLocation | null {
-  const segments = pathname.split("/").filter(Boolean);
+  let url: URL;
+  try {
+    url = new URL(pathname, "http://scriptorium.invalid");
+  } catch {
+    return null;
+  }
+  const segments = url.pathname.split("/").filter(Boolean);
   const mode = segments[0];
   if (!isUiMode(mode)) return null;
 
   const resource: ApplicationResource = {};
-  const keys = new Map<string, keyof ApplicationResource>([
-    ["projects", "projectId"],
-    ["volumes", "volumeId"],
-    ["chapters", "chapterId"],
-    ["scenes", "sceneId"],
-  ]);
-  for (let index = 1; index < segments.length; index += 2) {
-    const key = keys.get(segments[index]);
-    const value = segments[index + 1];
-    if (!key || value === undefined) return { mode, resource: null };
+  if (segments[1] === "projects" && segments[2] !== undefined) {
     try {
-      resource[key] = decodeURIComponent(value);
+      resource.projectId = decodeURIComponent(segments[2]);
+      if (segments[3] === "scenes" && segments[4] !== undefined) {
+        resource.sceneId = decodeURIComponent(segments[4]);
+      }
     } catch {
       return { mode, resource: null };
     }
   }
+  const volumeId = url.searchParams.get("volume");
+  const chapterId = url.searchParams.get("chapter");
+  const projectId = url.searchParams.get("project");
+  const sceneId = url.searchParams.get("scene");
+  if (volumeId) resource.volumeId = volumeId;
+  if (chapterId) resource.chapterId = chapterId;
+  if (!resource.projectId && projectId) resource.projectId = projectId;
+  if (!resource.sceneId && sceneId) resource.sceneId = sceneId;
   return { mode, resource: Object.keys(resource).length > 0 ? resource : null };
 }
 
-export function applicationPath(mode: UiMode, resource: ApplicationResource | null = null): string {
-  const path = [`/${mode}`];
-  if (resource?.projectId) path.push("projects", encodeURIComponent(resource.projectId));
-  if (resource?.volumeId) path.push("volumes", encodeURIComponent(resource.volumeId));
-  if (resource?.chapterId) path.push("chapters", encodeURIComponent(resource.chapterId));
-  if (resource?.sceneId) path.push("scenes", encodeURIComponent(resource.sceneId));
-  return path.join("/");
+export function applicationPath(mode: UiMode, resource: ApplicationResource | null = null, currentSearch = ""): string {
+  const path = resource?.projectId
+    ? `/${mode}/projects/${encodeURIComponent(resource.projectId)}${resource.sceneId ? `/scenes/${encodeURIComponent(resource.sceneId)}` : ""}`
+    : `/${mode}/`;
+  const query = new URLSearchParams(currentSearch);
+  for (const key of ["project", "scene", "volume", "chapter"]) query.delete(key);
+  if (resource?.volumeId) query.set("volume", resource.volumeId);
+  if (resource?.chapterId) query.set("chapter", resource.chapterId);
+  const search = query.toString();
+  return search ? `${path}?${search}` : path;
 }
 
 export function switchApplicationPath(pathname: string, mode: UiMode): string {
-  return applicationPath(mode, parseApplicationLocation(pathname)?.resource ?? null);
+  let search = "";
+  try {
+    search = new URL(pathname, "http://scriptorium.invalid").search;
+  } catch {
+    // The pathname parser below will return no resource for malformed input.
+  }
+  return applicationPath(mode, parseApplicationLocation(pathname)?.resource ?? null, search);
 }
