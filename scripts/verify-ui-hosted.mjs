@@ -149,7 +149,10 @@ async function main() {
       await delay(250);
     }
     assert.ok(ready?.status === 200, 'Hosted package did not become ready: ' + output);
-    assert.deepEqual(await ready.json(), { ok: true });
+    const readyBody = await ready.json();
+    assert.equal(readyBody.ok, true);
+    assert.equal(readyBody.pendingRequests, 1, 'readiness reports the request currently being served');
+    assert.equal(readyBody.pendingLocalCheckpoints, null);
 
     const health = await get('/api/health');
     assert.deepEqual(await health.json(), { status: 'ok' });
