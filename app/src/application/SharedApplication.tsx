@@ -31,7 +31,7 @@ import { loadThemeMode, persistThemeMode, type ThemeMode } from "../theme";
 import { clearDraft, loadDraft } from "../drafts";
 import type { ApplicationShell, ApplicationShellProps, UiMode } from "./contracts";
 import { applicationPath, parseApplicationLocation, readUiModePreference, rememberUiMode, switchApplicationPath, type ApplicationResource } from "./navigation";
-import { canRetainRecoveredEditorDuringSceneLoad, isNonDraftEntryAcknowledgedByReceipt, isSameSceneEditorLoad, isTextRepresentedByRecoveryRecord, isUnchangedEntryConfirmedByReceipt, mayWriteEditor, recoveryStatusForJournalOpen, type EditorRecoveryStatus } from "./recovery";
+import { canRetainRecoveredEditorDuringSceneLoad, isEditorTextSafeToFlush, isNonDraftEntryAcknowledgedByReceipt, isSameSceneEditorLoad, isUnchangedEntryConfirmedByReceipt, mayWriteEditor, recoveryStatusForJournalOpen, type EditorRecoveryStatus } from "./recovery";
 import {
   BrowserJournal,
   documentKey,
@@ -1606,7 +1606,7 @@ function AuthorWorkspace({
   async function flushDraft(): Promise<JournalEntry | null> {
     await scratchFlushRef.current();
     const requireRecoverableEditorText = (editor: EditorSession): void => {
-      if (!isTextRepresentedByRecoveryRecord(editor.text, editor.entry?.text ?? null, editor.read.scene.text)) {
+      if (!isEditorTextSafeToFlush(editor.text, editor.entry?.text ?? null, editor.read.scene.text, editor.recoveryStatus)) {
         throw new Error(editor.journalError || "現在の入力がブラウザー回復記録に含まれていないため、移動できません。");
       }
     };

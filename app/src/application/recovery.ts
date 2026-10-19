@@ -10,6 +10,17 @@ export function isTextRepresentedByRecoveryRecord(
   return editorText === (entryText ?? cleanText);
 }
 
+/** A locked pending editor may display its verified canonical read while recovery is running. */
+export function isEditorTextSafeToFlush(
+  editorText: string,
+  entryText: string | null,
+  cleanText: string,
+  recoveryStatus: EditorRecoveryStatus,
+): boolean {
+  return isTextRepresentedByRecoveryRecord(editorText, entryText, cleanText) ||
+    (recoveryStatus === "pending" && editorText === cleanText);
+}
+
 export function isEntryAcknowledgedByReceipt(
   entry: { publicationBatchId?: string; operation: { id: string; generation: number } },
   receipt: {

@@ -1,12 +1,20 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { canRetainRecoveredEditorDuringSceneLoad, isEntryAcknowledgedByReceipt, isNonDraftEntryAcknowledgedByReceipt, isSameSceneEditorLoad, isTextRepresentedByRecoveryRecord, isUnchangedEntryConfirmedByReceipt, mayWriteEditor, recoveryStatusForJournalOpen } from "./recovery.js";
+import { canRetainRecoveredEditorDuringSceneLoad, isEditorTextSafeToFlush, isEntryAcknowledgedByReceipt, isNonDraftEntryAcknowledgedByReceipt, isSameSceneEditorLoad, isTextRepresentedByRecoveryRecord, isUnchangedEntryConfirmedByReceipt, mayWriteEditor, recoveryStatusForJournalOpen } from "./recovery.js";
 
 test("text is recoverable only when the current record represents the editor", () => {
   assert.equal(isTextRepresentedByRecoveryRecord("clean", null, "clean"), true);
   assert.equal(isTextRepresentedByRecoveryRecord("draft", "draft", "clean"), true);
   assert.equal(isTextRepresentedByRecoveryRecord("new input", "older draft", "clean"), false);
   assert.equal(isTextRepresentedByRecoveryRecord("new input", null, "clean"), false);
+});
+
+test("a locked pending editor may flush its canonical placeholder without replacing a checkpointed entry", () => {
+  assert.equal(isEditorTextSafeToFlush("canonical", "checkpointed draft", "canonical", "pending"), true);
+  assert.equal(isEditorTextSafeToFlush("new input", "checkpointed draft", "canonical", "pending"), false);
+  assert.equal(isEditorTextSafeToFlush("canonical", "checkpointed draft", "canonical", "ready"), false);
+  assert.equal(isEditorTextSafeToFlush("canonical", "checkpointed draft", "canonical", "unavailable"), false);
+  assert.equal(isEditorTextSafeToFlush("checkpointed draft", "checkpointed draft", "canonical", "pending"), true);
 });
 
 test("only an unchanged exact operation generation is cleared by a confirmed receipt", () => {
