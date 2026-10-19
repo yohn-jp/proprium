@@ -295,13 +295,13 @@ export function Workspace({ scope, mode, panels, beforeLayoutChange, requestedPa
     }
   }, [visibleIds, mobilePanelId, moveSource, moveTarget]);
 
-  const changeLayout = useCallback(async (change: (current: WorkspaceLayout) => WorkspaceLayout, success = "Layout updated. Save layout to keep it."): Promise<boolean> => {
+  const changeLayout = useCallback(async (change: (current: WorkspaceLayout) => WorkspaceLayout, success = "Layout updated. Save layout to keep it.", runPreflight = true): Promise<boolean> => {
     if (changingRef.current) return false;
     changingRef.current = true;
     setChanging(true);
     setMessage("");
     try {
-      const allowed = beforeLayoutChange ? await beforeLayoutChange() : true;
+      const allowed = runPreflight && beforeLayoutChange ? await beforeLayoutChange() : true;
       if (!allowed) {
         setMessage("The editor could not confirm its recovery state. The current panel layout is unchanged.");
         return false;
@@ -329,7 +329,7 @@ export function Workspace({ scope, mode, panels, beforeLayoutChange, requestedPa
       setMessage(`The ${panelId} panel is not available.`);
       return;
     }
-    if (mode === "mobile" && selectedPanelId && selectedPanelId !== panelId) {
+    if (mode === "mobile" && selectedPanelId) {
       routeSuppressedByPanelRequestRef.current = `${scope}:${mode}:${selectedPanelId}`;
     }
     const reveal = async (): Promise<void> => {
@@ -409,7 +409,11 @@ export function Workspace({ scope, mode, panels, beforeLayoutChange, requestedPa
   useEffect(() => {
     if (mode !== "mobile" || !selectedPanelId || !catalog.has(selectedPanelId) || changingRef.current) return;
     const selectionKey = `${scope}:${mode}:${selectedPanelId}`;
-    if (routeSuppressedByPanelRequestRef.current === selectionKey) return;
+    if (routeSuppressedByPanelRequestRef.current === selectionKey) {
+      routeSuppressedByPanelRequestRef.current = "";
+      routeSelectionRef.current = selectionKey;
+      return;
+    }
     routeSuppressedByPanelRequestRef.current = "";
     if (routeSelectionRef.current === selectionKey) return;
     routeSelectionRef.current = selectionKey;

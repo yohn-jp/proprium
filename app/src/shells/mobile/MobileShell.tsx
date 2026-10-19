@@ -13,7 +13,7 @@ import {
   setupIonicReact,
 } from "@ionic/react";
 import { useLocation, useNavigate } from "react-router-dom";
-import type { ApplicationShellProps } from "../../application/contracts";
+import type { ApplicationShellProps, WorkspacePanelRequest } from "../../application/contracts";
 import { Workspace } from "../../workspace/Workspace";
 import "@ionic/react/css/core.css";
 import "@ionic/react/css/normalize.css";
@@ -90,6 +90,9 @@ export function MobileShell({ header, library, editor, tools, status, statusHasE
   const activeView = readViewFromSearch(location.search);
   const [switching, setSwitching] = useState(false);
   const [switchError, setSwitchError] = useState("");
+  const panelRequestSequenceRef = useRef(0);
+  const forwardedPanelRequestRef = useRef("");
+  const [workspacePanelRequest, setWorkspacePanelRequest] = useState<WorkspacePanelRequest>();
   const contentRef = useRef<HTMLIonContentElement | null>(null);
   const activeViewRef = useRef(activeView);
   const scrollPositionsRef = useRef(new Map<MobileView, number>());
@@ -135,8 +138,25 @@ export function MobileShell({ header, library, editor, tools, status, statusHasE
     }
   }, [beforeLayoutChange]);
 
+  const queueWorkspacePanel = useCallback((id: string) => {
+    const sequence = ++panelRequestSequenceRef.current;
+    setWorkspacePanelRequest({ id, sequence });
+  }, []);
+
+  useEffect(() => {
+    if (!requestedPanel?.id || !requestedPanel.sequence) return;
+    const requestKey = `${requestedPanel.id}:${requestedPanel.sequence}`;
+    if (forwardedPanelRequestRef.current === requestKey) return;
+    forwardedPanelRequestRef.current = requestKey;
+    queueWorkspacePanel(requestedPanel.id);
+  }, [requestedPanel?.id, requestedPanel?.sequence, queueWorkspacePanel]);
+
   const navigate = useCallback(async (view: MobileView) => {
-    if (view === activeView || !(await preparePanelChange())) return;
+    const hasWorkspace = Boolean(workspaceScope && panels?.length);
+    const sameRoute = view === activeView;
+    if ((sameRoute && !hasWorkspace) || !(await preparePanelChange())) return;
+    if (hasWorkspace) queueWorkspacePanel(WORKSPACE_PANEL_FOR_VIEW[view]);
+    if (sameRoute) return;
     navigateRoute(withViewInCurrentUrl(view), {
       state: {
         ...historyState(location.state),
@@ -144,7 +164,7 @@ export function MobileShell({ header, library, editor, tools, status, statusHasE
       },
     });
     setSwitchError("");
-  }, [activeView, location.state, navigateRoute, preparePanelChange]);
+  }, [activeView, location.state, navigateRoute, panels?.length, preparePanelChange, queueWorkspacePanel, workspaceScope]);
 
   const goBack = useCallback(async () => {
     const previous = historyState(location.state)[MOBILE_PREVIOUS_VIEW_STATE];
@@ -212,7 +232,7 @@ export function MobileShell({ header, library, editor, tools, status, statusHasE
                 mode="mobile"
                 panels={panels}
                 beforeLayoutChange={beforeLayoutChange}
-                requestedPanel={requestedPanel}
+                requestedPanel={workspacePanelRequest}
                 selectedPanelId={WORKSPACE_PANEL_FOR_VIEW[activeView]}
               />
             </div>
