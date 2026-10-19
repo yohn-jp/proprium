@@ -152,7 +152,7 @@ async function openWorkspaceContributionPanel(page: Page, id: string, title: str
 async function openWorkspaceReviewPanel(page: Page): Promise<void> {
   const toolbar = page.getByRole("toolbar", { name: "Workspace layout controls" });
   await toolbar.getByRole("button", { name: "Review", exact: true }).click();
-  await page.getByRole("tablist", { name: "Panel tabs" }).getByRole("tab", { name: "レビュー", exact: true }).click();
+  await page.getByRole("tablist", { name: "Panel tabs" }).getByRole("tab", { name: "Review", exact: true }).click();
   await expect(page.locator('[data-workspace-panel="review"]')).toBeVisible();
 }
 
@@ -258,7 +258,7 @@ test("full profile renders Story and Speaker review queues and turns both author
     expect(remoteScene).not.toMatch(/^speakerOverrides:/mu);
     expect(() => git(fixture.remote, "cat-file", "-e", `refs/heads/${branch}:meta/scriptorium/modules/speaker/corrections.jsonl`)).toThrow();
 
-    await page.getByRole("tablist", { name: "Panel tabs" }).getByRole("tab", { name: "目次", exact: true }).click();
+    await page.getByRole("tablist", { name: "Panel tabs" }).getByRole("tab", { name: "Outline", exact: true }).click();
     await page.getByRole("navigation", { name: "作品構成" })
       .getByRole("button", { name: "Review Chapter: Review Scene", exact: true }).click();
     await expect(page.getByRole("heading", { name: "Review Scene" })).toBeVisible();

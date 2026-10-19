@@ -77,7 +77,7 @@ async function openFixtureProject(page: Page): Promise<void> {
 async function openWorkspaceReviewPanel(page: Page): Promise<void> {
   const toolbar = page.getByRole("toolbar", { name: "Workspace layout controls" });
   await toolbar.getByRole("button", { name: "Review", exact: true }).click();
-  await page.getByRole("tablist", { name: "Panel tabs" }).getByRole("tab", { name: "レビュー", exact: true }).click();
+  await page.getByRole("tablist", { name: "Panel tabs" }).getByRole("tab", { name: "Review", exact: true }).click();
   await expect(page.locator('[data-workspace-panel="review"]')).toBeVisible();
 }
 
