@@ -499,16 +499,18 @@ test("both production Shells preserve recoverable Japanese drafts and the Mobile
   const mobileCompositionDraft = mobileCompositionBase + "日本語";
   await expect(mobileEditor).toHaveText(mobileCompositionDraft);
   await expectJournalDraft(page, "scene-2", mobileCompositionDraft);
+  const mobileWritingUrl = page.url();
   await page.getByRole("navigation", { name: "モバイル画面" }).getByRole("button", { name: "設定", exact: true }).click();
-  await page.getByRole("button", { name: "Desktop版へ切り替え" }).click();
-  await expect(page).toHaveURL(new RegExp("/mobile/projects/.+/scenes/scene-2"));
+  await expect(page).toHaveURL(mobileWritingUrl);
   await expect(page.getByRole("status").filter({ hasText: "変換が完了していません" })).toBeVisible();
-  await page.getByRole("navigation", { name: "モバイル画面" }).getByRole("button", { name: "書く", exact: true }).click();
+  await expect(mobileEditor).toHaveText(mobileCompositionDraft);
+  await expectJournalDraft(page, "scene-2", mobileCompositionDraft);
   await mobileEditor.evaluate((element) => element.dispatchEvent(new CompositionEvent("compositionend", { data: "日本語", bubbles: true })));
   await expect(mobileEditor).toHaveText(mobileCompositionDraft);
   await expectJournalDraft(page, "scene-2", mobileCompositionDraft);
 
   await page.getByRole("navigation", { name: "モバイル画面" }).getByRole("button", { name: "設定", exact: true }).click();
+  await expect(page.getByRole("button", { name: "Desktop版へ切り替え" })).toBeVisible();
   await page.getByRole("button", { name: "Desktop版へ切り替え" }).click();
   await expect(page).toHaveURL(new RegExp("/desktop/projects/.+/scenes/scene-2"));
   await expect(desktopEditor).toHaveText(mobileCompositionDraft);
