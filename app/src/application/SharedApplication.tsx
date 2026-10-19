@@ -2345,6 +2345,7 @@ function AuthorWorkspace({
   ];
   return <Shell mode={mode} header={header} library={library} editor={editorSlot} tools={toolsSlot} status={statusSlot}
     workspaceScope={authorScope} panels={panels} requestedPanel={panelRequest}
+    statusHasError={status.kind === "error" || Boolean(globalError || journalOpenError)}
     beforeLayoutChange={prepareLayoutChange} onSwitchMode={switchMode} />;
 }
 
