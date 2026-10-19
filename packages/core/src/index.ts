@@ -2366,6 +2366,15 @@ export class CoreStore implements MutationCoordinator {
     return this.withProjectLock(projectId, () => this.requireObservation(projectId));
   }
 
+  /** The last locally available Git snapshot, without GitHub network I/O.
+   * An unknown observation is never represented as a fresh remote observation. */
+  async localObservation(projectId: string): Promise<RemoteObservation> {
+    return this.withProjectLock(projectId, async () => {
+      const { record, root } = await this.getProject(projectId);
+      return this.requireReadObservation(projectId, record, root);
+    });
+  }
+
   /**
    * Re-censuses the current local writer state against a recent successful
    * remote observation. This method never fetches or falls back to observe().
@@ -2524,6 +2533,42 @@ export class CoreStore implements MutationCoordinator {
     });
   }
 
+  private async readSceneAtSnapshot(
+    selected: Awaited<ReturnType<CoreStore["selectedSnapshotUnlocked"]>>,
+    sceneId: string,
+  ): Promise<{ snapshot: SnapshotId; scene: Scene; document: { path: string; content: string; revision: string | null }; metadata: { path: string; content: string; revision: string } }> {
+    const files = await this.snapshotFiles(selected.root, selected.commit, "plot/volumes");
+    const matches: Array<{ path: string; text: string; data: Record<string, unknown> }> = [];
+    for (const file of files.filter((candidate) => /\/scenes\/[^/]+\.yaml$/.test(candidate))) {
+      const yaml = await this.parseSnapshotYaml(selected.root, selected.commit, file);
+      if (!yaml) continue;
+      const id = typeof yaml.data.id === "string" ? yaml.data.id : path.posix.basename(file, ".yaml");
+      if (id === sceneId) matches.push({ path: file, text: yaml.text, data: yaml.data });
+    }
+    if (!matches.length) throw coreError(404, "scene_not_found", "Scene not found");
+    if (matches.length > 1) throw coreError(409, "duplicate_scene_id", "The project contains duplicate scene ids");
+    const found = matches[0]!;
+    const parts = found.path.split("/");
+    const manuscriptPath = typeof found.data.manuscript === "string"
+      ? safeRelativePath(found.data.manuscript).split(path.sep).join("/")
+      : `manuscript/${parts[2]}/${parts[4]}/${sceneId}.md`;
+    try { assertProjectPath(manuscriptPath); }
+    catch { throw coreError(422, "invalid_manuscript_path", "The scene has an unsafe manuscript path"); }
+    let documentFile: { content: string; revision: string } | null;
+    try { documentFile = await this.snapshotFile(selected.root, selected.commit, manuscriptPath); }
+    catch (error) {
+      if (error instanceof CoreError && error.code === "unsafe_project_path") throw coreError(422, "unsafe_manuscript_path", "The scene manuscript path crosses a symbolic link");
+      throw error;
+    }
+    const content = documentFile?.content ?? "";
+    return {
+      snapshot: selected.snapshot,
+      scene: { id: sceneId, title: titleOf(found.data, sceneId), text: parseMarkdownDocument(content).body, revision: revisionFor(found.text, content) },
+      document: { path: manuscriptPath, content, revision: documentFile?.revision ?? null },
+      metadata: { path: found.path, content: found.text, revision: revisionForBytes(found.text) },
+    };
+  }
+
   async readSceneSnapshot(
     projectId: string,
     sceneId: string,
@@ -2532,36 +2577,28 @@ export class CoreStore implements MutationCoordinator {
   ): Promise<{ snapshot: SnapshotId; scene: Scene; document: { path: string; content: string; revision: string | null }; metadata: { path: string; content: string; revision: string } }> {
     return this.withProjectLock(projectId, async () => {
       const selected = await this.selectedSnapshotUnlocked(projectId, view, pinned);
-      const files = await this.snapshotFiles(selected.root, selected.commit, "plot/volumes");
-      const matches: Array<{ path: string; text: string; data: Record<string, unknown> }> = [];
-      for (const file of files.filter((candidate) => /\/scenes\/[^/]+\.yaml$/.test(candidate))) {
-        const yaml = await this.parseSnapshotYaml(selected.root, selected.commit, file);
-        if (!yaml) continue;
-        const id = typeof yaml.data.id === "string" ? yaml.data.id : path.posix.basename(file, ".yaml");
-        if (id === sceneId) matches.push({ path: file, text: yaml.text, data: yaml.data });
+      return this.readSceneAtSnapshot(selected, sceneId);
+    });
+  }
+
+  /** Read both views in one project lock and one API round trip. */
+  async readSceneViews(
+    projectId: string,
+    sceneId: string,
+    pinnedRemote: SnapshotId | string,
+  ): Promise<{ remote: { snapshot: SnapshotId; scene: Scene; document: { path: string; content: string; revision: string | null }; metadata: { path: string; content: string; revision: string } }; effective: { snapshot: SnapshotId; scene: Scene; document: { path: string; content: string; revision: string | null }; metadata: { path: string; content: string; revision: string } } }> {
+    return this.withProjectLock(projectId, async () => {
+      const remoteSelection = await this.selectedSnapshotUnlocked(projectId, "remote", pinnedRemote);
+      const effectiveSelection = await this.selectedSnapshotUnlocked(projectId, "checkpoint");
+      const effectiveBase = { ...effectiveSelection.snapshot, overlayCommit: undefined };
+      if (snapshotKey(effectiveBase) !== snapshotKey(remoteSelection.snapshot)) {
+        throw coreError(409, "snapshot_changed", "The remote snapshot changed while selecting the checkpoint view");
       }
-      if (!matches.length) throw coreError(404, "scene_not_found", "Scene not found");
-      if (matches.length > 1) throw coreError(409, "duplicate_scene_id", "The project contains duplicate scene ids");
-      const found = matches[0]!;
-      const parts = found.path.split("/");
-      const manuscriptPath = typeof found.data.manuscript === "string"
-        ? safeRelativePath(found.data.manuscript).split(path.sep).join("/")
-        : `manuscript/${parts[2]}/${parts[4]}/${sceneId}.md`;
-      try { assertProjectPath(manuscriptPath); }
-      catch { throw coreError(422, "invalid_manuscript_path", "The scene has an unsafe manuscript path"); }
-      let documentFile: { content: string; revision: string } | null;
-      try { documentFile = await this.snapshotFile(selected.root, selected.commit, manuscriptPath); }
-      catch (error) {
-        if (error instanceof CoreError && error.code === "unsafe_project_path") throw coreError(422, "unsafe_manuscript_path", "The scene manuscript path crosses a symbolic link");
-        throw error;
-      }
-      const content = documentFile?.content ?? "";
-      return {
-        snapshot: selected.snapshot,
-        scene: { id: sceneId, title: titleOf(found.data, sceneId), text: parseMarkdownDocument(content).body, revision: revisionFor(found.text, content) },
-        document: { path: manuscriptPath, content, revision: documentFile?.revision ?? null },
-        metadata: { path: found.path, content: found.text, revision: revisionForBytes(found.text) },
-      };
+      const remote = await this.readSceneAtSnapshot(remoteSelection, sceneId);
+      const effective = remoteSelection.commit === effectiveSelection.commit
+        ? { ...remote, snapshot: effectiveSelection.snapshot }
+        : await this.readSceneAtSnapshot(effectiveSelection, sceneId);
+      return { remote, effective };
     });
   }
 
@@ -3787,18 +3824,30 @@ export class CoreStore implements MutationCoordinator {
     record: ProjectRecord,
     root: string,
   ): Promise<RemoteObservation> {
-    const cached = this.readObservations.get(projectId);
-    if (cached && record.identity &&
-        snapshotKey({ repository: cached.snapshot.repository, remoteCommit: "" }) ===
-          snapshotKey({ repository: record.identity, remoteCommit: "" })) {
-      const age = Date.now() - Date.parse(cached.observedAt);
-      const latestFetchedRemote = await this.getRef(root, `refs/remotes/origin/${record.branch}`) ?? "";
-      if (Number.isFinite(age) && age >= 0 && age < READ_OBSERVATION_MAX_AGE_MS &&
-          latestFetchedRemote === cached.snapshot.remoteCommit) {
-        return structuredClone(cached);
-      }
+    if (!record.identity) {
+      throw coreError(409, "repository_identity_unavailable", "The registered repository identity is unavailable");
     }
-    return this.requireObservation(projectId);
+    const trackedCommit = await this.getRef(root, `refs/remotes/origin/${record.branch}`) ?? "";
+    if (!trackedCommit && !record.emptyRemote) {
+      throw coreError(503, "local_snapshot_unavailable", "The local remote-tracking snapshot is unavailable");
+    }
+    const cached = this.readObservations.get(projectId);
+    const sameRepository = cached && snapshotKey({ repository: cached.snapshot.repository, remoteCommit: "" }) ===
+      snapshotKey({ repository: record.identity, remoteCommit: "" });
+    const sameCommit = sameRepository && cached.snapshot.remoteCommit === trackedCommit;
+    const age = cached ? Date.now() - Date.parse(cached.observedAt) : Number.POSITIVE_INFINITY;
+    if (sameCommit && cached && Number.isFinite(age) && age >= 0 && age < READ_OBSERVATION_MAX_AGE_MS) {
+      return structuredClone(cached);
+    }
+    // Do not fetch from GitHub on the read path, and do not relabel a local ref
+    // as a confirmed remote observation. Explicit observe()/mutations remain fresh.
+    return {
+      snapshot: { repository: structuredClone(record.identity), remoteCommit: trackedCommit },
+      checkpointHead: await this.checkpointHead(root),
+      observedAt: sameRepository && cached ? cached.observedAt : new Date(0).toISOString(),
+      state: "unknown",
+      pending: sameCommit && cached ? structuredClone(cached.pending) : [],
+    };
   }
 
   private async reconcileUnlocked(projectId: string, knownObservation?: RemoteObservation): Promise<ReconcileResult> {
