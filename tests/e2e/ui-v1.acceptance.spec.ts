@@ -567,7 +567,7 @@ test("profile-selected contributions stay discoverable and mount one at a time i
   if (expectedModules) expect(enabledIds).toEqual(expectedModules);
   if ((process.env.SCRIPTORIUM_PROFILE ?? "core") === "core") expect(enabledIds).toEqual([]);
   if ((process.env.SCRIPTORIUM_PROFILE ?? "core") === "full") {
-    expect(enabledIds).toEqual(["assistant", "diagnostics", "mcp", "nlp", "publishing", "semantic", "speaker", "story"]);
+    expect(enabledIds).toEqual(["assistant", "diagnostics", "mcp", "nlp", "publishing", "search", "semantic", "speaker", "story"]);
   }
 
   const enabledSet = new Set(enabledIds);
