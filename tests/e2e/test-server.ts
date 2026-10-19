@@ -24,9 +24,9 @@ const authToken = process.env.SCRIPTORIUM_E2E_AUTH_TOKEN ?? "";
 if (!Number.isInteger(port) || port < 1 || port > 65_535) throw new Error("SCRIPTORIUM_E2E_PORT must be a valid TCP port");
 if (authToken.length < 32) throw new Error("SCRIPTORIUM_E2E_AUTH_TOKEN must contain at least 32 characters");
 
-async function createLocalFixture(): Promise<void> {
+async function createLocalFixture(targetRepositoryUrl = repositoryUrl): Promise<void> {
   const fixtureRoot = await mkdtemp(join(tmpdir(), "scriptorium-e2e-repo-"));
-  const bareRemote = resolve(repositoryUrl);
+  const bareRemote = resolve(targetRepositoryUrl);
   const workingCopy = join(fixtureRoot, "seed");
   await mkdir(workingCopy, { recursive: true });
   await mkdir(join(workingCopy, "plot/volumes/vol-1/chapters/ch-1/scenes"), { recursive: true });
@@ -119,6 +119,10 @@ async function close(server: Server): Promise<void> {
 async function startTestServer(): Promise<void> {
   if (process.env.SCRIPTORIUM_E2E_EXTERNAL_REPOSITORY !== "1") {
     await createLocalFixture();
+    const modularRepositoryUrl = process.env.SCRIPTORIUM_E2E_MODULAR_REPOSITORY_URL;
+    if (modularRepositoryUrl && resolve(modularRepositoryUrl) !== resolve(repositoryUrl)) {
+      await createLocalFixture(modularRepositoryUrl);
+    }
   }
 
   const profile = process.env.SCRIPTORIUM_PROFILE ?? "core";

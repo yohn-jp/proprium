@@ -2,7 +2,7 @@ import { expect, test, type Page } from "@playwright/test";
 import { pathToFileURL } from "node:url";
 
 const authToken = process.env.SCRIPTORIUM_E2E_AUTH_TOKEN ?? "";
-const repositoryUrl = process.env.SCRIPTORIUM_E2E_REPOSITORY_URL ?? "";
+const repositoryUrl = process.env.SCRIPTORIUM_E2E_MODULAR_REPOSITORY_URL ?? process.env.SCRIPTORIUM_E2E_REPOSITORY_URL ?? "";
 const profile = process.env.SCRIPTORIUM_PROFILE ?? "core";
 
 interface DraftRecord {

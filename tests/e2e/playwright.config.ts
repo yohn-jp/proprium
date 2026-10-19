@@ -16,6 +16,9 @@ const authToken = process.env.SCRIPTORIUM_E2E_AUTH_TOKEN
 
 process.env.SCRIPTORIUM_E2E_STATE_DIR = stateDir;
 process.env.SCRIPTORIUM_E2E_REPOSITORY_URL ??= resolve(stateDir, "origin.git");
+if (!configuredBaseURL && !externalRepository) {
+  process.env.SCRIPTORIUM_E2E_MODULAR_REPOSITORY_URL ??= resolve(stateDir, "modular-origin.git");
+}
 process.env.SCRIPTORIUM_E2E_REPOSITORY_BRANCH ??= "main";
 process.env.SCRIPTORIUM_E2E_AUTH_TOKEN = authToken;
 process.env.SCRIPTORIUM_E2E_PORT ??= "4173";
