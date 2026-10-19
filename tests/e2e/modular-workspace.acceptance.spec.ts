@@ -129,6 +129,14 @@ async function openPanelMenu(page: Page): Promise<void> {
   }
 }
 
+async function closePanelMenu(page: Page): Promise<void> {
+  const details = workspaceToolbar(page).locator("details");
+  if (await details.evaluate((element) => (element as HTMLDetailsElement).open)) {
+    await details.locator("summary").click();
+  }
+  await expect.poll(() => details.evaluate((element) => (element as HTMLDetailsElement).open)).toBe(false);
+}
+
 async function workspaceStorage(page: Page, mode: "desktop" | "mobile"): Promise<{ key: string; raw: string | null }> {
   return page.evaluate((expectedMode) => {
     const prefix = "scriptorium:workspace:v1:";
@@ -521,6 +529,7 @@ test("full profile exposes optional lexical search and terminology without chang
   await toolbar.getByRole("button", { name: "Show 全文検索", exact: true }).click();
   const searchPanel = page.locator('[data-workspace-panel="module:search.panel"]');
   await expect(searchPanel).toBeVisible();
+  await closePanelMenu(page);
   const query = searchPanel.getByLabel("検索語");
   await query.fill("submerged brass archive");
   await query.press("Enter");
@@ -532,6 +541,7 @@ test("full profile exposes optional lexical search and terminology without chang
   await toolbar.getByRole("button", { name: "Show 用語辞典", exact: true }).click();
   const termsPanel = page.locator('[data-workspace-panel="module:search.terms"]');
   await expect(termsPanel).toBeVisible();
+  await closePanelMenu(page);
   await expect(termsPanel).toContainText("Lantern Harbor");
   await expect(termsPanel).toContainText("Beacon Quay");
 
