@@ -24,6 +24,14 @@ import "../editorial.css";
 
 export type MobileView = "library" | "writing" | "inspection" | "tools" | "settings";
 
+const WORKSPACE_PANEL_FOR_VIEW: Readonly<Record<MobileView, string>> = {
+  library: "outline",
+  writing: "editor",
+  inspection: "inspector",
+  tools: "review",
+  settings: "inspector",
+};
+
 const VIEWS: ReadonlyArray<{ id: MobileView; label: string; title: string; mark: string }> = [
   { id: "library", label: "作品", title: "作品ライブラリ", mark: "▤" },
   { id: "writing", label: "書く", title: "執筆・読書", mark: "✎" },
@@ -115,8 +123,20 @@ export function MobileShell({ header, library, editor, tools, status, onSwitchMo
     return () => { cancelled = true; };
   }, [activeView]);
 
-  const navigate = useCallback((view: MobileView) => {
-    if (view === activeView) return;
+  const preparePanelChange = useCallback(async (): Promise<boolean> => {
+    setSwitchError("");
+    try {
+      const allowed = beforeLayoutChange ? await beforeLayoutChange() : true;
+      if (!allowed) setSwitchError("The editor could not confirm its recovery state. The current screen is unchanged.");
+      return allowed;
+    } catch (error) {
+      setSwitchError(errorMessage(error));
+      return false;
+    }
+  }, [beforeLayoutChange]);
+
+  const navigate = useCallback(async (view: MobileView) => {
+    if (view === activeView || !(await preparePanelChange())) return;
     navigateRoute(withViewInCurrentUrl(view), {
       state: {
         ...historyState(location.state),
@@ -124,16 +144,17 @@ export function MobileShell({ header, library, editor, tools, status, onSwitchMo
       },
     });
     setSwitchError("");
-  }, [activeView, location.state, navigateRoute]);
+  }, [activeView, location.state, navigateRoute, preparePanelChange]);
 
-  const goBack = useCallback(() => {
+  const goBack = useCallback(async () => {
     const previous = historyState(location.state)[MOBILE_PREVIOUS_VIEW_STATE];
     if (isMobileView(previous)) {
+      if (!(await preparePanelChange())) return;
       navigateRoute(-1);
       return;
     }
-    navigate(activeView === "writing" ? "library" : "writing");
-  }, [activeView, location.state, navigate, navigateRoute]);
+    await navigate(activeView === "writing" ? "library" : "writing");
+  }, [activeView, location.state, navigate, navigateRoute, preparePanelChange]);
 
   const switchToDesktop = useCallback(async () => {
     if (switching) return;
@@ -173,7 +194,19 @@ export function MobileShell({ header, library, editor, tools, status, onSwitchMo
         </IonHeader>
 
         <IonContent ref={contentRef} className="mobile-shell-content" fullscreen={false}>
-          <div className="mobile-shell-view-stack" data-active-view={activeView}>
+          {workspaceScope && panels?.length ? (
+            <div className="mobile-shell-workspace-view" data-active-view={activeView}>
+              {showSharedStatus ? sharedStatusNode : null}
+              <Workspace
+                scope={workspaceScope}
+                mode="mobile"
+                panels={panels}
+                beforeLayoutChange={beforeLayoutChange}
+                requestedPanel={requestedPanel}
+                selectedPanelId={WORKSPACE_PANEL_FOR_VIEW[activeView]}
+              />
+            </div>
+          ) : <div className="mobile-shell-view-stack" data-active-view={activeView}>
             <section className="mobile-shell-view" aria-labelledby="mobile-library-title" hidden={activeView !== "library"}>
               <h1 id="mobile-library-title" className="mobile-shell-page-title">作品ライブラリ</h1>
               <div className="mobile-shell-slot mobile-shell-library">{library}</div>
@@ -216,7 +249,7 @@ export function MobileShell({ header, library, editor, tools, status, onSwitchMo
                 {switchError ? <p className="mobile-shell-switch-error" role="alert">{switchError}</p> : null}
               </section>
             </section>
-          </div>
+          </div>}
         </IonContent>
 
         <IonFooter className="mobile-shell-footer">

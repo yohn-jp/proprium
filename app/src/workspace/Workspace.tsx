@@ -23,6 +23,7 @@ interface WorkspaceProps {
   panels: readonly WorkspacePanel[];
   beforeLayoutChange?: () => Promise<boolean>;
   requestedPanel?: WorkspacePanelRequest;
+  selectedPanelId?: string;
 }
 
 type Placement = "tab" | DockSide;
@@ -254,7 +255,7 @@ function WorkspaceTree({ node, mode, catalog, visibleCount, onActivate, onHide, 
   );
 }
 
-export function Workspace({ scope, mode, panels, beforeLayoutChange, requestedPanel }: WorkspaceProps): ReactNode {
+export function Workspace({ scope, mode, panels, beforeLayoutChange, requestedPanel, selectedPanelId }: WorkspaceProps): ReactNode {
   const panelIds = useMemo(() => [...new Set(panels.map((panel) => panel.id))], [panels]);
   const catalog = useMemo(() => new Map(panels.map((panel) => [panel.id, panel])), [panels]);
   const [initial] = useState(() => loadFor(scope, mode, panelIds));
@@ -315,7 +316,7 @@ export function Workspace({ scope, mode, panels, beforeLayoutChange, requestedPa
   useEffect(() => {
     const panelId = requestedPanel?.id;
     const sequence = requestedPanel?.sequence;
-    if (!panelId || !sequence) return;
+    if (!panelId || !sequence || changingRef.current) return;
     const requestKey = `${scope}:${mode}:${panelId}:${sequence}`;
     if (handledRequestRef.current === requestKey) return;
     handledRequestRef.current = requestKey;
@@ -337,7 +338,7 @@ export function Workspace({ scope, mode, panels, beforeLayoutChange, requestedPa
       });
     };
     void reveal();
-  }, [requestedPanel?.id, requestedPanel?.sequence, scope, mode, catalog, visibleIds, changeLayout]);
+  }, [requestedPanel?.id, requestedPanel?.sequence, scope, mode, catalog, visibleIds, changeLayout, changing]);
 
   const changePreset = (preset: Exclude<WorkspacePreset, "custom">): void => {
     void changeLayout(() => createWorkspacePreset(preset, panelIds), `${presetTitle(preset)} preset applied. Save layout to keep it.`);
@@ -393,6 +394,19 @@ export function Workspace({ scope, mode, panels, beforeLayoutChange, requestedPa
       }
     })();
   };
+
+  const routeSelectionRef = useRef("");
+  useEffect(() => {
+    if (mode !== "mobile" || !selectedPanelId || !catalog.has(selectedPanelId) || changingRef.current) return;
+    const selectionKey = `${scope}:${mode}:${selectedPanelId}`;
+    if (routeSelectionRef.current === selectionKey) return;
+    routeSelectionRef.current = selectionKey;
+    const change = visibleIds.includes(selectedPanelId)
+      ? (current: WorkspaceLayout) => current
+      : (current: WorkspaceLayout) => showWorkspacePanel(current, selectedPanelId);
+    void changeLayout(change, "Panel opened for this view. Save layout to keep it.")
+      .then((allowed) => { if (allowed) setMobilePanelId(selectedPanelId); });
+  }, [mode, scope, selectedPanelId, visibleIds, catalog, changeLayout, changing]);
 
   const resize = (splitId: string, sizes: number[]): void => {
     setLayout((current) => resizeWorkspaceSplit(current, splitId, sizes));
