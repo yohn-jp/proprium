@@ -9,6 +9,8 @@ interface DraftRecord {
   sceneId: string;
   state: string;
   text: string;
+  operationId: string;
+  generation: number;
 }
 
 interface WorkspaceState {
@@ -82,12 +84,18 @@ async function readJournal(page: Page): Promise<DraftRecord[]> {
     });
     try {
       const transaction = database.transaction("operations", "readonly");
-      const records = await new Promise<Array<{ sceneId: string; state: string; text: string }>>((resolve, reject) => {
+      const records = await new Promise<Array<{ sceneId: string; state: string; text: string; operation: { id: string; generation: number } }>>((resolve, reject) => {
         const request = transaction.objectStore("operations").getAll();
         request.onsuccess = () => resolve(request.result);
         request.onerror = () => reject(request.error ?? new Error("IndexedDB journal read failed"));
       });
-      return records.map(({ sceneId, state, text }) => ({ sceneId, state, text }));
+      return records.map(({ sceneId, state, text, operation }) => ({
+        sceneId,
+        state,
+        text,
+        operationId: operation.id,
+        generation: operation.generation,
+      }));
     } finally {
       database.close();
     }
@@ -116,6 +124,15 @@ async function readRemoteScene(page: Page, projectId: string, sceneId: string): 
   const sceneRead = await sceneResponse.json() as { document?: { content?: string } };
   expect(typeof sceneRead.document?.content).toBe("string");
   return sceneRead.document!.content!;
+}
+
+async function resetLocalCore(): Promise<void> {
+  const e2ePort = Number.parseInt(process.env.SCRIPTORIUM_E2E_PORT ?? "4173", 10);
+  const origin = `http://127.0.0.1:${e2ePort}`;
+  const reset = await fetch(`http://127.0.0.1:${e2ePort + 1}/__e2e/reset-core`, { method: "POST" });
+  expect(reset.status).toBe(204);
+  const health = await fetch(`${origin}/api/health`);
+  expect(health.ok).toBe(true);
 }
 
 function workspaceToolbar(page: Page) {
@@ -477,6 +494,98 @@ test("failed IndexedDB open before login keeps the scene readable and the existi
     __readNativeRecoveryJournal?: () => Promise<Array<{ sceneId: string; state: string; text: string }>>;
   }).__readNativeRecoveryJournal?.());
   expect(retained).toEqual(beforeFailure);
+});
+
+test("Core loss replays an exact checkpointed author entry before enabling the recovered editor", async ({ page }) => {
+  test.skip(Boolean(process.env.SCRIPTORIUM_E2E_EXTERNAL_REPOSITORY === "1" || process.env.SCRIPTORIUM_E2E_BASE_URL || process.env.SCRIPTORIUM_BASE_URL),
+    "This recovery acceptance resets only the disposable local Core data directory.");
+  expect(authToken.length).toBeGreaterThanOrEqual(32);
+  expect(repositoryUrl).not.toBe("");
+  const authorText = "Exact checkpointed author text survives Core loss.";
+  const canonicalRemote = "# Scene One\n\nThe first line of the story.\nBeacon Quay appears in this scene.\n";
+  let releaseReconcile!: () => void;
+  let signalReconcile!: () => void;
+  const reconcileGate = new Promise<void>((resolve) => { releaseReconcile = resolve; });
+  const reconcileStarted = new Promise<void>((resolve) => { signalReconcile = resolve; });
+
+  try {
+    await signIn(page, "desktop");
+    const projectId = await openFixtureScene(page, "desktop");
+    const editor = page.locator(".cm-content");
+    await editor.fill(authorText);
+    await expectDraft(page, "scene-1", authorText);
+    await page.getByRole("button", { name: "Checkpoint", exact: true }).click();
+    await expect(page.locator(".durability-message")).toContainText("ローカルチェックポイント");
+    await expect.poll(async () => (await readJournal(page)).some((entry) =>
+      entry.sceneId === "scene-1" && entry.state === "checkpointed" && entry.text === authorText,
+    )).toBe(true);
+    const originalEntry = (await readJournal(page)).find((entry) =>
+      entry.sceneId === "scene-1" && entry.state === "checkpointed" && entry.text === authorText,
+    );
+    expect(originalEntry).toBeTruthy();
+
+    await page.goto("about:blank");
+    await resetLocalCore();
+    await page.route((url) => url.pathname.endsWith("/reconcile"), async (route) => {
+      if (route.request().method() === "POST") {
+        signalReconcile();
+        await reconcileGate;
+      }
+      await route.continue();
+    });
+
+    await signIn(page, "desktop");
+    await page.getByLabel("GitHub リポジトリ URL").fill(repositoryInputValue(repositoryUrl));
+    await page.getByRole("button", { name: "リポジトリを登録" }).click();
+    await expect(page.getByRole("heading", { name: "Volume One" })).toBeVisible();
+    await reconcileStarted;
+    await page.getByRole("button", { name: "Chapter One: Scene One", exact: true }).click();
+    await expect(page.getByRole("heading", { name: "Scene One" })).toBeVisible();
+
+    const readiness = page.locator("[data-recovery-status]");
+    await expect(readiness).toHaveAttribute("data-recovery-status", "pending");
+    await expect(readiness).toHaveAttribute("data-editor-writable", "false");
+    await expect(editor).toHaveAttribute("contenteditable", "false");
+    const duringReplay = (await readJournal(page)).find((entry) => entry.operationId === originalEntry!.operationId);
+    expect(duringReplay).toMatchObject({
+      sceneId: "scene-1",
+      state: "checkpointed",
+      text: authorText,
+      operationId: originalEntry!.operationId,
+      generation: originalEntry!.generation,
+    });
+
+    const reconcileResponse = page.waitForResponse((response) =>
+      response.request().method() === "POST" && new URL(response.url()).pathname.endsWith("/reconcile"),
+    );
+    releaseReconcile();
+    expect((await reconcileResponse).ok()).toBe(true);
+    await expect(readiness).toHaveAttribute("data-recovery-status", "ready");
+    await expect(readiness).toHaveAttribute("data-editor-writable", "true");
+    await expect(editor).toHaveText(authorText);
+    const recoveredEntry = (await readJournal(page)).find((entry) => entry.operationId === originalEntry!.operationId);
+    expect(recoveredEntry).toMatchObject({
+      sceneId: "scene-1",
+      state: "checkpointed",
+      text: authorText,
+      operationId: originalEntry!.operationId,
+      generation: originalEntry!.generation,
+    });
+
+    const recoveredProjectsResponse = await page.request.get(new URL("/api/projects", page.url()).toString());
+    expect(recoveredProjectsResponse.ok()).toBe(true);
+    const recoveredProjects = await recoveredProjectsResponse.json() as Array<{ id: string; url: string }>;
+    const recoveredProject = recoveredProjects.find((project) => project.url === repositoryUrl || project.url === repositoryInputValue(repositoryUrl));
+    expect(recoveredProject).toBeTruthy();
+    expect(await readRemoteScene(page, recoveredProject!.id, "scene-1")).toBe(canonicalRemote);
+    expect(recoveredProject!.id).not.toBe(projectId);
+  } finally {
+    releaseReconcile();
+    if (process.env.SCRIPTORIUM_E2E_EXTERNAL_REPOSITORY !== "1" && !process.env.SCRIPTORIUM_E2E_BASE_URL && !process.env.SCRIPTORIUM_BASE_URL) {
+      await page.close().catch(() => undefined);
+      await resetLocalCore();
+    }
+  }
 });
 
 test("Core-only workspace keeps authoring available without search or terminology panels", async ({ page }) => {
