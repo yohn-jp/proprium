@@ -1717,7 +1717,7 @@ export function createServer(options: ApiServerOptions): Server {
       if (suffix === "" && method === "GET") {
         const project = (await listProjects()).find((candidate) => candidate.id === projectId);
         if (!project) throw httpFailure(404, "PROJECT_NOT_FOUND", "Project not found");
-        const observation = await options.store.observe(projectId);
+        const observation = await options.store.localObservation(projectId);
         sendJson(response, 200, { project, observation });
         return;
       }
@@ -1781,6 +1781,16 @@ export function createServer(options: ApiServerOptions): Server {
       if (suffix === "tree" && method === "GET") {
         const selected = optionalSnapshot(query);
         sendJson(response, 200, await options.store.readTreeSnapshot(projectId, selected.view, selected.pinned));
+        return;
+      }
+      const sceneViewsMatch = suffix.match(/^scenes\/([^/]+)\/views$/u);
+      if (sceneViewsMatch && method === "GET") {
+        const sceneId = parseSceneId(sceneViewsMatch[1]!);
+        const pinned = query.get("snapshot");
+        if (!pinned || !/^(?:[a-f0-9]{40}|[a-f0-9]{64})$/u.test(pinned)) {
+          throw httpFailure(400, "INVALID_SNAPSHOT", "Scene views require a pinned remote commit");
+        }
+        sendJson(response, 200, await options.store.readSceneViews(projectId, sceneId, pinned));
         return;
       }
       const sceneMatch = suffix.match(/^scenes\/([^/]+)$/u);

@@ -76,6 +76,7 @@ function makeStore(onSaveScene: () => void = () => undefined): CoreStoreShape {
       }
       return { ...scene, text: input.text, revision: "revision-2" };
     },
+    localObservation: async () => ({ snapshot: SNAPSHOT, checkpointHead: SNAPSHOT.remoteCommit, observedAt: "1970-01-01T00:00:00.000Z", state: "unknown", pending: [] }),
     history: async () => [{ hash: "abc12345", date: "2026-10-16T00:00:00.000Z", message: "write opening" }],
     sync: async () => ({ branch: "main", head: "abc12345", ahead: 0, behind: 0, dirty: false }),
     status: async () => ({ branch: "main", head: "abc12345", ahead: 1, behind: 0, dirty: true }),
@@ -109,7 +110,7 @@ function makeSnapshotStore() {
   const proposed: ChangeProposal[] = [];
   const approvals: Array<{ proposalId: string; operationIds: string[]; authorScope: string }> = [];
   const pinnedReads: Array<string | undefined> = [];
-  const snapshotReads: Array<{ kind: "tree" | "scene"; view?: string; pinned?: string }> = [];
+  const snapshotReads: Array<{ kind: "tree" | "scene" | "views"; view?: string; pinned?: string }> = [];
   const document = { path: "manuscript/ms-one/scene-one.md", content: "---\nid: scene-one\n---\n\nA harbor at night.\n", revision: "body-revision" };
   const store = Object.assign(makeStore(), {
     async reader(_projectId: string, _view = "remote", pinned?: string) {
@@ -125,6 +126,7 @@ function makeSnapshotStore() {
       };
     },
     async observe() { return { snapshot: SNAPSHOT, checkpointHead: SNAPSHOT.remoteCommit, observedAt: "2026-10-17T00:00:00.000Z", state: "fresh" as const, pending: [] }; },
+    async localObservation() { return { snapshot: SNAPSHOT, checkpointHead: SNAPSHOT.remoteCommit, observedAt: "1970-01-01T00:00:00.000Z", state: "unknown" as const, pending: [] }; },
     async readTreeSnapshot(_projectId: string, view?: "remote" | "checkpoint", pinned?: string) {
       snapshotReads.push({ kind: "tree", view, pinned });
       const snapshot = { ...SNAPSHOT, ...(pinned ? { remoteCommit: pinned } : {}) };
@@ -138,6 +140,16 @@ function makeSnapshotStore() {
         document,
         metadata: { path: "plot/volumes/v1/chapters/c1/scenes/scene-one.yaml", content: "id: scene-one\n", revision: "metadata-revision" },
       };
+    },
+    async readSceneViews(_projectId: string, sceneId: string, pinned: string) {
+      snapshotReads.push({ kind: "views", pinned });
+      const read = {
+        snapshot: { ...SNAPSHOT, remoteCommit: pinned },
+        scene: { id: sceneId, title: "Opening", text: "A harbor at night.", revision: "scene-revision" },
+        document,
+        metadata: { path: "plot/volumes/v1/chapters/c1/scenes/scene-one.yaml", content: "id: scene-one\n", revision: "metadata-revision" },
+      };
+      return { remote: read, effective: read };
     },
     async listManuscriptSnapshots(_projectId: string, manuscriptId: string, sceneId?: string, _view?: "remote" | "checkpoint", pinned?: string) {
       return { snapshot: { ...SNAPSHOT, ...(pinned ? { remoteCommit: pinned } : {}) }, snapshots: [{ id: "b".repeat(40), manuscriptId, sceneId, message: "loom(scene): update", date: "2026-10-16T00:00:00.000Z" }] };
@@ -1730,6 +1742,7 @@ describe("Scriptorium HTTP boundary", () => {
     assert.equal(detail.status, 200);
     assert.deepEqual(detailBody.project, { id: "project-1", url: "https://github.com/owner/work.git", branch: "main" });
     assert.equal(detailBody.observation.snapshot.remoteCommit, SNAPSHOT.remoteCommit);
+    assert.equal((detailBody.observation as { state: string }).state, "unknown", "project opening uses local observation");
     const missingProject = await fetch(`${apiServer.base}/api/projects/missing`, { headers: auth });
     assert.equal(missingProject.status, 404);
     assert.equal((await missingProject.json() as { code: string }).code, "PROJECT_NOT_FOUND");
@@ -1740,6 +1753,14 @@ describe("Scriptorium HTTP boundary", () => {
     const defaultScene = await fetch(`${apiServer.base}/api/projects/project-1/scenes/scene-one`, { headers: auth });
     assert.equal((await defaultScene.json() as { snapshot: SnapshotId }).snapshot.remoteCommit, SNAPSHOT.remoteCommit);
     assert.deepEqual(fixture.snapshotReads.at(-1), { kind: "scene", view: "remote", pinned: undefined });
+    const paired = await fetch(`${apiServer.base}/api/projects/project-1/scenes/scene-one/views?snapshot=${SNAPSHOT.remoteCommit}`, { headers: auth });
+    assert.equal(paired.status, 200);
+    const pairedBody = await paired.json() as { remote: { snapshot: SnapshotId }; effective: { snapshot: SnapshotId } };
+    assert.equal(pairedBody.remote.snapshot.remoteCommit, SNAPSHOT.remoteCommit);
+    assert.equal(pairedBody.effective.snapshot.remoteCommit, SNAPSHOT.remoteCommit);
+    assert.deepEqual(fixture.snapshotReads.at(-1), { kind: "views", pinned: SNAPSHOT.remoteCommit });
+    const missingPairPin = await fetch(`${apiServer.base}/api/projects/project-1/scenes/scene-one/views`, { headers: auth });
+    assert.equal(missingPairPin.status, 400);
     const checkpointId = "c".repeat(40);
     const checkpointTree = await fetch(`${apiServer.base}/api/projects/project-1/tree?view=checkpoint&snapshot=${checkpointId}`, { headers: auth });
     assert.equal(checkpointTree.status, 200);

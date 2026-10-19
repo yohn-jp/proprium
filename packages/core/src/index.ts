@@ -338,6 +338,8 @@ const HISTORICAL_METADATA_CACHE_MAX_BYTES = 64 * 1024 * 1024;
 const HISTORICAL_METADATA_CACHE_MAX_ENTRIES = 64;
 const GIT_BATCH_CONTENT_MAX_BYTES = 24 * 1024 * 1024;
 const GIT_BATCH_MAX_OBJECTS = 4096;
+const HIERARCHY_CACHE_MAX_BYTES = 16 * 1024 * 1024;
+const HIERARCHY_CACHE_MAX_ENTRIES = 8;
 
 function coreError(status: number, code: string, message: string): CoreError {
   return new CoreError(status, code, message);
@@ -1070,6 +1072,13 @@ export class CoreStore implements MutationCoordinator {
   private readonly readObservations = new Map<string, RemoteObservation>();
   private readonly historicalMetadataCache = new Map<string, { records: Array<{ path: string; commit: string; content: string }>; bytes: number }>();
   private historicalMetadataCacheBytes = 0;
+  private readonly hierarchyCache = new Map<string, {
+    tree: Tree;
+    scenes: Map<string, { path: string; text: string; data: Record<string, unknown> }>;
+    objects: Map<string, { mode: string; type: string; hash: string }>;
+    bytes: number;
+  }>();
+  private hierarchyCacheBytes = 0;
   private readonly proposals = new Map<string, Map<string, ChangeProposal>>();
   private readonly durableProposalIds = new Map<string, Set<string>>();
   private readonly approvals = new Map<string, Map<string, {
@@ -1811,6 +1820,11 @@ export class CoreStore implements MutationCoordinator {
 
   private clearHistoricalMetadataCache(root: string): void {
     const prefix = `${path.resolve(root)}\0`;
+    for (const [key, value] of this.hierarchyCache) {
+      if (!key.startsWith(prefix)) continue;
+      this.hierarchyCache.delete(key);
+      this.hierarchyCacheBytes -= value.bytes;
+    }
     for (const [key, cached] of this.historicalMetadataCache) {
       if (!key.startsWith(prefix)) continue;
       this.historicalMetadataCache.delete(key);
@@ -2363,7 +2377,45 @@ export class CoreStore implements MutationCoordinator {
   }
 
   async observe(projectId: string): Promise<RemoteObservation> {
-    return this.withProjectLock(projectId, () => this.requireObservation(projectId));
+    // Probe the remote outside the project mutation lock. Most observations find
+    // an unchanged HEAD and need no network I/O while holding that lock.
+    const { record, root } = await this.getProject(projectId);
+    const askpassDir = path.join(this.dataDir, `.observe-${projectId}-${randomUUID()}`);
+    await fs.mkdir(askpassDir, { mode: 0o700 });
+    let remote: { identity: RepositoryIdentity; remoteCommit: string };
+    try {
+      const askpass = await makeAskpassScript(askpassDir);
+      const identity = await this.getRepositoryIdentity(record, root, askpass);
+      const remoteCommit = await this.remoteBranchCommit(root, "origin", record.branch, askpass, record);
+      if (!remoteCommit && !record.emptyRemote) {
+        throw coreError(409, "remote_branch_missing", "The registered GitHub branch no longer exists");
+      }
+      remote = { identity, remoteCommit };
+    } finally {
+      await fs.rm(askpassDir, { recursive: true, force: true }).catch(() => undefined);
+    }
+    return this.withProjectLock(projectId, async () => {
+      const current = await this.getProject(projectId);
+      const tracked = await this.getRef(current.root, `refs/remotes/origin/${current.record.branch}`) ?? "";
+      const identityMatches = current.record.identity &&
+        snapshotKey({ repository: current.record.identity, remoteCommit: "" }) ===
+          snapshotKey({ repository: remote.identity, remoteCommit: "" });
+      if (current.record.url === record.url && current.record.branch === record.branch &&
+          identityMatches && tracked === remote.remoteCommit) {
+        return this.requireObservation(projectId, remote);
+      }
+      // A newer fetch or project reconstruction won the race: re-observe safely.
+      return this.requireObservation(projectId);
+    });
+  }
+
+  /** The last locally available Git snapshot, without GitHub network I/O.
+   * An unknown observation is never represented as a fresh remote observation. */
+  async localObservation(projectId: string): Promise<RemoteObservation> {
+    return this.withProjectLock(projectId, async () => {
+      const { record, root } = await this.getProject(projectId);
+      return this.requireReadObservation(projectId, record, root);
+    });
   }
 
   /**
@@ -2471,57 +2523,226 @@ export class CoreStore implements MutationCoordinator {
     });
   }
 
+
+  /** Load the hierarchy once per immutable commit. Git keeps the object IDs;
+   * the index only stores reconstructible YAML metadata and scene locations. */
+  private async hierarchySnapshot(root: string, commit: string, repositoryUrl: string): Promise<{
+    tree: Tree;
+    scenes: Map<string, { path: string; text: string; data: Record<string, unknown> }>;
+    objects: Map<string, { mode: string; type: string; hash: string }>;
+  }> {
+    const key = path.resolve(root) + "\0" + commit;
+    const cached = this.hierarchyCache.get(key);
+    if (cached) {
+      this.hierarchyCache.delete(key);
+      this.hierarchyCache.set(key, cached);
+      return cached;
+    }
+    const { files, yaml, objects } = await this.readHierarchyYaml(root, commit);
+    let title = repositoryTitle(repositoryUrl);
+    const project = yaml.get("meta/project.yaml");
+    if (project) title = titleOf(project.data, title);
+    const volumeIds = [...new Set(files.flatMap((file) => {
+      const found = file.match(/^plot\/volumes\/([^/]+)\//)?.[1];
+      return found ? [found] : [];
+    }))];
+    const volumes: TreeVolume[] = [];
+    const scenes = new Map<string, { path: string; text: string; data: Record<string, unknown> }>();
+    const seen = new Set<string>();
+    for (const volumeId of volumeIds) {
+      const volumeData = yaml.get(`plot/volumes/${volumeId}/volume.yaml`)?.data ?? { id: volumeId };
+      const volumeKey = typeof volumeData.id === "string" ? volumeData.id : volumeId;
+      if (seen.has(volumeKey)) throw coreError(409, "duplicate_entity_id", "The project contains duplicate hierarchy ids");
+      seen.add(volumeKey);
+      const prefix = `plot/volumes/${volumeId}/chapters/`;
+      const chapterIds = [...new Set(files.flatMap((file) => {
+        if (!file.startsWith(prefix)) return [];
+        const found = file.slice(prefix.length).match(/^([^/]+)\//)?.[1];
+        return found ? [found] : [];
+      }))];
+      const chapters: TreeChapter[] = [];
+      for (const chapterId of chapterIds) {
+        const base = `${prefix}${chapterId}`;
+        const chapterData = yaml.get(`${base}/chapter.yaml`)?.data ?? { id: chapterId };
+        const chapterKey = typeof chapterData.id === "string" ? chapterData.id : chapterId;
+        if (seen.has(chapterKey)) throw coreError(409, "duplicate_entity_id", "The project contains duplicate hierarchy ids");
+        seen.add(chapterKey);
+        const sceneEntries: Array<TreeScene & { order?: number }> = [];
+        for (const file of files.filter((candidate) => candidate.startsWith(`${base}/scenes/`) && candidate.endsWith(".yaml"))) {
+          const record = yaml.get(file);
+          if (!record) continue;
+          const sceneId = typeof record.data.id === "string" ? record.data.id : path.posix.basename(file, ".yaml");
+          if (seen.has(sceneId)) throw coreError(409, "duplicate_scene_id", "The project contains duplicate scene ids");
+          seen.add(sceneId);
+          scenes.set(sceneId, { path: file, ...record });
+          sceneEntries.push({
+            id: sceneId,
+            title: titleOf(record.data, sceneId),
+            ...(typeof record.data.order === "number" && Number.isFinite(record.data.order) ? { order: record.data.order } : {}),
+          });
+        }
+        const sortedScenes = sortByOrderAndTitle(sceneEntries).map(({ id, title }) => ({ id, title }));
+        chapters.push({ id: chapterKey, title: titleOf(chapterData, chapterKey), scenes: sortedScenes });
+      }
+      volumes.push({ id: volumeKey, title: titleOf(volumeData, volumeKey), chapters: chapters.sort((a, b) => a.title.localeCompare(b.title) || a.id.localeCompare(b.id)) });
+    }
+    const tree: Tree = { title, volumes: volumes.sort((a, b) => a.title.localeCompare(b.title) || a.id.localeCompare(b.id)) };
+    const bytes = [...yaml.entries()].reduce((sum, [name, record]) => sum + Buffer.byteLength(record.text, "utf8") + Buffer.byteLength(name, "utf8") + 128, 0) +
+      [...objects.keys()].reduce((sum, name) => sum + Buffer.byteLength(name, "utf8") + 96, 0);
+    if (bytes <= HIERARCHY_CACHE_MAX_BYTES) {
+      while (this.hierarchyCache.size >= HIERARCHY_CACHE_MAX_ENTRIES || this.hierarchyCacheBytes + bytes > HIERARCHY_CACHE_MAX_BYTES) {
+        const oldest = this.hierarchyCache.entries().next().value;
+        if (!oldest) break;
+        this.hierarchyCache.delete(oldest[0]);
+        this.hierarchyCacheBytes -= oldest[1].bytes;
+      }
+      this.hierarchyCache.set(key, { tree, scenes, objects, bytes });
+      this.hierarchyCacheBytes += bytes;
+    }
+    return { tree, scenes, objects };
+  }
+
+  /** Enumerate YAML object IDs once and decode them through bounded cat-file batches. */
+  private async readHierarchyYaml(root: string, commit: string): Promise<{
+    files: string[];
+    yaml: Map<string, { text: string; data: Record<string, unknown> }>;
+    objects: Map<string, { mode: string; type: string; hash: string }>;
+  }> {
+    const yaml = new Map<string, { text: string; data: Record<string, unknown> }>();
+    const objects = new Map<string, { mode: string; type: string; hash: string }>();
+    if (!commit) return { files: [], yaml, objects };
+    const raw = await git(root, ["ls-tree", "-r", "--full-tree", "-z", commit]);
+    const files: string[] = [];
+    const refs: Array<{ filePath: string; objectId: string }> = [];
+    for (const entry of raw.split("\0")) {
+      if (!entry) continue;
+      const tab = entry.indexOf("\t");
+      if (tab < 0) continue;
+      const filePath = entry.slice(tab + 1);
+      const [mode, type, objectId] = entry.slice(0, tab).split(" ");
+      if (!mode || !type || !objectId || !/^(?:[a-f0-9]{40}|[a-f0-9]{64})$/.test(objectId)) {
+        throw coreError(502, "git_operation_failed", "Git returned an invalid tree object entry");
+      }
+      objects.set(filePath, { mode, type, hash: objectId });
+      if (filePath.startsWith("plot/volumes/")) files.push(filePath);
+      const relevant = filePath === "meta/project.yaml" ||
+        /^plot\/volumes\/[^/]+\/volume\.yaml$/.test(filePath) ||
+        /^plot\/volumes\/[^/]+\/chapters\/[^/]+\/chapter\.yaml$/.test(filePath) ||
+        /^plot\/volumes\/[^/]+\/chapters\/[^/]+\/scenes\/.+\.yaml$/.test(filePath);
+      if (!relevant) continue;
+      assertProjectPath(filePath);
+      if (mode === "120000" || type !== "blob") {
+        throw coreError(422, "unsafe_project_path", "The hierarchy metadata is not a regular file");
+      }
+      refs.push({ filePath, objectId });
+    }
+    files.sort((a, b) => a.localeCompare(b));
+    if (!refs.length) return { files, yaml, objects };
+    const details = (await gitInput(root, ["cat-file", "--batch-check=%(objectname) %(objecttype) %(objectsize)"],
+      refs.map((ref) => ref.objectId).join("\n") + "\n")).split(/\r?\n/).filter(Boolean);
+    if (details.length !== refs.length) throw coreError(502, "git_operation_failed", "Git returned an incomplete hierarchy metadata index");
+    const blobs = refs.map((ref, index) => {
+      const [objectId, type, rawSize] = details[index]!.split(" ");
+      const size = Number(rawSize);
+      if (objectId !== ref.objectId || type !== "blob" || !Number.isSafeInteger(size) || size < 0) {
+        throw coreError(502, "git_operation_failed", "Git returned invalid hierarchy metadata details");
+      }
+      return { ...ref, size };
+    });
+    const parse = (filePath: string, content: string): void => {
+      let data: Record<string, unknown> | null;
+      try { data = asRecord(YAML.parse(content)); }
+      catch { throw coreError(422, "project_data_invalid", "A hierarchy YAML file is invalid"); }
+      if (!data) throw coreError(422, "project_data_invalid", "A hierarchy YAML file must contain a mapping");
+      yaml.set(filePath, { text: content, data });
+    };
+    let batch: typeof blobs = [];
+    let batchBytes = 0;
+    const flush = async (): Promise<void> => {
+      if (!batch.length) return;
+      const output = await gitInputBuffer(root, ["cat-file", "--batch"], batch.map((blob) => blob.objectId).join("\n") + "\n");
+      let offset = 0;
+      for (const blob of batch) {
+        const headerEnd = output.indexOf(0x0a, offset);
+        if (headerEnd < 0) throw coreError(502, "git_operation_failed", "Git returned truncated hierarchy metadata");
+        const [objectId, type, rawSize] = output.toString("ascii", offset, headerEnd).split(" ");
+        const size = Number(rawSize);
+        const end = headerEnd + 1 + size;
+        if (objectId !== blob.objectId || type !== "blob" || size !== blob.size || end >= output.length || output[end] !== 0x0a) {
+          throw coreError(502, "git_operation_failed", "Git returned an invalid hierarchy metadata batch");
+        }
+        parse(blob.filePath, output.toString("utf8", headerEnd + 1, end));
+        offset = end + 1;
+      }
+      if (offset !== output.length) throw coreError(502, "git_operation_failed", "Git returned trailing hierarchy metadata bytes");
+      batch = [];
+      batchBytes = 0;
+    };
+    for (const blob of blobs) {
+      if (blob.size > GIT_BATCH_CONTENT_MAX_BYTES) {
+        await flush();
+        const content = await this.snapshotFile(root, commit, blob.filePath);
+        if (!content) throw coreError(502, "git_operation_failed", "Hierarchy metadata disappeared");
+        parse(blob.filePath, content.content);
+        continue;
+      }
+      if (batch.length && batchBytes + blob.size > GIT_BATCH_CONTENT_MAX_BYTES) await flush();
+      batch.push(blob);
+      batchBytes += blob.size;
+      if (batch.length >= GIT_BATCH_MAX_OBJECTS) await flush();
+    }
+    await flush();
+    return { files, yaml, objects };
+  }
+
   async readTreeSnapshot(projectId: string, view: "remote" | "checkpoint" = "remote", pinned?: SnapshotId | string): Promise<{ snapshot: SnapshotId; tree: Tree }> {
     return this.withProjectLock(projectId, async () => {
       const selected = await this.selectedSnapshotUnlocked(projectId, view, pinned);
-      let title = repositoryTitle(selected.record.url);
-      const project = await this.parseSnapshotYaml(selected.root, selected.commit, "meta/project.yaml");
-      if (project) title = titleOf(project.data, title);
-      const files = await this.snapshotFiles(selected.root, selected.commit, "plot/volumes");
-      const volumeIds = [...new Set(files.flatMap((file) => {
-        const found = file.match(/^plot\/volumes\/([^/]+)\//)?.[1];
-        return found ? [found] : [];
-      }))];
-      const volumes: TreeVolume[] = [];
-      const seen = new Set<string>();
-      for (const volumeId of volumeIds) {
-        const volumeData = (await this.parseSnapshotYaml(selected.root, selected.commit, `plot/volumes/${volumeId}/volume.yaml`))?.data ?? { id: volumeId };
-        const volumeKey = typeof volumeData.id === "string" ? volumeData.id : volumeId;
-        if (seen.has(volumeKey)) throw coreError(409, "duplicate_entity_id", "The project contains duplicate hierarchy ids");
-        seen.add(volumeKey);
-        const prefix = `plot/volumes/${volumeId}/chapters/`;
-        const chapterIds = [...new Set(files.flatMap((file) => {
-          if (!file.startsWith(prefix)) return [];
-          const found = file.slice(prefix.length).match(/^([^/]+)\//)?.[1];
-          return found ? [found] : [];
-        }))];
-        const chapters: TreeChapter[] = [];
-        for (const chapterId of chapterIds) {
-          const base = `${prefix}${chapterId}`;
-          const chapterData = (await this.parseSnapshotYaml(selected.root, selected.commit, `${base}/chapter.yaml`))?.data ?? { id: chapterId };
-          const chapterKey = typeof chapterData.id === "string" ? chapterData.id : chapterId;
-          if (seen.has(chapterKey)) throw coreError(409, "duplicate_entity_id", "The project contains duplicate hierarchy ids");
-          seen.add(chapterKey);
-          const sceneEntries: Array<TreeScene & { order?: number }> = [];
-          for (const file of files.filter((candidate) => candidate.startsWith(`${base}/scenes/`) && candidate.endsWith(".yaml"))) {
-            const yaml = await this.parseSnapshotYaml(selected.root, selected.commit, file);
-            if (!yaml) continue;
-            const sceneId = typeof yaml.data.id === "string" ? yaml.data.id : path.posix.basename(file, ".yaml");
-            if (seen.has(sceneId)) throw coreError(409, "duplicate_scene_id", "The project contains duplicate scene ids");
-            seen.add(sceneId);
-            sceneEntries.push({
-              id: sceneId,
-              title: titleOf(yaml.data, sceneId),
-              ...(typeof yaml.data.order === "number" && Number.isFinite(yaml.data.order) ? { order: yaml.data.order } : {}),
-            });
-          }
-          const scenes = sortByOrderAndTitle(sceneEntries).map(({ id, title }) => ({ id, title }));
-          chapters.push({ id: chapterKey, title: titleOf(chapterData, chapterKey), scenes });
-        }
-        volumes.push({ id: volumeKey, title: titleOf(volumeData, volumeKey), chapters: chapters.sort((a, b) => a.title.localeCompare(b.title) || a.id.localeCompare(b.id)) });
-      }
-      return { snapshot: selected.snapshot, tree: { title, volumes: volumes.sort((a, b) => a.title.localeCompare(b.title) || a.id.localeCompare(b.id)) } };
+      const hierarchy = await this.hierarchySnapshot(selected.root, selected.commit, selected.record.url);
+      return { snapshot: selected.snapshot, tree: structuredClone(hierarchy.tree) };
     });
+  }
+
+  private async readSceneAtSnapshot(
+    selected: Awaited<ReturnType<CoreStore["selectedSnapshotUnlocked"]>>,
+    sceneId: string,
+  ): Promise<{ snapshot: SnapshotId; scene: Scene; document: { path: string; content: string; revision: string | null }; metadata: { path: string; content: string; revision: string } }> {
+    const hierarchy = await this.hierarchySnapshot(selected.root, selected.commit, selected.record.url);
+    const found = hierarchy.scenes.get(sceneId);
+    if (!found) throw coreError(404, "scene_not_found", "Scene not found");
+    const parts = found.path.split("/");
+    const manuscriptPath = typeof found.data.manuscript === "string"
+      ? safeRelativePath(found.data.manuscript).split(path.sep).join("/")
+      : `manuscript/${parts[2]}/${parts[4]}/${sceneId}.md`;
+    try { assertProjectPath(manuscriptPath); }
+    catch { throw coreError(422, "invalid_manuscript_path", "The scene has an unsafe manuscript path"); }
+    let documentFile: { content: string; revision: string } | null;
+    try {
+      // The immutable tree index provides the exact object ID; no per-component
+      // ls-tree subprocesses are required for each scene switch.
+      const parts = manuscriptPath.split("/");
+      for (let index = 1; index < parts.length; index += 1) {
+        if (hierarchy.objects.has(parts.slice(0, index).join("/"))) {
+          throw coreError(422, "unsafe_project_path", "The manuscript path crosses a non-directory tree entry");
+        }
+      }
+      const object = hierarchy.objects.get(manuscriptPath);
+      if (object && (object.mode === "120000" || object.type !== "blob")) {
+        throw coreError(422, "unsafe_project_path", "The manuscript path is not a regular file");
+      }
+      const bytes = object ? await gitBuffer(selected.root, ["cat-file", "blob", object.hash]) : null;
+      documentFile = bytes ? { content: bytes.toString("utf8"), revision: revisionForBytes(bytes) } : null;
+    } catch (error) {
+      if (error instanceof CoreError && error.code === "unsafe_project_path") throw coreError(422, "unsafe_manuscript_path", "The scene manuscript path crosses a symbolic link");
+      throw error;
+    }
+    const content = documentFile?.content ?? "";
+    return {
+      snapshot: selected.snapshot,
+      scene: { id: sceneId, title: titleOf(found.data, sceneId), text: parseMarkdownDocument(content).body, revision: revisionFor(found.text, content) },
+      document: { path: manuscriptPath, content, revision: documentFile?.revision ?? null },
+      metadata: { path: found.path, content: found.text, revision: revisionForBytes(found.text) },
+    };
   }
 
   async readSceneSnapshot(
@@ -2532,36 +2753,28 @@ export class CoreStore implements MutationCoordinator {
   ): Promise<{ snapshot: SnapshotId; scene: Scene; document: { path: string; content: string; revision: string | null }; metadata: { path: string; content: string; revision: string } }> {
     return this.withProjectLock(projectId, async () => {
       const selected = await this.selectedSnapshotUnlocked(projectId, view, pinned);
-      const files = await this.snapshotFiles(selected.root, selected.commit, "plot/volumes");
-      const matches: Array<{ path: string; text: string; data: Record<string, unknown> }> = [];
-      for (const file of files.filter((candidate) => /\/scenes\/[^/]+\.yaml$/.test(candidate))) {
-        const yaml = await this.parseSnapshotYaml(selected.root, selected.commit, file);
-        if (!yaml) continue;
-        const id = typeof yaml.data.id === "string" ? yaml.data.id : path.posix.basename(file, ".yaml");
-        if (id === sceneId) matches.push({ path: file, text: yaml.text, data: yaml.data });
+      return this.readSceneAtSnapshot(selected, sceneId);
+    });
+  }
+
+  /** Read both views in one project lock and one API round trip. */
+  async readSceneViews(
+    projectId: string,
+    sceneId: string,
+    pinnedRemote: SnapshotId | string,
+  ): Promise<{ remote: { snapshot: SnapshotId; scene: Scene; document: { path: string; content: string; revision: string | null }; metadata: { path: string; content: string; revision: string } }; effective: { snapshot: SnapshotId; scene: Scene; document: { path: string; content: string; revision: string | null }; metadata: { path: string; content: string; revision: string } } }> {
+    return this.withProjectLock(projectId, async () => {
+      const remoteSelection = await this.selectedSnapshotUnlocked(projectId, "remote", pinnedRemote);
+      const effectiveSelection = await this.selectedSnapshotUnlocked(projectId, "checkpoint");
+      const effectiveBase = { ...effectiveSelection.snapshot, overlayCommit: undefined };
+      if (snapshotKey(effectiveBase) !== snapshotKey(remoteSelection.snapshot)) {
+        throw coreError(409, "snapshot_changed", "The remote snapshot changed while selecting the checkpoint view");
       }
-      if (!matches.length) throw coreError(404, "scene_not_found", "Scene not found");
-      if (matches.length > 1) throw coreError(409, "duplicate_scene_id", "The project contains duplicate scene ids");
-      const found = matches[0]!;
-      const parts = found.path.split("/");
-      const manuscriptPath = typeof found.data.manuscript === "string"
-        ? safeRelativePath(found.data.manuscript).split(path.sep).join("/")
-        : `manuscript/${parts[2]}/${parts[4]}/${sceneId}.md`;
-      try { assertProjectPath(manuscriptPath); }
-      catch { throw coreError(422, "invalid_manuscript_path", "The scene has an unsafe manuscript path"); }
-      let documentFile: { content: string; revision: string } | null;
-      try { documentFile = await this.snapshotFile(selected.root, selected.commit, manuscriptPath); }
-      catch (error) {
-        if (error instanceof CoreError && error.code === "unsafe_project_path") throw coreError(422, "unsafe_manuscript_path", "The scene manuscript path crosses a symbolic link");
-        throw error;
-      }
-      const content = documentFile?.content ?? "";
-      return {
-        snapshot: selected.snapshot,
-        scene: { id: sceneId, title: titleOf(found.data, sceneId), text: parseMarkdownDocument(content).body, revision: revisionFor(found.text, content) },
-        document: { path: manuscriptPath, content, revision: documentFile?.revision ?? null },
-        metadata: { path: found.path, content: found.text, revision: revisionForBytes(found.text) },
-      };
+      const remote = await this.readSceneAtSnapshot(remoteSelection, sceneId);
+      const effective = remoteSelection.commit === effectiveSelection.commit
+        ? { ...remote, snapshot: effectiveSelection.snapshot }
+        : await this.readSceneAtSnapshot(effectiveSelection, sceneId);
+      return { remote, effective };
     });
   }
 
@@ -3738,9 +3951,12 @@ export class CoreStore implements MutationCoordinator {
     }
   }
 
-  private async observedUnlocked(projectId: string): Promise<RemoteObservation> {
+  private async observedUnlocked(
+    projectId: string,
+    alreadyFetched?: { identity: RepositoryIdentity; remoteCommit: string },
+  ): Promise<RemoteObservation> {
     const { record, root } = await this.getProject(projectId);
-    const remote = await this.fetchRemoteUnlocked(record, root);
+    const remote = alreadyFetched ?? await this.fetchRemoteUnlocked(record, root);
     const remoteHead = remote.remoteCommit;
     let localHead = await this.checkpointHead(root);
     const remoteOperations = remoteHead ? await this.readOperationRecords(root, remoteHead) : [];
@@ -3770,9 +3986,12 @@ export class CoreStore implements MutationCoordinator {
     };
   }
 
-  private async requireObservation(projectId: string): Promise<RemoteObservation> {
+  private async requireObservation(
+    projectId: string,
+    alreadyFetched?: { identity: RepositoryIdentity; remoteCommit: string },
+  ): Promise<RemoteObservation> {
     try {
-      const observation = await this.observedUnlocked(projectId);
+      const observation = await this.observedUnlocked(projectId, alreadyFetched);
       this.readObservations.set(projectId, structuredClone(observation));
       return observation;
     }
@@ -3787,18 +4006,30 @@ export class CoreStore implements MutationCoordinator {
     record: ProjectRecord,
     root: string,
   ): Promise<RemoteObservation> {
-    const cached = this.readObservations.get(projectId);
-    if (cached && record.identity &&
-        snapshotKey({ repository: cached.snapshot.repository, remoteCommit: "" }) ===
-          snapshotKey({ repository: record.identity, remoteCommit: "" })) {
-      const age = Date.now() - Date.parse(cached.observedAt);
-      const latestFetchedRemote = await this.getRef(root, `refs/remotes/origin/${record.branch}`) ?? "";
-      if (Number.isFinite(age) && age >= 0 && age < READ_OBSERVATION_MAX_AGE_MS &&
-          latestFetchedRemote === cached.snapshot.remoteCommit) {
-        return structuredClone(cached);
-      }
+    if (!record.identity) {
+      throw coreError(409, "repository_identity_unavailable", "The registered repository identity is unavailable");
     }
-    return this.requireObservation(projectId);
+    const trackedCommit = await this.getRef(root, `refs/remotes/origin/${record.branch}`) ?? "";
+    if (!trackedCommit && !record.emptyRemote) {
+      throw coreError(503, "local_snapshot_unavailable", "The local remote-tracking snapshot is unavailable");
+    }
+    const cached = this.readObservations.get(projectId);
+    const sameRepository = cached && snapshotKey({ repository: cached.snapshot.repository, remoteCommit: "" }) ===
+      snapshotKey({ repository: record.identity, remoteCommit: "" });
+    const sameCommit = sameRepository && cached.snapshot.remoteCommit === trackedCommit;
+    const age = cached ? Date.now() - Date.parse(cached.observedAt) : Number.POSITIVE_INFINITY;
+    if (sameCommit && cached && Number.isFinite(age) && age >= 0 && age < READ_OBSERVATION_MAX_AGE_MS) {
+      return structuredClone(cached);
+    }
+    // Do not fetch from GitHub on the read path, and do not relabel a local ref
+    // as a confirmed remote observation. Explicit observe()/mutations remain fresh.
+    return {
+      snapshot: { repository: structuredClone(record.identity), remoteCommit: trackedCommit },
+      checkpointHead: await this.checkpointHead(root),
+      observedAt: sameRepository && cached ? cached.observedAt : new Date(0).toISOString(),
+      state: "unknown",
+      pending: sameCommit && cached ? structuredClone(cached.pending) : [],
+    };
   }
 
   private async reconcileUnlocked(projectId: string, knownObservation?: RemoteObservation): Promise<ReconcileResult> {

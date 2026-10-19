@@ -817,11 +817,9 @@ function AuthorWorkspace({
     if (!isCurrentLoadContext()) return;
     updateWork((current) => current ? { ...current, selectedSceneId: sceneId, loadingScene: true } : current);
     try {
-      const remote = await api.readScene(projectId, sceneId, "remote", tree.snapshot);
+      const { remote, effective } = await api.readSceneViews(projectId, sceneId, tree.snapshot);
       if (!isCurrentLoadContext()) return;
       if (snapshotKey(remote.snapshot) !== snapshotKey(tree.snapshot)) throw new Error("作品構成と原稿が異なるリモートスナップショットから返されました。再読み込みしてください。");
-      const effective = await api.readScene(projectId, sceneId, "checkpoint");
-      if (!isCurrentLoadContext()) return;
       if (!sameRemoteSnapshot(effective.snapshot, remote.snapshot)) throw new Error("チェックポイントとリモート原稿の基準が異なります。同期状態を確認してください。");
       const repository = preferredRepository ?? effective.snapshot.repository;
       const currentJournal = journalRef.current;
@@ -1021,35 +1019,47 @@ function AuthorWorkspace({
       const activeProject = details.project;
       const observed = details.observation;
       const scope = scopeOverride ?? authorScopeRef.current;
-      await reconcileProject(activeProject.id, observed.snapshot.repository, scope, nav);
-      if (navigationRef.current !== nav) return;
-      if (journalRef.current) recoveredProjectsRef.current.add(`${activeProject.id}:${repositoryKey(observed.snapshot.repository)}`);
       const tree = await api.readTree(activeProject.id, "remote", observed.snapshot);
       if (navigationRef.current !== nav) return;
       if (snapshotKey(tree.snapshot) !== snapshotKey(observed.snapshot)) throw new Error("作品構成が別のリモートスナップショットから返されました。");
       const next: WorkState = { project: activeProject, observation: observed, tree, selectedSceneId: "", editor: null, loadingScene: false };
-      const [nextModules, nextContributions] = await Promise.all([
-        api.modules(activeProject.id).catch(() => []),
-        api.contributions(activeProject.id).catch(() => []),
-      ]);
-      if (navigationRef.current !== nav) return;
+      if (journalRef.current) recoveredProjectsRef.current.add(`${activeProject.id}:${repositoryKey(observed.snapshot.repository)}`);
       workRef.current = next;
       setWork(next);
-      setModules(nextModules);
-      setContributions(nextContributions);
-      await importRemoteProposals(activeProject.id, observed.snapshot.repository, scope, nav);
-      if (navigationRef.current !== nav) return;
-      await reloadJournalForWork(observed.snapshot.repository, nav);
-      if (navigationRef.current !== nav) return;
+      setModules([]);
+      setContributions([]);
+      // Optional modules, proposals and recovery must not block opening a locally
+      // available work. The navigation guard prevents an old load replacing new UI.
+      void Promise.all([
+        api.modules(activeProject.id).catch(() => []),
+        api.contributions(activeProject.id).catch(() => []),
+      ]).then(([nextModules, nextContributions]) => {
+        if (navigationRef.current !== nav) return;
+        setModules(nextModules);
+        setContributions(nextContributions);
+      });
+      void (async () => {
+        await reconcileProject(activeProject.id, observed.snapshot.repository, scope, nav);
+        if (navigationRef.current !== nav) return;
+        await importRemoteProposals(activeProject.id, observed.snapshot.repository, scope, nav);
+        if (navigationRef.current !== nav) return;
+        await reloadJournalForWork(observed.snapshot.repository, nav);
+      })().catch((error) => {
+        if (navigationRef.current === nav) setStatus({ message: messageOf(error), kind: "error" });
+      });
       if (persistSelection) {
         localStorageIfAvailable()?.setItem(ACTIVE_PROJECT_KEY, activeProject.id);
         updateApplicationLocation({ projectId: activeProject.id });
       }
       setProjects((current) => current.map((item) => item.id === activeProject.id ? activeProject : item));
       setStatus({
-        message: `リモート ${observed.snapshot.remoteCommit.slice(0, 12)} · ${new Date(observed.observedAt).toLocaleTimeString("ja-JP")} に確認`,
-        kind: observed.state === "fresh" ? "success" : "error",
+        message: observed.state === "fresh"
+          ? `リモート ${observed.snapshot.remoteCommit.slice(0, 12)} · ${new Date(observed.observedAt).toLocaleTimeString("ja-JP")} に確認`
+          : `ローカルSnapshot ${observed.snapshot.remoteCommit.slice(0, 12)} · リモート未確認`,
+        kind: observed.state === "fresh" ? "success" : "normal",
       });
+      // Refresh GitHub in the background; this never blocks the local tree.
+      void refreshRef.current();
     } catch (error) {
       if (navigationRef.current === nav) setStatus({ message: messageOf(error), kind: "error" });
     } finally {
@@ -1140,7 +1150,7 @@ function AuthorWorkspace({
     try {
       const observed = await api.observation(projectId);
       if (navigationRef.current !== nav || workRef.current?.project.id !== projectId) return;
-      await importRemoteProposals(projectId, observed.snapshot.repository, authorScope, nav);
+      await importRemoteProposals(projectId, observed.snapshot.repository, authorScopeRef.current, nav);
       if (navigationRef.current !== nav || workRef.current?.project.id !== projectId) return;
       const latestBeforeRead = workRef.current;
       const changedRemote = Boolean(latestBeforeRead && latestBeforeRead.observation.snapshot.remoteCommit !== observed.snapshot.remoteCommit);
@@ -1148,10 +1158,12 @@ function AuthorWorkspace({
       const changedEditorSnapshot = Boolean(latestBeforeRead?.editor &&
         !sameRemoteSnapshot(latestBeforeRead.editor.remote.snapshot, observed.snapshot));
       if (changedRemote) {
-      await reconcileProject(projectId, observed.snapshot.repository, authorScope, nav);
+        await reconcileProject(projectId, observed.snapshot.repository, authorScopeRef.current, nav);
         if (navigationRef.current !== nav || workRef.current?.project.id !== projectId) return;
       }
-      const tree = await api.readTree(projectId, "remote", observed.snapshot);
+      const tree = changedRemote
+        ? await api.readTree(projectId, "remote", observed.snapshot)
+        : (latestBeforeRead?.tree ?? await api.readTree(projectId, "remote", observed.snapshot));
       if (navigationRef.current !== nav || snapshotKey(tree.snapshot) !== snapshotKey(observed.snapshot)) return;
       const latestBeforeUpdate = workRef.current;
       const changedTree = snapshotKey(latestBeforeUpdate?.tree.snapshot ?? current.tree.snapshot) !== snapshotKey(tree.snapshot);
@@ -1180,21 +1192,13 @@ function AuthorWorkspace({
     } finally {
       observationBusyRef.current = false;
     }
-  }, [authorScope, importRemoteProposals, loadScene, recentResume.flush, reconcileProject, updateWork]);
+  }, [importRemoteProposals, loadScene, recentResume.flush, reconcileProject, updateWork]);
   refreshRef.current = refreshRemote;
 
   const refreshForeground = useCallback(() => {
-    const current = workRef.current;
-    if (current) {
-      void importRemoteProposals(
-        current.project.id,
-        current.observation.snapshot.repository,
-        authorScopeRef.current,
-        navigationRef.current,
-      );
-    }
+    // refreshRemote already imports proposal statuses after observing the HEAD.
     void refreshRef.current();
-  }, [importRemoteProposals]);
+  }, []);
 
   useEffect(() => {
     if (!work) return;

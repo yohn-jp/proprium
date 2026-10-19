@@ -184,7 +184,7 @@ test("manuscript snapshots enumerate and read exact documents at a pinned reacha
   }
 });
 
-test("read snapshots reuse a recent remote observation, refresh on cadence, and leave dirty files untouched", async () => {
+test("read snapshots stay local after observation expiry, and only explicit observe fetches remote changes", async () => {
   const fixture = await remoteFixture();
   const dataDir = path.join(fixture.root, "state");
   const store = new CoreStore({ dataDir, allowLocalRemotes: true });
@@ -227,18 +227,79 @@ test("read snapshots reuse a recent remote observation, refresh on cadence, and 
     Date.now = () => originalNow() + elapsed;
     try {
       elapsed = 15_001;
-      const refreshed = await store.reader(project.id);
-      assert.equal(refreshed.snapshot.remoteCommit, thirdRemote,
-        "a read after the observation cadence performs a real remote fetch");
-      assert.equal((await refreshed.read("README.md"))?.content, "Third remote revision.\n");
+      const local = await store.reader(project.id);
+      assert.equal(local.snapshot.remoteCommit, secondRemote,
+        "expiry does not make an ordinary read fetch GitHub");
+      assert.equal((await local.read("README.md"))?.content, "Second remote revision.\n");
+      assert.equal((await store.localObservation(project.id)).state, "unknown",
+        "expired remote freshness is not silently reported as fresh");
+      assert.equal(await git(workspace, "rev-parse", "refs/remotes/origin/main"), secondRemote);
+      const refreshed = await store.observe(project.id);
+      assert.equal(refreshed.snapshot.remoteCommit, thirdRemote);
+      assert.equal((await (await store.reader(project.id)).read("README.md"))?.content, "Third remote revision.\n");
       assert.equal(await fs.readFile(localReadme, "utf8"), "Uncommitted local bytes.\n",
-        "reading the newly fetched snapshot does not replace a dirty workspace file");
+        "an explicit fetch does not replace a dirty workspace file");
       await assert.rejects(store.sync(project.id), (error: unknown) =>
         error instanceof CoreError && error.code === "working_tree_dirty");
       assert.equal(await fs.readFile(localReadme, "utf8"), "Uncommitted local bytes.\n");
     } finally {
       Date.now = originalNow;
     }
+  } finally {
+    await fs.rm(fixture.root, { recursive: true, force: true });
+  }
+});
+
+
+test("local scene and tree reads survive a restart while GitHub is unavailable", async () => {
+  const fixture = await remoteFixture();
+  const dataDir = path.join(fixture.root, "state");
+  try {
+    await seedHierarchy(fixture, ["chapter1"]);
+    await addRemoteScene(fixture, "chapter1", "scene1");
+    const store = new CoreStore({ dataDir, allowLocalRemotes: true });
+    const project = await store.registerProject({ url: fixture.remote });
+    const observed = await store.observe(project.id);
+    await fs.rename(fixture.remote, path.join(fixture.root, "offline-remote.git"));
+    const restarted = new CoreStore({ dataDir, allowLocalRemotes: true });
+    const local = await restarted.localObservation(project.id);
+    assert.equal(local.state, "unknown");
+    assert.equal(local.snapshot.remoteCommit, observed.snapshot.remoteCommit);
+    const tree = await restarted.readTreeSnapshot(project.id, "remote");
+    assert.equal(tree.tree.volumes[0]?.chapters[0]?.scenes[0]?.id, "scene1");
+    const views = await restarted.readSceneViews(project.id, "scene1", local.snapshot);
+    assert.equal(views.remote.scene.id, "scene1");
+    assert.equal(views.effective.scene.id, "scene1");
+    assert.equal(views.effective.snapshot.remoteCommit, observed.snapshot.remoteCommit);
+    await assert.rejects(restarted.observe(project.id), (error: unknown) => error instanceof CoreError);
+  } finally {
+    await fs.rm(fixture.root, { recursive: true, force: true });
+  }
+});
+
+test("commit-keyed hierarchy index refreshes after an explicit remote observation", async () => {
+  const fixture = await remoteFixture();
+  const dataDir = path.join(fixture.root, "state");
+  try {
+    await seedHierarchy(fixture, ["chapter1"]);
+    await addRemoteScene(fixture, "chapter1", "scene1");
+    const store = new CoreStore({ dataDir, allowLocalRemotes: true });
+    const project = await store.registerProject({ url: fixture.remote });
+    const first = await store.readTreeSnapshot(project.id, "remote");
+    assert.equal(first.tree.volumes[0]?.chapters[0]?.scenes[0]?.title, "scene1");
+    const firstScene = await store.readSceneSnapshot(project.id, "scene1", "remote", first.snapshot);
+    assert.equal(firstScene.metadata.path, "plot/volumes/vol1/chapters/chapter1/scenes/scene1.yaml");
+    await fs.writeFile(path.join(fixture.seed, firstScene.metadata.path), "id: scene1\ntitle: Updated title\n");
+    await git(fixture.seed, "add", firstScene.metadata.path);
+    await git(fixture.seed, "commit", "-m", "Change scene title");
+    await git(fixture.seed, "push", "origin", "main");
+    const unchanged = await store.readTreeSnapshot(project.id, "remote");
+    assert.deepEqual(unchanged.tree, first.tree, "ordinary reads remain pinned to the fetched commit");
+    await store.observe(project.id);
+    const updated = await store.readTreeSnapshot(project.id, "remote");
+    assert.equal(updated.tree.volumes[0]?.chapters[0]?.scenes[0]?.title, "Updated title");
+    assert.equal((await store.readSceneSnapshot(project.id, "scene1", "remote")).scene.title, "Updated title");
+    assert.equal(first.tree.volumes[0]?.chapters[0]?.scenes[0]?.title, "scene1", "old snapshot stays immutable");
   } finally {
     await fs.rm(fixture.root, { recursive: true, force: true });
   }
