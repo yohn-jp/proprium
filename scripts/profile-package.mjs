@@ -9,7 +9,7 @@ import { productionClosure, pruneToProductionClosure } from './runtime-package-c
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const modulePackagePrefix = '@scriptorium/module-';
-const knownModules = ['story', 'diagnostics', 'nlp', 'semantic', 'speaker', 'assistant', 'publishing', 'mcp'];
+const knownModules = ['story', 'diagnostics', 'nlp', 'semantic', 'speaker', 'assistant', 'publishing', 'mcp', 'search'];
 
 function usage() {
   console.error('Usage: node scripts/profile-package.mjs (--profile <core|full> | --modules-json <json-array>) --out <new-directory> [--prebuilt] [--prime-deploy-cache]');

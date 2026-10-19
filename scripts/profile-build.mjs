@@ -7,7 +7,7 @@ import { fileURLToPath, pathToFileURL } from 'node:url';
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const modulePackagePrefix = '@scriptorium/module-';
-const moduleIds = ['story', 'diagnostics', 'nlp', 'semantic', 'speaker', 'assistant', 'publishing', 'mcp'];
+const moduleIds = ['story', 'diagnostics', 'nlp', 'semantic', 'speaker', 'assistant', 'publishing', 'mcp', 'search'];
 const sourceSpecifier = /\b(?:from\s*|import\s*(?:\(\s*)?|require\s*\(\s*)["'](@scriptorium\/module-[^"']+)["']/g;
 
 function usage() {

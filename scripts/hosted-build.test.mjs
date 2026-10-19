@@ -9,7 +9,7 @@ import { assertCleanRevisionSnapshot, canonicalJson, catalogFor, persistenceForM
 import { assertSigstoreBundleMatches, assertSupportedCosignVersion, createSlsaStatement } from './hosted-attestation.mjs';
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
-const moduleIds = ['story', 'diagnostics', 'nlp', 'semantic', 'speaker', 'assistant', 'publishing', 'mcp'];
+const moduleIds = ['story', 'diagnostics', 'nlp', 'semantic', 'speaker', 'assistant', 'publishing', 'mcp', 'search'];
 
 async function shippedModuleData() {
   const trustedModules = await Promise.all(moduleIds.map(async (id) => {

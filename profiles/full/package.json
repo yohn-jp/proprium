@@ -15,6 +15,7 @@
     "@scriptorium/module-story": "workspace:*",
     "@scriptorium/module-semantic": "workspace:*",
     "@scriptorium/module-speaker": "workspace:*",
-    "@scriptorium/module-assistant": "workspace:*"
+    "@scriptorium/module-assistant": "workspace:*",
+    "@scriptorium/module-search": "workspace:*"
   }
 }

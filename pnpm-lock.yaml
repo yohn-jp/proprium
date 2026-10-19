@@ -187,6 +187,9 @@ importers:
       '@scriptorium/module-publishing':
         specifier: workspace:*
         version: link:modules/publishing
+      '@scriptorium/module-search':
+        specifier: workspace:*
+        version: link:modules/search
       '@scriptorium/module-semantic':
         specifier: workspace:*
         version: link:modules/semantic
@@ -402,6 +405,15 @@ importers:
         specifier: ^2.8.1
         version: 2.9.1
 
+  modules/search:
+    dependencies:
+      '@scriptorium/contracts':
+        specifier: workspace:*
+        version: link:../../packages/contracts
+      '@scriptorium/module-runtime':
+        specifier: workspace:*
+        version: link:../../packages/module-runtime
+
   modules/semantic:
     dependencies:
       '@huggingface/transformers':
@@ -544,6 +556,9 @@ importers:
       '@scriptorium/module-publishing':
         specifier: workspace:*
         version: link:../../modules/publishing
+      '@scriptorium/module-search':
+        specifier: workspace:*
+        version: link:../../modules/search
       '@scriptorium/module-semantic':
         specifier: workspace:*
         version: link:../../modules/semantic

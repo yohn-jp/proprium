@@ -11,7 +11,7 @@ import { fileURLToPath, pathToFileURL } from 'node:url';
 import { productionClosure } from './runtime-package-closure.mjs';
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
-const moduleIds = ['story', 'diagnostics', 'nlp', 'semantic', 'speaker', 'assistant', 'publishing', 'mcp'];
+const moduleIds = ['story', 'diagnostics', 'nlp', 'semantic', 'speaker', 'assistant', 'publishing', 'mcp', 'search'];
 const modulePrefix = '@scriptorium/module-';
 const sha256Pattern = /^sha256:[a-f0-9]{64}$/u;
 const revisionPattern = /^[a-f0-9]{40}$/u;

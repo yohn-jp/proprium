@@ -23,25 +23,26 @@ test('Core package depends on the API and builds no optional module package', ()
 });
 
 test('Full package waits for selected module producers and exact package dependencies', () => {
-  const profile = { profile: 'full', modules: ['story', 'semantic'] };
+  const profile = { profile: 'full', modules: ['story', 'semantic', 'search'] };
   const packageManifest = {
     name: '@scriptorium/profile-full',
     dependencies: {
       '@scriptorium/api': 'workspace:*',
       '@scriptorium/module-story': 'workspace:*',
       '@scriptorium/module-semantic': 'workspace:*',
+      '@scriptorium/module-search': 'workspace:*',
     },
   };
-  assert.deepEqual(validateProfilePackage('full', profile, packageManifest, new Set(['story', 'semantic'])), {
+  assert.deepEqual(validateProfilePackage('full', profile, packageManifest, new Set(['story', 'semantic', 'search'])), {
     profileName: 'full',
-    moduleIds: ['story', 'semantic'],
+    moduleIds: ['story', 'semantic', 'search'],
   });
   assert.throws(
-    () => validateProfilePackage('full', profile, packageManifest, new Set(['story'])),
-    /not been produced: semantic/u,
+    () => validateProfilePackage('full', profile, packageManifest, new Set(['story', 'semantic'])),
+    /not been produced: search/u,
   );
   assert.throws(
-    () => validateProfilePackage('full', profile, { ...packageManifest, dependencies: { '@scriptorium/api': 'workspace:*', '@scriptorium/module-story': 'workspace:*' } }, new Set(['story', 'semantic'])),
+    () => validateProfilePackage('full', profile, { ...packageManifest, dependencies: { '@scriptorium/api': 'workspace:*', '@scriptorium/module-story': 'workspace:*' } }, new Set(['story', 'semantic', 'search'])),
     /dependencies do not match/u,
   );
 
@@ -49,4 +50,5 @@ test('Full package waits for selected module producers and exact package depende
   const moduleBuild = commands.find(({ args }) => args.includes('build') && args.some((argument) => argument.includes('@scriptorium/module-story')));
   assert.ok(moduleBuild);
   assert.ok(moduleBuild.args.includes('@scriptorium/module-semantic...'));
+  assert.ok(moduleBuild.args.includes('@scriptorium/module-search...'));
 });
