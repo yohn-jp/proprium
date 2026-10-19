@@ -113,9 +113,9 @@ function makeSnapshotStore() {
   const snapshotReads: Array<{ kind: "tree" | "scene" | "views"; view?: string; pinned?: string }> = [];
   const document = { path: "manuscript/ms-one/scene-one.md", content: "---\nid: scene-one\n---\n\nA harbor at night.\n", revision: "body-revision" };
   const store = Object.assign(makeStore(), {
-    async reader(_projectId: string, _view = "remote", pinned?: string) {
-      pinnedReads.push(pinned);
-      const snapshot = { ...SNAPSHOT, ...(pinned ? { remoteCommit: pinned } : {}) };
+    async reader(_projectId: string, _view = "remote", pinned?: SnapshotId | string) {
+      pinnedReads.push(typeof pinned === "string" ? pinned : pinned?.remoteCommit);
+      const snapshot = typeof pinned === "object" ? pinned : { ...SNAPSHOT, ...(pinned ? { remoteCommit: pinned } : {}) };
       return {
         snapshot,
         async read(path: string, encoding: "utf8" | "base64" = "utf8") {
@@ -124,6 +124,9 @@ function makeSnapshotStore() {
         },
         async list(prefix: string) { return prefix === "manuscript/" ? [document.path] : []; },
       };
+    },
+    async resolveDocumentScene(_projectId: string, path: string, pinned?: SnapshotId | string) {
+      return { snapshot: typeof pinned === "object" ? pinned : SNAPSHOT, sceneId: path === document.path ? "scene-one" : null };
     },
     async observe() { return { snapshot: SNAPSHOT, checkpointHead: SNAPSHOT.remoteCommit, observedAt: "2026-10-17T00:00:00.000Z", state: "fresh" as const, pending: [] }; },
     async localObservation() { return { snapshot: SNAPSHOT, checkpointHead: SNAPSHOT.remoteCommit, observedAt: "1970-01-01T00:00:00.000Z", state: "unknown" as const, pending: [] }; },
@@ -1738,11 +1741,11 @@ describe("Scriptorium HTTP boundary", () => {
     const projects = await fetch(`${apiServer.base}/api/projects`, { headers: auth });
     assert.deepEqual(await projects.json(), [{ id: "project-1", url: "https://github.com/owner/work.git", branch: "main" }]);
     const detail = await fetch(`${apiServer.base}/api/projects/project-1`, { headers: auth });
-    const detailBody = await detail.json() as { project: { id: string; url: string; branch: string }; observation: { snapshot: SnapshotId } };
+    const detailBody = await detail.json() as { project: { id: string; url: string; branch: string }; observation: { snapshot: SnapshotId; state: string } };
     assert.equal(detail.status, 200);
     assert.deepEqual(detailBody.project, { id: "project-1", url: "https://github.com/owner/work.git", branch: "main" });
     assert.equal(detailBody.observation.snapshot.remoteCommit, SNAPSHOT.remoteCommit);
-    assert.equal((detailBody.observation as { state: string }).state, "unknown", "project opening uses local observation");
+    assert.equal(detailBody.observation.state, "unknown", "project opening uses local observation");
     const missingProject = await fetch(`${apiServer.base}/api/projects/missing`, { headers: auth });
     assert.equal(missingProject.status, 404);
     assert.equal((await missingProject.json() as { code: string }).code, "PROJECT_NOT_FOUND");
@@ -1798,6 +1801,20 @@ describe("Scriptorium HTTP boundary", () => {
     });
     assert.equal((await invalidAction.json() as { error: { code: string } }).error.code, "invalid_action_input");
 
+    const overlay = { ...SNAPSHOT, overlayCommit: "c".repeat(40) };
+    const resolveResponse = await fetch(`${apiServer.base}/api/projects/project-1/actions/core.document.resolve`, {
+      method: "POST", headers: { ...auth, "Content-Type": "application/json" },
+      body: JSON.stringify({ input: { path: "manuscript/ms-one/scene-one.md" }, snapshot: overlay }),
+    });
+    assert.deepEqual(await resolveResponse.json(), { ok: true, snapshot: overlay, data: { sceneId: "scene-one" } });
+    const unsafeResolve = await fetch(`${apiServer.base}/api/projects/project-1/actions/core.document.resolve`, {
+      method: "POST", headers: { ...auth, "Content-Type": "application/json" }, body: JSON.stringify({ input: { path: "../secret" }, snapshot: overlay }),
+    });
+    assert.equal((await unsafeResolve.json() as { error: { code: string } }).error.code, "invalid_action_input");
+    const invalidSnapshot = await fetch(`${apiServer.base}/api/projects/project-1/actions/core.document.resolve`, {
+      method: "POST", headers: { ...auth, "Content-Type": "application/json" }, body: JSON.stringify({ input: { path: "manuscript/x.md" }, snapshot: { remoteCommit: "invalid" } }),
+    });
+    assert.equal(invalidSnapshot.status, 400);
     const pinned = "b".repeat(40);
     const snapshots = await fetch(`${apiServer.base}/api/projects/project-1/manuscripts/ms-one/snapshots?sceneId=scene-one&snapshot=${pinned}`, { headers: auth });
     const listed = await snapshots.json() as { snapshot: SnapshotId; snapshots: Array<{ id: string }> };

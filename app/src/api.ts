@@ -395,9 +395,9 @@ export const api = {
   }),
   modules: (projectId: string) => request<ModuleStatus[]>(projectPath(projectId, "modules")),
   contributions: (projectId: string) => request<UiContribution[]>(projectPath(projectId, "contributions")),
-  action: (projectId: string, actionId: string, input: unknown, signal?: AbortSignal) => request<ActionResult>(
+  action: (projectId: string, actionId: string, input: unknown, signal?: AbortSignal, snapshot?: SnapshotId) => request<ActionResult>(
     projectPath(projectId, `actions/${encodeURIComponent(actionId)}`),
-    { method: "POST", body: JSON.stringify({ input }), signal },
+    { method: "POST", body: JSON.stringify({ input, ...(snapshot ? { snapshot } : {}) }), signal },
   ),
 };
 

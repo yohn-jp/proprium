@@ -52,3 +52,20 @@ test("scene views use one pinned request for remote and checkpoint content", asy
     globalThis.fetch = originalFetch;
   }
 });
+
+test("module invocations bind the exact repository snapshot including the local checkpoint overlay", async () => {
+  const originalFetch = globalThis.fetch;
+  const snapshot: NonNullable<Parameters<typeof api.action>[4]> = {
+    repository: { provider: "local", repositoryId: "1", ownerScope: "owner", defaultBranch: "main", url: "file:///fixture" },
+    remoteCommit: "a".repeat(40), overlayCommit: "b".repeat(40),
+  };
+  globalThis.fetch = async (_input, options) => {
+    assert.deepEqual(JSON.parse(String(options?.body)), { input: { query: "term" }, snapshot });
+    return Response.json({ ok: true, snapshot, data: [] });
+  };
+  try {
+    assert.deepEqual((await api.action("project-1", "search.query", { query: "term" }, undefined, snapshot)).snapshot, snapshot);
+  } finally {
+    globalThis.fetch = originalFetch;
+  }
+});

@@ -3,7 +3,7 @@ import { snapshotKey, type BrowserEditorDocument, type BrowserModuleContext, typ
 import { api } from "../api";
 import { moduleBrowserLoaders } from "../generated/browser-modules";
 import type { BrowserJournal } from "../storage/journal";
-import { discoverableContributions } from "./catalog";
+import { discoverableContributions, workspaceContributions } from "./catalog";
 
 const SLOT_LABELS = {
   editor: "執筆ツール",
@@ -75,7 +75,7 @@ export function ContributionHost({
   );
 }
 
-function MountedContribution({
+export function MountedContribution({
   item,
   projectId,
   authorScope,
@@ -84,6 +84,7 @@ function MountedContribution({
   journal,
   onProposalStored,
   readCurrentEditor,
+  navigateDocument,
 }: {
   item: UiContribution;
   projectId: string;
@@ -93,6 +94,7 @@ function MountedContribution({
   journal: BrowserJournal | null;
   onProposalStored: () => void;
   readCurrentEditor: () => BrowserEditorDocument | null;
+  navigateDocument?: (path: string) => Promise<void>;
 }) {
   const elementRef = useRef<HTMLDivElement>(null);
   const [error, setError] = useState("");
@@ -119,14 +121,19 @@ function MountedContribution({
           snapshot,
           signal: controller.signal,
           readCurrentEditor,
+          navigateDocument: navigateDocument ? async (path) => {
+            if (controller.signal.aborted) throw new DOMException("Panel closed", "AbortError");
+            await navigateDocument(path);
+          } : undefined,
           invoke: async (actionId, input) => {
-            const result = await api.action(projectId, actionId, input, controller.signal);
+            const result = await api.action(projectId, actionId, input, controller.signal, snapshot);
+            if (controller.signal.aborted) throw new DOMException("Panel closed", "AbortError");
+            if (snapshotKey(result.snapshot) !== snapshotId) throw new Error("Action result belongs to a different repository snapshot.");
             if (result.ok && result.proposals?.length) {
               if (!journal) throw new Error("Browser recovery storage is unavailable; the module proposal was not delivered to its panel.");
               for (const proposal of result.proposals) await journal.putProposal(snapshot.repository, authorScope, proposal);
               if (result.proposals.length > 0) onProposalStored();
             }
-            if (snapshotKey(result.snapshot) !== snapshotId) throw new Error("Action result belongs to a different repository snapshot.");
             return result;
           },
           propose: async (operations: ChangeOperation[], evidence) => {
@@ -160,7 +167,7 @@ function MountedContribution({
       controller.abort();
       dispose?.();
     };
-  }, [authorScope, item.action, item.id, item.module, journal, onProposalStored, projectId, readCurrentEditor, refresh, snapshot, snapshotId]);
+  }, [authorScope, item.action, item.id, item.module, journal, navigateDocument, onProposalStored, projectId, readCurrentEditor, refresh, snapshot, snapshotId]);
 
   return (
     <article className="contribution-card" aria-label={item.title}>
@@ -169,4 +176,14 @@ function MountedContribution({
       <div ref={elementRef} data-contribution={item.id} />
     </article>
   );
+}
+
+/** A registered, enabled panel instance; mounting remains subject to the live host catalog. */
+export function WorkspaceContribution(props: Parameters<typeof MountedContribution>[0] & {
+  contributions: UiContribution[];
+  modules: ModuleStatus[];
+}) {
+  const allowed = workspaceContributions(props.contributions, props.modules).some((item) =>
+    item.id === props.item.id && item.module === props.item.module && item.action === props.item.action);
+  return allowed ? <MountedContribution {...props} /> : <p role="status">このパネルは利用できません。</p>;
 }

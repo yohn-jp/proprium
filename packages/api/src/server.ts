@@ -6,7 +6,7 @@ import { lstat, readFile, realpath } from "node:fs/promises";
 import { extname, resolve, sep } from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
 import Fastify, { type FastifyInstance, type FastifyRequest } from "fastify";
-import { CONTRACT_VERSION, MODEL_USAGE_CAPABILITY, snapshotKey, type ActionDescriptor, type ActionResult, type ChangeOperation, type ChangeProposal, type HttpContribution, type ModelUsageStore, type ModuleAction, type ModuleActionContext, type ModuleId, type ModuleStatus, type ProposalEvidence, type RecentActivityInput, type RepositoryIdentity, type SnapshotId, type ValueSchema } from "@scriptorium/contracts";
+import { CONTRACT_VERSION, MODEL_USAGE_CAPABILITY, assertProjectPath, snapshotKey, type ActionDescriptor, type ActionResult, type ChangeOperation, type ChangeProposal, type HttpContribution, type ModelUsageStore, type ModuleAction, type ModuleActionContext, type ModuleId, type ModuleStatus, type ProposalEvidence, type RecentActivityInput, type RepositoryIdentity, type SnapshotId, type ValueSchema } from "@scriptorium/contracts";
 import type { CoreStore, CreateHierarchyInput, HierarchyTarget, Project, ReorderHierarchyInput } from "@scriptorium/core";
 import { ModuleRuntime, type ActionHostContext, type DomainJobActionExecutor, type ModuleLoader, type ModuleRuntimeOptions, type WorkerJobLifecycleSnapshot } from "@scriptorium/module-runtime";
 import { HistoricalModelUsageStore } from "./historical-store.js";
@@ -443,6 +443,7 @@ type ProjectSyncEvent = {
 };
 
 type CoreStoreApi = CoreStore & {
+  resolveDocumentScene?: (projectId: string, documentPath: string, pinned?: SnapshotId | string) => Promise<{ snapshot: SnapshotId; sceneId: string | null }>;
   registeredRepositoryIdentity: (projectId: string) => Promise<RepositoryIdentity>;
   detachProject?: (projectId: string) => Promise<void>;
   reconstructProject?: (projectId: string) => Promise<Project>;
@@ -654,7 +655,7 @@ export function createServer(options: ApiServerOptions): Server {
     response.once("finish", cleanup);
     return controller.signal;
   };
-  const freshReader = async (projectId: string, view: "remote" | "checkpoint" = "remote", pinned?: string) => {
+  const freshReader = async (projectId: string, view: "remote" | "checkpoint" = "remote", pinned?: SnapshotId | string) => {
     return options.store.reader(projectId, view, pinned);
   };
   const searchSnapshot = async (projectId: string, term: string, limit: number, selected: ReturnType<typeof optionalSnapshot>) => {
@@ -859,6 +860,20 @@ export function createServer(options: ApiServerOptions): Server {
         if (!status) throw httpFailure(404, "PROPOSAL_NOT_FOUND", "Proposal not found");
         return { proposal: status };
       }) },
+      { module: "core", action: {
+        id: "core.document.resolve", effect: "read", outputSchema: jsonSchema,
+        inputSchema: { parse(value: unknown) {
+          if (!isRecord(value) || typeof value.path !== "string") throw new Error("A document path is required");
+          assertProjectPath(value.path);
+          return { path: value.path };
+        } },
+        async invoke(input, context) {
+          if (!coreStore.resolveDocumentScene) return { ok: false, snapshot: context.reader.snapshot,
+            error: { code: "DOCUMENT_NAVIGATION_UNAVAILABLE", message: "Document navigation is unavailable", retryable: false } };
+          const result = await coreStore.resolveDocumentScene(projectId, (input as { path: string }).path, context.reader.snapshot);
+          return { ok: true, snapshot: result.snapshot, data: { sceneId: result.sceneId } };
+        },
+      } },
       { module: "core", action: make("core.search", searchInput, async (context, input) => {
         const parsed = input as { query: string; limit: number };
         return search(context.reader, parsed.query, parsed.limit);
@@ -1961,7 +1976,19 @@ export function createServer(options: ApiServerOptions): Server {
         if (!descriptor) throw httpFailure(404, "ACTION_NOT_FOUND", `Action ${actionId} is unavailable`);
         if (isBearer && !["read", "compute", "propose"].includes(descriptor.effect)) throw httpFailure(403, "BEARER_EFFECT_DENIED", "Bearer credentials may only invoke read, compute, and propose actions");
         if (hosted && descriptor.effect !== "read") await requireWritePermission();
-        const reader = await freshReader(projectId, "remote");
+        let boundSnapshot: SnapshotId | undefined;
+        if (body.snapshot !== undefined) {
+          const selected = body.snapshot;
+          if (!isRecord(selected) || !isRecord(selected.repository) ||
+              !["github", "local"].includes(String(selected.repository.provider)) ||
+              ["repositoryId", "defaultBranch", "ownerScope", "url"].some((key) => typeof (selected.repository as Record<string, unknown>)[key] !== "string") ||
+              typeof selected.remoteCommit !== "string" || !/^(?:[a-f0-9]{40}|[a-f0-9]{64})$/u.test(selected.remoteCommit) ||
+              (selected.overlayCommit !== undefined && (typeof selected.overlayCommit !== "string" || !/^(?:[a-f0-9]{40}|[a-f0-9]{64})$/u.test(selected.overlayCommit)))) {
+            throw httpFailure(400, "INVALID_SNAPSHOT", "A complete repository-bound snapshot is required");
+          }
+          boundSnapshot = selected as unknown as SnapshotId;
+        }
+        const reader = await freshReader(projectId, boundSnapshot ? "checkpoint" : "remote", boundSnapshot);
         const source = descriptor.module === "core"
           ? isBearer ? "mcp" : "author"
           : isBearer || descriptor.module === "mcp" ? "mcp" : "module";

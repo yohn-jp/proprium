@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import type { ModuleStatus, UiContribution } from "@scriptorium/contracts";
-import { discoverableContributions } from "./contributions/catalog";
+import { discoverableContributions, workspaceContributions } from "./contributions/catalog";
 
 const contributions: UiContribution[] = [
   { id: "story.navigator", module: "story", slot: "dock", title: "Story navigator", action: "story.volumes.tree" },
@@ -29,4 +29,15 @@ test("catalog hides disabled and profile-excluded modules", () => {
 
   assert.deepEqual(discoverableContributions(contributions, modules, "dock"), []);
   assert.deepEqual(discoverableContributions(contributions, [], "review"), []);
+});
+
+test("workspace catalog ignores placement but gates contribution kind, context, identity and availability", () => {
+  const modules = [moduleStatus("story", "enabled-idle"), moduleStatus("assistant", "disabled")];
+  const panel = contributions[0]!;
+  assert.deepEqual(workspaceContributions([
+    panel, { ...panel, id: "story.other", slot: "review" },
+    { ...panel, id: "story.decoration", kind: "editor-adornment" },
+    { ...panel, id: "story.inline", contexts: ["editor"] },
+    panel, contributions[2]!,
+  ], modules).map((item) => item.id), ["story.navigator", "story.other"]);
 });
