@@ -871,7 +871,9 @@ export function createServer(options: ApiServerOptions): Server {
           if (!coreStore.resolveDocumentScene) return { ok: false, snapshot: context.reader.snapshot,
             error: { code: "DOCUMENT_NAVIGATION_UNAVAILABLE", message: "Document navigation is unavailable", retryable: false } };
           const result = await coreStore.resolveDocumentScene(projectId, (input as { path: string }).path, context.reader.snapshot);
-          return { ok: true, snapshot: result.snapshot, data: { sceneId: result.sceneId } };
+          const document = result.sceneId === null ? await context.reader.read((input as { path: string }).path) : undefined;
+          return { ok: true, snapshot: result.snapshot, data: { sceneId: result.sceneId,
+            ...(document !== undefined ? { document: document ? { path: (input as { path: string }).path, ...document } : null } : {}) } };
         },
       } },
       { module: "core", action: make("core.search", searchInput, async (context, input) => {
