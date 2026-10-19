@@ -270,6 +270,7 @@ export function Workspace({ scope, mode, panels, beforeLayoutChange, requestedPa
   const changingRef = useRef(false);
   const workspaceRef = useRef<HTMLElement | null>(null);
   const handledRequestRef = useRef("");
+  const routeSuppressedByPanelRequestRef = useRef("");
   const visibleIds = useMemo(() => visiblePanelIds(layout.root), [layout.root]);
 
   useEffect(() => {
@@ -323,6 +324,9 @@ export function Workspace({ scope, mode, panels, beforeLayoutChange, requestedPa
     if (!catalog.has(panelId)) {
       setMessage(`The ${panelId} panel is not available.`);
       return;
+    }
+    if (mode === "mobile" && selectedPanelId && selectedPanelId !== panelId) {
+      routeSuppressedByPanelRequestRef.current = `${scope}:${mode}:${selectedPanelId}`;
     }
     const reveal = async (): Promise<void> => {
       const change = visibleIds.includes(panelId)
@@ -399,6 +403,8 @@ export function Workspace({ scope, mode, panels, beforeLayoutChange, requestedPa
   useEffect(() => {
     if (mode !== "mobile" || !selectedPanelId || !catalog.has(selectedPanelId) || changingRef.current) return;
     const selectionKey = `${scope}:${mode}:${selectedPanelId}`;
+    if (routeSuppressedByPanelRequestRef.current === selectionKey) return;
+    routeSuppressedByPanelRequestRef.current = "";
     if (routeSelectionRef.current === selectionKey) return;
     routeSelectionRef.current = selectionKey;
     const change = visibleIds.includes(selectedPanelId)
