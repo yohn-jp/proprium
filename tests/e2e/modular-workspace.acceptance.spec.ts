@@ -519,7 +519,7 @@ test("full profile exposes optional lexical search and terminology without chang
   const toolbar = workspaceToolbar(page);
   await openPanelMenu(page);
   await toolbar.getByRole("button", { name: "Show 全文検索", exact: true }).click();
-  const searchPanel = page.locator('[data-workspace-panel="search.panel"]');
+  const searchPanel = page.locator('[data-workspace-panel="module:search.panel"]');
   await expect(searchPanel).toBeVisible();
   const query = searchPanel.getByLabel("検索語");
   await query.fill("submerged brass archive");
@@ -530,7 +530,7 @@ test("full profile exposes optional lexical search and terminology without chang
 
   await openPanelMenu(page);
   await toolbar.getByRole("button", { name: "Show 用語辞典", exact: true }).click();
-  const termsPanel = page.locator('[data-workspace-panel="search.terms"]');
+  const termsPanel = page.locator('[data-workspace-panel="module:search.terms"]');
   await expect(termsPanel).toBeVisible();
   await expect(termsPanel).toContainText("Lantern Harbor");
   await expect(termsPanel).toContainText("Beacon Quay");

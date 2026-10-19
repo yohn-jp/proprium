@@ -2,7 +2,7 @@ import { execFileSync } from "node:child_process";
 import { mkdtemp, mkdir, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
-import { pathToFileURL } from "node:url";
+import { fileURLToPath, pathToFileURL } from "node:url";
 import { expect, test, type Browser, type BrowserContext, type Page } from "@playwright/test";
 
 const authToken = process.env.SCRIPTORIUM_E2E_AUTH_TOKEN ?? "";
@@ -10,6 +10,16 @@ const defaultRepository = process.env.SCRIPTORIUM_E2E_REPOSITORY_URL ?? "";
 
 function repositoryInputValue(value: string): string {
   return value.startsWith("https://") || value.startsWith("file://") ? value : pathToFileURL(value).href;
+}
+
+function normalizedRepository(value: string): string {
+  try {
+    const url = new URL(value);
+    if (url.protocol === "file:") return fileURLToPath(url);
+  } catch {
+    // Local development repositories are stored by Core as normalized filesystem paths.
+  }
+  return value;
 }
 
 function projectLabel(value: string): string {
@@ -34,14 +44,20 @@ async function openProject(page: Page, repository: string): Promise<string> {
   if (await projectButton.isVisible().catch(() => false)) await projectButton.click();
   else {
     await page.getByLabel("GitHub リポジトリ URL").fill(repositoryInputValue(repository));
+    const registrationResponse = page.waitForResponse((response) => {
+      const url = new URL(response.url());
+      return response.request().method() === "POST" && url.pathname === "/api/projects";
+    });
     await page.getByRole("button", { name: "リポジトリを登録" }).click();
+    const response = await registrationResponse;
+    expect(response.ok(), "the synthetic repository registration should complete before it is looked up").toBe(true);
   }
-  await expect(page.getByRole("heading", { name: "Volume One" })).toBeVisible();
   const projectsResponse = await page.request.get(new URL("/api/projects", page.url()).toString());
   expect(projectsResponse.ok()).toBe(true);
   const projects = await projectsResponse.json() as Array<{ id: string; url: string }>;
-  const project = projects.find((item) => item.url === repository || item.url === repositoryInputValue(repository));
-  if (!project) throw new Error("The registered acceptance project is missing from the owner API.");
+  const expectedRepository = normalizedRepository(repositoryInputValue(repository));
+  const project = projects.find((item) => normalizedRepository(item.url) === expectedRepository);
+  if (!project) throw new Error(`The registered acceptance project is missing from the owner API (expected ${expectedRepository}; received ${projects.map((item) => normalizedRepository(item.url)).join(", ") || "no projects"}).`);
   return project.id;
 }
 

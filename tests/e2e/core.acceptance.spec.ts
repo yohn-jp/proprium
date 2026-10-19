@@ -1088,8 +1088,11 @@ test("a remote update during author approval keeps the conflicting editor draft 
   await approvalStarted;
   const repositoryRoot = await mkdtemp(join(tmpdir(), "scriptorium-e2e-conflict-"));
   const workingCopy = join(repositoryRoot, "work");
+  const fixtureBranch = process.env.SCRIPTORIUM_E2E_REPOSITORY_BRANCH ?? "main";
+  let initialRemoteCommit: string | null = null;
   try {
     execFileSync("git", ["clone", "--quiet", repositoryUrl, workingCopy], { stdio: "ignore" });
+    initialRemoteCommit = execFileSync("git", ["rev-parse", "HEAD"], { cwd: workingCopy, encoding: "utf8" }).trim();
     const manuscriptPath = join(workingCopy, "manuscript/vol-1/ch-1/scene-1.md");
     const remoteText = "External remote revision during author approval.";
     await writeFile(manuscriptPath, `# Scene One\n\nThe first line of the story.\n\n${remoteText}\n`, "utf8");
@@ -1131,7 +1134,26 @@ test("a remote update during author approval keeps the conflicting editor draft 
   } finally {
     releaseApproval();
     releaseFreshSceneRead();
-    await rm(repositoryRoot, { recursive: true, force: true });
+    try {
+      if (initialRemoteCommit) {
+        const currentRemoteCommit = execFileSync("git", ["ls-remote", "origin", `refs/heads/${fixtureBranch}`], {
+          cwd: workingCopy,
+          encoding: "utf8",
+        }).trim().split(/\s+/u)[0];
+        if (currentRemoteCommit && currentRemoteCommit !== initialRemoteCommit) {
+          // This test changes only its disposable local E2E remote. Restore its exact starting ref so
+          // later browser tests continue to exercise the original synthetic manuscript.
+          execFileSync("git", [
+            "push",
+            `--force-with-lease=refs/heads/${fixtureBranch}:${currentRemoteCommit}`,
+            "origin",
+            `${initialRemoteCommit}:refs/heads/${fixtureBranch}`,
+          ], { cwd: workingCopy, stdio: "ignore" });
+        }
+      }
+    } finally {
+      await rm(repositoryRoot, { recursive: true, force: true });
+    }
   }
 });
 

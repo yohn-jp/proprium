@@ -593,15 +593,27 @@ test("profile-selected workspace panels match contribution kinds and mount one a
     }
     const toolbar = page.getByRole("toolbar", { name: "Workspace layout controls" });
     await expect(toolbar).toBeVisible();
-    await toolbar.getByRole("button", { name: "Research", exact: true }).click();
-
     const panelMenu = page.locator(".st-workspace-panel-menu");
+    await panelMenu.locator("summary").click();
+    for (const item of expectedPanels) {
+      const show = panelMenu.getByRole("button", { name: "Show " + item.title, exact: true });
+      const hide = panelMenu.getByRole("button", { name: "Hide " + item.title, exact: true });
+      await expect.poll(async () => (await show.count()) + (await hide.count())).toBe(1);
+    }
+    for (const item of editorAdornments) {
+      await expect(page.locator('[data-workspace-panel="module:' + item.id + '"]')).toHaveCount(0);
+      await expect(panelMenu.getByRole("button", { name: "Show " + item.title, exact: true })).toHaveCount(0);
+      await expect(panelMenu.getByRole("button", { name: "Hide " + item.title, exact: true })).toHaveCount(0);
+    }
+    await panelMenu.locator("summary").click();
+
+    await toolbar.getByRole("button", { name: "Research", exact: true }).click();
+    await expect(page.locator(".st-workspace-message")).toContainText("調査 preset applied");
     await panelMenu.locator("summary").click();
     for (const item of expectedPanels) {
       await expect(panelMenu.getByRole("button", { name: "Hide " + item.title, exact: true })).toHaveCount(1);
     }
     for (const item of editorAdornments) {
-      await expect(page.locator('[data-workspace-panel="module:' + item.id + '"]')).toHaveCount(0);
       await expect(panelMenu.getByRole("button", { name: "Show " + item.title, exact: true })).toHaveCount(0);
       await expect(panelMenu.getByRole("button", { name: "Hide " + item.title, exact: true })).toHaveCount(0);
     }

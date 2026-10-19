@@ -196,7 +196,7 @@ test("full profile renders Story and Speaker review queues and turns both author
     expect(zukanResult.data?.pendingCount).toBe(1);
     expect(zukanResult.data?.suggestions?.some((item) => item.id === "zukan-review-queue-item" && item.status === "pending")).toBe(true);
     await expect(zukanPanel.locator('[data-contribution="story.zukan-review"]')).toBeVisible();
-    await expect(zukanPanel.getByRole("heading", { name: "Zukan suggestions" })).toBeVisible();
+    await expect(zukanPanel.locator('[data-contribution="story.zukan-review"]').getByRole("heading", { name: "Zukan suggestions" })).toBeVisible();
     await expect(zukanPanel.getByText("1 pending suggestion(s)")).toBeVisible();
     await expect(zukanPanel.getByText("Akari collects old maps.")).toBeVisible();
 
