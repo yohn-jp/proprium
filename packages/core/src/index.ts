@@ -1072,7 +1072,12 @@ export class CoreStore implements MutationCoordinator {
   private readonly readObservations = new Map<string, RemoteObservation>();
   private readonly historicalMetadataCache = new Map<string, { records: Array<{ path: string; commit: string; content: string }>; bytes: number }>();
   private historicalMetadataCacheBytes = 0;
-  private readonly hierarchyCache = new Map<string, { tree: Tree; scenes: Map<string, { path: string; text: string; data: Record<string, unknown> }>; bytes: number }>();
+  private readonly hierarchyCache = new Map<string, {
+    tree: Tree;
+    scenes: Map<string, { path: string; text: string; data: Record<string, unknown> }>;
+    objects: Map<string, { mode: string; type: string; hash: string }>;
+    bytes: number;
+  }>();
   private hierarchyCacheBytes = 0;
   private readonly proposals = new Map<string, Map<string, ChangeProposal>>();
   private readonly durableProposalIds = new Map<string, Set<string>>();
@@ -2524,6 +2529,7 @@ export class CoreStore implements MutationCoordinator {
   private async hierarchySnapshot(root: string, commit: string, repositoryUrl: string): Promise<{
     tree: Tree;
     scenes: Map<string, { path: string; text: string; data: Record<string, unknown> }>;
+    objects: Map<string, { mode: string; type: string; hash: string }>;
   }> {
     const key = path.resolve(root) + "\0" + commit;
     const cached = this.hierarchyCache.get(key);
@@ -2532,7 +2538,7 @@ export class CoreStore implements MutationCoordinator {
       this.hierarchyCache.set(key, cached);
       return cached;
     }
-    const { files, yaml } = await this.readHierarchyYaml(root, commit);
+    const { files, yaml, objects } = await this.readHierarchyYaml(root, commit);
     let title = repositoryTitle(repositoryUrl);
     const project = yaml.get("meta/project.yaml");
     if (project) title = titleOf(project.data, title);
@@ -2581,7 +2587,8 @@ export class CoreStore implements MutationCoordinator {
       volumes.push({ id: volumeKey, title: titleOf(volumeData, volumeKey), chapters: chapters.sort((a, b) => a.title.localeCompare(b.title) || a.id.localeCompare(b.id)) });
     }
     const tree: Tree = { title, volumes: volumes.sort((a, b) => a.title.localeCompare(b.title) || a.id.localeCompare(b.id)) };
-    const bytes = [...yaml.entries()].reduce((sum, [name, record]) => sum + Buffer.byteLength(record.text, "utf8") + Buffer.byteLength(name, "utf8") + 128, 0);
+    const bytes = [...yaml.entries()].reduce((sum, [name, record]) => sum + Buffer.byteLength(record.text, "utf8") + Buffer.byteLength(name, "utf8") + 128, 0) +
+      [...objects.keys()].reduce((sum, name) => sum + Buffer.byteLength(name, "utf8") + 96, 0);
     if (bytes <= HIERARCHY_CACHE_MAX_BYTES) {
       while (this.hierarchyCache.size >= HIERARCHY_CACHE_MAX_ENTRIES || this.hierarchyCacheBytes + bytes > HIERARCHY_CACHE_MAX_BYTES) {
         const oldest = this.hierarchyCache.entries().next().value;
@@ -2589,20 +2596,22 @@ export class CoreStore implements MutationCoordinator {
         this.hierarchyCache.delete(oldest[0]);
         this.hierarchyCacheBytes -= oldest[1].bytes;
       }
-      this.hierarchyCache.set(key, { tree, scenes, bytes });
+      this.hierarchyCache.set(key, { tree, scenes, objects, bytes });
       this.hierarchyCacheBytes += bytes;
     }
-    return { tree, scenes };
+    return { tree, scenes, objects };
   }
 
   /** Enumerate YAML object IDs once and decode them through bounded cat-file batches. */
   private async readHierarchyYaml(root: string, commit: string): Promise<{
     files: string[];
     yaml: Map<string, { text: string; data: Record<string, unknown> }>;
+    objects: Map<string, { mode: string; type: string; hash: string }>;
   }> {
     const yaml = new Map<string, { text: string; data: Record<string, unknown> }>();
-    if (!commit) return { files: [], yaml };
-    const raw = await git(root, ["ls-tree", "-r", "--full-tree", "-z", commit, "--", "plot/volumes", "meta/project.yaml"]);
+    const objects = new Map<string, { mode: string; type: string; hash: string }>();
+    if (!commit) return { files: [], yaml, objects };
+    const raw = await git(root, ["ls-tree", "-r", "--full-tree", "-z", commit]);
     const files: string[] = [];
     const refs: Array<{ filePath: string; objectId: string }> = [];
     for (const entry of raw.split("\0")) {
@@ -2610,6 +2619,11 @@ export class CoreStore implements MutationCoordinator {
       const tab = entry.indexOf("\t");
       if (tab < 0) continue;
       const filePath = entry.slice(tab + 1);
+      const [mode, type, objectId] = entry.slice(0, tab).split(" ");
+      if (!mode || !type || !objectId || !/^(?:[a-f0-9]{40}|[a-f0-9]{64})$/.test(objectId)) {
+        throw coreError(502, "git_operation_failed", "Git returned an invalid tree object entry");
+      }
+      objects.set(filePath, { mode, type, hash: objectId });
       if (filePath.startsWith("plot/volumes/")) files.push(filePath);
       const relevant = filePath === "meta/project.yaml" ||
         /^plot\/volumes\/[^/]+\/volume\.yaml$/.test(filePath) ||
@@ -2617,14 +2631,13 @@ export class CoreStore implements MutationCoordinator {
         /^plot\/volumes\/[^/]+\/chapters\/[^/]+\/scenes\/.+\.yaml$/.test(filePath);
       if (!relevant) continue;
       assertProjectPath(filePath);
-      const [mode, type, objectId] = entry.slice(0, tab).split(" ");
-      if (mode === "120000" || type !== "blob" || !objectId || !/^(?:[a-f0-9]{40}|[a-f0-9]{64})$/.test(objectId)) {
+      if (mode === "120000" || type !== "blob") {
         throw coreError(422, "unsafe_project_path", "The hierarchy metadata is not a regular file");
       }
       refs.push({ filePath, objectId });
     }
     files.sort((a, b) => a.localeCompare(b));
-    if (!refs.length) return { files, yaml };
+    if (!refs.length) return { files, yaml, objects };
     const details = (await gitInput(root, ["cat-file", "--batch-check=%(objectname) %(objecttype) %(objectsize)"],
       refs.map((ref) => ref.objectId).join("\n") + "\n")).split(/\r?\n/).filter(Boolean);
     if (details.length !== refs.length) throw coreError(502, "git_operation_failed", "Git returned an incomplete hierarchy metadata index");
@@ -2679,7 +2692,7 @@ export class CoreStore implements MutationCoordinator {
       if (batch.length >= GIT_BATCH_MAX_OBJECTS) await flush();
     }
     await flush();
-    return { files, yaml };
+    return { files, yaml, objects };
   }
 
   async readTreeSnapshot(projectId: string, view: "remote" | "checkpoint" = "remote", pinned?: SnapshotId | string): Promise<{ snapshot: SnapshotId; tree: Tree }> {
@@ -2704,8 +2717,22 @@ export class CoreStore implements MutationCoordinator {
     try { assertProjectPath(manuscriptPath); }
     catch { throw coreError(422, "invalid_manuscript_path", "The scene has an unsafe manuscript path"); }
     let documentFile: { content: string; revision: string } | null;
-    try { documentFile = await this.snapshotFile(selected.root, selected.commit, manuscriptPath); }
-    catch (error) {
+    try {
+      // The immutable tree index provides the exact object ID; no per-component
+      // ls-tree subprocesses are required for each scene switch.
+      const parts = manuscriptPath.split("/");
+      for (let index = 1; index < parts.length; index += 1) {
+        if (hierarchy.objects.has(parts.slice(0, index).join("/"))) {
+          throw coreError(422, "unsafe_project_path", "The manuscript path crosses a non-directory tree entry");
+        }
+      }
+      const object = hierarchy.objects.get(manuscriptPath);
+      if (object && (object.mode === "120000" || object.type !== "blob")) {
+        throw coreError(422, "unsafe_project_path", "The manuscript path is not a regular file");
+      }
+      const bytes = object ? await gitBuffer(selected.root, ["cat-file", "blob", object.hash]) : null;
+      documentFile = bytes ? { content: bytes.toString("utf8"), revision: revisionForBytes(bytes) } : null;
+    } catch (error) {
       if (error instanceof CoreError && error.code === "unsafe_project_path") throw coreError(422, "unsafe_manuscript_path", "The scene manuscript path crosses a symbolic link");
       throw error;
     }
