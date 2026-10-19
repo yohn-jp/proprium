@@ -447,7 +447,7 @@ test("failed IndexedDB open before login keeps the scene readable and the existi
   await expect(page.getByRole("heading", { name: "ログイン" })).toBeVisible();
   await page.addInitScript(() => {
     const nativeOpen = IDBFactory.prototype.open;
-    type RecoveryWindow = Window & { __readNativeRecoveryJournal?: () => Promise<Array<{ sceneId: string; state: string; text: string }>> };
+    type RecoveryWindow = Window & { __readNativeRecoveryJournal?: () => Promise<Array<{ sceneId: string; state: string; text: string; operationId: string; generation: number }>> };
     (window as RecoveryWindow).__readNativeRecoveryJournal = async () => {
       const request = Reflect.apply(nativeOpen, indexedDB, ["scriptorium-recovery", 3]) as IDBOpenDBRequest;
       const database = await new Promise<IDBDatabase>((resolve, reject) => {
@@ -455,12 +455,18 @@ test("failed IndexedDB open before login keeps the scene readable and the existi
         request.onerror = () => reject(request.error ?? new Error("Native IndexedDB journal open failed"));
       });
       try {
-        const records = await new Promise<Array<{ sceneId: string; state: string; text: string }>>((resolve, reject) => {
+        const records = await new Promise<Array<{ sceneId: string; state: string; text: string; operation: { id: string; generation: number } }>>((resolve, reject) => {
           const read = database.transaction("operations", "readonly").objectStore("operations").getAll();
           read.onsuccess = () => resolve(read.result);
           read.onerror = () => reject(read.error ?? new Error("Native IndexedDB journal read failed"));
         });
-        return records.map(({ sceneId, state, text }) => ({ sceneId, state, text }));
+        return records.map(({ sceneId, state, text, operation }) => ({
+          sceneId,
+          state,
+          text,
+          operationId: operation.id,
+          generation: operation.generation,
+        }));
       } finally {
         database.close();
       }
@@ -491,7 +497,7 @@ test("failed IndexedDB open before login keeps the scene readable and the existi
   await expect(page.getByRole("button", { name: "Checkpoint", exact: true })).toBeDisabled();
   await expect(page.getByRole("region", { name: "保存と接続の状態" }).getByRole("alert")).toContainText("Browser storage is unavailable");
   const retained = await page.evaluate(() => (window as Window & {
-    __readNativeRecoveryJournal?: () => Promise<Array<{ sceneId: string; state: string; text: string }>>;
+    __readNativeRecoveryJournal?: () => Promise<Array<{ sceneId: string; state: string; text: string; operationId: string; generation: number }>>;
   }).__readNativeRecoveryJournal?.());
   expect(retained).toEqual(beforeFailure);
 });
