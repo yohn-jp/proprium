@@ -1,6 +1,6 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { assertChangeOperation, snapshotKey, snapshotScopeRevision, type SnapshotReader, type ChangeOperation } from "./index.js";
+import { assertChangeOperation, createDocumentSource, snapshotKey, snapshotScopeRevision, type SnapshotReader, type ChangeOperation } from "./index.js";
 const operation: ChangeOperation = {
   id: "op-1", generation: 2, repository: { provider: "github", repositoryId: "12", defaultBranch: "writing", ownerScope: "owner", url: "https://github.com/example/work" },
   baseRemoteCommit: "a".repeat(40), effect: "manuscript", reads: [],
@@ -45,4 +45,76 @@ test("scope guards bind unseen insertions, deletions and file revisions independ
     assert.throws(() => assertChangeOperation({ ...operation, readScopes }));
   }
   await assert.rejects(snapshotScopeRevision({ ...reader, async list() { return ["manuscript/outside.md"]; } }, "bible"));
+});
+
+test("document source keeps snapshot paths, uses revision metadata, and reports scoped deltas", async () => {
+  const snapshot = { repository: operation.repository, remoteCommit: operation.baseRemoteCommit };
+  const files = new Map([
+    ["manuscript/scene.md", { content: "Scene text", revision: "a".repeat(64) }],
+    ["manuscript/removed.md", { content: "Old text", revision: "b".repeat(64) }],
+    ["meta/other.md", { content: "Outside scope", revision: "c".repeat(64) }],
+  ]);
+  const calls: string[] = [];
+  const reader: SnapshotReader = {
+    snapshot,
+    async list(prefix) {
+      calls.push(`list:${prefix}`);
+      return [...files.keys()].filter(path => !prefix || path === prefix || path.startsWith(`${prefix}/`)).reverse();
+    },
+    async listRevisions(prefix) {
+      calls.push(`revisions:${prefix}`);
+      return [...files.entries()]
+        .filter(([path]) => !prefix || path === prefix || path.startsWith(`${prefix}/`))
+        .map(([path, file]) => ({ path, revision: file.revision }));
+    },
+    async read(path) {
+      calls.push(`read:${path}`);
+      return files.get(path) ?? null;
+    },
+  };
+  const source = createDocumentSource(reader);
+  assert.equal(source.version, 1);
+  assert.deepEqual(source.snapshot, snapshot);
+  assert.deepEqual(await source.enumerate("manuscript"), [
+    { path: "manuscript/removed.md", revision: "b".repeat(64) },
+    { path: "manuscript/scene.md", revision: "a".repeat(64) },
+  ]);
+  assert.deepEqual(calls, ["revisions:manuscript"], "metadata-backed enumeration does not read document contents");
+  assert.deepEqual(await source.readMany(["manuscript/scene.md"]), [
+    { path: "manuscript/scene.md", content: "Scene text", revision: "a".repeat(64) },
+  ]);
+
+  files.set("manuscript/scene.md", { content: "Updated text", revision: "d".repeat(64) });
+  files.delete("manuscript/removed.md");
+  files.set("manuscript/new.md", { content: "New text", revision: "e".repeat(64) });
+  const delta = await source.changes([
+    { path: "manuscript/scene.md", revision: "a".repeat(64) },
+    { path: "manuscript/removed.md", revision: "b".repeat(64) },
+    { path: "manuscript/new.md", revision: null },
+    { path: "meta/other.md", revision: "c".repeat(64) },
+  ], "manuscript");
+  assert.deepEqual(delta, {
+    upserted: [
+      { path: "manuscript/new.md", revision: "e".repeat(64) },
+      { path: "manuscript/scene.md", revision: "d".repeat(64) },
+    ],
+    removed: ["manuscript/removed.md"],
+  });
+});
+
+test("document source rejects unsafe and out-of-scope snapshot paths", async () => {
+  const reader: SnapshotReader = {
+    snapshot: { repository: operation.repository, remoteCommit: operation.baseRemoteCommit },
+    async list() { return ["manuscript/../secret.md"]; },
+    async read() { return { content: "", revision: "a".repeat(64) }; },
+  };
+  const source = createDocumentSource(reader);
+  await assert.rejects(source.enumerate("manuscript"));
+  await assert.rejects(source.readMany([".git/config"]));
+
+  const outsideReader: SnapshotReader = {
+    ...reader,
+    async listRevisions() { return [{ path: "meta/other.md", revision: "a".repeat(64) }]; },
+  };
+  await assert.rejects(createDocumentSource(outsideReader).enumerate("manuscript"));
 });

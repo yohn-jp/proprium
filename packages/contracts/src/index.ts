@@ -85,6 +85,16 @@ export interface SnapshotReader {
   snapshot: SnapshotId;
   read(path: string, encoding?: "utf8" | "base64"): Promise<{ content: string; revision: string } | null>;
   list(prefix: string): Promise<string[]>;
+  /** Optional metadata-backed path revisions; values must match read(path).revision. */
+  listRevisions?(prefix: string): Promise<FileRevision[]>;
+}
+/** Snapshot-scoped file reads for optional consumers such as local search indexes. */
+export interface DocumentSource {
+  version: 1;
+  snapshot: SnapshotId;
+  enumerate(prefix?: string): Promise<FileRevision[]>;
+  readMany(paths: readonly string[]): Promise<Array<{ path: string; content: string; revision: string }>>;
+  changes(previous: readonly FileRevision[], prefix?: string): Promise<{ upserted: FileRevision[]; removed: string[] }>;
 }
 export interface ProposalEvidence {
   id: string;
@@ -265,6 +275,98 @@ export function assertProjectPath(value: unknown): asserts value is string {
       value.split("/").some(part => !part || part === "." || part === ".." || part.toLowerCase() === ".git")) {
     throw new ContractError("Unsafe project path");
   }
+}
+const DOCUMENT_READ_BATCH_SIZE = 32;
+
+function documentPrefix(prefix: string | undefined): string | undefined {
+  if (prefix === undefined) return undefined;
+  assertProjectPath(prefix);
+  return prefix;
+}
+
+function assertDocumentRevision(value: unknown): asserts value is string {
+  if (typeof value !== "string" || !/^[a-f0-9]{64}$/.test(value)) {
+    throw new ContractError("Snapshot document has an invalid revision");
+  }
+}
+
+function assertDocumentPath(path: unknown, prefix?: string): asserts path is string {
+  assertProjectPath(path);
+  if (prefix !== undefined && path !== prefix && !path.startsWith(`${prefix}/`)) {
+    throw new ContractError("Snapshot document is outside the requested scope");
+  }
+}
+
+async function inBatches<T, R>(values: readonly T[], action: (value: T) => Promise<R>): Promise<R[]> {
+  const output: R[] = [];
+  for (let offset = 0; offset < values.length; offset += DOCUMENT_READ_BATCH_SIZE) {
+    output.push(...await Promise.all(values.slice(offset, offset + DOCUMENT_READ_BATCH_SIZE).map(action)));
+  }
+  return output;
+}
+
+/** Adds bounded bulk reads and revision deltas over the existing immutable reader. */
+export function createDocumentSource(reader: SnapshotReader): DocumentSource {
+  const snapshot = structuredClone(reader.snapshot);
+  return {
+    version: 1,
+    snapshot,
+    async enumerate(prefix) {
+      const scope = documentPrefix(prefix);
+      const listed = reader.listRevisions
+        ? await reader.listRevisions(scope ?? "")
+        : await inBatches(await reader.list(scope ?? ""), async path => {
+            assertDocumentPath(path, scope);
+            const file = await reader.read(path);
+            if (!file) throw new ContractError("Snapshot document is unavailable");
+            assertDocumentRevision(file.revision);
+            return { path, revision: file.revision };
+          });
+      const seen = new Set<string>();
+      for (const item of listed) {
+        if (!item || typeof item !== "object") throw new ContractError("Invalid snapshot document listing");
+        assertDocumentPath(item.path, scope);
+        if (item.revision !== null) assertDocumentRevision(item.revision);
+        if (seen.has(item.path)) throw new ContractError("Snapshot document listing contains duplicate paths");
+        seen.add(item.path);
+      }
+      return listed.map(item => ({ ...item })).sort((left, right) => left.path.localeCompare(right.path));
+    },
+    async readMany(paths) {
+      const seen = new Set<string>();
+      for (const path of paths) {
+        assertDocumentPath(path);
+        if (seen.has(path)) throw new ContractError("Snapshot document read contains duplicate paths");
+        seen.add(path);
+      }
+      return inBatches(paths, async path => {
+        const file = await reader.read(path);
+        if (!file) throw new ContractError("Snapshot document is unavailable");
+        assertDocumentRevision(file.revision);
+        return { path, content: file.content, revision: file.revision };
+      });
+    },
+    async changes(previous, prefix) {
+      const scope = documentPrefix(prefix);
+      const prior = new Map<string, string | null>();
+      for (const item of previous) {
+        if (!item || typeof item !== "object") throw new ContractError("Invalid previous snapshot document");
+        assertDocumentPath(item.path);
+        if (scope !== undefined && item.path !== scope && !item.path.startsWith(`${scope}/`)) continue;
+        if (item.revision !== null && typeof item.revision !== "string") {
+          throw new ContractError("Invalid previous snapshot document revision");
+        }
+        if (prior.has(item.path)) throw new ContractError("Previous snapshot document listing contains duplicate paths");
+        prior.set(item.path, item.revision);
+      }
+      const current = await this.enumerate(scope);
+      const currentPaths = new Set(current.map(item => item.path));
+      return {
+        upserted: current.filter(item => prior.get(item.path) !== item.revision),
+        removed: [...prior.keys()].filter(path => !currentPaths.has(path)).sort((left, right) => left.localeCompare(right)),
+      };
+    },
+  };
 }
 export function snapshotKey(snapshot: SnapshotId): string {
   return JSON.stringify([snapshot.repository.provider, snapshot.repository.ownerScope,
