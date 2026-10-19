@@ -6,6 +6,8 @@ import { ManuscriptHistoryPanel } from "./ManuscriptHistoryPanel";
 import { MobileReadingPager } from "./MobileReadingPager";
 import { ManuscriptInput, type ManuscriptInputHandle } from "./ManuscriptInput";
 import { RubyText } from "./ruby";
+import { TermAwareRubyText } from "./TermAwareRubyText";
+import type { ResolveEditorTerms } from "./terms";
 import { loadTypographySettings, storeTypographySettings, typographyPresetValues, TYPOGRAPHY_PRESETS, type TypographySettings, type TypographyPresetId } from "./typography";
 import { WRITING_SYMBOLS } from "./writingSymbols";
 import { loadReadingPage, saveReadingPage } from "../resume/continueCandidates";
@@ -74,7 +76,10 @@ export function SceneEditor({
   onPublish,
   onHistory,
   historyOpen,
+  historyExternal,
   onRestoreHistoryBody,
+  resolveTerms,
+  onTermNavigate,
   scratchEntries,
   onDraftScratch,
   onCheckpointScratch,
@@ -114,7 +119,11 @@ export function SceneEditor({
   onPublish: () => void;
   onHistory: () => void;
   historyOpen: boolean;
+  /** Use when History is mounted as an independent workspace panel. */
+  historyExternal?: boolean;
   onRestoreHistoryBody: (body: string) => void;
+  resolveTerms?: ResolveEditorTerms;
+  onTermNavigate?: (targetPath: string, termId: string) => void;
   scratchEntries: JournalEntry[];
   onDraftScratch: (draft: ScratchDraftPayload, binding: ScratchDraftBinding) => Promise<JournalEntry | null>;
   onCheckpointScratch: (entry: JournalEntry) => Promise<void>;
@@ -286,7 +295,12 @@ export function SceneEditor({
           style={readerStyle(typography)}
         >
           <MobileReadingPager mode={vertical ? "vertical" : "horizontal"} pageIndex={readingPage} onPageIndexChange={changeReadingPage}>
-            <RubyText text={text} />
+            <TermAwareRubyText
+              key={`${repositoryKey}:${snapshot}:${path}`}
+              text={text}
+              resolveTerms={resolveTerms}
+              onTermNavigate={onTermNavigate}
+            />
           </MobileReadingPager>
         </section>
       )}
@@ -300,6 +314,8 @@ export function SceneEditor({
               onChange={onTextChange}
               onCursorPositionChange={(cursorSentenceIndex, scrollTop) => onCursorPositionChange(scene.id, cursorSentenceIndex, scrollTop)}
               onSelectionLengthChange={setSelectionLength}
+              resolveTerms={reading ? undefined : resolveTerms}
+              termResolutionKey={`${repositoryKey}:${snapshot}:${scene.id}:${path}`}
               labelledBy="manuscript-label"
               placeholder="物語の続きを書く"
               style={{
@@ -339,7 +355,7 @@ export function SceneEditor({
       <div className={`print-view ${vertical ? "is-vertical" : ""}`} aria-hidden={!printing} style={readerStyle(typography)}>
         <RubyText text={text} className="print-manuscript" />
       </div>
-      {historyOpen && <ManuscriptHistoryPanel projectId={projectId} manuscriptId={scene.id} sceneId={scene.id} snapshot={historySnapshot} currentBody={text} onRestore={onRestoreHistoryBody} onClose={onHistory} />}
+      {historyOpen && !historyExternal && <ManuscriptHistoryPanel projectId={projectId} manuscriptId={scene.id} sceneId={scene.id} snapshot={historySnapshot} currentBody={text} onRestore={onRestoreHistoryBody} onClose={onHistory} />}
     </section>
   );
 }

@@ -11,8 +11,11 @@ import { forwardRef, useEffect, useImperativeHandle, useRef, type CSSProperties 
 import { bracketPairsExtension } from "./cm/bracketPairs";
 import { editorCompositionExtension, isViewComposing } from "./cm/compositionGuard";
 import { ellipsisNormalizeExtension } from "./cm/ellipsisNormalize";
+import { refreshTermAdornments, termAdornmentsExtension } from "./cm/termAdornments";
 import { planWritingSymbol, type WritingSymbolId } from "./writingSymbols";
+import { type ResolveEditorTerms } from "./terms";
 import { offsetAtUiSentenceIndex, uiSentenceIndexAtOffset } from "../resume/continueCandidates";
+import "./terminology.css";
 
 export interface ManuscriptInputHandle {
   focus(): void;
@@ -31,6 +34,8 @@ export interface ManuscriptInputProps {
   placeholder?: string;
   labelledBy: string;
   style?: CSSProperties;
+  resolveTerms?: ResolveEditorTerms;
+  termResolutionKey?: string;
 }
 
 /** CodeMirror adapter retaining IME-safe editing, source bracket/ellipsis rules and history keymaps. */
@@ -43,11 +48,15 @@ export const ManuscriptInput = forwardRef<ManuscriptInputHandle, ManuscriptInput
   placeholder,
   labelledBy,
   style,
+  resolveTerms,
+  termResolutionKey,
 }, ref) {
   const containerRef = useRef<HTMLDivElement>(null);
   const viewRef = useRef<EditorView | null>(null);
   const externalSyncRef = useRef(false);
   const suppressPositionRef = useRef(false);
+  const resolverRef = useRef<ResolveEditorTerms | undefined>(resolveTerms);
+  resolverRef.current = resolveTerms;
   const latestRef = useRef({ onChange, onSelectionLengthChange, onCursorPositionChange });
   latestRef.current = { onChange, onSelectionLengthChange, onCursorPositionChange };
 
@@ -123,6 +132,7 @@ export const ManuscriptInput = forwardRef<ManuscriptInputHandle, ManuscriptInput
         bracketPairsExtension(),
         ellipsisNormalizeExtension(),
         editorCompositionExtension(),
+        termAdornmentsExtension(resolverRef),
         styleNonceExtension(),
         EditorView.lineWrapping,
         EditorView.contentAttributes.of({
@@ -165,6 +175,11 @@ export const ManuscriptInput = forwardRef<ManuscriptInputHandle, ManuscriptInput
   // CodeMirror initializes once; changing value and callbacks flow through refs and the sync effect.
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
+
+  useEffect(() => {
+    const view = viewRef.current;
+    if (view) view.dispatch({ effects: refreshTermAdornments.of(null) });
+  }, [resolveTerms, termResolutionKey]);
 
   useEffect(() => {
     const view = viewRef.current;

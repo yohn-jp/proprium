@@ -1,4 +1,5 @@
 import type { ReactNode } from "react";
+import type { EditorTermSpan } from "./terms";
 
 /** Source behavior from app/src/features/editor/manuscriptRuby.tsx: explicit Aozora `|漢字《よみ》` only. */
 const RUBY_RE = /\|([^《|\n]+?)《([^》]+)》/g;
@@ -22,22 +23,75 @@ export function parseRubySegments(line: string): RubySegment[] {
   return segments.length > 0 ? segments : [{ kind: "text", value: line, key: "text-0" }];
 }
 
-export function renderRubySegmentNodes(line: string): ReactNode[] {
-  return parseRubySegments(line).map((segment) => segment.kind === "ruby" ? (
-    <ruby key={segment.key}>{segment.base}<rt>{segment.reading}</rt></ruby>
-  ) : (
-    <span key={segment.key}>{segment.value || "\u00a0"}</span>
-  ));
+export function renderRubySegmentNodes(
+  line: string,
+  lineOffset = 0,
+  termSpans: readonly EditorTermSpan[] = [],
+  onTermNavigate?: (targetPath: string, termId: string) => void,
+): ReactNode[] {
+  return parseRubySegments(line).map((segment) => {
+    const localStart = Number(segment.key.slice(segment.key.lastIndexOf("-") + 1));
+    if (segment.kind === "ruby") {
+      const baseStart = lineOffset + localStart + 1;
+      return <ruby key={segment.key}>{renderTermText(segment.base, baseStart, termSpans, onTermNavigate)}<rt>{segment.reading}</rt></ruby>;
+    }
+    return <span key={segment.key}>{renderTermText(segment.value || "\u00a0", lineOffset + localStart, termSpans, onTermNavigate)}</span>;
+  });
 }
 
-export function RubyText({ text, className }: { text: string; className?: string }) {
+export function RubyText({ text, className, termSpans = [], onTermNavigate }: {
+  text: string;
+  className?: string;
+  termSpans?: readonly EditorTermSpan[];
+  onTermNavigate?: (targetPath: string, termId: string) => void;
+}) {
+  let sourceOffset = 0;
   return (
     <div className={className}>
-      {text.split("\n").map((line, index) => (
-        <p className="ruby-line" key={index}>{renderRubySegmentNodes(line)}</p>
-      ))}
+      {text.split("\n").map((line, index) => {
+        const lineOffset = sourceOffset;
+        sourceOffset += line.length + 1;
+        return <p className="ruby-line" key={index} data-source-start={lineOffset} data-source-end={lineOffset + line.length}>
+          {renderRubySegmentNodes(line, lineOffset, termSpans, onTermNavigate)}
+        </p>;
+      })}
     </div>
   );
+}
+
+function renderTermText(
+  value: string,
+  sourceOffset: number,
+  termSpans: readonly EditorTermSpan[],
+  onTermNavigate?: (targetPath: string, termId: string) => void,
+): ReactNode[] {
+  if (!onTermNavigate || termSpans.length === 0) return [value];
+  const sourceEnd = sourceOffset + value.length;
+  const matches = termSpans
+    .filter((span) => span.start >= sourceOffset && span.end <= sourceEnd && span.end > span.start)
+    .sort((left, right) => left.start - right.start || left.end - right.end);
+  if (matches.length === 0) return [value];
+
+  const nodes: ReactNode[] = [];
+  let cursor = 0;
+  for (const span of matches) {
+    const start = span.start - sourceOffset;
+    const end = span.end - sourceOffset;
+    if (start < cursor) continue;
+    if (start > cursor) nodes.push(<span key={`text-${cursor}`}>{value.slice(cursor, start)}</span>);
+    const label = value.slice(start, end);
+    nodes.push(<button
+      type="button"
+      className="term-navigation"
+      key={`term-${span.start}-${span.termId}`}
+      aria-label={`${label}、用語を開く`}
+      data-term-id={span.termId}
+      onClick={() => onTermNavigate(span.targetPath, span.termId)}
+    >{label}</button>);
+    cursor = end;
+  }
+  if (cursor < value.length) nodes.push(<span key={`text-${cursor}`}>{value.slice(cursor)}</span>);
+  return nodes.length > 0 ? nodes : [value];
 }
 
 export function documentBody(content: string): { prefix: string; body: string } {
