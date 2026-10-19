@@ -1153,6 +1153,13 @@ test("a remote update during author approval keeps the conflicting editor draft 
       }
     } finally {
       await rm(repositoryRoot, { recursive: true, force: true });
+      // Core has also observed the temporary conflict commit; clear that disposable project cache
+      // after restoring the bare ref so later tests start from the seed manuscript snapshot.
+      if (process.env.SCRIPTORIUM_E2E_EXTERNAL_REPOSITORY !== "1") {
+        const e2ePort = Number.parseInt(process.env.SCRIPTORIUM_E2E_PORT ?? "4173", 10);
+        const resetCore = await fetch(`http://127.0.0.1:${e2ePort + 1}/__e2e/reset-core`, { method: "POST" });
+        expect(resetCore.status).toBe(204);
+      }
     }
   }
 });
