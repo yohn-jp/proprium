@@ -1984,7 +1984,7 @@ export function createServer(options: ApiServerOptions): Server {
           if (!isRecord(selected) || !isRecord(selected.repository) ||
               !["github", "local"].includes(String(selected.repository.provider)) ||
               ["repositoryId", "defaultBranch", "ownerScope", "url"].some((key) => typeof (selected.repository as Record<string, unknown>)[key] !== "string") ||
-              typeof selected.remoteCommit !== "string" || !/^(?:[a-f0-9]{40}|[a-f0-9]{64})$/u.test(selected.remoteCommit) ||
+              typeof selected.remoteCommit !== "string" || !/^(?:[a-f0-9]{40}|[a-f0-9]{64}|)$/u.test(selected.remoteCommit) ||
               (selected.overlayCommit !== undefined && (typeof selected.overlayCommit !== "string" || !/^(?:[a-f0-9]{40}|[a-f0-9]{64})$/u.test(selected.overlayCommit)))) {
             throw httpFailure(400, "INVALID_SNAPSHOT", "A complete repository-bound snapshot is required");
           }

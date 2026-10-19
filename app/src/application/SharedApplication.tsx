@@ -14,7 +14,10 @@ import {
   type UiContribution,
 } from "@scriptorium/contracts";
 import { ApiError, api, type Project, type SceneRead, type Tree, type TreeRead } from "../api";
-import { ContributionHost } from "../contributions/ContributionHost";
+import { WorkspaceContribution } from "../contributions/ContributionHost";
+import { workspaceContributions } from "../contributions/catalog";
+import { ManuscriptHistoryPanel } from "../editor/ManuscriptHistoryPanel";
+import type { EditorTermSpan } from "../editor/terms";
 import { ProposalReview } from "../contributions/ProposalReview";
 import { PublicModuleView, publicModuleIdForPath } from "../contributions/PublicModuleView";
 import { ThemeControl } from "../components/ThemeControl";
@@ -408,6 +411,8 @@ function AuthorWorkspace({
   const [modules, setModules] = useState<ModuleStatus[]>([]);
   const [contributions, setContributions] = useState<UiContribution[]>([]);
   const [historyOpen, setHistoryOpen] = useState(false);
+  const [panelRequest, setPanelRequest] = useState<{ id: string; sequence: number }>();
+  const [inspectedDocument, setInspectedDocument] = useState<{ snapshot: SnapshotId; path: string; content: string; revision: string } | null>(null);
   const [busy, setBusy] = useState("");
   const navigationRef = useRef(0);
   const workRef = useRef<WorkState | null>(null);
@@ -1984,8 +1989,27 @@ function AuthorWorkspace({
     window.setTimeout(() => URL.revokeObjectURL(link.href), 0);
   }
 
+  function requestPanel(id: string): void {
+    setPanelRequest((previous) => ({ id, sequence: (previous?.sequence ?? 0) + 1 }));
+  }
+
   function toggleHistory(): void {
-    setHistoryOpen((open) => !open);
+    setHistoryOpen(true);
+    requestPanel("history");
+  }
+
+  async function prepareLayoutChange(): Promise<boolean> {
+    try {
+      const composedText = await editorFlushRef.current();
+      const current = workRef.current?.editor;
+      if (composedText !== null && current && composedText !== current.text) editText(composedText);
+      recentResume.flush();
+      await flushDraft();
+      return true;
+    } catch (error) {
+      setStatus({ message: `パネルを変更する前に下書きを保存してください。${messageOf(error)}`, kind: "error" });
+      return false;
+    }
   }
 
   function continueFrom(candidate: ReturnType<typeof mergeContinueCandidates>[number], reading = false): void {
@@ -2036,6 +2060,59 @@ function AuthorWorkspace({
   const continueCandidates = work && tree && recentResume.projectKey === JSON.stringify([authorScope, activeRepositoryKey, work.project.id])
     ? mergeContinueCandidates(recentResume.localWriting, recentResume.items, tree).slice(0, 2)
     : [];
+
+  // A checkpoint overlay is part of every optional consumer's immutable context.
+  const panelSnapshot = !work?.loadingScene && editor ? editor.read.snapshot : work?.tree.snapshot;
+  const panelSnapshotKey = panelSnapshot ? snapshotKey(panelSnapshot) : "";
+  const panelProjectId = work?.project.id ?? "";
+  const enabledPanels = workspaceContributions(contributions, modules);
+  const termAdornments = contributions.filter((item) => item.kind === "editor-adornment" &&
+    item.contexts?.includes("editor") && modules.some((module) => module.id === item.module &&
+      (module.availability === "active" || module.availability === "enabled-idle")));
+  const termAdornmentKey = JSON.stringify(termAdornments.map((item) => [item.module, item.id, item.action]));
+  const resolveTerms = useCallback(async (text: string, signal: AbortSignal): Promise<readonly EditorTermSpan[]> => {
+    if (termAdornments.length === 0 || !panelSnapshot || signal.aborted) return [];
+    const results = await Promise.allSettled(termAdornments.map((item) =>
+      api.action(panelProjectId, item.action, { text }, signal, panelSnapshot)));
+    const current = workRef.current;
+    const currentSnapshot = !current?.loadingScene && current?.editor ? current.editor.read.snapshot : current?.tree.snapshot;
+    if (signal.aborted || !current || current.project.id !== panelProjectId || !currentSnapshot ||
+        snapshotKey(currentSnapshot) !== panelSnapshotKey) return [];
+    return results.flatMap((outcome) => {
+      if (outcome.status !== "fulfilled" || !outcome.value.ok || snapshotKey(outcome.value.snapshot) !== panelSnapshotKey) return [];
+      const data = outcome.value.data as { spans?: EditorTermSpan[] };
+      return Array.isArray(data?.spans) ? data.spans : [];
+    });
+  }, [panelProjectId, panelSnapshotKey, termAdornmentKey]);
+
+  const navigateDocument = useCallback(async (documentPath: string): Promise<void> => {
+    assertProjectPath(documentPath);
+    const current = workRef.current;
+    const currentSnapshot = !current?.loadingScene && current?.editor ? current.editor.read.snapshot : current?.tree.snapshot;
+    if (!current || !panelSnapshot || current.project.id !== panelProjectId || !currentSnapshot ||
+        snapshotKey(currentSnapshot) !== panelSnapshotKey) throw new Error("パネルのスナップショットが更新されています。");
+    const nav = navigationRef.current;
+    const result = await api.action(current.project.id, "core.document.resolve", { path: documentPath }, undefined, panelSnapshot);
+    const latest = workRef.current;
+    const latestSnapshot = !latest?.loadingScene && latest?.editor ? latest.editor.read.snapshot : latest?.tree.snapshot;
+    if (!latest || latest.project.id !== panelProjectId || navigationRef.current !== nav || !latestSnapshot ||
+        snapshotKey(latestSnapshot) !== panelSnapshotKey || snapshotKey(result.snapshot) !== panelSnapshotKey) return;
+    if (!result.ok) throw new Error(result.error.message);
+    const data = result.data as { sceneId: string | null; document?: { path: string; content: string; revision: string } | null };
+    if (data.sceneId && sceneExistsInTree(latest.tree.tree, data.sceneId)) {
+      await loadScene(latest.project.id, data.sceneId, latest.tree, latest.observation.snapshot.repository);
+      requestPanel("editor");
+    } else if (data.document?.path === documentPath && typeof data.document.content === "string") {
+      setInspectedDocument({ ...data.document, snapshot: panelSnapshot });
+      requestPanel("inspector");
+    } else {
+      setStatus({ message: "リンク先の文書はこのスナップショットでは利用できません。", kind: "normal" });
+    }
+  }, [loadScene, panelProjectId, panelSnapshotKey]);
+
+  const onTermNavigate = useCallback((path: string) => {
+    void navigateDocument(path).catch((error) => setStatus({ message: messageOf(error), kind: "error" }));
+  }, [navigateDocument]);
 
   if (authState === "checking") return <main className="loading" role="status">Scriptorium を開いています…</main>;
   if (authState === "signed-out") {
@@ -2196,6 +2273,9 @@ function AuthorWorkspace({
           onPublish={() => void publishPending()}
           onHistory={() => void toggleHistory()}
           historyOpen={historyOpen}
+          historyExternal
+          resolveTerms={termAdornments.length > 0 && editorRecoveryStatus === "ready" ? resolveTerms : undefined}
+          onTermNavigate={onTermNavigate}
           onRestoreHistoryBody={editText}
           scratchEntries={currentRepoEntries.filter((entry) => entry.documentPath.startsWith("meta/scratch/"))}
           onDraftScratch={persistScratchDraft}
@@ -2231,18 +2311,41 @@ function AuthorWorkspace({
           }}
         />
       )}
-      {work && (
-        <div className="contribution-dock">
-          <ContributionHost projectId={work.project.id} authorScope={authorScope} slot="editor" contributions={contributions} modules={modules} snapshot={work.tree.snapshot} refresh={refreshContributionContext} journal={journal} onProposalStored={refreshProposals} readCurrentEditor={readCurrentEditor} />
-          {(["dock", "inspection", "review", "settings"] as const).map((slot) => (
-            <ContributionHost key={slot} projectId={work.project.id} authorScope={authorScope} slot={slot} contributions={contributions} modules={modules} snapshot={work.tree.snapshot} refresh={refreshContributionContext} journal={journal} onProposalStored={refreshProposals} readCurrentEditor={readCurrentEditor} />
-          ))}
-        </div>
-      )}
+      {currentRepoProposals.length === 0 && <p>確認待ちの提案はありません。</p>}
     </div>
   );
 
-  return <Shell mode={mode} header={header} library={library} editor={editorSlot} tools={toolsSlot} status={statusSlot} onSwitchMode={switchMode} />;
+  const inspectorSlot = <section aria-label="文書と保存状態">
+    {statusSlot}
+    {editor && <dl className="project-facts">
+      <div><dt>原稿</dt><dd><code>{editor.read.document.path}</code></dd></div>
+      <div><dt>スナップショット</dt><dd><code>{editor.read.snapshot.overlayCommit ?? editor.read.snapshot.remoteCommit}</code></dd></div>
+      <div><dt>ブラウザー回復</dt><dd>{editorRecoveryStatus}</dd></div>
+    </dl>}
+    {inspectedDocument && panelSnapshotKey === snapshotKey(inspectedDocument.snapshot) && <article>
+      <h3>{inspectedDocument.path}</h3><pre className="workspace-document-source">{inspectedDocument.content}</pre>
+    </article>}
+    <RecoveryList entries={currentRepoEntries} />
+  </section>;
+  const panels = [
+    { id: "editor", title: "Editor", render: () => editorSlot },
+    { id: "outline", title: "Outline", render: () => library },
+    { id: "inspector", title: "Inspector", render: () => inspectorSlot },
+    { id: "history", title: "History", render: () => editor && scene && work
+      ? <ManuscriptHistoryPanel projectId={work.project.id} manuscriptId={scene.id} sceneId={scene.id}
+          snapshot={work.observation.snapshot} currentBody={editor.text}
+          onRestore={(body) => { if (editorWritable) editText(body); }} onClose={() => { setHistoryOpen(false); requestPanel("editor"); }} />
+      : <p>履歴を表示するシーンを選択してください。</p> },
+    { id: "review", title: "Review", render: () => toolsSlot },
+    ...enabledPanels.map((item) => ({ id: `module:${item.id}`, title: item.title, render: () => work && panelSnapshot
+      ? <WorkspaceContribution item={item} contributions={contributions} modules={modules}
+          projectId={work.project.id} authorScope={authorScope} snapshot={panelSnapshot}
+          refresh={refreshContributionContext} journal={journal} onProposalStored={refreshProposals}
+          readCurrentEditor={readCurrentEditor} navigateDocument={navigateDocument} /> : <p>作品を選択してください。</p> })),
+  ];
+  return <Shell mode={mode} header={header} library={library} editor={editorSlot} tools={toolsSlot} status={statusSlot}
+    workspaceScope={authorScope} panels={panels} requestedPanel={panelRequest}
+    beforeLayoutChange={prepareLayoutChange} onSwitchMode={switchMode} />;
 }
 
 function editorDurability(editor: EditorSession): "draft" | "checkpointing" | "checkpointed" | "publication_unknown" | "saved" {
