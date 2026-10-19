@@ -2063,6 +2063,7 @@ function AuthorWorkspace({
   function continueFrom(candidate: ReturnType<typeof mergeContinueCandidates>[number], reading = false): void {
     const current = workRef.current;
     if (!current || !sceneExistsInTree(current.tree.tree, candidate.sceneId)) return;
+    const navigation = navigationRef.current;
     const targetRepositoryKey = repositoryKey(current.observation.snapshot.repository);
     const id = ++resumeRequestSequenceRef.current;
     setResumeRequest({
@@ -2074,18 +2075,35 @@ function AuthorWorkspace({
       ...(reading && candidate.pageIndex !== null ? { pageIndex: candidate.pageIndex } : {}),
     });
     if (current.selectedSceneId === candidate.sceneId && current.editor?.read.scene.id === candidate.sceneId && !current.loadingScene) {
-      requestPanel("editor");
+      requestEditorAfterExplicitLoad(current.project.id, candidate.sceneId, navigation, sceneLoadRef.current);
       return;
     }
-    void loadScene(current.project.id, candidate.sceneId, current.tree, current.observation.snapshot.repository)
-      .then(() => requestPanel("editor"));
+    loadSceneForExplicitNavigation(current.project.id, candidate.sceneId, current.tree, current.observation.snapshot.repository, navigation);
   }
 
   function selectSceneFromOutline(sceneId: string): void {
     const current = workRef.current;
     if (!current) return;
-    void loadScene(current.project.id, sceneId, current.tree, current.observation.snapshot.repository)
-      .then(() => requestPanel("editor"));
+    loadSceneForExplicitNavigation(current.project.id, sceneId, current.tree, current.observation.snapshot.repository, navigationRef.current);
+  }
+
+  function loadSceneForExplicitNavigation(
+    projectId: string,
+    sceneId: string,
+    tree: TreeRead,
+    repository: RepositoryIdentity,
+    navigation: number,
+  ): void {
+    const sceneRequest = sceneLoadRef.current + 1;
+    void loadScene(projectId, sceneId, tree, repository)
+      .then(() => requestEditorAfterExplicitLoad(projectId, sceneId, navigation, sceneRequest));
+  }
+
+  function requestEditorAfterExplicitLoad(projectId: string, sceneId: string, navigation: number, sceneRequest: number): void {
+    const current = workRef.current;
+    if (navigationRef.current !== navigation || sceneLoadRef.current !== sceneRequest ||
+        current?.project.id !== projectId || current.selectedSceneId !== sceneId) return;
+    requestPanel("editor");
   }
 
   function completeResumeRequest(requestId: number): void {
