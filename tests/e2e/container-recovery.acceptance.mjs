@@ -685,15 +685,30 @@ async function main() {
     const persistedDraft = await waitFor("the checkpointed entry in the reopened browser profile", () => readJournal(recoveredPage), (entries) => entries.some((entry) => entry.operationId === operationId && entry.state === "checkpointed" && entry.text === authorText));
     assert.equal(persistedDraft.filter((entry) => entry.operationId === operationId).length, 1, "The browser journal must contain one copy of the operation.");
     assert.equal((await recoveredPage.getByText("登録された作品はありません").isVisible().catch(() => false)), true, "The erased container data root must not retain the project registry.");
+    const reconcileResponsePromise = recoveredPage.waitForResponse((response) => {
+      const url = new URL(response.url());
+      return response.request().method() === "POST" && url.pathname.startsWith("/api/projects/") && url.pathname.endsWith("/reconcile");
+    }, { timeout: 90_000 });
     await openProject(recoveredPage, baseUrl);
-    await waitFor("Core replay of the complete checkpointed operation", () => readJournal(recoveredPage), (entries) => entries.some((entry) => entry.operationId === operationId && entry.state === "checkpointed" && entry.text === authorText && entry.operationContent?.includes(authorText)));
-    const replayed = (await readJournal(recoveredPage)).find((entry) => entry.operationId === operationId);
+    const reconcileResponse = await reconcileResponsePromise;
+    assert.equal(reconcileResponse.ok(), true, "Core reconciliation must succeed before the recovered editor is writable.");
+    const reconcileResult = await reconcileResponse.json();
+    assert.ok(
+      reconcileResult.operations?.some((item) => item.operationId === operationId && item.state === "replayed"),
+      "Core must report the recovered checkpoint operation as replayed.",
+    );
+    const recoveryGate = recoveredPage.locator("[data-recovery-status]");
+    await expect(recoveryGate).toHaveAttribute("data-recovery-status", "ready", { timeout: 90_000 });
+    await expect(recoveryGate).toHaveAttribute("data-editor-writable", "true", { timeout: 90_000 });
+    const recoveredEditor = recoveredPage.locator(".cm-content");
+    await expect(recoveredEditor).toHaveAttribute("contenteditable", "true", { timeout: 90_000 });
+    await expect(recoveredEditor).toHaveText(authorText, { timeout: 90_000 });
+    const replayedEntries = await waitFor("the checkpointed browser journal entry after Core replay", () => readJournal(recoveredPage), (entries) => entries.some((entry) => entry.operationId === operationId && entry.state === "checkpointed" && entry.text === authorText && entry.operationContent?.includes(authorText)));
+    const replayed = replayedEntries.find((entry) => entry.operationId === operationId);
     assert.ok(replayed);
     assert.equal(replayed.operationId, checkpointBeforeRestart.operationId);
     assert.equal(await github.branchHead(branch), initialHead, "Recovery must stay a local checkpoint until the author publishes.");
 
-    const recoveredEditor = recoveredPage.locator(".cm-content");
-    await expect(recoveredEditor).toHaveText(authorText);
     await recoveredPage.getByRole("button", { name: "Save to GitHub" }).click();
     await waitFor("a durable confirmed receipt acknowledging the recovered operation", () => readPublicationReceipts(recoveredPage), (receipts) => receipts.some((receipt) => receipt.state === "confirmed" && receipt.acknowledged.some((item) => item.operationId === operationId && item.generation === draftEntry.generation)), 120_000);
     const publishedHead = await waitFor("the explicit GitHub publication", () => github.branchHead(branch), (head) => head !== initialHead, 120_000);
