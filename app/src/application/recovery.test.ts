@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { isEntryAcknowledgedByReceipt, isNonDraftEntryAcknowledgedByReceipt, isTextRepresentedByRecoveryRecord, isUnchangedEntryConfirmedByReceipt, mayWriteEditor } from "./recovery.js";
+import { isEntryAcknowledgedByReceipt, isNonDraftEntryAcknowledgedByReceipt, isTextRepresentedByRecoveryRecord, isUnchangedEntryConfirmedByReceipt, mayWriteEditor, recoveryStatusForJournalOpen } from "./recovery.js";
 
 test("text is recoverable only when the current record represents the editor", () => {
   assert.equal(isTextRepresentedByRecoveryRecord("clean", null, "clean"), true);
@@ -42,4 +42,17 @@ test("the editor is writable only after its selected scene recovery is ready", (
   assert.equal(mayWriteEditor({ ...ready, loadingScene: true }), false);
   assert.equal(mayWriteEditor({ ...ready, selectedSceneId: "scene-2" }), false);
   assert.equal(mayWriteEditor({ ...ready, hasWritePermission: false }), false);
+});
+
+test("a failed IndexedDB open is unavailable from project activation through scene loading", () => {
+  const failedOpen = recoveryStatusForJournalOpen("IndexedDB is unavailable");
+  assert.equal(failedOpen, "unavailable");
+  assert.equal(mayWriteEditor({
+    hasWritePermission: true,
+    recoveryStatus: failedOpen,
+    loadingScene: false,
+    selectedSceneId: "scene-1",
+    editorSceneId: "scene-1",
+  }), false);
+  assert.equal(recoveryStatusForJournalOpen(""), "pending");
 });

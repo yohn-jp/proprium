@@ -50,6 +50,10 @@ export function isUnchangedEntryConfirmedByReceipt(
 
 export type EditorRecoveryStatus = "pending" | "ready" | "unavailable";
 
+export function recoveryStatusForJournalOpen(openError: string): EditorRecoveryStatus {
+  return openError ? "unavailable" : "pending";
+}
+
 export function mayWriteEditor(input: {
   hasWritePermission: boolean;
   recoveryStatus: EditorRecoveryStatus;

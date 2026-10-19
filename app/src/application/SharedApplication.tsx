@@ -31,7 +31,7 @@ import { loadThemeMode, persistThemeMode, type ThemeMode } from "../theme";
 import { clearDraft, loadDraft } from "../drafts";
 import type { ApplicationShell, ApplicationShellProps, UiMode } from "./contracts";
 import { applicationPath, parseApplicationLocation, readUiModePreference, rememberUiMode, type ApplicationResource } from "./navigation";
-import { isNonDraftEntryAcknowledgedByReceipt, isTextRepresentedByRecoveryRecord, isUnchangedEntryConfirmedByReceipt, mayWriteEditor, type EditorRecoveryStatus } from "./recovery";
+import { isNonDraftEntryAcknowledgedByReceipt, isTextRepresentedByRecoveryRecord, isUnchangedEntryConfirmedByReceipt, mayWriteEditor, recoveryStatusForJournalOpen, type EditorRecoveryStatus } from "./recovery";
 import {
   BrowserJournal,
   documentKey,
@@ -402,6 +402,7 @@ function AuthorWorkspace({
   const [loginError, setLoginError] = useState("");
   const [journal, setJournal] = useState<BrowserJournal | null>(null);
   const [journalOpenError, setJournalOpenError] = useState("");
+  const journalOpenErrorRef = useRef("");
   const [projects, setProjects] = useState<Project[]>([]);
   const [work, setWork] = useState<WorkState | null>(null);
   const [resumeRequest, setResumeRequest] = useState<ResumeRequest | null>(null);
@@ -686,6 +687,7 @@ function AuthorWorkspace({
         return;
       }
       journalRef.current = opened;
+      journalOpenErrorRef.current = "";
       setJournal(opened);
       setLegacyDrafts(readLegacyDrafts());
       void requestPersistentStorage().catch(() => undefined);
@@ -693,6 +695,7 @@ function AuthorWorkspace({
     }).catch((error) => {
       if (!cancelled) {
         const message = messageOf(error);
+        journalOpenErrorRef.current = message;
         setJournalOpenError(message);
         updateWork((current) => current?.editor
           ? { ...current, recoveryStatus: "unavailable", editor: { ...current.editor, recoveryStatus: "unavailable", journalError: message } }
@@ -891,12 +894,12 @@ function AuthorWorkspace({
       const currentJournal = journalRef.current;
       const projectRecoveryStatus = workRef.current?.recoveryStatus ?? "pending";
       let recoveryStatus: EditorRecoveryStatus = !currentJournal
-        ? journalOpenError ? "unavailable" : "pending"
+        ? recoveryStatusForJournalOpen(journalOpenErrorRef.current)
         : projectRecoveryStatus;
       let recoveryError = recoveryStatus === "pending"
         ? "ブラウザー回復記録を確認しています。確認が終わるまで編集を一時停止しています。"
         : recoveryStatus === "unavailable"
-          ? journalOpenError || "回復記録の照合に失敗しました。記録を保持しています。"
+          ? journalOpenErrorRef.current || "回復記録の照合に失敗しました。記録を保持しています。"
           : "";
       let localEntries: JournalEntry[] = [];
       if (currentJournal) {
@@ -1069,6 +1072,10 @@ function AuthorWorkspace({
         draftStored = finalEditor.draftStored;
         journalError = finalEditor.journalError;
       }
+      if (!journalRef.current && journalOpenErrorRef.current) {
+        recoveryStatus = recoveryStatusForJournalOpen(journalOpenErrorRef.current);
+        recoveryError = journalOpenErrorRef.current;
+      }
       const next: EditorSession = {
         read: effective,
         remote,
@@ -1115,7 +1122,15 @@ function AuthorWorkspace({
       const tree = await api.readTree(activeProject.id, "remote", observed.snapshot);
       if (navigationRef.current !== nav) return;
       if (snapshotKey(tree.snapshot) !== snapshotKey(observed.snapshot)) throw new Error("作品構成が別のリモートスナップショットから返されました。");
-      const next: WorkState = { project: activeProject, observation: observed, tree, selectedSceneId: "", editor: null, loadingScene: false, recoveryStatus: "pending" };
+      const next: WorkState = {
+        project: activeProject,
+        observation: observed,
+        tree,
+        selectedSceneId: "",
+        editor: null,
+        loadingScene: false,
+        recoveryStatus: recoveryStatusForJournalOpen(journalOpenErrorRef.current),
+      };
       const recoveryKey = recoveryKeyForNavigation(activeProject.id, observed.snapshot.repository, scope, nav);
       if (journalRef.current) recoveredProjectsRef.current.add(recoveryKey);
       workRef.current = next;
