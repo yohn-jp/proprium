@@ -3,6 +3,7 @@ import * as Separator from "@radix-ui/react-separator";
 import * as Tabs from "@radix-ui/react-tabs";
 import { Panel, PanelGroup, PanelResizeHandle, setNonce } from "react-resizable-panels";
 import type { ApplicationShellProps } from "../../application/contracts";
+import { Workspace } from "../../workspace/Workspace";
 import "./desktop.css";
 import "../editorial.css";
 
@@ -15,7 +16,7 @@ function describeFailure(reason: unknown): string {
     : "下書きの保存状態を確認してから、もう一度お試しください。";
 }
 
-export function DesktopShell({ header, library, editor, tools, status, onSwitchMode }: ApplicationShellProps) {
+export function DesktopShell({ header, library, editor, tools, status, onSwitchMode, workspaceScope, panels, beforeLayoutChange, requestedPanel }: ApplicationShellProps) {
   const [switching, setSwitching] = useState(false);
   const [switchError, setSwitchError] = useState("");
   const switchInFlight = useRef(false);
@@ -60,7 +61,9 @@ export function DesktopShell({ header, library, editor, tools, status, onSwitchM
       <div className="st-desktop-status" role="region" aria-label="保存と接続の状態">{status}</div>
       {switchError && <p className="st-desktop-switch-error" role="alert">{switchError}</p>}
 
-      <PanelGroup className="st-desktop-workbench" direction="horizontal" id="scriptorium-desktop-workbench">
+      {workspaceScope && panels?.length ? (
+        <Workspace scope={workspaceScope} mode="desktop" panels={panels} beforeLayoutChange={beforeLayoutChange} requestedPanel={requestedPanel} />
+      ) : <PanelGroup className="st-desktop-workbench" direction="horizontal" id="scriptorium-desktop-workbench">
         <Panel
           className="st-desktop-navigation-panel"
           defaultSize={28}
@@ -106,7 +109,7 @@ export function DesktopShell({ header, library, editor, tools, status, onSwitchM
             {editor}
           </main>
         </Panel>
-      </PanelGroup>
+      </PanelGroup>}
       <span className="st-desktop-visually-hidden" id="st-desktop-resize-help">
         左右矢印キーでパネル幅を変更できます。
       </span>

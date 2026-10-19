@@ -14,6 +14,7 @@ import {
 } from "@ionic/react";
 import { useLocation, useNavigate } from "react-router-dom";
 import type { ApplicationShellProps } from "../../application/contracts";
+import { Workspace } from "../../workspace/Workspace";
 import "@ionic/react/css/core.css";
 import "@ionic/react/css/normalize.css";
 import "@ionic/react/css/structure.css";
@@ -75,7 +76,7 @@ function errorMessage(error: unknown): string {
  * Ionic page navigation for the shared application controller.
  * The mobile entry supplies the Ionic React Router context around the controller.
  */
-export function MobileShell({ header, library, editor, tools, status, onSwitchMode }: ApplicationShellProps) {
+export function MobileShell({ header, library, editor, tools, status, onSwitchMode, workspaceScope, panels, beforeLayoutChange, requestedPanel }: ApplicationShellProps) {
   const location = useLocation();
   const navigateRoute = useNavigate();
   const activeView = readViewFromSearch(location.search);
@@ -180,7 +181,11 @@ export function MobileShell({ header, library, editor, tools, status, onSwitchMo
 
             <section className="mobile-shell-view" aria-labelledby="mobile-writing-title" hidden={activeView !== "writing"}>
               <h1 id="mobile-writing-title" className="mobile-shell-page-title">執筆・読書</h1>
-              <div className="mobile-shell-slot mobile-shell-editor">{editor}</div>
+              <div className="mobile-shell-slot mobile-shell-editor">
+                {workspaceScope && panels?.length
+                  ? <Workspace scope={workspaceScope} mode="mobile" panels={panels} beforeLayoutChange={beforeLayoutChange} requestedPanel={requestedPanel} />
+                  : editor}
+              </div>
             </section>
 
             <section className="mobile-shell-view" aria-labelledby="mobile-inspection-title" hidden={activeView !== "inspection"}>
