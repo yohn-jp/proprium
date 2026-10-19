@@ -242,7 +242,7 @@ test("appearance modes follow system preference initially and persist explicit l
   await expect.poll(() => page.locator("body").evaluate((element) => getComputedStyle(element).backgroundColor)).toBe("rgb(242, 238, 231)");
 });
 
-test("history keeps its pinned response through an equal-snapshot foreground observation", async ({ page }) => {
+test("history keeps its pinned response through a foreground observation without rereading the unchanged tree", async ({ page }) => {
   expect(authToken.length).toBeGreaterThanOrEqual(32);
   expect(repositoryUrl).not.toBe("");
   await signIn(page);
@@ -254,6 +254,14 @@ test("history keeps its pinned response through an equal-snapshot foreground obs
   const historyStarted = new Promise<void>((resolve) => { signalHistory = resolve; });
   let historyListRequests = 0;
   let actualHistoryStatus = 0;
+  let foregroundObservationRequests = 0;
+  let remoteTreeRequests = 0;
+  page.on("request", (request) => {
+    if (request.method() !== "GET") return;
+    const url = new URL(request.url());
+    if (url.pathname.endsWith("/observation")) foregroundObservationRequests++;
+    if (url.pathname.endsWith("/tree") && url.searchParams.get("view") === "remote") remoteTreeRequests++;
+  });
   await page.route((url) => url.pathname.endsWith("/manuscripts/scene-1/snapshots") && url.searchParams.get("sceneId") === "scene-1", async (route) => {
     historyListRequests++;
     if (historyListRequests === 1) {
@@ -267,27 +275,29 @@ test("history keeps its pinned response through an equal-snapshot foreground obs
     await route.continue();
   });
 
-  await page.getByRole("button", { name: "履歴", exact: true }).click();
-  await expect(page.locator('[data-workspace-panel="history"]')).toBeVisible();
-  await historyStarted;
-  const observationResponse = page.waitForResponse((response) =>
-    response.request().method() === "GET" && new URL(response.url()).pathname.endsWith("/observation"),
-  );
-  const treeResponse = page.waitForResponse((response) => {
-    const url = new URL(response.url());
-    return response.request().method() === "GET" && url.pathname.endsWith("/tree") && url.searchParams.get("view") === "remote";
-  });
-  await page.evaluate(() => window.dispatchEvent(new Event("online")));
-  const [observed, tree] = await Promise.all([observationResponse, treeResponse]);
-  expect(observed.ok()).toBe(true);
-  expect(tree.ok()).toBe(true);
-  const remote = await observed.json() as { state: string; observedAt: string; snapshot: { remoteCommit: string } };
-  const expectedStatus = remote.state === "fresh"
-    ? `リモート ${remote.snapshot.remoteCommit.slice(0, 12)} · ${new Date(remote.observedAt).toLocaleTimeString("ja-JP")} に確認`
-    : `リモート確認状態: ${remote.state}`;
-  await expect(page.locator(".topbar-status")).toContainText(expectedStatus);
+  try {
+    await page.getByRole("button", { name: "履歴", exact: true }).click();
+    await expect(page.locator('[data-workspace-panel="history"]')).toBeVisible();
+    await historyStarted;
+    const observationRequestsBeforeForeground = foregroundObservationRequests;
+    const treeRequestsBeforeForeground = remoteTreeRequests;
+    const observationResponse = page.waitForResponse((response) =>
+      response.request().method() === "GET" && new URL(response.url()).pathname.endsWith("/observation"),
+    );
+    await page.evaluate(() => window.dispatchEvent(new Event("online")));
+    const observed = await observationResponse;
+    expect(observed.ok()).toBe(true);
+    expect(foregroundObservationRequests).toBe(observationRequestsBeforeForeground + 1);
+    expect(remoteTreeRequests).toBe(treeRequestsBeforeForeground);
+    const remote = await observed.json() as { state: string; observedAt: string; snapshot: { remoteCommit: string } };
+    const expectedStatus = remote.state === "fresh"
+      ? `リモート ${remote.snapshot.remoteCommit.slice(0, 12)} · ${new Date(remote.observedAt).toLocaleTimeString("ja-JP")} に確認`
+      : `リモート確認状態: ${remote.state}`;
+    await expect(page.locator(".topbar-status")).toContainText(expectedStatus);
+  } finally {
+    releaseHistory();
+  }
 
-  releaseHistory();
   const history = page.locator(".manuscript-history");
   await expect(history.getByRole("heading", { name: "改稿の履歴" })).toBeVisible();
   await expect(history.locator('[role="status"]')).toHaveCount(0);
@@ -589,7 +599,7 @@ test("new typing survives a gated browser-draft rebase during checkpoint recover
   let signalCheckpointRead!: () => void;
   const checkpointReadGate = new Promise<void>((resolve) => { releaseCheckpointRead = resolve; });
   const checkpointReadStarted = new Promise<void>((resolve) => { signalCheckpointRead = resolve; });
-  await page.route((url) => url.pathname.endsWith("/scenes/scene-1") && url.searchParams.get("view") === "checkpoint", async (route) => {
+  await page.route((url) => url.pathname.endsWith("/scenes/scene-1/views") && url.searchParams.has("snapshot"), async (route) => {
     signalCheckpointRead();
     await checkpointReadGate;
     await route.continue();
@@ -1068,7 +1078,7 @@ test("a remote update during author approval keeps the conflicting editor draft 
     }
     await route.continue();
   });
-  await page.route((url) => url.pathname.endsWith("/scenes/scene-1") && url.searchParams.get("view") === "checkpoint", async (route) => {
+  await page.route((url) => url.pathname.endsWith("/scenes/scene-1/views") && url.searchParams.has("snapshot"), async (route) => {
     signalFreshSceneRead();
     await freshSceneReadGate;
     await route.continue();
@@ -1103,7 +1113,7 @@ test("a remote update during author approval keeps the conflicting editor draft 
     await page.locator(".cm-content").fill(duringReadText);
     const freshReadResponse = page.waitForResponse((response) => {
       const url = new URL(response.url());
-      return response.request().method() === "GET" && url.pathname.endsWith("/scenes/scene-1") && url.searchParams.get("view") === "checkpoint";
+      return response.request().method() === "GET" && url.pathname.endsWith("/scenes/scene-1/views") && url.searchParams.has("snapshot");
     });
     releaseFreshSceneRead();
     await freshReadResponse;

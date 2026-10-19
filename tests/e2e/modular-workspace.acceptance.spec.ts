@@ -368,6 +368,71 @@ test("editor stays read-only until delayed browser recovery is reconciled", asyn
   await expectDraft(page, "scene-1", draft);
 });
 
+test("failed IndexedDB open before login keeps the scene readable and the existing recovery record intact", async ({ page }) => {
+  expect(authToken.length).toBeGreaterThanOrEqual(32);
+  expect(repositoryUrl).not.toBe("");
+  await signIn(page, "desktop");
+  await openFixtureScene(page, "desktop");
+
+  const draft = "Existing recovery record survives an unavailable browser journal.";
+  await page.locator(".cm-content").fill(draft);
+  await expectDraft(page, "scene-1", draft);
+  const beforeFailure = await readJournal(page);
+  expect(beforeFailure.some((entry) => entry.sceneId === "scene-1" && entry.state === "draft" && entry.text === draft)).toBe(true);
+
+  await page.getByRole("button", { name: "ログアウト" }).click();
+  await expect(page.getByRole("heading", { name: "ログイン" })).toBeVisible();
+  await page.addInitScript(() => {
+    const nativeOpen = IDBFactory.prototype.open;
+    type RecoveryWindow = Window & { __readNativeRecoveryJournal?: () => Promise<Array<{ sceneId: string; state: string; text: string }>> };
+    (window as RecoveryWindow).__readNativeRecoveryJournal = async () => {
+      const request = Reflect.apply(nativeOpen, indexedDB, ["scriptorium-recovery", 3]) as IDBOpenDBRequest;
+      const database = await new Promise<IDBDatabase>((resolve, reject) => {
+        request.onsuccess = () => resolve(request.result);
+        request.onerror = () => reject(request.error ?? new Error("Native IndexedDB journal open failed"));
+      });
+      try {
+        const records = await new Promise<Array<{ sceneId: string; state: string; text: string }>>((resolve, reject) => {
+          const read = database.transaction("operations", "readonly").objectStore("operations").getAll();
+          read.onsuccess = () => resolve(read.result);
+          read.onerror = () => reject(read.error ?? new Error("Native IndexedDB journal read failed"));
+        });
+        return records.map(({ sceneId, state, text }) => ({ sceneId, state, text }));
+      } finally {
+        database.close();
+      }
+    };
+    Object.defineProperty(IDBFactory.prototype, "open", {
+      configurable: true,
+      writable: true,
+      value: function (this: IDBFactory, name: string, version?: number) {
+        if (name === "scriptorium-recovery") throw new DOMException("Synthetic IndexedDB open denial", "SecurityError");
+        return version === undefined ? nativeOpen.call(this, name) : nativeOpen.call(this, name, version);
+      },
+    });
+  });
+  await page.reload();
+  await expect(page.getByRole("heading", { name: "ログイン" })).toBeVisible();
+  await expect(page.locator('[role="alert"]').filter({ hasText: "Browser storage is unavailable" })).toHaveCount(1);
+
+  await page.getByLabel("アクセストークン").fill(authToken);
+  await page.getByRole("button", { name: "ログイン" }).click();
+  await expect(page.getByRole("heading", { name: "Volume One" })).toBeVisible();
+  await page.getByRole("button", { name: "Chapter One: Scene One", exact: true }).click();
+  await expect(page.getByRole("heading", { name: "Scene One" })).toBeVisible();
+  const readiness = page.locator('[data-recovery-status="unavailable"]');
+  await expect(readiness).toBeVisible();
+  await expect(readiness).toHaveAttribute("data-editor-writable", "false");
+  await expect(page.locator(".cm-content")).toBeVisible();
+  await expect(page.locator(".cm-content")).toHaveAttribute("contenteditable", "false");
+  await expect(page.getByRole("button", { name: "Checkpoint", exact: true })).toBeDisabled();
+  await expect(page.getByRole("region", { name: "保存と接続の状態" }).getByRole("alert")).toContainText("Browser storage is unavailable");
+  const retained = await page.evaluate(() => (window as Window & {
+    __readNativeRecoveryJournal?: () => Promise<Array<{ sceneId: string; state: string; text: string }>>;
+  }).__readNativeRecoveryJournal?.());
+  expect(retained).toEqual(beforeFailure);
+});
+
 test("Core-only workspace keeps authoring available without search or terminology panels", async ({ page }) => {
   test.skip(profile !== "core", "Run this acceptance with SCRIPTORIUM_PROFILE=core.");
   expect(authToken.length).toBeGreaterThanOrEqual(32);
