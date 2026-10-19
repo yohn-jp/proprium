@@ -16,6 +16,7 @@ import {
 import { ApiError, api, type Project, type SceneRead, type Tree, type TreeRead } from "../api";
 import { WorkspaceContribution } from "../contributions/ContributionHost";
 import { workspaceContributions } from "../contributions/catalog";
+import { Workspace } from "../workspace/Workspace";
 import { ManuscriptHistoryPanel } from "../editor/ManuscriptHistoryPanel";
 import type { EditorTermSpan } from "../editor/terms";
 import { ProposalReview } from "../contributions/ProposalReview";
@@ -329,21 +330,24 @@ export function SharedApplication({
   return <ThemedApplication initialTheme={initialTheme} mode={mode} Shell={Shell} allowPublicModule={false} />;
 }
 
-function DefaultApplicationShell({ mode, header, library, editor, tools, status, onSwitchMode }: ApplicationShellProps) {
+function DefaultApplicationShell({ mode, header, library, editor, tools, status, onSwitchMode, panels, workspaceScope, beforeLayoutChange, requestedPanel }: ApplicationShellProps) {
   return (
     <div className="workspace">
       {header}
       <button type="button" className="quiet-button" onClick={() => void onSwitchMode()}>
         {mode === "desktop" ? "モバイル版へ" : "デスクトップ版へ"}
       </button>
-      <div className="workspace-grid">
+      {panels && workspaceScope ? <>
+        {status}
+        <Workspace mode={mode} scope={workspaceScope} panels={panels} beforeLayoutChange={beforeLayoutChange} requestedPanel={requestedPanel} />
+      </> : <div className="workspace-grid">
         {library}
         <main className="writing-area" aria-label="執筆">
           {status}
           {editor}
           {tools}
         </main>
-      </div>
+      </div>}
     </div>
   );
 }

@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState, type DragEvent, type ReactNode } from "react";
-import { Panel, PanelGroup, PanelResizeHandle } from "react-resizable-panels";
+import { Panel, PanelGroup, PanelResizeHandle, setNonce } from "react-resizable-panels";
 import type { UiMode, WorkspacePanel, WorkspacePanelRequest } from "../application/contracts";
 import {
   activateWorkspacePanel,
@@ -16,6 +16,10 @@ import {
 } from "./layout";
 import { loadWorkspaceLayout, presetTitle, saveWorkspaceLayout, type WorkspaceLoad, type WorkspaceStorage } from "./persistence";
 import "./workspace.css";
+
+const styleNonce = typeof document === "undefined" ? undefined
+  : document.querySelector<HTMLMetaElement>('meta[name="scriptorium-style-nonce"]')?.content;
+if (styleNonce) setNonce(styleNonce);
 
 interface WorkspaceProps {
   scope: string;
