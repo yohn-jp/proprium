@@ -27,7 +27,7 @@ import { loadThemeMode, persistThemeMode, type ThemeMode } from "../theme";
 import { clearDraft, loadDraft } from "../drafts";
 import type { ApplicationShell, ApplicationShellProps, UiMode } from "./contracts";
 import { applicationPath, parseApplicationLocation, readUiModePreference, rememberUiMode, type ApplicationResource } from "./navigation";
-import { isNonDraftEntryAcknowledgedByReceipt, isTextRepresentedByRecoveryRecord, isUnchangedEntryConfirmedByReceipt } from "./recovery";
+import { isNonDraftEntryAcknowledgedByReceipt, isTextRepresentedByRecoveryRecord, isUnchangedEntryConfirmedByReceipt, mayWriteEditor, type EditorRecoveryStatus } from "./recovery";
 import {
   BrowserJournal,
   documentKey,
@@ -100,6 +100,7 @@ interface EditorSession {
   conflict: SceneRead | null;
   draftStored: boolean;
   journalError: string;
+  recoveryStatus: EditorRecoveryStatus;
 }
 
 interface WorkState {
@@ -109,6 +110,7 @@ interface WorkState {
   selectedSceneId: string;
   editor: EditorSession | null;
   loadingScene: boolean;
+  recoveryStatus: EditorRecoveryStatus;
 }
 
 function messageOf(error: unknown): string {
@@ -131,6 +133,14 @@ function projectLabel(project: Project): string {
 
 function sameRepository(left: RepositoryIdentity, right: RepositoryIdentity): boolean {
   return repositoryKey(left) === repositoryKey(right);
+}
+
+function recoveryKeyForProject(projectId: string, repository: RepositoryIdentity, authorScope: string): string {
+  return JSON.stringify([projectId, repositoryKey(repository), authorScope]);
+}
+
+function recoveryKeyForNavigation(projectId: string, repository: RepositoryIdentity, authorScope: string, navigation: number): string {
+  return JSON.stringify([recoveryKeyForProject(projectId, repository, authorScope), navigation]);
 }
 
 function draftTimerKey(entry: JournalEntry): string {
@@ -412,6 +422,7 @@ function AuthorWorkspace({
   const refreshRef = useRef<() => Promise<void>>(async () => undefined);
   const sceneLoadRef = useRef(0);
   const recoveredProjectsRef = useRef(new Set<string>());
+  const reconciliationRef = useRef(new Map<string, Promise<boolean>>());
   const proposalPollsRef = useRef(new Map<string, Promise<void>>());
   const resumeRequestSequenceRef = useRef(0);
   const requestedResourceRef = useRef(parseApplicationLocation(`${window.location.pathname}${window.location.search}`)?.resource ?? null);
@@ -459,8 +470,8 @@ function AuthorWorkspace({
   const readCurrentEditor = useCallback((): BrowserEditorDocument | null => {
     const current = workRef.current;
     const editor = current?.editor;
-    if (!current || !editor || current.loadingScene || current.selectedSceneId !== editor.read.scene.id ||
-        !sameRepository(current.observation.snapshot.repository, editor.read.snapshot.repository)) return null;
+    if (!current || current.recoveryStatus !== "ready" || !editor || editor.recoveryStatus !== "ready" || current.loadingScene ||
+        current.selectedSceneId !== editor.read.scene.id || !sameRepository(current.observation.snapshot.repository, editor.read.snapshot.repository)) return null;
     const cloneSnapshot = (snapshot: SnapshotId): SnapshotId => ({
       ...snapshot,
       repository: { ...snapshot.repository },
@@ -486,7 +497,8 @@ function AuthorWorkspace({
   function isCurrentEditor(nav: number, projectId: string, repository: RepositoryIdentity, documentPath: string, sceneId: string): boolean {
     const current = workRef.current;
     return isCurrentProject(nav, projectId, repository) && current?.editor?.read.document.path === documentPath &&
-      current.editor.read.scene.id === sceneId && current.selectedSceneId === sceneId && !current.loadingScene;
+      current.editor.read.scene.id === sceneId && current.selectedSceneId === sceneId && !current.loadingScene &&
+      current.recoveryStatus === "ready" && current.editor.recoveryStatus === "ready";
   }
 
   const refreshJournal = useCallback(async (repository?: RepositoryIdentity, expectedNavigation?: number) => {
@@ -667,10 +679,17 @@ function AuthorWorkspace({
       journalRef.current = opened;
       setJournal(opened);
       setLegacyDrafts(readLegacyDrafts());
-      await requestPersistentStorage();
+      void requestPersistentStorage().catch(() => undefined);
       await refreshJournal();
     }).catch((error) => {
-      if (!cancelled) setJournalOpenError(messageOf(error));
+      if (!cancelled) {
+        const message = messageOf(error);
+        setJournalOpenError(message);
+        updateWork((current) => current?.editor
+          ? { ...current, recoveryStatus: "unavailable", editor: { ...current.editor, recoveryStatus: "unavailable", journalError: message } }
+          : current ? { ...current, recoveryStatus: "unavailable" }
+          : current);
+      }
     });
     void api.version().then(async (version) => {
       if (cancelled) return null;
@@ -763,40 +782,78 @@ function AuthorWorkspace({
     return checkpointed;
   }, []);
 
-  const reconcileProject = useCallback(async (projectId: string, repository: RepositoryIdentity, author: string, expectedNavigation?: number) => {
-    const currentJournal = journalRef.current;
-    if (!currentJournal) return;
-    const persisted = await currentJournal.getRepository(repository, author);
-    if (expectedNavigation !== undefined && navigationRef.current !== expectedNavigation) return;
-    for (const entry of persisted) {
-      if (expectedNavigation !== undefined && navigationRef.current !== expectedNavigation) return;
-      if (entry.state !== "checkpointing" && entry.state !== "checkpointed") continue;
+  const reconcileProject = useCallback((projectId: string, repository: RepositoryIdentity, author: string, expectedNavigation?: number): Promise<boolean> => {
+    const nav = expectedNavigation ?? navigationRef.current;
+    const key = recoveryKeyForNavigation(projectId, repository, author, nav);
+    const running = reconciliationRef.current.get(key);
+    if (running) return running;
+    const isCurrent = () => navigationRef.current === nav && workRef.current?.project.id === projectId &&
+      sameRepository(workRef.current.observation.snapshot.repository, repository);
+    const task = (async (): Promise<boolean> => {
+      const currentJournal = journalRef.current;
+      if (!currentJournal) return false;
       try {
-        await replayAuthorizedEntry(projectId, entry, author);
+        const persisted = await currentJournal.getRepository(repository, author);
+        if (!isCurrent()) return false;
+        const pendingEntries = persisted.filter((entry) => entry.state === "checkpointing" || entry.state === "checkpointed");
+        let complete = true;
+        for (const entry of pendingEntries) {
+          if (!isCurrent()) return false;
+          try {
+            await replayAuthorizedEntry(projectId, entry, author);
+          } catch (error) {
+            const conflict = error instanceof ApiError && (error.status === 409 || error.status === 412);
+            if (conflict) {
+              try {
+                await currentJournal.updateState(entry, "conflict");
+              } catch {
+                complete = false;
+              }
+            } else {
+              complete = false;
+              if (isCurrent()) setStatus({ message: `チェックポイント回復を完了できません。記録を保持しています。${messageOf(error)}`, kind: "error" });
+            }
+          }
+        }
+        if (pendingEntries.length > 0 && complete) {
+          const reconciled = await api.reconcile(projectId);
+          if (!isCurrent()) return false;
+          for (const result of reconciled.operations) {
+            const match = pendingEntries.find((entry) => entry.operation.id === result.operationId);
+            if (!match) continue;
+            if (result.state === "conflict") await currentJournal.updateState(match, "conflict");
+            else if (result.receipt) await currentJournal.updateState(match, "checkpointed", result.receipt);
+          }
+        }
+        if (!complete) throw new Error("チェックポイント回復の結果を確認できませんでした。");
+        await reloadJournalForWork(repository, nav);
+        if (!isCurrent()) return false;
+        updateWork((current) => current?.project.id === projectId && sameRepository(current.observation.snapshot.repository, repository)
+          ? { ...current, recoveryStatus: "ready" }
+          : current);
+        return true;
       } catch (error) {
-        const conflict = error instanceof ApiError && (error.status === 409 || error.status === 412);
-        if (conflict) await currentJournal.updateState(entry, "conflict").catch(() => undefined);
-        else if (entry.state === "checkpointed") {
-          // The server's acknowledgement stays in the browser journal until recovery can be retried.
+        if (isCurrent()) {
+          updateWork((current) => current?.project.id === projectId && sameRepository(current.observation.snapshot.repository, repository)
+            ? {
+              ...current,
+              recoveryStatus: "unavailable",
+              editor: current.editor
+                ? { ...current.editor, recoveryStatus: "unavailable", journalError: `回復記録を照合できません。記録を保持しています。${messageOf(error)}` }
+                : null,
+            }
+            : current);
+          setStatus({ message: `回復記録を照合できません。記録を保持しています。${messageOf(error)}`, kind: "error" });
         }
+        return false;
       }
-    }
-    try {
-      const reconciled = await api.reconcile(projectId);
-      if (expectedNavigation !== undefined && navigationRef.current !== expectedNavigation) return;
-      for (const result of reconciled.operations) {
-        const match = persisted.find((entry) => entry.operation.id === result.operationId);
-        if (!match) continue;
-        if (result.state === "conflict") await currentJournal.updateState(match, "conflict");
-        else if (result.receipt && (result.state === "replayed" || result.state === "unchanged")) {
-          await currentJournal.updateState(match, "checkpointed", result.receipt);
-        }
-      }
-    } catch {
-      // Observation and editor reads remain available; reconciliation failures stay visible at their next operation.
-    }
-    await reloadJournalForWork(repository, expectedNavigation);
-  }, [reloadJournalForWork, replayAuthorizedEntry]);
+    })();
+    reconciliationRef.current.set(key, task);
+    void task.finally(() => {
+      if (reconciliationRef.current.get(key) === task) reconciliationRef.current.delete(key);
+    }).catch(() => undefined);
+    return task;
+  }, [reloadJournalForWork, replayAuthorizedEntry, updateWork]);
 
   const loadScene = useCallback(async (projectId: string, sceneId: string, tree: TreeRead, preferredRepository?: RepositoryIdentity) => {
     const sceneRequest = ++sceneLoadRef.current;
@@ -823,9 +880,24 @@ function AuthorWorkspace({
       if (!sameRemoteSnapshot(effective.snapshot, remote.snapshot)) throw new Error("チェックポイントとリモート原稿の基準が異なります。同期状態を確認してください。");
       const repository = preferredRepository ?? effective.snapshot.repository;
       const currentJournal = journalRef.current;
-      let localEntries = currentJournal
-        ? await currentJournal.getDocument(repository, effective.document.path, journalAuthorScope)
-        : [];
+      const projectRecoveryStatus = workRef.current?.recoveryStatus ?? "pending";
+      let recoveryStatus: EditorRecoveryStatus = !currentJournal
+        ? journalOpenError ? "unavailable" : "pending"
+        : projectRecoveryStatus;
+      let recoveryError = recoveryStatus === "pending"
+        ? "ブラウザー回復記録を確認しています。確認が終わるまで編集を一時停止しています。"
+        : recoveryStatus === "unavailable"
+          ? journalOpenError || "回復記録の照合に失敗しました。記録を保持しています。"
+          : "";
+      let localEntries: JournalEntry[] = [];
+      if (currentJournal) {
+        try {
+          localEntries = await currentJournal.getDocument(repository, effective.document.path, journalAuthorScope);
+        } catch (error) {
+          recoveryStatus = "unavailable";
+          recoveryError = `ブラウザー回復記録を読めません。記録を保持しています。${messageOf(error)}`;
+        }
+      }
       if (!isCurrentLoadContext()) return;
       let publicationReceipts: Awaited<ReturnType<BrowserJournal["getPublicationReceipts"]>> = [];
       let cleanupError: unknown;
@@ -834,6 +906,8 @@ function AuthorWorkspace({
           publicationReceipts = await currentJournal.getPublicationReceipts(repository, journalAuthorScope);
         } catch (error) {
           cleanupError = error;
+          recoveryStatus = "unavailable";
+          recoveryError = `公開確認記録を読めないため、回復状態を確認できません。記録を保持しています。${messageOf(error)}`;
         }
       }
       if (!isCurrentLoadContext()) return;
@@ -849,6 +923,8 @@ function AuthorWorkspace({
             await currentJournal.acknowledge(repository, journalAuthorScope, receipt);
           } catch (error) {
             cleanupError ??= error;
+            recoveryStatus = "unavailable";
+            recoveryError = `確認済み操作の回復記録を整理できません。記録を保持しています。${messageOf(error)}`;
           }
           if (!isCurrentLoadContext()) return;
         }
@@ -857,6 +933,8 @@ function AuthorWorkspace({
             localEntries = await currentJournal.getDocument(repository, effective.document.path, journalAuthorScope);
           } catch (error) {
             cleanupError ??= error;
+            recoveryStatus = "unavailable";
+            recoveryError = `確認済み操作の回復記録を再読込できません。記録を保持しています。${messageOf(error)}`;
           }
           if (!isCurrentLoadContext()) return;
           await refreshJournal(repository, nav);
@@ -874,13 +952,13 @@ function AuthorWorkspace({
       let text = effective.scene.text;
       let entry = latest;
       let conflict: SceneRead | null = null;
-      if (!latest && journalRef.current) {
+      if (!latest && currentJournal && recoveryStatus !== "unavailable") {
         const legacy = loadDraft(localStorageIfAvailable(), projectId, sceneId);
         if (legacy && legacy.text !== effective.scene.text) {
           const operation = buildOperation(effective, legacy.text, crypto.randomUUID(), 1);
           const migrated = makeEntry(repository, journalAuthorScope, sceneId, effective, legacy.text, effective.scene.text, operation, "draft");
           try {
-            if (!await journalRef.current.putLatestDraft(migrated)) throw new Error("A newer browser draft already exists.");
+            if (!await currentJournal.putLatestDraft(migrated)) throw new Error("A newer browser draft already exists.");
             clearDraft(localStorageIfAvailable(), projectId, sceneId);
             latest = migrated;
             if (legacy.revision !== effective.scene.revision) conflict = remote;
@@ -888,7 +966,9 @@ function AuthorWorkspace({
             generationRef.current = Math.max(generationRef.current, 1);
             void refreshJournal(repository, nav);
           } catch (error) {
-            setGlobalError(`古いブラウザー下書きを IndexedDB に移せませんでした。古い記録は残しました。${messageOf(error)}`);
+            recoveryStatus = "unavailable";
+            recoveryError = `古いブラウザー下書きを IndexedDB に移せませんでした。古い記録は残しました。${messageOf(error)}`;
+            setGlobalError(recoveryError);
           }
         }
       }
@@ -911,7 +991,7 @@ function AuthorWorkspace({
         text = inMemoryEditor.text;
       }
       if (latest) {
-        if (latest.state === "draft" || latest.state === "conflict") text = latest.text;
+        if (latest.state === "draft" || latest.state === "checkpointing" || latest.state === "conflict") text = latest.text;
         const docPrecondition = latest.operation.reads.find((item) => item.path === effective.document.path)?.revision;
         const docWrite = latest.operation.writes.find((item) => item.path === effective.document.path)?.content;
         if (latest.state === "draft" && docPrecondition !== effective.document.revision) {
@@ -932,7 +1012,9 @@ function AuthorWorkspace({
               entry = latest;
             } catch (error) {
               conflict = remote;
-              setGlobalError(`下書きをローカルチェックポイントの版に結び直せませんでした。元の記録は保持しています。${messageOf(error)}`);
+              recoveryStatus = "unavailable";
+              recoveryError = `下書きをローカルチェックポイントの版に結び直せませんでした。元の記録は保持しています。${messageOf(error)}`;
+              setGlobalError(recoveryError);
             }
           } else {
             conflict = remote;
@@ -941,6 +1023,7 @@ function AuthorWorkspace({
         if ((latest.state === "checkpointed" || latest.state === "publication_unknown") && docWrite !== effective.document.content) {
           conflict = remote;
         }
+        if (latest.state === "checkpointing" && docWrite !== effective.document.content) conflict = remote;
         if (latest.state === "conflict") conflict = remote;
       }
       if (!isCurrentLoadContext()) return;
@@ -985,7 +1068,8 @@ function AuthorWorkspace({
         entry: latest,
         conflict,
         draftStored,
-        journalError,
+        journalError: journalError || (recoveryStatus === "unavailable" ? recoveryError : ""),
+        recoveryStatus,
       };
       generationRef.current = Math.max(generationRef.current, latest?.operation.generation ?? 0);
       updateWork((current) => current ? { ...current, selectedSceneId: sceneId, editor: next, loadingScene: false } : current);
@@ -1022,8 +1106,9 @@ function AuthorWorkspace({
       const tree = await api.readTree(activeProject.id, "remote", observed.snapshot);
       if (navigationRef.current !== nav) return;
       if (snapshotKey(tree.snapshot) !== snapshotKey(observed.snapshot)) throw new Error("作品構成が別のリモートスナップショットから返されました。");
-      const next: WorkState = { project: activeProject, observation: observed, tree, selectedSceneId: "", editor: null, loadingScene: false };
-      if (journalRef.current) recoveredProjectsRef.current.add(`${activeProject.id}:${repositoryKey(observed.snapshot.repository)}`);
+      const next: WorkState = { project: activeProject, observation: observed, tree, selectedSceneId: "", editor: null, loadingScene: false, recoveryStatus: "pending" };
+      const recoveryKey = recoveryKeyForNavigation(activeProject.id, observed.snapshot.repository, scope, nav);
+      if (journalRef.current) recoveredProjectsRef.current.add(recoveryKey);
       workRef.current = next;
       setWork(next);
       setModules([]);
@@ -1038,15 +1123,10 @@ function AuthorWorkspace({
         setModules(nextModules);
         setContributions(nextContributions);
       });
-      void (async () => {
-        await reconcileProject(activeProject.id, observed.snapshot.repository, scope, nav);
-        if (navigationRef.current !== nav) return;
-        await importRemoteProposals(activeProject.id, observed.snapshot.repository, scope, nav);
-        if (navigationRef.current !== nav) return;
-        await reloadJournalForWork(observed.snapshot.repository, nav);
-      })().catch((error) => {
-        if (navigationRef.current === nav) setStatus({ message: messageOf(error), kind: "error" });
+      void reconcileProject(activeProject.id, observed.snapshot.repository, scope, nav).then((ready) => {
+        if (!ready) recoveredProjectsRef.current.delete(recoveryKey);
       });
+      void importRemoteProposals(activeProject.id, observed.snapshot.repository, scope, nav);
       if (persistSelection) {
         localStorageIfAvailable()?.setItem(ACTIVE_PROJECT_KEY, activeProject.id);
         updateApplicationLocation({ projectId: activeProject.id });
@@ -1135,11 +1215,21 @@ function AuthorWorkspace({
   useEffect(() => {
     const current = workRef.current;
     if (!journal || !current) return;
-    const key = `${current.project.id}:${repositoryKey(current.observation.snapshot.repository)}`;
+    const nav = navigationRef.current;
+    const key = recoveryKeyForNavigation(current.project.id, current.observation.snapshot.repository, authorScope, nav);
     if (recoveredProjectsRef.current.has(key)) return;
     recoveredProjectsRef.current.add(key);
-    void reconcileProject(current.project.id, current.observation.snapshot.repository, authorScope);
+    void reconcileProject(current.project.id, current.observation.snapshot.repository, authorScope, nav).then((ready) => {
+      if (!ready) recoveredProjectsRef.current.delete(key);
+    });
   }, [authorScope, journal, reconcileProject, work?.project.id]);
+
+  useEffect(() => {
+    const current = workRef.current;
+    if (!journal || current?.recoveryStatus !== "ready" || !current.selectedSceneId || current.loadingScene ||
+        current.editor?.recoveryStatus !== "pending") return;
+    void loadScene(current.project.id, current.selectedSceneId, current.tree, current.observation.snapshot.repository);
+  }, [journal, loadScene, work?.editor?.recoveryStatus, work?.loadingScene, work?.project.id, work?.recoveryStatus, work?.selectedSceneId]);
 
   const refreshRemote = useCallback(async () => {
     const current = workRef.current;
@@ -1150,8 +1240,8 @@ function AuthorWorkspace({
     try {
       const observed = await api.observation(projectId);
       if (navigationRef.current !== nav || workRef.current?.project.id !== projectId) return;
-      await importRemoteProposals(projectId, observed.snapshot.repository, authorScopeRef.current, nav);
-      if (navigationRef.current !== nav || workRef.current?.project.id !== projectId) return;
+      if (!sameRepository(workRef.current.observation.snapshot.repository, observed.snapshot.repository)) return;
+      void importRemoteProposals(projectId, observed.snapshot.repository, authorScopeRef.current, nav);
       const latestBeforeRead = workRef.current;
       const changedRemote = Boolean(latestBeforeRead && latestBeforeRead.observation.snapshot.remoteCommit !== observed.snapshot.remoteCommit);
       const changedCheckpoint = Boolean(latestBeforeRead && latestBeforeRead.observation.checkpointHead !== observed.checkpointHead);
@@ -1196,9 +1286,26 @@ function AuthorWorkspace({
   refreshRef.current = refreshRemote;
 
   const refreshForeground = useCallback(() => {
-    // refreshRemote already imports proposal statuses after observing the HEAD.
+    const current = workRef.current;
+    if (current && journalRef.current && (current.recoveryStatus === "unavailable" || current.editor?.recoveryStatus === "unavailable")) {
+      const nav = navigationRef.current;
+      const repository = current.observation.snapshot.repository;
+      const recoveryKey = recoveryKeyForNavigation(current.project.id, repository, authorScopeRef.current, nav);
+      recoveredProjectsRef.current.add(recoveryKey);
+      updateWork((latest) => latest?.project.id === current.project.id && sameRepository(latest.observation.snapshot.repository, repository)
+        ? {
+          ...latest,
+          recoveryStatus: "pending",
+          editor: latest.editor ? { ...latest.editor, recoveryStatus: "pending", journalError: "" } : null,
+        }
+        : latest);
+      void reconcileProject(current.project.id, repository, authorScopeRef.current, nav).then((ready) => {
+        if (!ready) recoveredProjectsRef.current.delete(recoveryKey);
+      });
+    }
+    // Proposal status and remote observation refresh independently of the editor.
     void refreshRef.current();
-  }, []);
+  }, [reconcileProject, updateWork]);
 
   useEffect(() => {
     if (!work) return;
@@ -1363,7 +1470,7 @@ function AuthorWorkspace({
     const navigation = navigationRef.current;
     const currentJournal = journalRef.current;
     if (!currentJournal) {
-      updateWork((current) => current?.editor?.entry?.operation.id === entry.operation.id && current.editor.entry.operation.generation === entry.operation.generation
+      updateWork((current) => navigationRef.current === navigation && current?.editor?.entry?.key === entry.key
         ? { ...current, editor: { ...current.editor, draftStored: false, journalError: "ブラウザー回復ストレージを利用できません。入力はこのタブにだけあります。" } }
         : current);
       return false;
@@ -1376,14 +1483,14 @@ function AuthorWorkspace({
       if (pending?.operation.id === entry.operation.id && pending.operation.generation === entry.operation.generation) {
         pendingDraftsRef.current.delete(pendingKey);
       }
-      await refreshJournal(workRef.current?.observation.snapshot.repository, navigation);
-      updateWork((current) => current?.editor?.entry?.operation.id === entry.operation.id && current.editor.entry.operation.generation === entry.operation.generation
+      await refreshJournal(entry.repository, navigation);
+      updateWork((current) => navigationRef.current === navigation && current?.editor?.entry?.key === entry.key
         ? { ...current, editor: { ...current.editor, draftStored: true, journalError: "" } }
         : current);
       return true;
     }).catch((error) => {
       const errorText = messageOf(error);
-      updateWork((current) => current?.editor?.entry?.operation.id === entry.operation.id && current.editor.entry.operation.generation === entry.operation.generation
+      updateWork((current) => navigationRef.current === navigation && current?.editor?.entry?.key === entry.key
         ? { ...current, editor: { ...current.editor, draftStored: false, journalError: errorText } }
         : current);
       if (navigationRef.current === navigation) setStatus({ message: errorText, kind: "error" });
@@ -1398,7 +1505,7 @@ function AuthorWorkspace({
     const currentJournal = journalRef.current;
     if (!current || !current.editor || !currentJournal) throw new Error("作品またはブラウザー回復ストレージを利用できません。");
     const read = current.editor.read;
-    if (repositoryKey(read.snapshot.repository) !== binding.repositoryKey || snapshotKey(read.snapshot) !== snapshotKey(binding.snapshot) ||
+    if (current.editor.recoveryStatus !== "ready" || repositoryKey(read.snapshot.repository) !== binding.repositoryKey || snapshotKey(read.snapshot) !== snapshotKey(binding.snapshot) ||
         read.scene.id !== binding.sceneId || read.document.path !== binding.documentPath || current.selectedSceneId !== binding.sceneId || current.loadingScene) {
       throw new Error("スクラッチの読み込み中に表示中の原稿が変わりました。添付先を確認してもう一度保存してください。");
     }
@@ -1416,12 +1523,7 @@ function AuthorWorkspace({
     const current = workRef.current;
     const editor = current?.editor;
     const currentJournal = journalRef.current;
-    if (!current || !editor || !currentJournal) {
-      if (current && editor) {
-        updateWork((latest) => latest?.editor ? { ...latest, editor: { ...latest.editor, text: nextText, draftStored: false, journalError: "ブラウザー回復ストレージを利用できません。" } } : latest);
-      }
-      return;
-    }
+    if (!current || !editor || !currentJournal || current.recoveryStatus !== "ready" || editor.recoveryStatus !== "ready" || current.loadingScene || current.selectedSceneId !== editor.read.scene.id) return;
     const prior = editor.entry;
     const id = prior?.state === "draft" ? prior.operation.id : crypto.randomUUID();
     const generation = Math.max(generationRef.current, prior?.operation.generation ?? 0) + 1;
@@ -1614,7 +1716,7 @@ function AuthorWorkspace({
     const current = workRef.current;
     const editor = current?.editor;
     const currentJournal = journalRef.current;
-    if (!current || current.loadingScene || current.selectedSceneId !== editor?.read.scene.id || !editor || !currentJournal || !editor.entry || busy) return;
+    if (!current || current.recoveryStatus !== "ready" || current.loadingScene || current.selectedSceneId !== editor?.read.scene.id || !editor || editor.recoveryStatus !== "ready" || !currentJournal || !editor.entry || busy) return;
     const nav = navigationRef.current;
     const projectId = current.project.id;
     const repository = current.observation.snapshot.repository;
@@ -1679,7 +1781,7 @@ function AuthorWorkspace({
   async function checkpointScratchEntry(entry: JournalEntry): Promise<void> {
     const current = workRef.current;
     const currentJournal = journalRef.current;
-    if (!current || !currentJournal) throw new Error("作品またはブラウザー回復ストレージを利用できません。");
+    if (!current || current.recoveryStatus !== "ready" || !currentJournal || current.editor?.recoveryStatus !== "ready" || current.loadingScene) throw new Error("作品またはブラウザー回復ストレージを利用できません。");
     if (busy) throw new Error("別の保存処理が進行中です。");
     const nav = navigationRef.current;
     const projectId = current.project.id;
@@ -1784,7 +1886,7 @@ function AuthorWorkspace({
   async function rebaseDraft(): Promise<void> {
     const current = workRef.current;
     const editor = current?.editor;
-    if (!current || !editor || !editor.conflict || !journalRef.current) return;
+    if (!current || current.recoveryStatus !== "ready" || !editor || editor.recoveryStatus !== "ready" || current.loadingScene || !editor.conflict || !journalRef.current) return;
     if (editor.entry && editor.entry.state !== "draft") {
       setStatus({ message: "チェックポイント済みの競合は自動で結び直せません。比較を保ったまま Core の再調整結果を確認してください。", kind: "error" });
       return;
@@ -1811,7 +1913,7 @@ function AuthorWorkspace({
     const current = workRef.current;
     const editor = current?.editor;
     const currentJournal = journalRef.current;
-    if (!current || !editor || !editor.conflict || !currentJournal) return;
+    if (!current || current.recoveryStatus !== "ready" || !editor || editor.recoveryStatus !== "ready" || current.loadingScene || !editor.conflict || !currentJournal) return;
     if (editor.entry && editor.entry.state !== "draft") {
       setStatus({ message: "チェックポイント済みの操作はブラウザーから削除できません。", kind: "error" });
       return;
@@ -1841,7 +1943,7 @@ function AuthorWorkspace({
     const current = workRef.current;
     const editor = current?.editor;
     const currentJournal = journalRef.current;
-    if (!current || !editor || current.loadingScene || current.selectedSceneId !== editor.read.scene.id || !currentJournal) return;
+    if (!current || current.recoveryStatus !== "ready" || !editor || editor.recoveryStatus !== "ready" || current.loadingScene || current.selectedSceneId !== editor.read.scene.id || !currentJournal) return;
     const accepted = window.confirm(
       `この古い記録を現在選択中の作品「${projectLabel(current.project)}」の「${editor.read.scene.title}」へ下書きとして移しますか？本文は Git に送信されません。`,
     );
@@ -1916,8 +2018,20 @@ function AuthorWorkspace({
   const tree = work?.tree.tree ?? null;
   const scene = work?.editor?.read.scene ?? null;
   const editor = work?.editor ?? null;
-  const canCheckpoint = Boolean(canWrite && editor?.entry && work && !work.loadingScene && work.selectedSceneId === editor.read.scene.id && (editor.entry.state === "draft" || editor.entry.state === "checkpointing") && editor.draftStored && !editor.conflict && editor.text !== editor.read.scene.text && !busy);
-  const canResolveDraft = Boolean(canWrite && editor?.conflict && (!editor.entry || editor.entry.state === "draft"));
+  const editorRecoveryStatus: EditorRecoveryStatus = work?.recoveryStatus === "unavailable" || editor?.recoveryStatus === "unavailable"
+    ? "unavailable"
+    : work?.recoveryStatus === "pending" || editor?.recoveryStatus === "pending"
+      ? "pending"
+      : "ready";
+  const editorWritable = Boolean(editor && work && mayWriteEditor({
+    hasWritePermission: canWrite,
+    recoveryStatus: editorRecoveryStatus,
+    loadingScene: work.loadingScene,
+    selectedSceneId: work.selectedSceneId,
+    editorSceneId: editor.read.scene.id,
+  }));
+  const canCheckpoint = Boolean(editorWritable && editor?.entry && (editor.entry.state === "draft" || editor.entry.state === "checkpointing") && editor.draftStored && !editor.conflict && editor.text !== editor.read.scene.text && !busy);
+  const canResolveDraft = Boolean(editorWritable && editor?.conflict && (!editor.entry || editor.entry.state === "draft"));
   const canPublish = canWrite && pendingCount > 0 && currentRepoEntries.some((entry) => (entry.state === "checkpointed" || entry.state === "publication_unknown") && !publishedOperationIds.has(entry.operation.id)) && !busy;
   const continueCandidates = work && tree && recentResume.projectKey === JSON.stringify([authorScope, activeRepositoryKey, work.project.id])
     ? mergeContinueCandidates(recentResume.localWriting, recentResume.items, tree).slice(0, 2)
@@ -2048,6 +2162,8 @@ function AuthorWorkspace({
       {work && work.loadingScene && <p className="loading" role="status">スナップショットを読み込んでいます…</p>}
       {work && !scene && !work.loadingScene && <div className="empty-state"><h1>{tree?.title ?? projectLabel(work.project)}</h1><p>左側の作品構成からシーンを選んでください。</p></div>}
       {editor && scene && work && (
+        <div data-recovery-status={editorRecoveryStatus} data-editor-writable={editorWritable ? "true" : "false"}>
+        {editorRecoveryStatus === "pending" && <p className="status" role="status">ブラウザー回復記録を確認しています。確認が終わるまで編集を一時停止しています。</p>}
         <SceneEditor
           key={JSON.stringify([authorScope, repositoryKey(editor.read.snapshot.repository), editor.read.document.path, canWrite])}
           projectId={work.project.id}
@@ -2059,7 +2175,7 @@ function AuthorWorkspace({
           path={editor.read.document.path}
           breadcrumb={breadcrumbFor(tree, scene.id)}
           text={editor.text}
-          readOnly={!canWrite}
+          readOnly={!editorWritable}
           onTextChange={editText}
           onCursorPositionChange={recentResume.onWritingPosition}
           onReadingPageChange={recentResume.onReadingPage}
@@ -2089,6 +2205,7 @@ function AuthorWorkspace({
           scratchBusy={Boolean(busy)}
           pendingCount={pendingCount}
         />
+        </div>
       )}
     </>
   );

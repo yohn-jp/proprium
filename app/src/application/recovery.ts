@@ -47,3 +47,16 @@ export function isUnchangedEntryConfirmedByReceipt(
 ): boolean {
   return editorText === entry.text && receipts.some((receipt) => isEntryAcknowledgedByReceipt(entry, receipt));
 }
+
+export type EditorRecoveryStatus = "pending" | "ready" | "unavailable";
+
+export function mayWriteEditor(input: {
+  hasWritePermission: boolean;
+  recoveryStatus: EditorRecoveryStatus;
+  loadingScene: boolean;
+  selectedSceneId: string;
+  editorSceneId: string;
+}): boolean {
+  return input.hasWritePermission && input.recoveryStatus === "ready" && !input.loadingScene &&
+    input.selectedSceneId.length > 0 && input.selectedSceneId === input.editorSceneId;
+}

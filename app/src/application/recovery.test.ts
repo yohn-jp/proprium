@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { isEntryAcknowledgedByReceipt, isNonDraftEntryAcknowledgedByReceipt, isTextRepresentedByRecoveryRecord, isUnchangedEntryConfirmedByReceipt } from "./recovery.js";
+import { isEntryAcknowledgedByReceipt, isNonDraftEntryAcknowledgedByReceipt, isTextRepresentedByRecoveryRecord, isUnchangedEntryConfirmedByReceipt, mayWriteEditor } from "./recovery.js";
 
 test("text is recoverable only when the current record represents the editor", () => {
   assert.equal(isTextRepresentedByRecoveryRecord("clean", null, "clean"), true);
@@ -26,4 +26,20 @@ test("only an unchanged exact operation generation is cleared by a confirmed rec
   }), false);
   assert.equal(isNonDraftEntryAcknowledgedByReceipt({ ...entry, state: "publication_unknown" }, confirmed[0]!), true);
   assert.equal(isNonDraftEntryAcknowledgedByReceipt({ ...entry, state: "draft" }, confirmed[0]!), false);
+});
+
+test("the editor is writable only after its selected scene recovery is ready", () => {
+  const ready = {
+    hasWritePermission: true,
+    recoveryStatus: "ready" as const,
+    loadingScene: false,
+    selectedSceneId: "scene-1",
+    editorSceneId: "scene-1",
+  };
+  assert.equal(mayWriteEditor(ready), true);
+  assert.equal(mayWriteEditor({ ...ready, recoveryStatus: "pending" }), false);
+  assert.equal(mayWriteEditor({ ...ready, recoveryStatus: "unavailable" }), false);
+  assert.equal(mayWriteEditor({ ...ready, loadingScene: true }), false);
+  assert.equal(mayWriteEditor({ ...ready, selectedSceneId: "scene-2" }), false);
+  assert.equal(mayWriteEditor({ ...ready, hasWritePermission: false }), false);
 });
