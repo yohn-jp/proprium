@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useRef, useState, type CSSProperties } from "react";
 import type { Scene, SceneRead } from "../api";
-import type { SnapshotId } from "@scriptorium/contracts";
+import { snapshotKey, type SnapshotId } from "@scriptorium/contracts";
 import type { JournalEntry } from "../storage/journal";
 import { ManuscriptHistoryPanel } from "./ManuscriptHistoryPanel";
 import { MobileReadingPager } from "./MobileReadingPager";
@@ -132,6 +132,7 @@ export function SceneEditor({
   scratchBusy: boolean;
   pendingCount: number;
 }) {
+  const snapshotIdentity = snapshotKey(snapshot);
   const editorRef = useRef<ManuscriptInputHandle>(null);
   const [reading, setReading] = useState(false);
   const [vertical, setVertical] = useState(false);
@@ -296,7 +297,7 @@ export function SceneEditor({
         >
           <MobileReadingPager mode={vertical ? "vertical" : "horizontal"} pageIndex={readingPage} onPageIndexChange={changeReadingPage}>
             <TermAwareRubyText
-              key={`${repositoryKey}:${snapshot}:${path}`}
+              key={`${repositoryKey}:${snapshotIdentity}:${path}`}
               text={text}
               resolveTerms={resolveTerms}
               onTermNavigate={onTermNavigate}
@@ -316,7 +317,7 @@ export function SceneEditor({
               onSelectionLengthChange={setSelectionLength}
               resolveTerms={reading ? undefined : resolveTerms}
               onTermNavigate={onTermNavigate}
-              termResolutionKey={`${repositoryKey}:${snapshot}:${scene.id}:${path}`}
+              termResolutionKey={`${repositoryKey}:${snapshotIdentity}:${scene.id}:${path}`}
               labelledBy="manuscript-label"
               placeholder="物語の続きを書く"
               style={{
