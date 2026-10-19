@@ -346,6 +346,9 @@ export const api = {
   scene: (projectId: string, sceneId: string) => request<Scene>(projectPath(projectId, `scenes/${encodeURIComponent(sceneId)}`)),
   readScene: (projectId: string, sceneId: string, view: "remote" | "checkpoint" = "remote", pinned?: SnapshotId) =>
     request<SceneRead>(projectPath(projectId, `scenes/${encodeURIComponent(sceneId)}${pinnedQuery(view, pinned)}`)),
+  readSceneViews: (projectId: string, sceneId: string, pinned: SnapshotId) =>
+    request<{ remote: SceneRead; effective: SceneRead }>(projectPath(projectId,
+      `scenes/${encodeURIComponent(sceneId)}/views?snapshot=${encodeURIComponent(pinned.remoteCommit)}`)),
   snapshot: (projectId: string, view: "remote" | "checkpoint" = "remote", pinned?: SnapshotId) =>
     request<SnapshotRead>(projectPath(projectId, `snapshot${pinnedQuery(view, pinned)}`)),
   history: (projectId: string) => request<Commit[]>(projectPath(projectId, "history")),
