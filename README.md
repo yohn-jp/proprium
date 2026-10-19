@@ -1,6 +1,6 @@
 # Scriptorium
 
-A modular Git-backed writing workspace migrated from Arcadia Loom. Git-controlled YAML and Markdown remain the source of truth. The Core profile runs without optional analysis or model dependencies; the full profile composes eight independent add-ons.
+A modular Git-backed writing workspace migrated from Arcadia Loom. Git-controlled YAML and Markdown remain the source of truth. The Core profile runs without optional analysis or model dependencies; the full profile composes nine independent add-ons.
 
 Connect a GitHub work repository, browse volumes, chapters and scenes, edit Markdown, save with revision checks, inspect Git commits, and explicitly synchronize with GitHub. The editor keeps unsaved drafts in this browser and offers Japanese vertical preview. One server instance serves one trusted owner; all registered projects belong to that owner.
 
@@ -29,9 +29,13 @@ manuscript/<volume>/<chapter>/<scene>.md
 
 Scene YAML identifies its Markdown file with `manuscript: manuscript/.../scene.md`. Unsupported metadata and files are preserved. The writing UI can create and reorder volumes, chapters, and scenes through reviewed Core operations.
 
-Draft means browser recovery storage; Checkpoint means a local Git commit; Saved means publication to GitHub has been confirmed. Checkpoint retains the browser recovery record. Remote observation fetches the repository's default branch and keeps its canonical snapshot separate from unpublished local work. Revision checks protect editing and report conflicts without automatically resolving manuscript text. Retried operations retain their identities across response loss and clone reconstruction. Browser recovery uses the same browser and origin; clearing browser storage removes that recovery copy.
+Draft means browser recovery storage; Checkpoint means a local Git commit; Saved means publication to GitHub has been confirmed. Checkpoint retains the browser recovery record. Remote observation probes the repository's default branch and fetches when its HEAD changes; canonical snapshots remain separate from unpublished local work. Revision checks protect editing and report conflicts without automatically resolving manuscript text. Retried operations retain their identities across response loss and clone reconstruction. Browser recovery uses the same browser and origin; clearing browser storage removes that recovery copy.
 
-To build and run the full composition, use `SCRIPTORIUM_PROFILE=full pnpm build` and `SCRIPTORIUM_PROFILE=full pnpm start`. It includes Story, Diagnostics, NLP, Semantic, Speaker, Assistant, Publishing, and MCP. Module settings distinguish absent, disabled, enabled-idle, and active modules. Heavy engines run in supervised child processes. Assistant provider execution requires provider configuration and author consent; selecting no provider keeps local writing and review available.
+Writing, Research, and Review presets assemble independent Editor, Outline, Inspector, History, and Review panels. Use panel grips and dock targets on desktop, or the keyboard-accessible move controls, to split, tab, reorder, resize, show, and hide panels. **Save layout** stores the arrangement for the current author and desktop/mobile device class in this browser, separately from draft recovery and Git. Invalid saved layouts fall back without erasing the prior setting until an explicit save.
+
+Search/Terminology is optional: it indexes snapshot revisions, including local checkpoints, and supports lexical, exact, prefix, and scoped queries. The term dictionary is changed through reviewable proposals. Automatic term links are temporary editor/reading decorations and never insert links into Markdown; use Ctrl/Command-click or Ctrl/Command-Enter on an editor term to navigate. Ambiguous aliases remain plain text and can be inspected in the terminology panel. Search can explicitly request existing NLP or Semantic capabilities; ordinary search does not load models. Core-only builds retain authoring without this plugin.
+
+To build and run the full composition, use `SCRIPTORIUM_PROFILE=full pnpm build` and `SCRIPTORIUM_PROFILE=full pnpm start`. It includes Story, Diagnostics, NLP, Semantic, Speaker, Assistant, Publishing, MCP, and Search/Terminology. Module settings distinguish absent, disabled, enabled-idle, and active modules. Heavy engines run in supervised child processes. Assistant provider execution requires provider configuration and author consent; selecting no provider keeps local writing and review available.
 
 ## Single OCI image
 
