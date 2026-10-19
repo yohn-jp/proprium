@@ -31,6 +31,7 @@ async function createLocalFixture(): Promise<void> {
   await mkdir(workingCopy, { recursive: true });
   await mkdir(join(workingCopy, "plot/volumes/vol-1/chapters/ch-1/scenes"), { recursive: true });
   await mkdir(join(workingCopy, "manuscript/vol-1/ch-1"), { recursive: true });
+  await mkdir(join(workingCopy, "meta/scriptorium/modules/search"), { recursive: true });
 
   await writeFile(join(workingCopy, "plot/volumes/vol-1/volume.yaml"), "id: vol-1\ntitle: Volume One\n", "utf8");
   await writeFile(
@@ -45,7 +46,7 @@ async function createLocalFixture(): Promise<void> {
   );
   await writeFile(
     join(workingCopy, "manuscript/vol-1/ch-1/scene-1.md"),
-    "# Scene One\n\nThe first line of the story.\n",
+    "# Scene One\n\nThe first line of the story.\nBeacon Quay appears in this scene.\n",
     "utf8",
   );
   await writeFile(
@@ -55,7 +56,20 @@ async function createLocalFixture(): Promise<void> {
   );
   await writeFile(
     join(workingCopy, "manuscript/vol-1/ch-1/scene-2.md"),
-    "# Scene Two\n\nThe second line of the story.\n",
+    "# Scene Two\n\nThe second line of the story.\nA submerged brass archive waits below Lantern Harbor.\n",
+    "utf8",
+  );
+  await writeFile(
+    join(workingCopy, "meta/scriptorium/modules/search/terms.json"),
+    JSON.stringify({
+      schemaVersion: 1,
+      terms: [{
+        id: "lantern-harbor",
+        canonical: "Lantern Harbor",
+        aliases: ["Beacon Quay"],
+        targetPath: "manuscript/vol-1/ch-1/scene-2.md",
+      }],
+    }, null, 2) + "\n",
     "utf8",
   );
 
