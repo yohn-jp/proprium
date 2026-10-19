@@ -611,6 +611,7 @@ async function main() {
   let diagnostics;
   let failureArtifactPath;
   let profileCookiesCleared = false;
+  let recoveredOperationReconcileState;
   const chromiumOptions = { headless: true, ...(chromiumPath ? { executablePath: chromiumPath } : {}) };
   let result;
 
@@ -693,10 +694,13 @@ async function main() {
     const reconcileResponse = await reconcileResponsePromise;
     assert.equal(reconcileResponse.ok(), true, "Core reconciliation must succeed before the recovered editor is writable.");
     const reconcileResult = await reconcileResponse.json();
+    const recoveredOperationOutcome = reconcileResult.operations?.find((item) => item.operationId === operationId);
     assert.ok(
-      reconcileResult.operations?.some((item) => item.operationId === operationId && item.state === "replayed"),
-      "Core must report the recovered checkpoint operation as replayed.",
+      recoveredOperationOutcome && ["replayed", "unchanged"].includes(recoveredOperationOutcome.state),
+      "Core must report the recovered checkpoint operation as present in its reconciled snapshot.",
     );
+    recoveredOperationReconcileState = recoveredOperationOutcome.state;
+    assert.ok(reconcileResult.snapshot?.overlayCommit, "Core reconciliation must return the recovered local checkpoint overlay.");
     const recoveryGate = recoveredPage.locator("[data-recovery-status]");
     await expect(recoveryGate).toHaveAttribute("data-recovery-status", "ready", { timeout: 90_000 });
     await expect(recoveryGate).toHaveAttribute("data-editor-writable", "true", { timeout: 90_000 });
@@ -707,6 +711,12 @@ async function main() {
     const replayed = replayedEntries.find((entry) => entry.operationId === operationId);
     assert.ok(replayed);
     assert.equal(replayed.operationId, checkpointBeforeRestart.operationId);
+    assert.equal(recoveredOperationOutcome.receipt?.operationId, replayed.operationId);
+    assert.equal(recoveredOperationOutcome.receipt?.generation, replayed.generation);
+    assert.equal(recoveredOperationOutcome.receipt?.localCommit, replayed.checkpointReceipt?.localCommit);
+    if (recoveredOperationOutcome.state === "unchanged") {
+      assert.equal(reconcileResult.snapshot.overlayCommit, recoveredOperationOutcome.receipt?.localCommit, "The reconciled overlay must be the checkpoint Core already contains.");
+    }
     assert.equal(await github.branchHead(branch), initialHead, "Recovery must stay a local checkpoint until the author publishes.");
 
     await recoveredPage.getByRole("button", { name: "Save to GitHub" }).click();
@@ -794,6 +804,7 @@ async function main() {
       initialRemoteCommit: initialHead,
       publishedRemoteCommit: publishedHead,
       recoveredOperationId: operationId,
+      recoveredOperationReconcileState,
       recoveredOperationCommitCount: 1,
       indexedDbRetainedAcrossBrowserRestart: true,
       dataVolumeDeletedAndRecreated: true,
