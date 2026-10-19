@@ -2372,7 +2372,36 @@ export class CoreStore implements MutationCoordinator {
   }
 
   async observe(projectId: string): Promise<RemoteObservation> {
-    return this.withProjectLock(projectId, () => this.requireObservation(projectId));
+    // Probe the remote outside the project mutation lock. Most observations find
+    // an unchanged HEAD and need no network I/O while holding that lock.
+    const { record, root } = await this.getProject(projectId);
+    const askpassDir = path.join(this.dataDir, `.observe-${projectId}-${randomUUID()}`);
+    await fs.mkdir(askpassDir, { mode: 0o700 });
+    let remote: { identity: RepositoryIdentity; remoteCommit: string };
+    try {
+      const askpass = await makeAskpassScript(askpassDir);
+      const identity = await this.getRepositoryIdentity(record, root, askpass);
+      const remoteCommit = await this.remoteBranchCommit(root, "origin", record.branch, askpass, record);
+      if (!remoteCommit && !record.emptyRemote) {
+        throw coreError(409, "remote_branch_missing", "The registered GitHub branch no longer exists");
+      }
+      remote = { identity, remoteCommit };
+    } finally {
+      await fs.rm(askpassDir, { recursive: true, force: true }).catch(() => undefined);
+    }
+    return this.withProjectLock(projectId, async () => {
+      const current = await this.getProject(projectId);
+      const tracked = await this.getRef(current.root, `refs/remotes/origin/${current.record.branch}`) ?? "";
+      const identityMatches = current.record.identity &&
+        snapshotKey({ repository: current.record.identity, remoteCommit: "" }) ===
+          snapshotKey({ repository: remote.identity, remoteCommit: "" });
+      if (current.record.url === record.url && current.record.branch === record.branch &&
+          identityMatches && tracked === remote.remoteCommit) {
+        return this.requireObservation(projectId, remote);
+      }
+      // A newer fetch or project reconstruction won the race: re-observe safely.
+      return this.requireObservation(projectId);
+    });
   }
 
   /** The last locally available Git snapshot, without GitHub network I/O.
@@ -3895,9 +3924,12 @@ export class CoreStore implements MutationCoordinator {
     }
   }
 
-  private async observedUnlocked(projectId: string): Promise<RemoteObservation> {
+  private async observedUnlocked(
+    projectId: string,
+    alreadyFetched?: { identity: RepositoryIdentity; remoteCommit: string },
+  ): Promise<RemoteObservation> {
     const { record, root } = await this.getProject(projectId);
-    const remote = await this.fetchRemoteUnlocked(record, root);
+    const remote = alreadyFetched ?? await this.fetchRemoteUnlocked(record, root);
     const remoteHead = remote.remoteCommit;
     let localHead = await this.checkpointHead(root);
     const remoteOperations = remoteHead ? await this.readOperationRecords(root, remoteHead) : [];
@@ -3927,9 +3959,12 @@ export class CoreStore implements MutationCoordinator {
     };
   }
 
-  private async requireObservation(projectId: string): Promise<RemoteObservation> {
+  private async requireObservation(
+    projectId: string,
+    alreadyFetched?: { identity: RepositoryIdentity; remoteCommit: string },
+  ): Promise<RemoteObservation> {
     try {
-      const observation = await this.observedUnlocked(projectId);
+      const observation = await this.observedUnlocked(projectId, alreadyFetched);
       this.readObservations.set(projectId, structuredClone(observation));
       return observation;
     }
