@@ -377,21 +377,23 @@ export function Workspace({ scope, mode, panels, beforeLayoutChange, requestedPa
     return changeLayout((current) => activateWorkspacePanel(current, panelId), "Panel selected. Save layout to keep it.");
   };
 
-  const activateMobilePanel = (panelId: string): void => {
-    if (panelId === mobilePanelId || changingRef.current) return;
+  const activateMobilePanel = (panelId: string): Promise<boolean> => {
+    if (panelId === mobilePanelId || changingRef.current) return Promise.resolve(false);
     changingRef.current = true;
     setChanging(true);
     setMessage("");
-    void (async () => {
+    return (async () => {
       try {
         const allowed = beforeLayoutChange ? await beforeLayoutChange() : true;
         if (!allowed) {
           setMessage("The editor could not confirm its recovery state. The current panel is unchanged.");
-          return;
+          return false;
         }
         setMobilePanelId(panelId);
+        return true;
       } catch (error) {
         setMessage(error instanceof Error && error.message ? error.message : "The editor could not be prepared for a panel change.");
+        return false;
       } finally {
         changingRef.current = false;
         setChanging(false);
@@ -505,7 +507,21 @@ export function Workspace({ scope, mode, panels, beforeLayoutChange, requestedPa
                   aria-selected={selected}
                   aria-controls={domId("st-workspace-mobile-pane", panelId)}
                   disabled={changing}
-                  onClick={() => activateMobilePanel(panelId)}
+                  tabIndex={selected ? 0 : -1}
+                  onClick={() => { void activateMobilePanel(panelId); }}
+                  onKeyDown={(event) => {
+                    const currentIndex = visibleIds.indexOf(panelId);
+                    let nextIndex = currentIndex;
+                    if (event.key === "ArrowRight") nextIndex = (currentIndex + 1) % visibleIds.length;
+                    else if (event.key === "ArrowLeft") nextIndex = (currentIndex + visibleIds.length - 1) % visibleIds.length;
+                    else if (event.key === "Home") nextIndex = 0;
+                    else if (event.key === "End") nextIndex = visibleIds.length - 1;
+                    else return;
+                    event.preventDefault();
+                    const nextPanelId = visibleIds[nextIndex]!;
+                    const trigger = event.currentTarget.parentElement?.querySelectorAll<HTMLButtonElement>("[role=tab]")[nextIndex];
+                    void activateMobilePanel(nextPanelId).then((allowed) => { if (allowed) trigger?.focus(); });
+                  }}
                 >{titleOf(panelId)}</button>
               );
             })}

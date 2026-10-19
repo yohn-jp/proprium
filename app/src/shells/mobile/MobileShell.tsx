@@ -84,7 +84,7 @@ function errorMessage(error: unknown): string {
  * Ionic page navigation for the shared application controller.
  * The mobile entry supplies the Ionic React Router context around the controller.
  */
-export function MobileShell({ header, library, editor, tools, status, onSwitchMode, workspaceScope, panels, beforeLayoutChange, requestedPanel }: ApplicationShellProps) {
+export function MobileShell({ header, library, editor, tools, status, statusHasError = false, onSwitchMode, workspaceScope, panels, beforeLayoutChange, requestedPanel }: ApplicationShellProps) {
   const location = useLocation();
   const navigateRoute = useNavigate();
   const activeView = readViewFromSearch(location.search);
@@ -173,7 +173,7 @@ export function MobileShell({ header, library, editor, tools, status, onSwitchMo
   }, [onSwitchMode, switching]);
 
   const title = VIEWS.find((view) => view.id === activeView)?.title ?? "Scriptorium";
-  const showSharedStatus = activeView === "inspection" || (activeView === "settings" && Boolean(switchError));
+  const showSharedStatus = activeView === "inspection" || (activeView === "settings" && Boolean(switchError)) || statusHasError;
   const sharedStatusNode = showSharedStatus ? (
     <div className="mobile-shell-slot mobile-shell-status" aria-label="保存と回復の状態">{status}</div>
   ) : null;
@@ -197,6 +197,16 @@ export function MobileShell({ header, library, editor, tools, status, onSwitchMo
           {workspaceScope && panels?.length ? (
             <div className="mobile-shell-workspace-view" data-active-view={activeView}>
               {showSharedStatus ? sharedStatusNode : null}
+              {activeView === "settings" ? (
+                <section className="mobile-shell-settings-card" aria-labelledby="mobile-display-settings-title">
+                  <h2 id="mobile-display-settings-title">表示と入力</h2>
+                  <p>外観やアカウントの操作は画面上部にあります。執筆画面では原稿を開いたまま各機能へ移動できます。</p>
+                  <IonButton className="mobile-shell-primary-action" expand="block" disabled={switching} onClick={() => void switchToDesktop()}>
+                    {switching ? "切り替えています…" : "Desktop版へ切り替え"}
+                  </IonButton>
+                  {switchError ? <p className="mobile-shell-switch-error" role="alert">{switchError}</p> : null}
+                </section>
+              ) : null}
               <Workspace
                 scope={workspaceScope}
                 mode="mobile"
