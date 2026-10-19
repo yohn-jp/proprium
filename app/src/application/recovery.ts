@@ -50,6 +50,30 @@ export function isUnchangedEntryConfirmedByReceipt(
 
 export type EditorRecoveryStatus = "pending" | "ready" | "unavailable";
 
+interface SceneEditorLoadIdentity {
+  currentProjectId: string | undefined;
+  requestedProjectId: string;
+  currentRepositoryMatches: boolean;
+  currentAuthorScopeMatches: boolean;
+  selectedSceneId: string;
+  requestedSceneId: string;
+  editorSceneId: string | undefined;
+}
+
+/** Identifies a retained editor that still represents the requested scene and author context. */
+export function isSameSceneEditorLoad(input: SceneEditorLoadIdentity): boolean {
+  return input.currentProjectId === input.requestedProjectId && input.currentRepositoryMatches && input.currentAuthorScopeMatches &&
+    input.requestedSceneId.length > 0 && input.selectedSceneId === input.requestedSceneId && input.editorSceneId === input.requestedSceneId;
+}
+
+/** Only a fully recovered editor may remain writable while that same scene refreshes in the background. */
+export function canRetainRecoveredEditorDuringSceneLoad(input: SceneEditorLoadIdentity & {
+  recoveryStatus: EditorRecoveryStatus;
+  editorRecoveryStatus: EditorRecoveryStatus | undefined;
+}): boolean {
+  return isSameSceneEditorLoad(input) && input.recoveryStatus === "ready" && input.editorRecoveryStatus === "ready";
+}
+
 export function recoveryStatusForJournalOpen(openError: string): EditorRecoveryStatus {
   return openError ? "unavailable" : "pending";
 }

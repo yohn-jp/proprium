@@ -31,7 +31,7 @@ import { loadThemeMode, persistThemeMode, type ThemeMode } from "../theme";
 import { clearDraft, loadDraft } from "../drafts";
 import type { ApplicationShell, ApplicationShellProps, UiMode } from "./contracts";
 import { applicationPath, parseApplicationLocation, readUiModePreference, rememberUiMode, type ApplicationResource } from "./navigation";
-import { isNonDraftEntryAcknowledgedByReceipt, isTextRepresentedByRecoveryRecord, isUnchangedEntryConfirmedByReceipt, mayWriteEditor, recoveryStatusForJournalOpen, type EditorRecoveryStatus } from "./recovery";
+import { canRetainRecoveredEditorDuringSceneLoad, isNonDraftEntryAcknowledgedByReceipt, isSameSceneEditorLoad, isTextRepresentedByRecoveryRecord, isUnchangedEntryConfirmedByReceipt, mayWriteEditor, recoveryStatusForJournalOpen, type EditorRecoveryStatus } from "./recovery";
 import {
   BrowserJournal,
   documentKey,
@@ -871,6 +871,20 @@ function AuthorWorkspace({
     const sceneRequest = ++sceneLoadRef.current;
     const nav = navigationRef.current;
     const journalAuthorScope = authorScopeRef.current;
+    const requestedRepository = preferredRepository ?? tree.snapshot.repository;
+    const sceneEditorLoadIdentity = (current: WorkState | null) => ({
+      currentProjectId: current?.project.id,
+      requestedProjectId: projectId,
+      currentRepositoryMatches: Boolean(current && current.editor &&
+        sameRepository(current.observation.snapshot.repository, requestedRepository) &&
+        sameRepository(current.editor.read.snapshot.repository, requestedRepository)),
+      currentAuthorScopeMatches: authorScopeRef.current === journalAuthorScope,
+      selectedSceneId: current?.selectedSceneId ?? "",
+      requestedSceneId: sceneId,
+      editorSceneId: current?.editor?.read.scene.id,
+      recoveryStatus: current?.recoveryStatus ?? "pending",
+      editorRecoveryStatus: current?.editor?.recoveryStatus,
+    });
     const isCurrentLoadContext = () => navigationRef.current === nav &&
       sceneLoadRef.current === sceneRequest && authorScopeRef.current === journalAuthorScope;
     try {
@@ -884,7 +898,11 @@ function AuthorWorkspace({
       return;
     }
     if (!isCurrentLoadContext()) return;
-    updateWork((current) => current ? { ...current, selectedSceneId: sceneId, loadingScene: true } : current);
+    updateWork((current) => current ? {
+      ...current,
+      selectedSceneId: sceneId,
+      loadingScene: !canRetainRecoveredEditorDuringSceneLoad(sceneEditorLoadIdentity(current)),
+    } : current);
     try {
       const { remote, effective } = await api.readSceneViews(projectId, sceneId, tree.snapshot);
       if (!isCurrentLoadContext()) return;
@@ -1095,8 +1113,18 @@ function AuthorWorkspace({
       }
     } catch (error) {
       if (!isCurrentLoadContext()) return;
-      updateWork((current) => current ? { ...current, loadingScene: false, editor: null } : current);
-      setStatus({ message: messageOf(error), kind: "error" });
+      let retainedCurrentEditor = false;
+      updateWork((current) => {
+        if (!current) return current;
+        retainedCurrentEditor = isSameSceneEditorLoad(sceneEditorLoadIdentity(current));
+        return { ...current, loadingScene: false, editor: retainedCurrentEditor ? current.editor : null };
+      });
+      setStatus({
+        message: retainedCurrentEditor
+          ? `シーンの更新を読み込めませんでした。表示中の編集内容は保持しています。${messageOf(error)}`
+          : messageOf(error),
+        kind: "error",
+      });
     }
   }, [refreshJournal, recentResume.flush, updateWork]);
 

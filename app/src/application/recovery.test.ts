@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { isEntryAcknowledgedByReceipt, isNonDraftEntryAcknowledgedByReceipt, isTextRepresentedByRecoveryRecord, isUnchangedEntryConfirmedByReceipt, mayWriteEditor, recoveryStatusForJournalOpen } from "./recovery.js";
+import { canRetainRecoveredEditorDuringSceneLoad, isEntryAcknowledgedByReceipt, isNonDraftEntryAcknowledgedByReceipt, isSameSceneEditorLoad, isTextRepresentedByRecoveryRecord, isUnchangedEntryConfirmedByReceipt, mayWriteEditor, recoveryStatusForJournalOpen } from "./recovery.js";
 
 test("text is recoverable only when the current record represents the editor", () => {
   assert.equal(isTextRepresentedByRecoveryRecord("clean", null, "clean"), true);
@@ -42,6 +42,38 @@ test("the editor is writable only after its selected scene recovery is ready", (
   assert.equal(mayWriteEditor({ ...ready, loadingScene: true }), false);
   assert.equal(mayWriteEditor({ ...ready, selectedSceneId: "scene-2" }), false);
   assert.equal(mayWriteEditor({ ...ready, hasWritePermission: false }), false);
+});
+
+test("a recovered editor remains writable only for a background refresh of its current scene identity", () => {
+  const sameScene = {
+    currentProjectId: "project-1",
+    requestedProjectId: "project-1",
+    currentRepositoryMatches: true,
+    currentAuthorScopeMatches: true,
+    selectedSceneId: "scene-1",
+    requestedSceneId: "scene-1",
+    editorSceneId: "scene-1",
+    recoveryStatus: "ready" as const,
+    editorRecoveryStatus: "ready" as const,
+  };
+  assert.equal(isSameSceneEditorLoad(sameScene), true);
+  const keepWritable = canRetainRecoveredEditorDuringSceneLoad(sameScene);
+  assert.equal(keepWritable, true);
+  assert.equal(mayWriteEditor({
+    hasWritePermission: true,
+    recoveryStatus: sameScene.recoveryStatus,
+    loadingScene: !keepWritable,
+    selectedSceneId: sameScene.selectedSceneId,
+    editorSceneId: sameScene.editorSceneId,
+  }), true);
+
+  assert.equal(isSameSceneEditorLoad({ ...sameScene, requestedSceneId: "scene-2" }), false);
+  assert.equal(isSameSceneEditorLoad({ ...sameScene, currentProjectId: "project-2" }), false);
+  assert.equal(isSameSceneEditorLoad({ ...sameScene, currentRepositoryMatches: false }), false);
+  assert.equal(isSameSceneEditorLoad({ ...sameScene, currentAuthorScopeMatches: false }), false);
+  assert.equal(isSameSceneEditorLoad({ ...sameScene, editorSceneId: undefined }), false);
+  assert.equal(canRetainRecoveredEditorDuringSceneLoad({ ...sameScene, recoveryStatus: "pending" }), false);
+  assert.equal(canRetainRecoveredEditorDuringSceneLoad({ ...sameScene, editorRecoveryStatus: "unavailable" }), false);
 });
 
 test("a failed IndexedDB open is unavailable from project activation through scene loading", () => {
