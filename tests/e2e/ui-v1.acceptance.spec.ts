@@ -35,6 +35,12 @@ interface UiContribution {
   module: string;
   slot: "editor" | "dock" | "inspection" | "review" | "settings";
   title: string;
+  kind?: "panel" | "editor-adornment" | "context-action";
+  contexts?: Array<"workspace" | "editor" | "reading">;
+}
+
+function isWorkspacePanelContribution(item: UiContribution): boolean {
+  return (item.kind ?? "panel") === "panel" && (!item.contexts || item.contexts.includes("workspace"));
 }
 
 function repositoryInputValue(value: string): string {
@@ -381,13 +387,13 @@ test("both production Shells preserve recoverable Japanese drafts and the Mobile
   expect(await page.locator('link[rel="stylesheet"]').evaluateAll((links) => links.map((link) => (link as HTMLLinkElement).href)))
     .toContain(new URL("/desktop/styles.css", page.url()).toString());
 
-  const resizeHandle = page.getByRole("separator", { name: "作品パネルと原稿パネルの幅を変更" });
+  const resizeHandle = page.getByRole("separator", { name: "Resize horizontal workspace panels" });
   await expect(resizeHandle).toBeVisible();
-  const navigationPanel = page.locator(".st-desktop-navigation-panel");
-  const beforeResize = (await navigationPanel.boundingBox())?.width;
+  const editorPanel = page.locator('[data-workspace-panel="editor"]');
+  const beforeResize = (await editorPanel.boundingBox())?.width;
   await resizeHandle.focus();
   await page.keyboard.press("ArrowRight");
-  const afterResize = (await navigationPanel.boundingBox())?.width;
+  const afterResize = (await editorPanel.boundingBox())?.width;
   expect(beforeResize).toBeTruthy();
   expect(afterResize).toBeTruthy();
   expect(afterResize).not.toBe(beforeResize);
@@ -462,6 +468,7 @@ test("both production Shells preserve recoverable Japanese drafts and the Mobile
   await expect(page.locator(".durability-message")).toContainText("確認済みの GitHub 版");
   await expect.poll(() => hasJournalEntryForOperation(page, desktopCheckpoint.operation.id, desktopCheckpoint.operation.generation)).toBe(false);
   await page.getByRole("button", { name: "履歴", exact: true }).click();
+  await expect(page.locator('[data-workspace-panel="history"]')).toBeVisible();
   const desktopHistory = page.locator(".manuscript-history");
   await expect(desktopHistory.getByRole("heading", { name: "改稿の履歴" })).toBeVisible();
   const desktopHistorySource = desktopHistory.locator("details summary");
@@ -526,6 +533,7 @@ test("both production Shells preserve recoverable Japanese drafts and the Mobile
   await page.reload();
   await expect(page).toHaveURL(new RegExp("/mobile/projects/.+/scenes/scene-2"));
   await page.getByRole("button", { name: "履歴", exact: true }).click();
+  await expect(page.locator('[data-workspace-panel="history"]')).toBeVisible();
   const mobileHistory = page.locator(".manuscript-history");
   await expect(mobileHistory.getByRole("heading", { name: "改稿の履歴" })).toBeVisible();
   const mobileHistorySource = mobileHistory.locator("details summary");
@@ -544,7 +552,7 @@ test("both production Shells preserve recoverable Japanese drafts and the Mobile
   expect(failedAssets, testInfo.project.name + " failed JS/CSS requests").toEqual([]);
 });
 
-test("profile-selected contributions stay discoverable and mount one at a time in both Shells", async ({ page }, testInfo) => {
+test("profile-selected workspace panels match contribution kinds and mount one at a time in both Shells", async ({ page }, testInfo) => {
   test.skip(testInfo.project.name !== "chromium", "The catalog is exercised once in Chromium; WebKit covers both production Shells above.");
   test.setTimeout(240_000);
   expect(authToken.length).toBeGreaterThanOrEqual(32);
@@ -571,9 +579,11 @@ test("profile-selected contributions stay discoverable and mount one at a time i
   }
 
   const enabledSet = new Set(enabledIds);
-  const expectedContributions = contributions.filter((item) => enabledSet.has(item.module));
+  const enabledContributions = contributions.filter((item) => enabledSet.has(item.module));
+  const expectedPanels = enabledContributions.filter(isWorkspacePanelContribution);
+  const editorAdornments = enabledContributions.filter((item) => item.kind === "editor-adornment");
   expect(contributions.some((item) => item.module === "mcp")).toBe(false);
-  expect(new Set(expectedContributions.map((item) => item.id)).size).toBe(expectedContributions.length);
+  expect(new Set(enabledContributions.map((item) => item.id)).size).toBe(enabledContributions.length);
 
   const mountedByShell: Record<string, string[]> = {};
   for (const mode of ["desktop", "mobile"] as const) {
@@ -581,40 +591,43 @@ test("profile-selected contributions stay discoverable and mount one at a time i
       await page.getByRole("button", { name: "モバイルUIへ" }).click();
       await expect(page).toHaveURL(new RegExp("/mobile/projects/.+/scenes/scene-1"));
     }
-    const mounted: string[] = [];
-    const editorItems = expectedContributions.filter((item) => item.slot === "editor");
-    if (mode === "mobile") {
-      await page.getByRole("navigation", { name: "モバイル画面" }).getByRole("button", { name: "道具", exact: true }).click();
-    } else {
-      await page.getByRole("tab", { name: "ツールと履歴" }).click();
-    }
-    for (const item of editorItems) {
-      const selector = page.locator(".contribution-host-editor").getByLabel("機能を選択");
-      await expect(selector.locator('option[value="' + item.id + '"]')).toHaveCount(1);
-      await selector.selectOption(item.id);
-      await expect(page.locator('[data-contribution="' + item.id + '"]')).toBeVisible();
-      mounted.push(item.id);
-      await selector.selectOption("");
-      await expect(page.locator('[data-contribution="' + item.id + '"]')).toHaveCount(0);
-    }
+    const toolbar = page.getByRole("toolbar", { name: "Workspace layout controls" });
+    await expect(toolbar).toBeVisible();
+    await toolbar.getByRole("button", { name: "Research", exact: true }).click();
 
-    const otherItems = expectedContributions.filter((item) => item.slot !== "editor");
-    for (const item of otherItems) {
-      const selector = page.locator(".contribution-host-" + item.slot).getByLabel("機能を選択");
-      await expect(selector.locator('option[value="' + item.id + '"]')).toHaveCount(1);
-      await selector.selectOption(item.id);
-      await expect(page.locator('[data-contribution="' + item.id + '"]')).toBeVisible();
-      mounted.push(item.id);
-      await selector.selectOption("");
-      await expect(page.locator('[data-contribution="' + item.id + '"]')).toHaveCount(0);
+    const panelMenu = page.locator(".st-workspace-panel-menu");
+    await panelMenu.locator("summary").click();
+    for (const item of expectedPanels) {
+      await expect(panelMenu.getByRole("button", { name: "Hide " + item.title, exact: true })).toHaveCount(1);
     }
-    expect(mounted.sort()).toEqual(expectedContributions.map((item) => item.id).sort());
-    expect(await page.locator("[data-contribution]").count()).toBe(0);
+    for (const item of editorAdornments) {
+      await expect(page.locator('[data-workspace-panel="module:' + item.id + '"]')).toHaveCount(0);
+      await expect(panelMenu.getByRole("button", { name: "Show " + item.title, exact: true })).toHaveCount(0);
+      await expect(panelMenu.getByRole("button", { name: "Hide " + item.title, exact: true })).toHaveCount(0);
+    }
+    await panelMenu.locator("summary").click();
+
+    const mounted: string[] = [];
+    const workspaceTabs = mode === "mobile"
+      ? page.getByRole("tablist", { name: "Workspace panels" })
+      : page.getByRole("tablist", { name: "Panel tabs" });
+    for (const item of expectedPanels) {
+      const tab = workspaceTabs.getByRole("tab", { name: item.title, exact: true });
+      await expect(tab).toHaveCount(1);
+      await tab.click();
+      const panel = page.locator('[data-workspace-panel="module:' + item.id + '"]');
+      await expect(panel).toBeVisible();
+      await expect(panel.locator('[data-contribution="' + item.id + '"]')).toBeVisible();
+      await expect(page.locator("[data-contribution]")).toHaveCount(1);
+      mounted.push(item.id);
+    }
+    expect(mounted.sort()).toEqual(expectedPanels.map((item) => item.id).sort());
+
+    await toolbar.getByRole("button", { name: "Writing", exact: true }).click();
+    await expect(page.locator("[data-contribution]")).toHaveCount(0);
     mountedByShell[mode] = mounted;
   }
   expect(mountedByShell.mobile.sort()).toEqual(mountedByShell.desktop.sort());
 
-  if (enabledIds.length === 0) {
-    await expect(page.locator(".contribution-host")).toHaveCount(0);
-  }
+  if (expectedPanels.length === 0) await expect(page.locator(".st-workspace-panel-menu-item")).toHaveCount(5);
 });

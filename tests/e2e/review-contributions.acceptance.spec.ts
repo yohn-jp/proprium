@@ -140,6 +140,22 @@ function actionResponse(response: { url(): string; request(): { method(): string
   return response.request().method() === "POST" && url.pathname.endsWith(`/actions/${actionId}`);
 }
 
+async function openWorkspaceContributionPanel(page: Page, id: string, title: string): Promise<ReturnType<Page["locator"]>> {
+  const toolbar = page.getByRole("toolbar", { name: "Workspace layout controls" });
+  await toolbar.getByRole("button", { name: "Research", exact: true }).click();
+  await page.getByRole("tablist", { name: "Panel tabs" }).getByRole("tab", { name: title, exact: true }).click();
+  const panel = page.locator('[data-workspace-panel="module:' + id + '"]');
+  await expect(panel).toBeVisible();
+  return panel;
+}
+
+async function openWorkspaceReviewPanel(page: Page): Promise<void> {
+  const toolbar = page.getByRole("toolbar", { name: "Workspace layout controls" });
+  await toolbar.getByRole("button", { name: "Review", exact: true }).click();
+  await page.getByRole("tablist", { name: "Panel tabs" }).getByRole("tab", { name: "レビュー", exact: true }).click();
+  await expect(page.locator('[data-workspace-panel="review"]')).toBeVisible();
+}
+
 async function readProposalStatus(page: Page, projectId: string, proposalId: string): Promise<ProposalStatus> {
   const origin = new URL(page.url()).origin;
   const response = await page.request.get(
@@ -171,17 +187,15 @@ test("full profile renders Story and Speaker review queues and turns both author
     expect(project, "the app must register the owned local bare repository through its real API").toBeDefined();
     projectId = project!.id;
 
-    await page.getByRole("tab", { name: "ツールと履歴" }).click();
-    const reviewSelector = page.locator(".contribution-host-review").getByLabel("機能を選択");
     const zukanListResponse = page.waitForResponse((response) => actionResponse(response, "story.zukan-suggestions.list"), { timeout: 60_000 });
-    await reviewSelector.selectOption("story.zukan-review");
+    const zukanPanel = await openWorkspaceContributionPanel(page, "story.zukan-review", "Zukan suggestions");
     const zukanResponse = await zukanListResponse;
     expect(zukanResponse.ok()).toBe(true);
     const zukanResult = await zukanResponse.json() as { ok: boolean; data?: { pendingCount?: number; suggestions?: Array<Record<string, unknown>> } };
     expect(zukanResult.ok).toBe(true);
     expect(zukanResult.data?.pendingCount).toBe(1);
     expect(zukanResult.data?.suggestions?.some((item) => item.id === "zukan-review-queue-item" && item.status === "pending")).toBe(true);
-    const zukanPanel = page.locator('[data-contribution="story.zukan-review"]');
+    await expect(zukanPanel.locator('[data-contribution="story.zukan-review"]')).toBeVisible();
     await expect(zukanPanel.getByRole("heading", { name: "Zukan suggestions" })).toBeVisible();
     await expect(zukanPanel.getByText("1 pending suggestion(s)")).toBeVisible();
     await expect(zukanPanel.getByText("Akari collects old maps.")).toBeVisible();
@@ -203,7 +217,7 @@ test("full profile renders Story and Speaker review queues and turns both author
     await expect(zukanPanel.getByText("A review proposal is pending checkpoint; this suggestion remains pending in the selected snapshot.")).toBeVisible();
 
     const speakerQueueResponse = page.waitForResponse((response) => actionResponse(response, "speaker.review.queue"), { timeout: 120_000 });
-    await reviewSelector.selectOption("speaker.review");
+    const speakerPanel = await openWorkspaceContributionPanel(page, "speaker.review", "話者確認キュー");
     const speakerResponse = await speakerQueueResponse;
     expect(speakerResponse.ok()).toBe(true);
     const speakerResult = await speakerResponse.json() as { ok: boolean; data?: { rows?: Array<{ sceneId?: string; attribution?: { text?: string; confidence?: string } }> } };
@@ -212,7 +226,7 @@ test("full profile renders Story and Speaker review queues and turns both author
     expect(unresolved.length).toBeGreaterThan(0);
     expect(unresolved.some((row) => row.attribution?.text === "『この古地図を探している。』")).toBe(true);
 
-    const speakerPanel = page.locator('[data-contribution="speaker.review"]');
+    await expect(speakerPanel.locator('[data-contribution="speaker.review"]')).toBeVisible();
     await expect(speakerPanel.getByRole("heading", { name: "未確定・低信頼の話者帰属" })).toBeVisible();
     await expect(speakerPanel.getByText("『この古地図を探している。』")).toBeVisible();
     await expect(speakerPanel.getByText(new RegExp(`${unresolved.length} 件。`))).toBeVisible();
@@ -244,7 +258,7 @@ test("full profile renders Story and Speaker review queues and turns both author
     expect(remoteScene).not.toMatch(/^speakerOverrides:/mu);
     expect(() => git(fixture.remote, "cat-file", "-e", `refs/heads/${branch}:meta/scriptorium/modules/speaker/corrections.jsonl`)).toThrow();
 
-    await page.getByRole("tab", { name: "作品ライブラリ" }).click();
+    await page.getByRole("tablist", { name: "Panel tabs" }).getByRole("tab", { name: "目次", exact: true }).click();
     await page.getByRole("navigation", { name: "作品構成" })
       .getByRole("button", { name: "Review Chapter: Review Scene", exact: true }).click();
     await expect(page.getByRole("heading", { name: "Review Scene" })).toBeVisible();
@@ -268,7 +282,7 @@ test("full profile renders Story and Speaker review queues and turns both author
     await page.getByRole("navigation", { name: "モバイル画面" }).getByRole("button", { name: "設定", exact: true }).click();
     await page.getByRole("button", { name: "Desktop版へ切り替え" }).click();
     await expect(page).toHaveURL(new RegExp("/desktop/projects/" + encodeURIComponent(project.id) + "/scenes/scene-review"));
-    await page.getByRole("tab", { name: "ツールと履歴" }).click();
+    await openWorkspaceReviewPanel(page);
     await expect(page.locator(".proposal-card").filter({ hasText: zukanProposalId! })).toContainText("ローカル Checkpoint 済み");
     await expect(page.locator(".proposal-card").filter({ hasText: speakerProposalId! })).toContainText("承認待ち");
     expect(git(fixture.remote, "rev-parse", `refs/heads/${branch}`)).toBe(fixture.initialHead);

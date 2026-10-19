@@ -74,6 +74,22 @@ async function openFixtureProject(page: Page): Promise<void> {
   await expect(page.locator(".cm-content")).toBeVisible();
 }
 
+async function openWorkspaceReviewPanel(page: Page): Promise<void> {
+  const toolbar = page.getByRole("toolbar", { name: "Workspace layout controls" });
+  await toolbar.getByRole("button", { name: "Review", exact: true }).click();
+  await page.getByRole("tablist", { name: "Panel tabs" }).getByRole("tab", { name: "レビュー", exact: true }).click();
+  await expect(page.locator('[data-workspace-panel="review"]')).toBeVisible();
+}
+
+async function openWorkspaceContributionPanel(page: Page, id: string, title: string): Promise<ReturnType<Page["locator"]>> {
+  const toolbar = page.getByRole("toolbar", { name: "Workspace layout controls" });
+  await toolbar.getByRole("button", { name: "Research", exact: true }).click();
+  await page.getByRole("tablist", { name: "Panel tabs" }).getByRole("tab", { name: title, exact: true }).click();
+  const panel = page.locator('[data-workspace-panel="module:' + id + '"]');
+  await expect(panel).toBeVisible();
+  return panel;
+}
+
 async function readJournal(page: Page): Promise<JournalSummary[]> {
   return page.evaluate(async () => {
     const database = await new Promise<IDBDatabase>((resolve, reject) => {
@@ -252,6 +268,7 @@ test("history keeps its pinned response through an equal-snapshot foreground obs
   });
 
   await page.getByRole("button", { name: "履歴", exact: true }).click();
+  await expect(page.locator('[data-workspace-panel="history"]')).toBeVisible();
   await historyStarted;
   const observationResponse = page.waitForResponse((response) =>
     response.request().method() === "GET" && new URL(response.url()).pathname.endsWith("/observation"),
@@ -389,6 +406,7 @@ test("writing UI recovers multi-document drafts and separates Draft, Checkpoint,
   expect(checkpointedScene).toBeTruthy();
   expect(checkpointedScratch).toBeTruthy();
   await page.getByRole("button", { name: "履歴", exact: true }).click();
+  await expect(page.locator('[data-workspace-panel="history"]')).toBeVisible();
   const checkpointHistory = page.locator(".manuscript-history");
   await expect(checkpointHistory.getByRole("heading", { name: "改稿の履歴" })).toBeVisible();
   await expect(checkpointHistory.getByRole("alert")).toHaveCount(0);
@@ -411,6 +429,7 @@ test("writing UI recovers multi-document drafts and separates Draft, Checkpoint,
   await editor.fill(laterDraft);
   await expect.poll(async () => (await readJournal(page)).some((entry) => entry.text === laterDraft && entry.state === "draft")).toBe(true);
   await page.getByRole("button", { name: "履歴", exact: true }).click();
+  await expect(page.locator('[data-workspace-panel="history"]')).toBeVisible();
   await expect(page.getByRole("heading", { name: "改稿の履歴" })).toBeVisible();
   const versions = page.getByRole("list", { name: "原稿の各バージョン" });
   await expect(versions.locator("li")).toHaveCount(1);
@@ -756,7 +775,7 @@ test("external MCP proposals enter owner review before approval, then checkpoint
   expect(proposed.status).toBe(201);
   const storedProposal = await proposed.json() as { id: string; source: string };
   expect(storedProposal).toMatchObject({ id: proposalId, source: "mcp" });
-  await page.getByRole("tab", { name: "ツールと履歴" }).click();
+  await openWorkspaceReviewPanel(page);
   const foregroundReads: Array<{ path: string; at: number }> = [];
   page.on("request", (request) => {
     if (request.method() !== "GET") return;
@@ -886,7 +905,7 @@ test("full browser MCP proposal payload is restored after Core data loss before 
   });
   expect(bearerProposal.status).toBe(201);
   expect(await bearerProposal.json()).toMatchObject({ id: proposalId, source: "mcp" });
-  await page.getByRole("tab", { name: "ツールと履歴" }).click();
+  await openWorkspaceReviewPanel(page);
   await expect.poll(async () => {
     await page.evaluate(() => window.dispatchEvent(new Event("online")));
     return page.getByText(proposalId, { exact: false }).isVisible().catch(() => false);
@@ -991,7 +1010,7 @@ test("full browser MCP proposal payload is restored after Core data loss before 
   expect(restoredStatus.publishedOperationIds).toContain(firstOperationId);
   expect(restoredStatus.approvedOperationIds).not.toContain(remainingOperationId);
 
-  await page.getByRole("tab", { name: "ツールと履歴" }).click();
+  await openWorkspaceReviewPanel(page);
   const proposalCard = page.locator(".proposal-card").filter({ hasText: proposalId });
   await expect(proposalCard).toBeVisible();
   await expect(proposalCard.getByText(/基準リモートが現在の HEAD より古くなっています/u)).toBeVisible();
@@ -1238,8 +1257,8 @@ test("unmounting a contribution aborts its in-flight action request", async ({ p
   try {
     await signIn(page);
     await openFixtureProject(page);
-    await page.getByRole("tab", { name: "ツールと履歴" }).click();
-    await page.locator(".contribution-host-settings").getByLabel("機能を選択").selectOption("publishing.export.epub");
+    const publishingPanel = await openWorkspaceContributionPanel(page, "publishing.export.epub", "EPUB 書き出し");
+    await expect(publishingPanel.locator('[data-contribution="publishing.export.epub"]')).toBeVisible();
     const actionRequest = await observed;
     const failedRequest = page.waitForEvent("requestfailed", (request) => request === actionRequest);
     await page.getByRole("button", { name: "ログアウト" }).click();
