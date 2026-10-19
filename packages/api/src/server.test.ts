@@ -76,6 +76,7 @@ function makeStore(onSaveScene: () => void = () => undefined): CoreStoreShape {
       }
       return { ...scene, text: input.text, revision: "revision-2" };
     },
+    localObservation: async () => ({ snapshot: SNAPSHOT, checkpointHead: SNAPSHOT.remoteCommit, observedAt: "1970-01-01T00:00:00.000Z", state: "unknown", pending: [] }),
     history: async () => [{ hash: "abc12345", date: "2026-10-16T00:00:00.000Z", message: "write opening" }],
     sync: async () => ({ branch: "main", head: "abc12345", ahead: 0, behind: 0, dirty: false }),
     status: async () => ({ branch: "main", head: "abc12345", ahead: 1, behind: 0, dirty: true }),
