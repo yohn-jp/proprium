@@ -1,6 +1,7 @@
 # Scriptorium — Modular Workspace Architecture
 
-**Status:** Accepted target direction for the next Core/Workspace evolution; design only, not an implementation or acceptance claim.  
+**Status:** Implemented on `main` under the Modular Workspace goal; implementation boundaries and acceptance evidence are recorded in [Modular Workspace verification](../verification/MODULAR-WORKSPACE.md).
+
 **Baseline inspected:** `main@a0419c499d47d51584bda649790c45082998bfed` (2026-10-19).  
 **Authority:** This document defines the new modular workspace, local-first read UX, and extensibility direction. Existing `CORE.md`, `FULL-MIGRATION.md`, Git durability, module security and recovery contracts remain authoritative for behavior not explicitly addressed here. The completed P00–P13 migration ledger is not reopened.
 
@@ -30,7 +31,7 @@ Verified against the baseline:
 | Existing advanced modules | `modules/{story,nlp,diagnostics,semantic,speaker,assistant,publishing,mcp}`; `profiles/core.json` excludes them | Preserve these boundaries; add lexical search/terminology as optional capabilities without dragging model dependencies into Core |
 | Search today | Core snapshot search actions and optional Semantic search already exist | Do not claim search is absent or remove existing entrypoints before migrating consumers; distinguish Core's current lexical read operation from the proposed optional indexed search |
 
-The diagram below is a responsibility model, **not** a claim that all interfaces already exist.
+The diagram below describes responsibility boundaries; concrete implementation and verification are recorded in the linked acceptance record.
 
 ```text
 Browser Workspace
@@ -163,7 +164,7 @@ No arbitrary third-party script execution, hot-install system, module-container 
 
 ## 8. Implementation sequence and acceptance boundaries
 
-This document is the design authority for future scoped implementation; it does not itself authorize new features on `main`.
+Phases A–C were implemented under the explicit Modular Workspace goal. The following phase boundaries remain the accepted scope; the verification record identifies the production source and observed acceptance results.
 
 **Phase A — Foreground integrity and read scheduling.** Establish an explicit editor-recovery readiness gate, separate render-essential reads from proposal/remote/index work, deduplicate unchanged observation and reconcile work using remote plus local revision keys. Preserve current safety behavior. Core remains usable offline from an existing checkout.
 
@@ -171,7 +172,7 @@ This document is the design authority for future scoped implementation; it does 
 
 **Phase C — Indexed search and terminology.** Inventory the existing Core lexical search and Semantic module first. Add only required document-source delta/bulk APIs, create a lightweight optional search+terminology capability, wire search panel and editor decoration through existing UI contributions. Add no unconditional NLP/LLM dependency.
 
-For each phase, its later implementation contract must prove the observable behavior, including failure cases and Core-only profile startup, using the repository's existing validation entrypoints. No latency benchmark is required by this architecture decision. Performance is assessed by the elimination of unnecessary critical-path work and code-path review; no unmeasured speed claims.
+Each phase uses the repository's existing validation entrypoints to prove observable behavior, including failure cases and Core-only profile startup; see the verification record for the completed checks and explicit limits. No latency benchmark is required by this architecture decision. Performance is assessed by the elimination of unnecessary critical-path work and code-path review; no unmeasured speed claims.
 
 ## 9. Explicit non-goals
 
