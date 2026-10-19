@@ -3,7 +3,7 @@ export const CONTRACT_VERSION = 1 as const;
 export const MAX_JOB_INPUT_BYTES = 8 * 1024 * 1024;
 export const MAX_JOB_OUTPUT_BYTES = 8 * 1024 * 1024;
 export const MAX_PROPOSAL_EVIDENCE_BYTES = 1024 * 1024;
-export type ModuleId = "story" | "diagnostics" | "nlp" | "semantic" | "speaker" | "assistant" | "publishing" | "mcp";
+export type ModuleId = "story" | "diagnostics" | "nlp" | "semantic" | "speaker" | "assistant" | "publishing" | "mcp" | "search";
 export interface RepositoryIdentity {
   provider: "github" | "local";
   repositoryId: string;
@@ -191,6 +191,11 @@ export interface ModuleAction {
   invoke(input: unknown, context: ModuleActionContext): Promise<ActionResult>;
 }
 export interface UiContribution {
+  /** Versioned composition metadata; absent values retain the original panel semantics. */
+  contractVersion?: 1;
+  kind?: "panel" | "editor-adornment" | "context-action";
+  contexts?: Array<"workspace" | "editor" | "reading">;
+  multipleInstances?: boolean;
   id: string;
   module: ModuleId;
   slot: "editor" | "dock" | "inspection" | "review" | "settings";
@@ -354,6 +359,8 @@ export interface BrowserModuleContext {
   invoke(actionId: string, input: unknown): Promise<ActionResult>;
   /** The shell journals the complete proposal before acknowledging it to the module UI. */
   propose(operations: ChangeOperation[], evidence?: ProposalEvidence[], proposalId?: string): Promise<ChangeProposal>;
+  /** Host-validated navigation within the bound project/snapshot. */
+  navigateDocument?(path: string): Promise<void>;
   refresh(): Promise<void>;
 }
 export interface BrowserModuleDefinition {

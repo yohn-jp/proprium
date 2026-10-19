@@ -184,7 +184,7 @@ function validateDefinition(expected: ModuleManifest, definition: ModuleDefiniti
   for (const action of definition.actions) {
     invalidAction(action);
     if (actionIds.has(action.id)) throw new ModuleRuntimeError("invalid_module_definition", `Module ${expected.id} declares duplicate action ${action.id}`);
-    if (/^(?:core|story|diagnostics|nlp|semantic|speaker|assistant|publishing|mcp)\./.test(action.id) &&
+    if (/^(?:core|story|diagnostics|nlp|semantic|speaker|assistant|publishing|mcp|search)\./.test(action.id) &&
         !action.id.startsWith(`${expected.id}.`)) {
       throw new ModuleRuntimeError("invalid_module_definition", `Action ${action.id} is not namespaced to ${expected.id}`);
     }
@@ -197,6 +197,13 @@ function validateDefinition(expected: ModuleManifest, definition: ModuleDefiniti
   for (const contribution of definition.ui) {
     if (!contribution || contribution.module !== expected.id || !/^[A-Za-z0-9._:-]{1,128}$/.test(contribution.id) ||
         !["editor", "dock", "inspection", "review", "settings"].includes(contribution.slot) ||
+        (contribution.contractVersion !== undefined && contribution.contractVersion !== 1) ||
+        (contribution.kind !== undefined && !["panel", "editor-adornment", "context-action"].includes(contribution.kind)) ||
+        (contribution.contexts !== undefined && (!Array.isArray(contribution.contexts) ||
+          contribution.contexts.length === 0 || contribution.contexts.length > 3 ||
+          new Set(contribution.contexts).size !== contribution.contexts.length ||
+          contribution.contexts.some((context) => !["workspace", "editor", "reading"].includes(context)))) ||
+        (contribution.multipleInstances !== undefined && typeof contribution.multipleInstances !== "boolean") ||
         typeof contribution.title !== "string" || contribution.title.length > 256 ||
         !actionIds.has(contribution.action) && !actionNames.has(actionIdFor(expected.id, { id: contribution.action } as ModuleAction)) ||
         contributionIds.has(contribution.id)) {

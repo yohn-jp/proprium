@@ -1434,3 +1434,24 @@ function jobRequest(module: ModuleId, options: Partial<JobRequest> = {}): JobReq
     ...options,
   };
 }
+
+test("composition contributions validate kind and host contexts independently of placement", async () => {
+  const metadata = manifest("search");
+  const action: ModuleAction = { id: "lookup", effect: "read", inputSchema: schema, outputSchema: schema,
+    async invoke(_input, context) { return { ok: true, snapshot: context.reader.snapshot }; } };
+  for (const invalid of [null, { contractVersion: 2 }, { kind: "script" }, { contexts: [] }, { contexts: ["editor", "editor"] }, { contexts: ["foreign"] }, { multipleInstances: "yes" }]) {
+    const runtime = new ModuleRuntime({ manifests: [metadata], enabled: ["search"], cacheDirectory: "/tmp/scriptorium-composition-test",
+      loaders: { search: async () => ({ ...definition(metadata, action), ui: [{
+        id: "search.terms", module: "search", slot: "editor", title: "Terms", action: "lookup",
+        contractVersion: 1, kind: "editor-adornment", contexts: ["editor", "reading"], ...(invalid ?? {}),
+      } as never] }) },
+    });
+    if (invalid === null) {
+      await runtime.activate("search");
+      assert.equal(runtime.contributions("search")[0]?.kind, "editor-adornment");
+    } else {
+      await assert.rejects(runtime.activate("search"), (error: unknown) => error instanceof ModuleRuntimeError && error.code === "invalid_module_definition");
+    }
+    await runtime.shutdown();
+  }
+});
