@@ -3,7 +3,31 @@ import test from "node:test";
 import { createElement } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 import { RubyText } from "./ruby";
-import { selectVisibleTermSlices, validateEditorTermSpans, type EditorTermSpan } from "./terms";
+import { findTermSpanAtSelection, selectPendingTermLines, selectVisibleTermSlices, validateEditorTermSpans, type EditorTermSpan } from "./terms";
+
+test("visible reader lines are resolved once per visit and can be queued again after leaving", () => {
+  const visible = [10, 20, 30];
+  const active = new Set([20]);
+  const completed = new Set([10]);
+
+  assert.deepEqual(selectPendingTermLines(visible, active, completed, 2), [30]);
+  completed.add(30);
+  assert.deepEqual(selectPendingTermLines(visible, active, completed, 2), []);
+
+  completed.delete(30);
+  assert.deepEqual(selectPendingTermLines(visible, active, completed, 2), [30]);
+});
+
+test("editor keyboard navigation selects the term under the caret or one exact marked selection", () => {
+  const spans: EditorTermSpan[] = [
+    { start: 4, end: 8, termId: "one", targetPath: "terms/one.md" },
+    { start: 8, end: 12, termId: "two", targetPath: "terms/two.md" },
+  ];
+  assert.equal(findTermSpanAtSelection(spans, { from: 5, to: 5 }), spans[0]);
+  assert.equal(findTermSpanAtSelection(spans, { from: 8, to: 8 }), spans[1]);
+  assert.equal(findTermSpanAtSelection(spans, { from: 5, to: 7 }), spans[0]);
+  assert.equal(findTermSpanAtSelection(spans, { from: 3, to: 9 }), undefined);
+});
 
 test("visible term slices are sorted, clipped, and bounded", () => {
   assert.deepEqual(selectVisibleTermSlices([

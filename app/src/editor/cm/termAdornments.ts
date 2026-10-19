@@ -1,16 +1,18 @@
 import { StateEffect, type Extension } from "@codemirror/state";
-import { Decoration, EditorView, ViewPlugin, type ViewUpdate } from "@codemirror/view";
+import { Decoration, EditorView, ViewPlugin, keymap, type ViewUpdate } from "@codemirror/view";
 import { isViewComposing } from "./compositionGuard";
-import { selectVisibleTermSlices, validateEditorTermSpans, type EditorTermSpan, type ResolveEditorTerms } from "../terms";
+import { findTermSpanAtSelection, selectVisibleTermSlices, validateEditorTermSpans, type EditorTermSpan, type ResolveEditorTerms } from "../terms";
 
 type ResolverRef = { current: ResolveEditorTerms | undefined };
+type NavigatorRef = { current: ((targetPath: string, termId: string) => void) | undefined };
 
 const replaceTerms = StateEffect.define<readonly EditorTermSpan[]>();
 export const refreshTermAdornments = StateEffect.define<null>();
 
 /** Resolves only deferred, bounded visible source slices and renders disposable CodeMirror marks. */
-export function termAdornmentsExtension(resolverRef: ResolverRef): Extension {
-  return ViewPlugin.fromClass(class {
+export function termAdornmentsExtension(resolverRef: ResolverRef, navigatorRef: NavigatorRef): Extension {
+  const currentSpans: { current: readonly EditorTermSpan[] } = { current: [] };
+  const plugin = ViewPlugin.fromClass(class {
     decorations = Decoration.none;
     private timer: ReturnType<typeof setTimeout> | null = null;
     private controller: AbortController | null = null;
@@ -25,7 +27,10 @@ export function termAdornmentsExtension(resolverRef: ResolverRef): Extension {
     update(update: ViewUpdate): void {
       for (const transaction of update.transactions) {
         for (const effect of transaction.effects) {
-          if (effect.is(replaceTerms)) this.decorations = this.toDecorations(effect.value, update.state.doc.length);
+          if (effect.is(replaceTerms)) {
+            currentSpans.current = effect.value;
+            this.decorations = this.toDecorations(effect.value, update.state.doc);
+          }
         }
       }
 
@@ -38,6 +43,7 @@ export function termAdornmentsExtension(resolverRef: ResolverRef): Extension {
         return;
       }
       if (wasComposing || needsRefresh) {
+        currentSpans.current = [];
         this.decorations = Decoration.none;
         this.cancel();
         this.schedule();
@@ -58,12 +64,17 @@ export function termAdornmentsExtension(resolverRef: ResolverRef): Extension {
 
     private schedule(): void {
       const resolver = resolverRef.current;
-      if (this.composing || !resolver || !this.view.dom.isConnected || this.view.dom.getClientRects().length === 0) return;
+      if (this.composing || !resolver) return;
       const generation = this.generation;
       const controller = new AbortController();
       this.controller = controller;
       this.timer = setTimeout(() => {
         this.timer = null;
+        if (!this.view.dom.isConnected || this.view.dom.getClientRects().length === 0) {
+          controller.abort();
+          if (this.controller === controller) this.controller = null;
+          return;
+        }
         void this.resolveVisible(this.view, resolver, controller, generation);
       }, 80);
     }
@@ -104,16 +115,61 @@ export function termAdornmentsExtension(resolverRef: ResolverRef): Extension {
         && this.generation === generation && view.state.doc === document;
     }
 
-    private toDecorations(spans: readonly EditorTermSpan[], documentLength: number) {
+    private toDecorations(spans: readonly EditorTermSpan[], document: EditorView["state"]["doc"]) {
       const ranges = spans
-        .filter((span) => span.start >= 0 && span.end > span.start && span.end <= documentLength)
-        .map((span) => Decoration.mark({
-          class: "cm-term-adornment",
-          attributes: { "data-term-id": span.termId, "data-term-target": span.targetPath },
-        }).range(span.start, span.end));
+        .filter((span) => span.start >= 0 && span.end > span.start && span.end <= document.length)
+        .map((span) => {
+          const attributes: Record<string, string> = {
+            "data-term-id": span.termId,
+            "data-term-target": span.targetPath,
+          };
+          if (navigatorRef.current) {
+            attributes.role = "link";
+            attributes["aria-label"] = `${document.sliceString(span.start, span.end)} 用語リンク。Control または Command + Enter で開く`;
+            attributes["aria-keyshortcuts"] = "Control+Enter Meta+Enter";
+          }
+          return Decoration.mark({
+            class: "cm-term-adornment",
+            attributes,
+          }).range(span.start, span.end);
+        });
       return Decoration.set(ranges, true);
     }
   }, {
     decorations: (plugin) => plugin.decorations,
   });
+
+  return [
+    plugin,
+    keymap.of([{
+      key: "Mod-Enter",
+      run(view) {
+        if (isViewComposing(view)) return false;
+        const selection = view.state.selection.main;
+        const span = findTermSpanAtSelection(currentSpans.current, { from: selection.from, to: selection.to });
+        if (!span || !navigatorRef.current) return false;
+        navigatorRef.current(span.targetPath, span.termId);
+        return true;
+      },
+    }]),
+    EditorView.domEventHandlers({
+      mousedown(event, view) {
+        if (event.button !== 0 || (!event.ctrlKey && !event.metaKey) || isViewComposing(view)) return false;
+        const mark = termMarkFromTarget(event.target);
+        const termId = mark?.dataset.termId;
+        const targetPath = mark?.dataset.termTarget;
+        const navigate = navigatorRef.current;
+        if (!termId || !targetPath || !navigate) return false;
+        event.preventDefault();
+        navigate(targetPath, termId);
+        return true;
+      },
+    }),
+  ];
+}
+
+function termMarkFromTarget(target: EventTarget | null): HTMLElement | null {
+  if (target instanceof Element) return target.closest<HTMLElement>(".cm-term-adornment");
+  if (target instanceof Node) return target.parentElement?.closest<HTMLElement>(".cm-term-adornment") ?? null;
+  return null;
 }

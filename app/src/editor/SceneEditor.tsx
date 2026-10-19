@@ -315,6 +315,7 @@ export function SceneEditor({
               onCursorPositionChange={(cursorSentenceIndex, scrollTop) => onCursorPositionChange(scene.id, cursorSentenceIndex, scrollTop)}
               onSelectionLengthChange={setSelectionLength}
               resolveTerms={reading ? undefined : resolveTerms}
+              onTermNavigate={onTermNavigate}
               termResolutionKey={`${repositoryKey}:${snapshot}:${scene.id}:${path}`}
               labelledBy="manuscript-label"
               placeholder="物語の続きを書く"

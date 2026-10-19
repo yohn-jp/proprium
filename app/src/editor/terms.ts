@@ -22,6 +22,39 @@ export interface VisibleTextRange {
 
 export interface TermTextSlice extends VisibleTextRange {}
 
+/** Selects one marked term for the editor's Mod+Enter navigation command. */
+export function findTermSpanAtSelection(
+  spans: readonly EditorTermSpan[],
+  selection: { from: number; to: number },
+): EditorTermSpan | undefined {
+  if (selection.from === selection.to) {
+    return spans.find((span) => span.start <= selection.from && selection.from < span.end)
+      ?? spans.find((span) => span.end === selection.from);
+  }
+  const matches = spans.filter((span) => span.start <= selection.from && span.end >= selection.to);
+  return matches.length === 1 ? matches[0] : undefined;
+}
+
+/** Returns visible lines that have neither an active request nor a completed result this visit. */
+export function selectPendingTermLines(
+  visibleLineStarts: readonly number[],
+  activeLines: ReadonlySet<number>,
+  completedLines: ReadonlySet<number>,
+  maxActiveLines: number,
+): number[] {
+  const capacity = Number.isFinite(maxActiveLines) ? Math.max(0, Math.floor(maxActiveLines) - activeLines.size) : 0;
+  if (capacity === 0) return [];
+  const selected: number[] = [];
+  const seen = new Set<number>();
+  for (const lineStart of visibleLineStarts) {
+    if (!Number.isInteger(lineStart) || activeLines.has(lineStart) || completedLines.has(lineStart) || seen.has(lineStart)) continue;
+    selected.push(lineStart);
+    seen.add(lineStart);
+    if (selected.length >= capacity) break;
+  }
+  return selected;
+}
+
 /** Bounds resolver work to currently visible source ranges, with per-call and total limits. */
 export function selectVisibleTermSlices(
   visibleRanges: readonly VisibleTextRange[],

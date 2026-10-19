@@ -1,5 +1,5 @@
 import { defaultKeymap, history, historyKeymap } from "@codemirror/commands";
-import { EditorState, Transaction } from "@codemirror/state";
+import { Compartment, EditorState, Transaction } from "@codemirror/state";
 import {
   drawSelection,
   EditorView,
@@ -35,6 +35,7 @@ export interface ManuscriptInputProps {
   labelledBy: string;
   style?: CSSProperties;
   resolveTerms?: ResolveEditorTerms;
+  onTermNavigate?: (targetPath: string, termId: string) => void;
   termResolutionKey?: string;
 }
 
@@ -49,14 +50,18 @@ export const ManuscriptInput = forwardRef<ManuscriptInputHandle, ManuscriptInput
   labelledBy,
   style,
   resolveTerms,
+  onTermNavigate,
   termResolutionKey,
 }, ref) {
   const containerRef = useRef<HTMLDivElement>(null);
   const viewRef = useRef<EditorView | null>(null);
+  const editabilityCompartment = useRef(new Compartment()).current;
   const externalSyncRef = useRef(false);
   const suppressPositionRef = useRef(false);
   const resolverRef = useRef<ResolveEditorTerms | undefined>(resolveTerms);
+  const navigatorRef = useRef<((targetPath: string, termId: string) => void) | undefined>(onTermNavigate);
   resolverRef.current = resolveTerms;
+  navigatorRef.current = onTermNavigate;
   const latestRef = useRef({ onChange, onSelectionLengthChange, onCursorPositionChange });
   latestRef.current = { onChange, onSelectionLengthChange, onCursorPositionChange };
 
@@ -124,15 +129,14 @@ export const ManuscriptInput = forwardRef<ManuscriptInputHandle, ManuscriptInput
       doc: value,
       extensions: [
         history(),
-        EditorState.readOnly.of(readOnly),
-        EditorView.editable.of(!readOnly),
+        editabilityCompartment.of(editabilityExtensions(readOnly)),
         drawSelection(),
         highlightActiveLine(),
         keymap.of([...defaultKeymap, ...historyKeymap]),
         bracketPairsExtension(),
         ellipsisNormalizeExtension(),
         editorCompositionExtension(),
-        termAdornmentsExtension(resolverRef),
+        termAdornmentsExtension(resolverRef, navigatorRef),
         styleNonceExtension(),
         EditorView.lineWrapping,
         EditorView.contentAttributes.of({
@@ -178,8 +182,13 @@ export const ManuscriptInput = forwardRef<ManuscriptInputHandle, ManuscriptInput
 
   useEffect(() => {
     const view = viewRef.current;
+    if (view) view.dispatch({ effects: editabilityCompartment.reconfigure(editabilityExtensions(readOnly)) });
+  }, [editabilityCompartment, readOnly]);
+
+  useEffect(() => {
+    const view = viewRef.current;
     if (view) view.dispatch({ effects: refreshTermAdornments.of(null) });
-  }, [resolveTerms, termResolutionKey]);
+  }, [resolveTerms, onTermNavigate, termResolutionKey]);
 
   useEffect(() => {
     const view = viewRef.current;
@@ -197,4 +206,8 @@ export const ManuscriptInput = forwardRef<ManuscriptInputHandle, ManuscriptInput
 function styleNonceExtension() {
   const nonce = document.querySelector<HTMLMetaElement>('meta[name="scriptorium-style-nonce"]')?.content;
   return nonce && nonce !== "__SCRIPTORIUM_STYLE_NONCE__" ? EditorView.cspNonce.of(nonce) : [];
+}
+
+function editabilityExtensions(readOnly: boolean) {
+  return [EditorState.readOnly.of(readOnly), EditorView.editable.of(!readOnly)];
 }

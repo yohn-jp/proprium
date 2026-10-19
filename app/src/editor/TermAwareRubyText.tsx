@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 import { RubyText } from "./ruby";
-import { validateEditorTermSpans, type EditorTermSpan, type ResolveEditorTerms } from "./terms";
+import { selectPendingTermLines, validateEditorTermSpans, type EditorTermSpan, type ResolveEditorTerms } from "./terms";
 
 const MAX_VISIBLE_LINE_CHARS = 4_096;
 const MAX_ACTIVE_LINES = 8;
@@ -35,6 +35,7 @@ export function TermAwareRubyText({
     let disposed = false;
     const visibleLines = new Map<number, HTMLParagraphElement>();
     const active = new Map<number, { controller: AbortController; timer: ReturnType<typeof setTimeout> }>();
+    const completed = new Set<number>();
 
     const removeTerms = (lineStart: number) => {
       setTermState((current) => {
@@ -46,9 +47,11 @@ export function TermAwareRubyText({
     };
 
     const pump = () => {
-      if (disposed || active.size >= MAX_ACTIVE_LINES) return;
-      for (const [lineStart, element] of visibleLines) {
-        if (active.has(lineStart)) continue;
+      if (disposed) return;
+      const pending = selectPendingTermLines([...visibleLines.keys()], new Set(active.keys()), completed, MAX_ACTIVE_LINES);
+      for (const lineStart of pending) {
+        const element = visibleLines.get(lineStart);
+        if (!element) continue;
         const sourceStart = Number(element.dataset.sourceStart);
         const sourceEnd = Number(element.dataset.sourceEnd);
         if (!Number.isInteger(sourceStart) || !Number.isInteger(sourceEnd) || sourceEnd <= sourceStart) continue;
@@ -69,7 +72,9 @@ export function TermAwareRubyText({
           }).catch(() => {
             // Optional terminology failures do not affect reading or editing.
           }).finally(() => {
+            if (active.get(lineStart)?.controller !== controller) return;
             active.delete(lineStart);
+            if (!disposed && !controller.signal.aborted && visibleLines.get(lineStart) === element) completed.add(lineStart);
             pump();
           });
         }, 40);
@@ -87,6 +92,7 @@ export function TermAwareRubyText({
           visibleLines.set(lineStart, element);
         } else {
           visibleLines.delete(lineStart);
+          completed.delete(lineStart);
           const request = active.get(lineStart);
           if (request) {
             clearTimeout(request.timer);
