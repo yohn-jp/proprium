@@ -96,10 +96,14 @@ export function applicationPath(mode: UiMode, resource: ApplicationResource | nu
 
 export function switchApplicationPath(pathname: string, mode: UiMode): string {
   let search = "";
+  const resource = parseApplicationLocation(pathname)?.resource ?? null;
   try {
-    search = new URL(pathname, "http://scriptorium.invalid").search;
+    const params = new URL(pathname, "http://scriptorium.invalid").searchParams;
+    if (mode === "mobile") params.set("view", resource?.sceneId ? "writing" : "library");
+    else params.delete("view");
+    search = params.toString();
   } catch {
     // The pathname parser below will return no resource for malformed input.
   }
-  return applicationPath(mode, parseApplicationLocation(pathname)?.resource ?? null, search);
+  return applicationPath(mode, resource, search);
 }

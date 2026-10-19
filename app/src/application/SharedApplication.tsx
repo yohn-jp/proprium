@@ -30,7 +30,7 @@ import { useRecentActivityResume } from "../resume/useRecentActivityResume";
 import { loadThemeMode, persistThemeMode, type ThemeMode } from "../theme";
 import { clearDraft, loadDraft } from "../drafts";
 import type { ApplicationShell, ApplicationShellProps, UiMode } from "./contracts";
-import { applicationPath, parseApplicationLocation, readUiModePreference, rememberUiMode, type ApplicationResource } from "./navigation";
+import { applicationPath, parseApplicationLocation, readUiModePreference, rememberUiMode, switchApplicationPath, type ApplicationResource } from "./navigation";
 import { canRetainRecoveredEditorDuringSceneLoad, isNonDraftEntryAcknowledgedByReceipt, isSameSceneEditorLoad, isTextRepresentedByRecoveryRecord, isUnchangedEntryConfirmedByReceipt, mayWriteEditor, recoveryStatusForJournalOpen, type EditorRecoveryStatus } from "./recovery";
 import {
   BrowserJournal,
@@ -1654,7 +1654,8 @@ function AuthorWorkspace({
       await flushDraft();
       if (!rememberUiMode(nextMode)) throw new Error("画面の選択をこのブラウザーに保存できませんでした。");
       const resource = resourceForWork(workRef.current) ?? parseApplicationLocation(`${window.location.pathname}${window.location.search}`)?.resource ?? null;
-      const nextPath = applicationPath(nextMode, resource, window.location.search);
+      const currentPath = applicationPath(mode, resource, window.location.search);
+      const nextPath = switchApplicationPath(currentPath, nextMode);
       window.location.assign(nextPath);
       return true;
     } catch (error) {
