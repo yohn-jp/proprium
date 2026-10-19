@@ -2073,8 +2073,19 @@ function AuthorWorkspace({
       scrollTop: candidate.scrollTop ?? 0,
       ...(reading && candidate.pageIndex !== null ? { pageIndex: candidate.pageIndex } : {}),
     });
-    if (current.selectedSceneId === candidate.sceneId && current.editor?.read.scene.id === candidate.sceneId && !current.loadingScene) return;
-    void loadScene(current.project.id, candidate.sceneId, current.tree, current.observation.snapshot.repository);
+    if (current.selectedSceneId === candidate.sceneId && current.editor?.read.scene.id === candidate.sceneId && !current.loadingScene) {
+      requestPanel("editor");
+      return;
+    }
+    void loadScene(current.project.id, candidate.sceneId, current.tree, current.observation.snapshot.repository)
+      .then(() => requestPanel("editor"));
+  }
+
+  function selectSceneFromOutline(sceneId: string): void {
+    const current = workRef.current;
+    if (!current) return;
+    void loadScene(current.project.id, sceneId, current.tree, current.observation.snapshot.repository)
+      .then(() => requestPanel("editor"));
   }
 
   function completeResumeRequest(requestId: number): void {
@@ -2252,7 +2263,7 @@ function AuthorWorkspace({
           onRead={(candidate) => continueFrom(candidate, true)}
         />
       )}
-      {tree && <TreeNav tree={tree} selectedSceneId={work?.selectedSceneId ?? ""} disabled={Boolean(busy)} onSelect={(sceneId) => work && void loadScene(work.project.id, sceneId, work.tree, work.observation.snapshot.repository)} />}
+      {tree && <TreeNav tree={tree} selectedSceneId={work?.selectedSceneId ?? ""} disabled={Boolean(busy)} onSelect={selectSceneFromOutline} />}
       {legacyDrafts.length > 0 && <LegacyRecoveryPanel drafts={legacyDrafts} selectedSceneId={work && !work.loadingScene && work.editor?.read.scene.id === work.selectedSceneId ? work.selectedSceneId : ""} onExport={exportLegacyDrafts} onMap={(draft) => void mapLegacyDraft(draft)} />}
       {!work && recoverableEntries.length > 0 && (
         <section className="recovery-panel" aria-labelledby="recovery-title">
