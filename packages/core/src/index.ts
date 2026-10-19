@@ -1070,11 +1070,15 @@ export class CoreStore implements MutationCoordinator {
   private readonly maxPushAttempts: number;
   private readonly queueTails = new Map<string, Promise<void>>();
   private readonly readObservations = new Map<string, RemoteObservation>();
+  private readonly observationRefKeys = new Map<string, string>();
+  private readonly reconciliationCache = new Map<string, { key: string; result: ReconcileResult }>();
+  private readonly fileRevisionCache = new Map<string, string>();
   private readonly historicalMetadataCache = new Map<string, { records: Array<{ path: string; commit: string; content: string }>; bytes: number }>();
   private historicalMetadataCacheBytes = 0;
   private readonly hierarchyCache = new Map<string, {
     tree: Tree;
     scenes: Map<string, { path: string; text: string; data: Record<string, unknown> }>;
+    documents: Map<string, string | null>;
     objects: Map<string, { mode: string; type: string; hash: string }>;
     bytes: number;
   }>();
@@ -1475,7 +1479,60 @@ export class CoreStore implements MutationCoordinator {
     const entry = await this.treeEntry(root, commit, relativePath);
     if (!entry) return null;
     const bytes = await gitBuffer(root, ["cat-file", "blob", entry.hash]);
-    return { content: encoding === "base64" ? bytes.toString("base64") : bytes.toString("utf8"), revision: revisionForBytes(bytes) };
+    const revision = this.cacheFileRevision(entry.hash, revisionForBytes(bytes));
+    return { content: encoding === "base64" ? bytes.toString("base64") : bytes.toString("utf8"), revision };
+  }
+
+  private cacheFileRevision(blobId: string, revision: string): string {
+    const cached = this.fileRevisionCache.get(blobId);
+    if (cached) {
+      this.fileRevisionCache.delete(blobId);
+      this.fileRevisionCache.set(blobId, cached);
+      return cached;
+    }
+    while (this.fileRevisionCache.size >= 16_384) {
+      const oldest = this.fileRevisionCache.keys().next().value;
+      if (oldest === undefined) break;
+      this.fileRevisionCache.delete(oldest);
+    }
+    this.fileRevisionCache.set(blobId, revision);
+    return revision;
+  }
+
+  private async snapshotFileRevisions(root: string, commit: string, prefix: string): Promise<FileRevision[]> {
+    if (prefix) {
+      try { assertProjectPath(prefix.replace(/\/$/, "")); }
+      catch { throw coreError(422, "unsafe_project_path", "The project path is unsafe"); }
+    }
+    if (!commit) return [];
+    const output = await git(root, ["ls-tree", "-r", "--full-tree", "-z", commit]);
+    const blobs: Array<{ path: string; blobId: string }> = [];
+    for (const entry of output.split("\0")) {
+      if (!entry) continue;
+      const tab = entry.indexOf("\t");
+      if (tab < 0) continue;
+      const filePath = entry.slice(tab + 1);
+      if (prefix && filePath !== prefix && !filePath.startsWith(`${prefix.replace(/\/$/, "")}/`)) continue;
+      const [mode, type, blobId] = entry.slice(0, tab).split(" ");
+      if (!mode || !type || !blobId || !/^(?:[a-f0-9]{40}|[a-f0-9]{64})$/.test(blobId)) {
+        throw coreError(502, "git_operation_failed", "Git returned an invalid tree object entry");
+      }
+      assertProjectPath(filePath);
+      if (mode === "120000" || type !== "blob") {
+        throw coreError(422, "unsafe_project_path", "The snapshot contains a non-regular document path");
+      }
+      blobs.push({ path: filePath, blobId });
+    }
+    const revisions: string[] = [];
+    for (let offset = 0; offset < blobs.length; offset += 32) {
+      revisions.push(...await Promise.all(blobs.slice(offset, offset + 32).map(async ({ blobId }) => {
+        const cached = this.fileRevisionCache.get(blobId);
+        if (cached) return cached;
+        return this.cacheFileRevision(blobId, revisionForBytes(await gitBuffer(root, ["cat-file", "blob", blobId])));
+      })));
+    }
+    return blobs.map(({ path: filePath }, index) => ({ path: filePath, revision: revisions[index]! }))
+      .sort((left, right) => left.path.localeCompare(right.path));
   }
 
   private async snapshotFiles(root: string, commit: string, prefix: string): Promise<string[]> {
@@ -1678,14 +1735,19 @@ export class CoreStore implements MutationCoordinator {
       const askpass = await makeAskpassScript(askpassDir);
       const identity = await this.getRepositoryIdentity(record, root, askpass);
       const remote = await this.authenticatedGit(record, root, ["ls-remote", "--heads", "origin", `refs/heads/${record.branch}`], askpass);
-      const exists = remote.split(/\r?\n/).some((line) => line.endsWith(`\trefs/heads/${record.branch}`));
-      if (!exists) {
+      const remoteCommit = remote.split(/\r?\n/).map((line) => {
+        const [commit, ref] = line.split("\t");
+        return ref === `refs/heads/${record.branch}` && /^(?:[a-f0-9]{40}|[a-f0-9]{64})$/.test(commit ?? "") ? commit : undefined;
+      }).find((commit): commit is string => !!commit);
+      if (!remoteCommit) {
         if (record.emptyRemote) return { identity, remoteCommit: "" };
         throw coreError(409, "remote_branch_missing", "The registered GitHub branch no longer exists");
       }
+      const trackedCommit = await this.getRef(root, `refs/remotes/origin/${record.branch}`);
+      if (trackedCommit === remoteCommit) return { identity, remoteCommit };
       await this.authenticatedGit(record, root, ["fetch", "--no-tags", "origin", record.branch], askpass);
-      const remoteCommit = await this.getRef(root, `refs/remotes/origin/${record.branch}`);
-      if (!remoteCommit) throw coreError(409, "remote_branch_missing", "The registered GitHub branch no longer exists");
+      const fetchedCommit = await this.getRef(root, `refs/remotes/origin/${record.branch}`);
+      if (!fetchedCommit) throw coreError(409, "remote_branch_missing", "The registered GitHub branch no longer exists");
       if (record.emptyRemote) {
         record.emptyRemote = false;
         await this.withRegistryLock(async () => {
@@ -1693,7 +1755,7 @@ export class CoreStore implements MutationCoordinator {
           await this.writeRegistry(records.map((item) => item.id === record.id ? { ...item, emptyRemote: false } : item));
         });
       }
-      return { identity, remoteCommit };
+      return { identity, remoteCommit: fetchedCommit };
     } finally {
       await fs.rm(askpassDir, { recursive: true, force: true }).catch(() => undefined);
     }
@@ -2261,6 +2323,25 @@ export class CoreStore implements MutationCoordinator {
     return this.getRef(root, "HEAD");
   }
 
+  private async operationRefsKey(root: string): Promise<string> {
+    const refs = await git(root, ["for-each-ref", "--format=%(refname) %(objectname)", "refs/scriptorium/checkpoints/"]);
+    return JSON.stringify([
+      await this.getRef(root, "refs/scriptorium/checkpoint-head") ?? "",
+      await this.getRef(root, "HEAD") ?? "",
+      refs.trim(),
+    ]);
+  }
+
+  private async reconciliationStateKey(root: string, observation: RemoteObservation): Promise<string> {
+    const refs = await git(root, ["for-each-ref", "--format=%(refname) %(objectname)", "refs/scriptorium/"]);
+    return JSON.stringify([
+      path.resolve(root),
+      snapshotKey(observation.snapshot),
+      await this.getRef(root, "HEAD") ?? "",
+      refs.trim(),
+    ]);
+  }
+
   private async makeReader(root: string, snapshot: SnapshotId, commit: string): Promise<SnapshotReader> {
     return {
       snapshot,
@@ -2270,6 +2351,7 @@ export class CoreStore implements MutationCoordinator {
         return this.snapshotFile(root, commit, relativePath, encoding);
       },
       list: async (prefix) => this.snapshotFiles(root, commit, prefix),
+      listRevisions: async (prefix) => this.snapshotFileRevisions(root, commit, prefix),
     };
   }
 
@@ -2529,6 +2611,7 @@ export class CoreStore implements MutationCoordinator {
   private async hierarchySnapshot(root: string, commit: string, repositoryUrl: string): Promise<{
     tree: Tree;
     scenes: Map<string, { path: string; text: string; data: Record<string, unknown> }>;
+    documents: Map<string, string | null>;
     objects: Map<string, { mode: string; type: string; hash: string }>;
   }> {
     const key = path.resolve(root) + "\0" + commit;
@@ -2548,6 +2631,7 @@ export class CoreStore implements MutationCoordinator {
     }))];
     const volumes: TreeVolume[] = [];
     const scenes = new Map<string, { path: string; text: string; data: Record<string, unknown> }>();
+    const documents = new Map<string, string | null>();
     const seen = new Set<string>();
     for (const volumeId of volumeIds) {
       const volumeData = yaml.get(`plot/volumes/${volumeId}/volume.yaml`)?.data ?? { id: volumeId };
@@ -2575,6 +2659,15 @@ export class CoreStore implements MutationCoordinator {
           if (seen.has(sceneId)) throw coreError(409, "duplicate_scene_id", "The project contains duplicate scene ids");
           seen.add(sceneId);
           scenes.set(sceneId, { path: file, ...record });
+          const parts = file.split("/");
+          const linkedPath = typeof record.data.manuscript === "string"
+            ? record.data.manuscript
+            : `manuscript/${parts[2]}/${parts[4]}/${sceneId}.md`;
+          try {
+            const documentPath = safeRelativePath(linkedPath).split(path.sep).join("/");
+            assertProjectPath(documentPath);
+            documents.set(documentPath, documents.has(documentPath) ? null : sceneId);
+          } catch { /* Invalid manuscript paths cannot be used for navigation. */ }
           sceneEntries.push({
             id: sceneId,
             title: titleOf(record.data, sceneId),
@@ -2588,7 +2681,8 @@ export class CoreStore implements MutationCoordinator {
     }
     const tree: Tree = { title, volumes: volumes.sort((a, b) => a.title.localeCompare(b.title) || a.id.localeCompare(b.id)) };
     const bytes = [...yaml.entries()].reduce((sum, [name, record]) => sum + Buffer.byteLength(record.text, "utf8") + Buffer.byteLength(name, "utf8") + 128, 0) +
-      [...objects.keys()].reduce((sum, name) => sum + Buffer.byteLength(name, "utf8") + 96, 0);
+      [...objects.keys()].reduce((sum, name) => sum + Buffer.byteLength(name, "utf8") + 96, 0) +
+      [...documents.entries()].reduce((sum, [documentPath, sceneId]) => sum + Buffer.byteLength(documentPath, "utf8") + (sceneId?.length ?? 0) + 48, 0);
     if (bytes <= HIERARCHY_CACHE_MAX_BYTES) {
       while (this.hierarchyCache.size >= HIERARCHY_CACHE_MAX_ENTRIES || this.hierarchyCacheBytes + bytes > HIERARCHY_CACHE_MAX_BYTES) {
         const oldest = this.hierarchyCache.entries().next().value;
@@ -2596,10 +2690,10 @@ export class CoreStore implements MutationCoordinator {
         this.hierarchyCache.delete(oldest[0]);
         this.hierarchyCacheBytes -= oldest[1].bytes;
       }
-      this.hierarchyCache.set(key, { tree, scenes, objects, bytes });
+      this.hierarchyCache.set(key, { tree, scenes, documents, objects, bytes });
       this.hierarchyCacheBytes += bytes;
     }
-    return { tree, scenes, objects };
+    return { tree, scenes, documents, objects };
   }
 
   /** Enumerate YAML object IDs once and decode them through bounded cat-file batches. */
@@ -2700,6 +2794,21 @@ export class CoreStore implements MutationCoordinator {
       const selected = await this.selectedSnapshotUnlocked(projectId, view, pinned);
       const hierarchy = await this.hierarchySnapshot(selected.root, selected.commit, selected.record.url);
       return { snapshot: selected.snapshot, tree: structuredClone(hierarchy.tree) };
+    });
+  }
+
+  /** Resolve a canonical manuscript path against its pinned hierarchy without reading scene bodies. */
+  async resolveDocumentScene(
+    projectId: string,
+    documentPath: string,
+    pinned?: SnapshotId | string,
+  ): Promise<{ snapshot: SnapshotId; sceneId: string | null }> {
+    assertProjectPath(documentPath);
+    return this.withProjectLock(projectId, async () => {
+      const view = pinned && typeof pinned === "object" && pinned.overlayCommit ? "checkpoint" : "remote";
+      const selected = await this.selectedSnapshotUnlocked(projectId, view, pinned);
+      const hierarchy = await this.hierarchySnapshot(selected.root, selected.commit, selected.record.url);
+      return { snapshot: structuredClone(selected.snapshot), sceneId: hierarchy.documents.get(documentPath) ?? null };
     });
   }
 
@@ -3893,6 +4002,8 @@ export class CoreStore implements MutationCoordinator {
           const askpass = await makeAskpassScript(askpassDir);
           const token = await this.gitCredential(record, "publish", authorization);
           this.readObservations.delete(projectId);
+          this.observationRefKeys.delete(projectId);
+          this.reconciliationCache.delete(projectId);
           try {
             await git(root, ["push", "origin", `${commit}:refs/heads/${record.branch}`], { token, askpass });
           } catch { /* A fresh remote observation below distinguishes rejection from a lost response. */ }
@@ -3958,6 +4069,13 @@ export class CoreStore implements MutationCoordinator {
     const { record, root } = await this.getProject(projectId);
     const remote = alreadyFetched ?? await this.fetchRemoteUnlocked(record, root);
     const remoteHead = remote.remoteCommit;
+    const identitySnapshot = { repository: remote.identity, remoteCommit: remoteHead };
+    const observedKey = await this.operationRefsKey(root);
+    const cached = this.readObservations.get(projectId);
+    if (cached && cached.state === "fresh" && this.observationRefKeys.get(projectId) === observedKey &&
+        snapshotKey(cached.snapshot) === snapshotKey(identitySnapshot)) {
+      return { ...structuredClone(cached), observedAt: new Date().toISOString() };
+    }
     let localHead = await this.checkpointHead(root);
     const remoteOperations = remoteHead ? await this.readOperationRecords(root, remoteHead) : [];
     const localOperations = await this.readLocalOperationRecords(root);
@@ -3977,13 +4095,15 @@ export class CoreStore implements MutationCoordinator {
         localHead = remoteHead;
       }
     }
-    return {
+    const observation: RemoteObservation = {
       snapshot: { repository: remote.identity, remoteCommit: remoteHead },
       checkpointHead: localHead,
       observedAt: new Date().toISOString(),
       state: "fresh",
       pending,
     };
+    this.observationRefKeys.set(projectId, await this.operationRefsKey(root));
+    return observation;
   }
 
   private async requireObservation(
@@ -4035,6 +4155,13 @@ export class CoreStore implements MutationCoordinator {
   private async reconcileUnlocked(projectId: string, knownObservation?: RemoteObservation): Promise<ReconcileResult> {
     const observation = knownObservation ?? await this.requireObservation(projectId);
     const { root } = await this.getProject(projectId);
+    const stateKey = await this.reconciliationStateKey(root, observation);
+    const cached = this.reconciliationCache.get(projectId);
+    if (cached?.key === stateKey) {
+      this.reconciliationCache.delete(projectId);
+      this.reconciliationCache.set(projectId, cached);
+      return structuredClone(cached.result);
+    }
     const remoteHead = observation.snapshot.remoteCommit;
     const localOperations = await this.readLocalOperationRecords(root);
     const remoteOperations = remoteHead ? await this.readOperationRecords(root, remoteHead) : [];
@@ -4203,10 +4330,19 @@ export class CoreStore implements MutationCoordinator {
     const previous = await this.getRef(root, "refs/scriptorium/reconciled-head");
     if (replayHead) await git(root, ["update-ref", "refs/scriptorium/reconciled-head", replayHead, ...(previous ? [previous] : [])]);
     else if (previous) await git(root, ["update-ref", "-d", "refs/scriptorium/reconciled-head", previous]);
-    return {
+    const result: ReconcileResult = {
       snapshot: { ...observation.snapshot, ...(replayHead && replayHead !== remoteHead ? { overlayCommit: replayHead } : {}) },
       operations: outcomes,
     };
+    const finalKey = await this.reconciliationStateKey(root, observation);
+    this.reconciliationCache.delete(projectId);
+    this.reconciliationCache.set(projectId, { key: finalKey, result: structuredClone(result) });
+    while (this.reconciliationCache.size > 128) {
+      const oldest = this.reconciliationCache.keys().next().value;
+      if (oldest === undefined) break;
+      this.reconciliationCache.delete(oldest);
+    }
+    return result;
   }
 
   private withProjectLock<T>(projectId: string, action: () => Promise<T>): Promise<T> {
@@ -4439,6 +4575,8 @@ export class CoreStore implements MutationCoordinator {
       this.durableProposalIds.delete(projectId);
       this.approvals.delete(projectId);
       this.readObservations.delete(projectId);
+      this.observationRefKeys.delete(projectId);
+      this.reconciliationCache.delete(projectId);
       if (detached) {
         this.clearHistoricalMetadataCache(root);
         await fs.rm(detachedRoot, { recursive: true, force: true }).catch(() => undefined);
@@ -4577,6 +4715,8 @@ export class CoreStore implements MutationCoordinator {
         this.proposals.delete(projectId);
         this.durableProposalIds.delete(projectId);
         this.readObservations.delete(projectId);
+        this.observationRefKeys.delete(projectId);
+        this.reconciliationCache.delete(projectId);
         this.clearHistoricalMetadataCache(root);
         if (backedUp) await fs.rm(backupRoot, { recursive: true, force: true }).catch(() => undefined);
         return { id: projectId, url: updated.url, branch: updated.branch };

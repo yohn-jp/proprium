@@ -157,6 +157,7 @@ test("manuscript snapshots enumerate and read exact documents at a pinned reacha
     const secondCommit = await git(fixture.seed, "rev-parse", "HEAD");
     await git(fixture.seed, "push", "origin", "main");
 
+    await store.observe(project.id);
     const listed = await store.listManuscriptSnapshots(project.id, "ms-one", "scene1");
     assert.equal(listed.snapshot.remoteCommit, secondCommit);
     assert.deepEqual(listed.snapshots.map((item) => item.id), [secondCommit, firstCommit]);

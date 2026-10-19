@@ -6,6 +6,7 @@ import os from "node:os";
 import path from "node:path";
 import { test } from "node:test";
 import YAML from "yaml";
+import { createDocumentSource } from "@scriptorium/contracts";
 import { CoreError, CoreStore } from "./index.js";
 
 const execFile = promisify(execFileCallback);
@@ -207,6 +208,24 @@ test("local durability census rejects stale observations and changed remote refs
   }
 });
 
+test("a fresh HEAD probe skips Git fetch when status sees the tracked commit unchanged", async () => {
+  const { tempDir, remote } = await makeRemote();
+  try {
+    const store = new CoreStore({ dataDir: path.join(tempDir, "state"), allowLocalRemotes: true });
+    const project = await store.registerProject({ url: remote });
+    await store.status(project.id);
+    const workspace = await projectWorkspace(path.join(tempDir, "state"), project.id);
+    const fetchHeadPath = path.join(workspace, ".git", "FETCH_HEAD");
+    const before = await fs.stat(fetchHeadPath, { bigint: true }).catch(() => undefined);
+    await new Promise((resolve) => setTimeout(resolve, 1_100));
+    await store.status(project.id);
+    const after = await fs.stat(fetchHeadPath, { bigint: true }).catch(() => undefined);
+    assert.equal(after?.mtimeNs, before?.mtimeNs, "an unchanged remote commit does not create or rewrite FETCH_HEAD");
+  } finally {
+    await fs.rm(tempDir, { recursive: true, force: true });
+  }
+});
+
 test("reports divergent local and remote histories without replacing the local draft", async () => {
   const { tempDir, remote, seed } = await makeRemote();
   try {
@@ -214,11 +233,22 @@ test("reports divergent local and remote histories without replacing the local d
     const project = await store.registerProject({ url: remote });
     const original = await store.readScene(project.id, "scene-1");
     await store.saveScene(project.id, "scene-1", { text: "Local edit.\n", revision: original.revision });
+    const firstReconcile = await store.reconcile(project.id);
+    assert.ok(firstReconcile.snapshot.overlayCommit, "a checkpoint based on the current remote is visible as a local overlay");
+    const repeatedReconcile = await store.reconcile(project.id);
+    assert.deepEqual(repeatedReconcile, firstReconcile, "an unchanged remote and local checkpoint reuse the same reconciliation result");
 
     await fs.writeFile(path.join(seed, "manuscript/vol-1/ch-1/scene-1.md"), "Remote edit.\n", "utf8");
     await runGit(seed, "add", "manuscript/vol-1/ch-1/scene-1.md");
     await runGit(seed, "commit", "-m", "Competing remote edit");
     await runGit(seed, "push", "origin", "main");
+
+    const changedHead = await store.reconcile(project.id);
+    assert.notEqual(changedHead.snapshot.remoteCommit, firstReconcile.snapshot.remoteCommit,
+      "a new remote HEAD invalidates the cached overlay");
+    assert.equal(changedHead.snapshot.overlayCommit, undefined,
+      "a conflicting checkpoint is not replayed onto the changed remote snapshot");
+    assert.ok(changedHead.operations.some((operation) => operation.state === "conflict"));
 
     await assert.rejects(
       store.sync(project.id),
@@ -705,6 +735,16 @@ test("search and writing statistics read one pinned remote snapshot", async () =
     const store = new CoreStore({ dataDir: path.join(tempDir, "state"), allowLocalRemotes: true });
     const project = await store.registerProject({ url: remote });
     const originalSnapshot = (await store.observe(project.id)).snapshot;
+    const documentSource = createDocumentSource(await store.reader(project.id, "remote", originalSnapshot));
+    const indexedDocuments = await documentSource.enumerate("manuscript");
+    const sceneDocument = indexedDocuments.find(({ path: filePath }) => filePath === "manuscript/vol-1/ch-1/scene-1.md");
+    assert.ok(sceneDocument?.revision);
+    assert.equal((await documentSource.readMany(["manuscript/vol-1/ch-1/scene-1.md"]))[0]?.revision, sceneDocument.revision,
+      "document enumeration and reads share Core's canonical content revision");
+    assert.deepEqual(await store.resolveDocumentScene(
+      project.id, "manuscript/vol-1/ch-1/scene-1.md", originalSnapshot,
+    ), { snapshot: originalSnapshot, sceneId: "scene-1" });
+    assert.equal((await store.resolveDocumentScene(project.id, "meta/scratch/side-note.md", originalSnapshot)).sceneId, null);
     const found = await store.searchSnapshot(project.id, "needle", 20, "remote", originalSnapshot);
     assert.equal(found.snapshot.remoteCommit, originalSnapshot.remoteCommit);
     assert.deepEqual(found.results.map(({ id, field, offset, length }) => ({ id, field, offset, length })), [
@@ -738,6 +778,9 @@ test("search and writing statistics read one pinned remote snapshot", async () =
     assert.equal(latest.results.length, 0);
     const pinnedAgain = await store.searchSnapshot(project.id, "needle", 20, "remote", originalSnapshot);
     assert.equal(pinnedAgain.results[0]?.offset, 10);
+    assert.deepEqual(await store.resolveDocumentScene(
+      project.id, "manuscript/vol-1/ch-1/scene-1.md", originalSnapshot,
+    ), { snapshot: originalSnapshot, sceneId: "scene-1" }, "pinned navigation remains bound to the original hierarchy");
     const latestStats = await store.writingStatsSnapshot(project.id);
     assert.equal(latestStats.stats.totalCharCount, "Updated without the old literal.\n".length + 1);
     const pinnedStats = await store.writingStatsSnapshot(project.id, "remote", originalSnapshot);
