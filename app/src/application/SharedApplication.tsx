@@ -1150,7 +1150,7 @@ function AuthorWorkspace({
     try {
       const observed = await api.observation(projectId);
       if (navigationRef.current !== nav || workRef.current?.project.id !== projectId) return;
-      await importRemoteProposals(projectId, observed.snapshot.repository, authorScope, nav);
+      await importRemoteProposals(projectId, observed.snapshot.repository, authorScopeRef.current, nav);
       if (navigationRef.current !== nav || workRef.current?.project.id !== projectId) return;
       const latestBeforeRead = workRef.current;
       const changedRemote = Boolean(latestBeforeRead && latestBeforeRead.observation.snapshot.remoteCommit !== observed.snapshot.remoteCommit);
@@ -1158,7 +1158,7 @@ function AuthorWorkspace({
       const changedEditorSnapshot = Boolean(latestBeforeRead?.editor &&
         !sameRemoteSnapshot(latestBeforeRead.editor.remote.snapshot, observed.snapshot));
       if (changedRemote) {
-        await reconcileProject(projectId, observed.snapshot.repository, authorScope, nav);
+        await reconcileProject(projectId, observed.snapshot.repository, authorScopeRef.current, nav);
         if (navigationRef.current !== nav || workRef.current?.project.id !== projectId) return;
       }
       const tree = changedRemote
@@ -1192,7 +1192,7 @@ function AuthorWorkspace({
     } finally {
       observationBusyRef.current = false;
     }
-  }, [authorScope, importRemoteProposals, loadScene, recentResume.flush, reconcileProject, updateWork]);
+  }, [importRemoteProposals, loadScene, recentResume.flush, reconcileProject, updateWork]);
   refreshRef.current = refreshRemote;
 
   const refreshForeground = useCallback(() => {
