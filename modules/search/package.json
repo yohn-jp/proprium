@@ -1,0 +1,41 @@
+{
+  "name": "@scriptorium/module-search",
+  "private": true,
+  "version": "0.1.0",
+  "type": "module",
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js"
+    },
+    "./browser": {
+      "types": "./dist/browser.d.ts",
+      "import": "./dist/browser.js"
+    }
+  },
+  "files": ["dist"],
+  "scripts": {
+    "build": "tsc -p tsconfig.json",
+    "typecheck": "tsc -p tsconfig.json --noEmit",
+    "test": "node --import tsx --test src/*.test.ts"
+  },
+  "dependencies": {
+    "@scriptorium/contracts": "workspace:*",
+    "@scriptorium/module-runtime": "workspace:*"
+  },
+  "scriptoriumModule": {
+    "id": "search",
+    "version": "0.1.0",
+    "contractVersion": 1,
+    "dependencies": [],
+    "provides": [],
+    "requires": [],
+    "optionalRequires": ["nlp.tokenizer", "semantic.embedding"],
+    "serverEntry": "./dist/index.js",
+    "statePaths": ["meta/scriptorium/modules/search"],
+    "locality": "local",
+    "browserEntry": "./dist/browser.js"
+  }
+}
