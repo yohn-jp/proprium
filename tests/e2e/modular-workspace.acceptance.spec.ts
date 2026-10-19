@@ -503,10 +503,22 @@ test("Core loss replays an exact checkpointed author entry before enabling the r
   expect(repositoryUrl).not.toBe("");
   const authorText = "Exact checkpointed author text survives Core loss.";
   const canonicalRemote = "# Scene One\n\nThe first line of the story.\nBeacon Quay appears in this scene.\n";
+  let releaseCheckpoint!: () => void;
+  let signalCheckpoint!: () => void;
+  const checkpointGate = new Promise<void>((resolve) => { releaseCheckpoint = resolve; });
+  const checkpointStarted = new Promise<void>((resolve) => { signalCheckpoint = resolve; });
+  let releaseSceneRead!: () => void;
+  let signalSceneRead!: () => void;
+  const sceneReadGate = new Promise<void>((resolve) => { releaseSceneRead = resolve; });
+  const sceneReadStarted = new Promise<void>((resolve) => { signalSceneRead = resolve; });
   let releaseReconcile!: () => void;
   let signalReconcile!: () => void;
   const reconcileGate = new Promise<void>((resolve) => { releaseReconcile = resolve; });
   const reconcileStarted = new Promise<void>((resolve) => { signalReconcile = resolve; });
+  let capturedViews: {
+    remote: { document: { content: string } };
+    effective: { document: { content: string } };
+  } | undefined;
 
   try {
     await signIn(page, "desktop");
@@ -526,6 +538,21 @@ test("Core loss replays an exact checkpointed author entry before enabling the r
 
     await page.goto("about:blank");
     await resetLocalCore();
+    await page.route((url) => url.pathname.endsWith("/checkpoints"), async (route) => {
+      if (route.request().method() === "POST") {
+        signalCheckpoint();
+        await checkpointGate;
+      }
+      await route.continue();
+    });
+    await page.route((url) => url.pathname.endsWith("/scenes/scene-1/views"), async (route) => {
+      const response = await route.fetch();
+      const body = await response.body();
+      capturedViews = JSON.parse(body.toString("utf8")) as typeof capturedViews;
+      signalSceneRead();
+      await sceneReadGate;
+      await route.fulfill({ response, body });
+    });
     await page.route((url) => url.pathname.endsWith("/reconcile"), async (route) => {
       if (route.request().method() === "POST") {
         signalReconcile();
@@ -538,14 +565,27 @@ test("Core loss replays an exact checkpointed author entry before enabling the r
     await page.getByLabel("GitHub リポジトリ URL").fill(repositoryInputValue(repositoryUrl));
     await page.getByRole("button", { name: "リポジトリを登録" }).click();
     await expect(page.getByRole("heading", { name: "Volume One" })).toBeVisible();
-    await reconcileStarted;
+    await checkpointStarted;
     await page.getByRole("button", { name: "Chapter One: Scene One", exact: true }).click();
+    await sceneReadStarted;
+    expect(capturedViews?.remote.document.content).toBe(canonicalRemote);
+    expect(capturedViews?.effective.document.content).toBe(canonicalRemote);
+
+    // Let Core replay the checkpoint while the pinned, pre-replay scene response stays held.
+    // This installs the canonical remote text beside the already checkpointed author entry.
+    releaseCheckpoint();
+    await expect.poll(async () => (await readJournal(page)).find((entry) => entry.operationId === originalEntry!.operationId)?.state)
+      .toBe("checkpointed");
+    await reconcileStarted;
+    releaseSceneRead();
     await expect(page.getByRole("heading", { name: "Scene One" })).toBeVisible();
 
     const readiness = page.locator("[data-recovery-status]");
     await expect(readiness).toHaveAttribute("data-recovery-status", "pending");
     await expect(readiness).toHaveAttribute("data-editor-writable", "false");
     await expect(editor).toHaveAttribute("contenteditable", "false");
+    await expect(editor).toContainText("The first line of the story.");
+    await expect(editor).not.toContainText(authorText);
     const duringReplay = (await readJournal(page)).find((entry) => entry.operationId === originalEntry!.operationId);
     expect(duringReplay).toMatchObject({
       sceneId: "scene-1",
@@ -580,6 +620,8 @@ test("Core loss replays an exact checkpointed author entry before enabling the r
     expect(await readRemoteScene(page, recoveredProject!.id, "scene-1")).toBe(canonicalRemote);
     expect(recoveredProject!.id).not.toBe(projectId);
   } finally {
+    releaseCheckpoint();
+    releaseSceneRead();
     releaseReconcile();
     if (process.env.SCRIPTORIUM_E2E_EXTERNAL_REPOSITORY !== "1" && !process.env.SCRIPTORIUM_E2E_BASE_URL && !process.env.SCRIPTORIUM_BASE_URL) {
       await page.close().catch(() => undefined);
