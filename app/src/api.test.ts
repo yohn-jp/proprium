@@ -32,3 +32,23 @@ test("concurrent expired Hosted requests share the rotating refresh exchange", a
     globalThis.fetch = originalFetch;
   }
 });
+
+test("scene views use one pinned request for remote and checkpoint content", async () => {
+  const originalFetch = globalThis.fetch;
+  const sha = "a".repeat(40);
+  const snapshot = { repository: { provider: "github", ownerScope: "owner", repositoryId: "1", defaultBranch: "main" }, remoteCommit: sha };
+  let requests = 0;
+  globalThis.fetch = async (input) => {
+    assert.equal(String(input), `/api/projects/project-1/scenes/scene-1/views?snapshot=${sha}`);
+    requests += 1;
+    return Response.json({ remote: { snapshot }, effective: { snapshot } });
+  };
+  try {
+    const views = await api.readSceneViews("project-1", "scene-1", snapshot as Parameters<typeof api.readSceneViews>[2]);
+    assert.equal(views.remote.snapshot.remoteCommit, sha);
+    assert.equal(views.effective.snapshot.remoteCommit, sha);
+    assert.equal(requests, 1);
+  } finally {
+    globalThis.fetch = originalFetch;
+  }
+});
