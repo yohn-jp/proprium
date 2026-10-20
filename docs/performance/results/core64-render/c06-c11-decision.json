@@ -1,0 +1,115 @@
+{
+  "schemaVersion": 1,
+  "status": "source-backed no-change decisions; render candidates remain pending",
+  "source": {
+    "runtime": "a1587e784788fa87d86c0eb7ab175d7a28a3209f",
+    "planningBase": "7008feef2294e1176cda2799ec0384e4ee7585c0",
+    "runtimePathDiffAgainstRuntimeSha": "none for SharedApplication.tsx, SceneEditor.tsx, ContributionHost.tsx, ManuscriptInput.tsx, and useRecentActivityResume.ts",
+    "workspaceProbe": "The current worktree has an experiment-only, probe-gated derivation timer in Workspace.tsx; it is excluded from this evidence commit and does not change derivation inputs or results."
+  },
+  "decisions": [
+    {
+      "candidate": "C06",
+      "disposition": "deferred-no-change",
+      "scope": "Do not broadly decompose SharedApplication without an isolated measured leaf.",
+      "sourceEvidence": [
+        {
+          "file": "app/src/application/SharedApplication.tsx",
+          "lines": "398-443",
+          "finding": "AuthorWorkspace owns workRef, React work publication, navigation and scene-load epochs, generation, author scope, strict journal queue, and draft timers."
+        },
+        {
+          "file": "app/src/application/SharedApplication.tsx",
+          "lines": "476-512, 1618-1658",
+          "finding": "Text edits update authoritative workRef and construct the operation before delayed React publication; draft writes remain on the existing 350 ms timer. Moving the code does not remove these operations."
+        },
+        {
+          "file": "app/src/application/SharedApplication.tsx",
+          "lines": "905-945, 956-984, 1080-1204",
+          "finding": "Scene loads bind navigation, scene request, author, repository, and snapshot freshness across composition flush, strict draft flush, remote reads, receipt/journal reads, live-generation reconciliation, and final publication."
+        },
+        {
+          "file": "app/src/application/SharedApplication.tsx",
+          "lines": "1563-1595, 1661-1699",
+          "finding": "Writes are serialized and completion is applied only to the matching navigation, author, entry, and text; flush loops until the live text is recoverable. The journal uses a strict transaction and awaits transaction completion."
+        },
+        {
+          "file": "app/src/storage/journal.ts",
+          "lines": "234-268",
+          "finding": "putLatestDraft validates the operation, opens a strict read/write IndexedDB transaction, rejects newer/equal-generation conflicts, replaces only older same-author drafts, and awaits completion."
+        },
+        {
+          "file": "app/src/application/SharedApplication.tsx",
+          "lines": "2020-2118",
+          "finding": "Restore drains pending writes and checks captured repository/document/scene/author plus operation ID/generation before replacement; a changed draft is retained or re-persisted."
+        },
+        {
+          "file": "app/src/storage/journal.ts",
+          "lines": "595-607",
+          "finding": "Restore removes only draft records for the same repository, document, and author using a strict write transaction; checkpointed and protected entries are not selected."
+        }
+      ],
+      "performanceEvidence": "G0 aggregate React/fiber and Long Task counts do not isolate a component, owner boundary, or update source. No target supports a broad extraction.",
+      "reopenWhen": "A matched profile identifies one small owner boundary with measurable cost. Restrict any implementation to that leaf and retain the cited generation, recovery, author-scope, and strict-write checks."
+    },
+    {
+      "candidate": "C11",
+      "disposition": "deferred-no-change",
+      "scope": "Do not split SceneEditor or lazy-load its views without per-view startup or first-use evidence.",
+      "sourceEvidence": [
+        {
+          "file": "app/src/editor/SceneEditor.tsx",
+          "lines": "5-13, 218-257",
+          "finding": "Reading, history, input, preview, and typography modules are statically imported; the component owns editor pending-text state and composition-flush registration."
+        },
+        {
+          "file": "app/src/editor/SceneEditor.tsx",
+          "lines": "265-282, 289-295",
+          "finding": "Resume position restoration and print both interact with the live editor instance and its flush/focus lifecycle."
+        },
+        {
+          "file": "app/src/editor/SceneEditor.tsx",
+          "lines": "372-445",
+          "finding": "Reading and inline history have conditional mount paths; the editor remains mounted in hidden columns during reading, while preview, scratch, print, and history behavior share the scene's current text and identity."
+        },
+        {
+          "file": "app/src/application/SharedApplication.tsx",
+          "lines": "2458-2506",
+          "finding": "The SceneEditor instance is keyed by author scope, repository, document path, and write permission and receives the current resume, history, text, durability, and navigation contracts."
+        },
+        {
+          "file": "app/src/workspace/Workspace.tsx",
+          "lines": "80-83, 174-176, 219-234",
+          "finding": "Workspace invokes the selected panel render; moving history into another component does not require unmounting the editor."
+        },
+        {
+          "file": "app/src/contributions/ContributionHost.tsx",
+          "lines": "39-73, 146-170",
+          "finding": "Contribution modules use a separate generated loader and selected-instance abort/dispose lifecycle; C11 does not need to restructure that path."
+        }
+      ],
+      "performanceEvidence": {
+        "g0AssetReport": "/data/scriptorium-core64-g0-a1587e78-20261020-2318/results/assets.json",
+        "g0AssetReportSha256": "ffcd04d513b220088502525a7321168ebbfc095a34919453abfeee937342cb26",
+        "aggregateBytes": {
+          "desktopJavaScript": 753221,
+          "desktopJavaScriptGzip": 239035,
+          "mobileJavaScriptTotal": 1688058,
+          "mobileJavaScriptTotalGzip": 441189
+        },
+        "gap": "No per-view asset attribution, component actualDuration, or first-open timing was captured."
+      },
+      "reopenWhen": "A per-view bundle/source-map or first-use trace isolates cost and a matched A/B demonstrates a startup gain without an unacceptable first-use delay or CodeMirror remount."
+    }
+  ],
+  "stillPending": {
+    "C04": "Requires matched render probe. Retain W1: its final 1 MiB capture was 513.2/536.7/547.4 ms p50/p95/p99 versus W0's 596.2/641.0/645.5 ms, while commits rose 56 to 92 and Long Tasks rose 63 to 73; do not redo W1 architecture.",
+    "C07": "Requires matched panel commit/reference/mount attribution.",
+    "C08": "Requires matched Workspace derivation timing and panel identity attribution."
+  },
+  "verification": {
+    "typecheck": "not run; documentation-only decision, and G0 C02/C21 verification batch was active",
+    "browserBuildOrMetrics": "not run; separate measurement slot required",
+    "tests": "not run for this documentation-only decision"
+  }
+}

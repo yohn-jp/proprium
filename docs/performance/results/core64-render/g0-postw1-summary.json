@@ -1,0 +1,82 @@
+{
+  "schemaVersion": 1,
+  "status": "inherited aggregate baseline; panel attribution not measured",
+  "source": {
+    "runtime": "a1587e784788fa87d86c0eb7ab175d7a28a3209f",
+    "planningBase": "7008feef2294e1176cda2799ec0384e4ee7585c0"
+  },
+  "rawEvidence": {
+    "root": "/data/scriptorium-core64-g0-a1587e78-20261020-2318/synthetic",
+    "browserResult": "results/browser-small.json",
+    "browserResultSha256": "afa81e825b52e79d59500711b2f54f29852568e291c7363fe3730d13e168ab5b",
+    "cpuProfile": "results/browser-small.json.cpuprofile",
+    "cpuProfileSha256": "879beea8190c55da48338431ca8512668ef66107f57f01f6e76867da7571bd69",
+    "environment": "results/environment.json",
+    "environmentSha256": "718f72ab3dd9d44f1298308275e8ce91be5282384e983410ddc7dee9b2e2dc58",
+    "browserHarnessSha256": "02e9a6fd44b56e25390ecc8a61591e2899446b3c424cec1ce57a189779f7a087"
+  },
+  "environment": {
+    "timestampUtc": "2026-10-20T14:22:00.015Z",
+    "node": "v24.21.0",
+    "pnpm": "12.10.1",
+    "chromium": "155.0.8059.79",
+    "chromiumExecutable": "/nix/store/ini1ifgvcsvw48x4mxawrv9jvbdwn70p-chromium-155.0.8059.79/bin/chromium",
+    "host": "Linux 6.18.52 x64; Intel Core i5-14600KF; 16 logical CPUs",
+    "profile": "core",
+    "repeats": 20
+  },
+  "fixture": {
+    "kind": "synthetic small",
+    "datasetId": "small",
+    "datasetCommit": "e70bb509cc41b383451335e05af36d78f1cb31db",
+    "scenes": 3,
+    "documentBytes": [1024, 102400, 1048576],
+    "syntheticOnly": true
+  },
+  "phaseMetrics": [
+    {
+      "phase": "input.1024",
+      "commitCount": 17,
+      "fiberVisits": 9169,
+      "flaggedFiberVisits": 8994,
+      "longTaskCount": 1,
+      "longTaskTotalMs": 154,
+      "longTaskMaxMs": 154
+    },
+    {
+      "phase": "input.102400",
+      "commitCount": 11,
+      "fiberVisits": 143032,
+      "flaggedFiberVisits": 142900,
+      "longTaskCount": 33,
+      "longTaskTotalMs": 1871,
+      "longTaskMaxMs": 198
+    },
+    {
+      "phase": "input.1048576",
+      "commitCount": 96,
+      "fiberVisits": 12358947,
+      "flaggedFiberVisits": 12357888,
+      "longTaskCount": 76,
+      "longTaskTotalMs": 25136,
+      "longTaskMaxMs": 673
+    }
+  ],
+  "selectionContext": {
+    "source": "G1 coordinator handoff from C02 owner; preliminary, not a panel-attributed G0 result",
+    "arrowLeftP95Ms": {
+      "1KiB": 6.4,
+      "100KiB": 55.5,
+      "1MiB": 606.9
+    },
+    "samplesPerSize": 20,
+    "onCursorPositionChange": "rough samples near 1 ms over approximately 10-second ArrowLeft windows; cause unproven"
+  },
+  "limitations": [
+    "React and fiber counts are aggregate and do not identify panel scope.",
+    "Workspace panel-ID/catalog derivation durations and panel mount events were not captured.",
+    "The CPU profile spans the whole browser run; it has no phase or panel attribution.",
+    "The G0 trace uses the aggregate-only DevTools hook. Matched probe baseline is required before evaluating a local optimization.",
+    "At n=20, p99 is effectively the maximum. Native OS IME and physical devices were not exercised."
+  ]
+}
