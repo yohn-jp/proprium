@@ -1,0 +1,42 @@
+{
+  "profile": "core",
+  "gzip": "Node gzipSync defaults; concatenated JS/CSS totals are size estimates, not network compression",
+  "rows": [
+    {
+      "ui": "launcher",
+      "mainJs": "main.js",
+      "mainJsBytes": 723070,
+      "mainJsGzipBytes": 228587,
+      "totalJsBytes": 723070,
+      "totalJsGzipBytes": 228587,
+      "jsFiles": 1,
+      "cssBytes": 28230,
+      "cssGzipBytes": 6330,
+      "cssFiles": 1
+    },
+    {
+      "ui": "desktop",
+      "mainJs": "main.js",
+      "mainJsBytes": 753221,
+      "mainJsGzipBytes": 239035,
+      "totalJsBytes": 753221,
+      "totalJsGzipBytes": 239035,
+      "jsFiles": 1,
+      "cssBytes": 48242,
+      "cssGzipBytes": 9422,
+      "cssFiles": 1
+    },
+    {
+      "ui": "mobile",
+      "mainJs": "main.js",
+      "mainJsBytes": 1667936,
+      "mainJsGzipBytes": 434651,
+      "totalJsBytes": 1688058,
+      "totalJsGzipBytes": 441189,
+      "jsFiles": 8,
+      "cssBytes": 65359,
+      "cssGzipBytes": 13263,
+      "cssFiles": 1
+    }
+  ]
+}

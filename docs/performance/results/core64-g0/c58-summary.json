@@ -1,0 +1,727 @@
+{
+  "schemaVersion": 1,
+  "purpose": "CORE-64 G0 C58 post-W1 baseline; synthetic-only measurement, no source modifications",
+  "sourceCommit": "a1587e784788fa87d86c0eb7ab175d7a28a3209f",
+  "captureUtc": "2026-10-20T14:22:00.015Z",
+  "profile": "core",
+  "toolchain": {
+    "node": "v24.21.0",
+    "pnpm": "12.10.1",
+    "git": "git version 2.54.0",
+    "os": {
+      "platform": "linux",
+      "release": "6.18.52",
+      "arch": "x64"
+    },
+    "cpuModel": "Intel(R) Core(TM) i5-14600KF",
+    "logicalCpuCount": 16,
+    "totalMemoryBytes": 50994450432,
+    "chromium": "155.0.8059.79",
+    "chromiumExecutable": "/nix/store/ini1ifgvcsvw48x4mxawrv9jvbdwn70p-chromium-155.0.8059.79/bin/chromium"
+  },
+  "scenario": {
+    "sizes": "small,medium,large,stress",
+    "repeats": 20,
+    "workerTimeoutMs": 180000,
+    "visibleIdleMs": 35000,
+    "seedAndFixtureManifests": [
+      "dataset-small.json",
+      "dataset-medium.json",
+      "dataset-large.json",
+      "dataset-stress.json"
+    ],
+    "sourceHarness": "scripts/performance/run.mjs; unchanged at source commit"
+  },
+  "bundles": [
+    {
+      "ui": "launcher",
+      "mainJs": "main.js",
+      "mainJsBytes": 723070,
+      "mainJsGzipBytes": 228587,
+      "totalJsBytes": 723070,
+      "totalJsGzipBytes": 228587,
+      "jsFiles": 1,
+      "cssBytes": 28230,
+      "cssGzipBytes": 6330,
+      "cssFiles": 1
+    },
+    {
+      "ui": "desktop",
+      "mainJs": "main.js",
+      "mainJsBytes": 753221,
+      "mainJsGzipBytes": 239035,
+      "totalJsBytes": 753221,
+      "totalJsGzipBytes": 239035,
+      "jsFiles": 1,
+      "cssBytes": 48242,
+      "cssGzipBytes": 9422,
+      "cssFiles": 1
+    },
+    {
+      "ui": "mobile",
+      "mainJs": "main.js",
+      "mainJsBytes": 1667936,
+      "mainJsGzipBytes": 434651,
+      "totalJsBytes": 1688058,
+      "totalJsGzipBytes": 441189,
+      "jsFiles": 8,
+      "cssBytes": 65359,
+      "cssGzipBytes": 13263,
+      "cssFiles": 1
+    }
+  ],
+  "browserStartupAndRuntime": [
+    {
+      "tier": "small",
+      "status": "complete",
+      "execution": {
+        "code": 0,
+        "signal": null,
+        "timeout": false,
+        "timeoutMs": 180000
+      },
+      "apiListenMs": 177.09660200000002,
+      "startupPhasesMs": {
+        "startup.loginReady": 197.002698,
+        "startup.registerToOutline": 345.3640939999998,
+        "startup.firstEditor": 311.260086
+      },
+      "startupSamples": {
+        "startup.loginReady": 1,
+        "startup.registerToOutline": 1,
+        "startup.firstEditor": 1
+      },
+      "apiAtFirstEditor": {
+        "rssBytes": 100098048,
+        "cpuMsUserPlusSystem": 568.961,
+        "lifetimePeakRssKiB": 98236,
+        "topLevelGitProcesses": 58,
+        "asyncReadFileCalls": 23
+      },
+      "chromiumAtFirstEditor": {
+        "largestRendererRssBytes": 208846848,
+        "cdpMetricsSincePerformanceEnable": {
+          "ScriptDuration": 0.140693,
+          "TaskDuration": 0.483813,
+          "JSHeapUsedSize": 8036360
+        }
+      },
+      "visibleIdle35s": {
+        "elapsedMs": 35007.253855999996,
+        "apiNodeCpuMs": 162.726,
+        "chromiumProcessCpuSeconds": 5.280000000000007,
+        "requests": 6,
+        "apiRssBeforeBytes": 138436608,
+        "apiRssAfterBytes": 152985600,
+        "chromiumSummedRssBeforeBytes": 2866610176,
+        "chromiumSummedRssAfterBytes": 1131982848
+      },
+      "fullScenarioTraffic": {
+        "totalRequests": 104,
+        "apiRequestStarts": 101,
+        "encodedTransferBytes": 35750146,
+        "completed": 103,
+        "failed": 1
+      },
+      "error": null
+    },
+    {
+      "tier": "medium",
+      "status": "complete",
+      "execution": {
+        "code": 0,
+        "signal": null,
+        "timeout": false,
+        "timeoutMs": 180000
+      },
+      "apiListenMs": 178.557286,
+      "startupPhasesMs": {
+        "startup.loginReady": 201.53824900000006,
+        "startup.registerToOutline": 854.4043459999998,
+        "startup.firstEditor": 312.10899100000006
+      },
+      "startupSamples": {
+        "startup.loginReady": 1,
+        "startup.registerToOutline": 1,
+        "startup.firstEditor": 1
+      },
+      "apiAtFirstEditor": {
+        "rssBytes": 109899776,
+        "cpuMsUserPlusSystem": 677.172,
+        "lifetimePeakRssKiB": 107324,
+        "topLevelGitProcesses": 58,
+        "asyncReadFileCalls": 23
+      },
+      "chromiumAtFirstEditor": {
+        "largestRendererRssBytes": 230547456,
+        "cdpMetricsSincePerformanceEnable": {
+          "ScriptDuration": 0.16095,
+          "TaskDuration": 0.645732,
+          "JSHeapUsedSize": 11862044
+        }
+      },
+      "visibleIdle35s": {
+        "elapsedMs": 35002.001315999994,
+        "apiNodeCpuMs": 248.861,
+        "chromiumProcessCpuSeconds": 5.509999999999999,
+        "requests": 9,
+        "apiRssBeforeBytes": 156839936,
+        "apiRssAfterBytes": 161976320,
+        "chromiumSummedRssBeforeBytes": 2925486080,
+        "chromiumSummedRssAfterBytes": 1168547840
+      },
+      "fullScenarioTraffic": {
+        "totalRequests": 107,
+        "apiRequestStarts": 104,
+        "encodedTransferBytes": 35898840,
+        "completed": 106,
+        "failed": 1
+      },
+      "error": null
+    },
+    {
+      "tier": "large",
+      "status": "complete",
+      "execution": {
+        "code": 0,
+        "signal": null,
+        "timeout": false,
+        "timeoutMs": 180000
+      },
+      "apiListenMs": 189.597413,
+      "startupPhasesMs": {
+        "startup.loginReady": 188.7978660000001,
+        "startup.registerToOutline": 1554.138417,
+        "startup.firstEditor": 1543.579687
+      },
+      "startupSamples": {
+        "startup.loginReady": 1,
+        "startup.registerToOutline": 1,
+        "startup.firstEditor": 1
+      },
+      "apiAtFirstEditor": {
+        "rssBytes": 184651776,
+        "cpuMsUserPlusSystem": 1386.22,
+        "lifetimePeakRssKiB": 181844,
+        "topLevelGitProcesses": 57,
+        "asyncReadFileCalls": 21
+      },
+      "chromiumAtFirstEditor": {
+        "largestRendererRssBytes": 333197312,
+        "cdpMetricsSincePerformanceEnable": {
+          "ScriptDuration": 0.316752,
+          "TaskDuration": 2.099065,
+          "JSHeapUsedSize": 26406232
+        }
+      },
+      "visibleIdle35s": {
+        "elapsedMs": 35001.95007899999,
+        "apiNodeCpuMs": 352.754,
+        "chromiumProcessCpuSeconds": 5.6499999999999995,
+        "requests": 9,
+        "apiRssBeforeBytes": 219815936,
+        "apiRssAfterBytes": 217374720,
+        "chromiumSummedRssBeforeBytes": 2186641408,
+        "chromiumSummedRssAfterBytes": 1204256768
+      },
+      "fullScenarioTraffic": {
+        "totalRequests": 112,
+        "apiRequestStarts": 109,
+        "encodedTransferBytes": 36274805,
+        "completed": 111,
+        "failed": 1
+      },
+      "error": null
+    },
+    {
+      "tier": "stress",
+      "status": "NOT_CHECKED",
+      "execution": {
+        "code": 1,
+        "signal": null,
+        "timeout": false,
+        "timeoutMs": 180000
+      },
+      "apiListenMs": 192.21673500000003,
+      "startupPhasesMs": {
+        "startup.loginReady": null,
+        "startup.registerToOutline": null,
+        "startup.firstEditor": null
+      },
+      "startupSamples": {
+        "startup.loginReady": 0,
+        "startup.registerToOutline": 0,
+        "startup.firstEditor": 0
+      },
+      "apiAtFirstEditor": null,
+      "chromiumAtFirstEditor": null,
+      "visibleIdle35s": null,
+      "fullScenarioTraffic": {
+        "totalRequests": 26,
+        "apiRequestStarts": 23,
+        "encodedTransferBytes": 2983054,
+        "completed": 26,
+        "failed": 0
+      },
+      "error": "Error: expect(locator).toHaveText(expected) failed\n\nLocator: locator('.scene-heading h1')\nExpected: \"Scene 1\"\nTimeout: 60000ms\nError: element(s) not found\n\nCall log:"
+    }
+  ],
+  "workerStatus": {
+    "core": [
+      {
+        "file": "mutation-large.json",
+        "status": "complete",
+        "measuredOperations": [
+          {
+            "name": "register",
+            "samples": 1
+          },
+          {
+            "name": "mutation.prepare",
+            "samples": 5
+          },
+          {
+            "name": "proposal",
+            "samples": 5
+          },
+          {
+            "name": "approval",
+            "samples": 5
+          },
+          {
+            "name": "checkpoint",
+            "samples": 5
+          },
+          {
+            "name": "publish",
+            "samples": 5
+          }
+        ]
+      },
+      {
+        "file": "mutation-medium.json",
+        "status": "complete",
+        "measuredOperations": [
+          {
+            "name": "register",
+            "samples": 1
+          },
+          {
+            "name": "mutation.prepare",
+            "samples": 5
+          },
+          {
+            "name": "proposal",
+            "samples": 5
+          },
+          {
+            "name": "approval",
+            "samples": 5
+          },
+          {
+            "name": "checkpoint",
+            "samples": 5
+          },
+          {
+            "name": "publish",
+            "samples": 5
+          }
+        ]
+      },
+      {
+        "file": "mutation-small.json",
+        "status": "complete",
+        "measuredOperations": [
+          {
+            "name": "register",
+            "samples": 1
+          },
+          {
+            "name": "mutation.prepare",
+            "samples": 5
+          },
+          {
+            "name": "proposal",
+            "samples": 5
+          },
+          {
+            "name": "approval",
+            "samples": 5
+          },
+          {
+            "name": "checkpoint",
+            "samples": 5
+          },
+          {
+            "name": "publish",
+            "samples": 5
+          }
+        ]
+      },
+      {
+        "file": "mutation-stress.json",
+        "status": "complete",
+        "measuredOperations": [
+          {
+            "name": "register",
+            "samples": 1
+          },
+          {
+            "name": "mutation.prepare",
+            "samples": 5
+          },
+          {
+            "name": "proposal",
+            "samples": 5
+          },
+          {
+            "name": "approval",
+            "samples": 5
+          },
+          {
+            "name": "checkpoint",
+            "samples": 5
+          },
+          {
+            "name": "publish",
+            "samples": 5
+          }
+        ]
+      },
+      {
+        "file": "read-large.json",
+        "status": "complete",
+        "measuredOperations": [
+          {
+            "name": "register",
+            "samples": 1
+          },
+          {
+            "name": "tree.cold",
+            "samples": 1
+          },
+          {
+            "name": "tree.warm",
+            "samples": 20
+          },
+          {
+            "name": "snapshot.scene",
+            "samples": 20
+          }
+        ]
+      },
+      {
+        "file": "read-medium.json",
+        "status": "complete",
+        "measuredOperations": [
+          {
+            "name": "register",
+            "samples": 1
+          },
+          {
+            "name": "tree.cold",
+            "samples": 1
+          },
+          {
+            "name": "tree.warm",
+            "samples": 20
+          },
+          {
+            "name": "snapshot.scene",
+            "samples": 20
+          }
+        ]
+      },
+      {
+        "file": "read-small.json",
+        "status": "complete",
+        "measuredOperations": [
+          {
+            "name": "register",
+            "samples": 1
+          },
+          {
+            "name": "tree.cold",
+            "samples": 1
+          },
+          {
+            "name": "tree.warm",
+            "samples": 20
+          },
+          {
+            "name": "snapshot.scene",
+            "samples": 20
+          }
+        ]
+      },
+      {
+        "file": "read-stress.json",
+        "status": "NOT_CHECKED",
+        "measuredOperations": [
+          {
+            "name": "register",
+            "samples": 1
+          },
+          {
+            "name": "tree.cold",
+            "samples": 1
+          },
+          {
+            "name": "tree.warm",
+            "samples": 9
+          },
+          {
+            "name": "snapshot.scene",
+            "samples": 9
+          }
+        ]
+      },
+      {
+        "file": "revisions-large.json",
+        "status": "complete",
+        "measuredOperations": [
+          {
+            "name": "register",
+            "samples": 1
+          },
+          {
+            "name": "reader.create",
+            "samples": 1
+          },
+          {
+            "name": "reader.list",
+            "samples": 1
+          },
+          {
+            "name": "reader.listRevisions.cold",
+            "samples": 1
+          },
+          {
+            "name": "reader.listRevisions.warm",
+            "samples": 1
+          }
+        ]
+      },
+      {
+        "file": "revisions-medium.json",
+        "status": "complete",
+        "measuredOperations": [
+          {
+            "name": "register",
+            "samples": 1
+          },
+          {
+            "name": "reader.create",
+            "samples": 1
+          },
+          {
+            "name": "reader.list",
+            "samples": 1
+          },
+          {
+            "name": "reader.listRevisions.cold",
+            "samples": 1
+          },
+          {
+            "name": "reader.listRevisions.warm",
+            "samples": 1
+          }
+        ]
+      },
+      {
+        "file": "revisions-small.json",
+        "status": "complete",
+        "measuredOperations": [
+          {
+            "name": "register",
+            "samples": 1
+          },
+          {
+            "name": "reader.create",
+            "samples": 1
+          },
+          {
+            "name": "reader.list",
+            "samples": 1
+          },
+          {
+            "name": "reader.listRevisions.cold",
+            "samples": 1
+          },
+          {
+            "name": "reader.listRevisions.warm",
+            "samples": 1
+          }
+        ]
+      },
+      {
+        "file": "revisions-stress.json",
+        "status": "complete",
+        "measuredOperations": [
+          {
+            "name": "register",
+            "samples": 1
+          },
+          {
+            "name": "reader.create",
+            "samples": 1
+          },
+          {
+            "name": "reader.list",
+            "samples": 1
+          },
+          {
+            "name": "reader.listRevisions.cold",
+            "samples": 1
+          },
+          {
+            "name": "reader.listRevisions.warm",
+            "samples": 1
+          }
+        ]
+      },
+      {
+        "file": "search-large.json",
+        "status": "NOT_CHECKED",
+        "measuredOperations": [
+          {
+            "name": "register",
+            "samples": 1
+          }
+        ]
+      },
+      {
+        "file": "search-medium.json",
+        "status": "complete",
+        "measuredOperations": [
+          {
+            "name": "register",
+            "samples": 1
+          },
+          {
+            "name": "search.scan",
+            "samples": 1
+          }
+        ]
+      },
+      {
+        "file": "search-small.json",
+        "status": "complete",
+        "measuredOperations": [
+          {
+            "name": "register",
+            "samples": 1
+          },
+          {
+            "name": "search.scan",
+            "samples": 1
+          }
+        ]
+      },
+      {
+        "file": "search-stress.json",
+        "status": "NOT_CHECKED",
+        "measuredOperations": [
+          {
+            "name": "register",
+            "samples": 1
+          }
+        ]
+      },
+      {
+        "file": "stats-large.json",
+        "status": "NOT_CHECKED",
+        "measuredOperations": [
+          {
+            "name": "register",
+            "samples": 1
+          }
+        ]
+      },
+      {
+        "file": "stats-medium.json",
+        "status": "complete",
+        "measuredOperations": [
+          {
+            "name": "register",
+            "samples": 1
+          },
+          {
+            "name": "stats.scan",
+            "samples": 1
+          }
+        ]
+      },
+      {
+        "file": "stats-small.json",
+        "status": "complete",
+        "measuredOperations": [
+          {
+            "name": "register",
+            "samples": 1
+          },
+          {
+            "name": "stats.scan",
+            "samples": 1
+          }
+        ]
+      },
+      {
+        "file": "stats-stress.json",
+        "status": "NOT_CHECKED",
+        "measuredOperations": [
+          {
+            "name": "register",
+            "samples": 1
+          }
+        ]
+      }
+    ],
+    "browser": [
+      {
+        "file": "browser-large.json",
+        "status": "complete",
+        "completedDocumentInputs": [
+          "input.1024",
+          "input.102400",
+          "input.1048576"
+        ],
+        "error": null
+      },
+      {
+        "file": "browser-medium.json",
+        "status": "complete",
+        "completedDocumentInputs": [
+          "input.1024",
+          "input.102400",
+          "input.1048576"
+        ],
+        "error": null
+      },
+      {
+        "file": "browser-small.json",
+        "status": "complete",
+        "completedDocumentInputs": [
+          "input.1024",
+          "input.102400",
+          "input.1048576"
+        ],
+        "error": null
+      },
+      {
+        "file": "browser-stress.json",
+        "status": "NOT_CHECKED",
+        "completedDocumentInputs": [],
+        "error": "Error: expect(locator).toHaveText(expected) failed"
+      }
+    ]
+  },
+  "interpretationLimits": [
+    "Each startup phase has n=1; p50/p95/p99 are the same observation and are not stable tail estimates.",
+    "The host is shared; filesystem and OS caches were not flushed. Git remotes are local synthetic repositories, not GitHub transport.",
+    "Chromium RSS is sampled at phase boundaries; summed process RSS double-counts shared pages and is not PSS or continuous peak RSS.",
+    "CDP TaskDuration/ScriptDuration values are cumulative from Performance.enable through first-editor readiness, not phase-local CPU.",
+    "Visible idle is a 35-second observation only. Hidden idle, physical IME, OCI, hosted GitHub traffic, crash/network partition loads and 24-hour idle are NOT_CHECKED.",
+    "Stress browser editor readiness failed after the harness action timeout; no stress browser input/idle metrics are inferred."
+  ]
+}

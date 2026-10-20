@@ -1,0 +1,203 @@
+{
+  "timestamp": "2026-10-20T14:22:00.015Z",
+  "source": "a1587e784788fa87d86c0eb7ab175d7a28a3209f",
+  "sourceStatus": "",
+  "node": "v24.21.0",
+  "pnpm": "12.10.1",
+  "git": "git version 2.54.0",
+  "os": {
+    "platform": "linux",
+    "release": "6.18.52",
+    "arch": "x64"
+  },
+  "cpus": [
+    {
+      "model": "Intel(R) Core(TM) i5-14600KF",
+      "speed": 0,
+      "times": {
+        "user": 8824510,
+        "nice": 8870,
+        "sys": 2705550,
+        "idle": 114319730,
+        "irq": 2563720
+      }
+    },
+    {
+      "model": "Intel(R) Core(TM) i5-14600KF",
+      "speed": 0,
+      "times": {
+        "user": 10770060,
+        "nice": 8040,
+        "sys": 3002060,
+        "idle": 117093270,
+        "irq": 2574190
+      }
+    },
+    {
+      "model": "Intel(R) Core(TM) i5-14600KF",
+      "speed": 0,
+      "times": {
+        "user": 10883380,
+        "nice": 5230,
+        "sys": 3048040,
+        "idle": 117956660,
+        "irq": 2552710
+      }
+    },
+    {
+      "model": "Intel(R) Core(TM) i5-14600KF",
+      "speed": 0,
+      "times": {
+        "user": 10969710,
+        "nice": 15280,
+        "sys": 3025990,
+        "idle": 118189450,
+        "irq": 2534550
+      }
+    },
+    {
+      "model": "Intel(R) Core(TM) i5-14600KF",
+      "speed": 0,
+      "times": {
+        "user": 10601590,
+        "nice": 3540,
+        "sys": 3025030,
+        "idle": 118781460,
+        "irq": 2552880
+      }
+    },
+    {
+      "model": "Intel(R) Core(TM) i5-14600KF",
+      "speed": 0,
+      "times": {
+        "user": 10670850,
+        "nice": 1460,
+        "sys": 3008300,
+        "idle": 118777290,
+        "irq": 2576580
+      }
+    },
+    {
+      "model": "Intel(R) Core(TM) i5-14600KF",
+      "speed": 0,
+      "times": {
+        "user": 9694550,
+        "nice": 19170,
+        "sys": 3146350,
+        "idle": 114604880,
+        "irq": 3696560
+      }
+    },
+    {
+      "model": "Intel(R) Core(TM) i5-14600KF",
+      "speed": 0,
+      "times": {
+        "user": 10680750,
+        "nice": 9560,
+        "sys": 3141300,
+        "idle": 115132040,
+        "irq": 2612260
+      }
+    },
+    {
+      "model": "Intel(R) Core(TM) i5-14600KF",
+      "speed": 0,
+      "times": {
+        "user": 10565990,
+        "nice": 7390,
+        "sys": 3056920,
+        "idle": 115816650,
+        "irq": 2606170
+      }
+    },
+    {
+      "model": "Intel(R) Core(TM) i5-14600KF",
+      "speed": 0,
+      "times": {
+        "user": 10758230,
+        "nice": 3650,
+        "sys": 3063550,
+        "idle": 116120720,
+        "irq": 2612850
+      }
+    },
+    {
+      "model": "Intel(R) Core(TM) i5-14600KF",
+      "speed": 0,
+      "times": {
+        "user": 10856370,
+        "nice": 5320,
+        "sys": 3038730,
+        "idle": 116560920,
+        "irq": 2607060
+      }
+    },
+    {
+      "model": "Intel(R) Core(TM) i5-14600KF",
+      "speed": 0,
+      "times": {
+        "user": 10741810,
+        "nice": 4250,
+        "sys": 3016410,
+        "idle": 117199680,
+        "irq": 2599890
+      }
+    },
+    {
+      "model": "Intel(R) Core(TM) i5-14600KF",
+      "speed": 0,
+      "times": {
+        "user": 10825140,
+        "nice": 4700,
+        "sys": 3001430,
+        "idle": 117560530,
+        "irq": 2584150
+      }
+    },
+    {
+      "model": "Intel(R) Core(TM) i5-14600KF",
+      "speed": 0,
+      "times": {
+        "user": 10843600,
+        "nice": 3600,
+        "sys": 3048140,
+        "idle": 117823310,
+        "irq": 2562310
+      }
+    },
+    {
+      "model": "Intel(R) Core(TM) i5-14600KF",
+      "speed": 0,
+      "times": {
+        "user": 10084320,
+        "nice": 3370,
+        "sys": 3125450,
+        "idle": 116616330,
+        "irq": 3703450
+      }
+    },
+    {
+      "model": "Intel(R) Core(TM) i5-14600KF",
+      "speed": 0,
+      "times": {
+        "user": 10832490,
+        "nice": 14650,
+        "sys": 3024490,
+        "idle": 118173350,
+        "irq": 2543000
+      }
+    }
+  ],
+  "totalMemoryBytes": 50994450432,
+  "freeMemoryBytes": 45093748736,
+  "loadAverage": [
+    2.77,
+    4.97,
+    3.95
+  ],
+  "profile": "core",
+  "repeats": 20,
+  "timeoutMs": 180000,
+  "chromiumExecutable": "/nix/store/ini1ifgvcsvw48x4mxawrv9jvbdwn70p-chromium-155.0.8059.79/bin/chromium",
+  "instrumentation": "opt-in process wrappers, proc IO, browser DevTools commit hook, IDB wrappers, Long Tasks, CDP CPU sampling; no production edits"
+}
