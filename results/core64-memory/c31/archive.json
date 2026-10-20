@@ -1,0 +1,257 @@
+{
+  "schemaVersion": 1,
+  "scope": "C31 multi-repository cache pressure and linked C63 budget decision; read-only accepted Core runtime",
+  "g0": {
+    "root": "/data/scriptorium-core64-g0-a1587e78-20261020-2318/synthetic",
+    "sourceRevision": "a1587e784788fa87d86c0eb7ab175d7a28a3209f",
+    "fixtures": [
+      {
+        "size": "large",
+        "expectedFiles": 10000,
+        "repos": 9,
+        "source": "/data/scriptorium-core64-g0-a1587e78-20261020-2318/synthetic/large/origin.git",
+        "sourceObjects": "/data/scriptorium-core64-g0-a1587e78-20261020-2318/synthetic/large/origin.git/objects",
+        "alternates": [
+          {
+            "remote": "/data/scriptorium-core64-g0-a1587e78-20261020-2318/results/core64-memory/c31/fixtures/cache-large/repo-01.git",
+            "alternateFile": "/data/scriptorium-core64-g0-a1587e78-20261020-2318/results/core64-memory/c31/fixtures/cache-large/repo-01.git/objects/info/alternates",
+            "alternateObjects": "/data/scriptorium-core64-g0-a1587e78-20261020-2318/synthetic/large/origin.git/objects"
+          },
+          {
+            "remote": "/data/scriptorium-core64-g0-a1587e78-20261020-2318/results/core64-memory/c31/fixtures/cache-large/repo-02.git",
+            "alternateFile": "/data/scriptorium-core64-g0-a1587e78-20261020-2318/results/core64-memory/c31/fixtures/cache-large/repo-02.git/objects/info/alternates",
+            "alternateObjects": "/data/scriptorium-core64-g0-a1587e78-20261020-2318/synthetic/large/origin.git/objects"
+          },
+          {
+            "remote": "/data/scriptorium-core64-g0-a1587e78-20261020-2318/results/core64-memory/c31/fixtures/cache-large/repo-03.git",
+            "alternateFile": "/data/scriptorium-core64-g0-a1587e78-20261020-2318/results/core64-memory/c31/fixtures/cache-large/repo-03.git/objects/info/alternates",
+            "alternateObjects": "/data/scriptorium-core64-g0-a1587e78-20261020-2318/synthetic/large/origin.git/objects"
+          },
+          {
+            "remote": "/data/scriptorium-core64-g0-a1587e78-20261020-2318/results/core64-memory/c31/fixtures/cache-large/repo-04.git",
+            "alternateFile": "/data/scriptorium-core64-g0-a1587e78-20261020-2318/results/core64-memory/c31/fixtures/cache-large/repo-04.git/objects/info/alternates",
+            "alternateObjects": "/data/scriptorium-core64-g0-a1587e78-20261020-2318/synthetic/large/origin.git/objects"
+          },
+          {
+            "remote": "/data/scriptorium-core64-g0-a1587e78-20261020-2318/results/core64-memory/c31/fixtures/cache-large/repo-05.git",
+            "alternateFile": "/data/scriptorium-core64-g0-a1587e78-20261020-2318/results/core64-memory/c31/fixtures/cache-large/repo-05.git/objects/info/alternates",
+            "alternateObjects": "/data/scriptorium-core64-g0-a1587e78-20261020-2318/synthetic/large/origin.git/objects"
+          },
+          {
+            "remote": "/data/scriptorium-core64-g0-a1587e78-20261020-2318/results/core64-memory/c31/fixtures/cache-large/repo-06.git",
+            "alternateFile": "/data/scriptorium-core64-g0-a1587e78-20261020-2318/results/core64-memory/c31/fixtures/cache-large/repo-06.git/objects/info/alternates",
+            "alternateObjects": "/data/scriptorium-core64-g0-a1587e78-20261020-2318/synthetic/large/origin.git/objects"
+          },
+          {
+            "remote": "/data/scriptorium-core64-g0-a1587e78-20261020-2318/results/core64-memory/c31/fixtures/cache-large/repo-07.git",
+            "alternateFile": "/data/scriptorium-core64-g0-a1587e78-20261020-2318/results/core64-memory/c31/fixtures/cache-large/repo-07.git/objects/info/alternates",
+            "alternateObjects": "/data/scriptorium-core64-g0-a1587e78-20261020-2318/synthetic/large/origin.git/objects"
+          },
+          {
+            "remote": "/data/scriptorium-core64-g0-a1587e78-20261020-2318/results/core64-memory/c31/fixtures/cache-large/repo-08.git",
+            "alternateFile": "/data/scriptorium-core64-g0-a1587e78-20261020-2318/results/core64-memory/c31/fixtures/cache-large/repo-08.git/objects/info/alternates",
+            "alternateObjects": "/data/scriptorium-core64-g0-a1587e78-20261020-2318/synthetic/large/origin.git/objects"
+          },
+          {
+            "remote": "/data/scriptorium-core64-g0-a1587e78-20261020-2318/results/core64-memory/c31/fixtures/cache-large/repo-09.git",
+            "alternateFile": "/data/scriptorium-core64-g0-a1587e78-20261020-2318/results/core64-memory/c31/fixtures/cache-large/repo-09.git/objects/info/alternates",
+            "alternateObjects": "/data/scriptorium-core64-g0-a1587e78-20261020-2318/synthetic/large/origin.git/objects"
+          }
+        ],
+        "objectStorage": "bare clones use Git alternates into the immutable G0 object store; no object copy",
+        "budgetRationale": "Nine project-scoped hierarchy entries exceed the fixed eight-entry hierarchyCache count cap; this tier also exercises revisions below the 16,384-entry fileRevisionCache cap."
+      },
+      {
+        "size": "stress",
+        "expectedFiles": 100000,
+        "repos": 2,
+        "source": "/data/scriptorium-core64-g0-a1587e78-20261020-2318/synthetic/stress/origin.git",
+        "sourceObjects": "/data/scriptorium-core64-g0-a1587e78-20261020-2318/synthetic/stress/origin.git/objects",
+        "alternates": [
+          {
+            "remote": "/data/scriptorium-core64-g0-a1587e78-20261020-2318/results/core64-memory/c31/fixtures/cache-stress/repo-01.git",
+            "alternateFile": "/data/scriptorium-core64-g0-a1587e78-20261020-2318/results/core64-memory/c31/fixtures/cache-stress/repo-01.git/objects/info/alternates",
+            "alternateObjects": "/data/scriptorium-core64-g0-a1587e78-20261020-2318/synthetic/stress/origin.git/objects"
+          },
+          {
+            "remote": "/data/scriptorium-core64-g0-a1587e78-20261020-2318/results/core64-memory/c31/fixtures/cache-stress/repo-02.git",
+            "alternateFile": "/data/scriptorium-core64-g0-a1587e78-20261020-2318/results/core64-memory/c31/fixtures/cache-stress/repo-02.git/objects/info/alternates",
+            "alternateObjects": "/data/scriptorium-core64-g0-a1587e78-20261020-2318/synthetic/stress/origin.git/objects"
+          }
+        ],
+        "objectStorage": "bare clones use Git alternates into the immutable G0 object store; no object copy",
+        "budgetRationale": "Each 100k repository exceeds the 16,384-entry fileRevisionCache cap; the second shared-object project measures cross-project reuse after the first project churns the bounded cache."
+      }
+    ]
+  },
+  "runtime": {
+    "root": "/home/sophia/src/scriptorium-c64-derived",
+    "revision": "f633da0b3f133ad812953c284aab35a4956d2507",
+    "coreSource": "/home/sophia/src/scriptorium-c64-derived/packages/core/src/index.ts",
+    "coreSourceSha256": "dd05006e97a4dd471fd3555b852d1ad4166de53a4ec41b80d8a0c52d3ab929c5",
+    "coreModule": "/home/sophia/src/scriptorium-c64-derived/packages/core/dist/index.js",
+    "coreModuleSha256": "a7b83895e2c239d85a3f4d973cf7458e64cc7415c418a4844ff33f700a52d4a3"
+  },
+  "harness": {
+    "path": "scripts/performance/core64-memory.mjs",
+    "sha256": "0d34ab69fdb5ca54f6c063308d494022e011a335edd805aa0e0e195d3ddf7eb1"
+  },
+  "cohort": {
+    "status": "complete",
+    "conclusionStatus": "C31 complete; C63 reconciliation-byte workload NOT_CHECKED; decline a new shared cache governor from this evidence, retain existing independent cache ceilings pending a bounded reconciliation measurement.",
+    "elapsedMs": 131581,
+    "workers": [
+      {
+        "mode": "cache",
+        "code": 0,
+        "signal": null,
+        "timedOut": false,
+        "reportStatus": "complete"
+      },
+      {
+        "mode": "cache",
+        "code": 0,
+        "signal": null,
+        "timedOut": false,
+        "reportStatus": "complete"
+      }
+    ],
+    "cpuAffinity": "4-7",
+    "overlapNote": "Memory C31/C63 on CPUs 4-7; C39 gates on CPUs 0-3; API fix on CPUs 8-11; C55 fix on CPUs 12-15. Latency is contended and observational only.",
+    "limits": {
+      "workerCount": 2,
+      "perWorkerAddressSpaceBytes": 6442450944,
+      "perWorkerV8OldSpaceMiB": 2048,
+      "perWorkerV8SemiSpaceMiB": 64,
+      "perWorkerCpuSeconds": 180,
+      "perWorkerWallTimeoutMs": 180000,
+      "cohortWallTimeoutMs": 720000,
+      "gitCommandTimeoutMs": 30000,
+      "gitCommandAddressSpaceBytes": 6442450944,
+      "gitCommandCpuSeconds": 30,
+      "cacheIdleMs": 35000,
+      "largeRepositoryCount": 9,
+      "stressRepositoryCount": 2,
+      "cacheRepositoryTotal": 11,
+      "note": "Each worker and its Git subprocesses inherit per-process RLIMIT_AS/CPU limits; this is not an aggregate cgroup memory cap."
+    },
+    "campaignOutputRoot": "/data/scriptorium-core64-g0-a1587e78-20261020-2318/results/core64-memory/c31"
+  },
+  "results": {
+    "9x10000": {
+      "status": "complete",
+      "repositoryCount": 9,
+      "rssBeforeMiB": 68.34,
+      "rssAfterMiB": 317.04,
+      "processPeakMiB": 317.04,
+      "derivedCache": {
+        "fileRevisionEntries": 10000,
+        "fileRevisionShallowEstimateBytes": 1680000,
+        "hierarchyEntries": 4,
+        "hierarchyExplicitBytes": 13668212,
+        "historicalMetadataEntries": 0,
+        "reconciliationEntries": 0,
+        "totalEstimatedOrAccountedBytes": 15348212
+      },
+      "cacheCounters": {
+        "fileRevision": {
+          "hits": 80000,
+          "evictionCandidates": 0
+        },
+        "hierarchy": {
+          "hits": 9,
+          "evictions": 5,
+          "oversizeNotRetained": 0
+        },
+        "historicalMetadata": {
+          "hits": 0,
+          "evictions": 0,
+          "oversizeNotRetained": 0
+        }
+      },
+      "idle": {
+        "durationMs": 35000,
+        "samples": 348,
+        "rssBeforeBytes": 332443648,
+        "rssAfterBytes": 332443648,
+        "cacheBeforeBytes": 15348212,
+        "cacheAfterBytes": 15348212,
+        "autoEvictionObserved": false
+      }
+    },
+    "2x100000": {
+      "status": "complete",
+      "repositoryCount": 2,
+      "rssBeforeMiB": 69.41,
+      "rssAfterMiB": 505.19,
+      "processPeakMiB": 527.38,
+      "derivedCache": {
+        "fileRevisionEntries": 16384,
+        "fileRevisionShallowEstimateBytes": 2752512,
+        "hierarchyEntries": 0,
+        "hierarchyExplicitBytes": 0,
+        "historicalMetadataEntries": 0,
+        "reconciliationEntries": 0,
+        "totalEstimatedOrAccountedBytes": 2752512
+      },
+      "cacheCounters": {
+        "fileRevision": {
+          "hits": 16384,
+          "evictionCandidates": 167232
+        },
+        "hierarchy": {
+          "hits": 0,
+          "evictions": 0,
+          "oversizeNotRetained": 4
+        },
+        "historicalMetadata": {
+          "hits": 0,
+          "evictions": 0,
+          "oversizeNotRetained": 0
+        }
+      },
+      "idle": {
+        "durationMs": 35000,
+        "samples": 348,
+        "rssBeforeBytes": 529727488,
+        "rssAfterBytes": 529727488,
+        "cacheBeforeBytes": 2752512,
+        "cacheAfterBytes": 2752512,
+        "autoEvictionObserved": false
+      }
+    }
+  },
+  "c63": {
+    "status": "NOT_CHECKED",
+    "reason": "The fixed C31 worker only performs read/revision/tree workloads. The reconciliationCache remained empty; no large reconciliation result or bounded byte retention was measured. Authority/lifecycle maps were also empty and excluded from derived-cache accounting.",
+    "authorityStatePolicy": "Do not evict read observations, observation refs, proposals, durable proposal IDs, approvals, receipts, lock state, or writer queues.",
+    "reconsiderationTrigger": "Revisit a per-CoreStore budget only after a bounded, representative reconciliation workload records retained reconciliation bytes and a realistic aggregate cache/RSS pressure target. If pressure is isolated to reconciliationCache, measure a local byte/entry cap first."
+  },
+  "decision": {
+    "status": "DECLINED_FOR_NOW",
+    "reason": "The measured C31 caches remain under their existing independent ceilings; this cohort shows cache-count churn and oversize hierarchy non-retention but no measured aggregate retained-cache pressure that justifies a store-wide governor. C63 is not a pass or universal-budget adequacy claim because reconciliation bytes were not exercised.",
+    "existingCeilings": {
+      "fileRevisionCache": "16,384 entries",
+      "hierarchyCache": "8 entries / 16 MiB",
+      "historicalMetadataCache": "64 entries / 64 MiB",
+      "reconciliationCache": "128 entries; no byte accounting in accepted runtime"
+    }
+  },
+  "archivedFiles": [
+    {
+      "path": "manifest.json",
+      "bytes": 192507,
+      "sha256": "630b7eeb5ce09484e795355f7d4ccc80e2d4591bde34806cbb483b57d72dbaa7"
+    },
+    {
+      "path": "raw/cache-large.json",
+      "bytes": 119973,
+      "sha256": "accae9f6b78a7d5ee6efa8c8c60789cc2966b8b9bf6ca5230ad172895881d83e"
+    },
+    {
+      "path": "raw/cache-stress.json",
+      "bytes": 31266,
+      "sha256": "89f3c23bf3a24de32f39ffe3720f9bb2fbfee132f928f0a42d2e15a274426a90"
+    }
+  ]
+}

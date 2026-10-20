@@ -1,0 +1,1034 @@
+{
+  "schemaVersion": 1,
+  "status": "complete",
+  "mode": "cache-pressure",
+  "repositoryCount": 2,
+  "idleMs": 35000,
+  "memory": {
+    "rssBeforeBytes": 72777728,
+    "processPeakRssBeforeBytes": 72777728,
+    "rssAfterBytes": 529727488,
+    "processPeakRssAfterBytes": 553000960
+  },
+  "events": [
+    {
+      "phase": "registered",
+      "repository": 1,
+      "cache": {
+        "probe": "runtime-private-fields-accessible",
+        "derivedCaches": {
+          "fileRevision": {
+            "entries": 0,
+            "shallowPayloadEstimateBytes": 0,
+            "model": "UTF-8 key/value bytes + 64 bytes per Map entry; excludes V8 overhead"
+          },
+          "hierarchy": {
+            "entries": 0,
+            "explicitBytes": 0,
+            "entryBytes": []
+          },
+          "historicalMetadata": {
+            "entries": 0,
+            "explicitBytes": 0,
+            "entryBytes": []
+          },
+          "reconciliation": {
+            "entries": 0,
+            "boundedJsonPayloadEstimateBytes": 0,
+            "entryBytes": []
+          },
+          "estimatedOrAccountedTotalBytes": 0,
+          "totalSemantics": "Mixed explicit Core estimates and labeled shallow payload estimates; not retained heap or process RSS"
+        },
+        "authorityState": {
+          "readObservations": 0,
+          "observationRefKeys": 0,
+          "proposalsByProject": 0,
+          "durableProposalIdsByProject": 0,
+          "approvalsByProject": 0,
+          "writerQueues": 0,
+          "semantics": "Lifecycle and authority state; excluded from reconstructible-cache byte totals and any eviction recommendation"
+        }
+      },
+      "rssBytes": 76595200
+    },
+    {
+      "phase": "registered",
+      "repository": 2,
+      "cache": {
+        "probe": "runtime-private-fields-accessible",
+        "derivedCaches": {
+          "fileRevision": {
+            "entries": 0,
+            "shallowPayloadEstimateBytes": 0,
+            "model": "UTF-8 key/value bytes + 64 bytes per Map entry; excludes V8 overhead"
+          },
+          "hierarchy": {
+            "entries": 0,
+            "explicitBytes": 0,
+            "entryBytes": []
+          },
+          "historicalMetadata": {
+            "entries": 0,
+            "explicitBytes": 0,
+            "entryBytes": []
+          },
+          "reconciliation": {
+            "entries": 0,
+            "boundedJsonPayloadEstimateBytes": 0,
+            "entryBytes": []
+          },
+          "estimatedOrAccountedTotalBytes": 0,
+          "totalSemantics": "Mixed explicit Core estimates and labeled shallow payload estimates; not retained heap or process RSS"
+        },
+        "authorityState": {
+          "readObservations": 0,
+          "observationRefKeys": 0,
+          "proposalsByProject": 0,
+          "durableProposalIdsByProject": 0,
+          "approvalsByProject": 0,
+          "writerQueues": 0,
+          "semantics": "Lifecycle and authority state; excluded from reconstructible-cache byte totals and any eviction recommendation"
+        }
+      },
+      "rssBytes": 76988416
+    },
+    {
+      "phase": "revisions",
+      "repository": 1,
+      "sample": {
+        "name": "revisions.repo-1",
+        "status": "success",
+        "ms": 6831.865616000001,
+        "cpuUs": {
+          "user": 5289717,
+          "system": 1455729
+        },
+        "io": {
+          "rchar": 97740483,
+          "wchar": 97398225,
+          "syscr": 194137,
+          "syscw": 403766,
+          "read_bytes": 0,
+          "write_bytes": 0,
+          "cancelled_write_bytes": 0
+        },
+        "rssBeforeBytes": 76988416,
+        "rssAfterBytes": 330620928,
+        "rssBytes": 330620928,
+        "sampledPeakRssBytes": 345927680,
+        "sampledRssSamples": 287,
+        "processPeakRssBeforeBytes": 76988416,
+        "processPeakRssAfterBytes": 345927680,
+        "maxRssKiB": 337820,
+        "instrumentationCounters": {
+          "gitProcesses": 27,
+          "gitCommandLogDropped": 0,
+          "readFileCalls": 0,
+          "readFileBytes": 0
+        },
+        "gitOutputs": {
+          "treeList": {
+            "calls": 1,
+            "failures": 0,
+            "stdoutBytes": 10254943,
+            "stderrBytes": 0,
+            "maxStdoutBytes": 10254943,
+            "lastStdoutBytes": 10254943,
+            "lastErrorCode": null,
+            "lastErrorMessage": null
+          },
+          "batchCheck": {
+            "calls": 1,
+            "failures": 0,
+            "stdoutBytes": 5048358,
+            "stderrBytes": 0,
+            "maxStdoutBytes": 5048358,
+            "lastStdoutBytes": 5048358,
+            "lastErrorCode": null,
+            "lastErrorMessage": null
+          },
+          "batchContent": {
+            "calls": 25,
+            "failures": 0,
+            "stdoutBytes": 73891856,
+            "stderrBytes": 0,
+            "maxStdoutBytes": 16040969,
+            "lastStdoutBytes": 305712,
+            "lastErrorCode": null,
+            "lastErrorMessage": null
+          }
+        },
+        "value": {
+          "revisions": 100000
+        }
+      },
+      "cache": {
+        "probe": "runtime-private-fields-accessible",
+        "derivedCaches": {
+          "fileRevision": {
+            "entries": 16384,
+            "shallowPayloadEstimateBytes": 2752512,
+            "model": "UTF-8 key/value bytes + 64 bytes per Map entry; excludes V8 overhead"
+          },
+          "hierarchy": {
+            "entries": 0,
+            "explicitBytes": 0,
+            "entryBytes": []
+          },
+          "historicalMetadata": {
+            "entries": 0,
+            "explicitBytes": 0,
+            "entryBytes": []
+          },
+          "reconciliation": {
+            "entries": 0,
+            "boundedJsonPayloadEstimateBytes": 0,
+            "entryBytes": []
+          },
+          "estimatedOrAccountedTotalBytes": 2752512,
+          "totalSemantics": "Mixed explicit Core estimates and labeled shallow payload estimates; not retained heap or process RSS"
+        },
+        "authorityState": {
+          "readObservations": 0,
+          "observationRefKeys": 0,
+          "proposalsByProject": 0,
+          "durableProposalIdsByProject": 0,
+          "approvalsByProject": 0,
+          "writerQueues": 0,
+          "semantics": "Lifecycle and authority state; excluded from reconstructible-cache byte totals and any eviction recommendation"
+        }
+      },
+      "rssBytes": 330620928,
+      "cacheCounters": {
+        "fileRevision": {
+          "hits": 0,
+          "evictionCandidates": 83616
+        },
+        "hierarchy": {
+          "hits": 0,
+          "evictions": 0,
+          "oversizeNotRetained": 0
+        },
+        "historicalMetadata": {
+          "hits": 0,
+          "evictions": 0,
+          "oversizeNotRetained": 0
+        }
+      }
+    },
+    {
+      "phase": "tree.cold",
+      "repository": 1,
+      "sample": {
+        "name": "tree.cold.repo-1",
+        "status": "success",
+        "ms": 5669.37629,
+        "cpuUs": {
+          "user": 5023821,
+          "system": 796941
+        },
+        "io": {
+          "rchar": 26218521,
+          "wchar": 25979788,
+          "syscr": 94918,
+          "syscw": 205206,
+          "read_bytes": 0,
+          "write_bytes": 4096,
+          "cancelled_write_bytes": 0
+        },
+        "rssBeforeBytes": 330620928,
+        "rssAfterBytes": 442220544,
+        "rssBytes": 442220544,
+        "sampledPeakRssBytes": 444583936,
+        "sampledRssSamples": 145,
+        "processPeakRssBeforeBytes": 345927680,
+        "processPeakRssAfterBytes": 444583936,
+        "maxRssKiB": 434164,
+        "instrumentationCounters": {
+          "gitProcesses": 21,
+          "gitCommandLogDropped": 0,
+          "readFileCalls": 2,
+          "readFileBytes": 1441
+        },
+        "gitOutputs": {
+          "otherGit": {
+            "calls": 6,
+            "failures": 1,
+            "stdoutBytes": 123,
+            "stderrBytes": 32,
+            "maxStdoutBytes": 41,
+            "lastStdoutBytes": 0,
+            "lastErrorCode": null,
+            "lastErrorMessage": null
+          },
+          "treeList": {
+            "calls": 1,
+            "failures": 0,
+            "stdoutBytes": 10254943,
+            "stderrBytes": 0,
+            "maxStdoutBytes": 10254943,
+            "lastStdoutBytes": 10254943,
+            "lastErrorCode": null,
+            "lastErrorMessage": null
+          },
+          "batchCheck": {
+            "calls": 1,
+            "failures": 0,
+            "stdoutBytes": 2526399,
+            "stderrBytes": 0,
+            "maxStdoutBytes": 2526399,
+            "lastStdoutBytes": 2526399,
+            "lastErrorCode": null,
+            "lastErrorMessage": null
+          },
+          "batchContent": {
+            "calls": 13,
+            "failures": 0,
+            "stdoutBytes": 9049983,
+            "stderrBytes": 0,
+            "maxStdoutBytes": 738640,
+            "lastStdoutBytes": 252026,
+            "lastErrorCode": null,
+            "lastErrorMessage": null
+          }
+        },
+        "value": {
+          "volumes": 100
+        }
+      },
+      "cache": {
+        "probe": "runtime-private-fields-accessible",
+        "derivedCaches": {
+          "fileRevision": {
+            "entries": 16384,
+            "shallowPayloadEstimateBytes": 2752512,
+            "model": "UTF-8 key/value bytes + 64 bytes per Map entry; excludes V8 overhead"
+          },
+          "hierarchy": {
+            "entries": 0,
+            "explicitBytes": 0,
+            "entryBytes": []
+          },
+          "historicalMetadata": {
+            "entries": 0,
+            "explicitBytes": 0,
+            "entryBytes": []
+          },
+          "reconciliation": {
+            "entries": 0,
+            "boundedJsonPayloadEstimateBytes": 0,
+            "entryBytes": []
+          },
+          "estimatedOrAccountedTotalBytes": 2752512,
+          "totalSemantics": "Mixed explicit Core estimates and labeled shallow payload estimates; not retained heap or process RSS"
+        },
+        "authorityState": {
+          "readObservations": 0,
+          "observationRefKeys": 0,
+          "proposalsByProject": 0,
+          "durableProposalIdsByProject": 0,
+          "approvalsByProject": 0,
+          "writerQueues": 0,
+          "semantics": "Lifecycle and authority state; excluded from reconstructible-cache byte totals and any eviction recommendation"
+        }
+      },
+      "rssBytes": 442220544,
+      "cacheCounters": {
+        "fileRevision": {
+          "hits": 0,
+          "evictionCandidates": 83616
+        },
+        "hierarchy": {
+          "hits": 0,
+          "evictions": 0,
+          "oversizeNotRetained": 1
+        },
+        "historicalMetadata": {
+          "hits": 0,
+          "evictions": 0,
+          "oversizeNotRetained": 0
+        }
+      }
+    },
+    {
+      "phase": "tree.warm",
+      "repository": 1,
+      "sample": {
+        "name": "tree.warm.repo-1",
+        "status": "success",
+        "ms": 6932.335809,
+        "cpuUs": {
+          "user": 4716269,
+          "system": 801633
+        },
+        "io": {
+          "rchar": 26244363,
+          "wchar": 25979596,
+          "syscr": 95413,
+          "syscw": 205182,
+          "read_bytes": 0,
+          "write_bytes": 4096,
+          "cancelled_write_bytes": 0
+        },
+        "rssBeforeBytes": 442220544,
+        "rssAfterBytes": 504127488,
+        "rssBytes": 504127488,
+        "sampledPeakRssBytes": 525963264,
+        "sampledRssSamples": 217,
+        "processPeakRssBeforeBytes": 444583936,
+        "processPeakRssAfterBytes": 525963264,
+        "maxRssKiB": 513636,
+        "instrumentationCounters": {
+          "gitProcesses": 21,
+          "gitCommandLogDropped": 0,
+          "readFileCalls": 2,
+          "readFileBytes": 1441
+        },
+        "gitOutputs": {
+          "otherGit": {
+            "calls": 6,
+            "failures": 1,
+            "stdoutBytes": 123,
+            "stderrBytes": 32,
+            "maxStdoutBytes": 41,
+            "lastStdoutBytes": 0,
+            "lastErrorCode": null,
+            "lastErrorMessage": null
+          },
+          "treeList": {
+            "calls": 1,
+            "failures": 0,
+            "stdoutBytes": 10254943,
+            "stderrBytes": 0,
+            "maxStdoutBytes": 10254943,
+            "lastStdoutBytes": 10254943,
+            "lastErrorCode": null,
+            "lastErrorMessage": null
+          },
+          "batchCheck": {
+            "calls": 1,
+            "failures": 0,
+            "stdoutBytes": 2526399,
+            "stderrBytes": 0,
+            "maxStdoutBytes": 2526399,
+            "lastStdoutBytes": 2526399,
+            "lastErrorCode": null,
+            "lastErrorMessage": null
+          },
+          "batchContent": {
+            "calls": 13,
+            "failures": 0,
+            "stdoutBytes": 9049983,
+            "stderrBytes": 0,
+            "maxStdoutBytes": 738640,
+            "lastStdoutBytes": 252026,
+            "lastErrorCode": null,
+            "lastErrorMessage": null
+          }
+        },
+        "value": {
+          "volumes": 100
+        }
+      },
+      "cache": {
+        "probe": "runtime-private-fields-accessible",
+        "derivedCaches": {
+          "fileRevision": {
+            "entries": 16384,
+            "shallowPayloadEstimateBytes": 2752512,
+            "model": "UTF-8 key/value bytes + 64 bytes per Map entry; excludes V8 overhead"
+          },
+          "hierarchy": {
+            "entries": 0,
+            "explicitBytes": 0,
+            "entryBytes": []
+          },
+          "historicalMetadata": {
+            "entries": 0,
+            "explicitBytes": 0,
+            "entryBytes": []
+          },
+          "reconciliation": {
+            "entries": 0,
+            "boundedJsonPayloadEstimateBytes": 0,
+            "entryBytes": []
+          },
+          "estimatedOrAccountedTotalBytes": 2752512,
+          "totalSemantics": "Mixed explicit Core estimates and labeled shallow payload estimates; not retained heap or process RSS"
+        },
+        "authorityState": {
+          "readObservations": 0,
+          "observationRefKeys": 0,
+          "proposalsByProject": 0,
+          "durableProposalIdsByProject": 0,
+          "approvalsByProject": 0,
+          "writerQueues": 0,
+          "semantics": "Lifecycle and authority state; excluded from reconstructible-cache byte totals and any eviction recommendation"
+        }
+      },
+      "rssBytes": 504127488,
+      "cacheCounters": {
+        "fileRevision": {
+          "hits": 0,
+          "evictionCandidates": 83616
+        },
+        "hierarchy": {
+          "hits": 0,
+          "evictions": 0,
+          "oversizeNotRetained": 2
+        },
+        "historicalMetadata": {
+          "hits": 0,
+          "evictions": 0,
+          "oversizeNotRetained": 0
+        }
+      }
+    },
+    {
+      "phase": "revisions",
+      "repository": 2,
+      "sample": {
+        "name": "revisions.repo-2",
+        "status": "success",
+        "ms": 5591.048245000002,
+        "cpuUs": {
+          "user": 4330723,
+          "system": 1214925
+        },
+        "io": {
+          "rchar": 92577758,
+          "wchar": 92288762,
+          "syscr": 168873,
+          "syscw": 338018,
+          "read_bytes": 0,
+          "write_bytes": 0,
+          "cancelled_write_bytes": 0
+        },
+        "rssBeforeBytes": 504127488,
+        "rssAfterBytes": 520138752,
+        "rssBytes": 520138752,
+        "sampledPeakRssBytes": 542085120,
+        "sampledRssSamples": 234,
+        "processPeakRssBeforeBytes": 525963264,
+        "processPeakRssAfterBytes": 542085120,
+        "maxRssKiB": 529380,
+        "instrumentationCounters": {
+          "gitProcesses": 23,
+          "gitCommandLogDropped": 0,
+          "readFileCalls": 0,
+          "readFileBytes": 0
+        },
+        "gitOutputs": {
+          "treeList": {
+            "calls": 1,
+            "failures": 0,
+            "stdoutBytes": 10254943,
+            "stderrBytes": 0,
+            "maxStdoutBytes": 10254943,
+            "lastStdoutBytes": 10254943,
+            "lastErrorCode": null,
+            "lastErrorMessage": null
+          },
+          "batchCheck": {
+            "calls": 1,
+            "failures": 0,
+            "stdoutBytes": 4229512,
+            "stderrBytes": 0,
+            "maxStdoutBytes": 4229512,
+            "lastStdoutBytes": 4229512,
+            "lastErrorCode": null,
+            "lastErrorMessage": null
+          },
+          "batchContent": {
+            "calls": 21,
+            "failures": 0,
+            "stdoutBytes": 70946207,
+            "stderrBytes": 0,
+            "maxStdoutBytes": 16040969,
+            "lastStdoutBytes": 302494,
+            "lastErrorCode": null,
+            "lastErrorMessage": null
+          }
+        },
+        "value": {
+          "revisions": 100000
+        }
+      },
+      "cache": {
+        "probe": "runtime-private-fields-accessible",
+        "derivedCaches": {
+          "fileRevision": {
+            "entries": 16384,
+            "shallowPayloadEstimateBytes": 2752512,
+            "model": "UTF-8 key/value bytes + 64 bytes per Map entry; excludes V8 overhead"
+          },
+          "hierarchy": {
+            "entries": 0,
+            "explicitBytes": 0,
+            "entryBytes": []
+          },
+          "historicalMetadata": {
+            "entries": 0,
+            "explicitBytes": 0,
+            "entryBytes": []
+          },
+          "reconciliation": {
+            "entries": 0,
+            "boundedJsonPayloadEstimateBytes": 0,
+            "entryBytes": []
+          },
+          "estimatedOrAccountedTotalBytes": 2752512,
+          "totalSemantics": "Mixed explicit Core estimates and labeled shallow payload estimates; not retained heap or process RSS"
+        },
+        "authorityState": {
+          "readObservations": 0,
+          "observationRefKeys": 0,
+          "proposalsByProject": 0,
+          "durableProposalIdsByProject": 0,
+          "approvalsByProject": 0,
+          "writerQueues": 0,
+          "semantics": "Lifecycle and authority state; excluded from reconstructible-cache byte totals and any eviction recommendation"
+        }
+      },
+      "rssBytes": 520138752,
+      "cacheCounters": {
+        "fileRevision": {
+          "hits": 16384,
+          "evictionCandidates": 167232
+        },
+        "hierarchy": {
+          "hits": 0,
+          "evictions": 0,
+          "oversizeNotRetained": 2
+        },
+        "historicalMetadata": {
+          "hits": 0,
+          "evictions": 0,
+          "oversizeNotRetained": 0
+        }
+      }
+    },
+    {
+      "phase": "tree.cold",
+      "repository": 2,
+      "sample": {
+        "name": "tree.cold.repo-2",
+        "status": "success",
+        "ms": 5179.592336999995,
+        "cpuUs": {
+          "user": 4494125,
+          "system": 800794
+        },
+        "io": {
+          "rchar": 26216720,
+          "wchar": 25979236,
+          "syscr": 98413,
+          "syscw": 205137,
+          "read_bytes": 0,
+          "write_bytes": 4096,
+          "cancelled_write_bytes": 0
+        },
+        "rssBeforeBytes": 520269824,
+        "rssAfterBytes": 525910016,
+        "rssBytes": 525910016,
+        "sampledPeakRssBytes": 546545664,
+        "sampledRssSamples": 141,
+        "processPeakRssBeforeBytes": 542085120,
+        "processPeakRssAfterBytes": 546545664,
+        "maxRssKiB": 533736,
+        "instrumentationCounters": {
+          "gitProcesses": 21,
+          "gitCommandLogDropped": 0,
+          "readFileCalls": 2,
+          "readFileBytes": 1441
+        },
+        "gitOutputs": {
+          "otherGit": {
+            "calls": 6,
+            "failures": 1,
+            "stdoutBytes": 123,
+            "stderrBytes": 32,
+            "maxStdoutBytes": 41,
+            "lastStdoutBytes": 0,
+            "lastErrorCode": null,
+            "lastErrorMessage": null
+          },
+          "treeList": {
+            "calls": 1,
+            "failures": 0,
+            "stdoutBytes": 10254943,
+            "stderrBytes": 0,
+            "maxStdoutBytes": 10254943,
+            "lastStdoutBytes": 10254943,
+            "lastErrorCode": null,
+            "lastErrorMessage": null
+          },
+          "batchCheck": {
+            "calls": 1,
+            "failures": 0,
+            "stdoutBytes": 2526399,
+            "stderrBytes": 0,
+            "maxStdoutBytes": 2526399,
+            "lastStdoutBytes": 2526399,
+            "lastErrorCode": null,
+            "lastErrorMessage": null
+          },
+          "batchContent": {
+            "calls": 13,
+            "failures": 0,
+            "stdoutBytes": 9049983,
+            "stderrBytes": 0,
+            "maxStdoutBytes": 738640,
+            "lastStdoutBytes": 252026,
+            "lastErrorCode": null,
+            "lastErrorMessage": null
+          }
+        },
+        "value": {
+          "volumes": 100
+        }
+      },
+      "cache": {
+        "probe": "runtime-private-fields-accessible",
+        "derivedCaches": {
+          "fileRevision": {
+            "entries": 16384,
+            "shallowPayloadEstimateBytes": 2752512,
+            "model": "UTF-8 key/value bytes + 64 bytes per Map entry; excludes V8 overhead"
+          },
+          "hierarchy": {
+            "entries": 0,
+            "explicitBytes": 0,
+            "entryBytes": []
+          },
+          "historicalMetadata": {
+            "entries": 0,
+            "explicitBytes": 0,
+            "entryBytes": []
+          },
+          "reconciliation": {
+            "entries": 0,
+            "boundedJsonPayloadEstimateBytes": 0,
+            "entryBytes": []
+          },
+          "estimatedOrAccountedTotalBytes": 2752512,
+          "totalSemantics": "Mixed explicit Core estimates and labeled shallow payload estimates; not retained heap or process RSS"
+        },
+        "authorityState": {
+          "readObservations": 0,
+          "observationRefKeys": 0,
+          "proposalsByProject": 0,
+          "durableProposalIdsByProject": 0,
+          "approvalsByProject": 0,
+          "writerQueues": 0,
+          "semantics": "Lifecycle and authority state; excluded from reconstructible-cache byte totals and any eviction recommendation"
+        }
+      },
+      "rssBytes": 525910016,
+      "cacheCounters": {
+        "fileRevision": {
+          "hits": 16384,
+          "evictionCandidates": 167232
+        },
+        "hierarchy": {
+          "hits": 0,
+          "evictions": 0,
+          "oversizeNotRetained": 3
+        },
+        "historicalMetadata": {
+          "hits": 0,
+          "evictions": 0,
+          "oversizeNotRetained": 0
+        }
+      }
+    },
+    {
+      "phase": "tree.warm",
+      "repository": 2,
+      "sample": {
+        "name": "tree.warm.repo-2",
+        "status": "success",
+        "ms": 5015.346700000002,
+        "cpuUs": {
+          "user": 4316009,
+          "system": 749130
+        },
+        "io": {
+          "rchar": 26215810,
+          "wchar": 25979044,
+          "syscr": 97759,
+          "syscw": 205113,
+          "read_bytes": 0,
+          "write_bytes": 4096,
+          "cancelled_write_bytes": 0
+        },
+        "rssBeforeBytes": 525910016,
+        "rssAfterBytes": 529727488,
+        "rssBytes": 529727488,
+        "sampledPeakRssBytes": 553000960,
+        "sampledRssSamples": 139,
+        "processPeakRssBeforeBytes": 546545664,
+        "processPeakRssAfterBytes": 553000960,
+        "maxRssKiB": 540040,
+        "instrumentationCounters": {
+          "gitProcesses": 21,
+          "gitCommandLogDropped": 0,
+          "readFileCalls": 2,
+          "readFileBytes": 1441
+        },
+        "gitOutputs": {
+          "otherGit": {
+            "calls": 6,
+            "failures": 1,
+            "stdoutBytes": 123,
+            "stderrBytes": 32,
+            "maxStdoutBytes": 41,
+            "lastStdoutBytes": 0,
+            "lastErrorCode": null,
+            "lastErrorMessage": null
+          },
+          "treeList": {
+            "calls": 1,
+            "failures": 0,
+            "stdoutBytes": 10254943,
+            "stderrBytes": 0,
+            "maxStdoutBytes": 10254943,
+            "lastStdoutBytes": 10254943,
+            "lastErrorCode": null,
+            "lastErrorMessage": null
+          },
+          "batchCheck": {
+            "calls": 1,
+            "failures": 0,
+            "stdoutBytes": 2526399,
+            "stderrBytes": 0,
+            "maxStdoutBytes": 2526399,
+            "lastStdoutBytes": 2526399,
+            "lastErrorCode": null,
+            "lastErrorMessage": null
+          },
+          "batchContent": {
+            "calls": 13,
+            "failures": 0,
+            "stdoutBytes": 9049983,
+            "stderrBytes": 0,
+            "maxStdoutBytes": 738640,
+            "lastStdoutBytes": 252026,
+            "lastErrorCode": null,
+            "lastErrorMessage": null
+          }
+        },
+        "value": {
+          "volumes": 100
+        }
+      },
+      "cache": {
+        "probe": "runtime-private-fields-accessible",
+        "derivedCaches": {
+          "fileRevision": {
+            "entries": 16384,
+            "shallowPayloadEstimateBytes": 2752512,
+            "model": "UTF-8 key/value bytes + 64 bytes per Map entry; excludes V8 overhead"
+          },
+          "hierarchy": {
+            "entries": 0,
+            "explicitBytes": 0,
+            "entryBytes": []
+          },
+          "historicalMetadata": {
+            "entries": 0,
+            "explicitBytes": 0,
+            "entryBytes": []
+          },
+          "reconciliation": {
+            "entries": 0,
+            "boundedJsonPayloadEstimateBytes": 0,
+            "entryBytes": []
+          },
+          "estimatedOrAccountedTotalBytes": 2752512,
+          "totalSemantics": "Mixed explicit Core estimates and labeled shallow payload estimates; not retained heap or process RSS"
+        },
+        "authorityState": {
+          "readObservations": 0,
+          "observationRefKeys": 0,
+          "proposalsByProject": 0,
+          "durableProposalIdsByProject": 0,
+          "approvalsByProject": 0,
+          "writerQueues": 0,
+          "semantics": "Lifecycle and authority state; excluded from reconstructible-cache byte totals and any eviction recommendation"
+        }
+      },
+      "rssBytes": 529727488,
+      "cacheCounters": {
+        "fileRevision": {
+          "hits": 16384,
+          "evictionCandidates": 167232
+        },
+        "hierarchy": {
+          "hits": 0,
+          "evictions": 0,
+          "oversizeNotRetained": 4
+        },
+        "historicalMetadata": {
+          "hits": 0,
+          "evictions": 0,
+          "oversizeNotRetained": 0
+        }
+      }
+    }
+  ],
+  "cacheCounters": {
+    "fileRevision": {
+      "hits": 16384,
+      "evictionCandidates": 167232
+    },
+    "hierarchy": {
+      "hits": 0,
+      "evictions": 0,
+      "oversizeNotRetained": 4
+    },
+    "historicalMetadata": {
+      "hits": 0,
+      "evictions": 0,
+      "oversizeNotRetained": 0
+    }
+  },
+  "interpretation": "Derived-cache estimates are reported separately from authority state and process RSS.",
+  "idle": {
+    "durationMs": 35000,
+    "samples": 348,
+    "rssBeforeBytes": 529727488,
+    "rssAfterBytes": 529727488,
+    "rssMinBytes": 529727488,
+    "rssSampledMaxBytes": 529727488,
+    "processPeakRssBeforeBytes": 553000960,
+    "processPeakRssAfterBytes": 553000960,
+    "cacheBefore": {
+      "probe": "runtime-private-fields-accessible",
+      "derivedCaches": {
+        "fileRevision": {
+          "entries": 16384,
+          "shallowPayloadEstimateBytes": 2752512,
+          "model": "UTF-8 key/value bytes + 64 bytes per Map entry; excludes V8 overhead"
+        },
+        "hierarchy": {
+          "entries": 0,
+          "explicitBytes": 0,
+          "entryBytes": []
+        },
+        "historicalMetadata": {
+          "entries": 0,
+          "explicitBytes": 0,
+          "entryBytes": []
+        },
+        "reconciliation": {
+          "entries": 0,
+          "boundedJsonPayloadEstimateBytes": 0,
+          "entryBytes": []
+        },
+        "estimatedOrAccountedTotalBytes": 2752512,
+        "totalSemantics": "Mixed explicit Core estimates and labeled shallow payload estimates; not retained heap or process RSS"
+      },
+      "authorityState": {
+        "readObservations": 0,
+        "observationRefKeys": 0,
+        "proposalsByProject": 0,
+        "durableProposalIdsByProject": 0,
+        "approvalsByProject": 0,
+        "writerQueues": 0,
+        "semantics": "Lifecycle and authority state; excluded from reconstructible-cache byte totals and any eviction recommendation"
+      }
+    },
+    "cacheAfter": {
+      "probe": "runtime-private-fields-accessible",
+      "derivedCaches": {
+        "fileRevision": {
+          "entries": 16384,
+          "shallowPayloadEstimateBytes": 2752512,
+          "model": "UTF-8 key/value bytes + 64 bytes per Map entry; excludes V8 overhead"
+        },
+        "hierarchy": {
+          "entries": 0,
+          "explicitBytes": 0,
+          "entryBytes": []
+        },
+        "historicalMetadata": {
+          "entries": 0,
+          "explicitBytes": 0,
+          "entryBytes": []
+        },
+        "reconciliation": {
+          "entries": 0,
+          "boundedJsonPayloadEstimateBytes": 0,
+          "entryBytes": []
+        },
+        "estimatedOrAccountedTotalBytes": 2752512,
+        "totalSemantics": "Mixed explicit Core estimates and labeled shallow payload estimates; not retained heap or process RSS"
+      },
+      "authorityState": {
+        "readObservations": 0,
+        "observationRefKeys": 0,
+        "proposalsByProject": 0,
+        "durableProposalIdsByProject": 0,
+        "approvalsByProject": 0,
+        "writerQueues": 0,
+        "semantics": "Lifecycle and authority state; excluded from reconstructible-cache byte totals and any eviction recommendation"
+      }
+    },
+    "cacheCounters": {
+      "fileRevision": {
+        "hits": 16384,
+        "evictionCandidates": 167232
+      },
+      "hierarchy": {
+        "hits": 0,
+        "evictions": 0,
+        "oversizeNotRetained": 4
+      },
+      "historicalMetadata": {
+        "hits": 0,
+        "evictions": 0,
+        "oversizeNotRetained": 0
+      }
+    },
+    "autoEvictionObserved": false
+  },
+  "finalCache": {
+    "probe": "runtime-private-fields-accessible",
+    "derivedCaches": {
+      "fileRevision": {
+        "entries": 16384,
+        "shallowPayloadEstimateBytes": 2752512,
+        "model": "UTF-8 key/value bytes + 64 bytes per Map entry; excludes V8 overhead"
+      },
+      "hierarchy": {
+        "entries": 0,
+        "explicitBytes": 0,
+        "entryBytes": []
+      },
+      "historicalMetadata": {
+        "entries": 0,
+        "explicitBytes": 0,
+        "entryBytes": []
+      },
+      "reconciliation": {
+        "entries": 0,
+        "boundedJsonPayloadEstimateBytes": 0,
+        "entryBytes": []
+      },
+      "estimatedOrAccountedTotalBytes": 2752512,
+      "totalSemantics": "Mixed explicit Core estimates and labeled shallow payload estimates; not retained heap or process RSS"
+    },
+    "authorityState": {
+      "readObservations": 0,
+      "observationRefKeys": 0,
+      "proposalsByProject": 0,
+      "durableProposalIdsByProject": 0,
+      "approvalsByProject": 0,
+      "writerQueues": 0,
+      "semantics": "Lifecycle and authority state; excluded from reconstructible-cache byte totals and any eviction recommendation"
+    }
+  },
+  "finishedAt": "2026-10-20T17:40:22.307Z"
+}
