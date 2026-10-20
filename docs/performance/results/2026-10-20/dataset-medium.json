@@ -1,0 +1,19 @@
+{
+  "schemaVersion": 1,
+  "size": "medium",
+  "files": 1000,
+  "volumes": 1,
+  "chapters": 10,
+  "scenes": 493,
+  "bytes": 3216993,
+  "historyCommits": 1,
+  "documentBytes": [
+    1024,
+    102400,
+    1048576
+  ],
+  "attachmentBytes": 0,
+  "commit": "773d4bb408f333e330e5359d74d43da8fe990554",
+  "remote": "/tmp/scriptorium-wave0-baseline-20261020/medium/origin.git",
+  "syntheticOnly": true
+}

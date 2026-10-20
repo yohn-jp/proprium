@@ -59,9 +59,9 @@ try {
   if (workload === 'stats') await sample('stats.scan', () => store.writingStatsSnapshot(project.id));
   if (workload === 'revisions') {
     const reader = await sample('reader.create', () => store.reader(project.id));
-    await sample('reader.list', () => reader.list());
-    await sample('reader.listRevisions.cold', () => reader.listRevisions());
-    await sample('reader.listRevisions.warm', () => reader.listRevisions());
+    await sample('reader.list', () => reader.list(''));
+    await sample('reader.listRevisions.cold', () => reader.listRevisions(''));
+    await sample('reader.listRevisions.warm', () => reader.listRevisions(''));
   }
   report.status = 'complete';
 } catch (error) { report.status = 'failed'; report.error = { message: error.message, code: error.code }; process.exitCode = 1; }
