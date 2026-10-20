@@ -55,8 +55,8 @@ b941a4cffc0fc26ad62021b8e7bd21f6cb1e512537d6cdb4b1c9db2fae818020  /data/scriptor
 d5bbdc909b4807cd49b0403919e43d116bd061e4c5cf5b57c5868a391f1f3be1  /data/scriptorium-core64-derived-e8aa3ecd-20261021/validation/test.log
 feb9f0737a5d45717a689a8503b8597ae0b388ec3340494233dd94660e0e5a6b  /data/scriptorium-core64-derived-e8aa3ecd-20261021/validation/typecheck.log
 6044bf153eecf17075c1319dbef00619e6959bc9846ba38bd849ef2a36c5da96  /data/scriptorium-core64-worktrees/g0/packages/core/dist/index.js
-c4c4b7f3a044bec6765626a7e389f07f096d962aab61bbf09072bb7de2fe3613  /home/sophia/src/scriptorium-c64-derived/docs/performance/CORE-64-DERIVED.md
-af6f702fc699bf93dbfe165f7f91cd7c020739e78a9fa8839c968f9368af9708  /home/sophia/src/scriptorium-c64-derived/docs/performance/results/core64-derived/RESULTS.md
+d3d12f549936be81bfeb5488dedd002c1ddad7d6262afc6407ae2e44ec66a9ae  /home/sophia/src/scriptorium-c64-derived/docs/performance/CORE-64-DERIVED.md
+5799c0c00147ec70b3fc12045803c864080821079d873a02694f92f061d25a5a  /home/sophia/src/scriptorium-c64-derived/docs/performance/results/core64-derived/RESULTS.md
 a7b83895e2c239d85a3f4d973cf7458e64cc7415c418a4844ff33f700a52d4a3  /home/sophia/src/scriptorium-c64-derived/packages/core/dist/index.js
 cfcb419006abea75c81817275dc00e1e6a2007d5e90e6e1d873775a8b13d1fe0  /home/sophia/src/scriptorium-c64-derived/packages/core/src/index.test.ts
 dd05006e97a4dd471fd3555b852d1ad4166de53a4ec41b80d8a0c52d3ab929c5  /home/sophia/src/scriptorium-c64-derived/packages/core/src/index.ts

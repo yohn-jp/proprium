@@ -56,12 +56,14 @@ For `n=5`, p95 and p99 are the observed maximum. They are not service percentile
 
 These fresh-worker `tree-profile` runs used the public cold `readTreeSnapshot` operation and a V8 profile around `hierarchySnapshot`. The tree SHA was identical before and after at each fixture size.
 
-| Files | Tree SHA-256 | Post-read grouping/assembly wall p50 before → after | `readHierarchyYaml` wall p50 before → after | Profiled whole cold-tree wall p50 before → after | Process peak RSS p50 before → after |
-| ---: | --- | ---: | ---: | ---: | ---: |
-| 1,000 | `eec728cfa3f03edb54ff9d2abc6d24da06a04b6078d303e1388c88ace5bbfeb0` | 3.935 → 3.571 ms | 97.759 → 95.670 ms | 194.129 → 167.442 ms | 93.82 → 91.30 MiB |
-| 10,000 | `ea9490c340d7f3742d161be63a87681f897f88035d905e50ce97416df5472cae` | 70.101 → 21.569 ms | 487.503 → 503.121 ms | 897.930 → 599.655 ms | 134.93 → 131.98 MiB |
+| Files | Tree SHA-256 | `hierarchySnapshot` method wall p50 before → after | Post-read grouping/assembly wall residual p50 before → after | `readHierarchyYaml` wall p50 before → after | Profiled whole cold-tree wall p50 before → after | Process peak RSS p50 before → after |
+| ---: | --- | ---: | ---: | ---: | ---: | ---: |
+| 1,000 | `eec728cfa3f03edb54ff9d2abc6d24da06a04b6078d303e1388c88ace5bbfeb0` | 101.694 → 99.240 ms | 3.935 → 3.571 ms | 97.759 → 95.670 ms | 194.129 → 167.442 ms | 93.82 → 91.30 MiB |
+| 10,000 | `ea9490c340d7f3742d161be63a87681f897f88035d905e50ce97416df5472cae` | 558.228 → 526.419 ms | 70.101 → 21.569 ms | 487.503 → 503.121 ms | 897.930 → 599.655 ms | 134.93 → 131.98 MiB |
 
-At 10,000 files, the grouping residual fell 69.2%. The profiled full-tree p50 is descriptive only: it includes V8 instrumentation, and `readHierarchyYaml` was slightly slower in the candidate cohort. A representative baseline profile's top Core leaf was the per-chapter `files.filter(...)` closure (39.095 ms); that frame was absent from the candidate's top frames. The candidate's representative top Core leaf `addHierarchyChild` was 2.110 ms. The profile also samples `node:inspector` stop overhead; do not treat sampled CPU as a precise per-loop census.
+The `hierarchySnapshot` method wall starts after the benchmark wrapper's `Profiler.start` request and stops when the original method returns, before the wrapper awaits `Profiler.stop`. It includes `readHierarchyYaml` and subsequent grouping, ordering, and tree materialization. The grouping/assembly residual is calculated as that method wall minus the separately timed `readHierarchyYaml` wall; it is the direct attribution used here, though it is not an exact per-loop timer. At 10,000 files, this residual fell 69.2% while the method wall fell from 558.228 to 526.419 ms and `readHierarchyYaml` was slightly slower in the candidate cohort.
+
+The `tree.cold.profiled` wall is the outer `readTreeSnapshot` sample. It includes cold-read wrapper work and the profiler start/stop requests, so its 897.930 → 599.655 ms p50 change is not attributed entirely to grouping. A representative baseline profile's top Core leaf was the per-chapter `files.filter(...)` closure (39.095 ms); that frame was absent from the candidate's top frames. The candidate's representative top Core leaf `addHierarchyChild` was 2.110 ms. The profile also samples `node:inspector` stop overhead; do not treat sampled CPU as a precise per-loop census.
 
 The 10-file exact-tree comparison was semantic-only and produced the same baseline/candidate tree SHA-256 `188d597fd606e4de07abc7caa052f6a5c8b86c5dd7ee160be3647e094cb9fc6b`. The comparator used the G0 distribution SHA-256 `6044bf153eecf17075c1319dbef00619e6959bc9846ba38bd849ef2a36c5da96` and the candidate distribution SHA-256 `a7b83895e2c239d85a3f4d973cf7458e64cc7415c418a4844ff33f700a52d4a3`. Existing G0 small cold-tree wall 73.67 ms is a separate `n=1` context value, not an after measurement.
 
