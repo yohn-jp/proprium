@@ -1,11 +1,11 @@
 {
   "schemaVersion": 1,
-  "status": "source-backed no-change decisions; render candidates remain pending",
+  "status": "C06 and C11 source-backed deferrals; C04, C07, and C08 have matched render attribution with no additional runtime change",
   "source": {
     "runtime": "a1587e784788fa87d86c0eb7ab175d7a28a3209f",
     "planningBase": "7008feef2294e1176cda2799ec0384e4ee7585c0",
     "runtimePathDiffAgainstRuntimeSha": "none for SharedApplication.tsx, SceneEditor.tsx, ContributionHost.tsx, ManuscriptInput.tsx, and useRecentActivityResume.ts",
-    "workspaceProbe": "The current worktree has an experiment-only, probe-gated derivation timer in Workspace.tsx; it is excluded from this evidence commit and does not change derivation inputs or results."
+    "workspaceProbe": "Temporary opt-in Workspace derivation timing was used for matched C08 attribution and removed from final product; see attribution-summary.json in this directory."
   },
   "decisions": [
     {
@@ -102,14 +102,21 @@
       "reopenWhen": "A per-view bundle/source-map or first-use trace isolates cost and a matched A/B demonstrates a startup gain without an unacceptable first-use delay or CodeMirror remount."
     }
   ],
-  "stillPending": {
-    "C04": "Requires matched render probe. Retain W1: its final 1 MiB capture was 513.2/536.7/547.4 ms p50/p95/p99 versus W0's 596.2/641.0/645.5 ms, while commits rose 56 to 92 and Long Tasks rose 63 to 73; do not redo W1 architecture.",
-    "C07": "Requires matched panel commit/reference/mount attribution.",
-    "C08": "Requires matched Workspace derivation timing and panel identity attribution."
-  },
   "verification": {
-    "typecheck": "not run; documentation-only decision, and G0 C02/C21 verification batch was active",
-    "browserBuildOrMetrics": "not run; separate measurement slot required",
-    "tests": "not run for this documentation-only decision"
+    "typecheck": "Offline frozen install and SCRIPTORIUM_PROFILE=core pnpm build passed with temporary attribution hooks; product source is clean after hook removal.",
+    "browserBuildOrMetrics": "One matched Chromium 155 n=20 attribution capture completed on copied G0 small fixture; no candidate A/B run because no local optimization was justified.",
+    "tests": "node --test scripts/performance/core64-render-probe.test.mjs passed; final diff contains no production source changes."
+  },
+  "renderAttribution": {
+    "report": "before.json",
+    "compactSummary": "attribution-summary.json",
+    "rawCaptureSha256": "686a4443a1174e3cf2dc664e0b863197cc29dc8b96511ac0ccee32a3411ccbc5",
+    "cpuProfileSha256": "a97f8b25aba3713d2371a8b0747861321707d342110c91b94d3013272e02ba6b",
+    "compactSummarySha256": "5bcc152cdb725ed52fa8226d49e7c4e77b8565fc608e30346b8b350f93fe4450"
+  },
+  "renderDisposition": {
+    "C04": "No additional state-subscription change adopted. The Editor subtree dominates flagged fibers, but this probe has no component actualDuration and does not isolate an owner boundary. Retain W1 coalescing/tradeoff; do not claim C04 is solved.",
+    "C07": "Panel arrays and render references churn on some parent commits, but the capture does not measure component duration or establish that stabilizing these references removes parent work. No local change adopted.",
+    "C08": "The five-panel ID and catalog derivations were each at or below 0.1 ms timing resolution. No local Workspace derivation change adopted."
   }
 }

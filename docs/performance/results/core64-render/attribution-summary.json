@@ -1,0 +1,1079 @@
+{
+  "schemaVersion": 1,
+  "status": "matched instrumented baseline; no local C04/C07/C08 optimization adopted",
+  "source": "e8aa3ecd7d1e0bfb3d81a003a2bc0320c9cc6d47",
+  "fixture": {
+    "schemaVersion": 1,
+    "size": "small",
+    "documentProfile": "matrix",
+    "datasetId": "small",
+    "files": 10,
+    "volumes": 1,
+    "chapters": 1,
+    "scenes": 3,
+    "bytes": 1152477,
+    "historyCommits": 1,
+    "documentBytes": [
+      1024,
+      102400,
+      1048576
+    ],
+    "attachmentBytes": 0,
+    "commit": "e70bb509cc41b383451335e05af36d78f1cb31db",
+    "remote": "/data/scriptorium-core64-g0-a1587e78-20261020-2318/synthetic/small/origin.git",
+    "syntheticOnly": true
+  },
+  "environment": {
+    "node": "v24.21.0",
+    "chromium": "155.0.8059.79",
+    "repeats": 20,
+    "viewport": "1440x1000"
+  },
+  "artifacts": {
+    "captureSha256": "686a4443a1174e3cf2dc664e0b863197cc29dc8b96511ac0ccee32a3411ccbc5",
+    "cpuProfileSha256": "a97f8b25aba3713d2371a8b0747861321707d342110c91b94d3013272e02ba6b",
+    "captureScriptSha256": "363483fa8a5be8f03835be807548fc7afaf24231c638e1b48809594c3cf9da40",
+    "captureProbeSha256": "bcc3bdf343d30eb644eecd5d7ecba0a080c4c01f1d524b31b26828380135ef15",
+    "phaseCohortSummarizerSha256": "6f6eadbe2d183f74cfb893f842bb506a20fb1a8359f42ba23630ecf82b7e8255",
+    "rawEventsRetained": true,
+    "phaseSummariesRecomputedFromRawEvents": true,
+    "currentRunnerSha256": "97673059f5cc2f20e8d153125223048c1ef3256b14a1f1014265015c5559d2e1",
+    "currentProbeSha256": "6f6eadbe2d183f74cfb893f842bb506a20fb1a8359f42ba23630ecf82b7e8255"
+  },
+  "cohorts": {
+    "input.1024": {
+      "documentBytes": 1024,
+      "elapsedMs": 2406,
+      "keyFrameMs": {
+        "n": 45,
+        "p50": 8.5,
+        "p95": 12.200000017881393,
+        "p99": 15.699999988079071,
+        "max": 15.699999988079071
+      },
+      "cursorKeyFrameMs": {
+        "n": 20,
+        "p50": 6.5999999940395355,
+        "p95": 9.599999994039536,
+        "p99": 11.900000005960464,
+        "max": 11.900000005960464
+      },
+      "longTasks": {
+        "count": 1,
+        "totalMs": 157,
+        "maxMs": 157
+      },
+      "strictWrites": 2,
+      "phases": {
+        "input.typing": {
+          "commitCount": 2,
+          "totalFibers": 892,
+          "flaggedFibers": 860,
+          "panelArrayChangedCommits": 0,
+          "panels": {
+            "editor": {
+              "touchedCommits": 2,
+              "flaggedFibers": 478,
+              "mountEvents": 0,
+              "unmountEvents": 0,
+              "panelObjectChanges": 0,
+              "renderRefChanges": 0,
+              "titleChanges": 0
+            },
+            "history": {
+              "touchedCommits": 0,
+              "flaggedFibers": 0,
+              "mountEvents": 0,
+              "unmountEvents": 0,
+              "panelObjectChanges": 0,
+              "renderRefChanges": 0,
+              "titleChanges": 0
+            },
+            "inspector": {
+              "touchedCommits": 0,
+              "flaggedFibers": 0,
+              "mountEvents": 0,
+              "unmountEvents": 0,
+              "panelObjectChanges": 0,
+              "renderRefChanges": 0,
+              "titleChanges": 0
+            },
+            "outline": {
+              "touchedCommits": 2,
+              "flaggedFibers": 168,
+              "mountEvents": 0,
+              "unmountEvents": 0,
+              "panelObjectChanges": 0,
+              "renderRefChanges": 0,
+              "titleChanges": 0
+            },
+            "review": {
+              "touchedCommits": 0,
+              "flaggedFibers": 0,
+              "mountEvents": 0,
+              "unmountEvents": 0,
+              "panelObjectChanges": 0,
+              "renderRefChanges": 0,
+              "titleChanges": 0
+            }
+          },
+          "measurements": {
+            "application.buildOperation": {
+              "calls": 20,
+              "totalMs": 1.7000000476837158,
+              "p50Ms": 0,
+              "p95Ms": 0.20000001788139343,
+              "maxMs": 0.7000000178813934
+            }
+          }
+        },
+        "input.cursor": {
+          "commitCount": 0,
+          "totalFibers": 0,
+          "flaggedFibers": 0,
+          "panelArrayChangedCommits": 0,
+          "panels": {},
+          "measurements": {}
+        },
+        "input.history": {
+          "commitCount": 6,
+          "totalFibers": 2676,
+          "flaggedFibers": 2600,
+          "panelArrayChangedCommits": 2,
+          "panels": {
+            "editor": {
+              "touchedCommits": 6,
+              "flaggedFibers": 1440,
+              "mountEvents": 0,
+              "unmountEvents": 0,
+              "panelObjectChanges": 2,
+              "renderRefChanges": 2,
+              "titleChanges": 0
+            },
+            "history": {
+              "touchedCommits": 0,
+              "flaggedFibers": 0,
+              "mountEvents": 0,
+              "unmountEvents": 0,
+              "panelObjectChanges": 2,
+              "renderRefChanges": 2,
+              "titleChanges": 0
+            },
+            "inspector": {
+              "touchedCommits": 0,
+              "flaggedFibers": 0,
+              "mountEvents": 0,
+              "unmountEvents": 0,
+              "panelObjectChanges": 2,
+              "renderRefChanges": 2,
+              "titleChanges": 0
+            },
+            "outline": {
+              "touchedCommits": 6,
+              "flaggedFibers": 504,
+              "mountEvents": 0,
+              "unmountEvents": 0,
+              "panelObjectChanges": 2,
+              "renderRefChanges": 2,
+              "titleChanges": 0
+            },
+            "review": {
+              "touchedCommits": 0,
+              "flaggedFibers": 0,
+              "mountEvents": 0,
+              "unmountEvents": 0,
+              "panelObjectChanges": 2,
+              "renderRefChanges": 2,
+              "titleChanges": 0
+            }
+          },
+          "measurements": {
+            "workspace.panelIds": {
+              "calls": 2,
+              "totalMs": 0,
+              "p50Ms": 0,
+              "p95Ms": 0,
+              "maxMs": 0
+            },
+            "workspace.catalog": {
+              "calls": 2,
+              "totalMs": 0,
+              "p50Ms": 0,
+              "p95Ms": 0,
+              "maxMs": 0
+            },
+            "application.buildOperation": {
+              "calls": 2,
+              "totalMs": 0.19999998807907104,
+              "p50Ms": 0.09999999403953552,
+              "p95Ms": 0.09999999403953552,
+              "maxMs": 0.09999999403953552
+            }
+          }
+        },
+        "input.composition": {
+          "commitCount": 1,
+          "totalFibers": 446,
+          "flaggedFibers": 430,
+          "panelArrayChangedCommits": 0,
+          "panels": {
+            "editor": {
+              "touchedCommits": 1,
+              "flaggedFibers": 239,
+              "mountEvents": 0,
+              "unmountEvents": 0,
+              "panelObjectChanges": 0,
+              "renderRefChanges": 0,
+              "titleChanges": 0
+            },
+            "history": {
+              "touchedCommits": 0,
+              "flaggedFibers": 0,
+              "mountEvents": 0,
+              "unmountEvents": 0,
+              "panelObjectChanges": 0,
+              "renderRefChanges": 0,
+              "titleChanges": 0
+            },
+            "inspector": {
+              "touchedCommits": 0,
+              "flaggedFibers": 0,
+              "mountEvents": 0,
+              "unmountEvents": 0,
+              "panelObjectChanges": 0,
+              "renderRefChanges": 0,
+              "titleChanges": 0
+            },
+            "outline": {
+              "touchedCommits": 1,
+              "flaggedFibers": 84,
+              "mountEvents": 0,
+              "unmountEvents": 0,
+              "panelObjectChanges": 0,
+              "renderRefChanges": 0,
+              "titleChanges": 0
+            },
+            "review": {
+              "touchedCommits": 0,
+              "flaggedFibers": 0,
+              "mountEvents": 0,
+              "unmountEvents": 0,
+              "panelObjectChanges": 0,
+              "renderRefChanges": 0,
+              "titleChanges": 0
+            }
+          },
+          "measurements": {
+            "application.buildOperation": {
+              "calls": 2,
+              "totalMs": 0.09999999403953552,
+              "p50Ms": 0,
+              "p95Ms": 0.09999999403953552,
+              "maxMs": 0.09999999403953552
+            }
+          }
+        },
+        "input.paste": {
+          "commitCount": 4,
+          "totalFibers": 3323,
+          "flaggedFibers": 3289,
+          "panelArrayChangedCommits": 3,
+          "panels": {
+            "editor": {
+              "touchedCommits": 4,
+              "flaggedFibers": 2501,
+              "mountEvents": 0,
+              "unmountEvents": 0,
+              "panelObjectChanges": 3,
+              "renderRefChanges": 3,
+              "titleChanges": 0
+            },
+            "history": {
+              "touchedCommits": 0,
+              "flaggedFibers": 0,
+              "mountEvents": 0,
+              "unmountEvents": 0,
+              "panelObjectChanges": 3,
+              "renderRefChanges": 3,
+              "titleChanges": 0
+            },
+            "inspector": {
+              "touchedCommits": 0,
+              "flaggedFibers": 0,
+              "mountEvents": 0,
+              "unmountEvents": 0,
+              "panelObjectChanges": 3,
+              "renderRefChanges": 3,
+              "titleChanges": 0
+            },
+            "outline": {
+              "touchedCommits": 4,
+              "flaggedFibers": 339,
+              "mountEvents": 0,
+              "unmountEvents": 0,
+              "panelObjectChanges": 3,
+              "renderRefChanges": 3,
+              "titleChanges": 0
+            },
+            "review": {
+              "touchedCommits": 0,
+              "flaggedFibers": 0,
+              "mountEvents": 0,
+              "unmountEvents": 0,
+              "panelObjectChanges": 3,
+              "renderRefChanges": 3,
+              "titleChanges": 0
+            }
+          },
+          "measurements": {
+            "application.buildOperation": {
+              "calls": 1,
+              "totalMs": 0,
+              "p50Ms": 0,
+              "p95Ms": 0,
+              "maxMs": 0
+            },
+            "workspace.panelIds": {
+              "calls": 3,
+              "totalMs": 0,
+              "p50Ms": 0,
+              "p95Ms": 0,
+              "maxMs": 0
+            },
+            "workspace.catalog": {
+              "calls": 3,
+              "totalMs": 0,
+              "p50Ms": 0,
+              "p95Ms": 0,
+              "maxMs": 0
+            }
+          }
+        }
+      }
+    },
+    "input.102400": {
+      "documentBytes": 102400,
+      "elapsedMs": 4241.200000017881,
+      "keyFrameMs": {
+        "n": 45,
+        "p50": 45.10000002384186,
+        "p95": 57.20000001788139,
+        "p99": 62.19999998807907,
+        "max": 62.19999998807907
+      },
+      "cursorKeyFrameMs": {
+        "n": 20,
+        "p50": 9.399999976158142,
+        "p95": 12,
+        "p99": 12.5,
+        "max": 12.5
+      },
+      "longTasks": {
+        "count": 19,
+        "totalMs": 1142,
+        "maxMs": 191
+      },
+      "strictWrites": 1,
+      "phases": {
+        "input.typing": {
+          "commitCount": 2,
+          "totalFibers": 25726,
+          "flaggedFibers": 25688,
+          "panelArrayChangedCommits": 0,
+          "panels": {
+            "editor": {
+              "touchedCommits": 2,
+              "flaggedFibers": 25300,
+              "mountEvents": 0,
+              "unmountEvents": 0,
+              "panelObjectChanges": 0,
+              "renderRefChanges": 0,
+              "titleChanges": 0
+            },
+            "history": {
+              "touchedCommits": 0,
+              "flaggedFibers": 0,
+              "mountEvents": 0,
+              "unmountEvents": 0,
+              "panelObjectChanges": 0,
+              "renderRefChanges": 0,
+              "titleChanges": 0
+            },
+            "inspector": {
+              "touchedCommits": 0,
+              "flaggedFibers": 0,
+              "mountEvents": 0,
+              "unmountEvents": 0,
+              "panelObjectChanges": 0,
+              "renderRefChanges": 0,
+              "titleChanges": 0
+            },
+            "outline": {
+              "touchedCommits": 2,
+              "flaggedFibers": 174,
+              "mountEvents": 0,
+              "unmountEvents": 0,
+              "panelObjectChanges": 0,
+              "renderRefChanges": 0,
+              "titleChanges": 0
+            },
+            "review": {
+              "touchedCommits": 0,
+              "flaggedFibers": 0,
+              "mountEvents": 0,
+              "unmountEvents": 0,
+              "panelObjectChanges": 0,
+              "renderRefChanges": 0,
+              "titleChanges": 0
+            }
+          },
+          "measurements": {
+            "application.buildOperation": {
+              "calls": 20,
+              "totalMs": 6.400000035762787,
+              "p50Ms": 0.30000001192092896,
+              "p95Ms": 0.5,
+              "maxMs": 0.5
+            }
+          }
+        },
+        "input.cursor": {
+          "commitCount": 0,
+          "totalFibers": 0,
+          "flaggedFibers": 0,
+          "panelArrayChangedCommits": 0,
+          "panels": {},
+          "measurements": {}
+        },
+        "input.history": {
+          "commitCount": 0,
+          "totalFibers": 0,
+          "flaggedFibers": 0,
+          "panelArrayChangedCommits": 0,
+          "panels": {},
+          "measurements": {
+            "application.buildOperation": {
+              "calls": 2,
+              "totalMs": 0.5,
+              "p50Ms": 0.19999998807907104,
+              "p95Ms": 0.30000001192092896,
+              "maxMs": 0.30000001192092896
+            }
+          }
+        },
+        "input.composition": {
+          "commitCount": 0,
+          "totalFibers": 0,
+          "flaggedFibers": 0,
+          "panelArrayChangedCommits": 0,
+          "panels": {},
+          "measurements": {
+            "application.buildOperation": {
+              "calls": 2,
+              "totalMs": 0.4999999701976776,
+              "p50Ms": 0.19999998807907104,
+              "p95Ms": 0.29999998211860657,
+              "maxMs": 0.29999998211860657
+            }
+          }
+        },
+        "input.paste": {
+          "commitCount": 4,
+          "totalFibers": 52991,
+          "flaggedFibers": 52957,
+          "panelArrayChangedCommits": 3,
+          "panels": {
+            "editor": {
+              "touchedCommits": 4,
+              "flaggedFibers": 52157,
+              "mountEvents": 0,
+              "unmountEvents": 0,
+              "panelObjectChanges": 3,
+              "renderRefChanges": 3,
+              "titleChanges": 0
+            },
+            "history": {
+              "touchedCommits": 0,
+              "flaggedFibers": 0,
+              "mountEvents": 0,
+              "unmountEvents": 0,
+              "panelObjectChanges": 3,
+              "renderRefChanges": 3,
+              "titleChanges": 0
+            },
+            "inspector": {
+              "touchedCommits": 0,
+              "flaggedFibers": 0,
+              "mountEvents": 0,
+              "unmountEvents": 0,
+              "panelObjectChanges": 3,
+              "renderRefChanges": 3,
+              "titleChanges": 0
+            },
+            "outline": {
+              "touchedCommits": 4,
+              "flaggedFibers": 351,
+              "mountEvents": 0,
+              "unmountEvents": 0,
+              "panelObjectChanges": 3,
+              "renderRefChanges": 3,
+              "titleChanges": 0
+            },
+            "review": {
+              "touchedCommits": 0,
+              "flaggedFibers": 0,
+              "mountEvents": 0,
+              "unmountEvents": 0,
+              "panelObjectChanges": 3,
+              "renderRefChanges": 3,
+              "titleChanges": 0
+            }
+          },
+          "measurements": {
+            "application.buildOperation": {
+              "calls": 1,
+              "totalMs": 0.30000001192092896,
+              "p50Ms": 0.30000001192092896,
+              "p95Ms": 0.30000001192092896,
+              "maxMs": 0.30000001192092896
+            },
+            "workspace.panelIds": {
+              "calls": 3,
+              "totalMs": 0,
+              "p50Ms": 0,
+              "p95Ms": 0,
+              "maxMs": 0
+            },
+            "workspace.catalog": {
+              "calls": 3,
+              "totalMs": 0,
+              "p50Ms": 0,
+              "p95Ms": 0,
+              "maxMs": 0
+            }
+          }
+        }
+      }
+    },
+    "input.1048576": {
+      "documentBytes": 1048576,
+      "elapsedMs": 17309.90000000596,
+      "keyFrameMs": {
+        "n": 45,
+        "p50": 511.90000000596046,
+        "p95": 540.6000000238419,
+        "p99": 546.4000000059605,
+        "max": 546.4000000059605
+      },
+      "cursorKeyFrameMs": {
+        "n": 20,
+        "p50": 23.400000005960464,
+        "p95": 24.5,
+        "p99": 25,
+        "max": 25
+      },
+      "longTasks": {
+        "count": 32,
+        "totalMs": 13583,
+        "maxMs": 686
+      },
+      "strictWrites": 2,
+      "phases": {
+        "input.typing": {
+          "commitCount": 9,
+          "totalFibers": 1158507,
+          "flaggedFibers": 1158387,
+          "panelArrayChangedCommits": 3,
+          "panels": {
+            "editor": {
+              "touchedCommits": 9,
+              "flaggedFibers": 1156620,
+              "mountEvents": 0,
+              "unmountEvents": 0,
+              "panelObjectChanges": 3,
+              "renderRefChanges": 3,
+              "titleChanges": 0
+            },
+            "history": {
+              "touchedCommits": 0,
+              "flaggedFibers": 0,
+              "mountEvents": 0,
+              "unmountEvents": 0,
+              "panelObjectChanges": 3,
+              "renderRefChanges": 3,
+              "titleChanges": 0
+            },
+            "inspector": {
+              "touchedCommits": 0,
+              "flaggedFibers": 0,
+              "mountEvents": 0,
+              "unmountEvents": 0,
+              "panelObjectChanges": 3,
+              "renderRefChanges": 3,
+              "titleChanges": 0
+            },
+            "outline": {
+              "touchedCommits": 9,
+              "flaggedFibers": 783,
+              "mountEvents": 0,
+              "unmountEvents": 0,
+              "panelObjectChanges": 3,
+              "renderRefChanges": 3,
+              "titleChanges": 0
+            },
+            "review": {
+              "touchedCommits": 0,
+              "flaggedFibers": 0,
+              "mountEvents": 0,
+              "unmountEvents": 0,
+              "panelObjectChanges": 3,
+              "renderRefChanges": 3,
+              "titleChanges": 0
+            }
+          },
+          "measurements": {
+            "application.buildOperation": {
+              "calls": 20,
+              "totalMs": 56.199999898672104,
+              "p50Ms": 2.300000011920929,
+              "p95Ms": 3.800000011920929,
+              "maxMs": 9.900000005960464
+            },
+            "workspace.panelIds": {
+              "calls": 3,
+              "totalMs": 0.09999999403953552,
+              "p50Ms": 0,
+              "p95Ms": 0.09999999403953552,
+              "maxMs": 0.09999999403953552
+            },
+            "workspace.catalog": {
+              "calls": 3,
+              "totalMs": 0,
+              "p50Ms": 0,
+              "p95Ms": 0,
+              "maxMs": 0
+            }
+          }
+        },
+        "input.cursor": {
+          "commitCount": 3,
+          "totalFibers": 386169,
+          "flaggedFibers": 386141,
+          "panelArrayChangedCommits": 2,
+          "panels": {
+            "editor": {
+              "touchedCommits": 3,
+              "flaggedFibers": 385545,
+              "mountEvents": 0,
+              "unmountEvents": 0,
+              "panelObjectChanges": 2,
+              "renderRefChanges": 2,
+              "titleChanges": 0
+            },
+            "history": {
+              "touchedCommits": 0,
+              "flaggedFibers": 0,
+              "mountEvents": 0,
+              "unmountEvents": 0,
+              "panelObjectChanges": 2,
+              "renderRefChanges": 2,
+              "titleChanges": 0
+            },
+            "inspector": {
+              "touchedCommits": 0,
+              "flaggedFibers": 0,
+              "mountEvents": 0,
+              "unmountEvents": 0,
+              "panelObjectChanges": 2,
+              "renderRefChanges": 2,
+              "titleChanges": 0
+            },
+            "outline": {
+              "touchedCommits": 3,
+              "flaggedFibers": 261,
+              "mountEvents": 0,
+              "unmountEvents": 0,
+              "panelObjectChanges": 2,
+              "renderRefChanges": 2,
+              "titleChanges": 0
+            },
+            "review": {
+              "touchedCommits": 0,
+              "flaggedFibers": 0,
+              "mountEvents": 0,
+              "unmountEvents": 0,
+              "panelObjectChanges": 2,
+              "renderRefChanges": 2,
+              "titleChanges": 0
+            }
+          },
+          "measurements": {
+            "workspace.panelIds": {
+              "calls": 2,
+              "totalMs": 0.09999999403953552,
+              "p50Ms": 0,
+              "p95Ms": 0.09999999403953552,
+              "maxMs": 0.09999999403953552
+            },
+            "workspace.catalog": {
+              "calls": 2,
+              "totalMs": 0,
+              "p50Ms": 0,
+              "p95Ms": 0,
+              "maxMs": 0
+            }
+          }
+        },
+        "input.history": {
+          "commitCount": 2,
+          "totalFibers": 257446,
+          "flaggedFibers": 257414,
+          "panelArrayChangedCommits": 0,
+          "panels": {
+            "editor": {
+              "touchedCommits": 2,
+              "flaggedFibers": 257026,
+              "mountEvents": 0,
+              "unmountEvents": 0,
+              "panelObjectChanges": 0,
+              "renderRefChanges": 0,
+              "titleChanges": 0
+            },
+            "history": {
+              "touchedCommits": 0,
+              "flaggedFibers": 0,
+              "mountEvents": 0,
+              "unmountEvents": 0,
+              "panelObjectChanges": 0,
+              "renderRefChanges": 0,
+              "titleChanges": 0
+            },
+            "inspector": {
+              "touchedCommits": 0,
+              "flaggedFibers": 0,
+              "mountEvents": 0,
+              "unmountEvents": 0,
+              "panelObjectChanges": 0,
+              "renderRefChanges": 0,
+              "titleChanges": 0
+            },
+            "outline": {
+              "touchedCommits": 2,
+              "flaggedFibers": 174,
+              "mountEvents": 0,
+              "unmountEvents": 0,
+              "panelObjectChanges": 0,
+              "renderRefChanges": 0,
+              "titleChanges": 0
+            },
+            "review": {
+              "touchedCommits": 0,
+              "flaggedFibers": 0,
+              "mountEvents": 0,
+              "unmountEvents": 0,
+              "panelObjectChanges": 0,
+              "renderRefChanges": 0,
+              "titleChanges": 0
+            }
+          },
+          "measurements": {
+            "application.buildOperation": {
+              "calls": 2,
+              "totalMs": 4.5,
+              "p50Ms": 2.199999988079071,
+              "p95Ms": 2.300000011920929,
+              "maxMs": 2.300000011920929
+            }
+          }
+        },
+        "input.composition": {
+          "commitCount": 0,
+          "totalFibers": 0,
+          "flaggedFibers": 0,
+          "panelArrayChangedCommits": 0,
+          "panels": {},
+          "measurements": {
+            "application.buildOperation": {
+              "calls": 2,
+              "totalMs": 4.699999958276749,
+              "p50Ms": 2.2999999821186066,
+              "p95Ms": 2.399999976158142,
+              "maxMs": 2.399999976158142
+            }
+          }
+        },
+        "input.paste": {
+          "commitCount": 4,
+          "totalFibers": 516434,
+          "flaggedFibers": 516400,
+          "panelArrayChangedCommits": 3,
+          "panels": {
+            "editor": {
+              "touchedCommits": 4,
+              "flaggedFibers": 515597,
+              "mountEvents": 0,
+              "unmountEvents": 0,
+              "panelObjectChanges": 3,
+              "renderRefChanges": 3,
+              "titleChanges": 0
+            },
+            "history": {
+              "touchedCommits": 0,
+              "flaggedFibers": 0,
+              "mountEvents": 0,
+              "unmountEvents": 0,
+              "panelObjectChanges": 3,
+              "renderRefChanges": 3,
+              "titleChanges": 0
+            },
+            "inspector": {
+              "touchedCommits": 0,
+              "flaggedFibers": 0,
+              "mountEvents": 0,
+              "unmountEvents": 0,
+              "panelObjectChanges": 3,
+              "renderRefChanges": 3,
+              "titleChanges": 0
+            },
+            "outline": {
+              "touchedCommits": 4,
+              "flaggedFibers": 354,
+              "mountEvents": 0,
+              "unmountEvents": 0,
+              "panelObjectChanges": 3,
+              "renderRefChanges": 3,
+              "titleChanges": 0
+            },
+            "review": {
+              "touchedCommits": 0,
+              "flaggedFibers": 0,
+              "mountEvents": 0,
+              "unmountEvents": 0,
+              "panelObjectChanges": 3,
+              "renderRefChanges": 3,
+              "titleChanges": 0
+            }
+          },
+          "measurements": {
+            "application.buildOperation": {
+              "calls": 1,
+              "totalMs": 2.2999999821186066,
+              "p50Ms": 2.2999999821186066,
+              "p95Ms": 2.2999999821186066,
+              "maxMs": 2.2999999821186066
+            },
+            "workspace.panelIds": {
+              "calls": 3,
+              "totalMs": 0,
+              "p50Ms": 0,
+              "p95Ms": 0,
+              "maxMs": 0
+            },
+            "workspace.catalog": {
+              "calls": 3,
+              "totalMs": 0,
+              "p50Ms": 0,
+              "p95Ms": 0,
+              "maxMs": 0
+            }
+          }
+        }
+      }
+    }
+  },
+  "workspaceActivation": {
+    "inspector": {
+      "phase": "workspace.activate.inspector",
+      "commitCount": 3,
+      "totalFibers": 387270,
+      "flaggedFibers": 387247,
+      "workspaceCommits": 3,
+      "panelArrayChangedCommits": 1,
+      "panels": {
+        "editor": {
+          "touchedCommits": 3,
+          "flaggedFibers": 386702,
+          "mountEvents": 0,
+          "unmountEvents": 0,
+          "panelObjectChanges": 1,
+          "renderRefChanges": 1,
+          "titleChanges": 0
+        },
+        "history": {
+          "touchedCommits": 0,
+          "flaggedFibers": 0,
+          "mountEvents": 0,
+          "unmountEvents": 0,
+          "panelObjectChanges": 1,
+          "renderRefChanges": 1,
+          "titleChanges": 0
+        },
+        "inspector": {
+          "touchedCommits": 2,
+          "flaggedFibers": 117,
+          "mountEvents": 1,
+          "unmountEvents": 0,
+          "panelObjectChanges": 1,
+          "renderRefChanges": 1,
+          "titleChanges": 0
+        },
+        "outline": {
+          "touchedCommits": 1,
+          "flaggedFibers": 90,
+          "mountEvents": 0,
+          "unmountEvents": 1,
+          "panelObjectChanges": 1,
+          "renderRefChanges": 1,
+          "titleChanges": 0
+        },
+        "review": {
+          "touchedCommits": 0,
+          "flaggedFibers": 0,
+          "mountEvents": 0,
+          "unmountEvents": 0,
+          "panelObjectChanges": 1,
+          "renderRefChanges": 1,
+          "titleChanges": 0
+        }
+      },
+      "measurements": {
+        "workspace.panelIds": {
+          "calls": 1,
+          "totalMs": 0,
+          "p50Ms": 0,
+          "p95Ms": 0,
+          "maxMs": 0,
+          "itemCounts": [
+            5
+          ]
+        },
+        "workspace.catalog": {
+          "calls": 1,
+          "totalMs": 0,
+          "p50Ms": 0,
+          "p95Ms": 0,
+          "maxMs": 0,
+          "itemCounts": [
+            5
+          ]
+        }
+      },
+      "mountEvents": [
+        {
+          "phase": "workspace.activate.inspector",
+          "at": 28027,
+          "panelId": "inspector",
+          "kind": "mount"
+        },
+        {
+          "phase": "workspace.activate.inspector",
+          "at": 28027,
+          "panelId": "outline",
+          "kind": "unmount"
+        }
+      ]
+    },
+    "outline": {
+      "phase": "workspace.activate.outline",
+      "commitCount": 2,
+      "totalFibers": 258187,
+      "flaggedFibers": 258162,
+      "workspaceCommits": 2,
+      "panelArrayChangedCommits": 0,
+      "panels": {
+        "editor": {
+          "touchedCommits": 2,
+          "flaggedFibers": 257802,
+          "mountEvents": 0,
+          "unmountEvents": 0,
+          "panelObjectChanges": 0,
+          "renderRefChanges": 0,
+          "titleChanges": 0
+        },
+        "history": {
+          "touchedCommits": 0,
+          "flaggedFibers": 0,
+          "mountEvents": 0,
+          "unmountEvents": 0,
+          "panelObjectChanges": 0,
+          "renderRefChanges": 0,
+          "titleChanges": 0
+        },
+        "inspector": {
+          "touchedCommits": 1,
+          "flaggedFibers": 60,
+          "mountEvents": 0,
+          "unmountEvents": 1,
+          "panelObjectChanges": 0,
+          "renderRefChanges": 0,
+          "titleChanges": 0
+        },
+        "outline": {
+          "touchedCommits": 1,
+          "flaggedFibers": 76,
+          "mountEvents": 1,
+          "unmountEvents": 0,
+          "panelObjectChanges": 0,
+          "renderRefChanges": 0,
+          "titleChanges": 0
+        },
+        "review": {
+          "touchedCommits": 0,
+          "flaggedFibers": 0,
+          "mountEvents": 0,
+          "unmountEvents": 0,
+          "panelObjectChanges": 0,
+          "renderRefChanges": 0,
+          "titleChanges": 0
+        }
+      },
+      "measurements": {},
+      "mountEvents": [
+        {
+          "phase": "workspace.activate.outline",
+          "at": 28356.90000000596,
+          "panelId": "outline",
+          "kind": "mount"
+        },
+        {
+          "phase": "workspace.activate.outline",
+          "at": 28356.90000000596,
+          "panelId": "inspector",
+          "kind": "unmount"
+        }
+      ]
+    }
+  },
+  "cpuProfile": {
+    "bytes": 560179,
+    "sha256": "a97f8b25aba3713d2371a8b0747861321707d342110c91b94d3013272e02ba6b",
+    "scope": "startup through input and panel activation; not phase-isolated"
+  },
+  "notChecked": [
+    "React component actualDuration; the probe records commit flags and panel reference changes.",
+    "Allocation bytes; buildOperation timing does not measure allocations.",
+    "Native OS IME and physical-device input.",
+    "A matched before/after candidate comparison; no local candidate was justified by this capture."
+  ],
+  "decisions": [
+    {
+      "candidate": "C04",
+      "disposition": "measured-no-additional-change",
+      "finding": "At 1 MiB, typing had 9 commits with 1,156,620 Editor and 783 Outline flagged fibers; ArrowLeft had 3 commits with 385,545 Editor and 261 Outline flags. No component actualDuration or isolated state-owner cost was measured. Retain W1 coalescing and its tradeoff; C04 is not claimed solved."
+    },
+    {
+      "candidate": "C07",
+      "disposition": "measured-no-change",
+      "finding": "At 1 MiB, panel arrays and all five panel objects/render references changed on 3/9 typing, 2/3 ArrowLeft, and 3/4 paste commits. This probe does not show that stable descriptors remove parent work or reduce component duration."
+    },
+    {
+      "candidate": "C08",
+      "disposition": "measured-no-change",
+      "finding": "The five-panel IDs and catalog derivations ran 3 times in typing and twice in ArrowLeft; each duration was at or below 0.1 ms timing resolution. No local Workspace change adopted."
+    }
+  ],
+  "hooks": {
+    "temporaryProductInstrumentationRemoved": true,
+    "productionSourceDiff": "none"
+  }
+}
