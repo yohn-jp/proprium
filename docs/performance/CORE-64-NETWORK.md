@@ -126,20 +126,62 @@ event traffic remain `NOT_CHECKED`.
 
 ## C64 — request/error/performance correlation
 
-The current probe records browser request paths/timings and server request
-paths/status/durations separately. The [G3 source review](CORE-64-G3-PLAN.md#candidate-triage)
-found no shared opaque request ID carried from browser through API and Git/IDB;
-the benchmark's Git Trace2 and browser/API data are separate. Existing counters
-can identify which endpoint is polled and provide per-layer timing, but they
-cannot reliably join one browser request to API and nested Git/IDB work,
-especially for repeated same-path requests. This cohort did not produce
-representative p95 distributions or demonstrate that a particular important
-p95 is currently unexplainable.
+Fastify 5.12.7 ([pinned in the lockfile](../../pnpm-lock.yaml#L2000)) exposes a
+per-request `request.id` and calls its default ID generator for routed requests
+even though this API constructs Fastify with `logger: false`
+([server initialization](../../packages/api/src/server.ts#L566)). That ID is
+internal here: the HTTP handlers do not read it for correlation, add it to
+response headers or error bodies, or pass it into Git or storage work.
+[`sendError`](../../packages/api/src/server.ts#L243) returns the public error
+code and message (or a generic internal error), without a request ID. The [G3
+source review](CORE-64-G3-PLAN.md#candidate-triage) correctly found no shared
+opaque ID across the layers; this clarifies that an internal Fastify ID exists
+but is not a correlation mechanism in the application.
 
-**Disposition:** add no broad tracing framework in this unit. Leave C64 for its
-G5 evidence gate; reconsider only if a measured p95 question cannot be answered
-with existing per-layer counters, then measure correlation overhead and keep
-manuscript content, credentials, and private repository data out of telemetry.
+This probe can compare Playwright request-event method/path/start rows with API
+method/path/status/duration rows at a coarse endpoint level. They have no
+shared request key; Playwright event timestamps use the parent Node clock,
+Resource Timing uses page-relative time, and API timestamps use the worker's
+Node clock. Repeated calls to the same path cannot be joined reliably.
+Resource Timing contributes URL-relative start/end and byte counts, not an ID
+that links to the API row. The network run records API request rows and
+process-level Git child-process/readFile counts as separate aggregates; it
+does not retain per-command Git spans or join Git work to an API request. It
+does not collect IndexedDB events. Other browser probes instrument IndexedDB
+separately, without a shared ID in this cohort. No Browser↔API↔Git/IDB span
+chain was captured.
+
+No accepted C38/C43/C44/C49 implementation leaf in this evidence unit is
+blocked on missing trace correlation: these decisions are about preserving
+existing observation and stream contracts or declining unproven optimizations.
+This is a bounded statement about these examined leaves, not a claim that
+current counters explain all production latency. The captured startup and SSE
+windows are single samples; representative p95 distributions, the fraction
+of target p95 samples that existing counters can attribute, trace-on/off CPU
+and RSS overhead, and error/conflict scope protection under tracing are all
+`NOT_CHECKED`.
+
+**Disposition: DECLINED — add no production tracing for this evidence unit.**
+There is no demonstrated accepted change or measured p95 question that requires
+cross-layer IDs, and adding tracing without a named question would incur
+unmeasured cost. Reconsider when an accepted leaf or a production incident has
+a measured p95 target that remains unexplained after the existing per-layer
+counters. First trial the smallest opaque request correlation needed for that
+target, measure join coverage and matched trace-on/off CPU/RSS, and test that
+error/conflict scope is preserved; never include manuscript content,
+credentials, or private repository data in telemetry. This declines new
+instrumentation now, not the fixed goal's ability to reopen the question on
+that evidence.
+
+## Final bounded decisions
+
+| ID | Decision | Evidence and boundary |
+| --- | --- | --- |
+| C38 | **Retain existing authoritative observation and focus-return freshness.** | Visible windows each made 2 observation calls in 35 seconds; a visible local bare-remote push was observed in 9,459 ms. Native hidden state made 0 observation calls for 35,192 ms; its push was observed 321 ms after focus returned. This supports the current visible/hidden contract only; long idle and native GitHub/GHES detection are `NOT_CHECKED`. The C38 capture remains valid partial evidence in a raw file whose overall status is failed due to later profile cleanup. |
+| C43 | **Decline replacing remote polling with project SSE.** | The open project stream emitted no frames for either local external push, so it is a local sync hint, not remote-change authority. No polling savings were measured; hosted remote behavior is `NOT_CHECKED`. |
+| C44 | **Decline a bootstrap endpoint or aggregation change.** | The two no-added-RTT samples and separate 80 ms/API-route sample each recorded 22 starts and the same byte totals; selected-scene readiness was 806 ms, 1,088 ms, and 1,702 ms respectively. These are unpaired single samples under competing load, not causal latency evidence. Authorization-denial and abort equivalence are `NOT_CHECKED`. |
+| C49 | **Keep job and project SSE protocols and authorization boundaries separate.** | The bounded probe verified distinct bearer outcomes, owner-cookie access, a project-scoped completed sync event, and 200 reconnects for unknown `Last-Event-ID` values with no data frames in 500 ms. Both streams closed cleanly on shutdown in 188 ms. Per-connection cost is not isolated by the noisy single-window CPU/RSS samples; backpressure and hosted event traffic are `NOT_CHECKED`. |
+| C64 | **DECLINED — no new production tracing in this unit.** | Fastify has an internal request ID, but it is neither consumed nor propagated. Existing benchmark rows and counters permit coarse per-layer inspection, not reliable request-to-browser/Git/IDB joins. No leaf here requires that join; attribution ratio, p95 causality, and instrumentation overhead remain `NOT_CHECKED`. Reopen only for a measured p95 target still unexplained by existing counters. |
 
 ## Verification record
 
