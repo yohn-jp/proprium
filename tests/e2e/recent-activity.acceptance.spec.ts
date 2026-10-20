@@ -169,6 +169,34 @@ test("recent activity hands off only numeric positions across devices, projects,
     const desktopCursor = desktopActivity.items.find((item) => item.sceneId === "scene-1" && item.deviceType === "desktop")?.sentenceOffset;
     expect(Number.isSafeInteger(desktopCursor) && (desktopCursor ?? 0) > 1).toBe(true);
 
+    // Local resume must restore the real CodeMirror scroll DOM together with its cursor.
+    const desktopScroller = ownerDesktop.page.locator(".cm-editor .cm-scroller").first();
+    const requestedScrollTop = await desktopScroller.evaluate((element) => {
+      const maximum = element.scrollHeight - element.clientHeight;
+      if (maximum <= 0) return { maximum, actual: element.scrollTop };
+      element.scrollTop = Math.max(1, maximum - Math.min(120, maximum / 2));
+      return { maximum, actual: element.scrollTop };
+    });
+    expect(requestedScrollTop.maximum).toBeGreaterThan(0);
+    expect(requestedScrollTop.actual).toBeGreaterThan(0);
+    await expect.poll(async () => ownerDesktop.page.evaluate(() => {
+      for (let index = 0; index < localStorage.length; index++) {
+        const key = localStorage.key(index);
+        if (!key?.startsWith("scriptorium:writing-resume:")) continue;
+        try {
+          const record = JSON.parse(localStorage.getItem(key) ?? "null") as { sceneId?: string; scrollTop?: number } | null;
+          if (record?.sceneId === "scene-1") return record.scrollTop ?? null;
+        } catch { /* Ignore unrelated malformed local state. */ }
+      }
+      return null;
+    })).toBe(requestedScrollTop.actual);
+    await ownerDesktop.page.getByRole("button", { name: "続きを書く", exact: true }).click();
+    await expect(ownerDesktop.page.locator(".cm-content")).toBeVisible();
+    await expect.poll(() => desktopScroller.evaluate((element) => element.scrollTop)).toBe(requestedScrollTop.actual);
+    const localRestoreCursor = await cursorOffset(ownerDesktop.page);
+    expect(localRestoreCursor).not.toBeNull();
+    expect(localRestoreCursor?.offset).toBe(localRestoreCursor?.length);
+
     await signIn(ownerMobile.page);
     const mobilePrimary = ownerMobile.page.getByRole("button", { name: projectLabel(fixture.remote), exact: true });
     await mobilePrimary.click();

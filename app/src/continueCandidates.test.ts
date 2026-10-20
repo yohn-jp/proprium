@@ -124,6 +124,18 @@ test("selection-only cursor updates reuse the CodeMirror document without materi
     assert.equal(indexBuilds, 1);
     assert.equal(index.indexAtOffset(4), 2);
     assert.equal(index.indexAtOffset(11), 3);
+
+    const revisedState = selectionState.update({
+      changes: { from: 0, to: selectionState.doc.length, insert: "一文目。\n\n四文目。" },
+    }).state;
+    assert.notStrictEqual(revisedState.doc, doc);
+    const revisedText = revisedState.doc.toString();
+    const revisedIndex = cache.get(revisedState.doc, revisedText);
+    assert.notStrictEqual(revisedIndex, index);
+    assert.equal(index.offsetAtIndex(3), 11);
+    assert.equal(revisedIndex.offsetAtIndex(3), 6);
+    assert.equal(revisedIndex.indexAtOffset(6), 3);
+    assert.equal(indexBuilds, 2);
   } finally {
     Reflect.deleteProperty(doc, "toString");
   }
