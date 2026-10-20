@@ -361,7 +361,11 @@ async function orchestrate(argv) {
     },
     coreModule,
     coreModuleSha256,
-    host: { node: process.version, platform: process.platform, arch: process.arch },
+    host: { node: process.version, platform: process.platform, arch: process.arch, cpuAffinity: await currentCpuAffinity() },
+    executionContext: {
+      overlapNote: process.env.C64_MEMORY_OVERLAP_NOTE ?? null,
+      latencyInterpretation: 'Latency is observational under concurrent campaign lanes and is not adoption performance evidence.',
+    },
     rules: {
       onlySyntheticData: true,
       maxBufferBytes: MAX_BUFFER,
@@ -473,6 +477,11 @@ async function saveRaw(file, data) {
 
 function byteLength(value) {
   return Buffer.isBuffer(value) ? value.length : Buffer.byteLength(value ?? '');
+}
+
+async function currentCpuAffinity() {
+  const status = await readFile('/proc/self/status', 'utf8');
+  return status.match(/^Cpus_allowed_list:\s*(.+)$/m)?.[1]?.trim() ?? null;
 }
 
 const outputGroups = new Map();
