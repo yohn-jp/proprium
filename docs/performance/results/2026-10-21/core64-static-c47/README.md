@@ -4,7 +4,7 @@ Date: 2026-10-21. Matched browser and 1,000-GET candidate source: `d8e32e6006f59
 
 All samples ran on CPUs 8–11 with Node `v24.21.0`, pnpm `12.10.1`, and the frozen lockfile SHA-256 recorded in each report. Browser samples used the already-installed Nix Chromium `155.0.8059.39`; no browser or package was installed during this run. The current UI outputs are preserved outside the repository at `/data/scriptorium-core64-static-matched-candidate/{core,full}/dist`.
 
-The baseline served fixed `main.js`/`styles.css` URLs with no cache header. The candidate HTML points to content-hashed JS/CSS under `assets/`; those URLs return `Cache-Control: public, max-age=31536000, immutable`, while HTML and fixed aliases return `no-store`. All six candidate first/repeat pairs retained distinct request-specific CSP/style nonces.
+The baseline served fixed `main.js`/`styles.css` URLs under the default `Cache-Control: no-store` security header; it did not give assets immutable caching. The candidate HTML points to content-hashed JS/CSS under `assets/`; those URLs return `Cache-Control: public, max-age=31536000, immutable`, while HTML and fixed aliases remain `no-store`. All six candidate first/repeat pairs retained distinct request-specific CSP/style nonces.
 
 | Profile / route | Baseline `first.totalTransferBytes` | Baseline `repeat.totalTransferBytes` | Candidate `first.totalTransferBytes` | Candidate `repeat.totalTransferBytes` | Net repeat reduction |
 | --- | ---: | ---: | ---: | ---: | ---: |
