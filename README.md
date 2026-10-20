@@ -4,6 +4,10 @@ A modular Git-backed writing workspace migrated from Arcadia Loom. Git-controlle
 
 Connect a GitHub work repository, browse volumes, chapters and scenes, edit Markdown, save with revision checks, inspect Git commits, and explicitly synchronize with GitHub. The editor keeps unsaved drafts in this browser and offers Japanese vertical preview. One server instance serves one trusted owner; all registered projects belong to that owner.
 
+## Future Plugin Platform (architecture only)
+
+Scriptorium's accepted product direction is a **Git-native writing application platform composed through plugins**. The [Plugin Platform Architecture](docs/architecture/PLUGIN-PLATFORM.md) defines the public SDK/protocol, capability grants, isolated WASI/server and sandboxed browser runtimes, immutable external packaging, failure containment, and migration gates. **The existing trusted built-in module runtime is not yet a sandbox for untrusted third-party plugins; this design is not implemented by the current images.**
+
 ## Run locally
 
 Requires Node.js 24+, Git, and pnpm 12.10.1.
@@ -63,6 +67,8 @@ For browser verification, install Chromium with `pnpm exec playwright install ch
 
 `pnpm verify` runs the frozen install, type and test checks, then builds and checks both Core and full profiles in Chromium and OCI. It also exercises both MCP transports, the NLP/Diagnostics persistence round trip, and the composed legacy migration through approval, publication, recloning, and module reactivation. It requires an OCI engine, Chromium, and the tokenizer artifacts used by that acceptance. The separate real-provider, model-lifecycle, GitHub, and container-recovery gates have reproduction instructions under `docs/verification`; the local command alone does not certify those gates.
 
-The [Core Performance Audit](docs/architecture/CORE-PERFORMANCE-AUDIT.md) inventories 64 source-grounded Core optimization candidates (23 P0 / 31 P1 / 10 P2), with measurement gates and future extension boundaries. These are investigation priorities, not measured regressions or implemented changes.\n\nThe [Full Migration Architecture](docs/architecture/FULL-MIGRATION.md) and [fixed migration plan](docs/migration/FULL-MIGRATION-PLAN.md) define Epic #7. [Core Architecture](docs/architecture/CORE.md) remains the baseline where not superseded. Core does not import individual add-ons. Migration implementation and acceptance status are tracked in the plan's feature/data ledgers; older Core acceptance records describe their recorded commits.
+The [Core Performance Audit](docs/architecture/CORE-PERFORMANCE-AUDIT.md) inventories 64 source-grounded Core optimization candidates (23 P0 / 31 P1 / 10 P2), with measurement gates and future extension boundaries. These are investigation priorities, not measured regressions or implemented changes.
+
+The [Full Migration Architecture](docs/architecture/FULL-MIGRATION.md) and [fixed migration plan](docs/migration/FULL-MIGRATION-PLAN.md) define Epic #7. [Core Architecture](docs/architecture/CORE.md) remains the baseline where not superseded. Core does not import individual add-ons. Migration implementation and acceptance status are tracked in the plan's feature/data ledgers; older Core acceptance records describe their recorded commits.
 
 See [CONTRIBUTING.md](CONTRIBUTING.md), [SECURITY.md](SECURITY.md), and the [MIT license](LICENSE). [Epic #7](https://github.com/yohn-jp/scriptorium/issues/7) tracks the full migration; Epic #1 is the initial Core recovery history.
