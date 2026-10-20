@@ -1523,14 +1523,24 @@ export class CoreStore implements MutationCoordinator {
       }
       blobs.push({ path: filePath, blobId });
     }
-    const revisionsByBlob = new Map<string, string>();
+    const cachedRevisions: Array<string | undefined> = new Array(blobs.length);
     const uncachedIds = new Set<string>();
-    for (const { blobId } of blobs) {
+    for (let index = 0; index < blobs.length; index += 1) {
+      const { blobId } = blobs[index]!;
       const cached = this.fileRevisionCache.get(blobId);
-      if (cached) revisionsByBlob.set(blobId, cached);
+      if (cached) cachedRevisions[index] = cached;
       else uncachedIds.add(blobId);
     }
+    if (!uncachedIds.size) {
+      return blobs.map(({ path: filePath }, index) => ({ path: filePath, revision: cachedRevisions[index]! }))
+        .sort((left, right) => left.path.localeCompare(right.path));
+    }
 
+    const revisionsByBlob = new Map<string, string>();
+    for (let index = 0; index < blobs.length; index += 1) {
+      const revision = cachedRevisions[index];
+      if (revision) revisionsByBlob.set(blobs[index]!.blobId, revision);
+    }
     if (uncachedIds.size) {
       const blobIds = [...uncachedIds];
       const checkOutput = await gitInput(root, ["cat-file", "--batch-check=%(objectname) %(objecttype) %(objectsize)"],
@@ -1591,7 +1601,9 @@ export class CoreStore implements MutationCoordinator {
       await flushBatch();
     }
 
-    return blobs.map(({ path: filePath, blobId }) => ({ path: filePath, revision: revisionsByBlob.get(blobId)! }))
+    return blobs.map(({ path: filePath, blobId }, index) => ({
+      path: filePath, revision: cachedRevisions[index] ?? revisionsByBlob.get(blobId)!,
+    }))
       .sort((left, right) => left.path.localeCompare(right.path));
   }
 
