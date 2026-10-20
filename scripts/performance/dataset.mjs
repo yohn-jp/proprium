@@ -5,7 +5,7 @@ import { pathToFileURL } from 'node:url';
 
 export const sizes = { small: 10, medium: 1000, large: 10000, stress: 100000 };
 export function git(cwd, ...args) {
-  return execFileSync('git', args, { cwd, encoding: 'utf8', stdio: ['ignore', 'pipe', 'pipe'],
+  return execFileSync('git', args, { cwd, encoding: 'utf8', maxBuffer: 32 * 1024 * 1024, stdio: ['ignore', 'pipe', 'pipe'],
     env: { ...process.env, GIT_CONFIG_NOSYSTEM: '1', GIT_CONFIG_GLOBAL: '/dev/null',
       GIT_AUTHOR_NAME: 'Synthetic Benchmark', GIT_AUTHOR_EMAIL: 'benchmark@example.invalid',
       GIT_COMMITTER_NAME: 'Synthetic Benchmark', GIT_COMMITTER_EMAIL: 'benchmark@example.invalid',
@@ -44,11 +44,11 @@ export async function generate(root, size) {
   if (size === 'large' || size === 'stress') await write('attachments/synthetic-10MiB.bin', Buffer.alloc(10 * 1024 * 1024, 83));
   while (files < count) await write(`synthetic/filler-${files}.txt`, 'Synthetic fixture only.\n');
   git(root, 'init', '--bare', '--initial-branch=main', remote);
-  git(seed, 'init', '--initial-branch=main'); git(seed, 'add', '.'); git(seed, 'commit', '-m', 'Synthetic baseline');
+  git(seed, 'init', '--initial-branch=main'); git(seed, 'add', '.'); git(seed, 'commit', '--quiet', '-m', 'Synthetic baseline');
   const historyCommits = size === 'stress' ? 100 : 1;
   for (let i = 1; i < historyCommits; i++) {
     await writeFile(join(seed, 'meta/project.yaml'), `id: synthetic\ntitle: Synthetic Wave 0\nsyntheticRevision: ${i}\n`);
-    git(seed, 'add', 'meta/project.yaml'); git(seed, 'commit', '-m', `Synthetic history ${i}`);
+    git(seed, 'add', 'meta/project.yaml'); git(seed, 'commit', '--quiet', '-m', `Synthetic history ${i}`);
   }
   git(seed, 'remote', 'add', 'origin', remote); git(seed, 'push', '-u', 'origin', 'main');
   const actual = git(seed, 'ls-files').split('\n').length;
