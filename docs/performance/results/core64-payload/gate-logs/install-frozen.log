@@ -1,0 +1,29 @@
+Scope: all 18 workspace projects
+✓ Lockfile passes supply-chain policies (verified 21h ago)
+Lockfile is up to date, resolution step is skipped
+Packages are hard linked from the content-addressable store to the virtual store.
+  Content-addressable store is at: /home/sophia/.local/share/pnpm/store/v11
+  Virtual store is at:             node_modules/.pnpm
+Packages: +348
+++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
+Progress: resolved 348, reused 348, downloaded 0, added 348, done
+
+devDependencies:
++ @playwright/test 1.64.1
++ @scriptorium/api <- packages/api
++ @scriptorium/module-assistant <- modules/assistant
++ @scriptorium/module-diagnostics <- modules/diagnostics
++ @scriptorium/module-mcp <- modules/mcp
++ @scriptorium/module-nlp <- modules/nlp
++ @scriptorium/module-publishing <- modules/publishing
++ @scriptorium/module-search <- modules/search
++ @scriptorium/module-semantic <- modules/semantic
++ @scriptorium/module-speaker <- modules/speaker
++ @scriptorium/module-story <- modules/story
++ @types/node 24.19.2
++ @types/react 19.3.0
++ @types/react-dom 19.3.0
++ tsx 4.23.15
++ typescript 5.9.3
+
+Done in 664ms using pnpm v12.10.1

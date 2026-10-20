@@ -2,7 +2,7 @@
 
 The linear attachment-validation fix passed the canonical basic gates on the rebased candidate before any adoption decision. The tested source revision was `aa4cd8b5b133523307ea0ff51257d6f88a631677`, based on main `22aac284cac6dca5e371e118349b0b615cb195bd`. The API source tree matched the payload cohort candidate exactly (`8149908e137ec74b599fc36ff7f6073e3c7928f3`); `server.ts` SHA-256 was `38f9e3856ea31c03b23ced81355cb42661b061c3b4cfd6227ac02255efb62885`, and `server.test.ts` SHA-256 was `e6963971cd9dd429571e10e6d0692c17a53accc06e9850a1602d3dd52ec8dbe2`.
 
-All commands ran with CPU affinity 8–11. The frozen offline install was reused from the recorded candidate build; the lockfile tree remained `4f4ef4aada13bfb9111de0ca7b8ecec63df8bab6` after rebasing onto main.
+The four canonical gate commands ran with CPU affinity 8–11. The frozen offline install was reused from the recorded candidate build; the lockfile tree remained `4f4ef4aada13bfb9111de0ca7b8ecec63df8bab6` after rebasing onto main. The [verification evidence manifest](verification-evidence.json) binds the test source and integrated API source trees and records the preserved logs with SHA-256 hashes.
 
 | Command | Result |
 | --- | --- |
