@@ -271,6 +271,16 @@ stateDiagram-v2
 
 **自動再試行の対象は冪等なRead/Computeに限定**。提案済みMutationは同一Operation IDとDigestで照合し、Checkpoint/PublishをPluginが自律的に繰り返さない。
 
+### 7.4 Praetorium Runtime / Quiesceとの連動
+
+Pluginが止まることと、**Scriptorium Writerを安全に停止できることは別**。Hosted Runtimeの\`/api/platform/v1/status\`、\`quiesce\`、\`resume\`契約（[現行platform-runtime](../../packages/api/src/platform-runtime.ts)）に従い、Plugin Hostも活動・保存状態に参加する。
+
+- **Activity/Status:** Plugin Workerの実行中Job、未DrainのRPC、Plugin UIからHostへ受領した未保存Draft、未確定Proposal/Operationを、Host側の観測に反映する。失敗や接続断は\`unknown\`として扱い、単に「Pluginプロセスがない = safe」と判定しない。
+- **Quiesce:** Hostは新規Plugin編集/書込提案を停止し、進行中UI変更を確定済みBrowser Journalへflushする。Browserが不在でFlushを確認できない場合や、Pluginがクラッシュ中の場合は、元のScriptorium/Writer不在証明・Checkpoint契約に沿って停止可否を決める。
+- **Shutdown:** Deadline以内に停止しないPluginは当該Sandboxだけterminateする。ただし未保存編集の消失、未確定Publish、旧Writerが生存していないかを別条件として確認し、単なるProcess killで\`quiesced\`を確定しない。
+- **Resume/Replacement:** PluginのActivation EpochとRuntime Epochを更新し、旧Sandboxから遅延到着したResponse/Event/Proposalを無効化する。新Runtime/新Pluginが旧Writerと同時に同じRepositoryへ書き込まない。
+- **プラットフォームの正本:** [Praetorium](https://github.com/yohn-jp/praetorium)のD1・Operation FenceとGitHub履歴をPlugin独自のローカル状態で置き換えない。Pod Ready/Worker停止をGitHubへの出版成功証明として扱わない。
+
 ## 8. 外部リポジトリ、配布、Praetorium連携
 
 ### 8.1 ソースとArtifactual Identity
