@@ -1759,6 +1759,14 @@ export class CoreStore implements MutationCoordinator {
         ...writes.map((change) => ({ path: change.path, content: change.content, ...(change.encoding ? { encoding: change.encoding } : {}) })),
         ...metadata.map((item) => ({ path: item.path, content: item.content, encoding: "utf8" as const })),
       ];
+      const indexInfoRecords: Buffer[] = [];
+      const pendingIndexPaths = new Set<string>();
+      const flushIndexInfo = async (): Promise<void> => {
+        if (!indexInfoRecords.length) return;
+        await gitInputBuffer(root, ["update-index", "-z", "--index-info"], Buffer.concat(indexInfoRecords), { env });
+        indexInfoRecords.length = 0;
+        pendingIndexPaths.clear();
+      };
       for (const change of allWrites) {
         assertProjectPath(change.path);
         const existing = parent ? await this.treeEntry(root, parent, change.path).catch((error) => {
@@ -1766,14 +1774,22 @@ export class CoreStore implements MutationCoordinator {
           throw error;
         }) : null;
         if (change.content === null) {
+          await flushIndexInfo();
           if (existing) await git(root, ["update-index", "--force-remove", "--", change.path], { env });
           continue;
         }
+        if (pendingIndexPaths.has(change.path)) await flushIndexInfo();
         const bytes = change.encoding === "base64" ? Buffer.from(change.content, "base64") : Buffer.from(change.content, "utf8");
         const blob = (await gitInput(root, ["hash-object", "-w", "--stdin"], bytes)).trim();
         const mode = existing?.mode === "100755" ? "100755" : "100644";
-        await git(root, ["update-index", "--add", "--cacheinfo", `${mode},${blob},${change.path}`], { env });
+        indexInfoRecords.push(Buffer.concat([
+          Buffer.from(`${mode} ${blob} 0\t`, "utf8"),
+          Buffer.from(change.path, "utf8"),
+          Buffer.from([0]),
+        ]));
+        pendingIndexPaths.add(change.path);
       }
+      await flushIndexInfo();
       const tree = (await git(root, ["write-tree"], { env })).trim();
       const commit = (await git(root, [
         "-c", "user.name=Scriptorium",

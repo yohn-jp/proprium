@@ -131,9 +131,41 @@ temporary index, while keeping per-content hashing, file modes, validation,
 and commit creation unchanged. Flush pending upserts before each deletion (or
 fall back to the existing path for mixed writes); preserve NUL-safe paths,
 binary hashing, CAS, receipt, temporary-index, workspace, and single-writer
-semantics. No production change or performance claim is made from this
-contended cohort. A separate isolated matched C23 1/10/100 before/after run is
-required before adoption.
+semantics. The branch candidate passes a focused Core build and mixed
+checkpoint/publish semantic test covering binary contents, spaced and Unicode
+paths, executable tree mode, deletion ordering, receipt revisions and exact
+publish acknowledgement. Git's `-z --index-info` input still separates the
+header from the pathname with a tab; NUL terminates the pathname record. The
+candidate remains unmeasured and unadopted: a separate isolated matched C23
+1/10/100 before/after run is required before an optimization claim or adoption.
+
+## Candidate dispositions
+
+**C27 — decline a census index/cache in this cohort.** Only the one-operation
+history completed (`n=3`, p50/p95 154/176 ms, 16/27 Git processes); all three
+pending-receipt integrity checks passed. Histories of 100, 1,000 and 10,000
+operations are `NOT_CHECKED` because public checkpoint setup timed out at
+20/100 after 60 seconds, 20/1,000 after 90 seconds, and 0/10,000 after 120
+seconds. These results do not show whether the census's remote/local operation
+record reads, worktree status, ancestry checks or `rev-list --all --reflog`
+scan become material at representative history scale. They also do not prove
+that an auxiliary index can preserve unknown-commit, restart, reflog and manual
+parent detection. Reconsider only with a complete isolated representative
+history measurement and source-stage evidence that the scan is material, plus
+correctness evidence for a rebuildable index preserving those checks.
+
+**C28 — decline request-scope memoization in this cohort.** The complete
+one-operation batch (`n=5`) measured p50/p95 1,666/5,223 ms and 98 Git
+processes; the ten-operation batch (`n=5`) measured 4,618/5,354 ms and 584
+Git processes. Both batches were confirmed with exact receipt acknowledgement.
+Those are contended totals, not phase attribution, and the saved command
+histogram is unusable; they do not establish that repeated immutable
+commit-keyed scans account for a material share of work. The 100-operation
+batch is `NOT_CHECKED`: setup timed out at 20/100 after 180 seconds. Reconsider
+only when an isolated, complete batch with valid phase or command attribution
+shows material repeated immutable reads. Any future memo must remain request
+scoped and leave fresh observation, remote CAS, retry, unknown-outcome and
+receipt reconciliation boundaries intact.
 
 The prepared status in
 [`results/core64-writer/PREPARED.md`](results/core64-writer/PREPARED.md) records

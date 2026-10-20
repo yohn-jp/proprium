@@ -1903,6 +1903,82 @@ test("binary operation writes preserve exact bytes in the workspace and a replac
   }
 });
 
+test("batched temporary-index updates preserve binary, executable, spaced-path, deletion, and receipt semantics", async () => {
+  const fixture = await remoteFixture();
+  const executablePath = "assets/scripts/run-tool.sh";
+  const removedPath = "assets/remove.bin";
+  const spacedBinaryPath = "assets/new binary ünicode.bin";
+  const afterDeletePath = "assets/after-delete.md";
+  const originalExecutable = Buffer.from("#!/bin/sh\nprintf 'before\\n'\n");
+  const originalRemoved = Buffer.from([0, 255, 2, 128, 13, 10]);
+  const replacementExecutable = Buffer.from("#!/bin/sh\nprintf 'after\\n'\n");
+  const newBinary = Buffer.from([0, 255, 1, 128, 13, 10, 0, 42]);
+  try {
+    await fs.mkdir(path.dirname(path.join(fixture.seed, executablePath)), { recursive: true });
+    await fs.mkdir(path.dirname(path.join(fixture.seed, removedPath)), { recursive: true });
+    await fs.writeFile(path.join(fixture.seed, executablePath), originalExecutable);
+    await fs.chmod(path.join(fixture.seed, executablePath), 0o755);
+    await fs.writeFile(path.join(fixture.seed, removedPath), originalRemoved);
+    await git(fixture.seed, "add", "assets");
+    await git(fixture.seed, "commit", "-m", "Add executable and binary files");
+    await git(fixture.seed, "push", "origin", "main");
+
+    const dataDir = path.join(fixture.root, "state");
+    const store = new CoreStore({ dataDir, allowLocalRemotes: true });
+    const project = await store.registerProject({ url: fixture.remote });
+    const snapshot = (await store.observe(project.id)).snapshot;
+    const originalExecutableRevision = createHash("sha256").update(originalExecutable).digest("hex");
+    const originalRemovedRevision = createHash("sha256").update(originalRemoved).digest("hex");
+    const writes: ChangeOperation["writes"] = [
+      { path: executablePath, revision: originalExecutableRevision, content: replacementExecutable.toString("utf8") },
+      { path: spacedBinaryPath, revision: null, content: newBinary.toString("base64"), encoding: "base64" },
+      { path: removedPath, revision: originalRemovedRevision, content: null },
+      { path: afterDeletePath, revision: null, content: "Written after the deletion.\n" },
+    ];
+    const op: ChangeOperation = {
+      id: "batched_index_semantics",
+      generation: 1,
+      repository: snapshot.repository,
+      baseRemoteCommit: snapshot.remoteCommit,
+      effect: "metadata",
+      reads: writes.map(({ path: filePath, revision }) => ({ path: filePath, revision })),
+      writes,
+      message: "Verify batched temporary-index semantics",
+    };
+    const checkpoint = await approveAndCheckpoint(store, project.id, snapshot, op);
+    const expectedRevisions = [
+      createHash("sha256").update(replacementExecutable).digest("hex"),
+      createHash("sha256").update(newBinary).digest("hex"),
+      null,
+      createHash("sha256").update("Written after the deletion.\n").digest("hex"),
+    ];
+    assert.deepEqual(checkpoint.revisions.map(({ path: filePath, revision }) => ({ path: filePath, revision })),
+      writes.map(({ path: filePath }, index) => ({ path: filePath, revision: expectedRevisions[index] })));
+
+    const workspace = path.join(dataDir, "projects", project.id);
+    assert.ok((await git(workspace, "ls-tree", checkpoint.localCommit, "--", executablePath)).startsWith("100755 blob "));
+    assert.deepEqual(await fs.readFile(path.join(workspace, executablePath)), replacementExecutable);
+    assert.deepEqual(await fs.readFile(path.join(workspace, spacedBinaryPath)), newBinary);
+    assert.equal(await fs.readFile(path.join(workspace, afterDeletePath), "utf8"), "Written after the deletion.\n");
+    assert.deepEqual(await (await store.reader(project.id, "checkpoint")).read(spacedBinaryPath, "base64"), {
+      content: newBinary.toString("base64"),
+      revision: expectedRevisions[1],
+    });
+
+    const publication = await store.publish(project.id, "batch_batched_index_semantics");
+    assert.equal(publication.state, "confirmed");
+    assert.deepEqual(publication.acknowledged.map(({ operationId }) => operationId), [op.id]);
+    const remoteReader = await store.reader(project.id, "remote");
+    assert.equal((await remoteReader.read(executablePath))?.content, replacementExecutable.toString("utf8"));
+    assert.equal((await remoteReader.read(afterDeletePath))?.content, "Written after the deletion.\n");
+    assert.equal((await remoteReader.read(spacedBinaryPath, "base64"))?.content, newBinary.toString("base64"));
+    await assert.rejects(git(fixture.root, "--git-dir", fixture.remote, "show", `${publication.remoteCommit}:${removedPath}`));
+    assert.ok((await git(fixture.root, "--git-dir", fixture.remote, "ls-tree", publication.remoteCommit, "--", executablePath)).startsWith("100755 blob "));
+  } finally {
+    await fs.rm(fixture.root, { recursive: true, force: true });
+  }
+});
+
 test("checkpoints preserve unrelated staged and untracked project files", async () => {
   const fixture = await remoteFixture();
   try {
