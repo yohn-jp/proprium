@@ -1,0 +1,2176 @@
+{
+  "status": "complete",
+  "contract": "C09",
+  "source": {
+    "commit": "ffd02739ab095dfda2854a3ff487434c84f6b536",
+    "probeSha256": "64fdd651de8ebb76df1ec10a96b6489be6462840566ef8582b7dd5c57aca1f75"
+  },
+  "runtime": {
+    "root": "/home/sophia/src/scriptorium-c64-resize",
+    "commit": "ffd02739ab095dfda2854a3ff487434c84f6b536",
+    "appDist": "/home/sophia/src/scriptorium-c64-resize/app/dist"
+  },
+  "host": {
+    "platform": "linux",
+    "release": "6.18.52",
+    "arch": "x64",
+    "node": "v24.21.0"
+  },
+  "fixture": {
+    "immutableSeed": "/data/scriptorium-core64-g0-a1587e78-20261020-2318/synthetic/small",
+    "size": "small",
+    "commit": "e70bb509cc41b383451335e05af36d78f1cb31db",
+    "files": 10,
+    "scenes": 3,
+    "documentBytes": [
+      1024,
+      102400,
+      1048576
+    ],
+    "disposableCopy": "created under the short temporary directory; removed after the run"
+  },
+  "browser": {
+    "version": "155.0.8059.79",
+    "executable": "/nix/store/ini1ifgvcsvw48x4mxawrv9jvbdwn70p-chromium-155.0.8059.79/bin/chromium"
+  },
+  "desktop": {
+    "before": {
+      "viewport": {
+        "width": 1440,
+        "height": 1000,
+        "devicePixelRatio": 1
+      },
+      "workspaceMode": "desktop",
+      "workspace": {
+        "x": 0,
+        "y": 185.984375,
+        "width": 1440,
+        "height": 814.015625
+      },
+      "split": {
+        "box": {
+          "x": 0,
+          "y": 320.703125,
+          "width": 1440,
+          "height": 679.296875
+        },
+        "groupId": "st-workspace-split-preset-main",
+        "resizeHandleCount": 1
+      },
+      "panels": {
+        "editor": {
+          "x": 0,
+          "y": 320.703125,
+          "width": 973.21875,
+          "height": 679.296875
+        },
+        "outline": {
+          "x": 982.015625,
+          "y": 320.703125,
+          "width": 457.984375,
+          "height": 679.296875
+        }
+      },
+      "storedLayout": null,
+      "storedLayoutKey": null
+    },
+    "pointerDrag": {
+      "automationElapsedMs": 1233.761223,
+      "requestedDeltaPx": 112,
+      "capture": {
+        "label": "pointer-drag",
+        "startedAt": 1057.300000011921,
+        "endedAt": 2251.100000023842,
+        "elapsedMs": 1193.800000011921,
+        "frameSummary": {
+          "sampledFrames": 69,
+          "intervalCount": 68,
+          "intervalMs": {
+            "p50": 16.700000000000045,
+            "p95": 16.800000000000182,
+            "max": 49.90000000000009
+          },
+          "gapsOver50ms": 0
+        },
+        "counts": {
+          "requestAnimationFrameCalls": 14,
+          "reactCommits": 45,
+          "longTasks": [],
+          "indexedDbTransactions": [
+            {
+              "mode": "readonly",
+              "stores": [
+                "publicationReceipts"
+              ],
+              "status": "complete",
+              "ms": 21.599999994039536
+            },
+            {
+              "mode": "readonly",
+              "stores": [
+                "proposals"
+              ],
+              "status": "complete",
+              "ms": 22.400000005960464
+            },
+            {
+              "mode": "readonly",
+              "stores": [
+                "operations"
+              ],
+              "status": "complete",
+              "ms": 1.4000000059604645
+            },
+            {
+              "mode": "readonly",
+              "stores": [
+                "publicationReceipts"
+              ],
+              "status": "complete",
+              "ms": 2
+            },
+            {
+              "mode": "readonly",
+              "stores": [
+                "operations"
+              ],
+              "status": "complete",
+              "ms": 2.300000011920929
+            },
+            {
+              "mode": "readonly",
+              "stores": [
+                "proposals"
+              ],
+              "status": "complete",
+              "ms": 2.4000000059604645
+            }
+          ],
+          "indexedDbReads": [
+            {
+              "source": "index",
+              "method": "getAll",
+              "store": "publicationReceipts",
+              "status": "complete",
+              "ms": 20.5
+            },
+            {
+              "source": "index",
+              "method": "getAll",
+              "store": "proposals",
+              "status": "complete",
+              "ms": 21.299999982118607
+            },
+            {
+              "source": "index",
+              "method": "getAll",
+              "store": "operations",
+              "status": "complete",
+              "ms": 0.800000011920929
+            },
+            {
+              "source": "index",
+              "method": "getAll",
+              "store": "publicationReceipts",
+              "status": "complete",
+              "ms": 0.7000000178813934
+            },
+            {
+              "source": "objectStore",
+              "method": "getAll",
+              "store": "operations",
+              "status": "complete",
+              "ms": 1.7000000178813934
+            },
+            {
+              "source": "objectStore",
+              "method": "getAll",
+              "store": "proposals",
+              "status": "complete",
+              "ms": 1.699999988079071
+            }
+          ],
+          "localStorageCalls": [
+            {
+              "at": 1202.5,
+              "method": "getItem",
+              "key": "scriptorium:draft:135ebf11-b8a9-483c-acca-9614aaca4cc0:scene-1"
+            },
+            {
+              "at": 1204.800000011921,
+              "method": "getItem",
+              "key": "scriptorium:editor-typography"
+            },
+            {
+              "at": 1204.9000000059605,
+              "method": "getItem",
+              "key": "scriptorium:reading-resume:%5B%22owner%22%2C%22%5B%5C%22local%5C%22%2C%5C%22local%3A8931ef096bb3ecb2b5adaec2d880c5c8107d7712d651ca7654fb517670647170%5C%22%2C%5C%228931ef096bb3ecb2b5adaec2d880c5c8107d7712d651ca7654fb517670647170%5C%22%2C%5C%22main%5C%22%5D%22%2C%22scene-1%22%5D"
+            },
+            {
+              "at": 1263.9000000059605,
+              "method": "setItem",
+              "key": "scriptorium:editor-typography"
+            },
+            {
+              "at": 1264,
+              "method": "setItem",
+              "key": "scriptorium:reading-resume:%5B%22owner%22%2C%22%5B%5C%22local%5C%22%2C%5C%22local%3A8931ef096bb3ecb2b5adaec2d880c5c8107d7712d651ca7654fb517670647170%5C%22%2C%5C%228931ef096bb3ecb2b5adaec2d880c5c8107d7712d651ca7654fb517670647170%5C%22%2C%5C%22main%5C%22%5D%22%2C%22scene-1%22%5D"
+            },
+            {
+              "at": 1264.1000000238419,
+              "method": "getItem",
+              "key": "scriptorium:reading-resume:%5B%22owner%22%2C%22%5B%5C%22local%5C%22%2C%5C%22local%3A8931ef096bb3ecb2b5adaec2d880c5c8107d7712d651ca7654fb517670647170%5C%22%2C%5C%228931ef096bb3ecb2b5adaec2d880c5c8107d7712d651ca7654fb517670647170%5C%22%2C%5C%22main%5C%22%5D%22%2C%22scene-1%22%5D"
+            }
+          ],
+          "sessionStorageCalls": [],
+          "panelResizeObserverNotifications": [
+            {
+              "at": 1077.300000011921,
+              "panelId": "editor",
+              "width": 973.21875
+            },
+            {
+              "at": 1077.4000000059605,
+              "panelId": "outline",
+              "width": 457.984375
+            },
+            {
+              "at": 1106.7000000178814,
+              "panelId": "editor",
+              "width": 976.078125
+            },
+            {
+              "at": 1106.7000000178814,
+              "panelId": "outline",
+              "width": 455.125
+            },
+            {
+              "at": 1139.2000000178814,
+              "panelId": "editor",
+              "width": 978.9375
+            },
+            {
+              "at": 1139.300000011921,
+              "panelId": "outline",
+              "width": 452.265625
+            },
+            {
+              "at": 1175.1000000238419,
+              "panelId": "editor",
+              "width": 981.8125
+            },
+            {
+              "at": 1175.2000000178814,
+              "panelId": "outline",
+              "width": 449.390625
+            },
+            {
+              "at": 1231.5,
+              "panelId": "editor",
+              "width": 984.671875
+            },
+            {
+              "at": 1231.5,
+              "panelId": "outline",
+              "width": 446.53125
+            },
+            {
+              "at": 1278.800000011921,
+              "panelId": "editor",
+              "width": 987.53125
+            },
+            {
+              "at": 1278.800000011921,
+              "panelId": "outline",
+              "width": 443.671875
+            },
+            {
+              "at": 1306.300000011921,
+              "panelId": "editor",
+              "width": 990.390625
+            },
+            {
+              "at": 1306.300000011921,
+              "panelId": "outline",
+              "width": 440.8125
+            },
+            {
+              "at": 1343.2000000178814,
+              "panelId": "editor",
+              "width": 993.25
+            },
+            {
+              "at": 1343.2000000178814,
+              "panelId": "outline",
+              "width": 437.953125
+            },
+            {
+              "at": 1372,
+              "panelId": "editor",
+              "width": 996.125
+            },
+            {
+              "at": 1372,
+              "panelId": "outline",
+              "width": 435.078125
+            },
+            {
+              "at": 1390,
+              "panelId": "editor",
+              "width": 998.984375
+            },
+            {
+              "at": 1390,
+              "panelId": "outline",
+              "width": 432.21875
+            },
+            {
+              "at": 1408.800000011921,
+              "panelId": "editor",
+              "width": 1000.40625
+            },
+            {
+              "at": 1408.800000011921,
+              "panelId": "outline",
+              "width": 430.796875
+            },
+            {
+              "at": 1438.7000000178814,
+              "panelId": "editor",
+              "width": 1003.265625
+            },
+            {
+              "at": 1438.7000000178814,
+              "panelId": "outline",
+              "width": 427.9375
+            },
+            {
+              "at": 1456.9000000059605,
+              "panelId": "editor",
+              "width": 1006.140625
+            },
+            {
+              "at": 1456.9000000059605,
+              "panelId": "outline",
+              "width": 425.0625
+            },
+            {
+              "at": 1476.2000000178814,
+              "panelId": "editor",
+              "width": 1009
+            },
+            {
+              "at": 1476.2000000178814,
+              "panelId": "outline",
+              "width": 422.203125
+            },
+            {
+              "at": 1489.5,
+              "panelId": "editor",
+              "width": 1011.859375
+            },
+            {
+              "at": 1489.5,
+              "panelId": "outline",
+              "width": 419.34375
+            },
+            {
+              "at": 1522.2000000178814,
+              "panelId": "editor",
+              "width": 1014.71875
+            },
+            {
+              "at": 1522.300000011921,
+              "panelId": "outline",
+              "width": 416.484375
+            },
+            {
+              "at": 1557,
+              "panelId": "editor",
+              "width": 1017.578125
+            },
+            {
+              "at": 1557,
+              "panelId": "outline",
+              "width": 413.625
+            },
+            {
+              "at": 1590.5,
+              "panelId": "editor",
+              "width": 1020.453125
+            },
+            {
+              "at": 1590.5,
+              "panelId": "outline",
+              "width": 410.75
+            },
+            {
+              "at": 1606.4000000059605,
+              "panelId": "editor",
+              "width": 1023.3125
+            },
+            {
+              "at": 1606.4000000059605,
+              "panelId": "outline",
+              "width": 407.890625
+            },
+            {
+              "at": 1640.5,
+              "panelId": "editor",
+              "width": 1026.171875
+            },
+            {
+              "at": 1640.5,
+              "panelId": "outline",
+              "width": 405.03125
+            },
+            {
+              "at": 1656.1000000238419,
+              "panelId": "editor",
+              "width": 1029.03125
+            },
+            {
+              "at": 1656.1000000238419,
+              "panelId": "outline",
+              "width": 402.171875
+            },
+            {
+              "at": 1692.300000011921,
+              "panelId": "editor",
+              "width": 1031.890625
+            },
+            {
+              "at": 1692.300000011921,
+              "panelId": "outline",
+              "width": 399.3125
+            },
+            {
+              "at": 1708.5,
+              "panelId": "editor",
+              "width": 1034.765625
+            },
+            {
+              "at": 1708.6000000238419,
+              "panelId": "outline",
+              "width": 396.4375
+            },
+            {
+              "at": 1739.2000000178814,
+              "panelId": "editor",
+              "width": 1037.625
+            },
+            {
+              "at": 1739.2000000178814,
+              "panelId": "outline",
+              "width": 393.578125
+            },
+            {
+              "at": 1756.2000000178814,
+              "panelId": "editor",
+              "width": 1040.484375
+            },
+            {
+              "at": 1756.2000000178814,
+              "panelId": "outline",
+              "width": 390.71875
+            },
+            {
+              "at": 1790,
+              "panelId": "editor",
+              "width": 1043.34375
+            },
+            {
+              "at": 1790,
+              "panelId": "outline",
+              "width": 387.859375
+            },
+            {
+              "at": 1806.300000011921,
+              "panelId": "editor",
+              "width": 1046.203125
+            },
+            {
+              "at": 1806.300000011921,
+              "panelId": "outline",
+              "width": 385
+            },
+            {
+              "at": 1838.6000000238419,
+              "panelId": "editor",
+              "width": 1047.640625
+            },
+            {
+              "at": 1838.6000000238419,
+              "panelId": "outline",
+              "width": 383.5625
+            },
+            {
+              "at": 1859,
+              "panelId": "editor",
+              "width": 1050.5
+            },
+            {
+              "at": 1859,
+              "panelId": "outline",
+              "width": 380.703125
+            },
+            {
+              "at": 1873,
+              "panelId": "editor",
+              "width": 1053.359375
+            },
+            {
+              "at": 1873.1000000238419,
+              "panelId": "outline",
+              "width": 377.84375
+            },
+            {
+              "at": 1907.7000000178814,
+              "panelId": "editor",
+              "width": 1056.234375
+            },
+            {
+              "at": 1907.7000000178814,
+              "panelId": "outline",
+              "width": 374.96875
+            },
+            {
+              "at": 1926.300000011921,
+              "panelId": "editor",
+              "width": 1059.09375
+            },
+            {
+              "at": 1926.300000011921,
+              "panelId": "outline",
+              "width": 372.109375
+            },
+            {
+              "at": 1960,
+              "panelId": "editor",
+              "width": 1061.953125
+            },
+            {
+              "at": 1960,
+              "panelId": "outline",
+              "width": 369.25
+            },
+            {
+              "at": 1972.9000000059605,
+              "panelId": "editor",
+              "width": 1064.8125
+            },
+            {
+              "at": 1972.9000000059605,
+              "panelId": "outline",
+              "width": 366.390625
+            },
+            {
+              "at": 2006.800000011921,
+              "panelId": "editor",
+              "width": 1067.671875
+            },
+            {
+              "at": 2006.800000011921,
+              "panelId": "outline",
+              "width": 363.53125
+            },
+            {
+              "at": 2023.300000011921,
+              "panelId": "editor",
+              "width": 1070.546875
+            },
+            {
+              "at": 2023.4000000059605,
+              "panelId": "outline",
+              "width": 360.65625
+            },
+            {
+              "at": 2040.1000000238419,
+              "panelId": "editor",
+              "width": 1073.40625
+            },
+            {
+              "at": 2040.1000000238419,
+              "panelId": "outline",
+              "width": 357.796875
+            },
+            {
+              "at": 2075.100000023842,
+              "panelId": "editor",
+              "width": 1076.265625
+            },
+            {
+              "at": 2075.100000023842,
+              "panelId": "outline",
+              "width": 354.9375
+            },
+            {
+              "at": 2089.600000023842,
+              "panelId": "editor",
+              "width": 1079.125
+            },
+            {
+              "at": 2089.600000023842,
+              "panelId": "outline",
+              "width": 352.078125
+            },
+            {
+              "at": 2123.800000011921,
+              "panelId": "editor",
+              "width": 1081.984375
+            },
+            {
+              "at": 2123.9000000059605,
+              "panelId": "outline",
+              "width": 349.21875
+            },
+            {
+              "at": 2142,
+              "panelId": "editor",
+              "width": 1084.859375
+            },
+            {
+              "at": 2142,
+              "panelId": "outline",
+              "width": 346.34375
+            }
+          ],
+          "panelWidthChanges": [
+            {
+              "at": 1077.300000011921,
+              "panelId": "editor",
+              "from": null,
+              "to": 973.21875
+            },
+            {
+              "at": 1077.4000000059605,
+              "panelId": "outline",
+              "from": null,
+              "to": 457.984375
+            },
+            {
+              "at": 1106.7000000178814,
+              "panelId": "editor",
+              "from": 973.21875,
+              "to": 976.078125
+            },
+            {
+              "at": 1106.7000000178814,
+              "panelId": "outline",
+              "from": 457.984375,
+              "to": 455.125
+            },
+            {
+              "at": 1139.300000011921,
+              "panelId": "editor",
+              "from": 976.078125,
+              "to": 978.9375
+            },
+            {
+              "at": 1139.300000011921,
+              "panelId": "outline",
+              "from": 455.125,
+              "to": 452.265625
+            },
+            {
+              "at": 1175.2000000178814,
+              "panelId": "editor",
+              "from": 978.9375,
+              "to": 981.8125
+            },
+            {
+              "at": 1175.2000000178814,
+              "panelId": "outline",
+              "from": 452.265625,
+              "to": 449.390625
+            },
+            {
+              "at": 1231.5,
+              "panelId": "editor",
+              "from": 981.8125,
+              "to": 984.671875
+            },
+            {
+              "at": 1231.5,
+              "panelId": "outline",
+              "from": 449.390625,
+              "to": 446.53125
+            },
+            {
+              "at": 1278.800000011921,
+              "panelId": "editor",
+              "from": 984.671875,
+              "to": 987.53125
+            },
+            {
+              "at": 1278.9000000059605,
+              "panelId": "outline",
+              "from": 446.53125,
+              "to": 443.671875
+            },
+            {
+              "at": 1306.300000011921,
+              "panelId": "editor",
+              "from": 987.53125,
+              "to": 990.390625
+            },
+            {
+              "at": 1306.300000011921,
+              "panelId": "outline",
+              "from": 443.671875,
+              "to": 440.8125
+            },
+            {
+              "at": 1343.2000000178814,
+              "panelId": "editor",
+              "from": 990.390625,
+              "to": 993.25
+            },
+            {
+              "at": 1343.2000000178814,
+              "panelId": "outline",
+              "from": 440.8125,
+              "to": 437.953125
+            },
+            {
+              "at": 1372,
+              "panelId": "editor",
+              "from": 993.25,
+              "to": 996.125
+            },
+            {
+              "at": 1372,
+              "panelId": "outline",
+              "from": 437.953125,
+              "to": 435.078125
+            },
+            {
+              "at": 1390,
+              "panelId": "editor",
+              "from": 996.125,
+              "to": 998.984375
+            },
+            {
+              "at": 1390,
+              "panelId": "outline",
+              "from": 435.078125,
+              "to": 432.21875
+            },
+            {
+              "at": 1408.800000011921,
+              "panelId": "editor",
+              "from": 998.984375,
+              "to": 1000.40625
+            },
+            {
+              "at": 1408.800000011921,
+              "panelId": "outline",
+              "from": 432.21875,
+              "to": 430.796875
+            },
+            {
+              "at": 1438.7000000178814,
+              "panelId": "editor",
+              "from": 1000.40625,
+              "to": 1003.265625
+            },
+            {
+              "at": 1438.7000000178814,
+              "panelId": "outline",
+              "from": 430.796875,
+              "to": 427.9375
+            },
+            {
+              "at": 1456.9000000059605,
+              "panelId": "editor",
+              "from": 1003.265625,
+              "to": 1006.140625
+            },
+            {
+              "at": 1456.9000000059605,
+              "panelId": "outline",
+              "from": 427.9375,
+              "to": 425.0625
+            },
+            {
+              "at": 1476.2000000178814,
+              "panelId": "editor",
+              "from": 1006.140625,
+              "to": 1009
+            },
+            {
+              "at": 1476.2000000178814,
+              "panelId": "outline",
+              "from": 425.0625,
+              "to": 422.203125
+            },
+            {
+              "at": 1489.5,
+              "panelId": "editor",
+              "from": 1009,
+              "to": 1011.859375
+            },
+            {
+              "at": 1489.5,
+              "panelId": "outline",
+              "from": 422.203125,
+              "to": 419.34375
+            },
+            {
+              "at": 1522.300000011921,
+              "panelId": "editor",
+              "from": 1011.859375,
+              "to": 1014.71875
+            },
+            {
+              "at": 1522.300000011921,
+              "panelId": "outline",
+              "from": 419.34375,
+              "to": 416.484375
+            },
+            {
+              "at": 1557,
+              "panelId": "editor",
+              "from": 1014.71875,
+              "to": 1017.578125
+            },
+            {
+              "at": 1557,
+              "panelId": "outline",
+              "from": 416.484375,
+              "to": 413.625
+            },
+            {
+              "at": 1590.5,
+              "panelId": "editor",
+              "from": 1017.578125,
+              "to": 1020.453125
+            },
+            {
+              "at": 1590.6000000238419,
+              "panelId": "outline",
+              "from": 413.625,
+              "to": 410.75
+            },
+            {
+              "at": 1606.4000000059605,
+              "panelId": "editor",
+              "from": 1020.453125,
+              "to": 1023.3125
+            },
+            {
+              "at": 1606.5,
+              "panelId": "outline",
+              "from": 410.75,
+              "to": 407.890625
+            },
+            {
+              "at": 1640.5,
+              "panelId": "editor",
+              "from": 1023.3125,
+              "to": 1026.171875
+            },
+            {
+              "at": 1640.5,
+              "panelId": "outline",
+              "from": 407.890625,
+              "to": 405.03125
+            },
+            {
+              "at": 1656.1000000238419,
+              "panelId": "editor",
+              "from": 1026.171875,
+              "to": 1029.03125
+            },
+            {
+              "at": 1656.1000000238419,
+              "panelId": "outline",
+              "from": 405.03125,
+              "to": 402.171875
+            },
+            {
+              "at": 1692.300000011921,
+              "panelId": "editor",
+              "from": 1029.03125,
+              "to": 1031.890625
+            },
+            {
+              "at": 1692.300000011921,
+              "panelId": "outline",
+              "from": 402.171875,
+              "to": 399.3125
+            },
+            {
+              "at": 1708.5,
+              "panelId": "editor",
+              "from": 1031.890625,
+              "to": 1034.765625
+            },
+            {
+              "at": 1708.6000000238419,
+              "panelId": "outline",
+              "from": 399.3125,
+              "to": 396.4375
+            },
+            {
+              "at": 1739.2000000178814,
+              "panelId": "editor",
+              "from": 1034.765625,
+              "to": 1037.625
+            },
+            {
+              "at": 1739.2000000178814,
+              "panelId": "outline",
+              "from": 396.4375,
+              "to": 393.578125
+            },
+            {
+              "at": 1756.2000000178814,
+              "panelId": "editor",
+              "from": 1037.625,
+              "to": 1040.484375
+            },
+            {
+              "at": 1756.2000000178814,
+              "panelId": "outline",
+              "from": 393.578125,
+              "to": 390.71875
+            },
+            {
+              "at": 1790,
+              "panelId": "editor",
+              "from": 1040.484375,
+              "to": 1043.34375
+            },
+            {
+              "at": 1790,
+              "panelId": "outline",
+              "from": 390.71875,
+              "to": 387.859375
+            },
+            {
+              "at": 1806.300000011921,
+              "panelId": "editor",
+              "from": 1043.34375,
+              "to": 1046.203125
+            },
+            {
+              "at": 1806.300000011921,
+              "panelId": "outline",
+              "from": 387.859375,
+              "to": 385
+            },
+            {
+              "at": 1838.6000000238419,
+              "panelId": "editor",
+              "from": 1046.203125,
+              "to": 1047.640625
+            },
+            {
+              "at": 1838.6000000238419,
+              "panelId": "outline",
+              "from": 385,
+              "to": 383.5625
+            },
+            {
+              "at": 1859,
+              "panelId": "editor",
+              "from": 1047.640625,
+              "to": 1050.5
+            },
+            {
+              "at": 1859.1000000238419,
+              "panelId": "outline",
+              "from": 383.5625,
+              "to": 380.703125
+            },
+            {
+              "at": 1873,
+              "panelId": "editor",
+              "from": 1050.5,
+              "to": 1053.359375
+            },
+            {
+              "at": 1873.1000000238419,
+              "panelId": "outline",
+              "from": 380.703125,
+              "to": 377.84375
+            },
+            {
+              "at": 1907.7000000178814,
+              "panelId": "editor",
+              "from": 1053.359375,
+              "to": 1056.234375
+            },
+            {
+              "at": 1907.7000000178814,
+              "panelId": "outline",
+              "from": 377.84375,
+              "to": 374.96875
+            },
+            {
+              "at": 1926.300000011921,
+              "panelId": "editor",
+              "from": 1056.234375,
+              "to": 1059.09375
+            },
+            {
+              "at": 1926.300000011921,
+              "panelId": "outline",
+              "from": 374.96875,
+              "to": 372.109375
+            },
+            {
+              "at": 1960,
+              "panelId": "editor",
+              "from": 1059.09375,
+              "to": 1061.953125
+            },
+            {
+              "at": 1960,
+              "panelId": "outline",
+              "from": 372.109375,
+              "to": 369.25
+            },
+            {
+              "at": 1972.9000000059605,
+              "panelId": "editor",
+              "from": 1061.953125,
+              "to": 1064.8125
+            },
+            {
+              "at": 1972.9000000059605,
+              "panelId": "outline",
+              "from": 369.25,
+              "to": 366.390625
+            },
+            {
+              "at": 2006.800000011921,
+              "panelId": "editor",
+              "from": 1064.8125,
+              "to": 1067.671875
+            },
+            {
+              "at": 2006.800000011921,
+              "panelId": "outline",
+              "from": 366.390625,
+              "to": 363.53125
+            },
+            {
+              "at": 2023.300000011921,
+              "panelId": "editor",
+              "from": 1067.671875,
+              "to": 1070.546875
+            },
+            {
+              "at": 2023.4000000059605,
+              "panelId": "outline",
+              "from": 363.53125,
+              "to": 360.65625
+            },
+            {
+              "at": 2040.1000000238419,
+              "panelId": "editor",
+              "from": 1070.546875,
+              "to": 1073.40625
+            },
+            {
+              "at": 2040.1000000238419,
+              "panelId": "outline",
+              "from": 360.65625,
+              "to": 357.796875
+            },
+            {
+              "at": 2075.100000023842,
+              "panelId": "editor",
+              "from": 1073.40625,
+              "to": 1076.265625
+            },
+            {
+              "at": 2075.100000023842,
+              "panelId": "outline",
+              "from": 357.796875,
+              "to": 354.9375
+            },
+            {
+              "at": 2089.600000023842,
+              "panelId": "editor",
+              "from": 1076.265625,
+              "to": 1079.125
+            },
+            {
+              "at": 2089.600000023842,
+              "panelId": "outline",
+              "from": 354.9375,
+              "to": 352.078125
+            },
+            {
+              "at": 2123.9000000059605,
+              "panelId": "editor",
+              "from": 1079.125,
+              "to": 1081.984375
+            },
+            {
+              "at": 2123.9000000059605,
+              "panelId": "outline",
+              "from": 352.078125,
+              "to": 349.21875
+            },
+            {
+              "at": 2142,
+              "panelId": "editor",
+              "from": 1081.984375,
+              "to": 1084.859375
+            },
+            {
+              "at": 2142,
+              "panelId": "outline",
+              "from": 349.21875,
+              "to": 346.34375
+            }
+          ],
+          "panelStyleMutations": [
+            {
+              "at": 1075.1000000238419,
+              "panelId": "editor",
+              "style": "flex: 68 1 0px; overflow: hidden; pointer-events: none;"
+            },
+            {
+              "at": 1075.1000000238419,
+              "panelId": "outline",
+              "style": "flex: 32 1 0px; overflow: hidden; pointer-events: none;"
+            },
+            {
+              "at": 1090.4000000059605,
+              "panelId": "editor",
+              "style": "flex: 68.2 1 0px; overflow: hidden; pointer-events: none;"
+            },
+            {
+              "at": 1090.5,
+              "panelId": "outline",
+              "style": "flex: 31.8 1 0px; overflow: hidden; pointer-events: none;"
+            },
+            {
+              "at": 1124.7000000178814,
+              "panelId": "editor",
+              "style": "flex: 68.4 1 0px; overflow: hidden; pointer-events: none;"
+            },
+            {
+              "at": 1124.800000011921,
+              "panelId": "outline",
+              "style": "flex: 31.6 1 0px; overflow: hidden; pointer-events: none;"
+            },
+            {
+              "at": 1160.5,
+              "panelId": "editor",
+              "style": "flex: 68.6 1 0px; overflow: hidden; pointer-events: none;"
+            },
+            {
+              "at": 1160.7000000178814,
+              "panelId": "outline",
+              "style": "flex: 31.4 1 0px; overflow: hidden; pointer-events: none;"
+            },
+            {
+              "at": 1189.7000000178814,
+              "panelId": "editor",
+              "style": "flex: 68.8 1 0px; overflow: hidden; pointer-events: none;"
+            },
+            {
+              "at": 1189.7000000178814,
+              "panelId": "outline",
+              "style": "flex: 31.2 1 0px; overflow: hidden; pointer-events: none;"
+            },
+            {
+              "at": 1265,
+              "panelId": "editor",
+              "style": "flex: 69 1 0px; overflow: hidden; pointer-events: none;"
+            },
+            {
+              "at": 1265,
+              "panelId": "outline",
+              "style": "flex: 31 1 0px; overflow: hidden; pointer-events: none;"
+            },
+            {
+              "at": 1294.800000011921,
+              "panelId": "editor",
+              "style": "flex: 69.2 1 0px; overflow: hidden; pointer-events: none;"
+            },
+            {
+              "at": 1294.9000000059605,
+              "panelId": "outline",
+              "style": "flex: 30.8 1 0px; overflow: hidden; pointer-events: none;"
+            },
+            {
+              "at": 1323.4000000059605,
+              "panelId": "editor",
+              "style": "flex: 69.4 1 0px; overflow: hidden; pointer-events: none;"
+            },
+            {
+              "at": 1323.4000000059605,
+              "panelId": "outline",
+              "style": "flex: 30.6 1 0px; overflow: hidden; pointer-events: none;"
+            },
+            {
+              "at": 1355.800000011921,
+              "panelId": "editor",
+              "style": "flex: 69.6 1 0px; overflow: hidden; pointer-events: none;"
+            },
+            {
+              "at": 1355.800000011921,
+              "panelId": "outline",
+              "style": "flex: 30.4 1 0px; overflow: hidden; pointer-events: none;"
+            },
+            {
+              "at": 1374.1000000238419,
+              "panelId": "editor",
+              "style": "flex: 69.8 1 0px; overflow: hidden; pointer-events: none;"
+            },
+            {
+              "at": 1374.1000000238419,
+              "panelId": "outline",
+              "style": "flex: 30.2 1 0px; overflow: hidden; pointer-events: none;"
+            },
+            {
+              "at": 1392.300000011921,
+              "panelId": "editor",
+              "style": "flex: 69.9 1 0px; overflow: hidden; pointer-events: none;"
+            },
+            {
+              "at": 1392.4000000059605,
+              "panelId": "outline",
+              "style": "flex: 30.1 1 0px; overflow: hidden; pointer-events: none;"
+            },
+            {
+              "at": 1422.300000011921,
+              "panelId": "editor",
+              "style": "flex: 70.1 1 0px; overflow: hidden; pointer-events: none;"
+            },
+            {
+              "at": 1422.300000011921,
+              "panelId": "outline",
+              "style": "flex: 29.9 1 0px; overflow: hidden; pointer-events: none;"
+            },
+            {
+              "at": 1440.800000011921,
+              "panelId": "editor",
+              "style": "flex: 70.3 1 0px; overflow: hidden; pointer-events: none;"
+            },
+            {
+              "at": 1440.800000011921,
+              "panelId": "outline",
+              "style": "flex: 29.7 1 0px; overflow: hidden; pointer-events: none;"
+            },
+            {
+              "at": 1459,
+              "panelId": "editor",
+              "style": "flex: 70.5 1 0px; overflow: hidden; pointer-events: none;"
+            },
+            {
+              "at": 1459.1000000238419,
+              "panelId": "outline",
+              "style": "flex: 29.5 1 0px; overflow: hidden; pointer-events: none;"
+            },
+            {
+              "at": 1478.2000000178814,
+              "panelId": "editor",
+              "style": "flex: 70.7 1 0px; overflow: hidden; pointer-events: none;"
+            },
+            {
+              "at": 1478.2000000178814,
+              "panelId": "outline",
+              "style": "flex: 29.3 1 0px; overflow: hidden; pointer-events: none;"
+            },
+            {
+              "at": 1505.9000000059605,
+              "panelId": "editor",
+              "style": "flex: 70.9 1 0px; overflow: hidden; pointer-events: none;"
+            },
+            {
+              "at": 1505.9000000059605,
+              "panelId": "outline",
+              "style": "flex: 29.1 1 0px; overflow: hidden; pointer-events: none;"
+            },
+            {
+              "at": 1542,
+              "panelId": "editor",
+              "style": "flex: 71.1 1 0px; overflow: hidden; pointer-events: none;"
+            },
+            {
+              "at": 1542,
+              "panelId": "outline",
+              "style": "flex: 28.9 1 0px; overflow: hidden; pointer-events: none;"
+            },
+            {
+              "at": 1572.6000000238419,
+              "panelId": "editor",
+              "style": "flex: 71.3 1 0px; overflow: hidden; pointer-events: none;"
+            },
+            {
+              "at": 1572.6000000238419,
+              "panelId": "outline",
+              "style": "flex: 28.7 1 0px; overflow: hidden; pointer-events: none;"
+            },
+            {
+              "at": 1592.9000000059605,
+              "panelId": "editor",
+              "style": "flex: 71.5 1 0px; overflow: hidden; pointer-events: none;"
+            },
+            {
+              "at": 1593,
+              "panelId": "outline",
+              "style": "flex: 28.5 1 0px; overflow: hidden; pointer-events: none;"
+            },
+            {
+              "at": 1624.800000011921,
+              "panelId": "editor",
+              "style": "flex: 71.7 1 0px; overflow: hidden; pointer-events: none;"
+            },
+            {
+              "at": 1624.800000011921,
+              "panelId": "outline",
+              "style": "flex: 28.3 1 0px; overflow: hidden; pointer-events: none;"
+            },
+            {
+              "at": 1642.5,
+              "panelId": "editor",
+              "style": "flex: 71.9 1 0px; overflow: hidden; pointer-events: none;"
+            },
+            {
+              "at": 1642.5,
+              "panelId": "outline",
+              "style": "flex: 28.1 1 0px; overflow: hidden; pointer-events: none;"
+            },
+            {
+              "at": 1672.300000011921,
+              "panelId": "editor",
+              "style": "flex: 72.1 1 0px; overflow: hidden; pointer-events: none;"
+            },
+            {
+              "at": 1672.300000011921,
+              "panelId": "outline",
+              "style": "flex: 27.9 1 0px; overflow: hidden; pointer-events: none;"
+            },
+            {
+              "at": 1695,
+              "panelId": "editor",
+              "style": "flex: 72.3 1 0px; overflow: hidden; pointer-events: none;"
+            },
+            {
+              "at": 1695,
+              "panelId": "outline",
+              "style": "flex: 27.7 1 0px; overflow: hidden; pointer-events: none;"
+            },
+            {
+              "at": 1722.4000000059605,
+              "panelId": "editor",
+              "style": "flex: 72.5 1 0px; overflow: hidden; pointer-events: none;"
+            },
+            {
+              "at": 1722.5,
+              "panelId": "outline",
+              "style": "flex: 27.5 1 0px; overflow: hidden; pointer-events: none;"
+            },
+            {
+              "at": 1741.7000000178814,
+              "panelId": "editor",
+              "style": "flex: 72.7 1 0px; overflow: hidden; pointer-events: none;"
+            },
+            {
+              "at": 1741.7000000178814,
+              "panelId": "outline",
+              "style": "flex: 27.3 1 0px; overflow: hidden; pointer-events: none;"
+            },
+            {
+              "at": 1774.6000000238419,
+              "panelId": "editor",
+              "style": "flex: 72.9 1 0px; overflow: hidden; pointer-events: none;"
+            },
+            {
+              "at": 1774.7000000178814,
+              "panelId": "outline",
+              "style": "flex: 27.1 1 0px; overflow: hidden; pointer-events: none;"
+            },
+            {
+              "at": 1793.1000000238419,
+              "panelId": "editor",
+              "style": "flex: 73.1 1 0px; overflow: hidden; pointer-events: none;"
+            },
+            {
+              "at": 1793.1000000238419,
+              "panelId": "outline",
+              "style": "flex: 26.9 1 0px; overflow: hidden; pointer-events: none;"
+            },
+            {
+              "at": 1822.2000000178814,
+              "panelId": "editor",
+              "style": "flex: 73.2 1 0px; overflow: hidden; pointer-events: none;"
+            },
+            {
+              "at": 1822.2000000178814,
+              "panelId": "outline",
+              "style": "flex: 26.8 1 0px; overflow: hidden; pointer-events: none;"
+            },
+            {
+              "at": 1840.5,
+              "panelId": "editor",
+              "style": "flex: 73.4 1 0px; overflow: hidden; pointer-events: none;"
+            },
+            {
+              "at": 1840.6000000238419,
+              "panelId": "outline",
+              "style": "flex: 26.6 1 0px; overflow: hidden; pointer-events: none;"
+            },
+            {
+              "at": 1861.1000000238419,
+              "panelId": "editor",
+              "style": "flex: 73.6 1 0px; overflow: hidden; pointer-events: none;"
+            },
+            {
+              "at": 1861.1000000238419,
+              "panelId": "outline",
+              "style": "flex: 26.4 1 0px; overflow: hidden; pointer-events: none;"
+            },
+            {
+              "at": 1889.1000000238419,
+              "panelId": "editor",
+              "style": "flex: 73.8 1 0px; overflow: hidden; pointer-events: none;"
+            },
+            {
+              "at": 1889.1000000238419,
+              "panelId": "outline",
+              "style": "flex: 26.2 1 0px; overflow: hidden; pointer-events: none;"
+            },
+            {
+              "at": 1911.6000000238419,
+              "panelId": "editor",
+              "style": "flex: 74 1 0px; overflow: hidden; pointer-events: none;"
+            },
+            {
+              "at": 1911.7000000178814,
+              "panelId": "outline",
+              "style": "flex: 26 1 0px; overflow: hidden; pointer-events: none;"
+            },
+            {
+              "at": 1939,
+              "panelId": "editor",
+              "style": "flex: 74.2 1 0px; overflow: hidden; pointer-events: none;"
+            },
+            {
+              "at": 1939.1000000238419,
+              "panelId": "outline",
+              "style": "flex: 25.8 1 0px; overflow: hidden; pointer-events: none;"
+            },
+            {
+              "at": 1962.1000000238419,
+              "panelId": "editor",
+              "style": "flex: 74.4 1 0px; overflow: hidden; pointer-events: none;"
+            },
+            {
+              "at": 1962.1000000238419,
+              "panelId": "outline",
+              "style": "flex: 25.6 1 0px; overflow: hidden; pointer-events: none;"
+            },
+            {
+              "at": 1991.1000000238419,
+              "panelId": "editor",
+              "style": "flex: 74.6 1 0px; overflow: hidden; pointer-events: none;"
+            },
+            {
+              "at": 1991.1000000238419,
+              "panelId": "outline",
+              "style": "flex: 25.4 1 0px; overflow: hidden; pointer-events: none;"
+            },
+            {
+              "at": 2008.9000000059605,
+              "panelId": "editor",
+              "style": "flex: 74.8 1 0px; overflow: hidden; pointer-events: none;"
+            },
+            {
+              "at": 2008.9000000059605,
+              "panelId": "outline",
+              "style": "flex: 25.2 1 0px; overflow: hidden; pointer-events: none;"
+            },
+            {
+              "at": 2025.300000011921,
+              "panelId": "editor",
+              "style": "flex: 75 1 0px; overflow: hidden; pointer-events: none;"
+            },
+            {
+              "at": 2025.300000011921,
+              "panelId": "outline",
+              "style": "flex: 25 1 0px; overflow: hidden; pointer-events: none;"
+            },
+            {
+              "at": 2055.7000000178814,
+              "panelId": "editor",
+              "style": "flex: 75.2 1 0px; overflow: hidden; pointer-events: none;"
+            },
+            {
+              "at": 2055.7000000178814,
+              "panelId": "outline",
+              "style": "flex: 24.8 1 0px; overflow: hidden; pointer-events: none;"
+            },
+            {
+              "at": 2077.300000011921,
+              "panelId": "editor",
+              "style": "flex: 75.4 1 0px; overflow: hidden; pointer-events: none;"
+            },
+            {
+              "at": 2077.300000011921,
+              "panelId": "outline",
+              "style": "flex: 24.6 1 0px; overflow: hidden; pointer-events: none;"
+            },
+            {
+              "at": 2105.600000023842,
+              "panelId": "editor",
+              "style": "flex: 75.6 1 0px; overflow: hidden; pointer-events: none;"
+            },
+            {
+              "at": 2105.7000000178814,
+              "panelId": "outline",
+              "style": "flex: 24.4 1 0px; overflow: hidden; pointer-events: none;"
+            },
+            {
+              "at": 2127.600000023842,
+              "panelId": "editor",
+              "style": "flex: 75.8 1 0px; overflow: hidden; pointer-events: none;"
+            },
+            {
+              "at": 2127.600000023842,
+              "panelId": "outline",
+              "style": "flex: 24.2 1 0px; overflow: hidden; pointer-events: none;"
+            },
+            {
+              "at": 2144.600000023842,
+              "panelId": "editor",
+              "style": "flex: 75.8 1 0px; overflow: hidden;"
+            },
+            {
+              "at": 2144.7000000178814,
+              "panelId": "outline",
+              "style": "flex: 24.2 1 0px; overflow: hidden;"
+            }
+          ],
+          "trustedPointerEvents": [
+            {
+              "at": 1072.1000000238419,
+              "type": "pointerdown",
+              "pointerType": "mouse"
+            },
+            {
+              "at": 1087.6000000238419,
+              "type": "pointermove",
+              "pointerType": "mouse"
+            },
+            {
+              "at": 1121.9000000059605,
+              "type": "pointermove",
+              "pointerType": "mouse"
+            },
+            {
+              "at": 1155.5,
+              "type": "pointermove",
+              "pointerType": "mouse"
+            },
+            {
+              "at": 1187.5,
+              "type": "pointermove",
+              "pointerType": "mouse"
+            },
+            {
+              "at": 1230.300000011921,
+              "type": "pointermove",
+              "pointerType": "mouse"
+            },
+            {
+              "at": 1293.1000000238419,
+              "type": "pointermove",
+              "pointerType": "mouse"
+            },
+            {
+              "at": 1321.2000000178814,
+              "type": "pointermove",
+              "pointerType": "mouse"
+            },
+            {
+              "at": 1354.2000000178814,
+              "type": "pointermove",
+              "pointerType": "mouse"
+            },
+            {
+              "at": 1371.300000011921,
+              "type": "pointermove",
+              "pointerType": "mouse"
+            },
+            {
+              "at": 1389.4000000059605,
+              "type": "pointermove",
+              "pointerType": "mouse"
+            },
+            {
+              "at": 1420.800000011921,
+              "type": "pointermove",
+              "pointerType": "mouse"
+            },
+            {
+              "at": 1437.9000000059605,
+              "type": "pointermove",
+              "pointerType": "mouse"
+            },
+            {
+              "at": 1456,
+              "type": "pointermove",
+              "pointerType": "mouse"
+            },
+            {
+              "at": 1472.9000000059605,
+              "type": "pointermove",
+              "pointerType": "mouse"
+            },
+            {
+              "at": 1504.5,
+              "type": "pointermove",
+              "pointerType": "mouse"
+            },
+            {
+              "at": 1538,
+              "type": "pointermove",
+              "pointerType": "mouse"
+            },
+            {
+              "at": 1571,
+              "type": "pointermove",
+              "pointerType": "mouse"
+            },
+            {
+              "at": 1589.9000000059605,
+              "type": "pointermove",
+              "pointerType": "mouse"
+            },
+            {
+              "at": 1620.800000011921,
+              "type": "pointermove",
+              "pointerType": "mouse"
+            },
+            {
+              "at": 1639.800000011921,
+              "type": "pointermove",
+              "pointerType": "mouse"
+            },
+            {
+              "at": 1670.9000000059605,
+              "type": "pointermove",
+              "pointerType": "mouse"
+            },
+            {
+              "at": 1691.5,
+              "type": "pointermove",
+              "pointerType": "mouse"
+            },
+            {
+              "at": 1720.800000011921,
+              "type": "pointermove",
+              "pointerType": "mouse"
+            },
+            {
+              "at": 1738.5,
+              "type": "pointermove",
+              "pointerType": "mouse"
+            },
+            {
+              "at": 1770.800000011921,
+              "type": "pointermove",
+              "pointerType": "mouse"
+            },
+            {
+              "at": 1789.4000000059605,
+              "type": "pointermove",
+              "pointerType": "mouse"
+            },
+            {
+              "at": 1820.7000000178814,
+              "type": "pointermove",
+              "pointerType": "mouse"
+            },
+            {
+              "at": 1837.9000000059605,
+              "type": "pointermove",
+              "pointerType": "mouse"
+            },
+            {
+              "at": 1856.1000000238419,
+              "type": "pointermove",
+              "pointerType": "mouse"
+            },
+            {
+              "at": 1887.6000000238419,
+              "type": "pointermove",
+              "pointerType": "mouse"
+            },
+            {
+              "at": 1906.5,
+              "type": "pointermove",
+              "pointerType": "mouse"
+            },
+            {
+              "at": 1937.5,
+              "type": "pointermove",
+              "pointerType": "mouse"
+            },
+            {
+              "at": 1959.1000000238419,
+              "type": "pointermove",
+              "pointerType": "mouse"
+            },
+            {
+              "at": 1987.4000000059605,
+              "type": "pointermove",
+              "pointerType": "mouse"
+            },
+            {
+              "at": 2006,
+              "type": "pointermove",
+              "pointerType": "mouse"
+            },
+            {
+              "at": 2022.6000000238419,
+              "type": "pointermove",
+              "pointerType": "mouse"
+            },
+            {
+              "at": 2054,
+              "type": "pointermove",
+              "pointerType": "mouse"
+            },
+            {
+              "at": 2072,
+              "type": "pointermove",
+              "pointerType": "mouse"
+            },
+            {
+              "at": 2104.2000000178814,
+              "type": "pointermove",
+              "pointerType": "mouse"
+            },
+            {
+              "at": 2123.100000023842,
+              "type": "pointermove",
+              "pointerType": "mouse"
+            },
+            {
+              "at": 2146.100000023842,
+              "type": "pointerup",
+              "pointerType": "mouse"
+            }
+          ],
+          "trustedKeyboardEvents": []
+        }
+      },
+      "after": {
+        "viewport": {
+          "width": 1440,
+          "height": 1000,
+          "devicePixelRatio": 1
+        },
+        "workspaceMode": "desktop",
+        "workspace": {
+          "x": 0,
+          "y": 149.984375,
+          "width": 1440,
+          "height": 850.015625
+        },
+        "split": {
+          "box": {
+            "x": 0,
+            "y": 284.703125,
+            "width": 1440,
+            "height": 715.296875
+          },
+          "groupId": "st-workspace-split-preset-main",
+          "resizeHandleCount": 1
+        },
+        "panels": {
+          "editor": {
+            "x": 0,
+            "y": 284.703125,
+            "width": 1084.859375,
+            "height": 715.296875
+          },
+          "outline": {
+            "x": 1093.65625,
+            "y": 284.703125,
+            "width": 346.34375,
+            "height": 715.296875
+          }
+        },
+        "storedLayout": null,
+        "storedLayoutKey": null
+      }
+    },
+    "keyboardResize": {
+      "key": "ArrowRight",
+      "capture": {
+        "label": "keyboard-arrow-right",
+        "startedAt": 2306.600000023842,
+        "endedAt": 2429.600000023842,
+        "elapsedMs": 123,
+        "frameSummary": {
+          "sampledFrames": 7,
+          "intervalCount": 6,
+          "intervalMs": {
+            "p50": 16.699999999999818,
+            "p95": 16.700000000000273,
+            "max": 16.700000000000273
+          },
+          "gapsOver50ms": 0
+        },
+        "counts": {
+          "requestAnimationFrameCalls": 1,
+          "reactCommits": 1,
+          "longTasks": [],
+          "indexedDbTransactions": [],
+          "indexedDbReads": [],
+          "localStorageCalls": [],
+          "sessionStorageCalls": [],
+          "panelResizeObserverNotifications": [
+            {
+              "at": 2321,
+              "panelId": "editor",
+              "width": 1084.859375
+            },
+            {
+              "at": 2321,
+              "panelId": "outline",
+              "width": 346.34375
+            },
+            {
+              "at": 2340.2000000178814,
+              "panelId": "editor",
+              "width": 1227.96875
+            },
+            {
+              "at": 2340.2000000178814,
+              "panelId": "outline",
+              "width": 203.234375
+            }
+          ],
+          "panelWidthChanges": [
+            {
+              "at": 2321,
+              "panelId": "editor",
+              "from": null,
+              "to": 1084.859375
+            },
+            {
+              "at": 2321,
+              "panelId": "outline",
+              "from": null,
+              "to": 346.34375
+            },
+            {
+              "at": 2340.2000000178814,
+              "panelId": "editor",
+              "from": 1084.859375,
+              "to": 1227.96875
+            },
+            {
+              "at": 2340.2000000178814,
+              "panelId": "outline",
+              "from": 346.34375,
+              "to": 203.234375
+            }
+          ],
+          "panelStyleMutations": [
+            {
+              "at": 2322.7000000178814,
+              "panelId": "editor",
+              "style": "flex: 85.8 1 0px; overflow: hidden;"
+            },
+            {
+              "at": 2322.800000011921,
+              "panelId": "outline",
+              "style": "flex: 14.2 1 0px; overflow: hidden;"
+            }
+          ],
+          "trustedPointerEvents": [],
+          "trustedKeyboardEvents": [
+            {
+              "at": 2321.5,
+              "type": "keydown",
+              "key": "ArrowRight"
+            }
+          ]
+        }
+      },
+      "after": {
+        "viewport": {
+          "width": 1440,
+          "height": 1000,
+          "devicePixelRatio": 1
+        },
+        "workspaceMode": "desktop",
+        "workspace": {
+          "x": 0,
+          "y": 149.984375,
+          "width": 1440,
+          "height": 850.015625
+        },
+        "split": {
+          "box": {
+            "x": 0,
+            "y": 284.703125,
+            "width": 1440,
+            "height": 715.296875
+          },
+          "groupId": "st-workspace-split-preset-main",
+          "resizeHandleCount": 1
+        },
+        "panels": {
+          "editor": {
+            "x": 0,
+            "y": 284.703125,
+            "width": 1227.96875,
+            "height": 715.296875
+          },
+          "outline": {
+            "x": 1236.765625,
+            "y": 284.703125,
+            "width": 203.234375,
+            "height": 715.296875
+          }
+        },
+        "storedLayout": null,
+        "storedLayoutKey": null
+      }
+    },
+    "saved": {
+      "key": "scriptorium:workspace:v1:owner:desktop",
+      "raw": "{\"version\":1,\"preset\":\"custom\",\"root\":{\"type\":\"split\",\"id\":\"split-preset-main\",\"direction\":\"horizontal\",\"children\":[{\"type\":\"leaf\",\"panelId\":\"editor\"},{\"type\":\"stack\",\"id\":\"stack-preset-secondary\",\"activePanelId\":\"outline\",\"children\":[{\"type\":\"leaf\",\"panelId\":\"outline\"},{\"type\":\"leaf\",\"panelId\":\"inspector\"}]}],\"sizes\":[85.7777777778,14.222222222199997]},\"hiddenPanelIds\":[\"history\",\"review\"]}",
+      "layout": {
+        "version": 1,
+        "preset": "custom",
+        "root": {
+          "type": "split",
+          "id": "split-preset-main",
+          "direction": "horizontal",
+          "children": [
+            {
+              "type": "leaf",
+              "panelId": "editor"
+            },
+            {
+              "type": "stack",
+              "id": "stack-preset-secondary",
+              "activePanelId": "outline",
+              "children": [
+                {
+                  "type": "leaf",
+                  "panelId": "outline"
+                },
+                {
+                  "type": "leaf",
+                  "panelId": "inspector"
+                }
+              ]
+            }
+          ],
+          "sizes": [
+            85.7777777778,
+            14.222222222199997
+          ]
+        },
+        "hiddenPanelIds": [
+          "history",
+          "review"
+        ]
+      },
+      "split": {
+        "type": "split",
+        "id": "split-preset-main",
+        "direction": "horizontal",
+        "children": [
+          {
+            "type": "leaf",
+            "panelId": "editor"
+          },
+          {
+            "type": "stack",
+            "id": "stack-preset-secondary",
+            "activePanelId": "outline",
+            "children": [
+              {
+                "type": "leaf",
+                "panelId": "outline"
+              },
+              {
+                "type": "leaf",
+                "panelId": "inspector"
+              }
+            ]
+          }
+        ],
+        "sizes": [
+          85.7777777778,
+          14.222222222199997
+        ]
+      },
+      "actualPanelWidthsPx": {
+        "editor": 1227.96875,
+        "outline": 203.234375
+      },
+      "localStorageCallsSinceBeforeSave": [
+        {
+          "at": 2486.100000023842,
+          "method": "setItem",
+          "store": "localStorage",
+          "key": "scriptorium:workspace:v1:owner:desktop"
+        },
+        {
+          "at": 2497.600000023842,
+          "method": "getItem",
+          "store": "localStorage",
+          "key": "scriptorium:workspace:v1:owner:desktop"
+        }
+      ],
+      "workspaceWriteCount": 1,
+      "allStorageCallCountSinceBeforeSave": 2
+    },
+    "afterReload": {
+      "viewport": {
+        "width": 1440,
+        "height": 1000,
+        "devicePixelRatio": 1
+      },
+      "workspaceMode": "desktop",
+      "workspace": {
+        "x": 0,
+        "y": 149.984375,
+        "width": 1440,
+        "height": 850.015625
+      },
+      "split": {
+        "box": {
+          "x": 0,
+          "y": 284.703125,
+          "width": 1440,
+          "height": 715.296875
+        },
+        "groupId": "st-workspace-split-preset-main",
+        "resizeHandleCount": 1
+      },
+      "panels": {
+        "editor": {
+          "x": 0,
+          "y": 284.703125,
+          "width": 1227.96875,
+          "height": 715.296875
+        },
+        "outline": {
+          "x": 1236.765625,
+          "y": 284.703125,
+          "width": 203.234375,
+          "height": 715.296875
+        }
+      },
+      "storedLayout": "{\"version\":1,\"preset\":\"custom\",\"root\":{\"type\":\"split\",\"id\":\"split-preset-main\",\"direction\":\"horizontal\",\"children\":[{\"type\":\"leaf\",\"panelId\":\"editor\"},{\"type\":\"stack\",\"id\":\"stack-preset-secondary\",\"activePanelId\":\"outline\",\"children\":[{\"type\":\"leaf\",\"panelId\":\"outline\"},{\"type\":\"leaf\",\"panelId\":\"inspector\"}]}],\"sizes\":[85.7777777778,14.222222222199997]},\"hiddenPanelIds\":[\"history\",\"review\"]}",
+      "storedLayoutKey": "scriptorium:workspace:v1:owner:desktop",
+      "restoredSplit": {
+        "type": "split",
+        "id": "split-preset-main",
+        "direction": "horizontal",
+        "children": [
+          {
+            "type": "leaf",
+            "panelId": "editor"
+          },
+          {
+            "type": "stack",
+            "id": "stack-preset-secondary",
+            "activePanelId": "outline",
+            "children": [
+              {
+                "type": "leaf",
+                "panelId": "outline"
+              },
+              {
+                "type": "leaf",
+                "panelId": "inspector"
+              }
+            ]
+          }
+        ],
+        "sizes": [
+          85.7777777778,
+          14.222222222199997
+        ]
+      },
+      "actualPanelWidthsPx": {
+        "editor": 1227.96875,
+        "outline": 203.234375
+      },
+      "editorSharePercent": 85.7997532670284,
+      "exactLayoutJsonRestored": true
+    }
+  },
+  "mobile": {
+    "safeAreaOverride": {
+      "supported": true,
+      "requestedInsetsCssPx": {
+        "top": 30,
+        "right": 0,
+        "bottom": 24,
+        "left": 0
+      }
+    },
+    "viewport": {
+      "viewportMeta": "width=device-width, initial-scale=1, viewport-fit=cover, interactive-widget=resizes-content",
+      "viewport": {
+        "width": 390,
+        "height": 844,
+        "visualWidth": 390,
+        "visualHeight": 844
+      },
+      "safeAreaEnvCssPx": {
+        "top": 30,
+        "bottom": 24
+      },
+      "headerPaddingTop": "30px",
+      "footerPaddingBottom": "24px",
+      "shellWidth": 390,
+      "workspaceWidth": 390,
+      "bodyScrollWidth": 390,
+      "bodyClientWidth": 390,
+      "visibleResizeHandleCount": 0,
+      "workspaceMode": "mobile"
+    },
+    "safeAreaApplied": true,
+    "storage": {
+      "viewport": {
+        "width": 390,
+        "height": 844,
+        "devicePixelRatio": 3
+      },
+      "workspaceMode": "mobile",
+      "workspace": {
+        "x": 0,
+        "y": 176.984375,
+        "width": 390,
+        "height": 550.859375
+      },
+      "split": null,
+      "panels": {
+        "editor": {
+          "x": 0,
+          "y": 567.84375,
+          "width": 390,
+          "height": 160
+        },
+        "outline": null
+      },
+      "storedLayout": null,
+      "storedLayoutKey": null
+    }
+  },
+  "notChecked": [],
+  "serverStartupMs": 196.083438
+}
