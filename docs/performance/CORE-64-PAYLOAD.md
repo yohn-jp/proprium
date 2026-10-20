@@ -84,7 +84,7 @@ taskset -c 8-11 timeout --signal=TERM --kill-after=10s 180s env TMPDIR=/data \
   packages/api/dist/server.test.js
 ```
 
-The full repository test suite, typecheck, Core-profile build, and `audit:core` were not rerun for this leaf; G0's frozen full-gate results apply to its baseline, while this candidate received the focused API dependency build and route tests above. No size contract or Core code changed.
+The canonical typecheck, full test suite, Core-profile build, and `audit:core` were subsequently run against the rebased candidate and all passed; see the [verification record](results/core64-payload/verification.md). The full-profile, browser, and OCI combined checks remain part of central verification. No size contract or Core code changed.
 
 ## Decision rule
 
