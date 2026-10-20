@@ -119,3 +119,8 @@ Top-level command samples retain only the first 1,000 argument vectors per worke
 native Git trace retains the full command stream. Instrumented Node RSS includes
 these retained samples and all other probes; older diagnostic artifacts with an
 uncapped command list are not directly comparable memory baselines.
+
+Browser action and readiness assertions both allow 60 seconds (Playwright's
+5-second expect default is too short for the largest document/hierarchy). The
+outer worker budget still bounds the entire workload; a readiness timeout is
+reported as unmeasured completion rather than as a finished latency sample.
