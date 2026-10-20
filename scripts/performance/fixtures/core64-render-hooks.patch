@@ -1,0 +1,79 @@
+diff --git a/app/src/application/SharedApplication.tsx b/app/src/application/SharedApplication.tsx
+--- a/app/src/application/SharedApplication.tsx
++++ b/app/src/application/SharedApplication.tsx
+@@ -45,6 +45,23 @@
+ } from "../storage/journal";
+ 
+ const ACTIVE_PROJECT_KEY = "scriptorium:active-project";
++
++type Core64RenderProbeWindow = Window & {
++  __scriptoriumCore64RenderProbe?: {
++    measure(name: string, durationMs: number, itemCount: number): void;
++  };
++};
++
++function measureCore64BuildOperation<T>(itemCount: number, build: () => T): T {
++  const probe = typeof window === "undefined"
++    ? undefined
++    : (window as Core64RenderProbeWindow).__scriptoriumCore64RenderProbe;
++  if (!probe) return build();
++  const start = performance.now();
++  const value = build();
++  probe.measure("application.buildOperation", performance.now() - start, itemCount);
++  return value;
++}
+ 
+ interface LegacyDraftRecord {
+   key: string;
+@@ -1626,7 +1643,8 @@
+     generationRef.current = generation;
+     let entry: JournalEntry;
+     try {
+-      const operation = buildOperation(editor.read, nextText, id, generation);
++      const operation = measureCore64BuildOperation(nextText.length,
++        () => buildOperation(editor.read, nextText, id, generation));
+       entry = makeEntry(editor.read.snapshot.repository, authorScopeRef.current, editor.read.scene.id, editor.read, nextText, editor.read.scene.text, operation, "draft");
+     } catch (error) {
+       updateWork((latest) => latest?.editor ? { ...latest, editor: { ...latest.editor, text: nextText, draftStored: false, journalError: messageOf(error) } } : latest);
+diff --git a/app/src/workspace/Workspace.tsx b/app/src/workspace/Workspace.tsx
+--- a/app/src/workspace/Workspace.tsx
++++ b/app/src/workspace/Workspace.tsx
+@@ -28,6 +28,23 @@
+   beforeLayoutChange?: () => Promise<boolean>;
+   requestedPanel?: WorkspacePanelRequest;
+   selectedPanelId?: string;
++}
++
++type Core64RenderProbeWindow = Window & {
++  __scriptoriumCore64RenderProbe?: {
++    measure(name: string, durationMs: number, itemCount: number): void;
++  };
++};
++
++function measureWorkspaceDerivation<T>(name: string, itemCount: number, derive: () => T): T {
++  const probe = typeof window === "undefined"
++    ? undefined
++    : (window as Core64RenderProbeWindow).__scriptoriumCore64RenderProbe;
++  if (!probe) return derive();
++  const start = performance.now();
++  const value = derive();
++  probe.measure(name, performance.now() - start, itemCount);
++  return value;
+ }
+ 
+ type Placement = "tab" | DockSide;
+@@ -260,8 +277,12 @@
+ }
+ 
+ export function Workspace({ scope, mode, panels, beforeLayoutChange, requestedPanel, selectedPanelId }: WorkspaceProps): ReactNode {
+-  const panelIds = useMemo(() => [...new Set(panels.map((panel) => panel.id))], [panels]);
+-  const catalog = useMemo(() => new Map(panels.map((panel) => [panel.id, panel])), [panels]);
++  const panelIds = useMemo(() => measureWorkspaceDerivation(
++    "workspace.panelIds", panels.length, () => [...new Set(panels.map((panel) => panel.id))],
++  ), [panels]);
++  const catalog = useMemo(() => measureWorkspaceDerivation(
++    "workspace.catalog", panels.length, () => new Map(panels.map((panel) => [panel.id, panel])),
++  ), [panels]);
+   const [initial] = useState(() => loadFor(scope, mode, panelIds));
+   const [layout, setLayout] = useState<WorkspaceLayout>(initial.layout);
+   const [persistenceState, setPersistenceState] = useState<WorkspaceLoad["state"]>(initial.state);

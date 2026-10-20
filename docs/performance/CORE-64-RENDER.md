@@ -61,9 +61,28 @@ The injected probe adds measurement overhead and records commit flags, not React
 
 The C02-integrated Core profile was built with the temporary hooks, then one n=20 Chromium capture ran on an isolated copy of the G0 small fixture. The raw report and CPU profile are [before.json](results/core64-render/before.json) and [before.json.cpuprofile](results/core64-render/before.json.cpuprofile); their SHA-256 values are `686a4443a1174e3cf2dc664e0b863197cc29dc8b96511ac0ccee32a3411ccbc5` and `a97f8b25aba3713d2371a8b0747861321707d342110c91b94d3013272e02ba6b`. The cohort-corrected compact analysis is [attribution-summary.json](results/core64-render/attribution-summary.json), SHA-256 `5bcc152cdb725ed52fa8226d49e7c4e77b8565fc608e30346b8b350f93fe4450`. The capture script and probe digests are retained in the raw report; current script/probe hashes are in the compact summary. The original report's phase summaries initially omitted the cohort predicate; the final compact summary was recomputed from its retained raw event rows with the corrected phase-and-cohort filter, without another browser run. The probe test passes. The product hooks are removed, so this unit has no production-path verification requirement beyond the instrumented build already completing.
 
+The harness alone does not reproduce the derivation or `buildOperation` timings: those fields require the temporary source hooks used for this capture. The preserved patch is [core64-render-hooks.patch](../../scripts/performance/fixtures/core64-render-hooks.patch), SHA-256 `e4f91089ae465a5eeee3442273ce546b87fabc477c4e77da44ca352d17bdf2a9`. It targets runtime source `e8aa3ecd7d1e0bfb3d81a003a2bc0320c9cc6d47`. Provenance is reconstructed, not an exact archived diff: the original complete temporary diff was not retained, so this artifact was reconstructed from the captured change notes and source context after the hooks were removed. `git apply --check` succeeds against the bound source revision. It adds opt-in durations and item counts for `application.buildOperation`, `workspace.panelIds`, and `workspace.catalog`; it does not measure allocations. The hooks emit only when the harness has installed `window.__scriptoriumCore64RenderProbe`.
+
+To reproduce in a disposable worktree, use a fresh copy of the same G0 synthetic-small fixture for each matched capture. The first command uses the full runtime source commit, then applies the reviewed patch from this checkout. Reverse it before removing the worktree:
+
 ```sh
-node scripts/performance/core64-render.mjs <fresh-small-fixture> docs/performance/results/core64-render/before.json 20
-node scripts/performance/core64-render.mjs <same-small-fixture> docs/performance/results/core64-render/after.json 20
+REPO=/home/sophia/src/scriptorium-c64-render
+REPRO=/data/tmp/scriptorium-c64-render-repro
+FIXTURE=/data/tmp/scriptorium-core64-small
+OUTPUT=/data/tmp/scriptorium-core64-before.json
+
+git worktree add --detach "$REPRO" e8aa3ecd7d1e0bfb3d81a003a2bc0320c9cc6d47
+git -C "$REPRO" apply "$REPO/scripts/performance/fixtures/core64-render-hooks.patch"
+cd "$REPRO"
+pnpm install --offline --frozen-lockfile
+SCRIPTORIUM_PROFILE=core pnpm build
+cp -a /data/scriptorium-core64-g0-a1587e78-20261020-2318/synthetic-small "$FIXTURE"
+SCRIPTORIUM_E2E_CHROMIUM=/nix/store/ini1ifgvcsvw48x4mxawrv9jvbdwn70p-chromium-155.0.8059.79/bin/chromium \
+  node scripts/performance/core64-render.mjs "$FIXTURE" "$OUTPUT" 20
+git apply -R "$REPO/scripts/performance/fixtures/core64-render-hooks.patch"
+git diff --exit-code -- app/src/application/SharedApplication.tsx app/src/workspace/Workspace.tsx
+cd "$REPO"
+git worktree remove --force "$REPRO"
 ```
 
-Set `SCRIPTORIUM_E2E_CHROMIUM` to the recorded Chromium executable for both runs. The harness itself starts the local fixture server and writes a sibling `.cpuprofile` file.
+Use a second distinct output and fresh fixture copy for an after run if a candidate is later justified. Both runs must use the same source, patch, fixture, viewport, Chromium, and repeat count. The existing capture above used one n=20 run; this section records reproducibility steps and does not claim a rerun.
