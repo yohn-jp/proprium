@@ -26,7 +26,7 @@ export function summarizeBrowser(report) {
     const data = phase.browser;
     const transactions = data.transactions.filter(inPhase);
     const reads = data.reads.filter(inPhase);
-    return { name: phase.name,
+    return { name: phase.name, storageEstimate: phase.storageEstimate,
       typingFrameMs: distribution(data.inputs.filter(row => inPhase(row) && row.type === 'keydown' && row.key === 'a').map(row => row.frameMs).filter(Number.isFinite)),
       arrowFrameMs: distribution(data.inputs.filter(row => inPhase(row) && row.type === 'keydown' && row.key === 'ArrowLeft').map(row => row.frameMs).filter(Number.isFinite)),
       beforeInputFrameMs: distribution(data.inputs.filter(row => inPhase(row) && row.type === 'beforeinput').map(row => row.frameMs).filter(Number.isFinite)),

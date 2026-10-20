@@ -67,7 +67,7 @@ try {
     await expect(editor).toContainText(`Synthetic scene ${id}`);
   }
   await phase('startup.firstEditor', () => openScene(1));
-  report.phases.push({ name: 'startup', server: await stats(), browser: await page.evaluate(() => structuredClone(window.__wave0)), cdp: await cdp.send('Performance.getMetrics'), runtime: await browserRuntime() });
+  report.phases.push({ name: 'startup', server: await stats(), browser: await page.evaluate(() => structuredClone(window.__wave0)), cdp: await cdp.send('Performance.getMetrics'), runtime: await browserRuntime(), storageEstimate: await page.evaluate(() => navigator.storage.estimate()) });
   for (let id = 1; id <= 3; id++) {
     await openScene(id);
     await editor.focus();
@@ -87,7 +87,7 @@ try {
     await page.waitForTimeout(1000);
     const end = await page.evaluate(() => performance.now());
     report.phases.push({ name: `input.${dataset.documentBytes[id - 1]}`, start, end, server: await stats(),
-      browser: await page.evaluate(() => structuredClone(window.__wave0)), cdp: await cdp.send('Performance.getMetrics'), runtime: await browserRuntime() });
+      browser: await page.evaluate(() => structuredClone(window.__wave0)), cdp: await cdp.send('Performance.getMetrics'), runtime: await browserRuntime(), storageEstimate: await page.evaluate(() => navigator.storage.estimate()) });
     await save(output, report);
   }
   for (let i = 0; i < repeats; i++) await phase('file.switch', () => openScene(i % 3 + 1));
