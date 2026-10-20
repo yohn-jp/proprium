@@ -27,6 +27,7 @@ export interface ManuscriptInputHandle {
 
 export interface ManuscriptInputProps {
   value: string;
+  externalTextRevision: number;
   readOnly?: boolean;
   onChange: (value: string) => void;
   onSelectionLengthChange?: (length: number) => void;
@@ -42,6 +43,7 @@ export interface ManuscriptInputProps {
 /** CodeMirror adapter retaining IME-safe editing, source bracket/ellipsis rules and history keymaps. */
 export const ManuscriptInput = forwardRef<ManuscriptInputHandle, ManuscriptInputProps>(function ManuscriptInput({
   value,
+  externalTextRevision,
   readOnly = false,
   onChange,
   onSelectionLengthChange,
@@ -199,7 +201,7 @@ export const ManuscriptInput = forwardRef<ManuscriptInputHandle, ManuscriptInput
       changes: { from: 0, to: view.state.doc.length, insert: value },
       annotations: Transaction.addToHistory.of(false),
     });
-  }, [value]);
+  }, [externalTextRevision, value]);
 
   return <div ref={containerRef} className="manuscript-input" style={style} data-testid="manuscript-input" />;
 });
