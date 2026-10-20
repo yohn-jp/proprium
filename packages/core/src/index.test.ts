@@ -831,6 +831,23 @@ test("lists byte-derived revisions from a pinned snapshot while batching duplica
     assert.ok(reader.listRevisions);
     const listRevisions = reader.listRevisions;
     const revision = (bytes: Buffer) => createHash("sha256").update(bytes).digest("hex");
+    const pinnedBinary = { content: binary.toString("base64"), revision: revision(binary) };
+    assert.deepEqual(await reader.read(paths.binary, "base64"), pinnedBinary);
+    assert.deepEqual(await reader.read(paths.binary, "base64"), pinnedBinary,
+      "repeated reads through one reader keep the same pinned file revision");
+    assert.deepEqual(await reader.read(paths.executable), {
+      content: "#!/bin/sh\nexit 0\n",
+      revision: revision(Buffer.from("#!/bin/sh\nexit 0\n")),
+    });
+    assert.deepEqual(await reader.read(paths.nested), {
+      content: "nested only\n",
+      revision: revision(Buffer.from("nested only\n")),
+    });
+    assert.equal(await reader.read("wave1/missing.txt"), null);
+    assert.equal(await reader.read("wave1/missing.txt"), null, "a cached missing entry remains missing");
+    const unsafePath = (error: unknown) => error instanceof CoreError && error.status === 422 && error.code === "unsafe_project_path";
+    await assert.rejects(reader.read("wave1/nested"), unsafePath, "a directory is not a regular file");
+    await assert.rejects(reader.read(`${paths.nested}/child`), unsafePath, "a file cannot be used as a parent directory");
     const expected = [
       { path: paths.binary, revision: revision(binary) },
       { path: paths.empty, revision: revision(empty) },
@@ -853,6 +870,16 @@ test("lists byte-derived revisions from a pinned snapshot while batching duplica
     await runGit(seed, "push", "origin", "main");
     const latestSnapshot = (await store.observe(project.id)).snapshot;
     const latestReader = await store.reader(project.id, "remote", latestSnapshot);
+    assert.deepEqual(await latestReader.read(paths.binary), {
+      content: "new content\n",
+      revision: revision(Buffer.from("new content\n")),
+    });
+    assert.deepEqual(await reader.read(paths.binary, "base64"), pinnedBinary,
+      "a reader created for the old commit remains bound to its cached tree entries");
+    await assert.rejects(latestReader.read("wave1/nested/unsafe-link"), unsafePath,
+      "the cached reader lookup still rejects a symbolic link");
+    await assert.rejects(latestReader.read("wave1/nested/unsafe-link/child"), unsafePath,
+      "a symbolic link cannot be traversed as a parent directory");
     assert.ok(latestReader.listRevisions);
     await assert.rejects(latestReader.listRevisions("wave1"), (error: unknown) =>
       error instanceof CoreError && error.status === 422 && error.code === "unsafe_project_path");

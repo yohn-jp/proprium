@@ -43,8 +43,13 @@ const execFile = promisify(execFileCallback);
 const DEFAULT_BRANCH = "main";
 const MAX_HISTORY = 100;
 const GIT_TIMEOUT_MS = 120_000;
+// Snapshot readers may outlive one request, so keep their tree lookup memo bounded.
+const SNAPSHOT_TREE_LOOKUP_CACHE_LIMIT = 4_096;
 // The active-project observation cadence is 15 seconds (FULL-MIGRATION §4).
 const READ_OBSERVATION_MAX_AGE_MS = 15_000;
+
+type SnapshotTreeEntry = { mode: string; type: string; hash: string };
+type SnapshotTreeLookup = (treeish: string, segment: string) => Promise<SnapshotTreeEntry | null>;
 
 export interface Project {
   id: string;
@@ -1439,7 +1444,48 @@ export class CoreStore implements MutationCoordinator {
     return { record, root };
   }
 
-  private async treeEntry(root: string, commit: string, relativePath: string): Promise<{ mode: string; type: string; hash: string } | null> {
+  private async treeEntryAt(root: string, treeish: string, segment: string): Promise<SnapshotTreeEntry | null> {
+    const output = await git(root, ["ls-tree", "-z", treeish, "--", segment]);
+    const encoded = output.split("\0").find((entry) => {
+      const tab = entry.indexOf("\t");
+      return tab >= 0 && entry.slice(tab + 1) === segment;
+    });
+    if (!encoded) return null;
+    const tab = encoded.indexOf("\t");
+    const fields = encoded.slice(0, tab).split(" ");
+    return { mode: fields[0] ?? "", type: fields[1] ?? "", hash: fields[2] ?? "" };
+  }
+
+  private snapshotTreeLookup(root: string): SnapshotTreeLookup {
+    const entries = new Map<string, Promise<SnapshotTreeEntry | null>>();
+    return (treeish, segment) => {
+      const key = `${treeish}\0${segment}`;
+      const cached = entries.get(key);
+      if (cached) {
+        entries.delete(key);
+        entries.set(key, cached);
+        return cached;
+      }
+      while (entries.size >= SNAPSHOT_TREE_LOOKUP_CACHE_LIMIT) {
+        const oldest = entries.keys().next().value;
+        if (oldest === undefined) break;
+        entries.delete(oldest);
+      }
+      const pending = this.treeEntryAt(root, treeish, segment);
+      entries.set(key, pending);
+      void pending.catch(() => {
+        if (entries.get(key) === pending) entries.delete(key);
+      });
+      return pending;
+    };
+  }
+
+  private async treeEntry(
+    root: string,
+    commit: string,
+    relativePath: string,
+    lookup?: SnapshotTreeLookup,
+  ): Promise<SnapshotTreeEntry | null> {
     assertProjectPath(relativePath);
     if (!commit) return null;
     let treeish = commit;
@@ -1447,15 +1493,9 @@ export class CoreStore implements MutationCoordinator {
     for (let index = 0; index < segments.length; index++) {
       const segment = segments[index];
       if (!segment) return null;
-      const output = await git(root, ["ls-tree", "-z", treeish, "--", segment]);
-      const entries = output.split("\0").filter(Boolean);
-      const encoded = entries.find((entry) => entry.slice(entry.indexOf("\t") + 1) === segment);
-      if (!encoded) return null;
-      const tab = encoded.indexOf("\t");
-      const fields = encoded.slice(0, tab).split(" ");
-      const mode = fields[0] ?? "";
-      const type = fields[1] ?? "";
-      const hash = fields[2] ?? "";
+      const entry = lookup ? await lookup(treeish, segment) : await this.treeEntryAt(root, treeish, segment);
+      if (!entry) return null;
+      const { mode, type, hash } = entry;
       if (mode === "120000") {
         throw coreError(422, "unsafe_project_path", "The project path crosses a symbolic link");
       }
@@ -1475,8 +1515,9 @@ export class CoreStore implements MutationCoordinator {
     commit: string,
     relativePath: string,
     encoding: "utf8" | "base64" = "utf8",
+    lookup?: SnapshotTreeLookup,
   ): Promise<{ content: string; revision: string } | null> {
-    const entry = await this.treeEntry(root, commit, relativePath);
+    const entry = await this.treeEntry(root, commit, relativePath, lookup);
     if (!entry) return null;
     const bytes = await gitBuffer(root, ["cat-file", "blob", entry.hash]);
     const revision = this.cacheFileRevision(entry.hash, revisionForBytes(bytes));
@@ -2415,12 +2456,13 @@ export class CoreStore implements MutationCoordinator {
   }
 
   private async makeReader(root: string, snapshot: SnapshotId, commit: string): Promise<SnapshotReader> {
+    const lookup = this.snapshotTreeLookup(root);
     return {
       snapshot,
       read: async (relativePath, encoding = "utf8") => {
         assertProjectPath(relativePath);
         if (encoding !== "utf8" && encoding !== "base64") throw coreError(400, "invalid_read_encoding", "Snapshot reads support UTF-8 or base64 encoding");
-        return this.snapshotFile(root, commit, relativePath, encoding);
+        return this.snapshotFile(root, commit, relativePath, encoding, lookup);
       },
       list: async (prefix) => this.snapshotFiles(root, commit, prefix),
       listRevisions: async (prefix) => this.snapshotFileRevisions(root, commit, prefix),
