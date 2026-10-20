@@ -1,8 +1,11 @@
 import assert from "node:assert/strict";
 import test from "node:test";
+import { EditorState } from "@codemirror/state";
 import type { RecentActivityItem } from "@scriptorium/contracts";
 import type { Tree } from "./api";
 import {
+  createUiSentencePositionIndexCache,
+  createUiSentencePositionIndex,
   formatHandoffHint,
   mergeContinueCandidates,
   offsetAtUiSentenceIndex,
@@ -60,4 +63,68 @@ test("cursor mapping uses source sentence numbering around Japanese punctuation 
   assert.equal(offsetAtUiSentenceIndex(text, 2), 4);
   assert.equal(offsetAtUiSentenceIndex(text, 3), 11);
   assert.equal(offsetAtUiSentenceIndex(text, null), null);
+});
+
+test("reusable cursor positions preserve dialogue, UTF-16, and newline offsets", () => {
+  const dialogue = createUiSentencePositionIndex("地の文。「台詞です。」続き。");
+  assert.equal(dialogue.indexAtOffset(4), 2);
+  assert.equal(dialogue.indexAtOffset(11), 3);
+  assert.equal(dialogue.offsetAtIndex(2), 4);
+  assert.equal(dialogue.offsetAtIndex(3), 11);
+
+  const surrogatePair = createUiSentencePositionIndex("A😀。B。");
+  assert.equal(surrogatePair.indexAtOffset(2), 1);
+  assert.equal(surrogatePair.indexAtOffset(4), 2);
+  assert.equal(surrogatePair.offsetAtIndex(2), 4);
+
+  const multipleLines = createUiSentencePositionIndex("一文目。\n二文目。\n三文目。");
+  assert.equal(multipleLines.indexAtOffset(4), null);
+  assert.equal(multipleLines.indexAtOffset(5), 2);
+  assert.equal(multipleLines.indexAtOffset(10), 3);
+  assert.equal(multipleLines.offsetAtIndex(2), 5);
+  assert.equal(multipleLines.offsetAtIndex(3), 10);
+
+  const blankLine = createUiSentencePositionIndex("一文目。\n\n四文目。");
+  assert.equal(blankLine.offsetAtIndex(3), 6);
+  assert.equal(blankLine.indexAtOffset(6), 3);
+  assert.equal(blankLine.indexAtOffset(10), 4);
+});
+
+test("selection-only cursor updates reuse the CodeMirror document without materializing text", () => {
+  const state = EditorState.create({ doc: "地の文。「台詞です。」続き。" });
+  const doc = state.doc;
+  const originalToString = doc.toString;
+  let materializations = 0;
+  Object.defineProperty(doc, "toString", {
+    configurable: true,
+    value() {
+      materializations++;
+      return originalToString.call(this);
+    },
+  });
+
+  let indexBuilds = 0;
+  const cache = createUiSentencePositionIndexCache<typeof doc>((text) => {
+    indexBuilds++;
+    return createUiSentencePositionIndex(text);
+  });
+
+  try {
+    const changedText = doc.toString();
+    const index = cache.get(doc, changedText);
+    const afterDocumentChange = materializations;
+    let selectionState = state;
+    for (const anchor of [4, 11, 2, 14]) {
+      selectionState = selectionState.update({ selection: { anchor } }).state;
+      assert.strictEqual(selectionState.doc, doc);
+      assert.strictEqual(cache.get(selectionState.doc), index);
+    }
+
+    assert.equal(materializations - afterDocumentChange, 0);
+    assert.equal(indexBuilds, 1);
+    assert.equal(index.indexAtOffset(4), 2);
+    assert.equal(index.indexAtOffset(11), 3);
+  } finally {
+    Reflect.deleteProperty(doc, "toString");
+  }
 });

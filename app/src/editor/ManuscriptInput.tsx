@@ -14,7 +14,7 @@ import { ellipsisNormalizeExtension } from "./cm/ellipsisNormalize";
 import { refreshTermAdornments, termAdornmentsExtension } from "./cm/termAdornments";
 import { planWritingSymbol, type WritingSymbolId } from "./writingSymbols";
 import { type ResolveEditorTerms } from "./terms";
-import { offsetAtUiSentenceIndex, uiSentenceIndexAtOffset } from "../resume/continueCandidates";
+import { createUiSentencePositionIndexCache, type UiSentencePositionIndexCache } from "../resume/continueCandidates";
 import "./terminology.css";
 
 export interface ManuscriptInputHandle {
@@ -57,6 +57,7 @@ export const ManuscriptInput = forwardRef<ManuscriptInputHandle, ManuscriptInput
 }, ref) {
   const containerRef = useRef<HTMLDivElement>(null);
   const viewRef = useRef<EditorView | null>(null);
+  const sentencePositionIndexRef = useRef<UiSentencePositionIndexCache<EditorState["doc"]> | null>(null);
   const editabilityCompartment = useRef(new Compartment()).current;
   const externalSyncRef = useRef(false);
   const suppressPositionRef = useRef(false);
@@ -67,11 +68,16 @@ export const ManuscriptInput = forwardRef<ManuscriptInputHandle, ManuscriptInput
   const latestRef = useRef({ onChange, onSelectionLengthChange, onCursorPositionChange });
   latestRef.current = { onChange, onSelectionLengthChange, onCursorPositionChange };
 
+  function sentencePositionIndex(doc: EditorState["doc"], text?: string) {
+    const cache = sentencePositionIndexRef.current ??= createUiSentencePositionIndexCache<EditorState["doc"]>();
+    return cache.get(doc, text);
+  }
+
   function reportPosition(view: EditorView): void {
     if (suppressPositionRef.current) return;
     const selection = view.state.selection.main;
     latestRef.current.onCursorPositionChange?.(
-      uiSentenceIndexAtOffset(view.state.doc.toString(), selection.head),
+      sentencePositionIndex(view.state.doc).indexAtOffset(selection.head),
       Math.max(0, view.scrollDOM.scrollTop),
     );
   }
@@ -108,7 +114,7 @@ export const ManuscriptInput = forwardRef<ManuscriptInputHandle, ManuscriptInput
     restorePosition(position) {
       const view = viewRef.current;
       if (!view) return;
-      const offset = offsetAtUiSentenceIndex(view.state.doc.toString(), position.cursorSentenceIndex);
+      const offset = sentencePositionIndex(view.state.doc).offsetAtIndex(position.cursorSentenceIndex);
       suppressPositionRef.current = true;
       if (offset !== null) {
         view.dispatch({
@@ -161,7 +167,7 @@ export const ManuscriptInput = forwardRef<ManuscriptInputHandle, ManuscriptInput
             latestRef.current.onSelectionLengthChange?.(selection.empty ? 0 : Math.abs(selection.to - selection.from));
             if (!externalSyncRef.current) {
               latestRef.current.onCursorPositionChange?.(
-                uiSentenceIndexAtOffset(changedText ?? update.state.doc.toString(), selection.head),
+                sentencePositionIndex(update.state.doc, changedText ?? undefined).indexAtOffset(selection.head),
                 Math.max(0, viewRef.current?.scrollDOM.scrollTop ?? 0),
               );
             }

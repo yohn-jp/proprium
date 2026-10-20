@@ -203,16 +203,59 @@ function sentenceOffsets(text: string): SentenceOffset[] {
 }
 
 export function uiSentenceIndexAtOffset(text: string, offset: number): number | null {
-  const cursor = Math.max(0, Math.min(offset, text.length));
+  return createUiSentencePositionIndex(text).indexAtOffset(offset);
+}
+
+export interface UiSentencePositionIndex {
+  indexAtOffset(offset: number): number | null;
+  offsetAtIndex(sentenceIndex: number | null): number | null;
+}
+
+export interface UiSentencePositionIndexCache<TDoc> {
+  get(doc: TDoc, text?: string): UiSentencePositionIndex;
+}
+
+/** Build one immutable sentence-position lookup for reuse while a document is unchanged. */
+export function createUiSentencePositionIndex(text: string): UiSentencePositionIndex {
+  const textLength = text.length;
   const offsets = sentenceOffsets(text);
-  for (let index = 0; index < offsets.length; index++) {
-    const range = offsets[index];
-    if (range && cursor >= range.start && (cursor < range.end || (index === offsets.length - 1 && cursor === range.end))) return index + 1;
-  }
-  return null;
+  return {
+    indexAtOffset(offset) {
+      const cursor = Math.max(0, Math.min(offset, textLength));
+      let low = 0;
+      let high = offsets.length;
+      while (low < high) {
+        const middle = Math.floor((low + high) / 2);
+        if ((offsets[middle]?.start ?? Number.POSITIVE_INFINITY) <= cursor) low = middle + 1;
+        else high = middle;
+      }
+      const index = low - 1;
+      const range = offsets[index];
+      if (range && cursor >= range.start && (cursor < range.end || (index === offsets.length - 1 && cursor === range.end))) return index + 1;
+      return null;
+    },
+    offsetAtIndex(sentenceIndex) {
+      if (sentenceIndex === null || !Number.isSafeInteger(sentenceIndex) || sentenceIndex < 1) return null;
+      return offsets[sentenceIndex - 1]?.start ?? null;
+    },
+  };
+}
+
+/** Retain a position lookup for the current immutable document across selection-only updates. */
+export function createUiSentencePositionIndexCache<TDoc extends { toString(): string }>(
+  buildIndex: (text: string) => UiSentencePositionIndex = createUiSentencePositionIndex,
+): UiSentencePositionIndexCache<TDoc> {
+  let cached: { doc: TDoc; index: UiSentencePositionIndex } | null = null;
+  return {
+    get(doc, text) {
+      if (cached?.doc === doc) return cached.index;
+      const index = buildIndex(text ?? doc.toString());
+      cached = { doc, index };
+      return index;
+    },
+  };
 }
 
 export function offsetAtUiSentenceIndex(text: string, sentenceIndex: number | null): number | null {
-  if (sentenceIndex === null || !Number.isSafeInteger(sentenceIndex) || sentenceIndex < 1) return null;
-  return sentenceOffsets(text)[sentenceIndex - 1]?.start ?? null;
+  return createUiSentencePositionIndex(text).offsetAtIndex(sentenceIndex);
 }
