@@ -3,7 +3,7 @@
 **Prepared:** 2026-10-20 JST
 **Reviewed base:** `a1587e784788fa87d86c0eb7ab175d7a28a3209f`
 **Scope:** C20–C36 and C54, with C63 cache evidence triage.
-**State:** C21 reader lookup candidate committed as `59ae3d323d6cd314e33072132d76398382814dea`; focused build/test and bounded paired measurements completed. Broad workspace/browser/OCI verification remains pending. See [C21 evidence](CORE-64-G2-C21-EVIDENCE.md).
+**State:** C21 reader lookup candidate committed as `59ae3d323d6cd314e33072132d76398382814dea`; focused and workspace checks, bounded paired measurements, and Core/modular Chromium workflows completed. The first shared-state browser run exposed a flaky scene-open assertion that also reproduced on frozen G0; all six affected cases passed their single fresh-state rerun. Full/OCI acceptance remains with the central G5 batch. See [C21 evidence](CORE-64-G2-C21-EVIDENCE.md).
 
 This plan follows [CORE-64-GOAL.md](CORE-64-GOAL.md), the fixed W0/W1 evidence, and the current source/tests at the reviewed base. The per-ID table records the initial evidence and hypotheses; the measured C21 result is documented separately. Other candidates remain hypotheses until their smallest relevant experiment establishes a cost.
 
