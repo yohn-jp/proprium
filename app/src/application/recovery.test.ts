@@ -1,6 +1,24 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { canRetainRecoveredEditorDuringSceneLoad, isEditorTextSafeToFlush, isEntryAcknowledgedByReceipt, isNonDraftEntryAcknowledgedByReceipt, isSameSceneEditorLoad, isTextRepresentedByRecoveryRecord, isUnchangedEntryConfirmedByReceipt, mayWriteEditor, recoveryStatusForJournalOpen } from "./recovery.js";
+import { canRetainRecoveredEditorDuringSceneLoad, isEditorTextSafeToFlush, isEntryAcknowledgedByReceipt, isNonDraftEntryAcknowledgedByReceipt, isSameSceneEditorLoad, isTextRepresentedByRecoveryRecord, isUnchangedEntryConfirmedByReceipt, mayWriteEditor, mergeLatestDraftEntry, recoveryStatusForJournalOpen } from "./recovery.js";
+
+interface DraftEntry {
+  documentKey: string;
+  authorScope: string | null;
+  state: string;
+  operation: { id: string; generation: number };
+}
+
+function draftEntry(overrides: Omit<Partial<DraftEntry>, "operation"> & { operation?: Partial<DraftEntry["operation"]> } = {}): DraftEntry {
+  const { operation, ...fields } = overrides;
+  return {
+    documentKey: "repository/scene-1",
+    authorScope: "author-1",
+    state: "draft",
+    ...fields,
+    operation: { id: "operation-1", generation: 1, ...operation },
+  };
+}
 
 test("text is recoverable only when the current record represents the editor", () => {
   assert.equal(isTextRepresentedByRecoveryRecord("clean", null, "clean"), true);
@@ -95,4 +113,30 @@ test("a failed IndexedDB open is unavailable from project activation through sce
     editorSceneId: "scene-1",
   }), false);
   assert.equal(recoveryStatusForJournalOpen(""), "pending");
+});
+
+test("a local draft merge replaces only older drafts for the same author and document", () => {
+  const priorDraft = draftEntry();
+  const otherDocument = draftEntry({ documentKey: "repository/scene-2" });
+  const foreignAuthor = draftEntry({ authorScope: "author-2" });
+  const protectedConflict = draftEntry({ state: "conflict", operation: { generation: 0 } });
+  const savedDraft = draftEntry({ operation: { generation: 2 } });
+
+  assert.deepEqual(mergeLatestDraftEntry([priorDraft, otherDocument, foreignAuthor, protectedConflict], savedDraft), [
+    otherDocument,
+    foreignAuthor,
+    protectedConflict,
+    savedDraft,
+  ]);
+});
+
+test("a stale local save cannot replace a newer generation or clear an exact conflict", () => {
+  const savedDraft = draftEntry({ operation: { generation: 2 } });
+  const newerDraft = draftEntry({ operation: { generation: 3 } });
+  const exactConflict = draftEntry({ state: "conflict", operation: { generation: 2 } });
+
+  const newerEntries = [newerDraft];
+  assert.equal(mergeLatestDraftEntry(newerEntries, savedDraft), newerEntries);
+  const conflictedEntries = [exactConflict];
+  assert.equal(mergeLatestDraftEntry(conflictedEntries, savedDraft), conflictedEntries);
 });

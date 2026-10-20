@@ -27,6 +27,7 @@ export interface ManuscriptInputHandle {
 
 export interface ManuscriptInputProps {
   value: string;
+  externalTextRevision: number;
   readOnly?: boolean;
   onChange: (value: string) => void;
   onSelectionLengthChange?: (length: number) => void;
@@ -42,6 +43,7 @@ export interface ManuscriptInputProps {
 /** CodeMirror adapter retaining IME-safe editing, source bracket/ellipsis rules and history keymaps. */
 export const ManuscriptInput = forwardRef<ManuscriptInputHandle, ManuscriptInputProps>(function ManuscriptInput({
   value,
+  externalTextRevision,
   readOnly = false,
   onChange,
   onSelectionLengthChange,
@@ -149,16 +151,17 @@ export const ManuscriptInput = forwardRef<ManuscriptInputHandle, ManuscriptInput
           enterkeyhint: "enter",
         }),
         EditorView.updateListener.of((update) => {
+          const changedText = update.docChanged ? update.state.doc.toString() : null;
           if (update.docChanged) {
             if (externalSyncRef.current) externalSyncRef.current = false;
-            else latestRef.current.onChange(update.state.doc.toString());
+            else if (changedText !== null) latestRef.current.onChange(changedText);
           }
           if (update.docChanged || update.selectionSet) {
             const selection = update.state.selection.main;
             latestRef.current.onSelectionLengthChange?.(selection.empty ? 0 : Math.abs(selection.to - selection.from));
             if (!externalSyncRef.current) {
               latestRef.current.onCursorPositionChange?.(
-                uiSentenceIndexAtOffset(update.state.doc.toString(), selection.head),
+                uiSentenceIndexAtOffset(changedText ?? update.state.doc.toString(), selection.head),
                 Math.max(0, viewRef.current?.scrollDOM.scrollTop ?? 0),
               );
             }
@@ -198,7 +201,7 @@ export const ManuscriptInput = forwardRef<ManuscriptInputHandle, ManuscriptInput
       changes: { from: 0, to: view.state.doc.length, insert: value },
       annotations: Transaction.addToHistory.of(false),
     });
-  }, [value]);
+  }, [externalTextRevision, value]);
 
   return <div ref={containerRef} className="manuscript-input" style={style} data-testid="manuscript-input" />;
 });

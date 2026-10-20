@@ -61,6 +61,29 @@ export function isUnchangedEntryConfirmedByReceipt(
 
 export type EditorRecoveryStatus = "pending" | "ready" | "unavailable";
 
+interface DraftEntryMergeCandidate {
+  documentKey: string;
+  authorScope: string | null;
+  state: string;
+  operation: { id: string; generation: number };
+}
+
+/** Merge a just-persisted draft without replacing a newer generation or protected state. */
+export function mergeLatestDraftEntry<T extends DraftEntryMergeCandidate>(entries: T[], savedDraft: T): T[] {
+  if (savedDraft.state !== "draft" || !savedDraft.authorScope) return entries;
+  const belongsToDocument = (entry: T) => entry.documentKey === savedDraft.documentKey && entry.authorScope === savedDraft.authorScope;
+  const hasNewerOrProtectedGeneration = entries.some((entry) => belongsToDocument(entry) &&
+    (entry.operation.generation > savedDraft.operation.generation ||
+      (entry.operation.generation === savedDraft.operation.generation &&
+        (entry.operation.id !== savedDraft.operation.id || entry.state !== "draft"))));
+  if (hasNewerOrProtectedGeneration) return entries;
+  return [
+    ...entries.filter((entry) => !belongsToDocument(entry) || entry.state !== "draft" ||
+      entry.operation.generation > savedDraft.operation.generation),
+    savedDraft,
+  ];
+}
+
 interface SceneEditorLoadIdentity {
   currentProjectId: string | undefined;
   requestedProjectId: string;

@@ -20,6 +20,13 @@ interface JournalSummary {
   writes: Array<{ path: string; content: string | null }>;
 }
 
+interface RestoreGate {
+  targetOperationId: string | null;
+  armed: boolean;
+  started: boolean;
+  release?: () => void;
+}
+
 interface PublicationReceiptSummary {
   batchId: string;
   state: string;
@@ -126,6 +133,12 @@ async function readJournal(page: Page): Promise<JournalSummary[]> {
       database.close();
     }
   });
+}
+
+async function resetLocalCore(): Promise<void> {
+  const e2ePort = Number.parseInt(process.env.SCRIPTORIUM_E2E_PORT ?? "4173", 10);
+  const response = await fetch(`http://127.0.0.1:${e2ePort + 1}/__e2e/reset-core`, { method: "POST" });
+  expect(response.status).toBe(204);
 }
 
 async function readPublicationReceipts(page: Page): Promise<PublicationReceiptSummary[]> {
@@ -304,6 +317,263 @@ test("history keeps its pinned response through a foreground observation without
   await expect(history.getByRole("alert")).toHaveCount(0);
   expect(actualHistoryStatus).toBe(200);
   expect(historyListRequests).toBe(1);
+});
+
+test("same-origin stale tabs cannot replace an equal-generation journal draft", async ({ page }) => {
+  test.skip(process.env.SCRIPTORIUM_E2E_EXTERNAL_REPOSITORY === "1", "The journal acceptance uses only the disposable local browser and Git fixtures.");
+  expect(authToken.length).toBeGreaterThanOrEqual(32);
+  expect(repositoryUrl).not.toBe("");
+  await resetLocalCore();
+
+  const secondTab = await page.context().newPage();
+  try {
+    await signIn(page);
+    await openFixtureProject(page);
+    await secondTab.goto("/desktop/");
+    await expect(secondTab.getByRole("heading", { name: "作品を追加" })).toBeVisible();
+    await openFixtureProject(secondTab);
+
+    const firstEditor = page.locator(".cm-content");
+    const secondEditor = secondTab.locator(".cm-content");
+    const firstTabText = "The first tab's durable manuscript bytes.";
+    const staleTabText = "The stale tab's conflicting manuscript bytes.";
+
+    // Both tabs opened the empty journal first, so each first edit is generation 1 with its own operation ID.
+    await firstEditor.fill(firstTabText);
+    await expect.poll(async () => (await readJournal(page)).some((entry) =>
+      entry.documentPath === "manuscript/vol-1/ch-1/scene-1.md" && entry.state === "draft" && entry.text === firstTabText,
+    )).toBe(true);
+    const firstSaved = (await readJournal(page)).find((entry) =>
+      entry.documentPath === "manuscript/vol-1/ch-1/scene-1.md" && entry.state === "draft" && entry.text === firstTabText,
+    );
+    expect(firstSaved).toBeTruthy();
+    expect(firstSaved?.generation).toBe(1);
+
+    await secondEditor.fill(staleTabText);
+    await expect(secondEditor).toHaveText(staleTabText);
+    await expect(secondTab.locator(".durability-message")).toContainText("保存を確認できていません");
+    await expect(secondTab.getByRole("alert")).toContainText("新しい世代");
+    await expect(secondTab.getByRole("button", { name: "Checkpoint", exact: true })).toBeDisabled();
+
+    const sharedJournal = (await readJournal(secondTab)).filter((entry) =>
+      entry.documentPath === "manuscript/vol-1/ch-1/scene-1.md" && entry.authorScope === firstSaved!.authorScope,
+    );
+    expect(sharedJournal).toHaveLength(1);
+    expect(sharedJournal[0]).toMatchObject({
+      state: "draft",
+      operationId: firstSaved!.operationId,
+      generation: firstSaved!.generation,
+      text: firstTabText,
+    });
+    expect((await readJournal(secondTab)).some((entry) => entry.text === staleTabText)).toBe(false);
+  } finally {
+    await secondTab.close();
+  }
+});
+
+test("coalesced editor state is current for immediate print and history actions", async ({ page }) => {
+  test.skip(process.env.SCRIPTORIUM_E2E_EXTERNAL_REPOSITORY === "1", "The history acceptance writes only to the disposable local Git fixture.");
+  expect(authToken.length).toBeGreaterThanOrEqual(32);
+  expect(repositoryUrl).not.toBe("");
+  const fixtureRoot = await mkdtemp(join(tmpdir(), "scriptorium-e2e-history-"));
+  const workingCopy = join(fixtureRoot, "work");
+  const fixtureBranch = process.env.SCRIPTORIUM_E2E_REPOSITORY_BRANCH ?? "main";
+  let initialRemoteCommit: string | null = null;
+  try {
+    execFileSync("git", ["clone", "--quiet", repositoryUrl, workingCopy], { stdio: "ignore" });
+    initialRemoteCommit = execFileSync("git", ["rev-parse", "HEAD"], { cwd: workingCopy, encoding: "utf8" }).trim();
+    const manuscriptPath = "manuscript/vol-1/ch-1/scene-1.md";
+    const historyBody = "# Scene One\n\nA committed version for the editor history comparison.\n";
+    await writeFile(join(workingCopy, manuscriptPath), historyBody, "utf8");
+    const gitEnv = {
+      ...process.env,
+      GIT_AUTHOR_NAME: "Scriptorium Acceptance",
+      GIT_AUTHOR_EMAIL: "acceptance@example.invalid",
+      GIT_COMMITTER_NAME: "Scriptorium Acceptance",
+      GIT_COMMITTER_EMAIL: "acceptance@example.invalid",
+    };
+    execFileSync("git", ["add", manuscriptPath], { cwd: workingCopy, stdio: "ignore" });
+    execFileSync("git", ["commit", "-m", "loom(scene): scene-1", "-m", "Loom-Manuscript: scene-1", "-m", `Loom-File: ${manuscriptPath}`], {
+      cwd: workingCopy,
+      env: gitEnv,
+      stdio: "ignore",
+    });
+    execFileSync("git", ["push", "origin", `HEAD:${fixtureBranch}`], { cwd: workingCopy, stdio: "ignore" });
+    await resetLocalCore();
+
+    await page.addInitScript(() => {
+      window.print = () => {
+        document.documentElement.dataset.printedManuscript = document.querySelector(".print-manuscript")?.textContent ?? "";
+      };
+    });
+    await signIn(page);
+    await openFixtureProject(page);
+
+    const editor = page.locator(".cm-content");
+    const printDraft = "Printed from the newest editor input.";
+    await editor.fill(printDraft);
+    await expect(page.locator(".durability-message")).toContainText("保存を確認できていません");
+    await page.getByRole("button", { name: "印刷" }).click();
+    await expect.poll(() => page.locator("html").getAttribute("data-printed-manuscript")).toBe(printDraft);
+
+    const historyDraft = "Compared against the newest editor input.";
+    await editor.fill(historyDraft);
+    await page.getByRole("button", { name: "履歴", exact: true }).click();
+    const history = page.locator(".manuscript-history");
+    await expect(history.getByRole("heading", { name: "改稿の履歴" })).toBeVisible();
+    await expect(history.locator('pre[aria-label="原稿の差分"]')).toContainText(historyDraft);
+  } finally {
+    try {
+      if (initialRemoteCommit) {
+        const currentRemoteCommit = execFileSync("git", ["ls-remote", "origin", `refs/heads/${fixtureBranch}`], {
+          cwd: workingCopy,
+          encoding: "utf8",
+        }).trim().split(/\s+/u)[0];
+        if (currentRemoteCommit && currentRemoteCommit !== initialRemoteCommit) {
+          execFileSync("git", [
+            "push",
+            `--force-with-lease=refs/heads/${fixtureBranch}:${currentRemoteCommit}`,
+            "origin",
+            `${initialRemoteCommit}:refs/heads/${fixtureBranch}`,
+          ], { cwd: workingCopy, stdio: "ignore" });
+        }
+      }
+    } finally {
+      await resetLocalCore();
+      await rm(fixtureRoot, { recursive: true, force: true });
+    }
+  }
+});
+
+test("coalesced typing restores to its unchanged React value without reviving the deleted draft", async ({ page }) => {
+  test.skip(process.env.SCRIPTORIUM_E2E_EXTERNAL_REPOSITORY === "1", "The recovery acceptance changes only the disposable local browser journal.");
+  expect(authToken.length).toBeGreaterThanOrEqual(32);
+  expect(repositoryUrl).not.toBe("");
+  await page.addInitScript(() => {
+    type GatedTransaction = IDBTransaction & { __scriptoriumHoldComplete?: boolean };
+    type GatedWindow = Window & { __scriptoriumRestoreGate?: RestoreGate };
+    const gate: RestoreGate = { targetOperationId: null, armed: false, started: false };
+    (window as GatedWindow).__scriptoriumRestoreGate = gate;
+
+    const transactionDescriptor = Object.getOwnPropertyDescriptor(IDBTransaction.prototype, "oncomplete");
+    const originalDelete = IDBObjectStore.prototype.delete;
+    if (!transactionDescriptor?.get || !transactionDescriptor.set) throw new Error("IndexedDB completion hooks are unavailable in this browser.");
+    Object.defineProperty(IDBTransaction.prototype, "oncomplete", {
+      configurable: true,
+      enumerable: transactionDescriptor.enumerable,
+      get() { return transactionDescriptor.get!.call(this); },
+      set(handler: ((this: IDBTransaction, event: Event) => unknown) | null) {
+        if (!handler) {
+          transactionDescriptor.set!.call(this, handler);
+          return;
+        }
+        const transaction = this as GatedTransaction;
+        transactionDescriptor.set!.call(this, function (this: IDBTransaction, event: Event) {
+          const currentGate = (window as GatedWindow).__scriptoriumRestoreGate;
+          if (currentGate?.armed && transaction.__scriptoriumHoldComplete) {
+            currentGate.started = true;
+            currentGate.release = () => {
+              currentGate.armed = false;
+              handler.call(transaction, event);
+            };
+            return;
+          }
+          return handler.call(this, event);
+        });
+      },
+    });
+    IDBObjectStore.prototype.delete = function (this: IDBObjectStore, key: IDBValidKey): IDBRequest<undefined> {
+      const currentGate = (window as GatedWindow).__scriptoriumRestoreGate;
+      if (this.name === "operations" && currentGate?.armed && currentGate.targetOperationId && String(key).includes(currentGate.targetOperationId)) {
+        (this.transaction as GatedTransaction).__scriptoriumHoldComplete = true;
+      }
+      return originalDelete.call(this, key);
+    };
+  });
+  await signIn(page);
+  await openFixtureProject(page);
+
+  const editor = page.locator(".cm-content");
+  const originalText = (await editor.textContent()) ?? "";
+  const stagingText = "Temporary browser journal seed.";
+  await editor.fill(stagingText);
+  await expect.poll(async () => (await readJournal(page)).some((entry) => entry.text === stagingText && entry.state === "draft")).toBe(true);
+  await page.evaluate(({ originalText, stagingText }) => new Promise<void>((resolve, reject) => {
+    const open = indexedDB.open("scriptorium-recovery", 3);
+    open.onerror = () => reject(open.error ?? new Error("IndexedDB open failed"));
+    open.onsuccess = () => {
+      const database = open.result;
+      const transaction = database.transaction("operations", "readwrite", { durability: "strict" });
+      const store = transaction.objectStore("operations");
+      const request = store.getAll();
+      request.onerror = () => reject(request.error ?? new Error("Journal read failed"));
+      request.onsuccess = () => {
+        const records = request.result as Array<{
+          state: string;
+          text: string;
+          baseText: string;
+          documentPath: string;
+          operation: {
+            reads: Array<{ path: string; revision: string | null }>;
+            writes: Array<{ path: string; revision: string | null; content: string | null }>;
+          };
+        }>;
+        const entry = records.find((candidate) => candidate.state === "draft" && candidate.text === stagingText);
+        if (!entry) {
+          reject(new Error("Journal seed is missing"));
+          return;
+        }
+        entry.text = originalText;
+        entry.baseText = originalText;
+        const read = entry.operation.reads.find((item) => item.path === entry.documentPath);
+        const write = entry.operation.writes.find((item) => item.path === entry.documentPath);
+        if (!read || !write) {
+          reject(new Error("Journal seed has no manuscript operation"));
+          return;
+        }
+        read.revision = "f".repeat(64);
+        write.revision = "f".repeat(64);
+        write.content = originalText;
+        store.put(entry);
+      };
+      transaction.oncomplete = () => { database.close(); resolve(); };
+      transaction.onerror = () => reject(transaction.error ?? new Error("Journal seed update failed"));
+      transaction.onabort = () => reject(transaction.error ?? new Error("Journal seed update aborted"));
+    };
+  }), { originalText, stagingText });
+
+  await page.reload();
+  await openFixtureProject(page);
+  await expect(page.locator(".conflict")).toBeVisible();
+  await expect(editor).toHaveText(originalText);
+  const prior = (await readJournal(page)).find((entry) => entry.state === "draft" && entry.text === originalText);
+  expect(prior).toBeTruthy();
+
+  await page.clock.install();
+  const pendingText = "Typing held before React publication.";
+  await editor.fill(pendingText);
+  await expect(page.locator(".durability-message")).toContainText("保存を確認できていません");
+  expect((await readJournal(page)).find((entry) => entry.operationId === prior!.operationId)?.text).toBe(originalText);
+  await page.evaluate((operationId) => {
+    const gate = (window as Window & { __scriptoriumRestoreGate?: RestoreGate }).__scriptoriumRestoreGate;
+    if (!gate) throw new Error("Restore gate was not installed.");
+    gate.targetOperationId = operationId;
+    gate.armed = true;
+  }, prior!.operationId);
+  page.on("dialog", (dialog) => { void dialog.accept(); });
+  await page.getByRole("button", { name: "この文書の未チェックポイント下書きを削除して GitHub 版に戻す" }).click();
+  await expect.poll(() => page.evaluate(() => Boolean((window as Window & { __scriptoriumRestoreGate?: RestoreGate }).__scriptoriumRestoreGate?.started))).toBe(true);
+  await expect(editor).toHaveAttribute("contenteditable", "false");
+  await editor.press("End");
+  expect(await editor.textContent()).toBe(pendingText);
+  await page.evaluate(() => {
+    const gate = (window as Window & { __scriptoriumRestoreGate?: RestoreGate }).__scriptoriumRestoreGate;
+    if (!gate?.release) throw new Error("Draft removal transaction was not held.");
+    gate.release();
+  });
+  await expect(editor).toHaveText(originalText);
+  await page.clock.runFor(350);
+  expect(await readJournal(page)).toHaveLength(0);
 });
 
 test("writing UI recovers multi-document drafts and separates Draft, Checkpoint, and GitHub publication", async ({ page }) => {

@@ -31,7 +31,7 @@ import { loadThemeMode, persistThemeMode, type ThemeMode } from "../theme";
 import { clearDraft, loadDraft } from "../drafts";
 import type { ApplicationShell, ApplicationShellProps, UiMode } from "./contracts";
 import { applicationPath, parseApplicationLocation, readUiModePreference, rememberUiMode, switchApplicationPath, type ApplicationResource } from "./navigation";
-import { canRetainRecoveredEditorDuringSceneLoad, isEditorTextSafeToFlush, isNonDraftEntryAcknowledgedByReceipt, isSameSceneEditorLoad, isUnchangedEntryConfirmedByReceipt, mayWriteEditor, recoveryStatusForJournalOpen, type EditorRecoveryStatus } from "./recovery";
+import { canRetainRecoveredEditorDuringSceneLoad, isEditorTextSafeToFlush, isNonDraftEntryAcknowledgedByReceipt, isSameSceneEditorLoad, isUnchangedEntryConfirmedByReceipt, mayWriteEditor, mergeLatestDraftEntry, recoveryStatusForJournalOpen, type EditorRecoveryStatus } from "./recovery";
 import {
   BrowserJournal,
   documentKey,
@@ -99,6 +99,7 @@ interface EditorSession {
   read: SceneRead;
   remote: SceneRead;
   text: string;
+  textRevision: number;
   baseText: string;
   entry: JournalEntry | null;
   conflict: SceneRead | null;
@@ -421,6 +422,7 @@ function AuthorWorkspace({
   const [busy, setBusy] = useState("");
   const navigationRef = useRef(0);
   const workRef = useRef<WorkState | null>(null);
+  const workPublishTimerRef = useRef<number | null>(null);
   const journalRef = useRef<BrowserJournal | null>(null);
   const draftQueueRef = useRef<Promise<void>>(Promise.resolve());
   const scratchFlushRef = useRef<() => Promise<JournalEntry | null>>(async () => null);
@@ -471,11 +473,44 @@ function AuthorWorkspace({
     stablePathRef.current = path;
   }
 
-  const updateWork = useCallback((updater: (current: WorkState | null) => WorkState | null) => {
-    const next = updater(workRef.current);
-    workRef.current = next;
+  const publishWorkState = useCallback((next: WorkState | null) => {
+    if (workPublishTimerRef.current !== null) {
+      window.clearTimeout(workPublishTimerRef.current);
+      workPublishTimerRef.current = null;
+    }
     setWork(next);
   }, []);
+
+  const scheduleWorkStatePublish = useCallback(() => {
+    if (workPublishTimerRef.current !== null) window.clearTimeout(workPublishTimerRef.current);
+    const timer = window.setTimeout(() => {
+      if (workPublishTimerRef.current !== timer) return;
+      workPublishTimerRef.current = null;
+      setWork(workRef.current);
+    }, 350);
+    workPublishTimerRef.current = timer;
+  }, []);
+
+  useEffect(() => () => {
+    if (workPublishTimerRef.current !== null) window.clearTimeout(workPublishTimerRef.current);
+  }, []);
+
+  const updateWork = useCallback((updater: (current: WorkState | null) => WorkState | null) => {
+    const current = workRef.current;
+    let next = updater(current);
+    if (current?.editor && next?.editor && next.editor.text !== current.editor.text) {
+      next = {
+        ...next,
+        editor: { ...next.editor, textRevision: current.editor.textRevision + 1 },
+      };
+    }
+    workRef.current = next;
+    publishWorkState(next);
+  }, [publishWorkState]);
+
+  const flushPendingReactPublish = useCallback(() => {
+    publishWorkState(workRef.current);
+  }, [publishWorkState]);
 
   const readCurrentEditor = useCallback((): BrowserEditorDocument | null => {
     const current = workRef.current;
@@ -1098,6 +1133,7 @@ function AuthorWorkspace({
         read: effective,
         remote,
         text,
+        textRevision: (finalEditor?.textRevision ?? 0) + (finalEditor && finalEditor.text !== text ? 1 : 0),
         baseText,
         entry: latest,
         conflict,
@@ -1162,7 +1198,7 @@ function AuthorWorkspace({
       const recoveryKey = recoveryKeyForNavigation(activeProject.id, observed.snapshot.repository, scope, nav);
       if (journalRef.current) recoveredProjectsRef.current.add(recoveryKey);
       workRef.current = next;
-      setWork(next);
+      publishWorkState(next);
       setModules([]);
       setContributions([]);
       // Optional modules, proposals and recovery must not block opening a locally
@@ -1518,6 +1554,12 @@ function AuthorWorkspace({
     setStatus({ message, kind });
   }
 
+  function mergePersistedDraft(entry: JournalEntry, navigation: number): void {
+    setEntries((currentEntries) => navigationRef.current === navigation && authorScopeRef.current === entry.authorScope
+      ? mergeLatestDraftEntry(currentEntries, entry)
+      : currentEntries);
+  }
+
   async function persistDraft(entry: JournalEntry): Promise<boolean> {
     const navigation = navigationRef.current;
     const currentJournal = journalRef.current;
@@ -1535,8 +1577,9 @@ function AuthorWorkspace({
       if (pending?.operation.id === entry.operation.id && pending.operation.generation === entry.operation.generation) {
         pendingDraftsRef.current.delete(pendingKey);
       }
-      await refreshJournal(entry.repository, navigation);
-      updateWork((current) => navigationRef.current === navigation && current?.editor?.entry?.key === entry.key
+      mergePersistedDraft(entry, navigation);
+      updateWork((current) => navigationRef.current === navigation && authorScopeRef.current === entry.authorScope &&
+        current?.editor?.entry?.key === entry.key && current.editor.entry.state === "draft" && current.editor.text === entry.text
         ? { ...current, editor: { ...current.editor, draftStored: true, journalError: "" } }
         : current);
       return true;
@@ -1563,15 +1606,16 @@ function AuthorWorkspace({
     }
     if (!draft.text.trim() && draft.attachments.length === 0) return null;
     const nav = navigationRef.current;
+    const author = authorScopeRef.current;
     const { operation, path } = buildScratchOperation(read, draft);
-    const entry = makeEntry(read.snapshot.repository, authorScopeRef.current, read.scene.id, read, draft.text, "", operation, "draft", path);
+    const entry = makeEntry(read.snapshot.repository, author, read.scene.id, read, draft.text, "", operation, "draft", path);
     const stored = await currentJournal.putLatestDraft(entry);
     if (!stored) return null;
-    await refreshJournal(read.snapshot.repository, nav);
+    mergePersistedDraft(entry, nav);
     return entry;
   }
 
-  function editText(nextText: string): void {
+  function editText(nextText: string, deferReactPublish = false): void {
     const current = workRef.current;
     const editor = current?.editor;
     const currentJournal = journalRef.current;
@@ -1588,10 +1632,21 @@ function AuthorWorkspace({
       updateWork((latest) => latest?.editor ? { ...latest, editor: { ...latest.editor, text: nextText, draftStored: false, journalError: messageOf(error) } } : latest);
       return;
     }
-    updateWork((latest) => latest?.editor ? {
+    const latest = workRef.current;
+    const updated = latest?.editor ? {
       ...latest,
-      editor: { ...latest.editor, text: nextText, entry, draftStored: false, journalError: "" },
-    } : latest);
+      editor: {
+        ...latest.editor,
+        text: nextText,
+        textRevision: latest.editor.textRevision + (deferReactPublish ? 0 : 1),
+        entry,
+        draftStored: false,
+        journalError: "",
+      },
+    } : latest;
+    workRef.current = updated;
+    if (deferReactPublish) scheduleWorkStatePublish();
+    else publishWorkState(updated);
     const timerKey = draftTimerKey(entry);
     const pendingTimer = draftTimersRef.current.get(timerKey);
     if (pendingTimer) window.clearTimeout(pendingTimer);
@@ -1966,7 +2021,7 @@ function AuthorWorkspace({
     const current = workRef.current;
     const editor = current?.editor;
     const currentJournal = journalRef.current;
-    if (!current || current.recoveryStatus !== "ready" || !editor || editor.recoveryStatus !== "ready" || current.loadingScene || !editor.conflict || !currentJournal) return;
+    if (!current || current.recoveryStatus !== "ready" || !editor || editor.recoveryStatus !== "ready" || current.loadingScene || !editor.conflict || !currentJournal || busy) return;
     if (editor.entry && editor.entry.state !== "draft") {
       setStatus({ message: "チェックポイント済みの操作はブラウザーから削除できません。", kind: "error" });
       return;
@@ -1977,18 +2032,102 @@ function AuthorWorkspace({
     const repository = editor.read.snapshot.repository;
     const documentPath = editor.read.document.path;
     const sceneId = editor.read.scene.id;
+    const author = authorScopeRef.current;
+    setBusy("restore");
+    let timerKey: string | null = null;
+    let retryEntry: JournalEntry | null = null;
+    let draftsRemoved = false;
+    const isSameCapturedEditorBinding = (candidate: WorkState | null): boolean => {
+      const candidateEditor = candidate?.editor;
+      return Boolean(candidate && candidateEditor && candidate.project.id === projectId &&
+        sameRepository(candidate.observation.snapshot.repository, repository) &&
+        candidate.selectedSceneId === sceneId && candidateEditor.read.document.path === documentPath &&
+        candidateEditor.read.scene.id === sceneId && authorScopeRef.current === author);
+    };
+    const schedulePendingRetry = (key: string, expected: JournalEntry): void => {
+      const pending = pendingDraftsRef.current.get(key);
+      if (!pending || pending.operation.id !== expected.operation.id || pending.operation.generation < expected.operation.generation) return;
+      const existingTimer = draftTimersRef.current.get(key);
+      if (existingTimer !== undefined) window.clearTimeout(existingTimer);
+      const timerEntry = pending;
+      const timer = window.setTimeout(() => {
+        if (draftTimersRef.current.get(key) !== timer) return;
+        draftTimersRef.current.delete(key);
+        void persistDraft(timerEntry);
+      }, 350);
+      draftTimersRef.current.set(key, timer);
+    };
     try {
-      await currentJournal.removeDrafts(repository, documentPath, authorScopeRef.current);
+      const composedText = await editorFlushRef.current();
+      const liveEditor = workRef.current?.editor;
+      if (composedText !== null && liveEditor && composedText !== liveEditor.text) editText(composedText, true);
       if (!isCurrentEditor(nav, projectId, repository, documentPath, sceneId)) return;
-      const remote = editor.conflict;
-      updateWork((state) => state?.editor ? {
+      const beforeDrain = workRef.current?.editor;
+      if (!beforeDrain?.entry || beforeDrain.entry.state !== "draft" || !beforeDrain.conflict) {
+        throw new Error("競合または下書き状態が変わりました。回復記録を確認してください。");
+      }
+      retryEntry = pendingDraftsRef.current.get(draftTimerKey(beforeDrain.entry)) ?? beforeDrain.entry;
+      timerKey = draftTimerKey(retryEntry);
+      const timer = draftTimersRef.current.get(timerKey);
+      if (timer !== undefined) window.clearTimeout(timer);
+      draftTimersRef.current.delete(timerKey);
+      await draftQueueRef.current;
+      if (!isCurrentEditor(nav, projectId, repository, documentPath, sceneId)) {
+        schedulePendingRetry(timerKey, retryEntry);
+        return;
+      }
+      const latest = workRef.current?.editor;
+      if (!latest?.entry || latest.entry.state !== "draft" || !latest.conflict ||
+          latest.entry.operation.id !== beforeDrain.entry.operation.id ||
+          latest.entry.operation.generation !== beforeDrain.entry.operation.generation || latest.text !== beforeDrain.text) {
+        throw new Error("下書きの入力が更新されたため、リモート版への復元を中止しました。下書きは保持しています。");
+      }
+      const latestEntry = latest.entry;
+      retryEntry = pendingDraftsRef.current.get(timerKey) ?? latestEntry;
+      const remote = latest.conflict;
+      await currentJournal.removeDrafts(repository, documentPath, author);
+      draftsRemoved = true;
+      const pendingAfterRemoval = pendingDraftsRef.current.get(timerKey);
+      if (pendingAfterRemoval?.operation.id === latestEntry.operation.id &&
+          pendingAfterRemoval.operation.generation === latestEntry.operation.generation) {
+        pendingDraftsRef.current.delete(timerKey);
+      }
+      const afterRemovalWork = workRef.current;
+      const afterRemoval = afterRemovalWork?.editor;
+      const sameEditorBinding = isSameCapturedEditorBinding(afterRemovalWork);
+      const currentEntry = afterRemoval?.entry;
+      const sameOperation = currentEntry?.state === "draft" && currentEntry.operation.id === latestEntry.operation.id;
+      if (!sameEditorBinding || !isCurrentEditor(nav, projectId, repository, documentPath, sceneId) ||
+          !sameOperation || currentEntry?.operation.generation !== latestEntry.operation.generation || afterRemoval?.text !== latest.text) {
+        if (sameEditorBinding && sameOperation && currentEntry && afterRemoval && afterRemoval.text !== remote.scene.text) {
+          pendingDraftsRef.current.set(timerKey, currentEntry);
+          if (!await persistDraft(currentEntry)) schedulePendingRetry(timerKey, currentEntry);
+        }
+        if (isCurrentEditor(nav, projectId, repository, documentPath, sceneId)) {
+          setStatus({ message: "下書きの入力が更新されたため、復元を中止しました。最新の下書きを回復記録に保持しています。", kind: "error" });
+        }
+        return;
+      }
+      updateWork((state) => state?.project.id === projectId && state.selectedSceneId === sceneId &&
+          state.editor?.read.document.path === documentPath && state.editor?.entry?.operation.id === latestEntry.operation.id &&
+          state.editor?.entry?.operation.generation === latestEntry.operation.generation ? {
         ...state,
         editor: { ...state.editor, read: remote, remote, text: remote.scene.text, baseText: remote.scene.text, entry: null, conflict: null, draftStored: true, journalError: "" },
       } : state);
       await refreshJournal(repository, nav);
       if (isCurrentEditor(nav, projectId, repository, documentPath, sceneId)) setStatus({ message: "保護対象外の下書きを削除して、GitHub 版に戻しました。", kind: "success" });
     } catch (error) {
+      if (!draftsRemoved && timerKey && retryEntry && isSameCapturedEditorBinding(workRef.current)) {
+        const live = workRef.current?.editor;
+        if (live?.entry?.state === "draft" && live.entry.operation.id === retryEntry.operation.id &&
+            live.entry.operation.generation >= retryEntry.operation.generation) {
+          pendingDraftsRef.current.set(timerKey, live.entry);
+          schedulePendingRetry(timerKey, retryEntry);
+        }
+      }
       if (isCurrentEditor(nav, projectId, repository, documentPath, sceneId)) setStatus({ message: messageOf(error), kind: "error" });
+    } finally {
+      setBusy((active) => active === "restore" ? "" : active);
     }
   }
 
@@ -2042,6 +2181,7 @@ function AuthorWorkspace({
   }
 
   function toggleHistory(): void {
+    publishWorkState(workRef.current);
     setHistoryOpen(true);
     requestPanel("history");
   }
@@ -2329,8 +2469,10 @@ function AuthorWorkspace({
           path={editor.read.document.path}
           breadcrumb={breadcrumbFor(tree, scene.id)}
           text={editor.text}
-          readOnly={!editorWritable}
-          onTextChange={editText}
+          textRevision={editor.textRevision}
+          flushPendingReactPublish={flushPendingReactPublish}
+          readOnly={!editorWritable || busy === "restore"}
+          onTextChange={(nextText) => editText(nextText, true)}
           onCursorPositionChange={recentResume.onWritingPosition}
           onReadingPageChange={recentResume.onReadingPage}
           resumeRequest={resumeRequest}

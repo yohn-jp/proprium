@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef, useState, type CSSProperties } from "react";
+import { createContext, forwardRef, memo, useCallback, useContext, useEffect, useImperativeHandle, useRef, useState, type CSSProperties, type ReactNode } from "react";
 import type { Scene, SceneRead } from "../api";
 import { snapshotKey, type SnapshotId } from "@scriptorium/contracts";
 import type { JournalEntry } from "../storage/journal";
@@ -13,6 +13,85 @@ import { WRITING_SYMBOLS } from "./writingSymbols";
 import { loadReadingPage, saveReadingPage } from "../resume/continueCandidates";
 
 type Durability = "draft" | "checkpointing" | "checkpointed" | "publication_unknown" | "saved";
+
+interface EditorDurabilityStatusHandle {
+  markPendingText: (text: string, revision: number) => void;
+}
+
+const PendingEditorTextContext = createContext(false);
+
+const PendingEditorTextBoundary = forwardRef<EditorDurabilityStatusHandle, {
+  text: string;
+  textRevision: number;
+  children: ReactNode;
+}>(function PendingEditorTextBoundary({ text, textRevision, children }, ref) {
+  const [pendingEditorText, setPendingEditorText] = useState(false);
+  const pendingEditorTextRef = useRef<string | null>(null);
+  const pendingEditorTextRevisionRef = useRef<number | null>(null);
+
+  useImperativeHandle(ref, () => ({
+    markPendingText(nextText, revision) {
+      pendingEditorTextRef.current = nextText;
+      pendingEditorTextRevisionRef.current = revision;
+      setPendingEditorText(true);
+    },
+  }), []);
+
+  useEffect(() => {
+    if (!pendingEditorText ||
+        (pendingEditorTextRevisionRef.current === textRevision && pendingEditorTextRef.current !== text)) return;
+    pendingEditorTextRef.current = null;
+    pendingEditorTextRevisionRef.current = null;
+    setPendingEditorText(false);
+  }, [pendingEditorText, text, textRevision]);
+
+  return <PendingEditorTextContext.Provider value={pendingEditorText}>{children}</PendingEditorTextContext.Provider>;
+});
+
+const EditorDurabilityBadges = memo(function EditorDurabilityBadges({
+  durability,
+  pendingCount,
+}: {
+  durability: Durability;
+  pendingCount: number;
+}) {
+  const pendingEditorText = useContext(PendingEditorTextContext);
+  const currentDurability = pendingEditorText ? "draft" : durability;
+  return <div className="durability-row" aria-label="保存状態">
+    <span className={`durability-badge ${currentDurability === "draft" ? "is-current" : ""}`}>Draft</span>
+    <span className={`durability-badge ${currentDurability === "checkpointing" || currentDurability === "checkpointed" || currentDurability === "publication_unknown" ? "is-current" : ""}`}>Checkpoint</span>
+    <span className={`durability-badge ${currentDurability === "saved" ? "is-current" : ""}`}>Saved to GitHub</span>
+    {pendingCount > 0 && <span className="pending-count">未公開 {pendingCount} 件</span>}
+  </div>;
+});
+
+const EditorDurabilityMessage = memo(function EditorDurabilityMessage({
+  durability,
+  draftStored,
+  journalError,
+}: {
+  durability: Durability;
+  draftStored: boolean;
+  journalError: string;
+}) {
+  const pendingEditorText = useContext(PendingEditorTextContext);
+  const currentDurability = pendingEditorText ? "draft" : durability;
+  const currentDraftStored = pendingEditorText ? false : draftStored;
+  const statusText = currentDurability === "draft"
+    ? currentDraftStored ? "下書きはこのブラウザーに保護されています。" : "この下書きのブラウザー保存を確認できていません。"
+    : currentDurability === "checkpointing"
+      ? "チェックポイントの結果を確認しています。再試行では同じ操作 ID を使います。"
+      : currentDurability === "checkpointed"
+        ? "ローカルチェックポイントです。GitHub へ保存するまでブラウザーの記録を保持します。"
+        : currentDurability === "publication_unknown"
+          ? "GitHub への保存結果は未確認です。同じバッチで状態を再確認できます。"
+          : "確認済みの GitHub 版を表示しています。";
+
+  return <>
+    <p className="durability-message" role="status" aria-live="polite">{statusText}</p>
+    {journalError && <p className="status" data-kind="error" role="alert">{journalError}</p>}
+  </>;
+});
 
 export interface ResumeRequest {
   id: number;
@@ -55,6 +134,8 @@ export function SceneEditor({
   path,
   breadcrumb,
   text,
+  textRevision,
+  flushPendingReactPublish,
   readOnly,
   onTextChange,
   onCursorPositionChange,
@@ -98,6 +179,8 @@ export function SceneEditor({
   path: string;
   breadcrumb: string;
   text: string;
+  textRevision: number;
+  flushPendingReactPublish: () => void;
   readOnly?: boolean;
   onTextChange: (next: string) => void;
   onCursorPositionChange: (sceneId: string, cursorSentenceIndex: number | null, scrollTop: number) => void;
@@ -141,8 +224,14 @@ export function SceneEditor({
   const [typography, setTypography] = useState<TypographySettings>(loadTypographySettings);
   const [readingPage, setReadingPage] = useState(() => loadReadingPage(authorScope, repositoryKey, scene.id));
   const [selectionLength, setSelectionLength] = useState(0);
+  const pendingEditorStatusRef = useRef<EditorDurabilityStatusHandle>(null);
+  const pendingEditorTextRef = useRef<string | null>(null);
+  const pendingEditorTextRevisionRef = useRef<number | null>(null);
   const [printing, setPrinting] = useState(false);
   const editorReadOnly = readOnly ?? false;
+  const displayText = pendingEditorTextRevisionRef.current === textRevision
+    ? pendingEditorTextRef.current ?? text
+    : text;
 
   useEffect(() => {
     if (!zen) return;
@@ -159,6 +248,13 @@ export function SceneEditor({
     registerNavigationFlush(() => editorRef.current?.flushComposition() ?? Promise.resolve(null));
     return () => registerNavigationFlush(null);
   }, [registerNavigationFlush]);
+
+  const onEditorTextChange = useCallback((next: string) => {
+    pendingEditorTextRef.current = next;
+    pendingEditorTextRevisionRef.current = textRevision;
+    pendingEditorStatusRef.current?.markPendingText(next, textRevision);
+    onTextChange(next);
+  }, [onTextChange, textRevision]);
 
   useEffect(() => {
     saveReadingPage(authorScope, repositoryKey, scene.id, readingPage);
@@ -190,17 +286,8 @@ export function SceneEditor({
     onReadingPageChange(scene.id, pageIndex);
   }, [onReadingPageChange, scene.id]);
 
-  const statusText = durability === "draft"
-    ? draftStored ? "下書きはこのブラウザーに保護されています。" : "この下書きのブラウザー保存を確認できていません。"
-    : durability === "checkpointing"
-      ? "チェックポイントの結果を確認しています。再試行では同じ操作 ID を使います。"
-      : durability === "checkpointed"
-        ? "ローカルチェックポイントです。GitHub へ保存するまでブラウザーの記録を保持します。"
-        : durability === "publication_unknown"
-          ? "GitHub への保存結果は未確認です。同じバッチで状態を再確認できます。"
-          : "確認済みの GitHub 版を表示しています。";
-
   function printManuscript(): void {
+    flushPendingReactPublish();
     setPrinting(true);
     requestAnimationFrame(() => {
       window.print();
@@ -209,17 +296,13 @@ export function SceneEditor({
   }
 
   return (
+    <PendingEditorTextBoundary ref={pendingEditorStatusRef} text={text} textRevision={textRevision}>
     <section className={`editor ${zen ? "is-zen" : ""} ${zen && typewriterDim && !vertical ? "is-typewriter-dim" : ""}`} aria-label="原稿エディター">
       <header className="editor-header">
         <div className="scene-heading">
           <p className="eyebrow">{breadcrumb} · {path}</p>
           <h1>{scene.title}</h1>
-          <div className="durability-row" aria-label="保存状態">
-            <span className={`durability-badge ${durability === "draft" ? "is-current" : ""}`}>Draft</span>
-            <span className={`durability-badge ${durability === "checkpointing" || durability === "checkpointed" || durability === "publication_unknown" ? "is-current" : ""}`}>Checkpoint</span>
-            <span className={`durability-badge ${durability === "saved" ? "is-current" : ""}`}>Saved to GitHub</span>
-            {pendingCount > 0 && <span className="pending-count">未公開 {pendingCount} 件</span>}
-          </div>
+          <EditorDurabilityBadges durability={durability} pendingCount={pendingCount} />
         </div>
         <div className="editor-actions" aria-label="保存と表示">
           <button type="button" onClick={onCheckpoint} disabled={!canCheckpoint || checkpointBusy}>
@@ -234,8 +317,7 @@ export function SceneEditor({
         </div>
       </header>
 
-      <p className="durability-message" role="status" aria-live="polite">{statusText}</p>
-      {journalError && <p className="status" data-kind="error" role="alert">{journalError}</p>}
+      <EditorDurabilityMessage durability={durability} draftStored={draftStored} journalError={journalError} />
 
       {conflict && (
         <section className="conflict" aria-labelledby="conflict-title">
@@ -281,7 +363,7 @@ export function SceneEditor({
           <button type="button" className="quiet-button compact-button" onClick={() => setTypography((value) => ({ ...value, maxWidth: Math.min(960, value.maxWidth + 40) }))} aria-label="読書幅を広く" disabled={typography.maxWidth >= 960}>幅 ＋</button>
         </div>
         <button type="button" className="quiet-button" onClick={() => setVertical((current) => !current)} aria-pressed={vertical}>{vertical ? "横書き" : "縦書き"}</button>
-        <button type="button" className="quiet-button" onClick={() => setReading((current) => !current)} aria-pressed={reading}>{reading ? "編集に戻る" : "読書モード"}</button>
+        <button type="button" className="quiet-button" onClick={() => { flushPendingReactPublish(); setReading((current) => !current); }} aria-pressed={reading}>{reading ? "編集に戻る" : "読書モード"}</button>
         <button type="button" className="quiet-button" onClick={() => setZen((current) => !current)} aria-pressed={zen}>{zen ? "集中を終了" : "集中"}</button>
         {zen && <button type="button" className="quiet-button" onClick={() => setTypewriterDim((current) => !current)} aria-pressed={typewriterDim}>現在行以外を減光</button>}
         <button type="button" className="quiet-button" onClick={printManuscript}>印刷</button>
@@ -298,7 +380,7 @@ export function SceneEditor({
           <MobileReadingPager mode={vertical ? "vertical" : "horizontal"} pageIndex={readingPage} onPageIndexChange={changeReadingPage}>
             <TermAwareRubyText
               key={`${repositoryKey}:${snapshotIdentity}:${path}`}
-              text={text}
+              text={displayText}
               resolveTerms={resolveTerms}
               onTermNavigate={onTermNavigate}
             />
@@ -311,8 +393,9 @@ export function SceneEditor({
             <ManuscriptInput
               ref={editorRef}
               value={text}
+              externalTextRevision={textRevision}
               readOnly={editorReadOnly}
-              onChange={onTextChange}
+              onChange={onEditorTextChange}
               onCursorPositionChange={(cursorSentenceIndex, scrollTop) => onCursorPositionChange(scene.id, cursorSentenceIndex, scrollTop)}
               onSelectionLengthChange={setSelectionLength}
               resolveTerms={reading ? undefined : resolveTerms}
@@ -332,7 +415,7 @@ export function SceneEditor({
                 "--reader-max-width": `${typography.maxWidth}px`,
               } as CSSProperties}
             />
-            <p className="editor-hint">{text.length} 字 · 400字詰め換算 {text.length === 0 ? 0 : Math.ceil(text.length / 400)} 枚{selectionLength > 0 ? ` · 選択 ${selectionLength} 字 / 400字詰め換算 ${Math.ceil(selectionLength / 400)} 枚` : ""}。入力は IndexedDB に自動記録されます。</p>
+            <p className="editor-hint">{displayText.length} 字 · 400字詰め換算 {displayText.length === 0 ? 0 : Math.ceil(displayText.length / 400)} 枚{selectionLength > 0 ? ` · 選択 ${selectionLength} 字 / 400字詰め換算 ${Math.ceil(selectionLength / 400)} 枚` : ""}。入力は IndexedDB に自動記録されます。</p>
             <div className="mobile-keyboard" aria-label="日本語入力補助">
               {WRITING_SYMBOLS.map(({ id, label, ariaLabel }) => (
                 <button type="button" key={id} aria-label={ariaLabel} onClick={() => editorRef.current?.insert(id)} disabled={editorReadOnly}>{label}</button>
@@ -350,15 +433,16 @@ export function SceneEditor({
           <section className="preview-column" aria-labelledby="preview-title">
             <h2 id="preview-title">{vertical ? "縦書きプレビュー" : "読みのプレビュー"}</h2>
             <div className={`manuscript-preview ${vertical ? "is-vertical" : ""}`} role="document" aria-label="ルビ付き読み取り専用プレビュー" style={readerStyle(typography)}>
-              <RubyText text={text} />
+              <RubyText text={displayText} />
             </div>
           </section>
       </div>
       <div className={`print-view ${vertical ? "is-vertical" : ""}`} aria-hidden={!printing} style={readerStyle(typography)}>
-        <RubyText text={text} className="print-manuscript" />
+        <RubyText text={displayText} className="print-manuscript" />
       </div>
-      {historyOpen && !historyExternal && <ManuscriptHistoryPanel projectId={projectId} manuscriptId={scene.id} sceneId={scene.id} snapshot={historySnapshot} currentBody={text} onRestore={onRestoreHistoryBody} onClose={onHistory} />}
+      {historyOpen && !historyExternal && <ManuscriptHistoryPanel projectId={projectId} manuscriptId={scene.id} sceneId={scene.id} snapshot={historySnapshot} currentBody={displayText} onRestore={onRestoreHistoryBody} onClose={onHistory} />}
     </section>
+    </PendingEditorTextBoundary>
   );
 }
 
