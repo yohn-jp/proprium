@@ -2,12 +2,16 @@ import { mkdir } from 'node:fs/promises';
 import { join, resolve } from 'node:path';
 import { createHash } from 'node:crypto';
 import { performance } from 'node:perf_hooks';
+import { pathToFileURL } from 'node:url';
 
-const [datasetRootValue, workerRootValue] = process.argv.slice(2);
-if (!datasetRootValue || !workerRootValue) throw new Error('Usage: core64-payload-worker.mjs <dataset-root> <worker-root>');
+const [datasetRootValue, workerRootValue, runtimeRootValue] = process.argv.slice(2);
+if (!datasetRootValue || !workerRootValue || !runtimeRootValue) {
+  throw new Error('Usage: core64-payload-worker.mjs <dataset-root> <worker-root> <frozen-runtime-root>');
+}
 
 const datasetRoot = resolve(datasetRootValue);
 const workerRoot = resolve(workerRootValue);
+const runtimeRoot = resolve(runtimeRootValue);
 const remote = join(datasetRoot, 'origin.git');
 const dataDir = join(workerRoot, 'core-data');
 const usageDirectory = join(workerRoot, 'usage');
@@ -16,8 +20,8 @@ const authToken = 'core64-synthetic-payload-probe-token';
 await mkdir(workerRoot, { recursive: true });
 await mkdir(staticDir, { recursive: true });
 
-const { CoreStore } = await import('../../packages/core/dist/index.js');
-const { createServer } = await import('../../packages/api/dist/server.js');
+const { CoreStore } = await import(pathToFileURL(join(runtimeRoot, 'packages/core/dist/index.js')));
+const { createServer } = await import(pathToFileURL(join(runtimeRoot, 'packages/api/dist/server.js')));
 const store = new CoreStore({ dataDir, allowLocalRemotes: true });
 const coreCalls = { propose: 0, approve: 0, checkpoint: 0 };
 for (const method of Object.keys(coreCalls)) {

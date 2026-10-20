@@ -1,17 +1,98 @@
-import { spawn, execFileSync } from 'node:child_process';
+import { spawn } from 'node:child_process';
 import { createHash } from 'node:crypto';
 import { request as httpRequest } from 'node:http';
-import { mkdir, mkdtemp, rm } from 'node:fs/promises';
+import { mkdir, mkdtemp, readFile, rm } from 'node:fs/promises';
 import { arch, platform, release, tmpdir } from 'node:os';
-import { join, resolve } from 'node:path';
+import { isAbsolute, join, relative, resolve, sep } from 'node:path';
 import { isDeepStrictEqual } from 'node:util';
 import { fileURLToPath, pathToFileURL } from 'node:url';
-import { generate } from './dataset.mjs';
+import { generate, git } from './dataset.mjs';
 import { save } from './common.mjs';
 
 const MiB = 1024 * 1024;
 const workerScript = fileURLToPath(new URL('./core64-payload-worker.mjs', import.meta.url));
+const sourceRoot = resolve(fileURLToPath(new URL('../..', import.meta.url)));
 const workerTimeoutMs = 120_000;
+const expectedRuntimeCommit = 'ffd02739ab095dfda2854a3ff487434c84f6b536';
+const expectedRuntimeManifestSha256 = 'f16e9db3d4e99c39985044ef44fa677dde62678be54f0d36f53693bf095a9031';
+const expectedArtifactRoots = [
+  'packages/contracts/dist',
+  'packages/module-runtime/dist',
+  'packages/core/dist',
+  'packages/api/dist',
+  'app/dist',
+  'profiles/core/generated',
+];
+
+async function bindRuntime() {
+  const requestedRoot = process.env.SCRIPTORIUM_PERF_RUNTIME_ROOT;
+  if (!requestedRoot) throw new Error('Set SCRIPTORIUM_PERF_RUNTIME_ROOT to the frozen C09 runtime at ffd02739.');
+  const runtimeRoot = resolve(requestedRoot);
+  const manifestPath = resolve(process.env.SCRIPTORIUM_PERF_RUNTIME_MANIFEST ??
+    join(runtimeRoot, 'docs/performance/results/core64-resize/runtime-manifest.json'));
+  const runtimeCommit = git(runtimeRoot, 'rev-parse', 'HEAD');
+  if (runtimeCommit !== expectedRuntimeCommit) {
+    throw new Error(`Expected frozen C09 runtime ${expectedRuntimeCommit}, found ${runtimeCommit} in ${runtimeRoot}`);
+  }
+
+  const manifestBytes = await readFile(manifestPath);
+  const manifestSha256 = createHash('sha256').update(manifestBytes).digest('hex');
+  if (manifestSha256 !== expectedRuntimeManifestSha256) throw new Error('Frozen C09 runtime manifest SHA-256 mismatch.');
+  const manifest = JSON.parse(manifestBytes.toString('utf8'));
+  if (manifest.sourceCommit !== expectedRuntimeCommit || resolve(manifest.runtimeRoot) !== runtimeRoot ||
+      manifest.productionIdentity?.identical !== true || manifest.dirtyProductionPaths?.length !== 0 ||
+      JSON.stringify(manifest.artifactRoots) !== JSON.stringify(expectedArtifactRoots)) {
+    throw new Error('Frozen C09 runtime manifest does not bind the expected source and six artifact roots.');
+  }
+
+  const runtimeSourceTrees = {};
+  const sourceTrees = {};
+  const sourceDirty = git(sourceRoot, 'status', '--porcelain', '--untracked-files=all', '--', 'packages/api/src', 'packages/contracts/src');
+  if (sourceDirty) throw new Error(`Probe API/contracts source paths are dirty: ${sourceDirty}`);
+  for (const path of ['packages/api/src', 'packages/contracts/src']) {
+    runtimeSourceTrees[path] = git(runtimeRoot, 'rev-parse', `${runtimeCommit}:${path}`);
+    sourceTrees[path] = git(sourceRoot, 'rev-parse', `HEAD:${path}`);
+    if (runtimeSourceTrees[path] !== sourceTrees[path]) {
+      throw new Error(`Frozen runtime ${path} source differs from the probe checkout.`);
+    }
+  }
+
+  const listedRoots = new Set(expectedArtifactRoots);
+  const listedPaths = new Set();
+  let artifactBytes = 0;
+  for (const artifact of manifest.files ?? []) {
+    if (typeof artifact.path !== 'string' || isAbsolute(artifact.path) || artifact.path.split(/[\\/]/).includes('..') ||
+        ![...listedRoots].some((root) => artifact.path.startsWith(`${root}/`)) || listedPaths.has(artifact.path)) {
+      throw new Error(`Invalid or duplicate frozen runtime artifact path: ${artifact.path}`);
+    }
+    listedPaths.add(artifact.path);
+    const filePath = resolve(runtimeRoot, artifact.path);
+    const relativePath = relative(runtimeRoot, filePath);
+    if (relativePath.startsWith(`..${sep}`) || relativePath === '..') {
+      throw new Error(`Frozen runtime artifact escapes its root: ${artifact.path}`);
+    }
+    const bytes = await readFile(filePath);
+    const sha256 = createHash('sha256').update(bytes).digest('hex');
+    if (bytes.length !== artifact.bytes || sha256 !== artifact.sha256) {
+      throw new Error(`Frozen runtime artifact hash/size mismatch: ${artifact.path}`);
+    }
+    artifactBytes += bytes.length;
+  }
+  if (listedPaths.size !== manifest.totals?.fileCount || artifactBytes !== manifest.totals?.bytes ||
+      [...listedRoots].some((root) => ![...listedPaths].some((path) => path.startsWith(`${root}/`)))) {
+    throw new Error('Frozen runtime artifact inventory is incomplete.');
+  }
+
+  return {
+    root: runtimeRoot,
+    commit: runtimeCommit,
+    manifest: manifestPath,
+    manifestSha256,
+    artifactFiles: listedPaths.size,
+    artifactBytes,
+    apiAndContractsSourceTrees: runtimeSourceTrees,
+  };
+}
 
 function messageChannel(child) {
   const queued = [];
@@ -169,10 +250,13 @@ function diff(before, after) {
   };
 }
 
-function validateSample(sample) {
+function validateSample(sample, sourceSeedCommit) {
   const checks = [];
   const check = (name, passed, evidence = undefined) => checks.push({ name, passed: Boolean(passed), ...(evidence === undefined ? {} : { evidence }) });
   const delta = sample.delta;
+  check('generated-source-remote-head-unchanged',
+    sample.sourceSeedCommitBefore === sourceSeedCommit && sample.sourceSeedCommitAfter === sourceSeedCommit,
+    { before: sample.sourceSeedCommitBefore, after: sample.sourceSeedCommitAfter, expected: sourceSeedCommit });
   if (sample.kind === 'accepted') {
     const attachmentPath = sample.responseBody?.attachments?.[0]?.path;
     const markdownPath = sample.responseBody?.path;
@@ -224,9 +308,11 @@ async function inspectWorker(child, channel, requestId, paths) {
   return (await channel.waitFor('inspect-result', { requestId })).state;
 }
 
-async function executeCase(testCase, datasetRoot, runRoot) {
+async function executeCase(testCase, datasetRoot, runRoot, runtimeRoot, sourceSeedCommit) {
   const workerRoot = join(runRoot, testCase.name);
-  const child = spawn(process.execPath, [workerScript, datasetRoot, workerRoot], {
+  const sourceSeedCommitBefore = git(join(datasetRoot, 'origin.git'), 'rev-parse', 'refs/heads/main');
+  if (sourceSeedCommitBefore !== sourceSeedCommit) throw new Error('Generated source remote changed before this scenario.');
+  const child = spawn(process.execPath, [workerScript, datasetRoot, workerRoot, runtimeRoot], {
     stdio: ['ignore', 'ignore', 'inherit', 'ipc'],
     env: { ...process.env, SCRIPTORIUM_PROFILE: 'core' },
   });
@@ -294,7 +380,9 @@ async function executeCase(testCase, datasetRoot, runRoot) {
       requestContentLength: sample.serverProbe.requestContentLength,
       termination: sample.serverProbe.termination,
     };
-    validateSample(sample);
+    sample.sourceSeedCommitBefore = sourceSeedCommitBefore;
+    sample.sourceSeedCommitAfter = git(join(datasetRoot, 'origin.git'), 'rev-parse', 'refs/heads/main');
+    validateSample(sample, sourceSeedCommit);
     child.send({ type: 'stop' });
     await channel.waitFor('stopped', {}, 30_000);
     await exitPromise;
@@ -314,31 +402,38 @@ async function executeCase(testCase, datasetRoot, runRoot) {
 async function main() {
   const mode = process.argv[2];
   const cases = expectedCases(mode);
+  if (mode === '--verify-runtime') {
+    console.log(JSON.stringify(await bindRuntime(), null, 2));
+    return;
+  }
   if (mode === '--plan') {
     console.log(JSON.stringify({
       smallOnly: expectedCases('--small-only'),
       afterG0Lease: expectedCases('--with-heavy'),
       heavyLeaseGuard: 'CORE64_G0_LEASE=released is required for --with-heavy',
       persistence: 'Each case uses a separate real CoreStore dataDir and real API createScratch route over the shared read-only synthetic bare remote.',
+      runtime: `SCRIPTORIUM_PERF_RUNTIME_ROOT must point to frozen C09 runtime ${expectedRuntimeCommit}; the six-root artifact manifest and API/contracts source trees are verified before any request.`,
     }, null, 2));
     return;
   }
-  if (!cases) throw new Error('Usage: node scripts/performance/core64-payload-probe.mjs --plan|--small-only|--with-heavy');
+  if (!cases) throw new Error('Usage: node scripts/performance/core64-payload-probe.mjs --plan|--verify-runtime|--small-only|--with-heavy');
   if (mode === '--with-heavy' && process.env.CORE64_G0_LEASE !== 'released') {
     throw new Error('Heavy payload/HTTP cases are gated: wait for G0 to release the measurement lease and set CORE64_G0_LEASE=released.');
   }
+  const runtime = await bindRuntime();
 
   const runRoot = await mkdtemp(join(tmpdir(), 'scriptorium-core64-payload-'));
   const datasetRoot = join(runRoot, 'dataset');
-  const outputDirectory = resolve('results/core64-payload');
+  const outputDirectory = join(sourceRoot, 'docs/performance/results/core64-payload');
   await mkdir(outputDirectory, { recursive: true });
   const runId = new Date().toISOString().replaceAll(':', '-').replaceAll('.', '-') + `-${process.pid}`;
   const outputFile = join(outputDirectory, `payload-${runId}.json`);
-  const sourceCommit = execFileSync('git', ['rev-parse', 'HEAD'], { encoding: 'utf8' }).trim();
+  const sourceCommit = git(sourceRoot, 'rev-parse', 'HEAD');
   const report = {
     schemaVersion: 1,
     runId,
     sourceCommit,
+    runtime,
     node: process.version,
     host: { platform: platform(), arch: arch(), release: release() },
     profile: 'core',
@@ -354,6 +449,7 @@ async function main() {
     generator: 'scripts/performance/dataset.mjs small short; synthetic bare remote only',
     lease: mode === '--with-heavy' ? 'G0 release asserted by CORE64_G0_LEASE=released' : 'tiny accepted-path probe only',
     dataset: null,
+    sourceSeed: null,
     plannedCases: cases.map(({ name, rawBytes, kind }) => ({ name, rawBytes, kind })),
     samples: [],
     unattempted: [],
@@ -361,13 +457,31 @@ async function main() {
 
   try {
     const generated = await generate(datasetRoot, 'small', 'short');
+    const sourceSeedCommit = git(generated.remote, 'rev-parse', 'refs/heads/main');
+    if (sourceSeedCommit !== generated.commit) throw new Error('Generated bare remote HEAD does not match its dataset seed commit.');
     report.dataset = { ...generated, remote: 'dataset/origin.git' };
-    for (const testCase of cases) {
+    report.sourceSeed = { remote: 'dataset/origin.git', commitBefore: sourceSeedCommit, commitAfter: null, unchanged: null };
+    for (const [caseIndex, testCase] of cases.entries()) {
       try {
-        const sample = await executeCase(testCase, datasetRoot, runRoot);
+        const sample = await executeCase(testCase, datasetRoot, runRoot, runtime.root, sourceSeedCommit);
         report.samples.push(sample);
+        report.sourceSeed.commitAfter = sample.sourceSeedCommitAfter;
+        report.sourceSeed.unchanged = sample.sourceSeedCommitAfter === sourceSeedCommit;
         await save(outputFile, report);
+        if (!report.sourceSeed.unchanged) {
+          report.status = 'FAIL';
+          report.unattempted = cases.slice(caseIndex + 1).map(({ name }) => ({
+            name,
+            status: 'NOT_CHECKED',
+            reason: 'Generated source remote changed during an earlier scenario.',
+          }));
+          await save(outputFile, report);
+          process.exitCode = 1;
+          return;
+        }
       } catch (error) {
+        report.sourceSeed.commitAfter = git(generated.remote, 'rev-parse', 'refs/heads/main');
+        report.sourceSeed.unchanged = report.sourceSeed.commitAfter === sourceSeedCommit;
         report.status = 'NOT_CHECKED';
         report.failure = error instanceof Error ? error.stack : String(error);
         report.unattempted = cases.filter(({ name }) => !report.samples.some((sample) => sample.name === name) && name !== testCase.name)
@@ -378,6 +492,8 @@ async function main() {
         return;
       }
     }
+    report.sourceSeed.commitAfter = git(generated.remote, 'rev-parse', 'refs/heads/main');
+    report.sourceSeed.unchanged = report.sourceSeed.commitAfter === sourceSeedCommit;
     report.status = report.samples.every((sample) => sample.status === 'PASS') ? 'PASS' : 'FAIL';
     await save(outputFile, report);
     console.log(JSON.stringify({ status: report.status, outputFile }, null, 2));
