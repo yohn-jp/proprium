@@ -64,7 +64,7 @@ try {
     await expect(editor).toContainText(`Synthetic scene ${id}`);
   }
   await phase('startup.firstEditor', () => openScene(1));
-  report.phases.push({ name: 'startup', server: await stats(), runtime: await browserRuntime(), browser: await page.evaluate(() => structuredClone(window.__wave0)), cdp: await cdp.send('Performance.getMetrics'), runtime: await browserRuntime() });
+  report.phases.push({ name: 'startup', server: await stats(), browser: await page.evaluate(() => structuredClone(window.__wave0)), cdp: await cdp.send('Performance.getMetrics'), runtime: await browserRuntime() });
   for (let id = 1; id <= 3; id++) {
     await openScene(id);
     await editor.focus();
@@ -92,11 +92,17 @@ try {
   await editor.press('Control+End'); await editor.press('b');
   await page.waitForTimeout(600);
   await phase('ui.checkpoint', async () => {
+    const checkpoint = page.waitForResponse(response => response.request().method() === 'POST' && new URL(response.url()).pathname.endsWith('/checkpoints'));
     await page.getByRole('button', { name: 'Checkpoint', exact: true }).click();
+    const receipt = await checkpoint;
+    if (!receipt.ok() || !(await receipt.json()).operationId) throw new Error('Checkpoint did not return a receipt');
     await expect(page.locator('.durability-message')).toContainText('ローカルチェックポイント');
   });
   await phase('ui.publish', async () => {
+    const publication = page.waitForResponse(response => response.request().method() === 'POST' && new URL(response.url()).pathname.endsWith('/publish'));
     await page.getByRole('button', { name: 'Save to GitHub', exact: true }).click();
+    const receipt = await publication;
+    if (!receipt.ok() || (await receipt.json()).state !== 'confirmed') throw new Error('Publication was not confirmed');
     await expect(page.getByText('Saved to GitHub', { exact: true })).toBeVisible();
   });
   async function idle(name) {
@@ -108,6 +114,9 @@ try {
       before, after: await stats(), runtimeBefore, runtimeAfter: await browserRuntime(), metricsBefore, metricsAfter: await cdp.send('Performance.getMetrics'),
       visibility: await page.evaluate(() => document.visibilityState) });
   }
+  // The status text can become visible before publication refresh requests finish.
+  // Exclude that foreground tail before counting background requests.
+  await page.waitForLoadState('networkidle');
   await idle('idle.visible');
   const foreground = await context.newPage(); await foreground.bringToFront();
   if (await page.evaluate(() => document.hidden)) await idle('idle.hidden');

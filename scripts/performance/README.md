@@ -81,3 +81,10 @@ Measurements and limits:
 64-candidate mapping and proposed Wave 1 work. OCI, hosted GitHub networking,
 crash recovery, actual hidden idle and 24-hour soak require separate environments
 when unavailable; never fill those observations with estimates.
+
+After every worker is terminal, run
+`node scripts/performance/summarize.mjs /tmp/scriptorium-wave0-fresh/results`.
+It writes `summary.json` (including operation CPU, I/O, RSS, Git counts, browser
+input/IDB/HTTP/idle metrics) and `tables.md`. Raw results remain authoritative.
+UI checkpoint/publish measurements await their actual successful HTTP receipts.
+The idle window starts after those foreground requests and their refreshes settle.

@@ -41,3 +41,19 @@ test('worker timeout retains completed evidence without claiming completion', as
     assert.equal(result.samples[0].ms, 12);
   } finally { await rm(root, { recursive: true, force: true }); }
 });
+
+test('browser summaries distinguish completed strict writes from pending or aborted transactions', async () => {
+  const { summarizeBrowser } = await import('./summarize.mjs');
+  const browser = { inputs: [{ type: 'keydown', key: 'a', start: 2, frameMs: 12 }], reactCommits: [], longTasks: [],
+    reads: [{ start: 2, method: 'getAll', records: 3 }], transactions: [
+      { start: 2, mode: 'readwrite', durability: 'strict', status: 'complete', ms: 5 },
+      { start: 2, mode: 'readwrite', durability: 'strict', status: 'pending' },
+      { start: 2, mode: 'readwrite', durability: 'strict', status: 'aborted', ms: 8 },
+    ] };
+  const result = summarizeBrowser({ status: 'NOT_CHECKED', phases: [{ name: 'input.1024', start: 1, end: 3, browser }], samples: [], requests: [] });
+  assert.equal(result.status, 'NOT_CHECKED');
+  assert.equal(result.inputs[0].strictWriteMs.n, 1);
+  assert.equal(result.inputs[0].strictWriteMs.p95, 5);
+  assert.deepEqual(result.inputs[0].transactions, { total: 3, pending: 1, aborted: 1 });
+  assert.equal(result.inputs[0].reads.returnedRecords, 3);
+});
