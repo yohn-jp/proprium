@@ -82,15 +82,15 @@ async function summarize(directory) {
   }
   await save(join(directory, 'summary.json'), result);
   const fmt = value => value == null ? 'NOT_CHECKED' : value.toFixed(2);
-  const lines = ['| Dataset / operation | n | p50 ms | p95 ms | p99 ms | Node CPU p50 ms | RSS max MiB | Git p50 |', '| --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: |'];
+  const lines = ['| Dataset / operation | Worker status | n | p50 ms | p95 ms | p99 ms | Node CPU p50 ms | RSS max MiB | Git p50 |', '| --- | --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: |'];
   for (const [file, report] of Object.entries(result.core)) for (const [operation, data] of Object.entries(report.operations)) {
     if (operation === 'register') continue;
-    lines.push(`| ${file.replace('.json', '')} / ${operation} | ${data.ms.n} | ${fmt(data.ms.p50)} | ${fmt(data.ms.p95)} | ${fmt(data.ms.p99)} | ${fmt(data.nodeCpuMs.p50)} | ${fmt(data.rssMaxBytes / 1048576)} | ${data.gitProcesses.p50} |`);
+    lines.push(`| ${file.replace('.json', '')} / ${operation} | ${report.status} | ${data.ms.n} | ${fmt(data.ms.p50)} | ${fmt(data.ms.p95)} | ${fmt(data.ms.p99)} | ${fmt(data.nodeCpuMs.p50)} | ${fmt(data.rssMaxBytes / 1048576)} | ${data.gitProcesses.p50} |`);
   }
-  lines.push('', '| Dataset / document | typing n | typing p50 / p95 / p99 ms | arrow p95 ms | React commits | Long Tasks n / p95 ms | strict IDB n / p95 ms | getAll calls |', '| --- | ---: | --- | ---: | ---: | --- | --- | ---: |');
+  lines.push('', '| Dataset / document | Worker status | typing n | typing p50 / p95 / p99 ms | arrow p95 ms | React commits | Long Tasks n / p95 ms | strict IDB n / p95 ms | getAll calls |', '| --- | --- | ---: | --- | ---: | ---: | --- | --- | ---: |');
   for (const [file, report] of Object.entries(result.browser)) for (const input of report.inputs) {
     const t = input.typingFrameMs;
-    lines.push(`| ${file.replace('.json', '')} / ${input.name} | ${t.n} | ${fmt(t.p50)} / ${fmt(t.p95)} / ${fmt(t.p99)} | ${fmt(input.arrowFrameMs.p95)} | ${input.reactCommits} | ${input.longTasks.n} / ${fmt(input.longTasks.p95)} | ${input.strictWriteMs.n} / ${fmt(input.strictWriteMs.p95)} | ${input.reads.getAll} |`);
+    lines.push(`| ${file.replace('.json', '')} / ${input.name} | ${report.status} | ${t.n} | ${fmt(t.p50)} / ${fmt(t.p95)} / ${fmt(t.p99)} | ${fmt(input.arrowFrameMs.p95)} | ${input.reactCommits} | ${input.longTasks.n} / ${fmt(input.longTasks.p95)} | ${input.strictWriteMs.n} / ${fmt(input.strictWriteMs.p95)} | ${input.reads.getAll} |`);
   }
   await writeFile(join(directory, 'tables.md'), lines.join('\n') + '\n');
   return result;
