@@ -80,9 +80,63 @@ logs remain under
 - `core-verify.log`: 28,454 bytes, SHA-256 `f72849b6deaa94cc291ae3595adc9270d7a164f9000fb5bbe171d59a613fac4a`.
 - `full-verify.log`: 31,240 bytes, SHA-256 `e11e309c7ed23f2d02ca19178ed41e5ce65792337a0a154ca975d25a9a151afd`.
 
-Dedicated C62 n=5 start-to-ready samples, nearest-rank p50/p95, fixed 30-second
-idle RSS/cgroup-CPU sampling, and `/data` plus `/history` write checks have not
-run. Run `measure-oci-c62.mjs` against these exact image references only after
-the separate quiet-window grant; do not rebuild them for that measurement. Its
-cgroup CPU counter includes the in-container sampler and other work in the
-container cgroup, so it must not be described as app-only CPU.
+## Dedicated C62 measurements
+
+The dedicated measurement phase ran after the quiet-window grant on CPUs 8–15,
+sequentially for Core then Full. Each of the five startup samples used a fresh
+container with the already-built image reference. Image and operating-system
+caches were not flushed, and the measurement helper did not pull or rebuild
+images; these are warm-image, fresh-container startup measurements, not
+cold-boot or cold-pull latency. The coordinator reported no overlapping
+artifact workload; external host load is unknown.
+
+The start interval runs from the `podman run --detach` invocation through the
+first successful `/api/ready` response. Percentiles use nearest rank; at n=5,
+p95 is the maximum observation. Only the fifth run includes the 5-second idle
+warmup followed by a fixed 30-second idle window with 31 RSS samples and 30
+one-second cgroup CPU intervals.
+
+| Profile | Start samples (ms) | p50 (ms) | p95 (ms) | Idle actual | RSS p50 / p95 / max (KiB) | Cgroup CPU mean / max (% of one core) | Assertions |
+| --- | --- | ---: | ---: | ---: | ---: | ---: | --- |
+| Core | 762.506, 750.756, 713.695, 830.576, 743.110 | 750.756 | 830.576 | 30.043 s | 90,668 / 90,668 / 90,668 | 0.0743 / 0.2178 | all pass |
+| Full | 516.483, 494.400, 480.262, 513.829, 473.242 | 494.400 | 516.483 | 30.048 s | 91,260 / 91,264 / 91,264 | 0.0696 / 0.1919 | all pass |
+
+Both profiles passed asset/metadata verification, effective UID 1000, writable
+`/data` and `/history`, and graceful SIGTERM drain. The idle RSS process walk
+excludes the sampler process itself. CPU comes from the whole container cgroup
+and includes the in-container sampling helper and any other work in that cgroup;
+it is not an application-only CPU measure. Core and Full are different module
+profiles, not a controlled before/after comparison, so their values do not
+establish a causal gain.
+
+Verdict: **VERIFIED_EXISTING**. The existing runtime image and Dockerfile pass
+Core and Full acceptance. No image-stripping Dockerfile change was evaluated or
+justified by this campaign; retain the existing Dockerfile.
+
+Exact measurement commands, each with exit status 0:
+
+```bash
+taskset -c 8-15 node scripts/performance/measure-oci-c62.mjs core \
+  localhost/scriptorium:c64-oci-core-8966fc32 \
+  8966fc329a7628d3cf6b4aac84e6b678afc2d157 \
+  /data/scriptorium-c64-oci/evidence/final-8966fc329a7628d3cf6b4aac84e6b678afc2d157/core-measure.json \
+  2>&1 | tee /data/scriptorium-c64-oci/evidence/final-8966fc329a7628d3cf6b4aac84e6b678afc2d157/core-measure.log
+
+taskset -c 8-15 node scripts/performance/measure-oci-c62.mjs full \
+  localhost/scriptorium:c64-oci-full-8966fc32 \
+  8966fc329a7628d3cf6b4aac84e6b678afc2d157 \
+  /data/scriptorium-c64-oci/evidence/final-8966fc329a7628d3cf6b4aac84e6b678afc2d157/full-measure.json \
+  2>&1 | tee /data/scriptorium-c64-oci/evidence/final-8966fc329a7628d3cf6b4aac84e6b678afc2d157/full-measure.log
+```
+
+Selected raw evidence (all files remain in the evidence directory above):
+
+- `core-measure.json`: 15,362 bytes, SHA-256 `667291fd38cf9b6ee110d5305ef978edca920e73fc4441f789de155c67f7b2c2`.
+- `core-measure.log`: 6,254 bytes, SHA-256 `08343a2de89aad1b93e64e6b13f734ab68d0c2d252f3cd9b27d2e080afddd81d`.
+- `full-measure.json`: 15,366 bytes, SHA-256 `5f56d4fc85d7e63da7efc4c4db106163f0f150a4cdd6e1538c70ab94216dfecb`.
+- `full-measure.log`: 6,255 bytes, SHA-256 `849c189fcb1499d21f37233d891b624ba46cd4238d18cc9caf54a461286ac76c`.
+- `core-measure-status.txt` and `full-measure-status.txt` both contain `0`.
+
+The verifier and measurement scripts removed their own temporary containers;
+post-run isolated inventory had no containers or volumes. The cached Node base
+and the exact Core and Full images remain available in the isolated store.

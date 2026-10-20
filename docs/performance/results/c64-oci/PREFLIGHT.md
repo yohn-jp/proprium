@@ -1,6 +1,6 @@
 # C62 OCI acceptance preflight
 
-Status: **Core and Full OCI image builds and verifier acceptance PASS on source `8966fc329a7628d3cf6b4aac84e6b678afc2d157`; dedicated C62 timing and idle-resource measurements await a separate quiet-window grant.** See [ACCEPTANCE-20261021.md](ACCEPTANCE-20261021.md).
+Status: **Core and Full OCI builds, verifier acceptance, and dedicated C62 measurements PASS on source `8966fc329a7628d3cf6b4aac84e6b678afc2d157`.** See [ACCEPTANCE-20261021.md](ACCEPTANCE-20261021.md).
 
 The worktree was created as branch `perf/c64-oci` from `b2eb1924eeae60511f84e1959e83851dbc2fd090`; the isolated `info` probe ran before the task-local acceptance files were committed. G0's runtime reference is `a1587e784788fa87d86c0eb7ab175d7a28a3209f`. At the worktree base, the runtime input paths (`Dockerfile`, `packages`, `app`, `api`, `server.ts`, `pnpm-lock.yaml`, `package.json`, `profiles`, and `scripts`) had no diff from that runtime reference. This leaf adds only task-local probe scripts and evidence. The Core and Full images were subsequently built sequentially from clean source SHA `8966fc329a7628d3cf6b4aac84e6b678afc2d157`; see the acceptance record.
 
