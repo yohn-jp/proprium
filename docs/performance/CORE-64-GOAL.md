@@ -182,7 +182,7 @@ G1/G2/G3の計測やファイル非競合leafは並行可能だが、**受け渡
 
 - **優先/段階/基準時状態:** P1 / G2 / 未決着（Wave0分類に従って要調査）。Wave0分類: Defer、工数: High。 [監査時のコード](https://github.com/yohn-jp/scriptorium/blob/546882f05a5f4b4a412e64c7aec868d401ce8ca9/packages/core/src/index.ts#L1059-L1118)
 - **具体化した作業:** CoreStore分割はホットパス改善に必要な責務だけ。ProjectRegistry/Snapshot/Mutation/Transport/Publicationを実装上の境界候補として比較。
-- **判定証拠:** 循環依存・API契約・実行時間が改善する小規模抽出以外は根拠付き見送り。既存20以上のcontract/integration testsを維持。
+- **判定証拠:** 循環依存・API契約・実行時間が改善する小規模抽出以外は根拠付き見送り。既存のcontract/integration testsを維持。
 
 ### C25 — getProjectが呼び出しごとにJSON registryをFSから読む
 
@@ -421,7 +421,7 @@ G1/G2/G3の計測やファイル非競合leafは並行可能だが、**受け渡
 ### C64 — エラー/ログと性能トレースが共通のrequest IDで統合されていない可能性
 
 - **優先/段階/基準時状態:** P2 / G5 / 未決着（Wave0分類に従って要調査）。Wave0分類: Investigate、工数: High。 [監査時のコード](https://github.com/yohn-jp/scriptorium/blob/546882f05a5f4b4a412e64c7aec868d401ce8ca9/packages/api/src/server.ts#L483-L561)
-- **具体化した作業:** instrumentationだけが必要なら既存request/context IDでBrowser↔API↔Git/IDB correlationを追加。秘密情報・原稿本文はトレースに含めない。
+- **具体化した作業:** instrumentationだけが必要なら既存request/context IDの有無を確認し、必要な範囲のBrowser↔API↔Git/IDB correlationを追加。秘密情報・原稿本文はトレースに含めない。
 - **判定証拠:** 主要p95原因をspanに紐付けられた割合、overhead/RSS、trace off時のCPU、error/conflict時のscope保護。
 
 ## 結果台帳と停止条件
