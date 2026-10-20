@@ -57,3 +57,18 @@ test('browser summaries distinguish completed strict writes from pending or abor
   assert.deepEqual(result.inputs[0].transactions, { total: 3, pending: 1, aborted: 1 });
   assert.equal(result.inputs[0].reads.returnedRecords, 3);
 });
+
+test('worker timeout also terminates a detached descendant', { skip: process.platform !== 'linux' }, async () => {
+  const root = await mkdtemp(join(tmpdir(), 'wave0-detached-'));
+  try {
+    const worker = join(root, 'worker.mjs'), output = join(root, 'result.json');
+    await writeFile(worker, `import { spawn } from 'node:child_process'; import { writeFileSync } from 'node:fs'; const child=spawn(process.execPath,['-e','setInterval(()=>{},1000)'],{detached:true,stdio:'ignore'}); writeFileSync(process.argv[2],JSON.stringify({status:'running',samples:[],descendantPid:child.pid})); setInterval(()=>{},1000);`);
+    const result = await runWorker(worker, [output], output, 500);
+    assert.equal(result.status, 'NOT_CHECKED');
+    // An exited descendant can remain a zombie briefly until the host reaps it.
+    let state = 'missing';
+    try { state = (await readFile(`/proc/${result.descendantPid}/stat`, 'utf8')).split(') ')[1].split(' ')[0]; }
+    catch (error) { assert.equal(error.code, 'ENOENT'); }
+    assert.ok(['missing', 'Z'].includes(state), `Detached child remained live: ${state}`);
+  } finally { await rm(root, { recursive: true, force: true }); }
+});

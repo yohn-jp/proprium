@@ -1,4 +1,5 @@
 import { spawn, execFileSync } from 'node:child_process';
+import { readFileSync } from 'node:fs';
 import { readFile, mkdir } from 'node:fs/promises';
 import { join, resolve } from 'node:path';
 import { pathToFileURL } from 'node:url';
@@ -12,7 +13,20 @@ export async function runWorker(script, args, output, timeoutMs, env = {}) {
   const child = spawn(process.execPath, [script, ...args], { detached: true,
     env: { ...process.env, ...env }, stdio: ['ignore', 'ignore', 'inherit'] });
   let timeout = false;
-  const timer = setTimeout(() => { timeout = true; try { process.kill(-child.pid, 'SIGKILL'); } catch (error) { if (error.code !== 'ESRCH') throw error; } }, timeoutMs);
+  const timer = setTimeout(() => {
+    timeout = true;
+    // Chromium can create a detached process group. Capture the live descendant
+    // tree before killing its parent, then terminate children from the leaves.
+    const descendants = [];
+    const visit = pid => {
+      let children = [];
+      try { children = readFileSync(`/proc/${pid}/task/${pid}/children`, 'utf8').trim().split(/\s+/).filter(Boolean).map(Number); } catch {}
+      for (const id of children) { visit(id); descendants.push(id); }
+    };
+    visit(child.pid);
+    for (const id of descendants) { try { process.kill(id, 'SIGKILL'); } catch (error) { if (error.code !== 'ESRCH') throw error; } }
+    try { process.kill(-child.pid, 'SIGKILL'); } catch (error) { if (error.code !== 'ESRCH') throw error; }
+  }, timeoutMs);
   const terminal = await new Promise((resolveExit, reject) => { child.once('error', reject); child.once('exit', (code, signal) => resolveExit({ code, signal })); });
   clearTimeout(timer);
   let report;
