@@ -139,4 +139,4 @@ compressed data remains in the Release Asset.
 | `SCRIPTORIUM_PROFILE=core pnpm build` | Passed |
 | `pnpm audit:core` | Passed: 128 production dependency versions scanned |
 | Browser E2E | Passed: Chromium modular-workspace suite, 8 passed, 1 full-profile-only test skipped |
-| OCI acceptance (`nix shell nixpkgs#podman -c bash scripts/verify-oci.sh`) | NOT_CHECKED: the image build exited 125 with `no space left on device` while storing a layer; host had 2.8 GiB free. No existing images or storage were removed for a retry. |
+| OCI acceptance (`nix shell nixpkgs#podman -c bash scripts/verify-oci.sh`) | Passed on retry after removing only task-owned synthetic benchmark clones. Core OCI image health/assets, UID 1000, writable `/data`, and SIGTERM drain passed. Image ID `7d5d7a38dc42deddedbf665ba80ed487efab9e04d23d6a9e91e1d2879e674359`; manifest `sha256:0092865e559e051cb22291e4c9c5af6d8d777333b45bda7c188ceb725c8e643e`. The first attempt hit ENOSPC and is retained in the local verification log. |

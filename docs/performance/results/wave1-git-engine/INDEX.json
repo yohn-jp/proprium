@@ -5,7 +5,7 @@
     "url": "https://github.com/yohn-jp/scriptorium/releases/download/perf-wave1-git-2026-10-20/scriptorium-wave1-git-2026-10-20.tar",
     "file": "scriptorium-wave1-git-2026-10-20.tar",
     "bytes": 4956160,
-    "sha256": "35b038dd19da2cae4cfab883659d46fd49e4fc612d4fc0d77b509d19a09ade1a"
+    "sha256": "52095509d01f64c5b3d9ac7cd24380197942e1f6f76a7a5945b84f9fce6e76a2"
   },
   "compression": {
     "format": "gzip",
@@ -207,10 +207,10 @@
     {
       "file": "raw/summary.json.gz",
       "sourceFile": "summary.json",
-      "sourceBytes": 8997,
-      "gzipBytes": 2632,
-      "sha256": "7b625a7748d3dac34464f80133e77ec27640dd1c5ff112d411a46a63bf3ec189",
-      "gzipSha256": "ee8b875ffdeee646e1609993faa1cae292063364695fde138d81a4714929b7c3",
+      "sourceBytes": 9438,
+      "gzipBytes": 2850,
+      "sha256": "c195d312180886c06c3a6fd42e964fff417bd582dbdf74b7e3567e85c20adfab",
+      "gzipSha256": "89c5b3c5181ed62799d2f65b88f8e0e4df74b35e3857a0c84c666bb6b53c9acb",
       "diagnostic": false
     }
   ]

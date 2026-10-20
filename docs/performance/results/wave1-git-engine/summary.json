@@ -310,8 +310,7 @@
     "notChecked": [
       "Per-child Git CPU attribution",
       "100,000-file cold revision latency",
-      "objects exceeding the inherited 32 MiB Git output buffer bound",
-      "OCI image build/startup acceptance: attempted, but host image-layer storage failed with ENOSPC (2.8 GiB remained available; no existing images were removed)"
+      "objects exceeding the inherited 32 MiB Git output buffer bound"
     ]
   },
   "verification": {
@@ -321,7 +320,20 @@
     "SCRIPTORIUM_PROFILE=core pnpm build": "passed",
     "pnpm audit:core": { "status": "passed", "productionDependencyVersions": 128 },
     "browserE2E": { "status": "passed", "suite": "tests/e2e/modular-workspace.acceptance.spec.ts", "browser": "Chromium 155", "passed": 8, "skipped": 1, "failed": 0 },
-    "oci": { "status": "not_checked", "attempt": "bash scripts/verify-oci.sh", "exitCode": 125, "reason": "no space left on device while writing a container image layer" }
+    "oci": {
+      "status": "passed",
+      "command": "nix shell nixpkgs#podman -c bash scripts/verify-oci.sh",
+      "profile": "core",
+      "image": "localhost/scriptorium:wave1-git-6793f06",
+      "imageId": "7d5d7a38dc42deddedbf665ba80ed487efab9e04d23d6a9e91e1d2879e674359",
+      "manifestDigest": "sha256:0092865e559e051cb22291e4c9c5af6d8d777333b45bda7c188ceb725c8e643e",
+      "startupCgroupMemory": "40.99 MB",
+      "startupPids": 12,
+      "processes": 2,
+      "aggregateProcessRssKiB": 90852,
+      "checks": ["HTTP health/readiness/assets", "UID 1000", "writable /data", "SIGTERM drain"],
+      "note": "Initial attempt exited 125 with ENOSPC; retry passed after task-owned synthetic stress clones were removed. No unrelated container images were removed."
+    }
   },
   "evidence": {
     "manifest": "docs/performance/results/wave1-git-engine/INDEX.json",
