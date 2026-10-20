@@ -1,6 +1,6 @@
 {
   "schema": 1,
-  "candidate": "C39 recent-activity visibility polling and C40 cursor activity debounce",
+  "scope": "C39 recent-activity visibility polling and C40 cursor activity debounce",
   "measurementDateUtc": "2026-10-20",
   "baseline": {
     "runtimeSourceCommit": "ffd02739ab095dfda2854a3ff487434c84f6b536",

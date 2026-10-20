@@ -1,6 +1,6 @@
 # C39/C40 recent-activity comparison
 
-The C39 leaf is adopted. With the same local Git fixture, port, viewport, Chromium 155 binary, 15-second scheduler, and 15.5-second observation windows, native visible polling stayed at 1 GET in both runs. Natural hidden polling fell from 1 GET to 0. Returning to the foreground still triggered an immediate fresh handoff; the candidate then produced one more GET in the following 15.5 seconds. A response deliberately held across hide was applied by baseline and discarded by candidate.
+Focused measurements support the C39 leaf candidate, pending required verification and integration. With the same local Git fixture, port, viewport, Chromium 155 binary, 15-second scheduler, and 15.5-second observation windows, native visible polling stayed at 1 GET in both runs. Natural hidden polling fell from 1 GET to 0. Returning to the foreground still triggered an immediate fresh handoff; the candidate then produced one more GET in the following 15.5 seconds. A response deliberately held across hide was applied by baseline and discarded by candidate.
 
 | Observation | Baseline | Candidate |
 | --- | ---: | ---: |
