@@ -127,6 +127,15 @@ async function createContext(browser: Browser, width: number): Promise<{ context
   return { context, page: await context.newPage() };
 }
 
+async function disablePlaywrightFocusEmulation(page: Page): Promise<void> {
+  const session = await page.context().newCDPSession(page);
+  try {
+    await session.send("Emulation.setFocusEmulationEnabled", { enabled: false });
+  } finally {
+    await session.detach();
+  }
+}
+
 test("recent activity hands off only numeric positions across devices, projects, and API restart", async ({ browser }) => {
   test.skip(process.env.SCRIPTORIUM_E2E_EXTERNAL_REPOSITORY === "1", "This acceptance creates a disposable local Git repository for paged reader coverage.");
   const fixture = await makeLongReadingRepository();
@@ -386,6 +395,8 @@ test("recent activity polling pauses while naturally hidden and resumes when vis
 
     background = await context.newPage();
     await background.goto("about:blank");
+    await disablePlaywrightFocusEmulation(page);
+    await disablePlaywrightFocusEmulation(background);
     await background.bringToFront();
     let naturallyHidden = false;
     try {
@@ -493,6 +504,8 @@ test("recent activity ignores a refresh response invalidated by natural hide", a
 
     const background = await context.newPage();
     await background.goto("about:blank");
+    await disablePlaywrightFocusEmulation(page);
+    await disablePlaywrightFocusEmulation(background);
     await background.bringToFront();
     let naturallyHidden = false;
     try {
