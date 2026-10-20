@@ -2358,6 +2358,75 @@ describe("Scriptorium HTTP boundary", () => {
     assert.equal(fixture.approvals[0]?.authorScope, "owner");
   });
 
+  it("passes a large canonical base64 attachment through the bounded validator unchanged", async (t) => {
+    const staticDir = await mkdtemp(resolve(tmpdir(), "scriptorium-api-large-scratch-"));
+    tempDirs.push(staticDir);
+    const fixture = makeSnapshotStore();
+    const apiServer = await startCustomApi(fixture.store, staticDir);
+    t.after(apiServer.close);
+    const owner = await login(apiServer.base);
+    const raw = Buffer.alloc(6 * 1024 * 1024 + 2, 0x5a);
+    const dataBase64 = raw.toString("base64");
+    assert.ok(dataBase64.endsWith("=") && !dataBase64.endsWith("=="), "large one-byte-padding input exercises canonical final-group validation");
+    const response = await fetch(`${apiServer.base}/api/projects/project-1/scratch`, {
+      method: "POST", headers: { Cookie: owner.cookie, "Content-Type": "application/json", Origin: apiServer.base },
+      body: JSON.stringify({ text: "Large canonical attachment", attachments: [{ filename: "large.bin", mimeType: "application/octet-stream", dataBase64 }] }),
+    });
+    assert.equal(response.status, 201);
+    await response.arrayBuffer();
+    const attachment = fixture.proposed[0]?.operations[0]?.writes.find((write) => write.encoding === "base64");
+    assert.ok(attachment);
+    assert.equal(attachment.content, dataBase64);
+    assert.equal(createHash("sha256").update(Buffer.from(attachment.content ?? "", "base64")).digest("hex"),
+      createHash("sha256").update(raw).digest("hex"));
+    assert.equal(fixture.approvals.length, 1);
+  });
+
+  it("rejects malformed large base64 attachments before calling Core", async (t) => {
+    const staticDir = await mkdtemp(resolve(tmpdir(), "scriptorium-api-invalid-large-scratch-"));
+    tempDirs.push(staticDir);
+    const fixture = makeSnapshotStore();
+    const apiServer = await startCustomApi(fixture.store, staticDir);
+    t.after(apiServer.close);
+    const owner = await login(apiServer.base);
+    const dataBase64 = Buffer.alloc(6 * 1024 * 1024, 0x5a).toString("base64");
+    const malformedEncodings = [
+      `${dataBase64.slice(0, -1)}!`,
+      "AB==", // nonzero unused pad bits
+      "AA=A", // padding before the end
+      "AAA", // missing canonical padding
+    ];
+    for (const malformedBase64 of malformedEncodings) {
+      const response = await fetch(`${apiServer.base}/api/projects/project-1/scratch`, {
+        method: "POST", headers: { Cookie: owner.cookie, "Content-Type": "application/json", Origin: apiServer.base },
+        body: JSON.stringify({ text: "Malformed attachment", attachments: [{ filename: "large.bin", mimeType: "application/octet-stream", dataBase64: malformedBase64 }] }),
+      });
+      assert.equal(response.status, 400);
+      assert.equal((await response.json() as { code?: string }).code, "INVALID_SCRATCH_ATTACHMENT");
+    }
+    assert.equal(fixture.proposed.length, 0);
+    assert.equal(fixture.approvals.length, 0);
+  });
+
+  it("rejects an attachment one byte over the raw cap before calling Core", async (t) => {
+    const staticDir = await mkdtemp(resolve(tmpdir(), "scriptorium-api-oversize-scratch-"));
+    tempDirs.push(staticDir);
+    const fixture = makeSnapshotStore();
+    const apiServer = await startCustomApi(fixture.store, staticDir);
+    t.after(apiServer.close);
+    const owner = await login(apiServer.base);
+    const dataBase64 = Buffer.alloc(8 * 1024 * 1024 + 1, 0x5a).toString("base64");
+    const requestBody = JSON.stringify({ text: "Over the raw attachment cap", attachments: [{ filename: "large.bin", mimeType: "application/octet-stream", dataBase64 }] });
+    assert.ok(Buffer.byteLength(requestBody) < 12 * 1024 * 1024, "the request remains within the existing JSON parser cap");
+    const response = await fetch(`${apiServer.base}/api/projects/project-1/scratch`, {
+      method: "POST", headers: { Cookie: owner.cookie, "Content-Type": "application/json", Origin: apiServer.base }, body: requestBody,
+    });
+    assert.equal(response.status, 413);
+    assert.equal((await response.json() as { code?: string }).code, "SCRATCH_ATTACHMENT_TOO_LARGE");
+    assert.equal(fixture.proposed.length, 0);
+    assert.equal(fixture.approvals.length, 0);
+  });
+
   it("stores project recent activity for cookie owners across API restarts and rejects bearer or cross-origin writes", async (t) => {
     const root = await mkdtemp(resolve(tmpdir(), "scriptorium-api-recent-activity-"));
     const staticDir = resolve(root, "static");

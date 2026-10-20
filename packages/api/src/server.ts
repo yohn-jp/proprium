@@ -56,6 +56,25 @@ const API_DRAIN_TIMEOUT_MS = 5_000;
 const MAX_ACTIVE_DOMAIN_JOBS = 32;
 const API_VERSION = "0.1.0";
 const STYLE_NONCES = new WeakMap<IncomingMessage, string>();
+
+function hasBase64AlphabetAndPadding(value: string): boolean {
+  if (value.length % 4 !== 0) return false;
+  const firstPadding = value.indexOf("=");
+  const dataLength = firstPadding < 0 ? value.length : firstPadding;
+  const paddingLength = value.length - dataLength;
+  if (paddingLength > 2 || (paddingLength === 1 && dataLength % 4 !== 3) ||
+      (paddingLength === 2 && dataLength % 4 !== 2)) return false;
+  for (let index = 0; index < dataLength; index++) {
+    const code = value.charCodeAt(index);
+    if (!((code >= 0x41 && code <= 0x5a) || (code >= 0x61 && code <= 0x7a) ||
+        (code >= 0x30 && code <= 0x39) || code === 0x2b || code === 0x2f)) return false;
+  }
+  for (let index = dataLength; index < value.length; index++) {
+    if (value.charCodeAt(index) !== 0x3d) return false;
+  }
+  return true;
+}
+
 const PUBLIC_READER_MODULES = new Set(["story", "diagnostics", "nlp", "semantic", "speaker", "assistant", "publishing", "mcp"]);
 const SOURCE_DOMAIN_JOB_TYPES = new Set(["speaker-eval", "speaker-retrain", "aspect-review", "zukan-proposal", "summary-refresh"]);
 
@@ -1105,7 +1124,7 @@ export function createServer(options: ApiServerOptions): Server {
       if (!isRecord(item) || typeof item.filename !== "string" || !item.filename.trim() || item.filename.length > 256 ||
           typeof item.mimeType !== "string" || !/^[A-Za-z0-9!#$&^_.+-]{1,128}\/[A-Za-z0-9!#$&^_.+-]{1,128}$/u.test(item.mimeType) ||
           typeof item.dataBase64 !== "string" || !item.dataBase64 || item.dataBase64.length > Math.ceil(MAX_SCRATCH_ATTACHMENT_BYTES * 4 / 3) + 4 ||
-          !/^(?:[A-Za-z0-9+/]{4})*(?:[A-Za-z0-9+/]{2}==|[A-Za-z0-9+/]{3}=)?$/u.test(item.dataBase64)) {
+          !hasBase64AlphabetAndPadding(item.dataBase64)) {
         throw httpFailure(400, "INVALID_SCRATCH_ATTACHMENT", "Scratch attachment fields are invalid");
       }
       const content = Buffer.from(item.dataBase64, "base64");
