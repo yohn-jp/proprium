@@ -2,7 +2,7 @@
 
 Canonical contract: [CORE-64-GOAL.md](CORE-64-GOAL.md), frozen at `a1587e784788fa87d86c0eb7ab175d7a28a3209f`. Initial main and origin/main both resolve to that SHA (2026-10-20 JST).
 
-Goal status: **64/64 dispositions and required verification complete; archive publication in progress**. Existing W0/W1 changes remain accepted history; this count describes the new final ledger, not the number of implemented optimizations. Decisions: **11 IMPLEMENTED, 12 VERIFIED_EXISTING, 41 DECLINED**. Failed, skipped and unmeasured scenarios retain their explicit limits.
+Goal status: **complete — 64/64 dispositions, required verification and published raw archive verified**. Existing W0/W1 changes remain accepted history; this count describes the new final ledger, not the number of implemented optimizations. Decisions: **11 IMPLEMENTED, 12 VERIFIED_EXISTING, 41 DECLINED**. Failed, skipped and unmeasured scenarios retain their explicit limits.
 
 ## Combined final certification
 
@@ -21,7 +21,7 @@ Skip names and exact scope are in the final manifest. The two native-visibility 
 
 [Core/Full actual OCI acceptance and C62 metrics](results/c64-oci/ACCEPTANCE-20261021.md) PASS on the same production pin: health/readiness, launcher/Desktop/Mobile assets/nonces, 0/9 included modules idle, UID 1000, writable `/data` and `/history`, and SIGTERM drain. Five fresh-container startup samples and 30-second idle samples per profile used the exact cached images after other campaign heavy jobs stopped. This is no cold-pull/cold-boot or cross-profile speedup claim.
 
-The synthetic raw archive is being finalized with the existing deterministic packer; publication is the remaining campaign step. The historical preparation inventories remain separate from the final archive index.
+The [final synthetic raw archive](results/core64-archive/README.md) is published at [perf-core64-2026-10-21](https://github.com/yohn-jp/scriptorium/releases/tag/perf-core64-2026-10-21): **295 artifacts**, tar SHA-256 `5be0a43a560f9bf601f50fc5e76817e3282e3238698fbf106898ac63973b119f`. Coordinator download verification passed for the archive, all 295 compressed/decompressed members, and the matching [INDEX](results/core64-archive/INDEX.json). The historical preparation inventories remain separate.
 
 ## Execution ownership
 
@@ -29,7 +29,7 @@ Sol coordinates, reviews and serially integrates/pushes main. Each Luna Max work
 
 | Gate / fixed IDs | Worker / branch | Exclusive production ownership | Current bounded unit |
 | --- | --- | --- | --- |
-| G0 C58 baseline | Luna Max / `perf/c64-g0` | Existing harness; changes require coordination | One post-W1 environment/fixture/verification baseline |
+| G0 C58 baseline | Luna Max / `perf/c64-g0` | Existing harness; changes require coordination | One post-W1 baseline complete; final synthetic archive published and download-verified |
 | G1 C01–C19 | Luna Max editor/render/journal/resize/durability branches | All G1 product units complete; no active SharedApplication writer | All19 dispositions settled; C55 host/journal ownership recorded under G4 |
 | G2 C20–C36, C54; linked C63 | Luna Max G2/derived/read/memory/writer branches | Core index implementation complete; no active source writer | All G2 dispositions settled; C23 integrated with passing leaf gates; central combined validation PASS |
 | G3 C38–C47; linked C64 | Luna Max resume/network/status/static branches | Static API/Vite/hosted helper implementation complete; no active source writer | All G3 dispositions settled; C47 integrated with passing leaf gates; central combined validation PASS |
@@ -40,9 +40,9 @@ G0 precedes implementation comparisons. Independent G1/G2/G3/G5 investigations r
 
 G0 completed the single four-tier baseline at `80ab121a`; see [executed conditions and limits](G0-CORE-64-BASELINE.md). Install, typecheck, workspace tests, Core/Full builds and Core audit passed. Large/stress timeouts and editor-readiness failure remain NOT_CHECKED. G0 initially held the exclusive heavy benchmark/full verification lease. Later matched performance cohorts stopped other campaign heavy jobs and used declared CPU affinity; unknown external shared-host activity remains a limitation. After timing finished, independent non-performance gates used disjoint CPU0–3,4–7,8–11 lanes; final-validation installation/browser-launch preflight used12–15. No timing gain is inferred from overlapping semantic probes. `/data` has a separate filesystem with about 104 GiB available at preflight; root has about 2 GiB. Synthetic datasets/raw evidence go to unique campaign paths under `/data`; unrelated worktrees/artifacts are preserved.
 
-## Bounded work queue
+## Executed bounded work assignments
 
-Every fixed candidate has one result owner; shared contracts reuse the same evidence. These are assignments, not completed result rows. The four-tier G0 pass is complete. Individual measurement/build slots are serialized when resource contention can affect comparisons; source preparation and cheap syntax/semantic checks remain independent. Performance comparisons run without concurrent heavy tests/builds. Required final verification may run in a separate resource-controlled batch once measurements stop.
+Every fixed candidate has one result owner; shared contracts reuse the same evidence. These are the executed assignments; the final result rows appear below. The four-tier G0 pass is complete. Individual measurement/build slots are serialized when resource contention can affect comparisons; source preparation and cheap syntax/semantic checks remain independent. Adoption latency comparisons stopped other campaign heavy jobs. Byte/count and semantic probes disclose any concurrent lanes; their timings are observational. Final required verification ran in a separate resource-controlled batch; C62 startup/idle metrics used a quiet campaign window.
 
 | Fixed IDs | Luna Max unit / branch | Boundary |
 | --- | --- | --- |

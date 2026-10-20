@@ -1,6 +1,6 @@
 # CORE-64 synthetic evidence archive
 
-**Status:** packed and verified locally; publication pending coordinator release.
+**Status:** published; coordinator download verification passed for the tar, INDEX and all 295 artifacts.
 
 The frozen selection contains 295 artifacts. The deterministic tar is 16,066,560 bytes with SHA-256 `5be0a43a560f9bf601f50fc5e76817e3282e3238698fbf106898ac63973b119f`. The checked-in [`INDEX.json`](INDEX.json) has SHA-256 `33a6328e84efd918bc97f448dc92614a923c909c8329e94669d8a14b0882add3` and records the permanent asset URL `https://github.com/yohn-jp/scriptorium/releases/download/perf-core64-2026-10-21/core64-2026-10-21.tar`. The archive contains 282,467,104 source bytes represented by 15,828,762 deterministic gzip bytes. It has 251 non-diagnostic and 44 diagnostic rows. The longest USTAR filename component, including `.gz`, is 71 bytes.
 
@@ -36,7 +36,7 @@ The final validation report records passing frozen install, typecheck, tests, Co
 
 This archive contains only explicitly named synthetic captures, their selected verification logs, and tracked evidence manifests. `diagnostic: true` rows preserve failed, interrupted, superseded, or otherwise diagnostic attempts; they are not selected as primary evidence for comparative claims. The final verification manifest records hashes for 142 generated files, but the archive includes only that manifest, not compiled outputs or package distributions. No pnpm store, browser state/cache, or OCI image is included.
 
-Two C39 natural-visibility browser cases remain `NOT_CHECKED` because the final browser environment did not configure native headful visibility. This archive does not claim native Japanese IME coverage or long-idle/soak coverage. C62 acceptance records are present, but this tar is not an OCI image or hosted deployment. The archive selection is the named evidence for the campaign, not a claim that every candidate disposition had a separate performance run; dispositions remain in [`CORE-64-STATUS.md`](../../CORE-64-STATUS.md).
+Two C39 natural-visibility cases were not rerun in the final browser matrix because it did not configure native headful visibility; C39 retains its separately executed natural headful comparison in the [result ledger](../../CORE-64-RESULTS.md). This archive does not claim native Japanese IME coverage or long-idle/soak coverage. C62 acceptance records are present, but this tar is not an OCI image or hosted deployment. The archive selection is the named evidence for the campaign, not a claim that every candidate disposition had a separate performance run; dispositions remain in [`CORE-64-RESULTS.md`](../../CORE-64-RESULTS.md).
 
 ## Packaging and verification
 
@@ -65,4 +65,17 @@ node scripts/performance/artifacts.mjs verify \
   /data/scriptorium-core64-final-archive-extracted-20261021
 ```
 
-The recorded results were `Verified archive SHA-256 5be0a43a560f9bf601f50fc5e76817e3282e3238698fbf106898ac63973b119f` before extraction and `Verified 295 artifacts and archive` afterward. The tar listing contained exactly the `raw/` directory plus the 295 indexed members, with no additional entries. The archive has not been uploaded or published.
+The recorded results were `Verified archive SHA-256 5be0a43a560f9bf601f50fc5e76817e3282e3238698fbf106898ac63973b119f` before extraction and `Verified 295 artifacts and archive` afterward. The tar listing contained exactly the `raw/` directory plus the 295 indexed members, with no additional entries. The archive was subsequently published and independently downloaded as recorded below.
+
+## Publication and download verification
+
+The coordinator published [perf-core64-2026-10-21](https://github.com/yohn-jp/scriptorium/releases/tag/perf-core64-2026-10-21) at `2026-10-20T18:56:35Z`. The tag targets `e0e0d5a9695091729240cb09acb1c3f121cf96be`, which contains the frozen INDEX. Later completion edits change documentation only.
+
+| Uploaded asset | GitHub asset ID | Bytes | SHA-256 |
+| --- | ---: | ---: | --- |
+| [core64-2026-10-21.tar](https://github.com/yohn-jp/scriptorium/releases/download/perf-core64-2026-10-21/core64-2026-10-21.tar) | 660192815 | 16,066,560 | `5be0a43a560f9bf601f50fc5e76817e3282e3238698fbf106898ac63973b119f` |
+| [INDEX.json](https://github.com/yohn-jp/scriptorium/releases/download/perf-core64-2026-10-21/INDEX.json) | 660192819 | 185,247 | `33a6328e84efd918bc97f448dc92614a923c909c8329e94669d8a14b0882add3` |
+
+Both assets were downloaded through `gh release download` into `/data/scriptorium-core64-published-download-20261021`. Against the checked-in INDEX, `artifacts.mjs verify-archive` passed before extraction, then `artifacts.mjs verify` reported `Verified 295 artifacts and archive` after extraction. The downloaded INDEX SHA-256 also exactly matches the checked-in file and GitHub’s asset digest.
+
+The original temporary C05 public-flow runner was not retained (its recorded SHA remains); the render-hook reconstruction is explicitly labeled reconstructed. C59’s first partial FCP rows were overwritten and only their documented summaries remain. Those limits are not repaired by this archive. Existing Wave 0/Wave 1 published archives remain separate and unchanged.
