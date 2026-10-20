@@ -5,6 +5,8 @@
 **Baseline inspected:** `main@a0419c499d47d51584bda649790c45082998bfed` (2026-10-19).  
 **Authority:** This document defines the new modular workspace, local-first read UX, and extensibility direction. Existing `CORE.md`, `FULL-MIGRATION.md`, Git durability, module security and recovery contracts remain authoritative for behavior not explicitly addressed here. The completed P00–P13 migration ledger is not reopened.
 
+> **将来設計との関係:** 本書は既に実装済みのComposable Workspaceと**信頼された内蔵Module**の現在の契約を説明する。2026-10-20に合意した**公開Plugin SDK・外部リポジトリ・強制実行隔離**の目標は[PLUGIN-PLATFORM.md](PLUGIN-PLATFORM.md)に定義した。既存のin-process ModuleやBrowser `import()`を第三者コードに対する安全Sandboxと見なさない。導入は別Waveで実装・検証する。
+
 ## 1. Product decision
 
 Scriptorium is a Git-backed writing environment whose interface is assembled from movable, replaceable components. It ships usable workspace presets and allows users to construct and persist arbitrary layouts. Search, terminology linking, NLP, Semantic and other advanced features are optional modules on top of a small, usable Core.
