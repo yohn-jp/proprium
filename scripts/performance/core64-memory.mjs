@@ -24,8 +24,10 @@ const WORKER_TIMEOUT_MS = 180_000;
 const CACHE_IDLE_MS = 35_000;
 const LARGE_REPOSITORIES = 9;
 const STRESS_REPOSITORIES = 2;
-const COHORT_TIMEOUT_MS = 45 * 60_000;
+const C30_COHORT_TIMEOUT_MS = 6 * 60_000;
+const C31_COHORT_TIMEOUT_MS = 12 * 60_000;
 const GIT_COMMAND_TIMEOUT_MS = 30_000;
+const GIT_COMMAND_CPU_SECONDS = 30;
 let cohortDeadlineMs = null;
 const GIT_ENV = {
   ...process.env,
@@ -47,7 +49,11 @@ GIT_ENV.GIT_TERMINAL_PROMPT = '0';
 function git(cwd, args, input) {
   const remainingMs = cohortDeadlineMs === null ? GIT_COMMAND_TIMEOUT_MS : cohortDeadlineMs - Date.now();
   if (remainingMs <= 0) throw new Error('Memory probe cohort wall-time budget expired');
-  const result = execFileSync('git', ['-c', 'gc.auto=0', '-c', 'maintenance.auto=false', ...args], {
+  const result = execFileSync('prlimit', [
+    `--as=${WORKER_ADDRESS_SPACE_BYTES}`,
+    `--cpu=${GIT_COMMAND_CPU_SECONDS}`,
+    '--', 'git', '-c', 'gc.auto=0', '-c', 'maintenance.auto=false', ...args,
+  ], {
     cwd,
     env: GIT_ENV,
     input,
@@ -196,8 +202,10 @@ async function prepareTreeFixtures(fixtureRoot) {
 
 async function prepareCacheRemotes(g0Root, fixtureRoot) {
   const settings = [
-    { size: 'large', expectedFiles: 10_000, repos: LARGE_REPOSITORIES },
-    { size: 'stress', expectedFiles: 100_000, repos: STRESS_REPOSITORIES },
+    { size: 'large', expectedFiles: 10_000, repos: LARGE_REPOSITORIES,
+      budgetRationale: 'Nine project-scoped hierarchy entries exceed the fixed eight-entry hierarchyCache count cap; this tier also exercises revisions below the 16,384-entry fileRevisionCache cap.' },
+    { size: 'stress', expectedFiles: 100_000, repos: STRESS_REPOSITORIES,
+      budgetRationale: 'Each 100k repository exceeds the 16,384-entry fileRevisionCache cap; the second shared-object project measures cross-project reuse after the first project churns the bounded cache.' },
   ];
   const result = [];
   for (const setting of settings) {
@@ -210,14 +218,21 @@ async function prepareCacheRemotes(g0Root, fixtureRoot) {
     const source = join(datasetRoot, 'origin.git');
     await stat(source);
     const remotes = [];
+    const alternates = [];
     const remoteDir = join(fixtureRoot, `cache-${setting.size}`);
     await mkdir(remoteDir, { recursive: true });
     for (let index = 0; index < setting.repos; index += 1) {
       const remote = join(remoteDir, `repo-${String(index + 1).padStart(2, '0')}.git`);
       git(undefined, ['clone', '--bare', '--shared', source, remote]);
+      const alternateFile = join(remote, 'objects', 'info', 'alternates');
+      const alternateObjects = resolve(dirname(alternateFile), (await readFile(alternateFile, 'utf8')).trim());
+      if (alternateObjects !== resolve(source, 'objects')) {
+        throw new Error(`Shared clone ${remote} does not point to the immutable G0 object store`);
+      }
       remotes.push(remote);
+      alternates.push({ remote, alternateFile, alternateObjects });
     }
-    result.push({ ...setting, source, remotes, dataset: manifest });
+    result.push({ ...setting, source, remotes, alternates, objectStorage: 'bare clones use Git alternates into the immutable G0 object store; no object copy', dataset: manifest });
   }
   return result;
 }
@@ -274,15 +289,17 @@ async function spawnWorker(mode, args, output, timeoutMs) {
 }
 
 async function orchestrate(argv) {
-  if (argv[0] !== '--run' || argv.length !== 9 || argv[3] !== '--runtime-root' ||
-      argv[5] !== '--runtime-revision' || argv[7] !== '--core-index-sha256') {
-    throw new Error('Usage: node scripts/performance/core64-memory.mjs --run <g0-synthetic-root> <new-output-root> --runtime-root <accepted-core-worktree> --runtime-revision <accepted-git-revision> --core-index-sha256 <accepted-dist-hash>');
+  if (argv[0] !== '--run' || argv.length !== 11 || argv[3] !== '--phase' ||
+      argv[5] !== '--runtime-root' || argv[7] !== '--runtime-revision' || argv[9] !== '--core-index-sha256') {
+    throw new Error('Usage: node scripts/performance/core64-memory.mjs --run <g0-synthetic-root> <new-output-root> --phase <c30|c31> --runtime-root <accepted-core-worktree> --runtime-revision <accepted-git-revision> --core-index-sha256 <accepted-dist-hash>');
   }
+  if (!['c30', 'c31'].includes(argv[4])) throw new Error(`Unknown memory probe phase: ${argv[4]}`);
+  const phase = argv[4];
   const g0Root = resolve(argv[1]);
   const outputRoot = resolve(argv[2]);
-  const runtimeRoot = resolve(argv[4]);
-  const expectedRuntimeRevision = argv[6];
-  const expectedCoreModuleSha256 = argv[8];
+  const runtimeRoot = resolve(argv[6]);
+  const expectedRuntimeRevision = argv[8];
+  const expectedCoreModuleSha256 = argv[10];
   if (process.platform !== 'linux') throw new Error('The bounded memory probe requires Linux RLIMIT_AS and /proc/self/io');
   execFileSync('prlimit', ['--version'], { encoding: 'utf8', stdio: ['ignore', 'pipe', 'pipe'], maxBuffer: 1024 * 1024 });
   if (expectedRuntimeRevision !== ACCEPTED_RUNTIME_REVISION) {
@@ -294,6 +311,8 @@ async function orchestrate(argv) {
   const coreSource = join(runtimeRoot, 'packages', 'core', 'src', 'index.ts');
   const coreModule = join(runtimeRoot, 'packages', 'core', 'dist', 'index.js');
   const timeoutMs = WORKER_TIMEOUT_MS;
+  const cohortTimeoutMs = phase === 'c30' ? C30_COHORT_TIMEOUT_MS : C31_COHORT_TIMEOUT_MS;
+  const workerCount = phase === 'c30' ? 8 : 2;
   const runtimeRevision = gitText(runtimeRoot, ['rev-parse', 'HEAD']);
   if (runtimeRevision !== expectedRuntimeRevision) {
     throw new Error(`Runtime checkout revision mismatch: expected ${expectedRuntimeRevision}, got ${runtimeRevision}`);
@@ -306,9 +325,10 @@ async function orchestrate(argv) {
   if (coreModuleSha256 !== expectedCoreModuleSha256) {
     throw new Error(`Compiled Core entry hash mismatch: expected ${expectedCoreModuleSha256}, got ${coreModuleSha256}`);
   }
-  await stat(join(g0Root, 'small', 'origin.git'));
   await stat(join(g0Root, 'results', 'environment.json'));
-  for (const [size, expectedFiles] of [['large', 10_000], ['stress', 100_000]]) {
+  if (phase === 'c30') await stat(join(g0Root, 'small', 'origin.git'));
+  const requiredDatasets = phase === 'c31' ? [['large', 10_000], ['stress', 100_000]] : [];
+  for (const [size, expectedFiles] of requiredDatasets) {
     const datasetRoot = join(g0Root, size);
     const dataset = JSON.parse(await readFile(join(datasetRoot, 'dataset.json'), 'utf8'));
     if (dataset.files !== expectedFiles || dataset.syntheticOnly !== true) {
@@ -317,7 +337,7 @@ async function orchestrate(argv) {
     await stat(join(datasetRoot, 'origin.git'));
   }
   const cohortStartedAtMs = Date.now();
-  cohortDeadlineMs = cohortStartedAtMs + COHORT_TIMEOUT_MS;
+  cohortDeadlineMs = cohortStartedAtMs + cohortTimeoutMs;
   await mkdir(dirname(outputRoot), { recursive: true });
   await mkdir(outputRoot, { recursive: false });
   const fixtureRoot = join(outputRoot, 'fixtures');
@@ -326,6 +346,7 @@ async function orchestrate(argv) {
   await Promise.all([mkdir(fixtureRoot), mkdir(dataRoot), mkdir(rawRoot)]);
   const manifest = {
     schemaVersion: 1,
+    phase,
     status: 'running',
     startedAt: new Date().toISOString(),
     g0Root,
@@ -348,17 +369,20 @@ async function orchestrate(argv) {
       cacheBytes: 'Explicit Core byte counters plus labeled shallow payload estimates; never equated with process RSS',
       timeoutMs,
       cohortCaps: {
-        workerCount: 10,
+        workerCount,
         perWorkerAddressSpaceBytes: WORKER_ADDRESS_SPACE_BYTES,
         perWorkerV8OldSpaceMiB: WORKER_V8_OLD_SPACE_MIB,
         perWorkerV8SemiSpaceMiB: WORKER_V8_SEMI_SPACE_MIB,
         perWorkerCpuSeconds: WORKER_CPU_SECONDS,
         perWorkerWallTimeoutMs: timeoutMs,
-        cohortWallTimeoutMs: COHORT_TIMEOUT_MS,
+        cohortWallTimeoutMs: cohortTimeoutMs,
         gitCommandTimeoutMs: GIT_COMMAND_TIMEOUT_MS,
-        cacheIdleMs: CACHE_IDLE_MS,
-        largeRepositoryCount: LARGE_REPOSITORIES,
-        stressRepositoryCount: STRESS_REPOSITORIES,
+        gitCommandAddressSpaceBytes: WORKER_ADDRESS_SPACE_BYTES,
+        gitCommandCpuSeconds: GIT_COMMAND_CPU_SECONDS,
+        cacheIdleMs: phase === 'c31' ? CACHE_IDLE_MS : null,
+        largeRepositoryCount: phase === 'c31' ? LARGE_REPOSITORIES : null,
+        stressRepositoryCount: phase === 'c31' ? STRESS_REPOSITORIES : null,
+        cacheRepositoryTotal: phase === 'c31' ? LARGE_REPOSITORIES + STRESS_REPOSITORIES : null,
         note: 'Each worker and its Git subprocesses inherit per-process RLIMIT_AS/CPU limits; this is not an aggregate cgroup memory cap.',
       },
     },
@@ -366,59 +390,74 @@ async function orchestrate(argv) {
   };
   await saveRaw(join(outputRoot, 'manifest.json'), manifest);
   try {
-    const blob = await prepareBlobFixture(g0Root, fixtureRoot);
-    const tree = await prepareTreeFixtures(fixtureRoot);
-    const cache = await prepareCacheRemotes(g0Root, fixtureRoot);
-    manifest.fixtures = {
-      blob: join(fixtureRoot, 'blob-boundary.json'),
-      tree: join(fixtureRoot, 'tree-output.json'),
-      cache: cache.map(({ size, expectedFiles, repos, remotes }) => ({ size, expectedFiles, repos, remotes })),
-    };
-    await saveRaw(join(outputRoot, 'manifest.json'), manifest);
-
     const cases = [];
-    for (const [key, method, expectedOutcome] of [
-      ['blobExact', 'read', 'success'], ['blobPlusOne', 'read', 'error'],
-      ['blobExact', 'revision', 'success'], ['blobPlusOne', 'revision', 'error'],
-    ]) {
-      const item = blob.cases[key];
-      const output = join(rawRoot, `${method}-${key}.json`);
-      cases.push(await spawnWorker('boundary', [coreModule, join(dataRoot, `boundary-${method}-${key}`), blob.remote,
-        method, item.path, String(item.bytes), item.sha256, String(item.nulBytes), expectedOutcome], output, timeoutMs));
-      manifest.workers = cases;
+    if (phase === 'c30') {
+      const blob = await prepareBlobFixture(g0Root, fixtureRoot);
+      const tree = await prepareTreeFixtures(fixtureRoot);
+      manifest.fixtures = { blob: join(fixtureRoot, 'blob-boundary.json'), tree: join(fixtureRoot, 'tree-output.json') };
       await saveRaw(join(outputRoot, 'manifest.json'), manifest);
-    }
-    for (const name of ['exact', 'plusOne']) {
-      const output = join(rawRoot, `tree-${name}.json`);
-      const expected = name === 'exact' ? 'success' : 'error';
-      cases.push(await spawnWorker('tree', [coreModule, join(dataRoot, `tree-${name}`), tree.remotes[name], expected], output, timeoutMs));
-      manifest.workers = cases;
+      for (const [key, method, expectedOutcome] of [
+        ['blobExact', 'read', 'success'], ['blobPlusOne', 'read', 'error'],
+        ['blobExact', 'revision', 'success'], ['blobPlusOne', 'revision', 'error'],
+      ]) {
+        const item = blob.cases[key];
+        const output = join(rawRoot, `${method}-${key}.json`);
+        cases.push(await spawnWorker('boundary', [coreModule, join(dataRoot, `boundary-${method}-${key}`), blob.remote,
+          method, item.path, String(item.bytes), item.sha256, String(item.nulBytes), expectedOutcome], output, timeoutMs));
+        manifest.workers = cases;
+        await saveRaw(join(outputRoot, 'manifest.json'), manifest);
+      }
+      for (const name of ['exact', 'plusOne']) {
+        const output = join(rawRoot, `tree-${name}.json`);
+        const expected = name === 'exact' ? 'success' : 'error';
+        cases.push(await spawnWorker('tree', [coreModule, join(dataRoot, `tree-${name}`), tree.remotes[name], expected], output, timeoutMs));
+        manifest.workers = cases;
+        await saveRaw(join(outputRoot, 'manifest.json'), manifest);
+      }
+      for (const name of ['batchExact', 'batchPlusOne']) {
+        const item = blob.cases[name];
+        const expected = name === 'batchExact' ? 'success' : 'error';
+        const output = join(rawRoot, `batch-${name}.json`);
+        cases.push(await spawnWorker('batch', [blob.remote, item.gitObject, String(MAX_BUFFER), expected], output, timeoutMs));
+        manifest.workers = cases;
+        await saveRaw(join(outputRoot, 'manifest.json'), manifest);
+      }
+    } else {
+      const cache = await prepareCacheRemotes(g0Root, fixtureRoot);
+      manifest.fixtures = {
+        cache: cache.map(({ size, expectedFiles, repos, remotes, source, alternates, objectStorage, budgetRationale }) =>
+          ({ size, expectedFiles, repos, source, sourceObjects: resolve(source, 'objects'), remotes, alternates, objectStorage, budgetRationale })),
+      };
       await saveRaw(join(outputRoot, 'manifest.json'), manifest);
+      for (const setting of cache) {
+        const output = join(rawRoot, `cache-${setting.size}.json`);
+        cases.push(await spawnWorker('cache', [coreModule, join(dataRoot, `cache-${setting.size}`),
+          JSON.stringify(setting.remotes), String(CACHE_IDLE_MS)], output, timeoutMs));
+        manifest.workers = cases;
+        await saveRaw(join(outputRoot, 'manifest.json'), manifest);
+      }
     }
-    for (const name of ['batchExact', 'batchPlusOne']) {
-      const item = blob.cases[name];
-      const expected = name === 'batchExact' ? 'success' : 'error';
-      const output = join(rawRoot, `batch-${name}.json`);
-      cases.push(await spawnWorker('batch', [blob.remote, item.gitObject, String(MAX_BUFFER), expected], output, timeoutMs));
-      manifest.workers = cases;
-      await saveRaw(join(outputRoot, 'manifest.json'), manifest);
-    }
-    for (const setting of cache) {
-      const output = join(rawRoot, `cache-${setting.size}.json`);
-      cases.push(await spawnWorker('cache', [coreModule, join(dataRoot, `cache-${setting.size}`),
-        JSON.stringify(setting.remotes), String(CACHE_IDLE_MS)], output, timeoutMs));
-      manifest.workers = cases;
-      await saveRaw(join(outputRoot, 'manifest.json'), manifest);
-    }
+    if (Date.now() > cohortDeadlineMs) throw new Error('Memory probe phase exceeded its wall-time budget');
     manifest.status = cases.every((entry) => entry.code === 0 && !entry.timedOut && entry.report?.status === 'complete')
       ? 'complete' : 'partial';
+    manifest.conclusionStatus = manifest.status === 'complete' ? 'PENDING_REVIEW' : 'NOT_CHECKED';
+    if (manifest.status !== 'complete') {
+      const incomplete = cases.filter((entry) => entry.code !== 0 || entry.timedOut || entry.report?.status !== 'complete');
+      manifest.notCheckedReason = 'At least one task worker failed, timed out, hit a resource cap, or was ended at the phase deadline.';
+      manifest.notCheckedWorkers = incomplete.map((entry) => ({ mode: entry.mode, output: entry.output, timeoutMs: entry.timeoutMs,
+        timedOut: entry.timedOut, code: entry.code, signal: entry.signal, error: entry.error ?? null,
+        reportStatus: entry.report?.status ?? null, reportFailure: entry.report?.failure ?? entry.report?.sample?.error ?? null }));
+    }
     manifest.finishedAt = new Date().toISOString();
     manifest.cohortElapsedMs = Date.now() - cohortStartedAtMs;
     await saveRaw(join(outputRoot, 'manifest.json'), manifest);
     process.exitCode = manifest.status === 'complete' ? 0 : 1;
   } catch (error) {
     manifest.status = 'failed';
-    manifest.failure = { name: error?.name, message: String(error?.message ?? error) };
+    manifest.conclusionStatus = 'NOT_CHECKED';
+    manifest.notCheckedReason = 'The phase failed during fixture preparation or exceeded its cohort budget.';
+    manifest.failure = { name: error?.name, code: error?.code ?? null, signal: error?.signal ?? null,
+      message: String(error?.message ?? error) };
     manifest.finishedAt = new Date().toISOString();
     manifest.cohortElapsedMs = Date.now() - cohortStartedAtMs;
     await saveRaw(join(outputRoot, 'manifest.json'), manifest);
