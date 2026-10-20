@@ -1,6 +1,6 @@
 # Core 64 status and recent activity evidence
 
-This leaf covers C41, C42, and C45 from the fixed Core-64 goal. The branch starts at 53099848; the API source paths used here match the runtime tree at a1587e78. G0's post-W1 baseline is complete. Its current C02/C21 verification batch has the active workload slot, so this branch remains at probe preparation with no API measurement, test, or build run.
+This leaf covers C41, C42, and C45 from the fixed Core-64 goal. The branch starts at 53099848; the package source tree used by these probes matches runtime SHA `a1587e784788fa87d86c0eb7ab175d7a28a3209f`. G0's frozen worktree is at `80ab121ad08b2c5f5957e3405eed511762fb1747`, has no tracked or untracked changes, and `git diff --quiet a1587e78 -- packages` confirms the package tree is unchanged from the runtime SHA. Its compiled API artifacts are available for reuse. The probes accept `--runtime-root PATH`, verify the selected root's package tree against `a1587e78`, and write both the selected root and runtime SHA into each result. G0's current C02/C21 verification batch has the active workload slot, so this branch remains at probe preparation with no API measurement, test, or build run.
 
 ## Prepared probes
 
@@ -18,18 +18,11 @@ This boundary means a route extraction must receive or recreate shared authentic
 
 ## Next measurement slot
 
-Wait until the active C02/C21 verification batch releases the workload slot. The probes import built workspace output, so build only their direct workspace prerequisites first, in dependency order:
+Wait until the active C02/C21 verification batch releases the workload slot. Reuse G0's frozen compiled output at `/data/scriptorium-core64-worktrees/g0`; do not rebuild or reinstall for this bounded measurement. Collect the bounded C41/C42 evidence and run the focused API contract suite:
 
-    pnpm --filter @scriptorium/contracts build
-    pnpm --filter @scriptorium/module-runtime build
-    pnpm --filter @scriptorium/core build
-    pnpm --filter @scriptorium/api build
-
-Then collect the bounded C41/C42 evidence and run the focused API contract suite:
-
-    node scripts/performance/core64-status-authority.mjs docs/performance/results/core64-status/authority.json 20
-    C64_STATUS_REPEATS=10 node scripts/performance/core64-status-store.mjs bench docs/performance/results/core64-status/store.json
-    node scripts/performance/core64-status-store.mjs crash docs/performance/results/core64-status/crash-recovery.json
+    node scripts/performance/core64-status-authority.mjs docs/performance/results/core64-status/authority.json 20 --runtime-root /data/scriptorium-core64-worktrees/g0
+    C64_STATUS_REPEATS=10 node scripts/performance/core64-status-store.mjs bench docs/performance/results/core64-status/store.json --runtime-root /data/scriptorium-core64-worktrees/g0
+    node scripts/performance/core64-status-store.mjs crash docs/performance/results/core64-status/crash-recovery.json --runtime-root /data/scriptorium-core64-worktrees/g0
     pnpm --filter @scriptorium/api test
 
 C64_STATUS_REPEATS may be set from 5 through 30; at 10 it records ten fresh single-write runs and ten 100-write runs for each burst case. The status probe sample count may be set from 5 through 100; at 20 it records 20 requests per fixture size (1 and 100 persistence rows) plus one changed-remote control. The crash probe performs one injected partial temporary write followed by one SIGKILL and restart. Outputs use only synthetic data in private temporary directories. The C42 phase wrappers and /proc/self/io deltas add measurement overhead; keep phase values as attribution evidence and compare only runs made with identical probes and environment. Record the source revision, host, Node version, raw distributions, focused test outcome, and limits after execution. Hosted status and k3s reconcile remain NOT_CHECKED without a real authorized fixture.

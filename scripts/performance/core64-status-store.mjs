@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 import assert from "node:assert/strict";
-import { fork } from "node:child_process";
+import { fork, spawnSync } from "node:child_process";
 import { createHash } from "node:crypto";
 import { syncBuiltinESMExports } from "node:module";
 import os from "node:os";
@@ -8,10 +8,32 @@ import path from "node:path";
 import fsp from "node:fs/promises";
 import { performance } from "node:perf_hooks";
 import { once } from "node:events";
-import { fileURLToPath } from "node:url";
+import { fileURLToPath, pathToFileURL } from "node:url";
 
 const scriptPath = fileURLToPath(import.meta.url);
-const storeUrl = new URL("../../packages/api/dist/recent-activity-store.js", import.meta.url);
+const scriptDirectory = path.dirname(scriptPath);
+const runtimeSourceSha = "a1587e784788fa87d86c0eb7ab175d7a28a3209f";
+const positionalArgs = [];
+let requestedRuntimeRoot;
+const rawArgs = process.argv.slice(2);
+for (let index = 0; index < rawArgs.length; index += 1) {
+  const argument = rawArgs[index];
+  if (argument === "--runtime-root") {
+    requestedRuntimeRoot = rawArgs[index + 1];
+    assert.ok(requestedRuntimeRoot, "--runtime-root requires a path");
+    index += 1;
+  } else if (argument.startsWith("--runtime-root=")) {
+    requestedRuntimeRoot = argument.slice("--runtime-root=".length);
+    assert.ok(requestedRuntimeRoot, "--runtime-root requires a path");
+  } else {
+    positionalArgs.push(argument);
+  }
+}
+const runtimeRoot = path.resolve(requestedRuntimeRoot || path.resolve(scriptDirectory, "../.."));
+const sourceCheck = spawnSync("git", ["-C", runtimeRoot, "diff", "--quiet", runtimeSourceSha, "--", "packages"]);
+assert.equal(sourceCheck.error, undefined, "could not verify the runtime source tree with git");
+assert.equal(sourceCheck.status, 0, "runtimeRoot packages source must match the frozen a1587e78 tree");
+const storeUrl = pathToFileURL(path.join(runtimeRoot, "packages/api/dist/recent-activity-store.js"));
 const repository = {
   provider: "github",
   repositoryId: "perf-status",
@@ -289,6 +311,8 @@ async function runBench(outputPath, repeats) {
   const result = {
     schemaVersion: 1,
     candidate: "C42",
+    runtimeRoot,
+    runtimeSourceSha,
     source: "real RecentActivityStore implementation; synthetic temporary directories and owner/repository identities",
     durabilityPrimitive: ["bounded JSON state", "private temporary file", "file sync", "atomic rename", "containing-directory sync"],
     instrumentation: "in-process async filesystem and JSON phase wrappers plus /proc/self/io deltas; no production source hooks",
@@ -298,7 +322,12 @@ async function runBench(outputPath, repeats) {
   };
   await fsp.mkdir(path.dirname(path.resolve(outputPath)), { recursive: true });
   await fsp.writeFile(outputPath, JSON.stringify(result, null, 2) + "\n", { mode: 0o600 });
-  process.stdout.write(JSON.stringify({ outputPath, cases: cases.map(({ name, operationLatencyMs }) => ({ name, operationLatencyMs })) }, null, 2) + "\n");
+  process.stdout.write(JSON.stringify({
+    outputPath,
+    runtimeRoot,
+    runtimeSourceSha,
+    cases: cases.map(({ name, operationLatencyMs }) => ({ name, operationLatencyMs })),
+  }, null, 2) + "\n");
 }
 
 async function crashChild(usageDirectory) {
@@ -344,7 +373,7 @@ async function runCrash(outputPath) {
   const statePath = path.join(usageDirectory, "recent-activity", "recent-activity-state.json");
   const beforeBytes = await fsp.readFile(statePath);
   const beforeHash = createHash("sha256").update(beforeBytes).digest("hex");
-  const child = fork(scriptPath, ["crash-child", usageDirectory], {
+  const child = fork(scriptPath, ["crash-child", usageDirectory, "--runtime-root", runtimeRoot], {
     stdio: ["ignore", "ignore", "inherit", "ipc"],
   });
   const timeout = setTimeout(() => child.kill("SIGKILL"), 15_000);
@@ -388,6 +417,8 @@ async function runCrash(outputPath) {
   const result = {
     schemaVersion: 1,
     candidate: "C42",
+    runtimeRoot,
+    runtimeSourceSha,
     fixture: "synthetic private directory; existing upsert with injected half-write to its private temporary file",
     crashSignal: exitSignal,
     childExitCode: exitCode,
@@ -405,7 +436,7 @@ async function runCrash(outputPath) {
   await fsp.rm(tempRoot, { recursive: true, force: true });
 }
 
-const [mode = "bench", outputPath = path.join(os.tmpdir(), "core64-status-store.json")] = process.argv.slice(2);
+const [mode = "bench", outputPath = path.join(os.tmpdir(), "core64-status-store.json")] = positionalArgs;
 if (mode === "crash-child") {
   await crashChild(outputPath);
 } else if (mode === "crash") {

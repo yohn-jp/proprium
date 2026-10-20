@@ -1,13 +1,37 @@
 #!/usr/bin/env node
 import assert from "node:assert/strict";
+import { spawnSync } from "node:child_process";
 import { generateKeyPairSync, sign as signJwt } from "node:crypto";
 import fsp from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 import { performance } from "node:perf_hooks";
-import { fileURLToPath } from "node:url";
-import { createServer } from "../../packages/api/dist/server.js";
-import { RUNTIME_STATUS_PATH, sha256Digest } from "../../packages/api/dist/platform-runtime.js";
+import { fileURLToPath, pathToFileURL } from "node:url";
+
+const runtimeSourceSha = "a1587e784788fa87d86c0eb7ab175d7a28a3209f";
+const scriptDirectory = path.dirname(fileURLToPath(import.meta.url));
+const positionalArgs = [];
+let requestedRuntimeRoot;
+const rawArgs = process.argv.slice(2);
+for (let index = 0; index < rawArgs.length; index += 1) {
+  const argument = rawArgs[index];
+  if (argument === "--runtime-root") {
+    requestedRuntimeRoot = rawArgs[index + 1];
+    assert.ok(requestedRuntimeRoot, "--runtime-root requires a path");
+    index += 1;
+  } else if (argument.startsWith("--runtime-root=")) {
+    requestedRuntimeRoot = argument.slice("--runtime-root=".length);
+    assert.ok(requestedRuntimeRoot, "--runtime-root requires a path");
+  } else {
+    positionalArgs.push(argument);
+  }
+}
+const runtimeRoot = path.resolve(requestedRuntimeRoot || path.resolve(scriptDirectory, "../.."));
+const sourceCheck = spawnSync("git", ["-C", runtimeRoot, "diff", "--quiet", runtimeSourceSha, "--", "packages"]);
+assert.equal(sourceCheck.error, undefined, "could not verify the runtime source tree with git");
+assert.equal(sourceCheck.status, 0, "runtimeRoot packages source must match the frozen a1587e78 tree");
+const { createServer } = await import(pathToFileURL(path.join(runtimeRoot, "packages/api/dist/server.js")).href);
+const { RUNTIME_STATUS_PATH, sha256Digest } = await import(pathToFileURL(path.join(runtimeRoot, "packages/api/dist/platform-runtime.js")).href);
 
 const assignment = {
   contractVersion: "scriptorium-platform/v1",
@@ -242,7 +266,7 @@ async function verifyUnknownOnRace(temporaryRoot) {
   }
 }
 
-const [, , outputPath = path.join(os.tmpdir(), "core64-status-authority.json"), sampleText = "20"] = process.argv;
+const [outputPath = path.join(os.tmpdir(), "core64-status-authority.json"), sampleText = "20"] = positionalArgs;
 const samples = Number(sampleText);
 assert.ok(Number.isSafeInteger(samples) && samples >= 5 && samples <= 100, "sample count must be between 5 and 100");
 const temporaryRoot = await fsp.mkdtemp(path.join(os.tmpdir(), "scriptorium-c64-status-authority-"));
@@ -253,6 +277,8 @@ try {
   const result = {
     schemaVersion: 1,
     candidate: "C41",
+    runtimeRoot,
+    runtimeSourceSha,
     source: "local synthetic API process with signed status credentials, controlled Core store, and in-memory fake persistence rows",
     hostedOrK3sEvidence: "NOT_CHECKED: no authorized hosted or k3s fixture was supplied",
     invariants: {
@@ -268,6 +294,8 @@ try {
   await fsp.writeFile(outputPath, JSON.stringify(result, null, 2) + "\n", { mode: 0o600 });
   process.stdout.write(JSON.stringify({
     outputPath,
+    runtimeRoot,
+    runtimeSourceSha,
     fixtures: fixtures.map(({ fakePersistenceRecords, wallMs, counts }) => ({ fakePersistenceRecords, wallMs, observeCalls: counts.observeCalls })),
     remoteRace: race,
     hostedOrK3sEvidence: result.hostedOrK3sEvidence,
