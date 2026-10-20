@@ -31,7 +31,7 @@ import { loadThemeMode, persistThemeMode, type ThemeMode } from "../theme";
 import { clearDraft, loadDraft } from "../drafts";
 import type { ApplicationShell, ApplicationShellProps, UiMode } from "./contracts";
 import { applicationPath, parseApplicationLocation, readUiModePreference, rememberUiMode, switchApplicationPath, type ApplicationResource } from "./navigation";
-import { canRetainRecoveredEditorDuringSceneLoad, isEditorTextSafeToFlush, isNonDraftEntryAcknowledgedByReceipt, isSameSceneEditorLoad, isUnchangedEntryConfirmedByReceipt, mayWriteEditor, recoveryStatusForJournalOpen, type EditorRecoveryStatus } from "./recovery";
+import { canRetainRecoveredEditorDuringSceneLoad, isEditorTextSafeToFlush, isNonDraftEntryAcknowledgedByReceipt, isSameSceneEditorLoad, isUnchangedEntryConfirmedByReceipt, mayWriteEditor, mergeLatestDraftEntry, recoveryStatusForJournalOpen, type EditorRecoveryStatus } from "./recovery";
 import {
   BrowserJournal,
   documentKey,
@@ -1554,6 +1554,12 @@ function AuthorWorkspace({
     setStatus({ message, kind });
   }
 
+  function mergePersistedDraft(entry: JournalEntry, navigation: number): void {
+    setEntries((currentEntries) => navigationRef.current === navigation && authorScopeRef.current === entry.authorScope
+      ? mergeLatestDraftEntry(currentEntries, entry)
+      : currentEntries);
+  }
+
   async function persistDraft(entry: JournalEntry): Promise<boolean> {
     const navigation = navigationRef.current;
     const currentJournal = journalRef.current;
@@ -1571,8 +1577,9 @@ function AuthorWorkspace({
       if (pending?.operation.id === entry.operation.id && pending.operation.generation === entry.operation.generation) {
         pendingDraftsRef.current.delete(pendingKey);
       }
-      await refreshJournal(entry.repository, navigation);
-      updateWork((current) => navigationRef.current === navigation && current?.editor?.entry?.key === entry.key
+      mergePersistedDraft(entry, navigation);
+      updateWork((current) => navigationRef.current === navigation && authorScopeRef.current === entry.authorScope &&
+        current?.editor?.entry?.key === entry.key && current.editor.entry.state === "draft" && current.editor.text === entry.text
         ? { ...current, editor: { ...current.editor, draftStored: true, journalError: "" } }
         : current);
       return true;
@@ -1599,11 +1606,12 @@ function AuthorWorkspace({
     }
     if (!draft.text.trim() && draft.attachments.length === 0) return null;
     const nav = navigationRef.current;
+    const author = authorScopeRef.current;
     const { operation, path } = buildScratchOperation(read, draft);
-    const entry = makeEntry(read.snapshot.repository, authorScopeRef.current, read.scene.id, read, draft.text, "", operation, "draft", path);
+    const entry = makeEntry(read.snapshot.repository, author, read.scene.id, read, draft.text, "", operation, "draft", path);
     const stored = await currentJournal.putLatestDraft(entry);
     if (!stored) return null;
-    await refreshJournal(read.snapshot.repository, nav);
+    mergePersistedDraft(entry, nav);
     return entry;
   }
 
