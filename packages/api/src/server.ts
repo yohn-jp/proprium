@@ -308,6 +308,45 @@ function isPublicReaderPath(pathname: string): boolean {
   return PUBLIC_READER_MODULES.has(moduleId);
 }
 
+function manifestAssetFile(value: unknown, extension: ".js" | ".css"): value is string {
+  if (typeof value !== "string" || extname(value).toLowerCase() !== extension) return false;
+  if (value === (extension === ".js" ? "main.js" : "styles.css")) return true;
+  return /^assets\/[A-Za-z0-9._-]{1,180}$/u.test(value);
+}
+
+async function staticAliasTarget(
+  staticDir: string,
+  ui: string | undefined,
+  kind: "script" | "stylesheet",
+  fallback: string,
+): Promise<string> {
+  const uiRoot = resolve(staticDir, ...(ui ? [ui] : []));
+  let manifestBytes: Buffer;
+  try {
+    manifestBytes = await readFile(resolve(uiRoot, ".vite", "manifest.json"));
+  } catch (error) {
+    if ((error as NodeJS.ErrnoException).code === "ENOENT") return resolve(staticDir, fallback);
+    throw error;
+  }
+  const manifest: unknown = JSON.parse(manifestBytes.toString("utf8"));
+  if (!isRecord(manifest) || !isRecord(manifest["index.html"])) return resolve(staticDir, fallback);
+  const entry = manifest["index.html"];
+  let candidate: unknown;
+  if (kind === "script") {
+    candidate = entry.file;
+  } else {
+    candidate = Array.isArray(entry.css) ? entry.css.find((file) => manifestAssetFile(file, ".css")) : undefined;
+    if (!candidate && isRecord(manifest["style.css"])) candidate = manifest["style.css"].file;
+  }
+  const extension = kind === "script" ? ".js" : ".css";
+  if (!manifestAssetFile(candidate, extension)) return resolve(staticDir, fallback);
+  return resolve(uiRoot, candidate);
+}
+
+function isContentHashedAssetPath(pathname: string): boolean {
+  return /^\/(?:desktop\/|mobile\/)?assets\/[A-Za-z0-9._-]+-[A-Za-z0-9_-]{8}\.(?:js|css)$/u.test(pathname);
+}
+
 async function serveStatic(
   request: IncomingMessage,
   response: ServerResponse,
@@ -349,6 +388,11 @@ async function serveStatic(
   }
   if (!file) return false;
   try {
+    if (file.filename === "main.js" || (ui && file.filename === `${ui}/main.js`)) {
+      file = { ...file, filename: await staticAliasTarget(staticDir, ui, "script", file.filename) };
+    } else if (file.filename === "styles.css" || (ui && file.filename === `${ui}/styles.css`)) {
+      file = { ...file, filename: await staticAliasTarget(staticDir, ui, "stylesheet", file.filename) };
+    }
     const target = file.filename.startsWith(sep) ? file.filename : resolve(staticDir, file.filename);
     const root = await realpath(staticDir);
     const assetsDirectory = path.startsWith(assetPrefix) ? resolve(staticDir, ...(ui ? [ui] : []), "assets") : undefined;
@@ -378,7 +422,11 @@ async function serveStatic(
       response.setHeader("Referrer-Policy", "no-referrer");
       response.setHeader("X-Robots-Tag", "noindex, nofollow");
     }
-    response.writeHead(200, { "Content-Type": file.contentType, "Content-Length": content.length });
+    response.writeHead(200, {
+      "Content-Type": file.contentType,
+      "Content-Length": content.length,
+      "Cache-Control": isContentHashedAssetPath(path) ? "public, max-age=31536000, immutable" : "no-store",
+    });
     response.end(request.method === "HEAD" ? undefined : content);
   } catch (error) {
     const code = (error as NodeJS.ErrnoException).code;

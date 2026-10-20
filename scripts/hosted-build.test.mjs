@@ -5,11 +5,35 @@ import path from 'node:path';
 import test from 'node:test';
 import { fileURLToPath } from 'node:url';
 import { MODULE_PERSISTENCE_FORMATS, resolveBuildCatalogSelection } from '../packages/module-runtime/dist/index.js';
-import { assertCleanRevisionSnapshot, canonicalJson, catalogFor, persistenceForModules, resourceDeclarationFor } from './hosted-build.mjs';
+import { assertCleanRevisionSnapshot, browserManifestEntryFiles, canonicalJson, catalogFor, persistenceForModules, resourceDeclarationFor } from './hosted-build.mjs';
 import { assertSigstoreBundleMatches, assertSupportedCosignVersion, createSlsaStatement } from './hosted-attestation.mjs';
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const moduleIds = ['story', 'diagnostics', 'nlp', 'semantic', 'speaker', 'assistant', 'publishing', 'mcp', 'search'];
+
+test('hosted browser artifact binding follows hashed Vite entry and stylesheet files', () => {
+  assert.deepEqual(browserManifestEntryFiles({
+    'index.html': { file: 'assets/index-AbCd1234.js', isEntry: true },
+    'style.css': { file: 'assets/styles-EfGh5678.css' },
+  }), {
+    entryFile: 'assets/index-AbCd1234.js',
+    stylesheetFiles: ['assets/styles-EfGh5678.css'],
+  });
+  assert.deepEqual(browserManifestEntryFiles({
+    'index.html': { file: 'assets/index-AbCd1234.js', isEntry: true, css: ['assets/styles-EfGh5678.css'] },
+  }), {
+    entryFile: 'assets/index-AbCd1234.js',
+    stylesheetFiles: ['assets/styles-EfGh5678.css'],
+  });
+  assert.throws(() => browserManifestEntryFiles({
+    'index.html': { file: 'main.js', isEntry: true },
+    'style.css': { file: 'styles.css' },
+  }), /content-hashed application entry/u);
+  assert.throws(() => browserManifestEntryFiles({
+    'index.html': { file: 'assets/index-AbCd1234.js', isEntry: true },
+    'style.css': { file: '../styles.css' },
+  }), /content-hashed application stylesheet/u);
+});
 
 async function shippedModuleData() {
   const trustedModules = await Promise.all(moduleIds.map(async (id) => {

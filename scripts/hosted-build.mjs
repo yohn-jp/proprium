@@ -529,8 +529,25 @@ export async function browserArtifactRecords(deployedDirectory, browserIds) {
     browserUiArtifactRecords(path.join(deployedDirectory, 'app/dist', ui), browserIds, ui)));
   return {
     files: records.flatMap(({ files }) => files).sort((a, b) => a.path < b.path ? -1 : a.path > b.path ? 1 : 0),
+    entryFile: records[0].entryFile,
     manifestPath: '/app/app/dist/.vite/manifest.json',
   };
+}
+
+export function browserManifestEntryFiles(manifest) {
+  const applicationEntry = manifest && typeof manifest === 'object' && !Array.isArray(manifest) ? manifest['index.html'] : undefined;
+  const assetPath = (value, extension) => typeof value === 'string' &&
+    new RegExp(`^assets/[A-Za-z0-9._-]+-[A-Za-z0-9_-]{8}\\.${extension}$`, 'u').test(value);
+  if (!applicationEntry || applicationEntry.isEntry !== true || !assetPath(applicationEntry.file, 'js')) {
+    throw new Error('Vite browser manifest has no content-hashed application entry');
+  }
+  const stylesheetFiles = Array.isArray(applicationEntry.css)
+    ? applicationEntry.css
+    : [manifest['style.css']?.file];
+  if (stylesheetFiles.length === 0 || stylesheetFiles.some((file) => !assetPath(file, 'css'))) {
+    throw new Error('Vite browser manifest has no content-hashed application stylesheet');
+  }
+  return { entryFile: applicationEntry.file, stylesheetFiles };
 }
 
 async function browserUiArtifactRecords(distDirectory, browserIds, ui) {
@@ -542,9 +559,7 @@ async function browserUiArtifactRecords(distDirectory, browserIds, ui) {
     throw new Error('Vite browser manifest is invalid');
   }
   const applicationEntry = manifest['index.html'];
-  if (!applicationEntry || applicationEntry.isEntry !== true || applicationEntry.file !== 'main.js') {
-    throw new Error('Vite browser manifest has no canonical application entry');
-  }
+  const { entryFile } = browserManifestEntryFiles(manifest);
   const expectedDynamicSources = browserIds.map((id) => `../modules/${id}/dist/browser.js`).sort();
   const appManifest = JSON.parse(await readFile(path.join(root, 'app/package.json'), 'utf8'));
   const ionicPrefix = `../node_modules/.pnpm/@ionic+core@${appManifest.dependencies['@ionic/core']}/node_modules/@ionic/core/components/`;
@@ -606,7 +621,7 @@ async function browserUiArtifactRecords(distDirectory, browserIds, ui) {
     if (!info.isFile() || info.isSymbolicLink()) throw new Error(`Vite browser output is not a regular file: ${relative}`);
     files.push({ path: `/app/app/dist/${ui ? `${ui}/` : ""}${relative}`, sha256: sha256(await readFile(absolute)) });
   }
-  return { files, manifestPath: '/app/app/dist/.vite/manifest.json' };
+  return { files, entryFile, manifestPath: '/app/app/dist/.vite/manifest.json' };
 }
 
 async function writeComposition(input, catalog, selection, runtimeDirectory, trustedModules) {
@@ -625,13 +640,13 @@ async function writeComposition(input, catalog, selection, runtimeDirectory, tru
     throw new Error('Generated server/browser registries do not match the selected module composition');
   }
   const { records: runtimePackages, lockBytes } = await runtimePackageRecords(packageRuntimeDirectory, serverIds);
-  const { files: browserFiles, manifestPath: browserManifestPath } = await browserArtifactRecords(packageRuntimeDirectory, browserIds);
+  const { files: browserFiles, entryFile: browserEntryFile, manifestPath: browserManifestPath } = await browserArtifactRecords(packageRuntimeDirectory, browserIds);
   const moduleReports = await moduleRecords(packageRuntimeDirectory, selectedIds);
   if (canonicalJson(moduleReports.map(({ id, version, artifactDigest }) => ({ id, version, artifactDigest }))) !== canonicalJson(selection.resolvedModules)) {
     throw new Error('Deployed module package bytes do not match the immutable catalog identities');
   }
   const nativeDependencies = await scanNativeDependencies(path.join(packageRuntimeDirectory, 'node_modules'));
-  const browserEntryPath = path.join(packageRuntimeDirectory, 'app/dist/main.js');
+  const browserEntryPath = path.join(packageRuntimeDirectory, 'app/dist', browserEntryFile);
   const browserBundleDigest = sha256(await readFile(browserEntryPath));
   const journalSource = await readFile(path.join(root, 'app/src/storage/journal.ts'), 'utf8');
   const indexedDbVersion = Number(journalSource.match(/const DATABASE_VERSION = ([1-9][0-9]*);/u)?.[1]);
@@ -664,7 +679,7 @@ async function writeComposition(input, catalog, selection, runtimeDirectory, tru
     platform: input.platform,
     resolvedModules: selection.resolvedModules,
     server: { entry: 'app/launch.mjs', moduleIds: serverIds },
-    browser: { entry: 'app/app/dist/main.js', moduleIds: browserIds },
+    browser: { entry: `app/app/dist/${browserEntryFile}`, moduleIds: browserIds },
     nativeDependencies,
     persistence,
     smoke: { id: 'scriptorium-hosted-runtime-v1', healthPath: '/health/ready', timeoutSeconds: 60 },
@@ -689,7 +704,7 @@ async function writeComposition(input, catalog, selection, runtimeDirectory, tru
     serverRegistryPath: '/app/generated/server.mjs',
     browserRegistryPath: '/app/generated/browser.mjs',
     browserManifestPath,
-    browserEntryPath: '/app/app/dist/main.js',
+    browserEntryPath: `/app/app/dist/${browserEntryFile}`,
     browserBundleDigest,
     browserFiles,
     nativeDependencies,

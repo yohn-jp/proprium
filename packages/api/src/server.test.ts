@@ -1008,6 +1008,98 @@ describe("Scriptorium HTTP boundary", () => {
     assert.equal((await fetch(`${apiServer.base}/server.test.js`)).status, 404);
   });
 
+  it("keeps fixed UI aliases fresh while caching only content-hashed JS and CSS", async (t) => {
+    const staticDir = await mkdtemp(resolve(tmpdir(), "scriptorium-api-static-manifest-"));
+    tempDirs.push(staticDir);
+    await writeFile(resolve(staticDir, "server.test.js"), "private test file");
+    const fixtures = new Map<string, { entry: string; stylesheet: string; scriptBody: string; styleBody: string }>();
+    for (const ui of ["launcher", "desktop", "mobile"] as const) {
+      const uiRoot = ui === "launcher" ? staticDir : resolve(staticDir, ui);
+      const prefix = ui === "launcher" ? "" : `/${ui}`;
+      const suffix = ui === "launcher" ? "a1B2c3D4" : ui === "desktop" ? "e5F6g7H8" : "i9J0k1L2";
+      const entry = `main-${suffix}.js`;
+      const stylesheet = `styles-${suffix}.css`;
+      const scriptBody = `${ui} hashed bundle`;
+      const styleBody = `${ui} hashed styles`;
+      await Promise.all([
+        mkdir(resolve(uiRoot, ".vite"), { recursive: true }),
+        mkdir(resolve(uiRoot, "assets"), { recursive: true }),
+      ]);
+      await writeFile(resolve(uiRoot, "index.html"),
+        `<meta name="scriptorium-style-nonce" content="__SCRIPTORIUM_STYLE_NONCE__"><link rel="stylesheet" href="${prefix}/assets/${stylesheet}"><script type="module" src="${prefix}/assets/${entry}"></script>`);
+      await writeFile(resolve(uiRoot, "main.js"), `${ui} legacy bundle`);
+      await writeFile(resolve(uiRoot, "styles.css"), `${ui} legacy styles`);
+      await writeFile(resolve(uiRoot, "assets", entry), scriptBody);
+      await writeFile(resolve(uiRoot, "assets", stylesheet), styleBody);
+      await writeFile(resolve(uiRoot, "assets", "chunk.js"), `${ui} unhashed chunk`);
+      await writeFile(resolve(uiRoot, ".vite", "manifest.json"), JSON.stringify({
+        "index.html": { file: `assets/${entry}`, src: "index.html", isEntry: true },
+        "style.css": { file: `assets/${stylesheet}`, src: "style.css" },
+      }));
+      fixtures.set(ui, { entry, stylesheet, scriptBody, styleBody });
+    }
+    await symlink(resolve(staticDir, "server.test.js"), resolve(staticDir, "assets", "leak-LeakHa12.js"));
+
+    const apiServer = await startApi(staticDir);
+    t.after(apiServer.close);
+    for (const [ui, fixture] of fixtures) {
+      const prefix = ui === "launcher" ? "" : `/${ui}`;
+      const route = `${prefix}/`;
+      const shell = await fetch(`${apiServer.base}${route}`);
+      const shellHtml = await shell.text();
+      const nonce = /name="scriptorium-style-nonce" content="([^"]+)"/u.exec(shellHtml)?.[1];
+      assert.equal(shell.status, 200);
+      assert.equal(shell.headers.get("cache-control"), "no-store");
+      assert.ok(nonce && nonce !== "__SCRIPTORIUM_STYLE_NONCE__");
+      assert.ok(shell.headers.get("content-security-policy")?.includes(`style-src 'self' 'nonce-${nonce}'`));
+      assert.ok(shellHtml.includes(`src="${prefix}/assets/${fixture.entry}"`));
+      assert.ok(shellHtml.includes(`href="${prefix}/assets/${fixture.stylesheet}"`));
+      const nextShell = await fetch(`${apiServer.base}${route}`);
+      assert.notEqual(nextShell.headers.get("content-security-policy"), shell.headers.get("content-security-policy"));
+      assert.equal(nextShell.headers.get("cache-control"), "no-store");
+
+      const jsAsset = await fetch(`${apiServer.base}${prefix}/assets/${fixture.entry}`);
+      assert.equal(jsAsset.status, 200);
+      assert.equal(await jsAsset.text(), fixture.scriptBody);
+      assert.equal(jsAsset.headers.get("cache-control"), "public, max-age=31536000, immutable");
+      const cssAsset = await fetch(`${apiServer.base}${prefix}/assets/${fixture.stylesheet}`);
+      assert.equal(cssAsset.status, 200);
+      assert.equal(await cssAsset.text(), fixture.styleBody);
+      assert.equal(cssAsset.headers.get("cache-control"), "public, max-age=31536000, immutable");
+
+      const jsAlias = await fetch(`${apiServer.base}${prefix}/main.js`);
+      assert.equal(await jsAlias.text(), fixture.scriptBody, `${ui} fixed script URL resolves the active manifest`);
+      assert.equal(jsAlias.headers.get("cache-control"), "no-store");
+      const cssAlias = await fetch(`${apiServer.base}${prefix}/styles.css`);
+      assert.equal(await cssAlias.text(), fixture.styleBody, `${ui} fixed stylesheet URL resolves the active manifest`);
+      assert.equal(cssAlias.headers.get("cache-control"), "no-store");
+      const unhashed = await fetch(`${apiServer.base}${prefix}/assets/chunk.js`);
+      assert.equal(unhashed.headers.get("cache-control"), "no-store");
+      assert.equal((await fetch(`${apiServer.base}${prefix}/assets/stale-Ab1Cd2Ef.js`)).status, 404);
+    }
+
+    const symlinkResponse = await fetch(`${apiServer.base}/assets/leak-LeakHa12.js`);
+    assert.equal(symlinkResponse.status, 404);
+    assert.equal((await symlinkResponse.json() as { code: string }).code, "NOT_FOUND");
+    assert.equal(symlinkResponse.headers.get("cache-control"), "no-store");
+
+    await writeFile(resolve(staticDir, ".vite", "manifest.json"), JSON.stringify({
+      "index.html": { file: "../server.test.js", src: "index.html", isEntry: true },
+      "style.css": { file: "../server.test.js", src: "style.css" },
+    }));
+    const unsafeAlias = await fetch(`${apiServer.base}/main.js`);
+    assert.equal(await unsafeAlias.text(), "launcher legacy bundle", "an unsafe manifest path cannot expose a private file");
+    assert.equal(unsafeAlias.headers.get("cache-control"), "no-store");
+
+    await writeFile(resolve(staticDir, ".vite", "manifest.json"), JSON.stringify({
+      "index.html": { file: "main.js", src: "index.html", isEntry: true },
+      "style.css": { file: "styles.css", src: "style.css" },
+    }));
+    const rollbackAlias = await fetch(`${apiServer.base}/main.js`);
+    assert.equal(await rollbackAlias.text(), "launcher legacy bundle", "a legacy manifest remains usable after rollback");
+    assert.equal(rollbackAlias.headers.get("cache-control"), "no-store");
+  });
+
   it("stores bounded immutable model usage with complete paginated history and no symlink traversal", async () => {
     const root = await mkdtemp(resolve(tmpdir(), "scriptorium-api-model-history-"));
     tempDirs.push(root);

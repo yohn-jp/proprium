@@ -41,9 +41,9 @@ export default defineConfig({
     rollupOptions: {
       input: resolve(appRoot, "index.html"),
       output: {
-        entryFileNames: "main.js",
+        entryFileNames: "assets/[name]-[hash].js",
         chunkFileNames: "assets/[name]-[hash].js",
-        assetFileNames: (asset) => asset.name?.endsWith(".css") ? "styles.css" : "assets/[name]-[hash][extname]",
+        assetFileNames: (asset) => asset.name?.endsWith(".css") ? "assets/styles-[hash][extname]" : "assets/[name]-[hash][extname]",
       },
     },
   },
