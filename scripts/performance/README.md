@@ -151,3 +151,11 @@ avoid a page-wide accessibility-role scan across 50,000 scene buttons. Timings
 still include automation and visibility/readiness work; they are not pure user
 input latency. Failed browser workers save a partial CPU profile when CDP remains
 responsive, allowing automation overhead to be distinguished from app work.
+
+Idle settling waits for finite HTTP requests only, then allows the known cursor
+activity debounce to finish. The existing `/api/jobs/events` fetch stream remains
+open and is counted as a streaming request; global Playwright `networkidle` is
+unsuitable for this app. Server latency statistics cover completed responses;
+open-stream duration/bytes are not included in completed-transfer totals. Stream
+starts remain in browser/API request counts and their CPU/RSS cost remains in the
+idle window.

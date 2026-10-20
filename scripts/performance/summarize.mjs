@@ -47,7 +47,8 @@ export function summarizeBrowser(report) {
       idbGetAll: metrics.reads.filter(row => row.method === 'getAll').length } : null,
     storageEstimate: report.storageEstimate, network: report.network,
     browserRuntime: report.browserRuntime, server: server && { counts: server.counts, cpu: server.cpu, memory: server.memory, usage: server.usage, io: server.io },
-    requestCount: report.requests?.length,
+    requestCount: report.requests?.length, apiRequestCount: report.requests?.filter(row => row.path.startsWith('/api/')).length,
+    streamingRequests: report.requests?.filter(row => row.streaming),
     api: Object.fromEntries([...new Set(api.map(row => `${row.method} ${row.path}`))].map(key => {
       const rows = api.filter(row => `${row.method} ${row.path}` === key);
       return [key, { ms: distribution(rows.map(row => row.ms)), statusCounts: rows.reduce((counts, row) => { counts[row.status] = (counts[row.status] ?? 0) + 1; return counts; }, {}) }];

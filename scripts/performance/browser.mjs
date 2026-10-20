@@ -43,7 +43,25 @@ try {
   await context.addInitScript(installBrowserProbes);
   page = await context.newPage();
   page.setDefaultTimeout(60000);
-  page.on('request', request => report.requests.push({ start: performance.now(), method: request.method(), path: new URL(request.url()).pathname, type: request.resourceType() }));
+  const finiteRequests = new Set();
+  let lastFiniteEvent = performance.now();
+  page.on('request', request => {
+    const path = new URL(request.url()).pathname;
+    const streaming = request.resourceType() === 'eventsource' || request.resourceType() === 'websocket' ||
+      (request.method() === 'GET' && path.endsWith('/events')) || request.headers().accept?.includes('text/event-stream');
+    report.requests.push({ start: performance.now(), method: request.method(), path, type: request.resourceType(), streaming: Boolean(streaming) });
+    if (!streaming) { finiteRequests.add(request); lastFiniteEvent = performance.now(); }
+  });
+  const finished = request => { if (finiteRequests.delete(request)) lastFiniteEvent = performance.now(); };
+  page.on('requestfinished', finished); page.on('requestfailed', finished);
+  async function settleFiniteRequests() {
+    const deadline = performance.now() + 60000;
+    while (performance.now() < deadline) {
+      if (!finiteRequests.size && performance.now() - lastFiniteEvent >= 500) return;
+      await page.waitForTimeout(100);
+    }
+    throw new Error('Finite HTTP requests did not settle before the idle observation');
+  }
   const base = `http://127.0.0.1:${ready.port}`;
   cdp = await context.newCDPSession(page);
   await cdp.send('Network.enable');
@@ -121,7 +139,9 @@ try {
   }
   // The status text can become visible before publication refresh requests finish.
   // Exclude that foreground tail before counting background requests.
-  await page.waitForLoadState('networkidle');
+  await settleFiniteRequests();
+  await page.waitForTimeout(2500); // allow the cursor/activity debounce tail to complete
+  await settleFiniteRequests();
   await idle('idle.visible');
   const foreground = await context.newPage(); await foreground.bringToFront();
   if (await page.evaluate(() => document.hidden)) await idle('idle.hidden');
