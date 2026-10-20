@@ -1,0 +1,219 @@
+{
+  "capturedAt": "2026-10-20T17:06:26.475Z",
+  "worktree": "/home/sophia/src/scriptorium-c64-g5",
+  "sourceForFullArtifacts": {
+    "sourceCommit": "e3d6bc3af249a1483016ec7fcfe4f0ffb4ec8aa2",
+    "sourceTree": "b994c86b1a3b4b25e1f44a9a11e6a22929cde192",
+    "c59CandidateCommit": "85504858418463354f9f54e4a3cd132aed80d0fd",
+    "c59CandidateTree": "b994c86b1a3b4b25e1f44a9a11e6a22929cde192"
+  },
+  "command": "pnpm install --offline --frozen-lockfile",
+  "exitCode": 0,
+  "log": "docs/performance/results/2026-10-21/core64-g5/pnpm-install-frozen.log",
+  "result": "Scope: all 18 workspace projects; lockfile up to date; resolution step skipped; Done in 58ms using pnpm v12.10.1.",
+  "toolchain": {
+    "node": "v24.21.0",
+    "pnpm": "12.10.1",
+    "packageManager": "pnpm@12.10.1",
+    "storePath": "/home/sophia/.local/share/pnpm/store/v11"
+  },
+  "lockfile": {
+    "sha256Before": "107821c3fdeb50571c891e7de500c0b477bc01206c1f4caa63d830fd8be7e768",
+    "sha256After": "107821c3fdeb50571c891e7de500c0b477bc01206c1f4caa63d830fd8be7e768",
+    "unchanged": true
+  },
+  "beforeInstallObservation": {
+    "virtualStore": "node_modules/.pnpm was a real directory",
+    "workspaceLinkExamples": [
+      {
+        "name": "@scriptorium/api",
+        "realPath": "/home/sophia/src/scriptorium-c64-g5/packages/api"
+      },
+      {
+        "name": "@scriptorium/module-assistant",
+        "realPath": "/home/sophia/src/scriptorium-c64-g5/modules/assistant"
+      },
+      {
+        "name": "@scriptorium/module-story",
+        "realPath": "/home/sophia/src/scriptorium-c64-g5/modules/story"
+      }
+    ]
+  },
+  "afterInstall": {
+    "virtualStoreRealDirectory": true,
+    "workspaceProjectCount": 18,
+    "workspaceProjects": [
+      {
+        "name": "scriptorium",
+        "version": "0.1.0",
+        "path": "/home/sophia/src/scriptorium-c64-g5",
+        "realPath": "/home/sophia/src/scriptorium-c64-g5"
+      },
+      {
+        "name": "@scriptorium/app",
+        "version": "0.1.0",
+        "path": "/home/sophia/src/scriptorium-c64-g5/app",
+        "realPath": "/home/sophia/src/scriptorium-c64-g5/app"
+      },
+      {
+        "name": "@scriptorium/module-assistant",
+        "version": "0.1.0",
+        "path": "/home/sophia/src/scriptorium-c64-g5/modules/assistant",
+        "realPath": "/home/sophia/src/scriptorium-c64-g5/modules/assistant"
+      },
+      {
+        "name": "@scriptorium/module-diagnostics",
+        "version": "0.1.0",
+        "path": "/home/sophia/src/scriptorium-c64-g5/modules/diagnostics",
+        "realPath": "/home/sophia/src/scriptorium-c64-g5/modules/diagnostics"
+      },
+      {
+        "name": "@scriptorium/module-mcp",
+        "version": "0.1.0",
+        "path": "/home/sophia/src/scriptorium-c64-g5/modules/mcp",
+        "realPath": "/home/sophia/src/scriptorium-c64-g5/modules/mcp"
+      },
+      {
+        "name": "@scriptorium/module-nlp",
+        "version": "0.1.0",
+        "path": "/home/sophia/src/scriptorium-c64-g5/modules/nlp",
+        "realPath": "/home/sophia/src/scriptorium-c64-g5/modules/nlp"
+      },
+      {
+        "name": "@scriptorium/module-publishing",
+        "version": "0.1.0",
+        "path": "/home/sophia/src/scriptorium-c64-g5/modules/publishing",
+        "realPath": "/home/sophia/src/scriptorium-c64-g5/modules/publishing"
+      },
+      {
+        "name": "@scriptorium/module-search",
+        "version": "0.1.0",
+        "path": "/home/sophia/src/scriptorium-c64-g5/modules/search",
+        "realPath": "/home/sophia/src/scriptorium-c64-g5/modules/search"
+      },
+      {
+        "name": "@scriptorium/module-semantic",
+        "version": "0.1.0",
+        "path": "/home/sophia/src/scriptorium-c64-g5/modules/semantic",
+        "realPath": "/home/sophia/src/scriptorium-c64-g5/modules/semantic"
+      },
+      {
+        "name": "@scriptorium/module-speaker",
+        "version": "0.1.0",
+        "path": "/home/sophia/src/scriptorium-c64-g5/modules/speaker",
+        "realPath": "/home/sophia/src/scriptorium-c64-g5/modules/speaker"
+      },
+      {
+        "name": "@scriptorium/module-story",
+        "version": "0.1.0",
+        "path": "/home/sophia/src/scriptorium-c64-g5/modules/story",
+        "realPath": "/home/sophia/src/scriptorium-c64-g5/modules/story"
+      },
+      {
+        "name": "@scriptorium/api",
+        "version": "0.1.0",
+        "path": "/home/sophia/src/scriptorium-c64-g5/packages/api",
+        "realPath": "/home/sophia/src/scriptorium-c64-g5/packages/api"
+      },
+      {
+        "name": "@scriptorium/contracts",
+        "version": "1.0.0",
+        "path": "/home/sophia/src/scriptorium-c64-g5/packages/contracts",
+        "realPath": "/home/sophia/src/scriptorium-c64-g5/packages/contracts"
+      },
+      {
+        "name": "@scriptorium/core",
+        "version": "0.1.0",
+        "path": "/home/sophia/src/scriptorium-c64-g5/packages/core",
+        "realPath": "/home/sophia/src/scriptorium-c64-g5/packages/core"
+      },
+      {
+        "name": "@scriptorium/migration",
+        "version": "0.1.0",
+        "path": "/home/sophia/src/scriptorium-c64-g5/packages/migration",
+        "realPath": "/home/sophia/src/scriptorium-c64-g5/packages/migration"
+      },
+      {
+        "name": "@scriptorium/module-runtime",
+        "version": "0.1.0",
+        "path": "/home/sophia/src/scriptorium-c64-g5/packages/module-runtime",
+        "realPath": "/home/sophia/src/scriptorium-c64-g5/packages/module-runtime"
+      },
+      {
+        "name": "@scriptorium/profile-core",
+        "version": "0.1.0",
+        "path": "/home/sophia/src/scriptorium-c64-g5/profiles/core",
+        "realPath": "/home/sophia/src/scriptorium-c64-g5/profiles/core"
+      },
+      {
+        "name": "@scriptorium/profile-full",
+        "version": "0.1.0",
+        "path": "/home/sophia/src/scriptorium-c64-g5/profiles/full",
+        "realPath": "/home/sophia/src/scriptorium-c64-g5/profiles/full"
+      }
+    ],
+    "rootWorkspaceLinks": [
+      {
+        "name": "@scriptorium/api",
+        "link": "/home/sophia/src/scriptorium-c64-g5/node_modules/@scriptorium/api",
+        "realPath": "/home/sophia/src/scriptorium-c64-g5/packages/api"
+      },
+      {
+        "name": "@scriptorium/module-assistant",
+        "link": "/home/sophia/src/scriptorium-c64-g5/node_modules/@scriptorium/module-assistant",
+        "realPath": "/home/sophia/src/scriptorium-c64-g5/modules/assistant"
+      },
+      {
+        "name": "@scriptorium/module-diagnostics",
+        "link": "/home/sophia/src/scriptorium-c64-g5/node_modules/@scriptorium/module-diagnostics",
+        "realPath": "/home/sophia/src/scriptorium-c64-g5/modules/diagnostics"
+      },
+      {
+        "name": "@scriptorium/module-mcp",
+        "link": "/home/sophia/src/scriptorium-c64-g5/node_modules/@scriptorium/module-mcp",
+        "realPath": "/home/sophia/src/scriptorium-c64-g5/modules/mcp"
+      },
+      {
+        "name": "@scriptorium/module-nlp",
+        "link": "/home/sophia/src/scriptorium-c64-g5/node_modules/@scriptorium/module-nlp",
+        "realPath": "/home/sophia/src/scriptorium-c64-g5/modules/nlp"
+      },
+      {
+        "name": "@scriptorium/module-publishing",
+        "link": "/home/sophia/src/scriptorium-c64-g5/node_modules/@scriptorium/module-publishing",
+        "realPath": "/home/sophia/src/scriptorium-c64-g5/modules/publishing"
+      },
+      {
+        "name": "@scriptorium/module-search",
+        "link": "/home/sophia/src/scriptorium-c64-g5/node_modules/@scriptorium/module-search",
+        "realPath": "/home/sophia/src/scriptorium-c64-g5/modules/search"
+      },
+      {
+        "name": "@scriptorium/module-semantic",
+        "link": "/home/sophia/src/scriptorium-c64-g5/node_modules/@scriptorium/module-semantic",
+        "realPath": "/home/sophia/src/scriptorium-c64-g5/modules/semantic"
+      },
+      {
+        "name": "@scriptorium/module-speaker",
+        "link": "/home/sophia/src/scriptorium-c64-g5/node_modules/@scriptorium/module-speaker",
+        "realPath": "/home/sophia/src/scriptorium-c64-g5/modules/speaker"
+      },
+      {
+        "name": "@scriptorium/module-story",
+        "link": "/home/sophia/src/scriptorium-c64-g5/node_modules/@scriptorium/module-story",
+        "realPath": "/home/sophia/src/scriptorium-c64-g5/modules/story"
+      }
+    ],
+    "directPackageRecordCount": 117,
+    "resolvedPackagesFile": "docs/performance/results/2026-10-21/core64-g5/pnpm-resolved-packages.json",
+    "symlinkCount": 947,
+    "g0TargetLinks": []
+  },
+  "fullArtifactVerification": {
+    "manifest": "docs/performance/results/2026-10-21/core64-g5/c59-full-build-artifacts.json",
+    "expectedFiles": 639,
+    "checkedFiles": 639,
+    "mismatches": 0,
+    "errors": []
+  }
+}

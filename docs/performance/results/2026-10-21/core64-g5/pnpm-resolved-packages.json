@@ -1,0 +1,938 @@
+[
+  {
+    "project": "scriptorium",
+    "section": "devDependencies",
+    "name": "@playwright/test",
+    "version": "1.64.1",
+    "resolved": "https://registry.npmjs.org/@playwright/test/-/test-1.64.1.tgz",
+    "path": "/home/sophia/src/scriptorium-c64-g5/node_modules/.pnpm/@playwright+test@1.64.1/node_modules/@playwright/test"
+  },
+  {
+    "project": "scriptorium",
+    "section": "devDependencies",
+    "name": "@scriptorium/api",
+    "version": "link:packages/api",
+    "resolved": null,
+    "path": "/home/sophia/src/scriptorium-c64-g5/packages/api"
+  },
+  {
+    "project": "scriptorium",
+    "section": "devDependencies",
+    "name": "@scriptorium/module-assistant",
+    "version": "link:modules/assistant",
+    "resolved": null,
+    "path": "/home/sophia/src/scriptorium-c64-g5/modules/assistant"
+  },
+  {
+    "project": "scriptorium",
+    "section": "devDependencies",
+    "name": "@scriptorium/module-diagnostics",
+    "version": "link:modules/diagnostics",
+    "resolved": null,
+    "path": "/home/sophia/src/scriptorium-c64-g5/modules/diagnostics"
+  },
+  {
+    "project": "scriptorium",
+    "section": "devDependencies",
+    "name": "@scriptorium/module-mcp",
+    "version": "link:modules/mcp",
+    "resolved": null,
+    "path": "/home/sophia/src/scriptorium-c64-g5/modules/mcp"
+  },
+  {
+    "project": "scriptorium",
+    "section": "devDependencies",
+    "name": "@scriptorium/module-nlp",
+    "version": "link:modules/nlp",
+    "resolved": null,
+    "path": "/home/sophia/src/scriptorium-c64-g5/modules/nlp"
+  },
+  {
+    "project": "scriptorium",
+    "section": "devDependencies",
+    "name": "@scriptorium/module-publishing",
+    "version": "link:modules/publishing",
+    "resolved": null,
+    "path": "/home/sophia/src/scriptorium-c64-g5/modules/publishing"
+  },
+  {
+    "project": "scriptorium",
+    "section": "devDependencies",
+    "name": "@scriptorium/module-search",
+    "version": "link:modules/search",
+    "resolved": null,
+    "path": "/home/sophia/src/scriptorium-c64-g5/modules/search"
+  },
+  {
+    "project": "scriptorium",
+    "section": "devDependencies",
+    "name": "@scriptorium/module-semantic",
+    "version": "link:modules/semantic",
+    "resolved": null,
+    "path": "/home/sophia/src/scriptorium-c64-g5/modules/semantic"
+  },
+  {
+    "project": "scriptorium",
+    "section": "devDependencies",
+    "name": "@scriptorium/module-speaker",
+    "version": "link:modules/speaker",
+    "resolved": null,
+    "path": "/home/sophia/src/scriptorium-c64-g5/modules/speaker"
+  },
+  {
+    "project": "scriptorium",
+    "section": "devDependencies",
+    "name": "@scriptorium/module-story",
+    "version": "link:modules/story",
+    "resolved": null,
+    "path": "/home/sophia/src/scriptorium-c64-g5/modules/story"
+  },
+  {
+    "project": "scriptorium",
+    "section": "devDependencies",
+    "name": "@types/node",
+    "version": "24.19.2",
+    "resolved": "https://registry.npmjs.org/@types/node/-/node-24.19.2.tgz",
+    "path": "/home/sophia/src/scriptorium-c64-g5/node_modules/.pnpm/@types+node@24.19.2/node_modules/@types/node"
+  },
+  {
+    "project": "scriptorium",
+    "section": "devDependencies",
+    "name": "@types/react",
+    "version": "19.3.0",
+    "resolved": "https://registry.npmjs.org/@types/react/-/react-19.3.0.tgz",
+    "path": "/home/sophia/src/scriptorium-c64-g5/node_modules/.pnpm/@types+react@19.3.0/node_modules/@types/react"
+  },
+  {
+    "project": "scriptorium",
+    "section": "devDependencies",
+    "name": "@types/react-dom",
+    "version": "19.3.0",
+    "resolved": "https://registry.npmjs.org/@types/react-dom/-/react-dom-19.3.0.tgz",
+    "path": "/home/sophia/src/scriptorium-c64-g5/node_modules/.pnpm/@types+react-dom@19.3.0_@types+react@19.3.0/node_modules/@types/react-dom"
+  },
+  {
+    "project": "scriptorium",
+    "section": "devDependencies",
+    "name": "tsx",
+    "version": "4.23.15",
+    "resolved": "https://registry.npmjs.org/tsx/-/tsx-4.23.15.tgz",
+    "path": "/home/sophia/src/scriptorium-c64-g5/node_modules/.pnpm/tsx@4.23.15/node_modules/tsx"
+  },
+  {
+    "project": "scriptorium",
+    "section": "devDependencies",
+    "name": "typescript",
+    "version": "5.9.3",
+    "resolved": "https://registry.npmjs.org/typescript/-/typescript-5.9.3.tgz",
+    "path": "/home/sophia/src/scriptorium-c64-g5/node_modules/.pnpm/typescript@5.9.3/node_modules/typescript"
+  },
+  {
+    "project": "@scriptorium/app",
+    "section": "dependencies",
+    "name": "@codemirror/commands",
+    "version": "6.11.1",
+    "resolved": "https://registry.npmjs.org/@codemirror/commands/-/commands-6.11.1.tgz",
+    "path": "/home/sophia/src/scriptorium-c64-g5/node_modules/.pnpm/@codemirror+commands@6.11.1/node_modules/@codemirror/commands"
+  },
+  {
+    "project": "@scriptorium/app",
+    "section": "dependencies",
+    "name": "@codemirror/state",
+    "version": "6.7.6",
+    "resolved": "https://registry.npmjs.org/@codemirror/state/-/state-6.7.6.tgz",
+    "path": "/home/sophia/src/scriptorium-c64-g5/node_modules/.pnpm/@codemirror+state@6.7.6/node_modules/@codemirror/state"
+  },
+  {
+    "project": "@scriptorium/app",
+    "section": "dependencies",
+    "name": "@codemirror/view",
+    "version": "6.43.14",
+    "resolved": "https://registry.npmjs.org/@codemirror/view/-/view-6.43.14.tgz",
+    "path": "/home/sophia/src/scriptorium-c64-g5/node_modules/.pnpm/@codemirror+view@6.43.14/node_modules/@codemirror/view"
+  },
+  {
+    "project": "@scriptorium/app",
+    "section": "dependencies",
+    "name": "@ionic/core",
+    "version": "9.0.8",
+    "resolved": "https://registry.npmjs.org/@ionic/core/-/core-9.0.8.tgz",
+    "path": "/home/sophia/src/scriptorium-c64-g5/node_modules/.pnpm/@ionic+core@9.0.8/node_modules/@ionic/core"
+  },
+  {
+    "project": "@scriptorium/app",
+    "section": "dependencies",
+    "name": "@ionic/react",
+    "version": "9.0.8",
+    "resolved": "https://registry.npmjs.org/@ionic/react/-/react-9.0.8.tgz",
+    "path": "/home/sophia/src/scriptorium-c64-g5/node_modules/.pnpm/@ionic+react@9.0.8_@stencil+core@4.45.2_@types+react@19.3.0_react-dom@19.3.1_react@19.3.1__react@19.3.1/node_modules/@ionic/react"
+  },
+  {
+    "project": "@scriptorium/app",
+    "section": "dependencies",
+    "name": "@ionic/react-router",
+    "version": "9.0.8",
+    "resolved": "https://registry.npmjs.org/@ionic/react-router/-/react-router-9.0.8.tgz",
+    "path": "/home/sophia/src/scriptorium-c64-g5/node_modules/.pnpm/@ionic+react-router@9.0.8_@stencil+core@4.45.2_@types+react@19.3.0_react-dom@19.3.1_rea_1a5c6af562334243695f7ca6d9f6fab1/node_modules/@ionic/react-router"
+  },
+  {
+    "project": "@scriptorium/app",
+    "section": "dependencies",
+    "name": "@radix-ui/react-separator",
+    "version": "1.2.0",
+    "resolved": "https://registry.npmjs.org/@radix-ui/react-separator/-/react-separator-1.2.0.tgz",
+    "path": "/home/sophia/src/scriptorium-c64-g5/node_modules/.pnpm/@radix-ui+react-separator@1.2.0_@types+react-dom@19.3.0_@types+react@19.3.0__@types+rea_6a3f0072f69e5ed10ca7be85e9ca6c3c/node_modules/@radix-ui/react-separator"
+  },
+  {
+    "project": "@scriptorium/app",
+    "section": "dependencies",
+    "name": "@radix-ui/react-tabs",
+    "version": "1.2.1",
+    "resolved": "https://registry.npmjs.org/@radix-ui/react-tabs/-/react-tabs-1.2.1.tgz",
+    "path": "/home/sophia/src/scriptorium-c64-g5/node_modules/.pnpm/@radix-ui+react-tabs@1.2.1_@types+react-dom@19.3.0_@types+react@19.3.0__@types+react@19_519fe3e24f3d946c91e5ee8267015a1e/node_modules/@radix-ui/react-tabs"
+  },
+  {
+    "project": "@scriptorium/app",
+    "section": "dependencies",
+    "name": "@scriptorium/contracts",
+    "version": "link:../packages/contracts",
+    "resolved": null,
+    "path": "/home/sophia/src/scriptorium-c64-g5/packages/contracts"
+  },
+  {
+    "project": "@scriptorium/app",
+    "section": "dependencies",
+    "name": "react",
+    "version": "19.3.1",
+    "resolved": "https://registry.npmjs.org/react/-/react-19.3.1.tgz",
+    "path": "/home/sophia/src/scriptorium-c64-g5/node_modules/.pnpm/react@19.3.1/node_modules/react"
+  },
+  {
+    "project": "@scriptorium/app",
+    "section": "dependencies",
+    "name": "react-dom",
+    "version": "19.3.1",
+    "resolved": "https://registry.npmjs.org/react-dom/-/react-dom-19.3.1.tgz",
+    "path": "/home/sophia/src/scriptorium-c64-g5/node_modules/.pnpm/react-dom@19.3.1_react@19.3.1/node_modules/react-dom"
+  },
+  {
+    "project": "@scriptorium/app",
+    "section": "dependencies",
+    "name": "react-resizable-panels",
+    "version": "2.1.9",
+    "resolved": "https://registry.npmjs.org/react-resizable-panels/-/react-resizable-panels-2.1.9.tgz",
+    "path": "/home/sophia/src/scriptorium-c64-g5/node_modules/.pnpm/react-resizable-panels@2.1.9_react-dom@19.3.1_react@19.3.1__react@19.3.1/node_modules/react-resizable-panels"
+  },
+  {
+    "project": "@scriptorium/app",
+    "section": "dependencies",
+    "name": "react-router-dom",
+    "version": "6.30.6",
+    "resolved": "https://registry.npmjs.org/react-router-dom/-/react-router-dom-6.30.6.tgz",
+    "path": "/home/sophia/src/scriptorium-c64-g5/node_modules/.pnpm/react-router-dom@6.30.6_react-dom@19.3.1_react@19.3.1__react@19.3.1/node_modules/react-router-dom"
+  },
+  {
+    "project": "@scriptorium/app",
+    "section": "devDependencies",
+    "name": "@types/react",
+    "version": "19.3.0",
+    "resolved": "https://registry.npmjs.org/@types/react/-/react-19.3.0.tgz",
+    "path": "/home/sophia/src/scriptorium-c64-g5/node_modules/.pnpm/@types+react@19.3.0/node_modules/@types/react"
+  },
+  {
+    "project": "@scriptorium/app",
+    "section": "devDependencies",
+    "name": "@types/react-dom",
+    "version": "19.3.0",
+    "resolved": "https://registry.npmjs.org/@types/react-dom/-/react-dom-19.3.0.tgz",
+    "path": "/home/sophia/src/scriptorium-c64-g5/node_modules/.pnpm/@types+react-dom@19.3.0_@types+react@19.3.0/node_modules/@types/react-dom"
+  },
+  {
+    "project": "@scriptorium/app",
+    "section": "devDependencies",
+    "name": "@vitejs/plugin-react",
+    "version": "4.7.0",
+    "resolved": "https://registry.npmjs.org/@vitejs/plugin-react/-/plugin-react-4.7.0.tgz",
+    "path": "/home/sophia/src/scriptorium-c64-g5/node_modules/.pnpm/@vitejs+plugin-react@4.7.0_vite@6.4.4_@types+node@24.19.2_tsx@4.23.15_yaml@2.9.1_/node_modules/@vitejs/plugin-react"
+  },
+  {
+    "project": "@scriptorium/app",
+    "section": "devDependencies",
+    "name": "vite",
+    "version": "6.4.4",
+    "resolved": "https://registry.npmjs.org/vite/-/vite-6.4.4.tgz",
+    "path": "/home/sophia/src/scriptorium-c64-g5/node_modules/.pnpm/vite@6.4.4_@types+node@24.19.2_tsx@4.23.15_yaml@2.9.1/node_modules/vite"
+  },
+  {
+    "project": "@scriptorium/module-assistant",
+    "section": "dependencies",
+    "name": "@ai-sdk/anthropic",
+    "version": "4.0.16",
+    "resolved": "https://registry.npmjs.org/@ai-sdk/anthropic/-/anthropic-4.0.16.tgz",
+    "path": "/home/sophia/src/scriptorium-c64-g5/node_modules/.pnpm/@ai-sdk+anthropic@4.0.16_zod@3.25.76/node_modules/@ai-sdk/anthropic"
+  },
+  {
+    "project": "@scriptorium/module-assistant",
+    "section": "dependencies",
+    "name": "@ai-sdk/openai-compatible",
+    "version": "2.0.62",
+    "resolved": "https://registry.npmjs.org/@ai-sdk/openai-compatible/-/openai-compatible-2.0.62.tgz",
+    "path": "/home/sophia/src/scriptorium-c64-g5/node_modules/.pnpm/@ai-sdk+openai-compatible@2.0.62_zod@3.25.76/node_modules/@ai-sdk/openai-compatible"
+  },
+  {
+    "project": "@scriptorium/module-assistant",
+    "section": "dependencies",
+    "name": "@scriptorium/contracts",
+    "version": "link:../../packages/contracts",
+    "resolved": null,
+    "path": "/home/sophia/src/scriptorium-c64-g5/packages/contracts"
+  },
+  {
+    "project": "@scriptorium/module-assistant",
+    "section": "dependencies",
+    "name": "@scriptorium/migration",
+    "version": "link:../../packages/migration",
+    "resolved": null,
+    "path": "/home/sophia/src/scriptorium-c64-g5/packages/migration"
+  },
+  {
+    "project": "@scriptorium/module-assistant",
+    "section": "dependencies",
+    "name": "@scriptorium/module-diagnostics",
+    "version": "link:../diagnostics",
+    "resolved": null,
+    "path": "/home/sophia/src/scriptorium-c64-g5/modules/diagnostics"
+  },
+  {
+    "project": "@scriptorium/module-assistant",
+    "section": "dependencies",
+    "name": "@scriptorium/module-nlp",
+    "version": "link:../nlp",
+    "resolved": null,
+    "path": "/home/sophia/src/scriptorium-c64-g5/modules/nlp"
+  },
+  {
+    "project": "@scriptorium/module-assistant",
+    "section": "dependencies",
+    "name": "@scriptorium/module-runtime",
+    "version": "link:../../packages/module-runtime",
+    "resolved": null,
+    "path": "/home/sophia/src/scriptorium-c64-g5/packages/module-runtime"
+  },
+  {
+    "project": "@scriptorium/module-assistant",
+    "section": "dependencies",
+    "name": "@scriptorium/module-semantic",
+    "version": "link:../semantic",
+    "resolved": null,
+    "path": "/home/sophia/src/scriptorium-c64-g5/modules/semantic"
+  },
+  {
+    "project": "@scriptorium/module-assistant",
+    "section": "dependencies",
+    "name": "@scriptorium/module-speaker",
+    "version": "link:../speaker",
+    "resolved": null,
+    "path": "/home/sophia/src/scriptorium-c64-g5/modules/speaker"
+  },
+  {
+    "project": "@scriptorium/module-assistant",
+    "section": "dependencies",
+    "name": "@scriptorium/module-story",
+    "version": "link:../story",
+    "resolved": null,
+    "path": "/home/sophia/src/scriptorium-c64-g5/modules/story"
+  },
+  {
+    "project": "@scriptorium/module-assistant",
+    "section": "dependencies",
+    "name": "ai",
+    "version": "7.0.31",
+    "resolved": "https://registry.npmjs.org/ai/-/ai-7.0.31.tgz",
+    "path": "/home/sophia/src/scriptorium-c64-g5/node_modules/.pnpm/ai@7.0.31_zod@3.25.76/node_modules/ai"
+  },
+  {
+    "project": "@scriptorium/module-assistant",
+    "section": "dependencies",
+    "name": "jsonrepair",
+    "version": "3.15.0",
+    "resolved": "https://registry.npmjs.org/jsonrepair/-/jsonrepair-3.15.0.tgz",
+    "path": "/home/sophia/src/scriptorium-c64-g5/node_modules/.pnpm/jsonrepair@3.15.0/node_modules/jsonrepair"
+  },
+  {
+    "project": "@scriptorium/module-assistant",
+    "section": "dependencies",
+    "name": "react",
+    "version": "19.3.1",
+    "resolved": "https://registry.npmjs.org/react/-/react-19.3.1.tgz",
+    "path": "/home/sophia/src/scriptorium-c64-g5/node_modules/.pnpm/react@19.3.1/node_modules/react"
+  },
+  {
+    "project": "@scriptorium/module-assistant",
+    "section": "dependencies",
+    "name": "react-dom",
+    "version": "19.3.1",
+    "resolved": "https://registry.npmjs.org/react-dom/-/react-dom-19.3.1.tgz",
+    "path": "/home/sophia/src/scriptorium-c64-g5/node_modules/.pnpm/react-dom@19.3.1_react@19.3.1/node_modules/react-dom"
+  },
+  {
+    "project": "@scriptorium/module-assistant",
+    "section": "dependencies",
+    "name": "yaml",
+    "version": "2.9.1",
+    "resolved": "https://registry.npmjs.org/yaml/-/yaml-2.9.1.tgz",
+    "path": "/home/sophia/src/scriptorium-c64-g5/node_modules/.pnpm/yaml@2.9.1/node_modules/yaml"
+  },
+  {
+    "project": "@scriptorium/module-assistant",
+    "section": "dependencies",
+    "name": "zod",
+    "version": "3.25.76",
+    "resolved": "https://registry.npmjs.org/zod/-/zod-3.25.76.tgz",
+    "path": "/home/sophia/src/scriptorium-c64-g5/node_modules/.pnpm/zod@3.25.76/node_modules/zod"
+  },
+  {
+    "project": "@scriptorium/module-diagnostics",
+    "section": "dependencies",
+    "name": "@scriptorium/contracts",
+    "version": "link:../../packages/contracts",
+    "resolved": null,
+    "path": "/home/sophia/src/scriptorium-c64-g5/packages/contracts"
+  },
+  {
+    "project": "@scriptorium/module-diagnostics",
+    "section": "dependencies",
+    "name": "@scriptorium/migration",
+    "version": "link:../../packages/migration",
+    "resolved": null,
+    "path": "/home/sophia/src/scriptorium-c64-g5/packages/migration"
+  },
+  {
+    "project": "@scriptorium/module-diagnostics",
+    "section": "dependencies",
+    "name": "@scriptorium/module-nlp",
+    "version": "link:../nlp",
+    "resolved": null,
+    "path": "/home/sophia/src/scriptorium-c64-g5/modules/nlp"
+  },
+  {
+    "project": "@scriptorium/module-diagnostics",
+    "section": "dependencies",
+    "name": "@scriptorium/module-runtime",
+    "version": "link:../../packages/module-runtime",
+    "resolved": null,
+    "path": "/home/sophia/src/scriptorium-c64-g5/packages/module-runtime"
+  },
+  {
+    "project": "@scriptorium/module-diagnostics",
+    "section": "dependencies",
+    "name": "react",
+    "version": "19.3.1",
+    "resolved": "https://registry.npmjs.org/react/-/react-19.3.1.tgz",
+    "path": "/home/sophia/src/scriptorium-c64-g5/node_modules/.pnpm/react@19.3.1/node_modules/react"
+  },
+  {
+    "project": "@scriptorium/module-diagnostics",
+    "section": "dependencies",
+    "name": "react-dom",
+    "version": "19.3.1",
+    "resolved": "https://registry.npmjs.org/react-dom/-/react-dom-19.3.1.tgz",
+    "path": "/home/sophia/src/scriptorium-c64-g5/node_modules/.pnpm/react-dom@19.3.1_react@19.3.1/node_modules/react-dom"
+  },
+  {
+    "project": "@scriptorium/module-diagnostics",
+    "section": "dependencies",
+    "name": "yaml",
+    "version": "2.9.1",
+    "resolved": "https://registry.npmjs.org/yaml/-/yaml-2.9.1.tgz",
+    "path": "/home/sophia/src/scriptorium-c64-g5/node_modules/.pnpm/yaml@2.9.1/node_modules/yaml"
+  },
+  {
+    "project": "@scriptorium/module-mcp",
+    "section": "dependencies",
+    "name": "@modelcontextprotocol/sdk",
+    "version": "1.29.0",
+    "resolved": "https://registry.npmjs.org/@modelcontextprotocol/sdk/-/sdk-1.29.0.tgz",
+    "path": "/home/sophia/src/scriptorium-c64-g5/node_modules/.pnpm/@modelcontextprotocol+sdk@1.29.0_zod@3.25.76/node_modules/@modelcontextprotocol/sdk"
+  },
+  {
+    "project": "@scriptorium/module-mcp",
+    "section": "dependencies",
+    "name": "@scriptorium/contracts",
+    "version": "link:../../packages/contracts",
+    "resolved": null,
+    "path": "/home/sophia/src/scriptorium-c64-g5/packages/contracts"
+  },
+  {
+    "project": "@scriptorium/module-mcp",
+    "section": "dependencies",
+    "name": "zod",
+    "version": "3.25.76",
+    "resolved": "https://registry.npmjs.org/zod/-/zod-3.25.76.tgz",
+    "path": "/home/sophia/src/scriptorium-c64-g5/node_modules/.pnpm/zod@3.25.76/node_modules/zod"
+  },
+  {
+    "project": "@scriptorium/module-nlp",
+    "section": "dependencies",
+    "name": "@huggingface/transformers",
+    "version": "3.8.1",
+    "resolved": "https://registry.npmjs.org/@huggingface/transformers/-/transformers-3.8.1.tgz",
+    "path": "/home/sophia/src/scriptorium-c64-g5/node_modules/.pnpm/@huggingface+transformers@3.8.1/node_modules/@huggingface/transformers"
+  },
+  {
+    "project": "@scriptorium/module-nlp",
+    "section": "dependencies",
+    "name": "@scriptorium/contracts",
+    "version": "link:../../packages/contracts",
+    "resolved": null,
+    "path": "/home/sophia/src/scriptorium-c64-g5/packages/contracts"
+  },
+  {
+    "project": "@scriptorium/module-nlp",
+    "section": "dependencies",
+    "name": "@scriptorium/migration",
+    "version": "link:../../packages/migration",
+    "resolved": null,
+    "path": "/home/sophia/src/scriptorium-c64-g5/packages/migration"
+  },
+  {
+    "project": "@scriptorium/module-nlp",
+    "section": "dependencies",
+    "name": "@scriptorium/module-runtime",
+    "version": "link:../../packages/module-runtime",
+    "resolved": null,
+    "path": "/home/sophia/src/scriptorium-c64-g5/packages/module-runtime"
+  },
+  {
+    "project": "@scriptorium/module-nlp",
+    "section": "dependencies",
+    "name": "lindera-wasm-nodejs-ipadic",
+    "version": "2.0.0",
+    "resolved": "https://registry.npmjs.org/lindera-wasm-nodejs-ipadic/-/lindera-wasm-nodejs-ipadic-2.0.0.tgz",
+    "path": "/home/sophia/src/scriptorium-c64-g5/node_modules/.pnpm/lindera-wasm-nodejs-ipadic@2.0.0/node_modules/lindera-wasm-nodejs-ipadic"
+  },
+  {
+    "project": "@scriptorium/module-nlp",
+    "section": "dependencies",
+    "name": "react",
+    "version": "19.3.1",
+    "resolved": "https://registry.npmjs.org/react/-/react-19.3.1.tgz",
+    "path": "/home/sophia/src/scriptorium-c64-g5/node_modules/.pnpm/react@19.3.1/node_modules/react"
+  },
+  {
+    "project": "@scriptorium/module-nlp",
+    "section": "dependencies",
+    "name": "react-dom",
+    "version": "19.3.1",
+    "resolved": "https://registry.npmjs.org/react-dom/-/react-dom-19.3.1.tgz",
+    "path": "/home/sophia/src/scriptorium-c64-g5/node_modules/.pnpm/react-dom@19.3.1_react@19.3.1/node_modules/react-dom"
+  },
+  {
+    "project": "@scriptorium/module-nlp",
+    "section": "dependencies",
+    "name": "yaml",
+    "version": "2.9.1",
+    "resolved": "https://registry.npmjs.org/yaml/-/yaml-2.9.1.tgz",
+    "path": "/home/sophia/src/scriptorium-c64-g5/node_modules/.pnpm/yaml@2.9.1/node_modules/yaml"
+  },
+  {
+    "project": "@scriptorium/module-publishing",
+    "section": "dependencies",
+    "name": "@scriptorium/contracts",
+    "version": "link:../../packages/contracts",
+    "resolved": null,
+    "path": "/home/sophia/src/scriptorium-c64-g5/packages/contracts"
+  },
+  {
+    "project": "@scriptorium/module-publishing",
+    "section": "dependencies",
+    "name": "@scriptorium/migration",
+    "version": "link:../../packages/migration",
+    "resolved": null,
+    "path": "/home/sophia/src/scriptorium-c64-g5/packages/migration"
+  },
+  {
+    "project": "@scriptorium/module-publishing",
+    "section": "dependencies",
+    "name": "jszip",
+    "version": "3.10.2",
+    "resolved": "https://registry.npmjs.org/jszip/-/jszip-3.10.2.tgz",
+    "path": "/home/sophia/src/scriptorium-c64-g5/node_modules/.pnpm/jszip@3.10.2/node_modules/jszip"
+  },
+  {
+    "project": "@scriptorium/module-publishing",
+    "section": "dependencies",
+    "name": "react",
+    "version": "19.3.1",
+    "resolved": "https://registry.npmjs.org/react/-/react-19.3.1.tgz",
+    "path": "/home/sophia/src/scriptorium-c64-g5/node_modules/.pnpm/react@19.3.1/node_modules/react"
+  },
+  {
+    "project": "@scriptorium/module-publishing",
+    "section": "dependencies",
+    "name": "react-dom",
+    "version": "19.3.1",
+    "resolved": "https://registry.npmjs.org/react-dom/-/react-dom-19.3.1.tgz",
+    "path": "/home/sophia/src/scriptorium-c64-g5/node_modules/.pnpm/react-dom@19.3.1_react@19.3.1/node_modules/react-dom"
+  },
+  {
+    "project": "@scriptorium/module-publishing",
+    "section": "dependencies",
+    "name": "yaml",
+    "version": "2.9.1",
+    "resolved": "https://registry.npmjs.org/yaml/-/yaml-2.9.1.tgz",
+    "path": "/home/sophia/src/scriptorium-c64-g5/node_modules/.pnpm/yaml@2.9.1/node_modules/yaml"
+  },
+  {
+    "project": "@scriptorium/module-search",
+    "section": "dependencies",
+    "name": "@scriptorium/contracts",
+    "version": "link:../../packages/contracts",
+    "resolved": null,
+    "path": "/home/sophia/src/scriptorium-c64-g5/packages/contracts"
+  },
+  {
+    "project": "@scriptorium/module-search",
+    "section": "dependencies",
+    "name": "@scriptorium/module-runtime",
+    "version": "link:../../packages/module-runtime",
+    "resolved": null,
+    "path": "/home/sophia/src/scriptorium-c64-g5/packages/module-runtime"
+  },
+  {
+    "project": "@scriptorium/module-semantic",
+    "section": "dependencies",
+    "name": "@huggingface/transformers",
+    "version": "3.8.1",
+    "resolved": "https://registry.npmjs.org/@huggingface/transformers/-/transformers-3.8.1.tgz",
+    "path": "/home/sophia/src/scriptorium-c64-g5/node_modules/.pnpm/@huggingface+transformers@3.8.1/node_modules/@huggingface/transformers"
+  },
+  {
+    "project": "@scriptorium/module-semantic",
+    "section": "dependencies",
+    "name": "@scriptorium/contracts",
+    "version": "link:../../packages/contracts",
+    "resolved": null,
+    "path": "/home/sophia/src/scriptorium-c64-g5/packages/contracts"
+  },
+  {
+    "project": "@scriptorium/module-semantic",
+    "section": "dependencies",
+    "name": "@scriptorium/migration",
+    "version": "link:../../packages/migration",
+    "resolved": null,
+    "path": "/home/sophia/src/scriptorium-c64-g5/packages/migration"
+  },
+  {
+    "project": "@scriptorium/module-semantic",
+    "section": "dependencies",
+    "name": "@scriptorium/module-nlp",
+    "version": "link:../nlp",
+    "resolved": null,
+    "path": "/home/sophia/src/scriptorium-c64-g5/modules/nlp"
+  },
+  {
+    "project": "@scriptorium/module-semantic",
+    "section": "dependencies",
+    "name": "@scriptorium/module-runtime",
+    "version": "link:../../packages/module-runtime",
+    "resolved": null,
+    "path": "/home/sophia/src/scriptorium-c64-g5/packages/module-runtime"
+  },
+  {
+    "project": "@scriptorium/module-semantic",
+    "section": "dependencies",
+    "name": "@scriptorium/module-story",
+    "version": "link:../story",
+    "resolved": null,
+    "path": "/home/sophia/src/scriptorium-c64-g5/modules/story"
+  },
+  {
+    "project": "@scriptorium/module-semantic",
+    "section": "dependencies",
+    "name": "react",
+    "version": "19.3.1",
+    "resolved": "https://registry.npmjs.org/react/-/react-19.3.1.tgz",
+    "path": "/home/sophia/src/scriptorium-c64-g5/node_modules/.pnpm/react@19.3.1/node_modules/react"
+  },
+  {
+    "project": "@scriptorium/module-semantic",
+    "section": "dependencies",
+    "name": "react-dom",
+    "version": "19.3.1",
+    "resolved": "https://registry.npmjs.org/react-dom/-/react-dom-19.3.1.tgz",
+    "path": "/home/sophia/src/scriptorium-c64-g5/node_modules/.pnpm/react-dom@19.3.1_react@19.3.1/node_modules/react-dom"
+  },
+  {
+    "project": "@scriptorium/module-semantic",
+    "section": "dependencies",
+    "name": "yaml",
+    "version": "2.9.1",
+    "resolved": "https://registry.npmjs.org/yaml/-/yaml-2.9.1.tgz",
+    "path": "/home/sophia/src/scriptorium-c64-g5/node_modules/.pnpm/yaml@2.9.1/node_modules/yaml"
+  },
+  {
+    "project": "@scriptorium/module-speaker",
+    "section": "dependencies",
+    "name": "@scriptorium/contracts",
+    "version": "link:../../packages/contracts",
+    "resolved": null,
+    "path": "/home/sophia/src/scriptorium-c64-g5/packages/contracts"
+  },
+  {
+    "project": "@scriptorium/module-speaker",
+    "section": "dependencies",
+    "name": "@scriptorium/migration",
+    "version": "link:../../packages/migration",
+    "resolved": null,
+    "path": "/home/sophia/src/scriptorium-c64-g5/packages/migration"
+  },
+  {
+    "project": "@scriptorium/module-speaker",
+    "section": "dependencies",
+    "name": "@scriptorium/module-diagnostics",
+    "version": "link:../diagnostics",
+    "resolved": null,
+    "path": "/home/sophia/src/scriptorium-c64-g5/modules/diagnostics"
+  },
+  {
+    "project": "@scriptorium/module-speaker",
+    "section": "dependencies",
+    "name": "@scriptorium/module-nlp",
+    "version": "link:../nlp",
+    "resolved": null,
+    "path": "/home/sophia/src/scriptorium-c64-g5/modules/nlp"
+  },
+  {
+    "project": "@scriptorium/module-speaker",
+    "section": "dependencies",
+    "name": "@scriptorium/module-runtime",
+    "version": "link:../../packages/module-runtime",
+    "resolved": null,
+    "path": "/home/sophia/src/scriptorium-c64-g5/packages/module-runtime"
+  },
+  {
+    "project": "@scriptorium/module-speaker",
+    "section": "dependencies",
+    "name": "@scriptorium/module-story",
+    "version": "link:../story",
+    "resolved": null,
+    "path": "/home/sophia/src/scriptorium-c64-g5/modules/story"
+  },
+  {
+    "project": "@scriptorium/module-speaker",
+    "section": "dependencies",
+    "name": "yaml",
+    "version": "2.9.1",
+    "resolved": "https://registry.npmjs.org/yaml/-/yaml-2.9.1.tgz",
+    "path": "/home/sophia/src/scriptorium-c64-g5/node_modules/.pnpm/yaml@2.9.1/node_modules/yaml"
+  },
+  {
+    "project": "@scriptorium/module-speaker",
+    "section": "dependencies",
+    "name": "zod",
+    "version": "3.25.76",
+    "resolved": "https://registry.npmjs.org/zod/-/zod-3.25.76.tgz",
+    "path": "/home/sophia/src/scriptorium-c64-g5/node_modules/.pnpm/zod@3.25.76/node_modules/zod"
+  },
+  {
+    "project": "@scriptorium/module-story",
+    "section": "dependencies",
+    "name": "@scriptorium/contracts",
+    "version": "link:../../packages/contracts",
+    "resolved": null,
+    "path": "/home/sophia/src/scriptorium-c64-g5/packages/contracts"
+  },
+  {
+    "project": "@scriptorium/module-story",
+    "section": "dependencies",
+    "name": "@scriptorium/migration",
+    "version": "link:../../packages/migration",
+    "resolved": null,
+    "path": "/home/sophia/src/scriptorium-c64-g5/packages/migration"
+  },
+  {
+    "project": "@scriptorium/module-story",
+    "section": "dependencies",
+    "name": "react",
+    "version": "19.3.1",
+    "resolved": "https://registry.npmjs.org/react/-/react-19.3.1.tgz",
+    "path": "/home/sophia/src/scriptorium-c64-g5/node_modules/.pnpm/react@19.3.1/node_modules/react"
+  },
+  {
+    "project": "@scriptorium/module-story",
+    "section": "dependencies",
+    "name": "react-dom",
+    "version": "19.3.1",
+    "resolved": "https://registry.npmjs.org/react-dom/-/react-dom-19.3.1.tgz",
+    "path": "/home/sophia/src/scriptorium-c64-g5/node_modules/.pnpm/react-dom@19.3.1_react@19.3.1/node_modules/react-dom"
+  },
+  {
+    "project": "@scriptorium/module-story",
+    "section": "dependencies",
+    "name": "yaml",
+    "version": "2.9.1",
+    "resolved": "https://registry.npmjs.org/yaml/-/yaml-2.9.1.tgz",
+    "path": "/home/sophia/src/scriptorium-c64-g5/node_modules/.pnpm/yaml@2.9.1/node_modules/yaml"
+  },
+  {
+    "project": "@scriptorium/api",
+    "section": "dependencies",
+    "name": "@scriptorium/contracts",
+    "version": "link:../contracts",
+    "resolved": null,
+    "path": "/home/sophia/src/scriptorium-c64-g5/packages/contracts"
+  },
+  {
+    "project": "@scriptorium/api",
+    "section": "dependencies",
+    "name": "@scriptorium/core",
+    "version": "link:../core",
+    "resolved": null,
+    "path": "/home/sophia/src/scriptorium-c64-g5/packages/core"
+  },
+  {
+    "project": "@scriptorium/api",
+    "section": "dependencies",
+    "name": "@scriptorium/module-runtime",
+    "version": "link:../module-runtime",
+    "resolved": null,
+    "path": "/home/sophia/src/scriptorium-c64-g5/packages/module-runtime"
+  },
+  {
+    "project": "@scriptorium/api",
+    "section": "dependencies",
+    "name": "fastify",
+    "version": "5.12.7",
+    "resolved": "https://registry.npmjs.org/fastify/-/fastify-5.12.7.tgz",
+    "path": "/home/sophia/src/scriptorium-c64-g5/node_modules/.pnpm/fastify@5.12.7/node_modules/fastify"
+  },
+  {
+    "project": "@scriptorium/api",
+    "section": "dependencies",
+    "name": "zod",
+    "version": "3.25.76",
+    "resolved": "https://registry.npmjs.org/zod/-/zod-3.25.76.tgz",
+    "path": "/home/sophia/src/scriptorium-c64-g5/node_modules/.pnpm/zod@3.25.76/node_modules/zod"
+  },
+  {
+    "project": "@scriptorium/core",
+    "section": "dependencies",
+    "name": "@scriptorium/contracts",
+    "version": "link:../contracts",
+    "resolved": null,
+    "path": "/home/sophia/src/scriptorium-c64-g5/packages/contracts"
+  },
+  {
+    "project": "@scriptorium/core",
+    "section": "dependencies",
+    "name": "yaml",
+    "version": "2.9.1",
+    "resolved": "https://registry.npmjs.org/yaml/-/yaml-2.9.1.tgz",
+    "path": "/home/sophia/src/scriptorium-c64-g5/node_modules/.pnpm/yaml@2.9.1/node_modules/yaml"
+  },
+  {
+    "project": "@scriptorium/migration",
+    "section": "dependencies",
+    "name": "@scriptorium/contracts",
+    "version": "link:../contracts",
+    "resolved": null,
+    "path": "/home/sophia/src/scriptorium-c64-g5/packages/contracts"
+  },
+  {
+    "project": "@scriptorium/module-runtime",
+    "section": "dependencies",
+    "name": "@scriptorium/contracts",
+    "version": "link:../contracts",
+    "resolved": null,
+    "path": "/home/sophia/src/scriptorium-c64-g5/packages/contracts"
+  },
+  {
+    "project": "@scriptorium/profile-core",
+    "section": "dependencies",
+    "name": "@scriptorium/api",
+    "version": "link:../../packages/api",
+    "resolved": null,
+    "path": "/home/sophia/src/scriptorium-c64-g5/packages/api"
+  },
+  {
+    "project": "@scriptorium/profile-full",
+    "section": "dependencies",
+    "name": "@scriptorium/api",
+    "version": "link:../../packages/api",
+    "resolved": null,
+    "path": "/home/sophia/src/scriptorium-c64-g5/packages/api"
+  },
+  {
+    "project": "@scriptorium/profile-full",
+    "section": "dependencies",
+    "name": "@scriptorium/module-assistant",
+    "version": "link:../../modules/assistant",
+    "resolved": null,
+    "path": "/home/sophia/src/scriptorium-c64-g5/modules/assistant"
+  },
+  {
+    "project": "@scriptorium/profile-full",
+    "section": "dependencies",
+    "name": "@scriptorium/module-diagnostics",
+    "version": "link:../../modules/diagnostics",
+    "resolved": null,
+    "path": "/home/sophia/src/scriptorium-c64-g5/modules/diagnostics"
+  },
+  {
+    "project": "@scriptorium/profile-full",
+    "section": "dependencies",
+    "name": "@scriptorium/module-mcp",
+    "version": "link:../../modules/mcp",
+    "resolved": null,
+    "path": "/home/sophia/src/scriptorium-c64-g5/modules/mcp"
+  },
+  {
+    "project": "@scriptorium/profile-full",
+    "section": "dependencies",
+    "name": "@scriptorium/module-nlp",
+    "version": "link:../../modules/nlp",
+    "resolved": null,
+    "path": "/home/sophia/src/scriptorium-c64-g5/modules/nlp"
+  },
+  {
+    "project": "@scriptorium/profile-full",
+    "section": "dependencies",
+    "name": "@scriptorium/module-publishing",
+    "version": "link:../../modules/publishing",
+    "resolved": null,
+    "path": "/home/sophia/src/scriptorium-c64-g5/modules/publishing"
+  },
+  {
+    "project": "@scriptorium/profile-full",
+    "section": "dependencies",
+    "name": "@scriptorium/module-search",
+    "version": "link:../../modules/search",
+    "resolved": null,
+    "path": "/home/sophia/src/scriptorium-c64-g5/modules/search"
+  },
+  {
+    "project": "@scriptorium/profile-full",
+    "section": "dependencies",
+    "name": "@scriptorium/module-semantic",
+    "version": "link:../../modules/semantic",
+    "resolved": null,
+    "path": "/home/sophia/src/scriptorium-c64-g5/modules/semantic"
+  },
+  {
+    "project": "@scriptorium/profile-full",
+    "section": "dependencies",
+    "name": "@scriptorium/module-speaker",
+    "version": "link:../../modules/speaker",
+    "resolved": null,
+    "path": "/home/sophia/src/scriptorium-c64-g5/modules/speaker"
+  },
+  {
+    "project": "@scriptorium/profile-full",
+    "section": "dependencies",
+    "name": "@scriptorium/module-story",
+    "version": "link:../../modules/story",
+    "resolved": null,
+    "path": "/home/sophia/src/scriptorium-c64-g5/modules/story"
+  }
+]
