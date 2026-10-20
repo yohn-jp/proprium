@@ -2,12 +2,16 @@
 import childProcess from 'node:child_process';
 import fs from 'node:fs/promises';
 import { syncBuiltinESMExports } from 'node:module';
-export const counts = { gitProcesses: 0, readFileCalls: 0, readFileBytes: 0 };
+export const counts = { gitProcesses: 0, gitCommandLogDropped: 0, readFileCalls: 0, readFileBytes: 0 };
 export const gitCommands = [];
 for (const name of ['execFile', 'spawn']) {
   const original = childProcess[name];
   childProcess[name] = function(file, args, ...rest) {
-    if (file === 'git') { counts.gitProcesses++; gitCommands.push({ at: Date.now(), args }); }
+    if (file === 'git') {
+      counts.gitProcesses++;
+      if (gitCommands.length < 1000) gitCommands.push({ at: Date.now(), args });
+      else counts.gitCommandLogDropped++;
+    }
     return Reflect.apply(original, this, [file, args, ...rest]);
   };
   if (name === 'execFile') childProcess[name][Symbol.for('nodejs.util.promisify.custom')] = (...args) =>

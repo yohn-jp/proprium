@@ -113,3 +113,9 @@ Larger frame delays therefore lengthen the input phase and allow the existing
 constant-rate or fixed-duration human typing comparison. Arrow keys follow in a
 separate burst; file-switch readiness also resets the cursor to the document top
 before checking its synthetic header.
+
+Top-level command samples retain only the first 1,000 argument vectors per worker;
+`gitCommandLogDropped` counts omitted vectors, not omitted process counts. The
+native Git trace retains the full command stream. Instrumented Node RSS includes
+these retained samples and all other probes; older diagnostic artifacts with an
+uncapped command list are not directly comparable memory baselines.
