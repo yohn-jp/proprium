@@ -17,9 +17,11 @@ SCRIPTORIUM_C64_RUNTIME_ROOT=/home/sophia/src/scriptorium-c64-resize \
 node scripts/performance/core64-durability-probe.mjs \
   /home/sophia/src/scriptorium-c64-resize \
   /data/scriptorium-core64-g0-a1587e78-20261020-2318/synthetic/small \
-  /data/scriptorium-core64-durability-a1587e78 \
+  /data \
   docs/performance/results/core64-durability/probe.json 8
 ```
+
+The runner creates and removes a unique `core64-durability-*` directory directly under `/data` for each capture.
 
 By default, the runner reads `docs/performance/results/core64-resize/runtime-manifest.json` from the runtime root. `SCRIPTORIUM_C64_RUNTIME_MANIFEST` can override that path. Before starting Chromium, it verifies the manifest source and production identity, requires the Core, API, app, generated profile, contracts, and module-runtime build roots, checks every listed artifact's size and SHA-256 against the files in the runtime root, and records the manifest and its hash in the output. It validates all roots listed by the manifest, so additional workspace artifacts are covered too.
 
