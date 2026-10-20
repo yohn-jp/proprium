@@ -1,4 +1,5 @@
 import assert from "node:assert/strict";
+import { createHash } from "node:crypto";
 import { execFile as execFileCallback } from "node:child_process";
 import { promisify } from "node:util";
 import fs from "node:fs/promises";
@@ -785,6 +786,145 @@ test("search and writing statistics read one pinned remote snapshot", async () =
     assert.equal(latestStats.stats.totalCharCount, "Updated without the old literal.\n".length + 1);
     const pinnedStats = await store.writingStatsSnapshot(project.id, "remote", originalSnapshot);
     assert.equal(pinnedStats.stats.totalCharCount, 401);
+  } finally {
+    await fs.rm(tempDir, { recursive: true, force: true });
+  }
+});
+
+test("lists byte-derived revisions from a pinned snapshot while batching duplicate and binary blobs", async () => {
+  const { tempDir, remote, seed } = await makeRemote();
+  const binary = Buffer.from([0x00, 0x0a, 0xff, 0x00, 0x0a, 0x80]);
+  const duplicate = Buffer.from("same immutable blob\n");
+  const empty = Buffer.alloc(0);
+  const paths = {
+    binary: "wave1/data.bin",
+    empty: "wave1/empty.bin",
+    duplicateA: "wave1/duplicate-a.md",
+    duplicateB: "wave1/duplicate-b.md",
+    executable: "wave1/executable.sh",
+    nested: "wave1/nested/only.txt",
+  };
+  try {
+    for (const [relative, bytes] of [
+      [paths.binary, binary],
+      [paths.empty, empty],
+      [paths.duplicateA, duplicate],
+      [paths.duplicateB, duplicate],
+      [paths.executable, Buffer.from("#!/bin/sh\nexit 0\n")],
+      [paths.nested, Buffer.from("nested only\n")],
+    ] as const) {
+      const filePath = path.join(seed, relative);
+      await fs.mkdir(path.dirname(filePath), { recursive: true });
+      await fs.writeFile(filePath, bytes);
+    }
+    await runGit(seed, "add", ".");
+    await runGit(seed, "update-index", "--chmod=+x", paths.executable);
+    await runGit(seed, "commit", "-m", "Add binary and duplicate revision fixtures");
+    await runGit(seed, "push", "origin", "main");
+    assert.match(await runGit(seed, "ls-tree", "HEAD", paths.executable), /^100755 blob /);
+
+    const dataDir = path.join(tempDir, "state");
+    const store = new CoreStore({ dataDir, allowLocalRemotes: true });
+    const project = await store.registerProject({ url: remote });
+    const pinned = (await store.observe(project.id)).snapshot;
+    const reader = await store.reader(project.id, "remote", pinned);
+    assert.ok(reader.listRevisions);
+    const listRevisions = reader.listRevisions;
+    const revision = (bytes: Buffer) => createHash("sha256").update(bytes).digest("hex");
+    const expected = [
+      { path: paths.binary, revision: revision(binary) },
+      { path: paths.empty, revision: revision(empty) },
+      { path: paths.duplicateA, revision: revision(duplicate) },
+      { path: paths.duplicateB, revision: revision(duplicate) },
+      { path: paths.executable, revision: revision(Buffer.from("#!/bin/sh\nexit 0\n")) },
+      { path: paths.nested, revision: revision(Buffer.from("nested only\n")) },
+    ].sort((left, right) => left.path.localeCompare(right.path));
+    assert.deepEqual(await listRevisions("wave1"), expected);
+    assert.equal(expected.find(({ path: filePath }) => filePath === paths.duplicateA)?.revision,
+      expected.find(({ path: filePath }) => filePath === paths.duplicateB)?.revision);
+    assert.deepEqual(await listRevisions("wave1/nested"), [
+      { path: paths.nested, revision: revision(Buffer.from("nested only\n")) },
+    ]);
+
+    await fs.writeFile(path.join(seed, paths.binary), Buffer.from("new content\n"));
+    await fs.symlink("only.txt", path.join(seed, "wave1/nested/unsafe-link"));
+    await runGit(seed, "add", "wave1");
+    await runGit(seed, "commit", "-m", "Advance snapshot and add a symlink");
+    await runGit(seed, "push", "origin", "main");
+    const latestSnapshot = (await store.observe(project.id)).snapshot;
+    const latestReader = await store.reader(project.id, "remote", latestSnapshot);
+    assert.ok(latestReader.listRevisions);
+    await assert.rejects(latestReader.listRevisions("wave1"), (error: unknown) =>
+      error instanceof CoreError && error.status === 422 && error.code === "unsafe_project_path");
+
+    const restarted = new CoreStore({ dataDir, allowLocalRemotes: true });
+    const restartedReader = await restarted.reader(project.id, "remote", pinned);
+    assert.ok(restartedReader.listRevisions);
+    assert.deepEqual(await restartedReader.listRevisions("wave1"), expected,
+      "a fresh CoreStore can still read the exact files from the pinned historical commit");
+  } finally {
+    await fs.rm(tempDir, { recursive: true, force: true });
+  }
+});
+
+test("retains every request revision after the persistent blob cache reaches its limit", async () => {
+  const { tempDir, remote, seed } = await makeRemote(false);
+  const dataDir = path.join(tempDir, "state");
+  const fixtureDir = path.join(seed, "revision-cache");
+  const expected = new Map<string, string>();
+  try {
+    await fs.mkdir(fixtureDir, { recursive: true });
+    expected.set("README.md", createHash("sha256").update("Empty compatible work.\n").digest("hex"));
+    for (let index = 0; index < 16_385; index += 1) {
+      const name = String(index).padStart(5, "0") + ".txt";
+      const relative = path.posix.join("revision-cache", name);
+      const bytes = Buffer.from("revision " + index + "\n");
+      await fs.writeFile(path.join(seed, relative), bytes);
+      expected.set(relative, createHash("sha256").update(bytes).digest("hex"));
+    }
+    await runGit(seed, "add", "revision-cache");
+    await runGit(seed, "commit", "-m", "Add blobs beyond the revision cache capacity");
+    await runGit(seed, "push", "origin", "main");
+
+    const store = new CoreStore({ dataDir, allowLocalRemotes: true });
+    const project = await store.registerProject({ url: remote });
+    const reader = await store.reader(project.id, "remote", (await store.observe(project.id)).snapshot);
+    assert.ok(reader.listRevisions);
+    const actual = await reader.listRevisions("");
+    assert.equal(actual.length, expected.size);
+    for (const item of actual) assert.equal(item.revision, expected.get(item.path), item.path);
+  } finally {
+    await fs.rm(tempDir, { recursive: true, force: true });
+  }
+});
+
+test("bounds revision batches by object bytes and reads one oversized blob separately", async () => {
+  const { tempDir, remote, seed } = await makeRemote();
+  const fixtures = [
+    { path: "bounded/first.bin", bytes: Buffer.alloc(12 * 1024 * 1024, 0x41) },
+    { path: "bounded/second.bin", bytes: Buffer.alloc(13 * 1024 * 1024, 0x42) },
+    { path: "bounded/oversized.bin", bytes: Buffer.alloc(24 * 1024 * 1024 + 1, 0x43) },
+  ];
+  try {
+    for (const fixture of fixtures) {
+      const filePath = path.join(seed, fixture.path);
+      await fs.mkdir(path.dirname(filePath), { recursive: true });
+      await fs.writeFile(filePath, fixture.bytes);
+    }
+    await runGit(seed, "add", "bounded");
+    await runGit(seed, "commit", "-m", "Add bounded revision batch fixtures");
+    await runGit(seed, "push", "origin", "main");
+
+    const store = new CoreStore({ dataDir: path.join(tempDir, "state"), allowLocalRemotes: true });
+    const project = await store.registerProject({ url: remote });
+    const reader = await store.reader(project.id, "remote", (await store.observe(project.id)).snapshot);
+    assert.ok(reader.listRevisions);
+    const actual = await reader.listRevisions("bounded");
+    const expected = fixtures.map(({ path: filePath, bytes }) => ({
+      path: filePath,
+      revision: createHash("sha256").update(bytes).digest("hex"),
+    })).sort((left, right) => left.path.localeCompare(right.path));
+    assert.deepEqual(actual, expected);
   } finally {
     await fs.rm(tempDir, { recursive: true, force: true });
   }
