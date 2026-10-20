@@ -72,3 +72,20 @@ test('worker timeout also terminates a detached descendant', { skip: process.pla
     assert.ok(['missing', 'Z'].includes(state), `Detached child remained live: ${state}`);
   } finally { await rm(root, { recursive: true, force: true }); }
 });
+
+test('current author pipeline records receipts and leaves the generated seed remote immutable', async () => {
+  const root = await mkdtemp(join(tmpdir(), 'wave0-pipeline-'));
+  try {
+    const datasetPath = join(root, 'fixture'), output = join(root, 'result.json');
+    const fixture = await generate(datasetPath, 'small');
+    const result = await runWorker(new URL('./core.mjs', import.meta.url).pathname,
+      [datasetPath, output, '1', 'mutation'], output, 30000);
+    assert.equal(result.status, 'complete', JSON.stringify(result.error));
+    assert.equal(result.execution.code, 0);
+    for (const name of ['proposal', 'approval', 'checkpoint', 'publish']) {
+      const sample = result.samples.find(row => row.name === name);
+      assert.ok(sample && sample.ms > 0 && sample.counters.gitProcesses > 0, name);
+    }
+    assert.equal(git(root, '--git-dir', fixture.remote, 'rev-parse', 'main'), fixture.commit);
+  } finally { await rm(root, { recursive: true, force: true }); }
+});
