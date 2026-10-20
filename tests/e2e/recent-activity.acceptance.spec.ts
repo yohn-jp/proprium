@@ -170,14 +170,30 @@ test("recent activity hands off only numeric positions across devices, projects,
     expect(Number.isSafeInteger(desktopCursor) && (desktopCursor ?? 0) > 1).toBe(true);
 
     // Local resume must restore the real CodeMirror scroll DOM together with its cursor.
+    const scrollStyleInjected = await ownerDesktop.page.evaluate(() => {
+      const nonce = document.querySelector<HTMLMetaElement>('meta[name="scriptorium-style-nonce"]')?.content;
+      if (!nonce || nonce === "__SCRIPTORIUM_STYLE_NONCE__") return false;
+      const style = document.createElement("style");
+      style.nonce = nonce;
+      style.textContent = ".cm-editor .cm-scroller { height: 400px !important; overflow-y: auto !important; }";
+      document.head.append(style);
+      return true;
+    });
+    expect(scrollStyleInjected).toBe(true);
     const desktopScroller = ownerDesktop.page.locator(".cm-editor .cm-scroller").first();
     const requestedScrollTop = await desktopScroller.evaluate((element) => {
       const maximum = element.scrollHeight - element.clientHeight;
       if (maximum <= 0) return { maximum, actual: element.scrollTop };
       element.scrollTop = Math.max(1, maximum - Math.min(120, maximum / 2));
-      return { maximum, actual: element.scrollTop };
+      return {
+        maximum,
+        actual: element.scrollTop,
+        scrollHeight: element.scrollHeight,
+        clientHeight: element.clientHeight,
+        lineCount: element.querySelectorAll(".cm-line").length,
+      };
     });
-    expect(requestedScrollTop.maximum).toBeGreaterThan(0);
+    expect(requestedScrollTop.maximum, `CodeMirror scroller did not overflow: ${JSON.stringify(requestedScrollTop)}`).toBeGreaterThan(0);
     expect(requestedScrollTop.actual).toBeGreaterThan(0);
     await expect.poll(async () => ownerDesktop.page.evaluate(() => {
       for (let index = 0; index < localStorage.length; index++) {
