@@ -2493,8 +2493,13 @@ export class CoreStore implements MutationCoordinator {
     return { snapshot, commit: view === "checkpoint" ? snapshot.overlayCommit ?? snapshot.remoteCommit : snapshot.remoteCommit, record, root };
   }
 
-  private async parseSnapshotYaml(root: string, commit: string, filePath: string): Promise<{ text: string; data: Record<string, unknown> } | null> {
-    const file = await this.snapshotFile(root, commit, filePath);
+  private async parseSnapshotYaml(
+    root: string,
+    commit: string,
+    filePath: string,
+    lookup?: SnapshotTreeLookup,
+  ): Promise<{ text: string; data: Record<string, unknown> } | null> {
+    const file = await this.snapshotFile(root, commit, filePath, "utf8", lookup);
     if (!file) return null;
     let data: Record<string, unknown> | null;
     try { data = asRecord(YAML.parse(file.content)); }
@@ -2739,10 +2744,32 @@ export class CoreStore implements MutationCoordinator {
     let title = repositoryTitle(repositoryUrl);
     const project = yaml.get("meta/project.yaml");
     if (project) title = titleOf(project.data, title);
-    const volumeIds = [...new Set(files.flatMap((file) => {
-      const found = file.match(/^plot\/volumes\/([^/]+)\//)?.[1];
-      return found ? [found] : [];
-    }))];
+    const hierarchyChildren = new Map<string, Set<string>>();
+    const addHierarchyChild = (parent: string, child: string): void => {
+      let children = hierarchyChildren.get(parent);
+      if (!children) {
+        children = new Set<string>();
+        hierarchyChildren.set(parent, children);
+      }
+      children.add(child);
+    };
+    for (const file of files) {
+      const volumeId = file.match(/^plot\/volumes\/([^/]+)\//)?.[1];
+      if (!volumeId) continue;
+      addHierarchyChild("plot/volumes", volumeId);
+      const chapterPrefix = `plot/volumes/${volumeId}/chapters/`;
+      if (!file.startsWith(chapterPrefix)) continue;
+      const chapterRemainder = file.slice(chapterPrefix.length);
+      const chapterSeparator = chapterRemainder.indexOf("/");
+      if (chapterSeparator < 0) continue;
+      const chapterId = chapterRemainder.slice(0, chapterSeparator);
+      addHierarchyChild(`plot/volumes/${volumeId}/chapters`, chapterId);
+      const scenesPrefix = `${chapterPrefix}${chapterId}/scenes/`;
+      if (file.startsWith(scenesPrefix) && file.endsWith(".yaml")) {
+        addHierarchyChild(`${chapterPrefix}${chapterId}/scenes`, file);
+      }
+    }
+    const volumeIds = [...(hierarchyChildren.get("plot/volumes") ?? [])];
     const volumes: TreeVolume[] = [];
     const scenes = new Map<string, { path: string; text: string; data: Record<string, unknown> }>();
     const documents = new Map<string, string | null>();
@@ -2753,11 +2780,7 @@ export class CoreStore implements MutationCoordinator {
       if (seen.has(volumeKey)) throw coreError(409, "duplicate_entity_id", "The project contains duplicate hierarchy ids");
       seen.add(volumeKey);
       const prefix = `plot/volumes/${volumeId}/chapters/`;
-      const chapterIds = [...new Set(files.flatMap((file) => {
-        if (!file.startsWith(prefix)) return [];
-        const found = file.slice(prefix.length).match(/^([^/]+)\//)?.[1];
-        return found ? [found] : [];
-      }))];
+      const chapterIds = [...(hierarchyChildren.get(`plot/volumes/${volumeId}/chapters`) ?? [])];
       const chapters: TreeChapter[] = [];
       for (const chapterId of chapterIds) {
         const base = `${prefix}${chapterId}`;
@@ -2766,7 +2789,7 @@ export class CoreStore implements MutationCoordinator {
         if (seen.has(chapterKey)) throw coreError(409, "duplicate_entity_id", "The project contains duplicate hierarchy ids");
         seen.add(chapterKey);
         const sceneEntries: Array<TreeScene & { order?: number }> = [];
-        for (const file of files.filter((candidate) => candidate.startsWith(`${base}/scenes/`) && candidate.endsWith(".yaml"))) {
+        for (const file of hierarchyChildren.get(`${base}/scenes`) ?? []) {
           const record = yaml.get(file);
           if (!record) continue;
           const sceneId = typeof record.data.id === "string" ? record.data.id : path.posix.basename(file, ".yaml");
@@ -3019,6 +3042,7 @@ export class CoreStore implements MutationCoordinator {
     const resultLimit = Math.min(100, Math.floor(limit));
     return this.withProjectLock(projectId, async () => {
       const selected = await this.selectedSnapshotUnlocked(projectId, view, pinned);
+      const lookup = this.snapshotTreeLookup(selected.root);
       const files = await this.snapshotFiles(selected.root, selected.commit, "plot/volumes");
       const resultsByEntity = new Map<string, LiteralSearchResult>();
       const sceneIds = new Set<string>();
@@ -3051,7 +3075,7 @@ export class CoreStore implements MutationCoordinator {
       }))];
       for (const volumeDirectory of volumeDirectories) {
         const volumePath = `plot/volumes/${volumeDirectory}/volume.yaml`;
-        const volume = (await this.parseSnapshotYaml(selected.root, selected.commit, volumePath))?.data ?? { id: volumeDirectory };
+        const volume = (await this.parseSnapshotYaml(selected.root, selected.commit, volumePath, lookup))?.data ?? { id: volumeDirectory };
         const volumeId = typeof volume.id === "string" ? volume.id : volumeDirectory;
         titleHit({ id: volumeId, type: "volume", title: titleOf(volume, volumeId), filePath: volumePath });
         const chapterPrefix = `plot/volumes/${volumeDirectory}/chapters/`;
@@ -3062,12 +3086,12 @@ export class CoreStore implements MutationCoordinator {
         }))];
         for (const chapterDirectory of chapterDirectories) {
           const chapterPath = `${chapterPrefix}${chapterDirectory}/chapter.yaml`;
-          const chapter = (await this.parseSnapshotYaml(selected.root, selected.commit, chapterPath))?.data ?? { id: chapterDirectory };
+          const chapter = (await this.parseSnapshotYaml(selected.root, selected.commit, chapterPath, lookup))?.data ?? { id: chapterDirectory };
           const chapterId = typeof chapter.id === "string" ? chapter.id : chapterDirectory;
           titleHit({ id: chapterId, type: "chapter", title: titleOf(chapter, chapterId), filePath: chapterPath });
           const scenePrefix = `${chapterPrefix}${chapterDirectory}/scenes/`;
           for (const scenePath of files.filter((file) => file.startsWith(scenePrefix) && file.endsWith(".yaml"))) {
-            const parsed = await this.parseSnapshotYaml(selected.root, selected.commit, scenePath);
+            const parsed = await this.parseSnapshotYaml(selected.root, selected.commit, scenePath, lookup);
             if (!parsed) continue;
             const sceneId = typeof parsed.data.id === "string" ? parsed.data.id : path.posix.basename(scenePath, ".yaml");
             if (sceneIds.has(sceneId)) throw coreError(409, "duplicate_scene_id", "The project contains duplicate scene ids");
@@ -3079,7 +3103,7 @@ export class CoreStore implements MutationCoordinator {
               ? safeRelativePath(parsed.data.manuscript).split(path.sep).join("/")
               : `manuscript/${parts[2]}/${parts[4]}/${sceneId}.md`;
             assertProjectPath(manuscriptPath);
-            const document = await this.snapshotFile(selected.root, selected.commit, manuscriptPath);
+            const document = await this.snapshotFile(selected.root, selected.commit, manuscriptPath, "utf8", lookup);
             if (!document) continue;
             const body = parseMarkdownDocument(document.content).body;
             const match = findLiteralInsensitive(body, query);
@@ -3101,7 +3125,7 @@ export class CoreStore implements MutationCoordinator {
 
       for (const scratchPath of await this.snapshotFiles(selected.root, selected.commit, "meta/scratch")) {
         if (!scratchPath.toLowerCase().endsWith(".md")) continue;
-        const document = await this.snapshotFile(selected.root, selected.commit, scratchPath);
+        const document = await this.snapshotFile(selected.root, selected.commit, scratchPath, "utf8", lookup);
         if (!document) continue;
         const body = parseMarkdownDocument(document.content).body;
         const match = findLiteralInsensitive(body, query);
@@ -3134,6 +3158,7 @@ export class CoreStore implements MutationCoordinator {
   ): Promise<{ snapshot: SnapshotId; stats: WritingStats }> {
     return this.withProjectLock(projectId, async () => {
       const selected = await this.selectedSnapshotUnlocked(projectId, view, pinned);
+      const lookup = this.snapshotTreeLookup(selected.root);
       const files = await this.snapshotFiles(selected.root, selected.commit, "plot/volumes");
       const sceneById: Record<string, SceneWritingStats> = Object.create(null) as Record<string, SceneWritingStats>;
       let totalCharCount = 0;
@@ -3147,7 +3172,7 @@ export class CoreStore implements MutationCoordinator {
       const orderedVolumes: Array<{ directory: string; id: string; data: Record<string, unknown>; title: string }> = [];
       for (const directory of volumeDirectories) {
         const volumePath = `plot/volumes/${directory}/volume.yaml`;
-        const data = (await this.parseSnapshotYaml(selected.root, selected.commit, volumePath))?.data ?? { id: directory };
+        const data = (await this.parseSnapshotYaml(selected.root, selected.commit, volumePath, lookup))?.data ?? { id: directory };
         const id = typeof data.id === "string" ? data.id : directory;
         orderedVolumes.push({ directory, id, data, title: titleOf(data, id) });
       }
@@ -3166,7 +3191,7 @@ export class CoreStore implements MutationCoordinator {
         const orderedChapters: Array<{ directory: string; id: string; data: Record<string, unknown>; title: string }> = [];
         for (const directory of chapterDirectories) {
           const chapterPath = `${chapterPrefix}${directory}/chapter.yaml`;
-          const data = (await this.parseSnapshotYaml(selected.root, selected.commit, chapterPath))?.data ?? { id: directory };
+          const data = (await this.parseSnapshotYaml(selected.root, selected.commit, chapterPath, lookup))?.data ?? { id: directory };
           const id = typeof data.id === "string" ? data.id : directory;
           orderedChapters.push({ directory, id, data, title: titleOf(data, id) });
         }
@@ -3176,7 +3201,7 @@ export class CoreStore implements MutationCoordinator {
           const scenePrefix = `${chapterDirectory}/scenes/`;
           const orderedScenes: Array<{ path: string; id: string; data: Record<string, unknown>; title: string }> = [];
           for (const scenePath of files.filter((file) => file.startsWith(scenePrefix) && file.endsWith(".yaml"))) {
-            const parsed = await this.parseSnapshotYaml(selected.root, selected.commit, scenePath);
+            const parsed = await this.parseSnapshotYaml(selected.root, selected.commit, scenePath, lookup);
             if (!parsed) continue;
             const id = typeof parsed.data.id === "string" ? parsed.data.id : path.posix.basename(scenePath, ".yaml");
             orderedScenes.push({ path: scenePath, id, data: parsed.data, title: titleOf(parsed.data, id) });
@@ -3192,7 +3217,7 @@ export class CoreStore implements MutationCoordinator {
               ? safeRelativePath(scene.data.manuscript).split(path.sep).join("/")
               : `manuscript/${parts[2]}/${parts[4]}/${scene.id}.md`;
             assertProjectPath(manuscriptPath);
-            const documentFile = await this.snapshotFile(selected.root, selected.commit, manuscriptPath);
+            const documentFile = await this.snapshotFile(selected.root, selected.commit, manuscriptPath, "utf8", lookup);
             const document = parseMarkdownDocument(documentFile?.content ?? "");
             const charCount = document.body.length;
             const rawStatus = scene.data.status;

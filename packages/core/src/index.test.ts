@@ -711,11 +711,13 @@ test("hosted clones omit remote tags but keep manually created tags unsafe", asy
 test("search and writing statistics read one pinned remote snapshot", async () => {
   const { tempDir, remote, seed } = await makeRemote();
   const sceneOnePath = path.join(seed, "manuscript/vol-1/ch-1/scene-1.md");
+  const sceneOneYamlPath = path.join(seed, "plot/volumes/vol-1/chapters/ch-1/scenes/scene-1.yaml");
+  const renamedSceneOnePath = path.join(seed, "manuscript/vol-1/ch-1/renamed-scene-1.md");
   const sceneTwoYamlPath = path.join(seed, "plot/volumes/vol-1/chapters/ch-1/scenes/scene-2.yaml");
   const sceneTwoMarkdownPath = path.join(seed, "manuscript/vol-1/ch-1/scene-2.md");
   const scratchPath = path.join(seed, "meta/scratch/side-note.md");
   try {
-    const firstBody = `${"a".repeat(10)}Needle${"b".repeat(384)}`;
+    const firstBody = `📝${"a".repeat(8)}Needle${"b".repeat(384)}`;
     assert.equal(firstBody.length, 400);
     await fs.writeFile(sceneOnePath, `---\ntitle: Draft\nstatus: done\n---\n${firstBody}`, "utf8");
     await writeYaml(sceneTwoYamlPath, {
@@ -770,13 +772,22 @@ test("search and writing statistics read one pinned remote snapshot", async () =
     assert.equal(stats.stats.sceneById["scene-2"]?.charCount, 1);
     assert.equal(stats.stats.sceneById["scene-2"]?.status, "drafting");
 
-    await fs.writeFile(sceneOnePath, "Updated without the old literal.\n", "utf8");
-    await runGit(seed, "add", sceneOnePath);
-    await runGit(seed, "commit", "-m", "Change manuscript after pinned snapshot");
+    await fs.rename(sceneOnePath, renamedSceneOnePath);
+    const renamedScene = YAML.parse(await fs.readFile(sceneOneYamlPath, "utf8")) as Record<string, unknown>;
+    renamedScene.manuscript = "manuscript/vol-1/ch-1/renamed-scene-1.md";
+    await fs.writeFile(sceneOneYamlPath, YAML.stringify(renamedScene), "utf8");
+    await fs.writeFile(renamedSceneOnePath, "Updated without the old literal.\n", "utf8");
+    await runGit(seed, "add", "-A");
+    await runGit(seed, "commit", "-m", "Rename manuscript after pinned snapshot");
     await runGit(seed, "push", "origin", "main");
     await store.observe(project.id);
     const latest = await store.searchSnapshot(project.id, "needle");
     assert.equal(latest.results.length, 0);
+    const latestReader = await store.reader(project.id, "remote");
+    assert.equal(await latestReader.read("manuscript/vol-1/ch-1/scene-1.md"), null);
+    assert.equal((await latestReader.read("manuscript/vol-1/ch-1/renamed-scene-1.md"))?.content, "Updated without the old literal.\n");
+    const renamedSearch = await store.searchSnapshot(project.id, "updated without the old literal");
+    assert.equal(renamedSearch.results[0]?.filePath, "manuscript/vol-1/ch-1/renamed-scene-1.md");
     const pinnedAgain = await store.searchSnapshot(project.id, "needle", 20, "remote", originalSnapshot);
     assert.equal(pinnedAgain.results[0]?.offset, 10);
     assert.deepEqual(await store.resolveDocumentScene(
@@ -786,6 +797,75 @@ test("search and writing statistics read one pinned remote snapshot", async () =
     assert.equal(latestStats.stats.totalCharCount, "Updated without the old literal.\n".length + 1);
     const pinnedStats = await store.writingStatsSnapshot(project.id, "remote", originalSnapshot);
     assert.equal(pinnedStats.stats.totalCharCount, 401);
+
+    const checkpointText = "checkpoint-only manuscript marker\n";
+    const secondScene = await store.readScene(project.id, "scene-2");
+    await store.saveScene(project.id, "scene-2", { text: checkpointText, revision: secondScene.revision });
+    const checkpointSearch = await store.searchSnapshot(project.id, "checkpoint-only", 20, "checkpoint");
+    assert.equal(checkpointSearch.results[0]?.id, "scene-2");
+    assert.equal(checkpointSearch.results[0]?.filePath, "manuscript/vol-1/ch-1/scene-2.md");
+    assert.deepEqual((await store.searchSnapshot(project.id, "checkpoint-only", 20, "remote")).results, []);
+    const checkpointStats = await store.writingStatsSnapshot(project.id, "checkpoint");
+    assert.equal(checkpointStats.stats.sceneById["scene-2"]?.charCount, checkpointText.length);
+    const remoteStats = await store.writingStatsSnapshot(project.id, "remote");
+    assert.equal(remoteStats.stats.sceneById["scene-2"]?.charCount, 1);
+  } finally {
+    await fs.rm(tempDir, { recursive: true, force: true });
+  }
+});
+
+test("hierarchy grouping preserves order and fallback metadata while rejecting malformed YAML", async () => {
+  const { tempDir, remote, seed } = await makeRemote();
+  const volumeYamlPath = path.join(seed, "plot/volumes/vol-1/volume.yaml");
+  const chapterYamlPath = path.join(seed, "plot/volumes/vol-1/chapters/ch-1/chapter.yaml");
+  const sceneOneYamlPath = path.join(seed, "plot/volumes/vol-1/chapters/ch-1/scenes/scene-1.yaml");
+  const sceneTwoYamlPath = path.join(seed, "plot/volumes/vol-1/chapters/ch-1/scenes/scene-2.yaml");
+  try {
+    await fs.rm(volumeYamlPath);
+    await fs.rm(chapterYamlPath);
+    const sceneOne = YAML.parse(await fs.readFile(sceneOneYamlPath, "utf8")) as Record<string, unknown>;
+    sceneOne.title = "Second scene";
+    sceneOne.order = 2;
+    await fs.writeFile(sceneOneYamlPath, YAML.stringify(sceneOne), "utf8");
+    await writeYaml(sceneTwoYamlPath, {
+      id: "scene-2",
+      type: "scene",
+      title: "First scene",
+      volume: "vol-1",
+      chapter: "ch-1",
+      manuscript: "manuscript/vol-1/ch-1/scene-2.md",
+      order: 1,
+    });
+    await runGit(seed, "add", "-A");
+    await runGit(seed, "commit", "-m", "Exercise hierarchy fallbacks and explicit ordering");
+    await runGit(seed, "push", "origin", "main");
+
+    const store = new CoreStore({ dataDir: path.join(tempDir, "state"), allowLocalRemotes: true });
+    const project = await store.registerProject({ url: remote });
+    const tree = await store.readTreeSnapshot(project.id, "remote");
+    assert.deepEqual(tree.tree, {
+      title: "Sample Work",
+      volumes: [{
+        id: "vol-1",
+        title: "vol-1",
+        chapters: [{
+          id: "ch-1",
+          title: "ch-1",
+          scenes: [
+            { id: "scene-2", title: "First scene" },
+            { id: "scene-1", title: "Second scene" },
+          ],
+        }],
+      }],
+    });
+
+    await fs.writeFile(sceneTwoYamlPath, "id: [malformed\n", "utf8");
+    await runGit(seed, "add", sceneTwoYamlPath);
+    await runGit(seed, "commit", "-m", "Add malformed hierarchy metadata");
+    await runGit(seed, "push", "origin", "main");
+    await store.observe(project.id);
+    await assert.rejects(store.readTreeSnapshot(project.id, "remote"), (error: unknown) =>
+      error instanceof CoreError && error.status === 422 && error.code === "project_data_invalid");
   } finally {
     await fs.rm(tempDir, { recursive: true, force: true });
   }
