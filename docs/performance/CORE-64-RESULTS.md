@@ -12,10 +12,10 @@ Sol coordinates, reviews and serially integrates/pushes main. Each Luna Max work
 | --- | --- | --- | --- |
 | G0 C58 baseline | Luna Max / `perf/c64-g0` | Existing harness; changes require coordination | One post-W1 environment/fixture/verification baseline |
 | G1 C01–C19 | Luna Max editor/render/journal/resize/durability branches | All G1 product units complete; no active SharedApplication writer | All19 dispositions settled; C55 host/journal ownership recorded under G4 |
-| G2 C20–C36, C54; linked C63 | Luna Max G2/derived/read/memory/writer branches | Core index: writer alone until C23 integration | Read/derived/memory complete; C23 full gates passed, integration review next |
-| G3 C38–C47; linked C64 | Luna Max resume/network/status/static branches | Static alone: API server, Vite and hosted-build/smoke helpers | Resume/network/status complete; C46/C47 cache compatibility and gates underway |
+| G2 C20–C36, C54; linked C63 | Luna Max G2/derived/read/memory/writer branches | Core index implementation complete; no active source writer | All G2 dispositions settled; C23 integrated with passing leaf gates; central combined validation active |
+| G3 C38–C47; linked C64 | Luna Max resume/network/status/static branches | Static API/Vite/hosted helper implementation complete; no active source writer | All G3 dispositions settled; C47 integrated with passing leaf gates; central combined validation active |
 | G4 C37, C48–C53, C55–C57 | Luna Max payload/lifecycle branches | Payload and host/journal/API-client units complete; API server handed back to static | All G4 dispositions settled; final combined validation pending |
-| G5 C59–C62; C58/C63 shared evidence | Luna Max G5/build/OCI branches | Root package/build: build; Vite: static; OCI: OCI worker | C59/C60 declined; C61 gates underway; Core/Full OCI awaits final source |
+| G5 C59–C62; C58/C63 shared evidence | Luna Max G5/build/OCI branches | Root package/build: build; Vite: static; OCI: OCI worker | C59/C60 declined; C61 integrated with passing Core/Full leaf gates; final Core/Full OCI and C62 measurement active |
 
 G0 precedes implementation comparisons. Independent G1/G2/G3/G5 investigations run concurrently. G4 decisions use the consumers established by prior gates. Shared contracts C30/C31/C63, C46/C47, C48/C57, C21/C22/C35/C54 and C32/C33/C36 each use one implementation/evidence source. File ownership prevents concurrent edits; cross-owner changes must be sequenced.
 
@@ -52,7 +52,7 @@ Every fixed candidate has one result owner; shared contracts reuse the same evid
 
 ## Final dispositions
 
-Completed evidence-backed rows will be appended after review. Each row must include ID, gate, decision, baseline/head SHA, changed paths, comparison scenario, actual before/after values, semantic regression, verification commands/results, relative evidence links, and residual risk/reconsideration conditions. `BLOCKED` remains incomplete. Native IME, unavailable external GitHub proof and long idle are reported separately as `NOT_CHECKED` when applicable.
+Evidence-backed dispositions below have passed coordinator review; pending candidates remain absent until their evidence is complete. Each row must include ID, gate, decision, baseline/head SHA, changed paths, comparison scenario, actual before/after values, semantic regression, verification commands/results, relative evidence links, and residual risk/reconsideration conditions. `BLOCKED` remains incomplete. Native IME, unavailable external GitHub proof and long idle are reported separately as `NOT_CHECKED` when applicable.
 
 
 | ID | Gate | Owner | Decision | Baseline / head | Changed paths | Comparison scenario | Before → after | Semantic regression | Commands / result | Evidence | Residual risk / reconsideration |
