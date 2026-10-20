@@ -106,3 +106,10 @@ IDB read probes cover both object-store and index methods (including the journal
 `documentKey` index), and distinguish successful, pending and failed read requests.
 Old diagnostic browser artifacts without index probes undercount total reads and
 must not be used for total read comparisons.
+
+Typing is closed-loop: each key is followed by two animation-frame callbacks.
+Larger frame delays therefore lengthen the input phase and allow the existing
+350 ms autosave debounce to fire between more keys. IDB counts are not a
+constant-rate or fixed-duration human typing comparison. Arrow keys follow in a
+separate burst; file-switch readiness also resets the cursor to the document top
+before checking its synthetic header.
