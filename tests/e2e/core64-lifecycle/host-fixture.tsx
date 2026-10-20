@@ -128,7 +128,7 @@ function proposalOperation(currentSnapshot: SnapshotId): ChangeOperation {
 
 function proposalFor(id: string): ChangeProposal {
   const currentSnapshot = snapshot(0);
-  return { id, snapshot: currentSnapshot, operations: [proposalOperation(currentSnapshot)], source: "module" };
+  return { id, snapshot: currentSnapshot, operations: [proposalOperation(currentSnapshot)], source: "author" };
 }
 
 let browserJournal: BrowserJournal;

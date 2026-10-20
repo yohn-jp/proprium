@@ -84,7 +84,8 @@ async function installProposalRoute(page: Page): Promise<void> {
       await route.fulfill({
         status: 200,
         contentType: "application/json",
-        body: JSON.stringify(proposal),
+        // Mirror the production cookie-owner endpoint, which never accepts client source attribution.
+        body: JSON.stringify({ ...proposal, source: "author" }),
       });
     } catch {
       // The actual host can abort this held request before the fixture releases it.
@@ -271,6 +272,44 @@ test("actual host removes an old-author journal write that completes after abort
   const finalMetrics = await metrics(page);
   expect(finalMetrics.signalAborts).toBe(2);
   expect(finalMetrics.disposeCalls).toBe(2);
+});
+
+
+test("owner module proposal reconciles the server-assigned author source without an IDB conflict", async ({ page }) => {
+  await openHost(page, "?proposal-on-first-mount");
+  await selectContribution(page);
+  await expect.poll(async () => (await metrics(page)).lateCallbackOutcomes).toEqual(["resolved"]);
+  const result = await metrics(page);
+  expect(result.proposalApiRequests).toBe(1);
+  expect(result.journalWrites).toHaveLength(1);
+  expect(result.journalRemovals).toEqual([]);
+  expect(result.journalRecords).toEqual([{
+    authorScope: "author-old", proposalId: result.journalWrites[0]!.proposalId,
+  }]);
+  await page.getByRole("button", { name: "Unmount host" }).click();
+  await expectActiveResources(page, 0);
+});
+
+test("an aborted proposal POST retains its strict journal record for Core reconciliation", async ({ page }) => {
+  await openHost(page, "?defer-proposal-api&proposal-on-first-mount");
+  await selectContribution(page);
+  await expect.poll(async () => (await metrics(page)).proposalApiRequests).toBe(1);
+  await expect.poll(async () => (await metrics(page)).journalWrites.length).toBe(1);
+  const pending = await metrics(page);
+  const proposalId = pending.journalWrites[0]!.proposalId;
+
+  await page.getByRole("button", { name: "Change author" }).click();
+  await expect(page.getByLabel("Current author")).toHaveText("author-new");
+  await expect.poll(async () => (await metrics(page)).lateCallbackOutcomes).toEqual(["rejected"]);
+  const afterAbort = await metrics(page);
+  expect(afterAbort.journalRemovals).toEqual([]);
+  expect(afterAbort.journalRecords).toEqual([{ authorScope: "author-old", proposalId }]);
+  expect(afterAbort.proposalApiRequests).toBe(1);
+  // Release the intercepted request after cancellation; it may already have reached Core.
+  await page.getByRole("button", { name: "Resolve deferred proposal API" }).click();
+  await expect.poll(async () => (await metrics(page)).journalRecords).toEqual([{ authorScope: "author-old", proposalId }]);
+  await page.getByRole("button", { name: "Unmount host" }).click();
+  await expectActiveResources(page, 0);
 });
 
 test("actual host preserves a preexisting proposal when its module callback is cancelled", async ({ page }, info) => {

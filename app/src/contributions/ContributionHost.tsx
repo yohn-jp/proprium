@@ -143,7 +143,11 @@ export function MountedContribution({
             if (!journal) throw new Error("Browser recovery storage is unavailable; the module proposal was not delivered to its panel.");
             const proposalJournal = journal;
             const ownedProposals = new Map<string, JournalProposalOwnership>();
+            // A cancelled POST may already be durable in Core even if no reply arrived.
+            // Once dispatch begins, the browser copy must survive for ID-based reconciliation.
+            let submissionMayHaveReachedCore = false;
             const removeCancelledProposals = async () => {
+              if (submissionMayHaveReachedCore) return;
               let removedAny = false;
               for (const [proposalId, ownership] of ownedProposals) {
                 removedAny = await proposalJournal.removeProposal(snapshot.repository, authorScope, proposalId, ownership) || removedAny;
@@ -167,7 +171,9 @@ export function MountedContribution({
             };
 
             const submitted: ChangeProposal = {
-              id: crypto.randomUUID(), snapshot, operations, source: "module", ...(evidence ? { evidence } : {}),
+              // The cookie-owner proposals endpoint assigns "author" regardless of the browser request's source.
+              // Keep the strict local journal identity identical to the server's canonical proposal.
+              id: crypto.randomUUID(), snapshot, operations, source: "author", ...(evidence ? { evidence } : {}),
             };
             await persistWhileActive(submitted);
             onProposalStored();
@@ -178,6 +184,7 @@ export function MountedContribution({
 
             let proposal: ChangeProposal;
             try {
+              submissionMayHaveReachedCore = true;
               proposal = await api.propose(projectId, submitted, controller.signal);
             } catch (cause) {
               if (!isCancelled()) throw cause;

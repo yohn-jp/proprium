@@ -1968,6 +1968,65 @@ describe("Scriptorium HTTP boundary", () => {
     assert.deepEqual(fixture.approvals, [{ proposalId: "mcp-batch-1", operationIds: [operation.id], authorScope: "owner" }]);
   });
 
+
+  it("keeps a strict Core proposal after an owner request is aborted following its durable write", async (t) => {
+    const { root, remote } = await makeBareRemote();
+    tempDirs.push(root);
+    const staticDir = await mkdtemp(resolve(tmpdir(), "scriptorium-api-aborted-proposal-"));
+    tempDirs.push(staticDir);
+    const dataDir = resolve(root, "state");
+    const store = new CoreStore({ dataDir, allowLocalRemotes: true });
+    const apiServer = await startCustomApi(store, staticDir);
+    t.after(apiServer.close);
+    const owner = await login(apiServer.base);
+    const headers = { Cookie: owner.cookie, Origin: apiServer.base, "Content-Type": "application/json" };
+    const registration = await fetch(`${apiServer.base}/api/projects`, {
+      method: "POST", headers, body: JSON.stringify({ url: remote }),
+    });
+    assert.equal(registration.status, 201);
+    const project = await registration.json() as { id: string };
+    const snapshot = (await store.observe(project.id)).snapshot;
+    const operation: ChangeOperation = {
+      id: "aborted_response_operation", generation: 1, repository: snapshot.repository,
+      baseRemoteCommit: snapshot.remoteCommit, effect: "metadata", reads: [],
+      writes: [{ path: "meta/scriptorium/modules/publishing/aborted-response.md", revision: null, content: "Pending author decision.\n" }],
+      message: "proposal retained across lost response",
+    };
+    const proposal: ChangeProposal = {
+      id: "aborted_response_proposal", snapshot, operations: [operation], source: "author",
+    };
+
+    let acknowledgeStored!: () => void;
+    const stored = new Promise<void>((resolve) => { acknowledgeStored = resolve; });
+    let releaseResponse!: () => void;
+    const resume = new Promise<void>((resolve) => { releaseResponse = resolve; });
+    const originalPropose = store.propose.bind(store);
+    store.propose = async (projectId, input) => {
+      const durableProposal = await originalPropose(projectId, input);
+      acknowledgeStored();
+      await resume; // Simulate a lost response after the disk write, not an unprocessed request.
+      return durableProposal;
+    };
+    const abort = new AbortController();
+    const pending = fetch(`${apiServer.base}/api/projects/${project.id}/proposals`, {
+      method: "POST", headers, body: JSON.stringify(proposal), signal: abort.signal,
+    });
+    try {
+      await stored;
+      abort.abort();
+      await assert.rejects(pending, (error: unknown) => (error as Error).name === "AbortError");
+    } finally {
+      releaseResponse();
+    }
+
+    const recovered = await store.getProposal(project.id, proposal.id);
+    assert.deepEqual(recovered?.proposal, proposal);
+    const localJournal = JSON.parse(await readFile(resolve(dataDir, "proposal-journal", `${project.id}.json`), "utf8")) as {
+      proposals: ChangeProposal[];
+    };
+    assert.deepEqual(localJournal.proposals, [proposal], "the server persists unaccepted proposals without HTTP acknowledgment");
+  });
+
   it("restores a partial MCP proposal through an exact owner retry after Core data loss", async (t) => {
     const { root, remote } = await makeBareRemote();
     tempDirs.push(root);
