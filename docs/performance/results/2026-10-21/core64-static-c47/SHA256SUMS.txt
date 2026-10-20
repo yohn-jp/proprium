@@ -1,0 +1,12 @@
+abd85a932151e2a3729bd047b220d47e8937c04a701418e4b900827f7cac78b6  docs/performance/results/2026-10-21/core64-static-c47/README.md
+4e0c9075ae3db2065541ddd959f239caec92bf2c96fcd4a0defc5bdd7ac04044  docs/performance/results/2026-10-21/core64-static-c47/after-core.json
+61fcef0f7463eef85c66b96852c122b4a82f011bb26ce1df6924e41f0153bdc5  docs/performance/results/2026-10-21/core64-static-c47/after-full.json
+00c50d40e4e70a21e6d51c0afb4a905105f82737acdd3e2f5748b2c15b993f59  docs/performance/results/2026-10-21/core64-static-c47/before-core.json
+94693a842a0d12160690faa303d607c57fd1fc935cd6f8d30d0156479f983035  docs/performance/results/2026-10-21/core64-static-c47/before-full.json
+34c14ad72d6d0b923ba2933d0c46b09280538f3596e5ea73c83a2845cf5831b4  docs/performance/results/2026-10-21/core64-static-c47/gates-d8-interrupted/test-interrupted.log
+b4926aaaf9c2a51c388d729a342e24e792f2e7387fbc7bf201df0fe6b40d1030  docs/performance/results/2026-10-21/core64-static-c47/gates-e27/audit-core-e27.log
+1cd90d89aa62af4825f70927ec9e30970613afd7849b35c87661b8a95fd53962  docs/performance/results/2026-10-21/core64-static-c47/gates-e27/build-core-e27.log
+31a8d0313af889a47bde19b0f587227f12e74eefb581214d78b4100903b724fe  docs/performance/results/2026-10-21/core64-static-c47/gates-e27/install-e27.log
+1a520ba1e8db6eca6a447aaf678961fc28bb9edd2fa55d4885e36ee7414304eb  docs/performance/results/2026-10-21/core64-static-c47/gates-e27/static-symlink-focused.log
+c0f96d444d5262b60112c25187df939ce685bfd7a519cd7026690355270c70f5  docs/performance/results/2026-10-21/core64-static-c47/gates-e27/test-e27.log
+feb9f0737a5d45717a689a8503b8597ae0b388ec3340494233dd94660e0e5a6b  docs/performance/results/2026-10-21/core64-static-c47/gates-e27/typecheck-e27.log
