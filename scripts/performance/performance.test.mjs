@@ -89,3 +89,33 @@ test('current author pipeline records receipts and leaves the generated seed rem
     assert.equal(git(root, '--git-dir', fixture.remote, 'rev-parse', 'main'), fixture.commit);
   } finally { await rm(root, { recursive: true, force: true }); }
 });
+
+test('browser probes retain strict IDB semantics and count document index reads', { skip: !process.env.SCRIPTORIUM_E2E_CHROMIUM }, async () => {
+  const { chromium } = await import('@playwright/test');
+  const { installBrowserProbes } = await import('./browser-probes.mjs');
+  const browser = await chromium.launch({ headless: true, executablePath: process.env.SCRIPTORIUM_E2E_CHROMIUM });
+  try {
+    const context = await browser.newContext();
+    await context.addInitScript(installBrowserProbes);
+    const page = await context.newPage();
+    await page.route('http://127.0.0.1/benchmark', route => route.fulfill({ contentType: 'text/html', body: '<p>Synthetic probe test</p>' }));
+    await page.goto('http://127.0.0.1/benchmark');
+    const result = await page.evaluate(async () => {
+      const database = await new Promise((resolve, reject) => {
+        const request = indexedDB.open('synthetic-probe', 1);
+        request.onupgradeneeded = () => request.result.createObjectStore('operations', { keyPath: 'id' }).createIndex('documentKey', 'documentKey');
+        request.onsuccess = () => resolve(request.result); request.onerror = () => reject(request.error);
+      });
+      const tx = database.transaction('operations', 'readwrite', { durability: 'strict' });
+      const complete = new Promise((resolve, reject) => { tx.oncomplete = resolve; tx.onabort = () => reject(tx.error); });
+      tx.objectStore('operations').put({ id: 'a', documentKey: 'synthetic' });
+      const request = tx.objectStore('operations').index('documentKey').getAll('synthetic');
+      const rows = await new Promise((resolve, reject) => { request.onsuccess = () => resolve(request.result); request.onerror = () => reject(request.error); });
+      await complete; database.close();
+      return { rows, metrics: structuredClone(window.__wave0) };
+    });
+    assert.equal(result.rows.length, 1);
+    assert.ok(result.metrics.transactions.some(tx => tx.durability === 'strict' && tx.status === 'complete'));
+    assert.ok(result.metrics.reads.some(read => read.source === 'index' && read.index === 'documentKey' && read.records === 1 && read.status === 'complete'));
+  } finally { await browser.close(); }
+});
