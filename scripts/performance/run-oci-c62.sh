@@ -20,7 +20,7 @@ for profile in core full; do
   measure_log="$evidence_root/${profile}-measure.log"
 
   env \
-    OCI_ENGINE="$root/scripts/performance/oci-c62-podman.sh" \
+    OCI_ENGINE="$root/scripts/performance/podman" \
     TMPDIR=/data/scriptorium-c64-oci/tmp \
     SCRIPTORIUM_PROFILE="$profile" \
     SCRIPTORIUM_OCI_IMAGE="$image" \
