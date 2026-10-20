@@ -51,6 +51,8 @@ export async function generate(root, size) {
     git(seed, 'add', 'meta/project.yaml'); git(seed, 'commit', '--quiet', '-m', `Synthetic history ${i}`);
   }
   git(seed, 'remote', 'add', 'origin', remote); git(seed, 'push', '-u', 'origin', 'main');
+  git(seed, 'fsck', '--full', '--no-dangling');
+  if (Number(git(seed, 'rev-list', '--count', 'HEAD')) !== historyCommits) throw new Error('Synthetic history count mismatch');
   const actual = git(seed, 'ls-files').split('\n').length;
   if (actual !== count) throw new Error(`Expected ${count} tracked files; got ${actual}`);
   // Byte count describes final tracked tree, including history's final metadata update.
