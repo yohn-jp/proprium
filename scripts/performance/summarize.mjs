@@ -67,7 +67,7 @@ async function summarize(directory) {
   if (files.includes('assets.json')) result.assets = JSON.parse(await readFile(join(directory, 'assets.json'), 'utf8'));
   for (const file of files.filter(f => /^(dataset|read|mutation|legacy-mutation|revisions|search|stats|browser)-.*\.json$/.test(f))) {
     const report = JSON.parse(await readFile(join(directory, file), 'utf8'));
-    if (file.startsWith('dataset-')) result.datasets[report.size] = report;
+    if (file.startsWith('dataset-')) result.datasets[report.datasetId ?? report.size] = report;
     else if (file.startsWith('browser-')) result.browser[file] = summarizeBrowser(report);
     else result.core[file] = summarizeCore(report);
   }

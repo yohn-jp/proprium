@@ -18,6 +18,9 @@ test('synthetic fixture has exact tracked count, document sizes and reproducible
   try {
     const a = await generate(join(root, 'a'), 'small'), b = await generate(join(root, 'b'), 'small');
     assert.equal(a.files, 10); assert.equal(a.commit, b.commit);
+    const short = await generate(join(root, 'short'), 'small', 'short');
+    assert.equal(short.datasetId, 'small-short');
+    assert.equal(short.files, 10); assert.deepEqual(short.documentBytes, [1024, 1024, 1024]);
     for (let i = 1; i <= 3; i++) assert.equal(Buffer.byteLength(await readFile(join(root, 'a/seed/manuscript/vol-1/ch-1', `scene-${i}.md`))), a.documentBytes[i - 1]);
     assert.equal(git(join(root, 'a/seed'), 'ls-files').split('\n').length, 10);
     await assert.rejects(generate(join(root, 'a'), 'small'), { code: 'EEXIST' });

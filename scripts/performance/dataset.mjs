@@ -11,7 +11,8 @@ export function git(cwd, ...args) {
       GIT_COMMITTER_NAME: 'Synthetic Benchmark', GIT_COMMITTER_EMAIL: 'benchmark@example.invalid',
       GIT_AUTHOR_DATE: '2026-01-01T00:00:00Z', GIT_COMMITTER_DATE: '2026-01-01T00:00:00Z' } }).trim();
 }
-export async function generate(root, size) {
+export async function generate(root, size, documentProfile = 'matrix') {
+  if (!['matrix', 'short'].includes(documentProfile) || (documentProfile === 'short' && size !== 'small')) throw new Error('Short-document control is supported only for small');
   const count = sizes[size];
   if (!count) throw new Error(`Unknown dataset: ${size}`);
   // Exclusive directory creation prevents overwriting any existing repository.
@@ -32,7 +33,7 @@ export async function generate(root, size) {
     await write(`plot/volumes/vol-${v}/chapters/ch-${c}/chapter.yaml`, `id: ch-${c}\nvolume: vol-${v}\ntitle: ${c === 1 ? 'Chapter One' : `Chapter ${c}`}\norder: ${c}\n`);
   }
   const scenes = Math.floor((count - 2 - volumes - chapters) / 2);
-  const lengths = [1024, 100 * 1024, 1024 * 1024];
+  const lengths = documentProfile === 'short' ? [1024, 1024, 1024] : [1024, 100 * 1024, 1024 * 1024];
   for (let i = 1; i <= scenes; i++) {
     const c = Math.floor((i - 1) / Math.ceil(scenes / chapters)) + 1, v = Math.floor((c - 1) / 10) + 1;
     await write(`plot/volumes/vol-${v}/chapters/ch-${c}/scenes/scene-${i}.yaml`,
@@ -58,12 +59,12 @@ export async function generate(root, size) {
   // Byte count describes final tracked tree, including history's final metadata update.
   bytes = 0;
   for (const file of git(seed, 'ls-files').split('\n')) bytes += (await stat(join(seed, file))).size;
-  const manifest = { schemaVersion: 1, size, files: actual, volumes, chapters, scenes, bytes, historyCommits,
+  const manifest = { schemaVersion: 1, size, documentProfile, datasetId: documentProfile === 'short' ? 'small-short' : size, files: actual, volumes, chapters, scenes, bytes, historyCommits,
     documentBytes: lengths, attachmentBytes: size === 'large' || size === 'stress' ? 10485760 : 0,
     commit: git(seed, 'rev-parse', 'HEAD'), remote, syntheticOnly: true };
   await writeFile(join(root, 'dataset.json'), JSON.stringify(manifest, null, 2) + '\n');
   return manifest;
 }
 if (process.argv[1] && import.meta.url === pathToFileURL(resolve(process.argv[1])).href) {
-  console.log(JSON.stringify(await generate(resolve(process.argv[2]), process.argv[3]), null, 2));
+  console.log(JSON.stringify(await generate(resolve(process.argv[2]), process.argv[3], process.argv[4]), null, 2));
 }

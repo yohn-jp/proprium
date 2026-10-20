@@ -131,3 +131,11 @@ the generator/setup helper; measured Core Git execution and its settings remain
 unchanged. The stress construction encountered a transient object lookup during
 an early diagnostic attempt; integrity and the actual history are checked before
 using a completed fixture.
+
+The audit's ten-file **short-document control** is separate from the input-size
+matrix. Generate it with
+`node scripts/performance/dataset.mjs /tmp/new-small-short small short`.
+It has exactly ten tracked files with all three manuscripts at 1 KiB. The normal
+`small` matrix includes the larger input specimens to isolate document-size cost
+from repository file count. Baseline artifacts label the control `small-short`;
+its results are not mixed with the 1 KiB/100 KiB/1 MiB matrix.
