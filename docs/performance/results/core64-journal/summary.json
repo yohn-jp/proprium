@@ -78,7 +78,46 @@
       "index": "repositoryKey",
       "requestsPerStore": 1,
       "rowsReturnedPerStore": 100,
-      "crossRepositoryOrAuthorLeak": false
+      "noCrossRepositoryLeak": true,
+      "sameRepositoryAuthorFilterChecked": true,
+      "globalTimingFixtureLimitation": "all 50 guest entries were in repository 9; the scoped target repository 0 contained 100 owner entries and no guests",
+      "supplementalProof": "scoped-author-proof.json"
+    },
+    "scopedAuthorFilterSupplement": {
+      "path": "scoped-author-proof.json",
+      "sha256": "54e41d7acabebd26d472494af634e306734a6c0ac37e94f55201a4ec54c25fb4",
+      "mode": "scoped-author-filter-only",
+      "probeScriptSha256": "6562b8416527aa8b78e425651de26772d6f07fc7840ec06f4c7475e8947e1f21",
+      "probeHtmlSha256": "7f410fea7c51d5f3c9aab465edee5aa1fb78e8a48c17ef09e3c463d6177a3cff",
+      "fixture": {
+        "selectedRepository": "[\"github\",\"core64-owner-0\",\"core64-id-0\",\"main\"]",
+        "sameRepositoryEntriesByAuthor": { "owner": 2, "guest": 1 },
+        "otherRepositoryOwnerEntries": 1,
+        "sameRepositoryProposalsByAuthor": { "owner": 2, "guest": 1 },
+        "otherRepositoryOwnerProposals": 1
+      },
+      "entries": {
+        "index": "repositoryKey",
+        "indexedRows": 3,
+        "returnedOwnerRows": 2,
+        "requestCount": 1,
+        "transactionCount": 1,
+        "transactionMode": "readonly",
+        "filteredSameRepositoryGuest": true,
+        "filteredOtherRepository": true
+      },
+      "proposals": {
+        "index": "repositoryKey",
+        "indexedRows": 3,
+        "returnedOwnerRows": 2,
+        "requestCount": 1,
+        "transactionCount": 1,
+        "transactionMode": "readonly",
+        "filteredSameRepositoryGuest": true,
+        "filteredOtherRepository": true
+      },
+      "noSameRepositoryAuthorOrRepositoryLeak": true,
+      "timingSamples": 0
     },
     "proposal": "retain full inventory for explicit reconciliation and existing repository-scoped reads; no new schema index proposed"
   },

@@ -8,7 +8,7 @@ The probe served the actual `BrowserJournal` module from the frozen Core runtime
 
 Each timing has 20 samples. Percentiles use nearest rank `ceil(p*n)`: p95 is rank 19 and p99 is the maximum (rank 20). No samples were dropped. Record text used repeated four-byte UTF-8 Unicode scalars to produce exact 100 KiB and 1 MiB fields. The full records intentionally contain independent `text`, `baseText`, and `operation.writes[0].content` values.
 
-The frozen runtime was `/data/scriptorium-core64-worktrees/g0`, git head `80ab121ad08b2c5f5957e3405eed511762fb1747`, with `journal.ts` SHA-256 `5392cf4dcce0e0bbdd19fabaea683903334e157f3cc3d385552cf1f90ab024d9`. Chromium was `155.0.8059.79`; Node was `v24.21.0`. The probe script SHA-256 is `6fe2be822dcc1d8880da378647aa125112755c9cba4813379c66890a482089dc`; the HTML SHA-256 is `098165d53cde430d32c5d9d92d19d62376c83306050805a8ef846f22e0148f8a`.
+The frozen runtime was `/data/scriptorium-core64-worktrees/g0`, git head `80ab121ad08b2c5f5957e3405eed511762fb1747`, with `journal.ts` SHA-256 `5392cf4dcce0e0bbdd19fabaea683903334e157f3cc3d385552cf1f90ab024d9`. Chromium was `155.0.8059.79`; Node was `v24.21.0`. The 20-sample timing capture used driver SHA-256 `6fe2be822dcc1d8880da378647aa125112755c9cba4813379c66890a482089dc` and HTML SHA-256 `098165d53cde430d32c5d9d92d19d62376c83306050805a8ef846f22e0148f8a`.
 
 The exact run used the G0 frozen install and kept temporary files, Playwright profiles, and Vite cache under `/data`:
 
@@ -59,10 +59,23 @@ Each `getAllEntries` and `getAllProposals` sample used one readonly transaction 
 | `getAllEntries` | 1,000 | 2,245,143 | 80.5 / 86.7 ms | 71.9 ms | 86.8 ms |
 | `getAllProposals` | 1,000 | 1,451,124 | 66.5 / 79.3 ms | 62.6 ms | 101.8 ms |
 
-The `repositoryKey` scoped methods each returned exactly 100 owner rows for one repository, issuing one indexed request with 100 returned rows. No other repository or author rows leaked. The fixture contained 950 owner and 50 guest entries across ten repositories.
+The global timing fixture contained 950 owner and 50 guest entries across ten repositories. Because guest rows were assigned only when `index % 20 === 19`, all 50 guest rows landed in repository 9; the scoped query targeted repository 0, which contained 100 owner rows and no guests. That capture verified repository isolation and the indexed row count, but it did **not** verify author filtering when both authors exist in the same repository.
+
+A separate selected-repository proof used two owner and one guest entry/proposal in repository 0, plus one owner entry/proposal in repository 1. For both `getRepository(repository0, "owner")` and `getProposals(repository0, "owner")`, the journal issued one readonly `repositoryKey.getAll`, fetched the three rows for repository 0, returned the two owner records, and excluded the same-repository guest and other-repository owner. This was a single scoped assertion, not a timing sample, and did not repeat the global inventory measurements. The capture is [scoped-author-proof.json](results/core64-journal/scoped-author-proof.json), SHA-256 `54e41d7acabebd26d472494af634e306734a6c0ac37e94f55201a4ec54c25fb4`; it used the same runtime and browser, with driver SHA-256 `6562b8416527aa8b78e425651de26772d6f07fc7840ec06f4c7475e8947e1f21` and HTML SHA-256 `7f410fea7c51d5f3c9aab465edee5aa1fb78e8a48c17ef09e3c463d6177a3cff`.
+
+The supplemental run used the same frozen runtime and Chromium with the scoped-only mode:
+
+```sh
+TMPDIR=/data/scriptorium-core64-journal-tmp \
+SCRIPTORIUM_CORE64_RUNTIME_ROOT=/data/scriptorium-core64-worktrees/g0 \
+SCRIPTORIUM_CORE64_CACHE_DIR=/data/scriptorium-core64-journal-tmp/vite-cache-scoped-proof \
+SCRIPTORIUM_E2E_CHROMIUM=/nix/store/ini1ifgvcsvw48x4mxawrv9jvbdwn70p-chromium-155.0.8059.79/bin/chromium \
+node scripts/performance/core64-journal.mjs \
+  /data/scriptorium-core64-g1-journal-20261020T145916Z/scoped-author-proof.json 5 --scoped-only
+```
 
 **Proposal: retain full inventory for explicit reconciliation and use the existing scoped methods for repository views; no schema change is indicated.** The measured full scan matches its all-repository purpose, while scoped reads already reduce a repository view to 100 indexed rows. A different startup path or user-visible inventory bottleneck was not measured, so no change to the global APIs is proposed.
 
 ## Verification and limits
 
-The real Chromium/Vite probe completed with `status: complete`; both record sizes restored exact content, all C15 invariants held, and the C16 scope checks passed. `node --check` passed for the driver and extracted inline module, and `git diff --check` passed. No production code, journal schema, or migration was changed. Full workspace install/typecheck/test/build/audit and multi-tab, quota, crash, response-loss, old-schema migration, physical storage, and fsync checks are `NOT_CHECKED` for this measurement-only unit.
+The real Chromium/Vite timing probe and scoped-only author proof both completed with `status: complete`. Both record sizes restored exact content; all C15 invariants held; C16 global reads and same-repository author/repository filtering passed. `node --check` passed for the driver and extracted inline module, and `git diff --check` passed. No production code, journal schema, or migration was changed. Full workspace install/typecheck/test/build/audit and multi-tab, quota, crash, response-loss, old-schema migration, physical storage, and fsync checks are `NOT_CHECKED` for this measurement-only unit.

@@ -424,6 +424,98 @@
     }
   }
 
+  async function measureScopedAuthorFilter() {
+    const journal = await BrowserJournal.open();
+    try {
+      const repository = repositoryFor(0);
+      const otherRepository = repositoryFor(1);
+      const fixture = [
+        { repository, authorScope: "owner", path: "manuscript/scoped-owner-a.md", id: "c64-scoped-owner-a", generation: 1 },
+        { repository, authorScope: "owner", path: "manuscript/scoped-owner-b.md", id: "c64-scoped-owner-b", generation: 2 },
+        { repository, authorScope: "guest", path: "manuscript/scoped-guest.md", id: "c64-scoped-guest", generation: 3 },
+        { repository: otherRepository, authorScope: "owner", path: "manuscript/scoped-other-repository.md", id: "c64-scoped-other-repository", generation: 4 },
+      ];
+      const entries = fixture.map(({ repository: identity, ...fields }) => entryFor({
+        repository: identity,
+        ...fields,
+        text: `Scoped fixture ${fields.id}\n`,
+        baseText: "Scoped remote text\n",
+        state: "checkpointed",
+      }));
+      const proposals = entries.map((entry, index) => proposalFor(entry, `c64-scoped-proposal-${index}`));
+      await replaceStores({ entries, proposals, includeProposals: true });
+
+      const metrics = requireMetrics();
+      metrics.reset();
+      const entryStart = performance.now();
+      const scopedEntries = await journal.getRepository(repository, "owner");
+      const entryRequest = lastGetAll(metrics, entryStart, "operations");
+      const entryTransaction = firstTransaction(metrics, entryStart, "operations");
+      const entryRequestCount = metrics.reads.filter((item) => item.start >= entryStart && item.store === "operations" && item.method === "getAll").length;
+      const entryTransactionCount = metrics.transactions.filter((item) => item.start >= entryStart && item.stores.includes("operations")).length;
+
+      metrics.reset();
+      const proposalStart = performance.now();
+      const scopedProposals = await journal.getProposals(repository, "owner");
+      const proposalRequest = lastGetAll(metrics, proposalStart, "proposals");
+      const proposalTransaction = firstTransaction(metrics, proposalStart, "proposals");
+      const proposalRequestCount = metrics.reads.filter((item) => item.start >= proposalStart && item.store === "proposals" && item.method === "getAll").length;
+      const proposalTransactionCount = metrics.transactions.filter((item) => item.start >= proposalStart && item.stores.includes("proposals")).length;
+
+      const repositoryKeyValue = repositoryKey(repository);
+      const expectedEntryIds = new Set(["c64-scoped-owner-a", "c64-scoped-owner-b"]);
+      const expectedProposalIds = new Set(["c64-scoped-proposal-0", "c64-scoped-proposal-1"]);
+      const entryIds = scopedEntries.map((entry) => entry.operation.id);
+      const proposalIds = scopedProposals.map((record) => record.proposal.id);
+      const entryIsolationPassed = scopedEntries.length === 2 && entryIds.every((id) => expectedEntryIds.has(id)) &&
+        scopedEntries.every((entry) => entry.repositoryKey === repositoryKeyValue && entry.authorScope === "owner");
+      const proposalIsolationPassed = scopedProposals.length === 2 && proposalIds.every((id) => expectedProposalIds.has(id)) &&
+        scopedProposals.every((record) => record.repositoryKey === repositoryKeyValue && record.authorScope === "owner");
+      if (!entryIsolationPassed || !proposalIsolationPassed || entryRequestCount !== 1 || proposalRequestCount !== 1 ||
+          entryTransactionCount !== 1 || proposalTransactionCount !== 1 || entryRequest.index !== "repositoryKey" ||
+          proposalRequest.index !== "repositoryKey" || entryRequest.records !== 3 || proposalRequest.records !== 3 ||
+          entryTransaction.mode !== "readonly" || proposalTransaction.mode !== "readonly") {
+        throw new Error("Scoped repository/author reads did not filter same-repository guests and other repositories as expected.");
+      }
+      return {
+        fixture: {
+          selectedRepository: repositoryKeyValue,
+          sameRepositoryEntriesByAuthor: { owner: 2, guest: 1 },
+          otherRepositoryOwnerEntries: 1,
+          sameRepositoryProposalsByAuthor: { owner: 2, guest: 1 },
+          otherRepositoryOwnerProposals: 1,
+        },
+        entries: {
+          selectedAuthor: "owner",
+          indexedRows: entryRequest.records,
+          returnedRows: scopedEntries.length,
+          returnedOperationIds: entryIds,
+          index: entryRequest.index,
+          requestCount: entryRequestCount,
+          transactionCount: entryTransactionCount,
+          transactionMode: entryTransaction.mode,
+          filteredSameRepositoryGuest: !entryIds.includes("c64-scoped-guest"),
+          filteredOtherRepository: !entryIds.includes("c64-scoped-other-repository"),
+        },
+        proposals: {
+          selectedAuthor: "owner",
+          indexedRows: proposalRequest.records,
+          returnedRows: scopedProposals.length,
+          returnedProposalIds: proposalIds,
+          index: proposalRequest.index,
+          requestCount: proposalRequestCount,
+          transactionCount: proposalTransactionCount,
+          transactionMode: proposalTransaction.mode,
+          filteredSameRepositoryGuest: !proposalIds.includes("c64-scoped-proposal-2"),
+          filteredOtherRepository: !proposalIds.includes("c64-scoped-proposal-3"),
+        },
+        noSameRepositoryAuthorOrRepositoryLeak: true,
+      };
+    } finally {
+      journal.close();
+    }
+  }
+
   window.__core64JournalProbe = {
     async measurePayload(input) { return measurePayload(input); },
     async measureC15(count, repeats) {
@@ -433,6 +525,7 @@
     },
     async measureC15Isolation() { return measureC15Isolation(); },
     async measureInventory(input) { return measureInventory(input); },
+    async measureScopedAuthorFilter() { return measureScopedAuthorFilter(); },
     ready: true,
   };
 </script>

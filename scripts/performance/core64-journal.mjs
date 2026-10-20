@@ -5,10 +5,11 @@ import { createRequire } from 'node:module';
 import { dirname, resolve } from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 
-const [outputPath, repeatsArgument = '20'] = process.argv.slice(2);
+const [outputPath, repeatsArgument = '20', modeArgument] = process.argv.slice(2);
 const repeats = Number(repeatsArgument);
-if (!outputPath || !Number.isInteger(repeats) || repeats < 5 || repeats > 50) {
-  throw new Error('Usage: SCRIPTORIUM_CORE64_RUNTIME_ROOT=<frozen-root> node scripts/performance/core64-journal.mjs <output.json> [5..50 repeats]');
+const scopedOnly = modeArgument === '--scoped-only';
+if (!outputPath || !Number.isInteger(repeats) || repeats < 5 || repeats > 50 || (modeArgument !== undefined && !scopedOnly)) {
+  throw new Error('Usage: SCRIPTORIUM_CORE64_RUNTIME_ROOT=<frozen-root> node scripts/performance/core64-journal.mjs <output.json> [5..50 repeats] [--scoped-only]');
 }
 
 const runtimeRoot = resolve(process.env.SCRIPTORIUM_CORE64_RUNTIME_ROOT ?? process.cwd());
@@ -111,13 +112,15 @@ const report = {
   },
   browserExecutable: chromiumPath,
   node: process.version,
-  repeats,
+  mode: scopedOnly ? 'scoped-author-filter-only' : 'full',
+  repeats: scopedOnly ? 1 : repeats,
   physicalIndexedDbBytes: 'not exposed by the browser; logical UTF-8 fields, JSON serialization bytes, and origin usage estimates are reported separately',
   status: 'running',
   recordPayloads: [],
   putLatestDraft: {},
   isolation: null,
   inventory: null,
+  scopedAuthorFilter: null,
   probeStartupDiagnostics: [],
 };
 
@@ -179,16 +182,23 @@ try {
     return { context, page };
   }
 
-  for (const bytes of [102400, 1048576]) {
+  if (scopedOnly) {
     const { context, page } = await openProbePage();
     try {
-      report.recordPayloads.push(await page.evaluate((input) => window.__core64JournalProbe.measurePayload(input), { bytes, repeats }));
+      report.scopedAuthorFilter = await page.evaluate(() => window.__core64JournalProbe.measureScopedAuthorFilter());
     } finally {
       await context.close();
     }
-  }
+  } else {
+    for (const bytes of [102400, 1048576]) {
+      const { context, page } = await openProbePage();
+      try {
+        report.recordPayloads.push(await page.evaluate((input) => window.__core64JournalProbe.measurePayload(input), { bytes, repeats }));
+      } finally {
+        await context.close();
+      }
+    }
 
-  {
     const { context, page } = await openProbePage();
     try {
       for (const count of [1, 100, 1000]) {
@@ -200,14 +210,12 @@ try {
     } finally {
       await context.close();
     }
-  }
 
-  {
-    const { context, page } = await openProbePage();
+    const inventoryProbe = await openProbePage();
     try {
-      report.inventory = await page.evaluate((input) => window.__core64JournalProbe.measureInventory(input), { count: 1000, repeats });
+      report.inventory = await inventoryProbe.page.evaluate((input) => window.__core64JournalProbe.measureInventory(input), { count: 1000, repeats });
     } finally {
-      await context.close();
+      await inventoryProbe.context.close();
     }
   }
 
@@ -219,7 +227,7 @@ try {
 } finally {
   if (browser) await browser.close();
   if (vite) await vite.close();
-  report.summary = summarize(report);
+  report.summary = scopedOnly ? null : summarize(report);
   await mkdir(dirname(resolve(outputPath)), { recursive: true });
   await writeFile(outputFile, `${JSON.stringify(report, null, 2)}\n`);
 }
