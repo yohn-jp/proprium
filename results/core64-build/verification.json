@@ -1,0 +1,94 @@
+{
+  "schemaVersion": 1,
+  "candidateId": "C61",
+  "sourceImplementationCommit": "184c4e7994a58855b0de1cf316cb27bd988b5ece",
+  "evidenceCommitBeforeValidation": "80036ba",
+  "runnerAffinity": "taskset -c 0-3; the timed child affinity was verified as Cpus_allowed_list 0-7 during the timing cohort; validation commands were launched under taskset 0-3.",
+  "checks": [
+    {
+      "id": "frozen-install",
+      "command": "pnpm install --frozen-lockfile",
+      "status": "pass",
+      "scope": "baseline and candidate worktrees; completed before timing"
+    },
+    {
+      "id": "typecheck",
+      "command": "pnpm typecheck",
+      "status": "pass",
+      "log": "typecheck.log",
+      "startedUtc": "2026-10-20T18:13:01Z",
+      "logBytes": 1995,
+      "logSha256": "feb9f0737a5d45717a689a8503b8597ae0b388ec3340494233dd94660e0e5a6b"
+    },
+    {
+      "id": "test",
+      "command": "pnpm test",
+      "status": "pass",
+      "log": "full-test.log",
+      "startedUtc": "2026-10-20T18:13:46Z",
+      "logBytes": 51820,
+      "logSha256": "fea28ed3f76add94085ac6e080280ca82d5e1d4a004f3132ca1725351c71e46a"
+    },
+    {
+      "id": "core-build",
+      "command": "SCRIPTORIUM_PROFILE=core pnpm build",
+      "status": "pass",
+      "log": "core-build.log",
+      "startedUtc": "2026-10-20T18:16:47Z",
+      "logBytes": 3388,
+      "logSha256": "a4bca2a12cae3c618d1b0e8957ee8e3803b6aa0688d9b95073542c68bb840b46"
+    },
+    {
+      "id": "audit-core",
+      "command": "pnpm audit:core",
+      "status": "pass",
+      "detail": "128 production dependency versions scanned",
+      "log": "core-audit.log",
+      "startedUtc": "2026-10-20T18:17:07Z",
+      "logBytes": 3257,
+      "logSha256": "b4926aaaf9c2a51c388d729a342e24e792f2e7387fbc7bf201df0fe6b40d1030"
+    },
+    {
+      "id": "full-build-compatibility",
+      "command": "SCRIPTORIUM_PROFILE=full pnpm build",
+      "status": "pass",
+      "detail": "generated the Full profile with 9 modules via preserved workspace graph",
+      "log": "full-build.log",
+      "startedUtc": "2026-10-20T18:17:12Z",
+      "logBytes": 5887,
+      "logSha256": "16194b3b5b7ca3ad9b6bba24972f95f88aa12e148b5cdae15a8b03157a547e57"
+    }
+  ],
+  "testTotalsFromCommandLogs": {
+    "summaryGroups": 16,
+    "tests": 428,
+    "suites": 6,
+    "pass": 427,
+    "fail": 0,
+    "cancelled": 0,
+    "skipped": 1,
+    "todo": 0
+  },
+  "rootBuildGraphTestsInFullTestCommand": {
+    "core": true,
+    "full": true,
+    "pass": true
+  },
+  "testDiagnostics": "The test log contains MCP shutdown timeout diagnostics (50 ms drain warning); pnpm test exited 0 and every reported test summary has zero failures. No retry was needed.",
+  "fullProfile": {
+    "profile": "full",
+    "moduleCount": 9,
+    "modules": [
+      "story",
+      "nlp",
+      "diagnostics",
+      "semantic",
+      "speaker",
+      "assistant",
+      "publishing",
+      "mcp",
+      "search"
+    ]
+  },
+  "validationBatch": "No browser, OCI, CI, or unrelated acceptance commands were run."
+}

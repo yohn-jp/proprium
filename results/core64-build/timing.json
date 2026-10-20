@@ -135,13 +135,13 @@
       "@scriptorium/api"
     ]
   },
-  "validationStatusAtTiming": {
-    "focusedRootGraphTest": "Previously passed 2/2 on the unchanged implementation inputs; not rerun before measurement by instruction.",
-    "typecheck": "pending",
-    "test": "pending",
-    "canonicalCoreBuild": "timed runs above; separate canonical validation pending",
-    "auditCore": "pending",
-    "fullBuildCompatibility": "pending"
-  },
-  "note": "An initial command-label probe tried build:workspace on the baseline, where that alias does not exist; it exited before running a build and is not a timing observation. The baseline timing uses its pre-change `pnpm build` root script. Candidate build:workspace is byte-for-byte equal to baseline build and is preserved for Full compatibility."
+  "note": "An initial command-label probe tried build:workspace on the baseline, where that alias does not exist; it exited before running a build and is not a timing observation. The baseline timing uses its pre-change `pnpm build` root script. Candidate build:workspace is byte-for-byte equal to baseline build and is preserved for Full compatibility.",
+  "validationStatus": {
+    "focusedRootGraphTest": "Both root graph test cases passed within the full pnpm test command: default/explicit Core selects the selective graph, and Full keeps the workspace graph.",
+    "typecheck": "PASS; see verification.json and validation/typecheck.log.",
+    "test": "PASS; see verification.json and validation/full-test.log.",
+    "canonicalCoreBuild": "PASS; see verification.json and validation/core-build.log.",
+    "auditCore": "PASS; 128 production dependency versions scanned.",
+    "fullBuildCompatibility": "PASS; Full profile with 9 modules built through the preserved workspace graph."
+  }
 }

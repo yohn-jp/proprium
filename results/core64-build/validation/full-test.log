@@ -1,0 +1,660 @@
+$ pnpm --filter @scriptorium/contracts build && pnpm --filter @scriptorium/contracts test && pnpm --filter @scriptorium/module-runtime build && pnpm --filter @scriptorium/module-runtime test && pnpm --filter @scriptorium/migration build && pnpm --filter @scriptorium/migration test && node --test scripts/audit-runtime-deps.test.mjs scripts/runtime-package-closure.test.mjs scripts/hosted-build.test.mjs scripts/root-build.test.mjs && pnpm --filter @scriptorium/module-publishing test && pnpm --filter @scriptorium/module-mcp test && pnpm --filter @scriptorium/module-nlp build && pnpm --filter @scriptorium/module-nlp test && pnpm --filter @scriptorium/module-diagnostics build && pnpm --filter @scriptorium/module-diagnostics test && pnpm --filter @scriptorium/module-story build && pnpm --filter @scriptorium/module-story test && pnpm --filter @scriptorium/module-semantic build && pnpm --filter @scriptorium/module-semantic test && pnpm --filter @scriptorium/module-search build && pnpm --filter @scriptorium/module-search test && pnpm --filter @scriptorium/module-speaker build && pnpm --filter @scriptorium/module-speaker test && pnpm --filter @scriptorium/module-assistant build && pnpm --filter @scriptorium/module-assistant test && pnpm --filter @scriptorium/core build && pnpm --filter @scriptorium/core test && pnpm --filter @scriptorium/api test && pnpm --filter @scriptorium/app test
+$ tsc -p tsconfig.json
+$ node --import tsx --test src/*.test.ts
+✔ recovery payload retains exact operation and snapshot identity (2.139557ms)
+✔ untrusted recovery rejects traversal, duplicate writes and missing preconditions (0.613243ms)
+✔ scope guards bind unseen insertions, deletions and file revisions independent of listing order (11.983315ms)
+✔ document source keeps snapshot paths, uses revision metadata, and reports scoped deltas (6.736282ms)
+✔ document source rejects unsafe and out-of-scope snapshot paths (0.33ms)
+ℹ tests 5
+ℹ suites 0
+ℹ pass 5
+ℹ fail 0
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 368.513958
+$ tsc -p tsconfig.json
+$ node --import tsx --test src/*.test.ts
+✔ producer catalog resolves arbitrary selections through the exact module dependency closure (3.069862ms)
+✔ producer catalog rejects changed trusted identities and unknown ABI fields (0.600046ms)
+✔ producer catalog accepts resource IDs from the shared contract slug namespace (0.834329ms)
+✔ metadata resolution rejects unknown, absent, version, dependency, cycle, and capability failures without loading code (2.76864ms)
+✔ disabled modules are not imported; enabling an absent module reports redeployment (1.047932ms)
+✔ authenticated action catalogs expose only a cloned module domain job descriptor (1.499314ms)
+✔ module job descriptors reject read actions and malformed ASCII types (0.806355ms)
+✔ declared module jobs pass the exact validated action result and proposals to the host once (1.549967ms)
+✔ nested module invocation retains the host tracker and suppresses duplicate job wrappers (0.882185ms)
+✔ tracked module action receives abort cancellation and returns the cancelled result (0.792967ms)
+✔ abort while the host creates a queued record prevents the module action from starting (0.825137ms)
+✔ domain progress stays scoped to its host job through nested and overlapping invocations (0.956216ms)
+✔ domain progress rejects non-finite values and clamps finite values to the source range (1.104979ms)
+✔ cancellation during progress delivery stops the action before it continues (0.931139ms)
+✔ enabled idle modules import no heavy capability; proposals are host-issued and attached to success (1.293405ms)
+✔ per-call proposal cancellation reaches the host and prevents a late proposal result (0.595249ms)
+✔ two enabled consumers share one capability until the final module disables (0.812149ms)
+✔ module-owned capability shares one supervised worker across two consumers and exits after the last release (318.156267ms)
+✔ disabling a consumer cancels its provider-owned job and keeps the shared child until the final consumer releases (73.635924ms)
+✔ a per-call abort cancels a real nested worker while its outer action remains active (81.390156ms)
+✔ runtime module version mismatch is rejected before the worker starts (0.518021ms)
+✔ disabling a module drains its real child process and leaves author data untouched (68.207143ms)
+✔ module actions compose through namespaced host actions and owner-checked linked readers (1.173615ms)
+✔ optional capabilities do not block profile resolution and cannot activate a disabled provider (1.457452ms)
+✔ HTTP contributions are hidden until activation and public reads cannot propose; streamed calls drain on cancel (24.948935ms)
+✔ owner compute HTTP contributions can compose reads, compute, and jobs but cannot propose (53.052405ms)
+✔ public compute HTTP contribution definitions are rejected (0.82853ms)
+✔ owner compute HTTP contributions cannot use GET or HEAD (0.678769ms)
+✔ the production MCP module activates and serves tools through Streamable HTTP (991.939636ms)
+✔ module disable bounds a non-cooperative action drain and rejects late proposals (23.003017ms)
+✔ a late non-cooperative action cannot return success after disable times out (21.788247ms)
+✔ a late HTTP handler cannot return a response after module disable (21.864057ms)
+✔ composition contributions validate kind and host contexts independently of placement (1.096844ms)
+✔ child job uses isolated IPC, strips injected credentials, and exits after a matching result (62.952701ms)
+✔ one-shot lifecycle subscription awaits ordered metadata and omits request and result payloads (64.262091ms)
+✔ persistent worker requests publish successful and AbortSignal-cancelled lifecycle metadata (123.169431ms)
+✔ a non-cooperative queued listener cannot hold a short job deadline or shutdown (452.548823ms)
+✔ a non-cooperative running listener cannot hold a real one-shot child result (78.374744ms)
+✔ a non-cooperative service listener cannot hold AbortSignal cancellation or service shutdown (82.79985ms)
+✔ cancel and deadline terminate the actual child process (360.904425ms)
+✔ one-shot admission bounds child processes and queued requests, then drains on cancellation and disable (56.615589ms)
+✔ persistent service and per-service job admission are bounded and require consumer cancellation (63.71709ms)
+✔ spawn errors close one-shot and persistent worker records and release their admission slots (28.533984ms)
+✔ a timed-out unready service keeps its process slot until its resistant child exits (357.113849ms)
+✔ worker IPC enforces the shared UTF-8 input and output byte limits and identity (329.163135ms)
+ℹ tests 45
+ℹ suites 0
+ℹ pass 45
+ℹ fail 0
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 2576.330413
+$ tsc -p tsconfig.json
+$ node --import tsx --test src/*.test.ts
+✔ legacy inspection preserves scoped data, both SQLite stores, and pending Git work without source writes (1584.652628ms)
+ℹ tests 1
+ℹ suites 0
+ℹ pass 1
+ℹ fail 0
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 1851.328692
+✔ Core audit distinguishes installed optional modules from its actual production closure (475.182308ms)
+✔ composition persistence declares base and selected module readers/writers only (2.257367ms)
+✔ composition persistence rejects duplicate module selections (0.439629ms)
+✔ hosted resource catalog covers Core, worker closures, and the full shipped selection (19.947823ms)
+✔ SLSA statement has exactly the signed Runtime Base and canonical metadata subjects (1.191015ms)
+✔ SLSA construction rejects image, metadata, source digest, or revision mismatches (0.550262ms)
+✔ source must be the clean checked-out commit named by the catalog (0.275581ms)
+✔ unsigned or altered fake Sigstore bundle is rejected before it can be published (0.836366ms)
+✔ Cosign identity verification rejects versions affected by GHSA-fx35-mq7g-6g98 (0.809309ms)
+✔ default and explicit Core root builds select the existing selective profile graph (1.985693ms)
+✔ Full root builds keep the existing workspace graph (0.262154ms)
+✔ hosted pruning retains only the actual transitive package closure and removes excluded native packages (102.92033ms)
+ℹ tests 12
+ℹ suites 0
+ℹ pass 12
+ℹ fail 0
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 567.991726
+$ node --import tsx --test src/*.test.ts
+✔ source plaintext conversion and vertical print keep Japanese text and scene order (2.368612ms)
+✔ real EPUB ZIP contains EPUB3 manifest, Japanese XHTML, appendix, and binary cover bytes (56.027057ms)
+✔ EPUB bible reader keeps source flat character entities and typed lore/location YAML (1.363166ms)
+✔ episode edits propose metadata operations and preserve unknown YAML and publication dates (5.803775ms)
+✔ a share activates only on the remote published snapshot and revocation is checked on every public read (33.78114ms)
+✔ publishing migration hook validates the exact-byte episode map and selected hashed share records without duplicate writes (13.709798ms)
+✔ publishing reactivation proposes retained episode bytes and safely merges hashed grants (4.701662ms)
+✔ publishing reactivation defers to live stores and does nothing while disabled (1.011957ms)
+ℹ tests 8
+ℹ suites 0
+ℹ pass 8
+ℹ fail 0
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 1576.055143
+$ node --import tsx --test src/*.test.ts
+✔ stdio API client uses bearer actions and host-sourced proposals only (30.565743ms)
+✔ stdio API client can bind a requested owner project (0.386705ms)
+✔ stdio API client forwards MCP cancellation to each fetch (1.223114ms)
+✔ writing context preserves source identity, bounds, and selection provenance (33.965565ms)
+✔ writing context truncates Unicode by character and validates selection identity (1.216705ms)
+✔ SDK Streamable HTTP transport lists and invokes tools through the host action context (48.153062ms)
+✔ reload delegates to Story's pinned canonical snapshot materializer (8.12071ms)
+✔ MCP refuses action names that could approve or publish author changes (6.840111ms)
+✔ compute_cooccurrence maps to the Story co-occurrence action without extra source arguments (10.827113ms)
+✔ consistency and continuity use their exact project-level diagnostics actions (16.461231ms)
+✔ submit_change_set returns a source ChangeSetRecord with its source ID (11.352852ms)
+✔ ChangeSet readback preserves approved IDs while selected checkpoints are pending (11.747507ms)
+✔ submit_change_set maps source IDs outside Core's proposal ID alphabet and length (5.943752ms)
+✔ HTTP MCP session rejects cross-project tool calls with a machine scope error (5.482003ms)
+✔ SDK cancellation reaches an in-flight HTTP host action (57.831161ms)
+✔ submit_change_set rejects source records that are not proposed before host invocation (5.260392ms)
+✔ source tools fail with a module availability error when their producer is not enabled (3.670758ms)
+✔ hybrid search stays unavailable while full diagnostics invoke the canonical scene aggregate (4.308954ms)
+ℹ tests 18
+ℹ suites 0
+ℹ pass 18
+ℹ fail 0
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 1340.28191
+$ tsc -p tsconfig.json
+$ node --import tsx --test src/*.test.ts
+✔ candidate aggregation preserves source reading, per-entity occurrence count, and known-name exclusions (2.019451ms)
+✔ term variants preserve known-term first match and choose the highest-frequency cluster representative (0.343582ms)
+✔ search term expansion trims literals and adds only known source-style variants (0.239266ms)
+✔ source LLM reactions are external features with deny-by-default and explicit proposal consent (2.951189ms)
+✔ source-approved approximation counts CJK code points and conservatively rounds other text (1.547124ms)
+✔ model selection follows explicit model, tokenizer environment, then LLM environment (0.589157ms)
+✔ token count batches enforce per-text, aggregate byte, and item bounds (5.106391ms)
+ℹ tests 7
+ℹ suites 0
+ℹ pass 7
+ℹ fail 0
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 420.180327
+$ tsc -p tsconfig.json
+$ node --import tsx --test src/*.test.ts
+✔ public NLP and diagnostics module imports do not load Lindera in the parent process (283.103328ms)
+✔ production modules lazily run the real Lindera child and preserve snapshot-derived NLP and diagnostics behavior (2742.858571ms)
+✔ source manuscript formatter proposes a frontmatter-preserving edit without an external provider (13.500683ms)
+✔ corpus synonym suggestions acquire the optional snapshot-indexed provider and keep model identity (554.545925ms)
+✔ public actions read namespaced dictionaries/settings and lint changes remain proposals (1564.731832ms)
+ℹ tests 5
+ℹ suites 0
+ℹ pass 5
+ℹ fail 0
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 5415.482577
+$ tsc -p tsconfig.json
+$ node --import tsx --test src/*.test.ts src/domain/*.test.ts src/migration/*.test.ts
+✔ entity reads expose source revision and preserve nested notes and character voice (28.459226ms)
+✔ snapshot materialization reads each pinned Story snapshot without proposing writes (23.495714ms)
+✔ graph query accepts the browser string-array filter and rejects scalar filters (14.256817ms)
+✔ entity updates validate source revisions and return a reviewable Core proposal (20.768814ms)
+✔ entity relationship proposals pin referenced entity revisions and participate in thread lifecycle reads (14.959947ms)
+✔ Zukan suggestions list by status and approve/reject as snapshot-bound proposals (10.467822ms)
+✔ Zukan creation validates manuscript provenance and proposes a stable pending JSONL row (8.799315ms)
+✔ Zukan retries across an unrelated snapshot return the stored status without rebasing, while a new operation ID gets a new proposal identity (18.957181ms)
+✔ Zukan creation rejects stale manuscript quotes and validates sandbox source ranges (6.419779ms)
+✔ manual note edits stale matching pending Zukan rows in the same Story proposal (5.244663ms)
+✔ scene creation inserts by position in one proposal and includes every changed file precondition (18.879067ms)
+✔ series bindings use stable repository identity and preserve unknown settings (6.665424ms)
+✔ suggested tags do not allocate NLP at module load and report optional capability absence (2.010369ms)
+✔ state-proposal lifecycle uses the source manuscript FNV hash (1.85464ms)
+✔ NarrativeChangeSet preserves all nine source operation kinds in one identity-bound Core proposal (42.568517ms)
+✔ state.append-event rejects stale or mismatched source proposals (23.632139ms)
+✔ co-occurrence action returns source Jaccard/PMI and accepts scene scope (3.113172ms)
+✔ reader model action derives chapter disclosures and knowledge checks from the selected snapshot (2.496759ms)
+✔ NarrativeChangeSet retries return the stored proposal and reject changed source meaning (4.332195ms)
+✔ NarrativeChangeSet refuses to reconstruct an incomplete recovered Core proposal (3.504043ms)
+✔ NarrativeChangeSet preserves unrestricted source IDs and maps unsafe IDs to Core-safe proposal IDs (3.091067ms)
+✔ co-occurrence uses canonical scene.appears relations, deduplicates, and calculates source Jaccard/PMI (2.095285ms)
+✔ scope recalculates the denominator and relation gaps against scoped appearances (2.999651ms)
+✔ backlinks retain source relation order and omit missing source entities (1.639101ms)
+✔ appearances aggregate relation kinds by scene and sort by scene order (1.638501ms)
+✔ scene context resolves POV, raw location, relation collections and manuscript path (0.700128ms)
+✔ volume tree and scene-location chronology use volume/chapter/scene order (10.066448ms)
+✔ thread overview combines both planted relation directions and deduplicates by scene (0.521496ms)
+✔ graph defaults omit scene nodes and location map adds deduplicated reciprocal travel edges (1.005485ms)
+✔ series overlay gives work entities precedence and deduplicates relation identity (2.293521ms)
+✔ series overlay with an empty bible preserves the work view (0.155329ms)
+✔ thread lifecycle selects plant/payoff order and treats advances and mentions as recalls (3.235394ms)
+✔ point-in-time status keeps source labels and omits threads not planted yet (8.991651ms)
+✔ lifecycle warnings honor abandonment, staleness and final-volume resolution guidance (0.467986ms)
+✔ embedding mentions are added only for scenes without a keyword hit (0.511794ms)
+✔ Japanese number and time extraction retain source surfaces and offsets (3.791396ms)
+✔ tokenizer recovers split relative expressions while preserving source spans (0.585807ms)
+✔ timeline stays unknown without relative time and marks reversals from explicit deltas (0.390372ms)
+✔ timeline entries carry caller snapshot, scene context and confidence labels (0.65132ms)
+✔ world-state projection folds location, acquaintance, item ownership and confirmed raw events (9.720685ms)
+✔ state-event ordering and draft status prevent unconfirmed changes from becoming objective (0.450883ms)
+✔ reader disclosure uses first story-order mention, longest registered name, and summary changes (1.184418ms)
+✔ reader/character knowledge diff reports explanation gaps and dramatic irony (0.567305ms)
+✔ thread forget risk is source-scored from between-scene disclosures (0.507893ms)
+✔ imports canonical YAML and Markdown byte-for-byte at their source paths (11.053913ms)
+✔ preserves source Story files opaquely while the module is disabled (0.600566ms)
+✔ imports committed Story scratch notes and binary attachments at their original paths (1.136925ms)
+✔ retains committed scratch notes and binary attachments at their original paths while Story is disabled (0.878297ms)
+✔ reactivates opaque scratch, committed change-set history, and local snapshots byte-for-byte (2.567582ms)
+✔ uses nested changeSet IDs and supports top-level IDs when restoring committed history (0.523558ms)
+✔ defers matching live change-set and snapshot sources to the filesystem importer (0.489354ms)
+✔ reports changed live change-set and snapshot sources as conflicts (0.590765ms)
+✔ does not duplicate a live scratch import when the retained copy has the same bytes (0.35664ms)
+✔ restores opaque Story documents to canonical paths after re-enabling the module (1.197131ms)
+✔ blocks an unreadable legacy symlink path while preserving valid siblings and revision guards (1.800698ms)
+✔ blocks an unsafe canonical destination while preserving archived siblings and revision guards (0.467451ms)
+✔ reports a canonical target conflict without overwriting it (0.27283ms)
+✔ maps legacy series project IDs to stable repository IDs and preserves source and unknown fields (0.753183ms)
+✔ retains unresolved series IDs with an explicit author-review marker (0.441849ms)
+✔ preserves disabled series registry bytes in Story's opaque legacy namespace (0.243927ms)
+✔ converts source workflow tables to Story JSONL with decisions, unknown fields, and provenance intact (1.665283ms)
+✔ withholds divergent workflow IDs and emits explicit local review recovery (0.369141ms)
+ℹ tests 62
+ℹ suites 0
+ℹ pass 62
+ℹ fail 0
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 1234.570367
+$ tsc -p tsconfig.json
+$ node --import tsx --test src/*.test.ts
+✔ semantic reactivation restores opaque dismissal decisions exactly and reports conflicts (1.598361ms)
+✔ semantic reactivation leaves disabled-module legacy data unreadable (0.129197ms)
+✔ source sentence rows preserve embeddable types, body/description/notes order, and trimmed indexes (10.006051ms)
+✔ snapshot lexical projection supplies source field weighting and classic RRF ranks (1.106972ms)
+✔ semantic search caps vector overfetch at the provider's 100-hit contract (1.813655ms)
+✔ term expansion uses NLP rules and preserves the source short-token LIKE behavior (0.308392ms)
+✔ snapshot lexical notes follow source normalization and do not index malformed legacy strings (0.40229ms)
+✔ semantic reranker setting is returned as a revision-guarded author proposal (0.583185ms)
+✔ contradiction dismissal binds Bible and plot source scopes to its proposal (37.641166ms)
+✔ term clustering retains source reading, edit distance, canonical ordering, and opt-in semantic edges (0.869578ms)
+✔ mention groups use the source name trie and only retain prose entity mentions (0.536287ms)
+✔ source rule contradictions preserve pre-scene ownership boundaries and validated empty-string effects (0.290693ms)
+﹣ default ModuleRuntime composes semantic status, real CPU rebuild/search/rerank, and cache recovery (0.126597ms) # SKIP
+ℹ tests 13
+ℹ suites 0
+ℹ pass 12
+ℹ fail 0
+ℹ cancelled 0
+ℹ skipped 1
+ℹ todo 0
+ℹ duration_ms 467.967431
+$ tsc -p tsconfig.json
+$ node --import tsx --test src/*.test.ts
+✔ lexical search does not activate optional NLP or Semantic providers unless requested (5.235751ms)
+✔ terminology changes are emitted only as revision-guarded dictionary proposals (1.60637ms)
+✔ module disposal aborts and invalidates active index work (0.766691ms)
+✔ index cache filters project data to canonical textual document roots (9.752506ms)
+✔ unchanged snapshots reuse the index and changed revisions update and remove only their entries (0.956663ms)
+✔ overlay and repository identity isolate index cache entries (2.526939ms)
+✔ failed refresh never projects an older index as the requested snapshot (0.990158ms)
+✔ aborted indexing does not cache a partial snapshot (0.826682ms)
+✔ disabled module disposal cannot let an unfinished read repopulate the cache (1.599072ms)
+✔ source responses outside an explicitly requested root are rejected (0.49073ms)
+✔ a new request after cancellation starts fresh work instead of joining an aborted build (0.409541ms)
+✔ cancelling one shared requester leaves another active request on the same snapshot intact (1.721655ms)
+✔ document sources must bind to the exact requested snapshot including checkpoint overlay (0.602314ms)
+✔ lexical search ranks exact names and full text, applies scope and result bounds (10.582087ms)
+✔ Japanese full-text tokens retain useful character pairs and optional word hints (0.704699ms)
+✔ exact and prefix terminology lookups return only available scoped targets (0.485431ms)
+✔ term resolver preserves UTF-16 offsets across emoji and compatibility normalization (11.155608ms)
+✔ shared aliases are inspectable but never become a guessed navigation link (0.397944ms)
+✔ longest overlapping unique alias wins and unavailable targets stay plain text (0.286159ms)
+✔ registry parser rejects unsafe targets, duplicate IDs, and malformed aliases (0.84088ms)
+ℹ tests 20
+ℹ suites 0
+ℹ pass 20
+ℹ fail 0
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 586.927831
+$ tsc -p tsconfig.json
+$ node --import tsx --test src/*.test.ts
+✔ speaker reactivation restores retained corrections and model bytes with stable absent-only proposals (3.298287ms)
+✔ speaker reactivation reports unchanged and conflicting canonical files without overwriting (0.336317ms)
+✔ speaker reactivation defers to generic import while source files remain and does nothing while disabled (0.262135ms)
+✔ loading the server entry does not install worker IPC listeners in the host (490.562725ms)
+✔ evaluation and retraining actions advertise their source job types (1.343805ms)
+✔ speaker actions run real CPU attribution, propose corrections/model adoption, and reload from the reviewed snapshot (25855.045189ms)
+ℹ tests 6
+ℹ suites 0
+ℹ pass 6
+ℹ fail 0
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 26970.684422
+$ tsc -p tsconfig.json && node scripts/copy-prompts.mjs
+$ node --import tsx --test src/*.test.ts
+✔ module activation and provider health stay idle without provider or capabilities (7.556914ms)
+✔ default-denied external consent stops generation before usage lease or provider setup (19.395041ms)
+✔ provider NONE keeps source-grounded local rewrite context available and reports typed unavailability (36.10042ms)
+✔ speaker attribution uses the explicitly selected live editor text and preserves its separate remote base (138.622953ms)
+✔ continuation uses only a matching live editor draft after checking its remote scene base (23.754812ms)
+APICallError [AI_APICallError]: Service Unavailable
+    at <anonymous> (/data/scriptorium-core64-build-candidate/node_modules/.pnpm/@ai-sdk+provider-utils@4.0.40_zod@3.25.76/node_modules/@ai-sdk/provider-utils/src/response-handler.ts:88:16)
+    at process.processTicksAndRejections (node:internal/process/task_queues:104:5)
+    at async postToApi (/data/scriptorium-core64-build-candidate/node_modules/.pnpm/@ai-sdk+provider-utils@4.0.40_zod@3.25.76/node_modules/@ai-sdk/provider-utils/src/post-to-api.ts:118:28)
+    at async Proxy.doStream (/data/scriptorium-core64-build-candidate/node_modules/.pnpm/@ai-sdk+openai-compatible@2.0.62_zod@3.25.76/node_modules/@ai-sdk/openai-compatible/src/chat/openai-compatible-chat-language-model.ts:395:50)
+    at async execute (/data/scriptorium-core64-build-candidate/node_modules/.pnpm/ai@7.0.31_zod@3.25.76/node_modules/ai/src/generate-text/stream-language-model-call.ts:351:7)
+    at async runWithTracingChannelSpan (/data/scriptorium-core64-build-candidate/node_modules/.pnpm/ai@7.0.31_zod@3.25.76/node_modules/ai/src/telemetry/tracing-channel-publisher.ts:76:12)
+    at async executeLanguageModelCall (/data/scriptorium-core64-build-candidate/node_modules/.pnpm/ai@7.0.31_zod@3.25.76/node_modules/ai/src/telemetry/create-telemetry-dispatcher.ts:184:14)
+    at async streamLanguageModelCall (/data/scriptorium-core64-build-candidate/node_modules/.pnpm/ai@7.0.31_zod@3.25.76/node_modules/ai/src/generate-text/stream-language-model-call.ts:348:7)
+    at async retryWithExponentialBackoffInternal (/data/scriptorium-core64-build-candidate/node_modules/.pnpm/@ai-sdk+provider-utils@5.0.11_zod@3.25.76/node_modules/@ai-sdk/provider-utils/src/retry-with-exponential-backoff.ts:87:12)
+    at async streamStep (/data/scriptorium-core64-build-candidate/node_modules/.pnpm/ai@7.0.31_zod@3.25.76/node_modules/ai/src/generate-text/stream-text.ts:1901:15) {
+  cause: undefined,
+  url: 'http://127.0.0.1:45715/v1/chat/completions',
+  requestBodyValues: {
+    model: 'deepseek-ai/DeepSeek-V4-Pro',
+    user: undefined,
+    max_tokens: 1024,
+    temperature: 0.35,
+    top_p: 0.8,
+    frequency_penalty: undefined,
+    presence_penalty: undefined,
+    response_format: undefined,
+    stop: undefined,
+    seed: undefined,
+    repetition_penalty: 1.05,
+    reasoning_effort: undefined,
+    verbosity: undefined,
+    messages: [ [Object] ],
+    tools: undefined,
+    tool_choice: undefined,
+    stream: true,
+    stream_options: undefined
+  },
+  statusCode: 503,
+  responseHeaders: {
+    connection: 'keep-alive',
+    'content-type': 'text/plain',
+    date: 'Tue, 20 Oct 2026 18:14:49 GMT',
+    'keep-alive': 'timeout=5',
+    'transfer-encoding': 'chunked'
+  },
+  responseBody: 'local test provider unavailable',
+  isRetryable: true,
+  data: undefined,
+  Symbol(vercel.ai.error): true,
+  Symbol(vercel.ai.error.AI_APICallError): true
+}
+✔ rewrite parser follows source candidate normalization, keeps same-scene context, and falls back after a recorded provider failure (32.829418ms)
+✔ setting QA streams source-compatible global scene and hybrid Bible searches with bound citations (101.757736ms)
+✔ aspect review runs the deterministic local source implementation without consent or model access (3.719083ms)
+✔ implemented prompt previews return their actual prompts locally without consent, usage, or proposal effects (36.416618ms)
+✔ dialogue topic seeds retain manual relations and related links while excluding automatic and non-related links (2.155778ms)
+✔ rewrite proposal preserves all candidates until the author chooses one and pins the manuscript selection (1.943766ms)
+✔ chapter summary proposes fresh child and parent summaries in one Core operation (26.719967ms)
+✔ manuscript and sandbox Zukan suggestions are grounded before Story receives proposals (27.958263ms)
+✔ settings changes become a review proposal with snapshot preconditions (1.756633ms)
+✔ usage history combines preserved JSONL and host-owned events without rewriting legacy bytes (0.96374ms)
+✔ continuation context defaults to the trailing eight sentences and a 12,000 budget (1.961865ms)
+✔ continuation retrieval query uses the last three sentences and trims surrounding whitespace (0.202821ms)
+✔ retrieval adapter keeps best-first top five and follows the public hit fallbacks (0.699281ms)
+✔ chapter summary and up to five retrieval hits follow source context priority (0.399746ms)
+✔ budget trims oldest recent sentences before dropping lower-priority sections (0.168451ms)
+✔ k is bounded to the source API range and zero omits recent sentences (0.229197ms)
+✔ approximate fallback is explicitly labeled and is not presented as model-token measurement (0.13478ms)
+✔ invalid budgets and injected counter results fail instead of bypassing the cap (0.405542ms)
+✔ builds source-shaped voice, fingerprint, notes, blank headings, and high-confidence examples (8.111425ms)
+✔ supports missing public speaker data and rejects data for a different character (0.219905ms)
+✔ clips voice and notes excerpts to source bounds and accepts legacy notes (0.83626ms)
+✔ Assistant reactivation restores exact settings and usage bytes, including unknown fields (1.790316ms)
+✔ Assistant reactivation reports matching files and withholds conflicts (0.300434ms)
+✔ Assistant reactivation defers when disabled, absent, or still owned by the source importer (0.239888ms)
+✔ provider selection defaults to NONE and does not perform a network request (1.571309ms)
+✔ source feature presets resolve model purpose and sampling without exposing secrets (1.270575ms)
+✔ project preset settings select a model while provider credentials remain environment-only (0.642332ms)
+✔ OpenAI-compatible SDK streams deltas with environment auth and observes cancellation (395.429944ms)
+✔ search tools call only their read capabilities and keep bounded source citations (2.373383ms)
+✔ world-state output filters per entity and caps all returned records (1.078138ms)
+✔ summary output is bounded and an absent summary is an empty read (0.467284ms)
+✔ failures return bounded generic stubs and tool logs contain no thrown secret (0.307326ms)
+✔ buildRewriteLocalSuggestions splits at the first source-priority connective (1.76073ms)
+✔ buildRewriteLocalSuggestions enforces source sentence-split minimums (0.249077ms)
+✔ buildRewriteLocalSuggestions prefers the first corpus action only for recognized tell expressions (0.144971ms)
+✔ buildRewriteLocalSuggestions retains every source tell-to-show replacement (0.336101ms)
+✔ buildRewriteLocalSuggestions preserves source replacement order, punctuation, and whitespace semantics (0.182238ms)
+ℹ tests 42
+ℹ suites 0
+ℹ pass 42
+ℹ fail 0
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 2003.049917
+$ tsc -b tsconfig.build.json
+$ node --import tsx --test src/*.test.ts
+✔ registers a Git project, preserves frontmatter, rejects stale saves, and synchronizes history (3907.702316ms)
+✔ local durability census reuses only a recent remote observation and catches later checkpoints without fetching (1211.154988ms)
+✔ local durability census rejects stale observations and changed remote refs without refreshing (400.12393ms)
+✔ a fresh HEAD probe skips Git fetch when status sees the tracked commit unchanged (1455.104953ms)
+✔ reports divergent local and remote histories without replacing the local draft (1712.248392ms)
+✔ preserves history records with empty commit subjects (301.711849ms)
+✔ serializes simultaneous stale-revision saves through one CoreStore (1178.048696ms)
+✔ serializes saves from separate CoreStore instances sharing one data directory (1031.332135ms)
+✔ loads a truly empty remote and protects project paths from traversal and symlinks (496.786982ms)
+✔ creates a missing manuscript link and its nested Markdown file on first save (1068.074926ms)
+✔ uses literal manuscript paths for commits so wildcard names cannot capture unrelated edits (827.423225ms)
+✔ rejects an invalid project ID before creating a project lock path (1.767891ms)
+✔ rejects manuscript paths that escape the project or pass through a symlink (747.822288ms)
+✔ remembers when an initially empty remote acquires a branch (732.776341ms)
+✔ rejects .git manuscript paths without corrupting an active dotted branch ref (548.631605ms)
+✔ requires a GitHub HTTPS URL in production mode (1.700493ms)
+✔ hosted CoreStore has no shared-token or local-remote fallback and rejects unassigned repositories before network access (1.734042ms)
+✔ hosted clones omit remote tags but keep manually created tags unsafe (1150.113554ms)
+✔ search and writing statistics read one pinned remote snapshot (5306.150456ms)
+✔ hierarchy grouping preserves order and fallback metadata while rejecting malformed YAML (872.274816ms)
+✔ lists byte-derived revisions from a pinned snapshot while batching duplicate and binary blobs (1081.504667ms)
+✔ retains every request revision after the persistent blob cache reaches its limit (12348.178407ms)
+✔ bounds revision batches by object bytes and reads one oversized blob separately (1738.147078ms)
+✔ registered repository identity is a defensive registry-only read after the checkout and remote disappear (299.056635ms)
+✔ manuscript snapshots enumerate and read exact documents at a pinned reachable commit (861.562263ms)
+✔ read snapshots stay local after observation expiry, and only explicit observe fetches remote changes (1340.792542ms)
+✔ local scene and tree reads survive a restart while GitHub is unavailable (715.668303ms)
+✔ commit-keyed hierarchy index refreshes after an explicit remote observation (905.976702ms)
+✔ Core hierarchy builders create, reorder, restore, and delete only through approved operations (8862.163207ms)
+✔ stale chapter deletion is rejected when the remote hierarchy gains a child (1063.033489ms)
+✔ reconcile retains a structure checkpoint as conflicted when remote hierarchy membership changed (1480.975463ms)
+✔ same-snapshot hierarchy creations with a duplicate global ID cannot both checkpoint (2703.563591ms)
+✔ Core compensating operations restore exact prior binary bytes from the checkpoint parent (2996.609391ms)
+✔ checkpoints require approval, replay idempotently, and survive a clone from the remote receipt (2623.508964ms)
+✔ a browser journal can restore an unpublished checkpoint after the Core clone is lost (2271.703144ms)
+✔ disjoint remote changes replay as an explicit overlay and publish without merging prose (1982.037497ms)
+✔ local durability recognizes confirmed checkpoints and replay receipts while rejecting unknown local refs (4305.580213ms)
+✔ local durability does not hide a manual parent of an acknowledged replay checkpoint (3209.012056ms)
+✔ publication reports only unacknowledged operations across successive checkpoint batches (4094.788861ms)
+✔ deleted publication metadata cannot release a batch ID for different operations (4227.977638ms)
+✔ same-file remote updates remain conflicts while the local checkpoint remains readable (1873.177649ms)
+✔ fresh status detects a changed repository default branch before mutation (342.211127ms)
+✔ detach removes only a clean project clone and leaves GitHub untouched (448.490763ms)
+✔ detach preserves staged, untracked, pending checkpoint, and local proposal data (1365.482947ms)
+✔ detach refuses a clean local-only Git commit without removing it (490.324553ms)
+✔ detach refuses proposals that remain only in local recovery state (700.27071ms)
+✔ new registration rejects an explicit non-default branch without changing repository or registry state (302.544205ms)
+✔ legacy non-default registrations pause observation and preserve dirty clones during reconstruction (728.396167ms)
+✔ an explicit reconstruction safely rebinds a clean legacy checkout to the current default (936.821935ms)
+✔ reconstruction refuses to discard a clean local draft branch (435.845878ms)
+✔ reconstruction refuses to discard a saved stash (443.813475ms)
+✔ reconstruction verifies the repository default branch before replacing a clean clone (834.828117ms)
+✔ reconstruction can recover a lost clean clone but refuses a local proposal journal (744.648617ms)
+✔ checkpoint rejects a semantic read scope changed after author approval (1083.536574ms)
+✔ reconcile preserves a checkpoint conflict when its semantic read scope changes remotely (1422.268669ms)
+✔ semantic read scopes allow ordered virtual proposal operations and reject the reverse order (2573.131901ms)
+✔ proposal scopes reject a future remote digest that differs from the ordered virtual state (941.884159ms)
+✔ author approval revalidates proposal scopes from the pinned snapshot after journal recovery (820.460459ms)
+✔ a non-fast-forward push race retries from the new remote head (2904.668876ms)
+✔ a lost push response is confirmed from the fetched publication ancestor (1552.499593ms)
+✔ a rejected receive hook leaves the checkpoint pending and unacknowledged (2430.633756ms)
+✔ author approval binds to the exact operation payload (909.419422ms)
+✔ author proposal review exposes defensive copies and durable checkpoint status (1013.338567ms)
+✔ concurrent proposal ID reuse rejects changed payloads and preserves approval on exact retry (786.72504ms)
+✔ pending proposals survive a CoreStore process restart through the local journal (507.600211ms)
+✔ historical metadata scans batch immutable blobs and reuse their bounded commit cache (3440.61222ms)
+✔ partial proposal checkpoints persist only accepted payload and reconstruct its safe binding (2352.483158ms)
+✔ a complete accepted proposal payload is persisted only after every operation is checkpointed (2645.784922ms)
+✔ proposal status counts approved and checkpointed operations only once (1439.986974ms)
+✔ approval is rejected when the proposal's remote snapshot has changed (873.951307ms)
+✔ scene snapshot exposes full documents, preserved YAML, and absent-file preconditions (666.118109ms)
+✔ binary operation writes preserve exact bytes in the workspace and a replacement clone (1608.067973ms)
+✔ checkpoints preserve unrelated staged and untracked project files (781.676443ms)
+✔ scratch Markdown and attachments use the generic multi-file checkpoint queue (1638.079216ms)
+✔ generic operations cannot replace Core authority metadata but may write module metadata (644.292986ms)
+✔ reachable Git history keeps operation IDs bound after authority metadata is deleted (1819.040506ms)
+✔ a clean checkpoint queue advances with the fetched remote before the next edit (3758.966476ms)
+ℹ tests 77
+ℹ suites 0
+ℹ pass 77
+ℹ fail 0
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 92642.628898
+$ pnpm run build && node --test dist/*.test.js
+$ tsc -p tsconfig.json
+✔ hosted access grants bind issuer, audience, repository, instance, epoch and permission (31.02104ms)
+✔ publication authorization exchanges the verified user grant for the existing signed receipt (3.057826ms)
+✔ publication rechecks current Gateway authorization and rejects a receipt with a stale author revision (3.186819ms)
+✔ broker provider rereads runtime identity and asks the assigned Gateway for read and write credentials (15.710808ms)
+✔ broker refuses a different repository binding before contacting the credential endpoint (3.235216ms)
+✔ broker refuses a renewed runtime proof from an old epoch before issuing a GitHub credential (4.696034ms)
+▶ hosted runtime platform contract
+  ✔ parses only a structured immutable assignment and quiesce request (2.003386ms)
+  ✔ binds private controls to assignment, operation, payload and lifetime (0.641764ms)
+  ✔ reports the exact remote metadata format pairs only after a complete scan (6.382438ms)
+  ✔ normalizes the empty Core remote sentinel and verifies a complete empty scan (0.189889ms)
+  ✔ classifies supported module-owned formats and fails closed on unknown paths or versions (0.740758ms)
+  ✔ declares the actual hosted listener and quiesce shutdown action (0.245486ms)
+✔ hosted runtime platform contract (11.305459ms)
+▶ RecentActivityStore
+  ✔ keeps per-device cursors private, owner/repository scoped, and durable across store instances (42.290401ms)
+  ✔ archives exact canonical bytes and adopts only explicitly mapped rows without regressing live cursors (43.53883ms)
+  ✔ uses the root alias when canonical is absent and imports both archived sources by their cursor timestamps (33.600094ms)
+  ✔ archives equal-time conflicting aliases and blocks adoption (17.164926ms)
+✔ RecentActivityStore (137.868478ms)
+▶ RecentActivityStore
+  ✔ keeps per-device cursors private, owner/repository scoped, and durable across store instances (34.728983ms)
+  ✔ archives exact canonical bytes and adopts only explicitly mapped rows without regressing live cursors (29.258215ms)
+  ✔ uses the root alias when canonical is absent and imports both archived sources by their cursor timestamps (43.676647ms)
+  ✔ archives equal-time conflicting aliases and blocks adoption (15.99165ms)
+✔ RecentActivityStore (124.927547ms)
+▶ hosted runtime platform contract
+  ✔ parses only a structured immutable assignment and quiesce request (0.8721ms)
+  ✔ binds private controls to assignment, operation, payload and lifetime (0.304965ms)
+  ✔ reports the exact remote metadata format pairs only after a complete scan (1.050879ms)
+  ✔ normalizes the empty Core remote sentinel and verifies a complete empty scan (0.17478ms)
+  ✔ classifies supported module-owned formats and fails closed on unknown paths or versions (0.569934ms)
+  ✔ declares the actual hosted listener and quiesce shutdown action (0.206076ms)
+✔ hosted runtime platform contract (3.559788ms)
+Scriptorium is shutting down with 1 local checkpoint(s) pending; no publish was attempted.
+▶ Scriptorium HTTP boundary
+  ✔ binds hosted API access and signed lifecycle controls to one repository and runtime epoch (282.249348ms)
+  ✔ keeps a quiesce census unverified when a worker job starts and finishes during its local scan, then permits a stable retry (33.230856ms)
+  ✔ safely quiesces an untouched empty remote using the lifecycle request property order (15.401618ms)
+Scriptorium could not determine whether local checkpoints remain pending during shutdown.
+  ✔ keeps health public, protects project data, and serves the app shell (57.39606ms)
+  ✔ stores bounded immutable model usage with complete paginated history and no symlink traversal (33.184161ms)
+  ✔ stores only bounded worker lifecycle metadata and durable completion inbox state (19.352061ms)
+  ✔ retains exact declared domain action data and machine errors across host-history reopen (47.489407ms)
+  ✔ tracks exact source job results through direct actions and nested HTTP MCP invokes (92.912251ms)
+Scriptorium could not determine whether local checkpoints remain pending during shutdown.
+  ✔ archives exact legacy jobs outside Core data and exposes only explicitly mapped owner history (39.116075ms)
+  ✔ publishes real supervised worker jobs through owner-only history routes and SSE (73.549391ms)
+  ✔ propagates a disconnected owner action to a real running worker and records cancellation (4068.236031ms)
+  ✔ wires model usage lazily into the host and retains it after Core data-root deletion and reconstruction (703.701999ms)
+Scriptorium could not determine whether local checkpoints remain pending during shutdown.
+  ✔ uses an HttpOnly same-site session and enforces same-origin writes (17.473315ms)
+Scriptorium could not determine whether local checkpoints remain pending during shutdown.
+  ✔ marks a session cookie Secure when HTTPS is asserted by a trusted proxy (5.025393ms)
+  ✔ rejects short access tokens before opening a listener (0.295593ms)
+Scriptorium could not determine whether local checkpoints remain pending during shutdown.
+  ✔ serves immutable runtime metadata publicly in standalone mode (4.072835ms)
+  ✔ exposes the source Core read surface through pinned routes and composed host actions (24.979016ms)
+  ✔ assigns proposal source at the host and keeps approval exclusive to same-origin owner sessions (9.625438ms)
+  ✔ restores a partial MCP proposal through an exact owner retry after Core data loss (2314.712299ms)
+  ✔ streams owner-scoped events only for actual manual sync outcomes and closes streams on shutdown (10.827982ms)
+Scriptorium could not determine whether local checkpoints remain pending during shutdown.
+  ✔ routes project reconstruction and detachment only through the guarded Core ports (12.932789ms)
+  ✔ keeps the real Core clone unchanged on URL mismatch and honors its detach guard (752.462191ms)
+  ✔ allows bearer compute under runtime effect limits and host-assigns MCP proposal source (18.005693ms)
+  ✔ passes public module requests through the registered relative route with a fresh remote reader (11.89668ms)
+Scriptorium module runtime shutdown failed ModuleRuntimeError: Module mcp did not drain within 50 ms
+    at file:///data/scriptorium-core64-build-candidate/packages/module-runtime/dist/module-runtime.js:953:33
+    at async ModuleRuntime.shutdown (file:///data/scriptorium-core64-build-candidate/packages/module-runtime/dist/module-runtime.js:769:17) {
+  code: 'module_drain_timeout',
+  retryable: true
+}
+Scriptorium API shutdown exceeded 5000 ms; remaining HTTP connections were closed.
+Scriptorium could not determine whether local checkpoints remain pending during shutdown.
+  ✔ bounds shutdown when an in-flight module handler ignores cancellation (5006.045031ms)
+  ✔ stores scratch text and bounded attachments only through Core proposal/checkpoint operations (7.537141ms)
+  ✔ passes a large canonical base64 attachment through the bounded validator unchanged (305.455498ms)
+  ✔ rejects malformed large base64 attachments before calling Core (136.165576ms)
+  ✔ rejects an attachment one byte over the raw cap before calling Core (181.181374ms)
+Scriptorium could not determine whether local checkpoints remain pending during shutdown.
+Scriptorium could not determine whether local checkpoints remain pending during shutdown.
+  ✔ stores project recent activity for cookie owners across API restarts and rejects bearer or cross-origin writes (36.88232ms)
+✔ Scriptorium HTTP boundary (14323.409217ms)
+ℹ tests 56
+ℹ suites 5
+ℹ pass 56
+ℹ fail 0
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 15116.213386
+$ node --import tsx --test 'src/**/*.test.ts'
+✔ concurrent expired Hosted requests share the rotating refresh exchange (25.351523ms)
+✔ scene views use one pinned request for remote and checkpoint content (0.751617ms)
+✔ module invocations bind the exact repository snapshot including the local checkpoint overlay (1.640047ms)
+✔ application paths retain resource identity when switching shells (1.873698ms)
+✔ explicit UI preference is read and remembered without selecting from paths (0.302406ms)
+✔ text is recoverable only when the current record represents the editor (0.881034ms)
+✔ a locked pending editor may flush its canonical placeholder without replacing a checkpointed entry (0.145906ms)
+✔ only an unchanged exact operation generation is cleared by a confirmed receipt (0.231551ms)
+✔ the editor is writable only after its selected scene recovery is ready (1.436877ms)
+✔ a recovered editor remains writable only for a background refresh of its current scene identity (0.189578ms)
+✔ a failed IndexedDB open is unavailable from project activation through scene loading (0.1551ms)
+✔ a local draft merge replaces only older drafts for the same author and document (0.70005ms)
+✔ a stale local save cannot replace a newer generation or clear an exact conflict (0.103534ms)
+✔ catalog exposes only the selected slot and callable modules, in server order (1.443141ms)
+✔ catalog hides disabled and profile-excluded modules (0.138008ms)
+✔ workspace catalog ignores placement but gates contribution kind, context, identity and availability (0.267922ms)
+✔ continue candidates keep distinct device scenes and prefer the local cursor for the same scene (1.376685ms)
+✔ handoff hints identify the other device without displaying prose (0.249935ms)
+✔ local reading positions are isolated by author, repository, and scene (0.162292ms)
+✔ cursor mapping uses source sentence numbering around Japanese punctuation and dialogue (9.892826ms)
+✔ reusable cursor positions preserve dialogue, UTF-16, and newline offsets (0.274818ms)
+✔ selection-only cursor updates reuse the primed CodeMirror document and document index (2.354636ms)
+▶ local writing drafts
+  ✔ keeps drafts isolated by project and scene and restores the base revision (1.395573ms)
+  ✔ drops a draft that already matches the canonical scene and clears after save (0.272219ms)
+  ✔ ignores malformed or foreign-key data (0.12022ms)
+✔ local writing drafts (2.938747ms)
+✔ writing input retains Japanese bracket pairing and skips an existing closer (1.341608ms)
+✔ single ellipses normalize to the source's two-character form (0.160094ms)
+✔ ruby parsing keeps the source's explicit Aozora syntax and frontmatter bytes (0.456396ms)
+✔ mobile writing symbols wrap selected text and preserve the cursor inside quotes (0.147703ms)
+✔ typography preferences retain source ranges and reject invalid values (0.196469ms)
+✔ mobile reading pagination clamps pages, measures columns, and follows writing direction (0.171486ms)
+✔ visible reader lines are resolved once per visit and can be queued again after leaving (1.47672ms)
+✔ editor keyboard navigation selects the term under the caret or one exact marked selection (0.240741ms)
+✔ visible term slices are sorted, clipped, and bounded (0.517456ms)
+✔ resolver spans use UTF-16 positions and malformed or overlapping results are discarded (5.304175ms)
+✔ reading terms render as accessible links over Ruby text without changing the source (5.852012ms)
+✔ journal keys isolate author scopes and retain each operation generation (1.246972ms)
+✔ publication receipt keys are stable within a scope and distinct across batches/scopes (0.171286ms)
+✔ theme mode accepts only the three supported appearance choices (0.719621ms)
+✔ an explicit saved appearance wins over the system preference (0.158495ms)
+✔ a missing or invalid saved mode follows the system preference once at startup (0.405131ms)
+✔ presets are valid editable trees with the expected panel selections (1.839378ms)
+✔ validation rejects malformed, duplicate, oversized, deep, and executable-looking state (0.396337ms)
+✔ dock operations create tab stacks and horizontal or vertical splits (0.650568ms)
+✔ panels can be hidden and restored, while the final visible panel is retained (0.358862ms)
+✔ newly available panels can be added without replacing an unsaved layout (0.166889ms)
+✔ resizing updates only the addressed split and keeps percentages normalized (0.218455ms)
+✔ layout persistence is separate by author scope and device class (0.708929ms)
+✔ loading malformed state preserves its stored bytes until an explicit valid save (0.925085ms)
+✔ oversized or non-declarative payloads are rejected without storage writes (0.162692ms)
+✔ storage errors fall back without pretending that persistence succeeded (0.243539ms)
+ℹ tests 51
+ℹ suites 1
+ℹ pass 51
+ℹ fail 0
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 1158.138496

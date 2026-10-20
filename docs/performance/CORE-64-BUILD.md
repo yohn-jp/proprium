@@ -23,6 +23,17 @@ The exact four build logs, run metadata, preserved script strings, and per-file 
 
 A preliminary attempt to invoke `build:workspace` on the baseline exited before running a build because that alias exists only in the candidate. It is excluded from the measurement. The baseline was measured with its actual pre-change `pnpm build` entrypoint; the candidate preserves the baseline command body as `build:workspace` for the Full path.
 
-## Verification status
+## Verification
 
-The focused root-graph test previously passed 2/2 on the unchanged implementation inputs and was not rerun before timing. At this evidence commit, canonical typecheck, full tests, Core build/audit, and Full build compatibility are pending a separate validation batch.
+Candidate source `184c4e7994a58855b0de1cf316cb27bd988b5ece` passed the required local checks in the separate validation batch. Frozen installs had already passed in both matched worktrees before timing.
+
+| Command | Result | Evidence |
+| --- | --- | --- |
+| `pnpm install --frozen-lockfile` | Pass in baseline and candidate worktrees; each reused 348 packages and downloaded none | [setup record](../../results/core64-build/timing.json) |
+| `pnpm typecheck` | Pass | [log](../../results/core64-build/validation/typecheck.log) |
+| `pnpm test` | Pass; 428 tests reported, 427 passed, 0 failed, 1 skipped | [log](../../results/core64-build/validation/full-test.log) |
+| `SCRIPTORIUM_PROFILE=core pnpm build` | Pass | [log](../../results/core64-build/validation/core-build.log) |
+| `pnpm audit:core` | Pass; 128 production dependency versions scanned | [log](../../results/core64-build/validation/core-audit.log) |
+| `SCRIPTORIUM_PROFILE=full pnpm build` | Pass; Full profile generated with all 9 modules through the preserved workspace graph | [log](../../results/core64-build/validation/full-build.log) |
+
+The full test command includes both root graph tests: default/explicit Core selects the existing selective graph, and Full keeps the workspace graph. Its aggregate reports zero failures and one skipped test. MCP shutdown diagnostics were emitted during the test run, but the command exited successfully; no retry was needed. Exact commands, statuses, per-run log hashes, and the Full module list are in the [verification record](../../results/core64-build/verification.json). Verification commands were pinned to CPUs 0–3. No browser, OCI, or CI checks were run because this candidate changes the root build graph only.
