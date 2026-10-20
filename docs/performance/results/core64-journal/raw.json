@@ -1,0 +1,2224 @@
+{
+  "schemaVersion": 1,
+  "source": {
+    "gitHead": "80ab121ad08b2c5f5957e3405eed511762fb1747",
+    "journalSourceSha256": "5392cf4dcce0e0bbdd19fabaea683903334e157f3cc3d385552cf1f90ab024d9",
+    "probeScriptSha256": "6fe2be822dcc1d8880da378647aa125112755c9cba4813379c66890a482089dc",
+    "probeHtmlSha256": "098165d53cde430d32c5d9d92d19d62376c83306050805a8ef846f22e0148f8a",
+    "runtimeRoot": "/data/scriptorium-core64-worktrees/g0",
+    "probeRoot": "/home/sophia/src/scriptorium-c64-journal"
+  },
+  "browserExecutable": "/nix/store/ini1ifgvcsvw48x4mxawrv9jvbdwn70p-chromium-155.0.8059.79/bin/chromium",
+  "node": "v24.21.0",
+  "repeats": 20,
+  "physicalIndexedDbBytes": "not exposed by the browser; logical UTF-8 fields, JSON serialization bytes, and origin usage estimates are reported separately",
+  "status": "complete",
+  "recordPayloads": [
+    {
+      "targetTextUtf8Bytes": 102400,
+      "text": {
+        "utf8Bytes": 102400,
+        "utf16CodeUnits": 51200,
+        "codePoints": 25600
+      },
+      "baseText": {
+        "utf8Bytes": 102400,
+        "utf16CodeUnits": 51200,
+        "codePoints": 25600
+      },
+      "operationWriteContent": {
+        "utf8Bytes": 102400,
+        "utf16CodeUnits": 51200,
+        "codePoints": 25600
+      },
+      "duplicateContentLogical": {
+        "utf8Bytes": 307200,
+        "utf16CodeUnits": 153600,
+        "codePoints": 76800
+      },
+      "jsonSerializationUtf8Bytes": 308892,
+      "originStorageEstimate": {
+        "beforeDatabaseOpenBytes": 0,
+        "afterEmptyDatabaseOpenBytes": 73728,
+        "beforeRecordPutBytes": 73728,
+        "afterRecordPutBytes": 73728,
+        "recordPutDeltaEstimateBytes": 0,
+        "originQuotaBytes": 10737491968
+      },
+      "exactRestore": true,
+      "getDocumentSamples": [
+        {
+          "elapsedMs": 4,
+          "requestMs": 1.5999999940395355,
+          "returnedRecords": 1,
+          "readSource": "index",
+          "readMethod": "getAll",
+          "readStore": "operations",
+          "readIndex": "documentKey",
+          "requestCount": 1,
+          "transactionCount": 1,
+          "transactionMode": "readonly",
+          "transactionDurability": "default",
+          "transactionMs": 4
+        },
+        {
+          "elapsedMs": 3,
+          "requestMs": 1.600000023841858,
+          "returnedRecords": 1,
+          "readSource": "index",
+          "readMethod": "getAll",
+          "readStore": "operations",
+          "readIndex": "documentKey",
+          "requestCount": 1,
+          "transactionCount": 1,
+          "transactionMode": "readonly",
+          "transactionDurability": "default",
+          "transactionMs": 3
+        },
+        {
+          "elapsedMs": 3.0999999940395355,
+          "requestMs": 1.7000000178813934,
+          "returnedRecords": 1,
+          "readSource": "index",
+          "readMethod": "getAll",
+          "readStore": "operations",
+          "readIndex": "documentKey",
+          "requestCount": 1,
+          "transactionCount": 1,
+          "transactionMode": "readonly",
+          "transactionDurability": "default",
+          "transactionMs": 3
+        },
+        {
+          "elapsedMs": 7.399999976158142,
+          "requestMs": 1.9000000059604645,
+          "returnedRecords": 1,
+          "readSource": "index",
+          "readMethod": "getAll",
+          "readStore": "operations",
+          "readIndex": "documentKey",
+          "requestCount": 1,
+          "transactionCount": 1,
+          "transactionMode": "readonly",
+          "transactionDurability": "default",
+          "transactionMs": 7.299999982118607
+        },
+        {
+          "elapsedMs": 4.399999976158142,
+          "requestMs": 1.5999999940395355,
+          "returnedRecords": 1,
+          "readSource": "index",
+          "readMethod": "getAll",
+          "readStore": "operations",
+          "readIndex": "documentKey",
+          "requestCount": 1,
+          "transactionCount": 1,
+          "transactionMode": "readonly",
+          "transactionDurability": "default",
+          "transactionMs": 4.399999976158142
+        },
+        {
+          "elapsedMs": 2.7999999821186066,
+          "requestMs": 1.699999988079071,
+          "returnedRecords": 1,
+          "readSource": "index",
+          "readMethod": "getAll",
+          "readStore": "operations",
+          "readIndex": "documentKey",
+          "requestCount": 1,
+          "transactionCount": 1,
+          "transactionMode": "readonly",
+          "transactionDurability": "default",
+          "transactionMs": 2.7999999821186066
+        },
+        {
+          "elapsedMs": 2.800000011920929,
+          "requestMs": 1.699999988079071,
+          "returnedRecords": 1,
+          "readSource": "index",
+          "readMethod": "getAll",
+          "readStore": "operations",
+          "readIndex": "documentKey",
+          "requestCount": 1,
+          "transactionCount": 1,
+          "transactionMode": "readonly",
+          "transactionDurability": "default",
+          "transactionMs": 2.800000011920929
+        },
+        {
+          "elapsedMs": 2.699999988079071,
+          "requestMs": 1.600000023841858,
+          "returnedRecords": 1,
+          "readSource": "index",
+          "readMethod": "getAll",
+          "readStore": "operations",
+          "readIndex": "documentKey",
+          "requestCount": 1,
+          "transactionCount": 1,
+          "transactionMode": "readonly",
+          "transactionDurability": "default",
+          "transactionMs": 2.699999988079071
+        },
+        {
+          "elapsedMs": 2.5999999940395355,
+          "requestMs": 1.5999999940395355,
+          "returnedRecords": 1,
+          "readSource": "index",
+          "readMethod": "getAll",
+          "readStore": "operations",
+          "readIndex": "documentKey",
+          "requestCount": 1,
+          "transactionCount": 1,
+          "transactionMode": "readonly",
+          "transactionDurability": "default",
+          "transactionMs": 2.5999999940395355
+        },
+        {
+          "elapsedMs": 2.9000000059604645,
+          "requestMs": 1.5,
+          "returnedRecords": 1,
+          "readSource": "index",
+          "readMethod": "getAll",
+          "readStore": "operations",
+          "readIndex": "documentKey",
+          "requestCount": 1,
+          "transactionCount": 1,
+          "transactionMode": "readonly",
+          "transactionDurability": "default",
+          "transactionMs": 2.800000011920929
+        },
+        {
+          "elapsedMs": 2.9000000059604645,
+          "requestMs": 1.5,
+          "returnedRecords": 1,
+          "readSource": "index",
+          "readMethod": "getAll",
+          "readStore": "operations",
+          "readIndex": "documentKey",
+          "requestCount": 1,
+          "transactionCount": 1,
+          "transactionMode": "readonly",
+          "transactionDurability": "default",
+          "transactionMs": 2.7999999821186066
+        },
+        {
+          "elapsedMs": 2.899999976158142,
+          "requestMs": 1.5999999940395355,
+          "returnedRecords": 1,
+          "readSource": "index",
+          "readMethod": "getAll",
+          "readStore": "operations",
+          "readIndex": "documentKey",
+          "requestCount": 1,
+          "transactionCount": 1,
+          "transactionMode": "readonly",
+          "transactionDurability": "default",
+          "transactionMs": 2.899999976158142
+        },
+        {
+          "elapsedMs": 2.9000000059604645,
+          "requestMs": 1.5,
+          "returnedRecords": 1,
+          "readSource": "index",
+          "readMethod": "getAll",
+          "readStore": "operations",
+          "readIndex": "documentKey",
+          "requestCount": 1,
+          "transactionCount": 1,
+          "transactionMode": "readonly",
+          "transactionDurability": "default",
+          "transactionMs": 2.9000000059604645
+        },
+        {
+          "elapsedMs": 2.9000000059604645,
+          "requestMs": 1.5,
+          "returnedRecords": 1,
+          "readSource": "index",
+          "readMethod": "getAll",
+          "readStore": "operations",
+          "readIndex": "documentKey",
+          "requestCount": 1,
+          "transactionCount": 1,
+          "transactionMode": "readonly",
+          "transactionDurability": "default",
+          "transactionMs": 2.800000011920929
+        },
+        {
+          "elapsedMs": 10.199999988079071,
+          "requestMs": 1.4000000059604645,
+          "returnedRecords": 1,
+          "readSource": "index",
+          "readMethod": "getAll",
+          "readStore": "operations",
+          "readIndex": "documentKey",
+          "requestCount": 1,
+          "transactionCount": 1,
+          "transactionMode": "readonly",
+          "transactionDurability": "default",
+          "transactionMs": 10.199999988079071
+        },
+        {
+          "elapsedMs": 2.7999999821186066,
+          "requestMs": 1.5999999940395355,
+          "returnedRecords": 1,
+          "readSource": "index",
+          "readMethod": "getAll",
+          "readStore": "operations",
+          "readIndex": "documentKey",
+          "requestCount": 1,
+          "transactionCount": 1,
+          "transactionMode": "readonly",
+          "transactionDurability": "default",
+          "transactionMs": 2.699999988079071
+        },
+        {
+          "elapsedMs": 2.7000000178813934,
+          "requestMs": 1.7000000178813934,
+          "returnedRecords": 1,
+          "readSource": "index",
+          "readMethod": "getAll",
+          "readStore": "operations",
+          "readIndex": "documentKey",
+          "requestCount": 1,
+          "transactionCount": 1,
+          "transactionMode": "readonly",
+          "transactionDurability": "default",
+          "transactionMs": 2.7000000178813934
+        },
+        {
+          "elapsedMs": 2.4000000059604645,
+          "requestMs": 1.4000000059604645,
+          "returnedRecords": 1,
+          "readSource": "index",
+          "readMethod": "getAll",
+          "readStore": "operations",
+          "readIndex": "documentKey",
+          "requestCount": 1,
+          "transactionCount": 1,
+          "transactionMode": "readonly",
+          "transactionDurability": "default",
+          "transactionMs": 2.4000000059604645
+        },
+        {
+          "elapsedMs": 2.5999999940395355,
+          "requestMs": 1.5999999940395355,
+          "returnedRecords": 1,
+          "readSource": "index",
+          "readMethod": "getAll",
+          "readStore": "operations",
+          "readIndex": "documentKey",
+          "requestCount": 1,
+          "transactionCount": 1,
+          "transactionMode": "readonly",
+          "transactionDurability": "default",
+          "transactionMs": 2.5
+        },
+        {
+          "elapsedMs": 2.4000000059604645,
+          "requestMs": 1.4000000059604645,
+          "returnedRecords": 1,
+          "readSource": "index",
+          "readMethod": "getAll",
+          "readStore": "operations",
+          "readIndex": "documentKey",
+          "requestCount": 1,
+          "transactionCount": 1,
+          "transactionMode": "readonly",
+          "transactionDurability": "default",
+          "transactionMs": 2.4000000059604645
+        }
+      ]
+    },
+    {
+      "targetTextUtf8Bytes": 1048576,
+      "text": {
+        "utf8Bytes": 1048576,
+        "utf16CodeUnits": 524288,
+        "codePoints": 262144
+      },
+      "baseText": {
+        "utf8Bytes": 1048576,
+        "utf16CodeUnits": 524288,
+        "codePoints": 262144
+      },
+      "operationWriteContent": {
+        "utf8Bytes": 1048576,
+        "utf16CodeUnits": 524288,
+        "codePoints": 262144
+      },
+      "duplicateContentLogical": {
+        "utf8Bytes": 3145728,
+        "utf16CodeUnits": 1572864,
+        "codePoints": 786432
+      },
+      "jsonSerializationUtf8Bytes": 3147428,
+      "originStorageEstimate": {
+        "beforeDatabaseOpenBytes": 0,
+        "afterEmptyDatabaseOpenBytes": 73728,
+        "beforeRecordPutBytes": 73728,
+        "afterRecordPutBytes": 73728,
+        "recordPutDeltaEstimateBytes": 0,
+        "originQuotaBytes": 10737491968
+      },
+      "exactRestore": true,
+      "getDocumentSamples": [
+        {
+          "elapsedMs": 20.400000005960464,
+          "requestMs": 9.899999976158142,
+          "returnedRecords": 1,
+          "readSource": "index",
+          "readMethod": "getAll",
+          "readStore": "operations",
+          "readIndex": "documentKey",
+          "requestCount": 1,
+          "transactionCount": 1,
+          "transactionMode": "readonly",
+          "transactionDurability": "default",
+          "transactionMs": 20.30000001192093
+        },
+        {
+          "elapsedMs": 19.200000017881393,
+          "requestMs": 9.899999976158142,
+          "returnedRecords": 1,
+          "readSource": "index",
+          "readMethod": "getAll",
+          "readStore": "operations",
+          "readIndex": "documentKey",
+          "requestCount": 1,
+          "transactionCount": 1,
+          "transactionMode": "readonly",
+          "transactionDurability": "default",
+          "transactionMs": 19.200000017881393
+        },
+        {
+          "elapsedMs": 20.400000005960464,
+          "requestMs": 10.199999988079071,
+          "returnedRecords": 1,
+          "readSource": "index",
+          "readMethod": "getAll",
+          "readStore": "operations",
+          "readIndex": "documentKey",
+          "requestCount": 1,
+          "transactionCount": 1,
+          "transactionMode": "readonly",
+          "transactionDurability": "default",
+          "transactionMs": 20.400000005960464
+        },
+        {
+          "elapsedMs": 19.80000001192093,
+          "requestMs": 10,
+          "returnedRecords": 1,
+          "readSource": "index",
+          "readMethod": "getAll",
+          "readStore": "operations",
+          "readIndex": "documentKey",
+          "requestCount": 1,
+          "transactionCount": 1,
+          "transactionMode": "readonly",
+          "transactionDurability": "default",
+          "transactionMs": 19.80000001192093
+        },
+        {
+          "elapsedMs": 19.5,
+          "requestMs": 10,
+          "returnedRecords": 1,
+          "readSource": "index",
+          "readMethod": "getAll",
+          "readStore": "operations",
+          "readIndex": "documentKey",
+          "requestCount": 1,
+          "transactionCount": 1,
+          "transactionMode": "readonly",
+          "transactionDurability": "default",
+          "transactionMs": 19.5
+        },
+        {
+          "elapsedMs": 20.30000001192093,
+          "requestMs": 9.800000011920929,
+          "returnedRecords": 1,
+          "readSource": "index",
+          "readMethod": "getAll",
+          "readStore": "operations",
+          "readIndex": "documentKey",
+          "requestCount": 1,
+          "transactionCount": 1,
+          "transactionMode": "readonly",
+          "transactionDurability": "default",
+          "transactionMs": 20.30000001192093
+        },
+        {
+          "elapsedMs": 19.200000017881393,
+          "requestMs": 9.799999982118607,
+          "returnedRecords": 1,
+          "readSource": "index",
+          "readMethod": "getAll",
+          "readStore": "operations",
+          "readIndex": "documentKey",
+          "requestCount": 1,
+          "transactionCount": 1,
+          "transactionMode": "readonly",
+          "transactionDurability": "default",
+          "transactionMs": 19
+        },
+        {
+          "elapsedMs": 19.600000023841858,
+          "requestMs": 10,
+          "returnedRecords": 1,
+          "readSource": "index",
+          "readMethod": "getAll",
+          "readStore": "operations",
+          "readIndex": "documentKey",
+          "requestCount": 1,
+          "transactionCount": 1,
+          "transactionMode": "readonly",
+          "transactionDurability": "default",
+          "transactionMs": 19.600000023841858
+        },
+        {
+          "elapsedMs": 19.900000005960464,
+          "requestMs": 9.800000011920929,
+          "returnedRecords": 1,
+          "readSource": "index",
+          "readMethod": "getAll",
+          "readStore": "operations",
+          "readIndex": "documentKey",
+          "requestCount": 1,
+          "transactionCount": 1,
+          "transactionMode": "readonly",
+          "transactionDurability": "default",
+          "transactionMs": 19.700000017881393
+        },
+        {
+          "elapsedMs": 19.600000023841858,
+          "requestMs": 10.099999994039536,
+          "returnedRecords": 1,
+          "readSource": "index",
+          "readMethod": "getAll",
+          "readStore": "operations",
+          "readIndex": "documentKey",
+          "requestCount": 1,
+          "transactionCount": 1,
+          "transactionMode": "readonly",
+          "transactionDurability": "default",
+          "transactionMs": 19.5
+        },
+        {
+          "elapsedMs": 19.80000001192093,
+          "requestMs": 9.900000005960464,
+          "returnedRecords": 1,
+          "readSource": "index",
+          "readMethod": "getAll",
+          "readStore": "operations",
+          "readIndex": "documentKey",
+          "requestCount": 1,
+          "transactionCount": 1,
+          "transactionMode": "readonly",
+          "transactionDurability": "default",
+          "transactionMs": 19.700000017881393
+        },
+        {
+          "elapsedMs": 19.099999994039536,
+          "requestMs": 10,
+          "returnedRecords": 1,
+          "readSource": "index",
+          "readMethod": "getAll",
+          "readStore": "operations",
+          "readIndex": "documentKey",
+          "requestCount": 1,
+          "transactionCount": 1,
+          "transactionMode": "readonly",
+          "transactionDurability": "default",
+          "transactionMs": 19.099999994039536
+        },
+        {
+          "elapsedMs": 19.299999982118607,
+          "requestMs": 9.900000005960464,
+          "returnedRecords": 1,
+          "readSource": "index",
+          "readMethod": "getAll",
+          "readStore": "operations",
+          "readIndex": "documentKey",
+          "requestCount": 1,
+          "transactionCount": 1,
+          "transactionMode": "readonly",
+          "transactionDurability": "default",
+          "transactionMs": 19.19999998807907
+        },
+        {
+          "elapsedMs": 19.19999998807907,
+          "requestMs": 9.700000017881393,
+          "returnedRecords": 1,
+          "readSource": "index",
+          "readMethod": "getAll",
+          "readStore": "operations",
+          "readIndex": "documentKey",
+          "requestCount": 1,
+          "transactionCount": 1,
+          "transactionMode": "readonly",
+          "transactionDurability": "default",
+          "transactionMs": 19
+        },
+        {
+          "elapsedMs": 19.799999982118607,
+          "requestMs": 10.099999994039536,
+          "returnedRecords": 1,
+          "readSource": "index",
+          "readMethod": "getAll",
+          "readStore": "operations",
+          "readIndex": "documentKey",
+          "requestCount": 1,
+          "transactionCount": 1,
+          "transactionMode": "readonly",
+          "transactionDurability": "default",
+          "transactionMs": 19.69999998807907
+        },
+        {
+          "elapsedMs": 29.400000005960464,
+          "requestMs": 9.800000011920929,
+          "returnedRecords": 1,
+          "readSource": "index",
+          "readMethod": "getAll",
+          "readStore": "operations",
+          "readIndex": "documentKey",
+          "requestCount": 1,
+          "transactionCount": 1,
+          "transactionMode": "readonly",
+          "transactionDurability": "default",
+          "transactionMs": 29.30000001192093
+        },
+        {
+          "elapsedMs": 19.099999994039536,
+          "requestMs": 9.699999988079071,
+          "returnedRecords": 1,
+          "readSource": "index",
+          "readMethod": "getAll",
+          "readStore": "operations",
+          "readIndex": "documentKey",
+          "requestCount": 1,
+          "transactionCount": 1,
+          "transactionMode": "readonly",
+          "transactionDurability": "default",
+          "transactionMs": 19.099999994039536
+        },
+        {
+          "elapsedMs": 19,
+          "requestMs": 9.699999988079071,
+          "returnedRecords": 1,
+          "readSource": "index",
+          "readMethod": "getAll",
+          "readStore": "operations",
+          "readIndex": "documentKey",
+          "requestCount": 1,
+          "transactionCount": 1,
+          "transactionMode": "readonly",
+          "transactionDurability": "default",
+          "transactionMs": 19
+        },
+        {
+          "elapsedMs": 19.799999982118607,
+          "requestMs": 9.599999994039536,
+          "returnedRecords": 1,
+          "readSource": "index",
+          "readMethod": "getAll",
+          "readStore": "operations",
+          "readIndex": "documentKey",
+          "requestCount": 1,
+          "transactionCount": 1,
+          "transactionMode": "readonly",
+          "transactionDurability": "default",
+          "transactionMs": 19.799999982118607
+        },
+        {
+          "elapsedMs": 19,
+          "requestMs": 9.900000005960464,
+          "returnedRecords": 1,
+          "readSource": "index",
+          "readMethod": "getAll",
+          "readStore": "operations",
+          "readIndex": "documentKey",
+          "requestCount": 1,
+          "transactionCount": 1,
+          "transactionMode": "readonly",
+          "transactionDurability": "default",
+          "transactionMs": 19
+        }
+      ]
+    }
+  ],
+  "putLatestDraft": {
+    "1": [
+      {
+        "elapsedMs": 2.100000023841858,
+        "strictTransactionMs": 2,
+        "transactionDurability": "strict",
+        "indexedRead": {
+          "source": "index",
+          "method": "getAll",
+          "store": "operations",
+          "index": "documentKey",
+          "requestCount": 1,
+          "returnedRecords": 1
+        },
+        "transactionCount": 1,
+        "stored": true
+      },
+      {
+        "elapsedMs": 2,
+        "strictTransactionMs": 1.9000000059604645,
+        "transactionDurability": "strict",
+        "indexedRead": {
+          "source": "index",
+          "method": "getAll",
+          "store": "operations",
+          "index": "documentKey",
+          "requestCount": 1,
+          "returnedRecords": 1
+        },
+        "transactionCount": 1,
+        "stored": true
+      },
+      {
+        "elapsedMs": 2.0999999940395355,
+        "strictTransactionMs": 2,
+        "transactionDurability": "strict",
+        "indexedRead": {
+          "source": "index",
+          "method": "getAll",
+          "store": "operations",
+          "index": "documentKey",
+          "requestCount": 1,
+          "returnedRecords": 1
+        },
+        "transactionCount": 1,
+        "stored": true
+      },
+      {
+        "elapsedMs": 2.5,
+        "strictTransactionMs": 2.5,
+        "transactionDurability": "strict",
+        "indexedRead": {
+          "source": "index",
+          "method": "getAll",
+          "store": "operations",
+          "index": "documentKey",
+          "requestCount": 1,
+          "returnedRecords": 1
+        },
+        "transactionCount": 1,
+        "stored": true
+      },
+      {
+        "elapsedMs": 2,
+        "strictTransactionMs": 1.9000000059604645,
+        "transactionDurability": "strict",
+        "indexedRead": {
+          "source": "index",
+          "method": "getAll",
+          "store": "operations",
+          "index": "documentKey",
+          "requestCount": 1,
+          "returnedRecords": 1
+        },
+        "transactionCount": 1,
+        "stored": true
+      },
+      {
+        "elapsedMs": 1.7999999821186066,
+        "strictTransactionMs": 1.699999988079071,
+        "transactionDurability": "strict",
+        "indexedRead": {
+          "source": "index",
+          "method": "getAll",
+          "store": "operations",
+          "index": "documentKey",
+          "requestCount": 1,
+          "returnedRecords": 1
+        },
+        "transactionCount": 1,
+        "stored": true
+      },
+      {
+        "elapsedMs": 1.800000011920929,
+        "strictTransactionMs": 1.699999988079071,
+        "transactionDurability": "strict",
+        "indexedRead": {
+          "source": "index",
+          "method": "getAll",
+          "store": "operations",
+          "index": "documentKey",
+          "requestCount": 1,
+          "returnedRecords": 1
+        },
+        "transactionCount": 1,
+        "stored": true
+      },
+      {
+        "elapsedMs": 1.7999999821186066,
+        "strictTransactionMs": 1.7999999821186066,
+        "transactionDurability": "strict",
+        "indexedRead": {
+          "source": "index",
+          "method": "getAll",
+          "store": "operations",
+          "index": "documentKey",
+          "requestCount": 1,
+          "returnedRecords": 1
+        },
+        "transactionCount": 1,
+        "stored": true
+      },
+      {
+        "elapsedMs": 1.5999999940395355,
+        "strictTransactionMs": 1.5999999940395355,
+        "transactionDurability": "strict",
+        "indexedRead": {
+          "source": "index",
+          "method": "getAll",
+          "store": "operations",
+          "index": "documentKey",
+          "requestCount": 1,
+          "returnedRecords": 1
+        },
+        "transactionCount": 1,
+        "stored": true
+      },
+      {
+        "elapsedMs": 1.7000000178813934,
+        "strictTransactionMs": 1.5999999940395355,
+        "transactionDurability": "strict",
+        "indexedRead": {
+          "source": "index",
+          "method": "getAll",
+          "store": "operations",
+          "index": "documentKey",
+          "requestCount": 1,
+          "returnedRecords": 1
+        },
+        "transactionCount": 1,
+        "stored": true
+      },
+      {
+        "elapsedMs": 1.7999999821186066,
+        "strictTransactionMs": 1.7999999821186066,
+        "transactionDurability": "strict",
+        "indexedRead": {
+          "source": "index",
+          "method": "getAll",
+          "store": "operations",
+          "index": "documentKey",
+          "requestCount": 1,
+          "returnedRecords": 1
+        },
+        "transactionCount": 1,
+        "stored": true
+      },
+      {
+        "elapsedMs": 2.300000011920929,
+        "strictTransactionMs": 2.300000011920929,
+        "transactionDurability": "strict",
+        "indexedRead": {
+          "source": "index",
+          "method": "getAll",
+          "store": "operations",
+          "index": "documentKey",
+          "requestCount": 1,
+          "returnedRecords": 1
+        },
+        "transactionCount": 1,
+        "stored": true
+      },
+      {
+        "elapsedMs": 2.2999999821186066,
+        "strictTransactionMs": 2.2999999821186066,
+        "transactionDurability": "strict",
+        "indexedRead": {
+          "source": "index",
+          "method": "getAll",
+          "store": "operations",
+          "index": "documentKey",
+          "requestCount": 1,
+          "returnedRecords": 1
+        },
+        "transactionCount": 1,
+        "stored": true
+      },
+      {
+        "elapsedMs": 1.7000000178813934,
+        "strictTransactionMs": 1.5999999940395355,
+        "transactionDurability": "strict",
+        "indexedRead": {
+          "source": "index",
+          "method": "getAll",
+          "store": "operations",
+          "index": "documentKey",
+          "requestCount": 1,
+          "returnedRecords": 1
+        },
+        "transactionCount": 1,
+        "stored": true
+      },
+      {
+        "elapsedMs": 1.7000000178813934,
+        "strictTransactionMs": 1.7000000178813934,
+        "transactionDurability": "strict",
+        "indexedRead": {
+          "source": "index",
+          "method": "getAll",
+          "store": "operations",
+          "index": "documentKey",
+          "requestCount": 1,
+          "returnedRecords": 1
+        },
+        "transactionCount": 1,
+        "stored": true
+      },
+      {
+        "elapsedMs": 1.7000000178813934,
+        "strictTransactionMs": 1.600000023841858,
+        "transactionDurability": "strict",
+        "indexedRead": {
+          "source": "index",
+          "method": "getAll",
+          "store": "operations",
+          "index": "documentKey",
+          "requestCount": 1,
+          "returnedRecords": 1
+        },
+        "transactionCount": 1,
+        "stored": true
+      },
+      {
+        "elapsedMs": 1.5,
+        "strictTransactionMs": 1.5,
+        "transactionDurability": "strict",
+        "indexedRead": {
+          "source": "index",
+          "method": "getAll",
+          "store": "operations",
+          "index": "documentKey",
+          "requestCount": 1,
+          "returnedRecords": 1
+        },
+        "transactionCount": 1,
+        "stored": true
+      },
+      {
+        "elapsedMs": 1.5,
+        "strictTransactionMs": 1.4000000059604645,
+        "transactionDurability": "strict",
+        "indexedRead": {
+          "source": "index",
+          "method": "getAll",
+          "store": "operations",
+          "index": "documentKey",
+          "requestCount": 1,
+          "returnedRecords": 1
+        },
+        "transactionCount": 1,
+        "stored": true
+      },
+      {
+        "elapsedMs": 1.5,
+        "strictTransactionMs": 1.5,
+        "transactionDurability": "strict",
+        "indexedRead": {
+          "source": "index",
+          "method": "getAll",
+          "store": "operations",
+          "index": "documentKey",
+          "requestCount": 1,
+          "returnedRecords": 1
+        },
+        "transactionCount": 1,
+        "stored": true
+      },
+      {
+        "elapsedMs": 1.5999999940395355,
+        "strictTransactionMs": 1.5999999940395355,
+        "transactionDurability": "strict",
+        "indexedRead": {
+          "source": "index",
+          "method": "getAll",
+          "store": "operations",
+          "index": "documentKey",
+          "requestCount": 1,
+          "returnedRecords": 1
+        },
+        "transactionCount": 1,
+        "stored": true
+      }
+    ],
+    "100": [
+      {
+        "elapsedMs": 10,
+        "strictTransactionMs": 10,
+        "transactionDurability": "strict",
+        "indexedRead": {
+          "source": "index",
+          "method": "getAll",
+          "store": "operations",
+          "index": "documentKey",
+          "requestCount": 1,
+          "returnedRecords": 100
+        },
+        "transactionCount": 1,
+        "stored": true
+      },
+      {
+        "elapsedMs": 8.800000011920929,
+        "strictTransactionMs": 8.700000017881393,
+        "transactionDurability": "strict",
+        "indexedRead": {
+          "source": "index",
+          "method": "getAll",
+          "store": "operations",
+          "index": "documentKey",
+          "requestCount": 1,
+          "returnedRecords": 100
+        },
+        "transactionCount": 1,
+        "stored": true
+      },
+      {
+        "elapsedMs": 9.599999994039536,
+        "strictTransactionMs": 9.599999994039536,
+        "transactionDurability": "strict",
+        "indexedRead": {
+          "source": "index",
+          "method": "getAll",
+          "store": "operations",
+          "index": "documentKey",
+          "requestCount": 1,
+          "returnedRecords": 100
+        },
+        "transactionCount": 1,
+        "stored": true
+      },
+      {
+        "elapsedMs": 8.899999976158142,
+        "strictTransactionMs": 8.899999976158142,
+        "transactionDurability": "strict",
+        "indexedRead": {
+          "source": "index",
+          "method": "getAll",
+          "store": "operations",
+          "index": "documentKey",
+          "requestCount": 1,
+          "returnedRecords": 100
+        },
+        "transactionCount": 1,
+        "stored": true
+      },
+      {
+        "elapsedMs": 7.9000000059604645,
+        "strictTransactionMs": 7.9000000059604645,
+        "transactionDurability": "strict",
+        "indexedRead": {
+          "source": "index",
+          "method": "getAll",
+          "store": "operations",
+          "index": "documentKey",
+          "requestCount": 1,
+          "returnedRecords": 100
+        },
+        "transactionCount": 1,
+        "stored": true
+      },
+      {
+        "elapsedMs": 8.199999988079071,
+        "strictTransactionMs": 8.199999988079071,
+        "transactionDurability": "strict",
+        "indexedRead": {
+          "source": "index",
+          "method": "getAll",
+          "store": "operations",
+          "index": "documentKey",
+          "requestCount": 1,
+          "returnedRecords": 100
+        },
+        "transactionCount": 1,
+        "stored": true
+      },
+      {
+        "elapsedMs": 9.400000005960464,
+        "strictTransactionMs": 9.400000005960464,
+        "transactionDurability": "strict",
+        "indexedRead": {
+          "source": "index",
+          "method": "getAll",
+          "store": "operations",
+          "index": "documentKey",
+          "requestCount": 1,
+          "returnedRecords": 100
+        },
+        "transactionCount": 1,
+        "stored": true
+      },
+      {
+        "elapsedMs": 8.400000005960464,
+        "strictTransactionMs": 8.400000005960464,
+        "transactionDurability": "strict",
+        "indexedRead": {
+          "source": "index",
+          "method": "getAll",
+          "store": "operations",
+          "index": "documentKey",
+          "requestCount": 1,
+          "returnedRecords": 100
+        },
+        "transactionCount": 1,
+        "stored": true
+      },
+      {
+        "elapsedMs": 8.800000011920929,
+        "strictTransactionMs": 8.699999988079071,
+        "transactionDurability": "strict",
+        "indexedRead": {
+          "source": "index",
+          "method": "getAll",
+          "store": "operations",
+          "index": "documentKey",
+          "requestCount": 1,
+          "returnedRecords": 100
+        },
+        "transactionCount": 1,
+        "stored": true
+      },
+      {
+        "elapsedMs": 8.800000011920929,
+        "strictTransactionMs": 8.800000011920929,
+        "transactionDurability": "strict",
+        "indexedRead": {
+          "source": "index",
+          "method": "getAll",
+          "store": "operations",
+          "index": "documentKey",
+          "requestCount": 1,
+          "returnedRecords": 100
+        },
+        "transactionCount": 1,
+        "stored": true
+      },
+      {
+        "elapsedMs": 8.399999976158142,
+        "strictTransactionMs": 8.199999988079071,
+        "transactionDurability": "strict",
+        "indexedRead": {
+          "source": "index",
+          "method": "getAll",
+          "store": "operations",
+          "index": "documentKey",
+          "requestCount": 1,
+          "returnedRecords": 100
+        },
+        "transactionCount": 1,
+        "stored": true
+      },
+      {
+        "elapsedMs": 8.700000017881393,
+        "strictTransactionMs": 8.700000017881393,
+        "transactionDurability": "strict",
+        "indexedRead": {
+          "source": "index",
+          "method": "getAll",
+          "store": "operations",
+          "index": "documentKey",
+          "requestCount": 1,
+          "returnedRecords": 100
+        },
+        "transactionCount": 1,
+        "stored": true
+      },
+      {
+        "elapsedMs": 9.300000011920929,
+        "strictTransactionMs": 9.200000017881393,
+        "transactionDurability": "strict",
+        "indexedRead": {
+          "source": "index",
+          "method": "getAll",
+          "store": "operations",
+          "index": "documentKey",
+          "requestCount": 1,
+          "returnedRecords": 100
+        },
+        "transactionCount": 1,
+        "stored": true
+      },
+      {
+        "elapsedMs": 10.799999982118607,
+        "strictTransactionMs": 10.699999988079071,
+        "transactionDurability": "strict",
+        "indexedRead": {
+          "source": "index",
+          "method": "getAll",
+          "store": "operations",
+          "index": "documentKey",
+          "requestCount": 1,
+          "returnedRecords": 100
+        },
+        "transactionCount": 1,
+        "stored": true
+      },
+      {
+        "elapsedMs": 8.199999988079071,
+        "strictTransactionMs": 8.099999994039536,
+        "transactionDurability": "strict",
+        "indexedRead": {
+          "source": "index",
+          "method": "getAll",
+          "store": "operations",
+          "index": "documentKey",
+          "requestCount": 1,
+          "returnedRecords": 100
+        },
+        "transactionCount": 1,
+        "stored": true
+      },
+      {
+        "elapsedMs": 8,
+        "strictTransactionMs": 8,
+        "transactionDurability": "strict",
+        "indexedRead": {
+          "source": "index",
+          "method": "getAll",
+          "store": "operations",
+          "index": "documentKey",
+          "requestCount": 1,
+          "returnedRecords": 100
+        },
+        "transactionCount": 1,
+        "stored": true
+      },
+      {
+        "elapsedMs": 8.099999994039536,
+        "strictTransactionMs": 8.099999994039536,
+        "transactionDurability": "strict",
+        "indexedRead": {
+          "source": "index",
+          "method": "getAll",
+          "store": "operations",
+          "index": "documentKey",
+          "requestCount": 1,
+          "returnedRecords": 100
+        },
+        "transactionCount": 1,
+        "stored": true
+      },
+      {
+        "elapsedMs": 8.100000023841858,
+        "strictTransactionMs": 8.100000023841858,
+        "transactionDurability": "strict",
+        "indexedRead": {
+          "source": "index",
+          "method": "getAll",
+          "store": "operations",
+          "index": "documentKey",
+          "requestCount": 1,
+          "returnedRecords": 100
+        },
+        "transactionCount": 1,
+        "stored": true
+      },
+      {
+        "elapsedMs": 8.199999988079071,
+        "strictTransactionMs": 8.199999988079071,
+        "transactionDurability": "strict",
+        "indexedRead": {
+          "source": "index",
+          "method": "getAll",
+          "store": "operations",
+          "index": "documentKey",
+          "requestCount": 1,
+          "returnedRecords": 100
+        },
+        "transactionCount": 1,
+        "stored": true
+      },
+      {
+        "elapsedMs": 8.299999982118607,
+        "strictTransactionMs": 8.299999982118607,
+        "transactionDurability": "strict",
+        "indexedRead": {
+          "source": "index",
+          "method": "getAll",
+          "store": "operations",
+          "index": "documentKey",
+          "requestCount": 1,
+          "returnedRecords": 100
+        },
+        "transactionCount": 1,
+        "stored": true
+      }
+    ],
+    "1000": [
+      {
+        "elapsedMs": 76.59999999403954,
+        "strictTransactionMs": 76.59999999403954,
+        "transactionDurability": "strict",
+        "indexedRead": {
+          "source": "index",
+          "method": "getAll",
+          "store": "operations",
+          "index": "documentKey",
+          "requestCount": 1,
+          "returnedRecords": 1000
+        },
+        "transactionCount": 1,
+        "stored": true
+      },
+      {
+        "elapsedMs": 75.5,
+        "strictTransactionMs": 75.40000000596046,
+        "transactionDurability": "strict",
+        "indexedRead": {
+          "source": "index",
+          "method": "getAll",
+          "store": "operations",
+          "index": "documentKey",
+          "requestCount": 1,
+          "returnedRecords": 1000
+        },
+        "transactionCount": 1,
+        "stored": true
+      },
+      {
+        "elapsedMs": 76.5,
+        "strictTransactionMs": 76.5,
+        "transactionDurability": "strict",
+        "indexedRead": {
+          "source": "index",
+          "method": "getAll",
+          "store": "operations",
+          "index": "documentKey",
+          "requestCount": 1,
+          "returnedRecords": 1000
+        },
+        "transactionCount": 1,
+        "stored": true
+      },
+      {
+        "elapsedMs": 81.5,
+        "strictTransactionMs": 81.5,
+        "transactionDurability": "strict",
+        "indexedRead": {
+          "source": "index",
+          "method": "getAll",
+          "store": "operations",
+          "index": "documentKey",
+          "requestCount": 1,
+          "returnedRecords": 1000
+        },
+        "transactionCount": 1,
+        "stored": true
+      },
+      {
+        "elapsedMs": 79.19999998807907,
+        "strictTransactionMs": 79.19999998807907,
+        "transactionDurability": "strict",
+        "indexedRead": {
+          "source": "index",
+          "method": "getAll",
+          "store": "operations",
+          "index": "documentKey",
+          "requestCount": 1,
+          "returnedRecords": 1000
+        },
+        "transactionCount": 1,
+        "stored": true
+      },
+      {
+        "elapsedMs": 74.40000000596046,
+        "strictTransactionMs": 74.30000001192093,
+        "transactionDurability": "strict",
+        "indexedRead": {
+          "source": "index",
+          "method": "getAll",
+          "store": "operations",
+          "index": "documentKey",
+          "requestCount": 1,
+          "returnedRecords": 1000
+        },
+        "transactionCount": 1,
+        "stored": true
+      },
+      {
+        "elapsedMs": 78.60000002384186,
+        "strictTransactionMs": 78.60000002384186,
+        "transactionDurability": "strict",
+        "indexedRead": {
+          "source": "index",
+          "method": "getAll",
+          "store": "operations",
+          "index": "documentKey",
+          "requestCount": 1,
+          "returnedRecords": 1000
+        },
+        "transactionCount": 1,
+        "stored": true
+      },
+      {
+        "elapsedMs": 74.19999998807907,
+        "strictTransactionMs": 74.19999998807907,
+        "transactionDurability": "strict",
+        "indexedRead": {
+          "source": "index",
+          "method": "getAll",
+          "store": "operations",
+          "index": "documentKey",
+          "requestCount": 1,
+          "returnedRecords": 1000
+        },
+        "transactionCount": 1,
+        "stored": true
+      },
+      {
+        "elapsedMs": 80,
+        "strictTransactionMs": 80,
+        "transactionDurability": "strict",
+        "indexedRead": {
+          "source": "index",
+          "method": "getAll",
+          "store": "operations",
+          "index": "documentKey",
+          "requestCount": 1,
+          "returnedRecords": 1000
+        },
+        "transactionCount": 1,
+        "stored": true
+      },
+      {
+        "elapsedMs": 82.80000001192093,
+        "strictTransactionMs": 82.80000001192093,
+        "transactionDurability": "strict",
+        "indexedRead": {
+          "source": "index",
+          "method": "getAll",
+          "store": "operations",
+          "index": "documentKey",
+          "requestCount": 1,
+          "returnedRecords": 1000
+        },
+        "transactionCount": 1,
+        "stored": true
+      },
+      {
+        "elapsedMs": 74.40000000596046,
+        "strictTransactionMs": 74.40000000596046,
+        "transactionDurability": "strict",
+        "indexedRead": {
+          "source": "index",
+          "method": "getAll",
+          "store": "operations",
+          "index": "documentKey",
+          "requestCount": 1,
+          "returnedRecords": 1000
+        },
+        "transactionCount": 1,
+        "stored": true
+      },
+      {
+        "elapsedMs": 79.09999999403954,
+        "strictTransactionMs": 79.09999999403954,
+        "transactionDurability": "strict",
+        "indexedRead": {
+          "source": "index",
+          "method": "getAll",
+          "store": "operations",
+          "index": "documentKey",
+          "requestCount": 1,
+          "returnedRecords": 1000
+        },
+        "transactionCount": 1,
+        "stored": true
+      },
+      {
+        "elapsedMs": 84.40000000596046,
+        "strictTransactionMs": 84.40000000596046,
+        "transactionDurability": "strict",
+        "indexedRead": {
+          "source": "index",
+          "method": "getAll",
+          "store": "operations",
+          "index": "documentKey",
+          "requestCount": 1,
+          "returnedRecords": 1000
+        },
+        "transactionCount": 1,
+        "stored": true
+      },
+      {
+        "elapsedMs": 73.89999997615814,
+        "strictTransactionMs": 73.89999997615814,
+        "transactionDurability": "strict",
+        "indexedRead": {
+          "source": "index",
+          "method": "getAll",
+          "store": "operations",
+          "index": "documentKey",
+          "requestCount": 1,
+          "returnedRecords": 1000
+        },
+        "transactionCount": 1,
+        "stored": true
+      },
+      {
+        "elapsedMs": 74.59999999403954,
+        "strictTransactionMs": 74.59999999403954,
+        "transactionDurability": "strict",
+        "indexedRead": {
+          "source": "index",
+          "method": "getAll",
+          "store": "operations",
+          "index": "documentKey",
+          "requestCount": 1,
+          "returnedRecords": 1000
+        },
+        "transactionCount": 1,
+        "stored": true
+      },
+      {
+        "elapsedMs": 82.7000000178814,
+        "strictTransactionMs": 82.59999999403954,
+        "transactionDurability": "strict",
+        "indexedRead": {
+          "source": "index",
+          "method": "getAll",
+          "store": "operations",
+          "index": "documentKey",
+          "requestCount": 1,
+          "returnedRecords": 1000
+        },
+        "transactionCount": 1,
+        "stored": true
+      },
+      {
+        "elapsedMs": 74.09999999403954,
+        "strictTransactionMs": 74.09999999403954,
+        "transactionDurability": "strict",
+        "indexedRead": {
+          "source": "index",
+          "method": "getAll",
+          "store": "operations",
+          "index": "documentKey",
+          "requestCount": 1,
+          "returnedRecords": 1000
+        },
+        "transactionCount": 1,
+        "stored": true
+      },
+      {
+        "elapsedMs": 73.90000000596046,
+        "strictTransactionMs": 73.90000000596046,
+        "transactionDurability": "strict",
+        "indexedRead": {
+          "source": "index",
+          "method": "getAll",
+          "store": "operations",
+          "index": "documentKey",
+          "requestCount": 1,
+          "returnedRecords": 1000
+        },
+        "transactionCount": 1,
+        "stored": true
+      },
+      {
+        "elapsedMs": 79.19999998807907,
+        "strictTransactionMs": 79.19999998807907,
+        "transactionDurability": "strict",
+        "indexedRead": {
+          "source": "index",
+          "method": "getAll",
+          "store": "operations",
+          "index": "documentKey",
+          "requestCount": 1,
+          "returnedRecords": 1000
+        },
+        "transactionCount": 1,
+        "stored": true
+      },
+      {
+        "elapsedMs": 76.39999997615814,
+        "strictTransactionMs": 76.39999997615814,
+        "transactionDurability": "strict",
+        "indexedRead": {
+          "source": "index",
+          "method": "getAll",
+          "store": "operations",
+          "index": "documentKey",
+          "requestCount": 1,
+          "returnedRecords": 1000
+        },
+        "transactionCount": 1,
+        "stored": true
+      }
+    ]
+  },
+  "isolation": {
+    "staleGenerationDenied": true,
+    "equalGenerationDifferentOperationDenied": true,
+    "foreignAuthorHighGenerationDidNotBlockOwner": true,
+    "foreignAuthorRecordPreserved": true
+  },
+  "inventory": {
+    "rowsPerStore": 1000,
+    "repositoryCount": 10,
+    "authorScopes": {
+      "owner": 950,
+      "guest": 50
+    },
+    "entryInventoryJsonUtf8Bytes": 2245143,
+    "proposalInventoryJsonUtf8Bytes": 1451124,
+    "getAllEntriesSamples": [
+      {
+        "elapsedMs": 77.2000000178814,
+        "requestMs": 70.7999999821186,
+        "returnedRecords": 1000,
+        "readSource": "store",
+        "readMethod": "getAll",
+        "readStore": "operations",
+        "requestCount": 1,
+        "transactionCount": 1,
+        "transactionMode": "readonly",
+        "transactionMs": 76.40000000596046
+      },
+      {
+        "elapsedMs": 81.69999998807907,
+        "requestMs": 71.5,
+        "returnedRecords": 1000,
+        "readSource": "store",
+        "readMethod": "getAll",
+        "readStore": "operations",
+        "requestCount": 1,
+        "transactionCount": 1,
+        "transactionMode": "readonly",
+        "transactionMs": 81.09999999403954
+      },
+      {
+        "elapsedMs": 83.2999999821186,
+        "requestMs": 71.69999998807907,
+        "returnedRecords": 1000,
+        "readSource": "store",
+        "readMethod": "getAll",
+        "readStore": "operations",
+        "requestCount": 1,
+        "transactionCount": 1,
+        "transactionMode": "readonly",
+        "transactionMs": 83
+      },
+      {
+        "elapsedMs": 83.09999999403954,
+        "requestMs": 70.90000000596046,
+        "returnedRecords": 1000,
+        "readSource": "store",
+        "readMethod": "getAll",
+        "readStore": "operations",
+        "requestCount": 1,
+        "transactionCount": 1,
+        "transactionMode": "readonly",
+        "transactionMs": 83
+      },
+      {
+        "elapsedMs": 77.69999998807907,
+        "requestMs": 70.09999999403954,
+        "returnedRecords": 1000,
+        "readSource": "store",
+        "readMethod": "getAll",
+        "readStore": "operations",
+        "requestCount": 1,
+        "transactionCount": 1,
+        "transactionMode": "readonly",
+        "transactionMs": 77.09999999403954
+      },
+      {
+        "elapsedMs": 80.5,
+        "requestMs": 71.09999999403954,
+        "returnedRecords": 1000,
+        "readSource": "store",
+        "readMethod": "getAll",
+        "readStore": "operations",
+        "requestCount": 1,
+        "transactionCount": 1,
+        "transactionMode": "readonly",
+        "transactionMs": 80.10000002384186
+      },
+      {
+        "elapsedMs": 81,
+        "requestMs": 71,
+        "returnedRecords": 1000,
+        "readSource": "store",
+        "readMethod": "getAll",
+        "readStore": "operations",
+        "requestCount": 1,
+        "transactionCount": 1,
+        "transactionMode": "readonly",
+        "transactionMs": 80.59999999403954
+      },
+      {
+        "elapsedMs": 86.69999998807907,
+        "requestMs": 70.2000000178814,
+        "returnedRecords": 1000,
+        "readSource": "store",
+        "readMethod": "getAll",
+        "readStore": "operations",
+        "requestCount": 1,
+        "transactionCount": 1,
+        "transactionMode": "readonly",
+        "transactionMs": 86.59999999403954
+      },
+      {
+        "elapsedMs": 74.19999998807907,
+        "requestMs": 70.09999999403954,
+        "returnedRecords": 1000,
+        "readSource": "store",
+        "readMethod": "getAll",
+        "readStore": "operations",
+        "requestCount": 1,
+        "transactionCount": 1,
+        "transactionMode": "readonly",
+        "transactionMs": 74
+      },
+      {
+        "elapsedMs": 75.59999999403954,
+        "requestMs": 70.90000000596046,
+        "returnedRecords": 1000,
+        "readSource": "store",
+        "readMethod": "getAll",
+        "readStore": "operations",
+        "requestCount": 1,
+        "transactionCount": 1,
+        "transactionMode": "readonly",
+        "transactionMs": 75.19999998807907
+      },
+      {
+        "elapsedMs": 80.10000002384186,
+        "requestMs": 70.5,
+        "returnedRecords": 1000,
+        "readSource": "store",
+        "readMethod": "getAll",
+        "readStore": "operations",
+        "requestCount": 1,
+        "transactionCount": 1,
+        "transactionMode": "readonly",
+        "transactionMs": 79.80000001192093
+      },
+      {
+        "elapsedMs": 81.30000001192093,
+        "requestMs": 71.09999999403954,
+        "returnedRecords": 1000,
+        "readSource": "store",
+        "readMethod": "getAll",
+        "readStore": "operations",
+        "requestCount": 1,
+        "transactionCount": 1,
+        "transactionMode": "readonly",
+        "transactionMs": 80.80000001192093
+      },
+      {
+        "elapsedMs": 86.80000001192093,
+        "requestMs": 70.5,
+        "returnedRecords": 1000,
+        "readSource": "store",
+        "readMethod": "getAll",
+        "readStore": "operations",
+        "requestCount": 1,
+        "transactionCount": 1,
+        "transactionMode": "readonly",
+        "transactionMs": 86.5
+      },
+      {
+        "elapsedMs": 81.60000002384186,
+        "requestMs": 71.89999997615814,
+        "returnedRecords": 1000,
+        "readSource": "store",
+        "readMethod": "getAll",
+        "readStore": "operations",
+        "requestCount": 1,
+        "transactionCount": 1,
+        "transactionMode": "readonly",
+        "transactionMs": 81.10000002384186
+      },
+      {
+        "elapsedMs": 81.19999998807907,
+        "requestMs": 71.5,
+        "returnedRecords": 1000,
+        "readSource": "store",
+        "readMethod": "getAll",
+        "readStore": "operations",
+        "requestCount": 1,
+        "transactionCount": 1,
+        "transactionMode": "readonly",
+        "transactionMs": 80.89999997615814
+      },
+      {
+        "elapsedMs": 74.19999998807907,
+        "requestMs": 70.2999999821186,
+        "returnedRecords": 1000,
+        "readSource": "store",
+        "readMethod": "getAll",
+        "readStore": "operations",
+        "requestCount": 1,
+        "transactionCount": 1,
+        "transactionMode": "readonly",
+        "transactionMs": 74.09999999403954
+      },
+      {
+        "elapsedMs": 74.80000001192093,
+        "requestMs": 70.7999999821186,
+        "returnedRecords": 1000,
+        "readSource": "store",
+        "readMethod": "getAll",
+        "readStore": "operations",
+        "requestCount": 1,
+        "transactionCount": 1,
+        "transactionMode": "readonly",
+        "transactionMs": 74.60000002384186
+      },
+      {
+        "elapsedMs": 81.40000000596046,
+        "requestMs": 77.69999998807907,
+        "returnedRecords": 1000,
+        "readSource": "store",
+        "readMethod": "getAll",
+        "readStore": "operations",
+        "requestCount": 1,
+        "transactionCount": 1,
+        "transactionMode": "readonly",
+        "transactionMs": 81.2000000178814
+      },
+      {
+        "elapsedMs": 74.7999999821186,
+        "requestMs": 70.69999998807907,
+        "returnedRecords": 1000,
+        "readSource": "store",
+        "readMethod": "getAll",
+        "readStore": "operations",
+        "requestCount": 1,
+        "transactionCount": 1,
+        "transactionMode": "readonly",
+        "transactionMs": 74.40000000596046
+      },
+      {
+        "elapsedMs": 75.69999998807907,
+        "requestMs": 71.90000000596046,
+        "returnedRecords": 1000,
+        "readSource": "store",
+        "readMethod": "getAll",
+        "readStore": "operations",
+        "requestCount": 1,
+        "transactionCount": 1,
+        "transactionMode": "readonly",
+        "transactionMs": 75.5
+      }
+    ],
+    "getAllProposalsSamples": [
+      {
+        "elapsedMs": 69.30000001192093,
+        "requestMs": 59.400000005960464,
+        "returnedRecords": 1000,
+        "readSource": "store",
+        "readMethod": "getAll",
+        "readStore": "proposals",
+        "requestCount": 1,
+        "transactionCount": 1,
+        "transactionMode": "readonly",
+        "transactionMs": 68.90000000596046
+      },
+      {
+        "elapsedMs": 63.60000002384186,
+        "requestMs": 59.79999998211861,
+        "returnedRecords": 1000,
+        "readSource": "store",
+        "readMethod": "getAll",
+        "readStore": "proposals",
+        "requestCount": 1,
+        "transactionCount": 1,
+        "transactionMode": "readonly",
+        "transactionMs": 63.20000001788139
+      },
+      {
+        "elapsedMs": 66.90000000596046,
+        "requestMs": 59.89999997615814,
+        "returnedRecords": 1000,
+        "readSource": "store",
+        "readMethod": "getAll",
+        "readStore": "proposals",
+        "requestCount": 1,
+        "transactionCount": 1,
+        "transactionMode": "readonly",
+        "transactionMs": 66.7000000178814
+      },
+      {
+        "elapsedMs": 63.69999998807907,
+        "requestMs": 60.400000005960464,
+        "returnedRecords": 1000,
+        "readSource": "store",
+        "readMethod": "getAll",
+        "readStore": "proposals",
+        "requestCount": 1,
+        "transactionCount": 1,
+        "transactionMode": "readonly",
+        "transactionMs": 63.599999994039536
+      },
+      {
+        "elapsedMs": 66.5,
+        "requestMs": 59.5,
+        "returnedRecords": 1000,
+        "readSource": "store",
+        "readMethod": "getAll",
+        "readStore": "proposals",
+        "requestCount": 1,
+        "transactionCount": 1,
+        "transactionMode": "readonly",
+        "transactionMs": 66.40000000596046
+      },
+      {
+        "elapsedMs": 72.2000000178814,
+        "requestMs": 59.900000005960464,
+        "returnedRecords": 1000,
+        "readSource": "store",
+        "readMethod": "getAll",
+        "readStore": "proposals",
+        "requestCount": 1,
+        "transactionCount": 1,
+        "transactionMode": "readonly",
+        "transactionMs": 72.10000002384186
+      },
+      {
+        "elapsedMs": 66.5,
+        "requestMs": 59.5,
+        "returnedRecords": 1000,
+        "readSource": "store",
+        "readMethod": "getAll",
+        "readStore": "proposals",
+        "requestCount": 1,
+        "transactionCount": 1,
+        "transactionMode": "readonly",
+        "transactionMs": 66.40000000596046
+      },
+      {
+        "elapsedMs": 63.30000001192093,
+        "requestMs": 60.20000001788139,
+        "returnedRecords": 1000,
+        "readSource": "store",
+        "readMethod": "getAll",
+        "readStore": "proposals",
+        "requestCount": 1,
+        "transactionCount": 1,
+        "transactionMode": "readonly",
+        "transactionMs": 63.20000001788139
+      },
+      {
+        "elapsedMs": 63.30000001192093,
+        "requestMs": 60.20000001788139,
+        "returnedRecords": 1000,
+        "readSource": "store",
+        "readMethod": "getAll",
+        "readStore": "proposals",
+        "requestCount": 1,
+        "transactionCount": 1,
+        "transactionMode": "readonly",
+        "transactionMs": 63.20000001788139
+      },
+      {
+        "elapsedMs": 66.69999998807907,
+        "requestMs": 59.80000001192093,
+        "returnedRecords": 1000,
+        "readSource": "store",
+        "readMethod": "getAll",
+        "readStore": "proposals",
+        "requestCount": 1,
+        "transactionCount": 1,
+        "transactionMode": "readonly",
+        "transactionMs": 66.5
+      },
+      {
+        "elapsedMs": 67.2999999821186,
+        "requestMs": 60.30000001192093,
+        "returnedRecords": 1000,
+        "readSource": "store",
+        "readMethod": "getAll",
+        "readStore": "proposals",
+        "requestCount": 1,
+        "transactionCount": 1,
+        "transactionMode": "readonly",
+        "transactionMs": 67.09999999403954
+      },
+      {
+        "elapsedMs": 67.7999999821186,
+        "requestMs": 60.69999998807907,
+        "returnedRecords": 1000,
+        "readSource": "store",
+        "readMethod": "getAll",
+        "readStore": "proposals",
+        "requestCount": 1,
+        "transactionCount": 1,
+        "transactionMode": "readonly",
+        "transactionMs": 67.59999999403954
+      },
+      {
+        "elapsedMs": 67.69999998807907,
+        "requestMs": 60.599999994039536,
+        "returnedRecords": 1000,
+        "readSource": "store",
+        "readMethod": "getAll",
+        "readStore": "proposals",
+        "requestCount": 1,
+        "transactionCount": 1,
+        "transactionMode": "readonly",
+        "transactionMs": 67.59999999403954
+      },
+      {
+        "elapsedMs": 70,
+        "requestMs": 62.69999998807907,
+        "returnedRecords": 1000,
+        "readSource": "store",
+        "readMethod": "getAll",
+        "readStore": "proposals",
+        "requestCount": 1,
+        "transactionCount": 1,
+        "transactionMode": "readonly",
+        "transactionMs": 69.7999999821186
+      },
+      {
+        "elapsedMs": 79.30000001192093,
+        "requestMs": 60.20000001788139,
+        "returnedRecords": 1000,
+        "readSource": "store",
+        "readMethod": "getAll",
+        "readStore": "proposals",
+        "requestCount": 1,
+        "transactionCount": 1,
+        "transactionMode": "readonly",
+        "transactionMs": 79.09999999403954
+      },
+      {
+        "elapsedMs": 63.69999998807907,
+        "requestMs": 60.30000001192093,
+        "returnedRecords": 1000,
+        "readSource": "store",
+        "readMethod": "getAll",
+        "readStore": "proposals",
+        "requestCount": 1,
+        "transactionCount": 1,
+        "transactionMode": "readonly",
+        "transactionMs": 63.5
+      },
+      {
+        "elapsedMs": 65.69999998807907,
+        "requestMs": 62.599999994039536,
+        "returnedRecords": 1000,
+        "readSource": "store",
+        "readMethod": "getAll",
+        "readStore": "proposals",
+        "requestCount": 1,
+        "transactionCount": 1,
+        "transactionMode": "readonly",
+        "transactionMs": 65.5
+      },
+      {
+        "elapsedMs": 101.80000001192093,
+        "requestMs": 62.30000001192093,
+        "returnedRecords": 1000,
+        "readSource": "store",
+        "readMethod": "getAll",
+        "readStore": "proposals",
+        "requestCount": 1,
+        "transactionCount": 1,
+        "transactionMode": "readonly",
+        "transactionMs": 101.59999999403954
+      },
+      {
+        "elapsedMs": 63.69999998807907,
+        "requestMs": 60.599999994039536,
+        "returnedRecords": 1000,
+        "readSource": "store",
+        "readMethod": "getAll",
+        "readStore": "proposals",
+        "requestCount": 1,
+        "transactionCount": 1,
+        "transactionMode": "readonly",
+        "transactionMs": 63.599999994039536
+      },
+      {
+        "elapsedMs": 64,
+        "requestMs": 60.69999998807907,
+        "returnedRecords": 1000,
+        "readSource": "store",
+        "readMethod": "getAll",
+        "readStore": "proposals",
+        "requestCount": 1,
+        "transactionCount": 1,
+        "transactionMode": "readonly",
+        "transactionMs": 63.900000005960464
+      }
+    ],
+    "scopedRepositoryAuthorReads": {
+      "returnedEntries": 100,
+      "returnedProposals": 100,
+      "expected": 100,
+      "entryIndex": "repositoryKey",
+      "entryIndexRows": 100,
+      "entryIndexRequestCount": 1,
+      "proposalIndex": "repositoryKey",
+      "proposalIndexRows": 100,
+      "proposalIndexRequestCount": 1,
+      "noCrossRepositoryOrAuthorLeak": true
+    }
+  },
+  "probeStartupDiagnostics": [],
+  "origin": "http://127.0.0.1:42475",
+  "browser": "155.0.8059.79",
+  "summary": {
+    "nearestRankPercentiles": {
+      "rule": "ceil(p*n)",
+      "samples": 20,
+      "p95IsMaximum": false
+    },
+    "recordRestore": {
+      "102400": {
+        "endToEndMs": {
+          "n": 20,
+          "p50": 2.899999976158142,
+          "p95": 7.399999976158142,
+          "p99": 10.199999988079071,
+          "max": 10.199999988079071
+        },
+        "indexedRequestMs": {
+          "n": 20,
+          "p50": 1.5999999940395355,
+          "p95": 1.7000000178813934,
+          "p99": 1.9000000059604645,
+          "max": 1.9000000059604645
+        },
+        "transactionMs": {
+          "n": 20,
+          "p50": 2.800000011920929,
+          "p95": 7.299999982118607,
+          "p99": 10.199999988079071,
+          "max": 10.199999988079071
+        }
+      },
+      "1048576": {
+        "endToEndMs": {
+          "n": 20,
+          "p50": 19.600000023841858,
+          "p95": 20.400000005960464,
+          "p99": 29.400000005960464,
+          "max": 29.400000005960464
+        },
+        "indexedRequestMs": {
+          "n": 20,
+          "p50": 9.899999976158142,
+          "p95": 10.099999994039536,
+          "p99": 10.199999988079071,
+          "max": 10.199999988079071
+        },
+        "transactionMs": {
+          "n": 20,
+          "p50": 19.5,
+          "p95": 20.400000005960464,
+          "p99": 29.30000001192093,
+          "max": 29.30000001192093
+        }
+      }
+    },
+    "putLatestDraft": {
+      "1": {
+        "endToEndMs": {
+          "n": 20,
+          "p50": 1.7999999821186066,
+          "p95": 2.300000011920929,
+          "p99": 2.5,
+          "max": 2.5
+        },
+        "strictTransactionMs": {
+          "n": 20,
+          "p50": 1.699999988079071,
+          "p95": 2.300000011920929,
+          "p99": 2.5,
+          "max": 2.5
+        }
+      },
+      "100": {
+        "endToEndMs": {
+          "n": 20,
+          "p50": 8.400000005960464,
+          "p95": 10,
+          "p99": 10.799999982118607,
+          "max": 10.799999982118607
+        },
+        "strictTransactionMs": {
+          "n": 20,
+          "p50": 8.400000005960464,
+          "p95": 10,
+          "p99": 10.699999988079071,
+          "max": 10.699999988079071
+        }
+      },
+      "1000": {
+        "endToEndMs": {
+          "n": 20,
+          "p50": 76.5,
+          "p95": 82.80000001192093,
+          "p99": 84.40000000596046,
+          "max": 84.40000000596046
+        },
+        "strictTransactionMs": {
+          "n": 20,
+          "p50": 76.5,
+          "p95": 82.80000001192093,
+          "p99": 84.40000000596046,
+          "max": 84.40000000596046
+        }
+      }
+    },
+    "inventory": {
+      "getAllEntries": {
+        "endToEndMs": {
+          "n": 20,
+          "p50": 80.5,
+          "p95": 86.69999998807907,
+          "p99": 86.80000001192093,
+          "max": 86.80000001192093
+        },
+        "indexedRequestMs": {
+          "n": 20,
+          "p50": 70.90000000596046,
+          "p95": 71.90000000596046,
+          "p99": 77.69999998807907,
+          "max": 77.69999998807907
+        },
+        "transactionMs": {
+          "n": 20,
+          "p50": 80.10000002384186,
+          "p95": 86.5,
+          "p99": 86.59999999403954,
+          "max": 86.59999999403954
+        }
+      },
+      "getAllProposals": {
+        "endToEndMs": {
+          "n": 20,
+          "p50": 66.5,
+          "p95": 79.30000001192093,
+          "p99": 101.80000001192093,
+          "max": 101.80000001192093
+        },
+        "indexedRequestMs": {
+          "n": 20,
+          "p50": 60.20000001788139,
+          "p95": 62.599999994039536,
+          "p99": 62.69999998807907,
+          "max": 62.69999998807907
+        },
+        "transactionMs": {
+          "n": 20,
+          "p50": 66.40000000596046,
+          "p95": 79.09999999403954,
+          "p99": 101.59999999403954,
+          "max": 101.59999999403954
+        }
+      }
+    }
+  }
+}

@@ -1,0 +1,91 @@
+{
+  "schemaVersion": 1,
+  "status": "complete",
+  "source": {
+    "runtimeGitHead": "80ab121ad08b2c5f5957e3405eed511762fb1747",
+    "journalSourceSha256": "5392cf4dcce0e0bbdd19fabaea683903334e157f3cc3d385552cf1f90ab024d9",
+    "probeScriptSha256": "6fe2be822dcc1d8880da378647aa125112755c9cba4813379c66890a482089dc",
+    "probeHtmlSha256": "098165d53cde430d32c5d9d92d19d62376c83306050805a8ef846f22e0148f8a",
+    "rawJsonSha256": "9ab98b4fd57a45cb313c1cb65b1d8f3080ee73469847f552fd6d1310f31c7c4b"
+  },
+  "environment": {
+    "runtimeRoot": "/data/scriptorium-core64-worktrees/g0",
+    "browser": "Chromium 155.0.8059.79",
+    "node": "v24.21.0",
+    "repeats": 20,
+    "percentile": "nearest rank ceil(p*n); p95 is rank 19 and p99 is the maximum at rank 20",
+    "timingDisplayPrecision": "milliseconds rounded to 0.1 ms; raw.json retains unrounded samples and percentiles",
+    "physicalIndexedDbBytes": "not exposed or inferred; origin storage estimates and JSON serialization sizes are kept separate"
+  },
+  "C14": {
+    "exactRestore": true,
+    "samplesPerPayload": 20,
+    "rowsReturnedPerRead": 1,
+    "requestsPerRead": 1,
+    "read": "operations.documentKey.getAll",
+    "payloads": {
+      "102400": {
+        "eachTextFieldUtf8Bytes": 102400,
+        "combinedTextBaseTextWriteContentUtf8Bytes": 307200,
+        "jsonRecordUtf8Bytes": 308892,
+        "getDocumentMs": { "p50": 2.9, "p95": 7.4, "p99": 10.2 },
+        "indexedRequestMs": { "p50": 1.6, "p95": 1.7, "p99": 1.9 },
+        "transactionMs": { "p50": 2.8, "p95": 7.3, "p99": 10.2 }
+      },
+      "1048576": {
+        "eachTextFieldUtf8Bytes": 1048576,
+        "combinedTextBaseTextWriteContentUtf8Bytes": 3145728,
+        "jsonRecordUtf8Bytes": 3147428,
+        "getDocumentMs": { "p50": 19.6, "p95": 20.4, "p99": 29.4 },
+        "indexedRequestMs": { "p50": 9.9, "p95": 10.1, "p99": 10.2 },
+        "transactionMs": { "p50": 19.5, "p95": 20.4, "p99": 29.3 }
+      }
+    },
+    "originStorageEstimateBytes": {
+      "beforeDatabaseOpen": 0,
+      "afterEmptyDatabaseOpen": 73728,
+      "beforePut": 73728,
+      "afterPut": 73728,
+      "observedPutDelta": 0,
+      "interpretation": "origin-wide estimate showed no record-sized delta; it is not physical record storage"
+    },
+    "proposal": "retain current full fields; no payload schema rewrite without measurable physical storage benefit and migration/recovery proof"
+  },
+  "C15": {
+    "samplesPerOccupancy": 20,
+    "isolation": {
+      "staleGenerationDenied": true,
+      "equalGenerationDifferentOperationDenied": true,
+      "foreignAuthorHighGenerationDidNotBlockOwner": true,
+      "foreignAuthorRecordPreserved": true
+    },
+    "occupancies": {
+      "1": { "rowsReturned": 1, "requests": 1, "mode": "readwrite", "durability": "strict", "endToEndMs": { "p50": 1.8, "p95": 2.3, "p99": 2.5 }, "transactionMs": { "p50": 1.7, "p95": 2.3, "p99": 2.5 } },
+      "100": { "rowsReturned": 100, "requests": 1, "mode": "readwrite", "durability": "strict", "endToEndMs": { "p50": 8.4, "p95": 10.0, "p99": 10.8 }, "transactionMs": { "p50": 8.4, "p95": 10.0, "p99": 10.7 } },
+      "1000": { "rowsReturned": 1000, "requests": 1, "mode": "readwrite", "durability": "strict", "endToEndMs": { "p50": 76.5, "p95": 82.8, "p99": 84.4 }, "transactionMs": { "p50": 76.5, "p95": 82.8, "p99": 84.4 } }
+    },
+    "proposal": "retain strict indexed read and generation protections; flag the synthetic 1000-row occupancy for follow-up if production usage reaches this scale"
+  },
+  "C16": {
+    "rowsPerStore": 1000,
+    "repositories": 10,
+    "entriesByAuthor": { "owner": 950, "guest": 50 },
+    "getAllEntries": { "jsonArrayUtf8Bytes": 2245143, "requests": 1, "transactions": 1, "endToEndMs": { "p50": 80.5, "p95": 86.7, "p99": 86.8 }, "requestMs": { "p50": 70.9, "p95": 71.9, "p99": 77.7 } },
+    "getAllProposals": { "jsonArrayUtf8Bytes": 1451124, "requests": 1, "transactions": 1, "endToEndMs": { "p50": 66.5, "p95": 79.3, "p99": 101.8 }, "requestMs": { "p50": 60.2, "p95": 62.6, "p99": 62.7 } },
+    "scopedRepositoryAuthorReads": {
+      "entriesReturned": 100,
+      "proposalsReturned": 100,
+      "index": "repositoryKey",
+      "requestsPerStore": 1,
+      "rowsReturnedPerStore": 100,
+      "crossRepositoryOrAuthorLeak": false
+    },
+    "proposal": "retain full inventory for explicit reconciliation and existing repository-scoped reads; no new schema index proposed"
+  },
+  "notChecked": [
+    "physical IndexedDB record bytes and fsync cost",
+    "old-schema and interrupted migration behavior",
+    "transaction abort/quota, crash, response-loss, and multi-tab races",
+    "full workspace install, typecheck, test, build, and audit"
+  ]
+}
