@@ -22,15 +22,20 @@ export function installBrowserProbes() {
     tx.addEventListener('abort', () => Object.assign(row, { ms: performance.now() - start, status: 'aborted' }));
     return tx;
   };
-  for (const method of ['get', 'getAll', 'getAllKeys', 'count', 'openCursor']) {
-    const original = IDBObjectStore.prototype[method];
-    IDBObjectStore.prototype[method] = function(...args) {
-      const start = performance.now(), request = Reflect.apply(original, this, args);
-      const row = { start, method, store: this.name }; metrics.reads.push(row);
-      request.addEventListener('success', () => Object.assign(row, { ms: performance.now() - start,
-        records: Array.isArray(request.result) ? request.result.length : request.result == null ? 0 : 1 }));
-      return request;
-    };
+  for (const [source, prototype] of [['objectStore', IDBObjectStore.prototype], ['index', IDBIndex.prototype]]) {
+    for (const method of ['get', 'getAll', 'getAllKeys', 'getKey', 'count', 'openCursor', 'openKeyCursor']) {
+      const original = prototype[method];
+      prototype[method] = function(...args) {
+        const start = performance.now(), request = Reflect.apply(original, this, args);
+        const row = { start, source, method, store: source === 'index' ? this.objectStore.name : this.name,
+          index: source === 'index' ? this.name : undefined, status: 'pending' };
+        metrics.reads.push(row);
+        request.addEventListener('success', () => Object.assign(row, { ms: performance.now() - start, status: 'complete',
+          records: method === 'count' ? request.result : Array.isArray(request.result) ? request.result.length : request.result == null ? 0 : 1 }));
+        request.addEventListener('error', () => Object.assign(row, { ms: performance.now() - start, status: 'failed' }));
+        return request;
+      };
+    }
   }
   for (const type of ['keydown', 'beforeinput', 'compositionstart', 'compositionend']) {
     document.addEventListener(type, event => {

@@ -101,3 +101,8 @@ the corrected result explicitly in the baseline.
 from `readSceneSnapshot`. The optional `legacy` workload measures the older
 `saveScene` convenience path, which scans scene metadata. Never present its
 latency as the current UI's checkpoint latency.
+
+IDB read probes cover both object-store and index methods (including the journal's
+`documentKey` index), and distinguish successful, pending and failed read requests.
+Old diagnostic browser artifacts without index probes undercount total reads and
+must not be used for total read comparisons.
