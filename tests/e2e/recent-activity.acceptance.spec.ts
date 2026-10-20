@@ -147,10 +147,32 @@ async function unusedTcpPort(): Promise<number> {
 }
 
 async function stopBrowserProcess(child: ChildProcess): Promise<void> {
-  if (child.exitCode !== null || child.signalCode !== null) return;
-  const exited = new Promise<void>((resolveExit) => child.once("exit", () => resolveExit()));
+  const hasExited = () => child.exitCode !== null || child.signalCode !== null;
+  if (hasExited()) return;
+
+  const waitForExit = (timeoutMs: number) => new Promise<boolean>((resolveExit) => {
+    let settled = false;
+    let timer: ReturnType<typeof setTimeout> | undefined;
+    const finish = (exited: boolean) => {
+      if (settled) return;
+      settled = true;
+      if (timer !== undefined) clearTimeout(timer);
+      child.removeListener("exit", onExit);
+      resolveExit(exited);
+    };
+    const onExit = () => finish(true);
+    child.once("exit", onExit);
+    timer = setTimeout(() => finish(false), timeoutMs);
+    if (hasExited()) finish(true);
+  });
+
+  const gracefulExit = waitForExit(2_000);
   child.kill("SIGTERM");
-  await Promise.race([exited, new Promise<void>((resolveTimeout) => setTimeout(resolveTimeout, 2_000))]);
+  if (await gracefulExit) return;
+
+  const forcedExit = waitForExit(2_000);
+  child.kill("SIGKILL");
+  if (!(await forcedExit)) throw new Error("Native Chromium did not exit after SIGKILL");
 }
 
 async function createNativeHeadfulContext(width: number): Promise<{
