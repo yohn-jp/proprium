@@ -34,8 +34,9 @@ Production-input SHA-256 values at the built source revision:
 The complete source-file hash manifest is at
 `/data/scriptorium-c64-oci/evidence/final-8966fc329a7628d3cf6b4aac84e6b678afc2d157/source-file-hashes.txt`
 (SHA-256 `1c31812f36ab56d2e2b071d9039434fac8489902946be448263199fba4a90844`).
-The production-input manifest is alongside it (SHA-256
-`c688738e521ae49e27b27a67df94a7926412bcbb07687bb733d4060ff8f410b2`).
+The production-input manifest is
+`/data/scriptorium-c64-oci/evidence/final-8966fc329a7628d3cf6b4aac84e6b678afc2d157/production-file-hashes.txt`
+(SHA-256 `c688738e521ae49e27b27a67df94a7926412bcbb07687bb733d4060ff8f410b2`).
 
 ## Results
 
