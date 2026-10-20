@@ -1,0 +1,41 @@
+{
+  "schemaVersion": 1,
+  "syntheticOnly": true,
+  "source": "/data/scriptorium-core64-g0-a1587e78-20261020-2318/synthetic/small/origin.git",
+  "cases": {
+    "blobExact": {
+      "path": "attachments/blob-exact-32mib.bin",
+      "bytes": 33554432,
+      "sha256": "725ebd37e853e6e8c40959a9144e2eda15e7eba2978b5a60137d73a4b1bd7a77",
+      "nulBytes": 130562,
+      "gitObject": "d17e7cabc9239910b7a728549ca933e9dcf68e05"
+    },
+    "blobPlusOne": {
+      "path": "attachments/blob-plus-one.bin",
+      "bytes": 33554433,
+      "sha256": "b748c5bcb85faae1126838189cf862db84cd2a40c4144951841d53bf17c878ef",
+      "nulBytes": 130562,
+      "gitObject": "4de47ea615c4dddd9367c1fb85b686f4b11563d4"
+    },
+    "batchExact": {
+      "path": "attachments/batch-response-exact.bin",
+      "bytes": 33554376,
+      "sha256": "039a3cd2089da32688f07e362548702cadae3b9487e99254d5a324ce7561a035",
+      "nulBytes": 130562,
+      "gitObject": "5605567b7805c213e40c4a03f51fd5066b3a27c9"
+    },
+    "batchPlusOne": {
+      "path": "attachments/batch-response-plus-one.bin",
+      "bytes": 33554377,
+      "sha256": "8d31d9920e126fc9cda155002a46dd335e3ae780d1785f1172bcc268f0abe3cf",
+      "nulBytes": 130562,
+      "gitObject": "0ebf334e2006a0476b299558bed613c65fe6fc2f"
+    }
+  },
+  "remote": "/data/scriptorium-core64-g0-a1587e78-20261020-2318/results/core64-memory/c30/fixtures/blob-boundary.git",
+  "batchResponseTargetBytes": 33554432,
+  "batchResponseExpectedBytes": {
+    "exact": 33554432,
+    "plusOne": 33554433
+  }
+}

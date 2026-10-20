@@ -1,0 +1,55 @@
+{
+  "schemaVersion": 1,
+  "status": "complete",
+  "mode": "batch-output",
+  "sample": {
+    "name": "git.cat-file.batch.response",
+    "status": "error",
+    "ms": 102.447,
+    "cpuUs": null,
+    "io": null,
+    "rssBeforeBytes": 60014592,
+    "rssAfterBytes": 131055616,
+    "rssBytes": 131055616,
+    "sampledPeakRssBytes": 87801856,
+    "sampledRssSamples": 2,
+    "processPeakRssBeforeBytes": 60014592,
+    "processPeakRssAfterBytes": 131055616,
+    "maxRssKiB": null,
+    "instrumentationCounters": {
+      "gitProcesses": 1,
+      "gitCommandLogDropped": 0,
+      "readFileCalls": 0,
+      "readFileBytes": 0
+    },
+    "gitOutputs": {
+      "batchContent": {
+        "calls": 1,
+        "failures": 1,
+        "stdoutBytes": 33554432,
+        "stderrBytes": 0,
+        "maxStdoutBytes": 33554432,
+        "lastStdoutBytes": 33554432,
+        "lastErrorCode": "ERR_CHILD_PROCESS_STDIO_MAXBUFFER",
+        "lastErrorMessage": "stdout maxBuffer length exceeded"
+      }
+    },
+    "error": {
+      "name": "RangeError",
+      "code": "ERR_CHILD_PROCESS_STDIO_MAXBUFFER",
+      "signal": null,
+      "killed": false,
+      "message": "stdout maxBuffer length exceeded",
+      "partialOutputBytes": 33554432,
+      "maxBufferRelated": true
+    },
+    "partialOutputReturnedToCore": false,
+    "expectedOutcome": "error",
+    "returnedBytes": 33554432,
+    "outputByteCountMatchesTarget": null,
+    "expectedResponseBytes": 33554433,
+    "outcomeMatched": true
+  },
+  "finishedAt": "2026-10-20T17:30:00.860Z",
+  "note": "Raw cat-file --batch output exercises the same Node maxBuffer boundary. Core revision batches remain bounded to 24 MiB of blob bodies and 4,096 objects; their observed stdout lengths are captured separately during cache workers."
+}

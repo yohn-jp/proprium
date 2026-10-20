@@ -1,0 +1,123 @@
+{
+  "schemaVersion": 1,
+  "status": "complete",
+  "mode": "boundary",
+  "method": "revision",
+  "filePath": "attachments/blob-exact-32mib.bin",
+  "expectedBytes": 33554432,
+  "expectedSha256": "725ebd37e853e6e8c40959a9144e2eda15e7eba2978b5a60137d73a4b1bd7a77",
+  "expectedNulBytes": 130562,
+  "expectedOutcome": "success",
+  "source": "synthetic-only",
+  "samples": [
+    {
+      "name": "revision.33554432",
+      "status": "success",
+      "ms": 116.61364600000002,
+      "cpuUs": {
+        "user": 86987,
+        "system": 27042
+      },
+      "io": {
+        "rchar": 33583655,
+        "wchar": 33555902,
+        "syscr": 737,
+        "syscw": 2073,
+        "read_bytes": 0,
+        "write_bytes": 0,
+        "cancelled_write_bytes": 0
+      },
+      "rssBeforeBytes": 76091392,
+      "rssAfterBytes": 144904192,
+      "rssBytes": 144904192,
+      "sampledPeakRssBytes": 144510976,
+      "sampledRssSamples": 3,
+      "processPeakRssBeforeBytes": 76222464,
+      "processPeakRssAfterBytes": 144904192,
+      "maxRssKiB": 141508,
+      "instrumentationCounters": {
+        "gitProcesses": 3,
+        "gitCommandLogDropped": 0,
+        "readFileCalls": 0,
+        "readFileBytes": 0
+      },
+      "gitOutputs": {
+        "treeList": {
+          "calls": 1,
+          "failures": 0,
+          "stdoutBytes": 1258,
+          "stderrBytes": 0,
+          "maxStdoutBytes": 1258,
+          "lastStdoutBytes": 1258,
+          "lastErrorCode": null,
+          "lastErrorMessage": null
+        },
+        "batchCheck": {
+          "calls": 1,
+          "failures": 0,
+          "stdoutBytes": 55,
+          "stderrBytes": 0,
+          "maxStdoutBytes": 55,
+          "lastStdoutBytes": 55,
+          "lastErrorCode": null,
+          "lastErrorMessage": null
+        },
+        "blobRead": {
+          "calls": 1,
+          "failures": 0,
+          "stdoutBytes": 33554432,
+          "stderrBytes": 0,
+          "maxStdoutBytes": 33554432,
+          "lastStdoutBytes": 33554432,
+          "lastErrorCode": null,
+          "lastErrorMessage": null
+        }
+      },
+      "value": {
+        "count": 1,
+        "revision": "725ebd37e853e6e8c40959a9144e2eda15e7eba2978b5a60137d73a4b1bd7a77",
+        "matchesExpectedSha256": true
+      },
+      "expectedOutcome": "success",
+      "outputBytesMatchExpected": true,
+      "outcomeMatched": true
+    }
+  ],
+  "cacheAfter": {
+    "probe": "runtime-private-fields-accessible",
+    "derivedCaches": {
+      "fileRevision": {
+        "entries": 1,
+        "shallowPayloadEstimateBytes": 168,
+        "model": "UTF-8 key/value bytes + 64 bytes per Map entry; excludes V8 overhead"
+      },
+      "hierarchy": {
+        "entries": 0,
+        "explicitBytes": 0,
+        "entryBytes": []
+      },
+      "historicalMetadata": {
+        "entries": 0,
+        "explicitBytes": 0,
+        "entryBytes": []
+      },
+      "reconciliation": {
+        "entries": 0,
+        "boundedJsonPayloadEstimateBytes": 0,
+        "entryBytes": []
+      },
+      "estimatedOrAccountedTotalBytes": 168,
+      "totalSemantics": "Mixed explicit Core estimates and labeled shallow payload estimates; not retained heap or process RSS"
+    },
+    "authorityState": {
+      "readObservations": 0,
+      "observationRefKeys": 0,
+      "proposalsByProject": 0,
+      "durableProposalIdsByProject": 0,
+      "approvalsByProject": 0,
+      "writerQueues": 0,
+      "semantics": "Lifecycle and authority state; excluded from reconstructible-cache byte totals and any eviction recommendation"
+    }
+  },
+  "finishedAt": "2026-10-20T17:29:35.319Z"
+}

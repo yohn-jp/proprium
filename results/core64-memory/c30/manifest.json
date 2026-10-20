@@ -1,0 +1,886 @@
+{
+  "schemaVersion": 1,
+  "phase": "c30",
+  "status": "complete",
+  "startedAt": "2026-10-20T17:29:20.623Z",
+  "g0Root": "/data/scriptorium-core64-g0-a1587e78-20261020-2318/synthetic",
+  "g0SourceRevision": "a1587e784788fa87d86c0eb7ab175d7a28a3209f",
+  "runtime": {
+    "root": "/home/sophia/src/scriptorium-c64-derived",
+    "revision": "f633da0b3f133ad812953c284aab35a4956d2507",
+    "coreSource": "/home/sophia/src/scriptorium-c64-derived/packages/core/src/index.ts",
+    "coreSourceSha256": "dd05006e97a4dd471fd3555b852d1ad4166de53a4ec41b80d8a0c52d3ab929c5",
+    "coreModule": "/home/sophia/src/scriptorium-c64-derived/packages/core/dist/index.js",
+    "coreModuleSha256": "a7b83895e2c239d85a3f4d973cf7458e64cc7415c418a4844ff33f700a52d4a3"
+  },
+  "coreModule": "/home/sophia/src/scriptorium-c64-derived/packages/core/dist/index.js",
+  "coreModuleSha256": "a7b83895e2c239d85a3f4d973cf7458e64cc7415c418a4844ff33f700a52d4a3",
+  "host": {
+    "node": "v24.21.0",
+    "platform": "linux",
+    "arch": "x64",
+    "cpuAffinity": "0-3"
+  },
+  "executionContext": {
+    "overlapNote": "Memory on CPUs 0-3; writer on CPUs 4-7; C48 semantics on CPUs 8-11; OCI base pull on CPUs 12-15. Latency is a contended observation, not adoption-performance evidence.",
+    "latencyInterpretation": "Latency is observational under concurrent campaign lanes and is not adoption performance evidence."
+  },
+  "rules": {
+    "onlySyntheticData": true,
+    "maxBufferBytes": 33554432,
+    "processMemory": "Node process RSS endpoints, sampled operation peak, and process-lifetime high-water mark; Git child RSS is not added",
+    "cacheBytes": "Explicit Core byte counters plus labeled shallow payload estimates; never equated with process RSS",
+    "timeoutMs": 180000,
+    "cohortCaps": {
+      "workerCount": 8,
+      "perWorkerAddressSpaceBytes": 6442450944,
+      "perWorkerV8OldSpaceMiB": 2048,
+      "perWorkerV8SemiSpaceMiB": 64,
+      "perWorkerCpuSeconds": 180,
+      "perWorkerWallTimeoutMs": 180000,
+      "cohortWallTimeoutMs": 360000,
+      "gitCommandTimeoutMs": 30000,
+      "gitCommandAddressSpaceBytes": 6442450944,
+      "gitCommandCpuSeconds": 30,
+      "cacheIdleMs": null,
+      "largeRepositoryCount": null,
+      "stressRepositoryCount": null,
+      "cacheRepositoryTotal": null,
+      "note": "Each worker and its Git subprocesses inherit per-process RLIMIT_AS/CPU limits; this is not an aggregate cgroup memory cap."
+    }
+  },
+  "workers": [
+    {
+      "mode": "boundary",
+      "output": "/data/scriptorium-core64-g0-a1587e78-20261020-2318/results/core64-memory/c30-fixed/raw/read-blobExact.json",
+      "timeoutMs": 180000,
+      "timedOut": false,
+      "code": 0,
+      "signal": null,
+      "report": {
+        "schemaVersion": 1,
+        "status": "complete",
+        "mode": "boundary",
+        "method": "read",
+        "filePath": "attachments/blob-exact-32mib.bin",
+        "expectedBytes": 33554432,
+        "expectedSha256": "725ebd37e853e6e8c40959a9144e2eda15e7eba2978b5a60137d73a4b1bd7a77",
+        "expectedNulBytes": 130562,
+        "expectedOutcome": "success",
+        "source": "synthetic-only",
+        "samples": [
+          {
+            "name": "read.33554432",
+            "status": "success",
+            "ms": 356.76607500000006,
+            "cpuUs": {
+              "user": 301403,
+              "system": 56198
+            },
+            "io": {
+              "rchar": 33582459,
+              "wchar": 33554687,
+              "syscr": 735,
+              "syscw": 2072,
+              "read_bytes": 0,
+              "write_bytes": 0,
+              "cancelled_write_bytes": 0
+            },
+            "rssBeforeBytes": 75370496,
+            "rssAfterBytes": 223350784,
+            "rssBytes": 223350784,
+            "sampledPeakRssBytes": 223350784,
+            "sampledRssSamples": 3,
+            "processPeakRssBeforeBytes": 75370496,
+            "processPeakRssAfterBytes": 223350784,
+            "maxRssKiB": 218116,
+            "instrumentationCounters": {
+              "gitProcesses": 3,
+              "gitCommandLogDropped": 0,
+              "readFileCalls": 0,
+              "readFileBytes": 0
+            },
+            "gitOutputs": {
+              "treeList": {
+                "calls": 2,
+                "failures": 0,
+                "stdoutBytes": 139,
+                "stderrBytes": 0,
+                "maxStdoutBytes": 74,
+                "lastStdoutBytes": 74,
+                "lastErrorCode": null,
+                "lastErrorMessage": null
+              },
+              "blobRead": {
+                "calls": 1,
+                "failures": 0,
+                "stdoutBytes": 33554432,
+                "stderrBytes": 0,
+                "maxStdoutBytes": 33554432,
+                "lastStdoutBytes": 33554432,
+                "lastErrorCode": null,
+                "lastErrorMessage": null
+              }
+            },
+            "value": {
+              "present": true,
+              "encoding": "base64",
+              "sha256": "725ebd37e853e6e8c40959a9144e2eda15e7eba2978b5a60137d73a4b1bd7a77",
+              "nulBytes": 130562,
+              "decodedBytes": 33554432,
+              "base64Characters": 44739244
+            },
+            "expectedOutcome": "success",
+            "outputBytesMatchExpected": true,
+            "outcomeMatched": true
+          }
+        ],
+        "cacheAfter": {
+          "probe": "runtime-private-fields-accessible",
+          "derivedCaches": {
+            "fileRevision": {
+              "entries": 1,
+              "shallowPayloadEstimateBytes": 168,
+              "model": "UTF-8 key/value bytes + 64 bytes per Map entry; excludes V8 overhead"
+            },
+            "hierarchy": {
+              "entries": 0,
+              "explicitBytes": 0,
+              "entryBytes": []
+            },
+            "historicalMetadata": {
+              "entries": 0,
+              "explicitBytes": 0,
+              "entryBytes": []
+            },
+            "reconciliation": {
+              "entries": 0,
+              "boundedJsonPayloadEstimateBytes": 0,
+              "entryBytes": []
+            },
+            "estimatedOrAccountedTotalBytes": 168,
+            "totalSemantics": "Mixed explicit Core estimates and labeled shallow payload estimates; not retained heap or process RSS"
+          },
+          "authorityState": {
+            "readObservations": 0,
+            "observationRefKeys": 0,
+            "proposalsByProject": 0,
+            "durableProposalIdsByProject": 0,
+            "approvalsByProject": 0,
+            "writerQueues": 0,
+            "semantics": "Lifecycle and authority state; excluded from reconstructible-cache byte totals and any eviction recommendation"
+          }
+        },
+        "finishedAt": "2026-10-20T17:29:34.521Z"
+      }
+    },
+    {
+      "mode": "boundary",
+      "output": "/data/scriptorium-core64-g0-a1587e78-20261020-2318/results/core64-memory/c30-fixed/raw/read-blobPlusOne.json",
+      "timeoutMs": 180000,
+      "timedOut": false,
+      "code": 0,
+      "signal": null,
+      "report": {
+        "schemaVersion": 1,
+        "status": "complete",
+        "mode": "boundary",
+        "method": "read",
+        "filePath": "attachments/blob-plus-one.bin",
+        "expectedBytes": 33554433,
+        "expectedSha256": "b748c5bcb85faae1126838189cf862db84cd2a40c4144951841d53bf17c878ef",
+        "expectedNulBytes": 130562,
+        "expectedOutcome": "error",
+        "source": "synthetic-only",
+        "samples": [
+          {
+            "name": "read.33554433",
+            "status": "error",
+            "ms": 98.253,
+            "cpuUs": null,
+            "io": null,
+            "rssBeforeBytes": 76124160,
+            "rssAfterBytes": 144936960,
+            "rssBytes": 144936960,
+            "sampledPeakRssBytes": 101945344,
+            "sampledRssSamples": 2,
+            "processPeakRssBeforeBytes": 76124160,
+            "processPeakRssAfterBytes": 144936960,
+            "maxRssKiB": null,
+            "instrumentationCounters": {
+              "gitProcesses": 3,
+              "gitCommandLogDropped": 0,
+              "readFileCalls": 0,
+              "readFileBytes": 0
+            },
+            "gitOutputs": {
+              "treeList": {
+                "calls": 2,
+                "failures": 0,
+                "stdoutBytes": 136,
+                "stderrBytes": 0,
+                "maxStdoutBytes": 71,
+                "lastStdoutBytes": 71,
+                "lastErrorCode": null,
+                "lastErrorMessage": null
+              },
+              "blobRead": {
+                "calls": 1,
+                "failures": 1,
+                "stdoutBytes": 33554432,
+                "stderrBytes": 0,
+                "maxStdoutBytes": 33554432,
+                "lastStdoutBytes": 33554432,
+                "lastErrorCode": "ERR_CHILD_PROCESS_STDIO_MAXBUFFER",
+                "lastErrorMessage": "stdout maxBuffer length exceeded"
+              }
+            },
+            "error": {
+              "name": "CoreError",
+              "code": "git_operation_failed",
+              "signal": null,
+              "killed": false,
+              "message": "Git operation failed: stdout maxBuffer length exceeded",
+              "partialOutputBytes": null,
+              "maxBufferRelated": true
+            },
+            "partialOutputReturnedToCore": false,
+            "expectedOutcome": "error",
+            "outputBytesMatchExpected": null,
+            "outcomeMatched": true
+          }
+        ],
+        "cacheAfter": {
+          "probe": "runtime-private-fields-accessible",
+          "derivedCaches": {
+            "fileRevision": {
+              "entries": 0,
+              "shallowPayloadEstimateBytes": 0,
+              "model": "UTF-8 key/value bytes + 64 bytes per Map entry; excludes V8 overhead"
+            },
+            "hierarchy": {
+              "entries": 0,
+              "explicitBytes": 0,
+              "entryBytes": []
+            },
+            "historicalMetadata": {
+              "entries": 0,
+              "explicitBytes": 0,
+              "entryBytes": []
+            },
+            "reconciliation": {
+              "entries": 0,
+              "boundedJsonPayloadEstimateBytes": 0,
+              "entryBytes": []
+            },
+            "estimatedOrAccountedTotalBytes": 0,
+            "totalSemantics": "Mixed explicit Core estimates and labeled shallow payload estimates; not retained heap or process RSS"
+          },
+          "authorityState": {
+            "readObservations": 0,
+            "observationRefKeys": 0,
+            "proposalsByProject": 0,
+            "durableProposalIdsByProject": 0,
+            "approvalsByProject": 0,
+            "writerQueues": 0,
+            "semantics": "Lifecycle and authority state; excluded from reconstructible-cache byte totals and any eviction recommendation"
+          }
+        },
+        "finishedAt": "2026-10-20T17:29:34.914Z"
+      }
+    },
+    {
+      "mode": "boundary",
+      "output": "/data/scriptorium-core64-g0-a1587e78-20261020-2318/results/core64-memory/c30-fixed/raw/revision-blobExact.json",
+      "timeoutMs": 180000,
+      "timedOut": false,
+      "code": 0,
+      "signal": null,
+      "report": {
+        "schemaVersion": 1,
+        "status": "complete",
+        "mode": "boundary",
+        "method": "revision",
+        "filePath": "attachments/blob-exact-32mib.bin",
+        "expectedBytes": 33554432,
+        "expectedSha256": "725ebd37e853e6e8c40959a9144e2eda15e7eba2978b5a60137d73a4b1bd7a77",
+        "expectedNulBytes": 130562,
+        "expectedOutcome": "success",
+        "source": "synthetic-only",
+        "samples": [
+          {
+            "name": "revision.33554432",
+            "status": "success",
+            "ms": 116.61364600000002,
+            "cpuUs": {
+              "user": 86987,
+              "system": 27042
+            },
+            "io": {
+              "rchar": 33583655,
+              "wchar": 33555902,
+              "syscr": 737,
+              "syscw": 2073,
+              "read_bytes": 0,
+              "write_bytes": 0,
+              "cancelled_write_bytes": 0
+            },
+            "rssBeforeBytes": 76091392,
+            "rssAfterBytes": 144904192,
+            "rssBytes": 144904192,
+            "sampledPeakRssBytes": 144510976,
+            "sampledRssSamples": 3,
+            "processPeakRssBeforeBytes": 76222464,
+            "processPeakRssAfterBytes": 144904192,
+            "maxRssKiB": 141508,
+            "instrumentationCounters": {
+              "gitProcesses": 3,
+              "gitCommandLogDropped": 0,
+              "readFileCalls": 0,
+              "readFileBytes": 0
+            },
+            "gitOutputs": {
+              "treeList": {
+                "calls": 1,
+                "failures": 0,
+                "stdoutBytes": 1258,
+                "stderrBytes": 0,
+                "maxStdoutBytes": 1258,
+                "lastStdoutBytes": 1258,
+                "lastErrorCode": null,
+                "lastErrorMessage": null
+              },
+              "batchCheck": {
+                "calls": 1,
+                "failures": 0,
+                "stdoutBytes": 55,
+                "stderrBytes": 0,
+                "maxStdoutBytes": 55,
+                "lastStdoutBytes": 55,
+                "lastErrorCode": null,
+                "lastErrorMessage": null
+              },
+              "blobRead": {
+                "calls": 1,
+                "failures": 0,
+                "stdoutBytes": 33554432,
+                "stderrBytes": 0,
+                "maxStdoutBytes": 33554432,
+                "lastStdoutBytes": 33554432,
+                "lastErrorCode": null,
+                "lastErrorMessage": null
+              }
+            },
+            "value": {
+              "count": 1,
+              "revision": "725ebd37e853e6e8c40959a9144e2eda15e7eba2978b5a60137d73a4b1bd7a77",
+              "matchesExpectedSha256": true
+            },
+            "expectedOutcome": "success",
+            "outputBytesMatchExpected": true,
+            "outcomeMatched": true
+          }
+        ],
+        "cacheAfter": {
+          "probe": "runtime-private-fields-accessible",
+          "derivedCaches": {
+            "fileRevision": {
+              "entries": 1,
+              "shallowPayloadEstimateBytes": 168,
+              "model": "UTF-8 key/value bytes + 64 bytes per Map entry; excludes V8 overhead"
+            },
+            "hierarchy": {
+              "entries": 0,
+              "explicitBytes": 0,
+              "entryBytes": []
+            },
+            "historicalMetadata": {
+              "entries": 0,
+              "explicitBytes": 0,
+              "entryBytes": []
+            },
+            "reconciliation": {
+              "entries": 0,
+              "boundedJsonPayloadEstimateBytes": 0,
+              "entryBytes": []
+            },
+            "estimatedOrAccountedTotalBytes": 168,
+            "totalSemantics": "Mixed explicit Core estimates and labeled shallow payload estimates; not retained heap or process RSS"
+          },
+          "authorityState": {
+            "readObservations": 0,
+            "observationRefKeys": 0,
+            "proposalsByProject": 0,
+            "durableProposalIdsByProject": 0,
+            "approvalsByProject": 0,
+            "writerQueues": 0,
+            "semantics": "Lifecycle and authority state; excluded from reconstructible-cache byte totals and any eviction recommendation"
+          }
+        },
+        "finishedAt": "2026-10-20T17:29:35.319Z"
+      }
+    },
+    {
+      "mode": "boundary",
+      "output": "/data/scriptorium-core64-g0-a1587e78-20261020-2318/results/core64-memory/c30-fixed/raw/revision-blobPlusOne.json",
+      "timeoutMs": 180000,
+      "timedOut": false,
+      "code": 0,
+      "signal": null,
+      "report": {
+        "schemaVersion": 1,
+        "status": "complete",
+        "mode": "boundary",
+        "method": "revision",
+        "filePath": "attachments/blob-plus-one.bin",
+        "expectedBytes": 33554433,
+        "expectedSha256": "b748c5bcb85faae1126838189cf862db84cd2a40c4144951841d53bf17c878ef",
+        "expectedNulBytes": 130562,
+        "expectedOutcome": "error",
+        "source": "synthetic-only",
+        "samples": [
+          {
+            "name": "revision.33554433",
+            "status": "error",
+            "ms": 97.666,
+            "cpuUs": null,
+            "io": null,
+            "rssBeforeBytes": 76050432,
+            "rssAfterBytes": 144470016,
+            "rssBytes": 144470016,
+            "sampledPeakRssBytes": 101871616,
+            "sampledRssSamples": 2,
+            "processPeakRssBeforeBytes": 76050432,
+            "processPeakRssAfterBytes": 144470016,
+            "maxRssKiB": null,
+            "instrumentationCounters": {
+              "gitProcesses": 3,
+              "gitCommandLogDropped": 0,
+              "readFileCalls": 0,
+              "readFileBytes": 0
+            },
+            "gitOutputs": {
+              "treeList": {
+                "calls": 1,
+                "failures": 0,
+                "stdoutBytes": 1258,
+                "stderrBytes": 0,
+                "maxStdoutBytes": 1258,
+                "lastStdoutBytes": 1258,
+                "lastErrorCode": null,
+                "lastErrorMessage": null
+              },
+              "batchCheck": {
+                "calls": 1,
+                "failures": 0,
+                "stdoutBytes": 55,
+                "stderrBytes": 0,
+                "maxStdoutBytes": 55,
+                "lastStdoutBytes": 55,
+                "lastErrorCode": null,
+                "lastErrorMessage": null
+              },
+              "blobRead": {
+                "calls": 1,
+                "failures": 1,
+                "stdoutBytes": 33554432,
+                "stderrBytes": 0,
+                "maxStdoutBytes": 33554432,
+                "lastStdoutBytes": 33554432,
+                "lastErrorCode": "ERR_CHILD_PROCESS_STDIO_MAXBUFFER",
+                "lastErrorMessage": "stdout maxBuffer length exceeded"
+              }
+            },
+            "error": {
+              "name": "CoreError",
+              "code": "git_operation_failed",
+              "signal": null,
+              "killed": false,
+              "message": "Git operation failed: stdout maxBuffer length exceeded",
+              "partialOutputBytes": null,
+              "maxBufferRelated": true
+            },
+            "partialOutputReturnedToCore": false,
+            "expectedOutcome": "error",
+            "outputBytesMatchExpected": null,
+            "outcomeMatched": true
+          }
+        ],
+        "cacheAfter": {
+          "probe": "runtime-private-fields-accessible",
+          "derivedCaches": {
+            "fileRevision": {
+              "entries": 0,
+              "shallowPayloadEstimateBytes": 0,
+              "model": "UTF-8 key/value bytes + 64 bytes per Map entry; excludes V8 overhead"
+            },
+            "hierarchy": {
+              "entries": 0,
+              "explicitBytes": 0,
+              "entryBytes": []
+            },
+            "historicalMetadata": {
+              "entries": 0,
+              "explicitBytes": 0,
+              "entryBytes": []
+            },
+            "reconciliation": {
+              "entries": 0,
+              "boundedJsonPayloadEstimateBytes": 0,
+              "entryBytes": []
+            },
+            "estimatedOrAccountedTotalBytes": 0,
+            "totalSemantics": "Mixed explicit Core estimates and labeled shallow payload estimates; not retained heap or process RSS"
+          },
+          "authorityState": {
+            "readObservations": 0,
+            "observationRefKeys": 0,
+            "proposalsByProject": 0,
+            "durableProposalIdsByProject": 0,
+            "approvalsByProject": 0,
+            "writerQueues": 0,
+            "semantics": "Lifecycle and authority state; excluded from reconstructible-cache byte totals and any eviction recommendation"
+          }
+        },
+        "finishedAt": "2026-10-20T17:29:35.724Z"
+      }
+    },
+    {
+      "mode": "tree",
+      "output": "/data/scriptorium-core64-g0-a1587e78-20261020-2318/results/core64-memory/c30-fixed/raw/tree-exact.json",
+      "timeoutMs": 180000,
+      "timedOut": false,
+      "code": 0,
+      "signal": null,
+      "report": {
+        "schemaVersion": 1,
+        "status": "complete",
+        "mode": "tree-output",
+        "expectedOutputBytes": 33554432,
+        "sample": {
+          "name": "reader.list.all",
+          "status": "success",
+          "ms": 359.6665639999992,
+          "cpuUs": {
+            "user": 264999,
+            "system": 81279
+          },
+          "io": {
+            "rchar": 33567179,
+            "wchar": 33554676,
+            "syscr": 1663,
+            "syscw": 8225,
+            "read_bytes": 0,
+            "write_bytes": 0,
+            "cancelled_write_bytes": 0
+          },
+          "rssBeforeBytes": 76603392,
+          "rssAfterBytes": 192864256,
+          "rssBytes": 192864256,
+          "sampledPeakRssBytes": 192864256,
+          "sampledRssSamples": 10,
+          "processPeakRssBeforeBytes": 76603392,
+          "processPeakRssAfterBytes": 192864256,
+          "maxRssKiB": 188344,
+          "instrumentationCounters": {
+            "gitProcesses": 1,
+            "gitCommandLogDropped": 0,
+            "readFileCalls": 0,
+            "readFileBytes": 0
+          },
+          "gitOutputs": {
+            "treeList": {
+              "calls": 1,
+              "failures": 0,
+              "stdoutBytes": 33554432,
+              "stderrBytes": 0,
+              "maxStdoutBytes": 33554432,
+              "lastStdoutBytes": 33554432,
+              "lastErrorCode": null,
+              "lastErrorMessage": null
+            }
+          },
+          "value": {
+            "files": 124275,
+            "firstPath": "bucket-0000/aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa/bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb/entry-000000000000.bin",
+            "lastPath": "bucket-0060/aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa/bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb/entry-000000124274.binxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx"
+          },
+          "expectedOutcome": "success",
+          "outputBytesMatchExpected": true,
+          "outcomeMatched": true
+        },
+        "cacheAfter": {
+          "probe": "runtime-private-fields-accessible",
+          "derivedCaches": {
+            "fileRevision": {
+              "entries": 0,
+              "shallowPayloadEstimateBytes": 0,
+              "model": "UTF-8 key/value bytes + 64 bytes per Map entry; excludes V8 overhead"
+            },
+            "hierarchy": {
+              "entries": 0,
+              "explicitBytes": 0,
+              "entryBytes": []
+            },
+            "historicalMetadata": {
+              "entries": 0,
+              "explicitBytes": 0,
+              "entryBytes": []
+            },
+            "reconciliation": {
+              "entries": 0,
+              "boundedJsonPayloadEstimateBytes": 0,
+              "entryBytes": []
+            },
+            "estimatedOrAccountedTotalBytes": 0,
+            "totalSemantics": "Mixed explicit Core estimates and labeled shallow payload estimates; not retained heap or process RSS"
+          },
+          "authorityState": {
+            "readObservations": 0,
+            "observationRefKeys": 0,
+            "proposalsByProject": 0,
+            "durableProposalIdsByProject": 0,
+            "approvalsByProject": 0,
+            "writerQueues": 0,
+            "semantics": "Lifecycle and authority state; excluded from reconstructible-cache byte totals and any eviction recommendation"
+          }
+        },
+        "finishedAt": "2026-10-20T17:29:47.283Z"
+      }
+    },
+    {
+      "mode": "tree",
+      "output": "/data/scriptorium-core64-g0-a1587e78-20261020-2318/results/core64-memory/c30-fixed/raw/tree-plusOne.json",
+      "timeoutMs": 180000,
+      "timedOut": false,
+      "code": 0,
+      "signal": null,
+      "report": {
+        "schemaVersion": 1,
+        "status": "complete",
+        "mode": "tree-output",
+        "expectedOutputBytes": 33554433,
+        "sample": {
+          "name": "reader.list.all",
+          "status": "error",
+          "ms": 416.958,
+          "cpuUs": null,
+          "io": null,
+          "rssBeforeBytes": 76431360,
+          "rssAfterBytes": 174481408,
+          "rssBytes": 174481408,
+          "sampledPeakRssBytes": 140795904,
+          "sampledRssSamples": 15,
+          "processPeakRssBeforeBytes": 76431360,
+          "processPeakRssAfterBytes": 174481408,
+          "maxRssKiB": null,
+          "instrumentationCounters": {
+            "gitProcesses": 1,
+            "gitCommandLogDropped": 0,
+            "readFileCalls": 0,
+            "readFileBytes": 0
+          },
+          "gitOutputs": {
+            "treeList": {
+              "calls": 1,
+              "failures": 1,
+              "stdoutBytes": 33554432,
+              "stderrBytes": 0,
+              "maxStdoutBytes": 33554432,
+              "lastStdoutBytes": 33554432,
+              "lastErrorCode": "ERR_CHILD_PROCESS_STDIO_MAXBUFFER",
+              "lastErrorMessage": "stdout maxBuffer length exceeded"
+            }
+          },
+          "error": {
+            "name": "CoreError",
+            "code": "git_operation_failed",
+            "signal": null,
+            "killed": false,
+            "message": "Git operation failed: stdout maxBuffer length exceeded",
+            "partialOutputBytes": null,
+            "maxBufferRelated": true
+          },
+          "partialOutputReturnedToCore": false,
+          "expectedOutcome": "error",
+          "outputBytesMatchExpected": null,
+          "outcomeMatched": true
+        },
+        "cacheAfter": {
+          "probe": "runtime-private-fields-accessible",
+          "derivedCaches": {
+            "fileRevision": {
+              "entries": 0,
+              "shallowPayloadEstimateBytes": 0,
+              "model": "UTF-8 key/value bytes + 64 bytes per Map entry; excludes V8 overhead"
+            },
+            "hierarchy": {
+              "entries": 0,
+              "explicitBytes": 0,
+              "entryBytes": []
+            },
+            "historicalMetadata": {
+              "entries": 0,
+              "explicitBytes": 0,
+              "entryBytes": []
+            },
+            "reconciliation": {
+              "entries": 0,
+              "boundedJsonPayloadEstimateBytes": 0,
+              "entryBytes": []
+            },
+            "estimatedOrAccountedTotalBytes": 0,
+            "totalSemantics": "Mixed explicit Core estimates and labeled shallow payload estimates; not retained heap or process RSS"
+          },
+          "authorityState": {
+            "readObservations": 0,
+            "observationRefKeys": 0,
+            "proposalsByProject": 0,
+            "durableProposalIdsByProject": 0,
+            "approvalsByProject": 0,
+            "writerQueues": 0,
+            "semantics": "Lifecycle and authority state; excluded from reconstructible-cache byte totals and any eviction recommendation"
+          }
+        },
+        "finishedAt": "2026-10-20T17:29:59.919Z"
+      }
+    },
+    {
+      "mode": "batch",
+      "output": "/data/scriptorium-core64-g0-a1587e78-20261020-2318/results/core64-memory/c30-fixed/raw/batch-batchExact.json",
+      "timeoutMs": 180000,
+      "timedOut": false,
+      "code": 0,
+      "signal": null,
+      "report": {
+        "schemaVersion": 1,
+        "status": "complete",
+        "mode": "batch-output",
+        "sample": {
+          "name": "git.cat-file.batch.response",
+          "status": "success",
+          "ms": 200.169919,
+          "cpuUs": {
+            "user": 123927,
+            "system": 51933
+          },
+          "io": {
+            "rchar": 33565436,
+            "wchar": 33554621,
+            "syscr": 725,
+            "syscw": 2072,
+            "read_bytes": 0,
+            "write_bytes": 0,
+            "cancelled_write_bytes": 0
+          },
+          "rssBeforeBytes": 59858944,
+          "rssAfterBytes": 131252224,
+          "rssBytes": 131252224,
+          "sampledPeakRssBytes": 130859008,
+          "sampledRssSamples": 7,
+          "processPeakRssBeforeBytes": 59858944,
+          "processPeakRssAfterBytes": 131252224,
+          "maxRssKiB": 128176,
+          "instrumentationCounters": {
+            "gitProcesses": 1,
+            "gitCommandLogDropped": 0,
+            "readFileCalls": 0,
+            "readFileBytes": 0
+          },
+          "gitOutputs": {
+            "batchContent": {
+              "calls": 1,
+              "failures": 0,
+              "stdoutBytes": 33554432,
+              "stderrBytes": 0,
+              "maxStdoutBytes": 33554432,
+              "lastStdoutBytes": 33554432,
+              "lastErrorCode": null,
+              "lastErrorMessage": null
+            }
+          },
+          "value": {
+            "responseBytes": 33554432
+          },
+          "expectedOutcome": "success",
+          "returnedBytes": 33554432,
+          "outputByteCountMatchesTarget": true,
+          "expectedResponseBytes": 33554432,
+          "outcomeMatched": true
+        },
+        "finishedAt": "2026-10-20T17:30:00.245Z",
+        "note": "Raw cat-file --batch output exercises the same Node maxBuffer boundary. Core revision batches remain bounded to 24 MiB of blob bodies and 4,096 objects; their observed stdout lengths are captured separately during cache workers."
+      }
+    },
+    {
+      "mode": "batch",
+      "output": "/data/scriptorium-core64-g0-a1587e78-20261020-2318/results/core64-memory/c30-fixed/raw/batch-batchPlusOne.json",
+      "timeoutMs": 180000,
+      "timedOut": false,
+      "code": 0,
+      "signal": null,
+      "report": {
+        "schemaVersion": 1,
+        "status": "complete",
+        "mode": "batch-output",
+        "sample": {
+          "name": "git.cat-file.batch.response",
+          "status": "error",
+          "ms": 102.447,
+          "cpuUs": null,
+          "io": null,
+          "rssBeforeBytes": 60014592,
+          "rssAfterBytes": 131055616,
+          "rssBytes": 131055616,
+          "sampledPeakRssBytes": 87801856,
+          "sampledRssSamples": 2,
+          "processPeakRssBeforeBytes": 60014592,
+          "processPeakRssAfterBytes": 131055616,
+          "maxRssKiB": null,
+          "instrumentationCounters": {
+            "gitProcesses": 1,
+            "gitCommandLogDropped": 0,
+            "readFileCalls": 0,
+            "readFileBytes": 0
+          },
+          "gitOutputs": {
+            "batchContent": {
+              "calls": 1,
+              "failures": 1,
+              "stdoutBytes": 33554432,
+              "stderrBytes": 0,
+              "maxStdoutBytes": 33554432,
+              "lastStdoutBytes": 33554432,
+              "lastErrorCode": "ERR_CHILD_PROCESS_STDIO_MAXBUFFER",
+              "lastErrorMessage": "stdout maxBuffer length exceeded"
+            }
+          },
+          "error": {
+            "name": "RangeError",
+            "code": "ERR_CHILD_PROCESS_STDIO_MAXBUFFER",
+            "signal": null,
+            "killed": false,
+            "message": "stdout maxBuffer length exceeded",
+            "partialOutputBytes": 33554432,
+            "maxBufferRelated": true
+          },
+          "partialOutputReturnedToCore": false,
+          "expectedOutcome": "error",
+          "returnedBytes": 33554432,
+          "outputByteCountMatchesTarget": null,
+          "expectedResponseBytes": 33554433,
+          "outcomeMatched": true
+        },
+        "finishedAt": "2026-10-20T17:30:00.860Z",
+        "note": "Raw cat-file --batch output exercises the same Node maxBuffer boundary. Core revision batches remain bounded to 24 MiB of blob bodies and 4,096 objects; their observed stdout lengths are captured separately during cache workers."
+      }
+    }
+  ],
+  "fixtures": {
+    "blob": "/data/scriptorium-core64-g0-a1587e78-20261020-2318/results/core64-memory/c30-fixed/fixtures/blob-boundary.json",
+    "tree": "/data/scriptorium-core64-g0-a1587e78-20261020-2318/results/core64-memory/c30-fixed/fixtures/tree-output.json"
+  },
+  "conclusionStatus": "PENDING_REVIEW",
+  "finishedAt": "2026-10-20T17:30:00.927Z",
+  "cohortElapsedMs": 40305
+}

@@ -1,0 +1,11 @@
+{
+  "schemaVersion": 1,
+  "status": "failed",
+  "mode": "boundary",
+  "failure": {
+    "name": "CoreError",
+    "code": "git_operation_failed",
+    "message": "Git operation failed: The \"file\" argument must be of type string. Received an instance of Object"
+  },
+  "finishedAt": "2026-10-20T17:27:25.983Z"
+}

@@ -1,0 +1,44 @@
+{
+  "schemaVersion": 1,
+  "status": "failed",
+  "mode": "batch-output",
+  "sample": {
+    "name": "git.cat-file.batch.response",
+    "status": "error",
+    "ms": 3.072,
+    "cpuUs": null,
+    "io": null,
+    "rssBeforeBytes": 60186624,
+    "rssAfterBytes": 60448768,
+    "rssBytes": 60448768,
+    "sampledPeakRssBytes": 60186624,
+    "sampledRssSamples": 0,
+    "processPeakRssBeforeBytes": 60186624,
+    "processPeakRssAfterBytes": 60448768,
+    "maxRssKiB": null,
+    "instrumentationCounters": {
+      "gitProcesses": 0,
+      "gitCommandLogDropped": 0,
+      "readFileCalls": 0,
+      "readFileBytes": 0
+    },
+    "gitOutputs": {},
+    "error": {
+      "name": "TypeError",
+      "code": "ERR_INVALID_ARG_TYPE",
+      "signal": null,
+      "killed": false,
+      "message": "The \"file\" argument must be of type string. Received an instance of Object",
+      "partialOutputBytes": null,
+      "maxBufferRelated": false
+    },
+    "partialOutputReturnedToCore": false,
+    "expectedOutcome": "success",
+    "returnedBytes": null,
+    "outputByteCountMatchesTarget": false,
+    "expectedResponseBytes": 33554432,
+    "outcomeMatched": false
+  },
+  "finishedAt": "2026-10-20T17:27:26.292Z",
+  "note": "Raw cat-file --batch output exercises the same Node maxBuffer boundary. Core revision batches remain bounded to 24 MiB of blob bodies and 4,096 objects; their observed stdout lengths are captured separately during cache workers."
+}

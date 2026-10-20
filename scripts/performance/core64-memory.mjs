@@ -544,7 +544,7 @@ function installGitOutputProbe(childProcess) {
       recordGitOutput(Array.isArray(args) ? args.map(String) : [], error, stdout, stderr);
       return Reflect.apply(callback, this, [error, stdout, stderr]);
     };
-    return Reflect.apply(original, this, [...rest.slice(0, callbackIndex), wrapped]);
+    return Reflect.apply(original, this, [file, args, ...rest.slice(0, callbackIndex), wrapped]);
   };
   if (customPromisify) childProcess.execFile[Symbol.for('nodejs.util.promisify.custom')] = customPromisify;
   syncBuiltinESMExports();

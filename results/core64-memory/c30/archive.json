@@ -1,0 +1,234 @@
+{
+  "schemaVersion": 1,
+  "scope": "C30 only; C31/C63 shared-budget decision not measured",
+  "g0": {
+    "root": "/data/scriptorium-core64-g0-a1587e78-20261020-2318/synthetic",
+    "revision": "a1587e784788fa87d86c0eb7ab175d7a28a3209f"
+  },
+  "runtime": {
+    "root": "/home/sophia/src/scriptorium-c64-derived",
+    "revision": "f633da0b3f133ad812953c284aab35a4956d2507",
+    "coreSource": "/home/sophia/src/scriptorium-c64-derived/packages/core/src/index.ts",
+    "coreSourceSha256": "dd05006e97a4dd471fd3555b852d1ad4166de53a4ec41b80d8a0c52d3ab929c5",
+    "coreModule": "/home/sophia/src/scriptorium-c64-derived/packages/core/dist/index.js",
+    "coreModuleSha256": "a7b83895e2c239d85a3f4d973cf7458e64cc7415c418a4844ff33f700a52d4a3"
+  },
+  "initialAttempt": {
+    "outputRoot": "/data/scriptorium-core64-g0-a1587e78-20261020-2318/results/core64-memory/c30",
+    "harnessCommit": "32a5d655caabeb3580b88ec5b1a28d90542b01f3",
+    "harnessSha256": "9752191a7346d0d79954188771e148269bc29088a6288155a7f87cc3d44a03f7",
+    "status": "partial",
+    "conclusionStatus": "NOT_CHECKED",
+    "failedWorkers": 8,
+    "failure": "The output probe omitted file and args while forwarding to child_process.execFile, so Node received the options object as its executable. Git did not run; no boundary measurement was collected."
+  },
+  "correctedRun": {
+    "outputRoot": "/data/scriptorium-core64-g0-a1587e78-20261020-2318/results/core64-memory/c30-fixed",
+    "harnessSha256": "0d34ab69fdb5ca54f6c063308d494022e011a335edd805aa0e0e195d3ddf7eb1",
+    "status": "complete",
+    "conclusionStatus": "Reviewed: C30 complete; retain current 32 MiB output boundary; no Core product change warranted by C30. C31/C63 remain NOT_CHECKED.",
+    "elapsedMs": 40305,
+    "cpuAffinity": "0-3",
+    "overlapNote": "Memory on CPUs 0-3; writer on CPUs 4-7; C48 semantics on CPUs 8-11; OCI base pull on CPUs 12-15. Latency is a contended observation, not adoption-performance evidence.",
+    "workers": [
+      {
+        "mode": "boundary",
+        "raw": "read-blobExact.json",
+        "code": 0,
+        "signal": null,
+        "timedOut": false,
+        "reportStatus": "complete",
+        "outcomeMatched": true
+      },
+      {
+        "mode": "boundary",
+        "raw": "read-blobPlusOne.json",
+        "code": 0,
+        "signal": null,
+        "timedOut": false,
+        "reportStatus": "complete",
+        "outcomeMatched": true
+      },
+      {
+        "mode": "boundary",
+        "raw": "revision-blobExact.json",
+        "code": 0,
+        "signal": null,
+        "timedOut": false,
+        "reportStatus": "complete",
+        "outcomeMatched": true
+      },
+      {
+        "mode": "boundary",
+        "raw": "revision-blobPlusOne.json",
+        "code": 0,
+        "signal": null,
+        "timedOut": false,
+        "reportStatus": "complete",
+        "outcomeMatched": true
+      },
+      {
+        "mode": "tree",
+        "raw": "tree-exact.json",
+        "code": 0,
+        "signal": null,
+        "timedOut": false,
+        "reportStatus": "complete",
+        "outcomeMatched": true
+      },
+      {
+        "mode": "tree",
+        "raw": "tree-plusOne.json",
+        "code": 0,
+        "signal": null,
+        "timedOut": false,
+        "reportStatus": "complete",
+        "outcomeMatched": true
+      },
+      {
+        "mode": "batch",
+        "raw": "batch-batchExact.json",
+        "code": 0,
+        "signal": null,
+        "timedOut": false,
+        "reportStatus": "complete",
+        "outcomeMatched": true
+      },
+      {
+        "mode": "batch",
+        "raw": "batch-batchPlusOne.json",
+        "code": 0,
+        "signal": null,
+        "timedOut": false,
+        "reportStatus": "complete",
+        "outcomeMatched": true
+      }
+    ],
+    "workerDirectoriesOmitted": "Large synthetic Git objects and per-worker Core data directories remain only under the shared campaign data root; compact raw JSON and fixture manifests are archived here."
+  },
+  "runnerSmoke": {
+    "path": "runner-smoke.json",
+    "sampleStatus": "success",
+    "gitProcesses": 1,
+    "stdoutBytes": 1076,
+    "phaseStatus": "failed",
+    "note": "This is a small-object harness smoke, not boundary evidence. The phase-level expected-size assertion is intentionally false for the 1,076-byte seed object."
+  },
+  "archivedFiles": [
+    {
+      "path": "fixtures/blob-boundary.json",
+      "bytes": 1517,
+      "sha256": "c6435dc4af839e221e33a9cf60bc3da26a4ba0d945ec33ea1c7f3b9e259c2a51"
+    },
+    {
+      "path": "fixtures/tree-output.json",
+      "bytes": 886,
+      "sha256": "a072213d40b334b903c3eb77452eef8e12c7095a056704e48f7218983ede4868"
+    },
+    {
+      "path": "manifest.json",
+      "bytes": 32388,
+      "sha256": "d7b22a6f4ab77c64f57814d6902ce643a6517b86da692fcb7186cf0120e83f67"
+    },
+    {
+      "path": "raw/batch-batchExact.json",
+      "bytes": 1668,
+      "sha256": "16570eb5e57533a7b5401a1276c0d221a9a2df3270aff0bfa6857452bccf568c"
+    },
+    {
+      "path": "raw/batch-batchPlusOne.json",
+      "bytes": 1754,
+      "sha256": "bd7fb4d198ab8644bd3f723f47f0d185477399c2b8c7d95b0aaa0d67ce98e569"
+    },
+    {
+      "path": "raw/read-blobExact.json",
+      "bytes": 3362,
+      "sha256": "c35804e75ffffc17f6f5b5c76d3f6442012ff217361b1e3a699ba256f152ff75"
+    },
+    {
+      "path": "raw/read-blobPlusOne.json",
+      "bytes": 3221,
+      "sha256": "f738a2fd55f6cc91a3cdc1795713d1ca0cd1296356a08255f6845385dde94ae6"
+    },
+    {
+      "path": "raw/revision-blobExact.json",
+      "bytes": 3552,
+      "sha256": "4df3e8809aba895f5aabbae1e960d4166db6fbb222df0d97f05eabde263f72e5"
+    },
+    {
+      "path": "raw/revision-blobPlusOne.json",
+      "bytes": 3506,
+      "sha256": "6692b345b42f04626aabc8ad020c6ad8c76d106e5755952270ee90d352223b44"
+    },
+    {
+      "path": "raw/tree-exact.json",
+      "bytes": 3183,
+      "sha256": "6448fb7f337d31cddbfb777386e30fb7f0a7fcaab41906ceb607b2c2e87b13c8"
+    },
+    {
+      "path": "raw/tree-plusOne.json",
+      "bytes": 2617,
+      "sha256": "c5f3446b0359446d229367cb08e4748a4c6f15e112b59c934b292185c0a77e54"
+    },
+    {
+      "path": "runner-failure/fixtures/blob-boundary.json",
+      "bytes": 1511,
+      "sha256": "d17e93b5795cda9143ab5c19d6cce8355c7a06b5dbc7518adf74a3240f671e23"
+    },
+    {
+      "path": "runner-failure/fixtures/tree-output.json",
+      "bytes": 874,
+      "sha256": "0cdf6cac8572a7ff7d6516594e35e94096ec9dd8db61467724afbeb3e8e7b6e7"
+    },
+    {
+      "path": "runner-failure/manifest.json",
+      "bytes": 15089,
+      "sha256": "be4bf04e99b8f1c8b56334ae2f4dca4b61ad961fb0d371c41c0ad4918184069e"
+    },
+    {
+      "path": "runner-failure/raw/batch-batchExact.json",
+      "bytes": 1437,
+      "sha256": "f5644b9f2c3927a4298021815a2ddf61e28b97838508257ec9cc340a9b8f26fe"
+    },
+    {
+      "path": "runner-failure/raw/batch-batchPlusOne.json",
+      "bytes": 1433,
+      "sha256": "a312df9539f013570dd89981ad16927196b3ce741b09717ca938815ac45daf38"
+    },
+    {
+      "path": "runner-failure/raw/read-blobExact.json",
+      "bytes": 310,
+      "sha256": "ce4d62d3830ab68a6cfd5446131c8a9ed3e88d7ff4a88f5dee9edb1a854359fd"
+    },
+    {
+      "path": "runner-failure/raw/read-blobPlusOne.json",
+      "bytes": 310,
+      "sha256": "3596c112e88c94d56091ef7727426e594f012baef5afe796716dd1aa332408c1"
+    },
+    {
+      "path": "runner-failure/raw/revision-blobExact.json",
+      "bytes": 310,
+      "sha256": "d3525517594de8ea42a76e67c7892b9d91e1662f656a67846df4d0addd60aeff"
+    },
+    {
+      "path": "runner-failure/raw/revision-blobPlusOne.json",
+      "bytes": 310,
+      "sha256": "0fea0fc35165ad5ede13f757d2661ba1f5cdef61956c1c0ec4e170a1f595d44c"
+    },
+    {
+      "path": "runner-failure/raw/tree-exact.json",
+      "bytes": 306,
+      "sha256": "d23e3b7293dc7aafec8dfdfe7482d8bf1b2408a1ba47fc8017cb9464e96b09a5"
+    },
+    {
+      "path": "runner-failure/raw/tree-plusOne.json",
+      "bytes": 306,
+      "sha256": "e073ea646965833b355735941c916add90edc55e33f2137c047ac0d49893627a"
+    },
+    {
+      "path": "runner-smoke.json",
+      "bytes": 1636,
+      "sha256": "b171f002cdf3fc846d801fa2b1a6049333d283be25f3206b091bdeda16858d14"
+    }
+  ]
+}

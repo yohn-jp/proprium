@@ -1,0 +1,23 @@
+{
+  "schemaVersion": 1,
+  "syntheticOnly": true,
+  "remotes": {
+    "exact": "/data/scriptorium-core64-g0-a1587e78-20261020-2318/results/core64-memory/c30-fixed/fixtures/tree-exact.git",
+    "plusOne": "/data/scriptorium-core64-g0-a1587e78-20261020-2318/results/core64-memory/c30-fixed/fixtures/tree-plusOne.git"
+  },
+  "blobId": "7030c62a433c6975704ef975b2e6cafda6490bef",
+  "targetBytes": 33554432,
+  "bucketPrefix": "bucket-0000",
+  "middleA": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+  "middleB": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+  "firstLeaf": "entry-000000000000.bin",
+  "pathBytes": 216,
+  "bytesPerEntry": 270,
+  "count": 124275,
+  "exactExtraBytes": 182,
+  "plusOneExtraBytes": 183,
+  "expectedOutputBytes": {
+    "exact": 33554432,
+    "plusOne": 33554433
+  }
+}

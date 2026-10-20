@@ -1,0 +1,116 @@
+{
+  "schemaVersion": 1,
+  "status": "complete",
+  "mode": "boundary",
+  "method": "read",
+  "filePath": "attachments/blob-exact-32mib.bin",
+  "expectedBytes": 33554432,
+  "expectedSha256": "725ebd37e853e6e8c40959a9144e2eda15e7eba2978b5a60137d73a4b1bd7a77",
+  "expectedNulBytes": 130562,
+  "expectedOutcome": "success",
+  "source": "synthetic-only",
+  "samples": [
+    {
+      "name": "read.33554432",
+      "status": "success",
+      "ms": 356.76607500000006,
+      "cpuUs": {
+        "user": 301403,
+        "system": 56198
+      },
+      "io": {
+        "rchar": 33582459,
+        "wchar": 33554687,
+        "syscr": 735,
+        "syscw": 2072,
+        "read_bytes": 0,
+        "write_bytes": 0,
+        "cancelled_write_bytes": 0
+      },
+      "rssBeforeBytes": 75370496,
+      "rssAfterBytes": 223350784,
+      "rssBytes": 223350784,
+      "sampledPeakRssBytes": 223350784,
+      "sampledRssSamples": 3,
+      "processPeakRssBeforeBytes": 75370496,
+      "processPeakRssAfterBytes": 223350784,
+      "maxRssKiB": 218116,
+      "instrumentationCounters": {
+        "gitProcesses": 3,
+        "gitCommandLogDropped": 0,
+        "readFileCalls": 0,
+        "readFileBytes": 0
+      },
+      "gitOutputs": {
+        "treeList": {
+          "calls": 2,
+          "failures": 0,
+          "stdoutBytes": 139,
+          "stderrBytes": 0,
+          "maxStdoutBytes": 74,
+          "lastStdoutBytes": 74,
+          "lastErrorCode": null,
+          "lastErrorMessage": null
+        },
+        "blobRead": {
+          "calls": 1,
+          "failures": 0,
+          "stdoutBytes": 33554432,
+          "stderrBytes": 0,
+          "maxStdoutBytes": 33554432,
+          "lastStdoutBytes": 33554432,
+          "lastErrorCode": null,
+          "lastErrorMessage": null
+        }
+      },
+      "value": {
+        "present": true,
+        "encoding": "base64",
+        "sha256": "725ebd37e853e6e8c40959a9144e2eda15e7eba2978b5a60137d73a4b1bd7a77",
+        "nulBytes": 130562,
+        "decodedBytes": 33554432,
+        "base64Characters": 44739244
+      },
+      "expectedOutcome": "success",
+      "outputBytesMatchExpected": true,
+      "outcomeMatched": true
+    }
+  ],
+  "cacheAfter": {
+    "probe": "runtime-private-fields-accessible",
+    "derivedCaches": {
+      "fileRevision": {
+        "entries": 1,
+        "shallowPayloadEstimateBytes": 168,
+        "model": "UTF-8 key/value bytes + 64 bytes per Map entry; excludes V8 overhead"
+      },
+      "hierarchy": {
+        "entries": 0,
+        "explicitBytes": 0,
+        "entryBytes": []
+      },
+      "historicalMetadata": {
+        "entries": 0,
+        "explicitBytes": 0,
+        "entryBytes": []
+      },
+      "reconciliation": {
+        "entries": 0,
+        "boundedJsonPayloadEstimateBytes": 0,
+        "entryBytes": []
+      },
+      "estimatedOrAccountedTotalBytes": 168,
+      "totalSemantics": "Mixed explicit Core estimates and labeled shallow payload estimates; not retained heap or process RSS"
+    },
+    "authorityState": {
+      "readObservations": 0,
+      "observationRefKeys": 0,
+      "proposalsByProject": 0,
+      "durableProposalIdsByProject": 0,
+      "approvalsByProject": 0,
+      "writerQueues": 0,
+      "semantics": "Lifecycle and authority state; excluded from reconstructible-cache byte totals and any eviction recommendation"
+    }
+  },
+  "finishedAt": "2026-10-20T17:29:34.521Z"
+}

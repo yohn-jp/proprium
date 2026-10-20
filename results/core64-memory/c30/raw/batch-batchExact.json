@@ -1,0 +1,59 @@
+{
+  "schemaVersion": 1,
+  "status": "complete",
+  "mode": "batch-output",
+  "sample": {
+    "name": "git.cat-file.batch.response",
+    "status": "success",
+    "ms": 200.169919,
+    "cpuUs": {
+      "user": 123927,
+      "system": 51933
+    },
+    "io": {
+      "rchar": 33565436,
+      "wchar": 33554621,
+      "syscr": 725,
+      "syscw": 2072,
+      "read_bytes": 0,
+      "write_bytes": 0,
+      "cancelled_write_bytes": 0
+    },
+    "rssBeforeBytes": 59858944,
+    "rssAfterBytes": 131252224,
+    "rssBytes": 131252224,
+    "sampledPeakRssBytes": 130859008,
+    "sampledRssSamples": 7,
+    "processPeakRssBeforeBytes": 59858944,
+    "processPeakRssAfterBytes": 131252224,
+    "maxRssKiB": 128176,
+    "instrumentationCounters": {
+      "gitProcesses": 1,
+      "gitCommandLogDropped": 0,
+      "readFileCalls": 0,
+      "readFileBytes": 0
+    },
+    "gitOutputs": {
+      "batchContent": {
+        "calls": 1,
+        "failures": 0,
+        "stdoutBytes": 33554432,
+        "stderrBytes": 0,
+        "maxStdoutBytes": 33554432,
+        "lastStdoutBytes": 33554432,
+        "lastErrorCode": null,
+        "lastErrorMessage": null
+      }
+    },
+    "value": {
+      "responseBytes": 33554432
+    },
+    "expectedOutcome": "success",
+    "returnedBytes": 33554432,
+    "outputByteCountMatchesTarget": true,
+    "expectedResponseBytes": 33554432,
+    "outcomeMatched": true
+  },
+  "finishedAt": "2026-10-20T17:30:00.245Z",
+  "note": "Raw cat-file --batch output exercises the same Node maxBuffer boundary. Core revision batches remain bounded to 24 MiB of blob bodies and 4,096 objects; their observed stdout lengths are captured separately during cache workers."
+}

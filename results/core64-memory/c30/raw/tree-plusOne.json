@@ -1,0 +1,89 @@
+{
+  "schemaVersion": 1,
+  "status": "complete",
+  "mode": "tree-output",
+  "expectedOutputBytes": 33554433,
+  "sample": {
+    "name": "reader.list.all",
+    "status": "error",
+    "ms": 416.958,
+    "cpuUs": null,
+    "io": null,
+    "rssBeforeBytes": 76431360,
+    "rssAfterBytes": 174481408,
+    "rssBytes": 174481408,
+    "sampledPeakRssBytes": 140795904,
+    "sampledRssSamples": 15,
+    "processPeakRssBeforeBytes": 76431360,
+    "processPeakRssAfterBytes": 174481408,
+    "maxRssKiB": null,
+    "instrumentationCounters": {
+      "gitProcesses": 1,
+      "gitCommandLogDropped": 0,
+      "readFileCalls": 0,
+      "readFileBytes": 0
+    },
+    "gitOutputs": {
+      "treeList": {
+        "calls": 1,
+        "failures": 1,
+        "stdoutBytes": 33554432,
+        "stderrBytes": 0,
+        "maxStdoutBytes": 33554432,
+        "lastStdoutBytes": 33554432,
+        "lastErrorCode": "ERR_CHILD_PROCESS_STDIO_MAXBUFFER",
+        "lastErrorMessage": "stdout maxBuffer length exceeded"
+      }
+    },
+    "error": {
+      "name": "CoreError",
+      "code": "git_operation_failed",
+      "signal": null,
+      "killed": false,
+      "message": "Git operation failed: stdout maxBuffer length exceeded",
+      "partialOutputBytes": null,
+      "maxBufferRelated": true
+    },
+    "partialOutputReturnedToCore": false,
+    "expectedOutcome": "error",
+    "outputBytesMatchExpected": null,
+    "outcomeMatched": true
+  },
+  "cacheAfter": {
+    "probe": "runtime-private-fields-accessible",
+    "derivedCaches": {
+      "fileRevision": {
+        "entries": 0,
+        "shallowPayloadEstimateBytes": 0,
+        "model": "UTF-8 key/value bytes + 64 bytes per Map entry; excludes V8 overhead"
+      },
+      "hierarchy": {
+        "entries": 0,
+        "explicitBytes": 0,
+        "entryBytes": []
+      },
+      "historicalMetadata": {
+        "entries": 0,
+        "explicitBytes": 0,
+        "entryBytes": []
+      },
+      "reconciliation": {
+        "entries": 0,
+        "boundedJsonPayloadEstimateBytes": 0,
+        "entryBytes": []
+      },
+      "estimatedOrAccountedTotalBytes": 0,
+      "totalSemantics": "Mixed explicit Core estimates and labeled shallow payload estimates; not retained heap or process RSS"
+    },
+    "authorityState": {
+      "readObservations": 0,
+      "observationRefKeys": 0,
+      "proposalsByProject": 0,
+      "durableProposalIdsByProject": 0,
+      "approvalsByProject": 0,
+      "writerQueues": 0,
+      "semantics": "Lifecycle and authority state; excluded from reconstructible-cache byte totals and any eviction recommendation"
+    }
+  },
+  "finishedAt": "2026-10-20T17:29:59.919Z"
+}

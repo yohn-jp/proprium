@@ -1,0 +1,410 @@
+{
+  "schemaVersion": 1,
+  "phase": "c30",
+  "status": "partial",
+  "startedAt": "2026-10-20T17:27:10.886Z",
+  "g0Root": "/data/scriptorium-core64-g0-a1587e78-20261020-2318/synthetic",
+  "g0SourceRevision": "a1587e784788fa87d86c0eb7ab175d7a28a3209f",
+  "runtime": {
+    "root": "/home/sophia/src/scriptorium-c64-derived",
+    "revision": "f633da0b3f133ad812953c284aab35a4956d2507",
+    "coreSource": "/home/sophia/src/scriptorium-c64-derived/packages/core/src/index.ts",
+    "coreSourceSha256": "dd05006e97a4dd471fd3555b852d1ad4166de53a4ec41b80d8a0c52d3ab929c5",
+    "coreModule": "/home/sophia/src/scriptorium-c64-derived/packages/core/dist/index.js",
+    "coreModuleSha256": "a7b83895e2c239d85a3f4d973cf7458e64cc7415c418a4844ff33f700a52d4a3"
+  },
+  "coreModule": "/home/sophia/src/scriptorium-c64-derived/packages/core/dist/index.js",
+  "coreModuleSha256": "a7b83895e2c239d85a3f4d973cf7458e64cc7415c418a4844ff33f700a52d4a3",
+  "host": {
+    "node": "v24.21.0",
+    "platform": "linux",
+    "arch": "x64",
+    "cpuAffinity": "0-3"
+  },
+  "executionContext": {
+    "overlapNote": "Memory on CPUs 0-3; writer on CPUs 4-7; C48 semantics on CPUs 8-11; OCI base pull on CPUs 12-15. Latency is a contended observation, not adoption-performance evidence.",
+    "latencyInterpretation": "Latency is observational under concurrent campaign lanes and is not adoption performance evidence."
+  },
+  "rules": {
+    "onlySyntheticData": true,
+    "maxBufferBytes": 33554432,
+    "processMemory": "Node process RSS endpoints, sampled operation peak, and process-lifetime high-water mark; Git child RSS is not added",
+    "cacheBytes": "Explicit Core byte counters plus labeled shallow payload estimates; never equated with process RSS",
+    "timeoutMs": 180000,
+    "cohortCaps": {
+      "workerCount": 8,
+      "perWorkerAddressSpaceBytes": 6442450944,
+      "perWorkerV8OldSpaceMiB": 2048,
+      "perWorkerV8SemiSpaceMiB": 64,
+      "perWorkerCpuSeconds": 180,
+      "perWorkerWallTimeoutMs": 180000,
+      "cohortWallTimeoutMs": 360000,
+      "gitCommandTimeoutMs": 30000,
+      "gitCommandAddressSpaceBytes": 6442450944,
+      "gitCommandCpuSeconds": 30,
+      "cacheIdleMs": null,
+      "largeRepositoryCount": null,
+      "stressRepositoryCount": null,
+      "cacheRepositoryTotal": null,
+      "note": "Each worker and its Git subprocesses inherit per-process RLIMIT_AS/CPU limits; this is not an aggregate cgroup memory cap."
+    }
+  },
+  "workers": [
+    {
+      "mode": "boundary",
+      "output": "/data/scriptorium-core64-g0-a1587e78-20261020-2318/results/core64-memory/c30/raw/read-blobExact.json",
+      "timeoutMs": 180000,
+      "timedOut": false,
+      "code": 1,
+      "signal": null,
+      "report": {
+        "schemaVersion": 1,
+        "status": "failed",
+        "mode": "boundary",
+        "failure": {
+          "name": "CoreError",
+          "code": "git_operation_failed",
+          "message": "Git operation failed: The \"file\" argument must be of type string. Received an instance of Object"
+        },
+        "finishedAt": "2026-10-20T17:27:25.600Z"
+      }
+    },
+    {
+      "mode": "boundary",
+      "output": "/data/scriptorium-core64-g0-a1587e78-20261020-2318/results/core64-memory/c30/raw/read-blobPlusOne.json",
+      "timeoutMs": 180000,
+      "timedOut": false,
+      "code": 1,
+      "signal": null,
+      "report": {
+        "schemaVersion": 1,
+        "status": "failed",
+        "mode": "boundary",
+        "failure": {
+          "name": "CoreError",
+          "code": "git_operation_failed",
+          "message": "Git operation failed: The \"file\" argument must be of type string. Received an instance of Object"
+        },
+        "finishedAt": "2026-10-20T17:27:25.707Z"
+      }
+    },
+    {
+      "mode": "boundary",
+      "output": "/data/scriptorium-core64-g0-a1587e78-20261020-2318/results/core64-memory/c30/raw/revision-blobExact.json",
+      "timeoutMs": 180000,
+      "timedOut": false,
+      "code": 1,
+      "signal": null,
+      "report": {
+        "schemaVersion": 1,
+        "status": "failed",
+        "mode": "boundary",
+        "failure": {
+          "name": "CoreError",
+          "code": "git_operation_failed",
+          "message": "Git operation failed: The \"file\" argument must be of type string. Received an instance of Object"
+        },
+        "finishedAt": "2026-10-20T17:27:25.844Z"
+      }
+    },
+    {
+      "mode": "boundary",
+      "output": "/data/scriptorium-core64-g0-a1587e78-20261020-2318/results/core64-memory/c30/raw/revision-blobPlusOne.json",
+      "timeoutMs": 180000,
+      "timedOut": false,
+      "code": 1,
+      "signal": null,
+      "report": {
+        "schemaVersion": 1,
+        "status": "failed",
+        "mode": "boundary",
+        "failure": {
+          "name": "CoreError",
+          "code": "git_operation_failed",
+          "message": "Git operation failed: The \"file\" argument must be of type string. Received an instance of Object"
+        },
+        "finishedAt": "2026-10-20T17:27:25.983Z"
+      }
+    },
+    {
+      "mode": "tree",
+      "output": "/data/scriptorium-core64-g0-a1587e78-20261020-2318/results/core64-memory/c30/raw/tree-exact.json",
+      "timeoutMs": 180000,
+      "timedOut": false,
+      "code": 1,
+      "signal": null,
+      "report": {
+        "schemaVersion": 1,
+        "status": "failed",
+        "mode": "tree",
+        "failure": {
+          "name": "CoreError",
+          "code": "git_operation_failed",
+          "message": "Git operation failed: The \"file\" argument must be of type string. Received an instance of Object"
+        },
+        "finishedAt": "2026-10-20T17:27:26.098Z"
+      }
+    },
+    {
+      "mode": "tree",
+      "output": "/data/scriptorium-core64-g0-a1587e78-20261020-2318/results/core64-memory/c30/raw/tree-plusOne.json",
+      "timeoutMs": 180000,
+      "timedOut": false,
+      "code": 1,
+      "signal": null,
+      "report": {
+        "schemaVersion": 1,
+        "status": "failed",
+        "mode": "tree",
+        "failure": {
+          "name": "CoreError",
+          "code": "git_operation_failed",
+          "message": "Git operation failed: The \"file\" argument must be of type string. Received an instance of Object"
+        },
+        "finishedAt": "2026-10-20T17:27:26.213Z"
+      }
+    },
+    {
+      "mode": "batch",
+      "output": "/data/scriptorium-core64-g0-a1587e78-20261020-2318/results/core64-memory/c30/raw/batch-batchExact.json",
+      "timeoutMs": 180000,
+      "timedOut": false,
+      "code": 1,
+      "signal": null,
+      "report": {
+        "schemaVersion": 1,
+        "status": "failed",
+        "mode": "batch-output",
+        "sample": {
+          "name": "git.cat-file.batch.response",
+          "status": "error",
+          "ms": 3.072,
+          "cpuUs": null,
+          "io": null,
+          "rssBeforeBytes": 60186624,
+          "rssAfterBytes": 60448768,
+          "rssBytes": 60448768,
+          "sampledPeakRssBytes": 60186624,
+          "sampledRssSamples": 0,
+          "processPeakRssBeforeBytes": 60186624,
+          "processPeakRssAfterBytes": 60448768,
+          "maxRssKiB": null,
+          "instrumentationCounters": {
+            "gitProcesses": 0,
+            "gitCommandLogDropped": 0,
+            "readFileCalls": 0,
+            "readFileBytes": 0
+          },
+          "gitOutputs": {},
+          "error": {
+            "name": "TypeError",
+            "code": "ERR_INVALID_ARG_TYPE",
+            "signal": null,
+            "killed": false,
+            "message": "The \"file\" argument must be of type string. Received an instance of Object",
+            "partialOutputBytes": null,
+            "maxBufferRelated": false
+          },
+          "partialOutputReturnedToCore": false,
+          "expectedOutcome": "success",
+          "returnedBytes": null,
+          "outputByteCountMatchesTarget": false,
+          "expectedResponseBytes": 33554432,
+          "outcomeMatched": false
+        },
+        "finishedAt": "2026-10-20T17:27:26.292Z",
+        "note": "Raw cat-file --batch output exercises the same Node maxBuffer boundary. Core revision batches remain bounded to 24 MiB of blob bodies and 4,096 objects; their observed stdout lengths are captured separately during cache workers."
+      }
+    },
+    {
+      "mode": "batch",
+      "output": "/data/scriptorium-core64-g0-a1587e78-20261020-2318/results/core64-memory/c30/raw/batch-batchPlusOne.json",
+      "timeoutMs": 180000,
+      "timedOut": false,
+      "code": 1,
+      "signal": null,
+      "report": {
+        "schemaVersion": 1,
+        "status": "failed",
+        "mode": "batch-output",
+        "sample": {
+          "name": "git.cat-file.batch.response",
+          "status": "error",
+          "ms": 3.93,
+          "cpuUs": null,
+          "io": null,
+          "rssBeforeBytes": 59981824,
+          "rssAfterBytes": 60375040,
+          "rssBytes": 60375040,
+          "sampledPeakRssBytes": 59981824,
+          "sampledRssSamples": 0,
+          "processPeakRssBeforeBytes": 59981824,
+          "processPeakRssAfterBytes": 60375040,
+          "maxRssKiB": null,
+          "instrumentationCounters": {
+            "gitProcesses": 0,
+            "gitCommandLogDropped": 0,
+            "readFileCalls": 0,
+            "readFileBytes": 0
+          },
+          "gitOutputs": {},
+          "error": {
+            "name": "TypeError",
+            "code": "ERR_INVALID_ARG_TYPE",
+            "signal": null,
+            "killed": false,
+            "message": "The \"file\" argument must be of type string. Received an instance of Object",
+            "partialOutputBytes": null,
+            "maxBufferRelated": false
+          },
+          "partialOutputReturnedToCore": false,
+          "expectedOutcome": "error",
+          "returnedBytes": null,
+          "outputByteCountMatchesTarget": null,
+          "expectedResponseBytes": 33554433,
+          "outcomeMatched": false
+        },
+        "finishedAt": "2026-10-20T17:27:26.384Z",
+        "note": "Raw cat-file --batch output exercises the same Node maxBuffer boundary. Core revision batches remain bounded to 24 MiB of blob bodies and 4,096 objects; their observed stdout lengths are captured separately during cache workers."
+      }
+    }
+  ],
+  "fixtures": {
+    "blob": "/data/scriptorium-core64-g0-a1587e78-20261020-2318/results/core64-memory/c30/fixtures/blob-boundary.json",
+    "tree": "/data/scriptorium-core64-g0-a1587e78-20261020-2318/results/core64-memory/c30/fixtures/tree-output.json"
+  },
+  "conclusionStatus": "NOT_CHECKED",
+  "notCheckedReason": "At least one task worker failed, timed out, hit a resource cap, or was ended at the phase deadline.",
+  "notCheckedWorkers": [
+    {
+      "mode": "boundary",
+      "output": "/data/scriptorium-core64-g0-a1587e78-20261020-2318/results/core64-memory/c30/raw/read-blobExact.json",
+      "timeoutMs": 180000,
+      "timedOut": false,
+      "code": 1,
+      "signal": null,
+      "error": null,
+      "reportStatus": "failed",
+      "reportFailure": {
+        "name": "CoreError",
+        "code": "git_operation_failed",
+        "message": "Git operation failed: The \"file\" argument must be of type string. Received an instance of Object"
+      }
+    },
+    {
+      "mode": "boundary",
+      "output": "/data/scriptorium-core64-g0-a1587e78-20261020-2318/results/core64-memory/c30/raw/read-blobPlusOne.json",
+      "timeoutMs": 180000,
+      "timedOut": false,
+      "code": 1,
+      "signal": null,
+      "error": null,
+      "reportStatus": "failed",
+      "reportFailure": {
+        "name": "CoreError",
+        "code": "git_operation_failed",
+        "message": "Git operation failed: The \"file\" argument must be of type string. Received an instance of Object"
+      }
+    },
+    {
+      "mode": "boundary",
+      "output": "/data/scriptorium-core64-g0-a1587e78-20261020-2318/results/core64-memory/c30/raw/revision-blobExact.json",
+      "timeoutMs": 180000,
+      "timedOut": false,
+      "code": 1,
+      "signal": null,
+      "error": null,
+      "reportStatus": "failed",
+      "reportFailure": {
+        "name": "CoreError",
+        "code": "git_operation_failed",
+        "message": "Git operation failed: The \"file\" argument must be of type string. Received an instance of Object"
+      }
+    },
+    {
+      "mode": "boundary",
+      "output": "/data/scriptorium-core64-g0-a1587e78-20261020-2318/results/core64-memory/c30/raw/revision-blobPlusOne.json",
+      "timeoutMs": 180000,
+      "timedOut": false,
+      "code": 1,
+      "signal": null,
+      "error": null,
+      "reportStatus": "failed",
+      "reportFailure": {
+        "name": "CoreError",
+        "code": "git_operation_failed",
+        "message": "Git operation failed: The \"file\" argument must be of type string. Received an instance of Object"
+      }
+    },
+    {
+      "mode": "tree",
+      "output": "/data/scriptorium-core64-g0-a1587e78-20261020-2318/results/core64-memory/c30/raw/tree-exact.json",
+      "timeoutMs": 180000,
+      "timedOut": false,
+      "code": 1,
+      "signal": null,
+      "error": null,
+      "reportStatus": "failed",
+      "reportFailure": {
+        "name": "CoreError",
+        "code": "git_operation_failed",
+        "message": "Git operation failed: The \"file\" argument must be of type string. Received an instance of Object"
+      }
+    },
+    {
+      "mode": "tree",
+      "output": "/data/scriptorium-core64-g0-a1587e78-20261020-2318/results/core64-memory/c30/raw/tree-plusOne.json",
+      "timeoutMs": 180000,
+      "timedOut": false,
+      "code": 1,
+      "signal": null,
+      "error": null,
+      "reportStatus": "failed",
+      "reportFailure": {
+        "name": "CoreError",
+        "code": "git_operation_failed",
+        "message": "Git operation failed: The \"file\" argument must be of type string. Received an instance of Object"
+      }
+    },
+    {
+      "mode": "batch",
+      "output": "/data/scriptorium-core64-g0-a1587e78-20261020-2318/results/core64-memory/c30/raw/batch-batchExact.json",
+      "timeoutMs": 180000,
+      "timedOut": false,
+      "code": 1,
+      "signal": null,
+      "error": null,
+      "reportStatus": "failed",
+      "reportFailure": {
+        "name": "TypeError",
+        "code": "ERR_INVALID_ARG_TYPE",
+        "signal": null,
+        "killed": false,
+        "message": "The \"file\" argument must be of type string. Received an instance of Object",
+        "partialOutputBytes": null,
+        "maxBufferRelated": false
+      }
+    },
+    {
+      "mode": "batch",
+      "output": "/data/scriptorium-core64-g0-a1587e78-20261020-2318/results/core64-memory/c30/raw/batch-batchPlusOne.json",
+      "timeoutMs": 180000,
+      "timedOut": false,
+      "code": 1,
+      "signal": null,
+      "error": null,
+      "reportStatus": "failed",
+      "reportFailure": {
+        "name": "TypeError",
+        "code": "ERR_INVALID_ARG_TYPE",
+        "signal": null,
+        "killed": false,
+        "message": "The \"file\" argument must be of type string. Received an instance of Object",
+        "partialOutputBytes": null,
+        "maxBufferRelated": false
+      }
+    }
+  ],
+  "finishedAt": "2026-10-20T17:27:26.398Z",
+  "cohortElapsedMs": 15512
+}
