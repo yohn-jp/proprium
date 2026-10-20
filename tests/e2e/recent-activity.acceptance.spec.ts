@@ -1,12 +1,15 @@
-import { execFileSync } from "node:child_process";
+import { execFileSync, spawn, type ChildProcess } from "node:child_process";
 import { mkdtemp, mkdir, rm, writeFile } from "node:fs/promises";
+import { createServer } from "node:net";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
-import { expect, test, type Browser, type BrowserContext, type Page } from "@playwright/test";
+import { chromium, expect, test, type Browser, type BrowserContext, type Page } from "@playwright/test";
 
 const authToken = process.env.SCRIPTORIUM_E2E_AUTH_TOKEN ?? "";
 const defaultRepository = process.env.SCRIPTORIUM_E2E_REPOSITORY_URL ?? "";
+const configuredBaseURL = process.env.SCRIPTORIUM_E2E_BASE_URL ?? process.env.SCRIPTORIUM_BASE_URL ??
+  `http://127.0.0.1:${process.env.SCRIPTORIUM_E2E_PORT ?? "4173"}`;
 
 function repositoryInputValue(value: string): string {
   return value.startsWith("https://") || value.startsWith("file://") ? value : pathToFileURL(value).href;
@@ -32,7 +35,7 @@ function projectLabel(value: string): string {
 }
 
 async function signIn(page: Page): Promise<void> {
-  await page.goto("/desktop/");
+  await page.goto(new URL("/desktop/", configuredBaseURL).toString());
   await page.getByLabel("アクセストークン").fill(authToken);
   await page.getByRole("button", { name: "ログイン" }).click();
   await expect(page.getByRole("heading", { name: "作品を追加" })).toBeVisible();
@@ -127,13 +130,101 @@ async function createContext(browser: Browser, width: number): Promise<{ context
   return { context, page: await context.newPage() };
 }
 
-async function disablePlaywrightFocusEmulation(page: Page): Promise<void> {
-  const session = await page.context().newCDPSession(page);
+async function unusedTcpPort(): Promise<number> {
+  const server = createServer();
+  await new Promise<void>((resolveListen, reject) => {
+    server.once("error", reject);
+    server.listen(0, "127.0.0.1", () => {
+      server.off("error", reject);
+      resolveListen();
+    });
+  });
+  const address = server.address();
+  if (!address || typeof address === "string") throw new Error("Could not allocate a loopback port for Chromium CDP");
+  const port = address.port;
+  await new Promise<void>((resolveClose, reject) => server.close((error) => error ? reject(error) : resolveClose()));
+  return port;
+}
+
+async function stopBrowserProcess(child: ChildProcess): Promise<void> {
+  if (child.exitCode !== null || child.signalCode !== null) return;
+  const exited = new Promise<void>((resolveExit) => child.once("exit", () => resolveExit()));
+  child.kill("SIGTERM");
+  await Promise.race([exited, new Promise<void>((resolveTimeout) => setTimeout(resolveTimeout, 2_000))]);
+}
+
+async function createNativeHeadfulContext(width: number): Promise<{
+  browser: Browser;
+  context: BrowserContext;
+  page: Page;
+  close: () => Promise<void>;
+}> {
+  const executable = process.env.SCRIPTORIUM_E2E_CHROMIUM;
+  if (!executable) throw new Error("Native visibility coverage requires SCRIPTORIUM_E2E_CHROMIUM");
+  const profile = await mkdtemp(join(tmpdir(), "scriptorium-native-chromium-"));
+  const port = await unusedTcpPort();
+  const child = spawn(executable, [
+    "--no-sandbox",
+    `--user-data-dir=${profile}`,
+    `--remote-debugging-port=${port}`,
+    "--remote-allow-origins=*",
+    "about:blank",
+  ], { env: process.env, stdio: "ignore" });
+  let browser: Browser | null = null;
+  let spawnError: Error | null = null;
+  child.once("error", (error) => { spawnError = error; });
+
   try {
-    await session.send("Emulation.setFocusEmulationEnabled", { enabled: false });
-  } finally {
-    await session.detach();
+    const deadline = Date.now() + 10_000;
+    let endpointReady = false;
+    while (Date.now() < deadline) {
+      if (spawnError) throw spawnError;
+      if (child.exitCode !== null) throw new Error(`Native Chromium exited before CDP was ready (code ${child.exitCode})`);
+      try {
+        const response = await fetch(`http://127.0.0.1:${port}/json/version`);
+        if (response.ok) {
+          endpointReady = true;
+          break;
+        }
+      } catch { /* Wait briefly for the local CDP endpoint. */ }
+      await new Promise((resolveWait) => setTimeout(resolveWait, 100));
+    }
+    if (!endpointReady) throw new Error("Native Chromium CDP endpoint did not start within 10 seconds");
+    browser = await chromium.connectOverCDP(`http://127.0.0.1:${port}`, { noDefaults: true });
+    const context = browser.contexts()[0];
+    if (!context) throw new Error("Native Chromium did not expose its default browser context");
+    const page = context.pages()[0] ?? await context.newPage();
+    await page.setViewportSize({ width, height: 900 });
+    return {
+      browser,
+      context,
+      page,
+      close: async () => {
+        await browser?.close().catch(() => undefined);
+        await stopBrowserProcess(child);
+        await rm(profile, { recursive: true, force: true });
+      },
+    };
+  } catch (error) {
+    await browser?.close().catch(() => undefined);
+    await stopBrowserProcess(child);
+    await rm(profile, { recursive: true, force: true });
+    throw error;
   }
+}
+
+function requireNativeVisibilityCoverage(): void {
+  const missing = [
+    process.env.SCRIPTORIUM_E2E_NATIVE_VISIBILITY === "1" ? "" : "SCRIPTORIUM_E2E_NATIVE_VISIBILITY=1",
+    process.env.DISPLAY ? "" : "DISPLAY",
+    process.env.SCRIPTORIUM_E2E_CHROMIUM ? "" : "SCRIPTORIUM_E2E_CHROMIUM",
+  ].filter(Boolean);
+  if (missing.length === 0) return;
+  test.info().annotations.push({
+    type: "c39-natural-visibility",
+    description: `NOT_CHECKED: native headful coverage requires ${missing.join(", ")}.`,
+  });
+  test.skip(true, "NOT_CHECKED: native headful visibility environment is not configured.");
 }
 
 test("recent activity hands off only numeric positions across devices, projects, and API restart", async ({ browser }) => {
@@ -365,10 +456,12 @@ test("recent activity hands off only numeric positions across devices, projects,
   }
 });
 
-test("recent activity polling pauses while naturally hidden and resumes when visible", async ({ browser }) => {
+test("recent activity polling pauses while naturally hidden and resumes when visible", async () => {
   test.skip(process.env.SCRIPTORIUM_E2E_EXTERNAL_REPOSITORY === "1", "This visibility acceptance uses a disposable local Git fixture.");
+  requireNativeVisibilityCoverage();
   const fixture = await makeLongReadingRepository();
-  const { context, page } = await createContext(browser, 1280);
+  const native = await createNativeHeadfulContext(1280);
+  const { context, page } = native;
   let projectId: string | null = null;
   let background: Page | undefined;
   let recentActivityGets = 0;
@@ -395,8 +488,6 @@ test("recent activity polling pauses while naturally hidden and resumes when vis
 
     background = await context.newPage();
     await background.goto("about:blank");
-    await disablePlaywrightFocusEmulation(page);
-    await disablePlaywrightFocusEmulation(background);
     await background.bringToFront();
     let naturallyHidden = false;
     try {
@@ -453,15 +544,17 @@ test("recent activity polling pauses while naturally hidden and resumes when vis
       }).catch(() => undefined);
     }
     await background?.close().catch(() => undefined);
-    await context.close();
+    await native.close();
     await rm(fixture.root, { recursive: true, force: true });
   }
 });
 
-test("recent activity ignores a refresh response invalidated by natural hide", async ({ browser }) => {
+test("recent activity ignores a refresh response invalidated by natural hide", async () => {
   test.skip(process.env.SCRIPTORIUM_E2E_EXTERNAL_REPOSITORY === "1", "This visibility acceptance uses a disposable local Git fixture.");
+  requireNativeVisibilityCoverage();
   const fixture = await makeLongReadingRepository();
-  const { context, page } = await createContext(browser, 1280);
+  const native = await createNativeHeadfulContext(1280);
+  const { context, page } = native;
   let projectId: string | null = null;
   let recentActivityGets = 0;
   let interceptedGet = false;
@@ -504,8 +597,6 @@ test("recent activity ignores a refresh response invalidated by natural hide", a
 
     const background = await context.newPage();
     await background.goto("about:blank");
-    await disablePlaywrightFocusEmulation(page);
-    await disablePlaywrightFocusEmulation(background);
     await background.bringToFront();
     let naturallyHidden = false;
     try {
@@ -553,7 +644,7 @@ test("recent activity ignores a refresh response invalidated by natural hide", a
         headers: { origin },
       }).catch(() => undefined);
     }
-    await context.close();
+    await native.close();
     await rm(fixture.root, { recursive: true, force: true });
   }
 });
