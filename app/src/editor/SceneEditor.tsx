@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef, useState, type CSSProperties } from "react";
+import { createContext, forwardRef, memo, useCallback, useContext, useEffect, useImperativeHandle, useRef, useState, type CSSProperties, type ReactNode } from "react";
 import type { Scene, SceneRead } from "../api";
 import { snapshotKey, type SnapshotId } from "@scriptorium/contracts";
 import type { JournalEntry } from "../storage/journal";
@@ -13,6 +13,85 @@ import { WRITING_SYMBOLS } from "./writingSymbols";
 import { loadReadingPage, saveReadingPage } from "../resume/continueCandidates";
 
 type Durability = "draft" | "checkpointing" | "checkpointed" | "publication_unknown" | "saved";
+
+interface EditorDurabilityStatusHandle {
+  markPendingText: (text: string, revision: number) => void;
+}
+
+const PendingEditorTextContext = createContext(false);
+
+const PendingEditorTextBoundary = forwardRef<EditorDurabilityStatusHandle, {
+  text: string;
+  textRevision: number;
+  children: ReactNode;
+}>(function PendingEditorTextBoundary({ text, textRevision, children }, ref) {
+  const [pendingEditorText, setPendingEditorText] = useState(false);
+  const pendingEditorTextRef = useRef<string | null>(null);
+  const pendingEditorTextRevisionRef = useRef<number | null>(null);
+
+  useImperativeHandle(ref, () => ({
+    markPendingText(nextText, revision) {
+      pendingEditorTextRef.current = nextText;
+      pendingEditorTextRevisionRef.current = revision;
+      setPendingEditorText(true);
+    },
+  }), []);
+
+  useEffect(() => {
+    if (!pendingEditorText ||
+        (pendingEditorTextRevisionRef.current === textRevision && pendingEditorTextRef.current !== text)) return;
+    pendingEditorTextRef.current = null;
+    pendingEditorTextRevisionRef.current = null;
+    setPendingEditorText(false);
+  }, [pendingEditorText, text, textRevision]);
+
+  return <PendingEditorTextContext.Provider value={pendingEditorText}>{children}</PendingEditorTextContext.Provider>;
+});
+
+const EditorDurabilityBadges = memo(function EditorDurabilityBadges({
+  durability,
+  pendingCount,
+}: {
+  durability: Durability;
+  pendingCount: number;
+}) {
+  const pendingEditorText = useContext(PendingEditorTextContext);
+  const currentDurability = pendingEditorText ? "draft" : durability;
+  return <div className="durability-row" aria-label="保存状態">
+    <span className={`durability-badge ${currentDurability === "draft" ? "is-current" : ""}`}>Draft</span>
+    <span className={`durability-badge ${currentDurability === "checkpointing" || currentDurability === "checkpointed" || currentDurability === "publication_unknown" ? "is-current" : ""}`}>Checkpoint</span>
+    <span className={`durability-badge ${currentDurability === "saved" ? "is-current" : ""}`}>Saved to GitHub</span>
+    {pendingCount > 0 && <span className="pending-count">未公開 {pendingCount} 件</span>}
+  </div>;
+});
+
+const EditorDurabilityMessage = memo(function EditorDurabilityMessage({
+  durability,
+  draftStored,
+  journalError,
+}: {
+  durability: Durability;
+  draftStored: boolean;
+  journalError: string;
+}) {
+  const pendingEditorText = useContext(PendingEditorTextContext);
+  const currentDurability = pendingEditorText ? "draft" : durability;
+  const currentDraftStored = pendingEditorText ? false : draftStored;
+  const statusText = currentDurability === "draft"
+    ? currentDraftStored ? "下書きはこのブラウザーに保護されています。" : "この下書きのブラウザー保存を確認できていません。"
+    : currentDurability === "checkpointing"
+      ? "チェックポイントの結果を確認しています。再試行では同じ操作 ID を使います。"
+      : currentDurability === "checkpointed"
+        ? "ローカルチェックポイントです。GitHub へ保存するまでブラウザーの記録を保持します。"
+        : currentDurability === "publication_unknown"
+          ? "GitHub への保存結果は未確認です。同じバッチで状態を再確認できます。"
+          : "確認済みの GitHub 版を表示しています。";
+
+  return <>
+    <p className="durability-message" role="status" aria-live="polite">{statusText}</p>
+    {journalError && <p className="status" data-kind="error" role="alert">{journalError}</p>}
+  </>;
+});
 
 export interface ResumeRequest {
   id: number;
@@ -145,7 +224,7 @@ export function SceneEditor({
   const [typography, setTypography] = useState<TypographySettings>(loadTypographySettings);
   const [readingPage, setReadingPage] = useState(() => loadReadingPage(authorScope, repositoryKey, scene.id));
   const [selectionLength, setSelectionLength] = useState(0);
-  const [pendingEditorText, setPendingEditorText] = useState(false);
+  const pendingEditorStatusRef = useRef<EditorDurabilityStatusHandle>(null);
   const pendingEditorTextRef = useRef<string | null>(null);
   const pendingEditorTextRevisionRef = useRef<number | null>(null);
   const [printing, setPrinting] = useState(false);
@@ -173,17 +252,9 @@ export function SceneEditor({
   const onEditorTextChange = useCallback((next: string) => {
     pendingEditorTextRef.current = next;
     pendingEditorTextRevisionRef.current = textRevision;
-    setPendingEditorText(true);
+    pendingEditorStatusRef.current?.markPendingText(next, textRevision);
     onTextChange(next);
   }, [onTextChange, textRevision]);
-
-  useEffect(() => {
-    if (!pendingEditorText ||
-        (pendingEditorTextRevisionRef.current === textRevision && pendingEditorTextRef.current !== text)) return;
-    pendingEditorTextRef.current = null;
-    pendingEditorTextRevisionRef.current = null;
-    setPendingEditorText(false);
-  }, [pendingEditorText, text, textRevision]);
 
   useEffect(() => {
     saveReadingPage(authorScope, repositoryKey, scene.id, readingPage);
@@ -215,18 +286,6 @@ export function SceneEditor({
     onReadingPageChange(scene.id, pageIndex);
   }, [onReadingPageChange, scene.id]);
 
-  const currentDurability = pendingEditorText ? "draft" : durability;
-  const currentDraftStored = pendingEditorText ? false : draftStored;
-  const statusText = currentDurability === "draft"
-    ? currentDraftStored ? "下書きはこのブラウザーに保護されています。" : "この下書きのブラウザー保存を確認できていません。"
-    : currentDurability === "checkpointing"
-      ? "チェックポイントの結果を確認しています。再試行では同じ操作 ID を使います。"
-      : currentDurability === "checkpointed"
-        ? "ローカルチェックポイントです。GitHub へ保存するまでブラウザーの記録を保持します。"
-        : currentDurability === "publication_unknown"
-          ? "GitHub への保存結果は未確認です。同じバッチで状態を再確認できます。"
-          : "確認済みの GitHub 版を表示しています。";
-
   function printManuscript(): void {
     flushPendingReactPublish();
     setPrinting(true);
@@ -237,17 +296,13 @@ export function SceneEditor({
   }
 
   return (
+    <PendingEditorTextBoundary ref={pendingEditorStatusRef} text={text} textRevision={textRevision}>
     <section className={`editor ${zen ? "is-zen" : ""} ${zen && typewriterDim && !vertical ? "is-typewriter-dim" : ""}`} aria-label="原稿エディター">
       <header className="editor-header">
         <div className="scene-heading">
           <p className="eyebrow">{breadcrumb} · {path}</p>
           <h1>{scene.title}</h1>
-          <div className="durability-row" aria-label="保存状態">
-            <span className={`durability-badge ${currentDurability === "draft" ? "is-current" : ""}`}>Draft</span>
-            <span className={`durability-badge ${currentDurability === "checkpointing" || currentDurability === "checkpointed" || currentDurability === "publication_unknown" ? "is-current" : ""}`}>Checkpoint</span>
-            <span className={`durability-badge ${currentDurability === "saved" ? "is-current" : ""}`}>Saved to GitHub</span>
-            {pendingCount > 0 && <span className="pending-count">未公開 {pendingCount} 件</span>}
-          </div>
+          <EditorDurabilityBadges durability={durability} pendingCount={pendingCount} />
         </div>
         <div className="editor-actions" aria-label="保存と表示">
           <button type="button" onClick={onCheckpoint} disabled={!canCheckpoint || checkpointBusy}>
@@ -262,8 +317,7 @@ export function SceneEditor({
         </div>
       </header>
 
-      <p className="durability-message" role="status" aria-live="polite">{statusText}</p>
-      {journalError && <p className="status" data-kind="error" role="alert">{journalError}</p>}
+      <EditorDurabilityMessage durability={durability} draftStored={draftStored} journalError={journalError} />
 
       {conflict && (
         <section className="conflict" aria-labelledby="conflict-title">
@@ -388,6 +442,7 @@ export function SceneEditor({
       </div>
       {historyOpen && !historyExternal && <ManuscriptHistoryPanel projectId={projectId} manuscriptId={scene.id} sceneId={scene.id} snapshot={historySnapshot} currentBody={displayText} onRestore={onRestoreHistoryBody} onClose={onHistory} />}
     </section>
+    </PendingEditorTextBoundary>
   );
 }
 
