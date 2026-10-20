@@ -1,20 +1,20 @@
 import { createHash } from 'node:crypto';
 import { fork } from 'node:child_process';
 import { once } from 'node:events';
-import { copyFile, mkdir, mkdtemp, readFile, rm, symlink } from 'node:fs/promises';
+import { copyFile, lstat, mkdir, mkdtemp, readFile, realpath, rm, symlink } from 'node:fs/promises';
 import { createRequire } from 'node:module';
 import os from 'node:os';
-import { join, resolve } from 'node:path';
+import { join, relative, resolve } from 'node:path';
 import { pathToFileURL } from 'node:url';
 import { performance } from 'node:perf_hooks';
 import { distribution, save } from './common.mjs';
 import { installBrowserProbes } from './browser-probes.mjs';
 
 const [runtimeRootArg, fixtureRootArg, scratchParentArg, outputArg, navigationRepeatsArg = '8'] = process.argv.slice(2);
-const expectedRuntimeSource = process.env.SCRIPTORIUM_C64_EXPECTED_RUNTIME_SHA ?? 'e8aa3ecd7d1e0bfb3d81a003a2bc0320c9cc6d47';
+const expectedRuntimeSource = process.env.SCRIPTORIUM_C64_EXPECTED_RUNTIME_SHA ?? 'ffd02739ab095dfda2854a3ff487434c84f6b536';
 
 function usage() {
-  return 'Usage: node scripts/performance/core64-durability-probe.mjs <runtime-repo-root> <canonical-small-fixture> <scratch-parent> <output.json> [navigation-repeats=8] (SCRIPTORIUM_C64_RUNTIME_ROOT overrides the runtime path)';
+  return 'Usage: node scripts/performance/core64-durability-probe.mjs <runtime-repo-root> <canonical-small-fixture> <scratch-parent> <output.json> [navigation-repeats=8] (SCRIPTORIUM_C64_RUNTIME_ROOT and SCRIPTORIUM_C64_RUNTIME_MANIFEST override runtime paths)';
 }
 
 if (!runtimeRootArg || runtimeRootArg === '--help') {
@@ -38,6 +38,7 @@ if (!fixtureRootArg || !scratchParentArg || !outputArg || !Number.isInteger(navi
 const datasetFile = join(fixtureRoot, 'dataset.json');
 const origin = join(fixtureRoot, 'origin.git');
 const serverScript = join(runtimeRoot, 'scripts/performance/server.mjs');
+const runtimeManifestPath = resolve(process.env.SCRIPTORIUM_C64_RUNTIME_MANIFEST ?? join(runtimeRoot, 'docs/performance/results/core64-resize/runtime-manifest.json'));
 for (const required of [
   join(runtimeRoot, 'package.json'),
   join(runtimeRoot, 'app/dist/index.html'),
@@ -66,13 +67,80 @@ const runtimeSource = await runtimeRequire('node:child_process').execFileSync('g
 if (runtimeSource !== expectedRuntimeSource) {
   throw new Error(`Runtime source mismatch: expected ${expectedRuntimeSource}, received ${runtimeSource}. Set SCRIPTORIUM_C64_EXPECTED_RUNTIME_SHA only for an explicitly approved runtime.`);
 }
+const runtimeManifestBytes = await readFile(runtimeManifestPath).catch(() => {
+  throw new Error(`Shared runtime manifest is unavailable: ${runtimeManifestPath}`);
+});
+const runtimeManifest = JSON.parse(runtimeManifestBytes.toString('utf8'));
+const requiredArtifactRoots = ['packages/core/dist', 'packages/api/dist', 'app/dist', 'profiles/core/generated'];
+const expectedComparedPaths = ['app', 'packages', 'modules', 'profiles', 'Dockerfile', 'package.json', 'pnpm-lock.yaml'];
+const expectedProductionTrees = {
+  'app/src': '6114d95c43649dec93887034cc35a5d3d3b09e96',
+  'packages/core/src': 'eee5bb9d8d9cbe811aa04d143ee8d24acae4b28d',
+  'packages/api/src': 'bbf7aaf1f5a10a77cbb707447ac54937092cd616',
+  'profiles/core': '29f1c8f2ee691be603db1f811b2c5fb61d1a4f40',
+};
+if (runtimeManifest.schemaVersion !== 1
+  || resolve(runtimeManifest.runtimeRoot ?? '') !== runtimeRoot
+  || runtimeManifest.sourceCommit !== runtimeSource
+  || runtimeManifest.profile !== 'core'
+  || runtimeManifest.buildCommand !== 'SCRIPTORIUM_PROFILE=core pnpm build'
+  || runtimeManifest.productionIdentity?.referenceCommit !== 'e8aa3ecd7d1e0bfb3d81a003a2bc0320c9cc6d47'
+  || runtimeManifest.productionIdentity?.identical !== true
+  || !Array.isArray(runtimeManifest.productionIdentity?.comparedPaths)
+  || JSON.stringify(runtimeManifest.productionIdentity.comparedPaths) !== JSON.stringify(expectedComparedPaths)
+  || JSON.stringify(runtimeManifest.productionIdentity?.trees) !== JSON.stringify(expectedProductionTrees)
+  || !Array.isArray(runtimeManifest.dirtyProductionPaths)
+  || runtimeManifest.dirtyProductionPaths.length !== 0
+  || !Array.isArray(runtimeManifest.artifactRoots)
+  || JSON.stringify(runtimeManifest.artifactRoots) !== JSON.stringify(requiredArtifactRoots)) {
+  throw new Error(`Shared runtime manifest does not identify the expected clean Core build at ${runtimeSource}.`);
+}
+if (!Array.isArray(runtimeManifest.files) || runtimeManifest.files.length === 0) {
+  throw new Error('Shared runtime manifest contains no artifact file inventory.');
+}
+const runtimeRootReal = await realpath(runtimeRoot);
+const verifiedArtifactPaths = new Set();
+let verifiedArtifactBytes = 0;
+for (const artifact of runtimeManifest.files) {
+  if (typeof artifact.path !== 'string' || artifact.path.includes('\\') || artifact.path.startsWith('/')
+    || !requiredArtifactRoots.some((root) => artifact.path.startsWith(`${root}/`))
+    || verifiedArtifactPaths.has(artifact.path)
+    || !Number.isSafeInteger(artifact.bytes) || artifact.bytes < 0
+    || !/^[a-f0-9]{64}$/.test(artifact.sha256)) {
+    throw new Error(`Invalid or duplicate artifact entry in shared runtime manifest: ${JSON.stringify(artifact)}`);
+  }
+  const artifactPath = resolve(runtimeRoot, artifact.path);
+  const artifactRelative = relative(runtimeRoot, artifactPath);
+  if (!artifactRelative || artifactRelative.startsWith('..')) {
+    throw new Error(`Artifact path escapes the shared runtime root: ${artifact.path}`);
+  }
+  const [artifactStat, artifactRealPath] = await Promise.all([lstat(artifactPath), realpath(artifactPath)]);
+  const realRelative = relative(runtimeRootReal, artifactRealPath);
+  if (!artifactStat.isFile() || !realRelative || realRelative.startsWith('..')) {
+    throw new Error(`Manifest artifact is not a regular file within the shared runtime: ${artifact.path}`);
+  }
+  const artifactBytes = await readFile(artifactPath);
+  const artifactSha256 = createHash('sha256').update(artifactBytes).digest('hex');
+  if (artifactBytes.length !== artifact.bytes || artifactSha256 !== artifact.sha256) {
+    throw new Error(`Shared runtime artifact failed size or SHA-256 verification: ${artifact.path}`);
+  }
+  verifiedArtifactPaths.add(artifact.path);
+  verifiedArtifactBytes += artifact.bytes;
+}
+if (runtimeManifest.totals?.fileCount !== runtimeManifest.files.length
+  || runtimeManifest.totals?.bytes !== verifiedArtifactBytes
+  || requiredArtifactRoots.some((root) => ![...verifiedArtifactPaths].some((path) => path.startsWith(`${root}/`)))) {
+  throw new Error('Shared runtime manifest totals do not match its verified artifact inventory.');
+}
 const scriptHash = createHash('sha256').update(await readFile(new URL(import.meta.url))).digest('hex');
 const datasetHash = createHash('sha256').update(await readFile(datasetFile)).digest('hex');
+const runtimeManifestHash = createHash('sha256').update(runtimeManifestBytes).digest('hex');
 const report = {
   schemaVersion: 1,
   probe: 'Core 64 bounded browser durability attribution',
   status: 'running',
-  runtime: { root: runtimeRoot, source: runtimeSource, expectedSource: expectedRuntimeSource, node: process.version, platform: `${os.platform()} ${os.release()} ${os.arch()}` },
+  runtime: { root: runtimeRoot, source: runtimeSource, expectedSource: expectedRuntimeSource, node: process.version, platform: `${os.platform()} ${os.release()} ${os.arch()}`,
+    artifactManifest: { ...runtimeManifest, path: runtimeManifestPath, sha256: runtimeManifestHash } },
   fixture: { dataset: manifest, datasetSha256: datasetHash },
   harness: { canonicalServer: serverScript, probeScriptSha256: scriptHash },
   scenarios: [],
