@@ -145,3 +145,9 @@ count and run `browser.mjs` against it. Use result names such as
 `read-small-short.json` and `browser-small-short.json`, and copy its manifest to
 `dataset-small-short.json` before summarizing. Each browser input phase also
 records the scene ID so equally sized control documents remain distinguishable.
+
+Navigation targets use scoped scene-button/text and scene-heading selectors to
+avoid a page-wide accessibility-role scan across 50,000 scene buttons. Timings
+still include automation and visibility/readiness work; they are not pure user
+input latency. Failed browser workers save a partial CPU profile when CDP remains
+responsive, allowing automation overhead to be distinguished from app work.

@@ -57,11 +57,12 @@ try {
   await page.getByLabel('アクセストークン').fill('synthetic-benchmark-local-token-000000');
   await page.getByRole('button', { name: 'ログイン', exact: true }).click();
   await page.getByLabel('GitHub リポジトリ URL').fill(pathToFileURL(ready.remote).href);
-  await phase('startup.registerToOutline', async () => { await page.getByRole('button', { name: 'リポジトリを登録' }).click(); await page.getByRole('button', { name: 'Chapter One: Scene 1', exact: true }).waitFor(); });
+  const sceneButton = id => page.locator('button.scene-button').filter({ hasText: new RegExp(`^Chapter One: Scene ${id}$`) });
+  await phase('startup.registerToOutline', async () => { await page.getByRole('button', { name: 'リポジトリを登録' }).click(); await sceneButton(1).waitFor(); });
   const editor = page.locator('.cm-content');
   async function openScene(id) {
-    await page.getByRole('button', { name: `Chapter One: Scene ${id}`, exact: true }).click();
-    await expect(page.getByRole('heading', { name: `Scene ${id}`, exact: true })).toBeVisible();
+    await sceneButton(id).click();
+    await expect(page.locator('.scene-heading h1')).toHaveText(`Scene ${id}`);
     await expect(editor).toHaveAttribute('contenteditable', 'true');
     await editor.press('Control+Home');
     // Heading can precede the paired snapshot read: verify expected manuscript too.
@@ -140,6 +141,9 @@ try {
   if (page && !page.isClosed()) {
     report.browserMetrics = await page.evaluate(() => structuredClone(window.__wave0)).catch(() => null);
     report.server = await stats().catch(() => null);
+    if (cdp) {
+      try { const { profile } = await cdp.send('Profiler.stop'); await writeFile(output + '.cpuprofile', JSON.stringify(profile)); report.partialCpuProfile = true; } catch {}
+    }
   }
   process.exitCode = 1; }
 finally {
