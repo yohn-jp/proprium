@@ -1,0 +1,2437 @@
+{
+  "schemaVersion": 1,
+  "candidate": "C42",
+  "runtimeRoot": "/data/scriptorium-core64-worktrees/g0",
+  "runtimeSourceSha": "a1587e784788fa87d86c0eb7ab175d7a28a3209f",
+  "source": "real RecentActivityStore implementation; synthetic temporary directories and owner/repository identities",
+  "durabilityPrimitive": [
+    "bounded JSON state",
+    "private temporary file",
+    "file sync",
+    "atomic rename",
+    "containing-directory sync"
+  ],
+  "instrumentation": "in-process async filesystem and JSON phase wrappers plus /proc/self/io deltas; no production source hooks",
+  "environment": {
+    "node": "24.21.0",
+    "platform": "linux",
+    "arch": "x64",
+    "kernel": "6.18.52"
+  },
+  "repeats": 10,
+  "cases": [
+    {
+      "name": "single-upsert",
+      "operationCount": 1,
+      "repeatCount": 10,
+      "batchWallMs": {
+        "n": 10,
+        "p50Ms": 4.815509999999989,
+        "p95Ms": 8.654816999999994,
+        "p99Ms": 8.654816999999994,
+        "maxMs": 8.654816999999994
+      },
+      "operationLatencyMs": {
+        "n": 10,
+        "p50Ms": 4.801809999999989,
+        "p95Ms": 8.590316999999999,
+        "p99Ms": 8.590316999999999,
+        "maxMs": 8.590316999999999
+      },
+      "runs": [
+        {
+          "repeat": 0,
+          "operationCount": 1,
+          "ownerCount": 1,
+          "wallMs": 8.654816999999994,
+          "operationLatencyMs": {
+            "n": 1,
+            "p50Ms": 8.590316999999999,
+            "p95Ms": 8.590316999999999,
+            "p99Ms": 8.590316999999999,
+            "maxMs": 8.590316999999999
+          },
+          "cpuUserMs": 6.181,
+          "cpuSystemMs": 1.198,
+          "stateBytes": 507,
+          "scopeChecks": [
+            {
+              "owner": "synthetic-owner-0",
+              "deviceTypes": [
+                "desktop"
+              ]
+            }
+          ],
+          "unrelatedAuthorEmpty": true,
+          "io": {
+            "rchar": 776,
+            "wchar": 715,
+            "syscr": 28,
+            "syscw": 27,
+            "read_bytes": 0,
+            "write_bytes": 4096,
+            "cancelled_write_bytes": 0
+          },
+          "metrics": {
+            "durationMs": {
+              "lstat": 1.9864029999999957,
+              "mkdir": 0.48760099999999795,
+              "open": 0.6465020000000052,
+              "stateStat": 0,
+              "stateRead": 0,
+              "tempWrite": 0.3712009999999992,
+              "fileSync": 0.860202000000001,
+              "directorySync": 1.3991029999999895,
+              "rename": 0.16560100000000233,
+              "unlink": 0.17319999999999425,
+              "jsonParse": 0,
+              "jsonStringify": 0.03160000000000451,
+              "close": 0.3563000000000045
+            },
+            "calls": {
+              "lstat": 4,
+              "mkdir": 2,
+              "open": 3,
+              "stateOpen": 0,
+              "tempOpen": 1,
+              "directoryOpen": 2,
+              "stateStat": 0,
+              "stateRead": 0,
+              "tempWrite": 1,
+              "fileSync": 1,
+              "directorySync": 2,
+              "rename": 1,
+              "unlink": 1,
+              "jsonParse": 0,
+              "jsonStringify": 1,
+              "close": 3
+            },
+            "bytes": {
+              "stateRead": 0,
+              "tempWrite": 507,
+              "jsonStringify": 506
+            }
+          }
+        },
+        {
+          "repeat": 1,
+          "operationCount": 1,
+          "ownerCount": 1,
+          "wallMs": 4.262609999999995,
+          "operationLatencyMs": {
+            "n": 1,
+            "p50Ms": 4.248207999999991,
+            "p95Ms": 4.248207999999991,
+            "p99Ms": 4.248207999999991,
+            "maxMs": 4.248207999999991
+          },
+          "cpuUserMs": 2.671,
+          "cpuSystemMs": 0,
+          "stateBytes": 507,
+          "scopeChecks": [
+            {
+              "owner": "synthetic-owner-0",
+              "deviceTypes": [
+                "desktop"
+              ]
+            }
+          ],
+          "unrelatedAuthorEmpty": true,
+          "io": {
+            "rchar": 296,
+            "wchar": 699,
+            "syscr": 26,
+            "syscw": 25,
+            "read_bytes": 0,
+            "write_bytes": 4096,
+            "cancelled_write_bytes": 0
+          },
+          "metrics": {
+            "durationMs": {
+              "lstat": 0.573401000000004,
+              "mkdir": 0.3511010000000141,
+              "open": 0.40190099999998097,
+              "stateStat": 0,
+              "stateRead": 0,
+              "tempWrite": 0.14280000000000825,
+              "fileSync": 0.7669020000000017,
+              "directorySync": 1.0698009999999982,
+              "rename": 0.13250100000000486,
+              "unlink": 0.1425999999999874,
+              "jsonParse": 0,
+              "jsonStringify": 0.014099999999999113,
+              "close": 0.3515000000000015
+            },
+            "calls": {
+              "lstat": 4,
+              "mkdir": 2,
+              "open": 3,
+              "stateOpen": 0,
+              "tempOpen": 1,
+              "directoryOpen": 2,
+              "stateStat": 0,
+              "stateRead": 0,
+              "tempWrite": 1,
+              "fileSync": 1,
+              "directorySync": 2,
+              "rename": 1,
+              "unlink": 1,
+              "jsonParse": 0,
+              "jsonStringify": 1,
+              "close": 3
+            },
+            "bytes": {
+              "stateRead": 0,
+              "tempWrite": 507,
+              "jsonStringify": 506
+            }
+          }
+        },
+        {
+          "repeat": 2,
+          "operationCount": 1,
+          "ownerCount": 1,
+          "wallMs": 5.336611000000005,
+          "operationLatencyMs": {
+            "n": 1,
+            "p50Ms": 5.320111000000011,
+            "p95Ms": 5.320111000000011,
+            "p99Ms": 5.320111000000011,
+            "maxMs": 5.320111000000011
+          },
+          "cpuUserMs": 2.38,
+          "cpuSystemMs": 0.596,
+          "stateBytes": 507,
+          "scopeChecks": [
+            {
+              "owner": "synthetic-owner-0",
+              "deviceTypes": [
+                "desktop"
+              ]
+            }
+          ],
+          "unrelatedAuthorEmpty": true,
+          "io": {
+            "rchar": 297,
+            "wchar": 699,
+            "syscr": 26,
+            "syscw": 25,
+            "read_bytes": 0,
+            "write_bytes": 4096,
+            "cancelled_write_bytes": 0
+          },
+          "metrics": {
+            "durationMs": {
+              "lstat": 0.49940200000000345,
+              "mkdir": 0.3684000000000083,
+              "open": 0.5494019999999864,
+              "stateStat": 0,
+              "stateRead": 0,
+              "tempWrite": 0.1386010000000084,
+              "fileSync": 1.225201999999996,
+              "directorySync": 1.4326039999999978,
+              "rename": 0.15260000000000673,
+              "unlink": 0.18179999999999552,
+              "jsonParse": 0,
+              "jsonStringify": 0.014899999999997249,
+              "close": 0.46140099999999507
+            },
+            "calls": {
+              "lstat": 4,
+              "mkdir": 2,
+              "open": 3,
+              "stateOpen": 0,
+              "tempOpen": 1,
+              "directoryOpen": 2,
+              "stateStat": 0,
+              "stateRead": 0,
+              "tempWrite": 1,
+              "fileSync": 1,
+              "directorySync": 2,
+              "rename": 1,
+              "unlink": 1,
+              "jsonParse": 0,
+              "jsonStringify": 1,
+              "close": 3
+            },
+            "bytes": {
+              "stateRead": 0,
+              "tempWrite": 507,
+              "jsonStringify": 506
+            }
+          }
+        },
+        {
+          "repeat": 3,
+          "operationCount": 1,
+          "ownerCount": 1,
+          "wallMs": 5.5490119999999905,
+          "operationLatencyMs": {
+            "n": 1,
+            "p50Ms": 5.532411999999994,
+            "p95Ms": 5.532411999999994,
+            "p99Ms": 5.532411999999994,
+            "maxMs": 5.532411999999994
+          },
+          "cpuUserMs": 0.307,
+          "cpuSystemMs": 2.848,
+          "stateBytes": 507,
+          "scopeChecks": [
+            {
+              "owner": "synthetic-owner-0",
+              "deviceTypes": [
+                "desktop"
+              ]
+            }
+          ],
+          "unrelatedAuthorEmpty": true,
+          "io": {
+            "rchar": 298,
+            "wchar": 699,
+            "syscr": 26,
+            "syscw": 25,
+            "read_bytes": 0,
+            "write_bytes": 4096,
+            "cancelled_write_bytes": 0
+          },
+          "metrics": {
+            "durationMs": {
+              "lstat": 0.5822020000000094,
+              "mkdir": 0.37530000000002417,
+              "open": 0.647102000000018,
+              "stateStat": 0,
+              "stateRead": 0,
+              "tempWrite": 0.1659000000000077,
+              "fileSync": 1.001102000000003,
+              "directorySync": 1.3153019999999884,
+              "rename": 0.229101,
+              "unlink": 0.24680099999999072,
+              "jsonParse": 0,
+              "jsonStringify": 0.017000999999993383,
+              "close": 0.6930019999999928
+            },
+            "calls": {
+              "lstat": 4,
+              "mkdir": 2,
+              "open": 3,
+              "stateOpen": 0,
+              "tempOpen": 1,
+              "directoryOpen": 2,
+              "stateStat": 0,
+              "stateRead": 0,
+              "tempWrite": 1,
+              "fileSync": 1,
+              "directorySync": 2,
+              "rename": 1,
+              "unlink": 1,
+              "jsonParse": 0,
+              "jsonStringify": 1,
+              "close": 3
+            },
+            "bytes": {
+              "stateRead": 0,
+              "tempWrite": 507,
+              "jsonStringify": 506
+            }
+          }
+        },
+        {
+          "repeat": 4,
+          "operationCount": 1,
+          "ownerCount": 1,
+          "wallMs": 5.115510999999998,
+          "operationLatencyMs": {
+            "n": 1,
+            "p50Ms": 5.0998110000000025,
+            "p95Ms": 5.0998110000000025,
+            "p99Ms": 5.0998110000000025,
+            "maxMs": 5.0998110000000025
+          },
+          "cpuUserMs": 0.128,
+          "cpuSystemMs": 2.856,
+          "stateBytes": 507,
+          "scopeChecks": [
+            {
+              "owner": "synthetic-owner-0",
+              "deviceTypes": [
+                "desktop"
+              ]
+            }
+          ],
+          "unrelatedAuthorEmpty": true,
+          "io": {
+            "rchar": 298,
+            "wchar": 699,
+            "syscr": 26,
+            "syscw": 25,
+            "read_bytes": 0,
+            "write_bytes": 4096,
+            "cancelled_write_bytes": 0
+          },
+          "metrics": {
+            "durationMs": {
+              "lstat": 0.8322020000000094,
+              "mkdir": 0.3506009999999975,
+              "open": 0.5114009999999922,
+              "stateStat": 0,
+              "stateRead": 0,
+              "tempWrite": 0.17200000000001125,
+              "fileSync": 0.8279019999999946,
+              "directorySync": 1.305302999999995,
+              "rename": 0.22590100000000746,
+              "unlink": 0.23600100000000168,
+              "jsonParse": 0,
+              "jsonStringify": 0.026099999999999568,
+              "close": 0.31210000000002935
+            },
+            "calls": {
+              "lstat": 4,
+              "mkdir": 2,
+              "open": 3,
+              "stateOpen": 0,
+              "tempOpen": 1,
+              "directoryOpen": 2,
+              "stateStat": 0,
+              "stateRead": 0,
+              "tempWrite": 1,
+              "fileSync": 1,
+              "directorySync": 2,
+              "rename": 1,
+              "unlink": 1,
+              "jsonParse": 0,
+              "jsonStringify": 1,
+              "close": 3
+            },
+            "bytes": {
+              "stateRead": 0,
+              "tempWrite": 507,
+              "jsonStringify": 506
+            }
+          }
+        },
+        {
+          "repeat": 5,
+          "operationCount": 1,
+          "ownerCount": 1,
+          "wallMs": 4.320708999999994,
+          "operationLatencyMs": {
+            "n": 1,
+            "p50Ms": 4.306009000000003,
+            "p95Ms": 4.306009000000003,
+            "p99Ms": 4.306009000000003,
+            "maxMs": 4.306009000000003
+          },
+          "cpuUserMs": 1.522,
+          "cpuSystemMs": 1.209,
+          "stateBytes": 507,
+          "scopeChecks": [
+            {
+              "owner": "synthetic-owner-0",
+              "deviceTypes": [
+                "desktop"
+              ]
+            }
+          ],
+          "unrelatedAuthorEmpty": true,
+          "io": {
+            "rchar": 298,
+            "wchar": 699,
+            "syscr": 26,
+            "syscw": 25,
+            "read_bytes": 0,
+            "write_bytes": 4096,
+            "cancelled_write_bytes": 0
+          },
+          "metrics": {
+            "durationMs": {
+              "lstat": 0.5613019999999835,
+              "mkdir": 0.3246000000000038,
+              "open": 0.38890100000000416,
+              "stateStat": 0,
+              "stateRead": 0,
+              "tempWrite": 0.1846000000000032,
+              "fileSync": 0.7287010000000009,
+              "directorySync": 1.0886019999999945,
+              "rename": 0.16650000000001342,
+              "unlink": 0.144401000000002,
+              "jsonParse": 0,
+              "jsonStringify": 0.015100000000003888,
+              "close": 0.3590019999999896
+            },
+            "calls": {
+              "lstat": 4,
+              "mkdir": 2,
+              "open": 3,
+              "stateOpen": 0,
+              "tempOpen": 1,
+              "directoryOpen": 2,
+              "stateStat": 0,
+              "stateRead": 0,
+              "tempWrite": 1,
+              "fileSync": 1,
+              "directorySync": 2,
+              "rename": 1,
+              "unlink": 1,
+              "jsonParse": 0,
+              "jsonStringify": 1,
+              "close": 3
+            },
+            "bytes": {
+              "stateRead": 0,
+              "tempWrite": 507,
+              "jsonStringify": 506
+            }
+          }
+        },
+        {
+          "repeat": 6,
+          "operationCount": 1,
+          "ownerCount": 1,
+          "wallMs": 4.978010000000012,
+          "operationLatencyMs": {
+            "n": 1,
+            "p50Ms": 4.961209999999994,
+            "p95Ms": 4.961209999999994,
+            "p99Ms": 4.961209999999994,
+            "maxMs": 4.961209999999994
+          },
+          "cpuUserMs": 2.133,
+          "cpuSystemMs": 0.637,
+          "stateBytes": 507,
+          "scopeChecks": [
+            {
+              "owner": "synthetic-owner-0",
+              "deviceTypes": [
+                "desktop"
+              ]
+            }
+          ],
+          "unrelatedAuthorEmpty": true,
+          "io": {
+            "rchar": 298,
+            "wchar": 699,
+            "syscr": 26,
+            "syscw": 25,
+            "read_bytes": 0,
+            "write_bytes": 4096,
+            "cancelled_write_bytes": 0
+          },
+          "metrics": {
+            "durationMs": {
+              "lstat": 0.53449999999998,
+              "mkdir": 0.37430200000000013,
+              "open": 0.5007010000000207,
+              "stateStat": 0,
+              "stateRead": 0,
+              "tempWrite": 0.17210099999999784,
+              "fileSync": 1.0664020000000107,
+              "directorySync": 1.3097019999999873,
+              "rename": 0.15480000000002292,
+              "unlink": 0.1666009999999858,
+              "jsonParse": 0,
+              "jsonStringify": 0.013399999999990087,
+              "close": 0.35390100000000757
+            },
+            "calls": {
+              "lstat": 4,
+              "mkdir": 2,
+              "open": 3,
+              "stateOpen": 0,
+              "tempOpen": 1,
+              "directoryOpen": 2,
+              "stateStat": 0,
+              "stateRead": 0,
+              "tempWrite": 1,
+              "fileSync": 1,
+              "directorySync": 2,
+              "rename": 1,
+              "unlink": 1,
+              "jsonParse": 0,
+              "jsonStringify": 1,
+              "close": 3
+            },
+            "bytes": {
+              "stateRead": 0,
+              "tempWrite": 507,
+              "jsonStringify": 506
+            }
+          }
+        },
+        {
+          "repeat": 7,
+          "operationCount": 1,
+          "ownerCount": 1,
+          "wallMs": 4.577609999999993,
+          "operationLatencyMs": {
+            "n": 1,
+            "p50Ms": 4.565109999999976,
+            "p95Ms": 4.565109999999976,
+            "p99Ms": 4.565109999999976,
+            "maxMs": 4.565109999999976
+          },
+          "cpuUserMs": 2.029,
+          "cpuSystemMs": 0.998,
+          "stateBytes": 507,
+          "scopeChecks": [
+            {
+              "owner": "synthetic-owner-0",
+              "deviceTypes": [
+                "desktop"
+              ]
+            }
+          ],
+          "unrelatedAuthorEmpty": true,
+          "io": {
+            "rchar": 298,
+            "wchar": 699,
+            "syscr": 26,
+            "syscw": 25,
+            "read_bytes": 0,
+            "write_bytes": 4096,
+            "cancelled_write_bytes": 0
+          },
+          "metrics": {
+            "durationMs": {
+              "lstat": 0.7198009999999897,
+              "mkdir": 0.43860099999997715,
+              "open": 0.3854999999999791,
+              "stateStat": 0,
+              "stateRead": 0,
+              "tempWrite": 0.20580100000000812,
+              "fileSync": 0.789400999999998,
+              "directorySync": 1.0656029999999816,
+              "rename": 0.14790000000002124,
+              "unlink": 0.15390100000001894,
+              "jsonParse": 0,
+              "jsonStringify": 0.01500000000001478,
+              "close": 0.39410100000000625
+            },
+            "calls": {
+              "lstat": 4,
+              "mkdir": 2,
+              "open": 3,
+              "stateOpen": 0,
+              "tempOpen": 1,
+              "directoryOpen": 2,
+              "stateStat": 0,
+              "stateRead": 0,
+              "tempWrite": 1,
+              "fileSync": 1,
+              "directorySync": 2,
+              "rename": 1,
+              "unlink": 1,
+              "jsonParse": 0,
+              "jsonStringify": 1,
+              "close": 3
+            },
+            "bytes": {
+              "stateRead": 0,
+              "tempWrite": 507,
+              "jsonStringify": 506
+            }
+          }
+        },
+        {
+          "repeat": 8,
+          "operationCount": 1,
+          "ownerCount": 1,
+          "wallMs": 4.815509999999989,
+          "operationLatencyMs": {
+            "n": 1,
+            "p50Ms": 4.801809999999989,
+            "p95Ms": 4.801809999999989,
+            "p99Ms": 4.801809999999989,
+            "maxMs": 4.801809999999989
+          },
+          "cpuUserMs": 4.394,
+          "cpuSystemMs": 0.779,
+          "stateBytes": 507,
+          "scopeChecks": [
+            {
+              "owner": "synthetic-owner-0",
+              "deviceTypes": [
+                "desktop"
+              ]
+            }
+          ],
+          "unrelatedAuthorEmpty": true,
+          "io": {
+            "rchar": 298,
+            "wchar": 699,
+            "syscr": 26,
+            "syscw": 25,
+            "read_bytes": 0,
+            "write_bytes": 4096,
+            "cancelled_write_bytes": 0
+          },
+          "metrics": {
+            "durationMs": {
+              "lstat": 0.44210100000000807,
+              "mkdir": 0.3839010000000087,
+              "open": 0.776900999999981,
+              "stateStat": 0,
+              "stateRead": 0,
+              "tempWrite": 0.1666010000000142,
+              "fileSync": 0.698001000000005,
+              "directorySync": 1.2608030000000099,
+              "rename": 0.1303000000000054,
+              "unlink": 0.13760000000002037,
+              "jsonParse": 0,
+              "jsonStringify": 0.014200000000016644,
+              "close": 0.48590200000001005
+            },
+            "calls": {
+              "lstat": 4,
+              "mkdir": 2,
+              "open": 3,
+              "stateOpen": 0,
+              "tempOpen": 1,
+              "directoryOpen": 2,
+              "stateStat": 0,
+              "stateRead": 0,
+              "tempWrite": 1,
+              "fileSync": 1,
+              "directorySync": 2,
+              "rename": 1,
+              "unlink": 1,
+              "jsonParse": 0,
+              "jsonStringify": 1,
+              "close": 3
+            },
+            "bytes": {
+              "stateRead": 0,
+              "tempWrite": 507,
+              "jsonStringify": 506
+            }
+          }
+        },
+        {
+          "repeat": 9,
+          "operationCount": 1,
+          "ownerCount": 1,
+          "wallMs": 4.086807999999991,
+          "operationLatencyMs": {
+            "n": 1,
+            "p50Ms": 4.071908000000008,
+            "p95Ms": 4.071908000000008,
+            "p99Ms": 4.071908000000008,
+            "maxMs": 4.071908000000008
+          },
+          "cpuUserMs": 1.832,
+          "cpuSystemMs": 0.557,
+          "stateBytes": 507,
+          "scopeChecks": [
+            {
+              "owner": "synthetic-owner-0",
+              "deviceTypes": [
+                "desktop"
+              ]
+            }
+          ],
+          "unrelatedAuthorEmpty": true,
+          "io": {
+            "rchar": 298,
+            "wchar": 699,
+            "syscr": 26,
+            "syscw": 25,
+            "read_bytes": 0,
+            "write_bytes": 4096,
+            "cancelled_write_bytes": 0
+          },
+          "metrics": {
+            "durationMs": {
+              "lstat": 0.5793009999999583,
+              "mkdir": 0.3424010000000237,
+              "open": 0.4023009999999658,
+              "stateStat": 0,
+              "stateRead": 0,
+              "tempWrite": 0.13920000000001664,
+              "fileSync": 0.7037020000000211,
+              "directorySync": 0.9663010000000156,
+              "rename": 0.13589999999999236,
+              "unlink": 0.17169999999998709,
+              "jsonParse": 0,
+              "jsonStringify": 0.015700000000009595,
+              "close": 0.34819899999999393
+            },
+            "calls": {
+              "lstat": 4,
+              "mkdir": 2,
+              "open": 3,
+              "stateOpen": 0,
+              "tempOpen": 1,
+              "directoryOpen": 2,
+              "stateStat": 0,
+              "stateRead": 0,
+              "tempWrite": 1,
+              "fileSync": 1,
+              "directorySync": 2,
+              "rename": 1,
+              "unlink": 1,
+              "jsonParse": 0,
+              "jsonStringify": 1,
+              "close": 3
+            },
+            "bytes": {
+              "stateRead": 0,
+              "tempWrite": 507,
+              "jsonStringify": 506
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "parallel-100-device-burst-one-author",
+      "operationCount": 100,
+      "repeatCount": 10,
+      "batchWallMs": {
+        "n": 10,
+        "p50Ms": 488.4093090000001,
+        "p95Ms": 542.264721,
+        "p99Ms": 542.264721,
+        "maxMs": 542.264721
+      },
+      "operationLatencyMs": {
+        "n": 1000,
+        "p50Ms": 248.736314,
+        "p95Ms": 470.88987399999996,
+        "p99Ms": 502.06013800000005,
+        "maxMs": 540.396217
+      },
+      "runs": [
+        {
+          "repeat": 0,
+          "operationCount": 100,
+          "ownerCount": 1,
+          "wallMs": 542.264721,
+          "operationLatencyMs": {
+            "n": 100,
+            "p50Ms": 273.75466600000004,
+            "p95Ms": 516.207167,
+            "p99Ms": 536.110408,
+            "maxMs": 540.396217
+          },
+          "cpuUserMs": 213.448,
+          "cpuSystemMs": 114.13,
+          "stateBytes": 629,
+          "scopeChecks": [
+            {
+              "owner": "synthetic-owner-shared",
+              "deviceTypes": [
+                "desktop",
+                "mobile"
+              ]
+            }
+          ],
+          "unrelatedAuthorEmpty": true,
+          "io": {
+            "rchar": 82159,
+            "wchar": 82737,
+            "syscr": 2601,
+            "syscw": 2607,
+            "read_bytes": 0,
+            "write_bytes": 409600,
+            "cancelled_write_bytes": 0
+          },
+          "metrics": {
+            "durationMs": {
+              "lstat": 50.76949400000075,
+              "mkdir": 47.534888000000706,
+              "open": 59.38031799999902,
+              "stateStat": 12.572729000000322,
+              "stateRead": 24.84394700000024,
+              "tempWrite": 16.26123100000015,
+              "fileSync": 82.89747099999983,
+              "directorySync": 133.64267599999968,
+              "rename": 16.138840000000613,
+              "unlink": 15.427036000000044,
+              "jsonParse": 1.5228069999998581,
+              "jsonStringify": 1.2836989999999275,
+              "close": 49.09779600000013
+            },
+            "calls": {
+              "lstat": 400,
+              "mkdir": 200,
+              "open": 399,
+              "stateOpen": 99,
+              "tempOpen": 100,
+              "directoryOpen": 200,
+              "stateStat": 99,
+              "stateRead": 99,
+              "tempWrite": 100,
+              "fileSync": 100,
+              "directorySync": 200,
+              "rename": 100,
+              "unlink": 100,
+              "jsonParse": 99,
+              "jsonStringify": 100,
+              "close": 399
+            },
+            "bytes": {
+              "stateRead": 62052,
+              "tempWrite": 62681,
+              "jsonStringify": 62581
+            }
+          }
+        },
+        {
+          "repeat": 1,
+          "operationCount": 100,
+          "ownerCount": 1,
+          "wallMs": 501.59773700000005,
+          "operationLatencyMs": {
+            "n": 100,
+            "p50Ms": 257.348832,
+            "p95Ms": 475.282782,
+            "p99Ms": 495.927825,
+            "maxMs": 500.61543500000005
+          },
+          "cpuUserMs": 183.15,
+          "cpuSystemMs": 125.238,
+          "stateBytes": 633,
+          "scopeChecks": [
+            {
+              "owner": "synthetic-owner-shared",
+              "deviceTypes": [
+                "desktop",
+                "mobile"
+              ]
+            }
+          ],
+          "unrelatedAuthorEmpty": true,
+          "io": {
+            "rchar": 82608,
+            "wchar": 83163,
+            "syscr": 2600,
+            "syscw": 2603,
+            "read_bytes": 0,
+            "write_bytes": 409600,
+            "cancelled_write_bytes": 0
+          },
+          "metrics": {
+            "durationMs": {
+              "lstat": 50.96889099999942,
+              "mkdir": 46.255600999999956,
+              "open": 56.37241500000175,
+              "stateStat": 11.992330999999353,
+              "stateRead": 23.981759000000125,
+              "tempWrite": 14.760232999999744,
+              "fileSync": 79.75936000000058,
+              "directorySync": 113.55933199999913,
+              "rename": 15.328121000000806,
+              "unlink": 15.461138000000005,
+              "jsonParse": 1.5026029999991124,
+              "jsonStringify": 1.2333049999988361,
+              "close": 46.68080599999871
+            },
+            "calls": {
+              "lstat": 400,
+              "mkdir": 200,
+              "open": 399,
+              "stateOpen": 99,
+              "tempOpen": 100,
+              "directoryOpen": 200,
+              "stateStat": 99,
+              "stateRead": 99,
+              "tempWrite": 100,
+              "fileSync": 100,
+              "directorySync": 200,
+              "rename": 100,
+              "unlink": 100,
+              "jsonParse": 99,
+              "jsonStringify": 100,
+              "close": 399
+            },
+            "bytes": {
+              "stateRead": 62506,
+              "tempWrite": 63139,
+              "jsonStringify": 63039
+            }
+          }
+        },
+        {
+          "repeat": 2,
+          "operationCount": 100,
+          "ownerCount": 1,
+          "wallMs": 497.50762800000007,
+          "operationLatencyMs": {
+            "n": 100,
+            "p50Ms": 262.62404300000003,
+            "p95Ms": 473.2642779999999,
+            "p99Ms": 491.2933150000001,
+            "maxMs": 495.6469239999999
+          },
+          "cpuUserMs": 159.407,
+          "cpuSystemMs": 135.044,
+          "stateBytes": 633,
+          "scopeChecks": [
+            {
+              "owner": "synthetic-owner-shared",
+              "deviceTypes": [
+                "desktop",
+                "mobile"
+              ]
+            }
+          ],
+          "unrelatedAuthorEmpty": true,
+          "io": {
+            "rchar": 82589,
+            "wchar": 83135,
+            "syscr": 2600,
+            "syscw": 2602,
+            "read_bytes": 0,
+            "write_bytes": 409600,
+            "cancelled_write_bytes": 0
+          },
+          "metrics": {
+            "durationMs": {
+              "lstat": 47.610299999999825,
+              "mkdir": 45.14969800000131,
+              "open": 52.93380600000023,
+              "stateStat": 11.511123999999882,
+              "stateRead": 23.745249999999942,
+              "tempWrite": 14.657632999999578,
+              "fileSync": 75.77095400000076,
+              "directorySync": 126.79016600000068,
+              "rename": 15.154328999996778,
+              "unlink": 14.342526000001726,
+              "jsonParse": 1.3286039999989043,
+              "jsonStringify": 1.11369899999886,
+              "close": 46.43298000000232
+            },
+            "calls": {
+              "lstat": 400,
+              "mkdir": 200,
+              "open": 399,
+              "stateOpen": 99,
+              "tempOpen": 100,
+              "directoryOpen": 200,
+              "stateStat": 99,
+              "stateRead": 99,
+              "tempWrite": 100,
+              "fileSync": 100,
+              "directorySync": 200,
+              "rename": 100,
+              "unlink": 100,
+              "jsonParse": 99,
+              "jsonStringify": 100,
+              "close": 399
+            },
+            "bytes": {
+              "stateRead": 62486,
+              "tempWrite": 63119,
+              "jsonStringify": 63019
+            }
+          }
+        },
+        {
+          "repeat": 3,
+          "operationCount": 100,
+          "ownerCount": 1,
+          "wallMs": 473.24717799999985,
+          "operationLatencyMs": {
+            "n": 100,
+            "p50Ms": 233.86038399999984,
+            "p95Ms": 448.9402289999998,
+            "p99Ms": 468.03406700000005,
+            "maxMs": 472.3003759999999
+          },
+          "cpuUserMs": 164.273,
+          "cpuSystemMs": 125.581,
+          "stateBytes": 633,
+          "scopeChecks": [
+            {
+              "owner": "synthetic-owner-shared",
+              "deviceTypes": [
+                "desktop",
+                "mobile"
+              ]
+            }
+          ],
+          "unrelatedAuthorEmpty": true,
+          "io": {
+            "rchar": 82610,
+            "wchar": 83155,
+            "syscr": 2600,
+            "syscw": 2602,
+            "read_bytes": 0,
+            "write_bytes": 409600,
+            "cancelled_write_bytes": 0
+          },
+          "metrics": {
+            "durationMs": {
+              "lstat": 48.87190400000327,
+              "mkdir": 44.30958900000451,
+              "open": 53.43100900000127,
+              "stateStat": 11.591425000002118,
+              "stateRead": 23.949247999998533,
+              "tempWrite": 13.86872400000152,
+              "fileSync": 80.12046999999916,
+              "directorySync": 99.43760800000086,
+              "rename": 14.251424999998335,
+              "unlink": 15.092928000000938,
+              "jsonParse": 1.2674069999991389,
+              "jsonStringify": 1.0048010000002705,
+              "close": 46.305497999999034
+            },
+            "calls": {
+              "lstat": 400,
+              "mkdir": 200,
+              "open": 399,
+              "stateOpen": 99,
+              "tempOpen": 100,
+              "directoryOpen": 200,
+              "stateStat": 99,
+              "stateRead": 99,
+              "tempWrite": 100,
+              "fileSync": 100,
+              "directorySync": 200,
+              "rename": 100,
+              "unlink": 100,
+              "jsonParse": 99,
+              "jsonStringify": 100,
+              "close": 399
+            },
+            "bytes": {
+              "stateRead": 62506,
+              "tempWrite": 63139,
+              "jsonStringify": 63039
+            }
+          }
+        },
+        {
+          "repeat": 4,
+          "operationCount": 100,
+          "ownerCount": 1,
+          "wallMs": 486.1027039999999,
+          "operationLatencyMs": {
+            "n": 100,
+            "p50Ms": 241.22739900000033,
+            "p95Ms": 461.43315399999983,
+            "p99Ms": 479.43729099999973,
+            "maxMs": 485.031602
+          },
+          "cpuUserMs": 184.754,
+          "cpuSystemMs": 130.404,
+          "stateBytes": 633,
+          "scopeChecks": [
+            {
+              "owner": "synthetic-owner-shared",
+              "deviceTypes": [
+                "desktop",
+                "mobile"
+              ]
+            }
+          ],
+          "unrelatedAuthorEmpty": true,
+          "io": {
+            "rchar": 82656,
+            "wchar": 83223,
+            "syscr": 2608,
+            "syscw": 2613,
+            "read_bytes": 0,
+            "write_bytes": 409600,
+            "cancelled_write_bytes": 0
+          },
+          "metrics": {
+            "durationMs": {
+              "lstat": 48.10059400000182,
+              "mkdir": 45.351407999995445,
+              "open": 54.27201399999967,
+              "stateStat": 13.053622999998424,
+              "stateRead": 25.36674900000162,
+              "tempWrite": 14.89442999999892,
+              "fileSync": 74.13215299999774,
+              "directorySync": 105.69331999999895,
+              "rename": 15.191932000000179,
+              "unlink": 15.776544000001195,
+              "jsonParse": 1.4094020000002274,
+              "jsonStringify": 1.1257989999976417,
+              "close": 49.81619500000215
+            },
+            "calls": {
+              "lstat": 400,
+              "mkdir": 200,
+              "open": 399,
+              "stateOpen": 99,
+              "tempOpen": 100,
+              "directoryOpen": 200,
+              "stateStat": 99,
+              "stateRead": 99,
+              "tempWrite": 100,
+              "fileSync": 100,
+              "directorySync": 200,
+              "rename": 100,
+              "unlink": 100,
+              "jsonParse": 99,
+              "jsonStringify": 100,
+              "close": 399
+            },
+            "bytes": {
+              "stateRead": 62486,
+              "tempWrite": 63119,
+              "jsonStringify": 63019
+            }
+          }
+        },
+        {
+          "repeat": 5,
+          "operationCount": 100,
+          "ownerCount": 1,
+          "wallMs": 488.4093090000001,
+          "operationLatencyMs": {
+            "n": 100,
+            "p50Ms": 247.72821199999998,
+            "p95Ms": 463.306458,
+            "p99Ms": 482.27609600000005,
+            "maxMs": 486.88630600000033
+          },
+          "cpuUserMs": 178.754,
+          "cpuSystemMs": 122.307,
+          "stateBytes": 633,
+          "scopeChecks": [
+            {
+              "owner": "synthetic-owner-shared",
+              "deviceTypes": [
+                "desktop",
+                "mobile"
+              ]
+            }
+          ],
+          "unrelatedAuthorEmpty": true,
+          "io": {
+            "rchar": 82612,
+            "wchar": 83147,
+            "syscr": 2600,
+            "syscw": 2601,
+            "read_bytes": 0,
+            "write_bytes": 409600,
+            "cancelled_write_bytes": 0
+          },
+          "metrics": {
+            "durationMs": {
+              "lstat": 47.17321199999833,
+              "mkdir": 45.74598999999898,
+              "open": 54.82662099999834,
+              "stateStat": 12.771024000003308,
+              "stateRead": 23.595958000000337,
+              "tempWrite": 15.500736000001325,
+              "fileSync": 74.65295499999866,
+              "directorySync": 112.90763200000174,
+              "rename": 14.887336000000687,
+              "unlink": 14.664527999998427,
+              "jsonParse": 1.2741069999997308,
+              "jsonStringify": 1.1854000000012093,
+              "close": 47.223188999998456
+            },
+            "calls": {
+              "lstat": 400,
+              "mkdir": 200,
+              "open": 399,
+              "stateOpen": 99,
+              "tempOpen": 100,
+              "directoryOpen": 200,
+              "stateStat": 99,
+              "stateRead": 99,
+              "tempWrite": 100,
+              "fileSync": 100,
+              "directorySync": 200,
+              "rename": 100,
+              "unlink": 100,
+              "jsonParse": 99,
+              "jsonStringify": 100,
+              "close": 399
+            },
+            "bytes": {
+              "stateRead": 62506,
+              "tempWrite": 63139,
+              "jsonStringify": 63039
+            }
+          }
+        },
+        {
+          "repeat": 6,
+          "operationCount": 100,
+          "ownerCount": 1,
+          "wallMs": 511.0405559999999,
+          "operationLatencyMs": {
+            "n": 100,
+            "p50Ms": 254.15772500000003,
+            "p95Ms": 487.5191070000001,
+            "p99Ms": 505.6239449999998,
+            "maxMs": 510.1260540000003
+          },
+          "cpuUserMs": 170.288,
+          "cpuSystemMs": 133.398,
+          "stateBytes": 633,
+          "scopeChecks": [
+            {
+              "owner": "synthetic-owner-shared",
+              "deviceTypes": [
+                "desktop",
+                "mobile"
+              ]
+            }
+          ],
+          "unrelatedAuthorEmpty": true,
+          "io": {
+            "rchar": 82592,
+            "wchar": 83119,
+            "syscr": 2600,
+            "syscw": 2600,
+            "read_bytes": 0,
+            "write_bytes": 409600,
+            "cancelled_write_bytes": 0
+          },
+          "metrics": {
+            "durationMs": {
+              "lstat": 51.72471400000359,
+              "mkdir": 48.22939700000097,
+              "open": 57.71521299999995,
+              "stateStat": 12.686924000001,
+              "stateRead": 27.002049999996416,
+              "tempWrite": 15.561836000000767,
+              "fileSync": 79.56006499999876,
+              "directorySync": 112.09403700000621,
+              "rename": 16.87632700000131,
+              "unlink": 15.594928000001346,
+              "jsonParse": 1.5676039999966633,
+              "jsonStringify": 1.1737979999975323,
+              "close": 50.78450600000451
+            },
+            "calls": {
+              "lstat": 400,
+              "mkdir": 200,
+              "open": 399,
+              "stateOpen": 99,
+              "tempOpen": 100,
+              "directoryOpen": 200,
+              "stateStat": 99,
+              "stateRead": 99,
+              "tempWrite": 100,
+              "fileSync": 100,
+              "directorySync": 200,
+              "rename": 100,
+              "unlink": 100,
+              "jsonParse": 99,
+              "jsonStringify": 100,
+              "close": 399
+            },
+            "bytes": {
+              "stateRead": 62486,
+              "tempWrite": 63119,
+              "jsonStringify": 63019
+            }
+          }
+        },
+        {
+          "repeat": 7,
+          "operationCount": 100,
+          "ownerCount": 1,
+          "wallMs": 481.61769500000037,
+          "operationLatencyMs": {
+            "n": 100,
+            "p50Ms": 234.65638500000023,
+            "p95Ms": 457.25724500000024,
+            "p99Ms": 475.63978399999996,
+            "maxMs": 480.24319300000025
+          },
+          "cpuUserMs": 164.266,
+          "cpuSystemMs": 126.081,
+          "stateBytes": 633,
+          "scopeChecks": [
+            {
+              "owner": "synthetic-owner-shared",
+              "deviceTypes": [
+                "desktop",
+                "mobile"
+              ]
+            }
+          ],
+          "unrelatedAuthorEmpty": true,
+          "io": {
+            "rchar": 82612,
+            "wchar": 83147,
+            "syscr": 2600,
+            "syscw": 2601,
+            "read_bytes": 0,
+            "write_bytes": 409600,
+            "cancelled_write_bytes": 0
+          },
+          "metrics": {
+            "durationMs": {
+              "lstat": 47.79328599999644,
+              "mkdir": 44.797792999995636,
+              "open": 53.83651400000417,
+              "stateStat": 11.244524000002912,
+              "stateRead": 23.718845000003057,
+              "tempWrite": 13.92483200000197,
+              "fileSync": 82.50096299999768,
+              "directorySync": 106.03531799999655,
+              "rename": 15.431033999998363,
+              "unlink": 14.196728000002167,
+              "jsonParse": 1.3622009999994589,
+              "jsonStringify": 1.0726050000048417,
+              "close": 45.68150499998637
+            },
+            "calls": {
+              "lstat": 400,
+              "mkdir": 200,
+              "open": 399,
+              "stateOpen": 99,
+              "tempOpen": 100,
+              "directoryOpen": 200,
+              "stateStat": 99,
+              "stateRead": 99,
+              "tempWrite": 100,
+              "fileSync": 100,
+              "directorySync": 200,
+              "rename": 100,
+              "unlink": 100,
+              "jsonParse": 99,
+              "jsonStringify": 100,
+              "close": 399
+            },
+            "bytes": {
+              "stateRead": 62506,
+              "tempWrite": 63139,
+              "jsonStringify": 63039
+            }
+          }
+        },
+        {
+          "repeat": 8,
+          "operationCount": 100,
+          "ownerCount": 1,
+          "wallMs": 491.43131600000015,
+          "operationLatencyMs": {
+            "n": 100,
+            "p50Ms": 248.36431300000004,
+            "p95Ms": 466.1690630000003,
+            "p99Ms": 485.7856039999997,
+            "maxMs": 490.5755140000001
+          },
+          "cpuUserMs": 152.838,
+          "cpuSystemMs": 142.672,
+          "stateBytes": 633,
+          "scopeChecks": [
+            {
+              "owner": "synthetic-owner-shared",
+              "deviceTypes": [
+                "desktop",
+                "mobile"
+              ]
+            }
+          ],
+          "unrelatedAuthorEmpty": true,
+          "io": {
+            "rchar": 82592,
+            "wchar": 83127,
+            "syscr": 2600,
+            "syscw": 2601,
+            "read_bytes": 0,
+            "write_bytes": 409600,
+            "cancelled_write_bytes": 0
+          },
+          "metrics": {
+            "durationMs": {
+              "lstat": 48.202008999999634,
+              "mkdir": 45.79289699999026,
+              "open": 54.80272000000787,
+              "stateStat": 11.422825999999077,
+              "stateRead": 23.287259999994603,
+              "tempWrite": 14.375030999995033,
+              "fileSync": 79.01145299999826,
+              "directorySync": 112.4467359999926,
+              "rename": 15.300928000002386,
+              "unlink": 15.985130000003664,
+              "jsonParse": 1.393701999998484,
+              "jsonStringify": 1.059003000001212,
+              "close": 48.236709999993764
+            },
+            "calls": {
+              "lstat": 400,
+              "mkdir": 200,
+              "open": 399,
+              "stateOpen": 99,
+              "tempOpen": 100,
+              "directoryOpen": 200,
+              "stateStat": 99,
+              "stateRead": 99,
+              "tempWrite": 100,
+              "fileSync": 100,
+              "directorySync": 200,
+              "rename": 100,
+              "unlink": 100,
+              "jsonParse": 99,
+              "jsonStringify": 100,
+              "close": 399
+            },
+            "bytes": {
+              "stateRead": 62486,
+              "tempWrite": 63119,
+              "jsonStringify": 63019
+            }
+          }
+        },
+        {
+          "repeat": 9,
+          "operationCount": 100,
+          "ownerCount": 1,
+          "wallMs": 466.51516400000037,
+          "operationLatencyMs": {
+            "n": 100,
+            "p50Ms": 224.52186400000028,
+            "p95Ms": 442.38141500000074,
+            "p99Ms": 460.88925299999937,
+            "maxMs": 465.6354620000002
+          },
+          "cpuUserMs": 161.102,
+          "cpuSystemMs": 122.455,
+          "stateBytes": 633,
+          "scopeChecks": [
+            {
+              "owner": "synthetic-owner-shared",
+              "deviceTypes": [
+                "desktop",
+                "mobile"
+              ]
+            }
+          ],
+          "unrelatedAuthorEmpty": true,
+          "io": {
+            "rchar": 82613,
+            "wchar": 83139,
+            "syscr": 2600,
+            "syscw": 2600,
+            "read_bytes": 0,
+            "write_bytes": 409600,
+            "cancelled_write_bytes": 0
+          },
+          "metrics": {
+            "durationMs": {
+              "lstat": 45.85029300000133,
+              "mkdir": 43.012588000016876,
+              "open": 52.29080800000338,
+              "stateStat": 11.638921000000664,
+              "stateRead": 23.060944000001655,
+              "tempWrite": 14.296532000005755,
+              "fileSync": 72.21343999999772,
+              "directorySync": 108.93381500000578,
+              "rename": 14.940834000002724,
+              "unlink": 14.249535999999352,
+              "jsonParse": 1.3224030000046696,
+              "jsonStringify": 1.0876049999942552,
+              "close": 44.12080100000185
+            },
+            "calls": {
+              "lstat": 400,
+              "mkdir": 200,
+              "open": 399,
+              "stateOpen": 99,
+              "tempOpen": 100,
+              "directoryOpen": 200,
+              "stateStat": 99,
+              "stateRead": 99,
+              "tempWrite": 100,
+              "fileSync": 100,
+              "directorySync": 200,
+              "rename": 100,
+              "unlink": 100,
+              "jsonParse": 99,
+              "jsonStringify": 100,
+              "close": 399
+            },
+            "bytes": {
+              "stateRead": 62506,
+              "tempWrite": 63139,
+              "jsonStringify": 63039
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "parallel-100-scoped-authors",
+      "operationCount": 100,
+      "repeatCount": 10,
+      "batchWallMs": {
+        "n": 10,
+        "p50Ms": 548.8672339999994,
+        "p95Ms": 576.472291,
+        "p99Ms": 576.472291,
+        "maxMs": 576.472291
+      },
+      "operationLatencyMs": {
+        "n": 1000,
+        "p50Ms": 266.0060489999996,
+        "p95Ms": 517.751671,
+        "p99Ms": 547.8643319999992,
+        "maxMs": 575.7264899999991
+      },
+      "runs": [
+        {
+          "repeat": 0,
+          "operationCount": 100,
+          "ownerCount": 100,
+          "wallMs": 548.8672339999994,
+          "operationLatencyMs": {
+            "n": 100,
+            "p50Ms": 274.11906700000054,
+            "p95Ms": 517.9933710000005,
+            "p99Ms": 542.6368220000004,
+            "maxMs": 547.8643319999992
+          },
+          "cpuUserMs": 205.919,
+          "cpuSystemMs": 150.2,
+          "stateBytes": 46445,
+          "scopeChecks": [
+            {
+              "owner": "synthetic-owner-0",
+              "deviceTypes": [
+                "desktop"
+              ]
+            },
+            {
+              "owner": "synthetic-owner-50",
+              "deviceTypes": [
+                "desktop"
+              ]
+            },
+            {
+              "owner": "synthetic-owner-99",
+              "deviceTypes": [
+                "mobile"
+              ]
+            }
+          ],
+          "unrelatedAuthorEmpty": true,
+          "io": {
+            "rchar": 2320337,
+            "wchar": 2366723,
+            "syscr": 2600,
+            "syscw": 2606,
+            "read_bytes": 0,
+            "write_bytes": 2551808,
+            "cancelled_write_bytes": 0
+          },
+          "metrics": {
+            "durationMs": {
+              "lstat": 49.56929799999216,
+              "mkdir": 52.967310000007274,
+              "open": 58.46830899999986,
+              "stateStat": 12.34813099999701,
+              "stateRead": 25.822850999996263,
+              "tempWrite": 17.71953599999506,
+              "fileSync": 81.64187000000038,
+              "directorySync": 112.1623269999991,
+              "rename": 15.920928999999887,
+              "unlink": 16.675940000000992,
+              "jsonParse": 6.106120000000374,
+              "jsonStringify": 6.569915999998557,
+              "close": 47.918995000000905
+            },
+            "calls": {
+              "lstat": 400,
+              "mkdir": 200,
+              "open": 399,
+              "stateOpen": 99,
+              "tempOpen": 100,
+              "directoryOpen": 200,
+              "stateStat": 99,
+              "stateRead": 99,
+              "tempWrite": 100,
+              "fileSync": 100,
+              "directorySync": 200,
+              "rename": 100,
+              "unlink": 100,
+              "jsonParse": 99,
+              "jsonStringify": 100,
+              "close": 399
+            },
+            "bytes": {
+              "stateRead": 2300230,
+              "tempWrite": 2346675,
+              "jsonStringify": 2346575
+            }
+          }
+        },
+        {
+          "repeat": 1,
+          "operationCount": 100,
+          "ownerCount": 100,
+          "wallMs": 554.3480460000001,
+          "operationLatencyMs": {
+            "n": 100,
+            "p50Ms": 262.8972439999998,
+            "p95Ms": 526.1050880000003,
+            "p99Ms": 548.4015340000005,
+            "maxMs": 553.5067439999993
+          },
+          "cpuUserMs": 242.796,
+          "cpuSystemMs": 138.471,
+          "stateBytes": 46675,
+          "scopeChecks": [
+            {
+              "owner": "synthetic-owner-0",
+              "deviceTypes": [
+                "desktop"
+              ]
+            },
+            {
+              "owner": "synthetic-owner-50",
+              "deviceTypes": [
+                "desktop"
+              ]
+            },
+            {
+              "owner": "synthetic-owner-99",
+              "deviceTypes": [
+                "mobile"
+              ]
+            }
+          ],
+          "unrelatedAuthorEmpty": true,
+          "io": {
+            "rchar": 2332673,
+            "wchar": 2379256,
+            "syscr": 2600,
+            "syscw": 2602,
+            "read_bytes": 0,
+            "write_bytes": 2568192,
+            "cancelled_write_bytes": 0
+          },
+          "metrics": {
+            "durationMs": {
+              "lstat": 46.548102000000654,
+              "mkdir": 51.325095000003785,
+              "open": 54.55851399999483,
+              "stateStat": 11.541925999994419,
+              "stateRead": 24.321843000000626,
+              "tempWrite": 16.88133999999809,
+              "fileSync": 86.15026800000214,
+              "directorySync": 112.0420439999998,
+              "rename": 15.705337000000327,
+              "unlink": 14.976739999998244,
+              "jsonParse": 8.064723999995294,
+              "jsonStringify": 7.773217000003569,
+              "close": 46.39408899999671
+            },
+            "calls": {
+              "lstat": 400,
+              "mkdir": 200,
+              "open": 399,
+              "stateOpen": 99,
+              "tempOpen": 100,
+              "directoryOpen": 200,
+              "stateStat": 99,
+              "stateRead": 99,
+              "tempWrite": 100,
+              "fileSync": 100,
+              "directorySync": 200,
+              "rename": 100,
+              "unlink": 100,
+              "jsonParse": 99,
+              "jsonStringify": 100,
+              "close": 399
+            },
+            "bytes": {
+              "stateRead": 2312565,
+              "tempWrite": 2359240,
+              "jsonStringify": 2359140
+            }
+          }
+        },
+        {
+          "repeat": 2,
+          "operationCount": 100,
+          "ownerCount": 100,
+          "wallMs": 533.2610019999993,
+          "operationLatencyMs": {
+            "n": 100,
+            "p50Ms": 252.74762199999986,
+            "p95Ms": 504.0980419999996,
+            "p99Ms": 526.2538869999998,
+            "maxMs": 532.3895999999995
+          },
+          "cpuUserMs": 192.36,
+          "cpuSystemMs": 142.092,
+          "stateBytes": 46665,
+          "scopeChecks": [
+            {
+              "owner": "synthetic-owner-0",
+              "deviceTypes": [
+                "desktop"
+              ]
+            },
+            {
+              "owner": "synthetic-owner-50",
+              "deviceTypes": [
+                "desktop"
+              ]
+            },
+            {
+              "owner": "synthetic-owner-99",
+              "deviceTypes": [
+                "mobile"
+              ]
+            }
+          ],
+          "unrelatedAuthorEmpty": true,
+          "io": {
+            "rchar": 2332128,
+            "wchar": 2378701,
+            "syscr": 2600,
+            "syscw": 2602,
+            "read_bytes": 0,
+            "write_bytes": 2568192,
+            "cancelled_write_bytes": 0
+          },
+          "metrics": {
+            "durationMs": {
+              "lstat": 49.73270300000604,
+              "mkdir": 48.67200200000934,
+              "open": 57.2198309999967,
+              "stateStat": 11.898125000002437,
+              "stateRead": 24.16874700000153,
+              "tempWrite": 17.260637000000315,
+              "fileSync": 86.42017799999303,
+              "directorySync": 108.10061899999255,
+              "rename": 15.631625000004533,
+              "unlink": 15.161328999994112,
+              "jsonParse": 6.312408999995569,
+              "jsonStringify": 5.385208999999122,
+              "close": 48.02249299998766
+            },
+            "calls": {
+              "lstat": 400,
+              "mkdir": 200,
+              "open": 399,
+              "stateOpen": 99,
+              "tempOpen": 100,
+              "directoryOpen": 200,
+              "stateStat": 99,
+              "stateRead": 99,
+              "tempWrite": 100,
+              "fileSync": 100,
+              "directorySync": 200,
+              "rename": 100,
+              "unlink": 100,
+              "jsonParse": 99,
+              "jsonStringify": 100,
+              "close": 399
+            },
+            "bytes": {
+              "stateRead": 2312020,
+              "tempWrite": 2358685,
+              "jsonStringify": 2358585
+            }
+          }
+        },
+        {
+          "repeat": 3,
+          "operationCount": 100,
+          "ownerCount": 100,
+          "wallMs": 513.0652600000003,
+          "operationLatencyMs": {
+            "n": 100,
+            "p50Ms": 247.29561099999955,
+            "p95Ms": 486.05470400000013,
+            "p99Ms": 507.42054800000005,
+            "maxMs": 512.3355579999998
+          },
+          "cpuUserMs": 211.627,
+          "cpuSystemMs": 125.702,
+          "stateBytes": 46675,
+          "scopeChecks": [
+            {
+              "owner": "synthetic-owner-0",
+              "deviceTypes": [
+                "desktop"
+              ]
+            },
+            {
+              "owner": "synthetic-owner-50",
+              "deviceTypes": [
+                "desktop"
+              ]
+            },
+            {
+              "owner": "synthetic-owner-99",
+              "deviceTypes": [
+                "mobile"
+              ]
+            }
+          ],
+          "unrelatedAuthorEmpty": true,
+          "io": {
+            "rchar": 2332674,
+            "wchar": 2379256,
+            "syscr": 2600,
+            "syscw": 2602,
+            "read_bytes": 0,
+            "write_bytes": 2568192,
+            "cancelled_write_bytes": 0
+          },
+          "metrics": {
+            "durationMs": {
+              "lstat": 48.113886000001,
+              "mkdir": 47.5991029999941,
+              "open": 55.53979999999956,
+              "stateStat": 11.897321999999804,
+              "stateRead": 23.47505100000035,
+              "tempWrite": 16.870442999997977,
+              "fileSync": 77.92954799999916,
+              "directorySync": 105.30711900000279,
+              "rename": 15.427336999995532,
+              "unlink": 14.451140999996824,
+              "jsonParse": 5.994613000003483,
+              "jsonStringify": 4.935407999987547,
+              "close": 46.36819800000285
+            },
+            "calls": {
+              "lstat": 400,
+              "mkdir": 200,
+              "open": 399,
+              "stateOpen": 99,
+              "tempOpen": 100,
+              "directoryOpen": 200,
+              "stateStat": 99,
+              "stateRead": 99,
+              "tempWrite": 100,
+              "fileSync": 100,
+              "directorySync": 200,
+              "rename": 100,
+              "unlink": 100,
+              "jsonParse": 99,
+              "jsonStringify": 100,
+              "close": 399
+            },
+            "bytes": {
+              "stateRead": 2312565,
+              "tempWrite": 2359240,
+              "jsonStringify": 2359140
+            }
+          }
+        },
+        {
+          "repeat": 4,
+          "operationCount": 100,
+          "ownerCount": 100,
+          "wallMs": 529.1757930000003,
+          "operationLatencyMs": {
+            "n": 100,
+            "p50Ms": 269.29985599999964,
+            "p95Ms": 502.17893899999945,
+            "p99Ms": 523.0347820000006,
+            "maxMs": 528.2688909999997
+          },
+          "cpuUserMs": 197.293,
+          "cpuSystemMs": 131.92,
+          "stateBytes": 46665,
+          "scopeChecks": [
+            {
+              "owner": "synthetic-owner-0",
+              "deviceTypes": [
+                "desktop"
+              ]
+            },
+            {
+              "owner": "synthetic-owner-50",
+              "deviceTypes": [
+                "desktop"
+              ]
+            },
+            {
+              "owner": "synthetic-owner-99",
+              "deviceTypes": [
+                "mobile"
+              ]
+            }
+          ],
+          "unrelatedAuthorEmpty": true,
+          "io": {
+            "rchar": 2332131,
+            "wchar": 2378693,
+            "syscr": 2600,
+            "syscw": 2601,
+            "read_bytes": 0,
+            "write_bytes": 2568192,
+            "cancelled_write_bytes": 0
+          },
+          "metrics": {
+            "durationMs": {
+              "lstat": 49.8943950000039,
+              "mkdir": 47.57940300000064,
+              "open": 55.98561200001586,
+              "stateStat": 12.109825000000455,
+              "stateRead": 26.553955999998834,
+              "tempWrite": 16.9375399999999,
+              "fileSync": 79.7385639999975,
+              "directorySync": 109.80082900000161,
+              "rename": 16.030038000003515,
+              "unlink": 16.42343499999788,
+              "jsonParse": 6.050516000003881,
+              "jsonStringify": 4.972610999998324,
+              "close": 48.01579800000309
+            },
+            "calls": {
+              "lstat": 400,
+              "mkdir": 200,
+              "open": 399,
+              "stateOpen": 99,
+              "tempOpen": 100,
+              "directoryOpen": 200,
+              "stateStat": 99,
+              "stateRead": 99,
+              "tempWrite": 100,
+              "fileSync": 100,
+              "directorySync": 200,
+              "rename": 100,
+              "unlink": 100,
+              "jsonParse": 99,
+              "jsonStringify": 100,
+              "close": 399
+            },
+            "bytes": {
+              "stateRead": 2312020,
+              "tempWrite": 2358685,
+              "jsonStringify": 2358585
+            }
+          }
+        },
+        {
+          "repeat": 5,
+          "operationCount": 100,
+          "ownerCount": 100,
+          "wallMs": 553.7854440000001,
+          "operationLatencyMs": {
+            "n": 100,
+            "p50Ms": 264.58014699999967,
+            "p95Ms": 519.9175750000004,
+            "p99Ms": 546.67893,
+            "maxMs": 553.0496430000003
+          },
+          "cpuUserMs": 214.737,
+          "cpuSystemMs": 139.24,
+          "stateBytes": 46675,
+          "scopeChecks": [
+            {
+              "owner": "synthetic-owner-0",
+              "deviceTypes": [
+                "desktop"
+              ]
+            },
+            {
+              "owner": "synthetic-owner-50",
+              "deviceTypes": [
+                "desktop"
+              ]
+            },
+            {
+              "owner": "synthetic-owner-99",
+              "deviceTypes": [
+                "mobile"
+              ]
+            }
+          ],
+          "unrelatedAuthorEmpty": true,
+          "io": {
+            "rchar": 2332740,
+            "wchar": 2379368,
+            "syscr": 2608,
+            "syscw": 2616,
+            "read_bytes": 0,
+            "write_bytes": 2568192,
+            "cancelled_write_bytes": 0
+          },
+          "metrics": {
+            "durationMs": {
+              "lstat": 54.14942600000904,
+              "mkdir": 50.07381099999657,
+              "open": 58.866816999996445,
+              "stateStat": 12.50582299999769,
+              "stateRead": 26.037051000002066,
+              "tempWrite": 17.29783999999654,
+              "fileSync": 83.20837400000892,
+              "directorySync": 114.61993499999608,
+              "rename": 16.831139000000803,
+              "unlink": 15.840237000002162,
+              "jsonParse": 6.707118999993327,
+              "jsonStringify": 6.245518000005177,
+              "close": 50.97941899999387
+            },
+            "calls": {
+              "lstat": 400,
+              "mkdir": 200,
+              "open": 399,
+              "stateOpen": 99,
+              "tempOpen": 100,
+              "directoryOpen": 200,
+              "stateStat": 99,
+              "stateRead": 99,
+              "tempWrite": 100,
+              "fileSync": 100,
+              "directorySync": 200,
+              "rename": 100,
+              "unlink": 100,
+              "jsonParse": 99,
+              "jsonStringify": 100,
+              "close": 399
+            },
+            "bytes": {
+              "stateRead": 2312565,
+              "tempWrite": 2359240,
+              "jsonStringify": 2359140
+            }
+          }
+        },
+        {
+          "repeat": 6,
+          "operationCount": 100,
+          "ownerCount": 100,
+          "wallMs": 551.7882399999999,
+          "operationLatencyMs": {
+            "n": 100,
+            "p50Ms": 277.0335720000003,
+            "p95Ms": 523.5496810000004,
+            "p99Ms": 545.369428,
+            "maxMs": 550.9929379999994
+          },
+          "cpuUserMs": 200.294,
+          "cpuSystemMs": 138.181,
+          "stateBytes": 46665,
+          "scopeChecks": [
+            {
+              "owner": "synthetic-owner-0",
+              "deviceTypes": [
+                "desktop"
+              ]
+            },
+            {
+              "owner": "synthetic-owner-50",
+              "deviceTypes": [
+                "desktop"
+              ]
+            },
+            {
+              "owner": "synthetic-owner-99",
+              "deviceTypes": [
+                "mobile"
+              ]
+            }
+          ],
+          "unrelatedAuthorEmpty": true,
+          "io": {
+            "rchar": 2332131,
+            "wchar": 2378701,
+            "syscr": 2600,
+            "syscw": 2602,
+            "read_bytes": 0,
+            "write_bytes": 2568192,
+            "cancelled_write_bytes": 0
+          },
+          "metrics": {
+            "durationMs": {
+              "lstat": 52.36170999998285,
+              "mkdir": 51.16541000000507,
+              "open": 60.47822799999631,
+              "stateStat": 12.121832000000722,
+              "stateRead": 25.61855099999775,
+              "tempWrite": 17.07593399999314,
+              "fileSync": 82.1385719999962,
+              "directorySync": 117.65823799999089,
+              "rename": 16.193823999985398,
+              "unlink": 15.79523499998686,
+              "jsonParse": 6.147119999994175,
+              "jsonStringify": 5.283114999987447,
+              "close": 50.37329300001147
+            },
+            "calls": {
+              "lstat": 400,
+              "mkdir": 200,
+              "open": 399,
+              "stateOpen": 99,
+              "tempOpen": 100,
+              "directoryOpen": 200,
+              "stateStat": 99,
+              "stateRead": 99,
+              "tempWrite": 100,
+              "fileSync": 100,
+              "directorySync": 200,
+              "rename": 100,
+              "unlink": 100,
+              "jsonParse": 99,
+              "jsonStringify": 100,
+              "close": 399
+            },
+            "bytes": {
+              "stateRead": 2312020,
+              "tempWrite": 2358685,
+              "jsonStringify": 2358585
+            }
+          }
+        },
+        {
+          "repeat": 7,
+          "operationCount": 100,
+          "ownerCount": 100,
+          "wallMs": 576.472291,
+          "operationLatencyMs": {
+            "n": 100,
+            "p50Ms": 284.9465889999992,
+            "p95Ms": 545.8270279999997,
+            "p99Ms": 568.9680759999992,
+            "maxMs": 575.7264899999991
+          },
+          "cpuUserMs": 223.922,
+          "cpuSystemMs": 130.986,
+          "stateBytes": 46675,
+          "scopeChecks": [
+            {
+              "owner": "synthetic-owner-0",
+              "deviceTypes": [
+                "desktop"
+              ]
+            },
+            {
+              "owner": "synthetic-owner-50",
+              "deviceTypes": [
+                "desktop"
+              ]
+            },
+            {
+              "owner": "synthetic-owner-99",
+              "deviceTypes": [
+                "mobile"
+              ]
+            }
+          ],
+          "unrelatedAuthorEmpty": true,
+          "io": {
+            "rchar": 2332676,
+            "wchar": 2379256,
+            "syscr": 2600,
+            "syscw": 2602,
+            "read_bytes": 0,
+            "write_bytes": 2568192,
+            "cancelled_write_bytes": 0
+          },
+          "metrics": {
+            "durationMs": {
+              "lstat": 52.91739499997675,
+              "mkdir": 52.93959499999801,
+              "open": 61.38463099999353,
+              "stateStat": 12.233223000010184,
+              "stateRead": 25.687047999985225,
+              "tempWrite": 18.30502999998862,
+              "fileSync": 86.99137499999415,
+              "directorySync": 129.27925999999024,
+              "rename": 17.034629999987374,
+              "unlink": 16.275534999997035,
+              "jsonParse": 6.586411999995107,
+              "jsonStringify": 5.546505999998772,
+              "close": 50.799809999998615
+            },
+            "calls": {
+              "lstat": 400,
+              "mkdir": 200,
+              "open": 399,
+              "stateOpen": 99,
+              "tempOpen": 100,
+              "directoryOpen": 200,
+              "stateStat": 99,
+              "stateRead": 99,
+              "tempWrite": 100,
+              "fileSync": 100,
+              "directorySync": 200,
+              "rename": 100,
+              "unlink": 100,
+              "jsonParse": 99,
+              "jsonStringify": 100,
+              "close": 399
+            },
+            "bytes": {
+              "stateRead": 2312565,
+              "tempWrite": 2359240,
+              "jsonStringify": 2359140
+            }
+          }
+        },
+        {
+          "repeat": 8,
+          "operationCount": 100,
+          "ownerCount": 100,
+          "wallMs": 551.7248400000008,
+          "operationLatencyMs": {
+            "n": 100,
+            "p50Ms": 251.92851999999948,
+            "p95Ms": 522.5865810000014,
+            "p99Ms": 545.7257269999991,
+            "maxMs": 550.952738
+          },
+          "cpuUserMs": 184.216,
+          "cpuSystemMs": 154.18,
+          "stateBytes": 46665,
+          "scopeChecks": [
+            {
+              "owner": "synthetic-owner-0",
+              "deviceTypes": [
+                "desktop"
+              ]
+            },
+            {
+              "owner": "synthetic-owner-50",
+              "deviceTypes": [
+                "desktop"
+              ]
+            },
+            {
+              "owner": "synthetic-owner-99",
+              "deviceTypes": [
+                "mobile"
+              ]
+            }
+          ],
+          "unrelatedAuthorEmpty": true,
+          "io": {
+            "rchar": 2332131,
+            "wchar": 2378701,
+            "syscr": 2600,
+            "syscw": 2602,
+            "read_bytes": 0,
+            "write_bytes": 2568192,
+            "cancelled_write_bytes": 0
+          },
+          "metrics": {
+            "durationMs": {
+              "lstat": 52.27631300000394,
+              "mkdir": 54.20931199999177,
+              "open": 57.274823999994624,
+              "stateStat": 12.41352399999596,
+              "stateRead": 24.780556999998225,
+              "tempWrite": 17.62823500000013,
+              "fileSync": 83.46307599999636,
+              "directorySync": 115.74403800001346,
+              "rename": 16.74333600001046,
+              "unlink": 16.03933199999483,
+              "jsonParse": 6.0810119999932795,
+              "jsonStringify": 5.039608999992197,
+              "close": 50.494300000018484
+            },
+            "calls": {
+              "lstat": 400,
+              "mkdir": 200,
+              "open": 399,
+              "stateOpen": 99,
+              "tempOpen": 100,
+              "directoryOpen": 200,
+              "stateStat": 99,
+              "stateRead": 99,
+              "tempWrite": 100,
+              "fileSync": 100,
+              "directorySync": 200,
+              "rename": 100,
+              "unlink": 100,
+              "jsonParse": 99,
+              "jsonStringify": 100,
+              "close": 399
+            },
+            "bytes": {
+              "stateRead": 2312020,
+              "tempWrite": 2358685,
+              "jsonStringify": 2358585
+            }
+          }
+        },
+        {
+          "repeat": 9,
+          "operationCount": 100,
+          "ownerCount": 100,
+          "wallMs": 530.0936950000014,
+          "operationLatencyMs": {
+            "n": 100,
+            "p50Ms": 255.05882700000075,
+            "p95Ms": 501.2014359999994,
+            "p99Ms": 523.1307820000002,
+            "maxMs": 529.3639949999997
+          },
+          "cpuUserMs": 179.027,
+          "cpuSystemMs": 146.318,
+          "stateBytes": 46675,
+          "scopeChecks": [
+            {
+              "owner": "synthetic-owner-0",
+              "deviceTypes": [
+                "desktop"
+              ]
+            },
+            {
+              "owner": "synthetic-owner-50",
+              "deviceTypes": [
+                "desktop"
+              ]
+            },
+            {
+              "owner": "synthetic-owner-99",
+              "deviceTypes": [
+                "mobile"
+              ]
+            }
+          ],
+          "unrelatedAuthorEmpty": true,
+          "io": {
+            "rchar": 2332676,
+            "wchar": 2379256,
+            "syscr": 2600,
+            "syscw": 2602,
+            "read_bytes": 0,
+            "write_bytes": 2568192,
+            "cancelled_write_bytes": 0
+          },
+          "metrics": {
+            "durationMs": {
+              "lstat": 48.610400000010486,
+              "mkdir": 48.69550099998378,
+              "open": 56.290323999990505,
+              "stateStat": 11.408228000003874,
+              "stateRead": 24.093645999995715,
+              "tempWrite": 16.57075000000441,
+              "fileSync": 84.82696699999542,
+              "directorySync": 111.2356389999768,
+              "rename": 16.097632999999405,
+              "unlink": 15.295430000012857,
+              "jsonParse": 6.261218999996345,
+              "jsonStringify": 4.881108999992648,
+              "close": 48.162904000026174
+            },
+            "calls": {
+              "lstat": 400,
+              "mkdir": 200,
+              "open": 399,
+              "stateOpen": 99,
+              "tempOpen": 100,
+              "directoryOpen": 200,
+              "stateStat": 99,
+              "stateRead": 99,
+              "tempWrite": 100,
+              "fileSync": 100,
+              "directorySync": 200,
+              "rename": 100,
+              "unlink": 100,
+              "jsonParse": 99,
+              "jsonStringify": 100,
+              "close": 399
+            },
+            "bytes": {
+              "stateRead": 2312565,
+              "tempWrite": 2359240,
+              "jsonStringify": 2359140
+            }
+          }
+        }
+      ]
+    }
+  ]
+}

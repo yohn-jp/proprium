@@ -137,6 +137,7 @@ function instrumentHandle(handle, kind) {
   wrap("sync", kind === "directory" ? "directorySync" : kind === "temporary" ? "fileSync" : undefined,
     kind === "directory" ? "directorySync" : kind === "temporary" ? "fileSync" : undefined);
   wrap("close", "close", "close");
+  return handle;
 }
 
 function installInstrumentation() {

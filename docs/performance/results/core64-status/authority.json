@@ -1,0 +1,348 @@
+{
+  "schemaVersion": 1,
+  "candidate": "C41",
+  "runtimeRoot": "/data/scriptorium-core64-worktrees/g0",
+  "runtimeSourceSha": "a1587e784788fa87d86c0eb7ab175d7a28a3209f",
+  "source": "local synthetic API process with signed status credentials, controlled Core store, and in-memory fake persistence rows",
+  "hostedOrK3sEvidence": "NOT_CHECKED: no authorized hosted or k3s fixture was supplied",
+  "invariants": {
+    "stableStatusUsesPairedRemoteObservations": true,
+    "readerPinnedToFirstObservation": true,
+    "remoteMismatchReturnsUnknown": true
+  },
+  "environment": {
+    "node": "24.21.0",
+    "platform": "linux",
+    "arch": "x64",
+    "kernel": "6.18.52"
+  },
+  "fixtures": [
+    {
+      "fakePersistenceRecords": 1,
+      "samples": 20,
+      "wallMs": {
+        "n": 20,
+        "p50Ms": 1.5127030000000161,
+        "p95Ms": 5.704713999999996,
+        "p99Ms": 31.52587299999999,
+        "maxMs": 31.52587299999999
+      },
+      "perRequest": [
+        {
+          "wallMs": 31.52587299999999,
+          "observedCalls": 2,
+          "scannedRecords": 1,
+          "persistenceState": "verified"
+        },
+        {
+          "wallMs": 3.6485079999999925,
+          "observedCalls": 2,
+          "scannedRecords": 1,
+          "persistenceState": "verified"
+        },
+        {
+          "wallMs": 2.1061049999999852,
+          "observedCalls": 2,
+          "scannedRecords": 1,
+          "persistenceState": "verified"
+        },
+        {
+          "wallMs": 1.7658050000000003,
+          "observedCalls": 2,
+          "scannedRecords": 1,
+          "persistenceState": "verified"
+        },
+        {
+          "wallMs": 4.705610999999976,
+          "observedCalls": 2,
+          "scannedRecords": 1,
+          "persistenceState": "verified"
+        },
+        {
+          "wallMs": 2.1531050000000107,
+          "observedCalls": 2,
+          "scannedRecords": 1,
+          "persistenceState": "verified"
+        },
+        {
+          "wallMs": 5.704713999999996,
+          "observedCalls": 2,
+          "scannedRecords": 1,
+          "persistenceState": "verified"
+        },
+        {
+          "wallMs": 1.9916039999999953,
+          "observedCalls": 2,
+          "scannedRecords": 1,
+          "persistenceState": "verified"
+        },
+        {
+          "wallMs": 1.8186039999999934,
+          "observedCalls": 2,
+          "scannedRecords": 1,
+          "persistenceState": "verified"
+        },
+        {
+          "wallMs": 1.7838040000000035,
+          "observedCalls": 2,
+          "scannedRecords": 1,
+          "persistenceState": "verified"
+        },
+        {
+          "wallMs": 1.5127030000000161,
+          "observedCalls": 2,
+          "scannedRecords": 1,
+          "persistenceState": "verified"
+        },
+        {
+          "wallMs": 1.283902999999981,
+          "observedCalls": 2,
+          "scannedRecords": 1,
+          "persistenceState": "verified"
+        },
+        {
+          "wallMs": 1.0948029999999846,
+          "observedCalls": 2,
+          "scannedRecords": 1,
+          "persistenceState": "verified"
+        },
+        {
+          "wallMs": 1.1244029999999725,
+          "observedCalls": 2,
+          "scannedRecords": 1,
+          "persistenceState": "verified"
+        },
+        {
+          "wallMs": 1.0996020000000044,
+          "observedCalls": 2,
+          "scannedRecords": 1,
+          "persistenceState": "verified"
+        },
+        {
+          "wallMs": 1.0939020000000141,
+          "observedCalls": 2,
+          "scannedRecords": 1,
+          "persistenceState": "verified"
+        },
+        {
+          "wallMs": 1.0276029999999992,
+          "observedCalls": 2,
+          "scannedRecords": 1,
+          "persistenceState": "verified"
+        },
+        {
+          "wallMs": 1.152401999999995,
+          "observedCalls": 2,
+          "scannedRecords": 1,
+          "persistenceState": "verified"
+        },
+        {
+          "wallMs": 1.1800029999999992,
+          "observedCalls": 2,
+          "scannedRecords": 1,
+          "persistenceState": "verified"
+        },
+        {
+          "wallMs": 1.3573030000000017,
+          "observedCalls": 2,
+          "scannedRecords": 1,
+          "persistenceState": "verified"
+        }
+      ],
+      "counts": {
+        "observeCalls": 40,
+        "listCalls": 20,
+        "readCalls": 20,
+        "pinnedReads": [
+          "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+          "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+          "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+          "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+          "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+          "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+          "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+          "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+          "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+          "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+          "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+          "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+          "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+          "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+          "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+          "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+          "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+          "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+          "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+          "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+        ]
+      }
+    },
+    {
+      "fakePersistenceRecords": 100,
+      "samples": 20,
+      "wallMs": {
+        "n": 20,
+        "p50Ms": 1.5836039999999798,
+        "p95Ms": 2.3461050000000228,
+        "p99Ms": 6.375613999999985,
+        "maxMs": 6.375613999999985
+      },
+      "perRequest": [
+        {
+          "wallMs": 6.375613999999985,
+          "observedCalls": 2,
+          "scannedRecords": 100,
+          "persistenceState": "verified"
+        },
+        {
+          "wallMs": 2.0852049999999736,
+          "observedCalls": 2,
+          "scannedRecords": 100,
+          "persistenceState": "verified"
+        },
+        {
+          "wallMs": 1.3471020000000067,
+          "observedCalls": 2,
+          "scannedRecords": 100,
+          "persistenceState": "verified"
+        },
+        {
+          "wallMs": 1.4104029999999739,
+          "observedCalls": 2,
+          "scannedRecords": 100,
+          "persistenceState": "verified"
+        },
+        {
+          "wallMs": 1.208802999999989,
+          "observedCalls": 2,
+          "scannedRecords": 100,
+          "persistenceState": "verified"
+        },
+        {
+          "wallMs": 1.67350399999998,
+          "observedCalls": 2,
+          "scannedRecords": 100,
+          "persistenceState": "verified"
+        },
+        {
+          "wallMs": 1.892503999999974,
+          "observedCalls": 2,
+          "scannedRecords": 100,
+          "persistenceState": "verified"
+        },
+        {
+          "wallMs": 1.762503000000038,
+          "observedCalls": 2,
+          "scannedRecords": 100,
+          "persistenceState": "verified"
+        },
+        {
+          "wallMs": 1.5831029999999942,
+          "observedCalls": 2,
+          "scannedRecords": 100,
+          "persistenceState": "verified"
+        },
+        {
+          "wallMs": 1.8421040000000062,
+          "observedCalls": 2,
+          "scannedRecords": 100,
+          "persistenceState": "verified"
+        },
+        {
+          "wallMs": 1.659403999999995,
+          "observedCalls": 2,
+          "scannedRecords": 100,
+          "persistenceState": "verified"
+        },
+        {
+          "wallMs": 1.5836039999999798,
+          "observedCalls": 2,
+          "scannedRecords": 100,
+          "persistenceState": "verified"
+        },
+        {
+          "wallMs": 1.611202999999989,
+          "observedCalls": 2,
+          "scannedRecords": 100,
+          "persistenceState": "verified"
+        },
+        {
+          "wallMs": 1.6613029999999753,
+          "observedCalls": 2,
+          "scannedRecords": 100,
+          "persistenceState": "verified"
+        },
+        {
+          "wallMs": 1.5475040000000035,
+          "observedCalls": 2,
+          "scannedRecords": 100,
+          "persistenceState": "verified"
+        },
+        {
+          "wallMs": 2.3461050000000228,
+          "observedCalls": 2,
+          "scannedRecords": 100,
+          "persistenceState": "verified"
+        },
+        {
+          "wallMs": 1.3920030000000452,
+          "observedCalls": 2,
+          "scannedRecords": 100,
+          "persistenceState": "verified"
+        },
+        {
+          "wallMs": 1.308603000000005,
+          "observedCalls": 2,
+          "scannedRecords": 100,
+          "persistenceState": "verified"
+        },
+        {
+          "wallMs": 1.0664019999999823,
+          "observedCalls": 2,
+          "scannedRecords": 100,
+          "persistenceState": "verified"
+        },
+        {
+          "wallMs": 1.2869029999999952,
+          "observedCalls": 2,
+          "scannedRecords": 100,
+          "persistenceState": "verified"
+        }
+      ],
+      "counts": {
+        "observeCalls": 40,
+        "listCalls": 20,
+        "readCalls": 2000,
+        "pinnedReads": [
+          "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+          "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+          "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+          "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+          "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+          "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+          "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+          "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+          "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+          "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+          "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+          "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+          "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+          "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+          "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+          "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+          "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+          "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+          "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+          "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+        ]
+      }
+    }
+  ],
+  "remoteRace": {
+    "observeCalls": 2,
+    "pinnedReadCommit": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+    "finalObservedCommit": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+    "persistenceState": "unknown",
+    "scannedRecords": 100
+  }
+}

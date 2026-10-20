@@ -1,0 +1,64 @@
+{
+  "schemaVersion": 1,
+  "runDate": "2026-10-21",
+  "externalCampaignDirectory": "/data/core64-status.8Z29QzLB",
+  "temporaryDirectory": "/data/g3stmp/c64-status.1t2iYRIK",
+  "environment": {
+    "host": "nixos-dev",
+    "platform": "linux",
+    "architecture": "x64",
+    "kernel": "6.18.52",
+    "node": "24.21.0",
+    "pnpm": "12.10.1",
+    "temporaryFilesystem": "/dev/sda, 251G total; 97G available after run"
+  },
+  "runtime": {
+    "sourceSha": "a1587e784788fa87d86c0eb7ab175d7a28a3209f",
+    "frozenWorktree": "/data/scriptorium-core64-worktrees/g0",
+    "worktreeHead": "80ab121ad08b2c5f5957e3405eed511762fb1747",
+    "worktreeClean": true,
+    "packageTreeCheck": {
+      "command": "git -C /data/scriptorium-core64-worktrees/g0 diff --quiet a1587e784788fa87d86c0eb7ab175d7a28a3209f -- packages",
+      "exitCode": 0
+    },
+    "sourceGitBlobIds": {
+      "packages/api/src/server.ts": "fc87e8f79123260bfa59720d6614424fa49e2975",
+      "packages/api/src/platform-runtime.ts": "6c3a1ae8cdeecb1a7c1c841cd961b259f4610fd9",
+      "packages/api/src/recent-activity-store.ts": "1fac268720deac2ff970503415616f6e8428b68b"
+    },
+    "importedCompiledArtifactSha256": {
+      "/data/scriptorium-core64-worktrees/g0/packages/api/dist/server.js": "da20e4f0f89e0ea6ee09b6b6522ea0ec32aa71c4c2bab86194122d4c9ed78a02",
+      "/data/scriptorium-core64-worktrees/g0/packages/api/dist/platform-runtime.js": "81f1a36dbf0130bff8ffcdc766a7a5eba203210c3094dd36865c998a45aeaae6",
+      "/data/scriptorium-core64-worktrees/g0/packages/api/dist/recent-activity-store.js": "3650f03883f7d33ac53e4d7039e9a1cb9258f1464b7413c2ec13d4ef3541e812"
+    }
+  },
+  "probeScripts": {
+    "scripts/performance/core64-status-authority.mjs": "81344f2cf8f2aaaf6e7c8aaf2af52413a5e0b9d4d6e2eeefb72f22c0c8641a78",
+    "scripts/performance/core64-status-store.mjs": "61d5d414cb2797d50fd920cae8fcdb1c308b89894c21650d8d68c5ced5efd4d3"
+  },
+  "rawEvidenceSha256": {
+    "authority.json": "9f89260c88e60d08ebe7b41b7db7e1f96903d2d2a072761fbf747b3cbe5a9d22",
+    "store.json": "bacc3b26fc43d50ff576d615d0a1f08f555349d58b89afff26969da7f03d5497",
+    "crash-recovery.json": "5a7ec92b5d74b0a1226533454c298503b18cb7e427ecbf0281c21f108bc023a4"
+  },
+  "focusedTests": [
+    {
+      "command": "node --test --test-name-pattern='binds hosted API access and signed lifecycle controls|keeps a quiesce census unverified' dist/server.test.js",
+      "workingDirectory": "/data/scriptorium-core64-worktrees/g0/packages/api",
+      "passed": 2,
+      "failed": 0
+    },
+    {
+      "command": "node --test --test-name-pattern='keeps per-device cursors private, owner/repository scoped, and durable' dist/recent-activity-store.test.js",
+      "workingDirectory": "/data/scriptorium-core64-worktrees/g0/packages/api",
+      "passed": 1,
+      "failed": 0
+    }
+  ],
+  "notRun": [
+    "pnpm install --frozen-lockfile",
+    "full build, full test suite, and pnpm audit:core",
+    "hosted or k3s status/reconcile fixture",
+    "multi-process recent-activity writer fixture"
+  ]
+}

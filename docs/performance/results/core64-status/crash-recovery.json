@@ -1,0 +1,19 @@
+{
+  "schemaVersion": 1,
+  "candidate": "C42",
+  "runtimeRoot": "/data/scriptorium-core64-worktrees/g0",
+  "runtimeSourceSha": "a1587e784788fa87d86c0eb7ab175d7a28a3209f",
+  "fixture": "synthetic private directory; existing upsert with injected half-write to its private temporary file",
+  "crashSignal": "SIGKILL",
+  "childExitCode": null,
+  "temporaryBytes": {
+    "written": 259,
+    "intended": 518
+  },
+  "canonicalStateBeforeSha256": "c53038dc94516e9b9934bf1c5ca0046f1383d06d2faff2b4d064891e52d10de0",
+  "canonicalStateAfterSha256": "79a07e05f9911f98dcee0a699028932144cf221fc599986880c64d850b634b01",
+  "canonicalStateAfterCrashParses": true,
+  "restartPreservedCommittedCursor": true,
+  "subsequentUpsertSucceeded": true,
+  "orphanTemporaryFileRetained": true
+}
