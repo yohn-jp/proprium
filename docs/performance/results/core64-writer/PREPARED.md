@@ -1,25 +1,29 @@
 # Core 64 writer probe status
 
-**Status: partial `NOT_CHECKED` contended cohort.** The fixed C23/C27/C28 run
-completed after the coordinator's grant. C23 checkpoint scales 1/10/100,
-C27 census at 1 operation, and C28 publish at 1/10 operations completed with
-semantic assertions passing. C27 census at 100/1,000/10,000 and C28 publish at
-100 hit their bounded setup timeouts and have zero timed samples. See
-[`CORE-64-WRITER.md`](../../CORE-64-WRITER.md) and the adjacent raw JSON.
+**Status: isolated C23 matched cohort complete; C27/C28 remain partial.** The
+guarded C23 candidate and accepted baseline each completed five checkpoint
+samples at 1, 10, and 100 files. Receipt revisions and pending-checkpoint
+census assertions passed for all 30 samples. Exact Git process totals were
+stable per scale: baseline/candidate 50/47, 104/92, and 644/542. The compact
+matched evidence and raw report hashes are in
+[`isolated-c23.json`](isolated-c23.json); the full cohort report is in
+[`CORE-64-WRITER.md`](../../CORE-64-WRITER.md).
 
-The run used CPUs 4–7 with `CORE64_WRITER_RUN_MODE=contended`, alongside the
-coordinator's other assigned lanes. Its walltimes are contended observations
-and cannot support an optimization adoption decision. The G0 seed remained
-read-only and the accepted frozen Core runtime is pinned by commit and
-SHA-256; the final run record verifies both were unchanged.
+The C23 workers used requested and effective CPUs 4–7. Variant order
+alternated by scale: baseline then candidate at 1 file, candidate then baseline
+at 10, and baseline then candidate at 100. Each worker collected five fresh
+contexts. Shared-host external activity is unknown. At n=5, nearest-rank p95
+is the maximum sample and is not a stable tail estimate. The 100-file workers
+retained complete command logs for their first sample only because the
+instrumentation caps each worker at 1,000 argv records; all aggregate process
+counts remain exact.
 
-The probe covers C23 checkpoint batches (1/10/100 files), C27 durability census
-histories (1/100/1,000/10,000 operations), and C28 pending publish batches
-(1/10/100 operations). See
-[`CORE-64-WRITER.md`](../../CORE-64-WRITER.md) for the input guards, runtime
-hashes, sample counts, integrity assertions and timeout budgets.
+C27's census history beyond one pending operation and C28's 100-operation
+publish setup remain `NOT_CHECKED` after their bounded setup timeouts. The
+report records why census indexing/cache and request-scope publish memoization
+are declined on current evidence, with concrete reconsideration conditions.
+These limits do not imply a global blocked result.
 
-The maximum sum of case worker budgets was 15 minutes 30 seconds, plus process
-launch overhead; reserve 17 minutes for a rerun. The 10,000-operation C27 case
-has a two-minute total budget and timed out before completing proposal setup;
-that result remains `NOT_CHECKED`.
+No full repository gates were run as part of this evidence commit. The C23
+source candidate remains frozen at `0152e9211f00abdbfdbc36939505d48162a3c1a1`;
+the measured candidate build hash is recorded in `isolated-c23.json`.

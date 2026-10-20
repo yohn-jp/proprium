@@ -1,0 +1,87 @@
+{
+  "schemaVersion": 1,
+  "status": "complete",
+  "candidate": "C23 temporary-index update batching",
+  "startedAtUtc": "2026-10-20T18:03:47.749Z",
+  "finishedAtUtc": "2026-10-20T18:04:58.279Z",
+  "execution": {
+    "mode": "isolated",
+    "requestedCpuSet": "4-7",
+    "effectiveCpuSet": "4-7",
+    "sharedHostExternalActivity": "unknown",
+    "variantOrder": [
+      "baseline-1",
+      "candidate-1",
+      "candidate-10",
+      "baseline-10",
+      "baseline-100",
+      "candidate-100"
+    ],
+    "samplesPerVariant": 5,
+    "p95Interpretation": "Nearest-rank p95 at n=5 is the maximum sample; this is not a stable tail estimate.",
+    "integrityChecksPassed": 30
+  },
+  "fixture": {
+    "description": "Immutable synthetic G0 10-file fixture",
+    "remoteCommit": "e70bb509cc41b383451335e05af36d78f1cb31db",
+    "manifestSha256": "a8612670688f31269fb0541dc5aa528efa0eb92eab30c45fe2e0fcaa0a7125dd"
+  },
+  "baseline": {
+    "sourceCommit": "f633da0b3f133ad812953c284aab35a4956d2507",
+    "coreDistSha256": "a7b83895e2c239d85a3f4d973cf7458e64cc7415c418a4844ff33f700a52d4a3",
+    "contractsDistSha256": "b33421f57a9ba54adebdf06fee5c298ed2cdd65ea0a710d885d87d0f974b15be"
+  },
+  "candidateRuntime": {
+    "sourceCommit": "0152e9211f00abdbfdbc36939505d48162a3c1a1",
+    "sourceSha256": "0408ab8500555060bc1efc6a1cdb21ed1036ed8904ad7f0bc356fc5a25e36ee4",
+    "coreDistSha256": "8f339dacbea1ad40ae60d358c7fba12e74bfd390337a7cbbadceef4247264e68",
+    "contractsDistSha256": "b33421f57a9ba54adebdf06fee5c298ed2cdd65ea0a710d885d87d0f974b15be",
+    "build": "Fresh Core build completed once before timed workers; source remained frozen during measurement."
+  },
+  "nearestRankResults": [
+    {
+      "files": 1,
+      "samples": 5,
+      "baselineMs": { "p50": 294.2855810000001, "p95": 311.69246699999985 },
+      "candidateMs": { "p50": 278.8770810000001, "p95": 286.01541399999996 },
+      "baselineGitProcesses": { "p50": 50, "p95": 50 },
+      "candidateGitProcesses": { "p50": 47, "p95": 47 },
+      "commandLogCompleteness": "all five samples"
+    },
+    {
+      "files": 10,
+      "samples": 5,
+      "baselineMs": { "p50": 547.490926, "p95": 567.9391290000003 },
+      "candidateMs": { "p50": 495.255361, "p95": 507.124198 },
+      "baselineGitProcesses": { "p50": 104, "p95": 104 },
+      "candidateGitProcesses": { "p50": 92, "p95": 92 },
+      "commandLogCompleteness": "all five samples"
+    },
+    {
+      "files": 100,
+      "samples": 5,
+      "baselineMs": { "p50": 3644.1161680000005, "p95": 4148.850307 },
+      "candidateMs": { "p50": 2800.180361999999, "p95": 3010.379713 },
+      "baselineGitProcesses": { "p50": 644, "p95": 644 },
+      "candidateGitProcesses": { "p50": 542, "p95": 542 },
+      "commandLogCompleteness": "first sample only; subsequent argv records exceeded 1,000-record worker cap"
+    }
+  ],
+  "completeFirstSampleCommandCounts": {
+    "baselineUpdateIndex": { "files1": 4, "files10": 13, "files100": 103 },
+    "candidateUpdateIndex": { "files1": 1, "files10": 1, "files100": 1 },
+    "scope": "Complete command histograms are available for every 1- and 10-file sample and for the first 100-file sample. Aggregate Git process deltas are exact for all samples."
+  },
+  "rawReports": {
+    "retention": "Authorized external scratch area; files are not copied into this repository.",
+    "sha256": {
+      "base-1.json": "d322db7734ab2fcd2c526cc41b9f1d0c2cb7a7de4e28cfee3faa082ca5553726",
+      "candidate-1.json": "04d32dd75a4778372ebaf4bd4dbc4c93b5cf40de8824d5cdd64d13d4130efeba",
+      "candidate-10.json": "55e7079d8ff4aa858983aea9252ad0e454f734d6250de5362e56b95e83460e71",
+      "base-10.json": "867bbfddf6f7207d19b3f4cdbb223108b793cf9b1fc3265cf6a72c6accc90a17",
+      "base-100.json": "32128eaa755745c451c527cf3aad74523f40f79c7837af47dd1bf1c93f4aa35c",
+      "candidate-100.json": "95a5f0fdeb4958b257cfa79c55799c5416428198b40f4aab6177f169b9231ea7"
+    }
+  },
+  "interpretation": "Exact Git process counts and semantic checks favor the batched candidate at tested scales. Latencies are one isolated matched cohort with unknown external host activity and scale-alternated variant order; no general total-workload p95 claim is made."
+}
