@@ -1,0 +1,1916 @@
+{
+  "schemaVersion": 1,
+  "harness": {
+    "sha256": "fcac29eb4a1c472082c892fbb7fc27b64782d51c547dd11e64e6cb9a25a08f00"
+  },
+  "environment": {
+    "profile": "full",
+    "browserPath": "/nix/store/ini1ifgvcsvw48x4mxawrv9jvbdwn70p-chromium-155.0.8059.79/bin/chromium",
+    "baselineBase": "http://127.0.0.1:4485",
+    "candidateBase": "http://127.0.0.1:4487",
+    "samplesPerVariant": 20,
+    "node": "v24.21.0",
+    "capturedAt": "2026-10-20T17:22:15.114Z",
+    "browserVersion": "155.0.8059.79"
+  },
+  "samples": [
+    {
+      "route": "launcher",
+      "variant": "baseline",
+      "sample": 1,
+      "status": 200,
+      "firstContentfulPaintMs": 120,
+      "domContentLoadedMs": 135.69999998807907,
+      "loadEventEndMs": 136.09999999403954,
+      "appReadyMs": 219,
+      "wallMs": 250.9578079999999,
+      "finalUrl": "http://127.0.0.1:4485/?g5=paint#launcher",
+      "jsResponses": [
+        {
+          "pathname": "/main.js",
+          "status": 200,
+          "bytes": 726390
+        }
+      ]
+    },
+    {
+      "route": "launcher",
+      "variant": "c59",
+      "sample": 1,
+      "status": 200,
+      "firstContentfulPaintMs": 84,
+      "domContentLoadedMs": 68.40000000596046,
+      "loadEventEndMs": 69.2999999821186,
+      "appReadyMs": 140.69999998807907,
+      "wallMs": 151.60321599999997,
+      "finalUrl": "http://127.0.0.1:4487/?g5=paint#launcher",
+      "jsResponses": [
+        {
+          "pathname": "/main.js",
+          "status": 200,
+          "bytes": 227407
+        }
+      ]
+    },
+    {
+      "route": "launcher",
+      "variant": "c59",
+      "sample": 2,
+      "status": 200,
+      "firstContentfulPaintMs": 76,
+      "domContentLoadedMs": 62.79999998211861,
+      "loadEventEndMs": 63.69999998807907,
+      "appReadyMs": 135.90000000596046,
+      "wallMs": 151.51461799999993,
+      "finalUrl": "http://127.0.0.1:4487/?g5=paint#launcher",
+      "jsResponses": [
+        {
+          "pathname": "/main.js",
+          "status": 200,
+          "bytes": 227407
+        }
+      ]
+    },
+    {
+      "route": "launcher",
+      "variant": "baseline",
+      "sample": 2,
+      "status": 200,
+      "firstContentfulPaintMs": 68,
+      "domContentLoadedMs": 104.80000001192093,
+      "loadEventEndMs": 105.19999998807907,
+      "appReadyMs": 181.80000001192093,
+      "wallMs": 195.73416899999984,
+      "finalUrl": "http://127.0.0.1:4485/?g5=paint#launcher",
+      "jsResponses": [
+        {
+          "pathname": "/main.js",
+          "status": 200,
+          "bytes": 726390
+        }
+      ]
+    },
+    {
+      "route": "launcher",
+      "variant": "baseline",
+      "sample": 3,
+      "status": 200,
+      "firstContentfulPaintMs": 68,
+      "domContentLoadedMs": 106.69999998807907,
+      "loadEventEndMs": 107.09999999403954,
+      "appReadyMs": 184.69999998807907,
+      "wallMs": 195.6896700000002,
+      "finalUrl": "http://127.0.0.1:4485/?g5=paint#launcher",
+      "jsResponses": [
+        {
+          "pathname": "/main.js",
+          "status": 200,
+          "bytes": 726390
+        }
+      ]
+    },
+    {
+      "route": "launcher",
+      "variant": "c59",
+      "sample": 3,
+      "status": 200,
+      "firstContentfulPaintMs": 84,
+      "domContentLoadedMs": 68.19999998807907,
+      "loadEventEndMs": 69.19999998807907,
+      "appReadyMs": 138.80000001192093,
+      "wallMs": 150.89963499999976,
+      "finalUrl": "http://127.0.0.1:4487/?g5=paint#launcher",
+      "jsResponses": [
+        {
+          "pathname": "/main.js",
+          "status": 200,
+          "bytes": 227407
+        }
+      ]
+    },
+    {
+      "route": "launcher",
+      "variant": "c59",
+      "sample": 4,
+      "status": 200,
+      "firstContentfulPaintMs": 76,
+      "domContentLoadedMs": 63.5,
+      "loadEventEndMs": 64.5,
+      "appReadyMs": 141.10000002384186,
+      "wallMs": 158.36232500000006,
+      "finalUrl": "http://127.0.0.1:4487/?g5=paint#launcher",
+      "jsResponses": [
+        {
+          "pathname": "/main.js",
+          "status": 200,
+          "bytes": 227407
+        }
+      ]
+    },
+    {
+      "route": "launcher",
+      "variant": "baseline",
+      "sample": 4,
+      "status": 200,
+      "firstContentfulPaintMs": 72,
+      "domContentLoadedMs": 112.80000001192093,
+      "loadEventEndMs": 113.2000000178814,
+      "appReadyMs": 185.5,
+      "wallMs": 195.4789770000002,
+      "finalUrl": "http://127.0.0.1:4485/?g5=paint#launcher",
+      "jsResponses": [
+        {
+          "pathname": "/main.js",
+          "status": 200,
+          "bytes": 726390
+        }
+      ]
+    },
+    {
+      "route": "launcher",
+      "variant": "baseline",
+      "sample": 5,
+      "status": 200,
+      "firstContentfulPaintMs": 72,
+      "domContentLoadedMs": 102.90000000596046,
+      "loadEventEndMs": 103.19999998807907,
+      "appReadyMs": 178.19999998807907,
+      "wallMs": 192.55215899999985,
+      "finalUrl": "http://127.0.0.1:4485/?g5=paint#launcher",
+      "jsResponses": [
+        {
+          "pathname": "/main.js",
+          "status": 200,
+          "bytes": 726390
+        }
+      ]
+    },
+    {
+      "route": "launcher",
+      "variant": "c59",
+      "sample": 5,
+      "status": 200,
+      "firstContentfulPaintMs": 80,
+      "domContentLoadedMs": 69.2000000178814,
+      "loadEventEndMs": 70,
+      "appReadyMs": 139.80000001192093,
+      "wallMs": 156.23058500000025,
+      "finalUrl": "http://127.0.0.1:4487/?g5=paint#launcher",
+      "jsResponses": [
+        {
+          "pathname": "/main.js",
+          "status": 200,
+          "bytes": 227407
+        }
+      ]
+    },
+    {
+      "route": "launcher",
+      "variant": "c59",
+      "sample": 6,
+      "status": 200,
+      "firstContentfulPaintMs": 76,
+      "domContentLoadedMs": 61.69999998807907,
+      "loadEventEndMs": 62.69999998807907,
+      "appReadyMs": 132.69999998807907,
+      "wallMs": 144.46521699999994,
+      "finalUrl": "http://127.0.0.1:4487/?g5=paint#launcher",
+      "jsResponses": [
+        {
+          "pathname": "/main.js",
+          "status": 200,
+          "bytes": 227407
+        }
+      ]
+    },
+    {
+      "route": "launcher",
+      "variant": "baseline",
+      "sample": 6,
+      "status": 200,
+      "firstContentfulPaintMs": 60,
+      "domContentLoadedMs": 103,
+      "loadEventEndMs": 103.59999999403954,
+      "appReadyMs": 177.40000000596046,
+      "wallMs": 188.60987100000057,
+      "finalUrl": "http://127.0.0.1:4485/?g5=paint#launcher",
+      "jsResponses": [
+        {
+          "pathname": "/main.js",
+          "status": 200,
+          "bytes": 726390
+        }
+      ]
+    },
+    {
+      "route": "launcher",
+      "variant": "baseline",
+      "sample": 7,
+      "status": 200,
+      "firstContentfulPaintMs": 76,
+      "domContentLoadedMs": 110.2000000178814,
+      "loadEventEndMs": 110.7000000178814,
+      "appReadyMs": 184.7000000178814,
+      "wallMs": 194.5977009999997,
+      "finalUrl": "http://127.0.0.1:4485/?g5=paint#launcher",
+      "jsResponses": [
+        {
+          "pathname": "/main.js",
+          "status": 200,
+          "bytes": 726390
+        }
+      ]
+    },
+    {
+      "route": "launcher",
+      "variant": "c59",
+      "sample": 7,
+      "status": 200,
+      "firstContentfulPaintMs": 76,
+      "domContentLoadedMs": 71.40000000596046,
+      "loadEventEndMs": 71.90000000596046,
+      "appReadyMs": 139.60000002384186,
+      "wallMs": 148.25241000000005,
+      "finalUrl": "http://127.0.0.1:4487/?g5=paint#launcher",
+      "jsResponses": [
+        {
+          "pathname": "/main.js",
+          "status": 200,
+          "bytes": 227407
+        }
+      ]
+    },
+    {
+      "route": "launcher",
+      "variant": "c59",
+      "sample": 8,
+      "status": 200,
+      "firstContentfulPaintMs": 60,
+      "domContentLoadedMs": 69.7999999821186,
+      "loadEventEndMs": 70.39999997615814,
+      "appReadyMs": 142,
+      "wallMs": 152.69008500000018,
+      "finalUrl": "http://127.0.0.1:4487/?g5=paint#launcher",
+      "jsResponses": [
+        {
+          "pathname": "/main.js",
+          "status": 200,
+          "bytes": 227407
+        }
+      ]
+    },
+    {
+      "route": "launcher",
+      "variant": "baseline",
+      "sample": 8,
+      "status": 200,
+      "firstContentfulPaintMs": 72,
+      "domContentLoadedMs": 107.80000001192093,
+      "loadEventEndMs": 108.30000001192093,
+      "appReadyMs": 175.40000000596046,
+      "wallMs": 187.87599200000022,
+      "finalUrl": "http://127.0.0.1:4485/?g5=paint#launcher",
+      "jsResponses": [
+        {
+          "pathname": "/main.js",
+          "status": 200,
+          "bytes": 726390
+        }
+      ]
+    },
+    {
+      "route": "launcher",
+      "variant": "baseline",
+      "sample": 9,
+      "status": 200,
+      "firstContentfulPaintMs": 68,
+      "domContentLoadedMs": 97.5,
+      "loadEventEndMs": 97.90000000596046,
+      "appReadyMs": 175.90000000596046,
+      "wallMs": 185.63235500000064,
+      "finalUrl": "http://127.0.0.1:4485/?g5=paint#launcher",
+      "jsResponses": [
+        {
+          "pathname": "/main.js",
+          "status": 200,
+          "bytes": 726390
+        }
+      ]
+    },
+    {
+      "route": "launcher",
+      "variant": "c59",
+      "sample": 9,
+      "status": 200,
+      "firstContentfulPaintMs": 60,
+      "domContentLoadedMs": 71.5,
+      "loadEventEndMs": 72,
+      "appReadyMs": 146.09999999403954,
+      "wallMs": 160.28617099999974,
+      "finalUrl": "http://127.0.0.1:4487/?g5=paint#launcher",
+      "jsResponses": [
+        {
+          "pathname": "/main.js",
+          "status": 200,
+          "bytes": 227407
+        }
+      ]
+    },
+    {
+      "route": "launcher",
+      "variant": "c59",
+      "sample": 10,
+      "status": 200,
+      "firstContentfulPaintMs": 76,
+      "domContentLoadedMs": 63.599999994039536,
+      "loadEventEndMs": 64.5,
+      "appReadyMs": 134.39999997615814,
+      "wallMs": 146.16306900000018,
+      "finalUrl": "http://127.0.0.1:4487/?g5=paint#launcher",
+      "jsResponses": [
+        {
+          "pathname": "/main.js",
+          "status": 200,
+          "bytes": 227407
+        }
+      ]
+    },
+    {
+      "route": "launcher",
+      "variant": "baseline",
+      "sample": 10,
+      "status": 200,
+      "firstContentfulPaintMs": 60,
+      "domContentLoadedMs": 101.69999998807907,
+      "loadEventEndMs": 102.19999998807907,
+      "appReadyMs": 174.59999999403954,
+      "wallMs": 186.5561290000005,
+      "finalUrl": "http://127.0.0.1:4485/?g5=paint#launcher",
+      "jsResponses": [
+        {
+          "pathname": "/main.js",
+          "status": 200,
+          "bytes": 726390
+        }
+      ]
+    },
+    {
+      "route": "launcher",
+      "variant": "baseline",
+      "sample": 11,
+      "status": 200,
+      "firstContentfulPaintMs": 84,
+      "domContentLoadedMs": 100.30000001192093,
+      "loadEventEndMs": 100.80000001192093,
+      "appReadyMs": 179.59999999403954,
+      "wallMs": 191.07310199999938,
+      "finalUrl": "http://127.0.0.1:4485/?g5=paint#launcher",
+      "jsResponses": [
+        {
+          "pathname": "/main.js",
+          "status": 200,
+          "bytes": 726390
+        }
+      ]
+    },
+    {
+      "route": "launcher",
+      "variant": "c59",
+      "sample": 11,
+      "status": 200,
+      "firstContentfulPaintMs": 76,
+      "domContentLoadedMs": 63,
+      "loadEventEndMs": 64.10000002384186,
+      "appReadyMs": 135.40000000596046,
+      "wallMs": 147.0690450000002,
+      "finalUrl": "http://127.0.0.1:4487/?g5=paint#launcher",
+      "jsResponses": [
+        {
+          "pathname": "/main.js",
+          "status": 200,
+          "bytes": 227407
+        }
+      ]
+    },
+    {
+      "route": "launcher",
+      "variant": "c59",
+      "sample": 12,
+      "status": 200,
+      "firstContentfulPaintMs": 84,
+      "domContentLoadedMs": 68.2999999821186,
+      "loadEventEndMs": 69.40000000596046,
+      "appReadyMs": 141.5,
+      "wallMs": 151.26912599999923,
+      "finalUrl": "http://127.0.0.1:4487/?g5=paint#launcher",
+      "jsResponses": [
+        {
+          "pathname": "/main.js",
+          "status": 200,
+          "bytes": 227407
+        }
+      ]
+    },
+    {
+      "route": "launcher",
+      "variant": "baseline",
+      "sample": 12,
+      "status": 200,
+      "firstContentfulPaintMs": 64,
+      "domContentLoadedMs": 100.7000000178814,
+      "loadEventEndMs": 101.2000000178814,
+      "appReadyMs": 176.2000000178814,
+      "wallMs": 187.62219899999945,
+      "finalUrl": "http://127.0.0.1:4485/?g5=paint#launcher",
+      "jsResponses": [
+        {
+          "pathname": "/main.js",
+          "status": 200,
+          "bytes": 726390
+        }
+      ]
+    },
+    {
+      "route": "launcher",
+      "variant": "baseline",
+      "sample": 13,
+      "status": 200,
+      "firstContentfulPaintMs": 68,
+      "domContentLoadedMs": 100.7000000178814,
+      "loadEventEndMs": 101.10000002384186,
+      "appReadyMs": 171.5,
+      "wallMs": 182.09555499999988,
+      "finalUrl": "http://127.0.0.1:4485/?g5=paint#launcher",
+      "jsResponses": [
+        {
+          "pathname": "/main.js",
+          "status": 200,
+          "bytes": 726390
+        }
+      ]
+    },
+    {
+      "route": "launcher",
+      "variant": "c59",
+      "sample": 13,
+      "status": 200,
+      "firstContentfulPaintMs": 68,
+      "domContentLoadedMs": 75,
+      "loadEventEndMs": 75.59999999403954,
+      "appReadyMs": 144.59999999403954,
+      "wallMs": 157.07146199999988,
+      "finalUrl": "http://127.0.0.1:4487/?g5=paint#launcher",
+      "jsResponses": [
+        {
+          "pathname": "/main.js",
+          "status": 200,
+          "bytes": 227407
+        }
+      ]
+    },
+    {
+      "route": "launcher",
+      "variant": "c59",
+      "sample": 14,
+      "status": 200,
+      "firstContentfulPaintMs": 60,
+      "domContentLoadedMs": 68.5,
+      "loadEventEndMs": 68.90000000596046,
+      "appReadyMs": 143.7000000178814,
+      "wallMs": 151.80861000000004,
+      "finalUrl": "http://127.0.0.1:4487/?g5=paint#launcher",
+      "jsResponses": [
+        {
+          "pathname": "/main.js",
+          "status": 200,
+          "bytes": 227407
+        }
+      ]
+    },
+    {
+      "route": "launcher",
+      "variant": "baseline",
+      "sample": 14,
+      "status": 200,
+      "firstContentfulPaintMs": 72,
+      "domContentLoadedMs": 99.30000001192093,
+      "loadEventEndMs": 99.59999999403954,
+      "appReadyMs": 170.69999998807907,
+      "wallMs": 187.26040900000044,
+      "finalUrl": "http://127.0.0.1:4485/?g5=paint#launcher",
+      "jsResponses": [
+        {
+          "pathname": "/main.js",
+          "status": 200,
+          "bytes": 726390
+        }
+      ]
+    },
+    {
+      "route": "launcher",
+      "variant": "baseline",
+      "sample": 15,
+      "status": 200,
+      "firstContentfulPaintMs": 64,
+      "domContentLoadedMs": 103.30000001192093,
+      "loadEventEndMs": 103.80000001192093,
+      "appReadyMs": 178.30000001192093,
+      "wallMs": 188.40547700000025,
+      "finalUrl": "http://127.0.0.1:4485/?g5=paint#launcher",
+      "jsResponses": [
+        {
+          "pathname": "/main.js",
+          "status": 200,
+          "bytes": 726390
+        }
+      ]
+    },
+    {
+      "route": "launcher",
+      "variant": "c59",
+      "sample": 15,
+      "status": 200,
+      "firstContentfulPaintMs": 80,
+      "domContentLoadedMs": 67.2999999821186,
+      "loadEventEndMs": 68.2999999821186,
+      "appReadyMs": 140.90000000596046,
+      "wallMs": 152.8607809999994,
+      "finalUrl": "http://127.0.0.1:4487/?g5=paint#launcher",
+      "jsResponses": [
+        {
+          "pathname": "/main.js",
+          "status": 200,
+          "bytes": 227407
+        }
+      ]
+    },
+    {
+      "route": "launcher",
+      "variant": "c59",
+      "sample": 16,
+      "status": 200,
+      "firstContentfulPaintMs": 88,
+      "domContentLoadedMs": 64.09999999403954,
+      "loadEventEndMs": 65.09999999403954,
+      "appReadyMs": 134.5,
+      "wallMs": 146.92224899999928,
+      "finalUrl": "http://127.0.0.1:4487/?g5=paint#launcher",
+      "jsResponses": [
+        {
+          "pathname": "/main.js",
+          "status": 200,
+          "bytes": 227407
+        }
+      ]
+    },
+    {
+      "route": "launcher",
+      "variant": "baseline",
+      "sample": 16,
+      "status": 200,
+      "firstContentfulPaintMs": 64,
+      "domContentLoadedMs": 99.7000000178814,
+      "loadEventEndMs": 100.2000000178814,
+      "appReadyMs": 173.5,
+      "wallMs": 188.4778750000005,
+      "finalUrl": "http://127.0.0.1:4485/?g5=paint#launcher",
+      "jsResponses": [
+        {
+          "pathname": "/main.js",
+          "status": 200,
+          "bytes": 726390
+        }
+      ]
+    },
+    {
+      "route": "launcher",
+      "variant": "baseline",
+      "sample": 17,
+      "status": 200,
+      "firstContentfulPaintMs": 68,
+      "domContentLoadedMs": 98,
+      "loadEventEndMs": 98.30000001192093,
+      "appReadyMs": 177.80000001192093,
+      "wallMs": 188.73506799999996,
+      "finalUrl": "http://127.0.0.1:4485/?g5=paint#launcher",
+      "jsResponses": [
+        {
+          "pathname": "/main.js",
+          "status": 200,
+          "bytes": 726390
+        }
+      ]
+    },
+    {
+      "route": "launcher",
+      "variant": "c59",
+      "sample": 17,
+      "status": 200,
+      "firstContentfulPaintMs": 72,
+      "domContentLoadedMs": 85.19999998807907,
+      "loadEventEndMs": 85.69999998807907,
+      "appReadyMs": 161.09999999403954,
+      "wallMs": 170.78007500000058,
+      "finalUrl": "http://127.0.0.1:4487/?g5=paint#launcher",
+      "jsResponses": [
+        {
+          "pathname": "/main.js",
+          "status": 200,
+          "bytes": 227407
+        }
+      ]
+    },
+    {
+      "route": "launcher",
+      "variant": "c59",
+      "sample": 18,
+      "status": 200,
+      "firstContentfulPaintMs": 100,
+      "domContentLoadedMs": 79.80000001192093,
+      "loadEventEndMs": 80.7000000178814,
+      "appReadyMs": 182.5,
+      "wallMs": 196.8591379999998,
+      "finalUrl": "http://127.0.0.1:4487/?g5=paint#launcher",
+      "jsResponses": [
+        {
+          "pathname": "/main.js",
+          "status": 200,
+          "bytes": 227407
+        }
+      ]
+    },
+    {
+      "route": "launcher",
+      "variant": "baseline",
+      "sample": 18,
+      "status": 200,
+      "firstContentfulPaintMs": 92,
+      "domContentLoadedMs": 122.60000002384186,
+      "loadEventEndMs": 123,
+      "appReadyMs": 237.40000000596046,
+      "wallMs": 253.75343000000066,
+      "finalUrl": "http://127.0.0.1:4485/?g5=paint#launcher",
+      "jsResponses": [
+        {
+          "pathname": "/main.js",
+          "status": 200,
+          "bytes": 726390
+        }
+      ]
+    },
+    {
+      "route": "launcher",
+      "variant": "baseline",
+      "sample": 19,
+      "status": 200,
+      "firstContentfulPaintMs": 112,
+      "domContentLoadedMs": 134.40000000596046,
+      "loadEventEndMs": 134.80000001192093,
+      "appReadyMs": 225.30000001192093,
+      "wallMs": 238.23086899999907,
+      "finalUrl": "http://127.0.0.1:4485/?g5=paint#launcher",
+      "jsResponses": [
+        {
+          "pathname": "/main.js",
+          "status": 200,
+          "bytes": 726390
+        }
+      ]
+    },
+    {
+      "route": "launcher",
+      "variant": "c59",
+      "sample": 19,
+      "status": 200,
+      "firstContentfulPaintMs": 100,
+      "domContentLoadedMs": 76.7999999821186,
+      "loadEventEndMs": 77.7999999821186,
+      "appReadyMs": 150.59999999403954,
+      "wallMs": 160.982852000001,
+      "finalUrl": "http://127.0.0.1:4487/?g5=paint#launcher",
+      "jsResponses": [
+        {
+          "pathname": "/main.js",
+          "status": 200,
+          "bytes": 227407
+        }
+      ]
+    },
+    {
+      "route": "launcher",
+      "variant": "c59",
+      "sample": 20,
+      "status": 200,
+      "firstContentfulPaintMs": 100,
+      "domContentLoadedMs": 77.40000000596046,
+      "loadEventEndMs": 78.30000001192093,
+      "appReadyMs": 158.2000000178814,
+      "wallMs": 173.79428999999982,
+      "finalUrl": "http://127.0.0.1:4487/?g5=paint#launcher",
+      "jsResponses": [
+        {
+          "pathname": "/main.js",
+          "status": 200,
+          "bytes": 227407
+        }
+      ]
+    },
+    {
+      "route": "launcher",
+      "variant": "baseline",
+      "sample": 20,
+      "status": 200,
+      "firstContentfulPaintMs": 80,
+      "domContentLoadedMs": 118.90000000596046,
+      "loadEventEndMs": 119.2999999821186,
+      "appReadyMs": 205.40000000596046,
+      "wallMs": 216.83097400000042,
+      "finalUrl": "http://127.0.0.1:4485/?g5=paint#launcher",
+      "jsResponses": [
+        {
+          "pathname": "/main.js",
+          "status": 200,
+          "bytes": 726390
+        }
+      ]
+    },
+    {
+      "route": "public-reader",
+      "variant": "baseline",
+      "sample": 1,
+      "status": 200,
+      "firstContentfulPaintMs": 80,
+      "domContentLoadedMs": 120.09999999403954,
+      "loadEventEndMs": 120.59999999403954,
+      "appReadyMs": 252,
+      "wallMs": 263.8175460000002,
+      "finalUrl": "http://127.0.0.1:4485/r/publishing/123/e2e-invalid-token?g5=paint#reader",
+      "jsResponses": [
+        {
+          "pathname": "/main.js",
+          "status": 200,
+          "bytes": 726390
+        },
+        {
+          "pathname": "/assets/browser-BJcfBg0P.js",
+          "status": 200,
+          "bytes": 20649
+        }
+      ]
+    },
+    {
+      "route": "public-reader",
+      "variant": "c59",
+      "sample": 1,
+      "status": 200,
+      "firstContentfulPaintMs": 100,
+      "domContentLoadedMs": 73.2000000178814,
+      "loadEventEndMs": 74.10000002384186,
+      "appReadyMs": 957.8000000119209,
+      "wallMs": 974.8140579999999,
+      "finalUrl": "http://127.0.0.1:4487/r/publishing/123/e2e-invalid-token?g5=paint#reader",
+      "jsResponses": [
+        {
+          "pathname": "/main.js",
+          "status": 200,
+          "bytes": 227407
+        },
+        {
+          "pathname": "/assets/App-C3qIvJRg.js",
+          "status": 200,
+          "bytes": 496654
+        },
+        {
+          "pathname": "/assets/browser-BJcfBg0P.js",
+          "status": 200,
+          "bytes": 20649
+        }
+      ]
+    },
+    {
+      "route": "public-reader",
+      "variant": "c59",
+      "sample": 2,
+      "status": 200,
+      "firstContentfulPaintMs": 76,
+      "domContentLoadedMs": 82.09999999403954,
+      "loadEventEndMs": 82.5,
+      "appReadyMs": 946.5,
+      "wallMs": 959.8483809999998,
+      "finalUrl": "http://127.0.0.1:4487/r/publishing/123/e2e-invalid-token?g5=paint#reader",
+      "jsResponses": [
+        {
+          "pathname": "/main.js",
+          "status": 200,
+          "bytes": 227407
+        },
+        {
+          "pathname": "/assets/App-C3qIvJRg.js",
+          "status": 200,
+          "bytes": 496654
+        },
+        {
+          "pathname": "/assets/browser-BJcfBg0P.js",
+          "status": 200,
+          "bytes": 20649
+        }
+      ]
+    },
+    {
+      "route": "public-reader",
+      "variant": "baseline",
+      "sample": 2,
+      "status": 200,
+      "firstContentfulPaintMs": 68,
+      "domContentLoadedMs": 105.5,
+      "loadEventEndMs": 106,
+      "appReadyMs": 200.30000001192093,
+      "wallMs": 216.73487599999862,
+      "finalUrl": "http://127.0.0.1:4485/r/publishing/123/e2e-invalid-token?g5=paint#reader",
+      "jsResponses": [
+        {
+          "pathname": "/main.js",
+          "status": 200,
+          "bytes": 726390
+        },
+        {
+          "pathname": "/assets/browser-BJcfBg0P.js",
+          "status": 200,
+          "bytes": 20649
+        }
+      ]
+    },
+    {
+      "route": "public-reader",
+      "variant": "baseline",
+      "sample": 3,
+      "status": 200,
+      "firstContentfulPaintMs": 72,
+      "domContentLoadedMs": 102.2000000178814,
+      "loadEventEndMs": 102.59999999403954,
+      "appReadyMs": 199.2000000178814,
+      "wallMs": 211.31152999999904,
+      "finalUrl": "http://127.0.0.1:4485/r/publishing/123/e2e-invalid-token?g5=paint#reader",
+      "jsResponses": [
+        {
+          "pathname": "/main.js",
+          "status": 200,
+          "bytes": 726390
+        },
+        {
+          "pathname": "/assets/browser-BJcfBg0P.js",
+          "status": 200,
+          "bytes": 20649
+        }
+      ]
+    },
+    {
+      "route": "public-reader",
+      "variant": "c59",
+      "sample": 3,
+      "status": 200,
+      "firstContentfulPaintMs": 92,
+      "domContentLoadedMs": 71.5,
+      "loadEventEndMs": 72.40000000596046,
+      "appReadyMs": 454,
+      "wallMs": 464.5512750000016,
+      "finalUrl": "http://127.0.0.1:4487/r/publishing/123/e2e-invalid-token?g5=paint#reader",
+      "jsResponses": [
+        {
+          "pathname": "/main.js",
+          "status": 200,
+          "bytes": 227407
+        },
+        {
+          "pathname": "/assets/App-C3qIvJRg.js",
+          "status": 200,
+          "bytes": 496654
+        },
+        {
+          "pathname": "/assets/browser-BJcfBg0P.js",
+          "status": 200,
+          "bytes": 20649
+        }
+      ]
+    },
+    {
+      "route": "public-reader",
+      "variant": "c59",
+      "sample": 4,
+      "status": 200,
+      "firstContentfulPaintMs": 112,
+      "domContentLoadedMs": 81.59999999403954,
+      "loadEventEndMs": 82.59999999403954,
+      "appReadyMs": 487.59999999403954,
+      "wallMs": 513.5907890000017,
+      "finalUrl": "http://127.0.0.1:4487/r/publishing/123/e2e-invalid-token?g5=paint#reader",
+      "jsResponses": [
+        {
+          "pathname": "/main.js",
+          "status": 200,
+          "bytes": 227407
+        },
+        {
+          "pathname": "/assets/App-C3qIvJRg.js",
+          "status": 200,
+          "bytes": 496654
+        },
+        {
+          "pathname": "/assets/browser-BJcfBg0P.js",
+          "status": 200,
+          "bytes": 20649
+        }
+      ]
+    },
+    {
+      "route": "public-reader",
+      "variant": "baseline",
+      "sample": 4,
+      "status": 200,
+      "firstContentfulPaintMs": 80,
+      "domContentLoadedMs": 112.80000001192093,
+      "loadEventEndMs": 113.40000000596046,
+      "appReadyMs": 221.10000002384186,
+      "wallMs": 229.27762200000143,
+      "finalUrl": "http://127.0.0.1:4485/r/publishing/123/e2e-invalid-token?g5=paint#reader",
+      "jsResponses": [
+        {
+          "pathname": "/main.js",
+          "status": 200,
+          "bytes": 726390
+        },
+        {
+          "pathname": "/assets/browser-BJcfBg0P.js",
+          "status": 200,
+          "bytes": 20649
+        }
+      ]
+    },
+    {
+      "route": "public-reader",
+      "variant": "baseline",
+      "sample": 5,
+      "status": 200,
+      "firstContentfulPaintMs": 72,
+      "domContentLoadedMs": 125.09999999403954,
+      "loadEventEndMs": 125.7000000178814,
+      "appReadyMs": 231.59999999403954,
+      "wallMs": 249.2057590000004,
+      "finalUrl": "http://127.0.0.1:4485/r/publishing/123/e2e-invalid-token?g5=paint#reader",
+      "jsResponses": [
+        {
+          "pathname": "/main.js",
+          "status": 200,
+          "bytes": 726390
+        },
+        {
+          "pathname": "/assets/browser-BJcfBg0P.js",
+          "status": 200,
+          "bytes": 20649
+        }
+      ]
+    },
+    {
+      "route": "public-reader",
+      "variant": "c59",
+      "sample": 5,
+      "status": 200,
+      "firstContentfulPaintMs": 92,
+      "domContentLoadedMs": 72.80000001192093,
+      "loadEventEndMs": 73.7000000178814,
+      "appReadyMs": 450.80000001192093,
+      "wallMs": 467.7082859999973,
+      "finalUrl": "http://127.0.0.1:4487/r/publishing/123/e2e-invalid-token?g5=paint#reader",
+      "jsResponses": [
+        {
+          "pathname": "/main.js",
+          "status": 200,
+          "bytes": 227407
+        },
+        {
+          "pathname": "/assets/App-C3qIvJRg.js",
+          "status": 200,
+          "bytes": 496654
+        },
+        {
+          "pathname": "/assets/browser-BJcfBg0P.js",
+          "status": 200,
+          "bytes": 20649
+        }
+      ]
+    },
+    {
+      "route": "public-reader",
+      "variant": "c59",
+      "sample": 6,
+      "status": 200,
+      "firstContentfulPaintMs": 84,
+      "domContentLoadedMs": 70.30000001192093,
+      "loadEventEndMs": 71.19999998807907,
+      "appReadyMs": 942.8000000119209,
+      "wallMs": 951.9657039999984,
+      "finalUrl": "http://127.0.0.1:4487/r/publishing/123/e2e-invalid-token?g5=paint#reader",
+      "jsResponses": [
+        {
+          "pathname": "/main.js",
+          "status": 200,
+          "bytes": 227407
+        },
+        {
+          "pathname": "/assets/App-C3qIvJRg.js",
+          "status": 200,
+          "bytes": 496654
+        },
+        {
+          "pathname": "/assets/browser-BJcfBg0P.js",
+          "status": 200,
+          "bytes": 20649
+        }
+      ]
+    },
+    {
+      "route": "public-reader",
+      "variant": "baseline",
+      "sample": 6,
+      "status": 200,
+      "firstContentfulPaintMs": 76,
+      "domContentLoadedMs": 113.90000000596046,
+      "loadEventEndMs": 114.30000001192093,
+      "appReadyMs": 226.80000001192093,
+      "wallMs": 234.95916099999886,
+      "finalUrl": "http://127.0.0.1:4485/r/publishing/123/e2e-invalid-token?g5=paint#reader",
+      "jsResponses": [
+        {
+          "pathname": "/main.js",
+          "status": 200,
+          "bytes": 726390
+        },
+        {
+          "pathname": "/assets/browser-BJcfBg0P.js",
+          "status": 200,
+          "bytes": 20649
+        }
+      ]
+    },
+    {
+      "route": "public-reader",
+      "variant": "baseline",
+      "sample": 7,
+      "status": 200,
+      "firstContentfulPaintMs": 76,
+      "domContentLoadedMs": 112.39999997615814,
+      "loadEventEndMs": 113,
+      "appReadyMs": 215.19999998807907,
+      "wallMs": 229.882705,
+      "finalUrl": "http://127.0.0.1:4485/r/publishing/123/e2e-invalid-token?g5=paint#reader",
+      "jsResponses": [
+        {
+          "pathname": "/main.js",
+          "status": 200,
+          "bytes": 726390
+        },
+        {
+          "pathname": "/assets/browser-BJcfBg0P.js",
+          "status": 200,
+          "bytes": 20649
+        }
+      ]
+    },
+    {
+      "route": "public-reader",
+      "variant": "c59",
+      "sample": 7,
+      "status": 200,
+      "firstContentfulPaintMs": 88,
+      "domContentLoadedMs": 77,
+      "loadEventEndMs": 77.39999997615814,
+      "appReadyMs": 944.1999999880791,
+      "wallMs": 957.8405380000004,
+      "finalUrl": "http://127.0.0.1:4487/r/publishing/123/e2e-invalid-token?g5=paint#reader",
+      "jsResponses": [
+        {
+          "pathname": "/main.js",
+          "status": 200,
+          "bytes": 227407
+        },
+        {
+          "pathname": "/assets/App-C3qIvJRg.js",
+          "status": 200,
+          "bytes": 496654
+        },
+        {
+          "pathname": "/assets/browser-BJcfBg0P.js",
+          "status": 200,
+          "bytes": 20649
+        }
+      ]
+    },
+    {
+      "route": "public-reader",
+      "variant": "c59",
+      "sample": 8,
+      "status": 200,
+      "firstContentfulPaintMs": 88,
+      "domContentLoadedMs": 104.59999999403954,
+      "loadEventEndMs": 105.09999999403954,
+      "appReadyMs": 481.09999999403954,
+      "wallMs": 492.3363900000004,
+      "finalUrl": "http://127.0.0.1:4487/r/publishing/123/e2e-invalid-token?g5=paint#reader",
+      "jsResponses": [
+        {
+          "pathname": "/main.js",
+          "status": 200,
+          "bytes": 227407
+        },
+        {
+          "pathname": "/assets/App-C3qIvJRg.js",
+          "status": 200,
+          "bytes": 496654
+        },
+        {
+          "pathname": "/assets/browser-BJcfBg0P.js",
+          "status": 200,
+          "bytes": 20649
+        }
+      ]
+    },
+    {
+      "route": "public-reader",
+      "variant": "baseline",
+      "sample": 8,
+      "status": 200,
+      "firstContentfulPaintMs": 72,
+      "domContentLoadedMs": 119.80000001192093,
+      "loadEventEndMs": 120.40000000596046,
+      "appReadyMs": 218.90000000596046,
+      "wallMs": 229.57591300000058,
+      "finalUrl": "http://127.0.0.1:4485/r/publishing/123/e2e-invalid-token?g5=paint#reader",
+      "jsResponses": [
+        {
+          "pathname": "/main.js",
+          "status": 200,
+          "bytes": 726390
+        },
+        {
+          "pathname": "/assets/browser-BJcfBg0P.js",
+          "status": 200,
+          "bytes": 20649
+        }
+      ]
+    },
+    {
+      "route": "public-reader",
+      "variant": "baseline",
+      "sample": 9,
+      "status": 200,
+      "firstContentfulPaintMs": 76,
+      "domContentLoadedMs": 110.10000002384186,
+      "loadEventEndMs": 110.5,
+      "appReadyMs": 209.7000000178814,
+      "wallMs": 218.35303000000204,
+      "finalUrl": "http://127.0.0.1:4485/r/publishing/123/e2e-invalid-token?g5=paint#reader",
+      "jsResponses": [
+        {
+          "pathname": "/main.js",
+          "status": 200,
+          "bytes": 726390
+        },
+        {
+          "pathname": "/assets/browser-BJcfBg0P.js",
+          "status": 200,
+          "bytes": 20649
+        }
+      ]
+    },
+    {
+      "route": "public-reader",
+      "variant": "c59",
+      "sample": 9,
+      "status": 200,
+      "firstContentfulPaintMs": 72,
+      "domContentLoadedMs": 78.2000000178814,
+      "loadEventEndMs": 78.60000002384186,
+      "appReadyMs": 947.4000000059605,
+      "wallMs": 961.2839400000012,
+      "finalUrl": "http://127.0.0.1:4487/r/publishing/123/e2e-invalid-token?g5=paint#reader",
+      "jsResponses": [
+        {
+          "pathname": "/main.js",
+          "status": 200,
+          "bytes": 227407
+        },
+        {
+          "pathname": "/assets/App-C3qIvJRg.js",
+          "status": 200,
+          "bytes": 496654
+        },
+        {
+          "pathname": "/assets/browser-BJcfBg0P.js",
+          "status": 200,
+          "bytes": 20649
+        }
+      ]
+    },
+    {
+      "route": "public-reader",
+      "variant": "c59",
+      "sample": 10,
+      "status": 200,
+      "firstContentfulPaintMs": 76,
+      "domContentLoadedMs": 89.59999999403954,
+      "loadEventEndMs": 90.09999999403954,
+      "appReadyMs": 466.90000000596046,
+      "wallMs": 481.5434949999981,
+      "finalUrl": "http://127.0.0.1:4487/r/publishing/123/e2e-invalid-token?g5=paint#reader",
+      "jsResponses": [
+        {
+          "pathname": "/main.js",
+          "status": 200,
+          "bytes": 227407
+        },
+        {
+          "pathname": "/assets/App-C3qIvJRg.js",
+          "status": 200,
+          "bytes": 496654
+        },
+        {
+          "pathname": "/assets/browser-BJcfBg0P.js",
+          "status": 200,
+          "bytes": 20649
+        }
+      ]
+    },
+    {
+      "route": "public-reader",
+      "variant": "baseline",
+      "sample": 10,
+      "status": 200,
+      "firstContentfulPaintMs": 80,
+      "domContentLoadedMs": 115.30000001192093,
+      "loadEventEndMs": 115.7000000178814,
+      "appReadyMs": 215.80000001192093,
+      "wallMs": 228.70693799999935,
+      "finalUrl": "http://127.0.0.1:4485/r/publishing/123/e2e-invalid-token?g5=paint#reader",
+      "jsResponses": [
+        {
+          "pathname": "/main.js",
+          "status": 200,
+          "bytes": 726390
+        },
+        {
+          "pathname": "/assets/browser-BJcfBg0P.js",
+          "status": 200,
+          "bytes": 20649
+        }
+      ]
+    },
+    {
+      "route": "public-reader",
+      "variant": "baseline",
+      "sample": 11,
+      "status": 200,
+      "firstContentfulPaintMs": 76,
+      "domContentLoadedMs": 112,
+      "loadEventEndMs": 112.5,
+      "appReadyMs": 210.80000001192093,
+      "wallMs": 223.1721949999992,
+      "finalUrl": "http://127.0.0.1:4485/r/publishing/123/e2e-invalid-token?g5=paint#reader",
+      "jsResponses": [
+        {
+          "pathname": "/main.js",
+          "status": 200,
+          "bytes": 726390
+        },
+        {
+          "pathname": "/assets/browser-BJcfBg0P.js",
+          "status": 200,
+          "bytes": 20649
+        }
+      ]
+    },
+    {
+      "route": "public-reader",
+      "variant": "c59",
+      "sample": 11,
+      "status": 200,
+      "firstContentfulPaintMs": 72,
+      "domContentLoadedMs": 83.90000000596046,
+      "loadEventEndMs": 84.59999999403954,
+      "appReadyMs": 949.8000000119209,
+      "wallMs": 961.1130449999982,
+      "finalUrl": "http://127.0.0.1:4487/r/publishing/123/e2e-invalid-token?g5=paint#reader",
+      "jsResponses": [
+        {
+          "pathname": "/main.js",
+          "status": 200,
+          "bytes": 227407
+        },
+        {
+          "pathname": "/assets/App-C3qIvJRg.js",
+          "status": 200,
+          "bytes": 496654
+        },
+        {
+          "pathname": "/assets/browser-BJcfBg0P.js",
+          "status": 200,
+          "bytes": 20649
+        }
+      ]
+    },
+    {
+      "route": "public-reader",
+      "variant": "c59",
+      "sample": 12,
+      "status": 200,
+      "firstContentfulPaintMs": 80,
+      "domContentLoadedMs": 82.09999999403954,
+      "loadEventEndMs": 82.59999999403954,
+      "appReadyMs": 947.3000000119209,
+      "wallMs": 960.8212529999983,
+      "finalUrl": "http://127.0.0.1:4487/r/publishing/123/e2e-invalid-token?g5=paint#reader",
+      "jsResponses": [
+        {
+          "pathname": "/main.js",
+          "status": 200,
+          "bytes": 227407
+        },
+        {
+          "pathname": "/assets/App-C3qIvJRg.js",
+          "status": 200,
+          "bytes": 496654
+        },
+        {
+          "pathname": "/assets/browser-BJcfBg0P.js",
+          "status": 200,
+          "bytes": 20649
+        }
+      ]
+    },
+    {
+      "route": "public-reader",
+      "variant": "baseline",
+      "sample": 12,
+      "status": 200,
+      "firstContentfulPaintMs": 76,
+      "domContentLoadedMs": 112.90000000596046,
+      "loadEventEndMs": 113.40000000596046,
+      "appReadyMs": 214.2999999821186,
+      "wallMs": 225.09673999999723,
+      "finalUrl": "http://127.0.0.1:4485/r/publishing/123/e2e-invalid-token?g5=paint#reader",
+      "jsResponses": [
+        {
+          "pathname": "/main.js",
+          "status": 200,
+          "bytes": 726390
+        },
+        {
+          "pathname": "/assets/browser-BJcfBg0P.js",
+          "status": 200,
+          "bytes": 20649
+        }
+      ]
+    },
+    {
+      "route": "public-reader",
+      "variant": "baseline",
+      "sample": 13,
+      "status": 200,
+      "firstContentfulPaintMs": 80,
+      "domContentLoadedMs": 122.80000001192093,
+      "loadEventEndMs": 123.5,
+      "appReadyMs": 230.40000000596046,
+      "wallMs": 240.49140500000067,
+      "finalUrl": "http://127.0.0.1:4485/r/publishing/123/e2e-invalid-token?g5=paint#reader",
+      "jsResponses": [
+        {
+          "pathname": "/main.js",
+          "status": 200,
+          "bytes": 726390
+        },
+        {
+          "pathname": "/assets/browser-BJcfBg0P.js",
+          "status": 200,
+          "bytes": 20649
+        }
+      ]
+    },
+    {
+      "route": "public-reader",
+      "variant": "c59",
+      "sample": 13,
+      "status": 200,
+      "firstContentfulPaintMs": 136,
+      "domContentLoadedMs": 126.30000001192093,
+      "loadEventEndMs": 126.69999998807907,
+      "appReadyMs": 529,
+      "wallMs": 567.0165799999995,
+      "finalUrl": "http://127.0.0.1:4487/r/publishing/123/e2e-invalid-token?g5=paint#reader",
+      "jsResponses": [
+        {
+          "pathname": "/main.js",
+          "status": 200,
+          "bytes": 227407
+        },
+        {
+          "pathname": "/assets/App-C3qIvJRg.js",
+          "status": 200,
+          "bytes": 496654
+        },
+        {
+          "pathname": "/assets/browser-BJcfBg0P.js",
+          "status": 200,
+          "bytes": 20649
+        }
+      ]
+    },
+    {
+      "route": "public-reader",
+      "variant": "c59",
+      "sample": 14,
+      "status": 200,
+      "firstContentfulPaintMs": 92,
+      "domContentLoadedMs": 75.5,
+      "loadEventEndMs": 76.30000001192093,
+      "appReadyMs": 950.3000000119209,
+      "wallMs": 964.7836420000021,
+      "finalUrl": "http://127.0.0.1:4487/r/publishing/123/e2e-invalid-token?g5=paint#reader",
+      "jsResponses": [
+        {
+          "pathname": "/main.js",
+          "status": 200,
+          "bytes": 227407
+        },
+        {
+          "pathname": "/assets/App-C3qIvJRg.js",
+          "status": 200,
+          "bytes": 496654
+        },
+        {
+          "pathname": "/assets/browser-BJcfBg0P.js",
+          "status": 200,
+          "bytes": 20649
+        }
+      ]
+    },
+    {
+      "route": "public-reader",
+      "variant": "baseline",
+      "sample": 14,
+      "status": 200,
+      "firstContentfulPaintMs": 80,
+      "domContentLoadedMs": 112.5,
+      "loadEventEndMs": 113,
+      "appReadyMs": 220.60000002384186,
+      "wallMs": 229.833507000003,
+      "finalUrl": "http://127.0.0.1:4485/r/publishing/123/e2e-invalid-token?g5=paint#reader",
+      "jsResponses": [
+        {
+          "pathname": "/main.js",
+          "status": 200,
+          "bytes": 726390
+        },
+        {
+          "pathname": "/assets/browser-BJcfBg0P.js",
+          "status": 200,
+          "bytes": 20649
+        }
+      ]
+    },
+    {
+      "route": "public-reader",
+      "variant": "baseline",
+      "sample": 15,
+      "status": 200,
+      "firstContentfulPaintMs": 72,
+      "domContentLoadedMs": 106.30000001192093,
+      "loadEventEndMs": 106.80000001192093,
+      "appReadyMs": 215.90000000596046,
+      "wallMs": 237.23789699999907,
+      "finalUrl": "http://127.0.0.1:4485/r/publishing/123/e2e-invalid-token?g5=paint#reader",
+      "jsResponses": [
+        {
+          "pathname": "/main.js",
+          "status": 200,
+          "bytes": 726390
+        },
+        {
+          "pathname": "/assets/browser-BJcfBg0P.js",
+          "status": 200,
+          "bytes": 20649
+        }
+      ]
+    },
+    {
+      "route": "public-reader",
+      "variant": "c59",
+      "sample": 15,
+      "status": 200,
+      "firstContentfulPaintMs": 84,
+      "domContentLoadedMs": 70.19999998807907,
+      "loadEventEndMs": 71.19999998807907,
+      "appReadyMs": 936.2999999821186,
+      "wallMs": 958.9874539999946,
+      "finalUrl": "http://127.0.0.1:4487/r/publishing/123/e2e-invalid-token?g5=paint#reader",
+      "jsResponses": [
+        {
+          "pathname": "/main.js",
+          "status": 200,
+          "bytes": 227407
+        },
+        {
+          "pathname": "/assets/App-C3qIvJRg.js",
+          "status": 200,
+          "bytes": 496654
+        },
+        {
+          "pathname": "/assets/browser-BJcfBg0P.js",
+          "status": 200,
+          "bytes": 20649
+        }
+      ]
+    },
+    {
+      "route": "public-reader",
+      "variant": "c59",
+      "sample": 16,
+      "status": 200,
+      "firstContentfulPaintMs": 84,
+      "domContentLoadedMs": 65.09999999403954,
+      "loadEventEndMs": 66.09999999403954,
+      "appReadyMs": 934.1999999880791,
+      "wallMs": 945.2293019999997,
+      "finalUrl": "http://127.0.0.1:4487/r/publishing/123/e2e-invalid-token?g5=paint#reader",
+      "jsResponses": [
+        {
+          "pathname": "/main.js",
+          "status": 200,
+          "bytes": 227407
+        },
+        {
+          "pathname": "/assets/App-C3qIvJRg.js",
+          "status": 200,
+          "bytes": 496654
+        },
+        {
+          "pathname": "/assets/browser-BJcfBg0P.js",
+          "status": 200,
+          "bytes": 20649
+        }
+      ]
+    },
+    {
+      "route": "public-reader",
+      "variant": "baseline",
+      "sample": 16,
+      "status": 200,
+      "firstContentfulPaintMs": 64,
+      "domContentLoadedMs": 109.2999999821186,
+      "loadEventEndMs": 109.59999999403954,
+      "appReadyMs": 210.09999999403954,
+      "wallMs": 220.08000999999786,
+      "finalUrl": "http://127.0.0.1:4485/r/publishing/123/e2e-invalid-token?g5=paint#reader",
+      "jsResponses": [
+        {
+          "pathname": "/main.js",
+          "status": 200,
+          "bytes": 726390
+        },
+        {
+          "pathname": "/assets/browser-BJcfBg0P.js",
+          "status": 200,
+          "bytes": 20649
+        }
+      ]
+    },
+    {
+      "route": "public-reader",
+      "variant": "baseline",
+      "sample": 17,
+      "status": 200,
+      "firstContentfulPaintMs": 64,
+      "domContentLoadedMs": 109.59999999403954,
+      "loadEventEndMs": 110.09999999403954,
+      "appReadyMs": 205.69999998807907,
+      "wallMs": 215.42760800000542,
+      "finalUrl": "http://127.0.0.1:4485/r/publishing/123/e2e-invalid-token?g5=paint#reader",
+      "jsResponses": [
+        {
+          "pathname": "/main.js",
+          "status": 200,
+          "bytes": 726390
+        },
+        {
+          "pathname": "/assets/browser-BJcfBg0P.js",
+          "status": 200,
+          "bytes": 20649
+        }
+      ]
+    },
+    {
+      "route": "public-reader",
+      "variant": "c59",
+      "sample": 17,
+      "status": 200,
+      "firstContentfulPaintMs": 76,
+      "domContentLoadedMs": 63.30000001192093,
+      "loadEventEndMs": 64.19999998807907,
+      "appReadyMs": 931,
+      "wallMs": 942.8189790000033,
+      "finalUrl": "http://127.0.0.1:4487/r/publishing/123/e2e-invalid-token?g5=paint#reader",
+      "jsResponses": [
+        {
+          "pathname": "/main.js",
+          "status": 200,
+          "bytes": 227407
+        },
+        {
+          "pathname": "/assets/App-C3qIvJRg.js",
+          "status": 200,
+          "bytes": 496654
+        },
+        {
+          "pathname": "/assets/browser-BJcfBg0P.js",
+          "status": 200,
+          "bytes": 20649
+        }
+      ]
+    },
+    {
+      "route": "public-reader",
+      "variant": "c59",
+      "sample": 18,
+      "status": 200,
+      "firstContentfulPaintMs": 88,
+      "domContentLoadedMs": 71.59999999403954,
+      "loadEventEndMs": 72.59999999403954,
+      "appReadyMs": 944.9000000059605,
+      "wallMs": 956.2692650000026,
+      "finalUrl": "http://127.0.0.1:4487/r/publishing/123/e2e-invalid-token?g5=paint#reader",
+      "jsResponses": [
+        {
+          "pathname": "/main.js",
+          "status": 200,
+          "bytes": 227407
+        },
+        {
+          "pathname": "/assets/App-C3qIvJRg.js",
+          "status": 200,
+          "bytes": 496654
+        },
+        {
+          "pathname": "/assets/browser-BJcfBg0P.js",
+          "status": 200,
+          "bytes": 20649
+        }
+      ]
+    },
+    {
+      "route": "public-reader",
+      "variant": "baseline",
+      "sample": 18,
+      "status": 200,
+      "firstContentfulPaintMs": 60,
+      "domContentLoadedMs": 100.19999998807907,
+      "loadEventEndMs": 100.59999999403954,
+      "appReadyMs": 188.89999997615814,
+      "wallMs": 203.4093270000012,
+      "finalUrl": "http://127.0.0.1:4485/r/publishing/123/e2e-invalid-token?g5=paint#reader",
+      "jsResponses": [
+        {
+          "pathname": "/main.js",
+          "status": 200,
+          "bytes": 726390
+        },
+        {
+          "pathname": "/assets/browser-BJcfBg0P.js",
+          "status": 200,
+          "bytes": 20649
+        }
+      ]
+    },
+    {
+      "route": "public-reader",
+      "variant": "baseline",
+      "sample": 19,
+      "status": 200,
+      "firstContentfulPaintMs": 64,
+      "domContentLoadedMs": 105.80000001192093,
+      "loadEventEndMs": 106.19999998807907,
+      "appReadyMs": 197.59999999403954,
+      "wallMs": 209.34011800000007,
+      "finalUrl": "http://127.0.0.1:4485/r/publishing/123/e2e-invalid-token?g5=paint#reader",
+      "jsResponses": [
+        {
+          "pathname": "/main.js",
+          "status": 200,
+          "bytes": 726390
+        },
+        {
+          "pathname": "/assets/browser-BJcfBg0P.js",
+          "status": 200,
+          "bytes": 20649
+        }
+      ]
+    },
+    {
+      "route": "public-reader",
+      "variant": "c59",
+      "sample": 19,
+      "status": 200,
+      "firstContentfulPaintMs": 88,
+      "domContentLoadedMs": 66.7999999821186,
+      "loadEventEndMs": 67.90000000596046,
+      "appReadyMs": 939.7999999821186,
+      "wallMs": 958.1645079999944,
+      "finalUrl": "http://127.0.0.1:4487/r/publishing/123/e2e-invalid-token?g5=paint#reader",
+      "jsResponses": [
+        {
+          "pathname": "/main.js",
+          "status": 200,
+          "bytes": 227407
+        },
+        {
+          "pathname": "/assets/App-C3qIvJRg.js",
+          "status": 200,
+          "bytes": 496654
+        },
+        {
+          "pathname": "/assets/browser-BJcfBg0P.js",
+          "status": 200,
+          "bytes": 20649
+        }
+      ]
+    },
+    {
+      "route": "public-reader",
+      "variant": "c59",
+      "sample": 20,
+      "status": 200,
+      "firstContentfulPaintMs": 80,
+      "domContentLoadedMs": 66.09999999403954,
+      "loadEventEndMs": 67.09999999403954,
+      "appReadyMs": 932.0999999940395,
+      "wallMs": 943.9397160000008,
+      "finalUrl": "http://127.0.0.1:4487/r/publishing/123/e2e-invalid-token?g5=paint#reader",
+      "jsResponses": [
+        {
+          "pathname": "/main.js",
+          "status": 200,
+          "bytes": 227407
+        },
+        {
+          "pathname": "/assets/App-C3qIvJRg.js",
+          "status": 200,
+          "bytes": 496654
+        },
+        {
+          "pathname": "/assets/browser-BJcfBg0P.js",
+          "status": 200,
+          "bytes": 20649
+        }
+      ]
+    },
+    {
+      "route": "public-reader",
+      "variant": "baseline",
+      "sample": 20,
+      "status": 200,
+      "firstContentfulPaintMs": 68,
+      "domContentLoadedMs": 106.80000001192093,
+      "loadEventEndMs": 107.19999998807907,
+      "appReadyMs": 201.09999999403954,
+      "wallMs": 211.6401990000013,
+      "finalUrl": "http://127.0.0.1:4485/r/publishing/123/e2e-invalid-token?g5=paint#reader",
+      "jsResponses": [
+        {
+          "pathname": "/main.js",
+          "status": 200,
+          "bytes": 726390
+        },
+        {
+          "pathname": "/assets/browser-BJcfBg0P.js",
+          "status": 200,
+          "bytes": 20649
+        }
+      ]
+    }
+  ],
+  "errors": [],
+  "actualServedAssets": {
+    "baseline": {
+      "/assets/browser-BJcfBg0P.js": {
+        "status": 200,
+        "bytes": 20649,
+        "sha256": "e09842ae66a0fe0f4baa4a18216bff4ac1004b34487dc0e5bf501ee5806dada8"
+      },
+      "/main.js": {
+        "status": 200,
+        "bytes": 726390,
+        "sha256": "8f4a1383634f6e4e40f5159b2f2b3bb9ea1c809d233251562c46d9979812e271"
+      }
+    },
+    "c59": {
+      "/assets/App-C3qIvJRg.js": {
+        "status": 200,
+        "bytes": 496654,
+        "sha256": "a5219716a2c1170094bd9d96304dbb74ed8929b1f8c5000d4fe16ce29fe29d70"
+      },
+      "/assets/browser-BJcfBg0P.js": {
+        "status": 200,
+        "bytes": 20649,
+        "sha256": "e09842ae66a0fe0f4baa4a18216bff4ac1004b34487dc0e5bf501ee5806dada8"
+      },
+      "/main.js": {
+        "status": 200,
+        "bytes": 227407,
+        "sha256": "1bfefb240ea910192378ed1de17f7f1722b70ace5f6be454f6f0555897390920"
+      }
+    }
+  },
+  "summary": {
+    "launcher/baseline": {
+      "n": 20,
+      "firstContentfulPaintMs": {
+        "p50": 68,
+        "p95": 112
+      },
+      "appReadyMs": {
+        "p50": 178.19999998807907,
+        "p95": 225.30000001192093
+      }
+    },
+    "launcher/c59": {
+      "n": 20,
+      "firstContentfulPaintMs": {
+        "p50": 76,
+        "p95": 100
+      },
+      "appReadyMs": {
+        "p50": 140.90000000596046,
+        "p95": 161.09999999403954
+      }
+    },
+    "public-reader/baseline": {
+      "n": 20,
+      "firstContentfulPaintMs": {
+        "p50": 72,
+        "p95": 80
+      },
+      "appReadyMs": {
+        "p50": 214.2999999821186,
+        "p95": 231.59999999403954
+      }
+    },
+    "public-reader/c59": {
+      "n": 20,
+      "firstContentfulPaintMs": {
+        "p50": 84,
+        "p95": 112
+      },
+      "appReadyMs": {
+        "p50": 936.2999999821186,
+        "p95": 950.3000000119209
+      }
+    }
+  }
+}

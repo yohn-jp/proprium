@@ -1,0 +1,201 @@
+{
+  "schemaVersion": 1,
+  "capturedAt": "2026-10-20T17:24:33.464Z",
+  "candidate": {
+    "name": "C59",
+    "sourceCommit": "85504858418463354f9f54e4a3cd132aed80d0fd",
+    "fullBuildSourceCommit": "e3d6bc3af249a1483016ec7fcfe4f0ffb4ec8aa2",
+    "sourceTree": "b994c86b1a3b4b25e1f44a9a11e6a22929cde192"
+  },
+  "baseline": {
+    "sourceCommit": "9f801061d1cc40c4719988b5e1aef17d3ff60e74"
+  },
+  "runtime": {
+    "node": "v24.21.0",
+    "chromium": "155.0.8059.79",
+    "executable": "/nix/store/ini1ifgvcsvw48x4mxawrv9jvbdwn70p-chromium-155.0.8059.79/bin/chromium",
+    "cpuAffinity": "0-7",
+    "browserContexts": "20 fresh contexts per variant per route, alternating baseline/C59"
+  },
+  "routes": {
+    "core": [
+      "/?g5=paint#launcher"
+    ],
+    "full": [
+      "/?g5=paint#launcher",
+      "/r/publishing/123/e2e-invalid-token?g5=paint#reader"
+    ],
+    "checks": "HTTP 200, expected heading and route alert, query/hash preserved, built /main.js loaded; Full C59 direct route also loads the lazy App chunk"
+  },
+  "measurements": {
+    "core": {
+      "report": "first-paint-core.json",
+      "reportSha256": "b37e9cfc7758a15cebdbe9e2124854a0f91c516d7084f4b16eaf940f001935ea",
+      "harnessSha256": "fcac29eb4a1c472082c892fbb7fc27b64782d51c547dd11e64e6cb9a25a08f00",
+      "summary": {
+        "launcher/baseline": {
+          "n": 20,
+          "firstContentfulPaintMs": {
+            "p50": 72,
+            "p95": 120
+          },
+          "appReadyMs": {
+            "p50": 191.10000002384186,
+            "p95": 211.5
+          }
+        },
+        "launcher/c59": {
+          "n": 20,
+          "firstContentfulPaintMs": {
+            "p50": 84,
+            "p95": 96
+          },
+          "appReadyMs": {
+            "p50": 153.2000000178814,
+            "p95": 169.19999998807907
+          }
+        }
+      },
+      "errors": 0,
+      "sampleCount": 40,
+      "actualServedAssets": {
+        "baseline": {
+          "/main.js": {
+            "status": 200,
+            "bytes": 723541,
+            "sha256": "398b49b4f36c3aa47610d1948f6becd11ebb60f5a2101b75c58338b1cfcead1f"
+          }
+        },
+        "c59": {
+          "/main.js": {
+            "status": 200,
+            "bytes": 227391,
+            "sha256": "5d0b27ecbfa4d48e547fc6760d3f5c2c73d17c48e98ccef36830f6ffc8d55fd6"
+          }
+        }
+      }
+    },
+    "full": {
+      "report": "first-paint-full.json",
+      "reportSha256": "be4e154921f6b4a4faf5ca7e4c65a7633bf92c79aaa38665f797ea18bc455116",
+      "harnessSha256": "fcac29eb4a1c472082c892fbb7fc27b64782d51c547dd11e64e6cb9a25a08f00",
+      "summary": {
+        "launcher/baseline": {
+          "n": 20,
+          "firstContentfulPaintMs": {
+            "p50": 68,
+            "p95": 112
+          },
+          "appReadyMs": {
+            "p50": 178.19999998807907,
+            "p95": 225.30000001192093
+          }
+        },
+        "launcher/c59": {
+          "n": 20,
+          "firstContentfulPaintMs": {
+            "p50": 76,
+            "p95": 100
+          },
+          "appReadyMs": {
+            "p50": 140.90000000596046,
+            "p95": 161.09999999403954
+          }
+        },
+        "public-reader/baseline": {
+          "n": 20,
+          "firstContentfulPaintMs": {
+            "p50": 72,
+            "p95": 80
+          },
+          "appReadyMs": {
+            "p50": 214.2999999821186,
+            "p95": 231.59999999403954
+          }
+        },
+        "public-reader/c59": {
+          "n": 20,
+          "firstContentfulPaintMs": {
+            "p50": 84,
+            "p95": 112
+          },
+          "appReadyMs": {
+            "p50": 936.2999999821186,
+            "p95": 950.3000000119209
+          }
+        }
+      },
+      "errors": 0,
+      "sampleCount": 80,
+      "actualServedAssets": {
+        "baseline": {
+          "/assets/browser-BJcfBg0P.js": {
+            "status": 200,
+            "bytes": 20649,
+            "sha256": "e09842ae66a0fe0f4baa4a18216bff4ac1004b34487dc0e5bf501ee5806dada8"
+          },
+          "/main.js": {
+            "status": 200,
+            "bytes": 726390,
+            "sha256": "8f4a1383634f6e4e40f5159b2f2b3bb9ea1c809d233251562c46d9979812e271"
+          }
+        },
+        "c59": {
+          "/assets/App-C3qIvJRg.js": {
+            "status": 200,
+            "bytes": 496654,
+            "sha256": "a5219716a2c1170094bd9d96304dbb74ed8929b1f8c5000d4fe16ce29fe29d70"
+          },
+          "/assets/browser-BJcfBg0P.js": {
+            "status": 200,
+            "bytes": 20649,
+            "sha256": "e09842ae66a0fe0f4baa4a18216bff4ac1004b34487dc0e5bf501ee5806dada8"
+          },
+          "/main.js": {
+            "status": 200,
+            "bytes": 227407,
+            "sha256": "1bfefb240ea910192378ed1de17f7f1722b70ace5f6be454f6f0555897390920"
+          }
+        }
+      }
+    },
+    "actualServedCss": {
+      "report": "served-css.json",
+      "reportSha256": "ae10bbcfe9f057270a8dc16e0cf525b33f8c2d7f53e7fea90ce26eec67b4badf",
+      "assets": [
+        {
+          "name": "core-baseline",
+          "path": "/styles.css",
+          "status": 200,
+          "bytes": 28230,
+          "sha256": "5e336d9b3c641023debd562bfad64b3b1776c028e623f0df3f5ca2941bba6d41"
+        },
+        {
+          "name": "core-c59",
+          "path": "/styles.css",
+          "status": 200,
+          "bytes": 28230,
+          "sha256": "532b7961a831d874d8617610017471978ee84daeea3bf18a7c7954f5ba6df5f8"
+        },
+        {
+          "name": "full-baseline",
+          "path": "/styles.css",
+          "status": 200,
+          "bytes": 28230,
+          "sha256": "5e336d9b3c641023debd562bfad64b3b1776c028e623f0df3f5ca2941bba6d41"
+        },
+        {
+          "name": "full-c59",
+          "path": "/styles.css",
+          "status": 200,
+          "bytes": 28230,
+          "sha256": "532b7961a831d874d8617610017471978ee84daeea3bf18a7c7954f5ba6df5f8"
+        }
+      ]
+    }
+  },
+  "limitations": [
+    "The baseline timing campaign G0 used a different CPU affinity; this report compares only baseline and C59 under the conditions recorded here and makes no cross-campaign timing claim.",
+    "The public reader timing uses the existing invalid-token fixture route and measures visible publication heading plus alert readiness; it captures the C59 lazy App chunk first-use cost."
+  ]
+}

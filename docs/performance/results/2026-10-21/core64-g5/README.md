@@ -1,6 +1,6 @@
 # Core 64 G5 static asset closure
 
-Date: 2026-10-21. Source baseline: `9f801061d1cc40c4719988b5e1aef17d3ff60e74` (current main after C02/C21). This is a static build comparison for C59 and C60, not a browser performance or runtime acceptance result.
+Date: 2026-10-21. Source baseline: `9f801061d1cc40c4719988b5e1aef17d3ff60e74` (main after C02/C21). This records static C59/C60 comparisons and C59's bounded first-paint measurements; it is not full browser or runtime acceptance.
 
 The launcher candidate is commit `85504858418463354f9f54e4a3cd132aed80d0fd` (C59). The isolated CSS experiment is `7bb2fb8a2df5bc1aacd5983feee3a4a13088da53` (C60); it was reverted on this branch by `e3d6bc3a`. The branch retains C59 only.
 
@@ -60,7 +60,7 @@ The full build's non-manifest app files are byte-for-byte identical to the saved
 
 ## Decisions and remaining acceptance
 
-**C59 remains a measurement candidate, not an accepted optimization.** Its static launcher closure has a clear reduction, while `/r/*` now downloads the App chunk on first use. Browser timing and interaction checks must decide whether that tradeoff is acceptable. Required browser evidence includes direct `/r/*` loading, launcher choice, remembered preference redirects, query/hash preservation, theme behavior, nonce/CSP, and Core/Full profiles in the configured Chromium and WebKit coverage. Run the documented Core and Full Playwright acceptance commands after the browser/timing lease is granted.
+**C59 is declined for the current candidate.** The initial launcher JS closure is much smaller, and launcher app-ready p50 improves by about 38 ms, but launcher FCP p50 is 8–12 ms slower. On the measured Full public-reader fixture, app-ready p50 is 722 ms slower. This is sufficient to reject the current tradeoff; static byte reduction alone is not a success criterion. The direct-reader delta is observed, not causally attributed solely to lazy transfer; import scheduling and module initialization were not separately isolated. The C59 source remains on this worker branch for review only and is not adopted or merged.
 
 **C60 is declined under the current asset-serving contract.** The exact non-applied source diff is:
 
@@ -80,4 +80,34 @@ index d0c05c12..d088537e 100644
 
 The experiment's dynamic App entry references root `/styles2.css`. The current API serves `/styles.css` explicitly and serves root dynamic assets under `/assets/*`; it has no route for `/styles2.css` ([`serveStatic`](../../../../../packages/api/src/server.ts#L295-L326)). Therefore the candidate's generated dynamic stylesheet does not fit the current served-asset contract. This is a finding about the current contract, not a claim that CSS splitting can never work. Reconsider only under a named asset-serving contract change (potentially coordinated with C46/C47), with a fresh measured benefit and browser proof for theme changes, route transitions, flash behavior, print styling, nonce/CSP, and Core/Full profiles.
 
-Neither candidate has completed browser or OCI acceptance. Browser and first-paint checks remain pending the isolated browser slot; no performance timing was run in this batch. The documented Core and Full Playwright commands still need exact results for direct routes, reader loading, launcher choice and remembered preference, query/hash, theme, nonce/CSP, and profile behavior. OCI acceptance remains delegated and `NOT_CHECKED` here. C59 must not be called accepted until the browser results are recorded. C60 has no current code delta to validate.
+The timing cohorts verified launcher and invalid-token public-reader shell readiness and preserved the query/hash. They did not run the full interaction matrix. Theme behavior, print styling, nonce/CSP, launcher choice and remembered preference, and valid Core reader acceptance are explicitly `NOT_CHECKED`; no claim is made about those behaviors. The full browser acceptance matrix was not run after the coordinator declined C59. OCI acceptance remains separately delegated and `NOT_CHECKED` here. C60 has no current code delta to validate.
+
+## C59 first-paint measurements
+
+The baseline UI artifact is bound to source `9f801061d1cc40c4719988b5e1aef17d3ff60e74`; the C59 UI artifact is bound to `85504858418463354f9f54e4a3cd132aed80d0fd`. The immutable Full runtime artifacts used for the candidate server were built at `e3d6bc3af249a1483016ec7fcfe4f0ffb4ec8aa2`, tree `b994c86b1a3b4b25e1f44a9a11e6a22929cde192`, identical to the C59 source tree. No build ran during timing. The test server served the archived production `app/dist`, not Vite dev source. Chromium `155.0.8059.79`, Node `v24.21.0`, and CPU affinity `0-7` were used for browser and servers. Each route/variant used 20 fresh contexts, alternating baseline and C59. These results are limited to the paired run and must not be compared with G0's differently-affinitized timing campaign.
+
+FCP and app-ready values are milliseconds, shown as p50 / p95 / p99 / max; `n=20` for every row. App-ready is after the visible launcher title or, for the Full reader fixture, the visible shared-publication heading and alert.
+
+| Route | Variant | FCP p50 / p95 / p99 / max | App-ready p50 / p95 / p99 / max |
+| --- | --- | ---: | ---: |
+| Core launcher | Baseline | 72 / 120 / 120 / 120 | 191.1 / 211.5 / 221.6 / 221.6 |
+| Core launcher | C59 | 84 / 96 / 100 / 100 | 153.2 / 169.2 / 179 / 179 |
+| Full launcher | Baseline | 68 / 112 / 120 / 120 | 178.2 / 225.3 / 237.4 / 237.4 |
+| Full launcher | C59 | 76 / 100 / 100 / 100 | 140.9 / 161.1 / 182.5 / 182.5 |
+| Full public-reader fixture | Baseline | 72 / 80 / 80 / 80 | 214.3 / 231.6 / 252 / 252 |
+| Full public-reader fixture | C59 | 84 / 112 / 136 / 136 | 936.3 / 950.3 / 957.8 / 957.8 |
+
+The direct route was `/r/publishing/123/e2e-invalid-token?g5=paint#reader`. The fixture intentionally uses an invalid token; this measures direct route shell/error readiness and the C59 first-use module path, not successful manuscript loading. The query and hash were preserved, and every measured navigation and listed asset returned HTTP 200. The C59 direct route served `/assets/App-C3qIvJRg.js` (496,654 bytes, SHA-256 `a5219716a2c1170094bd9d96304dbb74ed8929b1f8c5000d4fe16ce29fe29d70`). The 722 ms p50 delta is not attributed solely to chunk transfer; import scheduling and module initialization were not separately isolated.
+
+Actual served entry bundles were:
+
+| Profile | Variant | `/main.js` bytes | `/main.js` SHA-256 |
+| --- | --- | ---: | --- |
+| Core | Baseline | 723,541 | `398b49b4f36c3aa47610d1948f6becd11ebb60f5a2101b75c58338b1cfcead1f` |
+| Core | C59 | 227,391 | `5d0b27ecbfa4d48e547fc6760d3f5c2c73d17c48e98ccef36830f6ffc8d55fd6` |
+| Full | Baseline | 726,390 | `8f4a1383634f6e4e40f5159b2f2b3bb9ea1c809d233251562c46d9979812e271` |
+| Full | C59 | 227,407 | `1bfefb240ea910192378ed1de17f7f1722b70ace5f6be454f6f0555897390920` |
+
+Both Full variants also served `/assets/browser-BJcfBg0P.js` (20,649 bytes, SHA-256 `e09842ae66a0fe0f4baa4a18216bff4ac1004b34487dc0e5bf501ee5806dada8`). Actual served `/styles.css` was 28,230 bytes in Core and Full; baseline SHA-256 was `5e336d9b3c641023debd562bfad64b3b1776c028e623f0df3f5ca2941bba6d41`, and C59 SHA-256 was `532b7961a831d874d8617610017471978ee84daeea3bf18a7c7954f5ba6df5f8`. The stylesheet bytes therefore differ despite the equal byte count; theme, print, and CSP behavior were not tested in this timing pass.
+
+Raw Core and Full samples, served CSS hashes, the run manifest, and exact harness are archived in [`c59-first-paint-core.json`](./c59-first-paint-core.json), [`c59-first-paint-full.json`](./c59-first-paint-full.json), [`c59-served-css.json`](./c59-served-css.json), [`c59-browser-timing-manifest.json`](./c59-browser-timing-manifest.json), and [`c59-first-paint-harness.mjs`](./c59-first-paint-harness.mjs). The first Core attempt stopped after 13 samples per variant because Chromium exposed no FCP entry for C59 sample 14. Its surfaced partial summary and failure are documented in [`c59-first-paint-initial-attempt-diagnostic.json`](./c59-first-paint-initial-attempt-diagnostic.json); the attempt's individual sample rows were overwritten by the successful complete rerun, so the diagnostic does not present those rows as preserved raw data. The complete rerun waited for the official FCP entry and has 20 samples per variant with zero errors.

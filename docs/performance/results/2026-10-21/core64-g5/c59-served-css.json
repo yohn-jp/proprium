@@ -1,0 +1,33 @@
+{
+  "capturedAt": "2026-10-20T17:23:56.699Z",
+  "assets": [
+    {
+      "name": "core-baseline",
+      "path": "/styles.css",
+      "status": 200,
+      "bytes": 28230,
+      "sha256": "5e336d9b3c641023debd562bfad64b3b1776c028e623f0df3f5ca2941bba6d41"
+    },
+    {
+      "name": "core-c59",
+      "path": "/styles.css",
+      "status": 200,
+      "bytes": 28230,
+      "sha256": "532b7961a831d874d8617610017471978ee84daeea3bf18a7c7954f5ba6df5f8"
+    },
+    {
+      "name": "full-baseline",
+      "path": "/styles.css",
+      "status": 200,
+      "bytes": 28230,
+      "sha256": "5e336d9b3c641023debd562bfad64b3b1776c028e623f0df3f5ca2941bba6d41"
+    },
+    {
+      "name": "full-c59",
+      "path": "/styles.css",
+      "status": 200,
+      "bytes": 28230,
+      "sha256": "532b7961a831d874d8617610017471978ee84daeea3bf18a7c7954f5ba6df5f8"
+    }
+  ]
+}
