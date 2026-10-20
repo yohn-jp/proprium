@@ -1,0 +1,21 @@
+{
+  "schemaVersion": 1,
+  "size": "small",
+  "documentProfile": "short",
+  "datasetId": "small-short",
+  "files": 10,
+  "volumes": 1,
+  "chapters": 1,
+  "scenes": 3,
+  "bytes": 3549,
+  "historyCommits": 1,
+  "documentBytes": [
+    1024,
+    1024,
+    1024
+  ],
+  "attachmentBytes": 0,
+  "commit": "7bc240abb70bd6c506a8645a66a3128fddd71842",
+  "remote": "/tmp/scriptorium-wave0-baseline-20261020/small-short/origin.git",
+  "syntheticOnly": true
+}
