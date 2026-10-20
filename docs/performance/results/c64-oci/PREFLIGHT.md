@@ -2,7 +2,7 @@
 
 Status: **preflight ready; Core/Full image acceptance NOT_CHECKED while G0 holds the build/OCI lease**.
 
-Preflight source branch is `perf/c64-oci` at `b2eb1924eeae60511f84e1959e83851dbc2fd090`. G0's runtime reference is `a1587e784788fa87d86c0eb7ab175d7a28a3209f`; the production input paths used for C62 (`Dockerfile`, `packages`, `app`, `api`, `server.ts`, `pnpm-lock.yaml`, `package.json`, `profiles`, and `scripts`) have no diff between those commits. The eventual Core and Full images will be built sequentially from one clean, committed source SHA.
+The worktree was created as branch `perf/c64-oci` from `b2eb1924eeae60511f84e1959e83851dbc2fd090`; the isolated `info` probe ran before the task-local acceptance files were committed. G0's runtime reference is `a1587e784788fa87d86c0eb7ab175d7a28a3209f`. At the worktree base, the runtime input paths (`Dockerfile`, `packages`, `app`, `api`, `server.ts`, `pnpm-lock.yaml`, `package.json`, `profiles`, and `scripts`) had no diff from that runtime reference. This leaf adds only task-local probe scripts and evidence. The eventual Core and Full images will be built sequentially from one clean, committed source SHA.
 
 The task-local engine wrapper uses Podman 5.8.9 with a fresh rootless store under `/data/scriptorium-c64-oci`: graphroot `/data/scriptorium-c64-oci/storage`, runroot `/data/scriptorium-c64-oci/runroot`, and transient files `/data/scriptorium-c64-oci/tmp`. It sets `TMPDIR` to that transient directory and uses cgroupfs for both profiles. `podman info` passed with rootless `true`, the overlay driver, and zero images, containers, or volumes in this isolated store. The host reported 110,767,632,384 bytes free on `/data` at preflight.
 
