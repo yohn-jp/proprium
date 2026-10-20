@@ -75,8 +75,6 @@ const contribution: UiContribution = {
   action: "publishing.lifecycle-fixture",
 };
 
-const modules: ModuleStatus[] = [{ id: "publishing", availability: "enabled-idle", activeJobs: 0 }];
-
 function snapshot(scene: number): SnapshotId {
   return {
     repository,
@@ -99,7 +97,12 @@ function HostFixture() {
   const [visible, setVisible] = useState(true);
   const [authorScope, setAuthorScope] = useState("author-old");
   const [scene, setScene] = useState(0);
+  const [moduleAvailability, setModuleAvailability] = useState<ModuleStatus["availability"]>(
+    query.has("start-disabled") ? "disabled" : "enabled-idle",
+  );
   harness.currentAuthor = authorScope;
+
+  const modules: ModuleStatus[] = [{ id: "publishing", availability: moduleAvailability, activeJobs: 0 }];
 
   return (
     <main>
@@ -107,6 +110,8 @@ function HostFixture() {
       <button type="button" onClick={() => setScene((value) => value + 1)}>Change scene snapshot</button>
       <button type="button" onClick={() => setAuthorScope("author-new")}>Change author</button>
       <button type="button" onClick={() => harness.resolveFirstMount?.()}>Resolve deferred mount</button>
+      <button type="button" onClick={() => setModuleAvailability("enabled-idle")}>Enable fixture module</button>
+      <button type="button" onClick={() => setModuleAvailability("disabled")}>Disable fixture module</button>
       <output aria-label="Current author">{authorScope}</output>
       <output aria-label="Scene revision">{scene}</output>
       {visible && (

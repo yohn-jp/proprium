@@ -9,6 +9,7 @@ const loaderFixture = resolve(fixtureRoot, "tests/e2e/core64-lifecycle/browser-l
 export default {
   root: fixtureRoot,
   cacheDir: join(tmpdir(), "scriptorium-core64-lifecycle-vite-cache"),
+  optimizeDeps: { entries: [resolve(fixtureRoot, "tests/e2e/core64-lifecycle/host-fixture.html")] },
   esbuild: { jsx: "automatic", jsxImportSource: "react" },
   server: { host: "127.0.0.1", port: 4189, strictPort: true },
   resolve: {

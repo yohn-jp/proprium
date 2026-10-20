@@ -62,8 +62,10 @@ async function openHost(page: Page, query = ""): Promise<void> {
 }
 
 async function selectContribution(page: Page): Promise<void> {
-  await page.getByLabel("機能を選択").selectOption("publishing.lifecycle-fixture");
-  await expect(page.locator('[data-contribution="publishing.lifecycle-fixture"]')).toBeVisible();
+  const selector = page.getByLabel("機能を選択");
+  await expect(selector).toBeVisible({ timeout: 5_000 });
+  await selector.selectOption("publishing.lifecycle-fixture");
+  await expect(page.locator('[data-contribution="publishing.lifecycle-fixture"]')).toBeAttached();
 }
 
 async function expectActiveResources(page: Page, expected: number): Promise<void> {
@@ -85,6 +87,29 @@ async function waitForMounts(page: Page, count: number): Promise<void> {
 test.beforeEach(async ({ page }, info) => {
   await attachHostSourceBinding(info);
   await installProposalRoute(page);
+});
+
+test("actual ContributionHost keeps disabled module unloaded, then cleans it up on disable", async ({ page }) => {
+  await openHost(page, "?start-disabled");
+  await expect(page.getByLabel("機能を選択")).toHaveCount(0);
+  const whileDisabled = await metrics(page);
+  expect(whileDisabled.loaderCalls).toBe(0);
+  expect(whileDisabled.mountCalls).toBe(0);
+  expect([whileDisabled.activeTimers, whileDisabled.activeRequests, whileDisabled.activeWorkers]).toEqual([0, 0, 0]);
+
+  await page.getByRole("button", { name: "Enable fixture module" }).click();
+  await selectContribution(page);
+  await expectActiveResources(page, 1);
+  expect((await metrics(page)).loaderCalls).toBe(1);
+
+  await page.getByRole("button", { name: "Disable fixture module" }).click();
+  await expect(page.getByLabel("機能を選択")).toHaveCount(0);
+  await expectActiveResources(page, 0);
+  await expect.poll(async () => (await metrics(page)).signalAborts).toBe(1);
+  await expect.poll(async () => (await metrics(page)).disposeCalls).toBe(1);
+  const afterDisable = await metrics(page);
+  expect(afterDisable.loaderCalls).toBe(1);
+  expect(afterDisable.mountCalls).toBe(1);
 });
 
 test("actual ContributionHost lazily mounts and aborts/disposes timer, request, and worker on unmount", async ({ page }) => {
@@ -125,7 +150,7 @@ test("actual ContributionHost aborts/disposes the old contribution when the scen
   expect(afterUnmount.disposeCalls).toBe(2);
 });
 
-test("late mount cleanup after author change cannot journal a proposal into the old author scope", async ({ page }) => {
+test("late mount cleanup after author change cannot journal a proposal into the old author scope", async ({ page }, info) => {
   await openHost(page, "?defer-first-mount&late-proposal");
   await selectContribution(page);
   await expect.poll(async () => (await metrics(page)).mountCalls).toBe(1);
@@ -146,8 +171,12 @@ test("late mount cleanup after author change cannot journal a proposal into the 
   await expect.poll(async () => (await metrics(page)).disposeCalls).toBe(1);
   const afterLateCallback = await metrics(page);
   expect(afterLateCallback.lateCallbackAttempts).toBe(1);
-  expect(afterLateCallback.lateCallbackOutcomes).toEqual(["rejected"]);
+  await info.attach("late-callback-metrics.json", {
+    body: JSON.stringify(afterLateCallback, null, 2),
+    contentType: "application/json",
+  });
   expect(afterLateCallback.journalWrites).toEqual([]);
+  expect(afterLateCallback.lateCallbackOutcomes).toEqual(["rejected"]);
 
   await page.getByRole("button", { name: "Unmount host" }).click();
   await expectActiveResources(page, 0);

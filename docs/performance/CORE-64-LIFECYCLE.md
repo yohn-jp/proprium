@@ -1,6 +1,6 @@
 # Core 64 lifecycle invariant certification
 
-**Scope:** Finalize evidence-only dispositions for C51 and C56. C52 and C55 remain pending the next browser verification slot. No product code or tests are changed by this evidence commit.
+**Scope:** C51 and C56 retain their existing evidence dispositions. C52 has a bounded real-browser host-state pass; C55 has a source-bound late-callback failure. The browser harness is test-only. No production fix is included in this evidence commit.
 
 **Source base:** `53099848caa237a69c098c6f83bad00d9368184d` (`perf/c64-lifecycle`). The G0 test run used runtime `a1587e784788fa87d86c0eb7ab175d7a28a3209f`; current final main is `79c22d6688a7e70ab9758ea75ff756f6d6de9b6b`. The relevant implementation and test files cited below are byte-identical at all three commits.
 
@@ -33,8 +33,16 @@ Retain the read/propose port boundary and host-only approval, checkpoint, reconc
 
 These tests establish restrictions for the current trusted, in-process module API. They do not establish process isolation for arbitrary third-party plugin code. An external plugin sandbox and untested permission combinations remain `NOT_CHECKED` and are outside this goal.
 
-## C52 and C55 — pending
+## C52 — `VERIFIED_TESTED_HOST_STATE`
 
-G0's Core and full builds, Core audit, profile generation tests, and module-runtime tests are evidence for the compile-profile boundary and in-process enabled-state transitions. They do not measure zero module-attributed browser timers, network requests, or workers for every installed-disabled configuration. A full-profile real-browser lifecycle regression for contribution lazy mount, snapshot rejection, abort/dispose, and late callback cleanup remains pending. The prepared `tests/e2e/core64-lifecycle.acceptance.spec.ts` is uncommitted and unrun until the scheduler releases the browser slot; no result is claimed.
+The actual `ContributionHost` and contribution catalog passed a Chromium case with a synthetic trusted Publishing contribution. While disabled, the host showed no selector, called no loader, mounted nothing, and recorded zero fixture timers, held requests, or workers. Enabling the module and selecting the contribution started one of each; disabling it aborted the signal, disposed the contribution, and returned every active-resource counter to zero. This verifies this host-state transition only. The generated Full loader was replaced by the fixture, so this result does not establish that all Full-profile chunks stay undownloaded or that every installed-disabled module has zero browser activity. The existing G0 test [`disabled modules are not imported; enabling an absent module reports redeployment`](../../packages/module-runtime/src/module-runtime.test.ts#L88) remains separate runtime evidence.
 
-No new heavy checks were run because the C02/C21 verification batch is active. The planned browser command is recorded in the prepared test/report for the next slot.
+## C55 — `FAIL` for a late proposal callback after author change
+
+The real-host deferred-mount browser case passed its setup and abort-state assertions, then failed: after the old author scope was aborted and the new author scope mounted, resolving the old mount let its delayed `context.propose()` resolve. The requirement is rejection after abort. `ContributionHost` passes the actual source-bound host hash in the browser artifact; the attached page snapshot shows the current author as `author-new`.
+
+The fixture records writes by author scope. The exact `journalWrites` assertion followed the resolved-versus-rejected assertion, so Playwright stopped before printing that array. The executed callback nevertheless proves the old-scope write path is reachable: [`context.propose`](../../app/src/contributions/ContributionHost.tsx#L139) writes the submitted proposal with its captured `authorScope` before awaiting the routed API response, then writes the returned proposal to that same scope. This source-order argument is an inference from the observed resolved callback and fixture route, not a separately emitted write-count assertion. The harness now attaches the metrics before assertions so the next source-correctness run will preserve the full array on failure.
+
+The scene-snapshot replacement and direct unmount browser cases remain `NOT_CHECKED`: the first broad attempt had a disabled-fixture setup error, and the bounded rerun selected only the deferred author-change case. G0 runtime cancellation tests remain useful analogues but do not replace those browser-host checks. External plugin process isolation and untested permission combinations remain `NOT_CHECKED` as stated under C56.
+
+Full-profile producer output was reused from G5 C59 (`e3d6bc3af249a1483016ec7fcfe4f0ffb4ec8aa2`, tree `b994c86b1a3b4b25e1f44a9a11e6a22929cde192`). Its 639-file manifest was rehashed before and after the probe with all 639 entries matching; the browser harness served the current host source directly and replaced only the generated loader table with a synthetic contribution. No product bundle was rebuilt and no timing result is claimed. Exact commands, outcomes, raw paths, and hashes are in the [C52/C55 browser evidence record](results/core64-lifecycle/2026-10-21-C52-C55.md).
