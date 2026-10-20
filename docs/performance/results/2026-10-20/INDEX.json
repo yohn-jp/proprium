@@ -1,6 +1,19 @@
 {
-  "schemaVersion": 1,
-  "sourceDirectory": "/tmp/scriptorium-wave0-baseline-20261020/results",
+  "schemaVersion": 2,
+  "storage": {
+    "type": "github-release-asset",
+    "url": "https://github.com/yohn-jp/scriptorium/releases/download/perf-wave0-2026-10-20/scriptorium-wave0-2026-10-20.tar",
+    "file": "scriptorium-wave0-2026-10-20.tar",
+    "bytes": 26798080,
+    "sha256": "aa8ed77475d4a05b847e565f4cadd69a557e839816b708b76e08c700778fb0d3"
+  },
+  "compression": {
+    "format": "gzip",
+    "level": 6,
+    "mtime": 0,
+    "os": 255
+  },
+  "packaging": "GNU tar: ustar, name sort, epoch mtime, uid/gid 0, directories 0755, files 0644",
   "artifacts": [
     {
       "file": "raw/assets.json.gz",

@@ -8,7 +8,7 @@ or changes production source, dependencies, authentication or writer guarantees.
 pnpm install --frozen-lockfile
 SCRIPTORIUM_PROFILE=core pnpm build
 # On hosts needing a system browser, export SCRIPTORIUM_E2E_CHROMIUM first.
-node --test scripts/performance/performance.test.mjs
+node --test scripts/performance/*.test.mjs
 node scripts/performance/run.mjs /tmp/scriptorium-wave0-fresh
 node scripts/performance/summarize.mjs /tmp/scriptorium-wave0-fresh/results
 ```
@@ -123,3 +123,55 @@ authoritative. [BASELINE.md](../../docs/performance/BASELINE.md) records the che
 run, diagnostics, environmental gaps, all 64 candidates and four Wave 1 proposals.
 OCI, hosted GitHub traffic, crash/multi-tab loads, physical IME and 24-hour soak
 remain separate measurements when unavailable; never fill missing observations.
+
+## External baseline evidence
+
+The 128 raw measurements, traces, profiles and original verification logs live in
+[a dedicated GitHub prerelease](https://github.com/yohn-jp/scriptorium/releases/tag/perf-wave0-2026-10-20),
+as `scriptorium-wave0-2026-10-20.tar`. The archive contains the original `raw/*.gz`
+bytes. It is a benchmark evidence release, separate from product versions and OCI
+publication. Git retains the measurement code, baseline, candidate map, summary,
+tables and [Manifest](../../docs/performance/results/2026-10-20/INDEX.json).
+Do not replace published evidence; use a new release/Manifest for a new campaign.
+
+Retrieve and verify the archive **before extracting**, then verify every compressed
+and uncompressed artifact against the Git Manifest (Node 24, GNU tar, GitHub CLI):
+
+```sh
+index=docs/performance/results/2026-10-20/INDEX.json
+evidence=$(mktemp -d /tmp/scriptorium-evidence.XXXXXX)
+gh release download perf-wave0-2026-10-20 --repo yohn-jp/scriptorium \
+  --pattern scriptorium-wave0-2026-10-20.tar --dir "$evidence"
+node scripts/performance/artifacts.mjs verify-archive "$index" "$evidence"
+tar -xf "$evidence/scriptorium-wave0-2026-10-20.tar" -C "$evidence"
+node scripts/performance/artifacts.mjs verify "$index" "$evidence"
+```
+
+To reproduce compression, archive generation and the Manifest without rerunning
+measurements, recover the raw inputs from the verified archive. Alternatively use
+the original benchmark `results` directory, including its named diagnostics and
+verification logs. `summary.json` and `tables.md` are not raw archive members.
+
+```sh
+mkdir "$evidence/source"
+for artifact in "$evidence"/raw/*.gz; do
+  name=$(basename "$artifact" .gz)
+  gzip -dc "$artifact" > "$evidence/source/$name"
+done
+node scripts/performance/artifacts.mjs pack "$index" "$evidence/source" \
+  "$evidence/repacked" \
+  https://github.com/yohn-jp/scriptorium/releases/download/perf-wave0-2026-10-20/scriptorium-wave0-2026-10-20.tar
+cmp "$index" "$evidence/repacked/INDEX.json"
+cmp "$evidence/scriptorium-wave0-2026-10-20.tar" \
+  "$evidence/repacked/scriptorium-wave0-2026-10-20.tar"
+node scripts/performance/artifacts.mjs verify "$index" "$evidence/repacked"
+```
+
+`pack` requires a new output directory and uses the Manifest as the exact inventory;
+it refuses changed source data or compression hashes. It uses gzip level 6 with
+zero mtime and OS=255, plus sorted ustar members with fixed ownership, modes and
+timestamps. The recorded Node/toolchain in `environment.json` reproduces the
+baseline; a different zlib implementation may fail the byte-identity check and
+must not silently replace published hashes. Diagnostic flags and JSONL validity
+metadata are preserved. New measurement campaigns need a new reviewed inventory,
+not this baseline's hashes. No upload occurs in the packaging command.
