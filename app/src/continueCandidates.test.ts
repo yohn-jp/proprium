@@ -90,8 +90,9 @@ test("reusable cursor positions preserve dialogue, UTF-16, and newline offsets",
   assert.equal(blankLine.indexAtOffset(10), 4);
 });
 
-test("selection-only cursor updates reuse the CodeMirror document without materializing text", () => {
-  const state = EditorState.create({ doc: "地の文。「台詞です。」続き。" });
+test("selection-only cursor updates reuse the primed CodeMirror document and document index", () => {
+  const initialText = "地の文。「台詞です。」続き。\r\n次の行。";
+  const state = EditorState.create({ doc: initialText });
   const doc = state.doc;
   const originalToString = doc.toString;
   let materializations = 0;
@@ -110,9 +111,10 @@ test("selection-only cursor updates reuse the CodeMirror document without materi
   });
 
   try {
-    const changedText = doc.toString();
-    const index = cache.get(doc, changedText);
-    const afterDocumentChange = materializations;
+    const normalizedInitialText = doc.toString();
+    const index = cache.get(doc, normalizedInitialText);
+    assert.equal(normalizedInitialText, "地の文。「台詞です。」続き。\n次の行。");
+    assert.equal(materializations, 1);
     let selectionState = state;
     for (const anchor of [4, 11, 2, 14]) {
       selectionState = selectionState.update({ selection: { anchor } }).state;
@@ -120,7 +122,7 @@ test("selection-only cursor updates reuse the CodeMirror document without materi
       assert.strictEqual(cache.get(selectionState.doc), index);
     }
 
-    assert.equal(materializations - afterDocumentChange, 0);
+    assert.equal(materializations, 1);
     assert.equal(indexBuilds, 1);
     assert.equal(index.indexAtOffset(4), 2);
     assert.equal(index.indexAtOffset(11), 3);
@@ -129,8 +131,21 @@ test("selection-only cursor updates reuse the CodeMirror document without materi
       changes: { from: 0, to: selectionState.doc.length, insert: "一文目。\n\n四文目。" },
     }).state;
     assert.notStrictEqual(revisedState.doc, doc);
+    const revisedDocToString = revisedState.doc.toString;
+    let revisedMaterializations = 0;
+    Object.defineProperty(revisedState.doc, "toString", {
+      configurable: true,
+      value() {
+        revisedMaterializations++;
+        return revisedDocToString.call(this);
+      },
+    });
     const revisedText = revisedState.doc.toString();
     const revisedIndex = cache.get(revisedState.doc, revisedText);
+    assert.equal(revisedMaterializations, 1);
+    const revisedSelectionState = revisedState.update({ selection: { anchor: 6 } }).state;
+    assert.strictEqual(cache.get(revisedSelectionState.doc), revisedIndex);
+    assert.equal(revisedMaterializations, 1);
     assert.notStrictEqual(revisedIndex, index);
     assert.equal(index.offsetAtIndex(3), 11);
     assert.equal(revisedIndex.offsetAtIndex(3), 6);

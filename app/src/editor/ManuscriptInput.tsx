@@ -158,6 +158,9 @@ export const ManuscriptInput = forwardRef<ManuscriptInputHandle, ManuscriptInput
         }),
         EditorView.updateListener.of((update) => {
           const changedText = update.docChanged ? update.state.doc.toString() : null;
+          const changedDocumentIndex = update.docChanged
+            ? sentencePositionIndex(update.state.doc, changedText ?? undefined)
+            : null;
           if (update.docChanged) {
             if (externalSyncRef.current) externalSyncRef.current = false;
             else if (changedText !== null) latestRef.current.onChange(changedText);
@@ -167,7 +170,7 @@ export const ManuscriptInput = forwardRef<ManuscriptInputHandle, ManuscriptInput
             latestRef.current.onSelectionLengthChange?.(selection.empty ? 0 : Math.abs(selection.to - selection.from));
             if (!externalSyncRef.current) {
               latestRef.current.onCursorPositionChange?.(
-                sentencePositionIndex(update.state.doc, changedText ?? undefined).indexAtOffset(selection.head),
+                (changedDocumentIndex ?? sentencePositionIndex(update.state.doc)).indexAtOffset(selection.head),
                 Math.max(0, viewRef.current?.scrollDOM.scrollTop ?? 0),
               );
             }
@@ -176,6 +179,7 @@ export const ManuscriptInput = forwardRef<ManuscriptInputHandle, ManuscriptInput
         placeholder ? cmPlaceholder(placeholder) : [],
       ],
     });
+    sentencePositionIndex(state.doc, state.doc.toString());
     const view = new EditorView({ state, parent });
     viewRef.current = view;
     const onScroll = () => reportPosition(view);
