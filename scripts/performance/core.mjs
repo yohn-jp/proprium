@@ -32,12 +32,25 @@ try {
     await sample('snapshot.scene', () => store.readSceneSnapshot(project.id, `scene-${i % 3 + 1}`));
   }
   }
-  if (workload === 'mutation') {
+  if (workload === 'mutation' || workload === 'legacy') {
   const repeats = Number(repeatsArg);
-  // Use canonical saveScene: this performs the existing revision-fenced checkpoint path.
+  // Keep the author proposal/approval/checkpoint path distinct from legacy saveScene.
   for (let i = 0; i < Math.min(repeats, 5); i++) {
-    const scene = await store.readScene(project.id, 'scene-1');
-    await sample('checkpoint', () => store.saveScene(project.id, 'scene-1', { revision: scene.revision, text: `${scene.text}\nSynthetic checkpoint ${i}.` }));
+    if (workload === 'legacy') {
+      const scene = await store.readScene(project.id, 'scene-1');
+      await sample('legacy.saveSceneCheckpoint', () => store.saveScene(project.id, 'scene-1', { revision: scene.revision, text: `${scene.text}\nSynthetic checkpoint ${i}.` }));
+    } else {
+      const scene = await sample('mutation.prepare', () => store.readSceneSnapshot(project.id, 'scene-1', 'checkpoint'));
+      const operation = { id: randomUUID(), generation: 1, repository: scene.snapshot.repository,
+        baseRemoteCommit: scene.snapshot.remoteCommit, effect: 'manuscript',
+        reads: [{ path: scene.document.path, revision: scene.document.revision }],
+        writes: [{ path: scene.document.path, revision: scene.document.revision, content: `${scene.document.content}\nSynthetic checkpoint ${i}.` }],
+        message: `Synthetic checkpoint ${i}` };
+      const proposal = await sample('proposal', () => store.propose(project.id, { id: `proposal_${operation.id}`, snapshot: scene.snapshot, operations: [operation], source: 'author' }));
+      await sample('approval', () => store.approve(project.id, { proposalId: proposal.id, operationIds: [operation.id], authorScope: 'synthetic-benchmark-author' }));
+      const receipt = await sample('checkpoint', () => store.checkpoint(project.id, operation));
+      if (receipt.operationId !== operation.id) throw new Error('Checkpoint receipt operation mismatch');
+    }
     const publication = await sample('publish', () => store.publish(project.id, randomUUID()));
     if (publication.state !== 'confirmed') throw new Error(`Publication state: ${publication.state}`);
   }

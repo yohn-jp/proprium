@@ -95,3 +95,9 @@ Each worker records its script checksum and source commit when started; raw run
 metadata also records the coordinator's starting revision. If a harness correction
 requires a rerun, preserve the original result as diagnostic evidence and identify
 the corrected result explicitly in the baseline.
+
+`mutation` times the current public `propose`, `approve`, `checkpoint` and
+`publish` methods separately, with a revision-bound manuscript operation prepared
+from `readSceneSnapshot`. The optional `legacy` workload measures the older
+`saveScene` convenience path, which scans scene metadata. Never present its
+latency as the current UI's checkpoint latency.
