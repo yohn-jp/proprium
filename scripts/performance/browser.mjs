@@ -116,17 +116,17 @@ try {
   await page.waitForTimeout(600);
   await phase('ui.checkpoint', async () => {
     const checkpoint = page.waitForResponse(response => response.request().method() === 'POST' && new URL(response.url()).pathname.endsWith('/checkpoints'));
-    await page.getByRole('button', { name: 'Checkpoint', exact: true }).click();
+    await page.locator('.editor-actions').getByRole('button', { name: 'Checkpoint', exact: true }).click();
     const receipt = await checkpoint;
     if (!receipt.ok() || !(await receipt.json()).operationId) throw new Error('Checkpoint did not return a receipt');
     await expect(page.locator('.durability-message')).toContainText('ローカルチェックポイント');
   });
   await phase('ui.publish', async () => {
     const publication = page.waitForResponse(response => response.request().method() === 'POST' && new URL(response.url()).pathname.endsWith('/publish'));
-    await page.getByRole('button', { name: 'Save to GitHub', exact: true }).click();
+    await page.locator('.editor-actions').getByRole('button', { name: 'Save to GitHub', exact: true }).click();
     const receipt = await publication;
     if (!receipt.ok() || (await receipt.json()).state !== 'confirmed') throw new Error('Publication was not confirmed');
-    await expect(page.getByText('Saved to GitHub', { exact: true })).toBeVisible();
+    await expect(page.locator('.durability-row').getByText('Saved to GitHub', { exact: true })).toBeVisible();
   });
   async function idle(name) {
     const before = await stats(), requestsBefore = report.requests.length;
