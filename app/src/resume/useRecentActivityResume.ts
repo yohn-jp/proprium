@@ -137,7 +137,19 @@ export function useRecentActivityResume({
     lastWritingRef.current = local ? { bindingKey: captured.identityKey, position: local } : null;
     setLocalWriting(local);
 
+    let refreshTimer: number | null = null;
+    const stopRefreshTimer = () => {
+      if (refreshTimer !== null) window.clearInterval(refreshTimer);
+      refreshTimer = null;
+    };
+    const startRefreshTimer = () => {
+      if (refreshTimer === null && document.visibilityState === "visible") {
+        refreshTimer = window.setInterval(() => void refresh(), REFRESH_INTERVAL_MS);
+      }
+    };
+
     const refresh = async () => {
+      if (document.visibilityState !== "visible") return;
       const sequence = ++refreshSequenceRef.current;
       const startedAt = latestWriteVersionRef.current;
       try {
@@ -156,11 +168,17 @@ export function useRecentActivityResume({
         }
       }
     };
-    void refresh();
-    const timer = window.setInterval(() => void refresh(), REFRESH_INTERVAL_MS);
+    if (document.visibilityState === "visible") void refresh();
+    startRefreshTimer();
     const onVisibility = () => {
-      if (document.visibilityState === "visible") void refresh();
-      else flush(true);
+      if (document.visibilityState === "visible") {
+        void refresh();
+        startRefreshTimer();
+      } else {
+        refreshSequenceRef.current += 1;
+        stopRefreshTimer();
+        flush(true);
+      }
     };
     const onPageHide = () => flush(true);
     document.addEventListener("visibilitychange", onVisibility);
@@ -169,7 +187,7 @@ export function useRecentActivityResume({
     return () => {
       alive = false;
       controller.abort();
-      window.clearInterval(timer);
+      stopRefreshTimer();
       document.removeEventListener("visibilitychange", onVisibility);
       window.removeEventListener("beforeunload", onPageHide);
       window.removeEventListener("pagehide", onPageHide);

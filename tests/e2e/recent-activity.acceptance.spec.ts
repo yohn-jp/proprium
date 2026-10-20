@@ -87,7 +87,7 @@ async function selectScene(page: Page, label = "Chapter One: Scene One"): Promis
   await expect(page.locator(".cm-content")).toBeVisible();
 }
 
-async function makeLongReadingRepository(): Promise<{ root: string; remote: string }> {
+async function makeLongReadingRepository(repetitionCount = 160): Promise<{ root: string; remote: string }> {
   const root = await mkdtemp(join(tmpdir(), "scriptorium-recent-activity-"));
   const remote = join(root, "reading.git");
   const working = join(root, "seed");
@@ -106,7 +106,7 @@ async function makeLongReadingRepository(): Promise<{ root: string; remote: stri
   await mkdir(join(working, "manuscript/vol-1/ch-1"), { recursive: true });
   await writeFile(join(working, "plot/volumes/vol-1/volume.yaml"), "id: vol-1\ntitle: Volume One\n", "utf8");
   await writeFile(join(working, "plot/volumes/vol-1/chapters/ch-1/chapter.yaml"), "id: ch-1\nvolume: vol-1\ntitle: Chapter One\n", "utf8");
-  const body = "# Scene One\n\n" + "読書位置を別の端末へ引き継ぐための文章です。\n\n".repeat(160);
+  const body = "# Scene One\n\n" + "読書位置を別の端末へ引き継ぐための文章です。\n\n".repeat(repetitionCount);
   await writeFile(join(working, "plot/volumes/vol-1/chapters/ch-1/scenes/scene-1.yaml"),
     "id: scene-1\ntitle: Scene One\nvolume: vol-1\nchapter: ch-1\nmanuscript: manuscript/vol-1/ch-1/scene-1.md\n", "utf8");
   await writeFile(join(working, "manuscript/vol-1/ch-1/scene-1.md"), body, "utf8");
@@ -353,5 +353,276 @@ test("recent activity hands off only numeric positions across devices, projects,
     await anonymous.close();
     await rm(fixture.root, { recursive: true, force: true });
     await rm(secondFixture.root, { recursive: true, force: true });
+  }
+});
+
+test("recent activity polling pauses while naturally hidden and resumes when visible", async ({ browser }) => {
+  test.skip(process.env.SCRIPTORIUM_E2E_EXTERNAL_REPOSITORY === "1", "This visibility acceptance uses a disposable local Git fixture.");
+  const fixture = await makeLongReadingRepository();
+  const { context, page } = await createContext(browser, 1280);
+  let projectId: string | null = null;
+  let background: Page | undefined;
+  let recentActivityGets = 0;
+  page.on("request", (request) => {
+    const url = new URL(request.url());
+    if (request.method() === "GET" && url.pathname.endsWith("/recent-activity")) recentActivityGets += 1;
+  });
+
+  try {
+    await signIn(page);
+    projectId = await openProject(page, fixture.remote);
+    await selectScene(page);
+    await expect.poll(() => recentActivityGets).toBeGreaterThan(0);
+    await page.waitForTimeout(500);
+    const initialVisibleCount = recentActivityGets;
+
+    await page.waitForTimeout(15_500);
+    expect(recentActivityGets).toBe(initialVisibleCount + 1, "visible recent-activity polling should retain its 15-second refresh");
+    const visiblePollCountBeforeHide = recentActivityGets - initialVisibleCount;
+    test.info().annotations.push({
+      type: "c39-visible-poll-count",
+      description: `visible before hide: ${visiblePollCountBeforeHide} GET(s) in 15.5 seconds.`,
+    });
+
+    background = await context.newPage();
+    await background.goto("about:blank");
+    await background.bringToFront();
+    let naturallyHidden = false;
+    try {
+      await page.waitForFunction(() => document.visibilityState === "hidden", null, { timeout: 3_000 });
+      naturallyHidden = true;
+    } catch (error) {
+      if (!(error instanceof Error) || error.name !== "TimeoutError") throw error;
+    }
+    if (!naturallyHidden) {
+      test.info().annotations.push({
+        type: "c39-natural-visibility",
+        description: "NOT_CHECKED: headless Chromium did not naturally report the original page as hidden.",
+      });
+      test.skip(true, "NOT_CHECKED: headless Chromium did not naturally report the original page as hidden.");
+      return;
+    }
+
+    const hiddenCount = recentActivityGets;
+    await page.waitForTimeout(15_500);
+    const hiddenPollCount = recentActivityGets - hiddenCount;
+    test.info().annotations.push({
+      type: "c39-hidden-poll-count",
+      description: `${hiddenPollCount} GET(s) in 15.5 seconds after Chromium naturally reported hidden.`,
+    });
+    if (process.env.SCRIPTORIUM_E2E_EXPECT_C39_PAUSED === "1") {
+      expect(recentActivityGets).toBe(hiddenCount, "hidden pages should issue no recent-activity poll");
+    }
+
+    const remoteUpdate = await page.request.put(
+      new URL(`/api/projects/${encodeURIComponent(projectId!)}/recent-activity`, page.url()).toString(),
+      {
+        data: { sceneId: "scene-2", sentenceOffset: 2, deviceType: "mobile" },
+        headers: { origin: new URL(page.url()).origin },
+      },
+    );
+    expect(remoteUpdate.ok()).toBe(true, "the other-device cursor should be stored while this page is hidden");
+
+    await page.bringToFront();
+    await expect.poll(() => page.evaluate(() => document.visibilityState)).toBe("visible");
+    await expect.poll(() => recentActivityGets, { timeout: 5_000 }).toBe(hiddenCount + 1);
+    await expect(page.getByText(/スマホでたった今まで編集していました/u)).toBeVisible();
+    await page.waitForTimeout(15_500);
+    expect(recentActivityGets).toBe(hiddenCount + 2, "the visible polling interval should restart after focus returns");
+    const visiblePollsAfterReturn = recentActivityGets - hiddenCount;
+    test.info().annotations.push({
+      type: "c39-visibility-poll-counts",
+      description: `visible before hide: ${visiblePollCountBeforeHide}; hidden: ${hiddenPollCount}; visible after return: ${visiblePollsAfterReturn} GET(s), including immediate refresh.`,
+    });
+  } finally {
+    if (projectId) {
+      const origin = new URL(page.url()).origin;
+      await page.request.delete(new URL(`/api/projects/${encodeURIComponent(projectId)}`, origin).toString(), {
+        headers: { origin },
+      }).catch(() => undefined);
+    }
+    await background?.close().catch(() => undefined);
+    await context.close();
+    await rm(fixture.root, { recursive: true, force: true });
+  }
+});
+
+test("recent activity ignores a refresh response invalidated by natural hide", async ({ browser }) => {
+  test.skip(process.env.SCRIPTORIUM_E2E_EXTERNAL_REPOSITORY === "1", "This visibility acceptance uses a disposable local Git fixture.");
+  const fixture = await makeLongReadingRepository();
+  const { context, page } = await createContext(browser, 1280);
+  let projectId: string | null = null;
+  let recentActivityGets = 0;
+  let interceptedGet = false;
+  let signalIntercepted: (() => void) | null = null;
+  let signalReleased: (() => void) | null = null;
+  let signalCompleted: (() => void) | null = null;
+  const heldGet = new Promise<void>((resolveHeld) => { signalIntercepted = resolveHeld; });
+  const heldResponseReleased = new Promise<void>((resolveReleased) => { signalReleased = resolveReleased; });
+  const heldResponseCompleted = new Promise<void>((resolveCompleted) => { signalCompleted = resolveCompleted; });
+  page.on("request", (request) => {
+    const url = new URL(request.url());
+    if (request.method() === "GET" && url.pathname.endsWith("/recent-activity")) recentActivityGets += 1;
+  });
+  await page.route("**/api/projects/*/recent-activity", async (route) => {
+    if (route.request().method() !== "GET" || interceptedGet) {
+      await route.continue();
+      return;
+    }
+    interceptedGet = true;
+    signalIntercepted?.();
+    await heldResponseReleased;
+    await route.fulfill({
+      status: 200,
+      contentType: "application/json",
+      body: JSON.stringify({ items: [{
+        sceneId: "scene-2",
+        sentenceOffset: 2,
+        deviceType: "mobile",
+        updatedAt: "2000-01-01T00:00:00.000Z",
+      }] }),
+    });
+    signalCompleted?.();
+  });
+
+  try {
+    await signIn(page);
+    projectId = await openProject(page, fixture.remote);
+    await expect(page.getByRole("navigation", { name: "作品構成" })).toBeVisible();
+    await heldGet;
+
+    const background = await context.newPage();
+    await background.goto("about:blank");
+    await background.bringToFront();
+    let naturallyHidden = false;
+    try {
+      await page.waitForFunction(() => document.visibilityState === "hidden", null, { timeout: 3_000 });
+      naturallyHidden = true;
+    } catch (error) {
+      if (!(error instanceof Error) || error.name !== "TimeoutError") throw error;
+    }
+    if (!naturallyHidden) {
+      test.info().annotations.push({
+        type: "c39-inflight-visibility",
+        description: "NOT_CHECKED: Chromium did not naturally report the original page as hidden while its refresh was held.",
+      });
+      test.skip(true, "NOT_CHECKED: Chromium did not naturally report the original page as hidden.");
+      return;
+    }
+
+    signalReleased?.();
+    await heldResponseCompleted;
+    await page.waitForTimeout(200);
+    const staleHandoff = page.getByText(/スマホで.*編集していました/u);
+    const expectsInvalidation = process.env.SCRIPTORIUM_E2E_EXPECT_C39_PAUSED === "1";
+    if (expectsInvalidation) await expect(staleHandoff).toHaveCount(0);
+    else await expect(staleHandoff).toBeVisible();
+    test.info().annotations.push({
+      type: "c39-inflight-refresh",
+      description: expectsInvalidation
+        ? "The delayed response started while visible was discarded after natural hide."
+        : "The baseline applied the delayed response after natural hide; the response completed while hidden.",
+    });
+
+    const hiddenGets = recentActivityGets;
+    await page.waitForTimeout(15_500);
+    expect(recentActivityGets).toBe(hiddenGets + (expectsInvalidation ? 0 : 1));
+    await page.bringToFront();
+    await expect.poll(() => page.evaluate(() => document.visibilityState)).toBe("visible");
+    await expect.poll(() => recentActivityGets).toBe(hiddenGets + (expectsInvalidation ? 1 : 2));
+    await expect(staleHandoff).toHaveCount(0);
+  } finally {
+    // If natural visibility was unavailable, unblock the intercepted request before teardown.
+    signalReleased?.();
+    if (projectId) {
+      const origin = new URL(page.url()).origin;
+      await page.request.delete(new URL(`/api/projects/${encodeURIComponent(projectId)}`, origin).toString(), {
+        headers: { origin },
+      }).catch(() => undefined);
+    }
+    await context.close();
+    await rm(fixture.root, { recursive: true, force: true });
+  }
+});
+
+test("recent activity coalesces repeated positions and records 50 input reports", async ({ browser }) => {
+  test.skip(process.env.SCRIPTORIUM_E2E_EXTERNAL_REPOSITORY === "1", "This debounce acceptance uses a disposable local Git fixture.");
+  const fixture = await makeLongReadingRepository(5);
+  const { context, page } = await createContext(browser, 1280);
+  let projectId: string | null = null;
+  const positionWrites: unknown[] = [];
+  page.on("request", (request) => {
+    const url = new URL(request.url());
+    if (request.method() !== "PUT" || !url.pathname.endsWith("/recent-activity")) return;
+    try { positionWrites.push(request.postDataJSON()); } catch { positionWrites.push(request.postData()); }
+  });
+
+  try {
+    await signIn(page);
+    projectId = await openProject(page, fixture.remote);
+    const matchesPositionWrite = (response: import("@playwright/test").Response) =>
+      response.url().includes(`/api/projects/${encodeURIComponent(projectId!)}/recent-activity`) &&
+      response.request().method() === "PUT";
+    const initialWrite = page.waitForResponse(matchesPositionWrite);
+    await selectScene(page);
+    const editor = page.locator(".cm-content");
+    await editor.focus();
+    await editor.press("Control+End");
+    const initialResponse = await initialWrite;
+    expect(initialResponse.ok()).toBe(true);
+    const initialActivity = await initialResponse.json() as {
+      items: Array<{ sceneId: string; sentenceOffset: number | null; deviceType: string; updatedAt: string }>;
+    };
+    const initialCursor = initialActivity.items.find((item) => item.sceneId === "scene-1" && item.deviceType === "desktop");
+    expect(initialCursor).toBeDefined();
+    expect(typeof initialCursor?.sentenceOffset).toBe("number");
+    const initialWriteCount = positionWrites.length;
+    expect(initialWriteCount).toBeGreaterThan(0);
+
+    const repeatedPositionWrite = page.waitForResponse(matchesPositionWrite);
+    const reportsStartedAt = Date.now();
+    await page.locator(".cm-scroller").evaluate((scroller) => {
+      for (let index = 0; index < 50; index += 1) scroller.dispatchEvent(new Event("scroll"));
+    });
+    const repeatedReportDurationMs = Date.now() - reportsStartedAt;
+    const repeatedResponse = await repeatedPositionWrite;
+    expect(repeatedResponse.ok()).toBe(true);
+    const repeatedActivity = await repeatedResponse.json() as {
+      items: Array<{ sceneId: string; sentenceOffset: number | null; deviceType: string; updatedAt: string }>;
+    };
+    const repeatedCursor = repeatedActivity.items.find((item) => item.sceneId === "scene-1" && item.deviceType === "desktop");
+    expect(repeatedCursor).toBeDefined();
+    expect(repeatedCursor?.sentenceOffset).toBe(initialCursor?.sentenceOffset);
+    expect(Date.parse(repeatedCursor?.updatedAt ?? "")).toBeGreaterThan(Date.parse(initialCursor?.updatedAt ?? ""));
+    expect(positionWrites).toHaveLength(initialWriteCount + 1);
+    expect(positionWrites[initialWriteCount]).toEqual(positionWrites[initialWriteCount - 1]);
+
+    await page.waitForTimeout(2_100);
+    expect(positionWrites).toHaveLength(initialWriteCount + 1, "unchanged position reports should settle after their debounced PUT");
+
+    const inputStartCount = positionWrites.length;
+    const inputStartedAt = Date.now();
+    await editor.focus();
+    await page.keyboard.type("x".repeat(50), { delay: 0 });
+    const inputBurstDurationMs = Date.now() - inputStartedAt;
+    await page.waitForTimeout(2_100);
+    const inputPutCount = positionWrites.length - inputStartCount;
+    expect(inputPutCount).toBeGreaterThan(0);
+    if (inputBurstDurationMs < 2_000) {
+      expect(inputPutCount).toBe(1, "a 50-character burst completed within the server debounce window should make one PUT");
+    }
+    test.info().annotations.push(
+      { type: "c40-identical-position", description: `50 repeated reports in ${repeatedReportDurationMs} ms; 1 PUT; identical cursor input refreshed updatedAt.` },
+      { type: "c40-50-inputs", description: `50 characters in ${inputBurstDurationMs} ms; ${inputPutCount} PUT(s)${inputBurstDurationMs < 2_000 ? " within debounce window" : "; workload exceeded debounce window"}.` },
+    );
+  } finally {
+    if (projectId) {
+      const origin = new URL(page.url()).origin;
+      await page.request.delete(new URL(`/api/projects/${encodeURIComponent(projectId)}`, origin).toString(), {
+        headers: { origin },
+      }).catch(() => undefined);
+    }
+    await context.close();
+    await rm(fixture.root, { recursive: true, force: true });
   }
 });
