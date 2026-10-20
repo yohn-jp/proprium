@@ -149,16 +149,17 @@ export const ManuscriptInput = forwardRef<ManuscriptInputHandle, ManuscriptInput
           enterkeyhint: "enter",
         }),
         EditorView.updateListener.of((update) => {
+          const changedText = update.docChanged ? update.state.doc.toString() : null;
           if (update.docChanged) {
             if (externalSyncRef.current) externalSyncRef.current = false;
-            else latestRef.current.onChange(update.state.doc.toString());
+            else if (changedText !== null) latestRef.current.onChange(changedText);
           }
           if (update.docChanged || update.selectionSet) {
             const selection = update.state.selection.main;
             latestRef.current.onSelectionLengthChange?.(selection.empty ? 0 : Math.abs(selection.to - selection.from));
             if (!externalSyncRef.current) {
               latestRef.current.onCursorPositionChange?.(
-                uiSentenceIndexAtOffset(update.state.doc.toString(), selection.head),
+                uiSentenceIndexAtOffset(changedText ?? update.state.doc.toString(), selection.head),
                 Math.max(0, viewRef.current?.scrollDOM.scrollTop ?? 0),
               );
             }
