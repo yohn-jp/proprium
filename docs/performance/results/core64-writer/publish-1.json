@@ -1,0 +1,318 @@
+{
+  "schemaVersion": 1,
+  "status": "complete",
+  "kind": "publish",
+  "scale": 1,
+  "repeats": 5,
+  "execution": {
+    "code": 0,
+    "signal": null,
+    "timeout": false,
+    "timeoutMs": 60000
+  },
+  "runtime": {
+    "entry": "/home/sophia/src/scriptorium-c64-derived/packages/core/dist/index.js",
+    "sourceCommit": "f633da0b3f133ad812953c284aab35a4956d2507"
+  },
+  "fixture": {
+    "schemaVersion": 1,
+    "size": "small",
+    "files": 10,
+    "volumes": 1,
+    "chapters": 1,
+    "scenes": 3,
+    "bytes": 1152477,
+    "historyCommits": 1,
+    "documentBytes": [
+      1024,
+      102400,
+      1048576
+    ],
+    "attachmentBytes": 0,
+    "commit": "e70bb509cc41b383451335e05af36d78f1cb31db",
+    "remote": "/tmp/scriptorium-wave0-baseline-20261020/small/origin.git",
+    "syntheticOnly": true
+  },
+  "node": "v24.21.0",
+  "startedAt": "2026-10-20T17:31:45.858Z",
+  "samples": [
+    {
+      "name": "publish",
+      "ms": 1305.921209,
+      "cpuUs": {
+        "user": 291723,
+        "system": 167398
+      },
+      "rssBytes": 84152320,
+      "maxRssKiB": 82180,
+      "io": {
+        "rchar": 1423150,
+        "wchar": 37140,
+        "syscr": 4200,
+        "syscw": 1015,
+        "read_bytes": 0,
+        "write_bytes": 188416,
+        "cancelled_write_bytes": 20480
+      },
+      "counters": {
+        "gitProcesses": 98,
+        "gitCommandLogDropped": 0
+      },
+      "gitProcessCount": 98,
+      "gitCommandLog": {
+        "captured": 98,
+        "dropped": 0,
+        "complete": true,
+        "byCommand": {
+          "--literal-pathspecs": 98
+        }
+      }
+    },
+    {
+      "name": "publish",
+      "ms": 700.3519769999994,
+      "cpuUs": {
+        "user": 155723,
+        "system": 101791
+      },
+      "rssBytes": 91885568,
+      "maxRssKiB": 89732,
+      "io": {
+        "rchar": 1423151,
+        "wchar": 37140,
+        "syscr": 4197,
+        "syscw": 1013,
+        "read_bytes": 0,
+        "write_bytes": 188416,
+        "cancelled_write_bytes": 20480
+      },
+      "counters": {
+        "gitProcesses": 98,
+        "gitCommandLogDropped": 0
+      },
+      "gitProcessCount": 98,
+      "gitCommandLog": {
+        "captured": 98,
+        "dropped": 0,
+        "complete": true,
+        "byCommand": {
+          "--literal-pathspecs": 98
+        }
+      }
+    },
+    {
+      "name": "publish",
+      "ms": 1666.4083839999994,
+      "cpuUs": {
+        "user": 287850,
+        "system": 180060
+      },
+      "rssBytes": 93851648,
+      "maxRssKiB": 91652,
+      "io": {
+        "rchar": 1423229,
+        "wchar": 37156,
+        "syscr": 4209,
+        "syscw": 1017,
+        "read_bytes": 0,
+        "write_bytes": 188416,
+        "cancelled_write_bytes": 20480
+      },
+      "counters": {
+        "gitProcesses": 98,
+        "gitCommandLogDropped": 0
+      },
+      "gitProcessCount": 98,
+      "gitCommandLog": {
+        "captured": 98,
+        "dropped": 0,
+        "complete": true,
+        "byCommand": {
+          "--literal-pathspecs": 98
+        }
+      }
+    },
+    {
+      "name": "publish",
+      "ms": 3092.6919400000006,
+      "cpuUs": {
+        "user": 252831,
+        "system": 176177
+      },
+      "rssBytes": 103026688,
+      "maxRssKiB": 100612,
+      "io": {
+        "rchar": 1423147,
+        "wchar": 37139,
+        "syscr": 4200,
+        "syscw": 1016,
+        "read_bytes": 0,
+        "write_bytes": 188416,
+        "cancelled_write_bytes": 20480
+      },
+      "counters": {
+        "gitProcesses": 98,
+        "gitCommandLogDropped": 0
+      },
+      "gitProcessCount": 98,
+      "gitCommandLog": {
+        "captured": 98,
+        "dropped": 0,
+        "complete": true,
+        "byCommand": {
+          "--literal-pathspecs": 98
+        }
+      }
+    },
+    {
+      "name": "publish",
+      "ms": 5223.079673,
+      "cpuUs": {
+        "user": 252723,
+        "system": 189412
+      },
+      "rssBytes": 107614208,
+      "maxRssKiB": 105092,
+      "io": {
+        "rchar": 1423138,
+        "wchar": 37111,
+        "syscr": 4193,
+        "syscw": 1012,
+        "read_bytes": 0,
+        "write_bytes": 188416,
+        "cancelled_write_bytes": 20480
+      },
+      "counters": {
+        "gitProcesses": 98,
+        "gitCommandLogDropped": 0
+      },
+      "gitProcessCount": 98,
+      "gitCommandLog": {
+        "captured": 98,
+        "dropped": 0,
+        "complete": true,
+        "byCommand": {
+          "--literal-pathspecs": 98
+        }
+      }
+    }
+  ],
+  "summaries": {
+    "publish": {
+      "n": 5,
+      "p50": 1666.4083839999994,
+      "p95": 5223.079673,
+      "p99": 5223.079673,
+      "max": 5223.079673
+    }
+  },
+  "metricSummaries": {
+    "publish": {
+      "gitProcesses": {
+        "n": 5,
+        "p50": 98,
+        "p95": 98,
+        "p99": 98,
+        "max": 98
+      },
+      "nodeCpuUserUs": {
+        "n": 5,
+        "p50": 252831,
+        "p95": 291723,
+        "p99": 291723,
+        "max": 291723
+      },
+      "nodeCpuSystemUs": {
+        "n": 5,
+        "p50": 176177,
+        "p95": 189412,
+        "p99": 189412,
+        "max": 189412
+      },
+      "rssBytes": {
+        "n": 5,
+        "p50": 93851648,
+        "p95": 107614208,
+        "p99": 107614208,
+        "max": 107614208
+      },
+      "maxRssKiB": {
+        "n": 5,
+        "p50": 91652,
+        "p95": 105092,
+        "p99": 105092,
+        "max": 105092
+      }
+    }
+  },
+  "preparations": [
+    {
+      "label": "publish_1_1",
+      "completed": 1,
+      "total": 1,
+      "elapsedMs": 1305.9296189999998
+    },
+    {
+      "label": "publish_1_2",
+      "completed": 1,
+      "total": 1,
+      "elapsedMs": 740.4241369999995
+    },
+    {
+      "label": "publish_1_3",
+      "completed": 1,
+      "total": 1,
+      "elapsedMs": 671.2533080000003
+    },
+    {
+      "label": "publish_1_4",
+      "completed": 1,
+      "total": 1,
+      "elapsedMs": 4681.351033999999
+    },
+    {
+      "label": "publish_1_5",
+      "completed": 1,
+      "total": 1,
+      "elapsedMs": 2947.036942999999
+    }
+  ],
+  "integrityChecks": [
+    {
+      "repeat": 1,
+      "state": "confirmed",
+      "acknowledgedCount": 1,
+      "remoteCommit": "2ea79e7bd64845d2ea06789dca813a06fceb3054"
+    },
+    {
+      "repeat": 2,
+      "state": "confirmed",
+      "acknowledgedCount": 1,
+      "remoteCommit": "879150ae3fa07910367dc5ce3c25c3e48def7f41"
+    },
+    {
+      "repeat": 3,
+      "state": "confirmed",
+      "acknowledgedCount": 1,
+      "remoteCommit": "6495d7a727824ef7241db2df39c201157c7d4b69"
+    },
+    {
+      "repeat": 4,
+      "state": "confirmed",
+      "acknowledgedCount": 1,
+      "remoteCommit": "13bb206228efd3f91e9bfb3e3b386b3c689f0394"
+    },
+    {
+      "repeat": 5,
+      "state": "confirmed",
+      "acknowledgedCount": 1,
+      "remoteCommit": "ce2cf8fd7c1331aaf32fadd254f32ea55ef9f50f"
+    }
+  ],
+  "progress": {
+    "phase": "prepare",
+    "completed": 5,
+    "total": 5
+  },
+  "finishedAt": "2026-10-20T17:32:11.295Z"
+}

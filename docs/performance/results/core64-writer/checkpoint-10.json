@@ -1,0 +1,292 @@
+{
+  "schemaVersion": 1,
+  "status": "complete",
+  "kind": "checkpoint",
+  "scale": 10,
+  "repeats": 5,
+  "execution": {
+    "code": 0,
+    "signal": null,
+    "timeout": false,
+    "timeoutMs": 90000
+  },
+  "runtime": {
+    "entry": "/home/sophia/src/scriptorium-c64-derived/packages/core/dist/index.js",
+    "sourceCommit": "f633da0b3f133ad812953c284aab35a4956d2507"
+  },
+  "fixture": {
+    "schemaVersion": 1,
+    "size": "small",
+    "files": 10,
+    "volumes": 1,
+    "chapters": 1,
+    "scenes": 3,
+    "bytes": 1152477,
+    "historyCommits": 1,
+    "documentBytes": [
+      1024,
+      102400,
+      1048576
+    ],
+    "attachmentBytes": 0,
+    "commit": "e70bb509cc41b383451335e05af36d78f1cb31db",
+    "remote": "/tmp/scriptorium-wave0-baseline-20261020/small/origin.git",
+    "syntheticOnly": true
+  },
+  "node": "v24.21.0",
+  "startedAt": "2026-10-20T17:26:30.236Z",
+  "samples": [
+    {
+      "name": "checkpoint",
+      "ms": 788.146345,
+      "cpuUs": {
+        "user": 227756,
+        "system": 99707
+      },
+      "rssBytes": 82477056,
+      "maxRssKiB": 80544,
+      "io": {
+        "rchar": 1230513,
+        "wchar": 74820,
+        "syscr": 4026,
+        "syscw": 1110,
+        "read_bytes": 0,
+        "write_bytes": 266240,
+        "cancelled_write_bytes": 24576
+      },
+      "counters": {
+        "gitProcesses": 104,
+        "gitCommandLogDropped": 0
+      },
+      "gitProcessCount": 104,
+      "gitCommandLog": {
+        "captured": 104,
+        "dropped": 0,
+        "complete": true,
+        "byCommand": {
+          "--literal-pathspecs": 104
+        }
+      }
+    },
+    {
+      "name": "checkpoint",
+      "ms": 843.252853,
+      "cpuUs": {
+        "user": 212908,
+        "system": 130633
+      },
+      "rssBytes": 91127808,
+      "maxRssKiB": 88992,
+      "io": {
+        "rchar": 1230498,
+        "wchar": 74798,
+        "syscr": 4024,
+        "syscw": 1108,
+        "read_bytes": 0,
+        "write_bytes": 266240,
+        "cancelled_write_bytes": 24576
+      },
+      "counters": {
+        "gitProcesses": 104,
+        "gitCommandLogDropped": 0
+      },
+      "gitProcessCount": 104,
+      "gitCommandLog": {
+        "captured": 104,
+        "dropped": 0,
+        "complete": true,
+        "byCommand": {
+          "--literal-pathspecs": 104
+        }
+      }
+    },
+    {
+      "name": "checkpoint",
+      "ms": 1029.0760750000004,
+      "cpuUs": {
+        "user": 230357,
+        "system": 146273
+      },
+      "rssBytes": 91914240,
+      "maxRssKiB": 89760,
+      "io": {
+        "rchar": 1230499,
+        "wchar": 74804,
+        "syscr": 4024,
+        "syscw": 1108,
+        "read_bytes": 0,
+        "write_bytes": 266240,
+        "cancelled_write_bytes": 24576
+      },
+      "counters": {
+        "gitProcesses": 104,
+        "gitCommandLogDropped": 0
+      },
+      "gitProcessCount": 104,
+      "gitCommandLog": {
+        "captured": 104,
+        "dropped": 0,
+        "complete": true,
+        "byCommand": {
+          "--literal-pathspecs": 104
+        }
+      }
+    },
+    {
+      "name": "checkpoint",
+      "ms": 1146.60444,
+      "cpuUs": {
+        "user": 257278,
+        "system": 162242
+      },
+      "rssBytes": 98205696,
+      "maxRssKiB": 95904,
+      "io": {
+        "rchar": 1230492,
+        "wchar": 74788,
+        "syscr": 4023,
+        "syscw": 1107,
+        "read_bytes": 0,
+        "write_bytes": 266240,
+        "cancelled_write_bytes": 24576
+      },
+      "counters": {
+        "gitProcesses": 104,
+        "gitCommandLogDropped": 0
+      },
+      "gitProcessCount": 104,
+      "gitCommandLog": {
+        "captured": 104,
+        "dropped": 0,
+        "complete": true,
+        "byCommand": {
+          "--literal-pathspecs": 104
+        }
+      }
+    },
+    {
+      "name": "checkpoint",
+      "ms": 961.0077099999999,
+      "cpuUs": {
+        "user": 235230,
+        "system": 136152
+      },
+      "rssBytes": 108167168,
+      "maxRssKiB": 105632,
+      "io": {
+        "rchar": 1230509,
+        "wchar": 74807,
+        "syscr": 4025,
+        "syscw": 1109,
+        "read_bytes": 0,
+        "write_bytes": 266240,
+        "cancelled_write_bytes": 24576
+      },
+      "counters": {
+        "gitProcesses": 104,
+        "gitCommandLogDropped": 0
+      },
+      "gitProcessCount": 104,
+      "gitCommandLog": {
+        "captured": 104,
+        "dropped": 0,
+        "complete": true,
+        "byCommand": {
+          "--literal-pathspecs": 104
+        }
+      }
+    }
+  ],
+  "summaries": {
+    "checkpoint": {
+      "n": 5,
+      "p50": 961.0077099999999,
+      "p95": 1146.60444,
+      "p99": 1146.60444,
+      "max": 1146.60444
+    }
+  },
+  "metricSummaries": {
+    "checkpoint": {
+      "gitProcesses": {
+        "n": 5,
+        "p50": 104,
+        "p95": 104,
+        "p99": 104,
+        "max": 104
+      },
+      "nodeCpuUserUs": {
+        "n": 5,
+        "p50": 230357,
+        "p95": 257278,
+        "p99": 257278,
+        "max": 257278
+      },
+      "nodeCpuSystemUs": {
+        "n": 5,
+        "p50": 136152,
+        "p95": 162242,
+        "p99": 162242,
+        "max": 162242
+      },
+      "rssBytes": {
+        "n": 5,
+        "p50": 91914240,
+        "p95": 108167168,
+        "p99": 108167168,
+        "max": 108167168
+      },
+      "maxRssKiB": {
+        "n": 5,
+        "p50": 89760,
+        "p95": 105632,
+        "p99": 105632,
+        "max": 105632
+      }
+    }
+  },
+  "preparations": [],
+  "integrityChecks": [
+    {
+      "repeat": 1,
+      "receiptOperationId": "c64w_checkpoint_10_1",
+      "receiptRevisionCount": 10,
+      "pendingCheckpointCount": 1,
+      "localWorkspaceDirty": true
+    },
+    {
+      "repeat": 2,
+      "receiptOperationId": "c64w_checkpoint_10_2",
+      "receiptRevisionCount": 10,
+      "pendingCheckpointCount": 1,
+      "localWorkspaceDirty": true
+    },
+    {
+      "repeat": 3,
+      "receiptOperationId": "c64w_checkpoint_10_3",
+      "receiptRevisionCount": 10,
+      "pendingCheckpointCount": 1,
+      "localWorkspaceDirty": true
+    },
+    {
+      "repeat": 4,
+      "receiptOperationId": "c64w_checkpoint_10_4",
+      "receiptRevisionCount": 10,
+      "pendingCheckpointCount": 1,
+      "localWorkspaceDirty": true
+    },
+    {
+      "repeat": 5,
+      "receiptOperationId": "c64w_checkpoint_10_5",
+      "receiptRevisionCount": 10,
+      "pendingCheckpointCount": 1,
+      "localWorkspaceDirty": true
+    }
+  ],
+  "progress": {
+    "phase": "prepare",
+    "completed": 5,
+    "total": 5
+  },
+  "finishedAt": "2026-10-20T17:26:38.964Z"
+}

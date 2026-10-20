@@ -33,14 +33,14 @@ manifest, commit, runtime commit, source match and compiled hashes still pass
 the same guards.
 
 After C59 releases the first-paint metrics lane and an explicit grant is given,
-run the writer cohort alongside browser acceptance on CPUs 8–11. Use a fresh
-output path outside the repository, fixture and runtime:
+run the writer cohort alongside the other assigned lanes on CPUs 4–7. Use a
+fresh output path outside the repository, fixture and runtime:
 
 ```sh
 CORE64_WRITER_RUN_MODE=contended \
-CORE64_WRITER_REQUESTED_CPUSET=8-11 \
-taskset -c 8-11 node scripts/performance/core64-writer.mjs \
-  /tmp/scriptorium-core64-writer-affinity8-11
+CORE64_WRITER_REQUESTED_CPUSET=4-7 \
+taskset -c 4-7 node scripts/performance/core64-writer.mjs \
+  /data/scriptorium-core64-writer-affinity4-7
 ```
 
 `run.json` records source and runtime commits/hashes, fixture manifest hash and
@@ -51,8 +51,8 @@ come from existing Node-only `execFile` / `spawn` instrumentation and are exact
 for Core-issued child processes; the command histogram is incomplete after the
 helper's 1,000-entry log fills. CPU is Node-only. `rssBytes` is the sample
 endpoint and `maxRssKiB` is process-lifetime high-water RSS, including setup.
-The runner verifies the requested and effective CPU set is `8-11`; each worker
-records its inherited effective set. Since this lane overlaps browser
+The runner verifies and records the requested and effective CPU set is `4-7`;
+its Node workers and their Git subprocesses inherit that affinity. Since this lane overlaps other assigned
 acceptance, its walltimes are contended observations and cannot justify
 adopting an optimization. Only later isolated, selective matched before/after
 timing may support adoption, and only if correctness evidence supports a
@@ -83,17 +83,60 @@ launch overhead. This bounds the full sequence; it does not predict a result.
 The workload keeps the current public CAS, temporary-index checkpoint, receipt,
 freshness and fencing paths. It does not inject remote races or lost publish
 responses into timed samples; those remain correctness cases, not latency
-noise. There is no proposed production optimization before matched evidence
-identifies a material cost. If evidence supports batching, the candidate scope
-is limited to the existing temporary-index path; authority locks, receipts,
-unknown-outcome handling and fencing remain unchanged. Any implementation
-would require focused safety checks and the full repository gates.
+noise. The overlapped cohort cannot justify adoption. Any implementation
+candidate stays limited to the existing temporary-index path; authority locks,
+receipts, unknown-outcome handling and fencing remain unchanged. Any
+implementation requires focused safety checks and the full repository gates.
 
 ## Evidence state
 
+The affinity-pinned cohort ran with `CORE64_WRITER_RUN_MODE=contended` and
+effective CPU set 4–7 while the coordinator's other lanes were active. These
+walltimes are cohort observations, not isolated performance evidence, and are
+not used to adopt an optimization. The top-level record and per-case raw data
+are in [`run.json`](results/core64-writer/run.json) and the adjacent case JSON.
+Each completed cohort passed its receipt or publish-acknowledgement assertions.
+The runner verified that the immutable fixture and frozen runtime were
+unchanged (`fixtureUnchanged` and `runtimeUnchanged` are true).
+
+| Candidate | Scale | Samples | p50 / p95 wall time | p50 / p95 Git processes | Result |
+| --- | ---: | ---: | ---: | ---: | --- |
+| C23 checkpoint | 1 file | 5 | 551 / 709 ms | 50 / 50 | complete |
+| C23 checkpoint | 10 files | 5 | 961 / 1,147 ms | 104 / 104 | complete |
+| C23 checkpoint | 100 files | 5 | 4,558 / 12,479 ms | 644 / 644 | complete |
+| C27 census | 1 pending operation | 3 | 154 / 176 ms | 16 / 27 | complete |
+| C27 census | 100 operations | 0 | — | — | `NOT_CHECKED`: setup timed out at 20/100 after 60 s |
+| C27 census | 1,000 operations | 0 | — | — | `NOT_CHECKED`: setup timed out at 20/1,000 after 90 s |
+| C27 census | 10,000 operations | 0 | — | — | `NOT_CHECKED`: setup timed out at 0/10,000 after 120 s |
+| C28 publish | 1 operation | 5 | 1,666 / 5,223 ms | 98 / 98 | complete |
+| C28 publish | 10 operations | 5 | 4,618 / 5,354 ms | 584 / 584 | complete |
+| C28 publish | 100 operations | 0 | — | — | `NOT_CHECKED`: setup timed out at 20/100 after 180 s |
+
+For the completed C23 samples, the exact per-sample Git child-process counts
+were stable at `50`, `104`, and `644`, giving an exact slope of six additional
+Git forks per additional file (`44 + 6 × file count`). This is a useful
+checkpoint scaling signal, but stage-level counts were not retained: the
+instrumentation's command parser treated the leading `--literal-pathspecs`
+option as the command name, and the raw argv arrays were not persisted. The
+`gitProcessCount` totals remain exact; `gitCommandLog.byCommand` in this cohort
+must not be used as a command breakdown.
+
+The source under measurement has two per-file tree lookups for the new path
+(one for the operation precondition and one to preserve the existing file mode
+in `createCommit`), followed by per-file `hash-object` and `update-index`
+calls. The exact fork slope plus the source's one `update-index` subprocess per
+non-null write supports a focused isolated A/B candidate: batch contiguous
+upsert records with `update-index --index-info -z` against the existing
+temporary index, while keeping per-content hashing, file modes, validation,
+and commit creation unchanged. Flush pending upserts before each deletion (or
+fall back to the existing path for mixed writes); preserve NUL-safe paths,
+binary hashing, CAS, receipt, temporary-index, workspace, and single-writer
+semantics. No production change or performance claim is made from this
+contended cohort. A separate isolated matched C23 1/10/100 before/after run is
+required before adoption.
+
 The prepared status in
-[`results/core64-writer/PREPARED.md`](results/core64-writer/PREPARED.md) is not a
-measurement. Probe execution remains `NOT_CHECKED` until C59 releases the
-first-paint metrics lane and an explicit run grant arrives. Then run only the
-affinity-pinned cohort above and append the generated JSON plus a contention
-label here.
+[`results/core64-writer/PREPARED.md`](results/core64-writer/PREPARED.md) records
+the bounded run limits and remaining `NOT_CHECKED` scales. The script's
+command-name parser has been corrected for future runs; it cannot reconstruct
+the omitted argv from this archived cohort.

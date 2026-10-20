@@ -23,8 +23,8 @@ try {
   const status = await readFile('/proc/self/status', 'utf8');
   effectiveCpuSet = status.match(/^Cpus_allowed_list:\s*(.+)$/m)?.[1] ?? null;
 } catch {}
-if (executionMode === 'contended' && (requestedCpuSet !== '8-11' || effectiveCpuSet !== '8-11')) {
-  throw new Error(`Contended worker requires requested/effective CPU affinity 8-11; got ${requestedCpuSet}/${effectiveCpuSet}`);
+if (executionMode === 'contended' && (!requestedCpuSet || effectiveCpuSet !== requestedCpuSet)) {
+  throw new Error(`Contended worker requires matching requested/effective CPU affinity; got ${requestedCpuSet}/${effectiveCpuSet}`);
 }
 if (!fixturePathArg || !scratchRootArg || !outputArg || !['checkpoint', 'census', 'publish'].includes(kind) ||
     !Number.isSafeInteger(scale) || scale < 1 || !Number.isSafeInteger(repeats) || repeats < 1 ||
@@ -40,7 +40,7 @@ const report = {
   kind,
   scale,
   repeats,
-  execution: { mode: executionMode, requestedCpuSet, effectiveCpuSet },
+  executionContext: { mode: executionMode, requestedCpuSet, effectiveCpuSet },
   runtime: { entry: runtimeEntry, sourceCommit: runtimeCommit },
   fixture,
   node: process.version,
@@ -61,7 +61,11 @@ function counters() {
 function commandName(args) {
   if (!Array.isArray(args)) return '(unknown)';
   let index = 0;
-  while (args[index] === '-c') index += 2;
+  while (index < args.length) {
+    if (args[index] === '--literal-pathspecs') { index += 1; continue; }
+    if (args[index] === '-c') { index += 2; continue; }
+    break;
+  }
   return args[index] ?? '(unknown)';
 }
 

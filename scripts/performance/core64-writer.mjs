@@ -94,8 +94,8 @@ if (actualRuntimeIndexSha256 !== runtimeIndexSha256 || actualContractsIndexSha25
 const executionMode = process.env.CORE64_WRITER_RUN_MODE ?? 'unspecified';
 const requestedCpuSet = process.env.CORE64_WRITER_REQUESTED_CPUSET ?? null;
 const effectiveCpuSetAtStart = await effectiveCpuSet();
-if (executionMode === 'contended' && (requestedCpuSet !== '8-11' || effectiveCpuSetAtStart !== '8-11')) {
-  throw new Error(`Contended writer cohort requires requested/effective CPU affinity 8-11; got ${requestedCpuSet}/${effectiveCpuSetAtStart}`);
+if (executionMode === 'contended' && (!requestedCpuSet || effectiveCpuSetAtStart !== requestedCpuSet)) {
+  throw new Error(`Contended writer cohort requires matching requested/effective CPU affinity; got ${requestedCpuSet}/${effectiveCpuSetAtStart}`);
 }
 
 // A fresh output root keeps all benchmark clones and Core state away from the
@@ -174,14 +174,15 @@ run.runtimeCoreDistSha256After = await treeDigest(join(runtimeRoot, 'packages/co
 run.runtimeContractsDistSha256After = await treeDigest(join(runtimeRoot, 'packages/contracts/dist'));
 run.runtimeCheckoutCleanAfter = runtimeCommand('status', '--porcelain') === '';
 run.effectiveCpuSetAfter = await effectiveCpuSet();
+run.affinityUnchanged = executionMode !== 'contended' || run.effectiveCpuSetAfter === requestedCpuSet;
 run.fixtureUnchanged = run.fixtureManifestSha256After === fixtureManifestSha256 &&
   run.fixtureRemoteHeadAfter === fixtureRemoteHead;
 run.runtimeUnchanged = run.runtimeCheckoutCleanAfter &&
   run.runtimeCoreDistSha256After === runtimeCoreDistSha256 &&
   run.runtimeContractsDistSha256After === runtimeContractsDistSha256;
-if (!run.fixtureUnchanged || !run.runtimeUnchanged) {
+if (!run.fixtureUnchanged || !run.runtimeUnchanged || !run.affinityUnchanged) {
   run.status = 'failed';
-  run.error = 'Immutable G0 fixture or accepted frozen runtime changed during the probe';
+  run.error = 'Immutable G0 fixture, accepted frozen runtime or requested CPU affinity changed during the probe';
 }
 run.finishedAt = new Date().toISOString();
 await save(runPath, run);
