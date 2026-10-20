@@ -71,7 +71,14 @@ const runtimeManifestBytes = await readFile(runtimeManifestPath).catch(() => {
   throw new Error(`Shared runtime manifest is unavailable: ${runtimeManifestPath}`);
 });
 const runtimeManifest = JSON.parse(runtimeManifestBytes.toString('utf8'));
-const requiredArtifactRoots = ['packages/core/dist', 'packages/api/dist', 'app/dist', 'profiles/core/generated'];
+const requiredArtifactRoots = [
+  'packages/core/dist',
+  'packages/api/dist',
+  'app/dist',
+  'profiles/core/generated',
+  'packages/contracts/dist',
+  'packages/module-runtime/dist',
+];
 const expectedComparedPaths = ['app', 'packages', 'modules', 'profiles', 'Dockerfile', 'package.json', 'pnpm-lock.yaml'];
 const expectedProductionTrees = {
   'app/src': '6114d95c43649dec93887034cc35a5d3d3b09e96',
@@ -92,7 +99,11 @@ if (runtimeManifest.schemaVersion !== 1
   || !Array.isArray(runtimeManifest.dirtyProductionPaths)
   || runtimeManifest.dirtyProductionPaths.length !== 0
   || !Array.isArray(runtimeManifest.artifactRoots)
-  || JSON.stringify(runtimeManifest.artifactRoots) !== JSON.stringify(requiredArtifactRoots)) {
+  || runtimeManifest.artifactRoots.length === 0
+  || runtimeManifest.artifactRoots.some((root) => typeof root !== 'string' || root.startsWith('/') || root.includes('\\')
+    || root.split('/').some((segment) => segment === '' || segment === '.' || segment === '..'))
+  || new Set(runtimeManifest.artifactRoots).size !== runtimeManifest.artifactRoots.length
+  || requiredArtifactRoots.some((root) => !runtimeManifest.artifactRoots.includes(root))) {
   throw new Error(`Shared runtime manifest does not identify the expected clean Core build at ${runtimeSource}.`);
 }
 if (!Array.isArray(runtimeManifest.files) || runtimeManifest.files.length === 0) {
@@ -100,10 +111,12 @@ if (!Array.isArray(runtimeManifest.files) || runtimeManifest.files.length === 0)
 }
 const runtimeRootReal = await realpath(runtimeRoot);
 const verifiedArtifactPaths = new Set();
+const verifiedArtifactRoots = new Set();
 let verifiedArtifactBytes = 0;
 for (const artifact of runtimeManifest.files) {
   if (typeof artifact.path !== 'string' || artifact.path.includes('\\') || artifact.path.startsWith('/')
-    || !requiredArtifactRoots.some((root) => artifact.path.startsWith(`${root}/`))
+    || artifact.path.split('/').some((segment) => segment === '' || segment === '.' || segment === '..')
+    || !runtimeManifest.artifactRoots.some((root) => artifact.path.startsWith(`${root}/`))
     || verifiedArtifactPaths.has(artifact.path)
     || !Number.isSafeInteger(artifact.bytes) || artifact.bytes < 0
     || !/^[a-f0-9]{64}$/.test(artifact.sha256)) {
@@ -125,11 +138,13 @@ for (const artifact of runtimeManifest.files) {
     throw new Error(`Shared runtime artifact failed size or SHA-256 verification: ${artifact.path}`);
   }
   verifiedArtifactPaths.add(artifact.path);
+  const artifactRoot = runtimeManifest.artifactRoots.find((root) => artifact.path.startsWith(`${root}/`));
+  verifiedArtifactRoots.add(artifactRoot);
   verifiedArtifactBytes += artifact.bytes;
 }
 if (runtimeManifest.totals?.fileCount !== runtimeManifest.files.length
   || runtimeManifest.totals?.bytes !== verifiedArtifactBytes
-  || requiredArtifactRoots.some((root) => ![...verifiedArtifactPaths].some((path) => path.startsWith(`${root}/`)))) {
+  || runtimeManifest.artifactRoots.some((root) => !verifiedArtifactRoots.has(root))) {
   throw new Error('Shared runtime manifest totals do not match its verified artifact inventory.');
 }
 const scriptHash = createHash('sha256').update(await readFile(new URL(import.meta.url))).digest('hex');

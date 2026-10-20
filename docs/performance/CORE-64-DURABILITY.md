@@ -21,7 +21,7 @@ node scripts/performance/core64-durability-probe.mjs \
   docs/performance/results/core64-durability/probe.json 8
 ```
 
-By default, the runner reads `docs/performance/results/core64-resize/runtime-manifest.json` from the runtime root. `SCRIPTORIUM_C64_RUNTIME_MANIFEST` can override that path. Before starting Chromium, it verifies the manifest source and production identity, checks each listed artifact's size and SHA-256 against the files in the runtime root, and records the manifest and its hash in the output.
+By default, the runner reads `docs/performance/results/core64-resize/runtime-manifest.json` from the runtime root. `SCRIPTORIUM_C64_RUNTIME_MANIFEST` can override that path. Before starting Chromium, it verifies the manifest source and production identity, requires the Core, API, app, generated profile, contracts, and module-runtime build roots, checks every listed artifact's size and SHA-256 against the files in the runtime root, and records the manifest and its hash in the output. It validates all roots listed by the manifest, so additional workspace artifacts are covered too.
 
 Set `SCRIPTORIUM_E2E_CHROMIUM` to the same Chromium 155 executable recorded in the G0 environment when running the probe and focused E2E cases. Keep all generated scratch data under `/data`; only the compact report and grounded decision belong in this branch.
 
