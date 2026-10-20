@@ -37,6 +37,12 @@ for (const protectedPath of [repoRoot, fixtureRoot, runtimeRoot]) {
 const command = (...args) => datasetGit(repoRoot, ...args);
 const runtimeCommand = (...args) => datasetGit(runtimeRoot, ...args);
 const hashFile = async (file) => createHash('sha256').update(await readFile(file)).digest('hex');
+async function effectiveCpuSet() {
+  try {
+    const status = await readFile('/proc/self/status', 'utf8');
+    return status.match(/^Cpus_allowed_list:\s*(.+)$/m)?.[1] ?? null;
+  } catch { return null; }
+}
 
 async function treeDigest(directory) {
   const hash = createHash('sha256');
@@ -85,6 +91,12 @@ const actualContractsIndexSha256 = await hashFile(join(runtimeRoot, 'packages/co
 if (actualRuntimeIndexSha256 !== runtimeIndexSha256 || actualContractsIndexSha256 !== contractsIndexSha256) {
   throw new Error('Accepted compiled Core or contracts entry does not match its pinned SHA-256');
 }
+const executionMode = process.env.CORE64_WRITER_RUN_MODE ?? 'unspecified';
+const requestedCpuSet = process.env.CORE64_WRITER_REQUESTED_CPUSET ?? null;
+const effectiveCpuSetAtStart = await effectiveCpuSet();
+if (executionMode === 'contended' && (requestedCpuSet !== '8-11' || effectiveCpuSetAtStart !== '8-11')) {
+  throw new Error(`Contended writer cohort requires requested/effective CPU affinity 8-11; got ${requestedCpuSet}/${effectiveCpuSetAtStart}`);
+}
 
 // A fresh output root keeps all benchmark clones and Core state away from the
 // immutable G0 fixture and from any other probe result.
@@ -130,6 +142,7 @@ const run = {
   totalMemoryBytes: os.totalmem(),
   freeMemoryBytesAtStart: os.freemem(),
   loadAverageAtStart: os.loadavg(),
+  execution: { mode: executionMode, requestedCpuSet, effectiveCpuSet: effectiveCpuSetAtStart },
   runtime,
   fixture: { ...fixture, manifestSha256: fixtureManifestSha256, remoteHead: fixtureRemoteHead },
   scratchRoot,
@@ -160,6 +173,7 @@ run.fixtureRemoteHeadAfter = datasetGit(repoRoot, '--git-dir', fixtureRemote, 'r
 run.runtimeCoreDistSha256After = await treeDigest(join(runtimeRoot, 'packages/core/dist'));
 run.runtimeContractsDistSha256After = await treeDigest(join(runtimeRoot, 'packages/contracts/dist'));
 run.runtimeCheckoutCleanAfter = runtimeCommand('status', '--porcelain') === '';
+run.effectiveCpuSetAfter = await effectiveCpuSet();
 run.fixtureUnchanged = run.fixtureManifestSha256After === fixtureManifestSha256 &&
   run.fixtureRemoteHeadAfter === fixtureRemoteHead;
 run.runtimeUnchanged = run.runtimeCheckoutCleanAfter &&

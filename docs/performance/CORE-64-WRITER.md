@@ -32,10 +32,15 @@ and runtime paths can be changed with
 manifest, commit, runtime commit, source match and compiled hashes still pass
 the same guards.
 
-Run from a fresh output path outside the repository, fixture and runtime:
+After C59 releases the first-paint metrics lane and an explicit grant is given,
+run the writer cohort alongside browser acceptance on CPUs 8–11. Use a fresh
+output path outside the repository, fixture and runtime:
 
 ```sh
-node scripts/performance/core64-writer.mjs /tmp/scriptorium-core64-writer-run
+CORE64_WRITER_RUN_MODE=contended \
+CORE64_WRITER_REQUESTED_CPUSET=8-11 \
+taskset -c 8-11 node scripts/performance/core64-writer.mjs \
+  /tmp/scriptorium-core64-writer-affinity8-11
 ```
 
 `run.json` records source and runtime commits/hashes, fixture manifest hash and
@@ -46,6 +51,12 @@ come from existing Node-only `execFile` / `spawn` instrumentation and are exact
 for Core-issued child processes; the command histogram is incomplete after the
 helper's 1,000-entry log fills. CPU is Node-only. `rssBytes` is the sample
 endpoint and `maxRssKiB` is process-lifetime high-water RSS, including setup.
+The runner verifies the requested and effective CPU set is `8-11`; each worker
+records its inherited effective set. Since this lane overlaps browser
+acceptance, its walltimes are contended observations and cannot justify
+adopting an optimization. Only later isolated, selective matched before/after
+timing may support adoption, and only if correctness evidence supports a
+candidate.
 
 ## Cases
 
@@ -82,7 +93,7 @@ would require focused safety checks and the full repository gates.
 
 The prepared status in
 [`results/core64-writer/PREPARED.md`](results/core64-writer/PREPARED.md) is not a
-measurement. Probe execution remains `NOT_CHECKED` while the current G5
-verification and G3 environment batch use the heavy-run window. After that
-window clears, run only with the exclusive heavy-run lease and append the
-generated JSON plus an evidence summary here.
+measurement. Probe execution remains `NOT_CHECKED` until C59 releases the
+first-paint metrics lane and an explicit run grant arrives. Then run only the
+affinity-pinned cohort above and append the generated JSON plus a contention
+label here.

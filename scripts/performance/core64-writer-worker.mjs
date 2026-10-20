@@ -16,6 +16,16 @@ const output = resolve(outputArg ?? '');
 const scale = Number(scaleArg);
 const repeats = Number(repeatsArg);
 const runtimeEntry = resolve(runtimeEntryArg ?? '');
+const executionMode = process.env.CORE64_WRITER_RUN_MODE ?? 'unspecified';
+const requestedCpuSet = process.env.CORE64_WRITER_REQUESTED_CPUSET ?? null;
+let effectiveCpuSet = null;
+try {
+  const status = await readFile('/proc/self/status', 'utf8');
+  effectiveCpuSet = status.match(/^Cpus_allowed_list:\s*(.+)$/m)?.[1] ?? null;
+} catch {}
+if (executionMode === 'contended' && (requestedCpuSet !== '8-11' || effectiveCpuSet !== '8-11')) {
+  throw new Error(`Contended worker requires requested/effective CPU affinity 8-11; got ${requestedCpuSet}/${effectiveCpuSet}`);
+}
 if (!fixturePathArg || !scratchRootArg || !outputArg || !['checkpoint', 'census', 'publish'].includes(kind) ||
     !Number.isSafeInteger(scale) || scale < 1 || !Number.isSafeInteger(repeats) || repeats < 1 ||
     !runtimeEntryArg || !/^[a-f0-9]{40}$/.test(runtimeCommit ?? '')) {
@@ -30,6 +40,7 @@ const report = {
   kind,
   scale,
   repeats,
+  execution: { mode: executionMode, requestedCpuSet, effectiveCpuSet },
   runtime: { entry: runtimeEntry, sourceCommit: runtimeCommit },
   fixture,
   node: process.version,
