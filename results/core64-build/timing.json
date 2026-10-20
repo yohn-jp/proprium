@@ -1,0 +1,139 @@
+{
+  "schemaVersion": 1,
+  "candidateId": "C61",
+  "title": "Core root build graph matched timing",
+  "source": {
+    "baseline": {
+      "commit": "1a03807dec4990c7b44af551b4dcbd279c9498e4",
+      "worktree": "/data/scriptorium-core64-build-baseline",
+      "state": "detached; clean source tree"
+    },
+    "candidate": {
+      "commit": "184c4e7994a58855b0de1cf316cb27bd988b5ece",
+      "branch": "perf/c64-build",
+      "worktree": "/data/scriptorium-core64-build-candidate",
+      "state": "clean source tree before build outputs"
+    },
+    "lockSha256": "107821c3fdeb50571c891e7de500c0b477bc01206c1f4caa63d830fd8be7e768",
+    "candidateParent": "1a03807dec4990c7b44af551b4dcbd279c9498e4"
+  },
+  "environment": {
+    "hostClock": "UTC timestamps reported by the host shell",
+    "node": "v24.21.0",
+    "pnpm": "12.10.1",
+    "vite": "6.4.4",
+    "pnpmStoreUsed": "/data/.pnpm-store/v11",
+    "pnpmStoreNote": "pnpm warned that the home store cannot hardlink into /data and automatically used this /data store for both worktrees.",
+    "install": {
+      "command": "pnpm install --frozen-lockfile",
+      "baseline": {
+        "status": 0,
+        "elapsedSeconds": 2.472,
+        "reusedPackages": 348,
+        "downloadedPackages": 0,
+        "virtualStore": "real node_modules/.pnpm directory"
+      },
+      "candidate": {
+        "status": 0,
+        "elapsedSeconds": 0.447,
+        "reusedPackages": 348,
+        "downloadedPackages": 0,
+        "virtualStore": "real node_modules/.pnpm directory"
+      }
+    },
+    "affinity": {
+      "runner": "taskset -c 0-7",
+      "effectiveChildCpusAllowedList": "0-7",
+      "invokingShellCpusAllowedList": "0-15"
+    },
+    "sharedHostActivity": "Unknown; no exclusive whole-host isolation was asserted."
+  },
+  "timing": {
+    "environment": {
+      "SCRIPTORIUM_PROFILE": "core"
+    },
+    "command": "pnpm build",
+    "timedWrapper": "taskset -c 0-7 bash -c 'time -p env SCRIPTORIUM_PROFILE=core pnpm build > <run-log> 2>&1'",
+    "order": [
+      "baseline-clean",
+      "baseline-warm",
+      "candidate-clean",
+      "candidate-warm"
+    ],
+    "observationsPerState": 1,
+    "observationsAreBudgets": false,
+    "runs": [
+      {
+        "id": "baseline-clean",
+        "role": "baseline",
+        "state": "clean outputs/caches",
+        "startedUtc": "2026-10-20T18:07:34Z",
+        "seconds": 34.72,
+        "exitStatus": 0,
+        "commandUses": "unchanged baseline root build script",
+        "log": "logs/baseline-clean-build.log"
+      },
+      {
+        "id": "baseline-warm",
+        "role": "baseline",
+        "state": "immediate warm repeat; no cleanup",
+        "startedUtc": "2026-10-20T18:08:11Z",
+        "seconds": 29.64,
+        "exitStatus": 0,
+        "commandUses": "unchanged baseline root build script",
+        "log": "logs/baseline-warm-build.log"
+      },
+      {
+        "id": "candidate-clean",
+        "role": "candidate",
+        "state": "clean outputs/caches",
+        "startedUtc": "2026-10-20T18:08:44Z",
+        "seconds": 17.84,
+        "exitStatus": 0,
+        "commandUses": "new Core-aware root dispatcher",
+        "log": "logs/candidate-clean-build.log"
+      },
+      {
+        "id": "candidate-warm",
+        "role": "candidate",
+        "state": "immediate warm repeat; no cleanup",
+        "startedUtc": "2026-10-20T18:09:04Z",
+        "seconds": 17.13,
+        "exitStatus": 0,
+        "commandUses": "new Core-aware root dispatcher",
+        "log": "logs/candidate-warm-build.log"
+      }
+    ],
+    "observedDifferenceSeconds": {
+      "clean": 16.88,
+      "warm": 12.51
+    },
+    "observedReductionPercent": {
+      "clean": 48.6,
+      "warm": 42.2
+    },
+    "cleanStatePolicy": "Each worktree was a fresh separately installed checkout with no dist output directories, core generated profile, Vite caches, or TypeScript build-info files before its first timed build. Warm is the immediate second run in the same worktree without cleanup."
+  },
+  "outputClosureManifest": "closure-manifest.json",
+  "noOptionalCore": {
+    "coreProfile": "profiles/core.json has modules: []",
+    "candidateOptionalModuleDistDirectories": 0,
+    "optionalModulePackageSpecifierMatchesInGeneratedProfileCoreApiAppOutputs": 0,
+    "candidateBuildLogBuiltPackages": [
+      "@scriptorium/contracts",
+      "@scriptorium/module-runtime",
+      "@scriptorium/core",
+      "@scriptorium/app",
+      "@scriptorium/api"
+    ]
+  },
+  "validationStatusAtTiming": {
+    "focusedRootGraphTest": "Previously passed 2/2 on the unchanged implementation inputs; not rerun before measurement by instruction.",
+    "typecheck": "pending",
+    "test": "pending",
+    "canonicalCoreBuild": "timed runs above; separate canonical validation pending",
+    "auditCore": "pending",
+    "fullBuildCompatibility": "pending"
+  },
+  "note": "An initial command-label probe tried build:workspace on the baseline, where that alias does not exist; it exited before running a build and is not a timing observation. The baseline timing uses its pre-change `pnpm build` root script. Candidate build:workspace is byte-for-byte equal to baseline build and is preserved for Full compatibility."
+}

@@ -1,0 +1,785 @@
+{
+  "schemaVersion": 1,
+  "algorithm": "For each output group, sort paths with Node localeCompare; SHA-256(path + NUL + raw file bytes + NUL) for each path in order. Per-file SHA-256 and byte count are also listed. Symlink content is its link target.",
+  "worktrees": {
+    "baseline": {
+      "root": "/data/scriptorium-core64-build-baseline",
+      "groups": {
+        "core": {
+          "relativeOutput": "packages/core/dist",
+          "aggregateSha256": "03f9996247a548ca34404cff4b96ca1e2e0aa0219f79ea1dd822d00b94ba23da",
+          "fileCount": 6,
+          "totalBytes": 554476,
+          "files": [
+            {
+              "path": "hosted-git-credentials.d.ts",
+              "bytes": 1366,
+              "sha256": "a95da5c8a7d42c129b125a442f12c7f205d50e4a4861847bbb2d178dfc021ed2",
+              "type": "file"
+            },
+            {
+              "path": "hosted-git-credentials.js",
+              "bytes": 61,
+              "sha256": "80a2972d482d37f44feaadeb636fb64fc825c55689fe35380419cc60e0e55f6a",
+              "type": "file"
+            },
+            {
+              "path": "hosted-git-credentials.js.map",
+              "bytes": 136,
+              "sha256": "b4fdc165e3b425a98feb8bdcd2a7292a6a6dcbd38022d6dec93c831bf20c40dd",
+              "type": "file"
+            },
+            {
+              "path": "index.d.ts",
+              "bytes": 14614,
+              "sha256": "eafafa0354a2a0731c345e62255336db8f4c1d118771a2b0742265e2e603c7d8",
+              "type": "file"
+            },
+            {
+              "path": "index.js",
+              "bytes": 280541,
+              "sha256": "a7b83895e2c239d85a3f4d973cf7458e64cc7415c418a4844ff33f700a52d4a3",
+              "type": "file"
+            },
+            {
+              "path": "index.js.map",
+              "bytes": 257758,
+              "sha256": "27e53ba2ed250afc40e388c2ab954154230985a62dbe350e936a22b7a06b0b13",
+              "type": "file"
+            }
+          ]
+        },
+        "api": {
+          "relativeOutput": "packages/api/dist",
+          "aggregateSha256": "d2957cf29d4081971f68ad42f04bce24d394e540bb9b125786d32969e9a142ce",
+          "fileCount": 30,
+          "totalBytes": 927294,
+          "files": [
+            {
+              "path": "historical-store.d.ts",
+              "bytes": 774,
+              "sha256": "2fb8165e400b63803ecf46ff2751a620fd6ab716371efa4a435a0dea065a5ed5",
+              "type": "file"
+            },
+            {
+              "path": "historical-store.js",
+              "bytes": 16976,
+              "sha256": "47c8f8ddb0407e2a270ac58c4b79f09a47cf65bfc0892d7de00c37840e45edf9",
+              "type": "file"
+            },
+            {
+              "path": "historical-store.js.map",
+              "bytes": 16484,
+              "sha256": "529b27f8e27bdf6343ece2c0a7ddea9b1d5a999820f30654fec05f7cf7a1e269",
+              "type": "file"
+            },
+            {
+              "path": "hosted-policy.d.ts",
+              "bytes": 2647,
+              "sha256": "f79392650ffcbb1c221ba9376af89b298a8c52aecf899ef7f85289e96fed53f2",
+              "type": "file"
+            },
+            {
+              "path": "hosted-policy.js",
+              "bytes": 24261,
+              "sha256": "40fbf4b90d72a5a1e2457394187b8b9a8fe9d325a426b57e28cd11eeabc564f4",
+              "type": "file"
+            },
+            {
+              "path": "hosted-policy.js.map",
+              "bytes": 23127,
+              "sha256": "3ca74c02eb962ec363ed2fd071e2eb50117a591c43937820e1ec1aceaf4e17a6",
+              "type": "file"
+            },
+            {
+              "path": "hosted-policy.test.d.ts",
+              "bytes": 11,
+              "sha256": "8e609bb71c20b858c77f0e9f90bb1319db8477b13f9f965f1a1e18524bf50881",
+              "type": "file"
+            },
+            {
+              "path": "hosted-policy.test.js",
+              "bytes": 14866,
+              "sha256": "9fd3172735d7aac2d6fcf27f812af31002b864a3d48708753132bf88aa966ab4",
+              "type": "file"
+            },
+            {
+              "path": "hosted-policy.test.js.map",
+              "bytes": 13844,
+              "sha256": "52f7b64ce5003fda93300e5748fc9cea931073cb29ea736146cb22f030c7b931",
+              "type": "file"
+            },
+            {
+              "path": "job-history-store.d.ts",
+              "bytes": 4327,
+              "sha256": "8e3d185b9be14405056d5b1f99bc40dc08fc0bbb97b32b50d945f02f77a75aaf",
+              "type": "file"
+            },
+            {
+              "path": "job-history-store.js",
+              "bytes": 46048,
+              "sha256": "4e3df6b339c1162cc51bdeb754530065b70e6fd907822b33887b7b5a32eb4951",
+              "type": "file"
+            },
+            {
+              "path": "job-history-store.js.map",
+              "bytes": 46990,
+              "sha256": "4cc02c2b16dd59fec342a42f82f85342f2ac20456edcefd81da1d1afab0547fc",
+              "type": "file"
+            },
+            {
+              "path": "platform-runtime.d.ts",
+              "bytes": 5240,
+              "sha256": "fce378360a6b22e9c57ac1cc84aa0695b2b9b709fe1efcb7b00de2571082a762",
+              "type": "file"
+            },
+            {
+              "path": "platform-runtime.js",
+              "bytes": 14556,
+              "sha256": "81f1a36dbf0130bff8ffcdc766a7a5eba203210c3094dd36865c998a45aeaae6",
+              "type": "file"
+            },
+            {
+              "path": "platform-runtime.js.map",
+              "bytes": 13709,
+              "sha256": "8335d321e2c4f1e5620a148d5dc5be12ac345152f63df72eb972edc479de9b0b",
+              "type": "file"
+            },
+            {
+              "path": "platform-runtime.test.d.ts",
+              "bytes": 11,
+              "sha256": "8e609bb71c20b858c77f0e9f90bb1319db8477b13f9f965f1a1e18524bf50881",
+              "type": "file"
+            },
+            {
+              "path": "platform-runtime.test.js",
+              "bytes": 10375,
+              "sha256": "6a770f3efc1f49968fe2d0518871daababb52776234dd8216397f2dd6d38d61e",
+              "type": "file"
+            },
+            {
+              "path": "platform-runtime.test.js.map",
+              "bytes": 8459,
+              "sha256": "595fe585ae11c840f8c9d0e22c80ae764e58db49f3b42e896c86141d3ba6bfee",
+              "type": "file"
+            },
+            {
+              "path": "recent-activity-store.d.ts",
+              "bytes": 2908,
+              "sha256": "e2470f41496b55b33d86ba725acaefc7c60c415f4c983d9226c47bcd0147cdcc",
+              "type": "file"
+            },
+            {
+              "path": "recent-activity-store.js",
+              "bytes": 28319,
+              "sha256": "3650f03883f7d33ac53e4d7039e9a1cb9258f1464b7413c2ec13d4ef3541e812",
+              "type": "file"
+            },
+            {
+              "path": "recent-activity-store.js.map",
+              "bytes": 26983,
+              "sha256": "06364024e23831a310f741b78cac6456211f7e233e9a9269674bbf76e4027536",
+              "type": "file"
+            },
+            {
+              "path": "recent-activity-store.test.d.ts",
+              "bytes": 11,
+              "sha256": "8e609bb71c20b858c77f0e9f90bb1319db8477b13f9f965f1a1e18524bf50881",
+              "type": "file"
+            },
+            {
+              "path": "recent-activity-store.test.js",
+              "bytes": 10258,
+              "sha256": "c7c1492f3bd552ad3917bb1cfbb7d11dbeaac3cb8e994c4a110b6389046c9c51",
+              "type": "file"
+            },
+            {
+              "path": "recent-activity-store.test.js.map",
+              "bytes": 10194,
+              "sha256": "0945b01c200d7d42ff5a9e0b46c3d42a580bd6e3415085ecdb08360299ed3738",
+              "type": "file"
+            },
+            {
+              "path": "server.d.ts",
+              "bytes": 2310,
+              "sha256": "85cbd164095dd0aa358c152145480e4fdd811b5eb60eb40613775c4cd703de66",
+              "type": "file"
+            },
+            {
+              "path": "server.js",
+              "bytes": 152507,
+              "sha256": "28ec0901676cf96beb28e20c0b86c211af5119f7bb125aee1f9fc88667de86c3",
+              "type": "file"
+            },
+            {
+              "path": "server.js.map",
+              "bytes": 133420,
+              "sha256": "fb0b97f6e0377cef3bc671dfe7d5da05530f5321424984f3580e51cafabdc662",
+              "type": "file"
+            },
+            {
+              "path": "server.test.d.ts",
+              "bytes": 79,
+              "sha256": "22f6ddc9c729f417b47b56b010f896d2645fe82e4a574caf00917f387a26cc9d",
+              "type": "file"
+            },
+            {
+              "path": "server.test.js",
+              "bytes": 150499,
+              "sha256": "023e892c8a724a6ba9a19d1e64684fd699882379127ca525c2d2fdc99ad2d11e",
+              "type": "file"
+            },
+            {
+              "path": "server.test.js.map",
+              "bytes": 147101,
+              "sha256": "f03133a305dde2cc233303ed323619671c7d0c507ec55d9a3b585158fbeba5db",
+              "type": "file"
+            }
+          ]
+        },
+        "app": {
+          "relativeOutput": "app/dist",
+          "aggregateSha256": "6e06b1e42d4c8e3ed1ab4e41f68bdc0c98a00888cdd9ee3e501d7725071481ed",
+          "fileCount": 19,
+          "totalBytes": 3314139,
+          "files": [
+            {
+              "path": ".vite/manifest.json",
+              "bytes": 185,
+              "sha256": "a47d20cd0037ad287e3c6e4105d03dcef0a48ab3c2da38f09ab407a1366b1476",
+              "type": "file"
+            },
+            {
+              "path": "desktop/.vite/manifest.json",
+              "bytes": 185,
+              "sha256": "a47d20cd0037ad287e3c6e4105d03dcef0a48ab3c2da38f09ab407a1366b1476",
+              "type": "file"
+            },
+            {
+              "path": "desktop/index.html",
+              "bytes": 705,
+              "sha256": "063d613d9ab9bfb7bcadbe04392a2280d8b9acabe293d9e1c4a001de61ad06f3",
+              "type": "file"
+            },
+            {
+              "path": "desktop/main.js",
+              "bytes": 753908,
+              "sha256": "8f0f744716a27a5ccb7532837b7f903c49c88da7b81e1cf13da25eee611ed9f8",
+              "type": "file"
+            },
+            {
+              "path": "desktop/styles.css",
+              "bytes": 48242,
+              "sha256": "c73d6c7031ea50a64212b1e5cd542655c61e4f57b53798a0a5e98137e7718609",
+              "type": "file"
+            },
+            {
+              "path": "index.html",
+              "bytes": 689,
+              "sha256": "0d9f9ca60c77de9c503b0412f4bd80e6b7101372eadef4ae7ad30ab2f624594b",
+              "type": "file"
+            },
+            {
+              "path": "main.js",
+              "bytes": 723752,
+              "sha256": "d0093787db251c05e55e4f33f8a5d6964f069ba793f197d577665b2d65868543",
+              "type": "file"
+            },
+            {
+              "path": "mobile/.vite/manifest.json",
+              "bytes": 3436,
+              "sha256": "2e989a5fc846b9bb235ee2d2a998a92d28e283e0004c5307d3caf28dec3ea7e4",
+              "type": "file"
+            },
+            {
+              "path": "mobile/assets/p-BVNUhOOf-CdGyl3tB.js",
+              "bytes": 665,
+              "sha256": "3add107b263e81083833354d8a562456bf464c7d611c09b472d122c8f5a4665a",
+              "type": "file"
+            },
+            {
+              "path": "mobile/assets/p-C1AxSUnp-CcQScZIO.js",
+              "bytes": 1614,
+              "sha256": "76343326b71d68b15cc3e7989446c9fb0b860c70d0faf51b9c63d002713a9ef4",
+              "type": "file"
+            },
+            {
+              "path": "mobile/assets/p-D7-vHX0A-BxQHh78o.js",
+              "bytes": 1235,
+              "sha256": "bd95b284a9fc9b7d513cfcc0fbe9979b99dfde4d622aa1308d4d448c8607f096",
+              "type": "file"
+            },
+            {
+              "path": "mobile/assets/p-DD92Fw3n-CWi5Vml-.js",
+              "bytes": 468,
+              "sha256": "e87b3e6c849cbc63125b9b3f8590366412167a64b53f17f9969cbdbbf46bf251",
+              "type": "file"
+            },
+            {
+              "path": "mobile/assets/p-Dvyv9SMk-DjdQepIz.js",
+              "bytes": 10376,
+              "sha256": "2463ced6970c01202ec845f410e3e2991995aa05db561d9e8fbcdeb517b19dc0",
+              "type": "file"
+            },
+            {
+              "path": "mobile/assets/p-Uk13YgEc-gw9zJIvW.js",
+              "bytes": 931,
+              "sha256": "d1b9694ce9c17c2540323c5a46ba6bff06bfc6e6614a95e8ea7fb803becca85a",
+              "type": "file"
+            },
+            {
+              "path": "mobile/assets/p-YNnH1_Hs-C59jlUpA.js",
+              "bytes": 4833,
+              "sha256": "39533eb750efdf3a2fbcae3c3a7c284c737fb678e10f1a6c63928d0ef3b9de00",
+              "type": "file"
+            },
+            {
+              "path": "mobile/index.html",
+              "bytes": 703,
+              "sha256": "3fc736fde7be1dd13accda8d29df807421195c19fedca12641b99298b4707c8d",
+              "type": "file"
+            },
+            {
+              "path": "mobile/main.js",
+              "bytes": 1668623,
+              "sha256": "5b8d4130c1b0def24b8950aedf574952c1bcf445e828881267a33fb61e197aeb",
+              "type": "file"
+            },
+            {
+              "path": "mobile/styles.css",
+              "bytes": 65359,
+              "sha256": "3f55040c2bce926d0fcbaa9d7ff5834fc3dd6fd965a36462c6815bb469155ee2",
+              "type": "file"
+            },
+            {
+              "path": "styles.css",
+              "bytes": 28230,
+              "sha256": "5e336d9b3c641023debd562bfad64b3b1776c028e623f0df3f5ca2941bba6d41",
+              "type": "file"
+            }
+          ]
+        },
+        "coreProfile": {
+          "relativeOutput": "profiles/core/generated",
+          "aggregateSha256": "00d6d4a9b87a4545bb7317c53c43a17d618ee9c75a00ef33072964bc5b718721",
+          "fileCount": 3,
+          "totalBytes": 438,
+          "files": [
+            {
+              "path": "browser.mjs",
+              "bytes": 87,
+              "sha256": "4c641f66ad0dc9c3ff79d0e3bdffa4fcb17bf315824b0a8772d9dd47137f8d1a",
+              "type": "file"
+            },
+            {
+              "path": "module-manifests.json",
+              "bytes": 41,
+              "sha256": "095c6bca10d019123a39bc22d0acdcbf1157ae3f073e7d5bee47ea9db04bab0d",
+              "type": "file"
+            },
+            {
+              "path": "server.mjs",
+              "bytes": 310,
+              "sha256": "3f47f1d316a4c26e04fa5af897491d353feb45c576ce0196237c61df5ecbd8c5",
+              "type": "file"
+            }
+          ]
+        }
+      }
+    },
+    "candidate": {
+      "root": "/data/scriptorium-core64-build-candidate",
+      "groups": {
+        "core": {
+          "relativeOutput": "packages/core/dist",
+          "aggregateSha256": "03f9996247a548ca34404cff4b96ca1e2e0aa0219f79ea1dd822d00b94ba23da",
+          "fileCount": 6,
+          "totalBytes": 554476,
+          "files": [
+            {
+              "path": "hosted-git-credentials.d.ts",
+              "bytes": 1366,
+              "sha256": "a95da5c8a7d42c129b125a442f12c7f205d50e4a4861847bbb2d178dfc021ed2",
+              "type": "file"
+            },
+            {
+              "path": "hosted-git-credentials.js",
+              "bytes": 61,
+              "sha256": "80a2972d482d37f44feaadeb636fb64fc825c55689fe35380419cc60e0e55f6a",
+              "type": "file"
+            },
+            {
+              "path": "hosted-git-credentials.js.map",
+              "bytes": 136,
+              "sha256": "b4fdc165e3b425a98feb8bdcd2a7292a6a6dcbd38022d6dec93c831bf20c40dd",
+              "type": "file"
+            },
+            {
+              "path": "index.d.ts",
+              "bytes": 14614,
+              "sha256": "eafafa0354a2a0731c345e62255336db8f4c1d118771a2b0742265e2e603c7d8",
+              "type": "file"
+            },
+            {
+              "path": "index.js",
+              "bytes": 280541,
+              "sha256": "a7b83895e2c239d85a3f4d973cf7458e64cc7415c418a4844ff33f700a52d4a3",
+              "type": "file"
+            },
+            {
+              "path": "index.js.map",
+              "bytes": 257758,
+              "sha256": "27e53ba2ed250afc40e388c2ab954154230985a62dbe350e936a22b7a06b0b13",
+              "type": "file"
+            }
+          ]
+        },
+        "api": {
+          "relativeOutput": "packages/api/dist",
+          "aggregateSha256": "d2957cf29d4081971f68ad42f04bce24d394e540bb9b125786d32969e9a142ce",
+          "fileCount": 30,
+          "totalBytes": 927294,
+          "files": [
+            {
+              "path": "historical-store.d.ts",
+              "bytes": 774,
+              "sha256": "2fb8165e400b63803ecf46ff2751a620fd6ab716371efa4a435a0dea065a5ed5",
+              "type": "file"
+            },
+            {
+              "path": "historical-store.js",
+              "bytes": 16976,
+              "sha256": "47c8f8ddb0407e2a270ac58c4b79f09a47cf65bfc0892d7de00c37840e45edf9",
+              "type": "file"
+            },
+            {
+              "path": "historical-store.js.map",
+              "bytes": 16484,
+              "sha256": "529b27f8e27bdf6343ece2c0a7ddea9b1d5a999820f30654fec05f7cf7a1e269",
+              "type": "file"
+            },
+            {
+              "path": "hosted-policy.d.ts",
+              "bytes": 2647,
+              "sha256": "f79392650ffcbb1c221ba9376af89b298a8c52aecf899ef7f85289e96fed53f2",
+              "type": "file"
+            },
+            {
+              "path": "hosted-policy.js",
+              "bytes": 24261,
+              "sha256": "40fbf4b90d72a5a1e2457394187b8b9a8fe9d325a426b57e28cd11eeabc564f4",
+              "type": "file"
+            },
+            {
+              "path": "hosted-policy.js.map",
+              "bytes": 23127,
+              "sha256": "3ca74c02eb962ec363ed2fd071e2eb50117a591c43937820e1ec1aceaf4e17a6",
+              "type": "file"
+            },
+            {
+              "path": "hosted-policy.test.d.ts",
+              "bytes": 11,
+              "sha256": "8e609bb71c20b858c77f0e9f90bb1319db8477b13f9f965f1a1e18524bf50881",
+              "type": "file"
+            },
+            {
+              "path": "hosted-policy.test.js",
+              "bytes": 14866,
+              "sha256": "9fd3172735d7aac2d6fcf27f812af31002b864a3d48708753132bf88aa966ab4",
+              "type": "file"
+            },
+            {
+              "path": "hosted-policy.test.js.map",
+              "bytes": 13844,
+              "sha256": "52f7b64ce5003fda93300e5748fc9cea931073cb29ea736146cb22f030c7b931",
+              "type": "file"
+            },
+            {
+              "path": "job-history-store.d.ts",
+              "bytes": 4327,
+              "sha256": "8e3d185b9be14405056d5b1f99bc40dc08fc0bbb97b32b50d945f02f77a75aaf",
+              "type": "file"
+            },
+            {
+              "path": "job-history-store.js",
+              "bytes": 46048,
+              "sha256": "4e3df6b339c1162cc51bdeb754530065b70e6fd907822b33887b7b5a32eb4951",
+              "type": "file"
+            },
+            {
+              "path": "job-history-store.js.map",
+              "bytes": 46990,
+              "sha256": "4cc02c2b16dd59fec342a42f82f85342f2ac20456edcefd81da1d1afab0547fc",
+              "type": "file"
+            },
+            {
+              "path": "platform-runtime.d.ts",
+              "bytes": 5240,
+              "sha256": "fce378360a6b22e9c57ac1cc84aa0695b2b9b709fe1efcb7b00de2571082a762",
+              "type": "file"
+            },
+            {
+              "path": "platform-runtime.js",
+              "bytes": 14556,
+              "sha256": "81f1a36dbf0130bff8ffcdc766a7a5eba203210c3094dd36865c998a45aeaae6",
+              "type": "file"
+            },
+            {
+              "path": "platform-runtime.js.map",
+              "bytes": 13709,
+              "sha256": "8335d321e2c4f1e5620a148d5dc5be12ac345152f63df72eb972edc479de9b0b",
+              "type": "file"
+            },
+            {
+              "path": "platform-runtime.test.d.ts",
+              "bytes": 11,
+              "sha256": "8e609bb71c20b858c77f0e9f90bb1319db8477b13f9f965f1a1e18524bf50881",
+              "type": "file"
+            },
+            {
+              "path": "platform-runtime.test.js",
+              "bytes": 10375,
+              "sha256": "6a770f3efc1f49968fe2d0518871daababb52776234dd8216397f2dd6d38d61e",
+              "type": "file"
+            },
+            {
+              "path": "platform-runtime.test.js.map",
+              "bytes": 8459,
+              "sha256": "595fe585ae11c840f8c9d0e22c80ae764e58db49f3b42e896c86141d3ba6bfee",
+              "type": "file"
+            },
+            {
+              "path": "recent-activity-store.d.ts",
+              "bytes": 2908,
+              "sha256": "e2470f41496b55b33d86ba725acaefc7c60c415f4c983d9226c47bcd0147cdcc",
+              "type": "file"
+            },
+            {
+              "path": "recent-activity-store.js",
+              "bytes": 28319,
+              "sha256": "3650f03883f7d33ac53e4d7039e9a1cb9258f1464b7413c2ec13d4ef3541e812",
+              "type": "file"
+            },
+            {
+              "path": "recent-activity-store.js.map",
+              "bytes": 26983,
+              "sha256": "06364024e23831a310f741b78cac6456211f7e233e9a9269674bbf76e4027536",
+              "type": "file"
+            },
+            {
+              "path": "recent-activity-store.test.d.ts",
+              "bytes": 11,
+              "sha256": "8e609bb71c20b858c77f0e9f90bb1319db8477b13f9f965f1a1e18524bf50881",
+              "type": "file"
+            },
+            {
+              "path": "recent-activity-store.test.js",
+              "bytes": 10258,
+              "sha256": "c7c1492f3bd552ad3917bb1cfbb7d11dbeaac3cb8e994c4a110b6389046c9c51",
+              "type": "file"
+            },
+            {
+              "path": "recent-activity-store.test.js.map",
+              "bytes": 10194,
+              "sha256": "0945b01c200d7d42ff5a9e0b46c3d42a580bd6e3415085ecdb08360299ed3738",
+              "type": "file"
+            },
+            {
+              "path": "server.d.ts",
+              "bytes": 2310,
+              "sha256": "85cbd164095dd0aa358c152145480e4fdd811b5eb60eb40613775c4cd703de66",
+              "type": "file"
+            },
+            {
+              "path": "server.js",
+              "bytes": 152507,
+              "sha256": "28ec0901676cf96beb28e20c0b86c211af5119f7bb125aee1f9fc88667de86c3",
+              "type": "file"
+            },
+            {
+              "path": "server.js.map",
+              "bytes": 133420,
+              "sha256": "fb0b97f6e0377cef3bc671dfe7d5da05530f5321424984f3580e51cafabdc662",
+              "type": "file"
+            },
+            {
+              "path": "server.test.d.ts",
+              "bytes": 79,
+              "sha256": "22f6ddc9c729f417b47b56b010f896d2645fe82e4a574caf00917f387a26cc9d",
+              "type": "file"
+            },
+            {
+              "path": "server.test.js",
+              "bytes": 150499,
+              "sha256": "023e892c8a724a6ba9a19d1e64684fd699882379127ca525c2d2fdc99ad2d11e",
+              "type": "file"
+            },
+            {
+              "path": "server.test.js.map",
+              "bytes": 147101,
+              "sha256": "f03133a305dde2cc233303ed323619671c7d0c507ec55d9a3b585158fbeba5db",
+              "type": "file"
+            }
+          ]
+        },
+        "app": {
+          "relativeOutput": "app/dist",
+          "aggregateSha256": "6e06b1e42d4c8e3ed1ab4e41f68bdc0c98a00888cdd9ee3e501d7725071481ed",
+          "fileCount": 19,
+          "totalBytes": 3314139,
+          "files": [
+            {
+              "path": ".vite/manifest.json",
+              "bytes": 185,
+              "sha256": "a47d20cd0037ad287e3c6e4105d03dcef0a48ab3c2da38f09ab407a1366b1476",
+              "type": "file"
+            },
+            {
+              "path": "desktop/.vite/manifest.json",
+              "bytes": 185,
+              "sha256": "a47d20cd0037ad287e3c6e4105d03dcef0a48ab3c2da38f09ab407a1366b1476",
+              "type": "file"
+            },
+            {
+              "path": "desktop/index.html",
+              "bytes": 705,
+              "sha256": "063d613d9ab9bfb7bcadbe04392a2280d8b9acabe293d9e1c4a001de61ad06f3",
+              "type": "file"
+            },
+            {
+              "path": "desktop/main.js",
+              "bytes": 753908,
+              "sha256": "8f0f744716a27a5ccb7532837b7f903c49c88da7b81e1cf13da25eee611ed9f8",
+              "type": "file"
+            },
+            {
+              "path": "desktop/styles.css",
+              "bytes": 48242,
+              "sha256": "c73d6c7031ea50a64212b1e5cd542655c61e4f57b53798a0a5e98137e7718609",
+              "type": "file"
+            },
+            {
+              "path": "index.html",
+              "bytes": 689,
+              "sha256": "0d9f9ca60c77de9c503b0412f4bd80e6b7101372eadef4ae7ad30ab2f624594b",
+              "type": "file"
+            },
+            {
+              "path": "main.js",
+              "bytes": 723752,
+              "sha256": "d0093787db251c05e55e4f33f8a5d6964f069ba793f197d577665b2d65868543",
+              "type": "file"
+            },
+            {
+              "path": "mobile/.vite/manifest.json",
+              "bytes": 3436,
+              "sha256": "2e989a5fc846b9bb235ee2d2a998a92d28e283e0004c5307d3caf28dec3ea7e4",
+              "type": "file"
+            },
+            {
+              "path": "mobile/assets/p-BVNUhOOf-CdGyl3tB.js",
+              "bytes": 665,
+              "sha256": "3add107b263e81083833354d8a562456bf464c7d611c09b472d122c8f5a4665a",
+              "type": "file"
+            },
+            {
+              "path": "mobile/assets/p-C1AxSUnp-CcQScZIO.js",
+              "bytes": 1614,
+              "sha256": "76343326b71d68b15cc3e7989446c9fb0b860c70d0faf51b9c63d002713a9ef4",
+              "type": "file"
+            },
+            {
+              "path": "mobile/assets/p-D7-vHX0A-BxQHh78o.js",
+              "bytes": 1235,
+              "sha256": "bd95b284a9fc9b7d513cfcc0fbe9979b99dfde4d622aa1308d4d448c8607f096",
+              "type": "file"
+            },
+            {
+              "path": "mobile/assets/p-DD92Fw3n-CWi5Vml-.js",
+              "bytes": 468,
+              "sha256": "e87b3e6c849cbc63125b9b3f8590366412167a64b53f17f9969cbdbbf46bf251",
+              "type": "file"
+            },
+            {
+              "path": "mobile/assets/p-Dvyv9SMk-DjdQepIz.js",
+              "bytes": 10376,
+              "sha256": "2463ced6970c01202ec845f410e3e2991995aa05db561d9e8fbcdeb517b19dc0",
+              "type": "file"
+            },
+            {
+              "path": "mobile/assets/p-Uk13YgEc-gw9zJIvW.js",
+              "bytes": 931,
+              "sha256": "d1b9694ce9c17c2540323c5a46ba6bff06bfc6e6614a95e8ea7fb803becca85a",
+              "type": "file"
+            },
+            {
+              "path": "mobile/assets/p-YNnH1_Hs-C59jlUpA.js",
+              "bytes": 4833,
+              "sha256": "39533eb750efdf3a2fbcae3c3a7c284c737fb678e10f1a6c63928d0ef3b9de00",
+              "type": "file"
+            },
+            {
+              "path": "mobile/index.html",
+              "bytes": 703,
+              "sha256": "3fc736fde7be1dd13accda8d29df807421195c19fedca12641b99298b4707c8d",
+              "type": "file"
+            },
+            {
+              "path": "mobile/main.js",
+              "bytes": 1668623,
+              "sha256": "5b8d4130c1b0def24b8950aedf574952c1bcf445e828881267a33fb61e197aeb",
+              "type": "file"
+            },
+            {
+              "path": "mobile/styles.css",
+              "bytes": 65359,
+              "sha256": "3f55040c2bce926d0fcbaa9d7ff5834fc3dd6fd965a36462c6815bb469155ee2",
+              "type": "file"
+            },
+            {
+              "path": "styles.css",
+              "bytes": 28230,
+              "sha256": "5e336d9b3c641023debd562bfad64b3b1776c028e623f0df3f5ca2941bba6d41",
+              "type": "file"
+            }
+          ]
+        },
+        "coreProfile": {
+          "relativeOutput": "profiles/core/generated",
+          "aggregateSha256": "00d6d4a9b87a4545bb7317c53c43a17d618ee9c75a00ef33072964bc5b718721",
+          "fileCount": 3,
+          "totalBytes": 438,
+          "files": [
+            {
+              "path": "browser.mjs",
+              "bytes": 87,
+              "sha256": "4c641f66ad0dc9c3ff79d0e3bdffa4fcb17bf315824b0a8772d9dd47137f8d1a",
+              "type": "file"
+            },
+            {
+              "path": "module-manifests.json",
+              "bytes": 41,
+              "sha256": "095c6bca10d019123a39bc22d0acdcbf1157ae3f073e7d5bee47ea9db04bab0d",
+              "type": "file"
+            },
+            {
+              "path": "server.mjs",
+              "bytes": 310,
+              "sha256": "3f47f1d316a4c26e04fa5af897491d353feb45c576ce0196237c61df5ecbd8c5",
+              "type": "file"
+            }
+          ]
+        }
+      }
+    }
+  },
+  "comparison": {
+    "allGroupsMatch": true,
+    "groups": {
+      "core": true,
+      "api": true,
+      "app": true,
+      "coreProfile": true
+    }
+  }
+}

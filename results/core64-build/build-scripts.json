@@ -1,0 +1,21 @@
+{
+  "baseline": {
+    "commit": "1a03807dec4990c7b44af551b4dcbd279c9498e4",
+    "scriptName": "build",
+    "command": "pnpm --filter @scriptorium/contracts build && pnpm --filter @scriptorium/module-runtime build && pnpm --filter @scriptorium/migration build && pnpm --filter @scriptorium/module-publishing build && pnpm --filter @scriptorium/module-mcp build && pnpm --filter @scriptorium/module-nlp build && pnpm --filter @scriptorium/module-diagnostics build && pnpm --filter @scriptorium/module-story build && pnpm --filter @scriptorium/module-semantic build && pnpm --filter @scriptorium/module-search build && pnpm --filter @scriptorium/module-speaker build && pnpm --filter @scriptorium/module-assistant build && pnpm --filter @scriptorium/core build && node scripts/profile-build.mjs --profile \"${SCRIPTORIUM_PROFILE:-core}\" && pnpm --filter @scriptorium/app build && pnpm --filter @scriptorium/api build",
+    "commandSha256": "fb75db2532cda5d7ca511d5fc71614e344801275e1fcdcf18b973f0390f5332b"
+  },
+  "candidate": {
+    "commit": "184c4e7994a58855b0de1cf316cb27bd988b5ece",
+    "scriptName": "build",
+    "command": "node scripts/root-build.mjs",
+    "commandSha256": "1ee129d8718c9ea38a79c23e1d8ec946fa1e1a515cb281bd72e668fd37a1be4a"
+  },
+  "candidatePreservedWorkspace": {
+    "scriptName": "build:workspace",
+    "command": "pnpm --filter @scriptorium/contracts build && pnpm --filter @scriptorium/module-runtime build && pnpm --filter @scriptorium/migration build && pnpm --filter @scriptorium/module-publishing build && pnpm --filter @scriptorium/module-mcp build && pnpm --filter @scriptorium/module-nlp build && pnpm --filter @scriptorium/module-diagnostics build && pnpm --filter @scriptorium/module-story build && pnpm --filter @scriptorium/module-semantic build && pnpm --filter @scriptorium/module-search build && pnpm --filter @scriptorium/module-speaker build && pnpm --filter @scriptorium/module-assistant build && pnpm --filter @scriptorium/core build && node scripts/profile-build.mjs --profile \"${SCRIPTORIUM_PROFILE:-core}\" && pnpm --filter @scriptorium/app build && pnpm --filter @scriptorium/api build",
+    "commandSha256": "fb75db2532cda5d7ca511d5fc71614e344801275e1fcdcf18b973f0390f5332b"
+  },
+  "candidateWorkspaceEqualsBaselineBuild": true,
+  "invocation": "SCRIPTORIUM_PROFILE=core pnpm build"
+}
