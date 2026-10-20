@@ -77,7 +77,7 @@ No user repository/manuscript is read; generated fixtures remain outside Git.
 - Per-operation Node wall time, CPU microseconds, current RSS, process-lifetime
   peak RSS and `/proc/self/io` are captured. CPU excludes child Git processes.
   Character I/O includes pipes/cache; kernel read/write bytes are storage
-  accounting. Diagnostic proc reads add overhead. Async readFile counts are not
+  accounting. Linux [proc I/O](https://man7.org/linux/man-pages/man5/proc_pid_io.5.html) also includes reaped child activity; this differs from the Node-only CPU/RSS fields. Diagnostic proc reads add overhead. Async readFile counts are not
   a syscall census. Process memory includes retained probes.
 - Core-issued execFile/spawn counts differ from all OS executions. Native Git
   traces include nested invocations and setup. In-memory command samples cap at
