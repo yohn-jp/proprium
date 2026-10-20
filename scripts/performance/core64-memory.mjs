@@ -11,10 +11,22 @@ import { performance } from 'node:perf_hooks';
 import { syncBuiltinESMExports } from 'node:module';
 
 const MiB = 1024 * 1024;
+const GiB = 1024 * MiB;
 const MAX_BUFFER = 32 * MiB;
 const SCRIPT = fileURLToPath(import.meta.url);
 const ACCEPTED_RUNTIME_REVISION = 'f633da0b3f133ad812953c284aab35a4956d2507';
 const ACCEPTED_CORE_MODULE_SHA256 = 'a7b83895e2c239d85a3f4d973cf7458e64cc7415c418a4844ff33f700a52d4a3';
+const WORKER_ADDRESS_SPACE_BYTES = 6 * GiB;
+const WORKER_V8_OLD_SPACE_MIB = 2048;
+const WORKER_V8_SEMI_SPACE_MIB = 64;
+const WORKER_CPU_SECONDS = 180;
+const WORKER_TIMEOUT_MS = 180_000;
+const CACHE_IDLE_MS = 35_000;
+const LARGE_REPOSITORIES = 9;
+const STRESS_REPOSITORIES = 2;
+const COHORT_TIMEOUT_MS = 45 * 60_000;
+const GIT_COMMAND_TIMEOUT_MS = 30_000;
+let cohortDeadlineMs = null;
 const GIT_ENV = {
   ...process.env,
   GIT_CONFIG_NOSYSTEM: '1',
@@ -33,12 +45,15 @@ for (const name of ['GIT_CONFIG', 'GIT_CONFIG_PARAMETERS', 'GIT_CONFIG_COUNT', '
 GIT_ENV.GIT_TERMINAL_PROMPT = '0';
 
 function git(cwd, args, input) {
+  const remainingMs = cohortDeadlineMs === null ? GIT_COMMAND_TIMEOUT_MS : cohortDeadlineMs - Date.now();
+  if (remainingMs <= 0) throw new Error('Memory probe cohort wall-time budget expired');
   const result = execFileSync('git', ['-c', 'gc.auto=0', '-c', 'maintenance.auto=false', ...args], {
     cwd,
     env: GIT_ENV,
     input,
     encoding: 'buffer',
     maxBuffer: 4 * MiB,
+    timeout: Math.min(GIT_COMMAND_TIMEOUT_MS, remainingMs),
     stdio: ['pipe', 'pipe', 'pipe'],
   });
   return result;
@@ -54,11 +69,6 @@ function gitTree(cwd, entries) {
 
 function treeEntry(mode, type, oid, name) {
   return Buffer.from(`${mode} ${type} ${oid}\t${name}\0`, 'utf8');
-}
-
-function safeCount(value, fallback) {
-  const parsed = Number(value);
-  return Number.isSafeInteger(parsed) && parsed > 0 ? parsed : fallback;
 }
 
 function deterministicBlob(size) {
@@ -186,8 +196,8 @@ async function prepareTreeFixtures(fixtureRoot) {
 
 async function prepareCacheRemotes(g0Root, fixtureRoot) {
   const settings = [
-    { size: 'large', expectedFiles: 10_000, repos: safeCount(process.env.C64_MEMORY_LARGE_REPOS, 9) },
-    { size: 'stress', expectedFiles: 100_000, repos: safeCount(process.env.C64_MEMORY_STRESS_REPOS, 2) },
+    { size: 'large', expectedFiles: 10_000, repos: LARGE_REPOSITORIES },
+    { size: 'stress', expectedFiles: 100_000, repos: STRESS_REPOSITORIES },
   ];
   const result = [];
   for (const setting of settings) {
@@ -213,13 +223,24 @@ async function prepareCacheRemotes(g0Root, fixtureRoot) {
 }
 
 async function spawnWorker(mode, args, output, timeoutMs) {
+  const remainingMs = cohortDeadlineMs === null ? timeoutMs : cohortDeadlineMs - Date.now();
+  if (remainingMs <= 0) throw new Error('Memory probe cohort wall-time budget expired before worker launch');
+  const boundedTimeoutMs = Math.min(timeoutMs, remainingMs);
   const workerEnv = { ...process.env, GIT_CONFIG_NOSYSTEM: '1', GIT_CONFIG_GLOBAL: '/dev/null' };
   delete workerEnv.SCRIPTORIUM_GITHUB_TOKEN;
+  delete workerEnv.NODE_OPTIONS;
   for (const name of ['GIT_CONFIG', 'GIT_CONFIG_PARAMETERS', 'GIT_CONFIG_COUNT', 'GIT_DIR', 'GIT_WORK_TREE', 'GIT_INDEX_FILE']) {
     delete workerEnv[name];
   }
   workerEnv.GIT_TERMINAL_PROMPT = '0';
-  const child = spawn(process.execPath, [SCRIPT, '--worker', mode, ...args, output], {
+  const child = spawn('prlimit', [
+    `--as=${WORKER_ADDRESS_SPACE_BYTES}`,
+    `--cpu=${WORKER_CPU_SECONDS}`,
+    '--', process.execPath,
+    `--max-old-space-size=${WORKER_V8_OLD_SPACE_MIB}`,
+    `--max-semi-space-size=${WORKER_V8_SEMI_SPACE_MIB}`,
+    SCRIPT, '--worker', mode, ...args, output,
+  ], {
     stdio: 'ignore', detached: process.platform !== 'win32',
     env: workerEnv,
   });
@@ -241,7 +262,7 @@ async function spawnWorker(mode, args, output, timeoutMs) {
         else child.kill('SIGKILL');
       } catch { /* The process may already be gone. */ }
     }, 5_000).unref();
-  }, timeoutMs);
+  }, boundedTimeoutMs);
   timer.unref();
   let exited;
   try { exited = await exit; }
@@ -249,7 +270,7 @@ async function spawnWorker(mode, args, output, timeoutMs) {
   clearTimeout(timer);
   let report = null;
   try { report = JSON.parse(await readFile(output, 'utf8')); } catch { /* Preserve absent/partial evidence below. */ }
-  return { mode, output, timeoutMs, timedOut, ...exited, report };
+  return { mode, output, timeoutMs: boundedTimeoutMs, timedOut, ...exited, report };
 }
 
 async function orchestrate(argv) {
@@ -262,6 +283,8 @@ async function orchestrate(argv) {
   const runtimeRoot = resolve(argv[4]);
   const expectedRuntimeRevision = argv[6];
   const expectedCoreModuleSha256 = argv[8];
+  if (process.platform !== 'linux') throw new Error('The bounded memory probe requires Linux RLIMIT_AS and /proc/self/io');
+  execFileSync('prlimit', ['--version'], { encoding: 'utf8', stdio: ['ignore', 'pipe', 'pipe'], maxBuffer: 1024 * 1024 });
   if (expectedRuntimeRevision !== ACCEPTED_RUNTIME_REVISION) {
     throw new Error(`Runtime revision must be the accepted Core source ${ACCEPTED_RUNTIME_REVISION}`);
   }
@@ -270,7 +293,7 @@ async function orchestrate(argv) {
   }
   const coreSource = join(runtimeRoot, 'packages', 'core', 'src', 'index.ts');
   const coreModule = join(runtimeRoot, 'packages', 'core', 'dist', 'index.js');
-  const timeoutMs = safeCount(process.env.C64_MEMORY_WORKER_TIMEOUT_MS, 180_000);
+  const timeoutMs = WORKER_TIMEOUT_MS;
   const runtimeRevision = gitText(runtimeRoot, ['rev-parse', 'HEAD']);
   if (runtimeRevision !== expectedRuntimeRevision) {
     throw new Error(`Runtime checkout revision mismatch: expected ${expectedRuntimeRevision}, got ${runtimeRevision}`);
@@ -293,6 +316,8 @@ async function orchestrate(argv) {
     }
     await stat(join(datasetRoot, 'origin.git'));
   }
+  const cohortStartedAtMs = Date.now();
+  cohortDeadlineMs = cohortStartedAtMs + COHORT_TIMEOUT_MS;
   await mkdir(dirname(outputRoot), { recursive: true });
   await mkdir(outputRoot, { recursive: false });
   const fixtureRoot = join(outputRoot, 'fixtures');
@@ -322,6 +347,20 @@ async function orchestrate(argv) {
       processMemory: 'Node process RSS endpoints, sampled operation peak, and process-lifetime high-water mark; Git child RSS is not added',
       cacheBytes: 'Explicit Core byte counters plus labeled shallow payload estimates; never equated with process RSS',
       timeoutMs,
+      cohortCaps: {
+        workerCount: 10,
+        perWorkerAddressSpaceBytes: WORKER_ADDRESS_SPACE_BYTES,
+        perWorkerV8OldSpaceMiB: WORKER_V8_OLD_SPACE_MIB,
+        perWorkerV8SemiSpaceMiB: WORKER_V8_SEMI_SPACE_MIB,
+        perWorkerCpuSeconds: WORKER_CPU_SECONDS,
+        perWorkerWallTimeoutMs: timeoutMs,
+        cohortWallTimeoutMs: COHORT_TIMEOUT_MS,
+        gitCommandTimeoutMs: GIT_COMMAND_TIMEOUT_MS,
+        cacheIdleMs: CACHE_IDLE_MS,
+        largeRepositoryCount: LARGE_REPOSITORIES,
+        stressRepositoryCount: STRESS_REPOSITORIES,
+        note: 'Each worker and its Git subprocesses inherit per-process RLIMIT_AS/CPU limits; this is not an aggregate cgroup memory cap.',
+      },
     },
     workers: [],
   };
@@ -367,19 +406,21 @@ async function orchestrate(argv) {
     for (const setting of cache) {
       const output = join(rawRoot, `cache-${setting.size}.json`);
       cases.push(await spawnWorker('cache', [coreModule, join(dataRoot, `cache-${setting.size}`),
-        JSON.stringify(setting.remotes), String(safeCount(process.env.C64_MEMORY_IDLE_MS, 35_000))], output, timeoutMs));
+        JSON.stringify(setting.remotes), String(CACHE_IDLE_MS)], output, timeoutMs));
       manifest.workers = cases;
       await saveRaw(join(outputRoot, 'manifest.json'), manifest);
     }
     manifest.status = cases.every((entry) => entry.code === 0 && !entry.timedOut && entry.report?.status === 'complete')
       ? 'complete' : 'partial';
     manifest.finishedAt = new Date().toISOString();
+    manifest.cohortElapsedMs = Date.now() - cohortStartedAtMs;
     await saveRaw(join(outputRoot, 'manifest.json'), manifest);
     process.exitCode = manifest.status === 'complete' ? 0 : 1;
   } catch (error) {
     manifest.status = 'failed';
     manifest.failure = { name: error?.name, message: String(error?.message ?? error) };
     manifest.finishedAt = new Date().toISOString();
+    manifest.cohortElapsedMs = Date.now() - cohortStartedAtMs;
     await saveRaw(join(outputRoot, 'manifest.json'), manifest);
     throw error;
   }
