@@ -395,7 +395,10 @@ async function serveStatic(
     }
     const target = file.filename.startsWith(sep) ? file.filename : resolve(staticDir, file.filename);
     const root = await realpath(staticDir);
-    const assetsDirectory = path.startsWith(assetPrefix) ? resolve(staticDir, ...(ui ? [ui] : []), "assets") : undefined;
+    const uiAssetsDirectory = resolve(staticDir, ...(ui ? [ui] : []), "assets");
+    const assetsDirectory = path.startsWith(assetPrefix) || target.startsWith(`${uiAssetsDirectory}${sep}`)
+      ? uiAssetsDirectory
+      : undefined;
     if (ui && (await lstat(resolve(staticDir, ui))).isSymbolicLink()) {
       sendJson(response, 404, { error: "Page not found", code: "NOT_FOUND" });
       return true;

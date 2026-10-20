@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import { execFile as execFileCallback } from "node:child_process";
 import { createHash, generateKeyPairSync, sign as signJwt } from "node:crypto";
 import { request as httpRequest } from "node:http";
-import { lstat, mkdir, mkdtemp, readFile, rm, symlink, writeFile } from "node:fs/promises";
+import { lstat, mkdir, mkdtemp, readFile, rename, rm, symlink, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { resolve } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -1082,6 +1082,18 @@ describe("Scriptorium HTTP boundary", () => {
     assert.equal(symlinkResponse.status, 404);
     assert.equal((await symlinkResponse.json() as { code: string }).code, "NOT_FOUND");
     assert.equal(symlinkResponse.headers.get("cache-control"), "no-store");
+
+    const launcherAssets = resolve(staticDir, "assets");
+    const internalAssets = resolve(staticDir, "internal-assets");
+    await rename(launcherAssets, internalAssets);
+    await symlink(internalAssets, launcherAssets, "dir");
+    for (const alias of ["/main.js", "/styles.css"]) {
+      const aliasResponse = await fetch(`${apiServer.base}${alias}`);
+      assert.equal(aliasResponse.status, 404, `${alias} rejects a manifest target beneath a symlinked assets directory`);
+      assert.equal((await aliasResponse.json() as { code: string }).code, "NOT_FOUND");
+    }
+    await rm(launcherAssets);
+    await rename(internalAssets, launcherAssets);
 
     await writeFile(resolve(staticDir, ".vite", "manifest.json"), JSON.stringify({
       "index.html": { file: "../server.test.js", src: "index.html", isEntry: true },
