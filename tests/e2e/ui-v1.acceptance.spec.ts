@@ -286,11 +286,17 @@ test("both production Shells preserve recoverable Japanese drafts and the Mobile
   }
   await expect(page).toHaveURL(new RegExp("/mobile/projects/" + encodeURIComponent(projectId) + "/scenes/scene-1"));
   const mobileScriptPaths = await page.locator("script[src]").evaluateAll((scripts) =>
-    scripts.map((script) => new URL((script as HTMLScriptElement).src).pathname));
-  expect(mobileScriptPaths.some((path) => /^\/mobile\/assets\/index-[A-Za-z0-9_-]+\.js$/u.test(path))).toBe(true);
+    scripts.map((script) => {
+      const url = new URL((script as HTMLScriptElement).src);
+      return url.origin === location.origin ? url.pathname : "";
+    }));
+  expect(mobileScriptPaths.some((path) => /^\/mobile\/assets\/index-[A-Za-z0-9_-]{8}\.js$/u.test(path))).toBe(true);
   const mobileStylePaths = await page.locator('link[rel="stylesheet"]').evaluateAll((links) =>
-    links.map((link) => new URL((link as HTMLLinkElement).href).pathname));
-  expect(mobileStylePaths.some((path) => /^\/mobile\/assets\/styles-[A-Za-z0-9_-]+\.css$/u.test(path))).toBe(true);
+    links.map((link) => {
+      const url = new URL((link as HTMLLinkElement).href);
+      return url.origin === location.origin ? url.pathname : "";
+    }));
+  expect(mobileStylePaths.some((path) => /^\/mobile\/assets\/styles-[A-Za-z0-9_-]{8}\.css$/u.test(path))).toBe(true);
 
   const mobileDraft = "彼は|東京《とうきょう》へ行く。\n\nMobile draft survives the Shell change.";
   const mobileEditor = page.locator(".cm-content");
@@ -385,11 +391,17 @@ test("both production Shells preserve recoverable Japanese drafts and the Mobile
   await expectJournalDraft(page, "scene-1", longReadingDraft);
   await expect.poll(() => page.evaluate(() => localStorage.getItem("scriptorium:ui-mode"))).toBe("desktop");
   const desktopScriptPaths = await page.locator("script[src]").evaluateAll((scripts) =>
-    scripts.map((script) => new URL((script as HTMLScriptElement).src).pathname));
-  expect(desktopScriptPaths.some((path) => /^\/desktop\/assets\/index-[A-Za-z0-9_-]+\.js$/u.test(path))).toBe(true);
+    scripts.map((script) => {
+      const url = new URL((script as HTMLScriptElement).src);
+      return url.origin === location.origin ? url.pathname : "";
+    }));
+  expect(desktopScriptPaths.some((path) => /^\/desktop\/assets\/index-[A-Za-z0-9_-]{8}\.js$/u.test(path))).toBe(true);
   const desktopStylePaths = await page.locator('link[rel="stylesheet"]').evaluateAll((links) =>
-    links.map((link) => new URL((link as HTMLLinkElement).href).pathname));
-  expect(desktopStylePaths.some((path) => /^\/desktop\/assets\/styles-[A-Za-z0-9_-]+\.css$/u.test(path))).toBe(true);
+    links.map((link) => {
+      const url = new URL((link as HTMLLinkElement).href);
+      return url.origin === location.origin ? url.pathname : "";
+    }));
+  expect(desktopStylePaths.some((path) => /^\/desktop\/assets\/styles-[A-Za-z0-9_-]{8}\.css$/u.test(path))).toBe(true);
 
   const resizeHandle = page.getByRole("separator", { name: "Resize horizontal workspace panels" });
   await expect(resizeHandle).toBeVisible();
