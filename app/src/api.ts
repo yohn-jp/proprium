@@ -373,9 +373,10 @@ export const api = {
       ...options,
     }),
   proposalStatuses: (projectId: string) => request<{ proposals: ProposalStatus[] }>(projectPath(projectId, "proposals")),
-  propose: (projectId: string, proposal: ChangeProposal) => request<ChangeProposal>(projectPath(projectId, "proposals"), {
+  propose: (projectId: string, proposal: ChangeProposal, signal?: AbortSignal) => request<ChangeProposal>(projectPath(projectId, "proposals"), {
     method: "POST",
     body: JSON.stringify(proposal),
+    ...(signal ? { signal } : {}),
   }),
   approve: (projectId: string, approval: Approval) => request<void>(projectPath(projectId, "approvals"), {
     method: "POST",

@@ -2,7 +2,7 @@ import { useEffect, useId, useRef, useState } from "react";
 import { snapshotKey, type BrowserEditorDocument, type BrowserModuleContext, type BrowserModuleDefinition, type ChangeOperation, type ChangeProposal, type ModuleStatus, type SnapshotId, type UiContribution } from "@scriptorium/contracts";
 import { api } from "../api";
 import { moduleBrowserLoaders } from "../generated/browser-modules";
-import type { BrowserJournal } from "../storage/journal";
+import type { BrowserJournal, JournalProposalOwnership } from "../storage/journal";
 import { discoverableContributions, workspaceContributions } from "./catalog";
 
 const SLOT_LABELS = {
@@ -137,15 +137,68 @@ export function MountedContribution({
             return result;
           },
           propose: async (operations: ChangeOperation[], evidence) => {
+            const isCancelled = () => cancelled || controller.signal.aborted;
+            const abortError = () => new DOMException("Panel closed", "AbortError");
+            if (isCancelled()) throw abortError();
+            if (!journal) throw new Error("Browser recovery storage is unavailable; the module proposal was not delivered to its panel.");
+            const proposalJournal = journal;
+            const ownedProposals = new Map<string, JournalProposalOwnership>();
+            const removeCancelledProposals = async () => {
+              let removedAny = false;
+              for (const [proposalId, ownership] of ownedProposals) {
+                removedAny = await proposalJournal.removeProposal(snapshot.repository, authorScope, proposalId, ownership) || removedAny;
+                ownedProposals.delete(proposalId);
+              }
+              if (removedAny) onProposalStored();
+            };
+            const persistWhileActive = async (proposal: ChangeProposal) => {
+              try {
+                const ownership = await proposalJournal.putProposal(snapshot.repository, authorScope, proposal);
+                if (ownership) ownedProposals.set(proposal.id, ownership);
+              } catch (cause) {
+                if (!isCancelled()) throw cause;
+                await removeCancelledProposals();
+                throw abortError();
+              }
+              if (isCancelled()) {
+                await removeCancelledProposals();
+                throw abortError();
+              }
+            };
+
             const submitted: ChangeProposal = {
               id: crypto.randomUUID(), snapshot, operations, source: "module", ...(evidence ? { evidence } : {}),
             };
-            if (!journal) throw new Error("Browser recovery storage is unavailable; the module proposal was not delivered to its panel.");
-            await journal.putProposal(snapshot.repository, authorScope, submitted);
+            await persistWhileActive(submitted);
             onProposalStored();
-            const proposal = await api.propose(projectId, submitted);
-            await journal.putProposal(snapshot.repository, authorScope, proposal);
-            if (proposal.id !== submitted.id) await journal.removeProposal(snapshot.repository, authorScope, submitted.id);
+            if (isCancelled()) {
+              await removeCancelledProposals();
+              throw abortError();
+            }
+
+            let proposal: ChangeProposal;
+            try {
+              proposal = await api.propose(projectId, submitted, controller.signal);
+            } catch (cause) {
+              if (!isCancelled()) throw cause;
+              await removeCancelledProposals();
+              throw abortError();
+            }
+            if (isCancelled()) {
+              await removeCancelledProposals();
+              throw abortError();
+            }
+
+            await persistWhileActive(proposal);
+            if (proposal.id !== submitted.id && ownedProposals.has(submitted.id)) {
+              const ownership = ownedProposals.get(submitted.id)!;
+              await proposalJournal.removeProposal(snapshot.repository, authorScope, submitted.id, ownership);
+              ownedProposals.delete(submitted.id);
+              if (isCancelled()) {
+                await removeCancelledProposals();
+                throw abortError();
+              }
+            }
             onProposalStored();
             return proposal;
           },

@@ -26,7 +26,7 @@ export default {
     },
   }],
   webServer: {
-    command: "pnpm --dir app exec vite --config ../tests/e2e/core64-lifecycle/vite.config.mjs --host 127.0.0.1 --port 4189 --strictPort",
+    command: "app/node_modules/.bin/vite --config tests/e2e/core64-lifecycle/vite.config.mjs --host 127.0.0.1 --port 4189 --strictPort",
     cwd: repositoryRoot,
     url: "http://127.0.0.1:4189/tests/e2e/core64-lifecycle/host-fixture.html",
     reuseExistingServer: false,

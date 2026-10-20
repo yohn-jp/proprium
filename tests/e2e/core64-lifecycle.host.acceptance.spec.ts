@@ -23,6 +23,14 @@ type Metrics = {
   lateCallbackAttempts: number;
   lateCallbackOutcomes: string[];
   journalWrites: Array<{ authorScope: string; proposalId: string }>;
+  journalRemovals: Array<{ authorScope: string; proposalId: string }>;
+  journalRecords: Array<{ authorScope: string; proposalId: string }>;
+  legacyProposalIds: string[];
+  reviewStatusProposalIds: string[];
+  dismissedProposalIds: string[];
+  pendingJournalWrites: number;
+  proposalApiRequests: number;
+  proposalReinsertions: number;
   proposalStoredEvents: number;
 };
 
@@ -35,22 +43,52 @@ async function metrics(page: Page): Promise<Metrics> {
 async function attachHostSourceBinding(info: TestInfo): Promise<void> {
   const source = await readFile(hostSourcePath);
   const sourceHash = createHash("sha256").update(source).digest("hex");
+  const apiSource = await readFile(resolve(repositoryRoot, "app/src/api.ts"));
+  const journalSource = await readFile(resolve(repositoryRoot, "app/src/storage/journal.ts"));
   const commit = execFileSync("git", ["rev-parse", "HEAD"], { cwd: repositoryRoot, encoding: "utf8" }).trim();
   await info.attach("ContributionHost.tsx", { body: source, contentType: "text/plain" });
   await info.attach("host-source-binding.txt", {
-    body: `commit=${commit}\npath=${hostSourcePath}\nsha256=${sourceHash}\n`,
+    body: [
+      `commit=${commit}`,
+      `path=${hostSourcePath}`,
+      `sha256=${sourceHash}`,
+      `apiSha256=${createHash("sha256").update(apiSource).digest("hex")}`,
+      `journalSha256=${createHash("sha256").update(journalSource).digest("hex")}`,
+      "apiPath=app/src/api.ts",
+      "journalPath=app/src/storage/journal.ts",
+      "",
+    ].join("\n"),
     contentType: "text/plain",
   });
 }
 
 async function installProposalRoute(page: Page): Promise<void> {
   await page.route("**/api/projects/project-1/proposals", async (route) => {
-    const proposal = route.request().postDataJSON();
-    await route.fulfill({
-      status: 200,
-      contentType: "application/json",
-      body: JSON.stringify(proposal),
+    await page.evaluate(() => {
+      (window as unknown as { __core64HostLifecycle: { metrics: Metrics } })
+        .__core64HostLifecycle.metrics.proposalApiRequests += 1;
     });
+    if (new URL(page.url()).searchParams.has("defer-proposal-api")) {
+      await page.evaluate(() => new Promise<void>((resolve) => {
+        const harness = (window as unknown as {
+          __core64HostLifecycle: { resolveProposalApi: (() => void) | null };
+        }).__core64HostLifecycle;
+        harness.resolveProposalApi = () => {
+          harness.resolveProposalApi = null;
+          resolve();
+        };
+      }));
+    }
+    const proposal = route.request().postDataJSON();
+    try {
+      await route.fulfill({
+        status: 200,
+        contentType: "application/json",
+        body: JSON.stringify(proposal),
+      });
+    } catch {
+      // The actual host can abort this held request before the fixture releases it.
+    }
   });
 }
 
@@ -89,13 +127,17 @@ test.beforeEach(async ({ page }, info) => {
   await installProposalRoute(page);
 });
 
-test("actual ContributionHost keeps disabled module unloaded, then cleans it up on disable", async ({ page }) => {
+test("actual ContributionHost keeps disabled module unloaded, then cleans it up on disable", async ({ page }, info) => {
   await openHost(page, "?start-disabled");
   await expect(page.getByLabel("機能を選択")).toHaveCount(0);
   const whileDisabled = await metrics(page);
   expect(whileDisabled.loaderCalls).toBe(0);
   expect(whileDisabled.mountCalls).toBe(0);
   expect([whileDisabled.activeTimers, whileDisabled.activeRequests, whileDisabled.activeWorkers]).toEqual([0, 0, 0]);
+  await info.attach("disabled-module-metrics.json", {
+    body: JSON.stringify(whileDisabled, null, 2),
+    contentType: "application/json",
+  });
 
   await page.getByRole("button", { name: "Enable fixture module" }).click();
   await selectContribution(page);
@@ -108,6 +150,10 @@ test("actual ContributionHost keeps disabled module unloaded, then cleans it up 
   await expect.poll(async () => (await metrics(page)).signalAborts).toBe(1);
   await expect.poll(async () => (await metrics(page)).disposeCalls).toBe(1);
   const afterDisable = await metrics(page);
+  await info.attach("after-disable-metrics.json", {
+    body: JSON.stringify(afterDisable, null, 2),
+    contentType: "application/json",
+  });
   expect(afterDisable.loaderCalls).toBe(1);
   expect(afterDisable.mountCalls).toBe(1);
 });
@@ -176,6 +222,9 @@ test("late mount cleanup after author change cannot journal a proposal into the 
     contentType: "application/json",
   });
   expect(afterLateCallback.journalWrites).toEqual([]);
+  expect(afterLateCallback.journalRemovals).toEqual([]);
+  expect(afterLateCallback.journalRecords).toEqual([]);
+  expect(afterLateCallback.proposalApiRequests).toBe(0);
   expect(afterLateCallback.lateCallbackOutcomes).toEqual(["rejected"]);
 
   await page.getByRole("button", { name: "Unmount host" }).click();
@@ -183,4 +232,163 @@ test("late mount cleanup after author change cannot journal a proposal into the 
   const finalMetrics = await metrics(page);
   expect(finalMetrics.signalAborts).toBe(2);
   expect(finalMetrics.disposeCalls).toBe(2);
+});
+
+test("actual host removes an old-author journal write that completes after abort", async ({ page }, info) => {
+  await openHost(page, "?defer-first-journal&proposal-on-first-mount");
+  await selectContribution(page);
+  await expect.poll(async () => (await metrics(page)).pendingJournalWrites).toBe(1);
+  await expectActiveResources(page, 1);
+
+  await page.getByRole("button", { name: "Change author" }).click();
+  await expect(page.getByLabel("Current author")).toHaveText("author-new");
+  await waitForMounts(page, 2);
+  await expect.poll(async () => (await metrics(page)).signalAborts).toBe(1);
+  await expectActiveResources(page, 1);
+  const beforeJournalResolve = await metrics(page);
+  expect(beforeJournalResolve.journalWrites).toEqual([]);
+  expect(beforeJournalResolve.proposalApiRequests).toBe(0);
+  expect(beforeJournalResolve.disposeCalls).toBe(0);
+
+  await page.getByRole("button", { name: "Resolve deferred journal write" }).click();
+  await expect.poll(async () => (await metrics(page)).lateCallbackOutcomes.length).toBe(1);
+  await expect.poll(async () => (await metrics(page)).disposeCalls).toBe(1);
+  const afterJournalResolve = await metrics(page);
+  await info.attach("in-flight-journal-metrics.json", {
+    body: JSON.stringify(afterJournalResolve, null, 2),
+    contentType: "application/json",
+  });
+  expect(afterJournalResolve.lateCallbackOutcomes).toEqual(["rejected"]);
+  expect(afterJournalResolve.journalWrites).toHaveLength(1);
+  expect(afterJournalResolve.journalWrites[0]?.authorScope).toBe("author-old");
+  expect(afterJournalResolve.journalRemovals).toEqual(afterJournalResolve.journalWrites);
+  expect(afterJournalResolve.journalRecords).toEqual([]);
+  expect(afterJournalResolve.proposalApiRequests).toBe(0);
+  expect(afterJournalResolve.pendingJournalWrites).toBe(0);
+
+  await page.getByRole("button", { name: "Unmount host" }).click();
+  await expectActiveResources(page, 0);
+  const finalMetrics = await metrics(page);
+  expect(finalMetrics.signalAborts).toBe(2);
+  expect(finalMetrics.disposeCalls).toBe(2);
+});
+
+test("actual host preserves a preexisting proposal when its module callback is cancelled", async ({ page }, info) => {
+  await openHost(page, "?preexisting-proposal&defer-proposal-api&proposal-on-first-mount");
+  await selectContribution(page);
+  await expect.poll(async () => (await metrics(page)).proposalApiRequests).toBe(1);
+  await expectActiveResources(page, 1);
+
+  await page.getByRole("button", { name: "Change author" }).click();
+  await expect(page.getByLabel("Current author")).toHaveText("author-new");
+  await waitForMounts(page, 2);
+  await expect.poll(async () => (await metrics(page)).lateCallbackOutcomes.length).toBe(1);
+  await expect.poll(async () => (await metrics(page)).disposeCalls).toBe(1);
+  await expect.poll(async () => (await metrics(page)).signalAborts).toBe(1);
+  await expectActiveResources(page, 1);
+  const afterAbort = await metrics(page);
+  await info.attach("preexisting-proposal-metrics.json", {
+    body: JSON.stringify(afterAbort, null, 2),
+    contentType: "application/json",
+  });
+  expect(afterAbort.lateCallbackOutcomes).toEqual(["rejected"]);
+  expect(afterAbort.journalWrites).toEqual([]);
+  expect(afterAbort.journalRemovals).toEqual([]);
+  expect(afterAbort.journalRecords).toEqual([{ authorScope: "author-old", proposalId: "preexisting-proposal-id" }]);
+  expect(afterAbort.legacyProposalIds).toEqual(["preexisting-proposal-id"]);
+  expect(afterAbort.proposalApiRequests).toBe(1);
+
+  await page.getByRole("button", { name: "Resolve deferred proposal API" }).click();
+  await page.getByRole("button", { name: "Unmount host" }).click();
+  await expectActiveResources(page, 0);
+  const finalMetrics = await metrics(page);
+  expect(finalMetrics.signalAborts).toBe(2);
+  expect(finalMetrics.disposeCalls).toBe(2);
+});
+
+test("actual host preserves a proposal with newer author review state after cancellation", async ({ page }, info) => {
+  await openHost(page, "?defer-proposal-api&proposal-on-first-mount");
+  await selectContribution(page);
+  await expect.poll(async () => (await metrics(page)).proposalApiRequests).toBe(1);
+  await expect.poll(async () => (await metrics(page)).journalWrites.length).toBe(1);
+  await page.getByRole("button", { name: "Mark proposal reviewed" }).click();
+  await expect.poll(async () => (await metrics(page)).reviewStatusProposalIds.length).toBe(1);
+
+  await page.getByRole("button", { name: "Change author" }).click();
+  await expect(page.getByLabel("Current author")).toHaveText("author-new");
+  await expect.poll(async () => (await metrics(page)).lateCallbackOutcomes.length).toBe(1);
+  await expect.poll(async () => (await metrics(page)).disposeCalls).toBe(1);
+  const afterAbort = await metrics(page);
+  await info.attach("reviewed-proposal-metrics.json", {
+    body: JSON.stringify(afterAbort, null, 2),
+    contentType: "application/json",
+  });
+  const proposalId = afterAbort.journalWrites[0]?.proposalId;
+  expect(afterAbort.lateCallbackOutcomes).toEqual(["rejected"]);
+  expect(afterAbort.journalRemovals).toEqual([]);
+  expect(afterAbort.journalRecords).toEqual([{ authorScope: "author-old", proposalId }]);
+  expect(afterAbort.reviewStatusProposalIds).toEqual([proposalId]);
+
+  await page.getByRole("button", { name: "Resolve deferred proposal API" }).click();
+  await page.getByRole("button", { name: "Unmount host" }).click();
+  await expectActiveResources(page, 0);
+  expect((await metrics(page)).disposeCalls).toBe(2);
+});
+
+test("actual host preserves a dismissed proposal after its callback is cancelled", async ({ page }, info) => {
+  await openHost(page, "?defer-proposal-api&proposal-on-first-mount");
+  await selectContribution(page);
+  await expect.poll(async () => (await metrics(page)).proposalApiRequests).toBe(1);
+  await expect.poll(async () => (await metrics(page)).journalWrites.length).toBe(1);
+  await page.getByRole("button", { name: "Dismiss proposal" }).click();
+  await expect.poll(async () => (await metrics(page)).dismissedProposalIds.length).toBe(1);
+
+  await page.getByRole("button", { name: "Change author" }).click();
+  await expect(page.getByLabel("Current author")).toHaveText("author-new");
+  await expect.poll(async () => (await metrics(page)).lateCallbackOutcomes.length).toBe(1);
+  await expect.poll(async () => (await metrics(page)).disposeCalls).toBe(1);
+  const afterAbort = await metrics(page);
+  await info.attach("dismissed-proposal-metrics.json", {
+    body: JSON.stringify(afterAbort, null, 2),
+    contentType: "application/json",
+  });
+  const proposalId = afterAbort.journalWrites[0]?.proposalId;
+  expect(afterAbort.lateCallbackOutcomes).toEqual(["rejected"]);
+  expect(afterAbort.journalRemovals).toEqual([]);
+  expect(afterAbort.journalRecords).toEqual([{ authorScope: "author-old", proposalId }]);
+  expect(afterAbort.dismissedProposalIds).toEqual([proposalId]);
+
+  await page.getByRole("button", { name: "Resolve deferred proposal API" }).click();
+  await page.getByRole("button", { name: "Unmount host" }).click();
+  await expectActiveResources(page, 0);
+  expect((await metrics(page)).disposeCalls).toBe(2);
+});
+
+test("actual host preserves a newer same-ID proposal version after cancellation", async ({ page }, info) => {
+  await openHost(page, "?defer-proposal-api&proposal-on-first-mount");
+  await selectContribution(page);
+  await expect.poll(async () => (await metrics(page)).proposalApiRequests).toBe(1);
+  await expect.poll(async () => (await metrics(page)).journalWrites.length).toBe(1);
+  await page.getByRole("button", { name: "Replace proposal with same ID" }).click();
+  await expect.poll(async () => (await metrics(page)).proposalReinsertions).toBe(1);
+
+  await page.getByRole("button", { name: "Change author" }).click();
+  await expect(page.getByLabel("Current author")).toHaveText("author-new");
+  await expect.poll(async () => (await metrics(page)).lateCallbackOutcomes.length).toBe(1);
+  await expect.poll(async () => (await metrics(page)).disposeCalls).toBe(1);
+  const afterAbort = await metrics(page);
+  await info.attach("reinserted-proposal-metrics.json", {
+    body: JSON.stringify(afterAbort, null, 2),
+    contentType: "application/json",
+  });
+  const proposalId = afterAbort.journalWrites[0]?.proposalId;
+  expect(afterAbort.lateCallbackOutcomes).toEqual(["rejected"]);
+  expect(afterAbort.journalRemovals).toEqual([]);
+  expect(afterAbort.journalRecords).toEqual([{ authorScope: "author-old", proposalId }]);
+  expect(afterAbort.proposalReinsertions).toBe(1);
+
+  await page.getByRole("button", { name: "Resolve deferred proposal API" }).click();
+  await page.getByRole("button", { name: "Unmount host" }).click();
+  await expectActiveResources(page, 0);
+  expect((await metrics(page)).disposeCalls).toBe(2);
 });

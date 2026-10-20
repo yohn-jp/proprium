@@ -51,7 +51,14 @@ export interface JournalProposal {
   status?: ProposalStatus;
   /** A local dismissal hides a still-pending remote proposal without deleting its source record. */
   dismissedAt?: number;
+  /** Identifies the insertion that first created this private record for cancellation cleanup. */
+  ownershipToken?: string;
   createdAt: number;
+}
+
+export interface JournalProposalOwnership {
+  token: string;
+  proposal: ChangeProposal;
 }
 
 interface ScratchRecord {
@@ -316,7 +323,13 @@ export class BrowserJournal {
     }
   }
 
-  async putProposal(repository: RepositoryIdentity, authorScope: string, proposal: ChangeProposal, status?: ProposalStatus): Promise<void> {
+  /** Return an ownership token only when this call inserted a new proposal record. */
+  async putProposal(
+    repository: RepositoryIdentity,
+    authorScope: string,
+    proposal: ChangeProposal,
+    status?: ProposalStatus,
+  ): Promise<JournalProposalOwnership | null> {
     if (!authorScope) throw new JournalError("The proposal has no author identity scope.");
     if (!proposal || !/^[A-Za-z0-9_-]{1,128}$/u.test(proposal.id) || !Array.isArray(proposal.operations) || !proposal.operations.length ||
         !["author", "module", "mcp"].includes(proposal.source) || repositoryKey(proposal.snapshot.repository) !== repositoryKey(repository)) {
@@ -358,6 +371,7 @@ export class BrowserJournal {
       authorScope,
       repository,
       proposal,
+      ownershipToken: crypto.randomUUID(),
       ...(status ? { status } : {}),
       createdAt: Date.now(),
     };
@@ -412,8 +426,10 @@ export class BrowserJournal {
           createdAt: existing.createdAt,
         }
         : record;
-      if (!existing || (status && stableJson(existing.status) !== stableJson(status))) store.put(updated);
+      const inserted = !existing;
+      if (inserted || (status && stableJson(existing.status) !== stableJson(status))) store.put(updated);
       await done;
+      return inserted ? { token: record.ownershipToken!, proposal } : null;
     } catch (error) {
       if (error instanceof JournalError) throw error;
       throw storageMessage(error, "module proposal");
@@ -467,12 +483,30 @@ export class BrowserJournal {
     }
   }
 
-  async removeProposal(repository: RepositoryIdentity, authorScope: string, proposalId: string): Promise<void> {
+  async removeProposal(
+    repository: RepositoryIdentity,
+    authorScope: string,
+    proposalId: string,
+    ownership?: JournalProposalOwnership,
+  ): Promise<boolean> {
     try {
       const transaction = this.database.transaction(PROPOSAL_STORE, "readwrite", { durability: "strict" });
       const done = transactionDone(transaction);
-      transaction.objectStore(PROPOSAL_STORE).delete(JSON.stringify([repositoryKey(repository), authorScope, proposalId]));
+      const key = JSON.stringify([repositoryKey(repository), authorScope, proposalId]);
+      const store = transaction.objectStore(PROPOSAL_STORE);
+      if (ownership) {
+        const existing = await requestValue(store.get(key)) as JournalProposal | undefined;
+        if (!existing || existing.repositoryKey !== repositoryKey(repository) || existing.authorScope !== authorScope ||
+            ownership.proposal.id !== proposalId || existing.ownershipToken !== ownership.token ||
+            stableJson(existing.proposal) !== stableJson(ownership.proposal) || existing.status !== undefined ||
+            existing.dismissedAt !== undefined) {
+          await done;
+          return false;
+        }
+      }
+      store.delete(key);
       await done;
+      return true;
     } catch (error) {
       throw storageMessage(error, "module proposal");
     }

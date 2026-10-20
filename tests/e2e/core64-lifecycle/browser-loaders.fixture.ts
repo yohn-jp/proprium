@@ -6,6 +6,8 @@ declare global {
       currentAuthor: string;
       deferFirstMount: boolean;
       lateProposalAfterDeferredMount: boolean;
+      deferFirstJournalWrite: boolean;
+      proposalOnFirstMount: boolean;
       resolveFirstMount: (() => void) | null;
       metrics: {
         loaderCalls: number;
@@ -31,7 +33,7 @@ function lateOperation(context: BrowserModuleContext): ChangeOperation {
     generation: 1,
     repository: context.snapshot.repository,
     baseRemoteCommit: context.snapshot.remoteCommit,
-    effect: "propose",
+    effect: "metadata",
     reads: [],
     writes: [{
       path: "meta/scriptorium/modules/publishing/lifecycle-late-callback.md",
@@ -90,6 +92,16 @@ const definition: BrowserModuleDefinition = {
     }
 
     if (harness.lateProposalAfterDeferredMount && mountNumber === 1) {
+      metrics.lateCallbackAttempts += 1;
+      try {
+        await context.propose([lateOperation(context)]);
+        metrics.lateCallbackOutcomes.push("resolved");
+      } catch {
+        metrics.lateCallbackOutcomes.push("rejected");
+      }
+    }
+
+    if (harness.proposalOnFirstMount && mountNumber === 1) {
       metrics.lateCallbackAttempts += 1;
       try {
         await context.propose([lateOperation(context)]);
