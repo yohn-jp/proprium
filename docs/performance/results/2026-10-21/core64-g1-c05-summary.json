@@ -1,0 +1,380 @@
+{
+  "schemaVersion": 1,
+  "source": "80601fbf9be40143f540be773ab4b69baa8030b3",
+  "browser": "155.0.8059.79",
+  "fixtureCommit": "e70bb509cc41b383451335e05af36d78f1cb31db",
+  "fixtureSizes": [
+    1024,
+    102400,
+    1048576
+  ],
+  "repeatCount": 20,
+  "renderProbeScriptSha256": "97673059f5cc2f20e8d153125223048c1ef3256b14a1f1014265015c5559d2e1",
+  "renderProbeSha256": "6f6eadbe2d183f74cfb893f842bb506a20fb1a8359f42ba23630ecf82b7e8255",
+  "measurements": [
+    {
+      "name": "editor.docToString.docChanged",
+      "phase": "input.composition",
+      "cohort": "input.1024",
+      "count": 2,
+      "totalMs": 0,
+      "p50Ms": 0,
+      "p95Ms": 0,
+      "maxMs": 0,
+      "itemCounts": [
+        1047,
+        1048
+      ]
+    },
+    {
+      "name": "editor.docToString.docChanged",
+      "phase": "input.composition",
+      "cohort": "input.102400",
+      "count": 2,
+      "totalMs": 0.09999999403953552,
+      "p50Ms": 0,
+      "p95Ms": 0,
+      "maxMs": 0.09999999403953552,
+      "itemCounts": [
+        102423,
+        102424
+      ]
+    },
+    {
+      "name": "editor.docToString.docChanged",
+      "phase": "input.composition",
+      "cohort": "input.1048576",
+      "count": 2,
+      "totalMs": 0.3999999761581421,
+      "p50Ms": 0.19999998807907104,
+      "p95Ms": 0.19999998807907104,
+      "maxMs": 0.19999998807907104,
+      "itemCounts": [
+        1048597,
+        1048598
+      ]
+    },
+    {
+      "name": "editor.docToString.docChanged",
+      "phase": "input.history",
+      "cohort": "input.1024",
+      "count": 2,
+      "totalMs": 0.09999999403953552,
+      "p50Ms": 0,
+      "p95Ms": 0,
+      "maxMs": 0.09999999403953552,
+      "itemCounts": [
+        1024,
+        1044
+      ]
+    },
+    {
+      "name": "editor.docToString.docChanged",
+      "phase": "input.history",
+      "cohort": "input.102400",
+      "count": 2,
+      "totalMs": 0,
+      "p50Ms": 0,
+      "p95Ms": 0,
+      "maxMs": 0,
+      "itemCounts": [
+        102400,
+        102420
+      ]
+    },
+    {
+      "name": "editor.docToString.docChanged",
+      "phase": "input.history",
+      "cohort": "input.1048576",
+      "count": 2,
+      "totalMs": 0.40000003576278687,
+      "p50Ms": 0.20000001788139343,
+      "p95Ms": 0.20000001788139343,
+      "maxMs": 0.20000001788139343,
+      "itemCounts": [
+        1048594,
+        1048595
+      ]
+    },
+    {
+      "name": "editor.docToString.docChanged",
+      "phase": "input.paste",
+      "cohort": "input.1024",
+      "count": 1,
+      "totalMs": 0,
+      "p50Ms": 0,
+      "p95Ms": 0,
+      "maxMs": 0,
+      "itemCounts": [
+        2199
+      ]
+    },
+    {
+      "name": "editor.docToString.docChanged",
+      "phase": "input.paste",
+      "cohort": "input.102400",
+      "count": 1,
+      "totalMs": 0.20000001788139343,
+      "p50Ms": 0.20000001788139343,
+      "p95Ms": 0.20000001788139343,
+      "maxMs": 0.20000001788139343,
+      "itemCounts": [
+        103575
+      ]
+    },
+    {
+      "name": "editor.docToString.docChanged",
+      "phase": "input.paste",
+      "cohort": "input.1048576",
+      "count": 1,
+      "totalMs": 0.4000000059604645,
+      "p50Ms": 0.4000000059604645,
+      "p95Ms": 0.4000000059604645,
+      "maxMs": 0.4000000059604645,
+      "itemCounts": [
+        1049749
+      ]
+    },
+    {
+      "name": "editor.docToString.docChanged",
+      "phase": "input.typing",
+      "cohort": "input.1024",
+      "count": 20,
+      "totalMs": 0.20000001788139343,
+      "p50Ms": 0,
+      "p95Ms": 0.09999999403953552,
+      "maxMs": 0.10000002384185791,
+      "itemCounts": [
+        1025,
+        1026,
+        1027,
+        1028,
+        1029,
+        1030,
+        1031,
+        1032,
+        1033,
+        1034,
+        1035,
+        1036,
+        1037,
+        1038,
+        1039,
+        1040,
+        1041,
+        1042,
+        1043,
+        1044
+      ]
+    },
+    {
+      "name": "editor.docToString.docChanged",
+      "phase": "input.typing",
+      "cohort": "input.102400",
+      "count": 20,
+      "totalMs": 1.4000000059604645,
+      "p50Ms": 0.09999999403953552,
+      "p95Ms": 0.19999998807907104,
+      "maxMs": 0.20000001788139343,
+      "itemCounts": [
+        102401,
+        102402,
+        102403,
+        102404,
+        102405,
+        102406,
+        102407,
+        102408,
+        102409,
+        102410,
+        102411,
+        102412,
+        102413,
+        102414,
+        102415,
+        102416,
+        102417,
+        102418,
+        102419,
+        102420
+      ]
+    },
+    {
+      "name": "editor.docToString.docChanged",
+      "phase": "input.typing",
+      "cohort": "input.1048576",
+      "count": 20,
+      "totalMs": 6.799999982118607,
+      "p50Ms": 0.29999998211860657,
+      "p95Ms": 0.4000000059604645,
+      "maxMs": 1.399999976158142,
+      "itemCounts": [
+        1048577,
+        1048578,
+        1048579,
+        1048580,
+        1048581,
+        1048582,
+        1048583,
+        1048584,
+        1048585,
+        1048586,
+        1048587,
+        1048588,
+        1048589,
+        1048590,
+        1048591,
+        1048592,
+        1048593,
+        1048594,
+        1048595,
+        1048596
+      ]
+    },
+    {
+      "name": "editor.docToString.mountPrime",
+      "phase": "between",
+      "cohort": "between",
+      "count": 2,
+      "totalMs": 0.3999999761581421,
+      "p50Ms": 0.19999998807907104,
+      "p95Ms": 0.19999998807907104,
+      "maxMs": 0.19999998807907104,
+      "itemCounts": [
+        102400,
+        1048576
+      ]
+    },
+    {
+      "name": "editor.docToString.mountPrime",
+      "phase": "startup",
+      "cohort": "startup",
+      "count": 1,
+      "totalMs": 0,
+      "p50Ms": 0,
+      "p95Ms": 0,
+      "maxMs": 0,
+      "itemCounts": [
+        1024
+      ]
+    },
+    {
+      "name": "editor.docToString.valueSyncCompare",
+      "phase": "between",
+      "cohort": "between",
+      "count": 2,
+      "totalMs": 1.2999999821186066,
+      "p50Ms": 0,
+      "p95Ms": 0,
+      "maxMs": 1.2999999821186066,
+      "itemCounts": [
+        102400,
+        1048576
+      ]
+    },
+    {
+      "name": "editor.docToString.valueSyncCompare",
+      "phase": "input.cursor",
+      "cohort": "input.1024",
+      "count": 1,
+      "totalMs": 0,
+      "p50Ms": 0,
+      "p95Ms": 0,
+      "maxMs": 0,
+      "itemCounts": [
+        1044
+      ]
+    },
+    {
+      "name": "editor.docToString.valueSyncCompare",
+      "phase": "input.cursor",
+      "cohort": "input.102400",
+      "count": 1,
+      "totalMs": 0,
+      "p50Ms": 0,
+      "p95Ms": 0,
+      "maxMs": 0,
+      "itemCounts": [
+        102420
+      ]
+    },
+    {
+      "name": "editor.docToString.valueSyncCompare",
+      "phase": "input.cursor",
+      "cohort": "input.1048576",
+      "count": 1,
+      "totalMs": 0.20000001788139343,
+      "p50Ms": 0.20000001788139343,
+      "p95Ms": 0.20000001788139343,
+      "maxMs": 0.20000001788139343,
+      "itemCounts": [
+        1048596
+      ]
+    },
+    {
+      "name": "editor.docToString.valueSyncCompare",
+      "phase": "input.paste",
+      "cohort": "input.1024",
+      "count": 1,
+      "totalMs": 0,
+      "p50Ms": 0,
+      "p95Ms": 0,
+      "maxMs": 0,
+      "itemCounts": [
+        2199
+      ]
+    },
+    {
+      "name": "editor.docToString.valueSyncCompare",
+      "phase": "input.paste",
+      "cohort": "input.102400",
+      "count": 1,
+      "totalMs": 0,
+      "p50Ms": 0,
+      "p95Ms": 0,
+      "maxMs": 0,
+      "itemCounts": [
+        103575
+      ]
+    },
+    {
+      "name": "editor.docToString.valueSyncCompare",
+      "phase": "input.paste",
+      "cohort": "input.1048576",
+      "count": 1,
+      "totalMs": 0.29999998211860657,
+      "p50Ms": 0.29999998211860657,
+      "p95Ms": 0.29999998211860657,
+      "maxMs": 0.29999998211860657,
+      "itemCounts": [
+        1049749
+      ]
+    },
+    {
+      "name": "editor.docToString.valueSyncCompare",
+      "phase": "input.typing",
+      "cohort": "input.1048576",
+      "count": 1,
+      "totalMs": 0.29999998211860657,
+      "p50Ms": 0.29999998211860657,
+      "p95Ms": 0.29999998211860657,
+      "maxMs": 0.29999998211860657,
+      "itemCounts": [
+        1048586
+      ]
+    },
+    {
+      "name": "editor.docToString.valueSyncCompare",
+      "phase": "startup",
+      "cohort": "startup",
+      "count": 1,
+      "totalMs": 0,
+      "p50Ms": 0,
+      "p95Ms": 0,
+      "maxMs": 0,
+      "itemCounts": [
+        1024
+      ]
+    }
+  ]
+}
