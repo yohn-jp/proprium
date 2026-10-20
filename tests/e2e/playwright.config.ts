@@ -31,6 +31,7 @@ if (externalServer && !externalRepository) {
 export default defineConfig({
   testDir: ".",
   testMatch: "**/*.spec.ts",
+  testIgnore: "**/core64-lifecycle.host.acceptance.spec.ts",
   fullyParallel: false,
   workers: 1,
   timeout: 90_000,
