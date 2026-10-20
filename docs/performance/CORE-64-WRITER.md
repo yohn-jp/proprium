@@ -131,13 +131,24 @@ temporary index, while keeping per-content hashing, file modes, validation,
 and commit creation unchanged. Flush pending upserts before each deletion (or
 fall back to the existing path for mixed writes); preserve NUL-safe paths,
 binary hashing, CAS, receipt, temporary-index, workspace, and single-writer
-semantics. The branch candidate passes a focused Core build and mixed
-checkpoint/publish semantic test covering binary contents, spaced and Unicode
-paths, executable tree mode, deletion ordering, receipt revisions and exact
-publish acknowledgement. Git's `-z --index-info` input still separates the
-header from the pathname with a tab; NUL terminates the pathname record. The
-candidate remains unmeasured and unadopted: a separate isolated matched C23
-1/10/100 before/after run is required before an optimization claim or adoption.
+semantics. The candidate's focused checkpoint/publish semantic test covers
+binary contents, spaced and Unicode paths, executable tree mode, deletion
+ordering, receipt revisions and exact publish acknowledgement. Git's
+`-z --index-info` input still separates the header from the pathname with a
+tab; NUL terminates the pathname record. A focused compatibility matrix found
+that raw `--index-info -z` accepts file/directory prefix conflicts such as
+writing both `a` and `a/b`, including a user `meta` file alongside Core's
+generated metadata, where legacy sequential `--add --cacheinfo` rejects the
+write set. The candidate now uses the legacy per-path update path for the whole
+operation whenever any user or generated write path is an ancestor of another.
+The set-based ancestor walk is linear in the total path segments. Existing
+file/directory topology transitions still fail Core path preconditions, and
+focused checks confirm rejection leaves checkpoint refs and receipts
+unchanged. The initial batching leaf passed a focused Core build; the latest
+compatibility guard passed the focused matrix test but needs a fresh build
+before matched timing. The candidate remains unmeasured and unadopted: a
+separate isolated matched C23 1/10/100 before/after run is required before an
+optimization claim or adoption.
 
 ## Candidate dispositions
 

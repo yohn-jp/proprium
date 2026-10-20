@@ -1759,6 +1759,16 @@ export class CoreStore implements MutationCoordinator {
         ...writes.map((change) => ({ path: change.path, content: change.content, ...(change.encoding ? { encoding: change.encoding } : {}) })),
         ...metadata.map((item) => ({ path: item.path, content: item.content, encoding: "utf8" as const })),
       ];
+      const writePaths = new Set(allWrites.map(({ path: filePath }) => filePath));
+      const hasPathPrefixConflict = allWrites.some(({ path: filePath }) => {
+        const segments = filePath.split("/");
+        let prefix = segments[0] ?? "";
+        for (const segment of segments.slice(1)) {
+          if (writePaths.has(prefix)) return true;
+          prefix += `/${segment}`;
+        }
+        return false;
+      });
       const indexInfoRecords: Buffer[] = [];
       const pendingIndexPaths = new Set<string>();
       const flushIndexInfo = async (): Promise<void> => {
@@ -1782,6 +1792,10 @@ export class CoreStore implements MutationCoordinator {
         const bytes = change.encoding === "base64" ? Buffer.from(change.content, "base64") : Buffer.from(change.content, "utf8");
         const blob = (await gitInput(root, ["hash-object", "-w", "--stdin"], bytes)).trim();
         const mode = existing?.mode === "100755" ? "100755" : "100644";
+        if (hasPathPrefixConflict) {
+          await git(root, ["update-index", "--add", "--cacheinfo", `${mode},${blob},${change.path}`], { env });
+          continue;
+        }
         indexInfoRecords.push(Buffer.concat([
           Buffer.from(`${mode} ${blob} 0\t`, "utf8"),
           Buffer.from(change.path, "utf8"),

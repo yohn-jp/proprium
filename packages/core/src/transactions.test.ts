@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { createHash } from "node:crypto";
-import { execFile as execFileCallback } from "node:child_process";
+import { execFile as execFileCallback, spawn as spawnCallback } from "node:child_process";
 import { promisify } from "node:util";
 import fs from "node:fs/promises";
 import os from "node:os";
@@ -14,6 +14,88 @@ const execFile = promisify(execFileCallback);
 async function git(cwd: string, ...args: string[]): Promise<string> {
   const { stdout } = await execFile("git", args, { cwd, maxBuffer: 4 * 1024 * 1024 });
   return stdout.trim();
+}
+
+type IndexChange = { path: string; content: Buffer | null };
+type IndexOutcome = { kind: "tree"; tree: string } | { kind: "error"; stage: string };
+
+async function runIndexStrategy(
+  cwd: string,
+  scratch: string,
+  parent: string,
+  changes: IndexChange[],
+  strategy: "legacy" | "batch" | "batch-only",
+): Promise<IndexOutcome> {
+  const directory = await fs.mkdtemp(path.join(scratch, `index-${strategy}-`));
+  const env = { ...process.env, GIT_INDEX_FILE: path.join(directory, "index") };
+  const changePaths = new Set(changes.map(({ path: filePath }) => filePath));
+  const hasPathPrefixConflict = changes.some(({ path: filePath }) => {
+    const segments = filePath.split("/");
+    let prefix = segments[0] ?? "";
+    for (const segment of segments.slice(1)) {
+      if (changePaths.has(prefix)) return true;
+      prefix += `/${segment}`;
+    }
+    return false;
+  });
+  const useBatch = strategy === "batch-only" || (strategy === "batch" && !hasPathPrefixConflict);
+  const command = async (...args: string[]): Promise<string> => {
+    const { stdout } = await execFile("git", args, { cwd, env, maxBuffer: 4 * 1024 * 1024 });
+    return stdout.trim();
+  };
+  const input = (args: string[], bytes: Buffer): Promise<string> => new Promise((resolve, reject) => {
+    const child = spawnCallback("git", args, { cwd, env, stdio: ["pipe", "pipe", "pipe"] });
+    const stdout: Buffer[] = [];
+    const stderr: Buffer[] = [];
+    child.stdout.on("data", (chunk: Buffer) => stdout.push(chunk));
+    child.stderr.on("data", (chunk: Buffer) => stderr.push(chunk));
+    child.once("error", reject);
+    child.once("close", (code) => {
+      if (code === 0) resolve(Buffer.concat(stdout).toString("utf8").trim());
+      else reject(new Error(Buffer.concat(stderr).toString("utf8")));
+    });
+    child.stdin.end(bytes);
+  });
+  const records: Buffer[] = [];
+  let stage = "read-tree";
+  const flush = async (): Promise<void> => {
+    if (!records.length) return;
+    stage = "update-index";
+    await input(["update-index", "-z", "--index-info"], Buffer.concat(records));
+    records.length = 0;
+  };
+  try {
+    await command("read-tree", parent);
+    for (const [index, change] of changes.entries()) {
+      if (change.content === null) {
+        if (useBatch) await flush();
+        stage = "update-index";
+        await command("update-index", "--force-remove", "--", change.path);
+        continue;
+      }
+      const contentPath = path.join(directory, `blob-${index}`);
+      await fs.writeFile(contentPath, change.content);
+      stage = "hash-object";
+      const blob = await command("hash-object", "-w", "--", contentPath);
+      if (!useBatch) {
+        stage = "update-index";
+        await command("update-index", "--add", "--cacheinfo", `100644,${blob},${change.path}`);
+      } else {
+        records.push(Buffer.concat([
+          Buffer.from(`100644 ${blob} 0\t`, "utf8"),
+          Buffer.from(change.path, "utf8"),
+          Buffer.from([0]),
+        ]));
+      }
+    }
+    if (useBatch) await flush();
+    stage = "write-tree";
+    return { kind: "tree", tree: await command("write-tree") };
+  } catch {
+    return { kind: "error", stage };
+  } finally {
+    await fs.rm(directory, { recursive: true, force: true });
+  }
 }
 
 async function remoteFixture(): Promise<{ root: string; remote: string; seed: string }> {
@@ -1974,6 +2056,189 @@ test("batched temporary-index updates preserve binary, executable, spaced-path, 
     assert.equal((await remoteReader.read(spacedBinaryPath, "base64"))?.content, newBinary.toString("base64"));
     await assert.rejects(git(fixture.root, "--git-dir", fixture.remote, "show", `${publication.remoteCommit}:${removedPath}`));
     assert.ok((await git(fixture.root, "--git-dir", fixture.remote, "ls-tree", publication.remoteCommit, "--", executablePath)).startsWith("100755 blob "));
+  } finally {
+    await fs.rm(fixture.root, { recursive: true, force: true });
+  }
+});
+
+test("batched temporary-index updates preserve legacy file-directory conflict semantics", async () => {
+  const fixture = await remoteFixture();
+  const fileToDirectoryFile = "prefix-cases/file-to-directory/a";
+  const directoryToFileChild = "prefix-cases/directory-to-file/a/b";
+  const fileToDirectoryChild = `${fileToDirectoryFile}/b`;
+  const directoryToFileFile = "prefix-cases/directory-to-file/a";
+  const fileContents = Buffer.from("Existing file.\n");
+  const childContents = Buffer.from("Existing child.\n");
+  try {
+    await fs.mkdir(path.dirname(path.join(fixture.seed, fileToDirectoryFile)), { recursive: true });
+    await fs.mkdir(path.dirname(path.join(fixture.seed, directoryToFileChild)), { recursive: true });
+    await fs.writeFile(path.join(fixture.seed, fileToDirectoryFile), fileContents);
+    await fs.writeFile(path.join(fixture.seed, directoryToFileChild), childContents);
+    await git(fixture.seed, "add", "prefix-cases");
+    await git(fixture.seed, "commit", "-m", "Seed file-directory conflict cases");
+    await git(fixture.seed, "push", "origin", "main");
+    const parent = await git(fixture.seed, "rev-parse", "HEAD");
+    const scenarios: Array<{
+      name: string;
+      changes: IndexChange[];
+      expected: IndexOutcome["kind"];
+      unguardedBatch?: IndexOutcome["kind"];
+    }> = [
+      {
+        name: "new parent before new child",
+        changes: [
+          { path: "prefix-cases/new-parent/a", content: Buffer.from("parent file\n") },
+          { path: "prefix-cases/new-parent/a/b", content: Buffer.from("child file\n") },
+        ],
+        expected: "error",
+        unguardedBatch: "tree",
+      },
+      {
+        name: "new child before new parent",
+        changes: [
+          { path: "prefix-cases/new-child/a/b", content: Buffer.from("child file\n") },
+          { path: "prefix-cases/new-child/a", content: Buffer.from("parent file\n") },
+        ],
+        expected: "error",
+        unguardedBatch: "tree",
+      },
+      {
+        name: "user meta file before internal metadata",
+        changes: [
+          { path: "meta", content: Buffer.from("User file at metadata root.\n") },
+          { path: "meta/scriptorium/operations/prefix_user_metadata.json", content: Buffer.from("Internal operation metadata.\n") },
+        ],
+        expected: "error",
+        unguardedBatch: "tree",
+      },
+      {
+        name: "file to directory, delete before add",
+        changes: [
+          { path: fileToDirectoryFile, content: null },
+          { path: fileToDirectoryChild, content: Buffer.from("New child.\n") },
+        ],
+        expected: "tree",
+      },
+      {
+        name: "file to directory, add before delete",
+        changes: [
+          { path: fileToDirectoryChild, content: Buffer.from("New child.\n") },
+          { path: fileToDirectoryFile, content: null },
+        ],
+        expected: "error",
+      },
+      {
+        name: "directory to file, delete before add",
+        changes: [
+          { path: directoryToFileChild, content: null },
+          { path: directoryToFileFile, content: Buffer.from("New parent file.\n") },
+        ],
+        expected: "tree",
+      },
+      {
+        name: "directory to file, add before delete",
+        changes: [
+          { path: directoryToFileFile, content: Buffer.from("New parent file.\n") },
+          { path: directoryToFileChild, content: null },
+        ],
+        expected: "error",
+      },
+    ];
+    for (const scenario of scenarios) {
+      const legacy = await runIndexStrategy(fixture.seed, fixture.root, parent, scenario.changes, "legacy");
+      const batch = await runIndexStrategy(fixture.seed, fixture.root, parent, scenario.changes, "batch");
+      const rawBatch = await runIndexStrategy(fixture.seed, fixture.root, parent, scenario.changes, "batch-only");
+      assert.equal(legacy.kind, scenario.expected, `${scenario.name}: legacy outcome ${JSON.stringify(legacy)}`);
+      assert.equal(batch.kind, legacy.kind, `${scenario.name}: batch ${JSON.stringify(batch)}, legacy ${JSON.stringify(legacy)}`);
+      if (legacy.kind === "tree" && batch.kind === "tree") assert.equal(batch.tree, legacy.tree, scenario.name);
+      if (scenario.unguardedBatch) assert.equal(rawBatch.kind, scenario.unguardedBatch,
+        `${scenario.name}: raw index-info batch behavior changed: ${JSON.stringify(rawBatch)}`);
+    }
+
+    const dataDir = path.join(fixture.root, "state");
+    const store = new CoreStore({ dataDir, allowLocalRemotes: true });
+    const project = await store.registerProject({ url: fixture.remote });
+    const snapshot = (await store.observe(project.id)).snapshot;
+    const workspace = path.join(dataDir, "projects", project.id);
+    const headBefore = await git(workspace, "rev-parse", "HEAD");
+    const branchBefore = await git(workspace, "rev-parse", "refs/heads/main");
+    const checkpointHeadBefore = await git(workspace, "rev-parse", "refs/scriptorium/checkpoint-head");
+    const rejectedOperations: Array<{ id: string; writes: ChangeOperation["writes"]; code: string }> = [
+      {
+        id: "prefix_new_parent_first",
+        writes: [
+          { path: "prefix-cases/new-parent/a", revision: null, content: "parent file\n" },
+          { path: "prefix-cases/new-parent/a/b", revision: null, content: "child file\n" },
+        ],
+        code: "git_operation_failed",
+      },
+      {
+        id: "prefix_new_child_first",
+        writes: [
+          { path: "prefix-cases/new-child/a/b", revision: null, content: "child file\n" },
+          { path: "prefix-cases/new-child/a", revision: null, content: "parent file\n" },
+        ],
+        code: "git_operation_failed",
+      },
+      {
+        id: "prefix_user_metadata",
+        writes: [{ path: "meta", revision: null, content: "User file at metadata root.\n" }],
+        code: "git_operation_failed",
+      },
+      {
+        id: "prefix_existing_file_to_directory",
+        writes: [
+          { path: fileToDirectoryFile, revision: createHash("sha256").update(fileContents).digest("hex"), content: null },
+          { path: fileToDirectoryChild, revision: null, content: "New child.\n" },
+        ],
+        code: "unsafe_project_path",
+      },
+      {
+        id: "prefix_existing_file_to_directory_reverse",
+        writes: [
+          { path: fileToDirectoryChild, revision: null, content: "New child.\n" },
+          { path: fileToDirectoryFile, revision: createHash("sha256").update(fileContents).digest("hex"), content: null },
+        ],
+        code: "unsafe_project_path",
+      },
+      {
+        id: "prefix_existing_directory_to_file",
+        writes: [
+          { path: directoryToFileChild, revision: createHash("sha256").update(childContents).digest("hex"), content: null },
+          { path: directoryToFileFile, revision: null, content: "New parent file.\n" },
+        ],
+        code: "unsafe_project_path",
+      },
+      {
+        id: "prefix_existing_directory_to_file_reverse",
+        writes: [
+          { path: directoryToFileFile, revision: null, content: "New parent file.\n" },
+          { path: directoryToFileChild, revision: createHash("sha256").update(childContents).digest("hex"), content: null },
+        ],
+        code: "unsafe_project_path",
+      },
+    ];
+    for (const { id, writes, code } of rejectedOperations) {
+      const op: ChangeOperation = {
+        id,
+        generation: 1,
+        repository: snapshot.repository,
+        baseRemoteCommit: snapshot.remoteCommit,
+        effect: "metadata",
+        reads: writes.map(({ path: filePath, revision }) => ({ path: filePath, revision })),
+        writes,
+        message: "Verify fail-closed file-directory conflicts",
+      };
+      const proposal = await store.propose(project.id, { id: `proposal_${id}`, snapshot, operations: [op], source: "author" });
+      await store.approve(project.id, { proposalId: proposal.id, operationIds: [id], authorScope: "owner" });
+      await assert.rejects(store.checkpoint(project.id, op),
+        (error: unknown) => error instanceof CoreError && error.code === code, id);
+      assert.equal(await git(workspace, "rev-parse", "HEAD"), headBefore, `${id}: HEAD changed`);
+      assert.equal(await git(workspace, "rev-parse", "refs/heads/main"), branchBefore, `${id}: branch changed`);
+      assert.equal(await git(workspace, "rev-parse", "refs/scriptorium/checkpoint-head"), checkpointHeadBefore, `${id}: checkpoint head changed`);
+      assert.equal(await git(workspace, "for-each-ref", "--format=%(refname)", "refs/scriptorium/checkpoints/"), "", `${id}: checkpoint receipt ref created`);
+      assert.deepEqual((await store.observe(project.id)).pending, [], `${id}: uncommitted operation became pending`);
+    }
   } finally {
     await fs.rm(fixture.root, { recursive: true, force: true });
   }
