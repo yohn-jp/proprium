@@ -1527,7 +1527,7 @@ export class CoreStore implements MutationCoordinator {
     const uncachedIds = new Set<string>();
     for (const { blobId } of blobs) {
       const cached = this.fileRevisionCache.get(blobId);
-      if (cached) revisionsByBlob.set(blobId, this.cacheFileRevision(blobId, cached));
+      if (cached) revisionsByBlob.set(blobId, cached);
       else uncachedIds.add(blobId);
     }
 
