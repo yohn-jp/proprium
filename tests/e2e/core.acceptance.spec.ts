@@ -319,6 +319,58 @@ test("history keeps its pinned response through a foreground observation without
   expect(historyListRequests).toBe(1);
 });
 
+test("same-origin stale tabs cannot replace an equal-generation journal draft", async ({ page }) => {
+  test.skip(process.env.SCRIPTORIUM_E2E_EXTERNAL_REPOSITORY === "1", "The journal acceptance uses only the disposable local browser and Git fixtures.");
+  expect(authToken.length).toBeGreaterThanOrEqual(32);
+  expect(repositoryUrl).not.toBe("");
+  await resetLocalCore();
+
+  const secondTab = await page.context().newPage();
+  try {
+    await signIn(page);
+    await openFixtureProject(page);
+    await secondTab.goto("/desktop/");
+    await expect(secondTab.getByRole("heading", { name: "作品を追加" })).toBeVisible();
+    await openFixtureProject(secondTab);
+
+    const firstEditor = page.locator(".cm-content");
+    const secondEditor = secondTab.locator(".cm-content");
+    const firstTabText = "The first tab's durable manuscript bytes.";
+    const staleTabText = "The stale tab's conflicting manuscript bytes.";
+
+    // Both tabs opened the empty journal first, so each first edit is generation 1 with its own operation ID.
+    await firstEditor.fill(firstTabText);
+    await expect.poll(async () => (await readJournal(page)).some((entry) =>
+      entry.documentPath === "manuscript/vol-1/ch-1/scene-1.md" && entry.state === "draft" && entry.text === firstTabText,
+    )).toBe(true);
+    const firstSaved = (await readJournal(page)).find((entry) =>
+      entry.documentPath === "manuscript/vol-1/ch-1/scene-1.md" && entry.state === "draft" && entry.text === firstTabText,
+    );
+    expect(firstSaved).toBeTruthy();
+    expect(firstSaved?.generation).toBe(1);
+
+    await secondEditor.fill(staleTabText);
+    await expect(secondEditor).toHaveText(staleTabText);
+    await expect(secondTab.locator(".durability-message")).toContainText("保存を確認できていません");
+    await expect(secondTab.getByRole("alert")).toContainText("新しい世代");
+    await expect(secondTab.getByRole("button", { name: "Checkpoint", exact: true })).toBeDisabled();
+
+    const sharedJournal = (await readJournal(secondTab)).filter((entry) =>
+      entry.documentPath === "manuscript/vol-1/ch-1/scene-1.md" && entry.authorScope === firstSaved!.authorScope,
+    );
+    expect(sharedJournal).toHaveLength(1);
+    expect(sharedJournal[0]).toMatchObject({
+      state: "draft",
+      operationId: firstSaved!.operationId,
+      generation: firstSaved!.generation,
+      text: firstTabText,
+    });
+    expect((await readJournal(secondTab)).some((entry) => entry.text === staleTabText)).toBe(false);
+  } finally {
+    await secondTab.close();
+  }
+});
+
 test("coalesced editor state is current for immediate print and history actions", async ({ page }) => {
   test.skip(process.env.SCRIPTORIUM_E2E_EXTERNAL_REPOSITORY === "1", "The history acceptance writes only to the disposable local Git fixture.");
   expect(authToken.length).toBeGreaterThanOrEqual(32);
