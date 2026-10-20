@@ -49,6 +49,9 @@ confirmed effective UID 1000. The verifier confirms `/data` writes; `/history`
 writes are still pending the dedicated C62 measurement helper and quiet-window
 grant.
 
+Post-acceptance isolated-store inventory contained only the pinned Node base and
+the two tagged Core/Full images; there were no remaining containers or volumes.
+
 Concurrent one-shot verifier snapshots: Core reported cgroup memory 42.19 MB,
 12 PIDs, and 91,680 KiB aggregate process RSS with its sampler excluded. Full
 reported 41.21 MB, 12 PIDs, and 90,644 KiB aggregate process RSS with its sampler
