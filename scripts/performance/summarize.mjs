@@ -26,7 +26,7 @@ export function summarizeBrowser(report) {
     const data = phase.browser;
     const transactions = data.transactions.filter(inPhase);
     const reads = data.reads.filter(inPhase);
-    return { name: phase.name, storageEstimate: phase.storageEstimate,
+    return { name: phase.name, sceneId: phase.sceneId, storageEstimate: phase.storageEstimate,
       typingFrameMs: distribution(data.inputs.filter(row => inPhase(row) && row.type === 'keydown' && row.key === 'a').map(row => row.frameMs).filter(Number.isFinite)),
       arrowFrameMs: distribution(data.inputs.filter(row => inPhase(row) && row.type === 'keydown' && row.key === 'ArrowLeft').map(row => row.frameMs).filter(Number.isFinite)),
       beforeInputFrameMs: distribution(data.inputs.filter(row => inPhase(row) && row.type === 'beforeinput').map(row => row.frameMs).filter(Number.isFinite)),
@@ -91,7 +91,7 @@ async function summarize(directory) {
   lines.push('', '| Dataset / document | Worker status | typing n | typing p50 / p95 / p99 ms | arrow p95 ms | React commits | Long Tasks n / p95 ms | strict IDB n / p95 ms | getAll calls |', '| --- | --- | ---: | --- | ---: | ---: | --- | --- | ---: |');
   for (const [file, report] of Object.entries(result.browser)) for (const input of report.inputs) {
     const t = input.typingFrameMs;
-    lines.push(`| ${file.replace('.json', '')} / ${input.name} | ${report.status} | ${t.n} | ${fmt(t.p50)} / ${fmt(t.p95)} / ${fmt(t.p99)} | ${fmt(input.arrowFrameMs.p95)} | ${input.reactCommits} | ${input.longTasks.n} / ${fmt(input.longTasks.p95)} | ${input.strictWriteMs.n} / ${fmt(input.strictWriteMs.p95)} | ${input.reads.getAll} |`);
+    lines.push(`| ${file.replace('.json', '')} / ${input.name}${input.sceneId ? ' / ' + input.sceneId : ''} | ${report.status} | ${t.n} | ${fmt(t.p50)} / ${fmt(t.p95)} / ${fmt(t.p99)} | ${fmt(input.arrowFrameMs.p95)} | ${input.reactCommits} | ${input.longTasks.n} / ${fmt(input.longTasks.p95)} | ${input.strictWriteMs.n} / ${fmt(input.strictWriteMs.p95)} | ${input.reads.getAll} |`);
   }
   await writeFile(join(directory, 'tables.md'), lines.join('\n') + '\n');
   return result;

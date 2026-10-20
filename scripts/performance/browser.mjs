@@ -87,7 +87,7 @@ try {
     await page.waitForFunction(at => window.__wave0.transactions.some(tx => tx.start > at && tx.mode === 'readwrite' && tx.status === 'complete'), start);
     await page.waitForTimeout(1000);
     const end = await page.evaluate(() => performance.now());
-    report.phases.push({ name: `input.${dataset.documentBytes[id - 1]}`, start, end, server: await stats(),
+    report.phases.push({ name: `input.${dataset.documentBytes[id - 1]}`, sceneId: `scene-${id}`, start, end, server: await stats(),
       browser: await page.evaluate(() => structuredClone(window.__wave0)), cdp: await cdp.send('Performance.getMetrics'), runtime: await browserRuntime(), storageEstimate: await page.evaluate(() => navigator.storage.estimate()) });
     await save(output, report);
   }

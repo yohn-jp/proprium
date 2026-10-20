@@ -139,3 +139,9 @@ It has exactly ten tracked files with all three manuscripts at 1 KiB. The normal
 `small` matrix includes the larger input specimens to isolate document-size cost
 from repository file count. Baseline artifacts label the control `small-short`;
 its results are not mixed with the 1 KiB/100 KiB/1 MiB matrix.
+
+After generating that control, run the five Core workloads with the same repeat
+count and run `browser.mjs` against it. Use result names such as
+`read-small-short.json` and `browser-small-short.json`, and copy its manifest to
+`dataset-small-short.json` before summarizing. Each browser input phase also
+records the scene ID so equally sized control documents remain distinguishable.
