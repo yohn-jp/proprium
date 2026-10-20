@@ -1,0 +1,69 @@
+$ pnpm --filter @scriptorium/contracts build && pnpm --filter @scriptorium/module-runtime build && pnpm --filter @scriptorium/migration build && pnpm --filter @scriptorium/module-publishing build && pnpm --filter @scriptorium/module-mcp build && pnpm --filter @scriptorium/module-nlp build && pnpm --filter @scriptorium/module-diagnostics build && pnpm --filter @scriptorium/module-story build && pnpm --filter @scriptorium/module-semantic build && pnpm --filter @scriptorium/module-search build && pnpm --filter @scriptorium/module-speaker build && pnpm --filter @scriptorium/module-assistant build && pnpm --filter @scriptorium/core build && node scripts/profile-build.mjs --profile "${SCRIPTORIUM_PROFILE:-core}" && pnpm --filter @scriptorium/app build && pnpm --filter @scriptorium/api build
+$ tsc -p tsconfig.json
+$ tsc -p tsconfig.json
+$ tsc -p tsconfig.json
+$ tsc -p tsconfig.json
+$ tsc -p tsconfig.json
+$ tsc -p tsconfig.json
+$ tsc -p tsconfig.json
+$ tsc -p tsconfig.json
+$ tsc -p tsconfig.json
+$ tsc -p tsconfig.json
+$ tsc -p tsconfig.json
+$ tsc -p tsconfig.json && node scripts/copy-prompts.mjs
+$ tsc -b tsconfig.build.json
+Generated core module composition: 0 module(s) in /home/sophia/src/scriptorium-c64-static/profiles/core/generated
+$ tsc --noEmit -p tsconfig.json && vite build && SCRIPTORIUM_UI=desktop vite build && SCRIPTORIUM_UI=mobile vite build
+vite v6.4.4 building for production...
+transforming...
+✓ 78 modules transformed.
+rendering chunks...
+computing gzip size...
+dist/.vite/manifest.json           0.22 kB │ gzip:   0.14 kB
+dist/index.html                    0.72 kB │ gzip:   0.43 kB
+dist/assets/styles-9eCYjaqk.css   28.23 kB │ gzip:   6.33 kB
+dist/assets/index-C9bWcgoz.js    723.75 kB │ gzip: 228.79 kB
+
+(!) Some chunks are larger than 500 kB after minification. Consider:
+- Using dynamic import() to code-split the application
+- Use build.rollupOptions.output.manualChunks to improve chunking: https://rollupjs.org/configuration-options/#output-manualchunks
+- Adjust chunk size limit for this warning via build.chunkSizeWarningLimit.
+✓ built in 1.81s
+vite v6.4.4 building for production...
+transforming...
+✓ 101 modules transformed.
+rendering chunks...
+computing gzip size...
+dist/desktop/.vite/manifest.json           0.22 kB │ gzip:   0.14 kB
+dist/desktop/index.html                    0.74 kB │ gzip:   0.44 kB
+dist/desktop/assets/styles-DSRKpUX4.css   48.24 kB │ gzip:   9.42 kB
+dist/desktop/assets/index-C1-MIbf0.js    753.91 kB │ gzip: 239.27 kB
+
+(!) Some chunks are larger than 500 kB after minification. Consider:
+- Using dynamic import() to code-split the application
+- Use build.rollupOptions.output.manualChunks to improve chunking: https://rollupjs.org/configuration-options/#output-manualchunks
+- Adjust chunk size limit for this warning via build.chunkSizeWarningLimit.
+✓ built in 1.87s
+vite v6.4.4 building for production...
+transforming...
+✓ 261 modules transformed.
+rendering chunks...
+computing gzip size...
+dist/mobile/index.html                         0.74 kB │ gzip:   0.44 kB
+dist/mobile/.vite/manifest.json                3.47 kB │ gzip:   0.47 kB
+dist/mobile/assets/styles-DcgQckBh.css        65.36 kB │ gzip:  13.26 kB
+dist/mobile/assets/p-DD92Fw3n-CBpluxrJ.js      0.48 kB │ gzip:   0.34 kB
+dist/mobile/assets/p-BVNUhOOf-Ctu2BRFt.js      0.67 kB │ gzip:   0.47 kB
+dist/mobile/assets/p-Uk13YgEc-gYxLwJL_.js      0.94 kB │ gzip:   0.52 kB
+dist/mobile/assets/p-D7-vHX0A-eVI9wysZ.js      1.24 kB │ gzip:   0.63 kB
+dist/mobile/assets/p-C1AxSUnp-CXH_sdOd.js      1.62 kB │ gzip:   0.83 kB
+dist/mobile/assets/p-YNnH1_Hs-sEBF9GbT.js      4.84 kB │ gzip:   2.17 kB
+dist/mobile/assets/p-Dvyv9SMk-BSDq4rDc.js     10.39 kB │ gzip:   3.03 kB
+dist/mobile/assets/index-soLszK2T.js       1,668.57 kB │ gzip: 434.88 kB
+
+(!) Some chunks are larger than 500 kB after minification. Consider:
+- Using dynamic import() to code-split the application
+- Use build.rollupOptions.output.manualChunks to improve chunking: https://rollupjs.org/configuration-options/#output-manualchunks
+- Adjust chunk size limit for this warning via build.chunkSizeWarningLimit.
+✓ built in 2.85s
+$ tsc -p tsconfig.json
