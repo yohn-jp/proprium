@@ -1,0 +1,191 @@
+{
+  "config": {
+    "argv": [
+      "/nix/store/503mh0fj8j1cfvrxcavr76szbn4dk2r7-nodejs-slim-24.21.0/bin/node",
+      "/data/scriptorium-core64-g3-virtual-store/@playwright+test@1.64.1/node_modules/@playwright/test/cli.js",
+      "test",
+      "--config",
+      "tests/e2e/playwright.config.ts",
+      "--project=chromium",
+      "--workers=1",
+      "--reporter=json",
+      "--grep",
+      "recent activity polling pauses"
+    ],
+    "configFile": "/home/sophia/src/scriptorium-c64-g3/tests/e2e/playwright.config.ts",
+    "rootDir": "/home/sophia/src/scriptorium-c64-g3/tests/e2e",
+    "failOnFlakyTests": false,
+    "forbidOnly": false,
+    "fullyParallel": false,
+    "globalSetup": null,
+    "globalTeardown": null,
+    "globalTimeout": 0,
+    "grep": {},
+    "grepInvert": null,
+    "maxFailures": 0,
+    "metadata": {
+      "actualWorkers": 1
+    },
+    "preserveOutput": "always",
+    "projects": [
+      {
+        "outputDir": "/home/sophia/src/scriptorium-c64-g3/tests/e2e/test-results",
+        "repeatEach": 1,
+        "retries": 0,
+        "metadata": {
+          "actualWorkers": 1
+        },
+        "id": "chromium",
+        "name": "chromium",
+        "testDir": "/home/sophia/src/scriptorium-c64-g3/tests/e2e",
+        "testIgnore": [],
+        "testMatch": [
+          "**/*.spec.ts"
+        ],
+        "timeout": 90000
+      },
+      {
+        "outputDir": "/home/sophia/src/scriptorium-c64-g3/tests/e2e/test-results",
+        "repeatEach": 1,
+        "retries": 0,
+        "metadata": {
+          "actualWorkers": 1
+        },
+        "id": "webkit",
+        "name": "webkit",
+        "testDir": "/home/sophia/src/scriptorium-c64-g3/tests/e2e",
+        "testIgnore": [],
+        "testMatch": [
+          "**/ui-v1.acceptance.spec.ts"
+        ],
+        "timeout": 90000
+      }
+    ],
+    "filteredProjects": [
+      {
+        "grep": {},
+        "grepInvert": null,
+        "outputDir": "/home/sophia/src/scriptorium-c64-g3/tests/e2e/test-results",
+        "repeatEach": 1,
+        "retries": 0,
+        "metadata": {
+          "actualWorkers": 1
+        },
+        "name": "chromium",
+        "testDir": "/home/sophia/src/scriptorium-c64-g3/tests/e2e",
+        "snapshotDir": "/home/sophia/src/scriptorium-c64-g3/tests/e2e",
+        "testIgnore": [],
+        "testMatch": "**/*.spec.ts",
+        "timeout": 90000,
+        "use": {
+          "baseURL": "http://127.0.0.1:4573",
+          "headless": true,
+          "trace": "retain-on-failure",
+          "browserName": "chromium",
+          "launchOptions": {
+            "executablePath": "/nix/store/ini1ifgvcsvw48x4mxawrv9jvbdwn70p-chromium-155.0.8059.79/bin/chromium"
+          }
+        },
+        "dependencies": [],
+        "ignoreSnapshots": false,
+        "__projectId": "chromium"
+      }
+    ],
+    "quiet": false,
+    "reporter": [
+      [
+        "json"
+      ]
+    ],
+    "reportSlowTests": {
+      "max": 5,
+      "threshold": 300000
+    },
+    "shard": null,
+    "tags": [],
+    "updateSnapshots": "default",
+    "updateSourceMethod": "patch",
+    "version": "1.64.1",
+    "workers": 1,
+    "webServer": null
+  },
+  "suites": [
+    {
+      "title": "recent-activity.acceptance.spec.ts",
+      "file": "recent-activity.acceptance.spec.ts",
+      "column": 0,
+      "line": 0,
+      "specs": [
+        {
+          "title": "recent activity polling pauses while naturally hidden and resumes when visible",
+          "ok": true,
+          "tags": [],
+          "tests": [
+            {
+              "timeout": 90000,
+              "annotations": [
+                {
+                  "type": "c39-visible-poll-count",
+                  "description": "visible before hide: 1 GET(s) in 15.5 seconds."
+                },
+                {
+                  "type": "c39-hidden-poll-count",
+                  "description": "1 GET(s) in 15.5 seconds after Chromium naturally reported hidden."
+                },
+                {
+                  "type": "c39-visibility-poll-counts",
+                  "description": "visible before hide: 1; hidden: 1; visible after return: 3 GET(s), including immediate focus refresh; post-refresh 15.5-second delta: 1."
+                }
+              ],
+              "expectedStatus": "passed",
+              "projectId": "chromium",
+              "projectName": "chromium",
+              "results": [
+                {
+                  "workerIndex": 0,
+                  "parallelIndex": 0,
+                  "status": "passed",
+                  "duration": 50248,
+                  "errors": [],
+                  "stdout": [],
+                  "stderr": [],
+                  "retry": 0,
+                  "startTime": "2026-10-20T17:14:49.702Z",
+                  "annotations": [
+                    {
+                      "type": "c39-visible-poll-count",
+                      "description": "visible before hide: 1 GET(s) in 15.5 seconds."
+                    },
+                    {
+                      "type": "c39-hidden-poll-count",
+                      "description": "1 GET(s) in 15.5 seconds after Chromium naturally reported hidden."
+                    },
+                    {
+                      "type": "c39-visibility-poll-counts",
+                      "description": "visible before hide: 1; hidden: 1; visible after return: 3 GET(s), including immediate focus refresh; post-refresh 15.5-second delta: 1."
+                    }
+                  ],
+                  "attachments": []
+                }
+              ],
+              "status": "expected"
+            }
+          ],
+          "id": "928d4759ad2d6ce1f220-e7e78675b6b4cab6fcff",
+          "file": "recent-activity.acceptance.spec.ts",
+          "line": 459,
+          "column": 1
+        }
+      ]
+    }
+  ],
+  "errors": [],
+  "stats": {
+    "startTime": "2026-10-20T17:14:48.978Z",
+    "duration": 51031.733,
+    "expected": 1,
+    "skipped": 0,
+    "unexpected": 0,
+    "flaky": 0
+  }
+}

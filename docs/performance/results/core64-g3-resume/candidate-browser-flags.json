@@ -1,0 +1,7 @@
+[
+  {
+    "pid": 3225151,
+    "command": "/nix/store/xaaviz84rjj4pm3k6rq1rvz5pja1a77q-chromium-unwrapped-155.0.8059.79/libexec/chromium/chromium --no-sandbox --user-data-dir=/data/scriptorium-core64-g3-tmp/scriptorium-native-chromium-odQ4d0 --remote-debugging-port=38805 --remote-allow-origins=* about:blank",
+    "headless": false
+  }
+]

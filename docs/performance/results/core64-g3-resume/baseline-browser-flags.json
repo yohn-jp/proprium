@@ -1,0 +1,7 @@
+{
+  "capture": "initial native-headful baseline cohort; same launch helper, Chromium executable, DISPLAY and Xvfb/Openbox environment used for the clean baseline poll report",
+  "pid": 3214190,
+  "command": "/nix/store/xaaviz84rjj4pm3k6rq1rvz5pja1a77q-chromium-unwrapped-155.0.8059.79/libexec/chromium/chromium --no-sandbox --user-data-dir=/data/scriptorium-core64-g3-tmp/scriptorium-native-chromium-ZYsZLt --remote-debugging-port=40287 --remote-allow-origins=* about:blank",
+  "headless": false,
+  "note": "The process argv contains no --headless flag. The initial cohort's poll test later exposed a baseline assertion mismatch on focus counts; the clean baseline poll run is recorded separately."
+}
