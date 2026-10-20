@@ -1,3 +1,5 @@
+import { createHash } from 'node:crypto';
+import { git } from './dataset.mjs';
 import { fork } from 'node:child_process';
 import { once } from 'node:events';
 import { readFile, writeFile } from 'node:fs/promises';
@@ -11,7 +13,8 @@ const [datasetPath, output, repeatsArg = '20', idleArg = '35000'] = process.argv
 const repeats = Number(repeatsArg), idleMs = Number(idleArg);
 const dataset = JSON.parse(await readFile(join(datasetPath, 'dataset.json'), 'utf8'));
 let page;
-const report = { profile: 'core', dataset, node: process.version, samples: [], phases: [], requests: [], status: 'running', notChecked: [] };
+const harness = { source: git(process.cwd(), 'rev-parse', 'HEAD'), scriptSha256: createHash('sha256').update(await readFile(new URL(import.meta.url))).digest('hex') };
+const report = { harness, profile: 'core', dataset, node: process.version, samples: [], phases: [], requests: [], status: 'running', notChecked: [] };
 const server = fork(new URL('./server.mjs', import.meta.url), [resolve(datasetPath)], { stdio: ['ignore', 'ignore', 'inherit', 'ipc'] });
 let browser, cdp, browserCDP;
 async function browserRuntime() {

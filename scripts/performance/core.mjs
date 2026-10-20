@@ -1,7 +1,7 @@
 import { counts, gitCommands } from './instrument-node.mjs';
 import { readFile } from 'node:fs/promises';
 import { join, resolve } from 'node:path';
-import { randomUUID } from 'node:crypto';
+import { randomUUID, createHash } from 'node:crypto';
 import { git } from './dataset.mjs';
 import { measure, save, distribution } from './common.mjs';
 const { CoreStore } = await import('../../packages/core/dist/index.js');
@@ -11,7 +11,8 @@ const runId = randomUUID();
 const remote = join(datasetPath, `run-${runId}.git`);
 git(datasetPath, 'clone', '--bare', dataset.remote, remote);
 const store = new CoreStore({ dataDir: join(datasetPath, `state-${runId}`), allowLocalRemotes: true });
-const report = { dataset, profile: 'core', node: process.version, workload, samples: [], summaries: {}, gitCommands, status: 'running' };
+const harness = { source: git(process.cwd(), 'rev-parse', 'HEAD'), scriptSha256: createHash('sha256').update(await readFile(new URL(import.meta.url))).digest('hex') };
+const report = { harness, dataset, profile: 'core', node: process.version, workload, samples: [], summaries: {}, gitCommands, status: 'running' };
 async function sample(name, action) {
   report.pending = { name, startedAt: new Date().toISOString() }; await save(output, report);
   const result = await measure(name, action, () => ({ ...counts }));
@@ -41,7 +42,7 @@ try {
     if (publication.state !== 'confirmed') throw new Error(`Publication state: ${publication.state}`);
   }
   }
-  if (workload === 'search') await sample('search.scan', () => store.searchSnapshot(project.id, 'Synthetic', 20));
+  if (workload === 'search') await sample('search.scan', () => store.searchSnapshot(project.id, 'wave0-absent-needle-9f742e', 20));
   if (workload === 'stats') await sample('stats.scan', () => store.writingStatsSnapshot(project.id));
   if (workload === 'revisions') {
     const reader = await sample('reader.create', () => store.reader(project.id));

@@ -88,3 +88,10 @@ It writes `summary.json` (including operation CPU, I/O, RSS, Git counts, browser
 input/IDB/HTTP/idle metrics) and `tables.md`. Raw results remain authoritative.
 UI checkpoint/publish measurements await their actual successful HTTP receipts.
 The idle window starts after those foreground requests and their refreshes settle.
+
+Search uses an absent synthetic needle to measure the full Core scan rather than
+stopping after 20 matching documents. It does not invoke an optional search module.
+Each worker records its script checksum and source commit when started; raw run
+metadata also records the coordinator's starting revision. If a harness correction
+requires a rerun, preserve the original result as diagnostic evidence and identify
+the corrected result explicitly in the baseline.
