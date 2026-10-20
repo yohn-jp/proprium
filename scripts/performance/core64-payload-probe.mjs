@@ -1,7 +1,7 @@
 import { spawn } from 'node:child_process';
 import { createHash } from 'node:crypto';
 import { request as httpRequest } from 'node:http';
-import { mkdir, mkdtemp, readFile, rm } from 'node:fs/promises';
+import { mkdir, mkdtemp, readFile, readdir, rm } from 'node:fs/promises';
 import { arch, platform, release, tmpdir } from 'node:os';
 import { isAbsolute, join, relative, resolve, sep } from 'node:path';
 import { isDeepStrictEqual } from 'node:util';
@@ -23,14 +23,76 @@ const expectedArtifactRoots = [
   'app/dist',
   'profiles/core/generated',
 ];
+const candidateArtifactRoots = expectedArtifactRoots.slice(0, 4);
+
+async function filesUnder(directory) {
+  const files = [];
+  for (const entry of (await readdir(directory, { withFileTypes: true })).sort((left, right) => left.name.localeCompare(right.name))) {
+    const path = join(directory, entry.name);
+    if (entry.isDirectory()) files.push(...await filesUnder(path));
+    else if (entry.isFile()) files.push(path);
+    else throw new Error(`Unexpected candidate runtime artifact: ${path}`);
+  }
+  return files;
+}
+
+async function bindCandidateRuntime(runtimeRoot, runtimeCommit) {
+  const sourceCommit = git(sourceRoot, 'rev-parse', 'HEAD');
+  if (runtimeRoot !== sourceRoot || runtimeCommit !== sourceCommit) {
+    throw new Error('Candidate runtime must be the current probe worktree at its committed source revision.');
+  }
+  const sourcePaths = ['packages/api/src', 'packages/contracts/src', 'packages/core/src', 'packages/module-runtime/src'];
+  const sourceDirty = git(sourceRoot, 'status', '--porcelain', '--untracked-files=all', '--', ...sourcePaths);
+  if (sourceDirty) throw new Error(`Candidate runtime source paths are dirty: ${sourceDirty}`);
+  const sourceTrees = Object.fromEntries(sourcePaths.map((path) => [path, git(sourceRoot, 'rev-parse', `${runtimeCommit}:${path}`)]));
+  const artifacts = [];
+  let totalBytes = 0;
+  for (const artifactRoot of candidateArtifactRoots) {
+    const absoluteRoot = join(runtimeRoot, artifactRoot);
+    const files = await filesUnder(absoluteRoot);
+    if (files.length === 0) throw new Error(`Candidate runtime artifact root is empty: ${artifactRoot}`);
+    for (const file of files) {
+      const bytes = await readFile(file);
+      const artifact = {
+        path: relative(runtimeRoot, file).split(sep).join('/'),
+        bytes: bytes.length,
+        sha256: createHash('sha256').update(bytes).digest('hex'),
+      };
+      artifacts.push(artifact);
+      totalBytes += bytes.length;
+    }
+  }
+  const artifactManifestSha256 = createHash('sha256').update(JSON.stringify(artifacts)).digest('hex');
+  return {
+    kind: 'candidate-own-source-build',
+    root: runtimeRoot,
+    commit: runtimeCommit,
+    lockfileTree: git(runtimeRoot, 'rev-parse', `${runtimeCommit}:pnpm-lock.yaml`),
+    sourceTrees,
+    buildCommand: 'pnpm --filter @scriptorium/api... build (contracts, module-runtime, core, api)',
+    installCommand: 'pnpm install --offline --frozen-lockfile',
+    node: process.version,
+    packageManager: 'pnpm@12.10.1',
+    artifactRoots: candidateArtifactRoots,
+    artifactFiles: artifacts.length,
+    artifactBytes: totalBytes,
+    artifactManifestSha256,
+    artifacts,
+  };
+}
 
 async function bindRuntime() {
   const requestedRoot = process.env.SCRIPTORIUM_PERF_RUNTIME_ROOT;
-  if (!requestedRoot) throw new Error('Set SCRIPTORIUM_PERF_RUNTIME_ROOT to the frozen C09 runtime at ffd02739.');
+  if (!requestedRoot) throw new Error('Set SCRIPTORIUM_PERF_RUNTIME_ROOT to the frozen C09 or committed candidate runtime root.');
   const runtimeRoot = resolve(requestedRoot);
+  const runtimeCommit = git(runtimeRoot, 'rev-parse', 'HEAD');
+  if (runtimeRoot === sourceRoot) return await bindCandidateRuntime(runtimeRoot, runtimeCommit);
+  return await bindFrozenRuntime(runtimeRoot, runtimeCommit);
+}
+
+async function bindFrozenRuntime(runtimeRoot, runtimeCommit) {
   const manifestPath = resolve(process.env.SCRIPTORIUM_PERF_RUNTIME_MANIFEST ??
     join(runtimeRoot, 'docs/performance/results/core64-resize/runtime-manifest.json'));
-  const runtimeCommit = git(runtimeRoot, 'rev-parse', 'HEAD');
   if (runtimeCommit !== expectedRuntimeCommit) {
     throw new Error(`Expected frozen C09 runtime ${expectedRuntimeCommit}, found ${runtimeCommit} in ${runtimeRoot}`);
   }
@@ -412,7 +474,7 @@ async function main() {
       afterG0Lease: expectedCases('--with-heavy'),
       heavyLeaseGuard: 'CORE64_G0_LEASE=released is required for --with-heavy',
       persistence: 'Each case uses a separate real CoreStore dataDir and real API createScratch route over the shared read-only synthetic bare remote.',
-      runtime: `SCRIPTORIUM_PERF_RUNTIME_ROOT must point to frozen C09 runtime ${expectedRuntimeCommit}; the six-root artifact manifest and API/contracts source trees are verified before any request.`,
+      runtime: 'SCRIPTORIUM_PERF_RUNTIME_ROOT must point to the pinned C09 baseline or the committed candidate worktree; relevant artifacts are verified before any request.',
     }, null, 2));
     return;
   }
@@ -429,11 +491,23 @@ async function main() {
   const runId = new Date().toISOString().replaceAll(':', '-').replaceAll('.', '-') + `-${process.pid}`;
   const outputFile = join(outputDirectory, `payload-${runId}.json`);
   const sourceCommit = git(sourceRoot, 'rev-parse', 'HEAD');
+  const probeScripts = {};
+  for (const path of ['scripts/performance/core64-payload-probe.mjs', 'scripts/performance/core64-payload-worker.mjs']) {
+    probeScripts[path] = createHash('sha256').update(await readFile(join(sourceRoot, path))).digest('hex');
+  }
   const report = {
     schemaVersion: 1,
     runId,
     sourceCommit,
+    probeScripts,
     runtime,
+    executionContext: {
+      cpuAffinity: process.env.SCRIPTORIUM_PERF_CPUSET ?? 'unspecified',
+      affinityEnforcer: process.env.SCRIPTORIUM_PERF_CPUSET ? 'taskset' : 'unspecified',
+      hardTimeoutSeconds: Number(process.env.SCRIPTORIUM_PERF_HARD_TIMEOUT_SECONDS ?? 0) || null,
+      concurrentLanes: (process.env.SCRIPTORIUM_PERF_CONCURRENT_LANES ?? '').split(';').filter(Boolean),
+      latencyInterpretation: 'Concurrent measurement lanes make latency observational only; no adoption or comparative performance claim is supported.',
+    },
     node: process.version,
     host: { platform: platform(), arch: arch(), release: release() },
     profile: 'core',
