@@ -125,6 +125,7 @@ try {
   const foreground = await context.newPage(); await foreground.bringToFront();
   if (await page.evaluate(() => document.hidden)) await idle('idle.hidden');
   else report.notChecked.push('Hidden idle: headless Chromium did not hide the original page when another tab was foregrounded. No synthetic visibility override.');
+  await foreground.close();
   report.storageEstimate = await page.evaluate(() => navigator.storage.estimate());
   report.browserMetrics = await page.evaluate(() => structuredClone(window.__wave0));
   report.server = await stats();
