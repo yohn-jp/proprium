@@ -124,3 +124,10 @@ Browser action and readiness assertions both allow 60 seconds (Playwright's
 5-second expect default is too short for the largest document/hierarchy). The
 outer worker budget still bounds the entire workload; a readiness timeout is
 reported as unmeasured completion rather than as a finished latency sample.
+
+Fixture-construction Git commands disable automatic/background maintenance so
+100,000-file commits cannot race fixture-history creation. This applies only to
+the generator/setup helper; measured Core Git execution and its settings remain
+unchanged. The stress construction encountered a transient object lookup during
+an early diagnostic attempt; integrity and the actual history are checked before
+using a completed fixture.
