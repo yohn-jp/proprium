@@ -1,14 +1,14 @@
 # Core 64 G5 — build and OCI preflight
 
-Date: 2026-10-20. Read-only preflight at base `a1587e784788fa87d86c0eb7ab175d7a28a3209f`.
+Initial plan date: 2026-10-20, read-only preflight at base `a1587e784788fa87d86c0eb7ab175d7a28a3209f`.
 
-Status: plan only. No dependency install, build, test, browser acceptance, OCI build/container, benchmark, CI, or Inari command was run. G0 retains the exclusive build/OCI resource lease.
+Execution update (2026-10-21): the initial preflight below preceded all build work. C59 and C60 static Core/Full artifact comparisons are recorded in [G5 static asset closure results](results/2026-10-21/core64-g5/README.md); C59 is a browser/timing candidate and C60 was reverted because its dynamic CSS output does not fit the current asset-serving contract. The static-build lease is released. Browser/timing and OCI acceptance remain `NOT_CHECKED`; no acceptance is claimed. The C62 OCI/runtime investigation is assigned separately.
 
 ## Scope and current source evidence
 
-This unit covers C59–C62. C58's current-main baseline remains with G0; C63's cache-budget work remains with G2. After the resource lease is released, G5 owns the UI build configuration, root build graph, Dockerfile, and directly related build/verification scripts. `server.ts` is G3's boundary and `SharedApplication.tsx` is G1's boundary.
+The original G5 preflight scoped C59–C62. This worktree's current implementation leaf is C59/C60 launcher and Vite behavior; C58's baseline remains with G0, C63's cache-budget work with G2, `server.ts` with G3, and `SharedApplication.tsx` with G1. The coordinator assigned the C62 OCI/runtime investigation separately. No root build-graph, API asset-serving, or OCI changes are made here.
 
-The active launcher path needs one ownership correction before a C59 edit: `app/index.html` loads `/src/launcher.tsx`; Vite rewrites that URL to `entries/desktop.tsx` or `entries/mobile.tsx` for those builds. The active `launcher.tsx` statically imports `App`, and `App` re-exports `SharedApplication`. `app/src/main.tsx` also statically imports `App`, but the current `index.html` does not reference `main.tsx`. If C59 needs code changes, include `app/src/launcher.tsx` in G5's exclusive write set; no source was changed in this plan.
+The active launcher path needed one ownership correction before the C59 edit: `app/index.html` loads `/src/launcher.tsx`; Vite rewrites that URL to `entries/desktop.tsx` or `entries/mobile.tsx` for those builds. The active `launcher.tsx` statically imports `App`, and `App` re-exports `SharedApplication`. `app/src/main.tsx` also statically imports `App`, but the current `index.html` does not reference `main.tsx`. The implemented C59 candidate changes only `app/src/launcher.tsx`; its static Core/Full closure result and later basic build verification are linked above.
 
 Current build facts:
 
@@ -18,7 +18,7 @@ Current build facts:
 - `scripts/profile-package.mjs --profile core --out <new-directory-outside-workspace>` already provides a selective Core packaging path. Its Core command graph builds contracts/runtime, profile generation, app, and API dependencies; it does not build optional modules.
 - The Dockerfile pins Node 24 slim and builds a selected Core or Full runtime package. The runtime installs CA certificates, Git, and tini, runs as `node`/UID 1000, and declares `/data` and `/history` volumes. Its separate Go buildkit stages are not part of the Core/Full runtime image measurement.
 
-These source facts establish candidate gaps, not measured savings. G5 should consume G0's frozen toolchain and current-main reference when available and add only the route/build/OCI observations needed for these candidates.
+The source facts above established gaps before execution. C59/C60 now have separate static closure evidence on the C02/C21-updated main baseline; browser behavior and first-paint timing remain unmeasured. The local full Core/Full build and Core audit outcomes are recorded in the linked G5 results.
 
 ## Tool and host preflight
 
@@ -69,8 +69,8 @@ Repeat with `SCRIPTORIUM_PROFILE=full` and a distinct tag. The command is record
 
 | Candidate | Comparison and acceptance evidence |
 | --- | --- |
-| C59 — launcher static import | At the G0 reference SHA, record the Vite manifest's recursively imported JavaScript and CSS bytes (gzip) for `/`, `/desktop/`, and `/mobile/`, then capture cold first paint and launcher choice, remembered preference, direct route, and `/r/*` load behavior in Chromium. Test one isolated dynamic-import change only if the launcher route's initial closure contains avoidable `App` code. Compare the same routes and cache conditions before/after; preserve reader routing, query/hash, theme, nonce/CSP, and all three built entries. |
-| C60 — CSS split | Change only `cssCodeSplit` in an isolated candidate. Compare each entry's initial CSS request/gzip bytes and first paint, then check desktop/mobile light, dark, and paper themes, route transitions, and print styling for flash or style differences. Keep it only with a measured initial-load benefit and equivalent rendering. |
+| C59 — launcher static import | Static Core/Full closure is recorded in [G5 static asset closure results](results/2026-10-21/core64-g5/README.md). The candidate removes roughly 157 KB gzip-9 of initial launcher JavaScript and moves `App` to the direct `/r/*` dynamic path. Browser first paint and reader first-use tradeoff remain pending; verify launcher choice, remembered preference, query/hash, theme, nonce/CSP, and Core/Full behavior before acceptance. |
+| C60 — CSS split | The single-setting experiment reduced initial CSS by 1,091 bytes gzip-9 but emitted a dynamic `styles2.css` outside the current server contract. The candidate was reverted and declined under this contract; reconsider only after a named C46/C47 asset-serving contract change, a fresh measured benefit, and theme/FOUC/print/CSP evidence. |
 | C61 — Core build graph | Compare current `SCRIPTORIUM_PROFILE=core pnpm build` with a Core-only root graph using the existing `createBuildCommands('core', profile)` sequence from `profile-package.mjs`. Record clean-output and warm build wall time, cache state, and emitted profile closure on the same host and toolchain. The existing `node scripts/profile-package.mjs --profile core --out <new-directory-outside-workspace>` can validate the selective package closure, but exclude its deploy/audit time from the matched build-time comparison. Confirm generated Core imports contain no optional modules and retain typecheck, tests, Core audit, Core build, and Full build behavior. Do not treat package pruning or a skipped source import as a valid build-time saving. |
 | C62 — runtime image | Once Podman preflight succeeds and G0 releases the lease, compare Core and Full images at the same source SHA and engine settings. Record final image bytes/digest, repeated start-to-ready times, a fixed idle CPU/RSS sample, `/data` and `/history` writes, UID 1000, profile/assets, and graceful SIGTERM drain. Reuse the existing verifier for its covered assertions and add only the missing task-local measurements/checks required by C62. Preserve pinned base, user, volume, signal, and profile semantics. |
 
@@ -78,4 +78,4 @@ No performance budget or implementation is justified by static source inspection
 
 ## Next execution gate
 
-After G0 releases its resource lease, first establish a successful rootless Podman `info` probe and a runnable Playwright Chromium/WebKit path, then bind measurements to G0's reference SHA/toolchain. Recheck G5's exclusive paths, including the active `launcher.tsx` path if C59 is implemented. Run only the focused experiment for a candidate with an observable gap, followed by the production acceptance commands above. Do not add CI/workflow changes.
+C59's next gate is the separately granted browser/timing slot against the recorded baseline and candidate artifacts. Run the focused Core and Full browser cases and production acceptance commands above, including theme, direct route, reader, preference, nonce/CSP, and profile checks; record exact results before accepting or declining the change. Do not repeat builds or start browser/timing measurements without the coordinator's lease. OCI acceptance and C62 runtime measurements are handled by the separately assigned OCI unit. Do not add CI/workflow changes.

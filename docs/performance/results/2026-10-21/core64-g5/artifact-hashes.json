@@ -1,0 +1,474 @@
+[
+  {
+    "source": "baseline",
+    "sourceSha": "9f801061d1cc40c4719988b5e1aef17d3ff60e74",
+    "profile": "core",
+    "ui": "launcher",
+    "manifestSha256": "a47d20cd0037ad287e3c6e4105d03dcef0a48ab3c2da38f09ab407a1366b1476",
+    "entry": "index.html",
+    "main": {
+      "file": "main.js",
+      "bytes": 723541,
+      "gzip9": 228224,
+      "sha256": "398b49b4f36c3aa47610d1948f6becd11ebb60f5a2101b75c58338b1cfcead1f"
+    },
+    "css": [
+      {
+        "file": "styles.css",
+        "bytes": 28230,
+        "gzip9": 6308,
+        "sha256": "5e336d9b3c641023debd562bfad64b3b1776c028e623f0df3f5ca2941bba6d41"
+      }
+    ],
+    "dynamicApp": null
+  },
+  {
+    "source": "baseline",
+    "sourceSha": "9f801061d1cc40c4719988b5e1aef17d3ff60e74",
+    "profile": "core",
+    "ui": "desktop",
+    "manifestSha256": "a47d20cd0037ad287e3c6e4105d03dcef0a48ab3c2da38f09ab407a1366b1476",
+    "entry": "index.html",
+    "main": {
+      "file": "main.js",
+      "bytes": 753694,
+      "gzip9": 238686,
+      "sha256": "aecdae3232b90acbf02858f80f38d60cb8ef504bcd15c548bc11b2f8e1789ff4"
+    },
+    "css": [
+      {
+        "file": "styles.css",
+        "bytes": 48242,
+        "gzip9": 9365,
+        "sha256": "c73d6c7031ea50a64212b1e5cd542655c61e4f57b53798a0a5e98137e7718609"
+      }
+    ],
+    "dynamicApp": null
+  },
+  {
+    "source": "baseline",
+    "sourceSha": "9f801061d1cc40c4719988b5e1aef17d3ff60e74",
+    "profile": "core",
+    "ui": "mobile",
+    "manifestSha256": "ba68371752b85b25e72d2cb803dfd74f68102d66ecba0fad3c39f0b27cbee60d",
+    "entry": "index.html",
+    "main": {
+      "file": "main.js",
+      "bytes": 1668408,
+      "gzip9": 433548,
+      "sha256": "a4e370272b683202be9e5f08ef3955fb54ec5a6c3f1e3f96f6b797ec6661c57c"
+    },
+    "css": [
+      {
+        "file": "styles.css",
+        "bytes": 65359,
+        "gzip9": 13191,
+        "sha256": "3f55040c2bce926d0fcbaa9d7ff5834fc3dd6fd965a36462c6815bb469155ee2"
+      }
+    ],
+    "dynamicApp": null
+  },
+  {
+    "source": "baseline",
+    "sourceSha": "9f801061d1cc40c4719988b5e1aef17d3ff60e74",
+    "profile": "full",
+    "ui": "launcher",
+    "manifestSha256": "9fc9f1c6fba664ac736d9a0df37e18eed4a1463b9527f151e1101784150c2b48",
+    "entry": "index.html",
+    "main": {
+      "file": "main.js",
+      "bytes": 726390,
+      "gzip9": 228904,
+      "sha256": "8f4a1383634f6e4e40f5159b2f2b3bb9ea1c809d233251562c46d9979812e271"
+    },
+    "css": [
+      {
+        "file": "styles.css",
+        "bytes": 28230,
+        "gzip9": 6308,
+        "sha256": "5e336d9b3c641023debd562bfad64b3b1776c028e623f0df3f5ca2941bba6d41"
+      }
+    ],
+    "dynamicApp": null
+  },
+  {
+    "source": "baseline",
+    "sourceSha": "9f801061d1cc40c4719988b5e1aef17d3ff60e74",
+    "profile": "full",
+    "ui": "desktop",
+    "manifestSha256": "9fc9f1c6fba664ac736d9a0df37e18eed4a1463b9527f151e1101784150c2b48",
+    "entry": "index.html",
+    "main": {
+      "file": "main.js",
+      "bytes": 756553,
+      "gzip9": 239408,
+      "sha256": "d126028085630465e01e82dc1c221eae9e99983096558c4edf8b99f8e733f36d"
+    },
+    "css": [
+      {
+        "file": "styles.css",
+        "bytes": 48242,
+        "gzip9": 9365,
+        "sha256": "c73d6c7031ea50a64212b1e5cd542655c61e4f57b53798a0a5e98137e7718609"
+      }
+    ],
+    "dynamicApp": null
+  },
+  {
+    "source": "baseline",
+    "sourceSha": "9f801061d1cc40c4719988b5e1aef17d3ff60e74",
+    "profile": "full",
+    "ui": "mobile",
+    "manifestSha256": "ce85da5f9dc9d865aa4567f8f78b6023bc8df5df062f8c457ef049c3aaecf523",
+    "entry": "index.html",
+    "main": {
+      "file": "main.js",
+      "bytes": 1670123,
+      "gzip9": 433847,
+      "sha256": "808c544072a79efb70fd76c71fee46a928684b3bf190f6efedd679143d2d8805"
+    },
+    "css": [
+      {
+        "file": "styles.css",
+        "bytes": 65359,
+        "gzip9": 13191,
+        "sha256": "3f55040c2bce926d0fcbaa9d7ff5834fc3dd6fd965a36462c6815bb469155ee2"
+      }
+    ],
+    "dynamicApp": null
+  },
+  {
+    "source": "c59",
+    "sourceSha": "85504858418463354f9f54e4a3cd132aed80d0fd",
+    "profile": "core",
+    "ui": "launcher",
+    "manifestSha256": "570c857152e63e1a9568a657bc97f8dab80ada005a46cb786ba9d21f8fce96cc",
+    "entry": "index.html",
+    "main": {
+      "file": "main.js",
+      "bytes": 227391,
+      "gzip9": 70839,
+      "sha256": "5d0b27ecbfa4d48e547fc6760d3f5c2c73d17c48e98ccef36830f6ffc8d55fd6"
+    },
+    "css": [
+      {
+        "file": "styles.css",
+        "bytes": 28230,
+        "gzip9": 6287,
+        "sha256": "532b7961a831d874d8617610017471978ee84daeea3bf18a7c7954f5ba6df5f8"
+      }
+    ],
+    "dynamicApp": {
+      "file": {
+        "file": "assets/App-DF0uJULV.js",
+        "bytes": 494823,
+        "gzip9": 157606,
+        "sha256": "2a65e9fc9cd89b850099382a717b3704a290d4625123f8c3f4157f3ce1236a0a"
+      },
+      "css": []
+    }
+  },
+  {
+    "source": "c59",
+    "sourceSha": "85504858418463354f9f54e4a3cd132aed80d0fd",
+    "profile": "core",
+    "ui": "desktop",
+    "manifestSha256": "a47d20cd0037ad287e3c6e4105d03dcef0a48ab3c2da38f09ab407a1366b1476",
+    "entry": "index.html",
+    "main": {
+      "file": "main.js",
+      "bytes": 753694,
+      "gzip9": 238686,
+      "sha256": "aecdae3232b90acbf02858f80f38d60cb8ef504bcd15c548bc11b2f8e1789ff4"
+    },
+    "css": [
+      {
+        "file": "styles.css",
+        "bytes": 48242,
+        "gzip9": 9365,
+        "sha256": "c73d6c7031ea50a64212b1e5cd542655c61e4f57b53798a0a5e98137e7718609"
+      }
+    ],
+    "dynamicApp": null
+  },
+  {
+    "source": "c59",
+    "sourceSha": "85504858418463354f9f54e4a3cd132aed80d0fd",
+    "profile": "core",
+    "ui": "mobile",
+    "manifestSha256": "ba68371752b85b25e72d2cb803dfd74f68102d66ecba0fad3c39f0b27cbee60d",
+    "entry": "index.html",
+    "main": {
+      "file": "main.js",
+      "bytes": 1668408,
+      "gzip9": 433548,
+      "sha256": "a4e370272b683202be9e5f08ef3955fb54ec5a6c3f1e3f96f6b797ec6661c57c"
+    },
+    "css": [
+      {
+        "file": "styles.css",
+        "bytes": 65359,
+        "gzip9": 13191,
+        "sha256": "3f55040c2bce926d0fcbaa9d7ff5834fc3dd6fd965a36462c6815bb469155ee2"
+      }
+    ],
+    "dynamicApp": null
+  },
+  {
+    "source": "c59",
+    "sourceSha": "85504858418463354f9f54e4a3cd132aed80d0fd",
+    "profile": "full",
+    "ui": "launcher",
+    "manifestSha256": "4bbbf7938639e0383017bbe0bbf2e700e0d4f72acc30a9a5a25b06165948da63",
+    "entry": "index.html",
+    "main": {
+      "file": "main.js",
+      "bytes": 227407,
+      "gzip9": 70847,
+      "sha256": "1bfefb240ea910192378ed1de17f7f1722b70ace5f6be454f6f0555897390920"
+    },
+    "css": [
+      {
+        "file": "styles.css",
+        "bytes": 28230,
+        "gzip9": 6287,
+        "sha256": "532b7961a831d874d8617610017471978ee84daeea3bf18a7c7954f5ba6df5f8"
+      }
+    ],
+    "dynamicApp": {
+      "file": {
+        "file": "assets/App-C3qIvJRg.js",
+        "bytes": 496654,
+        "gzip9": 157922,
+        "sha256": "a5219716a2c1170094bd9d96304dbb74ed8929b1f8c5000d4fe16ce29fe29d70"
+      },
+      "css": []
+    }
+  },
+  {
+    "source": "c59",
+    "sourceSha": "85504858418463354f9f54e4a3cd132aed80d0fd",
+    "profile": "full",
+    "ui": "desktop",
+    "manifestSha256": "9fc9f1c6fba664ac736d9a0df37e18eed4a1463b9527f151e1101784150c2b48",
+    "entry": "index.html",
+    "main": {
+      "file": "main.js",
+      "bytes": 756553,
+      "gzip9": 239408,
+      "sha256": "d126028085630465e01e82dc1c221eae9e99983096558c4edf8b99f8e733f36d"
+    },
+    "css": [
+      {
+        "file": "styles.css",
+        "bytes": 48242,
+        "gzip9": 9365,
+        "sha256": "c73d6c7031ea50a64212b1e5cd542655c61e4f57b53798a0a5e98137e7718609"
+      }
+    ],
+    "dynamicApp": null
+  },
+  {
+    "source": "c59",
+    "sourceSha": "85504858418463354f9f54e4a3cd132aed80d0fd",
+    "profile": "full",
+    "ui": "mobile",
+    "manifestSha256": "ce85da5f9dc9d865aa4567f8f78b6023bc8df5df062f8c457ef049c3aaecf523",
+    "entry": "index.html",
+    "main": {
+      "file": "main.js",
+      "bytes": 1670123,
+      "gzip9": 433847,
+      "sha256": "808c544072a79efb70fd76c71fee46a928684b3bf190f6efedd679143d2d8805"
+    },
+    "css": [
+      {
+        "file": "styles.css",
+        "bytes": 65359,
+        "gzip9": 13191,
+        "sha256": "3f55040c2bce926d0fcbaa9d7ff5834fc3dd6fd965a36462c6815bb469155ee2"
+      }
+    ],
+    "dynamicApp": null
+  },
+  {
+    "source": "c60",
+    "sourceSha": "7bb2fb8a2df5bc1aacd5983feee3a4a13088da53",
+    "profile": "core",
+    "ui": "launcher",
+    "manifestSha256": "6afea84f66af240966af17d876704625cfffa566f626a7db4e2a4ee4001cc816",
+    "entry": "index.html",
+    "main": {
+      "file": "main.js",
+      "bytes": 227528,
+      "gzip9": 70930,
+      "sha256": "091f1d62d3ae535c6169c2364794edde9662f0917b1978c4c27defb5922c4586"
+    },
+    "css": [
+      {
+        "file": "styles.css",
+        "bytes": 21664,
+        "gzip9": 5196,
+        "sha256": "43ccc1334441717950c4536ed4efe73d4903da4ee945c6fb7bad2688e54a1276"
+      },
+      {
+        "file": "styles2.css",
+        "bytes": 6567,
+        "gzip9": 1631,
+        "sha256": "a12b2c74bf444ef29b3536c4fa8ffeda908c507b389fc7af8bf6832b0cb41005"
+      }
+    ],
+    "dynamicApp": {
+      "file": {
+        "file": "assets/App-DqmzLca3.js",
+        "bytes": 494823,
+        "gzip9": 157606,
+        "sha256": "2a65e9fc9cd89b850099382a717b3704a290d4625123f8c3f4157f3ce1236a0a"
+      },
+      "css": [
+        {
+          "file": "styles2.css",
+          "bytes": 6567,
+          "gzip9": 1631,
+          "sha256": "a12b2c74bf444ef29b3536c4fa8ffeda908c507b389fc7af8bf6832b0cb41005"
+        }
+      ]
+    }
+  },
+  {
+    "source": "c60",
+    "sourceSha": "7bb2fb8a2df5bc1aacd5983feee3a4a13088da53",
+    "profile": "core",
+    "ui": "desktop",
+    "manifestSha256": "0e19f0a30e304313df9c0f841d35cf50634c86731bcd0e29c27843ff1f01e486",
+    "entry": "index.html",
+    "main": {
+      "file": "main.js",
+      "bytes": 753694,
+      "gzip9": 238686,
+      "sha256": "aecdae3232b90acbf02858f80f38d60cb8ef504bcd15c548bc11b2f8e1789ff4"
+    },
+    "css": [
+      {
+        "file": "styles.css",
+        "bytes": 48242,
+        "gzip9": 9365,
+        "sha256": "c73d6c7031ea50a64212b1e5cd542655c61e4f57b53798a0a5e98137e7718609"
+      }
+    ],
+    "dynamicApp": null
+  },
+  {
+    "source": "c60",
+    "sourceSha": "7bb2fb8a2df5bc1aacd5983feee3a4a13088da53",
+    "profile": "core",
+    "ui": "mobile",
+    "manifestSha256": "4b0d02e02f32dc9ec5aed68e291eb076ce8a85fa39a2f9f6f0a6916661bf5c22",
+    "entry": "index.html",
+    "main": {
+      "file": "main.js",
+      "bytes": 1668408,
+      "gzip9": 433548,
+      "sha256": "a4e370272b683202be9e5f08ef3955fb54ec5a6c3f1e3f96f6b797ec6661c57c"
+    },
+    "css": [
+      {
+        "file": "styles.css",
+        "bytes": 65359,
+        "gzip9": 13191,
+        "sha256": "3f55040c2bce926d0fcbaa9d7ff5834fc3dd6fd965a36462c6815bb469155ee2"
+      }
+    ],
+    "dynamicApp": null
+  },
+  {
+    "source": "c60",
+    "sourceSha": "7bb2fb8a2df5bc1aacd5983feee3a4a13088da53",
+    "profile": "full",
+    "ui": "launcher",
+    "manifestSha256": "67ab17830e80f5af029322bfe1e2787a66ad1d1bb1feaf1f943373e7f389b5b0",
+    "entry": "index.html",
+    "main": {
+      "file": "main.js",
+      "bytes": 227544,
+      "gzip9": 70939,
+      "sha256": "386651fb3f0f0a94ea788f64a246e8ee1d39654fdca04eb1bd1a9f70e886f0d6"
+    },
+    "css": [
+      {
+        "file": "styles.css",
+        "bytes": 21664,
+        "gzip9": 5196,
+        "sha256": "43ccc1334441717950c4536ed4efe73d4903da4ee945c6fb7bad2688e54a1276"
+      },
+      {
+        "file": "styles2.css",
+        "bytes": 6567,
+        "gzip9": 1631,
+        "sha256": "a12b2c74bf444ef29b3536c4fa8ffeda908c507b389fc7af8bf6832b0cb41005"
+      }
+    ],
+    "dynamicApp": {
+      "file": {
+        "file": "assets/App-lvCl6DAf.js",
+        "bytes": 496671,
+        "gzip9": 157931,
+        "sha256": "5755643aac8f1a9a8c31509c2309e3dd2a9f576e74efa78eb295cdcbad2c3234"
+      },
+      "css": [
+        {
+          "file": "styles2.css",
+          "bytes": 6567,
+          "gzip9": 1631,
+          "sha256": "a12b2c74bf444ef29b3536c4fa8ffeda908c507b389fc7af8bf6832b0cb41005"
+        }
+      ]
+    }
+  },
+  {
+    "source": "c60",
+    "sourceSha": "7bb2fb8a2df5bc1aacd5983feee3a4a13088da53",
+    "profile": "full",
+    "ui": "desktop",
+    "manifestSha256": "59c6d097a2757dfd4c959948a19e26601ff48395da71526a3c3ae57edd35984f",
+    "entry": "index.html",
+    "main": {
+      "file": "main.js",
+      "bytes": 756553,
+      "gzip9": 239408,
+      "sha256": "d126028085630465e01e82dc1c221eae9e99983096558c4edf8b99f8e733f36d"
+    },
+    "css": [
+      {
+        "file": "styles.css",
+        "bytes": 48242,
+        "gzip9": 9365,
+        "sha256": "c73d6c7031ea50a64212b1e5cd542655c61e4f57b53798a0a5e98137e7718609"
+      }
+    ],
+    "dynamicApp": null
+  },
+  {
+    "source": "c60",
+    "sourceSha": "7bb2fb8a2df5bc1aacd5983feee3a4a13088da53",
+    "profile": "full",
+    "ui": "mobile",
+    "manifestSha256": "c8d5ee2edf56a18bbfec02cebecc11b48aa4b9e0a63932a9b9e89e8650eb7dd9",
+    "entry": "index.html",
+    "main": {
+      "file": "main.js",
+      "bytes": 1670123,
+      "gzip9": 433847,
+      "sha256": "808c544072a79efb70fd76c71fee46a928684b3bf190f6efedd679143d2d8805"
+    },
+    "css": [
+      {
+        "file": "styles.css",
+        "bytes": 65359,
+        "gzip9": 13191,
+        "sha256": "3f55040c2bce926d0fcbaa9d7ff5834fc3dd6fd965a36462c6815bb469155ee2"
+      }
+    ],
+    "dynamicApp": null
+  }
+]
