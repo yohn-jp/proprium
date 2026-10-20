@@ -141,5 +141,6 @@ memo must remain request scoped and preserve fresh observation, remote CAS,
 retry, unknown-outcome, and receipt reconciliation boundaries.
 
 The initial cohort raw files and `PREPARED.md` retain its setup progress and
-remaining `NOT_CHECKED` scales. No full repository gates were run as part of
-this evidence update.
+remaining `NOT_CHECKED` scales. The separate canonical verification results and
+raw command-log hashes are recorded in
+[`VERIFICATION.md`](results/core64-writer/VERIFICATION.md).

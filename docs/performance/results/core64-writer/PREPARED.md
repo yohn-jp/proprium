@@ -1,6 +1,7 @@
 # Core 64 writer probe status
 
-**Status: isolated C23 matched cohort complete; C27/C28 remain partial.** The
+**Status: isolated C23 matched cohort and canonical verification complete;
+C27/C28 remain partial.** The
 guarded C23 candidate and accepted baseline each completed five checkpoint
 samples at 1, 10, and 100 files. Receipt revisions and pending-checkpoint
 census assertions passed for all 30 samples. Exact Git process totals were
@@ -24,6 +25,7 @@ report records why census indexing/cache and request-scope publish memoization
 are declined on current evidence, with concrete reconsideration conditions.
 These limits do not imply a global blocked result.
 
-No full repository gates were run as part of this evidence commit. The C23
-source candidate remains frozen at `0152e9211f00abdbfdbc36939505d48162a3c1a1`;
-the measured candidate build hash is recorded in `isolated-c23.json`.
+The separate canonical verification results and raw command-log hashes are in
+[`VERIFICATION.md`](VERIFICATION.md). The C23 source candidate remains frozen
+at `0152e9211f00abdbfdbc36939505d48162a3c1a1`; the measured candidate build
+hash is recorded in `isolated-c23.json`.
