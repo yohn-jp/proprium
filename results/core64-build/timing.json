@@ -71,7 +71,9 @@
         "seconds": 34.72,
         "exitStatus": 0,
         "commandUses": "unchanged baseline root build script",
-        "log": "logs/baseline-clean-build.log"
+        "log": "logs/baseline-clean-build.log",
+        "logSha256": "403c5ca837d221d0017880d247433ae1a3821c423d34c850f36fe762860ef9e7",
+        "logBytes": 4128
       },
       {
         "id": "baseline-warm",
@@ -81,7 +83,9 @@
         "seconds": 29.64,
         "exitStatus": 0,
         "commandUses": "unchanged baseline root build script",
-        "log": "logs/baseline-warm-build.log"
+        "log": "logs/baseline-warm-build.log",
+        "logSha256": "6612fff47f15e74549366f2194aa819f560191c79c2b6c079ada2c2af505521b",
+        "logBytes": 4128
       },
       {
         "id": "candidate-clean",
@@ -91,7 +95,9 @@
         "seconds": 17.84,
         "exitStatus": 0,
         "commandUses": "new Core-aware root dispatcher",
-        "log": "logs/candidate-clean-build.log"
+        "log": "logs/candidate-clean-build.log",
+        "logSha256": "376199cec83962799e8b83137892077930177678277b807ae40bb645b6de1757",
+        "logBytes": 3388
       },
       {
         "id": "candidate-warm",
@@ -101,7 +107,9 @@
         "seconds": 17.13,
         "exitStatus": 0,
         "commandUses": "new Core-aware root dispatcher",
-        "log": "logs/candidate-warm-build.log"
+        "log": "logs/candidate-warm-build.log",
+        "logSha256": "661aa5f2d576dd083aa4db61a71188a29d83f9e7a4be91efbacb50903ff88efe",
+        "logBytes": 3388
       }
     ],
     "observedDifferenceSeconds": {
