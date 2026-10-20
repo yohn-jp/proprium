@@ -1,4 +1,5 @@
-import { readFile, writeFile } from 'node:fs/promises';
+import { randomUUID } from 'node:crypto';
+import { readFile, writeFile, rename, rm } from 'node:fs/promises';
 import { performance } from 'node:perf_hooks';
 
 export function distribution(values) {
@@ -23,4 +24,13 @@ export async function measure(name, action, counters = () => ({})) {
     io: beforeIO && afterIO ? Object.fromEntries(Object.keys(afterIO).map(k => [k, afterIO[k] - beforeIO[k]])) : null,
     counters: Object.fromEntries(Object.keys(after).map(k => [k, after[k] - (before[k] ?? 0)])) } };
 }
-export async function save(file, data) { await writeFile(file, JSON.stringify(data, null, 2) + '\n'); }
+export async function save(file, data) {
+  const temporary = `${file}.${randomUUID()}.tmp`;
+  try {
+    await writeFile(temporary, JSON.stringify(data, null, 2) + '\n');
+    await rename(temporary, file);
+  } catch (error) {
+    await rm(temporary, { force: true });
+    throw error;
+  }
+}
