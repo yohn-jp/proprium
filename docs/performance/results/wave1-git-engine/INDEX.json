@@ -1,0 +1,217 @@
+{
+  "schemaVersion": 2,
+  "storage": {
+    "type": "github-release-asset",
+    "url": "https://github.com/yohn-jp/scriptorium/releases/download/perf-wave1-git-2026-10-20/scriptorium-wave1-git-2026-10-20.tar",
+    "file": "scriptorium-wave1-git-2026-10-20.tar",
+    "bytes": 4956160,
+    "sha256": "52095509d01f64c5b3d9ac7cd24380197942e1f6f76a7a5945b84f9fce6e76a2"
+  },
+  "compression": {
+    "format": "gzip",
+    "level": 6,
+    "mtime": 0,
+    "os": 255
+  },
+  "packaging": "GNU tar: ustar, name sort, epoch mtime, uid/gid 0, directories 0755, files 0644",
+  "artifacts": [
+    {
+      "file": "raw/after-revisions-01.git-trace.jsonl.gz",
+      "sourceFile": "after-revisions-01.git-trace.jsonl",
+      "sourceBytes": 44743,
+      "gzipBytes": 3666,
+      "sha256": "2a6103c7ff125dc7d9b6d909645f3a4cef232250d45db51056ab8968b6f444d9",
+      "gzipSha256": "d70be605590ebc9e91880645e13c70538705b93c0dc78d0e6fce4be586ccf9e3",
+      "diagnostic": false
+    },
+    {
+      "file": "raw/after-revisions-01.json.gz",
+      "sourceFile": "after-revisions-01.json",
+      "sourceBytes": 10166,
+      "gzipBytes": 1655,
+      "sha256": "3abbfcacb55cacf23b3ef5e4bb4e435c5c93bda4471bb1496d886639707cfa8f",
+      "gzipSha256": "8d904bde5f573e0168c7e01e973f4c86f27be2a3328ed93edef50d15fd0b5549",
+      "diagnostic": false
+    },
+    {
+      "file": "raw/after-revisions-02.git-trace.jsonl.gz",
+      "sourceFile": "after-revisions-02.git-trace.jsonl",
+      "sourceBytes": 44743,
+      "gzipBytes": 3657,
+      "sha256": "cbda006e65789af3c68f96b0d5b5001ed4152f01351c6b52cf8cb919926ce6ac",
+      "gzipSha256": "223e61478cf508fc466077f714482668e4b8ecafdfb9ceeca62240ec599f5ec0",
+      "diagnostic": false
+    },
+    {
+      "file": "raw/after-revisions-02.json.gz",
+      "sourceFile": "after-revisions-02.json",
+      "sourceBytes": 10120,
+      "gzipBytes": 1647,
+      "sha256": "e79b155d307d9248a9452ea7c33aedbd60cc621aabdbe7767b29608b16aaa1f1",
+      "gzipSha256": "2a64b412c4949f868496349ac541c0428483c3943668db00c31e968f8d6f8504",
+      "diagnostic": false
+    },
+    {
+      "file": "raw/after-revisions-03.git-trace.jsonl.gz",
+      "sourceFile": "after-revisions-03.git-trace.jsonl",
+      "sourceBytes": 44743,
+      "gzipBytes": 3646,
+      "sha256": "2f4bbec3cbdf5a28f88c8bfeec086e62e9d57a3cd833be17c223f2c65a219321",
+      "gzipSha256": "660f2e6f72a46eb9e4dddcea0f05ae611ce404306dc5c8bb3c501390bfd3b62e",
+      "diagnostic": false
+    },
+    {
+      "file": "raw/after-revisions-03.json.gz",
+      "sourceFile": "after-revisions-03.json",
+      "sourceBytes": 10170,
+      "gzipBytes": 1650,
+      "sha256": "13340b4393eee6fcfb78c99268c105bf7c3def72f89056d5df7d874ca31db2f9",
+      "gzipSha256": "7fe6060b311f4b836d6f35ace859041f1e1787510958a870140e85041a9516f7",
+      "diagnostic": false
+    },
+    {
+      "file": "raw/after-revisions-04.git-trace.jsonl.gz",
+      "sourceFile": "after-revisions-04.git-trace.jsonl",
+      "sourceBytes": 44743,
+      "gzipBytes": 3688,
+      "sha256": "1289f2b1f91f5fb020ce577f44edb162b66f8180438796658fd4eeb6b42f0fc5",
+      "gzipSha256": "1b97b0ac25a7caf2824c160d200b13adb4ad822e1bd165b866084d43a46b229c",
+      "diagnostic": false
+    },
+    {
+      "file": "raw/after-revisions-04.json.gz",
+      "sourceFile": "after-revisions-04.json",
+      "sourceBytes": 10205,
+      "gzipBytes": 1654,
+      "sha256": "7ab2dd1c61485a66873e8eb1e7c83476658e45e2e62129faf693fc49ad47b051",
+      "gzipSha256": "6f93dce287a5dd2d13f8292ce56c68c59f2062ca6c7e220090a40820119683e0",
+      "diagnostic": false
+    },
+    {
+      "file": "raw/after-revisions-05.git-trace.jsonl.gz",
+      "sourceFile": "after-revisions-05.git-trace.jsonl",
+      "sourceBytes": 44743,
+      "gzipBytes": 3676,
+      "sha256": "642e05b08943b51461ac4e180e2e84b116a4851c097de18ff3345939aabfaeca",
+      "gzipSha256": "4a01938d811b27bae8b1c4030edc60e4fad7015b3292fc6f7f4bd6056b0dd745",
+      "diagnostic": false
+    },
+    {
+      "file": "raw/after-revisions-05.json.gz",
+      "sourceFile": "after-revisions-05.json",
+      "sourceBytes": 10051,
+      "gzipBytes": 1639,
+      "sha256": "9b4936b7520aee25e8b80d0b3d9eed6ceb079ad7e76eb58e6ae6d620b3e9c5c9",
+      "gzipSha256": "6c4b871b2315a004978732fbb76560099038b4d8312512ea3d4843e4d14fd4a7",
+      "diagnostic": false
+    },
+    {
+      "file": "raw/before-revisions-01.git-trace.jsonl.gz",
+      "sourceFile": "before-revisions-01.git-trace.jsonl",
+      "sourceBytes": 16658207,
+      "gzipBytes": 948166,
+      "sha256": "9c50a2519ce62918a72ebf37d68b27a3bc39b3f91637f3024caa4388e029a24c",
+      "gzipSha256": "454b0a6440cc94c7661899a54e07e1cf228888ccd8dd587f4582232645424eec",
+      "diagnostic": false
+    },
+    {
+      "file": "raw/before-revisions-01.json.gz",
+      "sourceFile": "before-revisions-01.json",
+      "sourceBytes": 333014,
+      "gzipBytes": 30864,
+      "sha256": "44c8013f48b62bb295f6ca4b0f4eec4780ae45474a1b56d1d506781cfc5182f6",
+      "gzipSha256": "933c98d9d4dbd3b7e6fc9a940110174592809be937640f7367d4ab679612600f",
+      "diagnostic": false
+    },
+    {
+      "file": "raw/before-revisions-02.git-trace.jsonl.gz",
+      "sourceFile": "before-revisions-02.git-trace.jsonl",
+      "sourceBytes": 16658207,
+      "gzipBytes": 949616,
+      "sha256": "c1537d37b253fd441c7daad981350774b68ce7a90e66af459d1e4205df2b18e9",
+      "gzipSha256": "363b169251326a78ff6e38a9b04221f8cbe6b4b2d59f62035d1e2de75e21bc63",
+      "diagnostic": false
+    },
+    {
+      "file": "raw/before-revisions-02.json.gz",
+      "sourceFile": "before-revisions-02.json",
+      "sourceBytes": 333058,
+      "gzipBytes": 30873,
+      "sha256": "21f74361b175046116eefb7628f62491b0b0a6f393a1baadd333e7e288861a19",
+      "gzipSha256": "2e9d2c67c4fa12a838917d61c45f0d938eefbe9849512a143d65a7285b14e431",
+      "diagnostic": false
+    },
+    {
+      "file": "raw/before-revisions-03.git-trace.jsonl.gz",
+      "sourceFile": "before-revisions-03.git-trace.jsonl",
+      "sourceBytes": 16658207,
+      "gzipBytes": 948386,
+      "sha256": "620ade404af67dbb2fdda9c1e8cdf24c20e48821ab7b0ba753634e6805ac6133",
+      "gzipSha256": "857b636fc391b10aad2eb0a4fc30aed04766ae44154fec25875db139996efd38",
+      "diagnostic": false
+    },
+    {
+      "file": "raw/before-revisions-03.json.gz",
+      "sourceFile": "before-revisions-03.json",
+      "sourceBytes": 333087,
+      "gzipBytes": 30888,
+      "sha256": "25332342ad3c7fba20d9961d6764ab1132f00b34da7e6f4687d7826dceed0ef9",
+      "gzipSha256": "32d0eb88f1f4569c9b237380f3ea3525828e0bf8b88f3d9ab1a610b9c9bdd607",
+      "diagnostic": false
+    },
+    {
+      "file": "raw/before-revisions-04.git-trace.jsonl.gz",
+      "sourceFile": "before-revisions-04.git-trace.jsonl",
+      "sourceBytes": 16658207,
+      "gzipBytes": 948415,
+      "sha256": "b830b18acc110b643286e8be15a4d7fa189946b2af9d7af9bd3cebdbb01c3dfb",
+      "gzipSha256": "0ef4ba1d2beb5880dcba930a72e7c02207ccb652df49b709c3d7f5870f82be52",
+      "diagnostic": false
+    },
+    {
+      "file": "raw/before-revisions-04.json.gz",
+      "sourceFile": "before-revisions-04.json",
+      "sourceBytes": 332998,
+      "gzipBytes": 30827,
+      "sha256": "eac43387978f02be2d7a78fc7f18d17aaf24f7c7de504f3b46d4218e2dda2d1d",
+      "gzipSha256": "ad927158b3caa4670d1ed4236034e7917a588a4c4305294f0d0fb989fb15e483",
+      "diagnostic": false
+    },
+    {
+      "file": "raw/before-revisions-05.git-trace.jsonl.gz",
+      "sourceFile": "before-revisions-05.git-trace.jsonl",
+      "sourceBytes": 16658207,
+      "gzipBytes": 949564,
+      "sha256": "d782de7ca21a5c07cd31442d15cb13dba2e6745a427ac71aec7948e37fcd18cf",
+      "gzipSha256": "cad68d97eaf33cbfd81be1e19bc8a9551829d4265a5f849a4eda667a8c302b1f",
+      "diagnostic": false
+    },
+    {
+      "file": "raw/before-revisions-05.json.gz",
+      "sourceFile": "before-revisions-05.json",
+      "sourceBytes": 333017,
+      "gzipBytes": 30857,
+      "sha256": "21cec0bf580c068229d10e0868edcf0f19213990281aeda92c17d27d636cb4fc",
+      "gzipSha256": "409acb1aadda2d57f1edc9f9d28de7a7d133ea1056cb1cb8554c5389a0e5bc11",
+      "diagnostic": false
+    },
+    {
+      "file": "raw/environment.json.gz",
+      "sourceFile": "environment.json",
+      "sourceBytes": 501,
+      "gzipBytes": 355,
+      "sha256": "72c11fc6dc2304924ea91a1240642561b29dd4b917b5323bb3fc66ccc49e062b",
+      "gzipSha256": "dd9afd796d81a9b7fc25ac0f2303695377870d2d0ebc2cfee65fe3adbf6b5627",
+      "diagnostic": false
+    },
+    {
+      "file": "raw/summary.json.gz",
+      "sourceFile": "summary.json",
+      "sourceBytes": 9438,
+      "gzipBytes": 2850,
+      "sha256": "c195d312180886c06c3a6fd42e964fff417bd582dbdf74b7e3567e85c20adfab",
+      "gzipSha256": "89c5b3c5181ed62799d2f65b88f8e0e4df74b35e3857a0c84c666bb6b53c9acb",
+      "diagnostic": false
+    }
+  ]
+}

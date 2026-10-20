@@ -1523,15 +1523,87 @@ export class CoreStore implements MutationCoordinator {
       }
       blobs.push({ path: filePath, blobId });
     }
-    const revisions: string[] = [];
-    for (let offset = 0; offset < blobs.length; offset += 32) {
-      revisions.push(...await Promise.all(blobs.slice(offset, offset + 32).map(async ({ blobId }) => {
-        const cached = this.fileRevisionCache.get(blobId);
-        if (cached) return cached;
-        return this.cacheFileRevision(blobId, revisionForBytes(await gitBuffer(root, ["cat-file", "blob", blobId])));
-      })));
+    const cachedRevisions: Array<string | undefined> = new Array(blobs.length);
+    const uncachedIds = new Set<string>();
+    for (let index = 0; index < blobs.length; index += 1) {
+      const { blobId } = blobs[index]!;
+      const cached = this.fileRevisionCache.get(blobId);
+      if (cached) cachedRevisions[index] = cached;
+      else uncachedIds.add(blobId);
     }
-    return blobs.map(({ path: filePath }, index) => ({ path: filePath, revision: revisions[index]! }))
+    if (!uncachedIds.size) {
+      return blobs.map(({ path: filePath }, index) => ({ path: filePath, revision: cachedRevisions[index]! }))
+        .sort((left, right) => left.path.localeCompare(right.path));
+    }
+
+    const revisionsByBlob = new Map<string, string>();
+    for (let index = 0; index < blobs.length; index += 1) {
+      const revision = cachedRevisions[index];
+      if (revision) revisionsByBlob.set(blobs[index]!.blobId, revision);
+    }
+    if (uncachedIds.size) {
+      const blobIds = [...uncachedIds];
+      const checkOutput = await gitInput(root, ["cat-file", "--batch-check=%(objectname) %(objecttype) %(objectsize)"],
+        blobIds.join("\n") + "\n");
+      const checkLines = checkOutput.split(/\r?\n/).filter((line) => line.length > 0);
+      if (checkLines.length !== blobIds.length) {
+        throw coreError(502, "git_operation_failed", "Git returned an incomplete snapshot revision index");
+      }
+      const pending: Array<{ blobId: string; size: number }> = [];
+      for (let index = 0; index < blobIds.length; index += 1) {
+        const result = checkLines[index]!;
+        const [objectId, type, sizeText] = result.split(" ");
+        const size = Number(sizeText);
+        if (objectId !== blobIds[index] || type !== "blob" || !Number.isSafeInteger(size) || size < 0) {
+          throw coreError(502, "git_operation_failed", "Git returned invalid snapshot revision object details");
+        }
+        pending.push({ blobId: objectId, size });
+      }
+
+      let batch: typeof pending = [];
+      let batchBytes = 0;
+      const flushBatch = async (): Promise<void> => {
+        if (!batch.length) return;
+        const output = await gitInputBuffer(root, ["cat-file", "--batch"], batch.map(({ blobId }) => blobId).join("\n") + "\n");
+        let offset = 0;
+        for (const blob of batch) {
+          const headerEnd = output.indexOf(0x0a, offset);
+          if (headerEnd < 0) throw coreError(502, "git_operation_failed", "Git returned a truncated snapshot revision batch");
+          const [objectId, type, sizeText] = output.toString("ascii", offset, headerEnd).split(" ");
+          const size = Number(sizeText);
+          const contentStart = headerEnd + 1;
+          const contentEnd = contentStart + size;
+          if (objectId !== blob.blobId || type !== "blob" || size !== blob.size ||
+              !Number.isSafeInteger(size) || size < 0 || contentEnd >= output.length || output[contentEnd] !== 0x0a) {
+            throw coreError(502, "git_operation_failed", "Git returned invalid snapshot revision batch data");
+          }
+          const revision = this.cacheFileRevision(blob.blobId, revisionForBytes(output.subarray(contentStart, contentEnd)));
+          revisionsByBlob.set(blob.blobId, revision);
+          offset = contentEnd + 1;
+        }
+        if (offset !== output.length) throw coreError(502, "git_operation_failed", "Git returned trailing snapshot revision batch data");
+        batch = [];
+        batchBytes = 0;
+      };
+
+      for (const blob of pending) {
+        if (blob.size > GIT_BATCH_CONTENT_MAX_BYTES) {
+          await flushBatch();
+          const revision = revisionForBytes(await gitBuffer(root, ["cat-file", "blob", blob.blobId]));
+          revisionsByBlob.set(blob.blobId, this.cacheFileRevision(blob.blobId, revision));
+          continue;
+        }
+        if (batch.length && batchBytes + blob.size > GIT_BATCH_CONTENT_MAX_BYTES) await flushBatch();
+        batch.push(blob);
+        batchBytes += blob.size;
+        if (batch.length >= GIT_BATCH_MAX_OBJECTS) await flushBatch();
+      }
+      await flushBatch();
+    }
+
+    return blobs.map(({ path: filePath, blobId }, index) => ({
+      path: filePath, revision: cachedRevisions[index] ?? revisionsByBlob.get(blobId)!,
+    }))
       .sort((left, right) => left.path.localeCompare(right.path));
   }
 
