@@ -22,8 +22,6 @@ export interface ApplicationShellProps {
   editor: ReactNode;
   tools: ReactNode;
   status: ReactNode;
-  /** Whether status currently contains an error that should stay visible on every shell view. */
-  statusHasError?: boolean;
   onSwitchMode(): Promise<boolean>;
   /** Stable author and device scope; desktop and mobile use separate layout keys. */
   workspaceScope?: string;

@@ -84,7 +84,7 @@ function errorMessage(error: unknown): string {
  * Ionic page navigation for the shared application controller.
  * The mobile entry supplies the Ionic React Router context around the controller.
  */
-export function MobileShell({ header, library, editor, tools, status, statusHasError = false, onSwitchMode, workspaceScope, panels, beforeLayoutChange, requestedPanel }: ApplicationShellProps) {
+export function MobileShell({ header, library, editor, tools, status, onSwitchMode, workspaceScope, panels, beforeLayoutChange, requestedPanel }: ApplicationShellProps) {
   const location = useLocation();
   const navigateRoute = useNavigate();
   const activeView = readViewFromSearch(location.search);
@@ -193,11 +193,6 @@ export function MobileShell({ header, library, editor, tools, status, statusHasE
   }, [onSwitchMode, switching]);
 
   const title = VIEWS.find((view) => view.id === activeView)?.title ?? "Scriptorium";
-  const showSharedStatus = activeView === "inspection" || (activeView === "settings" && Boolean(switchError)) || statusHasError;
-  const sharedStatusNode = showSharedStatus ? (
-    <div className="mobile-shell-slot mobile-shell-status" aria-label="保存と回復の状態">{status}</div>
-  ) : null;
-
   return (
     <IonApp className="mobile-shell">
       <IonPage className="mobile-shell-page">
@@ -216,7 +211,6 @@ export function MobileShell({ header, library, editor, tools, status, statusHasE
         <IonContent ref={contentRef} className="mobile-shell-content" fullscreen={false}>
           {workspaceScope && panels?.length ? (
             <div className="mobile-shell-workspace-view" data-active-view={activeView}>
-              {showSharedStatus ? sharedStatusNode : null}
               {activeView === "settings" ? (
                 <section className="mobile-shell-settings-card" aria-labelledby="mobile-display-settings-title">
                   <h2 id="mobile-display-settings-title">表示と入力</h2>
@@ -253,7 +247,6 @@ export function MobileShell({ header, library, editor, tools, status, statusHasE
 
             <section className="mobile-shell-view" aria-labelledby="mobile-inspection-title" hidden={activeView !== "inspection"}>
               <h1 id="mobile-inspection-title" className="mobile-shell-page-title">状態と回復</h1>
-              {activeView === "inspection" ? sharedStatusNode : null}
               <p className="mobile-shell-review-hint">
                 提案の確認と承認、選択した機能の実行はツール画面から行えます。
               </p>
@@ -272,7 +265,6 @@ export function MobileShell({ header, library, editor, tools, status, statusHasE
               <section className="mobile-shell-settings-card" aria-labelledby="mobile-display-settings-title">
                 <h2 id="mobile-display-settings-title">表示と入力</h2>
                 <p>外観やアカウントの操作は画面上部にあります。執筆画面では原稿を開いたまま各機能へ移動できます。</p>
-                {activeView === "settings" && switchError ? sharedStatusNode : null}
                 <IonButton className="mobile-shell-primary-action" expand="block" disabled={switching} onClick={() => void switchToDesktop()}>
                   {switching ? "切り替えています…" : "Desktop版へ切り替え"}
                 </IonButton>
@@ -282,6 +274,7 @@ export function MobileShell({ header, library, editor, tools, status, statusHasE
           </div>}
         </IonContent>
 
+        {status && <div className="mobile-shell-status" role="region" aria-label="保存と回復の状態">{status}</div>}
         <IonFooter className="mobile-shell-footer">
           <nav className="mobile-shell-navigation" aria-label="モバイル画面">
             {VIEWS.map((view) => (
