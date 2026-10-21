@@ -478,6 +478,8 @@ test("both production Shells preserve recoverable Japanese drafts and the Mobile
   const remoteBeforeDesktopPublish = readLocalRemoteDocument("manuscript/vol-1/ch-1/scene-2.md");
   await page.getByRole("button", { name: "Save to GitHub", exact: true }).click();
   await expect(page.locator(".durability-message")).toContainText("確認済みの GitHub 版");
+  expect(await page.locator(".st-workspace-desktop, .st-desktop-workbench").first()
+    .evaluate((node) => node.getBoundingClientRect().top)).toBeCloseTo(desktopWorkspaceTop, 1);
   if (remoteBeforeDesktopPublish !== null) {
     expect(readLocalRemoteDocument("manuscript/vol-1/ch-1/scene-2.md")).toContain(protectedDraft);
   }
@@ -555,6 +557,8 @@ test("both production Shells preserve recoverable Japanese drafts and the Mobile
   await expectJournalState(page, "scene-2", mobilePublishedDraft, "checkpointed");
   await page.getByRole("button", { name: "Save to GitHub", exact: true }).click();
   await expect(page.locator(".durability-message")).toContainText("確認済みの GitHub 版");
+  expect(await page.locator(".mobile-shell-ion-header")
+    .evaluate((node) => node.getBoundingClientRect().height)).toBeCloseTo(mobileHeaderHeight, 1);
   if (remoteBeforeDesktopPublish !== null) {
     expect(readLocalRemoteDocument("manuscript/vol-1/ch-1/scene-2.md")).toContain(mobilePublishedDraft);
   }
