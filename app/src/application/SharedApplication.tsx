@@ -1366,6 +1366,9 @@ function AuthorWorkspace({
       setStatus((previous) => {
         // Quiet unchanged background polls must not re-open a notice or erase save confirmation.
         if (observed.state === "fresh" && previous.kind === "success") return previous;
+        if (observed.state === "fresh" && previous.kind === "error" &&
+            !previous.message.startsWith("リモート確認状態:") &&
+            !previous.message.startsWith("リモートの確認に失敗しました。")) return previous;
         if (observed.state === "fresh" && !changedRemote && !changedCheckpoint && !changedTree &&
             !changedEditorSnapshot && previous.kind !== "error") return previous;
         return {
@@ -1751,7 +1754,8 @@ function AuthorWorkspace({
       authorizedAt: entry.authorizedAt ?? Date.now(),
     }, "checkpointing");
     if (checkpointing.state === "conflict") throw new Error("競合した回復記録はチェックポイントできません。");
-    // The IndexedDB transition is durable; update the active editor without re-reading the entire journal.
+    // Keep the visible journal aligned with the already-durable IndexedDB transition.
+    setEntries((current) => current.map((item) => item.key === checkpointing.key ? checkpointing : item));
     onCheckpointing?.(checkpointing);
     const proposal = await api.propose(projectId, {
       id: proposalId,
@@ -2585,7 +2589,7 @@ function AuthorWorkspace({
   ];
   return <Shell mode={mode} header={header} library={library} editor={editorSlot} tools={toolsSlot} status={statusSlot}
     workspaceScope={authorScope} panels={panels} requestedPanel={panelRequest}
-     beforeLayoutChange={prepareLayoutChange} onSwitchMode={switchMode} />;
+    beforeLayoutChange={prepareLayoutChange} onSwitchMode={switchMode} />;
 }
 
 function editorDurability(editor: EditorSession): "draft" | "checkpointing" | "checkpointed" | "publication_unknown" | "saved" {
