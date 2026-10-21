@@ -445,6 +445,15 @@ function AuthorWorkspace({
     enabled: authState === "ready" && canWrite,
   });
 
+  // Only successful and informational notices expire. Recovery errors remain visible.
+  useEffect(() => {
+    if (!status.message || status.kind === "error" || busy === "checkpoint" || busy === "publish") return;
+    const timer = window.setTimeout(() => {
+      setStatus((current) => current === status ? { message: "", kind: "normal" } : current);
+    }, status.kind === "success" ? 6_000 : 9_000);
+    return () => window.clearTimeout(timer);
+  }, [busy, status]);
+
   const registerScratchFlush = useCallback((flush: (() => Promise<JournalEntry | null>) | null) => {
     scratchFlushRef.current = flush ?? (async () => null);
   }, []);
@@ -1354,11 +1363,17 @@ function AuthorWorkspace({
         const stableTree = snapshotKey(latest.tree.snapshot) === snapshotKey(tree.snapshot) ? latest.tree : tree;
         return { ...latest, observation: stableObservation, tree: stableTree };
       });
-      setStatus({
-        message: observed.state === "fresh"
-          ? `リモート ${observed.snapshot.remoteCommit.slice(0, 12)} · ${new Date(observed.observedAt).toLocaleTimeString("ja-JP")} に確認`
-          : `リモート確認状態: ${observed.state}`,
-        kind: observed.state === "fresh" ? "normal" : "error",
+      setStatus((previous) => {
+        // Quiet unchanged background polls must not re-open a notice or erase save confirmation.
+        if (observed.state === "fresh" && previous.kind === "success") return previous;
+        if (observed.state === "fresh" && !changedRemote && !changedCheckpoint && !changedTree &&
+            !changedEditorSnapshot && previous.kind !== "error") return previous;
+        return {
+          message: observed.state === "fresh"
+            ? `リモート ${observed.snapshot.remoteCommit.slice(0, 12)} · ${new Date(observed.observedAt).toLocaleTimeString("ja-JP")} に確認`
+            : `リモート確認状態: ${observed.state}`,
+          kind: observed.state === "fresh" ? "normal" : "error",
+        };
       });
       const latest = workRef.current;
       if ((changedRemote || changedCheckpoint || changedTree || changedEditorSnapshot) && latest?.project.id === projectId && latest.selectedSceneId) {
@@ -1736,7 +1751,7 @@ function AuthorWorkspace({
       authorizedAt: entry.authorizedAt ?? Date.now(),
     }, "checkpointing");
     if (checkpointing.state === "conflict") throw new Error("競合した回復記録はチェックポイントできません。");
-    await refreshJournal(checkpointing.repository, expectedNavigation);
+    // The IndexedDB transition is durable; update the active editor without re-reading the entire journal.
     onCheckpointing?.(checkpointing);
     const proposal = await api.propose(projectId, {
       id: proposalId,
@@ -1832,6 +1847,7 @@ function AuthorWorkspace({
     const sceneId = editor.read.scene.id;
     let submittedEntry = editor.entry;
     setBusy("checkpoint");
+    setStatus({ message: "チェックポイントを作成しています…", kind: "normal" });
     try {
       await flushDraft();
       if (!isCurrentEditor(nav, projectId, repository, documentPath, sceneId)) return;
@@ -1853,7 +1869,7 @@ function AuthorWorkspace({
       await refreshJournal(saved.repository, nav);
       if (!isCurrentEditor(nav, projectId, repository, documentPath, sceneId)) return;
       setStatus({ message: "ローカルチェックポイントを作成しました。GitHub へ保存するまでブラウザーの回復記録を保持します。", kind: "success" });
-      await refreshRemote();
+      void refreshRemote();
     } catch (error) {
       if (error instanceof ApiError && (error.status === 409 || error.status === 412)) {
         let conflictEntry: JournalEntry | null = null;
@@ -1895,6 +1911,7 @@ function AuthorWorkspace({
     const projectId = current.project.id;
     const repository = current.observation.snapshot.repository;
     setBusy("checkpoint");
+    setStatus({ message: "スクラッチのチェックポイントを作成しています…", kind: "normal" });
     try {
       await scratchFlushRef.current();
       if (!isCurrentProject(nav, projectId, repository)) throw new Error("作品を切り替えたため、スクラッチの保存表示を更新できませんでした。");
@@ -1906,7 +1923,7 @@ function AuthorWorkspace({
       await refreshJournal(saved.repository, nav);
       if (!isCurrentProject(nav, projectId, repository)) return;
       setStatus({ message: "スクラッチのローカルチェックポイントを作成しました。Save to GitHub で公開できます。", kind: "success" });
-      await refreshRemote();
+      void refreshRemote();
     } catch (error) {
       if (error instanceof ApiError && (error.status === 409 || error.status === 412)) {
         await currentJournal.updateState(entry, "conflict").catch(() => undefined);
@@ -1938,14 +1955,14 @@ function AuthorWorkspace({
       });
     };
     setBusy("publish");
+    setStatus({ message: "GitHub に保存しています…", kind: "normal" });
     try {
       await scratchFlushRef.current();
       if (!isCurrentProject(nav, projectId, initialRepository)) return;
       const observed = await api.observation(projectId);
       const repository = observed.snapshot.repository;
       if (!isCurrentProject(nav, projectId, initialRepository) || !sameRepository(repository, initialRepository)) return;
-      await api.reconcile(projectId);
-      if (!isCurrentProject(nav, projectId, initialRepository)) return;
+      // Core publish() reconciles again under the project lock; no client preflight is needed.
       const proposalStatuses = await api.proposalStatuses(projectId);
       if (!isCurrentProject(nav, projectId, initialRepository)) return;
       const alreadyPublished = new Set(proposalStatuses.proposals.flatMap((item) => item.publishedOperationIds ?? []));
@@ -1982,8 +1999,10 @@ function AuthorWorkspace({
       }
       await refreshJournal(repository, nav);
       if (!isCurrentProject(nav, projectId, repository)) return;
-      await refreshRemote();
-      if (isCurrentProject(nav, projectId, repository)) setStatus({ message: "GitHub への保存を確認しました。確認済みの操作だけ回復記録から削除しました。", kind: "success" });
+      if (isCurrentProject(nav, projectId, repository)) {
+        setStatus({ message: "GitHub への保存を確認しました。確認済みの操作だけ回復記録から削除しました。", kind: "success" });
+        void refreshRemote();
+      }
     } catch (error) {
       if (isCurrentProject(nav, projectId, initialRepository)) setStatus({ message: messageOf(error), kind: "error" });
     } finally {
@@ -2433,15 +2452,17 @@ function AuthorWorkspace({
     </aside>
   );
 
-  const statusSlot = (
+  const statusSlot = (status.message || globalError || journalOpenError || isolatedRecoveryCount > 0 ||
+    (work && work.observation.state !== "fresh")) ? (
     <div className="application-status">
-      <div className="topbar-status" role="status" aria-live="polite" data-kind={status.kind}>{status.message || "作品を選択してください"}</div>
+      {status.message && <div className="topbar-status" role={status.kind === "error" ? "alert" : "status"}
+        aria-live={status.kind === "error" ? "assertive" : "polite"} data-kind={status.kind}>{status.message}</div>}
       {globalError && <p className="status" data-kind="error" role="alert">{globalError}</p>}
       {journalOpenError && <p className="status" data-kind="error" role="alert">{journalOpenError}</p>}
       {isolatedRecoveryCount > 0 && <p className="status" role="status">別の作者スコープまたは未割り当ての回復記録 {isolatedRecoveryCount} 件を保持しています。現在のセッションには復元しません。</p>}
       {work?.observation.state !== "fresh" && work && <p className="status" data-kind="error" role="alert">リモート確認状態: {work.observation.state}。最後に確認できた原稿を表示しています。</p>}
     </div>
-  );
+  ) : null;
 
   const editorSlot = (
     <>
@@ -2564,8 +2585,7 @@ function AuthorWorkspace({
   ];
   return <Shell mode={mode} header={header} library={library} editor={editorSlot} tools={toolsSlot} status={statusSlot}
     workspaceScope={authorScope} panels={panels} requestedPanel={panelRequest}
-    statusHasError={status.kind === "error" || Boolean(globalError || journalOpenError)}
-    beforeLayoutChange={prepareLayoutChange} onSwitchMode={switchMode} />;
+     beforeLayoutChange={prepareLayoutChange} onSwitchMode={switchMode} />;
 }
 
 function editorDurability(editor: EditorSession): "draft" | "checkpointing" | "checkpointed" | "publication_unknown" | "saved" {

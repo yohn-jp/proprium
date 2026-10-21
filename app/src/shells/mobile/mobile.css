@@ -149,6 +149,31 @@
 .mobile-shell-settings-card p { color: var(--muted); font-size: 0.9rem; line-height: 1.55; }
 .mobile-shell-switch-error { padding: 0.65rem; border: 1px solid var(--error-border); border-radius: 0.45rem; color: var(--error-text); background: var(--error-bg); line-height: 1.5; }
 
+.mobile-shell .mobile-shell-status {
+  position: fixed;
+  z-index: 30;
+  right: max(0.75rem, env(safe-area-inset-right, 0px));
+  bottom: calc(4rem + env(safe-area-inset-bottom, 0px));
+  width: min(25rem, calc(100vw - 3rem));
+  max-height: min(45vh, 16rem);
+  padding: 0.75rem 0.9rem;
+  overflow: auto;
+  border: 1px solid var(--line);
+  border-radius: 0.7rem;
+  color: var(--ink);
+  background: var(--paper);
+  box-shadow: 0 0.75rem 2rem rgb(0 0 0 / 16%);
+}
+.mobile-shell .mobile-shell-status .application-status {
+  display: grid;
+  gap: 0.3rem;
+}
+.mobile-shell .mobile-shell-status .topbar-status {
+  flex: none;
+  overflow-wrap: anywhere;
+  white-space: normal;
+}
+
 .mobile-shell-footer {
   flex: 0 0 auto;
   border-top: 1px solid var(--line);

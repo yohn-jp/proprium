@@ -58,7 +58,7 @@ export function DesktopShell({ header, library, editor, tools, status, onSwitchM
         </div>
       </div>
 
-      <div className="st-desktop-status" role="region" aria-label="保存と接続の状態">{status}</div>
+      {status && <div className="st-desktop-status" role="region" aria-label="保存と接続の状態">{status}</div>}
       {switchError && <p className="st-desktop-switch-error" role="alert">{switchError}</p>}
 
       {workspaceScope && panels?.length ? (

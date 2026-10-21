@@ -90,14 +90,18 @@
 }
 
 .st-desktop-status {
-  z-index: 1;
-  flex: 0 0 auto;
-  min-width: 0;
-  max-height: 8rem;
-  padding: 0.45rem 0.85rem;
+  position: fixed;
+  z-index: 30;
+  right: max(1rem, env(safe-area-inset-right, 0px));
+  bottom: max(1rem, env(safe-area-inset-bottom, 0px));
+  width: min(27rem, calc(100vw - 2.5rem));
+  max-height: min(45vh, 18rem);
+  padding: 0.8rem 1rem;
   overflow: auto;
-  border-bottom: 1px solid var(--line);
-  background: var(--surface-subtle);
+  border: 1px solid var(--line);
+  border-radius: 0.7rem;
+  background: var(--paper);
+  box-shadow: 0 0.75rem 2rem rgb(0 0 0 / 16%);
   font-size: 0.84rem;
 }
 

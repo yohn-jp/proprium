@@ -466,7 +466,12 @@ test("both production Shells preserve recoverable Japanese drafts and the Mobile
   await expectJournalDraft(page, "scene-2", protectedDraft);
   await expect(desktopEditor).toHaveText(protectedDraft);
 
+  const desktopWorkspaceTop = await page.locator(".st-workspace-desktop, .st-desktop-workbench").first()
+    .evaluate((node) => node.getBoundingClientRect().top);
   await page.getByRole("button", { name: "Checkpoint", exact: true }).click();
+  await expect(page.locator(".st-desktop-status")).toHaveCSS("position", "fixed");
+  expect(await page.locator(".st-workspace-desktop, .st-desktop-workbench").first()
+    .evaluate((node) => node.getBoundingClientRect().top)).toBeCloseTo(desktopWorkspaceTop, 1);
   await expect(page.locator(".durability-message")).toContainText("ローカルチェックポイント");
   await expectJournalState(page, "scene-2", protectedDraft, "checkpointed");
   const desktopCheckpoint = await readJournalEntry(page, "scene-2", protectedDraft);
@@ -540,7 +545,12 @@ test("both production Shells preserve recoverable Japanese drafts and the Mobile
   const mobilePublishedDraft = "Mobile checkpoint, history, and explicit publication.";
   await mobileEditor.fill(mobilePublishedDraft);
   await expectJournalDraft(page, "scene-2", mobilePublishedDraft);
+  const mobileHeaderHeight = await page.locator(".mobile-shell-ion-header")
+    .evaluate((node) => node.getBoundingClientRect().height);
   await page.getByRole("button", { name: "Checkpoint", exact: true }).click();
+  await expect(page.locator(".mobile-shell-status")).toHaveCSS("position", "fixed");
+  expect(await page.locator(".mobile-shell-ion-header")
+    .evaluate((node) => node.getBoundingClientRect().height)).toBeCloseTo(mobileHeaderHeight, 1);
   await expect(page.locator(".durability-message")).toContainText("ローカルチェックポイント");
   await expectJournalState(page, "scene-2", mobilePublishedDraft, "checkpointed");
   await page.getByRole("button", { name: "Save to GitHub", exact: true }).click();

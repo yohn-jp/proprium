@@ -105,12 +105,6 @@
   background: transparent;
   font-size: 0.75rem;
 }
-.st-desktop-shell .st-desktop-status {
-  min-height: 2.3rem;
-  padding: 0.5rem clamp(1rem, 2.3vw, 2rem);
-  border-bottom-color: var(--line);
-  background: var(--st-canvas);
-}
 .st-desktop-shell .application-status {
   display: grid;
   gap: 0.3rem;
@@ -636,6 +630,7 @@
   }
   .st-desktop-shell .st-desktop-chrome,
   .st-desktop-shell .st-desktop-status,
+  .mobile-shell .mobile-shell-status,
   .st-desktop-shell .st-desktop-navigation-panel,
   .st-desktop-shell .st-desktop-resize-handle,
   .mobile-shell .mobile-shell-footer { display: none !important; }
