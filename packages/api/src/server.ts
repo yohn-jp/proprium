@@ -2196,7 +2196,11 @@ export function createServer(options: ApiServerOptions): Server {
         const contribution = await contributionFor(moduleId, moduleRoute[2] ?? "", method);
         if (!contribution || contribution.access !== "owner") throw httpFailure(404, "MODULE_ROUTE_UNAVAILABLE", "Module route is unavailable");
         if (isBearer && !["read", "compute", "propose"].includes(contribution.effect)) throw httpFailure(403, "BEARER_EFFECT_DENIED", "Bearer credentials may only use read, compute, and propose module routes");
-        if (hosted && contribution.effect !== "read") await requireWritePermission();
+        // The MCP transport advertises "propose" because some tools create
+        // proposals, but initialization and read-only tools require read only.
+        // Actual proposal writes are gated by actionHost.authorizeProposal.
+        if (hosted && contribution.effect !== "read" && moduleId !== "mcp")
+          await requireWritePermission();
         if (!runtime.invokeHttp) throw httpFailure(503, "MODULE_HTTP_UNAVAILABLE", "The runtime does not support HTTP module contributions");
         if (contribution.effect === "read" && method !== "GET" && method !== "HEAD") throw httpFailure(405, "MODULE_HTTP_METHOD_DENIED", "Read-only module routes must use GET or HEAD");
         const reader = await freshReader(projectId, "remote");
