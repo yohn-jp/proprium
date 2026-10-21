@@ -41,6 +41,27 @@ Search/Terminology is optional: it indexes snapshot revisions, including local c
 
 To build and run the full composition, use `SCRIPTORIUM_PROFILE=full pnpm build` and `SCRIPTORIUM_PROFILE=full pnpm start`. It includes Story, Diagnostics, NLP, Semantic, Speaker, Assistant, Publishing, MCP, and Search/Terminology. Module settings distinguish absent, disabled, enabled-idle, and active modules. Heavy engines run in supervised child processes. Assistant provider execution requires provider configuration and author consent; selecting no provider keeps local writing and review available.
 
+## Hosted MCP access
+
+When the optional `mcp` module is included in a Praetorium Hosted composition,
+the stable application origin exposes `/mcp` (Streamable HTTP) and
+`/.well-known/oauth-protected-resource` (public OAuth resource discovery).
+Configure a remote MCP client with `https://<stable-application-origin>/mcp`,
+not the physical Pod hostname or the Praetorium browser entry URL.
+The resource metadata points to Praetorium for GitHub-based OAuth login,
+explicit client consent, PKCE token exchange and refresh. Scriptorium validates
+the issued short-lived repository/instance/epoch-bound bearer grant and retains
+the existing proposal/author approval boundary.
+
+A stopped Hosted instance is served by Praetorium's Instance Access fallback:
+the initial unauthenticated request receives OAuth discovery, while a valid
+bearer request can trigger the existing authorized Wake path and returns
+`503 Retry-After` until the same stable URL becomes ready. The caller must
+retry its request; no MCP request body is queued or replayed by the platform.
+This service consumes the reusable [Praetorium service MCP
+contract](https://github.com/yohn-jp/praetorium/blob/feat/generic-mcp-oauth-wake-20261021/docs/architecture/SERVICE-MCP.md)
+rather than implementing an application-specific OAuth issuer.
+
 ## Single OCI image
 
 ```sh

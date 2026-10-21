@@ -628,7 +628,22 @@ describe("Scriptorium HTTP boundary", () => {
 
     const noGrant = await fetch(`${apiServer.base}/api/projects`);
     assert.equal(noGrant.status, 401);
+    const discovery = await fetch(`${apiServer.base}/.well-known/oauth-protected-resource`);
+    assert.equal(discovery.status, 200);
+    assert.deepEqual(await discovery.json(), {
+      resource: HOSTED_ASSIGNMENT.grantPolicy.audience,
+      authorization_servers: [HOSTED_ASSIGNMENT.grantPolicy.issuer],
+      scopes_supported: ["read", "write"],
+    });
+    const mcpChallenge = await fetch(`${apiServer.base}/mcp`, {
+      method: "POST", headers: { "Content-Type": "application/json" },
+      body: '{"jsonrpc":"2.0","id":1,"method":"initialize"}',
+    });
+    assert.equal(mcpChallenge.status, 401);
+    assert.match(mcpChallenge.headers.get("www-authenticate") ?? "", /oauth-protected-resource/u);
     const readerHeaders = { Authorization: "Bearer read-grant" };
+    const mcpReader = await fetch(`${apiServer.base}/mcp`, { headers: readerHeaders });
+    assert.equal(mcpReader.status, 404, "a read grant must pass auth even if MCP was not packaged");
     const projects = await fetch(`${apiServer.base}/api/projects`, { headers: readerHeaders });
     assert.equal(projects.status, 200);
     assert.deepEqual(await projects.json(), [{ id: "project-1", url: "https://github.com/owner/work.git", branch: "main" }]);

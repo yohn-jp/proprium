@@ -1511,12 +1511,24 @@ export function createServer(options: ApiServerOptions): Server {
   const handle = async (request: IncomingMessage, response: ServerResponse, parsedBody?: unknown): Promise<void> => {
     const styleNonce = STYLE_NONCES.get(request) ?? randomBytes(18).toString("base64");
     if (!response.headersSent) setSecurityHeaders(response, styleNonce);
-    const routePath = requestPath(request);
+    const originalPath = requestPath(request);
+    const routePath = hosted && originalPath === "/mcp"
+      ? `/api/projects/${encodeURIComponent(hosted.projectId)}/modules/mcp/streamable`
+      : originalPath;
     const method = request.method ?? "GET";
     const query = queryOf(request);
     const isRead = method === "GET" || method === "HEAD";
     const publicRead = isRead && ["/api/health", "/api/ready", "/api/version", "/health/live", "/health/ready", "/health/startup"].includes(routePath);
     const publicModuleRoute = !hosted && routePath.startsWith("/api/public/repos/") && routePath.includes("/modules/");
+
+    if (hosted && originalPath === "/.well-known/oauth-protected-resource" && method === "GET") {
+      sendJson(response, 200, {
+        resource: assignment!.grantPolicy.audience,
+        authorization_servers: [assignment!.grantPolicy.issuer],
+        scopes_supported: ["read", "write"],
+      });
+      return;
+    }
 
     if (hosted && routePath === "/api/login" && method === "POST") {
       fail(response, 410, "HOSTED_LOGIN_RETIRED", "Hosted access is issued by Praetorium. Open this instance through Praetorium.");
@@ -1587,6 +1599,10 @@ export function createServer(options: ApiServerOptions): Server {
       catch (error) {
         const candidate = error as { status?: unknown };
         const status = candidate?.status === 403 ? 403 : 401;
+        if (routePath.endsWith("/modules/mcp/streamable")) {
+          response.setHeader("WWW-Authenticate",
+            `Bearer resource_metadata="${assignment!.grantPolicy.audience}/.well-known/oauth-protected-resource", scope="read"`);
+        }
         fail(response, status, status === 403 ? "FORBIDDEN" : "UNAUTHORIZED", "Hosted repository access is invalid or expired");
         return;
       }
@@ -1596,7 +1612,10 @@ export function createServer(options: ApiServerOptions): Server {
     const isBearer = hosted ? Boolean(bearer && hostedPrincipal) : !isCookie && bearer.length > 0 && constantTimeEqual(bearer, options.authToken!);
     const hasAuth = hosted ? Boolean(hostedPrincipal) : isCookie || isBearer;
     if (routePath.startsWith("/api/") && !publicRead && !publicModuleRoute && !hasAuth) {
-      response.setHeader("WWW-Authenticate", 'Bearer realm="scriptorium", Cookie realm="scriptorium"');
+      response.setHeader("WWW-Authenticate",
+        hosted && routePath.endsWith("/modules/mcp/streamable")
+          ? `Bearer resource_metadata="${assignment!.grantPolicy.audience}/.well-known/oauth-protected-resource", scope="read"`
+          : 'Bearer realm="scriptorium", Cookie realm="scriptorium"');
       fail(response, 401, "UNAUTHORIZED", "Authentication required");
       return;
     }
@@ -2177,7 +2196,11 @@ export function createServer(options: ApiServerOptions): Server {
         const contribution = await contributionFor(moduleId, moduleRoute[2] ?? "", method);
         if (!contribution || contribution.access !== "owner") throw httpFailure(404, "MODULE_ROUTE_UNAVAILABLE", "Module route is unavailable");
         if (isBearer && !["read", "compute", "propose"].includes(contribution.effect)) throw httpFailure(403, "BEARER_EFFECT_DENIED", "Bearer credentials may only use read, compute, and propose module routes");
-        if (hosted && contribution.effect !== "read") await requireWritePermission();
+        // The MCP transport advertises "propose" because some tools create
+        // proposals, but initialization and read-only tools require read only.
+        // Actual proposal writes are gated by actionHost.authorizeProposal.
+        if (hosted && contribution.effect !== "read" && moduleId !== "mcp")
+          await requireWritePermission();
         if (!runtime.invokeHttp) throw httpFailure(503, "MODULE_HTTP_UNAVAILABLE", "The runtime does not support HTTP module contributions");
         if (contribution.effect === "read" && method !== "GET" && method !== "HEAD") throw httpFailure(405, "MODULE_HTTP_METHOD_DENIED", "Read-only module routes must use GET or HEAD");
         const reader = await freshReader(projectId, "remote");
@@ -2276,7 +2299,10 @@ export function createServer(options: ApiServerOptions): Server {
   const routeHandler = async (request: FastifyRequest, reply: import("fastify").FastifyReply): Promise<void> => {
     reply.hijack();
     activeRequests += 1;
-    const routePath = requestPath(request.raw);
+    const originalPath = requestPath(request.raw);
+    const routePath = hosted && originalPath === "/mcp"
+      ? `/api/projects/${encodeURIComponent(hosted.projectId)}/modules/mcp/streamable`
+      : originalPath;
     const method = request.raw.method ?? "GET";
     const isNonActivityRoute = [
       RUNTIME_STATUS_PATH, RUNTIME_QUIESCE_PATH, RUNTIME_RESUME_PATH, RUNTIME_METADATA_PATH,
