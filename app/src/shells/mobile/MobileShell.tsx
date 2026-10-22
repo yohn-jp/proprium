@@ -6,12 +6,14 @@ import {
   IonContent,
   IonFooter,
   IonHeader,
+  IonModal,
   IonPage,
   setupIonicReact,
 } from "@ionic/react";
 import { useLocation, useNavigate } from "react-router-dom";
 import type { ApplicationShellProps, WorkspacePanelRequest } from "../../application/contracts";
 import { Workspace } from "../../workspace/Workspace";
+import { useWritingKeyboardVisibility } from "./useWritingKeyboardVisibility";
 import "@ionic/react/css/core.css";
 import "@ionic/react/css/normalize.css";
 import "@ionic/react/css/structure.css";
@@ -20,6 +22,7 @@ import "./mobile.css";
 import "../editorial.css";
 
 export type MobileView = "library" | "writing" | "inspection" | "tools" | "settings";
+type ReferenceSheet = "outline" | "inspector";
 
 const WORKSPACE_PANEL_FOR_VIEW: Readonly<Record<MobileView, string>> = {
   library: "outline",
@@ -81,18 +84,32 @@ function errorMessage(error: unknown): string {
  * Ionic page navigation for the shared application controller.
  * The mobile entry supplies the Ionic React Router context around the controller.
  */
-export function MobileShell({ header, documentTitle, documentContext, library, editor, tools, status, onSwitchMode, workspaceScope, panels, beforeLayoutChange, requestedPanel }: ApplicationShellProps) {
+export function MobileShell({ header, documentTitle, documentContext, desktopDurability, library, editor, tools, status, onSwitchMode, workspaceScope, panels, beforeLayoutChange, requestedPanel }: ApplicationShellProps) {
   const location = useLocation();
   const navigateRoute = useNavigate();
   const activeView = readViewFromSearch(location.search);
+  const writingKeyboardVisible = useWritingKeyboardVisibility();
   const [switching, setSwitching] = useState(false);
   const [switchError, setSwitchError] = useState("");
+  const [referenceSheet, setReferenceSheet] = useState<ReferenceSheet | null>(null);
+  const [openingReference, setOpeningReference] = useState(false);
+  const openingReferenceRef = useRef(false);
+  const referenceTriggerRef = useRef<HTMLButtonElement | null>(null);
+  const referenceOriginRef = useRef("");
+  const routeIdentityRef = useRef(location.pathname + location.search);
+  routeIdentityRef.current = location.pathname + location.search;
   const panelRequestSequenceRef = useRef(0);
   const forwardedPanelRequestRef = useRef("");
   const [workspacePanelRequest, setWorkspacePanelRequest] = useState<WorkspacePanelRequest>();
   const contentRef = useRef<HTMLIonContentElement | null>(null);
   const activeViewRef = useRef(activeView);
   const scrollPositionsRef = useRef(new Map<MobileView, number>());
+
+  // A sheet only presents already-authorized panels. The Workspace and CodeMirror
+  // remain mounted behind it; scene/navigation changes close the sheet.
+  useEffect(() => {
+    setReferenceSheet(null);
+  }, [location.pathname, activeView]);
 
   useEffect(() => {
     const url = new URL(window.location.href);
@@ -127,7 +144,7 @@ export function MobileShell({ header, documentTitle, documentContext, library, e
     setSwitchError("");
     try {
       const allowed = beforeLayoutChange ? await beforeLayoutChange() : true;
-      if (!allowed) setSwitchError("The editor could not confirm its recovery state. The current screen is unchanged.");
+      if (!allowed) setSwitchError("下書きの回復状態を確認できないため、この画面を維持しています。入力は保持されています。");
       return allowed;
     } catch (error) {
       setSwitchError(errorMessage(error));
@@ -145,6 +162,7 @@ export function MobileShell({ header, documentTitle, documentContext, library, e
     const requestKey = `${requestedPanel.id}:${requestedPanel.sequence}`;
     if (forwardedPanelRequestRef.current === requestKey) return;
     forwardedPanelRequestRef.current = requestKey;
+    setReferenceSheet(null);
     queueWorkspacePanel(requestedPanel.id);
   }, [requestedPanel?.id, requestedPanel?.sequence, queueWorkspacePanel]);
 
@@ -152,6 +170,7 @@ export function MobileShell({ header, documentTitle, documentContext, library, e
     const hasWorkspace = Boolean(workspaceScope && panels?.length);
     const sameRoute = view === activeView;
     if ((sameRoute && !hasWorkspace) || !(await preparePanelChange())) return;
+    setReferenceSheet(null);
     if (hasWorkspace) queueWorkspacePanel(WORKSPACE_PANEL_FOR_VIEW[view]);
     if (sameRoute) return;
     navigateRoute(withViewInCurrentUrl(view), {
@@ -164,6 +183,10 @@ export function MobileShell({ header, documentTitle, documentContext, library, e
   }, [activeView, location.state, navigateRoute, panels?.length, preparePanelChange, queueWorkspacePanel, workspaceScope]);
 
   const goBack = useCallback(async () => {
+    if (referenceSheet) {
+      setReferenceSheet(null);
+      return;
+    }
     const previous = historyState(location.state)[MOBILE_PREVIOUS_VIEW_STATE];
     if (isMobileView(previous)) {
       if (!(await preparePanelChange())) return;
@@ -171,7 +194,7 @@ export function MobileShell({ header, documentTitle, documentContext, library, e
       return;
     }
     await navigate(activeView === "writing" ? "library" : "writing");
-  }, [activeView, location.state, navigate, navigateRoute, preparePanelChange]);
+  }, [activeView, location.state, navigate, navigateRoute, preparePanelChange, referenceSheet]);
 
   const switchToDesktop = useCallback(async () => {
     if (switching) return;
@@ -189,10 +212,48 @@ export function MobileShell({ header, documentTitle, documentContext, library, e
     }
   }, [onSwitchMode, switching]);
 
+  const openReferenceSheet = useCallback(async (kind: ReferenceSheet, trigger: HTMLButtonElement) => {
+    if (referenceSheet !== null) {
+      setReferenceSheet(kind);
+      return;
+    }
+    if (openingReferenceRef.current || !workspaceScope || !panels?.some((panel) => panel.id === kind)) return;
+    openingReferenceRef.current = true;
+    referenceTriggerRef.current = trigger;
+    const routeAtStart = routeIdentityRef.current;
+    referenceOriginRef.current = routeAtStart;
+    setOpeningReference(true);
+    try {
+      // Do not hide an editing/composition failure behind a sheet.
+      const allowed = await preparePanelChange();
+      if (allowed && routeIdentityRef.current === routeAtStart) setReferenceSheet(kind);
+    } finally {
+      openingReferenceRef.current = false;
+      setOpeningReference(false);
+    }
+  }, [panels, preparePanelChange, referenceSheet, workspaceScope]);
+
+  const closeReferenceSheet = useCallback(() => setReferenceSheet(null), []);
+  const onReferenceDismissed = useCallback(() => {
+    setReferenceSheet(null);
+    // Return to the invoking control, not to a contenteditable element:
+    // restoring input focus would unexpectedly reopen the soft keyboard.
+    const trigger = referenceTriggerRef.current;
+    if (trigger?.isConnected && routeIdentityRef.current === referenceOriginRef.current &&
+        readViewFromSearch(window.location.search) === "writing") {
+      trigger.focus({ preventScroll: true });
+    }
+  }, []);
+
+  const referencePanel = referenceSheet ? panels?.find((panel) => panel.id === referenceSheet) : undefined;
+  const hasWritingContext = activeView === "writing" && Boolean(documentTitle) && Boolean(workspaceScope)
+    && Boolean(panels?.some((panel) => panel.id === "outline"))
+    && Boolean(panels?.some((panel) => panel.id === "inspector"));
+
   const title = VIEWS.find((view) => view.id === activeView)?.title ?? "Scriptorium";
   const mobileTitle = activeView === "writing" && documentTitle ? documentTitle : title;
   return (
-    <IonApp className="mobile-shell">
+    <IonApp className={"mobile-shell" + (writingKeyboardVisible ? " mobile-shell-keyboard-open" : "")}>
       <IonPage className="mobile-shell-page">
         <IonHeader className="mobile-shell-ion-header">
           <div className="mobile-shell-identity-bar">
@@ -273,8 +334,24 @@ export function MobileShell({ header, documentTitle, documentContext, library, e
           </div>}
         </IonContent>
 
+        {switchError && activeView !== "settings" ? (
+          <p className="mobile-shell-interaction-error" role="alert">{switchError}</p>
+        ) : null}
         {status && <div className="mobile-shell-status" role="region" aria-label="保存と回復の状態">{status}</div>}
         <IonFooter className="mobile-shell-footer">
+          {hasWritingContext ? (
+            <div className="mobile-shell-writing-accessories" aria-label="執筆中の参照">
+              <span className="mobile-shell-accessories-label" aria-hidden="true">REFERENCES</span>
+              <button type="button" className="mobile-shell-accessory-button" disabled={openingReference}
+                onClick={(event) => { void openReferenceSheet("outline", event.currentTarget); }}>
+                <span aria-hidden="true">☷</span> 構成を参照
+              </button>
+              <button type="button" className="mobile-shell-accessory-button" disabled={openingReference}
+                onClick={(event) => { void openReferenceSheet("inspector", event.currentTarget); }}>
+                <span aria-hidden="true">◎</span> 保存状態を参照
+              </button>
+            </div>
+          ) : null}
           <nav className="mobile-shell-navigation" aria-label="モバイル画面">
             {VIEWS.map((view) => (
               <IonButton
@@ -294,6 +371,77 @@ export function MobileShell({ header, documentTitle, documentContext, library, e
           </nav>
         </IonFooter>
       </IonPage>
+      <IonModal
+        cssClass="mobile-shell-reference-modal"
+        isOpen={referenceSheet !== null}
+        onDidDismiss={onReferenceDismissed}
+        breakpoints={[0, 0.56, 0.88, 1]}
+        initialBreakpoint={0.56}
+        handle={true}
+        handleBehavior="cycle"
+        expandToScroll={false}
+        htmlAttributes={{ "aria-labelledby": "mobile-shell-reference-title" }}
+      >
+        <IonContent className="mobile-shell-reference-content" scrollY={true}>
+          <div className="mobile-shell-reference-top">
+            <div>
+              <p className="mobile-shell-reference-eyebrow">WRITING CONTEXT</p>
+              <h2 id="mobile-shell-reference-title">原稿の参照</h2>
+            </div>
+            <button type="button" className="mobile-shell-reference-close" onClick={closeReferenceSheet}>
+              閉じる
+            </button>
+          </div>
+          <div className="mobile-shell-reference-switch" role="tablist" aria-label="参照する情報">
+            {([
+              { id: "outline", label: "構成" },
+              { id: "inspector", label: "保存状態" },
+            ] as const).map((choice) => (
+              <button type="button" role="tab" key={choice.id}
+                id={"mobile-reference-tab-" + choice.id}
+                aria-selected={referenceSheet === choice.id}
+                aria-controls="mobile-shell-reference-pane"
+                tabIndex={referenceSheet === choice.id ? 0 : -1}
+                onKeyDown={(event) => {
+                  const next = event.key === "ArrowRight" || event.key === "End" ? "inspector"
+                    : event.key === "ArrowLeft" || event.key === "Home" ? "outline" : null;
+                  if (!next) return;
+                  event.preventDefault();
+                  setReferenceSheet(next);
+                  event.currentTarget.parentElement?.querySelector<HTMLButtonElement>(
+                    "#mobile-reference-tab-" + next,
+                  )?.focus();
+                }}
+                onClick={() => setReferenceSheet(choice.id)}>
+                {choice.label}
+              </button>
+            ))}
+          </div>
+          <div id="mobile-shell-reference-pane" className="mobile-shell-reference-pane"
+            role="tabpanel"
+            aria-labelledby={referenceSheet ? "mobile-reference-tab-" + referenceSheet : undefined}
+            data-mobile-reference-panel={referenceSheet ?? undefined}>
+            {referenceSheet === "inspector" && desktopDurability ? (
+              <div className="mobile-shell-reference-durability" role="status" aria-label="原稿の保存状態">
+                <strong>{{
+                  draft: "Draft", checkpointing: "Checkpoint確認中",
+                  checkpointed: "Checkpoint", publication_unknown: "Publish結果未確認",
+                  saved: "GitHub保存済み",
+                }[desktopDurability]}</strong>
+                <span>{{
+                  draft: "ブラウザーの下書きです。GitHubへの保存はまだ確認されていません。",
+                  checkpointing: "ローカルCheckpointの結果を確認しています。",
+                  checkpointed: "ローカルCheckpointです。GitHubへの公開は完了していません。",
+                  publication_unknown: "GitHubへの保存結果は未確認です。原稿の回復記録を保持しています。",
+                  saved: "GitHubへの保存が確認されています。",
+                }[desktopDurability]}</span>
+              </div>
+            ) : null}
+            {referencePanel?.render() ?? <p>この情報は現在利用できません。</p>}
+          </div>
+          <p className="mobile-shell-reference-hint">上のハンドルを上下に動かすと、参照領域を広げたり閉じたりできます。</p>
+        </IonContent>
+      </IonModal>
     </IonApp>
   );
 }
