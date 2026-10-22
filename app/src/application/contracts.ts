@@ -18,6 +18,10 @@ export interface WorkspacePanelRequest {
 export interface ApplicationShellProps {
   mode: UiMode;
   header: ReactNode;
+  /** Production-authorized buttons/status for the Desktop Studio masthead. */
+  desktopActions?: ReactNode;
+  documentTitle?: string;
+  documentContext?: string;
   library: ReactNode;
   editor: ReactNode;
   tools: ReactNode;
