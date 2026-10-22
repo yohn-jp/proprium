@@ -16,6 +16,7 @@ import {
 } from "./layout";
 import { loadWorkspaceLayout, presetTitle, saveWorkspaceLayout, type WorkspaceLoad, type WorkspaceStorage } from "./persistence";
 import "./workspace.css";
+import { loadFloatingPanels, saveFloatingPanels, type FloatingPanelLayout } from "./floating";
 
 const styleNonce = typeof document === "undefined" ? undefined
   : document.querySelector<HTMLMetaElement>('meta[name="scriptorium-style-nonce"]')?.content;
@@ -72,9 +73,12 @@ interface PanelFrameProps {
   canHide: boolean;
   onHide(panelId: string): void;
   onDrop(sourceId: string, targetId: string, placement: Placement): void;
+  onFloat(panelId: string): void;
+  onMaximize(panelId: string): void;
+  maximized: boolean;
 }
 
-function PanelFrame({ panelId, panel, mode, canHide, onHide, onDrop }: PanelFrameProps): ReactNode {
+function PanelFrame({ panelId, panel, mode, canHide, onHide, onDrop, onFloat, onMaximize, maximized }: PanelFrameProps): ReactNode {
   const title = panel?.title ?? panelId;
   const dragStart = (event: DragEvent<HTMLDivElement>): void => {
     event.dataTransfer.setData("text/plain", panelId);
@@ -127,7 +131,11 @@ function PanelFrame({ panelId, panel, mode, canHide, onHide, onDrop }: PanelFram
             ))}
           </div>
         ) : null}
-        {mode === "desktop" ? (
+        {mode === "desktop" ? <div className="st-workspace-frame-actions">
+          <button type="button" className="st-workspace-float-button" title={`Float ${title}`}
+            aria-label={`Float ${title}`} disabled={!canHide} onClick={() => onFloat(panelId)}>◱</button>
+          <button type="button" className="st-workspace-maximize" title={maximized ? `Restore ${title}` : `Maximize ${title}`}
+            aria-label={maximized ? `Restore ${title}` : `Maximize ${title}`} onClick={() => onMaximize(panelId)}>{maximized ? "↙" : "⛶"}</button>
           <button
             className="st-workspace-hide"
             type="button"
@@ -136,7 +144,7 @@ function PanelFrame({ panelId, panel, mode, canHide, onHide, onDrop }: PanelFram
             disabled={!canHide}
             onClick={() => onHide(panelId)}
           >×</button>
-        ) : null}
+        </div> : null}
       </header>
       <div className="st-workspace-panel-body"><PanelContent panel={panel} /></div>
     </section>
@@ -152,11 +160,14 @@ interface TreeViewProps {
   onHide(panelId: string): void;
   onDrop(sourceId: string, targetId: string, placement: Placement): void;
   onResize(splitId: string, sizes: number[]): void;
+  onFloat(panelId: string): void;
+  onMaximize(panelId: string): void;
+  maximizedPanelId: string | null;
 }
 
-function WorkspaceTree({ node, mode, catalog, visibleCount, onActivate, onHide, onDrop, onResize }: TreeViewProps): ReactNode {
+function WorkspaceTree({ node, mode, catalog, visibleCount, onActivate, onHide, onDrop, onResize, onFloat, onMaximize, maximizedPanelId }: TreeViewProps): ReactNode {
   if (node.type === "leaf") {
-    return <PanelFrame panelId={node.panelId} panel={catalog.get(node.panelId)} mode={mode} canHide={visibleCount > 1} onHide={onHide} onDrop={onDrop} />;
+    return <PanelFrame panelId={node.panelId} panel={catalog.get(node.panelId)} mode={mode} canHide={visibleCount > 1} onHide={onHide} onDrop={onDrop} onFloat={onFloat} onMaximize={onMaximize} maximized={maximizedPanelId === node.panelId} />;
   }
   if (node.type === "stack") {
     return (
@@ -213,6 +224,8 @@ function WorkspaceTree({ node, mode, catalog, visibleCount, onActivate, onHide, 
             canHide={visibleCount > 1}
             onHide={onHide}
             onDrop={onDrop}
+            onFloat={onFloat} onMaximize={onMaximize}
+            maximized={maximizedPanelId === node.activePanelId}
           />
         </div>
       </div>
@@ -244,6 +257,7 @@ function WorkspaceTree({ node, mode, catalog, visibleCount, onActivate, onHide, 
               onHide={onHide}
               onDrop={onDrop}
               onResize={onResize}
+              onFloat={onFloat} onMaximize={onMaximize} maximizedPanelId={maximizedPanelId}
             />
           </Panel>,
           ...(index < node.children.length - 1 ? [
@@ -259,11 +273,53 @@ function WorkspaceTree({ node, mode, catalog, visibleCount, onActivate, onHide, 
   );
 }
 
+interface FloatingFrameProps {
+  record: FloatingPanelLayout;
+  panel?: WorkspacePanel;
+  onMove(panelId: string, left: number, top: number): void;
+  onDock(panelId: string): void;
+  onMaximize(panelId: string): void;
+  maximized: boolean;
+}
+function FloatingFrame({ record, panel, onMove, onDock, onMaximize, maximized }: FloatingFrameProps): ReactNode {
+  const dragging = useRef<{ x: number; y: number; left: number; top: number } | null>(null);
+  return <section className={"st-workspace-float" + (maximized ? " is-maximized" : "")}
+    data-floating-panel={record.panelId} aria-label={panel?.title ?? record.panelId}
+    style={{left:record.left,top:record.top,width:record.width,height:record.height}}>
+    <div className="st-workspace-float-handle" role="toolbar" aria-label="Floating panel controls" tabIndex={0}
+      onPointerDown={(event) => {
+        if (event.target !== event.currentTarget || event.button !== 0) return;
+        dragging.current={x:event.clientX,y:event.clientY,left:record.left,top:record.top};
+        event.currentTarget.setPointerCapture(event.pointerId);
+      }}
+      onPointerMove={(event) => {
+        const origin=dragging.current;
+        if (origin) onMove(record.panelId,origin.left+event.clientX-origin.x,origin.top+event.clientY-origin.y);
+      }}
+      onPointerUp={()=>{dragging.current=null;}} onPointerCancel={()=>{dragging.current=null;}}
+      onKeyDown={(event) => {
+        const directions:Record<string,[number,number]>={ArrowLeft:[-20,0],ArrowRight:[20,0],ArrowUp:[0,-20],ArrowDown:[0,20]};
+        const move=directions[event.key];
+        if(move){event.preventDefault();onMove(record.panelId,record.left+move[0]!,record.top+move[1]!);}
+      }}>
+      <span className="st-workspace-float-mark" aria-hidden="true">⠿</span>
+      <span className="st-workspace-float-title">{panel?.title ?? record.panelId}</span>
+      <button type="button" aria-label={maximized?"元のサイズに戻す":"パネルを最大化"}
+        onClick={()=>onMaximize(record.panelId)}>{maximized?"↙":"⛶"}</button>
+      <button type="button" aria-label="パネルをドックへ戻す" onClick={()=>onDock(record.panelId)}>↙ 戻す</button>
+    </div>
+    <div className="st-workspace-float-content"><PanelContent panel={panel}/></div>
+  </section>;
+}
+
 export function Workspace({ scope, mode, panels, beforeLayoutChange, requestedPanel, selectedPanelId }: WorkspaceProps): ReactNode {
   const panelIds = useMemo(() => [...new Set(panels.map((panel) => panel.id))], [panels]);
   const catalog = useMemo(() => new Map(panels.map((panel) => [panel.id, panel])), [panels]);
   const [initial] = useState(() => loadFor(scope, mode, panelIds));
   const [layout, setLayout] = useState<WorkspaceLayout>(initial.layout);
+  const [floating, setFloating] = useState<FloatingPanelLayout[]>(() => mode === "desktop"
+    ? loadFloatingPanels(browserStorage(), scope, panelIds, initial.layout.hiddenPanelIds) : []);
+  const [maximizedPanelId, setMaximizedPanelId] = useState<string | null>(null);
   const [persistenceState, setPersistenceState] = useState<WorkspaceLoad["state"]>(initial.state);
   const [mobilePanelId, setMobilePanelId] = useState<string>(() => initialMobilePanel(initial.layout));
   const [moveSource, setMoveSource] = useState<string>(() => firstActivePanel(initial.layout.root));
@@ -280,6 +336,8 @@ export function Workspace({ scope, mode, panels, beforeLayoutChange, requestedPa
   useEffect(() => {
     const loaded = loadFor(scope, mode, panelIds);
     setLayout(loaded.layout);
+    setFloating(mode === "desktop" ? loadFloatingPanels(browserStorage(), scope, panelIds, loaded.layout.hiddenPanelIds) : []);
+    setMaximizedPanelId(null);
     setPersistenceState(loaded.state);
     setMobilePanelId(initialMobilePanel(loaded.layout));
     setMoveSource(firstActivePanel(loaded.layout.root));
@@ -338,6 +396,7 @@ export function Workspace({ scope, mode, panels, beforeLayoutChange, requestedPa
         : (current: WorkspaceLayout) => showWorkspacePanel(current, panelId);
       const allowed = await changeLayout(change, "Panel opened. Save layout to keep it.");
       if (!allowed) return;
+      setFloating((current) => current.filter((item) => item.panelId !== panelId));
       if (mode === "mobile") setMobilePanelId(panelId);
       window.requestAnimationFrame(() => {
         const element = Array.from(workspaceRef.current?.querySelectorAll<HTMLElement>("[data-workspace-panel]") ?? [])
@@ -349,12 +408,19 @@ export function Workspace({ scope, mode, panels, beforeLayoutChange, requestedPa
   }, [requestedPanel?.id, requestedPanel?.sequence, scope, mode, catalog, visibleIds, changeLayout, changing]);
 
   const changePreset = (preset: Exclude<WorkspacePreset, "custom">): void => {
-    void changeLayout(() => createWorkspacePreset(preset, panelIds), `${presetTitle(preset)} preset applied. Save layout to keep it.`);
+    void changeLayout(() => createWorkspacePreset(preset, panelIds), `${presetTitle(preset)} preset applied. Save layout to keep it.`)
+      .then((allowed) => { if (allowed) { setFloating([]); setMaximizedPanelId(null); } });
   };
 
   const save = (): void => {
     const storage = browserStorage();
-    const saved = storage ? saveWorkspaceLayout(storage, scope, mode, layout) : false;
+    const measuredFloating = floating.map((item) => {
+      const element = Array.from(workspaceRef.current?.querySelectorAll<HTMLElement>("[data-floating-panel]") ?? [])
+        .find((candidate) => candidate.dataset.floatingPanel === item.panelId);
+      return element ? { ...item, width: Math.round(element.offsetWidth), height: Math.round(element.offsetHeight) } : item;
+    });
+    const saved = storage ? saveWorkspaceLayout(storage, scope, mode, layout)
+      && (mode !== "desktop" || saveFloatingPanels(storage, scope, measuredFloating, panelIds, layout.hiddenPanelIds)) : false;
     if (saved) {
       setPersistenceState("valid");
       setMessage("Layout saved on this device.");
@@ -370,7 +436,30 @@ export function Workspace({ scope, mode, panels, beforeLayoutChange, requestedPa
   };
 
   const showPanel = (panelId: string): void => {
-    void changeLayout((current) => showWorkspacePanel(current, panelId));
+    void changeLayout((current) => showWorkspacePanel(current, panelId))
+      .then((allowed) => { if (allowed) setFloating((current) => current.filter((item) => item.panelId !== panelId)); });
+  };
+  const floatPanel = (panelId: string): void => {
+    if (mode !== "desktop" || !visibleIds.includes(panelId) || visibleIds.length < 2) return;
+    void changeLayout((current) => hideWorkspacePanel(current, panelId), "Panel floated. Save layout to keep it.")
+      .then((allowed) => {
+        if (!allowed) return;
+        setFloating((current) => current.concat({
+          panelId, left: 180 + 18 * current.length, top: 146 + 22 * current.length,
+          width: panelId === "editor" ? 710 : 350, height: panelId === "editor" ? 560 : 410,
+        }));
+      });
+  };
+  const dockFloatingPanel = (panelId: string): void => {
+    void changeLayout((current) => showWorkspacePanel(current, panelId), "Panel docked. Save layout to keep it.")
+      .then((allowed) => { if (allowed) setFloating((current) => current.filter((item) => item.panelId !== panelId)); });
+  };
+  const moveFloatingPanel = (panelId: string, left: number, top: number): void => {
+    setFloating((current) => current.map((item) => item.panelId === panelId
+      ? { ...item, left: Math.max(0, Math.min(10000, left)), top: Math.max(0, Math.min(10000, top)) } : item));
+  };
+  const toggleMaximize = (panelId: string): void => {
+    setMaximizedPanelId((current) => current === panelId ? null : panelId);
   };
 
   const movePanel = (sourceId: string, targetId: string, nextPlacement: Placement): void => {
@@ -444,7 +533,7 @@ export function Workspace({ scope, mode, panels, beforeLayoutChange, requestedPa
         : "Layout changes are saved only when you choose Save layout.";
 
   return (
-    <section ref={workspaceRef} className={`st-workspace st-workspace-${mode}`} aria-label="Composable workspace">
+    <section ref={workspaceRef} className={`st-workspace st-workspace-${mode}`} data-maximized-panel={maximizedPanelId ?? undefined} aria-label="Composable workspace">
       <div className="st-workspace-toolbar" role="toolbar" aria-label="Workspace layout controls">
         <div className="st-workspace-presets" aria-label="Workspace presets">
           <button type="button" aria-pressed={layout.preset === "writing"} onClick={() => changePreset("writing")} disabled={changing}>Writing</button>
@@ -456,12 +545,15 @@ export function Workspace({ scope, mode, panels, beforeLayoutChange, requestedPa
           <div className="st-workspace-panel-menu-list">
             {panels.map((panel) => {
               const visible = visibleIds.includes(panel.id);
+              const isFloating = floating.some((item) => item.panelId === panel.id);
               return (
                 <div className="st-workspace-panel-menu-item" key={panel.id}>
                   <span>{panel.title}</span>
                   <button type="button" disabled={changing || (visible && visibleIds.length <= 1)} onClick={() => visible ? hidePanel(panel.id) : showPanel(panel.id)}>
-                    {visible ? `Hide ${panel.title}` : `Show ${panel.title}`}
+                    {isFloating ? `Dock ${panel.title}` : visible ? `Hide ${panel.title}` : `Show ${panel.title}`}
                   </button>
+                  {mode === "desktop" && visible && visibleIds.length > 1
+                    ? <button type="button" disabled={changing} onClick={() => floatPanel(panel.id)}>{`Float ${panel.title}`}</button> : null}
                 </div>
               );
             })}
@@ -470,6 +562,7 @@ export function Workspace({ scope, mode, panels, beforeLayoutChange, requestedPa
         <button className="st-workspace-save" type="button" onClick={save} disabled={changing}>Save layout</button>
       </div>
 
+      <details className="st-workspace-move-menu"><summary>配置変更</summary>
       <div className="st-workspace-move-controls" aria-label="Move panel controls">
         <label>
           Panel to move
@@ -494,7 +587,7 @@ export function Workspace({ scope, mode, panels, beforeLayoutChange, requestedPa
           </select>
         </label>
         <button type="button" disabled={changing || !moveSource || !moveTarget} onClick={() => movePanel(moveSource, moveTarget, placement)}>Move panel</button>
-      </div>
+      </div></details>
 
       {persistenceState === "invalid" ? <p className="st-workspace-warning" role="alert">{storageLabel}</p> : null}
       {message ? <p className="st-workspace-message" role="status" aria-live="polite">{message}</p> : null}
@@ -541,7 +634,7 @@ export function Workspace({ scope, mode, panels, beforeLayoutChange, requestedPa
             aria-labelledby={domId("st-workspace-mobile-tab", mobilePanelId)}
             tabIndex={0}
           >
-            <PanelFrame panelId={mobilePanelId} panel={catalog.get(mobilePanelId)} mode="mobile" canHide={false} onHide={hidePanel} onDrop={handleDrop} />
+            <PanelFrame panelId={mobilePanelId} panel={catalog.get(mobilePanelId)} mode="mobile" canHide={false} onHide={hidePanel} onDrop={handleDrop} onFloat={floatPanel} onMaximize={toggleMaximize} maximized={false} />
           </div>
         </div>
       ) : (
@@ -555,9 +648,15 @@ export function Workspace({ scope, mode, panels, beforeLayoutChange, requestedPa
             onHide={hidePanel}
             onDrop={handleDrop}
             onResize={resize}
+            onFloat={floatPanel} onMaximize={toggleMaximize} maximizedPanelId={maximizedPanelId}
           />
         </div>
       )}
+      {mode === "desktop" && floating.map((item) => (
+        <FloatingFrame key={item.panelId} record={item} panel={catalog.get(item.panelId)}
+          onMove={moveFloatingPanel} onDock={dockFloatingPanel} maximized={maximizedPanelId === item.panelId}
+          onMaximize={toggleMaximize}/>
+      ))}
     </section>
   );
 }
