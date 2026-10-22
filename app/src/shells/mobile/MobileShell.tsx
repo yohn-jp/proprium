@@ -84,7 +84,7 @@ function errorMessage(error: unknown): string {
  * Ionic page navigation for the shared application controller.
  * The mobile entry supplies the Ionic React Router context around the controller.
  */
-export function MobileShell({ header, documentTitle, documentContext, library, editor, tools, status, onSwitchMode, workspaceScope, panels, beforeLayoutChange, requestedPanel }: ApplicationShellProps) {
+export function MobileShell({ header, documentTitle, documentContext, desktopDurability, library, editor, tools, status, onSwitchMode, workspaceScope, panels, beforeLayoutChange, requestedPanel }: ApplicationShellProps) {
   const location = useLocation();
   const navigateRoute = useNavigate();
   const activeView = readViewFromSearch(location.search);
@@ -95,6 +95,7 @@ export function MobileShell({ header, documentTitle, documentContext, library, e
   const [openingReference, setOpeningReference] = useState(false);
   const openingReferenceRef = useRef(false);
   const referenceTriggerRef = useRef<HTMLButtonElement | null>(null);
+  const referenceOriginRef = useRef("");
   const routeIdentityRef = useRef(location.pathname + location.search);
   routeIdentityRef.current = location.pathname + location.search;
   const panelRequestSequenceRef = useRef(0);
@@ -143,7 +144,7 @@ export function MobileShell({ header, documentTitle, documentContext, library, e
     setSwitchError("");
     try {
       const allowed = beforeLayoutChange ? await beforeLayoutChange() : true;
-      if (!allowed) setSwitchError("The editor could not confirm its recovery state. The current screen is unchanged.");
+      if (!allowed) setSwitchError("下書きの回復状態を確認できないため、この画面を維持しています。入力は保持されています。");
       return allowed;
     } catch (error) {
       setSwitchError(errorMessage(error));
@@ -220,6 +221,7 @@ export function MobileShell({ header, documentTitle, documentContext, library, e
     openingReferenceRef.current = true;
     referenceTriggerRef.current = trigger;
     const routeAtStart = routeIdentityRef.current;
+    referenceOriginRef.current = routeAtStart;
     setOpeningReference(true);
     try {
       // Do not hide an editing/composition failure behind a sheet.
@@ -237,7 +239,8 @@ export function MobileShell({ header, documentTitle, documentContext, library, e
     // Return to the invoking control, not to a contenteditable element:
     // restoring input focus would unexpectedly reopen the soft keyboard.
     const trigger = referenceTriggerRef.current;
-    if (trigger?.isConnected && readViewFromSearch(window.location.search) === "writing") {
+    if (trigger?.isConnected && routeIdentityRef.current === referenceOriginRef.current &&
+        readViewFromSearch(window.location.search) === "writing") {
       trigger.focus({ preventScroll: true });
     }
   }, []);
@@ -407,6 +410,22 @@ export function MobileShell({ header, documentTitle, documentContext, library, e
             role="tabpanel"
             aria-labelledby={referenceSheet ? "mobile-reference-tab-" + referenceSheet : undefined}
             data-mobile-reference-panel={referenceSheet ?? undefined}>
+            {referenceSheet === "inspector" && desktopDurability ? (
+              <div className="mobile-shell-reference-durability" role="status" aria-label="原稿の保存状態">
+                <strong>{{
+                  draft: "Draft", checkpointing: "Checkpoint確認中",
+                  checkpointed: "Checkpoint", publication_unknown: "Publish結果未確認",
+                  saved: "GitHub保存済み",
+                }[desktopDurability]}</strong>
+                <span>{{
+                  draft: "ブラウザーの下書きです。GitHubへの保存はまだ確認されていません。",
+                  checkpointing: "ローカルCheckpointの結果を確認しています。",
+                  checkpointed: "ローカルCheckpointです。GitHubへの公開は完了していません。",
+                  publication_unknown: "GitHubへの保存結果は未確認です。原稿の回復記録を保持しています。",
+                  saved: "GitHubへの保存が確認されています。",
+                }[desktopDurability]}</span>
+              </div>
+            ) : null}
             {referencePanel?.render() ?? <p>この情報は現在利用できません。</p>}
           </div>
           <p className="mobile-shell-reference-hint">上のハンドルを上下に動かすと、参照領域を広げたり閉じたりできます。</p>

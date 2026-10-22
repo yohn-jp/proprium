@@ -528,3 +528,11 @@ ion-modal.mobile-shell-reference-modal {
 @media(prefers-reduced-motion:reduce){
   .mobile-shell-reference-modal * {animation-duration:.01ms!important;transition-duration:.01ms!important;scroll-behavior:auto!important}
 }
+
+.mobile-shell-reference-durability {
+  display:flex;flex-direction:column;gap:5px;margin-bottom:15px;padding:13px 14px;
+  border-radius:11px;border:1px solid var(--mobile-sheet-border);
+  background:var(--mobile-sheet-stage);color:var(--mobile-sheet-ink);
+}
+.mobile-shell-reference-durability strong {font-size:13px;color:var(--mobile-sheet-accent)}
+.mobile-shell-reference-durability span {font-size:12px;line-height:1.6}

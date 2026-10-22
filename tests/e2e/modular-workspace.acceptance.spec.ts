@@ -751,3 +751,61 @@ test("desktop floating panels preserve drafts and saved layout geometry", async 
   await expect(page.locator('[data-workspace-panel="outline"]')).toBeVisible();
   await expect(page.locator(".cm-content")).toHaveText(draft);
 });
+
+
+test("mobile writing reference sheet keeps the editor mounted and preserves the real draft", async ({ page }) => {
+  expect(authToken.length).toBeGreaterThanOrEqual(32);
+  expect(repositoryUrl).not.toBe("");
+  await page.setViewportSize({ width: 390, height: 844 });
+  await signIn(page, "mobile");
+  await openFixtureScene(page, "mobile");
+
+  const editor = page.locator('[data-workspace-panel="editor"] .cm-content');
+  const manuscript = page.locator(".manuscript-input");
+  const draft = "シートを開いても、この原稿と入力の文脈は残る。";
+  await editor.fill(draft);
+  await expectDraft(page, "scene-1", draft);
+  await manuscript.evaluate((node) => { node.setAttribute("data-stable-editor", "present"); });
+  const currentUrl = page.url();
+
+  await page.getByRole("button", { name: "構成を参照" }).click();
+  const sheet = page.locator("ion-modal.mobile-shell-reference-modal");
+  await expect(sheet).toBeVisible();
+  await expect(sheet.getByRole("tab", { name: "構成" })).toHaveAttribute("aria-selected", "true");
+  await expect(sheet.locator('[data-mobile-reference-panel="outline"] .scene-button').first()).toBeVisible();
+  await expect(manuscript).toHaveAttribute("data-stable-editor", "present");
+  await expect(editor).toHaveText(draft);
+  await expect(page).toHaveURL(currentUrl);
+
+  await sheet.getByRole("tab", { name: "保存状態" }).click();
+  await expect(sheet.locator('[data-mobile-reference-panel="inspector"]')).toBeVisible();
+  await expect(sheet.getByRole("status", { name: "原稿の保存状態" })).toContainText("Draft");
+  await expect(manuscript).toHaveAttribute("data-stable-editor", "present");
+  await sheet.getByRole("button", { name: "閉じる" }).click();
+  await expect(sheet).not.toBeVisible();
+  await expect(editor).toHaveText(draft);
+  await expect(page).toHaveURL(currentUrl);
+  await expectDraft(page, "scene-1", draft);
+});
+
+test("mobile reference sheet scene selection uses the existing guarded navigation", async ({ page }) => {
+  expect(authToken.length).toBeGreaterThanOrEqual(32);
+  expect(repositoryUrl).not.toBe("");
+  await page.setViewportSize({ width: 390, height: 844 });
+  await signIn(page, "mobile");
+  await openFixtureScene(page, "mobile");
+
+  const draft = "シーンを変更しても回復できる下書き。";
+  await page.locator('[data-workspace-panel="editor"] .cm-content').fill(draft);
+  await expectDraft(page, "scene-1", draft);
+
+  await page.getByRole("button", { name: "構成を参照" }).click();
+  const sheet = page.locator("ion-modal.mobile-shell-reference-modal");
+  await expect(sheet).toBeVisible();
+  await sheet.getByRole("button", { name: "Chapter One: Scene Two", exact: true }).click();
+
+  await expect(sheet).not.toBeVisible();
+  await expect(page.getByRole("heading", { name: "Scene Two" })).toBeVisible();
+  await expect(page.locator('[data-workspace-panel="editor"] .cm-content')).toBeVisible();
+  await expectDraft(page, "scene-1", draft);
+});
