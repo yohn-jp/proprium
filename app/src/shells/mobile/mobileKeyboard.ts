@@ -4,7 +4,7 @@ export interface WritingViewportSample {
   lastUnfocusedHeight: number;
   windowHeight: number;
   visualHeight: number | null;
-  visualOffsetTop: number;
+  visualScale: number;
 }
 
 export function isWritingKeyboardVisible(sample: WritingViewportSample): boolean {
@@ -12,8 +12,10 @@ export function isWritingKeyboardVisible(sample: WritingViewportSample): boolean
       !Number.isFinite(sample.lastUnfocusedHeight) || sample.windowHeight <= 0 ||
       sample.lastUnfocusedHeight <= 0) return false;
   const windowOcclusion = Math.max(0, sample.lastUnfocusedHeight - sample.windowHeight);
-  const visualOcclusion = sample.visualHeight !== null && Number.isFinite(sample.visualHeight)
-    ? Math.max(0, sample.windowHeight - sample.visualHeight - Math.max(0, sample.visualOffsetTop))
+  // Pinch zoom changes visualViewport.height without opening a keyboard.
+  const zoomed = Number.isFinite(sample.visualScale) && sample.visualScale > 1.05;
+  const visualOcclusion = !zoomed && sample.visualHeight !== null && Number.isFinite(sample.visualHeight)
+    ? Math.max(0, sample.windowHeight - sample.visualHeight)
     : 0;
   // Browser address bars usually move by tens of pixels; the soft keyboard takes much more.
   return Math.max(windowOcclusion, visualOcclusion) >= 140;

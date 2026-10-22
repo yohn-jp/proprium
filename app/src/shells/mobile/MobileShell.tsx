@@ -401,6 +401,17 @@ export function MobileShell({ header, documentTitle, documentContext, desktopDur
                 id={"mobile-reference-tab-" + choice.id}
                 aria-selected={referenceSheet === choice.id}
                 aria-controls="mobile-shell-reference-pane"
+                tabIndex={referenceSheet === choice.id ? 0 : -1}
+                onKeyDown={(event) => {
+                  const next = event.key === "ArrowRight" || event.key === "End" ? "inspector"
+                    : event.key === "ArrowLeft" || event.key === "Home" ? "outline" : null;
+                  if (!next) return;
+                  event.preventDefault();
+                  setReferenceSheet(next);
+                  event.currentTarget.parentElement?.querySelector<HTMLButtonElement>(
+                    "#mobile-reference-tab-" + next,
+                  )?.focus();
+                }}
                 onClick={() => setReferenceSheet(choice.id)}>
                 {choice.label}
               </button>

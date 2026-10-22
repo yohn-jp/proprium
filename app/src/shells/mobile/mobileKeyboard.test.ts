@@ -4,7 +4,7 @@ import { isWritingKeyboardVisible, type WritingViewportSample } from "./mobileKe
 
 const base: WritingViewportSample = {
   editorFocused: true, lastUnfocusedHeight: 844, windowHeight: 844,
-  visualHeight: 844, visualOffsetTop: 0,
+  visualHeight: 844, visualScale: 1,
 };
 test("soft keyboard hides chrome only when the editor is focused and occluded", () => {
   assert.equal(isWritingKeyboardVisible(base), false);
@@ -17,6 +17,7 @@ test("soft keyboard hides chrome only when the editor is focused and occluded", 
 test("invalid and offset visual viewport measurements never infer a keyboard", () => {
   assert.equal(isWritingKeyboardVisible({ ...base, visualHeight: null }), false);
   assert.equal(isWritingKeyboardVisible({ ...base, visualHeight: Number.NaN }), false);
-  assert.equal(isWritingKeyboardVisible({ ...base, visualHeight: 680, visualOffsetTop: 40 }), false);
+  assert.equal(isWritingKeyboardVisible({ ...base, visualHeight: 680, visualScale: 1.5 }), false);
+  assert.equal(isWritingKeyboardVisible({ ...base, visualHeight: 500, visualScale: 1 }), true);
   assert.equal(isWritingKeyboardVisible({ ...base, lastUnfocusedHeight: 0 }), false);
 });

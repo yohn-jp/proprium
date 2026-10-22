@@ -777,7 +777,8 @@ test("mobile writing reference sheet keeps the editor mounted and preserves the 
   await expect(editor).toHaveText(draft);
   await expect(page).toHaveURL(currentUrl);
 
-  await sheet.getByRole("tab", { name: "保存状態" }).click();
+  await sheet.getByRole("tab", { name: "構成" }).press("ArrowRight");
+  await expect(sheet.getByRole("tab", { name: "保存状態" })).toHaveAttribute("aria-selected", "true");
   await expect(sheet.locator('[data-mobile-reference-panel="inspector"]')).toBeVisible();
   await expect(sheet.getByRole("status", { name: "原稿の保存状態" })).toContainText("Draft");
   await expect(manuscript).toHaveAttribute("data-stable-editor", "present");
@@ -808,4 +809,32 @@ test("mobile reference sheet scene selection uses the existing guarded navigatio
   await expect(page.getByRole("heading", { name: "Scene Two" })).toBeVisible();
   await expect(page.locator('[data-workspace-panel="editor"] .cm-content')).toBeVisible();
   await expectDraft(page, "scene-1", draft);
+});
+
+
+test("mobile contextual reference refuses to cover a composing manuscript", async ({ page }) => {
+  expect(authToken.length).toBeGreaterThanOrEqual(32);
+  expect(repositoryUrl).not.toBe("");
+  await page.setViewportSize({ width: 390, height: 844 });
+  await signIn(page, "mobile");
+  await openFixtureScene(page, "mobile");
+
+  const editor = page.locator('[data-workspace-panel="editor"] .cm-content');
+  const draft = "変換中でも原稿を失わない";
+  await editor.fill(draft);
+  await expectDraft(page, "scene-1", draft);
+  await editor.evaluate((element) => element.dispatchEvent(
+    new CompositionEvent("compositionstart", { data: "へんかん", bubbles: true }),
+  ));
+
+  const urlBefore = page.url();
+  await page.getByRole("button", { name: "構成を参照" }).click();
+  await expect(page.locator("ion-modal.mobile-shell-reference-modal")).not.toBeVisible();
+  await expect(page.locator(".mobile-shell-interaction-error")).toContainText("下書きの回復状態");
+  await expect(page).toHaveURL(urlBefore);
+  await expect(editor).toHaveText(draft);
+  await expectDraft(page, "scene-1", draft);
+  await editor.evaluate((element) => element.dispatchEvent(
+    new CompositionEvent("compositionend", { data: "変換", bubbles: true }),
+  ));
 });

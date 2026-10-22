@@ -23,7 +23,7 @@ export function useWritingKeyboardVisibility(): boolean {
         lastUnfocusedHeight,
         windowHeight: window.innerHeight,
         visualHeight: viewport?.height ?? null,
-        visualOffsetTop: viewport?.offsetTop ?? 0,
+        visualScale: viewport?.scale ?? 1,
       }));
     };
     const afterBlur = () => {
