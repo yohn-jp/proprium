@@ -5,11 +5,20 @@ import path from 'node:path';
 import test from 'node:test';
 import { fileURLToPath } from 'node:url';
 import { MODULE_PERSISTENCE_FORMATS, resolveBuildCatalogSelection } from '../packages/module-runtime/dist/index.js';
-import { assertCleanRevisionSnapshot, browserManifestEntryFiles, canonicalJson, catalogFor, persistenceForModules, resourceDeclarationFor } from './hosted-build.mjs';
+import { assertCleanRevisionSnapshot, browserManifestEntryFiles, calculateBuildDigests, canonicalJson, catalogFor, persistenceForModules, resourceDeclarationFor } from './hosted-build.mjs';
 import { assertSigstoreBundleMatches, assertSupportedCosignVersion, createSlsaStatement } from './hosted-attestation.mjs';
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const moduleIds = ['story', 'diagnostics', 'nlp', 'semantic', 'speaker', 'assistant', 'publishing', 'mcp', 'search'];
+
+test('hosted source inventory excludes developer performance symlinks without disabling source validation', async () => {
+  // scripts/performance/podman is a tracked development-only symlink.
+  // The hosted source digest must not traverse that unrelated directory.
+  const digests = await calculateBuildDigests();
+  assert.match(digests.sourceDigest, /^sha256:[a-f0-9]{64}$/u);
+  assert.match(digests.recipeDigest, /^sha256:[a-f0-9]{64}$/u);
+  assert.match(digests.lockDigest, /^sha256:[a-f0-9]{64}$/u);
+});
 
 test('hosted browser artifact binding follows hashed Vite entry and stylesheet files', () => {
   assert.deepEqual(browserManifestEntryFiles({
