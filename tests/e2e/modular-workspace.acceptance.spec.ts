@@ -224,6 +224,7 @@ test("desktop workspace presets, arbitrary docking, panel visibility and layout 
   await toolbar.getByRole("button", { name: "Writing", exact: true }).click();
   await saveWorkspace(page);
 
+  await workspace.locator(".st-workspace-move-menu summary").click();
   const moveControls = workspace.locator(".st-workspace-move-controls");
   const movePanel = moveControls.getByLabel("Panel to move");
   const moveNextTo = moveControls.getByLabel("Move next to");

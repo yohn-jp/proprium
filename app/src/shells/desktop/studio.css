@@ -169,3 +169,16 @@
 @media(prefers-reduced-motion:reduce) {
   .st-studio-shell * {animation-duration:.01ms!important;transition-duration:.01ms!important;scroll-behavior:auto!important}
 }
+
+/* Real controller-owned durability, never a timed or specimen save indicator. */
+.st-studio-durability {
+  display:inline-flex;align-items:center;gap:7px;flex:0 0 auto;
+  padding:7px 10px;border-radius:100px;background:#f7f3e7;color:#9a792d;
+  font-size:11px;font-weight:650;white-space:nowrap;
+}
+.st-studio-durability::before {content:"";display:block;width:7px;height:7px;border-radius:50%;background:currentColor}
+.st-studio-durability.is-saved {background:#e2efe3;color:#2d7250}
+.st-studio-durability.is-publication_unknown {background:var(--error-bg);color:var(--error-text)}
+:root[data-zp-theme="dark"] .st-studio-durability {background:#34452e;color:#e1c98d}
+:root[data-zp-theme="dark"] .st-studio-durability.is-saved {background:#244f37;color:#c3f0d3}
+@media(max-width:900px){.st-studio-durability {padding:7px;font-size:10px}}

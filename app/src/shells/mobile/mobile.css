@@ -407,3 +407,6 @@
 @media(prefers-reduced-motion:reduce){
   .mobile-shell *,.mobile-shell *::before,.mobile-shell *::after {transition-duration:.01ms!important;animation-duration:.01ms!important;scroll-behavior:auto!important}
 }
+
+/* Mobile never exposes the Desktop arrangement editor. The core layout retains its persistence. */
+.mobile-shell .st-workspace-move-menu {display:none}

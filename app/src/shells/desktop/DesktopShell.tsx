@@ -19,14 +19,13 @@ function describeFailure(reason: unknown): string {
 
 /** Workspace Studio: the approved desktop composition, retaining the real application controller. */
 export function DesktopShell({
-  header, desktopActions, documentTitle, documentContext, library, editor, tools, status,
+  header, desktopActions, desktopDurability, documentTitle, documentContext, library, editor, tools, status,
   onSwitchMode, workspaceScope, panels, beforeLayoutChange, requestedPanel,
 }: ApplicationShellProps) {
   const [switching, setSwitching] = useState(false);
   const [switchError, setSwitchError] = useState("");
   const switchInFlight = useRef(false);
   const requestSeq = useRef(0);
-  const [railRequest, setRailRequest] = useState<WorkspacePanelRequest>();
   const [effectiveRequest, setEffectiveRequest] = useState<WorkspacePanelRequest>();
 
   useEffect(() => {
@@ -36,7 +35,6 @@ export function DesktopShell({
   function reveal(id: string) {
     if (!panels?.some((panel) => panel.id === id)) return;
     const request = { id, sequence: ++requestSeq.current };
-    setRailRequest(request);
     setEffectiveRequest(request);
   }
 
@@ -62,7 +60,7 @@ export function DesktopShell({
     { id: "history", mark: "◷", title: "履歴" },
     { id: "review", mark: "◇", title: "レビューとツール" },
   ];
-  const activeRequest = effectiveRequest ?? railRequest;
+  const activeRequest = effectiveRequest;
   return (
     <div className="st-desktop-shell st-studio-shell">
       <aside className="st-studio-rail" aria-label="デスクトップ操作">
@@ -70,17 +68,17 @@ export function DesktopShell({
         <nav aria-label="パネルを開く" className="st-studio-rail-nav">
           {rail.map((item) => <button key={item.id} type="button"
             className={"st-studio-rail-item" + (activeRequest?.id === item.id || (!activeRequest && item.id === "editor") ? " is-current" : "")}
-            title={item.title} aria-label={item.title} disabled={!panels?.some((panel) => panel.id === item.id)}
+            title={item.title} aria-label={"パネル：" + item.title} disabled={!panels?.some((panel) => panel.id === item.id)}
             onClick={() => reveal(item.id)}>{item.mark}</button>)}
         </nav>
         <div className="st-studio-rail-bottom">
-          <button type="button" className="st-studio-rail-item" title="モバイルUIへ" aria-label="モバイルUIへ切り替え"
+          <button type="button" className="st-studio-rail-item" title="モバイルUIへ" aria-label="モバイルUIへ"
             onClick={() => void switchToMobile()} disabled={switching}>↗</button>
           <span className="st-studio-avatar" aria-hidden="true">S</span>
         </div>
       </aside>
       <div className="st-studio-main">
-        <header className="st-studio-topbar">
+        <div className="st-studio-topbar">
           <div className="st-studio-identity">
             <a className="st-studio-wordmark" href="/">scriptorium<span>.</span></a>
             <div className="st-studio-breadcrumb" aria-label="現在の原稿">
@@ -89,10 +87,15 @@ export function DesktopShell({
             </div>
           </div>
           <div className="st-studio-masthead-actions">
+            {desktopDurability ? <span className={"st-studio-durability is-" + desktopDurability}
+              aria-label="原稿の保存状態">{{
+                draft: "Draft", checkpointing: "Checkpoint確認中", checkpointed: "Checkpoint",
+                publication_unknown: "Publish未確認", saved: "GitHub保存済み",
+              }[desktopDurability]}</span> : null}
             {desktopActions}
             <div className="st-studio-header-slot">{header}</div>
           </div>
-        </header>
+        </div>
         {switchError && <p className="st-desktop-switch-error" role="alert">{switchError}</p>}
         {status && <div className="st-desktop-status" role="region" aria-label="保存と接続の状態">{status}</div>}
         {workspaceScope && panels?.length ? (

@@ -3,13 +3,10 @@ import { setNonce } from "@ionic/core/components";
 import {
   IonApp,
   IonButton,
-  IonButtons,
   IonContent,
   IonFooter,
   IonHeader,
   IonPage,
-  IonTitle,
-  IonToolbar,
   setupIonicReact,
 } from "@ionic/react";
 import { useLocation, useNavigate } from "react-router-dom";
