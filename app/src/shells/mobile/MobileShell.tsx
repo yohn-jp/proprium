@@ -372,7 +372,7 @@ export function MobileShell({ header, documentTitle, documentContext, desktopDur
         </IonFooter>
       </IonPage>
       <IonModal
-        cssClass="mobile-shell-reference-modal"
+        className="mobile-shell-reference-modal"
         isOpen={referenceSheet !== null}
         onDidDismiss={onReferenceDismissed}
         breakpoints={[0, 0.56, 0.88, 1]}
