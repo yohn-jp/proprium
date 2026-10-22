@@ -84,7 +84,10 @@ async function walkFiles(directory, relativeDirectory, output) {
   entries.sort((left, right) => left.name < right.name ? -1 : left.name > right.name ? 1 : 0);
   for (const entry of entries) {
     const relative = path.posix.join(relativeDirectory, entry.name);
-    if (entry.name === 'node_modules' || entry.name === 'dist' || entry.name === 'generated' ||
+    // Performance probes are developer-only tooling, not Hosted Producer inputs.
+    // Keep rejecting symlinks in every included source directory.
+    if (relative === 'scripts/performance' ||
+        entry.name === 'node_modules' || entry.name === 'dist' || entry.name === 'generated' ||
         entry.name === '.git' || entry.name === 'coverage' || entry.name === 'build' || entry.name === '.turbo') continue;
     const absolute = path.join(directory, entry.name);
     const info = await lstat(absolute);
