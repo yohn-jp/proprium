@@ -108,7 +108,7 @@ function PanelFrame({ panelId, panel, mode, canHide, onHide, onDrop, onFloat, on
   };
 
   return (
-    <section className="st-workspace-panel" tabIndex={-1} data-workspace-panel={panelId} aria-labelledby={domId("st-workspace-heading", panelId)}>
+    <section className={"st-workspace-panel" + (maximized ? " is-maximized" : "")} tabIndex={-1} data-workspace-panel={panelId} aria-labelledby={domId("st-workspace-heading", panelId)}>
       <header className="st-workspace-panel-heading">
         {mode === "desktop" ? (
           <div
@@ -431,6 +431,7 @@ export function Workspace({ scope, mode, panels, beforeLayoutChange, requestedPa
 
   const hidePanel = (panelId: string): void => {
     void changeLayout((current) => hideWorkspacePanel(current, panelId)).then((allowed) => {
+      if (allowed) setMaximizedPanelId((current) => current === panelId ? null : current);
       if (allowed) window.setTimeout(() => workspaceRef.current?.querySelector<HTMLElement>(".st-workspace-panel")?.focus(), 0);
     });
   };

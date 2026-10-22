@@ -713,3 +713,41 @@ test("full profile exposes optional lexical search and terminology without chang
   const sourceAfter = await readRemoteScene(page, projectId, "scene-1");
   expect(sourceAfter).toBe(sourceBefore);
 });
+
+
+test("desktop floating panels preserve drafts and saved layout geometry", async ({ page }) => {
+  expect(authToken.length).toBeGreaterThanOrEqual(32);
+  expect(repositoryUrl).not.toBe("");
+  await signIn(page, "desktop");
+  await openFixtureScene(page, "desktop");
+
+  const workspace = page.locator(".st-workspace");
+  const manuscript = workspace.locator('[data-workspace-panel="editor"] .cm-content');
+  const draft = "Floating workspace retains the manuscript without inventing Git publish.";
+  await manuscript.fill(draft);
+  await expectDraft(page, "scene-1", draft);
+
+  await workspace.locator('[data-workspace-panel="outline"]')
+    .getByRole("button", { name: "Float Outline" }).click();
+  const floating = workspace.locator('[data-floating-panel="outline"]');
+  await expect(floating).toBeVisible();
+  await expect(manuscript).toHaveText(draft);
+
+  const editorPanel = workspace.locator('[data-workspace-panel="editor"]');
+  await editorPanel.getByRole("button", { name: "Maximize Editor" }).click();
+  await expect(editorPanel).toHaveClass(/is-maximized/);
+  await editorPanel.getByRole("button", { name: "Restore Editor" }).click();
+  await expect(editorPanel).not.toHaveClass(/is-maximized/);
+
+  await workspaceToolbar(page).getByRole("button", { name: "Save layout", exact: true }).click();
+  await expect.poll(async () => page.evaluate(() =>
+    Object.keys(localStorage).some((key) => key.startsWith("scriptorium:workspace:floating:v1:")))).toBe(true);
+  await page.reload();
+  await expect(page.locator('[data-floating-panel="outline"]')).toBeVisible();
+  await expect(page.locator('[data-workspace-panel="editor"] .cm-content')).toHaveText(draft);
+
+  await page.locator('[data-floating-panel="outline"]')
+    .getByRole("button", { name: "パネルをドックへ戻す" }).click();
+  await expect(page.locator('[data-workspace-panel="outline"]')).toBeVisible();
+  await expect(page.locator(".cm-content")).toHaveText(draft);
+});
