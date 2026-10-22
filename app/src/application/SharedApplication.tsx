@@ -2587,7 +2587,18 @@ function AuthorWorkspace({
           refresh={refreshContributionContext} journal={journal} onProposalStored={refreshProposals}
           readCurrentEditor={readCurrentEditor} navigateDocument={navigateDocument} /> : <p>作品を選択してください。</p> })),
   ];
-  return <Shell mode={mode} header={header} library={library} editor={editorSlot} tools={toolsSlot} status={statusSlot}
+  const desktopActions = editor && scene && work ? (
+    <div className="st-studio-real-actions" aria-label="原稿の保存操作">
+      <button type="button" aria-label="上部バーからCheckpoint" className="st-studio-checkpoint" disabled={!canCheckpoint || busy === "checkpoint" || busy === "publish"}
+        onClick={() => void checkpointCurrent()}>{busy === "checkpoint" ? "Checkpoint中…" : "Checkpoint"}</button>
+      <button type="button" aria-label="上部バーからPublish" className="st-studio-publish" disabled={!canPublish || busy === "checkpoint" || busy === "publish"}
+        onClick={() => void publishPending()}>{busy === "publish" ? "Publish中…" : "Publish ↗"}</button>
+    </div>
+  ) : null;
+  return <Shell mode={mode} header={header} desktopActions={desktopActions}
+    desktopDurability={editor ? editorDurability(editor) : undefined}
+    documentTitle={scene?.title} documentContext={tree?.title}
+    library={library} editor={editorSlot} tools={toolsSlot} status={statusSlot}
     workspaceScope={authorScope} panels={panels} requestedPanel={panelRequest}
     beforeLayoutChange={prepareLayoutChange} onSwitchMode={switchMode} />;
 }

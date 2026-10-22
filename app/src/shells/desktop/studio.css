@@ -1,0 +1,184 @@
+/* The approved Workspace Studio desktop art direction (2026-10-22).
+   Only the Desktop Shell uses these tokens; Mobile is an independent frontend. */
+.st-studio-shell {
+  --studio-rail: #18342d;
+  --studio-canvas: #e9eee8;
+  --studio-sheet: #fdfefa;
+  --studio-tint: #eff4ee;
+  --studio-tint-strong: #e3ebe2;
+  --studio-ink: #2b4b3d;
+  --studio-muted: #748779;
+  --studio-border: #dce5db;
+  --studio-primary: #2e5a49;
+  display: grid;
+  grid-template-columns: 56px minmax(0, 1fr);
+  color: var(--studio-ink);
+  background: var(--studio-canvas);
+  font-family: "Hiragino Sans", "Yu Gothic", Meiryo, sans-serif;
+}
+.st-studio-rail {
+  display: flex; flex-direction: column; align-items: center; min-width: 0;
+  background: var(--studio-rail); color: #c2d6c8; z-index: 5;
+}
+.st-studio-monogram {
+  display: grid; place-items: center; width: 56px; height: 69px;
+  font: 700 25px Georgia, serif; text-decoration: none; color: #fcfcf0;
+}
+.st-studio-monogram span, .st-studio-wordmark span { color: #8aa88b; }
+.st-studio-rail-nav,.st-studio-rail-bottom { display:flex; flex-direction:column; align-items:center; gap:7px; width:100%; }
+.st-studio-rail-bottom { margin-top:auto; margin-bottom:12px; }
+.st-studio-rail-item {
+  width: 41px; height: 41px; min-height: 41px; display:grid; place-items:center;
+  border:0; border-radius:9px; background:transparent; padding:0;
+  font-size:21px; line-height:1; color:#bdd4c5; cursor:pointer;
+}
+.st-studio-rail-item:hover:not(:disabled),.st-studio-rail-item.is-current {
+  color:#f7f9ef; background:#385f50;
+}
+.st-studio-rail-item:disabled {opacity:.35;cursor:default}
+.st-studio-avatar {
+  height: 28px;width:28px;border-radius:50%;background:#dbc8a8;color:#294437;
+  display:grid;place-items:center;font:700 13px Georgia,serif;
+}
+.st-studio-main {display:flex; flex-direction:column; min-width:0; min-height:0; height:100%;overflow:hidden}
+.st-studio-topbar {
+  display:flex; align-items:center; justify-content:space-between;
+  min-width:0; gap:16px; height:70px; flex:0 0 70px;
+  padding:0 24px; background:var(--studio-sheet);border-bottom:1px solid var(--studio-border);
+}
+.st-studio-identity { display:flex; align-items:center; gap:24px; min-width:0 }
+.st-studio-wordmark {flex:0 0 auto;font:700 25px Georgia, "Yu Mincho",serif; letter-spacing:-1.3px;color:var(--studio-ink);text-decoration:none}
+.st-studio-breadcrumb { min-width:0; overflow:hidden;text-overflow:ellipsis; white-space:nowrap;display:flex;gap:10px;align-items:center;color:var(--studio-muted);font-size:11px}
+.st-studio-breadcrumb strong {color:var(--studio-ink);font-weight:700; overflow:hidden;text-overflow:ellipsis}
+.st-studio-masthead-actions {display:flex;align-items:center;gap:15px;flex:0 1 auto;min-width:0}
+.st-studio-real-actions {display:flex; align-items:center;gap:7px;flex:0 0 auto}
+.st-studio-real-actions button {
+  font:600 12px "Hiragino Sans","Yu Gothic",sans-serif;min-height:36px;
+  padding:8px 14px;white-space:nowrap;border-radius:6px;
+}
+.st-studio-real-actions .st-studio-checkpoint {background:var(--studio-tint-strong);border-color:var(--studio-border);color:var(--studio-primary)}
+.st-studio-real-actions .st-studio-publish {background:var(--studio-primary);border-color:var(--studio-primary);color:white}
+.st-studio-real-actions button:disabled {opacity:.55}
+.st-studio-header-slot {min-width:0}
+.st-studio-header-slot .topbar {position:static;min-height:0;border:0; background:transparent; padding:0;gap:8px}
+.st-studio-header-slot .topbar .brand {display:none}
+.st-studio-header-slot .topbar .theme-control {font-size:10px;gap:4px}
+.st-studio-header-slot .topbar .theme-control select {min-height:35px;font-size:11px}
+.st-studio-header-slot .topbar .quiet-button {min-height:35px;padding:6px 10px;font-size:11px;border:1px solid var(--studio-border)}
+.st-studio-shell .st-desktop-status {right:20px;bottom:48px;background:var(--studio-sheet);box-shadow:0 12px 30px #17352920}
+.st-studio-shell .st-workspace {background:var(--studio-canvas);--ink:var(--studio-ink);--muted:var(--studio-muted);--paper:var(--studio-sheet);--line:var(--studio-border);--accent:var(--studio-primary);--accent-strong:var(--studio-primary);--surface-hover:var(--studio-tint-strong);--surface-selected:var(--studio-tint-strong);--toolbar-bg:var(--studio-sheet);--surface-subtle:var(--studio-tint)}
+.st-studio-shell .st-workspace-toolbar {
+  min-height:53px;gap:12px;padding:7px 19px;background:#f7faf6;
+  border-bottom:1px solid var(--studio-border); flex-wrap:nowrap;
+}
+.st-studio-shell .st-workspace-toolbar::before {
+  content:"VIEW";font:600 9px ui-monospace,monospace;color:#98a99e;
+  letter-spacing:2px;margin-right:4px;
+}
+.st-studio-shell .st-workspace-presets {flex-wrap:nowrap;gap:5px}
+.st-studio-shell .st-workspace-presets button {
+  border:0;border-radius:5px;background:transparent;color:#7b8f80;
+  min-height:34px;padding:6px 11px;font-size:12px;font-weight:600;
+}
+.st-studio-shell .st-workspace-presets button[aria-pressed="true"] {background:#e4ece3;color:#2e5a49}
+.st-studio-shell .st-workspace-panel-menu summary {
+  border:0;color:#698073;background:transparent;min-height:32px;font-size:12px;
+}
+.st-studio-shell .st-workspace-save {
+  background:var(--studio-primary);color:white;border:0;min-height:36px;
+  padding:8px 13px;font-size:12px;border-radius:5px;
+}
+.st-studio-shell .st-workspace-move-controls {padding:9px 14px;gap:10px;background:#f5f8f3}
+.st-studio-shell .st-workspace-layout {padding:10px; background:var(--studio-canvas)}
+.st-studio-shell .st-workspace-split {gap:6px;background:transparent}
+.st-studio-shell .st-workspace-panel {
+  background:var(--studio-sheet);border:1px solid var(--studio-border);
+  border-radius:7px;overflow:hidden;
+}
+.st-studio-shell .st-workspace-panel-heading {height:39px;min-height:39px;background:#f5f8f3;padding:4px 10px;border-bottom:1px solid var(--studio-border)}
+.st-studio-shell .st-workspace-panel-heading h2 {font-size:12px;color:#4c6856;font-weight:700}
+.st-studio-shell .st-workspace-drag-grip {border:0;background:transparent;padding:4px;color:#92a395}
+.st-studio-shell .st-workspace-drop-zones {display:none}
+.st-studio-shell .st-workspace-panel:hover .st-workspace-drop-zones,.st-studio-shell .st-workspace-panel:focus-within .st-workspace-drop-zones {display:flex}
+.st-studio-shell .st-workspace-drop-zone {width:20px;height:20px;font-size:10px}
+.st-studio-shell .st-workspace-hide {border:0;color:#829789;background:transparent;min-width:27px;padding:3px 5px!important}
+.st-studio-shell .st-workspace-resize-handle {background:transparent}
+.st-studio-shell .st-workspace-resize-horizontal {width:7px}
+.st-studio-shell .st-workspace-resize-vertical {height:7px}
+.st-studio-shell .st-workspace-resize-handle:hover {background:#bad0bd}
+.st-studio-shell .st-workspace-panel-body {background:var(--studio-sheet)}
+.st-studio-shell .st-workspace-tab {font-size:12px}
+.st-studio-shell .st-workspace-stack {background:var(--studio-sheet)}
+.st-studio-shell .st-workspace-message,.st-studio-shell .st-workspace-storage-state {font-size:10px;min-height:22px;padding:3px 12px}
+.st-studio-shell .st-workspace :is(.sidebar,.writing-area){background:transparent;border:0;padding:14px}
+.st-studio-shell .st-workspace .editor {max-width:1320px}
+.st-studio-shell .st-workspace .editor-header {align-items:center;border-bottom:1px solid var(--studio-border);padding:12px 4px 19px;margin:0 0 17px}
+.st-studio-shell .st-workspace .editor-header h1 {font:600 clamp(25px,2.4vw,35px) var(--manuscript-serif);letter-spacing:-.035em;color:var(--studio-ink)}
+.st-studio-shell .st-workspace .eyebrow {letter-spacing:.12em;font-size:10px;color:#91a696}
+.st-studio-shell .st-workspace .editor-columns {grid-template-columns:minmax(0,1fr) minmax(240px,.38fr);gap:12px}
+.st-studio-shell .st-workspace .manuscript-column,.st-studio-shell .st-workspace .preview-column {border-color:var(--studio-border);background:var(--studio-sheet);border-radius:5px}
+.st-studio-shell .st-workspace .manuscript-column {padding:clamp(18px,2.4vw,36px);box-shadow:0 3px 25px #214b3310}
+.st-studio-shell .st-workspace .manuscript-column > label {font-size:10px;letter-spacing:1.5px;color:#90a694;text-transform:uppercase}
+.st-studio-shell .st-workspace .cm-editor {color:var(--studio-ink);background:var(--studio-sheet)}
+.st-studio-shell .st-workspace .cm-content {padding:22px 10px;font-family:var(--manuscript-serif);font-size:var(--editor-font-size,18px);line-height:2.1}
+.st-studio-shell .st-workspace .typography-toolbar {background:var(--studio-tint);border-color:var(--studio-border)}
+.st-studio-shell .st-workspace .durability-row {gap:8px}
+.st-studio-shell .st-workspace .durability-badge {border-color:var(--studio-border);background:var(--studio-tint);font-size:11px}
+.st-studio-shell .st-workspace .durability-badge.is-current {background:#e7efe2;color:var(--studio-primary)}
+.st-studio-shell .st-workspace .sidebar :is(h2,h3) {color:var(--studio-ink);font-family:var(--manuscript-serif)}
+.st-studio-shell .st-desktop-workbench {margin:10px;background:transparent;border:1px solid var(--studio-border);border-radius:7px}
+.st-studio-shell .st-desktop-navigation {background:var(--studio-sheet)}
+.st-studio-shell .st-desktop-slot {background:var(--studio-sheet)}
+.st-studio-footer {
+  min-height:31px; flex:0 0 31px; display:flex;align-items:center;justify-content:space-between;
+  gap:12px;padding:0 15px;background:#f8fbf6;border-top:1px solid var(--studio-border);
+  color:#809587;font:10px ui-monospace,monospace;white-space:nowrap;
+}
+.st-studio-footer-dot{display:inline-block;height:6px;width:6px;border-radius:50%;background:#65a47a;margin-right:7px}
+:root[data-zp-theme="dark"] .st-studio-shell {
+  --studio-canvas:#17251f;--studio-sheet:#172a22;--studio-tint:#233b2f;--studio-tint-strong:#2c4c3a;
+  --studio-ink:#e5f2e8;--studio-muted:#b4c9b8;--studio-border:#3a5946;--studio-primary:#a5dcc0;
+}
+:root[data-zp-theme="dark"] .st-studio-topbar,
+:root[data-zp-theme="dark"] .st-studio-footer,
+:root[data-zp-theme="dark"] .st-studio-shell .st-workspace-toolbar,
+:root[data-zp-theme="dark"] .st-studio-shell .st-workspace-panel-heading {background:var(--studio-sheet);color:var(--studio-ink)}
+:root[data-zp-theme="dark"] .st-studio-real-actions .st-studio-publish,
+:root[data-zp-theme="dark"] .st-studio-shell .st-workspace-save {color:#133126}
+:root[data-zp-theme="dark"] .st-studio-shell .st-workspace-presets button[aria-pressed="true"] {background:var(--studio-tint-strong);color:var(--studio-ink)}
+:root[data-zp-theme="paper"] .st-studio-shell {
+  --studio-canvas:#eee9dc;--studio-sheet:#faf5e9;--studio-tint:#f3ede0;--studio-tint-strong:#e8dfcc;
+  --studio-border:#d3c9b5;--studio-ink:#324639;--studio-muted:#6c806f;
+}
+.st-studio-shell :is(button,a,summary,select,[tabindex]):focus-visible {outline:3px solid var(--focus-ring);outline-offset:2px}
+@media(max-width:1050px) {
+  .st-studio-breadcrumb {display:none}
+  .st-studio-topbar {padding:0 12px;gap:8px}
+  .st-studio-header-slot .topbar {gap:4px}
+}
+@media(max-width:760px) {
+  .st-studio-shell {grid-template-columns:45px minmax(0,1fr)}
+  .st-studio-rail-item,.st-studio-monogram {width:45px}
+  .st-studio-identity {gap:7px}
+  .st-studio-wordmark {font-size:20px}
+  .st-studio-masthead-actions {gap:5px}
+  .st-studio-real-actions button {padding:6px 8px;font-size:10px}
+  .st-studio-shell .st-workspace-toolbar {padding:5px 8px;gap:4px}
+  .st-studio-footer>span:last-child {display:none}
+}
+@media(prefers-reduced-motion:reduce) {
+  .st-studio-shell * {animation-duration:.01ms!important;transition-duration:.01ms!important;scroll-behavior:auto!important}
+}
+
+/* Real controller-owned durability, never a timed or specimen save indicator. */
+.st-studio-durability {
+  display:inline-flex;align-items:center;gap:7px;flex:0 0 auto;
+  padding:7px 10px;border-radius:100px;background:#f7f3e7;color:#9a792d;
+  font-size:11px;font-weight:650;white-space:nowrap;
+}
+.st-studio-durability::before {content:"";display:block;width:7px;height:7px;border-radius:50%;background:currentColor}
+.st-studio-durability.is-saved {background:#e2efe3;color:#2d7250}
+.st-studio-durability.is-publication_unknown {background:var(--error-bg);color:var(--error-text)}
+:root[data-zp-theme="dark"] .st-studio-durability {background:#34452e;color:#e1c98d}
+:root[data-zp-theme="dark"] .st-studio-durability.is-saved {background:#244f37;color:#c3f0d3}
+@media(max-width:900px){.st-studio-durability {padding:7px;font-size:10px}}

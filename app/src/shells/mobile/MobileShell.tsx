@@ -3,13 +3,10 @@ import { setNonce } from "@ionic/core/components";
 import {
   IonApp,
   IonButton,
-  IonButtons,
   IonContent,
   IonFooter,
   IonHeader,
   IonPage,
-  IonTitle,
-  IonToolbar,
   setupIonicReact,
 } from "@ionic/react";
 import { useLocation, useNavigate } from "react-router-dom";
@@ -84,7 +81,7 @@ function errorMessage(error: unknown): string {
  * Ionic page navigation for the shared application controller.
  * The mobile entry supplies the Ionic React Router context around the controller.
  */
-export function MobileShell({ header, library, editor, tools, status, onSwitchMode, workspaceScope, panels, beforeLayoutChange, requestedPanel }: ApplicationShellProps) {
+export function MobileShell({ header, documentTitle, documentContext, library, editor, tools, status, onSwitchMode, workspaceScope, panels, beforeLayoutChange, requestedPanel }: ApplicationShellProps) {
   const location = useLocation();
   const navigateRoute = useNavigate();
   const activeView = readViewFromSearch(location.search);
@@ -193,24 +190,26 @@ export function MobileShell({ header, library, editor, tools, status, onSwitchMo
   }, [onSwitchMode, switching]);
 
   const title = VIEWS.find((view) => view.id === activeView)?.title ?? "Scriptorium";
+  const mobileTitle = activeView === "writing" && documentTitle ? documentTitle : title;
   return (
     <IonApp className="mobile-shell">
       <IonPage className="mobile-shell-page">
         <IonHeader className="mobile-shell-ion-header">
-          <IonToolbar className="mobile-shell-toolbar">
-            <IonButtons slot="start">
-              <IonButton type="button" fill="clear" aria-label="前の画面に戻る" onClick={goBack}>
-                ← 戻る
-              </IonButton>
-            </IonButtons>
-            <IonTitle>{title}</IonTitle>
-          </IonToolbar>
-          <div className="mobile-shell-shared-header">{header}</div>
+          <div className="mobile-shell-identity-bar">
+            <IonButton type="button" className="mobile-shell-back" fill="clear" aria-label="前の画面に戻る" onClick={goBack}>‹</IonButton>
+            <div className="mobile-shell-identity-copy">
+              <span className="mobile-shell-wordmark">scriptorium<span>.</span></span>
+              <strong className="mobile-shell-current-title">{mobileTitle}</strong>
+              {documentContext && activeView === "writing" ? <small className="mobile-shell-context">{documentContext}</small> : null}
+            </div>
+            <span className="mobile-shell-page-mark" aria-hidden="true">{VIEWS.find((view) => view.id === activeView)?.mark}</span>
+          </div>
+          <div className="mobile-shell-shared-header" aria-label="アカウントと画面設定">{header}</div>
         </IonHeader>
 
         <IonContent ref={contentRef} className="mobile-shell-content" fullscreen={false}>
           {workspaceScope && panels?.length ? (
-            <div className="mobile-shell-workspace-view" data-active-view={activeView}>
+            <div className="mobile-shell-workspace-view" data-active-view={activeView} aria-label="モバイル用執筆画面">
               {activeView === "settings" ? (
                 <section className="mobile-shell-settings-card" aria-labelledby="mobile-display-settings-title">
                   <h2 id="mobile-display-settings-title">表示と入力</h2>

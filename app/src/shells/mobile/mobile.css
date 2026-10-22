@@ -226,3 +226,187 @@
   .mobile-shell *::before,
   .mobile-shell *::after { scroll-behavior: auto !important; animation-duration: 0.01ms !important; animation-iteration-count: 1 !important; transition-duration: 0.01ms !important; }
 }
+
+
+/* Independent Mobile Writing Studio: a book-like, task-oriented Ionic frontend.
+   It is selected by /mobile/, never by the browser width. */
+.mobile-shell {
+  --mobile-ink: #273c32;
+  --mobile-muted: #6e7f72;
+  --mobile-paper: #fcfbf5;
+  --mobile-stage: #f2f2e8;
+  --mobile-line: #e3e7dc;
+  --mobile-accent: #305846;
+  --mobile-gold: #a47e47;
+  --page-bg: var(--mobile-stage);
+  --paper: var(--mobile-paper);
+  --ink: var(--mobile-ink);
+  --muted: var(--mobile-muted);
+  --line: var(--mobile-line);
+  --accent: var(--mobile-accent);
+  --accent-strong: var(--mobile-accent);
+  --toolbar-bg: var(--mobile-paper);
+  --sidebar-bg: var(--mobile-paper);
+  --surface-hover: #e9f0e7;
+  --surface-selected: #e1ebe0;
+  --surface-selected-border: #a8c7ae;
+  --ion-background-color: var(--mobile-paper);
+  --ion-color-primary: var(--mobile-accent);
+  --ion-toolbar-background: var(--mobile-paper);
+  background: var(--mobile-stage);
+}
+.mobile-shell .mobile-shell-page {background:var(--mobile-stage)}
+.mobile-shell .mobile-shell-ion-header {
+  padding-top:env(safe-area-inset-top,0px);
+  border-bottom:1px solid var(--mobile-line); box-shadow:none;
+  background:var(--mobile-paper); color:var(--mobile-ink);
+}
+.mobile-shell-identity-bar {
+  display:flex; align-items:center; gap:11px; min-height:76px;
+  padding:7px max(16px,env(safe-area-inset-left,0px));
+}
+.mobile-shell .mobile-shell-back {
+  flex:0 0 38px; width:38px;height:42px; min-height:42px;margin:0;
+  --padding-start:0;--padding-end:0;--color:var(--mobile-accent);
+  font-size:35px;line-height:1;
+}
+.mobile-shell-identity-copy {display:flex;flex:1;flex-direction:column;gap:1px;min-width:0;padding:1px 0}
+.mobile-shell-wordmark {font:700 17px Georgia,"Yu Mincho",serif;letter-spacing:-.6px; color:var(--mobile-ink)}
+.mobile-shell-wordmark span {color:var(--mobile-gold)}
+.mobile-shell-current-title {font:600 15px/1.55 var(--manuscript-serif);color:var(--mobile-ink);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.mobile-shell-context {font-size:10px;color:var(--mobile-muted);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.mobile-shell-page-mark {flex:0 0 auto;border-radius:50%;background:#e6ece1;color:#477259;display:grid;place-items:center;width:36px;height:36px;font-size:18px}
+.mobile-shell .mobile-shell-shared-header {
+  display:flex;flex-wrap:nowrap;overflow-x:auto;overscroll-behavior-x:contain;
+  border-top:1px solid var(--mobile-line);padding:3px max(16px,env(safe-area-inset-left,0px));
+  scrollbar-width:none;background:var(--mobile-paper);min-height:39px;
+}
+.mobile-shell .mobile-shell-shared-header::-webkit-scrollbar {display:none}
+.mobile-shell .mobile-shell-shared-header .topbar {
+  flex:1 0 auto;display:flex;flex-wrap:nowrap;gap:6px;min-height:33px;
+  padding:0;align-items:center;
+}
+.mobile-shell .mobile-shell-shared-header .topbar .brand {display:none}
+.mobile-shell .mobile-shell-shared-header .theme-control {font-size:10px;margin:0;flex:0 0 auto}
+.mobile-shell .mobile-shell-shared-header .theme-control select {min-height:31px;padding:2px 6px;font-size:11px}
+.mobile-shell .mobile-shell-shared-header .topbar button {min-height:32px;padding:4px 8px;font-size:11px;border-radius:5px}
+.mobile-shell .mobile-shell-shared-header .topbar-status {order:unset;flex:0 1 25vw;font-size:10px}
+.mobile-shell .mobile-shell-content {--background:var(--mobile-stage);--padding-bottom:0}
+.mobile-shell-content::part(scroll) {scrollbar-gutter:auto}
+.mobile-shell .mobile-shell-workspace-view {height:100%;min-height:0;background:var(--mobile-stage)}
+.mobile-shell .st-workspace {height:100%;background:transparent}
+.mobile-shell .st-workspace-toolbar {
+  padding:5px 12px;background:var(--mobile-paper);
+  border-bottom:1px solid var(--mobile-line);gap:7px;flex-wrap:nowrap;overflow:auto;
+  scrollbar-width:none;
+}
+.mobile-shell .st-workspace-toolbar::-webkit-scrollbar {display:none}
+.mobile-shell .st-workspace-presets {flex-wrap:nowrap;gap:4px}
+.mobile-shell .st-workspace-presets button {
+  border:0;border-radius:5px;padding:5px 9px;min-height:32px;
+  color:var(--mobile-muted);font-size:11px;background:transparent;
+}
+.mobile-shell .st-workspace-presets button[aria-pressed="true"] {background:#e7ede1;color:var(--mobile-accent)}
+.mobile-shell .st-workspace-panel-menu summary {
+  min-height:32px;background:transparent;border:0;color:var(--mobile-muted);font-size:11px;
+}
+.mobile-shell .st-workspace-save {min-height:32px;padding:5px 10px;background:var(--mobile-accent);color:white;font-size:11px}
+.mobile-shell .st-workspace-move-controls {
+  display:none; /* Mobile has task-oriented navigation, not desktop docking controls. */
+}
+.mobile-shell .st-workspace-storage-state,.mobile-shell .st-workspace-message {font-size:10px;padding:4px 14px}
+.mobile-shell .st-workspace-mobile-tabs {
+  flex-wrap:wrap;gap:5px;padding:8px 12px;overflow:visible;
+  scrollbar-width:none;background:var(--mobile-stage);
+}
+.mobile-shell .st-workspace-mobile-tabs button {
+  min-height:32px;flex:0 0 auto;padding:5px 10px;
+  border:1px solid var(--mobile-line);border-radius:999px;background:var(--mobile-paper);
+  color:var(--mobile-muted);font-size:11px;font-weight:500;
+}
+.mobile-shell .st-workspace-mobile-tabs button[aria-selected="true"] {
+  background:var(--mobile-accent);border-color:var(--mobile-accent);color:white;
+}
+.mobile-shell .st-workspace-mobile-pane {background:var(--mobile-stage);overflow:auto}
+.mobile-shell .st-workspace-panel {border:0;background:transparent;overflow:visible}
+.mobile-shell .st-workspace-panel-heading {display:none}
+.mobile-shell .st-workspace-panel-body {background:transparent;overflow:visible}
+.mobile-shell .st-workspace-panel-body :is(.sidebar,.writing-area) {padding:12px 16px 26px;border:0;background:transparent}
+.mobile-shell .st-workspace-panel-body .sidebar {background:var(--mobile-paper);border:1px solid var(--mobile-line);border-radius:12px}
+.mobile-shell .st-workspace-panel-body .editor {max-width:900px;margin:0 auto}
+.mobile-shell .editor-header {
+  align-items:flex-start;gap:12px;flex-direction:column;
+  padding:16px 5px 14px;border-bottom:1px solid var(--mobile-line);
+}
+.mobile-shell .editor-header h1 {
+  font-family:var(--manuscript-serif);font-weight:600;font-size:clamp(26px,5vw,36px);
+  color:var(--mobile-ink);line-height:1.35;letter-spacing:-.025em;
+}
+.mobile-shell .editor-header .eyebrow {font-size:10px;letter-spacing:.12em;color:var(--mobile-muted)}
+.mobile-shell .editor-actions {gap:5px;width:100%;justify-content:flex-start;flex-wrap:wrap}
+.mobile-shell .editor-actions button {
+  min-height:37px!important;padding:7px 11px;font-size:12px;border-radius:6px;
+}
+.mobile-shell .durability-row {gap:5px;flex-wrap:wrap}
+.mobile-shell .durability-badge {border-radius:6px;font-size:10px;padding:4px 6px}
+.mobile-shell .durability-badge.is-current {background:#e5ede0;color:#285c43}
+.mobile-shell .durability-message {font-size:11px;line-height:1.65;margin:9px 4px}
+.mobile-shell .typography-toolbar {border:0;border-bottom:1px solid var(--mobile-line);border-radius:0;padding:8px 4px;background:transparent}
+.mobile-shell .editor-columns {display:flex;flex-direction:column;gap:18px;margin-top:8px}
+.mobile-shell .manuscript-column {
+  border:0;border-radius:0;padding:clamp(14px,4vw,32px) clamp(14px,4vw,28px);
+  background:var(--mobile-paper);box-shadow:0 8px 35px #2e47320b;
+}
+.mobile-shell .manuscript-column > label {font-size:10px;letter-spacing:.1em;color:var(--mobile-muted)}
+.mobile-shell .manuscript-input {border:0;background:transparent;border-radius:0}
+.mobile-shell .cm-editor {background:transparent;font-family:var(--editor-font-family,var(--manuscript-serif))}
+.mobile-shell .cm-scroller {font-family:var(--manuscript-serif);font-size:var(--editor-font-size,18px);line-height:2}
+.mobile-shell .cm-content {padding:16px 1px;min-height:36vh;line-height:2}
+.mobile-shell .preview-column {border:1px solid var(--mobile-line);background:var(--mobile-paper);border-radius:9px}
+.mobile-shell .reading-view {background:var(--mobile-paper);border:0;border-radius:7px}
+.mobile-shell .mobile-shell-footer {box-shadow:0 -4px 15px #1e3d240b;border-color:var(--mobile-line);background:var(--mobile-paper)}
+.mobile-shell .mobile-shell-navigation {
+  max-width:none;min-height:58px;
+  display:grid;grid-template-columns:repeat(5,minmax(0,1fr));
+  gap:0;padding:3px max(10px,env(safe-area-inset-right,0px)) 1px max(10px,env(safe-area-inset-left,0px));
+}
+.mobile-shell .mobile-shell-navigation ion-button {
+  margin:0;min-width:0;min-height:53px;--border-radius:8px;
+  --color:var(--mobile-muted);--color-activated:var(--mobile-accent);
+  --background:transparent;--box-shadow:none;
+}
+.mobile-shell .mobile-shell-navigation ion-button[aria-current="page"] {--color:var(--mobile-accent);--background:#e8eee4}
+.mobile-shell .mobile-shell-nav-content {display:flex;flex-direction:column;align-items:center;gap:1px;font-size:10px;line-height:1.45}
+.mobile-shell .mobile-shell-nav-mark {font-size:20px;line-height:1.1}
+.mobile-shell .mobile-shell-status {bottom:calc(4rem + env(safe-area-inset-bottom,0px))}
+.mobile-shell .mobile-shell-view {padding:18px 16px 28px}
+.mobile-shell .mobile-shell-page-title {font:600 24px/1.5 var(--manuscript-serif);margin-bottom:16px}
+:root[data-zp-theme="dark"] .mobile-shell {
+  --mobile-ink:#e3ebdf;--mobile-muted:#a9b8a7;--mobile-paper:#18271f;
+  --mobile-stage:#111a16;--mobile-line:#34463a;--mobile-accent:#a7d4b1;
+  --surface-hover:#263a2e;--surface-selected:#34513c;--surface-selected-border:#799e7b;
+}
+:root[data-zp-theme="dark"] .mobile-shell .mobile-shell-page-mark {background:#26392b;color:#b1dbc0}
+:root[data-zp-theme="dark"] .mobile-shell .st-workspace-mobile-tabs button[aria-selected="true"],
+:root[data-zp-theme="dark"] .mobile-shell .st-workspace-save {color:#132218}
+:root[data-zp-theme="paper"] .mobile-shell {
+  --mobile-ink:#38352a;--mobile-muted:#756a58;--mobile-paper:#f7f0e2;
+  --mobile-stage:#e9e0d0;--mobile-line:#d4c8b4;--mobile-accent:#564b37;
+}
+.mobile-shell :is(button,ion-button,a,[role="tab"],select,input):focus-visible {outline:3px solid var(--focus-ring);outline-offset:2px}
+@media(min-width:800px){
+  .mobile-shell .mobile-shell-identity-bar,.mobile-shell .mobile-shell-shared-header {padding-left:clamp(25px,9vw,160px);padding-right:clamp(25px,9vw,160px)}
+  .mobile-shell .mobile-shell-workspace-view,.mobile-shell .mobile-shell-view-stack {max-width:950px;margin:0 auto}
+  .mobile-shell .mobile-shell-navigation {max-width:950px;margin:0 auto}
+}
+@media(max-width:390px){
+  .mobile-shell .mobile-shell-identity-bar {min-height:68px}
+  .mobile-shell .st-workspace-mobile-tabs {padding:6px 9px}
+  .mobile-shell .st-workspace-mobile-tabs button {padding:4px 7px;font-size:10px}
+}
+@media(prefers-reduced-motion:reduce){
+  .mobile-shell *,.mobile-shell *::before,.mobile-shell *::after {transition-duration:.01ms!important;animation-duration:.01ms!important;scroll-behavior:auto!important}
+}
+
+/* Mobile never exposes the Desktop arrangement editor. The core layout retains its persistence. */
+.mobile-shell .st-workspace-move-menu {display:none}
