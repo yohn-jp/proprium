@@ -3,10 +3,10 @@ set -euo pipefail
 
 if [[ -n "${OCI_ENGINE:-}" ]]; then
   engine="$OCI_ENGINE"
-elif command -v docker >/dev/null 2>&1; then
-  engine=docker
 elif command -v podman >/dev/null 2>&1; then
   engine=podman
+elif command -v docker >/dev/null 2>&1; then
+  engine=docker
 else
   echo "Install Docker or Podman, or set OCI_ENGINE to an installed engine." >&2
   exit 2

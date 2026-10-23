@@ -63,8 +63,8 @@ rather than implementing an application-specific OAuth issuer.
 ## Single OCI image
 
 ```sh
-docker build --build-arg PROFILE=core -t scriptorium:local .
-docker run --rm -p 127.0.0.1:3000:3000 \
+podman build --format oci --build-arg PROFILE=core -t scriptorium:local .
+podman run --rm -p 127.0.0.1:3000:3000 \
   --env SCRIPTORIUM_AUTH_TOKEN --env SCRIPTORIUM_GITHUB_TOKEN \
   --mount type=volume,src=scriptorium-data,dst=/data \
   --mount type=volume,src=scriptorium-history,dst=/history \
