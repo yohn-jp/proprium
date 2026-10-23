@@ -139,7 +139,7 @@ async function createRuntime(
     enabled: ["speaker"],
     cacheDirectory,
     loaders: {
-      story: (context) => createStoryModule(context),
+      story: async (context) => createStoryModule(context),
       nlp: (context) => createNlpModule(context),
       diagnostics: (context) => createDiagnosticsModule(context),
       speaker: (context) => createSpeakerModule(context),
@@ -199,7 +199,7 @@ function applyReviewedProposal(
 
 function dataOf(result: Awaited<ReturnType<ModuleRuntime["invokeAction"]>>): Record<string, unknown> {
   assert.equal(result.ok, true, JSON.stringify(result));
-  if (!result.ok) throw new Error(result.error.message);
+  if (!result.ok) throw new Error("Expected successful result");
   assert.ok(result.data && typeof result.data === "object" && !Array.isArray(result.data));
   return result.data as Record<string, unknown>;
 }
@@ -321,7 +321,7 @@ test("speaker actions run real CPU attribution, propose corrections/model adopti
       const proposalData = dataOf(proposed);
       if (index === 0) assertSpeakerIdentity(proposalData, null);
       assert.equal(proposed.ok && proposed.proposals?.length, 1, JSON.stringify(proposed));
-      const proposal = proposed.ok ? proposed.proposals?.[0] : undefined;
+      const proposal: ChangeProposal | undefined = proposed.ok ? proposed.proposals?.[0] : undefined;
       assert.ok(proposal, JSON.stringify(proposalData));
       assert.deepEqual(proposal.operations[0]?.writes.map((write) => write.path).sort(), [
         `meta/scriptorium/modules/speaker/corrections.jsonl`,

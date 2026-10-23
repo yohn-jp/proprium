@@ -1,3 +1,6 @@
+import { ApiError } from "./api-error";
+export { ApiError } from "./api-error";
+import { responseContracts as dto, readApiResponse, decodeResponse, type ResponseGuard } from "./api-response";
 import type {
   ActionResult,
   Approval,
@@ -183,17 +186,6 @@ export interface RuntimeVersion {
   profile: string;
 }
 
-export class ApiError extends Error {
-  constructor(
-    message: string,
-    public readonly status: number,
-    public readonly code: string,
-  ) {
-    super(message);
-    this.name = "ApiError";
-  }
-}
-
 let hostedMode: boolean | undefined;
 let hostedRefresh: Promise<boolean> | undefined;
 
@@ -244,23 +236,10 @@ async function fetchWithHostedRefresh(path: string, init: RequestInit, retry = t
   return response;
 }
 
-async function request<T>(path: string, init: RequestInit = {}): Promise<T> {
+async function request<T>(guard: ResponseGuard<T>, path: string, init: RequestInit = {}): Promise<T> {
   const headers = new Headers(init.headers);
-  if (init.body !== undefined && !headers.has("Content-Type")) {
-    headers.set("Content-Type", "application/json");
-  }
-  const response = await fetchWithHostedRefresh(path, { ...init, headers });
-  if (response.status === 204) return undefined as T;
-  const body: unknown = await response.json().catch(() => null);
-  if (!response.ok) {
-    const details = body && typeof body === "object" ? (body as Record<string, unknown>) : {};
-    throw new ApiError(
-      typeof details.error === "string" ? details.error : `Request failed (${response.status})`,
-      response.status,
-      typeof details.code === "string" ? details.code : "REQUEST_FAILED",
-    );
-  }
-  return body as T;
+  if (init.body !== undefined && !headers.has("Content-Type")) headers.set("Content-Type", "application/json");
+  return readApiResponse(await fetchWithHostedRefresh(path, { ...init, headers }), guard);
 }
 
 async function requestEventStream(path: string, signal: AbortSignal): Promise<Response> {
@@ -291,12 +270,12 @@ function pinnedQuery(view: "remote" | "checkpoint", pinned?: SnapshotId): string
 /** The browser talks only to the public HTTP adapter and the shared contracts. */
 export const api = {
   version: async () => {
-    const version = await request<RuntimeVersion>("/api/version");
+    const version = await request(dto.version, "/api/version");
     hostedMode = version.hosted;
     return version;
   },
-  login: (token: string) => request<{ authenticated: true }>("/api/login", { method: "POST", body: JSON.stringify({ token }) }),
-  session: () => request<Session>("/api/session"),
+  login: (token: string) => request(dto.loggedIn, "/api/login", { method: "POST", body: JSON.stringify({ token }) }),
+  session: () => request(dto.session, "/api/session"),
   logout: async () => {
     if (hostedMode === true) {
       const response = await fetchWithHostedRefresh("/_platform/logout", { method: "POST" }, false);
@@ -307,98 +286,98 @@ export const api = {
         throw new ApiError(typeof details.error === "string" ? details.error : `Logout failed (${response.status})`, response.status,
           typeof details.code === "string" ? details.code : "LOGOUT_FAILED");
       }
-      return (body ?? { authenticated: false }) as { authenticated: false };
+      return decodeResponse(body, dto.loggedOut);
     }
-    return request<{ authenticated: false }>("/api/logout", { method: "POST", body: "{}" });
+    return request(dto.loggedOut, "/api/logout", { method: "POST", body: "{}" });
   },
-  jobs: (signal?: AbortSignal) => request<PublicJob[]>("/api/jobs", { signal }),
+  jobs: (signal?: AbortSignal) => request(dto.jobs, "/api/jobs", { ...(signal ? { signal } : {}) }),
   job: (jobId: string, signal?: AbortSignal) =>
-    request<PublicJob>(`/api/jobs/${encodeURIComponent(jobId)}`, { signal }),
+    request(dto.job, `/api/jobs/${encodeURIComponent(jobId)}`, { ...(signal ? { signal } : {}) }),
   inbox: (unreadOnly = false, signal?: AbortSignal) => {
     const query = unreadOnly ? "?unread=1" : "";
-    return request<InboxListResponse>(`/api/inbox${query}`, { signal });
+    return request(dto.inbox, `/api/inbox${query}`, { ...(signal ? { signal } : {}) });
   },
   markInboxRead: async (id: string, signal?: AbortSignal) => {
-    const response = await request<{ item: InboxItem }>(`/api/inbox/${encodeURIComponent(id)}/read`, {
+    const response = await request(dto.inboxItem, `/api/inbox/${encodeURIComponent(id)}/read`, {
       method: "POST",
-      signal,
+      ...(signal ? { signal } : {}),
     });
     return response.item;
   },
   markAllInboxRead: (signal?: AbortSignal) =>
-    request<{ marked: number }>("/api/inbox/read-all", { method: "POST", signal }),
+    request(dto.marked, "/api/inbox/read-all", { method: "POST", ...(signal ? { signal } : {}) }),
   jobEventStream: (signal: AbortSignal) => requestEventStream("/api/jobs/events", signal),
-  projects: () => request<Project[]>("/api/projects"),
-  projectDetails: (projectId: string) => request<ProjectDetails>(`/api/projects/${encodeURIComponent(projectId)}`),
-  registerProject: (url: string, branch?: string) => request<Project>("/api/projects", {
+  projects: () => request(dto.projects, "/api/projects"),
+  projectDetails: (projectId: string) => request(dto.projectDetails, `/api/projects/${encodeURIComponent(projectId)}`),
+  registerProject: (url: string, branch?: string) => request(dto.project, "/api/projects", {
     method: "POST",
     body: JSON.stringify({ url, ...(branch ? { branch } : {}) }),
   }),
-  reconstructProject: (projectId: string) => request<{ project: Project }>(`/api/projects/${encodeURIComponent(projectId)}`, {
+  reconstructProject: (projectId: string) => request(dto.projectEnvelope, `/api/projects/${encodeURIComponent(projectId)}`, {
     method: "PUT",
   }),
-  detachProject: (projectId: string) => request<void>(`/api/projects/${encodeURIComponent(projectId)}`, {
+  detachProject: (projectId: string) => request(dto.empty, `/api/projects/${encodeURIComponent(projectId)}`, {
     method: "DELETE",
   }),
-  tree: (projectId: string) => request<Tree>(projectPath(projectId, "tree")),
+  tree: (projectId: string) => request(dto.tree, projectPath(projectId, "tree")),
   readTree: (projectId: string, view: "remote" | "checkpoint" = "remote", pinned?: SnapshotId) =>
-    request<TreeRead>(projectPath(projectId, `tree${pinnedQuery(view, pinned)}`)),
-  scene: (projectId: string, sceneId: string) => request<Scene>(projectPath(projectId, `scenes/${encodeURIComponent(sceneId)}`)),
+    request(dto.treeRead, projectPath(projectId, `tree${pinnedQuery(view, pinned)}`)),
+  scene: (projectId: string, sceneId: string) => request(dto.scene, projectPath(projectId, `scenes/${encodeURIComponent(sceneId)}`)),
   readScene: (projectId: string, sceneId: string, view: "remote" | "checkpoint" = "remote", pinned?: SnapshotId) =>
-    request<SceneRead>(projectPath(projectId, `scenes/${encodeURIComponent(sceneId)}${pinnedQuery(view, pinned)}`)),
+    request(dto.sceneRead, projectPath(projectId, `scenes/${encodeURIComponent(sceneId)}${pinnedQuery(view, pinned)}`)),
   readSceneViews: (projectId: string, sceneId: string, pinned: SnapshotId) =>
-    request<{ remote: SceneRead; effective: SceneRead }>(projectPath(projectId,
+    request(dto.sceneViews, projectPath(projectId,
       `scenes/${encodeURIComponent(sceneId)}/views?snapshot=${encodeURIComponent(pinned.remoteCommit)}`)),
   snapshot: (projectId: string, view: "remote" | "checkpoint" = "remote", pinned?: SnapshotId) =>
-    request<SnapshotRead>(projectPath(projectId, `snapshot${pinnedQuery(view, pinned)}`)),
-  history: (projectId: string) => request<Commit[]>(projectPath(projectId, "history")),
+    request(dto.snapshotRead, projectPath(projectId, `snapshot${pinnedQuery(view, pinned)}`)),
+  history: (projectId: string) => request(dto.history, projectPath(projectId, "history")),
   manuscriptSnapshots: (projectId: string, manuscriptId: string, sceneId: string, pinned: SnapshotId) => {
     const query = new URLSearchParams({ sceneId, view: "remote", snapshot: pinned.remoteCommit });
-    return request<ManuscriptSnapshotList>(projectPath(projectId,
+    return request(dto.manuscriptList, projectPath(projectId,
       `manuscripts/${encodeURIComponent(manuscriptId)}/snapshots?${query.toString()}`));
   },
   manuscriptSnapshot: (projectId: string, manuscriptId: string, snapshotId: string, pinned: SnapshotId) => {
     const query = new URLSearchParams({ view: "remote", snapshot: pinned.remoteCommit });
-    return request<ManuscriptSnapshotRead>(projectPath(projectId,
+    return request(dto.manuscriptRead, projectPath(projectId,
       `manuscripts/${encodeURIComponent(manuscriptId)}/snapshots/${encodeURIComponent(snapshotId)}?${query.toString()}`));
   },
-  status: (projectId: string) => request<SyncStatus>(projectPath(projectId, "status")),
-  observation: (projectId: string) => request<RemoteObservation>(projectPath(projectId, "observation")),
+  status: (projectId: string) => request(dto.sync, projectPath(projectId, "status")),
+  observation: (projectId: string) => request(dto.observation, projectPath(projectId, "observation")),
   recentActivity: (projectId: string, signal?: AbortSignal) =>
-    request<RecentActivityResponse>(projectPath(projectId, "recent-activity"), { signal }),
+    request(dto.recentActivity, projectPath(projectId, "recent-activity"), { ...(signal ? { signal } : {}) }),
   putRecentActivity: (projectId: string, input: RecentActivityInput, options: { signal?: AbortSignal; keepalive?: boolean } = {}) =>
-    request<RecentActivityResponse>(projectPath(projectId, "recent-activity"), {
+    request(dto.recentActivity, projectPath(projectId, "recent-activity"), {
       method: "PUT",
       body: JSON.stringify(input),
       ...options,
     }),
-  proposalStatuses: (projectId: string) => request<{ proposals: ProposalStatus[] }>(projectPath(projectId, "proposals")),
-  propose: (projectId: string, proposal: ChangeProposal, signal?: AbortSignal) => request<ChangeProposal>(projectPath(projectId, "proposals"), {
+  proposalStatuses: (projectId: string) => request(dto.proposals, projectPath(projectId, "proposals")),
+  propose: (projectId: string, proposal: ChangeProposal, signal?: AbortSignal) => request(dto.proposal, projectPath(projectId, "proposals"), {
     method: "POST",
     body: JSON.stringify(proposal),
-    ...(signal ? { signal } : {}),
+    ...(signal ? { ...(signal ? { signal } : {}) } : {}),
   }),
-  approve: (projectId: string, approval: Approval) => request<void>(projectPath(projectId, "approvals"), {
+  approve: (projectId: string, approval: Approval) => request(dto.empty, projectPath(projectId, "approvals"), {
     method: "POST",
     body: JSON.stringify(approval),
   }),
-  checkpoint: (projectId: string, operation: ChangeOperation) => request<CheckpointReceipt>(projectPath(projectId, "checkpoints"), {
+  checkpoint: (projectId: string, operation: ChangeOperation) => request(dto.checkpoint, projectPath(projectId, "checkpoints"), {
     method: "POST",
     body: JSON.stringify(operation),
   }),
-  reconcile: (projectId: string) => request<ReconcileResult>(projectPath(projectId, "reconcile"), {
+  reconcile: (projectId: string) => request(dto.reconcile, projectPath(projectId, "reconcile"), {
     method: "POST",
     body: "{}",
   }),
-  publish: (projectId: string, batchId: string) => request<PublishReceipt>(projectPath(projectId, "publish"), {
+  publish: (projectId: string, batchId: string) => request(dto.publish, projectPath(projectId, "publish"), {
     method: "POST",
     body: JSON.stringify({ batchId }),
   }),
-  modules: (projectId: string) => request<ModuleStatus[]>(projectPath(projectId, "modules")),
-  contributions: (projectId: string) => request<UiContribution[]>(projectPath(projectId, "contributions")),
-  action: (projectId: string, actionId: string, input: unknown, signal?: AbortSignal, snapshot?: SnapshotId) => request<ActionResult>(
+  modules: (projectId: string) => request(dto.modules, projectPath(projectId, "modules")),
+  contributions: (projectId: string) => request(dto.contributions, projectPath(projectId, "contributions")),
+  action: (projectId: string, actionId: string, input: unknown, signal?: AbortSignal, snapshot?: SnapshotId) => request(dto.action,
     projectPath(projectId, `actions/${encodeURIComponent(actionId)}`),
-    { method: "POST", body: JSON.stringify({ input, ...(snapshot ? { snapshot } : {}) }), signal },
+    { method: "POST", body: JSON.stringify({ input, ...(snapshot ? { snapshot } : {}) }), ...(signal ? { signal } : {}) },
   ),
 };
 

@@ -618,7 +618,13 @@ function AuthorWorkspace({
     const owner = repositoryKey(repository);
     const pollKey = JSON.stringify([projectId, owner, scope]);
     const inFlight = proposalPollsRef.current.get(pollKey);
-    if (inFlight) return inFlight;
+    if (inFlight) {
+      await inFlight;
+      if (expectedNavigation === undefined || isCurrentProject(expectedNavigation, projectId, repository)) {
+        await refreshJournal(repository, expectedNavigation);
+      }
+      return;
+    }
     const poll = (async () => {
       let response: Awaited<ReturnType<typeof api.proposalStatuses>>;
       let receipts: Awaited<ReturnType<BrowserJournal["getPublicationReceipts"]>>;
@@ -1370,7 +1376,9 @@ function AuthorWorkspace({
             !previous.message.startsWith("リモート確認状態:") &&
             !previous.message.startsWith("リモートの確認に失敗しました。")) return previous;
         if (observed.state === "fresh" && !changedRemote && !changedCheckpoint && !changedTree &&
-            !changedEditorSnapshot && previous.kind !== "error") return previous;
+            !changedEditorSnapshot && previous.kind !== "error" &&
+            !previous.message.includes("リモート未確認") &&
+            !previous.message.startsWith("リモート ")) return previous;
         return {
           message: observed.state === "fresh"
             ? `リモート ${observed.snapshot.remoteCommit.slice(0, 12)} · ${new Date(observed.observedAt).toLocaleTimeString("ja-JP")} に確認`

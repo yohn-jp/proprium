@@ -1,31 +1,5 @@
 import type { BrowserModuleContext, BrowserModuleDefinition, ChangeOperation } from "@scriptorium/contracts";
 
-declare global {
-  interface Window {
-    __core64HostLifecycle: {
-      currentAuthor: string;
-      deferFirstMount: boolean;
-      lateProposalAfterDeferredMount: boolean;
-      deferFirstJournalWrite: boolean;
-      proposalOnFirstMount: boolean;
-      resolveFirstMount: (() => void) | null;
-      metrics: {
-        loaderCalls: number;
-        mountCalls: number;
-        mountAuthors: string[];
-        signalAborts: number;
-        disposeCalls: number;
-        activeTimers: number;
-        timerTicks: number;
-        activeRequests: number;
-        activeWorkers: number;
-        workersReady: number;
-        lateCallbackAttempts: number;
-        lateCallbackOutcomes: string[];
-      };
-    };
-  }
-}
 
 function lateOperation(context: BrowserModuleContext): ChangeOperation {
   return {

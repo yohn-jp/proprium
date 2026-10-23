@@ -87,8 +87,8 @@ test("authenticated inbox preserves owner job history and updates it from SSE", 
   const apiRequestsBeforeLogin: string[] = [];
   let gateNextJobsRead = false;
   let terminalEventSent = false;
-  let releaseQueuedRead: (() => void) | null = null;
-  let reportQueuedReadStarted: (() => void) | null = null;
+  let releaseQueuedRead!: () => void;
+  let reportQueuedReadStarted!: () => void;
   const queuedReadGate = new Promise<void>((resolve) => { releaseQueuedRead = resolve; });
   const queuedReadStarted = new Promise<void>((resolve) => { reportQueuedReadStarted = resolve; });
 

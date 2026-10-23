@@ -12,7 +12,7 @@ import { CoreError, CoreStore } from "./index.js";
 const execFile = promisify(execFileCallback);
 
 async function git(cwd: string, ...args: string[]): Promise<string> {
-  const { stdout } = await execFile("git", args, { cwd, maxBuffer: 4 * 1024 * 1024 });
+  const { stdout } = await execFile("git", ["-c", "user.name=Test Writer", "-c", "user.email=writer@example.test", ...args], { cwd, maxBuffer: 4 * 1024 * 1024 });
   return stdout.trim();
 }
 

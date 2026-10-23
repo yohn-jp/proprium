@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { fileURLToPath } from "node:url";
 import { test } from "node:test";
-import type { ActionDescriptor, ActionResult, ChangeOperation, ChangeProposal, JobRequest, ModuleAction, ModuleActionContext, ModuleDefinition, ModuleId, ModuleManifest, SnapshotId, ValueSchema, WorkerService } from "@scriptorium/contracts";
+import type { ActionDescriptor, ActionResult, ChangeOperation, ChangeProposal, ProposalEvidence, JobRequest, ModuleAction, ModuleActionContext, ModuleDefinition, ModuleId, ModuleManifest, SnapshotId, ValueSchema, WorkerService } from "@scriptorium/contracts";
 import { createStoryActions } from "../../../modules/story/src/actions.js";
 import { ModuleRuntime, ModuleRuntimeError, resolveModulePlan, SharedCapabilityPool, type DomainJobProgressSink, type WorkerJobLifecycleSnapshot } from "./index.js";
 
@@ -491,7 +491,7 @@ test("enabled idle modules import no heavy capability; proposals are host-issued
   assert.equal(runtime.status("story").availability, "enabled-idle");
   const host = {
     ...readContext(),
-    async propose(operations: ChangeOperation[], _evidence, proposalId): Promise<ChangeProposal> {
+    async propose(operations: ChangeOperation[], _evidence: ProposalEvidence[] | undefined, proposalId?: string): Promise<ChangeProposal> {
       forwardedProposalId = proposalId;
       return { id: proposalId ?? "proposal-1", snapshot, operations, source: "module" };
     },
@@ -529,7 +529,7 @@ test("per-call proposal cancellation reaches the host and prevents a late propos
   });
   const host = {
     ...readContext(),
-    async propose(operations: ChangeOperation[], _evidence, proposalId, signal?: AbortSignal): Promise<ChangeProposal> {
+    async propose(operations: ChangeOperation[], _evidence: ProposalEvidence[] | undefined, proposalId?: string, signal?: AbortSignal): Promise<ChangeProposal> {
       hostSignal = signal;
       startProposal();
       await hostProposal;
@@ -622,7 +622,7 @@ test("module-owned capability shares one supervised worker across two consumers 
           id: "nlp.tokenizer",
           version: "1.0.0",
           async create(providerContext) { creates += 1; return providerContext.createWorkerService(); },
-          async dispose(service) { disposals += 1; await service.dispose(); },
+          async dispose(service) { disposals += 1; assert.ok(service && typeof service === "object" && "dispose" in service && typeof service.dispose === "function"); await service.dispose(); },
         }];
         return definition;
       },
@@ -664,7 +664,7 @@ test("disabling a consumer cancels its provider-owned job and keeps the shared c
     capabilities: [{
       id: "nlp.tokenizer", version: "1.0.0",
       async create(context) { return context.createWorkerService(); },
-      async dispose(service) { await service.dispose(); },
+      async dispose(service) { assert.ok(service && typeof service === "object" && "dispose" in service && typeof service.dispose === "function"); await service.dispose(); },
     }],
     async dispose() {},
   };
@@ -765,7 +765,7 @@ test("a per-call abort cancels a real nested worker while its outer action remai
               },
             };
           },
-          async dispose(tokenizer) { await tokenizer.service.dispose(); },
+          async dispose(tokenizer) { assert.ok(tokenizer && typeof tokenizer === "object" && "service" in tokenizer); const service = tokenizer.service; assert.ok(service && typeof service === "object" && "dispose" in service && typeof service.dispose === "function"); await service.dispose(); },
         }],
         async dispose() {},
       }),
@@ -929,7 +929,7 @@ test("module actions compose through namespaced host actions and owner-checked l
   const linkedSnapshot: SnapshotId = { ...snapshot, repository: { ...snapshot.repository, repositoryId: "repo-linked" } };
   const linkedReader = {
     snapshot: linkedSnapshot,
-    async read() { return "linked"; },
+    async read() { return { content: "linked", revision: "linked-r1" }; },
     async list() { return ["linked.md"]; },
   };
   let loaderCalls = 0;
@@ -950,7 +950,7 @@ test("module actions compose through namespaced host actions and owner-checked l
             actions: actions.map(({ id, module }) => ({ id, module })),
             status,
             projectId: action.projectId,
-            linkedPaths: await linked.list(),
+            linkedPaths: await linked.list(""),
           } };
         },
       });
@@ -1169,7 +1169,7 @@ test("owner compute HTTP contributions can compose reads, compute, and jobs but 
             model: "test-model", modelVersion: "1", moduleVersion: publishing.version,
             deadline: Date.now() + 5_000, input: { source: "http-compute" },
           };
-          const job = await context.runJob(jobRequest);
+          const job = await context.runJob<{ echo: { source: string } }>(jobRequest);
           return Response.json({
             read: read.ok ? read.data : read.error.code,
             compute: compute.ok ? compute.data : compute.error.code,
@@ -1438,7 +1438,7 @@ function jobRequest(module: ModuleId, options: Partial<JobRequest> = {}): JobReq
 test("composition contributions validate kind and host contexts independently of placement", async () => {
   const metadata = manifest("search");
   const action: ModuleAction = { id: "lookup", effect: "read", inputSchema: schema, outputSchema: schema,
-    async invoke(_input, context) { return { ok: true, snapshot: context.reader.snapshot }; } };
+    async invoke(_input, context) { return { ok: true, snapshot: context.reader.snapshot, data: {} }; } };
   for (const invalid of [null, { contractVersion: 2 }, { kind: "script" }, { contexts: [] }, { contexts: ["editor", "editor"] }, { contexts: ["foreign"] }, { multipleInstances: "yes" }]) {
     const runtime = new ModuleRuntime({ manifests: [metadata], enabled: ["search"], cacheDirectory: "/tmp/scriptorium-composition-test",
       loaders: { search: async () => ({ ...definition(metadata, action), ui: [{

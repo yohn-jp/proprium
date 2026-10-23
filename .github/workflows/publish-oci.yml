@@ -1,23 +1,40 @@
 name: Publish Scriptorium OCI
-
 on:
   push:
-    tags:
-      - 'v*'
-
+    tags: ['v*']
 permissions:
   contents: read
-
 concurrency:
   group: scriptorium-oci-${{ github.ref }}
   cancel-in-progress: false
-
 jobs:
-  publish:
-    name: Publish ${{ matrix.profile }}
+  verify-source:
+    name: Verified release source
     runs-on: ubuntu-24.04
+    timeout-minutes: 5
     permissions:
       contents: read
+      actions: read
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.sha }}
+          persist-credentials: false
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24.22.0'
+      - name: Require exact successful main source, native, OCI and browser verification
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: node scripts/verify-release-source.mjs
+  publish:
+    name: Publish ${{ matrix.profile }}
+    needs: verify-source
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    permissions:
+      contents: read
+      actions: read
       packages: write
     strategy:
       fail-fast: false
@@ -26,9 +43,12 @@ jobs:
     steps:
       - uses: actions/checkout@v4
         with:
+          ref: ${{ github.sha }}
           persist-credentials: false
-      - name: Set up Docker Buildx
-        uses: docker/setup-buildx-action@v3
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24.22.0'
+      - uses: docker/setup-buildx-action@v3
       - name: Validate release tag and determine image
         id: image
         shell: bash
@@ -38,71 +58,84 @@ jobs:
         run: |
           set -euo pipefail
           if [[ ! "$REF_NAME" =~ ^v[0-9]+\.[0-9]+\.[0-9]+(-[0-9A-Za-z.-]+)?$ ]]; then
-            echo "Unsupported release tag: $REF_NAME" >&2
+            echo 'Unsupported release tag' >&2
             exit 1
           fi
           echo "name=ghcr.io/${GITHUB_REPOSITORY,,}/$PROFILE" >> "$GITHUB_OUTPUT"
           echo "tag=$REF_NAME" >> "$GITHUB_OUTPUT"
       - name: Build the exact release image
-        shell: bash
         env:
           PROFILE: ${{ matrix.profile }}
         run: |
-          set -euo pipefail
           docker buildx build --platform linux/amd64 --load \
-            --build-arg "PROFILE=$PROFILE" \
-            --tag "scriptorium-ci:$PROFILE" .
+            --build-arg "PROFILE=$PROFILE" --tag "scriptorium-ci:$PROFILE" .
       - name: Verify image before publication
-        shell: bash
         env:
           PROFILE: ${{ matrix.profile }}
         run: |
           set -euo pipefail
           token="$(head -c 32 /dev/urandom | od -An -tx1 | tr -d ' \n')"
-          cid="$(docker run -d --publish 127.0.0.1::3000 \
-            --env "SCRIPTORIUM_AUTH_TOKEN=$token" \
-            --env SCRIPTORIUM_DATA_DIR=/data \
-            "scriptorium-ci:$PROFILE")"
+          cid="$(docker run -d --publish 127.0.0.1::3000 --env "SCRIPTORIUM_AUTH_TOKEN=$token" --env SCRIPTORIUM_DATA_DIR=/data "scriptorium-ci:$PROFILE")"
           trap 'docker rm -f "$cid" >/dev/null 2>&1 || true' EXIT
           port="$(docker port "$cid" 3000/tcp | sed -n 's/.*://p')"
           test -n "$port"
           ready=0
           for attempt in $(seq 1 60); do
-            if curl --fail --silent "http://127.0.0.1:$port/api/health" >/dev/null; then
-              ready=1
-              break
-            fi
-            if [[ "$(docker inspect -f '{{.State.Running}}' "$cid")" != true ]]; then
-              break
-            fi
+            if curl --fail --silent "http://127.0.0.1:$port/api/health" >/dev/null; then ready=1; break; fi
+            if [[ "$(docker inspect -f '{{.State.Running}}' "$cid")" != true ]]; then break; fi
             sleep 1
           done
-          if [[ "$ready" != 1 ]]; then
-            docker logs "$cid"
-            exit 1
-          fi
+          if [[ "$ready" != 1 ]]; then docker logs "$cid"; exit 1; fi
           node scripts/verify-oci-http.mjs "http://127.0.0.1:$port" "$PROFILE"
           test "$(docker exec "$cid" node -p 'process.getuid()')" = 1000
           docker exec "$cid" node -e "require('node:fs').writeFileSync('/data/.ci-smoke', 'ok'); require('node:fs').unlinkSync('/data/.ci-smoke')"
           docker kill --signal TERM "$cid" >/dev/null
           test "$(docker wait "$cid")" = 0
-          docker logs "$cid" 2>&1 | grep -Fq "Scriptorium shutdown complete"
-      - name: Log in to GHCR
-        uses: docker/login-action@v3
+          docker logs "$cid" 2>&1 | grep -Fq 'Scriptorium shutdown complete'
+      - name: Recheck immutable tag before publication
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: node scripts/verify-release-source.mjs
+      - uses: docker/login-action@v3
         with:
           registry: ghcr.io
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
       - name: Publish verified image
-        id: publish
-        shell: bash
         env:
+          GH_TOKEN: ${{ github.token }}
           IMAGE: ${{ steps.image.outputs.name }}
           TAG: ${{ steps.image.outputs.tag }}
           PROFILE: ${{ matrix.profile }}
         run: |
-          set -euo pipefail
+          node scripts/verify-unpublished-image.mjs
           docker tag "scriptorium-ci:$PROFILE" "$IMAGE:$TAG"
           docker push "$IMAGE:$TAG"
           docker buildx imagetools inspect "$IMAGE:$TAG"
-          echo "Published $IMAGE:$TAG" >> "$GITHUB_STEP_SUMMARY"
+          echo "Published $IMAGE:$TAG from $GITHUB_SHA" >> "$GITHUB_STEP_SUMMARY"
+  release:
+    name: Publish verified Release
+    needs: [verify-source, publish]
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    permissions:
+      contents: write
+      actions: read
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.sha }}
+          persist-credentials: false
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24.22.0'
+      - name: Publish only after both verified images succeed
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          node scripts/verify-release-source.mjs
+          if gh release view "$GITHUB_REF_NAME" --repo "$GITHUB_REPOSITORY" >/dev/null 2>&1; then
+            echo 'Existing Release retained unchanged.'
+          else
+            gh release create "$GITHUB_REF_NAME" --repo "$GITHUB_REPOSITORY" --verify-tag --generate-notes --title "$GITHUB_REF_NAME"
+          fi

@@ -189,7 +189,7 @@ function actionContext(
         state: checkpoints.length ? "partially_approved" : approvedOperationIds.length ? "approved" : "proposed",
       };
     },
-  } satisfies ModuleActionContext;
+  } satisfies ModuleActionContext & { setProposalReview(approvedOperationIds: string[], checkpoints: unknown[]): void; setProposalPayloadIncomplete(approvedOperationIds: string[], checkpoints: unknown[], publishedOperationIds?: string[]): void };
 }
 
 test("SDK Streamable HTTP transport lists and invokes tools through the host action context", async () => {
@@ -851,5 +851,103 @@ test("hybrid search stays unavailable while full diagnostics invoke the canonica
   } finally {
     await transport.terminateSession().catch(() => undefined);
     await client.close().catch(() => undefined);
+  }
+});
+
+
+test("audit MCP capacity reserves concurrent initialization and bounds abandoned sessions", async () => {
+  const sessions = new Map();
+  const contribution = createMcpHttpContribution(sessions, { maxSessions: 1, idleTimeoutMs: 60_000 });
+  const host = actionContext([]);
+  const initialize = (id: number) => new Request("http://scriptorium.test/streamable", {
+    method: "POST", headers: { "Content-Type": "application/json", Accept: "application/json, text/event-stream" },
+    body: JSON.stringify({ jsonrpc: "2.0", id, method: "initialize", params: { protocolVersion: "2025-03-26", capabilities: {}, clientInfo: { name: "limits", version: "1" } } }),
+  });
+  try {
+    const responses = await Promise.all([contribution.handle(initialize(1), host), contribution.handle(initialize(2), host)]);
+    assert.deepEqual(responses.map(r => r.status).sort(), [200, 503]);
+    await Promise.all(responses.map(r => r.text()));
+    assert.equal(sessions.size, 1);
+    const denied = await contribution.handle(initialize(3), host);
+    assert.equal(denied.status, 503);
+    await denied.text();
+  } finally { await closeMcpSessions(sessions); }
+  assert.equal(sessions.size, 0);
+});
+
+test("audit MCP expires idle SDK sessions and cannot allocate after disposal", async () => {
+  let now = 0;
+  const sessions = new Map();
+  const contribution = createMcpHttpContribution(sessions, { maxSessions: 1, idleTimeoutMs: 100, now: () => now });
+  const host = actionContext([]);
+  const initialize = () => new Request("http://scriptorium.test/streamable", {
+    method: "POST", headers: { "Content-Type": "application/json", Accept: "application/json, text/event-stream" },
+    body: JSON.stringify({ jsonrpc: "2.0", id: 1, method: "initialize", params: { protocolVersion: "2025-03-26", capabilities: {}, clientInfo: { name: "expiry", version: "1" } } }),
+  });
+  try {
+    const first = await contribution.handle(initialize(), host);
+    assert.equal(first.status, 200);
+    const oldId = first.headers.get("mcp-session-id");
+    assert.ok(oldId);
+    await first.text();
+    now = 101;
+    const old = await contribution.handle(new Request("http://scriptorium.test/streamable", { headers: { "mcp-session-id": oldId, Accept: "text/event-stream" } }), host);
+    assert.equal(old.status, 404);
+    await old.text();
+    assert.equal(sessions.size, 0);
+    const next = await contribution.handle(initialize(), host);
+    assert.equal(next.status, 200);
+    await next.text();
+  } finally { await closeMcpSessions(sessions); }
+  const stopped = await contribution.handle(initialize(), host);
+  assert.equal(stopped.status, 503);
+  await stopped.text();
+});
+
+test("audit actual SDK event stream reserves capacity past idle expiry and releases on cancel", async () => {
+  let now = 0;
+  const sessions = new Map<string, import("./http.js").McpSession>();
+  const contribution = createMcpHttpContribution(sessions, { maxSessions: 1, idleTimeoutMs: 100, now: () => now });
+  const host = actionContext([]);
+  const initialize = () => new Request("http://scriptorium.test/streamable", {
+    method: "POST", headers: { "Content-Type": "application/json", Accept: "application/json, text/event-stream" },
+    body: JSON.stringify({ jsonrpc: "2.0", id: 1, method: "initialize", params: { protocolVersion: "2025-03-26", capabilities: {}, clientInfo: { name: "active-stream", version: "1" } } }),
+  });
+  let stream: Response | undefined;
+  try {
+    const initialized = await contribution.handle(initialize(), host);
+    assert.equal(initialized.status, 200);
+    const id = initialized.headers.get("mcp-session-id");
+    assert.ok(id);
+    await initialized.text();
+    stream = await contribution.handle(new Request("http://scriptorium.test/streamable", {
+      headers: { "mcp-session-id": id, Accept: "text/event-stream" },
+    }), host);
+    assert.equal(stream.status, 200);
+    assert.match(stream.headers.get("content-type") ?? "", /text\/event-stream/);
+    const session = sessions.get(id);
+    assert.ok(session);
+    assert.equal(session.activeRequests, 1);
+    assert.equal(session.timer, undefined);
+    now = 101;
+    const denied = await contribution.handle(initialize(), host);
+    assert.equal(denied.status, 503);
+    await denied.text();
+    assert.equal(sessions.get(id), session, "an open SDK stream is not idle or available for eviction");
+    await stream.body!.cancel();
+    assert.equal(session.activeRequests, 0);
+    assert.equal(session.lastUsedAt, now);
+    now = 202;
+    const expired = await contribution.handle(new Request("http://scriptorium.test/streamable", {
+      headers: { "mcp-session-id": id, Accept: "text/event-stream" },
+    }), host);
+    assert.equal(expired.status, 404);
+    await expired.text();
+    assert.equal(sessions.size, 0);
+    assert.equal(session.closing, true);
+    assert.equal(session.timer, undefined);
+  } finally {
+    await stream?.body?.cancel().catch(() => undefined);
+    await closeMcpSessions(sessions);
   }
 });

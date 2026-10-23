@@ -172,6 +172,9 @@ importers:
       '@scriptorium/api':
         specifier: workspace:*
         version: link:packages/api
+      '@scriptorium/contracts':
+        specifier: workspace:*
+        version: link:packages/contracts
       '@scriptorium/module-assistant':
         specifier: workspace:*
         version: link:modules/assistant
@@ -187,6 +190,9 @@ importers:
       '@scriptorium/module-publishing':
         specifier: workspace:*
         version: link:modules/publishing
+      '@scriptorium/module-runtime':
+        specifier: workspace:*
+        version: link:packages/module-runtime
       '@scriptorium/module-search':
         specifier: workspace:*
         version: link:modules/search

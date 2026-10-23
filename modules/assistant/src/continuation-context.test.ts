@@ -36,7 +36,7 @@ test("retrieval adapter keeps best-first top five and follows the public hit fal
     { entityId: "scene-3", sceneId: "scene-3", snippet: "  " },
     { entityId: "scene-4", sceneId: "scene-4", text: "fourth" },
     { sceneId: "scene-5", snippet: "fifth" },
-    { entityId: "scene-6", text: "outside top five" },
+    { entityId: "scene-6", sceneId: "scene-6", text: "outside top five" },
   ]), [
     { entityId: "scene-1", text: "first" },
     { entityId: "scene-2", text: "second" },

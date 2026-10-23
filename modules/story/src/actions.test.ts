@@ -13,7 +13,11 @@ import type {
   SnapshotId,
   SnapshotReader,
 } from "@scriptorium/contracts";
+import type { StoryVolumeTree } from "./domain/graph.js";
+
 import { createStoryActions } from "./actions.js";
+
+interface ZukanSuggestion { id: string; entityRevision?: string }
 
 const SERIES_PATH = "meta/scriptorium/modules/story/v1/series.json";
 const STATE_PROPOSALS_PATH = "meta/scriptorium/modules/story/state-proposals.jsonl";
@@ -529,7 +533,7 @@ test("scene creation inserts by position in one proposal and includes every chan
   const reader = makeReader(files);
   const proposals: Array<{ id: string; operations: ChangeOperation[] }> = [];
   const context = makeActionContext(reader, { proposals });
-  const tree = (await invoke<{ tree: VolumeTree; revision: string }>("story.volumes.tree", {}, context)).data;
+  const tree = (await invoke<{ tree: StoryVolumeTree; revision: string }>("story.volumes.tree", {}, context)).data;
   const result = await invoke<{ id: string; filePath: string }>("story.entities.create", {
     type: "scene", slug: "new-entry", title: "New entry", chapter: "ch-main-1", volume: "vol-main",
     position: 2, characters: ["char-uma"], location: "loc-cafe", base_revision: tree.revision, operation_id: "insert-scene-1",
@@ -740,7 +744,7 @@ test("state.append-event rejects stale or mismatched source proposals", async ()
     created_at: "2026-01-01T00:00:00.000Z",
     updated_at: "2026-01-01T00:00:00.000Z",
   };
-  const submit = async (label: string, proposalRow: typeof row | null, operationHash = manuscriptHash) => {
+  const submit = async (label: string, proposalRow: (Omit<typeof row, "duplicate_of_proposal_id"> & { duplicate_of_proposal_id: string | null }) | null, operationHash = manuscriptHash) => {
     const files = fixtureFiles({
       [STATE_PROPOSALS_PATH]: proposalRow ? `${JSON.stringify(proposalRow)}\n` : "",
     });

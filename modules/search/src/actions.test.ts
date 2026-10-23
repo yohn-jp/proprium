@@ -47,7 +47,7 @@ function findAction(actions: ModuleAction[], id: string): ModuleAction {
   return action;
 }
 
-function moduleContext(onAcquire: (id: string) => Promise<{ value: unknown; release(): Promise<void> }>): ModuleContext {
+function moduleContext(onAcquire: ModuleContext["acquireCapability"]): ModuleContext {
   return { cacheDirectory: "/tmp/search-test", signal: new AbortController().signal, acquireCapability: onAcquire, async createWorkerService() { throw new Error("search is model-free"); } };
 }
 
@@ -65,7 +65,7 @@ test("lexical search does not activate optional NLP or Semantic providers unless
       semanticRequests += 1;
       assert.equal(id, "semantic.search");
       assert.equal((input as { query: string }).query, "moonlit harbor");
-      assert.equal(signal.aborted, false);
+      assert.equal(signal?.aborted, false);
       return { ok: false, snapshot, error: { code: "missing_action", message: "disabled", retryable: false } };
     },
   });

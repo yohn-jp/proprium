@@ -1,3 +1,4 @@
+import { authorizationFailure } from "./authorization-error.js";
 import { randomBytes, timingSafeEqual } from "node:crypto";
 import { createServer as createHttpServer, type IncomingMessage, type Server, type ServerResponse } from "node:http";
 import { Readable } from "node:stream";
@@ -1597,13 +1598,12 @@ export function createServer(options: ApiServerOptions): Server {
     if (hosted && presentedHostedToken) {
       try { hostedPrincipal = await hosted.authorization.authenticate(presentedHostedToken, "read"); }
       catch (error) {
-        const candidate = error as { status?: unknown };
-        const status = candidate?.status === 403 ? 403 : 401;
-        if (routePath.endsWith("/modules/mcp/streamable")) {
+        const failure = authorizationFailure(error, "read");
+        if (failure.status === 401 && routePath.endsWith("/modules/mcp/streamable")) {
           response.setHeader("WWW-Authenticate",
             `Bearer resource_metadata="${assignment!.grantPolicy.audience}/.well-known/oauth-protected-resource", scope="read"`);
         }
-        fail(response, status, status === 403 ? "FORBIDDEN" : "UNAUTHORIZED", "Hosted repository access is invalid or expired");
+        fail(response, failure.status, failure.code, failure.message);
         return;
       }
     }
@@ -1644,7 +1644,10 @@ export function createServer(options: ApiServerOptions): Server {
           hostedPrincipal = principal;
           return principal;
         }
-        catch { throw httpFailure(403, "WRITE_PERMISSION_REQUIRED", "Current repository write permission is required"); }
+        catch (error) {
+          const failure = authorizationFailure(error, "write");
+          throw httpFailure(failure.status, failure.code, failure.message);
+        }
       }
       if (!isCookie) throw httpFailure(403, "AUTHOR_SESSION_REQUIRED", "An owner session is required");
       return undefined;

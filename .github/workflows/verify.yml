@@ -1,0 +1,434 @@
+name: Verify Scriptorium
+on:
+  pull_request:
+  push:
+    branches: [main]
+  workflow_dispatch:
+permissions:
+  contents: read
+# Independent runs retain their evidence; updates never cancel in-flight verification.
+jobs:
+  unit:
+    name: unit-${{ matrix.target }}
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    strategy:
+      fail-fast: false
+      matrix:
+        target: [contracts, module-runtime, migration, core, api, app, story, nlp, diagnostics, semantic, speaker, assistant, publishing, mcp, search, root]
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
+          persist-credentials: false
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24.22.0'
+      - name: Prepare exact pnpm toolchain
+        id: pnpm
+        run: |
+          corepack enable
+          corepack pnpm@12.10.1 --version
+          echo "store=$(pnpm store path --silent)" >> "$GITHUB_OUTPUT"
+      - name: Restore content-addressed dependency cache
+        id: dependencies
+        uses: actions/cache@v4
+        with:
+          path: ${{ steps.pnpm.outputs.store }}
+          key: pnpm-${{ runner.os }}-node24-pnpm12.10.1-${{ hashFiles('pnpm-lock.yaml') }}
+      - name: Install frozen dependencies
+        run: pnpm install --frozen-lockfile
+      - name: Dependency cache hit=${{ steps.dependencies.outputs.cache-hit || 'false' }}
+        env:
+          CACHE_HIT: ${{ steps.dependencies.outputs.cache-hit }}
+        run: echo "Dependency cache hit=${CACHE_HIT:-false}" >> "$GITHUB_STEP_SUMMARY"
+      - name: Build required dependencies
+        run: node scripts/ci-workspace.mjs prepare unit "${{ matrix.target }}"
+      - name: Test workspace
+        run: node scripts/ci-workspace.mjs unit "${{ matrix.target }}"
+  typecheck:
+    name: typecheck-${{ matrix.target }}
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    strategy:
+      fail-fast: false
+      matrix:
+        target: [foundations, core-api, app, modules-a, modules-b]
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
+          persist-credentials: false
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24.22.0'
+      - name: Prepare exact pnpm toolchain
+        id: pnpm
+        run: |
+          corepack enable
+          corepack pnpm@12.10.1 --version
+          echo "store=$(pnpm store path --silent)" >> "$GITHUB_OUTPUT"
+      - name: Restore content-addressed dependency cache
+        id: dependencies
+        uses: actions/cache@v4
+        with:
+          path: ${{ steps.pnpm.outputs.store }}
+          key: pnpm-${{ runner.os }}-node24-pnpm12.10.1-${{ hashFiles('pnpm-lock.yaml') }}
+      - name: Install frozen dependencies
+        run: pnpm install --frozen-lockfile
+      - name: Dependency cache hit=${{ steps.dependencies.outputs.cache-hit || 'false' }}
+        env:
+          CACHE_HIT: ${{ steps.dependencies.outputs.cache-hit }}
+        run: echo "Dependency cache hit=${CACHE_HIT:-false}" >> "$GITHUB_STEP_SUMMARY"
+      - name: Build required dependencies
+        run: node scripts/ci-workspace.mjs prepare typecheck "${{ matrix.target }}"
+      - name: Typecheck production sources
+        run: node scripts/ci-workspace.mjs typecheck "${{ matrix.target }}"
+  test-types:
+    name: test-types-${{ matrix.scope }}
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    strategy:
+      fail-fast: false
+      matrix:
+        scope: [app-e2e, packages, modules]
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
+          persist-credentials: false
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24.22.0'
+      - name: Prepare exact pnpm toolchain
+        id: pnpm
+        run: |
+          corepack enable
+          corepack pnpm@12.10.1 --version
+          echo "store=$(pnpm store path --silent)" >> "$GITHUB_OUTPUT"
+      - name: Restore content-addressed dependency cache
+        id: dependencies
+        uses: actions/cache@v4
+        with:
+          path: ${{ steps.pnpm.outputs.store }}
+          key: pnpm-${{ runner.os }}-node24-pnpm12.10.1-${{ hashFiles('pnpm-lock.yaml') }}
+      - name: Install frozen dependencies
+        run: pnpm install --frozen-lockfile
+      - name: Dependency cache hit=${{ steps.dependencies.outputs.cache-hit || 'false' }}
+        env:
+          CACHE_HIT: ${{ steps.dependencies.outputs.cache-hit }}
+        run: echo "Dependency cache hit=${CACHE_HIT:-false}" >> "$GITHUB_STEP_SUMMARY"
+      - name: Build required dependencies
+        run: node scripts/ci-workspace.mjs prepare test-types "${{ matrix.scope }}"
+      - name: Typecheck test and production sources together
+        run: node scripts/ci-workspace.mjs test-types "${{ matrix.scope }}"
+  safety:
+    name: safety
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
+          persist-credentials: false
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24.22.0'
+      - name: Prepare exact pnpm toolchain
+        id: pnpm
+        run: |
+          corepack enable
+          corepack pnpm@12.10.1 --version
+          echo "store=$(pnpm store path --silent)" >> "$GITHUB_OUTPUT"
+      - name: Restore content-addressed dependency cache
+        id: dependencies
+        uses: actions/cache@v4
+        with:
+          path: ${{ steps.pnpm.outputs.store }}
+          key: pnpm-${{ runner.os }}-node24-pnpm12.10.1-${{ hashFiles('pnpm-lock.yaml') }}
+      - name: Install frozen dependencies
+        run: pnpm install --frozen-lockfile
+      - name: Dependency cache hit=${{ steps.dependencies.outputs.cache-hit || 'false' }}
+        env:
+          CACHE_HIT: ${{ steps.dependencies.outputs.cache-hit }}
+        run: echo "Dependency cache hit=${CACHE_HIT:-false}" >> "$GITHUB_STEP_SUMMARY"
+      - name: Build safety boundary dependencies
+        run: pnpm --filter @scriptorium/api... build
+      - name: Typecheck scoped safety boundaries
+        run: pnpm typecheck:safety
+  build:
+    name: build-${{ matrix.profile }}
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    strategy:
+      fail-fast: false
+      matrix:
+        profile: [core, full]
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
+          persist-credentials: false
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24.22.0'
+      - name: Prepare exact pnpm toolchain
+        id: pnpm
+        run: |
+          corepack enable
+          corepack pnpm@12.10.1 --version
+          echo "store=$(pnpm store path --silent)" >> "$GITHUB_OUTPUT"
+      - name: Restore content-addressed dependency cache
+        id: dependencies
+        uses: actions/cache@v4
+        with:
+          path: ${{ steps.pnpm.outputs.store }}
+          key: pnpm-${{ runner.os }}-node24-pnpm12.10.1-${{ hashFiles('pnpm-lock.yaml') }}
+      - name: Install frozen dependencies
+        run: pnpm install --frozen-lockfile
+      - name: Dependency cache hit=${{ steps.dependencies.outputs.cache-hit || 'false' }}
+        env:
+          CACHE_HIT: ${{ steps.dependencies.outputs.cache-hit }}
+        run: echo "Dependency cache hit=${CACHE_HIT:-false}" >> "$GITHUB_STEP_SUMMARY"
+      - name: Build production profile
+        env:
+          SCRIPTORIUM_PROFILE: ${{ matrix.profile }}
+        run: pnpm build
+  audit:
+    name: audit-core
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
+          persist-credentials: false
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24.22.0'
+      - name: Prepare exact pnpm toolchain
+        id: pnpm
+        run: |
+          corepack enable
+          corepack pnpm@12.10.1 --version
+          echo "store=$(pnpm store path --silent)" >> "$GITHUB_OUTPUT"
+      - name: Restore content-addressed dependency cache
+        id: dependencies
+        uses: actions/cache@v4
+        with:
+          path: ${{ steps.pnpm.outputs.store }}
+          key: pnpm-${{ runner.os }}-node24-pnpm12.10.1-${{ hashFiles('pnpm-lock.yaml') }}
+      - name: Install frozen dependencies
+        run: pnpm install --frozen-lockfile
+      - name: Dependency cache hit=${{ steps.dependencies.outputs.cache-hit || 'false' }}
+        env:
+          CACHE_HIT: ${{ steps.dependencies.outputs.cache-hit }}
+        run: echo "Dependency cache hit=${CACHE_HIT:-false}" >> "$GITHUB_STEP_SUMMARY"
+      - name: Build Core production
+        run: pnpm build
+      - name: Audit Core production closure
+        run: pnpm audit:core
+  oci:
+    name: oci-${{ matrix.profile }}
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    strategy:
+      fail-fast: false
+      matrix:
+        profile: [core, full]
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
+          persist-credentials: false
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24.22.0'
+      - name: Verify production OCI startup, HTTP, UID and shutdown
+        env:
+          OCI_ENGINE: docker
+          SCRIPTORIUM_PROFILE: ${{ matrix.profile }}
+          SCRIPTORIUM_OCI_IMAGE: scriptorium-verification:${{ matrix.profile }}
+        run: bash scripts/verify-oci.sh
+  browser:
+    env:
+      SCRIPTORIUM_EXPECTED_SHA: ${{ github.event.pull_request.head.sha || github.sha }}
+      SCRIPTORIUM_PLAYWRIGHT_IMAGE_DIGEST: sha256:d65108d1a8095d8b0c4a5e32bf1807a40a5ce90ff0c78473e1116b1c243235e8
+    name: browser-${{ matrix.profile }}-${{ matrix.suite }}
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    container:
+      image: mcr.microsoft.com/playwright@sha256:d65108d1a8095d8b0c4a5e32bf1807a40a5ce90ff0c78473e1116b1c243235e8
+      options: --ipc=host
+    strategy:
+      fail-fast: false
+      matrix:
+        profile: [core, full]
+        suite: [core, job-inbox, modular-workspace, recent-activity, review-contributions, ui-v1, webkit]
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
+          persist-credentials: false
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24.22.0'
+      - name: Prepare exact pnpm toolchain
+        id: pnpm
+        run: |
+          corepack enable
+          corepack pnpm@12.10.1 --version
+          echo "store=$(pnpm store path --silent)" >> "$GITHUB_OUTPUT"
+      - name: Restore content-addressed dependency cache
+        id: dependencies
+        uses: actions/cache@v4
+        with:
+          path: ${{ steps.pnpm.outputs.store }}
+          key: pnpm-${{ runner.os }}-node24-pnpm12.10.1-${{ hashFiles('pnpm-lock.yaml') }}
+      - name: Install frozen dependencies
+        run: pnpm install --frozen-lockfile
+      - name: Dependency cache hit=${{ steps.dependencies.outputs.cache-hit || 'false' }}
+        env:
+          CACHE_HIT: ${{ steps.dependencies.outputs.cache-hit }}
+        run: echo "Dependency cache hit=${CACHE_HIT:-false}" >> "$GITHUB_STEP_SUMMARY"
+      - name: Verify pinned browser runtime
+        run: node scripts/verify-browser-runtime.mjs
+      - name: Build production browser profile
+        env:
+          SCRIPTORIUM_PROFILE: ${{ matrix.profile }}
+        run: pnpm build
+      - name: Test isolated browser shard
+        env:
+          SCRIPTORIUM_PROFILE: ${{ matrix.profile }}
+          SCRIPTORIUM_CI_REPORT_DIR: ${{ runner.temp }}/browser-results
+        run: node scripts/run-browser-shard.mjs --profile "${{ matrix.profile }}" --suite "${{ matrix.suite }}" --prebuilt
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: browser-${{ matrix.profile }}-${{ matrix.suite }}
+          path: |
+            ${{ runner.temp }}/browser-results
+            tests/e2e/test-results
+          retention-days: 7
+  hosted:
+    name: hosted-native-${{ matrix.selection }}
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    strategy:
+      fail-fast: false
+      matrix:
+        selection: [catalog, core, selected, full]
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
+          persist-credentials: false
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24.22.0'
+      - uses: docker/setup-buildx-action@v3
+      - name: Prepare exact pnpm toolchain
+        id: pnpm
+        run: |
+          corepack enable
+          corepack pnpm@12.10.1 --version
+          echo "store=$(pnpm store path --silent)" >> "$GITHUB_OUTPUT"
+      - name: Restore content-addressed dependency cache
+        id: dependencies
+        uses: actions/cache@v4
+        with:
+          path: ${{ steps.pnpm.outputs.store }}
+          key: pnpm-${{ runner.os }}-node24-pnpm12.10.1-${{ hashFiles('pnpm-lock.yaml') }}
+      - name: Install frozen dependencies
+        run: pnpm install --frozen-lockfile
+      - name: Dependency cache hit=${{ steps.dependencies.outputs.cache-hit || 'false' }}
+        env:
+          CACHE_HIT: ${{ steps.dependencies.outputs.cache-hit }}
+        run: echo "Dependency cache hit=${CACHE_HIT:-false}" >> "$GITHUB_STEP_SUMMARY"
+      - name: Build native Producer inputs
+        env:
+          SELECTION: ${{ matrix.selection }}
+        run: |
+          if [ "$SELECTION" = catalog ]; then
+            pnpm --filter '@scriptorium/module-*...' build
+          else
+            pnpm build:workspace
+          fi
+      - name: Verify native catalog and offline composition
+        env:
+          SCRIPTORIUM_NATIVE_REPORT_PATH: ${{ runner.temp }}/native-results/report.json
+        run: node scripts/verify-hosted-native.mjs --selection "${{ matrix.selection }}"
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: hosted-native-${{ matrix.selection }}
+          path: ${{ runner.temp }}/native-results
+          retention-days: 7
+  coverage:
+    name: coverage
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
+          persist-credentials: false
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24.22.0'
+      - name: Prepare exact pnpm toolchain
+        id: pnpm
+        run: |
+          corepack enable
+          corepack pnpm@12.10.1 --version
+          echo "store=$(pnpm store path --silent)" >> "$GITHUB_OUTPUT"
+      - name: Restore content-addressed dependency cache
+        id: dependencies
+        uses: actions/cache@v4
+        with:
+          path: ${{ steps.pnpm.outputs.store }}
+          key: pnpm-${{ runner.os }}-node24-pnpm12.10.1-${{ hashFiles('pnpm-lock.yaml') }}
+      - name: Install frozen dependencies
+        run: pnpm install --frozen-lockfile
+      - name: Dependency cache hit=${{ steps.dependencies.outputs.cache-hit || 'false' }}
+        env:
+          CACHE_HIT: ${{ steps.dependencies.outputs.cache-hit }}
+        run: echo "Dependency cache hit=${CACHE_HIT:-false}" >> "$GITHUB_STEP_SUMMARY"
+      - name: Verify complete workspace, test-source, browser and workflow inventory
+        run: |
+          node scripts/ci-workspace.mjs coverage
+          node --test scripts/ci-contract.test.mjs
+  certification:
+    name: certification
+    if: always()
+    needs: [unit, typecheck, test-types, safety, build, audit, oci, browser, hosted, coverage]
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    permissions:
+      contents: read
+      actions: read
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
+          persist-credentials: false
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24.22.0'
+      - name: Certify every required exact-source matrix element
+        env:
+          GH_TOKEN: ${{ github.token }}
+          SCRIPTORIUM_EXPECTED_SHA: ${{ github.event.pull_request.head.sha || github.sha }}
+          SCRIPTORIUM_REQUIRED_RESULTS: ${{ toJSON(needs) }}
+        run: node scripts/certify-ci.mjs
+      - name: Record measured workflow timings
+        if: always()
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: node scripts/measure-ci.mjs --out "${{ runner.temp }}/ci-metrics.json"
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: ci-metrics
+          path: ${{ runner.temp }}/ci-metrics.json
+          retention-days: 14

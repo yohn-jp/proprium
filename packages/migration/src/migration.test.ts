@@ -388,7 +388,7 @@ test("legacy inspection preserves scoped data, both SQLite stores, and pending G
   assert.deepEqual(await sourceTreeState(workspaceRoot), beforeWorkspace);
 
   const categories = new Set(inspection.entries.map(({ category }) => category));
-  for (const category of ["authoritative", "provisional", "secret", "derived", "relocated"]) assert.ok(categories.has(category), `missing ${category} category`);
+  for (const category of ["authoritative", "provisional", "secret", "derived", "relocated"] as const) assert.ok(categories.has(category), `missing ${category} category`);
   const writes = inspection.operations.flatMap((operation) => operation.writes);
   const writePaths = new Set(writes.map(({ path: writePath }) => writePath));
   for (const pathName of excludedGitCredentialPaths) assert.ok(!writePaths.has(pathName), `${pathName} must not become a migration operation`);

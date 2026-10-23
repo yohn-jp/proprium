@@ -216,7 +216,7 @@ test("corpus synonym suggestions acquire the optional snapshot-indexed provider 
   const { runtime, host } = await createRuntime(files, proposals, capabilityProviders);
   try {
     assert.equal(runtime.status("diagnostics").availability, "enabled-idle");
-    assert.deepEqual(providerCalls, [], "declared optional provider remains idle until a corpus suggestion is needed");
+    assert.equal(providerCalls.length, 0, "declared optional provider remains idle until a corpus suggestion is needed");
     const result = await runtime.invokeAction("diagnostics", "diagnostics.analyze", {
       text: "彼は悲しい。彼は悲しい。彼は悲しい。", sceneId: "scene-1",
     }, host);

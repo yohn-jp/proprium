@@ -1,5 +1,5 @@
 import type { ModuleContext, ModuleDefinition, ModuleManifest } from "@scriptorium/contracts";
-import { closeMcpSessions, createMcpHttpContribution } from "./http.js";
+import { closeMcpSessions, createMcpHttpContribution, type McpSession } from "./http.js";
 
 export const mcpManifest: ModuleManifest = {
   id: "mcp",
@@ -15,7 +15,7 @@ export const mcpManifest: ModuleManifest = {
 
 /** Register the external MCP transports without allocating models or persistent storage. */
 export async function createModule(context: ModuleContext): Promise<ModuleDefinition> {
-  const sessions = new Map();
+  const sessions = new Map<string, McpSession>();
   let disposed = false;
   const dispose = async () => {
     if (disposed) return;

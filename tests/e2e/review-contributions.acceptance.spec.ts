@@ -185,7 +185,8 @@ test("full profile renders Story and Speaker review queues and turns both author
     const projects = await projectsResponse.json() as Project[];
     const project = projects.find((item) => item.url === fixture.remote);
     expect(project, "the app must register the owned local bare repository through its real API").toBeDefined();
-    projectId = project!.id;
+    if (!project) throw new Error("Registered review project was not found");
+    projectId = project.id;
 
     const zukanListResponse = page.waitForResponse((response) => actionResponse(response, "story.zukan-suggestions.list"), { timeout: 60_000 });
     const zukanPanel = await openWorkspaceContributionPanel(page, "story.zukan-review", "Zukan suggestions");
