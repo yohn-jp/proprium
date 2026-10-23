@@ -63,7 +63,12 @@ try {
   const trusted = await trustedModuleData();
   assert.equal(catalog.producerRevision, sha);
   assert.equal(catalog.modules.length, trusted.length);
-  for (const requestedModules of [[], ['story', 'mcp', 'search']]) {
+  // Match the buildkit image's online cache priming before offline native compose.
+  // pnpm 12 supply-chain checks also need registry metadata, not just installed files.
+  run(process.execPath, ['scripts/profile-package.mjs', '--modules-json', '[]', '--prebuilt',
+    '--prime-deploy-cache', '--out', path.join(output, 'primed-app')]);
+  const selections = [[], ['story', 'mcp', 'search'], trusted.map(item => item.manifest.id).sort()];
+  for (const requestedModules of selections) {
     const resolved = resolveBuildCatalogSelection(catalog, requestedModules, trusted);
     const input = {
       contractVersion: catalog.contractVersion, producerRevision: sha, runtimeBaseDigest, buildKitDigest,
@@ -86,7 +91,7 @@ try {
   }
   assert.equal(execFileSync('git', ['status', '--porcelain'], { cwd: root, encoding: 'utf8' }), '');
   console.log(JSON.stringify({ acceptanceLevel: 'DISPOSABLE_NATIVE_PRODUCER', sha, runtimeBaseDigest, buildKitDigest,
-    catalog: 'PASS', composeSelections: [[], ['story', 'mcp', 'search']], publication: false, hostedRuntimeAcceptance: 'NOT_CHECKED' }));
+    catalog: 'PASS', composeSelections: selections, publication: false, hostedRuntimeAcceptance: 'NOT_CHECKED' }));
 } finally {
   await rm(output, { recursive: true, force: true });
   // This directory is the native Producer's fixed output, on this disposable runner only.

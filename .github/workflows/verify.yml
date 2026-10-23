@@ -27,22 +27,6 @@ jobs:
         run: |
           corepack enable
           corepack pnpm@12.10.1 install --frozen-lockfile
-      - name: Prepare bounded offline diagnostic checkout
-        if: github.head_ref == 'fix/29-audit-hardening'
-        run: |
-          tar -czf "$RUNNER_TEMP/scriptorium-checkout.tar.gz" .
-          tar -czf "$RUNNER_TEMP/scriptorium-toolchain.tar.gz" -C "$(dirname "$(dirname "$(command -v node)")")" bin lib
-          tar -czf "$RUNNER_TEMP/scriptorium-corepack.tar.gz" -C "$COREPACK_HOME" .
-      - uses: actions/upload-artifact@v4
-        if: github.head_ref == 'fix/29-audit-hardening'
-        with:
-          name: issue29-offline-diagnostics
-          path: |
-            ${{ runner.temp }}/scriptorium-checkout.tar.gz
-            ${{ runner.temp }}/scriptorium-toolchain.tar.gz
-            ${{ runner.temp }}/scriptorium-corepack.tar.gz
-          compression-level: 0
-          retention-days: 1
       - name: Verify exact source and test types
         run: |
           pnpm typecheck
@@ -120,3 +104,9 @@ jobs:
           pnpm build
           pnpm exec playwright install --with-deps chromium webkit
           pnpm exec playwright test --config tests/e2e/playwright.config.ts
+      - uses: actions/upload-artifact@v4
+        if: failure()
+        with:
+          name: browser-${{ matrix.profile }}-failures
+          path: tests/e2e/test-results
+          retention-days: 3
