@@ -5,7 +5,12 @@ import { fileURLToPath } from "node:url";
 import { execFileSync } from "node:child_process";
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
-const ledgerPath = path.join(root, "docs/migration/ledger.json");
+const evidenceRoot = path.join(root, "evidence/migration");
+const ledgerPath = path.join(evidenceRoot, "docs/migration/ledger.json");
+// Retained evidence keeps its original logical paths; runtime targets stay in root.
+function evidencePath(relative) {
+  return path.resolve(relative.startsWith("docs/") ? evidenceRoot : root, relative);
+}
 const args = process.argv.slice(2);
 let sourceRoot;
 let requireClosed = false;
@@ -43,7 +48,7 @@ async function exists(base, relative, label, expectedKind = "file") {
     check(false, `${label} path must be repository-relative: ${relative}`);
     return false;
   }
-  const basePath = path.resolve(base);
+  const basePath = path.resolve(base === root && relative.startsWith("docs/") ? evidenceRoot : base);
   const resolvedPath = path.resolve(basePath, relative);
   const lexicalRelative = path.relative(basePath, resolvedPath);
   if (lexicalRelative === ".." || lexicalRelative.startsWith(`..${path.sep}`) || path.isAbsolute(lexicalRelative)) {
@@ -187,7 +192,7 @@ for (const row of rows) {
       await exists(root, proof.path, proof.id);
       if (proof.jsonPointer) {
         try {
-          const evidence = JSON.parse(await readFile(path.resolve(root, proof.path), "utf8"));
+          const evidence = JSON.parse(await readFile(evidencePath(proof.path), "utf8"));
           check(jsonPointerValue(evidence, proof.jsonPointer) !== undefined, `${proof.id} JSON pointer does not resolve: ${proof.jsonPointer}`);
         } catch (error) {
           failures.push(`${proof.id} JSON pointer failed: ${error instanceof Error ? error.message : String(error)}`);
@@ -226,7 +231,7 @@ for (const row of rows) {
     await exists(root, proof.path, proof.id);
     if (proof.jsonPointer) {
       try {
-        const evidence = JSON.parse(await readFile(path.resolve(root, proof.path), "utf8"));
+        const evidence = JSON.parse(await readFile(evidencePath(proof.path), "utf8"));
         check(jsonPointerValue(evidence, proof.jsonPointer) !== undefined, `${proof.id} JSON pointer does not resolve: ${proof.jsonPointer}`);
       } catch (error) {
         failures.push(`${proof.id} JSON pointer failed: ${error instanceof Error ? error.message : String(error)}`);
@@ -243,7 +248,7 @@ for (const row of rows) {
     if (proof.result !== undefined) check(proof.result === "passed", `${proof.id} result must be passed when specified`);
     await exists(root, proof.path, proof.id);
     try {
-      const evidence = JSON.parse(await readFile(path.resolve(root, proof.path), "utf8"));
+      const evidence = JSON.parse(await readFile(evidencePath(proof.path), "utf8"));
       const pointed = jsonPointerValue(evidence, proof.jsonPointer);
       check(pointed !== undefined, `${proof.id} JSON pointer does not resolve: ${proof.jsonPointer}`);
       check(pointed?.id === "P13-FROZEN-COMPOSITION", `${proof.id} does not resolve to P13-FROZEN-COMPOSITION`);
@@ -315,7 +320,7 @@ for (const row of rows) {
 if (requireClosed) {
   check(sliceCount === 96, `closed ledger must contain exactly 96 implementation slices (found ${sliceCount})`);
   try {
-    const finalComposition = JSON.parse(await readFile(path.join(root, "docs/migration/evidence/P13.json"), "utf8"));
+    const finalComposition = JSON.parse(await readFile(evidencePath("docs/migration/evidence/P13.json"), "utf8"));
     check(finalComposition?.proofs?.[0]?.id === "P13-FROZEN-COMPOSITION"
       && finalComposition?.proofs?.[0]?.status === "passed",
     "closed ledger requires the final P13-FROZEN-COMPOSITION proof to be passed");

@@ -44,3 +44,6 @@ modules/diagnostics/src/data/*
 docs
 
 profiles/*/generated
+
+evidence
+artifacts

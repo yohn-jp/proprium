@@ -1,11 +1,4 @@
-# Scriptorium — Modular Workspace Architecture
-
-**Status:** Implemented on `main` under the Modular Workspace goal; implementation boundaries and acceptance evidence are recorded in [Modular Workspace verification](../verification/MODULAR-WORKSPACE.md).
-
-**Baseline inspected:** `main@a0419c499d47d51584bda649790c45082998bfed` (2026-10-19).  
-**Authority:** This document defines the new modular workspace, local-first read UX, and extensibility direction. Existing `CORE.md`, `FULL-MIGRATION.md`, Git durability, module security and recovery contracts remain authoritative for behavior not explicitly addressed here. The completed P00–P13 migration ledger is not reopened.
-
-> **将来設計との関係:** 本書は既に実装済みのComposable Workspaceと**信頼された内蔵Module**の現在の契約を説明する。2026-10-20に合意した**公開Plugin SDK・外部リポジトリ・強制実行隔離**の目標は[PLUGIN-PLATFORM.md](PLUGIN-PLATFORM.md)に定義した。既存のin-process ModuleやBrowser `import()`を第三者コードに対する安全Sandboxと見なさない。導入は別Waveで実装・検証する。
+# Modular workspace architecture
 
 ## 1. Product decision
 
@@ -19,21 +12,9 @@ The three product goals are:
 
 These goals must not weaken manuscript durability, revision preconditions, authentication, project isolation, accessibility, or the minimal Core profile.
 
-## 2. Existing foundation and gaps
+## 2. Composition boundaries
 
-Verified against the baseline:
-
-| Area | Existing implementation | Intended evolution |
-| --- | --- | --- |
-| Git/Core | `packages/core/src/index.ts`: local project clones, immutable Snapshot reads, explicit observation, checkpoint, reconcile, publish; hierarchy cache and paired scene reads | Separate the minimal foreground read path from nonessential coordination; expose efficient document enumeration/change deltas to optional consumers |
-| Core contracts | `packages/contracts/src/index.ts`: `SnapshotId`, `SnapshotReader`, actions, `ModuleManifest`, `UiContribution` | Add only the minimal versioned ports required by workspace composition and incremental indexing |
-| Module runtime | `packages/module-runtime`: manifest/profile gating, activation, capabilities, worker lifecycle | Reuse; do not create a second plugin framework |
-| Browser contributions | `ContributionHost.tsx`: lazy browser loader, `mount`/`dispose` and abort signal; `UiContribution.slot` fixed to editor/dock/inspection/review/settings | Host registered panel instances in user-controlled layout positions; preserve lifecycle and capability checks |
-| UI | `SharedApplication.tsx`, desktop/mobile shells and scene editor | Introduce a workspace composition controller independent of individual panels |
-| Existing advanced modules | `modules/{story,nlp,diagnostics,semantic,speaker,assistant,publishing,mcp}`; `profiles/core.json` excludes them | Preserve these boundaries; add lexical search/terminology as optional capabilities without dragging model dependencies into Core |
-| Search today | Core snapshot search actions and optional Semantic search already exist | Do not claim search is absent or remove existing entrypoints before migrating consumers; distinguish Core's current lexical read operation from the proposed optional indexed search |
-
-The diagram below describes responsibility boundaries; concrete implementation and verification are recorded in the linked acceptance record.
+The host composes panels and optional capabilities around Core snapshot and mutation contracts.
 
 ```text
 Browser Workspace
@@ -103,6 +84,7 @@ Core authoring panels (including Editor) remain available without modules. Optio
 The workspace host owns component mounting and lifetime. The module owns its rendered content, but cannot set global layout or bypass host actions. Modules receive only permitted, snapshot-scoped context; they cannot read another project or invoke mutation APIs without the existing proposal/approval flow.
 
 Minimum layout semantics:
+
 - Arbitrary user reordering and placement across allowed containers; horizontal/vertical splits, tab groups, resizing and hiding.
 - Presets for **Writing**, **Research** and **Review** as initial compositions (exact default panel selections are UX configuration, not Core semantics).
 - Save and restore a custom workspace, distinguish desktop/mobile arrangements, and persist schema version.
@@ -114,7 +96,7 @@ The layout schema must be validated before use, including depth, size, IDs, dupl
 
 ### 4.3 Persistence and synchronization
 
-Workspace layout is scoped to user/author identity and device class. It is not part of the Git canonical manuscript data and must not be written by repository sync. Initially, host-managed browser persistence is sufficient; cross-device user settings synchronization is a separate decision and must not be assumed.
+Workspace layout is scoped to user/author identity and device class. It is not part of the Git canonical manuscript data and must not be written by repository sync. The host persists layouts in browser storage; layouts are not synchronized through work repositories.
 
 The layout stores declarative IDs/settings, never executable component source, secrets, arbitrary paths or full manuscript contents. Persist preferences independently from IndexedDB draft/checkpoint recovery, with different storage keys and failure handling.
 
@@ -124,10 +106,10 @@ The layout stores declarative IDs/settings, never executable component source, s
 
 - **Core document source:** Snapshot-scoped enumeration, reads and incremental changed-document descriptions. It supplies no semantic ranking and does not depend on search/NLP packages.
 - **Standard lexical-search module:** An optional, lightweight local index; full-text, exact term/alias and prefix lookups, scope filters, ranking of lexical hits and bounded result navigation. No model dependency.
-- **Terminology capability:** A canonical term registry/aliases/target references and a resolver returning document spans for visible text. Initially it may ship alongside lexical search to reuse the index; splitting into a separate module is not mandatory.
+- **Terminology capability:** A canonical term registry/aliases/target references and a resolver returning document spans for visible text. It shares the optional Search module and its index.
 - **Existing NLP/Semantic modules:** Optional tokenization, extraction, embeddings and semantic ranking. They may enhance or contribute separate search modes through declared capabilities; no implicit model loading for lexical search.
 
-Because Core already offers snapshot search and Semantic already implements search behavior, implementation must inventory existing consumers and preserve their observable contracts before replacing or rerouting them. Avoid building a parallel third search engine by default.
+Core snapshot search, indexed lexical search and Semantic search have distinct owners and consumers. Changes must preserve their observable contracts and avoid redundant indexes.
 
 ### 5.2 Index lifecycle
 
@@ -145,13 +127,13 @@ An editor decoration must not break caret position, IME composition, selection, 
 
 The user can navigate links from writing/reading views, search results and terminology panels; no separate untrusted HTML rendering or model output is allowed to introduce executable links.
 
-## 6. Plugin registration and runtime evolution
+## 6. Contribution registration and lifecycle
 
-Extend, rather than replace, the existing `ModuleManifest`, `UiContribution`, `BrowserModuleDefinition` and `ModuleRuntime` contracts. The existing `UiContribution.slot` is a **fixed placement slot** and cannot alone express user-owned arbitrary layouts. A versioned evolution should identify contribution *kind* and supported host context independently of workspace position.
+`ModuleManifest`, `UiContribution`, `BrowserModuleDefinition` and `ModuleRuntime` supply the shared contribution boundary. Contribution metadata declares a version, kind, supported workspace/editor/reading contexts and multiple-instance policy. A placement slot supplies host defaults; workspace panel identity and layout determine user-owned placement.
 
-The runtime remains the single activation and capability authority. An unavailable/disabled module contributes neither activated workers nor invisible heavy browser code. Profiles continue controlling the artifact closure; the `core` profile must not transitively depend on NLP/Semantic, optional search or model assets. An enabled module without a visible panel may still run **only explicitly declared, necessary** background indexing/jobs; hiding a panel by itself does not silently start work.
+The runtime is the activation and capability authority. An unavailable or disabled module contributes neither active workers nor invisible heavy browser code. Profiles control artifact closure; Core does not transitively depend on optional search, NLP, Semantic or model assets. Background indexing and jobs require explicit declared activation; hiding a panel does not authorize work.
 
-No arbitrary third-party script execution, hot-install system, module-container orchestration or new plugin marketplace is implied. The first implementation targets trusted, build-time-installed modules in the existing profile system.
+This contract covers trusted modules installed at build time. It does not grant arbitrary third-party execution or runtime package installation.
 
 ## 7. State and failure invariants
 
@@ -164,27 +146,14 @@ No arbitrary third-party script execution, hot-install system, module-container 
 7. Layout changes and derived indexes are not persisted as manuscript commits.
 8. Unavailable remote service does not block reading locally verified objects; it does block actions whose existing contract requires fresh remote confirmation.
 
-## 8. Implementation sequence and acceptance boundaries
-
-Phases A–C were implemented under the explicit Modular Workspace goal. The following phase boundaries remain the accepted scope; the verification record identifies the production source and observed acceptance results.
-
-**Phase A — Foreground integrity and read scheduling.** Establish an explicit editor-recovery readiness gate, separate render-essential reads from proposal/remote/index work, deduplicate unchanged observation and reconcile work using remote plus local revision keys. Preserve current safety behavior. Core remains usable offline from an existing checkout.
-
-**Phase B — Workspace composition.** Introduce versioned layout/panel identity and validated persistence; adapt the existing contribution host; supply Writing/Research/Review presets and fully editable custom placement on desktop, with accessible mobile equivalents. Keep existing shells operational while consumers migrate; do not permanently maintain parallel UI architectures.
-
-**Phase C — Indexed search and terminology.** Inventory the existing Core lexical search and Semantic module first. Add only required document-source delta/bulk APIs, create a lightweight optional search+terminology capability, wire search panel and editor decoration through existing UI contributions. Add no unconditional NLP/LLM dependency.
-
-Each phase uses the repository's existing validation entrypoints to prove observable behavior, including failure cases and Core-only profile startup; see the verification record for the completed checks and explicit limits. No latency benchmark is required by this architecture decision. Performance is assessed by the elimination of unnecessary critical-path work and code-path review; no unmeasured speed claims.
-
-## 9. Explicit non-goals
+## 8. Explicit non-goals
 
 - Rewriting the Git storage or durability state machine.
 - Replacing existing NLP/Semantic modules or duplicating their indexes without a demonstrated gap.
 - Introducing an entire external plugin SDK, arbitrary third-party code sandbox, new database authority or module orchestration service.
 - Coupling layout choices to repository data or requiring all optional modules for the Core profile.
-- Treating a design-only PR as proof that these features are implemented.
 
-## 10. Architectural decision summary
+## 9. Architectural decision summary
 
 **Decision:** Local Git Core with a minimal, responsive foreground read model; a host-owned composable Workspace with presets and complete customization; search/terminology and advanced intelligence as optional, capability-based modules.
 
