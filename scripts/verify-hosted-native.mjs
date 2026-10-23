@@ -9,7 +9,7 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { trustedModuleData } from './hosted-build.mjs';
 import { resolveBuildCatalogSelection } from '../packages/module-runtime/dist/index.js';
-import { hostedNativeComposeCases, parseHostedNativeSelection } from './hosted-native-selection.mjs';
+import { createHostedNativeReport, hostedNativeComposeCases, parseHostedNativeSelection } from './hosted-native-selection.mjs';
 
 const selection = parseHostedNativeSelection(process.argv.slice(2));
 assert.equal(process.env.CI, 'true', 'This native contract check owns a disposable CI runner only');
@@ -110,16 +110,13 @@ try {
     });
   }
   assert.equal(execFileSync('git', ['status', '--porcelain'], { cwd: root, encoding: 'utf8' }), '');
-  const result = {
-    schemaVersion: 'scriptorium-hosted-native-verification/v1',
-    acceptanceLevel: 'DISPOSABLE_NATIVE_PRODUCER',
+  const result = createHostedNativeReport({
     selection,
     sourceSha: sha,
     dockerfileSha256: dockerfileHash,
     runtimeBaseDigest,
     buildKitDigest,
     catalog: {
-      result: 'PASS',
       producerRevision: catalog.producerRevision,
       sourceDigest: catalog.sourceDigest,
       recipeDigest: catalog.recipeDigest,
@@ -127,9 +124,7 @@ try {
       moduleCount: catalog.modules.length,
     },
     compositions: compositionResults,
-    publication: false,
-    hostedRuntimeAcceptance: 'NOT_CHECKED',
-  };
+  });
   const reportPath = path.resolve(process.env.SCRIPTORIUM_NATIVE_REPORT_PATH ?? path.join(tmpdir(), `scriptorium-hosted-native-${sha}-${selection}.json`));
   await mkdir(path.dirname(reportPath), { recursive: true });
   await writeFile(reportPath, `${JSON.stringify(result, null, 2)}\n`);

@@ -6,6 +6,7 @@ import { fileURLToPath } from 'node:url';
 import { TEST_TYPECHECK_SCOPES, TYPECHECK_TARGETS, UNIT_TARGETS, WORKSPACES } from './ci-contract.mjs';
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
+const generatedDirectoryNames = new Set(['.git', '.next', '.turbo', 'build', 'coverage', 'dist', 'node_modules', 'out', 'target']);
 const workspaceById = new Map(WORKSPACES.map((workspace) => [workspace.id, workspace]));
 const workspaceByName = new Map();
 const rootManifest = JSON.parse(await readFile(path.join(root, 'package.json'), 'utf8'));
@@ -206,7 +207,7 @@ async function runTestTypecheck(scope) {
   run(process.execPath, ['scripts/typecheck-tests.mjs', scope]);
 }
 
-async function listFiles(directory) {
+async function listFiles(directory, { excludeGenerated = true } = {}) {
   const files = [];
   async function visit(current) {
     let entries;
@@ -218,7 +219,7 @@ async function listFiles(directory) {
     }
     for (const entry of entries) {
       const absolute = path.join(current, entry.name);
-      if (entry.isDirectory()) await visit(absolute);
+      if (entry.isDirectory() && (!excludeGenerated || !generatedDirectoryNames.has(entry.name))) await visit(absolute);
       else if (entry.isFile()) files.push(absolute);
     }
   }
@@ -329,7 +330,7 @@ async function checkCoverage() {
     const manifest = target.path === '.' ? rootManifest : packageManifests.get(target.id);
     const testScript = target.path === '.' ? manifest.scripts?.['test:scripts'] : manifest.scripts?.test;
     if (!testScript) fail(`Unit target ${target.id} has no package.json test script`);
-    const testDirectory = path.join(packageRoot, target.path === '.' ? 'scripts' : 'src');
+    const testDirectory = path.join(packageRoot, target.path === '.' ? 'scripts' : '.');
     const selectedFiles = (await listFiles(testDirectory)).filter(isUnitTestFile);
     testFiles += await assertTestPatterns({
       label: `Unit target ${target.id}`,

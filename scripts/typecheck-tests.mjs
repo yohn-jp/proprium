@@ -6,6 +6,7 @@ import { fileURLToPath } from 'node:url';
 import { TEST_TYPECHECK_SCOPES, WORKSPACES } from './ci-contract.mjs';
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
+const generatedDirectoryNames = new Set(['.git', '.next', '.turbo', 'build', 'coverage', 'dist', 'node_modules', 'out', 'target']);
 const scopeWorkspaces = new Map([
   ['app-e2e', ['app']],
   ['packages', WORKSPACES.filter(({ path: workspacePath }) => workspacePath.startsWith('packages/')).map(({ id }) => id)],
@@ -32,7 +33,7 @@ async function listTypeScriptFiles(directory) {
   async function visit(current) {
     for (const entry of await readdir(current, { withFileTypes: true })) {
       const absolute = path.join(current, entry.name);
-      if (entry.isDirectory()) await visit(absolute);
+      if (entry.isDirectory() && !generatedDirectoryNames.has(entry.name)) await visit(absolute);
       else if (entry.isFile() && /\.tsx?$/u.test(entry.name)) files.push(absolute);
     }
   }
@@ -107,8 +108,7 @@ async function checkScope(scopeId) {
   const results = [];
   if (scopeId === 'app-e2e') {
     const appDirectory = path.join(root, 'app');
-    const appFiles = await listTypeScriptFiles(path.join(appDirectory, 'src'));
-    const appTests = appFiles.filter(isTestFile);
+    const appTests = (await listTypeScriptFiles(appDirectory)).filter(isTestFile);
     results.push(await checkDirectory(
       { id: scopeId, testFiles: appTests },
       'app',
@@ -129,9 +129,7 @@ async function checkScope(scopeId) {
     ));
   } else {
     for (const workspace of selected) {
-      const sourceDirectory = path.join(root, workspace.path, 'src');
-      const sourceFiles = await listTypeScriptFiles(sourceDirectory);
-      const testFiles = sourceFiles.filter(isTestFile);
+      const testFiles = (await listTypeScriptFiles(path.join(root, workspace.path))).filter(isTestFile);
       results.push(await checkDirectory(
         { id: scopeId, testFiles },
         workspace.path,

@@ -23,3 +23,19 @@ export function hostedNativeComposeCases(selection) {
   if (!composeCase) throw new Error(`Unknown Hosted Native selection: ${selection}`);
   return [composeCase];
 }
+
+export function createHostedNativeReport({ selection, sourceSha, dockerfileSha256, runtimeBaseDigest, buildKitDigest, catalog, compositions }) {
+  return {
+    schemaVersion: 'scriptorium-hosted-native-verification/v1',
+    acceptanceLevel: 'DISPOSABLE_NATIVE_PRODUCER',
+    selection,
+    sourceSha,
+    dockerfileSha256,
+    runtimeBaseDigest,
+    buildKitDigest,
+    catalog: { result: 'PASS', ...catalog },
+    compositions,
+    publication: false,
+    hostedRuntimeAcceptance: 'NOT_CHECKED',
+  };
+}

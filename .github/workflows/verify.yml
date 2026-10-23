@@ -252,6 +252,7 @@ jobs:
         run: bash scripts/verify-oci.sh
   browser:
     env:
+      SCRIPTORIUM_EXPECTED_SHA: ${{ github.event.pull_request.head.sha || github.sha }}
       SCRIPTORIUM_PLAYWRIGHT_IMAGE_DIGEST: sha256:d65108d1a8095d8b0c4a5e32bf1807a40a5ce90ff0c78473e1116b1c243235e8
     name: browser-${{ matrix.profile }}-${{ matrix.suite }}
     runs-on: ubuntu-24.04

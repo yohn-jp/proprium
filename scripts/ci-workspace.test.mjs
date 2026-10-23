@@ -79,3 +79,25 @@ test('speaker unit preparation builds packages whose canonical pnpm test command
     await rm(temporary, { recursive: true, force: true });
   }
 });
+
+test('coverage and test typecheck reject TypeScript tests outside workspace src', async () => {
+  const fixture = await mkdtemp(path.join(root, 'modules/speaker/.ci-coverage-probe-'));
+  const source = path.join(fixture, 'unregistered.test.ts');
+  await writeFile(source, 'export const coverageProbe: string = "unregistered";\n');
+  try {
+    const coverage = run(['coverage']);
+    assert.notEqual(coverage.status, 0, coverage.stdout);
+    assert.match(`${coverage.stdout}\n${coverage.stderr}`, /Unit target speaker does not execute these test files/u);
+    assert.match(`${coverage.stdout}\n${coverage.stderr}`, /unregistered\.test\.ts/u);
+
+    const typecheck = spawnSync(process.execPath, [path.join(root, 'scripts/typecheck-tests.mjs'), 'modules'], {
+      cwd: root,
+      encoding: 'utf8',
+    });
+    assert.notEqual(typecheck.status, 0, typecheck.stdout);
+    assert.match(`${typecheck.stdout}\n${typecheck.stderr}`, /TypeScript input omitted test sources for modules\/speaker/u);
+    assert.match(`${typecheck.stdout}\n${typecheck.stderr}`, /unregistered\.test\.ts/u);
+  } finally {
+    await rm(fixture, { recursive: true, force: true });
+  }
+});
