@@ -1,4 +1,5 @@
 import { mkdir, writeFile } from "node:fs/promises";
+import { execFileSync } from "node:child_process";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { summarizeBrowserCoverage } from "./browser-shards.mjs";
@@ -40,6 +41,7 @@ export default class BrowserCoverageReporter {
       && summary.notRun === 0;
     const report = {
       schemaVersion: 1,
+      sourceSha: execFileSync("git", ["rev-parse", "HEAD"], { cwd: root, encoding: "utf8" }).trim(),
       outcome: complete ? "PASS" : "FAIL",
       runStatus: result.status,
       profile,

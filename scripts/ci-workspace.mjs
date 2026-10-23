@@ -100,6 +100,18 @@ function getUnitTarget(targetId) {
   return target;
 }
 
+function canonicalTestBuildPackageNames() {
+  const commands = rootManifest.scripts.test.split(/\s*&&\s*/u);
+  const builds = new Set();
+  for (let index = 0; index + 1 < commands.length; index += 1) {
+    const build = /^pnpm --filter (\S+) build$/u.exec(commands[index]);
+    if (!build) continue;
+    const test = /^pnpm --filter (\S+) test$/u.exec(commands[index + 1]);
+    if (test?.[1] === build[1]) builds.add(build[1]);
+  }
+  return builds;
+}
+
 function getTypecheckTarget(targetId) {
   const target = TYPECHECK_TARGETS.find(({ id }) => id === targetId);
   if (!target) fail(`Unknown production typecheck target ${targetId}; expected one of ${TYPECHECK_TARGETS.map(({ id }) => id).join(', ')}`);
@@ -121,6 +133,10 @@ async function prepareUnit(targetId) {
   const manifest = packageManifests.get(workspace.id);
   if (!manifest.scripts?.test) fail(`Workspace unit target ${targetId} has no package.json test script`);
   const dependencies = buildTargets([workspace.id]);
+  if (canonicalTestBuildPackageNames().has(manifest.name)) {
+    buildWorkspaceTargets([workspace.id]);
+    console.log(`Unit target ${targetId}: built its own output because package.json test builds it before its tests.`);
+  }
   console.log(`Unit target ${targetId}: built dependency workspaces [${dependencies.join(', ')}]`);
 }
 

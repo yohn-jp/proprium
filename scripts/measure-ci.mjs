@@ -37,7 +37,7 @@ const latestLeaf = leafJobs.sort((a, b) => Date.parse(b.completed_at) - Date.par
 const report = { runId, url: run.html_url, sha: run.head_sha, attempt: run.run_attempt, status: run.status, result: run.conclusion,
   wallClockSeconds: run.status === 'completed' && completed.length ? (Math.max(...completed) - Date.parse(run.created_at)) / 1000 : null,
   observedElapsedSeconds: completed.length ? (Math.max(...completed) - Date.parse(run.created_at)) / 1000 : null,
-  criticalPath: latestLeaf ? `${latestLeaf.name} -> certification` : null,
+  criticalPath: latestLeaf ? `${latestLeaf.name}${jobs.some(job => job.name === 'certification') ? ' -> certification' : ''}` : null,
   warmColdClassification: 'Use per-job cache results; a rerun is not automatically warm.', jobs: observations };
 const output = option('--out');
 if (output) await writeFile(output, JSON.stringify(report, null, 2) + '\n');

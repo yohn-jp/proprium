@@ -1,5 +1,7 @@
 import assert from 'node:assert/strict';
-import { readFileSync } from 'node:fs';
+import { readFileSync, readdirSync } from 'node:fs';
+import path from 'node:path';
+import { fileURLToPath } from 'node:url';
 import { createRequire } from 'node:module';
 import { test } from 'node:test';
 import { REQUIRED_VERIFICATION_JOBS, VERIFICATION_LEAF_JOBS, UNIT_TARGETS, TYPECHECK_TARGETS, TEST_TYPECHECK_SCOPES, BROWSER_SHARDS, PROFILES, NATIVE_SELECTIONS } from './ci-contract.mjs';
@@ -62,4 +64,23 @@ test('all source checkouts bind exact PR head/main source without persisted cred
     assert.equal(checkout.with.ref, '${{ github.event.pull_request.head.sha || github.sha }}');
     assert.equal(checkout.with['persist-credentials'], false);
   }
+});
+
+test('every default browser spec is assigned a Chromium shard and WebKit UI is preserved', () => {
+  const directory = fileURLToPath(new URL('../tests/e2e/', import.meta.url));
+  const discover = current => readdirSync(current, { withFileTypes: true }).flatMap(entry => {
+    const full = path.join(current, entry.name);
+    return entry.isDirectory() && entry.name !== 'test-results'
+      ? discover(full)
+      : entry.isFile() && /\.spec\.tsx?$/.test(entry.name) ? [path.relative(directory, full)] : [];
+  });
+  // This pre-existing host acceptance requires a separate external lifecycle environment.
+  const hostOnly = 'core64-lifecycle.host.acceptance.spec.ts';
+  const specs = discover(directory).filter(file => file !== hostOnly);
+  assert.deepEqual(specs.toSorted(), BROWSER_SHARDS.filter(shard => shard.project === 'chromium').map(shard => shard.file).toSorted());
+  assert.deepEqual(BROWSER_SHARDS.filter(shard => shard.project === 'webkit').map(shard => shard.file), ['ui-v1.acceptance.spec.ts']);
+  const config = readFileSync(new URL('../tests/e2e/playwright.config.ts', import.meta.url), 'utf8');
+  assert.match(config, /testIgnore: "\*\*\/core64-lifecycle\.host\.acceptance\.spec\.ts"/);
+  assert.match(config, /fullyParallel: false/);
+  assert.match(config, /workers: 1/);
 });

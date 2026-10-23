@@ -51,3 +51,31 @@ test('root unit preparation builds the API dependency closure before invoking ro
     await rm(temporary, { recursive: true, force: true });
   }
 });
+
+test('speaker unit preparation builds packages whose canonical pnpm test command builds before testing', async () => {
+  const temporary = await mkdtemp(path.join(tmpdir(), 'scriptorium-ci-workspace-'));
+  const bin = path.join(temporary, 'bin');
+  const pnpm = path.join(bin, 'pnpm');
+  const record = path.join(temporary, 'pnpm-commands.jsonl');
+  await mkdir(bin);
+  await writeFile(pnpm, '#!/usr/bin/env node\nconst fs = require("node:fs");\nfs.appendFileSync(process.env.SCRIPTORIUM_CI_PNPM_RECORD, JSON.stringify(process.argv.slice(2)) + "\\n");\n');
+  await chmod(pnpm, 0o755);
+  const env = {
+    ...process.env,
+    PATH: `${bin}${path.delimiter}${process.env.PATH ?? ''}`,
+    SCRIPTORIUM_CI_PNPM_RECORD: record,
+  };
+  try {
+    const prepared = run(['prepare', 'unit', 'speaker'], env);
+    assert.equal(prepared.status, 0, prepared.stderr);
+    assert.match(prepared.stdout, /built its own output because package\.json test builds it before its tests/u);
+
+    const commands = (await readFile(record, 'utf8')).trim().split('\n').map((line) => JSON.parse(line));
+    const builtPackages = commands.map((command) => command[1]);
+    assert.ok(builtPackages.includes('@scriptorium/module-nlp'));
+    assert.ok(builtPackages.includes('@scriptorium/module-diagnostics'));
+    assert.deepEqual(commands.at(-1), ['--filter', '@scriptorium/module-speaker', 'run', 'build']);
+  } finally {
+    await rm(temporary, { recursive: true, force: true });
+  }
+});

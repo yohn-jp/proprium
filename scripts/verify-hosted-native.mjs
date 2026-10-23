@@ -115,7 +115,7 @@ try {
     acceptanceLevel: 'DISPOSABLE_NATIVE_PRODUCER',
     selection,
     sourceSha: sha,
-    dockerfileSha256,
+    dockerfileSha256: dockerfileHash,
     runtimeBaseDigest,
     buildKitDigest,
     catalog: {
