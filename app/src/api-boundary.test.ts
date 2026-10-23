@@ -42,3 +42,20 @@ test("audit browser API preserves service errors and permits 204 only for no-con
   assert.equal(await api.detachProject("project-1"), undefined);
   await assert.rejects(api.projects(), invalid);
 });
+
+test("audit browser API rejects successful actions missing their required opaque payload", async () => {
+  const snapshot = { repository: { provider: "local", repositoryId: "fixture", ownerScope: "owner", defaultBranch: "main", url: "file:///fixture" }, remoteCommit: "a".repeat(40) };
+  globalThis.fetch = async () => Response.json({ ok: true, snapshot });
+  await assert.rejects(api.action("project-1", "core.document.resolve", {}), invalid);
+  globalThis.fetch = async () => Response.json({ ok: true, snapshot, data: null });
+  const result = await api.action("project-1", "core.document.resolve", {});
+  assert.equal(result.ok && result.data, null);
+});
+
+test("audit browser API rejects jobs missing their required opaque result", async () => {
+  const job = { id: "job-1", type: "fixture", status: "done", progress: 1, error: null, createdAt: "2026-10-23T00:00:00Z", updatedAt: "2026-10-23T00:00:00Z", finishedAt: null };
+  globalThis.fetch = async () => Response.json([job]);
+  await assert.rejects(api.jobs(), invalid);
+  globalThis.fetch = async () => Response.json([{ ...job, result: null }]);
+  assert.equal((await api.jobs())[0]?.result, null);
+});
