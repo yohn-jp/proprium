@@ -48,6 +48,8 @@ Operation identities and receipts support bounded retry after a lost response or
 
 Use the repository's actual default branch. A changed or deleted binding pauses unsafe mutations until an explicit safe rebind. Remote HEAD probing detects changes; fetching and reconciliation perform the validated integration. Unchanged remote and local revision identities avoid redundant work. Observation failure exposes unknown freshness while verified local data remains readable.
 
+The active author workspace observes the remote at project entry, foreground/reconnect and before mutation or publication, with a 15-second observation cadence while actively viewed. The interval is a change-detection schedule, not a freshness guarantee; a failed probe produces unknown freshness. Remote HEAD changes trigger a validated fetch/reconcile, while unchanged HEAD and local operation refs permit safe read reuse. Foreground typing and locally verified reads are not blocked by optional background work, but actions requiring remote freshness still enforce their preconditions.
+
 Browser recovery is scoped to repository, author and origin. Journal records retain operation identities, generations and checkpoint/publication receipts. Reconciliation must complete before an editor is represented as fully recovered and writable. Quota, storage and conflict failures preserve recoverable work and surface their state.
 
 GitHub supplies confirmed shared work history. The local clone and pending checkpoints require recovery until publication. Private host usage/job history lives under `SCRIPTORIUM_USAGE_DIR` independently of Git; replacing a deployment must retain it. Secrets come from host configuration or credential brokers and never enter Git, browser assets or images.

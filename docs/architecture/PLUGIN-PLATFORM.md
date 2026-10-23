@@ -335,6 +335,21 @@ Pluginが依存してよいのは、Versioned Manifest Schema、生成されたS
 
 Host adapters must specify and verify process/cgroup authority, filesystem and network denial, the UI asset origin and CSP, large-file operation limits, registry admission and publisher identity. A deployment may claim only the guarantees exercised by its conformance and fault-injection checks. Numeric resource budgets require measurements on that host configuration.
 
+## 12. Implementation dependency and unresolved design constraints
+
+The following order is architectural dependency, not a dated implementation campaign or an instruction to implement all gates together. Each gate retains the existing host authority and must be proved against the actual producer/consumer boundary before downstream capability claims.
+
+| Prerequisite | Required boundary and proof |
+| --- | --- |
+| Protocol and identity | Freeze the namespaced plugin ID, versioned public manifest, capability/permission/error schemas and internal built-in adapter. Reject unknown ABI and missing capabilities before executing guest code. |
+| Server isolation | Prove a minimal WASI action in a separately resource-limited OS process; enforce filesystem/network denial and crash, OOM, infinite-loop and timeout containment. Fail closed if host quotas cannot be enforced. |
+| Browser isolation | Prove a cross-origin sandboxed iframe, validated MessageChannel and host-owned editor/panel fallback; guest code cannot read host DOM, cookies, IndexedDB or authenticated API. |
+| Generic Git editing | Prove snapshot-scoped file reads and scoped proposed edits through host Journal, approval, CAS, checkpoint and confirmed publication for non-Markdown files, including restart and conflicts. |
+| Immutable distribution | Compose approved external-repository artifacts by verified manifest/digest; disabled plugins do not expand Core's dependency closure. |
+| Legacy compatibility | Migrate selected trusted modules through an adapter only when equivalent behavior, data durability and lifecycle are demonstrated; unmigrated built-ins remain trusted, not reclassified as sandboxed. |
+
+Decisions that require evidence before selecting a concrete implementation: whether the deployed host can enforce child cgroups or needs isolated Pods/Jobs; canonical WIT/JSON schema and SDK generator versions; cross-origin UI asset/CSP routing; chunking and atomic reference semantics for assets above the existing operation limits; publisher identity, artifact signature and registry allowlist; explicit egress policy; and measured resource limits. Do not choose an unsafe default to close a design gap. Prefer existing runtime, registry and broker primitives over custom sandbox, database or marketplace machinery.
+
 ## 参考ソース
 
 - [Internal Contract](../../packages/contracts/src/index.ts)、[Module Runtime](../../packages/module-runtime/src/module-runtime.ts)、[Worker Supervisor](../../packages/module-runtime/src/worker-supervisor.ts)、[Profile Build](../../scripts/profile-build.mjs)、[Browser Contributions](../../app/src/contributions/ContributionHost.tsx)
