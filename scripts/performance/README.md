@@ -1,4 +1,4 @@
-# Core Wave 0 benchmark harness
+# Core benchmark harness
 
 Run from the repository root. This uses existing Core/API builds, the normal
 production desktop bundle and real IndexedDB. It never imports an optional plugin
@@ -9,8 +9,8 @@ pnpm install --frozen-lockfile
 SCRIPTORIUM_PROFILE=core pnpm build
 # On hosts needing a system browser, export SCRIPTORIUM_E2E_CHROMIUM first.
 node --test scripts/performance/*.test.mjs
-node scripts/performance/run.mjs /tmp/scriptorium-wave0-fresh
-node scripts/performance/summarize.mjs /tmp/scriptorium-wave0-fresh/results
+node scripts/performance/run.mjs /tmp/scriptorium-benchmark
+node scripts/performance/summarize.mjs /tmp/scriptorium-benchmark/results
 ```
 
 The output root must not exist. Every worker uses a fresh process, Core store and
@@ -56,7 +56,7 @@ preparing a revision-bound operation with `readSceneSnapshot`. The optional
 path's metadata scan as the current UI checkpoint. Search uses an absent needle
 to exercise the full Core scan, independently of optional search plugins.
 
-The audit's ten-file short-document control is separate from the input-size
+A ten-file short-document control is separate from the input-size
 matrix. Generate it with:
 
 ```sh
@@ -82,12 +82,12 @@ No user repository/manuscript is read; generated fixtures remain outside Git.
 - Core-issued execFile/spawn counts differ from all OS executions. Native Git
   traces include nested invocations and setup. In-memory command samples cap at
   1,000; `gitCommandLogDropped` counts omitted argument vectors, not missing process
-  counts. Older uncapped diagnostic memory results are not directly comparable.
+  counts. Capped and uncapped command logs have different memory costs and are not directly comparable.
 - Input is keydown/beforeinput-to-next-rAF, a frame-opportunity proxy rather than
   OS input-to-pixel latency. Typing waits two animation frames after each key.
   Longer delays extend the phase and allow more 350 ms autosaves between keys;
   counts are not fixed-rate human typing. Arrows follow as a burst, then undo/redo,
-  synthetic Japanese composition and paste. Native OS IME is NOT_CHECKED.
+  synthetic Japanese composition and paste. Synthetic composition does not exercise native OS IME.
 - Scene switches include automation/readiness and reset the cursor to verify the
   synthetic header. Scoped scene/editor selectors avoid whole-page accessibility
   scans across 50,000 buttons. Actions/assertions allow 60 seconds; the worker
@@ -119,59 +119,10 @@ No user repository/manuscript is read; generated fixtures remain outside Git.
 
 `summarize.mjs` emits operation CPU/I/O/RSS/Git distributions, browser input/IDB/
 HTTP/idle metrics in `summary.json` and readable `tables.md`. Raw results remain
-authoritative. [BASELINE.md](../../docs/performance/BASELINE.md) records the checked-in
-run, diagnostics, environmental gaps, all 64 candidates and four Wave 1 proposals.
-OCI, hosted GitHub traffic, crash/multi-tab loads, physical IME and 24-hour soak
-remain separate measurements when unavailable; never fill missing observations.
+authoritative. OCI, hosted GitHub traffic, crash/multi-tab loads, physical IME
+and long-duration soak require their own measured workloads; never fill missing
+observations. Keep output outside the checkout or under ignored `artifacts/`.
 
-## External baseline evidence
-
-The 128 raw measurements, traces, profiles and original verification logs live in
-[a dedicated GitHub prerelease](https://github.com/yohn-jp/scriptorium/releases/tag/perf-wave0-2026-10-20),
-as `scriptorium-wave0-2026-10-20.tar`. The archive contains the original `raw/*.gz`
-bytes. It is a benchmark evidence release, separate from product versions and OCI
-publication. Git retains the measurement code, baseline, candidate map, summary,
-tables and [Manifest](../../docs/performance/results/2026-10-20/INDEX.json).
-Do not replace published evidence; use a new release/Manifest for a new campaign.
-
-Retrieve and verify the archive **before extracting**, then verify every compressed
-and uncompressed artifact against the Git Manifest (Node 24, GNU tar, GitHub CLI):
-
-```sh
-index=docs/performance/results/2026-10-20/INDEX.json
-evidence=$(mktemp -d /tmp/scriptorium-evidence.XXXXXX)
-gh release download perf-wave0-2026-10-20 --repo yohn-jp/scriptorium \
-  --pattern scriptorium-wave0-2026-10-20.tar --dir "$evidence"
-node scripts/performance/artifacts.mjs verify-archive "$index" "$evidence"
-tar -xf "$evidence/scriptorium-wave0-2026-10-20.tar" -C "$evidence"
-node scripts/performance/artifacts.mjs verify "$index" "$evidence"
-```
-
-To reproduce compression, archive generation and the Manifest without rerunning
-measurements, recover the raw inputs from the verified archive. Alternatively use
-the original benchmark `results` directory, including its named diagnostics and
-verification logs. `summary.json` and `tables.md` are not raw archive members.
-
-```sh
-mkdir "$evidence/source"
-for artifact in "$evidence"/raw/*.gz; do
-  name=$(basename "$artifact" .gz)
-  gzip -dc "$artifact" > "$evidence/source/$name"
-done
-node scripts/performance/artifacts.mjs pack "$index" "$evidence/source" \
-  "$evidence/repacked" \
-  https://github.com/yohn-jp/scriptorium/releases/download/perf-wave0-2026-10-20/scriptorium-wave0-2026-10-20.tar
-cmp "$index" "$evidence/repacked/INDEX.json"
-cmp "$evidence/scriptorium-wave0-2026-10-20.tar" \
-  "$evidence/repacked/scriptorium-wave0-2026-10-20.tar"
-node scripts/performance/artifacts.mjs verify "$index" "$evidence/repacked"
-```
-
-`pack` requires a new output directory and uses the Manifest as the exact inventory;
-it refuses changed source data or compression hashes. It uses gzip level 6 with
-zero mtime and OS=255, plus sorted ustar members with fixed ownership, modes and
-timestamps. The recorded Node/toolchain in `environment.json` reproduces the
-baseline; a different zlib implementation may fail the byte-identity check and
-must not silently replace published hashes. Diagnostic flags and JSONL validity
-metadata are preserved. New measurement campaigns need a new reviewed inventory,
-not this baseline's hashes. No upload occurs in the packaging command.
+The [performance guide](../../docs/performance/README.md) describes comparison
+requirements. Immutable runtime/artifact identities required by specialized
+probes are retained under `evidence/performance/`.

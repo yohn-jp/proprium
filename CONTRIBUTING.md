@@ -1,16 +1,22 @@
 # Contributing to Scriptorium
 
-Scriptorium is a Git-backed writing application. Consult [Full Migration Architecture](docs/architecture/FULL-MIGRATION.md), the [fixed P00–P13 plan](docs/migration/FULL-MIGRATION-PLAN.md), and the applicable [Core Architecture](docs/architecture/CORE.md) before proposing a change.
+Start with the [documentation index](docs/README.md), [Core architecture](docs/architecture/CORE.md) and the contract for the area being changed.
 
-- Open a scoped Issue and identify the acceptance criteria.
-- Work from `main` on an issue-scoped branch (`feat/<issue>-<slug>`, `fix/<issue>-<slug>`, etc.).
-- Keep changes within the accepted Issue; use a PR instead of writing directly to `main`.
-- Epic #7 explicitly authorizes Sol alone to integrate and push directly to `main`; its workers commit only in isolated branches/worktrees.
-- Describe contract changes, dependencies, and validation actually executed.
-- Follow the current organization agent/governance contract in `yohn-jp/.github`.
-- Do not introduce optional NLP or embedded LLM dependencies into the minimal Core.
-- Do not commit work repositories, manuscripts, tokens, caches, embeddings, or model artifacts.
+- Agree on a scoped problem and acceptance criteria before implementation.
+- Work on an isolated branch and submit a pull request; do not write directly to `main`.
+- Preserve Core's dependency boundary and shared authorization, mutation and recovery contracts.
+- Describe behavior changes, relevant dependencies and validation actually executed.
+- Keep work repositories, manuscripts, credentials, caches, embeddings and model artifacts out of source control.
+- Use the applicable organization agent governance for agent-assisted changes.
 
-Install with `pnpm install --frozen-lockfile`; run `pnpm typecheck`, `pnpm test`, `pnpm build`, and `pnpm audit:core`. Follow the browser and image checks under `docs/verification` for changes affecting the user journey or packaging. Issue #29 authorizes repository verification CI and exact-source release gates after initial Core recovery. Verification never publishes or deploys. Only the gated release workflow may publish; do not synchronize organization templates or change production resources.
+Run `pnpm install --frozen-lockfile`, `pnpm typecheck`, `pnpm test`, `pnpm build` and `pnpm audit:core`. Run test-source/safety type checks and the browser, integration or image checks appropriate to the changed paths; see [verification](docs/verification/README.md). Verification does not publish or deploy. Publication uses the [gated release workflow](docs/verification/OCI-RELEASE.md).
+
+## Documentation
+
+Write documentation as a maintained reference for users, contributors or operators. Describe supported behavior, ownership, invariants and reproducible procedures. Identify design proposals by their intended contract and keep them separate from supported runtime behavior.
+
+Do not put dates, dated filenames, inspected branch/commit snapshots, Issue/PR/Epic numbers, waves, implementation phases, campaign instructions, progress checklists or execution results in documentation. Put work tracking in issues and pull requests, and machine results in check artifacts. A required API identifier, configuration name, dependency version or artifact-digest placeholder belongs in the procedure that uses it.
+
+Update references when moving or removing documents. Check relative links and verify commands against the repository entry points. Preserve licensing/provenance requirements and immutable verification inputs without treating historical audit material as product instructions.
 
 For security concerns, use [SECURITY.md](SECURITY.md).

@@ -92,7 +92,7 @@ async function bindRuntime() {
 
 async function bindFrozenRuntime(runtimeRoot, runtimeCommit) {
   const manifestPath = resolve(process.env.SCRIPTORIUM_PERF_RUNTIME_MANIFEST ??
-    join(runtimeRoot, 'docs/performance/results/core64-resize/runtime-manifest.json'));
+    join(sourceRoot, 'evidence/performance/resize-runtime-manifest.json'));
   if (runtimeCommit !== expectedRuntimeCommit) {
     throw new Error(`Expected frozen C09 runtime ${expectedRuntimeCommit}, found ${runtimeCommit} in ${runtimeRoot}`);
   }
@@ -486,7 +486,7 @@ async function main() {
 
   const runRoot = await mkdtemp(join(tmpdir(), 'scriptorium-core64-payload-'));
   const datasetRoot = join(runRoot, 'dataset');
-  const outputDirectory = join(sourceRoot, 'docs/performance/results/core64-payload');
+  const outputDirectory = join(sourceRoot, 'artifacts/performance/payload');
   await mkdir(outputDirectory, { recursive: true });
   const runId = new Date().toISOString().replaceAll(':', '-').replaceAll('.', '-') + `-${process.pid}`;
   const outputFile = join(outputDirectory, `payload-${runId}.json`);

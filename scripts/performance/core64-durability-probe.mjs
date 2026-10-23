@@ -5,7 +5,7 @@ import { copyFile, lstat, mkdir, mkdtemp, readFile, realpath, rm, symlink } from
 import { createRequire } from 'node:module';
 import os from 'node:os';
 import { join, relative, resolve } from 'node:path';
-import { pathToFileURL } from 'node:url';
+import { fileURLToPath, pathToFileURL } from 'node:url';
 import { performance } from 'node:perf_hooks';
 import { distribution, save } from './common.mjs';
 import { installBrowserProbes } from './browser-probes.mjs';
@@ -38,7 +38,7 @@ if (!fixtureRootArg || !scratchParentArg || !outputArg || !Number.isInteger(navi
 const datasetFile = join(fixtureRoot, 'dataset.json');
 const origin = join(fixtureRoot, 'origin.git');
 const serverScript = join(runtimeRoot, 'scripts/performance/server.mjs');
-const runtimeManifestPath = resolve(process.env.SCRIPTORIUM_C64_RUNTIME_MANIFEST ?? join(runtimeRoot, 'docs/performance/results/core64-resize/runtime-manifest.json'));
+const runtimeManifestPath = resolve(process.env.SCRIPTORIUM_C64_RUNTIME_MANIFEST ?? fileURLToPath(new URL('../../evidence/performance/resize-runtime-manifest.json', import.meta.url)));
 for (const required of [
   join(runtimeRoot, 'package.json'),
   join(runtimeRoot, 'app/dist/index.html'),

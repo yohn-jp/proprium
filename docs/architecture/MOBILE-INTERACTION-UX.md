@@ -1,6 +1,6 @@
 # Mobile writing interactions — Scriptorium
 
-**Scope:** Issue #27, the production Ionic React Mobile frontend only. Desktop Studio and shared Git/recovery contracts are unchanged. Mobile is chosen by the explicit `/mobile/` route, **not** window width.
+The Ionic React mobile shell is selected by the explicit `/mobile/` route. Desktop and mobile share Git, approval and recovery services.
 
 ## Intended moment
 
@@ -27,4 +27,4 @@ A writer resumes a recoverable Japanese draft, checks which scene comes next, in
 
 Source-level implementation is in `MobileShell.tsx`, `mobile.css` and `mobileKeyboard.ts`. Unit checks cover keyboard-occlusion predicates. Browser acceptance additions cover a real draft across sheet open/tab switch/dismiss, and scene selection through the sheet. A composition-denial scenario checks that the modal does not open while its preflight rejects the transition.
 
-**Not certified:** Physical iPhone/Android keyboard geometry, long-press/haptics, and native gesture feel are not proved by source review or synthetic browser tests. The existing `pnpm` build, Core tests, browser/E2E and OCI checks remain required before release; no green status is inferred from this document.
+Device acceptance must exercise physical keyboards, IME, long-press, haptics and native gestures as appropriate. Browser automation proves its named browser and viewport cases; source review does not establish physical-device behavior. See [verification](../verification/README.md).

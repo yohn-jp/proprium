@@ -142,7 +142,7 @@ async function fileIdentity(root, path) {
 }
 
 async function inspectUiArtifacts(staticDir, profile, sourceSha) {
-  const archivePath = resolve('docs/performance/results/2026-10-21/core64-g5/artifact-hashes.json');
+  const archivePath = resolve('evidence/performance/static-artifact-hashes.json');
   const archivedRows = JSON.parse(await readFile(archivePath, 'utf8'));
   const expectedRows = archivedRows.filter((row) => row.source === 'baseline' && row.sourceSha === sourceSha && row.profile === profile);
   const mustMatchG5Baseline = sourceSha === '9f801061d1cc40c4719988b5e1aef17d3ff60e74';
