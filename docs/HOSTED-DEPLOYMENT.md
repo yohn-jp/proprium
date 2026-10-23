@@ -2,8 +2,6 @@
 
 This guide describes how to build the standalone Core/Full profiles and the hosted Runtime Base, Build Kit, and selected composition using the existing Scriptorium build entry points. Hosted deployment consumes the canonical `scriptorium-build/v1` and `scriptorium-platform/v1` contracts. Praetorium remains the owner of instance lifecycle, Gateway/Instance Access, GitHub App credentials, and the BuildKit worker.
 
-Hosted S01–S05 source is committed at `008d5c429ec279a424cafd5b8c4cbee70a613b8e`. Runtime Base, Build Kit, Core, Story and MCP candidates were built from that clean source and published to the owned disposable registry; all three compositions passed Praetorium production unsigned artifact inspection and startup smoke. See the [campaign evidence](verification/HOSTED-CAMPAIGN-2026-10-17.md) and [immutable artifact record](verification/HOSTED-ARTIFACTS-008d5c4.json). Signed source admission and real GitHub App/Hosted browser/lifecycle acceptance remain unverified. The blank build record at the end is a reusable operator template, not current results.
-
 ## Core and Full standalone images
 
 Use Node 24 and the pnpm version declared by the Scriptorium root manifest. From a clean Scriptorium checkout:
@@ -71,11 +69,11 @@ node scripts/hosted-build.mjs catalog \
 
 Catalog generation requires `producerRevision` to equal `git rev-parse HEAD` and a clean worktree. Keep generated files outside the checkout. The catalog records the source, recipe, and lock digests, supported platform, shipped module versions/artifact digests, dependency requirements, resource data, Runtime Base digest, and Build Kit digest.
 
-Resource profiles are allocation policy, not measured workload minima: `small` is 500m CPU, 512 MiB memory, and 1 GiB ephemeral storage; `balanced` is 2 CPU, 4 GiB memory, and 8 GiB ephemeral storage; `large` is 4 CPU, 8 GiB memory, and 16 GiB ephemeral storage. The base runtime allocation is 250m CPU, 256 MiB memory, and 512 MiB ephemeral storage. Modules with a shipped `workerEntry` share one `worker-runtime` allocation (1 CPU, 4 GiB memory, 512 MiB ephemeral storage); the Semantic module adds one shared `semantic-models` allocation (1 CPU, 2 GiB memory, 4 GiB ephemeral storage). The resolver charges each shared group once for the selected dependency closure. The current full module closure therefore requires 2.25 CPU, 6,400 MiB memory, and 5,120 MiB ephemeral storage and fits the `large` profile. `workerLimits` records the existing runtime-wide WorkerSupervisor defaults and ceilings: 8 concurrent jobs, 8 queued one-shot jobs, 8 worker services, 1 concurrent job per service, and 4 queued jobs per service. These values describe allocation and admission policy; they do not claim model-workload measurements or per-module worker pools.
+Resource profiles are allocation policy, not measured workload minima: `small` is 500m CPU, 512 MiB memory, and 1 GiB ephemeral storage; `balanced` is 2 CPU, 4 GiB memory, and 8 GiB ephemeral storage; `large` is 4 CPU, 8 GiB memory, and 16 GiB ephemeral storage. The base runtime allocation is 250m CPU, 256 MiB memory, and 512 MiB ephemeral storage. Modules with a shipped `workerEntry` share one `worker-runtime` allocation (1 CPU, 4 GiB memory, 512 MiB ephemeral storage); the Semantic module adds one shared `semantic-models` allocation (1 CPU, 2 GiB memory, 4 GiB ephemeral storage). The resolver charges each shared group once for the selected dependency closure. The full module closure therefore requires 2.25 CPU, 6,400 MiB memory, and 5,120 MiB ephemeral storage and fits the `large` profile. `workerLimits` records the existing runtime-wide WorkerSupervisor defaults and ceilings: 8 concurrent jobs, 8 queued one-shot jobs, 8 worker services, 1 concurrent job per service, and 4 queued jobs per service. These values describe allocation and admission policy; they do not claim model-workload measurements or per-module worker pools.
 
 ## Selected hosted composition
 
-Create a canonical `scriptorium-build/v1` BuildInput from the verified catalog and the requested modules using Praetorium's existing resolver and canonical BuildInput encoder. Its fields are exactly `contractVersion`, `producerRevision`, `runtimeBaseDigest`, `buildKitDigest`, `recipeDigest`, `sourceDigest`, `lockDigest`, `requestedModules`, `resolvedModules`, `platform`, and `options`. Set `platform` to `linux/amd64` and `options` to `{}` for the current producer. Every resolved module includes its catalog `id`, `version`, and `artifactDigest`. Base64url-encode the canonical JSON bytes into `INPUT_BASE64URL`; the Build Kit repeats the source, recipe, lock, resolver, and artifact checks before composing an image.
+Create a canonical `scriptorium-build/v1` BuildInput from the verified catalog and the requested modules using Praetorium's existing resolver and canonical BuildInput encoder. Its fields are exactly `contractVersion`, `producerRevision`, `runtimeBaseDigest`, `buildKitDigest`, `recipeDigest`, `sourceDigest`, `lockDigest`, `requestedModules`, `resolvedModules`, `platform`, and `options`. Set `platform` to `linux/amd64` and `options` to `{}` for this producer. Every resolved module includes its catalog `id`, `version`, and `artifactDigest`. Base64url-encode the canonical JSON bytes into `INPUT_BASE64URL`; the Build Kit repeats the source, recipe, lock, resolver, and artifact checks before composing an image.
 
 Praetorium's Build Worker runs the following BuildKit frontend command. Keep its `source` bound to the Build Kit digest, and use a unique candidate tag derived from the build key and attempt identity:
 
@@ -96,18 +94,6 @@ buildctl \
 The BuildKit metadata file's `containerimage.digest` is the candidate image digest. The composed image contains the composition manifest and producer report under `/usr/share/scriptorium`; admission must inspect the pushed image bytes and verify its actual server/browser package closure, native dependencies, and startup smoke before accepting it. The recipe's smoke runs without network access or author credentials. Neither the author's repository nor its content, a user grant, a GitHub credential, or an App key is a build input or shared cache entry.
 
 Core and Full remain standalone presets. Hosted selections use the same shipped module manifests and `resolveBuildCatalogSelection` resolver; dependency modules are included automatically, incompatible or unknown selections fail. The resulting image stores runtime metadata, the composition manifest, the build catalog, and the package lock under `/usr/share/scriptorium`, with the selected runtime under `/app`.
-
-### Historical local deploy-package verification
-
-The following package-only observation predates the committed Hosted implementation and actual registry artifacts linked above. These historical S01 package outputs were prepared in the isolated `hosted/build` worktree based on `3f7b174ef6667b004c21e24a9ed89b8329d04c04`. I reran the deployed-profile verifier against Core, a `story`-only selection, and an `mcp`-only selection. Core resolved 53 production packages, story resolved 58, and MCP resolved 140; each deployed pnpm package-root set exactly matched its production dependency closure. The story-only Vite manifest contained only `../modules/story/dist/browser.js`; MCP had no browser dynamic entries. Recheck these outputs with:
-
-```sh
-node scripts/profile-build.mjs --profile core --verify-deploy /tmp/scriptorium-s01-current-core
-node scripts/profile-build.mjs --modules-json '["story"]' --verify-deploy /tmp/scriptorium-s01-current-story
-node scripts/profile-build.mjs --modules-json '["mcp"]' --verify-deploy /tmp/scriptorium-s01-current-mcp
-```
-
-This validates local deployed package trees from that still-dirty S01 worktree. It is not an OCI image build, registry inspection, or Hosted runtime acceptance, and it does not provide a publishable image digest.
 
 ## Hosted runtime files and credentials
 
@@ -131,25 +117,6 @@ Writing follows the existing Scriptorium proposal transaction: the browser keeps
 
 GitHub is the durable shared project history. The composition declares readable/writable persistence versions for Core's Git operations v1, proposal bindings/completions v2, publications v1, and browser recovery IndexedDB v3, plus the formats declared by selected modules. Core's operation, proposal, checkpoint, and publication records are committed under `meta/scriptorium`; browser drafts and replay state remain in the versioned browser recovery journal and are reconciled on the same repository origin after restart or redeploy. A successful checkpoint alone does not mean the change is on GitHub: publish must report a confirmed result. Pending checkpoints or an unknown push result must remain available for reconciliation and block destructive replacement. The runtime persistence scan reports the remote Git formats it has verified; it does not claim to inspect browser IndexedDB.
 
-## Build and deployment record template
+## Producer admission
 
-Use [the attestation command](hosted-producer-attestation.md) to generate and verify the canonical Sigstore bundle from actual immutable inputs. Its statement-only mode does not sign or admit a release.
-
-Populate this reusable record from the final clean source commit and actual registry/image inspections. Leave a value empty until the corresponding operation has been performed; a catalog, test fixture, local startup smoke, or command example does not establish an OCI digest or hosted acceptance.
-
-```text
-SCRIPTORIUM_PRODUCER_REVISION=
-SCRIPTORIUM_SOURCE_TREE_CLEAN=
-SCRIPTORIUM_RUNTIME_BASE_REF=
-SCRIPTORIUM_RUNTIME_BASE_DIGEST=
-SCRIPTORIUM_BUILD_KIT_REF=
-SCRIPTORIUM_BUILD_KIT_DIGEST=
-SCRIPTORIUM_BUILD_INPUT_KEY=
-SCRIPTORIUM_COMPOSITION_REF=
-SCRIPTORIUM_COMPOSITION_DIGEST=
-SCRIPTORIUM_COMPOSITION_MANIFEST_DIGEST=
-SCRIPTORIUM_REGISTRY_BYTES_INSPECTED=
-SCRIPTORIUM_HOSTED_BROWSER_AND_GITHUB_ACCEPTANCE=
-```
-
-This procedure does not apply production infrastructure or publish a release. Use an explicitly owned disposable registry and environment for end-to-end verification, and record only results from the exact source and artifact digests tested.
+Use [producer attestation](hosted-producer-attestation.md) to generate and verify the canonical Sigstore bundle from immutable inputs. Statement generation alone does not sign or admit a release. Admission binds the producer revision, source/recipe/lock digests, Runtime Base and Build Kit digests, composition key and pushed composition bytes. Test browser, GitHub and lifecycle behavior against the admitted artifact in an owned verification environment.

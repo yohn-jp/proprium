@@ -1,12 +1,10 @@
 # Scriptorium
 
-A modular Git-backed writing workspace migrated from Arcadia Loom. Git-controlled YAML and Markdown remain the source of truth. The Core profile runs without optional analysis or model dependencies; the full profile composes nine independent add-ons.
+A modular Git-backed writing workspace. Git-controlled YAML and Markdown remain the source of truth. The Core profile runs without optional analysis or model dependencies; the full profile composes nine independent add-ons.
 
 Connect a GitHub work repository, browse volumes, chapters and scenes, edit Markdown, save with revision checks, inspect Git commits, and explicitly synchronize with GitHub. The editor keeps unsaved drafts in this browser and offers Japanese vertical preview. One server instance serves one trusted owner; all registered projects belong to that owner.
 
-## Future Plugin Platform (architecture only)
-
-Scriptorium's accepted product direction is a **Git-native writing application platform composed through plugins**. The [Plugin Platform Architecture](docs/architecture/PLUGIN-PLATFORM.md) defines the public SDK/protocol, capability grants, isolated WASI/server and sandboxed browser runtimes, immutable external packaging, failure containment, and migration gates. **The existing trusted built-in module runtime is not yet a sandbox for untrusted third-party plugins; this design is not implemented by the current images.**
+[Documentation](docs/README.md) covers authoring, architecture, deployment and verification. The [external Plugin Platform proposal](docs/architecture/PLUGIN-PLATFORM.md) specifies a separate isolation and distribution design; built-in modules execute as trusted application code.
 
 ## Run locally
 
@@ -59,7 +57,7 @@ bearer request can trigger the existing authorized Wake path and returns
 `503 Retry-After` until the same stable URL becomes ready. The caller must
 retry its request; no MCP request body is queued or replayed by the platform.
 This service consumes the reusable [Praetorium service MCP
-contract](https://github.com/yohn-jp/praetorium/blob/feat/generic-mcp-oauth-wake-20261021/docs/architecture/SERVICE-MCP.md)
+contract](https://github.com/yohn-jp/praetorium/blob/main/docs/architecture/SERVICE-MCP.md)
 rather than implementing an application-specific OAuth issuer.
 
 ## Single OCI image
@@ -84,12 +82,6 @@ pnpm build
 pnpm audit:core
 ```
 
-For browser verification, install Chromium with `pnpm exec playwright install chromium` and run `pnpm test:e2e`. The full migration acceptance report is [docs/verification/FINAL-MIGRATION.md](docs/verification/FINAL-MIGRATION.md); [docs/verification/ACCEPTANCE.md](docs/verification/ACCEPTANCE.md) retains the historical Core evidence. CI and GitHub Actions are intentionally outside this initial recovery; local results do not imply remote CI success.
+See [verification](docs/verification/README.md) for browser, OCI, MCP, model, recovery and Hosted producer checks. `pnpm verify` runs the local composed checks; inputs and separate integration gates are documented there. Repository CI certifies the exact source before the [gated release workflow](docs/verification/OCI-RELEASE.md) may publish.
 
-`pnpm verify` runs the frozen install, type and test checks, then builds and checks both Core and full profiles in Chromium and OCI. It also exercises both MCP transports, the NLP/Diagnostics persistence round trip, and the composed legacy migration through approval, publication, recloning, and module reactivation. It requires an OCI engine, Chromium, and the tokenizer artifacts used by that acceptance. The separate real-provider, model-lifecycle, GitHub, and container-recovery gates have reproduction instructions under `docs/verification`; the local command alone does not certify those gates.
-
-The [Core Performance Audit](docs/architecture/CORE-PERFORMANCE-AUDIT.md) inventories 64 source-grounded Core optimization candidates (23 P0 / 31 P1 / 10 P2), with measurement gates and future extension boundaries. These are investigation priorities, not measured regressions or implemented changes.
-
-The [Full Migration Architecture](docs/architecture/FULL-MIGRATION.md) and [fixed migration plan](docs/migration/FULL-MIGRATION-PLAN.md) define Epic #7. [Core Architecture](docs/architecture/CORE.md) remains the baseline where not superseded. Core does not import individual add-ons. Migration implementation and acceptance status are tracked in the plan's feature/data ledgers; older Core acceptance records describe their recorded commits.
-
-See [CONTRIBUTING.md](CONTRIBUTING.md), [SECURITY.md](SECURITY.md), and the [MIT license](LICENSE). [Epic #7](https://github.com/yohn-jp/scriptorium/issues/7) tracks the full migration; Epic #1 is the initial Core recovery history.
+See [Core architecture](docs/architecture/CORE.md), [Modules](docs/architecture/MODULES.md) and [Modular Workspace](docs/architecture/MODULAR-WORKSPACE.md) for ownership and safety contracts. Read [CONTRIBUTING.md](CONTRIBUTING.md), [SECURITY.md](SECURITY.md) and [LICENSE](LICENSE) before contributing or distributing.

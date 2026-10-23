@@ -23,3 +23,5 @@ playwright-report/
 
 /profiles/*/generated/
 /profiles/generated/
+
+/artifacts/

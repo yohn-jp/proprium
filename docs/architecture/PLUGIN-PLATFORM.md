@@ -1,9 +1,6 @@
-# Scriptorium — Gitネイティブなライティングアプリケーション基盤 / Plugin Platform Architecture
+# Plugin platform proposal
 
-> **Status:** 2026-10-20 オーナーの最新方針に基づく**目標設計**。本書は設計提案の固定と実装境界の明確化であり、SDK公開・第三者コードの隔離・Plugin導入の実装済み証明ではない。
-> **Review base:** [main@35902764b9ceb5380e333ab707560930efc718fa](https://github.com/yohn-jp/scriptorium/tree/35902764b9ceb5380e333ab707560930efc718fa)（2026-10-20）。
-> **Authority:** 最新のオーナー指示 > 受入済み製品契約 > 実装の事実。既存の[Core](CORE.md)、[Modular Workspace](MODULAR-WORKSPACE.md)、[Full Migration](FULL-MIGRATION.md)、[性能監査](CORE-PERFORMANCE-AUDIT.md)を参照。本書の**外部Plugin公開・隔離に関する新しい合意**は、旧文書の「信頼された内蔵モジュールのみ」「第三者実行は対象外」という**過去のスコープ制限を将来設計について更新**する。既存P00–P13の合格記録や稼働事実は上書きしない。
-> **Scope:** Coreに対する一般的な拡張契約、公開SDK、実行分離、安全性、リソース、配布、移行順序。個別Plugin（Excalidraw、検索、NLP等）の機能実装は対象外。
+This proposal specifies external plugin protocols, packaging and enforced isolation. It does not describe the trusted built-in module runtime or promise those isolation guarantees for its packages. See [Modules](MODULES.md) for the supported runtime contract.
 
 ## 1. 製品の定義と品質目標
 
@@ -22,19 +19,11 @@
 
 **保証範囲を正確にする:** Plugin専用のOS分離とリソース制御が動作する範囲で、Plugin側の通常のクラッシュ/OOM/CPU暴走がCoreを終了させないことを目標とする。カーネル障害、ホスト全体のリソース枯渇、ブラウザ自体のクラッシュ、未知のSandbox脆弱性まで「絶対に落ちない」と主張しない。境界の成立は実機で故障注入して証明する。
 
-## 2. 現在の実装と、公開Plugin Platformとのギャップ
+## 2. Trust boundary
 
-| 現行の事実（上記review base） | 残すべき資産 | 新たに必要な境界 |
-| --- | --- | --- |
-| [contracts](../../packages/contracts/src/index.ts) の \`ModuleId\` は9件の固定Union、\`CONTRACT_VERSION=1\` | Snapshot、ChangeOperation、Capability、UiContribution、ActionResult | 外部配布可能な名前空間Plugin ID・互換性交渉・公開SDK |
-| [Module Runtime](../../packages/module-runtime/src/module-runtime.ts) はメタデータ解決、遅延ロード、Dependency/Capability検証、disable/drainを実装 | 既存の単一Host/RegistryとLifecycle | **信頼されないPluginのサーバーコードをCore Nodeプロセスでimportしない** |
-| [Worker Supervisor](../../packages/module-runtime/src/worker-supervisor.ts) は\`fork\`、時間制限、要求/応答最大8MiB、キャンセル、限定環境変数を実装 | 実行数制限・ジョブID・取消・Worker寿命 | 専用UID/FS/Network/cgroup等の**OS強制隔離**。現行のchild processと環境変数フィルタだけをSecurity Sandboxと呼ばない |
-| [Browser Module](../../app/src/contributions/ContributionHost.tsx) は\`import()\`して同一ページのHTMLElementへ\`mount()\` | Lazy mount、AbortSignal、Snapshotに束縛したHost action | 外部HTML/JSは**別originのsandboxed iframe**を通し、DOM・Cookie・Main Threadの直接共有を禁止 |
-| [profile-build](../../scripts/profile-build.mjs) は固定Module一覧をbuild-timeで選択 | Core-only Closure、Digestを前提としたProducerとの合成 | 外部リポジトリ産PluginのArtifact/Manifest/依存解決・署名・封入 |
-| [CoreStore](../../packages/core/src/index.ts) は汎用Path検証、SnapshotReaderのUTF-8/Base64、Git mutation/receiptを実装 | Git authority、スナップショット、read-set/CAS、Writer排他 | 文書種別とEditor binding、バイナリ/大容量Asset、拡張の保存操作を区別する汎用File API |
-| [Workspace](../../app/src/workspace/Workspace.tsx) は可変Layout・Panel Catalog・Presetsを実装 | ホスト所有のPanel identity、safe layout persistence | 外部PluginのEditor/Viewer/Command/Panel登録をmetadataのみで受理。失敗時の既定画面を維持 |
+Built-in modules are trusted application code. Public contracts, lifecycle supervision and lazy browser imports constrain supported integration, but do not isolate arbitrary JavaScript from the host process, DOM or credentials.
 
-**既存の内蔵モジュールは「信頼されたコード」であり、厳密に隔離されているとは言わない。** 新しい保証を導入しても、既存の9モジュールに遡ってその保証を宣言しない。移行期は\`legacy-trusted\`として別表示し、第三者/不審コードをそこへ混ぜない。
+External plugins require versioned namespaced identities, metadata-only registration, capability grants, immutable distribution, OS-enforced server isolation and a separate browser origin. Snapshot identity, operation approval, Git authority and browser recovery remain host-owned.
 
 ## 3. 最小の信頼境界と全体構成
 
@@ -69,20 +58,20 @@ flowchart TB
 
 **Two execution domains:**
 
-- **Browser UI:** 別originのsandboxed iframe内でPluginの画面コードを動かす。親のReact Tree、DOM、Cookie、IndexedDB、同一origin APIにアクセスさせず、Hostが検証した\`MessageChannel\`のみ提供する。Core既定Editorはホスト側に存在し、Plugin Editorが停止しても使用できる。
+- **Browser UI:** 別originのsandboxed iframe内でPluginの画面コードを動かす。親のReact Tree、DOM、Cookie、IndexedDB、同一origin APIにアクセスさせず、Hostが検証した`MessageChannel`のみ提供する。Core既定Editorはホスト側に存在し、Plugin Editorが停止しても使用できる。
 - **Server Compute:** WASI Componentを**Coreとは独立したOSプロセス**内のWasmtime等で実行し、IPC越しにHost Capabilityを使う。WASMの線形メモリ分離**だけ**でCPU/OOM/Filesystem/Kernel限界を証明したことにはならない。OS側の制限と計測が必要。
 
 WASM Component Model/WITは異言語間IFとして第一候補、RustはPluginの作成言語の一つ。公開ProtocolのJSON/WIT表現を二つの独立正本にしない（§4）。
 
-**原則として1 Pluginにつき必要時にだけSandboxを起動する。** 無効・アイドルに対して固定のContainer、WASM Runtime、WebSocket、OS Workerを用意しない。GPU/長時間学習/外部推論向けの分離コンピュートはPlugin Hostの将来Transportであり、Core必須要件ではない。
+**原則として1 Pluginにつき必要時にだけSandboxを起動する。** 無効・アイドルに対して固定のContainer、WASM Runtime、WebSocket、OS Workerを用意しない。GPU/長時間学習/外部推論向けの分離コンピュートはPlugin Hostの追加Transportであり、Core必須要件ではない。
 
 ## 4. Public Plugin Protocol v1 — 契約面
 
 ### 4.1 パッケージとManifest
 
-公開Pluginの識別子は **\`publisher.plugin-name\`** のような名前空間付きStable IDとし、内部の9件固定\`ModuleId\`とは区別する。表示名・Gitリポジトリ名・作業中のプロジェクトパスをコード実行IDに使用しない。
+公開Pluginの識別子は **`publisher.plugin-name`** のような名前空間付きStable IDとし、内部の9件固定`ModuleId`とは区別する。表示名・Gitリポジトリ名・作業中のプロジェクトパスをコード実行IDに使用しない。
 
-**提案するManifestの論理構造（実装済みSchemaではない）:**
+**提案するManifestの論理構造（提案Schema）:**
 
 ~~~json
 {
@@ -103,9 +92,9 @@ WASM Component Model/WITは異言語間IFとして第一候補、RustはPlugin�
 }
 ~~~
 
-ここでの\`entrypoints\`は**発行済みPlugin Artifact内部の検証済み相対パス**であり、実行時URL/npm specifier、外部network fetch、ホスト絶対パスではない。実際の\`schema\`、SemVer要件、Permission語彙、Limits値は実装前にMachine-readable schemaで固定する。UI-only/compute-onlyも可。例示Pluginは実際に存在しない。
+ここでの`entrypoints`は**発行済みPlugin Artifact内部の検証済み相対パス**であり、実行時URL/npm specifier、外部network fetch、ホスト絶対パスではない。実際の`schema`、SemVer要件、Permission語彙、Limits値は実装前にMachine-readable schemaで固定する。UI-only/compute-onlyも可。例示Pluginは実際に存在しない。
 
-**採用:** パブリックSDKのIDは開放するが、実行権限はインストール済みArtifactのIdentity、Host Policy、認証PrincipalとCapability Grantの**積集合**で決定する。Manifestの自己申告で権限を得られない。未認可のPluginは\`not-installed\`または\`disabled\`となる。
+**採用:** パブリックSDKのIDは開放するが、実行権限はインストール済みArtifactのIdentity、Host Policy、認証PrincipalとCapability Grantの**積集合**で決定する。Manifestの自己申告で権限を得られない。未認可のPluginは`not-installed`または`disabled`となる。
 
 ### 4.2 Versioning・型の正本
 
@@ -113,24 +102,24 @@ WASM Component Model/WITは異言語間IFとして第一候補、RustはPlugin�
 - JSON Schemaなどの**機械検証可能な単一の論理Contract**を正本にして、TypeScript SDK型とランタイムValidator、必要なWIT ABI bindingを生成・整合性検証する。WITはWASM Guest↔Broker Adapterの表現であり、権限の別正本ではない。
 - ホストはインストール/起動時に互換性を検証し、サポートしない必須Capabilityは起動拒否。Optional Capabilityは宣言したフォールバックのみ許す。
 - Minor/patchの後方互換契約は公開、破壊的変更は新major/並行対応期間を設ける。未知フィールドの扱いとSchema MigrationはABIごとに固定し、危険な黙認/型キャストはしない。
-- スナップショット・ChangeOperation等の既存契約は**アプリ内\`CONTRACT_VERSION=1\`をそのまま公開Plugin ABIとみなさない**。Adapterで変換し、公開範囲だけを安定化させる。
+- スナップショット・ChangeOperation等の既存契約は**アプリ内`CONTRACT_VERSION=1`をそのまま公開Plugin ABIとみなさない**。Adapterで変換し、公開範囲だけを安定化させる。
 
 ### 4.3 Host Capability API（許可リスト）
 
 | Versioned capability family | 最小操作 | 権限・実装境界 |
 | --- | --- | --- |
-| \`workspace.snapshot.read\` | \`list(prefix,cursor,limit)\`,\`stat(path)\`,\`read(path,revision,range)\` | 認可済みRepository+Snapshotに固定、Path/Symlink検証、Bytes/Files上限。Private Git Credentialは渡さない |
-| \`workspace.change.propose\` | \`propose(changeSet,readSet,revision,operationId)\` | **提案まで**。Authorの明示的な受入・Browser Journal・Checkpoint/PublishはHost-owned。別Plugin権限では代行不可 |
-| \`workspace.events.subscribe\` | \`subscribe(types,scope)\`,\`unsubscribe\` | advisoryな更新通知。Snapshot/version付き。欠落後は\`snapshot.diff\`等で照合できる |
-| \`workspace.navigation\` | \`open(path,revision)\`,\`reveal(panelId)\` | 対象Projectの認可・Safe Path、現在のEditor Recovery GateとNavigation GenerationをHostが確認 |
-| \`workspace.ui.contribute\` | Editor/Viewer、Panel、Command、Toolbar、Context Menuの**宣言的登録** | 登録先と表示順・可否はShellが管理。Pluginは任意Host DOMやGlobal CSSを編集できない |
-| \`workspace.compute\` | \`invoke(actionId,input,deadline)\`,\`cancel(jobId)\` | Actionの副作用クラス・同時実行・CPU/Memory/Time/Output quotaをHostが検証 |
-| \`plugin.state\` | \`readSettings\`,\`proposeSettingsChange\`,\`cacheRead/Write\` | Git保存するSettingsは承認経路。実行キャッシュはPlugin毎quota・破棄可能・正本ではない |
-| \`network.egress\` | Default **DENY**。将来は明示許可Originと用途別Proxy | Browser direct fetch/Native networkは不可。GitHub/AIトークンはPluginに渡さずProxy側でScope/Consent/Limitを適用 |
+| `workspace.snapshot.read` | `list(prefix,cursor,limit)`,`stat(path)`,`read(path,revision,range)` | 認可済みRepository+Snapshotに固定、Path/Symlink検証、Bytes/Files上限。Private Git Credentialは渡さない |
+| `workspace.change.propose` | `propose(changeSet,readSet,revision,operationId)` | **提案まで**。Authorの明示的な受入・Browser Journal・Checkpoint/PublishはHost-owned。別Plugin権限では代行不可 |
+| `workspace.events.subscribe` | `subscribe(types,scope)`,`unsubscribe` | advisoryな更新通知。Snapshot/version付き。欠落後は`snapshot.diff`等で照合できる |
+| `workspace.navigation` | `open(path,revision)`,`reveal(panelId)` | 対象Projectの認可・Safe Path、Editor Recovery GateとNavigation GenerationをHostが確認 |
+| `workspace.ui.contribute` | Editor/Viewer、Panel、Command、Toolbar、Context Menuの**宣言的登録** | 登録先と表示順・可否はShellが管理。Pluginは任意Host DOMやGlobal CSSを編集できない |
+| `workspace.compute` | `invoke(actionId,input,deadline)`,`cancel(jobId)` | Actionの副作用クラス・同時実行・CPU/Memory/Time/Output quotaをHostが検証 |
+| `plugin.state` | `readSettings`,`proposeSettingsChange`,`cacheRead/Write` | Git保存するSettingsは承認経路。実行キャッシュはPlugin毎quota・破棄可能・正本ではない |
+| `network.egress` | Default **DENY**。許可する場合は明示許可Originと用途別Proxy | Browser direct fetch/Native networkは不可。GitHub/AIトークンはPluginに渡さずProxy側でScope/Consent/Limitを適用 |
 
-**非公開・非委譲:** raw\`fs\`/Git exec、\`MutationCoordinator.approve/checkpoint/publish\`、GitHub App鍵、host credential、Kubernetes/Podman/host daemon socket、\`/data\`/Browser IndexedDBの直接アクセス、任意Server routes、他Repositoryへの無制限Reader、任意Pluginのkill/enable、Host CSP/認証処理。
+**非公開・非委譲:** raw`fs`/Git exec、`MutationCoordinator.approve/checkpoint/publish`、GitHub App鍵、host credential、Kubernetes/Podman/host daemon socket、`/data`/Browser IndexedDBの直接アクセス、任意Server routes、他Repositoryへの無制限Reader、任意Pluginのkill/enable、Host CSP/認証処理。
 
-この表は**全Capabilityを最初のMVPで実装する指示ではない**。v1最小集合は\`snapshot.read\`、\`change.propose\`、\`ui.contribute\`、\`navigation\`、Lifecycleとする。Events/Computeは実装需要で段階追加。
+v1必須集合は`snapshot.read`、`change.propose`、`ui.contribute`、`navigation`、Lifecycleとする。Events/Computeは任意Capabilityとし、対応範囲をManifestで宣言する。
 
 ### 4.4 Request/Responseの封筒
 
@@ -148,12 +137,12 @@ event    = {protocolVersion, eventId, projectId, snapshotId,
 - Identity、author scope、snapshot、Capability、Deadlineは**HostがSessionから束縛**し、Pluginが送った値を認可根拠として採用しない。
 - IPCはサイズ上限付きLength-framed、入力/出力Validatorを通す。Pluginのstdout/stderrをProtocolとして信頼しない。WASI Guest↔Sandbox Brokerの呼び出しは生成Bindingを使い、Broker↔Hostで検証済みEnvelopeに正規化する。
 - Requestの多重化とCancelには相関IDを使い、応答はActivation EpochとSnapshot一致を満たす場合のみ適用。タイムアウトした古い応答、前回起動の応答、別Projectからの応答は拒否。
-- Backpressure: 1 PluginのQueue、RPC同時実行、Bytes in flight、Event buffer、UI message率を上限付きにする。上限超過は\`plugin_overloaded\`で**そのPluginだけ**失敗させる。
-- Machine Errorは\`code\`、\`message\`、\`retryable\`、\`requestId\`の必要最小限。例: \`plugin_crashed\`、\`plugin_timeout\`、\`plugin_oom\`、\`plugin_protocol_invalid\`、\`capability_denied\`、\`plugin_unavailable\`、\`snapshot_changed\`。Host内部例外/Secretは露出しない。
+- Backpressure: 1 PluginのQueue、RPC同時実行、Bytes in flight、Event buffer、UI message率を上限付きにする。上限超過は`plugin_overloaded`で**そのPluginだけ**失敗させる。
+- Machine Errorは`code`、`message`、`retryable`、`requestId`の必要最小限。例: `plugin_crashed`、`plugin_timeout`、`plugin_oom`、`plugin_protocol_invalid`、`capability_denied`、`plugin_unavailable`、`snapshot_changed`。Host内部例外/Secretは露出しない。
 
 ## 5. Git-backed File / Document拡張
 
-File APIを**Markdown以外にも使える原始能力**にする。ただし既存作品の\`plot/volumes\`、\`manuscript/*.md\`、YAML Hierarchy、既定執筆UXの互換性は保持し、機械的に廃止しない。
+File APIを**Markdown以外にも使える原始能力**にする。ただし既存作品の`plot/volumes`、`manuscript/*.md`、YAML Hierarchy、既定執筆UXの互換性は保持し、機械的に廃止しない。
 
 ### 5.1 分離すべき抽象
 
@@ -172,14 +161,14 @@ Optional Plugin UI / Compute
   └─ Only host-authorized document read + proposed change
 ~~~
 
-現在\`SnapshotReader.read\`はBase64のバイナリ読取り、\`FileChange\`はBase64書込みを扱える。一方\`DocumentSource\`は主にUTF-8、\`ChangeOperation.effect\`は有限のライティング分類、Browser Draftは原稿型に最適化されている。**\`.excalidraw\`保存が既存の汎用UI保存として完成しているとは見なさない。**
+`SnapshotReader.read`のBase64読取りと`FileChange`のBase64書込みは、汎用ファイルの境界に用いる。`DocumentSource`のUTF-8契約、`ChangeOperation.effect`の効果分類、Browser Draftの保存形式を、各Editor bindingが明示的に満たす必要がある。Base64対応だけを根拠に任意形式のUI保存を保証しない。
 
-- Pluginは\`*.excalidraw\`などの**形式ハンドラ**（Editor/Viewer）を宣言する。HostはExtension・MIME・ユーザー選択・Capability Permissionでルーティングし、衝突はHost/ユーザーが決める。
+- Pluginは`*.excalidraw`などの**形式ハンドラ**（Editor/Viewer）を宣言する。HostはExtension・MIME・ユーザー選択・Capability Permissionでルーティングし、衝突はHost/ユーザーが決める。
 - Plugin UIからの編集途中はHostが**回復可能なDraft**として受け取る。Plugin自身のLocalStorageだけに唯一の原稿を置かない。大きな画像/Assetはサイズ限定ストリーム・Content Addressing・Commitとの原子的参照関係を設計する。
-- Pluginからの提案は\`FileChange\`系のCAS/Read-set・Operation IDへ正規化し、Editor UIの承認前Journal/Checkpoint/Publishの現行段階を保つ。承認が必要な効果の分類は明示的に定義。現在の\`EffectClass\`を理由なく\`migration\`で使い回さない。
-- エディタの一時Draft・ローカルCheckpoint・リモートGitHub confirmedは異なる状態のまま。図面プラグインでも\`publication_unknown\`を成功表示しない。
-- 限界値（現行Operation 8MiB、Scratch 8MiB等）を超える巨大画像については、パイプラインを回避するのではなく**サイズ・Asset分割・Chunking方式を別契約として設計**する。MVPでは既存上限で失敗を明示してよい。
-- \`Git object\`/Snapshot IndexはCoreが所有し、Plugin索引は派生・Quota付き・いつでも破棄可能。Pluginが独自の正本DBを作らない。
+- Pluginからの提案は`FileChange`系のCAS/Read-set・Operation IDへ正規化し、Editor UIの承認前Journal/Checkpoint/Publishの境界を保つ。承認が必要な効果の分類は明示的に定義。`EffectClass`を理由なく`migration`で使い回さない。
+- エディタの一時Draft・ローカルCheckpoint・リモートGitHub confirmedは異なる状態のまま。図面プラグインでも`publication_unknown`を成功表示しない。
+- HostのOperation・Scratch限界値を超える巨大画像については、パイプラインを回避するのではなく**サイズ・Asset分割・Chunking方式を別契約として設計**する。上限を超える操作は明示的に拒否する。
+- `Git object`/Snapshot IndexはCoreが所有し、Plugin索引は派生・Quota付き・いつでも破棄可能。Pluginが独自の正本DBを作らない。
 
 ## 6. Plugin Sandbox：故障と権限を本当に隔離する
 
@@ -188,10 +177,10 @@ Optional Plugin UI / Compute
 | 実行コード | 許容条件 | 壊れた場合 |
 | --- | --- | --- |
 | Core built-in | Scriptorium TCB。変更はCore検証対象 | 通常のCore障害として扱う |
-| 現行\`legacy-trusted\` Module | 既存内蔵・レビュー済み。**安全隔離保証なし**を明記 | 段階移行するまで、未知の不具合がHostへ影響する可能性を認める |
+| Trusted built-in Module | 既存内蔵・レビュー済み。**安全隔離保証なし**を明記 | 同一プロセスの不具合がHostへ影響する可能性を認める |
 | 外部Plugin UI | **独立originのsandboxed iframeが必須** | HostがFrameを切り離し、エラーPanel/標準Editor fallbackを表示。別Panelの状態は維持 |
 | 外部Plugin compute | **WASI Sandbox + 独立OSプロセス + 実証済みResource/Filesystem/Network制御**が必須 | 対象子プロセスだけterminate/quarantine。他のPluginとCoreは保持 |
-| 外部native/Node plugin | v1原則**許可しない**。将来同等以上の実隔離を別途認証した場合のみ | 「子プロセスだから安全」という免除はしない |
+| 外部native/Node plugin | v1原則**許可しない**。同等以上の実隔離を別途認証した場合のみ | 「子プロセスだから安全」という免除はしない |
 
 ### 6.2 Server側の下限
 
@@ -199,7 +188,7 @@ Optional Plugin UI / Compute
 2. 無限ループ: Wasmtime等の**Fuel/Epoch Interrupt**を設定し、実呼び出しDeadlineの期限切れをSupervisorがHost外から監視してterminateする。
 3. OOM: WASM Guest Memory/Table/Stack制限に加え、実際の**OS cgroup v2などのhard memory/CPU/PID/IO制御**を併用する。制限の適用可否・oom_score・Host cgroupの位置関係を観測する。
 4. Filesystem/Kernel: sandbox専用のUser/Mount/Network Namespace、専用非root UID、Read-only Plugin Artifact、tmpfs quota、no-new-privileges、seccomp/AppArmor等を環境で許される範囲で検証する。Host workspace/PVC・Git credentialsをmountしない。
-5. Kubernetes/Podman環境で**子cgroupの作成権限がない場合は無理に代替しない**。独立した制限付きSandbox Pod/Job等を別実行方式として選ぶか、\`plugin_sandbox_unavailable\`として起動拒否。強い隔離の欠如を正常稼働として黙認しない。
+5. Kubernetes/Podman環境で**子cgroupの作成権限がない場合は無理に代替しない**。独立した制限付きSandbox Pod/Job等を別実行方式として選ぶか、`plugin_sandbox_unavailable`として起動拒否。強い隔離の欠如を正常稼働として黙認しない。
 6. Sandbox runtime自体（Wasmtime、Helper、RPC Broker）はTCBに入り、固定Version・脆弱性更新とfuzz/conformanceを必要とする。WasmtimeをCore Nodeプロセスへ直埋込みして、Pluginのtrapに対する唯一の境界としない。
 
 実行場所を増やす場合も**各PluginのPod常駐を前提としない**。起動オンデマンドと閉鎖を実測し、単一Hostでハード上限を満たせない時にのみPod化する。管理基盤を新設する口実にしない。
@@ -207,9 +196,9 @@ Optional Plugin UI / Compute
 ### 6.3 Browser側の下限
 
 - Coreと**別のOrigin（できれば別site）**から検証済みのPlugin UIアセットを配信。Host Session Cookie、IndexedDB、DOM、Service Worker、LocalStorageを共有しない。Artifactに紐づくCache-Control・CSPをHostが強制。
-- \`iframe sandbox="allow-scripts"\`を基準とし、\`allow-same-origin\`、Top Navigation、Popup、Form等は既定では付けない。**同一origin frameの\`allow-scripts allow-same-origin\`を併用しない**。必要な例外は別設計/検証。Sandboxでブラウザ機能が使えないPluginはSDKへ委譲させる。
-- \`postMessage\`の初期通信はHostが生成したFrameの\`contentWindow\`と予期したArtifact/Sessionを束縛し、必要な\`MessagePort\`だけ渡す。Opaque Origin（\`origin="null"\`）の場合に\`event.origin\`だけで正当性を判定しない。受信ごとにChannel/Activation Epoch/Capability/Schemaを検査する。
-- Pluginの\`fetch\`によるHost/API認証迂回を禁止。CSP \`connect-src 'none'\`等とPermission Policyを既定とし、外部アクセスはBrokerの明示Capabilityで処理。画像・フォント等のアセット配信も同じResource Budget/Origin Policyに従う。
+- `iframe sandbox="allow-scripts"`を基準とし、`allow-same-origin`、Top Navigation、Popup、Form等は既定では付けない。**同一origin frameの`allow-scripts allow-same-origin`を併用しない**。必要な例外は別設計/検証。Sandboxでブラウザ機能が使えないPluginはSDKへ委譲させる。
+- `postMessage`の初期通信はHostが生成したFrameの`contentWindow`と予期したArtifact/Sessionを束縛し、必要な`MessagePort`だけ渡す。Opaque Origin（`origin="null"`）の場合に`event.origin`だけで正当性を判定しない。受信ごとにChannel/Activation Epoch/Capability/Schemaを検査する。
+- Pluginの`fetch`によるHost/API認証迂回を禁止。CSP `connect-src 'none'`等とPermission Policyを既定とし、外部アクセスはBrokerの明示Capabilityで処理。画像・フォント等のアセット配信も同じResource Budget/Origin Policyに従う。
 - Plugin描画ループが固着したらHostはPanelを閉じる。ブラウザによってFrameとHostが同一Renderer Processになる場合やブラウザ全体OOMは**完全に防げると主張しない**。ブラウザ実機（Chromium/WebKit/モバイル）でRecoveryを含めて検証する。
 
 ## 7. Lifecycle、Quotas、エラー閉じ込め
@@ -241,7 +230,7 @@ stateDiagram-v2
 - Failed/Quarantined: 原因、Plugin ID/Digest、Quota、Plugin-owned Jobを記録。**CoreのEditorをunmountしない**。単独PluginのエラーでCore Runtime/API全体へ例外を再throwしない。
 - Upgrade: Digest変更前に既存Worker/Frameをdrain、Versioned state migrationを検証し、失敗なら旧版を保持。保存済み原稿、未公開Operation、ユーザー設定を破棄しない。
 
-### 7.2 Resource budgets（設計契約であり、現在の実測ではない）
+### 7.2 Resource budgets（設計契約）
 
 各Pluginの**Host実行予算**はHost Policyが定義し、Manifest申告のBudget Classは許可拡張ではなく**上限内の要求**とする。必要メトリクス:
 
@@ -250,34 +239,34 @@ stateDiagram-v2
 | DisabledのOSプロセス/Browser Chunk | **0**（Manifest解析以外実行しない） |
 | Enabled-Idle CPU/Job/Network | **0の定期実行**。購読が明示的に存在する時だけ認可済み処理 |
 | ActiveのCPU/RSS/Memory/Table/PID/IO/Network | Guest上限、OS/cgroup上限、Host全体の上限を**階層的に強制** |
-| RPC bytes/in-flight/concurrency | 上限を超えたら該当Pluginへ\`plugin_overloaded\` |
+| RPC bytes/in-flight/concurrency | 上限を超えたら該当Pluginへ`plugin_overloaded` |
 | Deadline/Cancel/Drain | 無応答でもHost Supervisorが外側から終了できる |
 | Crash restart/Backoff | Crash loopがCore CPU/Log/Diskを無限に消費しない |
 | Plugin cache/quota | キャッシュはPluginごとの名前空間/Quota。削除でAuthorデータを消さない |
 
-具体的なMiB、ms、同時起動数の目標値は、現在進行中の[Core性能監査](CORE-PERFORMANCE-AUDIT.md)に基づく**Wave 0ベースライン実測後**に固定する。既存Worker Supervisorの8MiB/実行・Queue上限は**現状の実装値**であり、外部Plugin用の安全な最終値が決まったわけではない。
+MiB、ms、同時起動数の上限は対象Hostの実測と故障注入で検証する。内蔵Workerの上限値を外部Pluginの隔離保証へ流用しない。
 
 ### 7.3 エラー伝播とユーザー表示
 
 | 事象 | Hostの対応 | Core・作業データ |
 | --- | --- | --- |
 | 不正Manifest/署名/互換性 | Admit拒否、既存版維持 | Core通常起動 |
-| Load失敗/Trap/Process crash | 対象Plugin \`failed\`、実行Handle破棄、PanelはError Boundaryへ | Core Editor・他Panel継続 |
+| Load失敗/Trap/Process crash | 対象Plugin `failed`、実行Handle破棄、PanelはError Boundaryへ | Core Editor・他Panel継続 |
 | 無限ループ/Timeout | Deadline経過で独立Worker/Frameをterminate、必要ならQuarantine | Draft保存済み/未保存状態はHostが保持 |
 | OOM/IO過負荷 | OS予算で当該Sandbox終了、BudgetViolation記録 | Host cgroupが道連れにならないことを受入試験で検証 |
 | 非準拠RPC/権限外操作 | Fail closed、Audit、依存程度でQuarantine | Git/権限変更なし |
-| Host再起動/Delivery喪失 | Pluginの実行履歴は再構築、未確認Proposal/Operationを正本と照合 | Journal・Receipt保持。未知Publishは\`publication_unknown\` |
-| Pluginの要求したChangeの競合 | Coreが\`snapshot_changed\`やConflictを返し再提案を要求 | 原稿は自動上書きしない |
+| Host再起動/Delivery喪失 | Pluginの実行履歴は再構築、未確認Proposal/Operationを正本と照合 | Journal・Receipt保持。未知Publishは`publication_unknown` |
+| Pluginの要求したChangeの競合 | Coreが`snapshot_changed`やConflictを返し再提案を要求 | 原稿は自動上書きしない |
 
 **自動再試行の対象は冪等なRead/Computeに限定**。提案済みMutationは同一Operation IDとDigestで照合し、Checkpoint/PublishをPluginが自律的に繰り返さない。
 
 ### 7.4 Praetorium Runtime / Quiesceとの連動
 
-Pluginが止まることと、**Scriptorium Writerを安全に停止できることは別**。Hosted Runtimeの\`/api/platform/v1/status\`、\`quiesce\`、\`resume\`契約（[現行platform-runtime](../../packages/api/src/platform-runtime.ts)）に従い、Plugin Hostも活動・保存状態に参加する。
+Pluginが止まることと、**Scriptorium Writerを安全に停止できることは別**。Hosted Runtimeの`/api/platform/v1/status`、`quiesce`、`resume`契約（[platform-runtime](../../packages/api/src/platform-runtime.ts)）に従い、Plugin Hostも活動・保存状態に参加する。
 
-- **Activity/Status:** Plugin Workerの実行中Job、未DrainのRPC、Plugin UIからHostへ受領した未保存Draft、未確定Proposal/Operationを、Host側の観測に反映する。失敗や接続断は\`unknown\`として扱い、単に「Pluginプロセスがない = safe」と判定しない。
+- **Activity/Status:** Plugin Workerの実行中Job、未DrainのRPC、Plugin UIからHostへ受領した未保存Draft、未確定Proposal/Operationを、Host側の観測に反映する。失敗や接続断は`unknown`として扱い、単に「Pluginプロセスがない = safe」と判定しない。
 - **Quiesce:** Hostは新規Plugin編集/書込提案を停止し、進行中UI変更を確定済みBrowser Journalへflushする。Browserが不在でFlushを確認できない場合や、Pluginがクラッシュ中の場合は、元のScriptorium/Writer不在証明・Checkpoint契約に沿って停止可否を決める。
-- **Shutdown:** Deadline以内に停止しないPluginは当該Sandboxだけterminateする。ただし未保存編集の消失、未確定Publish、旧Writerが生存していないかを別条件として確認し、単なるProcess killで\`quiesced\`を確定しない。
+- **Shutdown:** Deadline以内に停止しないPluginは当該Sandboxだけterminateする。ただし未保存編集の消失、未確定Publish、旧Writerが生存していないかを別条件として確認し、単なるProcess killで`quiesced`を確定しない。
 - **Resume/Replacement:** PluginのActivation EpochとRuntime Epochを更新し、旧Sandboxから遅延到着したResponse/Event/Proposalを無効化する。新Runtime/新Pluginが旧Writerと同時に同じRepositoryへ書き込まない。
 - **プラットフォームの正本:** [Praetorium](https://github.com/yohn-jp/praetorium)のD1・Operation FenceとGitHub履歴をPlugin独自のローカル状態で置き換えない。Pod Ready/Worker停止をGitHubへの出版成功証明として扱わない。
 
@@ -296,36 +285,36 @@ independent Git repository
   -> metadata-only discovery; lazy sandbox execution
 ~~~
 
-- Core/SDK/Plugin Hostは\`yohn-jp/scriptorium\`に置く。Pluginは独立リポジトリから開発でき、機能内の任意依存関係はCore本体へ展開しない。
+- Core/SDK/Plugin Hostは`yohn-jp/scriptorium`に置く。Pluginは独立リポジトリから開発でき、機能内の任意依存関係はCore本体へ展開しない。
 - 配布形式の第一候補は**OCI Artifact**（Digest pinning、Producer/Registryと再利用しやすい）。npm配布やWIT SDK bindingも選択できるが、Registry名でなく**承認された内容Digest**を最終識別子とする。
-- Plugin Artifactの\`manifest\`、WASM、Browser UI、Resourceアセット、API SchemaはBuild時に同一Digestへ束縛。Manifest内容とEntry Pathは署名済みBundle内だけ参照する。
+- Plugin Artifactの`manifest`、WASM、Browser UI、Resourceアセット、API SchemaはBuild時に同一Digestへ束縛。Manifest内容とEntry Pathは署名済みBundle内だけ参照する。
 - **インストール/許可はHost管理**。Git作業リポジトリのYAMLやMarkdownから任意のPlugin URL/Packageを実行することはない。Work repositoryは「承認済みPlugin IDと設定」だけ指定できる。
 - Hosted Compositionは既存のPraetoriumによるCatalog、Immutable Digest、Admissionと接続する。新たな認可DBや第二のPlugin Marketplace Authorityを設けない。Private/Internal Pluginも同じVersion/Digest/Scope契約を使う。
-- Runtimeの\`npm install\`や任意コードダウンロード、\`latest\`タグ追従は禁止。アップグレードはHost Policyで承認したImage/Compositionの再配布とModule Recovery検証を必要とする。
+- Runtimeの`npm install`や任意コードダウンロード、`latest`タグ追従は禁止。アップグレードはHost Policyで承認したImage/Compositionの再配布とModule Recovery検証を必要とする。
 - SDKテストハーネスは外部リポジトリ単独で実行可能。**Coreのprivate importsを使うPluginはSDK準拠と認めない。**
 
 ### 8.2 外部Plugin開発者が触れる表面
 
-Pluginが依存してよいのは、Versioned Manifest Schema、生成されたSDK/WIT binding、Capability schemas、UI Bridge、公開conformance fixtureのみ。**\`packages/core/src/index.ts\`、\`packages/api/src/server.ts\`、ホストのプライベートEnv、ブラウザの\`SharedApplication\`状態へ直接依存させない。**
+Pluginが依存してよいのは、Versioned Manifest Schema、生成されたSDK/WIT binding、Capability schemas、UI Bridge、公開conformance fixtureのみ。**`packages/core/src/index.ts`、`packages/api/src/server.ts`、ホストのプライベートEnv、ブラウザの`SharedApplication`状態へ直接依存させない。**
 
-既存の内部\`@scriptorium/contracts\`全部を無条件にpublic npm SDKへ再輸出しない。単一のTransport非依存な公開Contract subsetを明示し、内部契約とはAdapterを通す。非互換な内部RefactorでもPluginが壊れないよう、公開ABI側にcompatibility gatesを置く。
+既存の内部`@scriptorium/contracts`全部を無条件にpublic npm SDKへ再輸出しない。単一のTransport非依存な公開Contract subsetを明示し、内部契約とはAdapterを通す。非互換な内部RefactorでもPluginが壊れないよう、公開ABI側にcompatibility gatesを置く。
 
 ## 9. 最小垂直スライス：図面エディタを例に契約を検証
 
 このセクションは**Excalidraw Pluginの実装指示ではなく**、汎用APIが実際に使えるかを検査する受入用の例。
 
-1. 外部リポジトリの\`example.diagram\`を承認済みDigestでBuild Compositionへ登録。Manifestのみ読み込み、Core起動とMarkdown編集の初期コストは変化しない。
-2. ユーザーが\`docs/map.excalidraw\`を開く。HostがPath/Revisionと選択されたSnapshotを確認し、対応Editorをオンデマンドのisolated Frameとして表示。
-3. Pluginは\`workspace.snapshot.read\`でJSONを受け取り編集。Canvas表示をServerへ強制しない。Raw Git Credential/Host DOMは受け取らない。
-4. ユーザーが保存操作を行う。Host UIはまず回復可能な差分/完全DraftをJournalに確定し、その後\`workspace.change.propose\`で適切なOperationを発行。PluginにAuthor Approval権限を渡さない。
-5. 既存のChange Approval→Checkpoint→Publish→GitHub confirmedが成功すればGitに\`.excalidraw\`ファイルとして存在。競合や\`publication_unknown\`の時はHostが状態を明示し、原稿と図面を保持。
+1. 外部リポジトリの`example.diagram`を承認済みDigestでBuild Compositionへ登録。Manifestのみ読み込み、Core起動とMarkdown編集の初期コストは変化しない。
+2. ユーザーが`docs/map.excalidraw`を開く。HostがPath/Revisionと選択されたSnapshotを確認し、対応Editorをオンデマンドのisolated Frameとして表示。
+3. Pluginは`workspace.snapshot.read`でJSONを受け取り編集。Canvas表示をServerへ強制しない。Raw Git Credential/Host DOMは受け取らない。
+4. ユーザーが保存操作を行う。Host UIはまず回復可能な差分/完全DraftをJournalに確定し、その後`workspace.change.propose`で適切なOperationを発行。PluginにAuthor Approval権限を渡さない。
+5. 既存のChange Approval→Checkpoint→Publish→GitHub confirmedが成功すればGitに`.excalidraw`ファイルとして存在。競合や`publication_unknown`の時はHostが状態を明示し、原稿と図面を保持。
 6. PluginのFrame/Workerを強制終了しても別のMarkdown Editor、未公開Draft、Core API、他Pluginは継続。Frameを再起動すればHost Journalから確実なDraftを復元。
 
 **このユースケースを満たせなければ**、公開APIが実際のファイル編集に不足している。具体的な差分を公開Protocolへ追加し、Plugin専用のCore回避APIを作らない。
 
 ## 10. 不変条件とConformance / Fault-injection
 
-### 10.1 契約の試験（必須の将来Acceptance）
+### 10.1 契約の試験（必須Acceptance）
 
 - **Core-only**: Pluginが0件/100件インストールされていても、disabled/no-plugin時のProcess=0・Browser Plugin Runtimeロード=0。Core Editor/Recovery/Publishへの既定経路は存在。性能差は測定して予算内。
 - **Manifest**: 不正ID、パストラバーサル、署名不一致、未知の必須Capability、依存Cycle、Duplicate Provider、ABI不一致、悪意のあるAsset URL、過大入力をfail closed。
@@ -334,45 +323,22 @@ Pluginが依存してよいのは、Versioned Manifest Schema、生成されたS
 - **Persistence**: Pluginの提案→Author Approval→Journal→Checkpoint→Publish、ネット断・Response loss・再起動・同時編集・CAS conflictで旧Writer/古いSnapshotは上書き不可、Digest/Operation IDで再照合。
 - **Lifecycle**: Disable/Unload/Upgradeと途中のin-flight RPC、古いActivation Epochの結果がHostへ再適用されない。Capability Leaseは解除され、Resource Usageは起動前まで戻る。
 - **Distribution**: 外部Repository Artifactが公開SDKだけでBuild/Verifyでき、Producerへ指定Digestで取り込まれ、Core-only Imageに依存追加しない。改竄Packageは実行前に拒否。
-- **Authorization**: Repository/Author scope、Operation、承認の現在状態をHostが毎回照合。Plugin IDの自己申告だけでwrite/linkedReader/networkを得ない。
+- **Authorization**: Repository/Author scope、Operation、承認状態をHostが毎回照合。Plugin IDの自己申告だけでwrite/linkedReader/networkを得ない。
 
 ### 10.2 測定項目と合格の論理
 
-\`process RSS/peak\`、\`cgroup memory.peak/OOM events\`、\`event loop lag\`、\`Browser long tasks/INP\`、\`initial JS+requests\`、\`sandbox spawn time\`、\`RPC p95/p99\`、\`idle CPU\`、\`plugin crash containment\`、\`draft recovery success\`を測定する。Core性能予算の具体値は[監査とWave 0](CORE-PERFORMANCE-AUDIT.md)と統合し、独断で架空のベースラインを記録しない。
+`process RSS/peak`、`cgroup memory.peak/OOM events`、`event loop lag`、`Browser long tasks/INP`、`initial JS+requests`、`sandbox spawn time`、`RPC p95/p99`、`idle CPU`、`plugin crash containment`、`draft recovery success`を測定する。性能予算は対象構成の再現可能な測定で検証し、架空のベースラインを記録しない。
 
 **単一のCrash実験PASS ≠ 隔離認証。** Kubernetes上のcgroup、BrowserのFrame/process分離、PluginのNetwork/FS Access Denial、異常終了後の復旧/Writer安全性まで実測して初めて対象構成に限定したFault-containment claimを出す。
 
-## 11. 実装する場合の段階的移行（今回の範囲外）
+## 11. Deployment-specific design constraints
 
-| Gate | 最小成果 | 完了条件 | 保持する現行資産 |
-| --- | --- | --- | --- |
-| **P0: Protocol freeze** | 公開Plugin ID、Manifest、Contract Schema、Capability/Grant/Error、明示Trust class、ABI VersionとConformance Fixture | 9固定ID/内部契約とのAdapterを明示。CoreにはPlugin依存を追加しない | 現行ModuleRuntime/Legacy module機能 |
-| **P1: Isolation proof** | WASI+別OSプロセス/Host Brokerの最小1 Action、cgroup/FS/network強制、Crash/OOM/Timeout試験 | Core稼働とデータ安全性を実機検証。隔離不可ならfail closed | Worker SupervisorのQueue/期限契約を再利用 |
-| **P2: Browser Host proof** | 別origin iframe、MessageChannel、Panel/Editor登録、host fallback | Host Cookie/DOMアクセス拒否とFrame障害継続を実機検証 | 既存Workspace Layout、BrowserJournal |
-| **P3: Git-backed generic edit** | Snapshot/File APIとRecovery/Proposalの公開Adapter、ファイル形式Editor binding | 任意拡張子ファイルを編集→Journal→Checkpoint→Publish、競合/未知を回復 | Git CoreのCAS、Snapshot、Operation ID |
-| **P4: External packaging** | 外部RepositoryのPlugin build、Digest入れたManifest、SDK conformance、Producer/OCI統合 | immutable Artifactから起動可能。無効時Core-only Closureを維持 | 現行Build Profiles、PraetoriumのAdmission |
-| **P5: Legacy migration** | 既存の必要モジュールを互換Adapterへ順次移行 | 各moduleの機能・Durabilityを維持してRuntimeを一本化。Legacy未移行はTrusted限定のまま | P00–P13の実績とユーザーデータ |
-
-**各Gateは独立したIssue/実装Waveとして実施**し、1セッションで公開SDK/OS sandbox/Browser iframe/Git変更まで一括実装しない。相互依存する実行境界は早期に最小の実物スライスを成立させる。性能Core改良セッションと同時並行してよいが、Core/Contractsを双方から無調整に書き換えず、公開ABIの単一Ownerを明確にする。
-
-実装時の優先は「既存の実装の活用 > 新しい依存や独自ランタイムの作成」。自作Sandbox、ファイルDB、Plugin Manager、Marketplaceを発明すること自体を目的にしない。
-
-## 12. 保留する製品判断
-
-- 強隔離Server Workerの初期Host方式: 既存Pod内で必要なcgroup権限を実証できるか、Sandbox Pod/Jobをオンデマンドで使うか。**機能保証なしで前者へ決め打ちしない**。
-- 最初のWASI Component/WIT packageの実際のSchemaと、JS/Rust SDK Generatorの配布版数。
-- 別originのPlugin UI Asset配信ドメインと認証不要Asset提供方式。Core/HostとのSameSite・CSP・SNI条件。
-- Core FileAPIのBinary/大容量AssetのChunkingと、現在の8MiB Operation/Journal制約を超える時の安全契約。
-- 独立PluginのExternal Registry（初期はOperator allowlistで足りる）。署名方式、SBOM必須範囲、Publisherの認証・鍵ローテーション。
-- ネットワーク許可と外部計算オフロードの将来Capability。初期v1はNo networkを維持。
-- スケール予算とHostごとの数値上限は性能Wave 0の実測で固定。
-
-これらは**未確定事項を正直に記録したもの**であり、スコープを空欄にしたまま安全だと主張するものではない。実装時に必要なものからContractとConformanceを確定する。
+Host adapters must specify and verify process/cgroup authority, filesystem and network denial, the UI asset origin and CSP, large-file operation limits, registry admission and publisher identity. A deployment may claim only the guarantees exercised by its conformance and fault-injection checks. Numeric resource budgets require measurements on that host configuration.
 
 ## 参考ソース
 
-- [現行Internal Contract](../../packages/contracts/src/index.ts)、[Module Runtime](../../packages/module-runtime/src/module-runtime.ts)、[Worker Supervisor](../../packages/module-runtime/src/worker-supervisor.ts)、[Profile Build](../../scripts/profile-build.mjs)、[Browser Contributions](../../app/src/contributions/ContributionHost.tsx)
-- [Modular Workspace](MODULAR-WORKSPACE.md)、[Full Migration](FULL-MIGRATION.md)、[Core性能監査](CORE-PERFORMANCE-AUDIT.md)
+- [Internal Contract](../../packages/contracts/src/index.ts)、[Module Runtime](../../packages/module-runtime/src/module-runtime.ts)、[Worker Supervisor](../../packages/module-runtime/src/worker-supervisor.ts)、[Profile Build](../../scripts/profile-build.mjs)、[Browser Contributions](../../app/src/contributions/ContributionHost.tsx)
+- [Modular Workspace](MODULAR-WORKSPACE.md)、[Core](CORE.md)、[Modules](MODULES.md)
 - [Wasmtime Security](https://docs.wasmtime.dev/security.html)、[Wasmtime Introduction](https://docs.wasmtime.dev/introduction.html)、[WIT Component Model](https://github.com/WebAssembly/component-model/blob/main/design/mvp/WIT.md)
 - [MDN iframe Sandbox](https://developer.mozilla.org/en-US/docs/Web/HTML/Reference/Elements/iframe)、[MDN CSP sandbox](https://developer.mozilla.org/en-US/docs/Web/HTTP/Reference/Headers/Content-Security-Policy/sandbox)
 
