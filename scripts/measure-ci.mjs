@@ -6,6 +6,8 @@ const args = process.argv.slice(2);
 const option = name => args.includes(name) ? args[args.indexOf(name) + 1] : undefined;
 const repository = process.env.GITHUB_REPOSITORY;
 const runId = option('--run') ?? process.env.GITHUB_RUN_ID;
+const attempt = option('--attempt');
+if (args.includes('--attempt') && !/^[1-9]\d*$/.test(attempt ?? '')) throw new Error('Attempt must be a positive integer');
 if (!/^[\w.-]+\/[\w.-]+$/.test(repository ?? '') || !/^\d+$/.test(runId ?? '') || !process.env.GH_TOKEN) throw new Error('Repository, run and read token required');
 const request = async endpoint => {
   const response = await fetch(`https://api.github.com/repos/${repository}/${endpoint}`, {
@@ -15,8 +17,9 @@ const request = async endpoint => {
   if (!response.ok) throw new Error(`Timing evidence unavailable (HTTP ${response.status})`);
   return response.json();
 };
-const run = await request(`actions/runs/${runId}`);
-const jobs = await collectGitHubPages(page => request(`actions/runs/${runId}/jobs?filter=latest&per_page=100&page=${page}`), 'jobs');
+const runPath = `actions/runs/${runId}${attempt ? `/attempts/${attempt}` : ''}`;
+const run = await request(runPath);
+const jobs = await collectGitHubPages(page => request(`${runPath}/jobs?${attempt ? '' : 'filter=latest&'}per_page=100&page=${page}`), 'jobs');
 const seconds = (start, end) => start && end ? Math.max(0, (Date.parse(end) - Date.parse(start)) / 1000) : null;
 const observations = jobs.map(job => {
   const phase = pattern => job.steps.filter(step => pattern.test(step.name)).map(step => ({ name: step.name, seconds: seconds(step.started_at, step.completed_at), result: step.conclusion }));
@@ -34,9 +37,11 @@ const observations = jobs.map(job => {
 const completed = jobs.filter(job => job.completed_at).map(job => Date.parse(job.completed_at));
 const leafJobs = jobs.filter(job => job.name !== 'certification' && job.completed_at);
 const latestLeaf = leafJobs.sort((a, b) => Date.parse(b.completed_at) - Date.parse(a.completed_at))[0];
-const report = { runId, url: run.html_url, sha: run.head_sha, attempt: run.run_attempt, status: run.status, result: run.conclusion,
-  wallClockSeconds: run.status === 'completed' && completed.length ? (Math.max(...completed) - Date.parse(run.created_at)) / 1000 : null,
-  observedElapsedSeconds: completed.length ? (Math.max(...completed) - Date.parse(run.created_at)) / 1000 : null,
+// A rerun starts a new attempt; do not count the idle gap since the original run.
+const attemptStartedAt = run.run_attempt > 1 ? run.run_started_at : run.created_at;
+const report = { runId, createdAt: run.created_at, attemptStartedAt, url: run.html_url, sha: run.head_sha, attempt: run.run_attempt, status: run.status, result: run.conclusion,
+  wallClockSeconds: run.status === 'completed' && completed.length ? (Math.max(...completed) - Date.parse(attemptStartedAt)) / 1000 : null,
+  observedElapsedSeconds: completed.length ? (Math.max(...completed) - Date.parse(attemptStartedAt)) / 1000 : null,
   criticalPath: latestLeaf ? `${latestLeaf.name}${jobs.some(job => job.name === 'certification') ? ' -> certification' : ''}` : null,
   warmColdClassification: 'Use per-job cache results; a rerun is not automatically warm.',
   phaseMeasurementNote: 'Empty phase arrays mean not separately instrumented, not zero. Legacy source/browser steps combine phases; OCI combines image build and runtime checks; native verification includes Docker builds and compose. Download-related steps include other work and are not download-only stopwatch measurements.',
