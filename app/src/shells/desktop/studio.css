@@ -182,3 +182,7 @@
 :root[data-zp-theme="dark"] .st-studio-durability {background:#34452e;color:#e1c98d}
 :root[data-zp-theme="dark"] .st-studio-durability.is-saved {background:#244f37;color:#c3f0d3}
 @media(max-width:900px){.st-studio-durability {padding:7px;font-size:10px}}
+
+@media (max-width: 1180px) {
+  .st-studio-shell .st-workspace .editor-columns {grid-template-columns:minmax(0,1fr)}
+}
