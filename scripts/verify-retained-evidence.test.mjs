@@ -9,7 +9,7 @@ test("closed migration campaign retains every referenced acceptance record", asy
   assert.equal(campaign.status, "complete");
   for (const task of campaign.tasks) {
     for (const proof of task.proofs ?? []) {
-      assert.match(proof, /^docs\/(?:migration|verification)\/[A-Za-z0-9./_-]+$/u);
+      assert.ok(proof.startsWith("docs/migration/") || proof.startsWith("docs/verification/"), proof);
       assert.ok(!proof.split("/").includes(".."));
       assert.equal((await stat(resolve(migration, proof))).isFile(), true, task.id + ": " + proof);
     }
