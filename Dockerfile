@@ -16,7 +16,7 @@ FROM pnpm-base AS source
 # The shared cache mount is usable by both BuildKit and Podman/Buildah.
 COPY package.json pnpm-lock.yaml pnpm-workspace.yaml ./
 RUN --mount=type=cache,id=scriptorium-pnpm-store,target=/pnpm/store,sharing=locked \
-    pnpm fetch --frozen-lockfile --store-dir=/pnpm/store
+    pnpm fetch --store-dir=/pnpm/store
 COPY . ./
 RUN --mount=type=cache,id=scriptorium-pnpm-store,target=/pnpm/store,sharing=locked \
     pnpm install --offline --frozen-lockfile --store-dir=/pnpm/store --package-import-method=copy
