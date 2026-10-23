@@ -1,3 +1,4 @@
+# syntax=docker/dockerfile:1.7
 ARG NODE_IMAGE=docker.io/library/node:24-bookworm-slim@sha256:a5f4366e834695d5f363b920c104953a535d3a9864d1bdf74566a0ebe01daee5
 ARG GO_IMAGE=docker.io/library/golang:1.25.5-bookworm@sha256:d9132cce84391efab786495288756d60e1da215b1f94e87860aeefc3d4c45b6d
 ARG PNPM_VERSION=12.10.1
@@ -11,8 +12,14 @@ RUN corepack enable \
 WORKDIR /opt/scriptorium
 
 FROM pnpm-base AS source
+# Fetch the locked external packages before copying frequently changed source.
+# The shared cache mount is usable by both BuildKit and Podman/Buildah.
+COPY package.json pnpm-lock.yaml pnpm-workspace.yaml ./
+RUN --mount=type=cache,id=scriptorium-pnpm-store,target=/pnpm/store,sharing=locked \
+    pnpm fetch --frozen-lockfile --store-dir=/pnpm/store
 COPY . ./
-RUN pnpm install --frozen-lockfile
+RUN --mount=type=cache,id=scriptorium-pnpm-store,target=/pnpm/store,sharing=locked \
+    pnpm install --offline --frozen-lockfile --store-dir=/pnpm/store --package-import-method=copy
 
 FROM source AS build
 ARG PROFILE
