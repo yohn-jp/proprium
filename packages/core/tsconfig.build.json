@@ -1,5 +1,5 @@
 {
   "extends": "./tsconfig.json",
-  "include": ["src/index.ts", "src/hosted-git-credentials.ts"],
+  "include": ["src/index.ts", "src/hosted-git-credentials.ts", "src/operation-records.ts"],
   "exclude": ["src/**/*.test.ts"]
 }
