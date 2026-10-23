@@ -903,3 +903,51 @@ test("audit MCP expires idle SDK sessions and cannot allocate after disposal", a
   assert.equal(stopped.status, 503);
   await stopped.text();
 });
+
+test("audit actual SDK event stream reserves capacity past idle expiry and releases on cancel", async () => {
+  let now = 0;
+  const sessions = new Map<string, import("./http.js").McpSession>();
+  const contribution = createMcpHttpContribution(sessions, { maxSessions: 1, idleTimeoutMs: 100, now: () => now });
+  const host = actionContext([]);
+  const initialize = () => new Request("http://scriptorium.test/streamable", {
+    method: "POST", headers: { "Content-Type": "application/json", Accept: "application/json, text/event-stream" },
+    body: JSON.stringify({ jsonrpc: "2.0", id: 1, method: "initialize", params: { protocolVersion: "2025-03-26", capabilities: {}, clientInfo: { name: "active-stream", version: "1" } } }),
+  });
+  let stream: Response | undefined;
+  try {
+    const initialized = await contribution.handle(initialize(), host);
+    assert.equal(initialized.status, 200);
+    const id = initialized.headers.get("mcp-session-id");
+    assert.ok(id);
+    await initialized.text();
+    stream = await contribution.handle(new Request("http://scriptorium.test/streamable", {
+      headers: { "mcp-session-id": id, Accept: "text/event-stream" },
+    }), host);
+    assert.equal(stream.status, 200);
+    assert.match(stream.headers.get("content-type") ?? "", /text\/event-stream/);
+    const session = sessions.get(id);
+    assert.ok(session);
+    assert.equal(session.activeRequests, 1);
+    assert.equal(session.timer, undefined);
+    now = 101;
+    const denied = await contribution.handle(initialize(), host);
+    assert.equal(denied.status, 503);
+    await denied.text();
+    assert.equal(sessions.get(id), session, "an open SDK stream is not idle or available for eviction");
+    await stream.body!.cancel();
+    assert.equal(session.activeRequests, 0);
+    assert.equal(session.lastUsedAt, now);
+    now = 202;
+    const expired = await contribution.handle(new Request("http://scriptorium.test/streamable", {
+      headers: { "mcp-session-id": id, Accept: "text/event-stream" },
+    }), host);
+    assert.equal(expired.status, 404);
+    await expired.text();
+    assert.equal(sessions.size, 0);
+    assert.equal(session.closing, true);
+    assert.equal(session.timer, undefined);
+  } finally {
+    await stream?.body?.cancel().catch(() => undefined);
+    await closeMcpSessions(sessions);
+  }
+});

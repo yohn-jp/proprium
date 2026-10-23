@@ -29,3 +29,15 @@ export function assertReleaseIdentity(tag, expectedSha, actualSha) {
     throw new Error('Release tag does not bind the verified immutable source');
   }
 }
+
+/** @param {Response} response */
+export async function assertImageTagAbsent(response) {
+  if (response.status === 200) throw new Error('Existing OCI version tag is immutable; use a new version');
+  if (response.status !== 404) throw new Error(`Cannot establish OCI tag absence (HTTP ${response.status})`);
+  /** @type {unknown} */
+  const body = await response.json();
+  if (!record(body) || !Array.isArray(body.errors) || body.errors.length === 0 ||
+      !body.errors.every(error => record(error) && (error.code === 'MANIFEST_UNKNOWN' || error.code === 'NAME_UNKNOWN'))) {
+    throw new Error('Registry did not confirm an absent OCI version tag');
+  }
+}

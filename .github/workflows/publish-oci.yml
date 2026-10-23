@@ -103,10 +103,12 @@ jobs:
           password: ${{ secrets.GITHUB_TOKEN }}
       - name: Publish verified image
         env:
+          GH_TOKEN: ${{ github.token }}
           IMAGE: ${{ steps.image.outputs.name }}
           TAG: ${{ steps.image.outputs.tag }}
           PROFILE: ${{ matrix.profile }}
         run: |
+          node scripts/verify-unpublished-image.mjs
           docker tag "scriptorium-ci:$PROFILE" "$IMAGE:$TAG"
           docker push "$IMAGE:$TAG"
           docker buildx imagetools inspect "$IMAGE:$TAG"

@@ -25,3 +25,19 @@ test('release gate requires every source, native, OCI and browser job', async ()
   assert.throws(() => assertVerificationJobs(jobs.slice(1)));
   assert.throws(() => assertVerificationJobs(jobs.map((job, index) => index === 1 ? { ...job, conclusion: 'skipped' } : job)));
 });
+
+test('OCI publication refuses existing image tags and fails closed on registry uncertainty', async () => {
+  const { assertImageTagAbsent } = await import('./release-policy.mjs');
+  for (const code of ['MANIFEST_UNKNOWN', 'NAME_UNKNOWN']) {
+    await assert.doesNotReject(assertImageTagAbsent(Response.json({ errors: [{ code, message: 'absent' }] }, { status: 404 })));
+  }
+  for (const response of [
+    Response.json({ schemaVersion: 2 }),
+    Response.json({ errors: [{ code: 'UNAUTHORIZED' }] }, { status: 401 }),
+    Response.json({ errors: [{ code: 'DENIED' }] }, { status: 403 }),
+    Response.json({ errors: [{ code: 'MANIFEST_UNKNOWN' }] }, { status: 503 }),
+    Response.json({ errors: [{ code: 'OTHER' }] }, { status: 404 }),
+    Response.json({ errors: [] }, { status: 404 }),
+    new Response('not registry JSON', { status: 404 }),
+  ]) await assert.rejects(assertImageTagAbsent(response));
+});
