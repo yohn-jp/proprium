@@ -11,6 +11,6 @@ Scriptorium is a Git-backed writing application. Consult [Full Migration Archite
 - Do not introduce optional NLP or embedded LLM dependencies into the minimal Core.
 - Do not commit work repositories, manuscripts, tokens, caches, embeddings, or model artifacts.
 
-Install with `pnpm install --frozen-lockfile`; run `pnpm typecheck`, `pnpm test`, `pnpm build`, and `pnpm audit:core`. Follow the browser and image checks under `docs/verification` for changes affecting the user journey or packaging. Do not add, synchronize, or run CI/GitHub Actions or organization templates as part of the initial recovery.
+Install with `pnpm install --frozen-lockfile`; run `pnpm typecheck`, `pnpm test`, `pnpm build`, and `pnpm audit:core`. Follow the browser and image checks under `docs/verification` for changes affecting the user journey or packaging. Issue #29 authorizes repository verification CI and exact-source release gates after initial Core recovery. Verification never publishes or deploys. Only the gated release workflow may publish; do not synchronize organization templates or change production resources.
 
 For security concerns, use [SECURITY.md](SECURITY.md).

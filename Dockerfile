@@ -34,7 +34,7 @@ LABEL org.opencontainers.image.revision=${SCRIPTORIUM_PRODUCER_REVISION}
 RUN test "${#SCRIPTORIUM_PRODUCER_REVISION}" -eq 40 \
  && printf '%s' "${SCRIPTORIUM_PRODUCER_REVISION}" | grep -Eq '^[a-f0-9]{40}$' \
  && printf '%s' "${SCRIPTORIUM_DOCKERFILE_SHA256}" | grep -Eq '^[a-f0-9]{64}$'
-RUN pnpm build
+RUN pnpm build:workspace
 RUN node scripts/profile-package.mjs --modules-json '[]' --prebuilt --prime-deploy-cache --out /tmp/scriptorium-hosted-artifact/app \
  && rm -rf /tmp/scriptorium-hosted-artifact
 COPY --from=frontend-build /scriptorium-buildkit-frontend /usr/local/bin/scriptorium-buildkit-frontend

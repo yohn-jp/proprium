@@ -8,7 +8,7 @@ test("concurrent expired Hosted requests share the rotating refresh exchange", a
   let refreshRequests = 0;
   globalThis.fetch = async (input) => {
     const path = String(input);
-    if (path === "/api/version") return Response.json({ hosted: true });
+    if (path === "/api/version") return Response.json({ name: "scriptorium", version: "0.1.0", hosted: true, profile: "hosted" });
     if (path === "/_platform/refresh") {
       refreshRequests += 1;
       await new Promise<void>((resolve) => setImmediate(resolve));
@@ -41,7 +41,8 @@ test("scene views use one pinned request for remote and checkpoint content", asy
   globalThis.fetch = async (input) => {
     assert.equal(String(input), `/api/projects/project-1/scenes/scene-1/views?snapshot=${sha}`);
     requests += 1;
-    return Response.json({ remote: { snapshot }, effective: { snapshot } });
+    const read = { snapshot, scene: { id: "scene-1", title: "One", text: "text", revision: "revision" }, document: { path: "a.md", content: "text", revision: null }, metadata: { path: "a.yaml", content: "id: scene-1", revision: null } };
+    return Response.json({ remote: read, effective: read });
   };
   try {
     const views = await api.readSceneViews("project-1", "scene-1", snapshot);

@@ -14,7 +14,7 @@ const execFile = promisify(execFileCallback);
 const READ_OBSERVATION_MAX_AGE_MS_FOR_TEST = 15_001;
 
 async function runGit(cwd: string, ...args: string[]): Promise<string> {
-  const { stdout } = await execFile("git", args, { cwd, maxBuffer: 4 * 1024 * 1024 });
+  const { stdout } = await execFile("git", ["-c", "user.name=Test Writer", "-c", "user.email=writer@example.test", ...args], { cwd, maxBuffer: 4 * 1024 * 1024 });
   return stdout.trim();
 }
 

@@ -2689,3 +2689,34 @@ describe("Scriptorium HTTP boundary", () => {
     assert.equal(observeCalls, 0, "persisted cursors remain available while remote observation is unavailable after restart");
   });
 });
+
+
+for (const status of [502, 503] as const) {
+  for (const phase of ["read", "write"] as const) {
+    it(`audit Hosted ${phase} dependency HTTP ${status} is not authentication denial`, async () => {
+      const directory = await mkdtemp(resolve(tmpdir(), "scriptorium-auth-outage-"));
+      const normal = hostedTestPolicy();
+      const policy: HostedAuthorizationPolicy = {
+        ...normal,
+        async authenticate(token, permission = "read") {
+          if (permission === phase) throw Object.assign(new Error("private upstream detail"), { status });
+          return normal.authenticate(token, permission);
+        },
+      };
+      const apiServer = await startHostedApi(makeStore(), directory, policy, undefined, undefined, resolve(directory, "history"));
+      try {
+        const response = await fetch(`${apiServer.base}${phase === "read" ? "/api/session" : "/api/inbox/read-all"}`, {
+          method: phase === "read" ? "GET" : "POST", headers: { Authorization: "Bearer write-grant" },
+        });
+        assert.equal(response.status, status);
+        assert.equal(response.headers.has("www-authenticate"), false);
+        const body = await response.json() as { code: string; error: string };
+        assert.equal(body.code, "AUTHORIZATION_UNAVAILABLE");
+        assert.ok(!body.error.includes("private"));
+      } finally {
+        await apiServer.close();
+        await rm(directory, { recursive: true, force: true });
+      }
+    });
+  }
+}
