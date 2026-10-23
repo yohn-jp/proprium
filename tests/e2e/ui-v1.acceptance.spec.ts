@@ -409,10 +409,9 @@ test("both production Shells preserve recoverable Japanese drafts and the Mobile
   const beforeResize = (await editorPanel.boundingBox())?.width;
   await resizeHandle.focus();
   await page.keyboard.press("ArrowRight");
-  const afterResize = (await editorPanel.boundingBox())?.width;
   expect(beforeResize).toBeTruthy();
-  expect(afterResize).toBeTruthy();
-  expect(afterResize).not.toBe(beforeResize);
+  await expect.poll(async () => (await editorPanel.boundingBox())?.width).not.toBe(beforeResize);
+  expect((await editorPanel.boundingBox())?.width).toBeTruthy();
 
   await page.getByRole("button", { name: "Chapter One: Scene Two", exact: true }).click();
   await expect(page.getByRole("heading", { name: "Scene Two" })).toBeVisible();
@@ -525,7 +524,7 @@ test("both production Shells preserve recoverable Japanese drafts and the Mobile
   const mobileWritingUrl = page.url();
   await page.getByRole("navigation", { name: "モバイル画面" }).getByRole("button", { name: "設定", exact: true }).click();
   await expect(page).toHaveURL(mobileWritingUrl);
-  await expect(page.getByRole("status").filter({ hasText: "変換が完了していません" })).toBeVisible();
+  await expect(page.getByRole("alert").filter({ hasText: "変換が完了していません" })).toBeVisible();
   await expect(mobileEditor).toHaveText(mobileCompositionDraft);
   await expectJournalDraft(page, "scene-2", mobileCompositionDraft);
   await mobileEditor.evaluate((element) => element.dispatchEvent(new CompositionEvent("compositionend", { data: "日本語", bubbles: true })));

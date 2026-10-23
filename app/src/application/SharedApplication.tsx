@@ -1370,7 +1370,9 @@ function AuthorWorkspace({
             !previous.message.startsWith("リモート確認状態:") &&
             !previous.message.startsWith("リモートの確認に失敗しました。")) return previous;
         if (observed.state === "fresh" && !changedRemote && !changedCheckpoint && !changedTree &&
-            !changedEditorSnapshot && previous.kind !== "error") return previous;
+            !changedEditorSnapshot && previous.kind !== "error" &&
+            !previous.message.includes("リモート未確認") &&
+            !previous.message.startsWith("リモート ")) return previous;
         return {
           message: observed.state === "fresh"
             ? `リモート ${observed.snapshot.remoteCommit.slice(0, 12)} · ${new Date(observed.observedAt).toLocaleTimeString("ja-JP")} に確認`

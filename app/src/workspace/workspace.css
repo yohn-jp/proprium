@@ -41,6 +41,8 @@
 }
 
 .st-workspace-toolbar {
+  position: relative;
+  z-index: 4;
   flex: 0 0 auto;
   padding: 0.45rem 0.6rem;
   border-bottom: 1px solid var(--line);

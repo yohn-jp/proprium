@@ -749,6 +749,7 @@ test("desktop floating panels preserve drafts and saved layout geometry", async 
   await page.locator('[data-floating-panel="outline"]')
     .getByRole("button", { name: "パネルをドックへ戻す" }).click();
   await expect(page.locator('[data-workspace-panel="outline"]')).toBeVisible();
+  await page.getByRole("tab", { name: "Editor", exact: true }).click();
   await expect(page.locator(".cm-content")).toHaveText(draft);
 });
 

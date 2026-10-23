@@ -305,7 +305,7 @@ export const api = {
     return response.item;
   },
   markAllInboxRead: (signal?: AbortSignal) =>
-    request(dto.marked, "/api/inbox/read-all", { method: "POST", signal }),
+    request(dto.marked, "/api/inbox/read-all", { method: "POST", ...(signal ? { signal } : {}) }),
   jobEventStream: (signal: AbortSignal) => requestEventStream("/api/jobs/events", signal),
   projects: () => request(dto.projects, "/api/projects"),
   projectDetails: (projectId: string) => request(dto.projectDetails, `/api/projects/${encodeURIComponent(projectId)}`),

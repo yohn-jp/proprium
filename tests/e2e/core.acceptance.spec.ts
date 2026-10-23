@@ -42,7 +42,7 @@ interface ProposalJournalSummary {
     operations: Array<{ id: string; generation: number; writes: Array<{ path: string; content: string | null }> }>;
     evidence?: Array<{ id: string; module: string }>;
   };
-  status?: { state: string; payloadComplete?: boolean; originalDigest?: string; operationIds?: string[]; approvedOperationIds: string[]; checkpoints: unknown[]; publishedOperationIds?: string[] };
+  status?: { state: string; payloadComplete?: boolean; originalDigest?: string; operationIds?: string[]; approvedOperationIds: string[]; checkpoints: Array<{ operationId: string }>; publishedOperationIds?: string[] };
 }
 
 function repositoryInputValue(value: string): string {
@@ -352,7 +352,7 @@ test("same-origin stale tabs cannot replace an equal-generation journal draft", 
     await secondEditor.fill(staleTabText);
     await expect(secondEditor).toHaveText(staleTabText);
     await expect(secondTab.locator(".durability-message")).toContainText("保存を確認できていません");
-    await expect(secondTab.getByRole("alert")).toContainText("新しい世代");
+    await expect(secondTab.locator(".topbar-status")).toContainText("新しい世代");
     await expect(secondTab.getByRole("button", { name: "Checkpoint", exact: true })).toBeDisabled();
 
     const sharedJournal = (await readJournal(secondTab)).filter((entry) =>
@@ -1258,7 +1258,7 @@ test("full browser MCP proposal payload is restored after Core data loss before 
   await expect.poll(async () => {
     const record = (await readProposalJournal(page)).find((item) => item.proposal.id === proposalId);
     return record?.status?.payloadComplete === true && record.proposal.operations.length === 2 &&
-      record.status.publishedOperationIds.includes(firstOperationId) &&
+      record.status.publishedOperationIds?.includes(firstOperationId) === true &&
       record.proposal.source === "mcp" && record.proposal.evidence?.some((item) => item.id === evidence.id) === true;
   }).toBe(true);
   const recoveredRecord = (await readProposalJournal(page)).find((record) => record.proposal.id === proposalId);
@@ -1449,7 +1449,7 @@ test("IndexedDB quota failures remain visible and block checkpointing", async ({
 
   const canonicalBefore = await page.locator(".cm-content").textContent();
   await page.locator(".cm-content").fill("This edit cannot be journaled because the browser is full.");
-  await expect(page.getByRole("alert")).toContainText("Browser storage is full");
+  await expect(page.locator(".topbar-status")).toContainText("Browser storage is full");
   await expect(page.getByRole("button", { name: "Checkpoint", exact: true })).toBeDisabled();
 
   const unloadDialog = page.waitForEvent("dialog");
