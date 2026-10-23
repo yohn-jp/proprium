@@ -1,6 +1,6 @@
 # Scriptorium
 
-Read [Modular Workspace Architecture](docs/architecture/MODULAR-WORKSPACE.md) for the current Core/Plugin/Workspace implementation. Read [Full Migration Architecture](docs/architecture/FULL-MIGRATION.md) and [the fixed P00–P13 plan](docs/migration/FULL-MIGRATION-PLAN.md) for Epic #7. [Core Architecture](docs/architecture/CORE.md) remains the baseline where not superseded. Follow the organization-wide `yohn-jp/.github/.github/agent-governance/AGENTS.md` and its applicable skills.
+Read [Internal Boundaries and Maintainability](docs/architecture/INTERNAL-BOUNDARIES.md) for the normative ownership and refactoring contract. Read [Modular Workspace Architecture](docs/architecture/MODULAR-WORKSPACE.md) for the current Core/Plugin/Workspace implementation. Read [Full Migration Architecture](docs/architecture/FULL-MIGRATION.md) and [the fixed P00–P13 plan](docs/migration/FULL-MIGRATION-PLAN.md) for Epic #7. [Core Architecture](docs/architecture/CORE.md) remains the baseline where not superseded. Follow the organization-wide `yohn-jp/.github/.github/agent-governance/AGENTS.md` and its applicable skills.
 
 ## Authority
 1. Explicit current user instructions and accepted Issue / Implementation contract.
