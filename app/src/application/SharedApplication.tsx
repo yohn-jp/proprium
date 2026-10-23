@@ -29,6 +29,7 @@ import { formatHandoffHint, mergeContinueCandidates, sceneExistsInTree, sceneTit
 import { useRecentActivityResume } from "../resume/useRecentActivityResume";
 import { loadThemeMode, persistThemeMode, type ThemeMode } from "../theme";
 import { clearDraft, loadDraft } from "../drafts";
+import { CheckpointConflictError, runCheckpointProtocol } from "./checkpoint-protocol";
 import type { ApplicationShell, ApplicationShellProps, UiMode } from "./contracts";
 import { applicationPath, parseApplicationLocation, readUiModePreference, rememberUiMode, switchApplicationPath, type ApplicationResource } from "./navigation";
 import { canRetainRecoveredEditorDuringSceneLoad, isEditorTextSafeToFlush, isNonDraftEntryAcknowledgedByReceipt, isSameSceneEditorLoad, isUnchangedEntryConfirmedByReceipt, mayWriteEditor, mergeLatestDraftEntry, recoveryStatusForJournalOpen, type EditorRecoveryStatus } from "./recovery";
@@ -220,10 +221,6 @@ function buildOperation(
   };
   assertChangeOperation(operation);
   return operation;
-}
-
-function proposalIdFor(operation: ChangeOperation): string {
-  return `author-${operation.id}-${operation.generation}`;
 }
 
 function proposalOperationIds(proposal: ChangeProposal): string[] {
@@ -817,31 +814,24 @@ function AuthorWorkspace({
     await refreshJournal(repository, expectedNavigation);
   }, [refreshJournal]);
 
-  const replayAuthorizedEntry = useCallback(async (projectId: string, entry: JournalEntry, author: string) => {
+  const replayAuthorizedEntry = useCallback(async (
+    projectId: string,
+    repository: RepositoryIdentity,
+    entry: JournalEntry,
+    author: string,
+  ) => {
     const currentJournal = journalRef.current;
     if (!currentJournal) throw new Error("ブラウザー回復ストレージを開けません。");
     if (entry.authorScope !== author) throw new Error("別の作者スコープの回復記録は再生できません。");
     if (entry.state !== "checkpointing" && entry.state !== "checkpointed") return entry;
-    const stableProposalId = entry.proposalId ?? proposalIdFor(entry.operation);
-    const prepared = await currentJournal.updateState({ ...entry, proposalId: stableProposalId, authorizedAt: entry.authorizedAt ?? Date.now() }, "checkpointing");
-    const proposal: ChangeProposal = {
-      id: stableProposalId,
-      snapshot: prepared.snapshot,
-      operations: [prepared.operation],
-      source: "author",
-    };
-    const accepted = await api.propose(projectId, proposal);
-    await currentJournal.putProposal(prepared.repository, author, accepted);
-    const assigned = await currentJournal.updateState({ ...prepared, proposalId: accepted.id }, "checkpointing");
-    await api.approve(projectId, {
-      proposalId: accepted.id,
-      operationIds: [assigned.operation.id],
+    return runCheckpointProtocol({
+      projectId,
+      repository,
       authorScope: author,
+      entry,
+      api,
+      journal: currentJournal,
     });
-    const receipt = await api.checkpoint(projectId, assigned.operation);
-    const checkpointed = await currentJournal.updateState(assigned, "checkpointed", receipt);
-    await currentJournal.removeProposal(prepared.repository, author, accepted.id).catch(() => undefined);
-    return checkpointed;
   }, []);
 
   const reconcileProject = useCallback((projectId: string, repository: RepositoryIdentity, author: string, expectedNavigation?: number): Promise<boolean> => {
@@ -849,7 +839,8 @@ function AuthorWorkspace({
     const key = recoveryKeyForNavigation(projectId, repository, author, nav);
     const running = reconciliationRef.current.get(key);
     if (running) return running;
-    const isCurrent = () => navigationRef.current === nav && workRef.current?.project.id === projectId &&
+    const isCurrent = () => navigationRef.current === nav && authorScopeRef.current === author &&
+      workRef.current?.project.id === projectId &&
       sameRepository(workRef.current.observation.snapshot.repository, repository);
     const task = (async (): Promise<boolean> => {
       const currentJournal = journalRef.current;
@@ -862,9 +853,10 @@ function AuthorWorkspace({
         for (const entry of pendingEntries) {
           if (!isCurrent()) return false;
           try {
-            await replayAuthorizedEntry(projectId, entry, author);
+            await replayAuthorizedEntry(projectId, repository, entry, author);
           } catch (error) {
-            const conflict = error instanceof ApiError && (error.status === 409 || error.status === 412);
+            const conflict = error instanceof CheckpointConflictError ||
+              (error instanceof ApiError && (error.status === 409 || error.status === 412));
             if (conflict) {
               try {
                 await currentJournal.updateState(entry, "conflict");
@@ -1745,41 +1737,6 @@ function AuthorWorkspace({
     }
   }
 
-  async function checkpointEntry(
-    projectId: string,
-    entry: JournalEntry,
-    onCheckpointing?: (entry: JournalEntry) => void,
-    expectedNavigation?: number,
-  ): Promise<JournalEntry> {
-    const currentJournal = journalRef.current;
-    if (!currentJournal) throw new Error("ブラウザー回復ストレージを開けません。");
-    if (entry.authorScope !== authorScopeRef.current) throw new Error("別の作者スコープの記録はチェックポイントできません。");
-    const operation = entry.operation;
-    const proposalId = entry.proposalId ?? proposalIdFor(operation);
-    const checkpointing = await currentJournal.updateState({
-      ...entry,
-      proposalId,
-      authorizedAt: entry.authorizedAt ?? Date.now(),
-    }, "checkpointing");
-    if (checkpointing.state === "conflict") throw new Error("競合した回復記録はチェックポイントできません。");
-    // Keep the visible journal aligned with the already-durable IndexedDB transition.
-    setEntries((current) => current.map((item) => item.key === checkpointing.key ? checkpointing : item));
-    onCheckpointing?.(checkpointing);
-    const proposal = await api.propose(projectId, {
-      id: proposalId,
-      snapshot: checkpointing.snapshot,
-      operations: [operation],
-      source: "author",
-    });
-    await currentJournal.putProposal(checkpointing.repository, authorScopeRef.current, proposal);
-    await currentJournal.updateState({ ...checkpointing, proposalId: proposal.id }, "checkpointing");
-    await api.approve(projectId, { proposalId: proposal.id, operationIds: [operation.id], authorScope: authorScopeRef.current });
-    const receipt = await api.checkpoint(projectId, operation);
-    const saved = await currentJournal.updateState({ ...checkpointing, proposalId: proposal.id }, "checkpointed", receipt);
-    await currentJournal.removeProposal(checkpointing.repository, authorScopeRef.current, proposal.id).catch(() => undefined);
-    return saved;
-  }
-
   async function reloadConflictSnapshot(
     nav: number,
     projectId: string,
@@ -1855,6 +1812,8 @@ function AuthorWorkspace({
     const nav = navigationRef.current;
     const projectId = current.project.id;
     const repository = current.observation.snapshot.repository;
+    const authorScope = authorScopeRef.current;
+    const isCurrentAttempt = () => isCurrentProject(nav, projectId, repository) && authorScopeRef.current === authorScope;
     const documentPath = editor.read.document.path;
     const sceneId = editor.read.scene.id;
     let submittedEntry = editor.entry;
@@ -1862,24 +1821,35 @@ function AuthorWorkspace({
     setStatus({ message: "チェックポイントを作成しています…", kind: "normal" });
     try {
       await flushDraft();
-      if (!isCurrentEditor(nav, projectId, repository, documentPath, sceneId)) return;
+      if (!isCurrentEditor(nav, projectId, repository, documentPath, sceneId) || !isCurrentAttempt()) return;
       const latest = workRef.current?.editor;
       if (!latest?.entry || latest.conflict) throw new Error("競合を確認してからチェックポイントを作成してください。");
       const operation = latest.entry.operation;
       const checkpointingEntry = latest.entry;
       submittedEntry = checkpointingEntry;
-      const saved = await checkpointEntry(projectId, checkpointingEntry, (checkpointing) => {
-        if (!isCurrentEditor(nav, projectId, repository, documentPath, sceneId)) return;
-        updateWork((state) => state?.editor?.entry?.operation.id === operation.id && state.editor.entry.operation.generation === operation.generation
-        ? { ...state, editor: { ...state.editor, entry: checkpointing } }
-        : state);
-      }, nav);
-      if (!isCurrentProject(nav, projectId, repository)) return;
+      const saved = await runCheckpointProtocol({
+        projectId,
+        repository,
+        authorScope,
+        entry: checkpointingEntry,
+        api,
+        journal: currentJournal,
+        onCheckpointing: (checkpointing) => {
+          if (isCurrentAttempt()) {
+            setEntries((currentEntries) => currentEntries.map((item) => item.key === checkpointing.key ? checkpointing : item));
+          }
+          if (!isCurrentAttempt() || !isCurrentEditor(nav, projectId, repository, documentPath, sceneId)) return;
+          updateWork((state) => state?.editor?.entry?.operation.id === operation.id && state.editor.entry.operation.generation === operation.generation
+            ? { ...state, editor: { ...state.editor, entry: checkpointing } }
+            : state);
+        },
+      });
+      if (!isCurrentAttempt() || !isCurrentEditor(nav, projectId, repository, documentPath, sceneId)) return;
       updateWork((state) => state?.editor?.entry?.operation.id === operation.id && state.editor.entry.operation.generation === operation.generation
         ? { ...state, editor: { ...state.editor, entry: saved } }
         : state);
       await refreshJournal(saved.repository, nav);
-      if (!isCurrentEditor(nav, projectId, repository, documentPath, sceneId)) return;
+      if (!isCurrentAttempt() || !isCurrentEditor(nav, projectId, repository, documentPath, sceneId)) return;
       setStatus({ message: "ローカルチェックポイントを作成しました。GitHub へ保存するまでブラウザーの回復記録を保持します。", kind: "success" });
       void refreshRemote();
     } catch (error) {
@@ -1888,27 +1858,29 @@ function AuthorWorkspace({
         try {
           conflictEntry = await currentJournal.updateState(submittedEntry, "conflict");
         } catch (storageError) {
-          if (isCurrentProject(nav, projectId, repository)) {
+          if (isCurrentAttempt()) {
             setStatus({ message: `チェックポイントが競合しましたが、競合状態を回復記録へ保存できませんでした。${messageOf(storageError)}`, kind: "error" });
           }
         }
-        if (conflictEntry && isCurrentEditor(nav, projectId, repository, documentPath, sceneId)) {
+        if (conflictEntry && isCurrentAttempt() && isCurrentEditor(nav, projectId, repository, documentPath, sceneId)) {
           updateWork((state) => state?.editor?.entry?.operation.id === submittedEntry.operation.id &&
               state.editor.entry.operation.generation === submittedEntry.operation.generation
             ? { ...state, editor: { ...state.editor, entry: conflictEntry!, text: conflictEntry!.text, conflict: null, draftStored: true } }
             : state);
         }
-        if (conflictEntry && isCurrentProject(nav, projectId, repository)) {
+        if (conflictEntry && isCurrentAttempt()) {
           try {
             await reloadConflictSnapshot(nav, projectId, repository, sceneId, documentPath, submittedEntry.operation.id, submittedEntry.operation.generation);
           } catch (refreshError) {
-            if (isCurrentProject(nav, projectId, repository)) {
+            if (isCurrentAttempt()) {
               setStatus({ message: `チェックポイントは競合しました。最新のリモート原稿を確認できませんでした。下書きは回復記録に保持しています。${messageOf(refreshError)}`, kind: "error" });
             }
           }
         }
       }
-      if (isCurrentEditor(nav, projectId, repository, documentPath, sceneId)) setStatus({ message: messageOf(error), kind: "error" });
+      if (isCurrentAttempt() && isCurrentEditor(nav, projectId, repository, documentPath, sceneId)) {
+        setStatus({ message: messageOf(error), kind: "error" });
+      }
     } finally {
       if (navigationRef.current === nav) setBusy("");
     }
@@ -1922,18 +1894,21 @@ function AuthorWorkspace({
     const nav = navigationRef.current;
     const projectId = current.project.id;
     const repository = current.observation.snapshot.repository;
+    const authorScope = authorScopeRef.current;
     setBusy("checkpoint");
     setStatus({ message: "スクラッチのチェックポイントを作成しています…", kind: "normal" });
     try {
       await scratchFlushRef.current();
-      if (!isCurrentProject(nav, projectId, repository)) throw new Error("作品を切り替えたため、スクラッチの保存表示を更新できませんでした。");
-      const candidates = await currentJournal.getDocument(entry.repository, entry.documentPath, authorScopeRef.current);
+      if (!isCurrentProject(nav, projectId, repository) || authorScopeRef.current !== authorScope) {
+        throw new Error("作品または作者を切り替えたため、スクラッチの保存表示を更新できませんでした。");
+      }
+      const candidates = await currentJournal.getDocument(entry.repository, entry.documentPath, authorScope);
       const latest = [...candidates].reverse().find((candidate) => candidate.operation.id === entry.operation.id);
       if (!latest || latest.state !== "draft") throw new Error("このスクラッチは Draft 状態ではなくなりました。回復一覧を更新してください。");
-      const saved = await checkpointEntry(projectId, latest, undefined, nav);
-      if (!isCurrentProject(nav, projectId, repository)) return;
+      const saved = await runCheckpointProtocol({ projectId, repository, authorScope, entry: latest, api, journal: currentJournal });
+      if (!isCurrentProject(nav, projectId, repository) || authorScopeRef.current !== authorScope) return;
       await refreshJournal(saved.repository, nav);
-      if (!isCurrentProject(nav, projectId, repository)) return;
+      if (!isCurrentProject(nav, projectId, repository) || authorScopeRef.current !== authorScope) return;
       setStatus({ message: "スクラッチのローカルチェックポイントを作成しました。Save to GitHub で公開できます。", kind: "success" });
       void refreshRemote();
     } catch (error) {
@@ -1941,7 +1916,9 @@ function AuthorWorkspace({
         await currentJournal.updateState(entry, "conflict").catch(() => undefined);
       }
       await refreshJournal(entry.repository, nav);
-      if (isCurrentProject(nav, projectId, repository)) setStatus({ message: messageOf(error), kind: "error" });
+      if (isCurrentProject(nav, projectId, repository) && authorScopeRef.current === authorScope) {
+        setStatus({ message: messageOf(error), kind: "error" });
+      }
       throw error;
     } finally {
       if (navigationRef.current === nav) setBusy("");
