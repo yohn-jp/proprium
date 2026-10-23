@@ -3,13 +3,15 @@
 import assert from 'node:assert/strict';
 import { execFileSync } from 'node:child_process';
 import { createHash } from 'node:crypto';
-import { mkdtemp, readFile, rm } from 'node:fs/promises';
+import { mkdir, mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { trustedModuleData } from './hosted-build.mjs';
 import { resolveBuildCatalogSelection } from '../packages/module-runtime/dist/index.js';
+import { hostedNativeComposeCases, parseHostedNativeSelection } from './hosted-native-selection.mjs';
 
+const selection = parseHostedNativeSelection(process.argv.slice(2));
 assert.equal(process.env.CI, 'true', 'This native contract check owns a disposable CI runner only');
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const run = (command, args, options = {}) => execFileSync(command, args, { cwd: root, stdio: 'inherit', timeout: 30 * 60_000, ...options });
@@ -62,13 +64,20 @@ try {
   const catalog = JSON.parse(await readFile(catalogPath, 'utf8'));
   const trusted = await trustedModuleData();
   assert.equal(catalog.producerRevision, sha);
+  assert.equal(catalog.runtimeBaseDigest, runtimeBaseDigest);
+  assert.equal(catalog.buildKitDigest, buildKitDigest);
   assert.equal(catalog.modules.length, trusted.length);
-  // Match the buildkit image's online cache priming before offline native compose.
-  // pnpm 12 supply-chain checks also need registry metadata, not just installed files.
-  run(process.execPath, ['scripts/profile-package.mjs', '--modules-json', '[]', '--prebuilt',
-    '--prime-deploy-cache', '--out', path.join(output, 'primed-app')]);
-  const selections = [[], ['story', 'mcp', 'search'], trusted.map(item => item.manifest.id).sort()];
-  for (const requestedModules of selections) {
+
+  const compositionResults = [];
+  const cases = hostedNativeComposeCases(selection);
+  if (cases.length > 0) {
+    // Match Build Kit's online cache priming before each runner's offline native compose.
+    // pnpm 12 supply-chain checks also need registry metadata, not just installed files.
+    run(process.execPath, ['scripts/profile-package.mjs', '--modules-json', '[]', '--prebuilt',
+      '--prime-deploy-cache', '--out', path.join(output, 'primed-app')]);
+  }
+  for (const composeCase of cases) {
+    const requestedModules = [...composeCase.requestedModules];
     const resolved = resolveBuildCatalogSelection(catalog, requestedModules, trusted);
     const input = {
       contractVersion: catalog.contractVersion, producerRevision: sha, runtimeBaseDigest, buildKitDigest,
@@ -85,13 +94,46 @@ try {
     assert.equal(report.buildKey, hash(Buffer.from(JSON.stringify(input))));
     const composedCatalog = JSON.parse(await readFile(path.join(metadataDir, 'build-catalog.json'), 'utf8'));
     assert.equal(composedCatalog.sourceDigest, catalog.sourceDigest);
+    assert.equal(composedCatalog.recipeDigest, catalog.recipeDigest);
+    assert.equal(composedCatalog.lockDigest, catalog.lockDigest);
+    assert.equal(composedCatalog.runtimeBaseDigest, runtimeBaseDigest);
+    assert.equal(composedCatalog.buildKitDigest, buildKitDigest);
     assert.equal(composedCatalog.producerRevision, sha);
     const manifest = JSON.parse(await readFile(path.join(metadataDir, 'composition-manifest.json'), 'utf8'));
     assert.deepEqual(manifest.resolvedModules.map(item => item.id).sort(), resolved.resolvedModules.map(item => item.id).sort());
+    compositionResults.push({
+      selection: composeCase.name,
+      requestedModules: [...requestedModules].sort(),
+      resolvedModules: resolved.resolvedModules.map(item => item.id).sort(),
+      buildKey: report.buildKey,
+      composeMode: 'OFFLINE',
+    });
   }
   assert.equal(execFileSync('git', ['status', '--porcelain'], { cwd: root, encoding: 'utf8' }), '');
-  console.log(JSON.stringify({ acceptanceLevel: 'DISPOSABLE_NATIVE_PRODUCER', sha, runtimeBaseDigest, buildKitDigest,
-    catalog: 'PASS', composeSelections: selections, publication: false, hostedRuntimeAcceptance: 'NOT_CHECKED' }));
+  const result = {
+    schemaVersion: 'scriptorium-hosted-native-verification/v1',
+    acceptanceLevel: 'DISPOSABLE_NATIVE_PRODUCER',
+    selection,
+    sourceSha: sha,
+    dockerfileSha256,
+    runtimeBaseDigest,
+    buildKitDigest,
+    catalog: {
+      result: 'PASS',
+      producerRevision: catalog.producerRevision,
+      sourceDigest: catalog.sourceDigest,
+      recipeDigest: catalog.recipeDigest,
+      lockDigest: catalog.lockDigest,
+      moduleCount: catalog.modules.length,
+    },
+    compositions: compositionResults,
+    publication: false,
+    hostedRuntimeAcceptance: 'NOT_CHECKED',
+  };
+  const reportPath = path.resolve(process.env.SCRIPTORIUM_NATIVE_REPORT_PATH ?? path.join(tmpdir(), `scriptorium-hosted-native-${sha}-${selection}.json`));
+  await mkdir(path.dirname(reportPath), { recursive: true });
+  await writeFile(reportPath, `${JSON.stringify(result, null, 2)}\n`);
+  console.log(JSON.stringify({ ...result, reportPath }));
 } finally {
   await rm(output, { recursive: true, force: true });
   // This directory is the native Producer's fixed output, on this disposable runner only.

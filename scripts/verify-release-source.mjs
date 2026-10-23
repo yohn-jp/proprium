@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 // Read-only gate for the existing tag publication workflow.
 import { execFileSync } from 'node:child_process';
-import { assertReleaseIdentity, assertVerificationJobs, verifiedSourceRun } from './release-policy.mjs';
+import { assertReleaseIdentity, assertVerificationJobs, collectGitHubPages, verifiedSourceRun } from './release-policy.mjs';
 
 const repository = process.env.GITHUB_REPOSITORY;
 const tag = process.env.GITHUB_REF_NAME;
@@ -24,14 +24,14 @@ for (let depth = 0; reference?.type === 'tag' && depth < 8; depth++) {
 }
 if (reference?.type !== 'commit') throw new Error('Release tag does not resolve to a commit');
 assertReleaseIdentity(tag, expectedSha, reference.sha);
-let verified;
-for (let page = 1; page <= 5; page++) {
-  const result = await request(`actions/workflows/verify.yml/runs?per_page=100&page=${page}`);
-  if (!Array.isArray(result.workflow_runs)) throw new Error('Invalid verification listing');
-  try { verified = verifiedSourceRun(result.workflow_runs, expectedSha); break; }
-  catch { if (result.workflow_runs.length < 100) break; }
-}
-if (!verified) throw new Error('Exact source has no successful main verification; rerun after verification completes');
-const result = await request(`actions/runs/${verified.id}/jobs?filter=latest&per_page=100`);
-assertVerificationJobs(result.jobs);
+const runs = await collectGitHubPages(
+  (page, perPage) => request(`actions/workflows/verify.yml/runs?head_sha=${encodeURIComponent(expectedSha)}&branch=main&event=push&status=success&per_page=${perPage}&page=${page}`),
+  'workflow_runs',
+);
+const verified = verifiedSourceRun(runs, expectedSha);
+const jobs = await collectGitHubPages(
+  (page, perPage) => request(`actions/runs/${verified.id}/jobs?filter=latest&per_page=${perPage}&page=${page}`),
+  'jobs',
+);
+assertVerificationJobs(jobs);
 console.log(`Verified release ${tag} source ${expectedSha} with run ${verified.id}. No publication performed by this gate.`);
