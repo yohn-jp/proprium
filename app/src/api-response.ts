@@ -1,4 +1,4 @@
-import { assertChangeOperation, type ActionResult, type ChangeProposal, type CheckpointReceipt, type ModuleStatus, type PublishReceipt, type ProposalStatus, type RecentActivityResponse, type ReconcileResult, type RemoteObservation, type RepositoryIdentity, type SnapshotId, type UiContribution } from "@scriptorium/contracts";
+import { assertChangeOperation, BUILTIN_MODULE_IDS, type ActionResult, type ChangeProposal, type CheckpointReceipt, type ModuleStatus, type PublishReceipt, type ProposalStatus, type RecentActivityResponse, type ReconcileResult, type RemoteObservation, type RepositoryIdentity, type SnapshotId, type UiContribution } from "@scriptorium/contracts";
 import type { Commit, FileDocument, InboxItem, InboxListResponse, ManuscriptSnapshot, ManuscriptSnapshotList, ManuscriptSnapshotMeta, ManuscriptSnapshotRead, Project, ProjectDetails, PublicJob, RuntimeVersion, Scene, SceneRead, Session, SnapshotRead, SyncStatus, Tree, TreeRead } from "./api";
 import { ApiError } from "./api-error";
 
@@ -13,8 +13,6 @@ const strings = (v: unknown): v is string[] => Array.isArray(v) && v.every(text)
 const oneOf = (v: unknown, values: readonly string[]): boolean => text(v) && values.includes(v);
 const optional = <T>(v: unknown, guard: ResponseGuard<T>): v is T | undefined => v === undefined || guard(v);
 const array = <T>(guard: ResponseGuard<T>): ResponseGuard<T[]> => (v): v is T[] => Array.isArray(v) && v.every(guard);
-const modules = ["story", "diagnostics", "nlp", "semantic", "speaker", "assistant", "publishing", "mcp", "search"] as const;
-
 const repository: ResponseGuard<RepositoryIdentity> = (v): v is RepositoryIdentity => record(v) && oneOf(v.provider, ["github", "local"]) && [v.repositoryId, v.defaultBranch, v.ownerScope, v.url].every(text);
 const snapshot: ResponseGuard<SnapshotId> = (v): v is SnapshotId => record(v) && repository(v.repository) && text(v.remoteCommit) && optional(v.overlayCommit, text);
 const fileRevision = (v: unknown): boolean => record(v) && text(v.path) && nullableText(v.revision);
@@ -22,7 +20,7 @@ const checkpoint: ResponseGuard<CheckpointReceipt> = (v): v is CheckpointReceipt
 const proposal: ResponseGuard<ChangeProposal> = (v): v is ChangeProposal => {
   if (!record(v) || !text(v.id) || !snapshot(v.snapshot) || !oneOf(v.source, ["author", "module", "mcp"]) || !Array.isArray(v.operations)) return false;
   try { for (const operation of v.operations) assertChangeOperation(operation); } catch { return false; }
-  return v.evidence === undefined || (Array.isArray(v.evidence) && v.evidence.every(e => record(e) && text(e.id) && snapshot(e.snapshot) && oneOf(e.module, modules) && text(e.kind) && Array.isArray(e.paths) && e.paths.every(fileRevision)));
+  return v.evidence === undefined || (Array.isArray(v.evidence) && v.evidence.every(e => record(e) && text(e.id) && snapshot(e.snapshot) && oneOf(e.module, BUILTIN_MODULE_IDS) && text(e.kind) && Array.isArray(e.paths) && e.paths.every(fileRevision)));
 };
 const proposalStatus: ResponseGuard<ProposalStatus> = (v): v is ProposalStatus => record(v) && proposal(v.proposal) && oneOf(v.state, ["proposed", "partially_approved", "approved", "checkpointed"]) && strings(v.approvedOperationIds) && array(checkpoint)(v.checkpoints) && strings(v.publishedOperationIds) && bool(v.stale) && optional(v.payloadComplete, bool) && optional(v.originalDigest, text) && optional(v.operationIds, strings);
 const project: ResponseGuard<Project> = (v): v is Project => record(v) && [v.id, v.url, v.branch].every(text);
@@ -35,8 +33,8 @@ const manuscriptMeta: ResponseGuard<ManuscriptSnapshotMeta> = (v): v is Manuscri
 const manuscript: ResponseGuard<ManuscriptSnapshot> = (v): v is ManuscriptSnapshot => manuscriptMeta(v) && record(v) && text(v.body) && document(v.document);
 const job: ResponseGuard<PublicJob> = (v): v is PublicJob => record(v) && "result" in v && [v.id, v.type, v.createdAt, v.updatedAt].every(text) && oneOf(v.status, ["queued", "running", "done", "error"]) && (v.progress === null || (typeof v.progress === "number" && Number.isFinite(v.progress) && v.progress >= 0 && v.progress <= 1)) && nullableText(v.error) && nullableText(v.finishedAt) && optional(v.errorCode, text) && optional(v.retryable, bool);
 const inbox: ResponseGuard<InboxItem> = (v): v is InboxItem => record(v) && [v.id, v.jobId, v.jobType, v.title, v.body, v.projectKey, v.createdAt].every(text) && v.kind === "job-complete" && oneOf(v.status, ["done", "error"]) && bool(v.read) && nullableText(v.userId);
-const moduleStatus: ResponseGuard<ModuleStatus> = (v): v is ModuleStatus => record(v) && oneOf(v.id, modules) && oneOf(v.availability, ["not-included", "disabled", "enabled-idle", "active"]) && integer(v.activeJobs) && optional(v.version, text);
-const contribution: ResponseGuard<UiContribution> = (v): v is UiContribution => record(v) && [v.id, v.title, v.action].every(text) && oneOf(v.module, modules) && oneOf(v.slot, ["editor", "dock", "inspection", "review", "settings"]) && (v.contractVersion === undefined || v.contractVersion === 1) && (v.kind === undefined || oneOf(v.kind, ["panel", "editor-adornment", "context-action"])) && (v.contexts === undefined || (Array.isArray(v.contexts) && v.contexts.every(c => oneOf(c, ["workspace", "editor", "reading"])))) && optional(v.multipleInstances, bool);
+const moduleStatus: ResponseGuard<ModuleStatus> = (v): v is ModuleStatus => record(v) && oneOf(v.id, BUILTIN_MODULE_IDS) && oneOf(v.availability, ["not-included", "disabled", "enabled-idle", "active"]) && integer(v.activeJobs) && optional(v.version, text);
+const contribution: ResponseGuard<UiContribution> = (v): v is UiContribution => record(v) && [v.id, v.title, v.action].every(text) && oneOf(v.module, BUILTIN_MODULE_IDS) && oneOf(v.slot, ["editor", "dock", "inspection", "review", "settings"]) && (v.contractVersion === undefined || v.contractVersion === 1) && (v.kind === undefined || oneOf(v.kind, ["panel", "editor-adornment", "context-action"])) && (v.contexts === undefined || (Array.isArray(v.contexts) && v.contexts.every(c => oneOf(c, ["workspace", "editor", "reading"])))) && optional(v.multipleInstances, bool);
 
 /** The guards follow the public DTOs; additive fields are retained, not silently stripped. */
 export const responseContracts = {

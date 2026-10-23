@@ -1,6 +1,11 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { assertChangeOperation, createDocumentSource, snapshotKey, snapshotScopeRevision, type SnapshotReader, type ChangeOperation } from "./index.js";
+import { assertChangeOperation, BUILTIN_MODULE_IDS, createDocumentSource, snapshotKey, snapshotScopeRevision, type SnapshotReader, type ChangeOperation } from "./index.js";
+test("built-in module IDs remain a frozen canonical tuple", () => {
+  assert.deepEqual(BUILTIN_MODULE_IDS, ["story", "diagnostics", "nlp", "semantic", "speaker", "assistant", "publishing", "mcp", "search"]);
+  assert.equal(Object.isFrozen(BUILTIN_MODULE_IDS), true);
+});
+
 const operation: ChangeOperation = {
   id: "op-1", generation: 2, repository: { provider: "github", repositoryId: "12", defaultBranch: "writing", ownerScope: "owner", url: "https://github.com/example/work" },
   baseRemoteCommit: "a".repeat(40), effect: "manuscript", reads: [],

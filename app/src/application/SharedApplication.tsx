@@ -7,14 +7,12 @@ import {
   type BrowserEditorDocument,
   type ChangeProposal,
   type ModuleStatus,
-  type RecentActivityDeviceType,
   type RemoteObservation,
   type RepositoryIdentity,
   type SnapshotId,
   type UiContribution,
 } from "@scriptorium/contracts";
 import { ApiError, api, type Project, type SceneRead, type Tree, type TreeRead } from "../api";
-import { WorkspaceContribution } from "../contributions/ContributionHost";
 import { workspaceContributions } from "../contributions/catalog";
 import { Workspace } from "../workspace/Workspace";
 import { ManuscriptHistoryPanel } from "../editor/ManuscriptHistoryPanel";
@@ -25,11 +23,16 @@ import { ThemeControl } from "../components/ThemeControl";
 import { JobInbox } from "../components/JobInbox";
 import { SceneEditor, type ResumeRequest, type ScratchDraftBinding, type ScratchDraftPayload } from "../editor/SceneEditor";
 import { replaceDocumentBody } from "../editor/ruby";
-import { formatHandoffHint, mergeContinueCandidates, sceneExistsInTree, sceneTitleInTree, type ContinueCandidate } from "../resume/continueCandidates";
+import { mergeContinueCandidates, sceneExistsInTree } from "../resume/continueCandidates";
 import { useRecentActivityResume } from "../resume/useRecentActivityResume";
 import { loadThemeMode, persistThemeMode, type ThemeMode } from "../theme";
 import { clearDraft, loadDraft } from "../drafts";
+import { CheckpointConflictError, runCheckpointProtocol } from "./checkpoint-protocol";
 import type { ApplicationShell, ApplicationShellProps, UiMode } from "./contracts";
+import { ApplicationStatus, hasApplicationStatus } from "./ApplicationStatus";
+import { availableModulePanels } from "./AvailableModulePanels";
+import { DocumentInspector } from "./DocumentInspector";
+import { LibraryOutline, projectLabel, RecoveryList, type LegacyDraftRecord } from "./LibraryOutline";
 import { applicationPath, parseApplicationLocation, readUiModePreference, rememberUiMode, switchApplicationPath, type ApplicationResource } from "./navigation";
 import { canRetainRecoveredEditorDuringSceneLoad, isEditorTextSafeToFlush, isNonDraftEntryAcknowledgedByReceipt, isSameSceneEditorLoad, isUnchangedEntryConfirmedByReceipt, mayWriteEditor, mergeLatestDraftEntry, recoveryStatusForJournalOpen, type EditorRecoveryStatus } from "./recovery";
 import {
@@ -45,15 +48,6 @@ import {
 } from "../storage/journal";
 
 const ACTIVE_PROJECT_KEY = "scriptorium:active-project";
-
-interface LegacyDraftRecord {
-  key: string;
-  projectId: string;
-  sceneId: string;
-  text: string;
-  revision: string;
-  savedAt: number;
-}
 
 function readLegacyDrafts(): LegacyDraftRecord[] {
   const records: LegacyDraftRecord[] = [];
@@ -125,15 +119,6 @@ function messageOf(error: unknown): string {
     return error.message;
   }
   return error instanceof Error ? error.message : "処理に失敗しました。";
-}
-
-function projectLabel(project: Project): string {
-  try {
-    const url = new URL(project.url);
-    return `${url.hostname}${url.pathname.replace(/\.git$/u, "").replace(/\/$/u, "")}`;
-  } catch {
-    return project.url;
-  }
 }
 
 function sameRepository(left: RepositoryIdentity, right: RepositoryIdentity): boolean {
@@ -220,10 +205,6 @@ function buildOperation(
   };
   assertChangeOperation(operation);
   return operation;
-}
-
-function proposalIdFor(operation: ChangeOperation): string {
-  return `author-${operation.id}-${operation.generation}`;
 }
 
 function proposalOperationIds(proposal: ChangeProposal): string[] {
@@ -817,31 +798,24 @@ function AuthorWorkspace({
     await refreshJournal(repository, expectedNavigation);
   }, [refreshJournal]);
 
-  const replayAuthorizedEntry = useCallback(async (projectId: string, entry: JournalEntry, author: string) => {
+  const replayAuthorizedEntry = useCallback(async (
+    projectId: string,
+    repository: RepositoryIdentity,
+    entry: JournalEntry,
+    author: string,
+  ) => {
     const currentJournal = journalRef.current;
     if (!currentJournal) throw new Error("ブラウザー回復ストレージを開けません。");
     if (entry.authorScope !== author) throw new Error("別の作者スコープの回復記録は再生できません。");
     if (entry.state !== "checkpointing" && entry.state !== "checkpointed") return entry;
-    const stableProposalId = entry.proposalId ?? proposalIdFor(entry.operation);
-    const prepared = await currentJournal.updateState({ ...entry, proposalId: stableProposalId, authorizedAt: entry.authorizedAt ?? Date.now() }, "checkpointing");
-    const proposal: ChangeProposal = {
-      id: stableProposalId,
-      snapshot: prepared.snapshot,
-      operations: [prepared.operation],
-      source: "author",
-    };
-    const accepted = await api.propose(projectId, proposal);
-    await currentJournal.putProposal(prepared.repository, author, accepted);
-    const assigned = await currentJournal.updateState({ ...prepared, proposalId: accepted.id }, "checkpointing");
-    await api.approve(projectId, {
-      proposalId: accepted.id,
-      operationIds: [assigned.operation.id],
+    return runCheckpointProtocol({
+      projectId,
+      repository,
       authorScope: author,
+      entry,
+      api,
+      journal: currentJournal,
     });
-    const receipt = await api.checkpoint(projectId, assigned.operation);
-    const checkpointed = await currentJournal.updateState(assigned, "checkpointed", receipt);
-    await currentJournal.removeProposal(prepared.repository, author, accepted.id).catch(() => undefined);
-    return checkpointed;
   }, []);
 
   const reconcileProject = useCallback((projectId: string, repository: RepositoryIdentity, author: string, expectedNavigation?: number): Promise<boolean> => {
@@ -849,7 +823,8 @@ function AuthorWorkspace({
     const key = recoveryKeyForNavigation(projectId, repository, author, nav);
     const running = reconciliationRef.current.get(key);
     if (running) return running;
-    const isCurrent = () => navigationRef.current === nav && workRef.current?.project.id === projectId &&
+    const isCurrent = () => navigationRef.current === nav && authorScopeRef.current === author &&
+      workRef.current?.project.id === projectId &&
       sameRepository(workRef.current.observation.snapshot.repository, repository);
     const task = (async (): Promise<boolean> => {
       const currentJournal = journalRef.current;
@@ -862,9 +837,10 @@ function AuthorWorkspace({
         for (const entry of pendingEntries) {
           if (!isCurrent()) return false;
           try {
-            await replayAuthorizedEntry(projectId, entry, author);
+            await replayAuthorizedEntry(projectId, repository, entry, author);
           } catch (error) {
-            const conflict = error instanceof ApiError && (error.status === 409 || error.status === 412);
+            const conflict = error instanceof CheckpointConflictError ||
+              (error instanceof ApiError && (error.status === 409 || error.status === 412));
             if (conflict) {
               try {
                 await currentJournal.updateState(entry, "conflict");
@@ -1745,41 +1721,6 @@ function AuthorWorkspace({
     }
   }
 
-  async function checkpointEntry(
-    projectId: string,
-    entry: JournalEntry,
-    onCheckpointing?: (entry: JournalEntry) => void,
-    expectedNavigation?: number,
-  ): Promise<JournalEntry> {
-    const currentJournal = journalRef.current;
-    if (!currentJournal) throw new Error("ブラウザー回復ストレージを開けません。");
-    if (entry.authorScope !== authorScopeRef.current) throw new Error("別の作者スコープの記録はチェックポイントできません。");
-    const operation = entry.operation;
-    const proposalId = entry.proposalId ?? proposalIdFor(operation);
-    const checkpointing = await currentJournal.updateState({
-      ...entry,
-      proposalId,
-      authorizedAt: entry.authorizedAt ?? Date.now(),
-    }, "checkpointing");
-    if (checkpointing.state === "conflict") throw new Error("競合した回復記録はチェックポイントできません。");
-    // Keep the visible journal aligned with the already-durable IndexedDB transition.
-    setEntries((current) => current.map((item) => item.key === checkpointing.key ? checkpointing : item));
-    onCheckpointing?.(checkpointing);
-    const proposal = await api.propose(projectId, {
-      id: proposalId,
-      snapshot: checkpointing.snapshot,
-      operations: [operation],
-      source: "author",
-    });
-    await currentJournal.putProposal(checkpointing.repository, authorScopeRef.current, proposal);
-    await currentJournal.updateState({ ...checkpointing, proposalId: proposal.id }, "checkpointing");
-    await api.approve(projectId, { proposalId: proposal.id, operationIds: [operation.id], authorScope: authorScopeRef.current });
-    const receipt = await api.checkpoint(projectId, operation);
-    const saved = await currentJournal.updateState({ ...checkpointing, proposalId: proposal.id }, "checkpointed", receipt);
-    await currentJournal.removeProposal(checkpointing.repository, authorScopeRef.current, proposal.id).catch(() => undefined);
-    return saved;
-  }
-
   async function reloadConflictSnapshot(
     nav: number,
     projectId: string,
@@ -1855,6 +1796,8 @@ function AuthorWorkspace({
     const nav = navigationRef.current;
     const projectId = current.project.id;
     const repository = current.observation.snapshot.repository;
+    const authorScope = authorScopeRef.current;
+    const isCurrentAttempt = () => isCurrentProject(nav, projectId, repository) && authorScopeRef.current === authorScope;
     const documentPath = editor.read.document.path;
     const sceneId = editor.read.scene.id;
     let submittedEntry = editor.entry;
@@ -1862,24 +1805,35 @@ function AuthorWorkspace({
     setStatus({ message: "チェックポイントを作成しています…", kind: "normal" });
     try {
       await flushDraft();
-      if (!isCurrentEditor(nav, projectId, repository, documentPath, sceneId)) return;
+      if (!isCurrentEditor(nav, projectId, repository, documentPath, sceneId) || !isCurrentAttempt()) return;
       const latest = workRef.current?.editor;
       if (!latest?.entry || latest.conflict) throw new Error("競合を確認してからチェックポイントを作成してください。");
       const operation = latest.entry.operation;
       const checkpointingEntry = latest.entry;
       submittedEntry = checkpointingEntry;
-      const saved = await checkpointEntry(projectId, checkpointingEntry, (checkpointing) => {
-        if (!isCurrentEditor(nav, projectId, repository, documentPath, sceneId)) return;
-        updateWork((state) => state?.editor?.entry?.operation.id === operation.id && state.editor.entry.operation.generation === operation.generation
-        ? { ...state, editor: { ...state.editor, entry: checkpointing } }
-        : state);
-      }, nav);
-      if (!isCurrentProject(nav, projectId, repository)) return;
+      const saved = await runCheckpointProtocol({
+        projectId,
+        repository,
+        authorScope,
+        entry: checkpointingEntry,
+        api,
+        journal: currentJournal,
+        onCheckpointing: (checkpointing) => {
+          if (isCurrentAttempt()) {
+            setEntries((currentEntries) => currentEntries.map((item) => item.key === checkpointing.key ? checkpointing : item));
+          }
+          if (!isCurrentAttempt() || !isCurrentEditor(nav, projectId, repository, documentPath, sceneId)) return;
+          updateWork((state) => state?.editor?.entry?.operation.id === operation.id && state.editor.entry.operation.generation === operation.generation
+            ? { ...state, editor: { ...state.editor, entry: checkpointing } }
+            : state);
+        },
+      });
+      if (!isCurrentAttempt() || !isCurrentEditor(nav, projectId, repository, documentPath, sceneId)) return;
       updateWork((state) => state?.editor?.entry?.operation.id === operation.id && state.editor.entry.operation.generation === operation.generation
         ? { ...state, editor: { ...state.editor, entry: saved } }
         : state);
       await refreshJournal(saved.repository, nav);
-      if (!isCurrentEditor(nav, projectId, repository, documentPath, sceneId)) return;
+      if (!isCurrentAttempt() || !isCurrentEditor(nav, projectId, repository, documentPath, sceneId)) return;
       setStatus({ message: "ローカルチェックポイントを作成しました。GitHub へ保存するまでブラウザーの回復記録を保持します。", kind: "success" });
       void refreshRemote();
     } catch (error) {
@@ -1888,27 +1842,29 @@ function AuthorWorkspace({
         try {
           conflictEntry = await currentJournal.updateState(submittedEntry, "conflict");
         } catch (storageError) {
-          if (isCurrentProject(nav, projectId, repository)) {
+          if (isCurrentAttempt()) {
             setStatus({ message: `チェックポイントが競合しましたが、競合状態を回復記録へ保存できませんでした。${messageOf(storageError)}`, kind: "error" });
           }
         }
-        if (conflictEntry && isCurrentEditor(nav, projectId, repository, documentPath, sceneId)) {
+        if (conflictEntry && isCurrentAttempt() && isCurrentEditor(nav, projectId, repository, documentPath, sceneId)) {
           updateWork((state) => state?.editor?.entry?.operation.id === submittedEntry.operation.id &&
               state.editor.entry.operation.generation === submittedEntry.operation.generation
             ? { ...state, editor: { ...state.editor, entry: conflictEntry!, text: conflictEntry!.text, conflict: null, draftStored: true } }
             : state);
         }
-        if (conflictEntry && isCurrentProject(nav, projectId, repository)) {
+        if (conflictEntry && isCurrentAttempt()) {
           try {
             await reloadConflictSnapshot(nav, projectId, repository, sceneId, documentPath, submittedEntry.operation.id, submittedEntry.operation.generation);
           } catch (refreshError) {
-            if (isCurrentProject(nav, projectId, repository)) {
+            if (isCurrentAttempt()) {
               setStatus({ message: `チェックポイントは競合しました。最新のリモート原稿を確認できませんでした。下書きは回復記録に保持しています。${messageOf(refreshError)}`, kind: "error" });
             }
           }
         }
       }
-      if (isCurrentEditor(nav, projectId, repository, documentPath, sceneId)) setStatus({ message: messageOf(error), kind: "error" });
+      if (isCurrentAttempt() && isCurrentEditor(nav, projectId, repository, documentPath, sceneId)) {
+        setStatus({ message: messageOf(error), kind: "error" });
+      }
     } finally {
       if (navigationRef.current === nav) setBusy("");
     }
@@ -1922,18 +1878,21 @@ function AuthorWorkspace({
     const nav = navigationRef.current;
     const projectId = current.project.id;
     const repository = current.observation.snapshot.repository;
+    const authorScope = authorScopeRef.current;
     setBusy("checkpoint");
     setStatus({ message: "スクラッチのチェックポイントを作成しています…", kind: "normal" });
     try {
       await scratchFlushRef.current();
-      if (!isCurrentProject(nav, projectId, repository)) throw new Error("作品を切り替えたため、スクラッチの保存表示を更新できませんでした。");
-      const candidates = await currentJournal.getDocument(entry.repository, entry.documentPath, authorScopeRef.current);
+      if (!isCurrentProject(nav, projectId, repository) || authorScopeRef.current !== authorScope) {
+        throw new Error("作品または作者を切り替えたため、スクラッチの保存表示を更新できませんでした。");
+      }
+      const candidates = await currentJournal.getDocument(entry.repository, entry.documentPath, authorScope);
       const latest = [...candidates].reverse().find((candidate) => candidate.operation.id === entry.operation.id);
       if (!latest || latest.state !== "draft") throw new Error("このスクラッチは Draft 状態ではなくなりました。回復一覧を更新してください。");
-      const saved = await checkpointEntry(projectId, latest, undefined, nav);
-      if (!isCurrentProject(nav, projectId, repository)) return;
+      const saved = await runCheckpointProtocol({ projectId, repository, authorScope, entry: latest, api, journal: currentJournal });
+      if (!isCurrentProject(nav, projectId, repository) || authorScopeRef.current !== authorScope) return;
       await refreshJournal(saved.repository, nav);
-      if (!isCurrentProject(nav, projectId, repository)) return;
+      if (!isCurrentProject(nav, projectId, repository) || authorScopeRef.current !== authorScope) return;
       setStatus({ message: "スクラッチのローカルチェックポイントを作成しました。Save to GitHub で公開できます。", kind: "success" });
       void refreshRemote();
     } catch (error) {
@@ -1941,7 +1900,9 @@ function AuthorWorkspace({
         await currentJournal.updateState(entry, "conflict").catch(() => undefined);
       }
       await refreshJournal(entry.repository, nav);
-      if (isCurrentProject(nav, projectId, repository)) setStatus({ message: messageOf(error), kind: "error" });
+      if (isCurrentProject(nav, projectId, repository) && authorScopeRef.current === authorScope) {
+        setStatus({ message: messageOf(error), kind: "error" });
+      }
       throw error;
     } finally {
       if (navigationRef.current === nav) setBusy("");
@@ -2395,86 +2356,44 @@ function AuthorWorkspace({
     </header>
   );
 
-  const library = (
-    <aside className="sidebar" aria-label="作品と構成">
-      {!hostedMode && <form onSubmit={(event) => void registerProject(event)} className="project-form">
-        <h2>作品を追加</h2>
-        <label htmlFor="repo-url">GitHub リポジトリ URL</label>
-        <input id="repo-url" name="url" type="url" placeholder="https://github.com/owner/work" required />
-        <button type="submit" disabled={busy === "register"}>{busy === "register" ? "登録中…" : "リポジトリを登録"}</button>
-      </form>}
-      <section className="project-list-section" aria-labelledby="projects-title">
-        <h2 id="projects-title">作品</h2>
-        <ul className="plain-list">
-          {projects.map((project) => (
-            <li key={project.id}>
-              <button type="button" className="project-button" aria-current={work?.project.id === project.id ? "true" : "false"} onClick={() => void activateProject(project)}>
-                {projectLabel(project)}
-              </button>
-            </li>
-          ))}
-          {projects.length === 0 && <li className="muted-list-item">登録された作品はありません</li>}
-        </ul>
-      </section>
-      {work && !hostedMode && (
-        <section className="project-management" aria-labelledby="project-management-title">
-          <h2 id="project-management-title">選択中のリポジトリ</h2>
-          <dl className="project-facts">
-            <div><dt>URL</dt><dd><code>{work.project.url}</code></dd></div>
-            <div><dt>リポジトリ ID</dt><dd><code>{work.observation.snapshot.repository.provider}:{work.observation.snapshot.repository.repositoryId}</code></dd></div>
-            <div><dt>既定ブランチ</dt><dd><code>{work.observation.snapshot.repository.defaultBranch}</code></dd></div>
-            <div><dt>登録ブランチ</dt><dd><code>{work.project.branch}</code></dd></div>
-            <div><dt>確認したリモート</dt><dd><code>{work.observation.snapshot.remoteCommit.slice(0, 12)}</code></dd></div>
-          </dl>
-          <p className="project-management-help">再構築と解除はローカル作業領域だけに適用されます。未公開の変更がある場合は Core が拒否し、回復記録は保持します。</p>
-          <div className="project-management-actions">
-            <button type="button" className="compact-button" disabled={Boolean(busy)} onClick={() => void reconstructActiveProject()}>
-              {busy === "reconstruct" ? "再構築中…" : "ローカルクローンを再構築"}
-            </button>
-            <button type="button" className="compact-button danger-button" disabled={Boolean(busy)} onClick={() => void detachActiveProject()}>
-              {busy === "detach" ? "解除中…" : "作品の登録を解除"}
-            </button>
-          </div>
-          {projectActionError?.projectId === work.project.id && (
-            <p className="status" data-kind="error" data-code={projectActionError.code} role="alert">
-              {projectActionError.message}{projectActionError.code ? ` (${projectActionError.code})` : ""}
-            </p>
-          )}
-        </section>
-      )}
-      {work && tree && (
-        <ContinuePanel
-          candidates={continueCandidates}
-          tree={tree}
-          deviceType={recentResume.deviceType}
-          error={recentResume.error}
-          onContinue={(candidate) => continueFrom(candidate)}
-          onRead={(candidate) => continueFrom(candidate, true)}
-        />
-      )}
-      {tree && <TreeNav tree={tree} selectedSceneId={work?.selectedSceneId ?? ""} disabled={Boolean(busy)} onSelect={selectSceneFromOutline} />}
-      {legacyDrafts.length > 0 && <LegacyRecoveryPanel drafts={legacyDrafts} selectedSceneId={work && !work.loadingScene && work.editor?.read.scene.id === work.selectedSceneId ? work.selectedSceneId : ""} onExport={exportLegacyDrafts} onMap={(draft) => void mapLegacyDraft(draft)} />}
-      {!work && recoverableEntries.length > 0 && (
-        <section className="recovery-panel" aria-labelledby="recovery-title">
-          <h2 id="recovery-title">ブラウザーの回復記録</h2>
-          <p>同じリポジトリを再登録すると、次の原稿を引き継げます。</p>
-          <RecoveryList entries={recoverableEntries} />
-        </section>
-      )}
-    </aside>
-  );
+  const library = <LibraryOutline
+    hostedMode={hostedMode}
+    busy={busy}
+    projects={projects}
+    activeProjectId={work?.project.id ?? null}
+    projectManagement={work ? {
+      project: work.project,
+      repository: work.observation.snapshot.repository,
+      remoteCommit: work.observation.snapshot.remoteCommit,
+      busy,
+      error: projectActionError?.projectId === work.project.id ? projectActionError : null,
+      onReconstruct: () => void reconstructActiveProject(),
+      onDetach: () => void detachActiveProject(),
+    } : null}
+    tree={tree}
+    selectedSceneId={work?.selectedSceneId ?? ""}
+    continueCandidates={continueCandidates}
+    deviceType={recentResume.deviceType}
+    continueError={recentResume.error}
+    legacyDrafts={legacyDrafts}
+    legacySelectedSceneId={work && !work.loadingScene && work.editor?.read.scene.id === work.selectedSceneId ? work.selectedSceneId : ""}
+    recoverableEntries={recoverableEntries}
+    onRegisterProject={registerProject}
+    onActivateProject={(project) => void activateProject(project)}
+    onContinue={continueFrom}
+    onSelectScene={selectSceneFromOutline}
+    onExportLegacyDrafts={exportLegacyDrafts}
+    onMapLegacyDraft={(draft) => void mapLegacyDraft(draft)}
+  />;
 
-  const statusSlot = (status.message || globalError || journalOpenError || isolatedRecoveryCount > 0 ||
-    (work && work.observation.state !== "fresh")) ? (
-    <div className="application-status">
-      {status.message && <div className="topbar-status" role={status.kind === "error" ? "alert" : "status"}
-        aria-live={status.kind === "error" ? "assertive" : "polite"} data-kind={status.kind}>{status.message}</div>}
-      {globalError && <p className="status" data-kind="error" role="alert">{globalError}</p>}
-      {journalOpenError && <p className="status" data-kind="error" role="alert">{journalOpenError}</p>}
-      {isolatedRecoveryCount > 0 && <p className="status" role="status">別の作者スコープまたは未割り当ての回復記録 {isolatedRecoveryCount} 件を保持しています。現在のセッションには復元しません。</p>}
-      {work?.observation.state !== "fresh" && work && <p className="status" data-kind="error" role="alert">リモート確認状態: {work.observation.state}。最後に確認できた原稿を表示しています。</p>}
-    </div>
-  ) : null;
+  const statusProps = {
+    status,
+    globalError,
+    journalOpenError,
+    isolatedRecoveryCount,
+    remoteState: work?.observation.state ?? null,
+  };
+  const statusSlot = hasApplicationStatus(statusProps) ? <ApplicationStatus {...statusProps} /> : null;
 
   const editorSlot = (
     <>
@@ -2567,18 +2486,31 @@ function AuthorWorkspace({
     </div>
   );
 
-  const inspectorSlot = <section aria-label="文書と保存状態">
-    {statusSlot}
-    {editor && <dl className="project-facts">
-      <div><dt>原稿</dt><dd><code>{editor.read.document.path}</code></dd></div>
-      <div><dt>スナップショット</dt><dd><code>{editor.read.snapshot.overlayCommit ?? editor.read.snapshot.remoteCommit}</code></dd></div>
-      <div><dt>ブラウザー回復</dt><dd>{editorRecoveryStatus}</dd></div>
-    </dl>}
-    {inspectedDocument && panelSnapshotKey === snapshotKey(inspectedDocument.snapshot) && <article>
-      <h3>{inspectedDocument.path}</h3><pre className="workspace-document-source">{inspectedDocument.content}</pre>
-    </article>}
-    <RecoveryList entries={currentRepoEntries} />
-  </section>;
+  const inspectorSlot = <DocumentInspector
+    status={statusSlot}
+    editorFacts={editor ? {
+      path: editor.read.document.path,
+      snapshot: editor.read.snapshot.overlayCommit ?? editor.read.snapshot.remoteCommit,
+      recoveryStatus: editorRecoveryStatus,
+    } : null}
+    inspectedDocument={inspectedDocument && panelSnapshotKey === snapshotKey(inspectedDocument.snapshot)
+      ? { path: inspectedDocument.path, content: inspectedDocument.content }
+      : null}
+    recoveryEntries={currentRepoEntries}
+  />;
+  const modulePanels = availableModulePanels({
+    items: enabledPanels,
+    contributions,
+    modules,
+    projectId: work?.project.id ?? null,
+    authorScope,
+    snapshot: panelSnapshot ?? null,
+    journal,
+    refresh: refreshContributionContext,
+    onProposalStored: refreshProposals,
+    readCurrentEditor,
+    navigateDocument,
+  });
   const panels = [
     { id: "editor", title: "Editor", render: () => editorSlot },
     { id: "outline", title: "Outline", render: () => library },
@@ -2589,11 +2521,7 @@ function AuthorWorkspace({
           onRestore={(body) => { if (editorWritable) editText(body); }} onClose={() => { setHistoryOpen(false); requestPanel("editor"); }} />
       : <p>履歴を表示するシーンを選択してください。</p> },
     { id: "review", title: "Review", render: () => toolsSlot },
-    ...enabledPanels.map((item) => ({ id: `module:${item.id}`, title: item.title, render: () => work && panelSnapshot
-      ? <WorkspaceContribution item={item} contributions={contributions} modules={modules}
-          projectId={work.project.id} authorScope={authorScope} snapshot={panelSnapshot}
-          refresh={refreshContributionContext} journal={journal} onProposalStored={refreshProposals}
-          readCurrentEditor={readCurrentEditor} navigateDocument={navigateDocument} /> : <p>作品を選択してください。</p> })),
+    ...modulePanels,
   ];
   const desktopActions = editor && scene && work ? (
     <div className="st-studio-real-actions" aria-label="原稿の保存操作">
@@ -2626,120 +2554,4 @@ function breadcrumbFor(tree: Tree | null, sceneId: string): string {
     }
   }
   return tree.title;
-}
-
-function ContinuePanel({
-  candidates,
-  tree,
-  deviceType,
-  error,
-  onContinue,
-  onRead,
-}: {
-  candidates: ContinueCandidate[];
-  tree: Tree;
-  deviceType: RecentActivityDeviceType;
-  error: string;
-  onContinue: (candidate: ContinueCandidate) => void;
-  onRead: (candidate: ContinueCandidate) => void;
-}) {
-  return (
-    <section className="continue-panel" aria-labelledby="continue-title">
-      <h2 id="continue-title">続きから</h2>
-      {error && <p className="continue-error" role="status">再開位置を同期できません: {error}</p>}
-      {candidates.length === 0 ? <p className="muted-list-item">再開できるシーンがまだありません</p> : (
-        <ul className="continue-list">
-          {candidates.map((candidate, index) => {
-            const handoff = candidate.source === "server"
-              ? formatHandoffHint(candidate.deviceType, candidate.updatedAt, Date.now(), deviceType)
-              : null;
-            return (
-              <li key={candidate.sceneId}>
-                <strong>{sceneTitleInTree(tree, candidate.sceneId)}</strong>
-                {handoff && <small>{handoff}</small>}
-                <button type="button" className="quiet-button compact-button" onClick={() => onContinue(candidate)}>
-                  {index === 0 ? "続きを書く" : "こちらを開く"}
-                </button>
-                {candidate.pageIndex !== null && (
-                  <button type="button" className="quiet-button compact-button" onClick={() => onRead(candidate)}>
-                    読書位置を開く
-                  </button>
-                )}
-              </li>
-            );
-          })}
-        </ul>
-      )}
-    </section>
-  );
-}
-
-function TreeNav({ tree, selectedSceneId, disabled, onSelect }: { tree: Tree; selectedSceneId: string; disabled: boolean; onSelect: (id: string) => void }) {
-  return (
-    <nav className="tree" aria-label="作品構成">
-      <h2>{tree.title}</h2>
-      {tree.volumes.map((volume) => (
-        <section className="tree-volume" key={volume.id}>
-          <h3>{volume.title}</h3>
-          {volume.chapters.map((chapter) => (
-            <details key={chapter.id} open>
-              <summary>{chapter.title}</summary>
-              <ul className="scene-list">
-                {chapter.scenes.map((scene) => (
-                  <li key={scene.id}>
-                    <button type="button" className="scene-button" aria-current={selectedSceneId === scene.id ? "true" : "false"} disabled={disabled} onClick={() => onSelect(scene.id)}>
-                      {chapter.title}: {scene.title}
-                    </button>
-                  </li>
-                ))}
-              </ul>
-            </details>
-          ))}
-        </section>
-      ))}
-    </nav>
-  );
-}
-
-function RecoveryList({ entries }: { entries: JournalEntry[] }) {
-  return (
-    <ul className="recovery-list">
-      {entries.map((entry) => (
-        <li key={entry.key}>
-          <strong>{entry.documentPath}</strong>
-          <span>{entry.state} · {new Date(entry.updatedAt).toLocaleString("ja-JP")}</span>
-          <small>{entry.repository.url} · {entry.repository.defaultBranch}</small>
-        </li>
-      ))}
-    </ul>
-  );
-}
-
-function LegacyRecoveryPanel({
-  drafts,
-  selectedSceneId,
-  onExport,
-  onMap,
-}: {
-  drafts: LegacyDraftRecord[];
-  selectedSceneId: string;
-  onExport: () => void;
-  onMap: (draft: LegacyDraftRecord) => void;
-}) {
-  return (
-    <section className="recovery-panel" aria-labelledby="legacy-recovery-title">
-      <h2 id="legacy-recovery-title">旧ブラウザー下書き</h2>
-      <p>プロジェクト ID に結び付いた古い下書きです。移行先が確認できるまで元の記録を残します。</p>
-      <ul className="recovery-list">
-        {drafts.map((draft) => (
-          <li key={draft.key}>
-            <strong>シーン {draft.sceneId}</strong>
-            <span>{draft.text.length} 字 · {new Date(draft.savedAt).toLocaleString("ja-JP")}</span>
-            {selectedSceneId && <button type="button" className="quiet-button" onClick={() => onMap(draft)}>選択中のシーンに下書きとして移す</button>}
-          </li>
-        ))}
-      </ul>
-      <button type="button" className="quiet-button" onClick={onExport}>回復 JSON をダウンロード</button>
-    </section>
-  );
 }

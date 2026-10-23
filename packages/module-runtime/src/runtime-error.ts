@@ -1,6 +1,6 @@
-import type { ModuleId } from "@scriptorium/contracts";
+import { BUILTIN_MODULE_IDS, type ModuleId } from "@scriptorium/contracts";
 
-export const MODULE_IDS = ["story", "diagnostics", "nlp", "semantic", "speaker", "assistant", "publishing", "mcp", "search"] as const satisfies readonly ModuleId[];
+export const MODULE_IDS = BUILTIN_MODULE_IDS;
 
 export function isModuleId(value: unknown): value is ModuleId {
   return typeof value === "string" && (MODULE_IDS as readonly string[]).includes(value);

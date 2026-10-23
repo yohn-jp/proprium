@@ -1,6 +1,6 @@
 # Scriptorium
 
-Read [Core architecture](docs/architecture/CORE.md), [Modular Workspace](docs/architecture/MODULAR-WORKSPACE.md) and [Modules](docs/architecture/MODULES.md) for application contracts. [Plugin Platform](docs/architecture/PLUGIN-PLATFORM.md) is a design proposal for external code, not the trusted module runtime contract. Follow the organization-wide `yohn-jp/.github/.github/agent-governance/AGENTS.md` and applicable skills.
+Read [Internal boundaries](docs/architecture/INTERNAL-BOUNDARIES.md) for shared ownership and refactoring invariants. Read [Core architecture](docs/architecture/CORE.md), [Modular Workspace](docs/architecture/MODULAR-WORKSPACE.md) and [Modules](docs/architecture/MODULES.md) for application contracts. [Plugin Platform](docs/architecture/PLUGIN-PLATFORM.md) is a design proposal for external code, not the trusted module runtime contract. Follow the organization-wide `yohn-jp/.github/.github/agent-governance/AGENTS.md` and applicable skills.
 
 ## Authority
 
