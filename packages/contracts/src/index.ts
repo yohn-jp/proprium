@@ -3,7 +3,8 @@ export const CONTRACT_VERSION = 1 as const;
 export const MAX_JOB_INPUT_BYTES = 8 * 1024 * 1024;
 export const MAX_JOB_OUTPUT_BYTES = 8 * 1024 * 1024;
 export const MAX_PROPOSAL_EVIDENCE_BYTES = 1024 * 1024;
-export type ModuleId = "story" | "diagnostics" | "nlp" | "semantic" | "speaker" | "assistant" | "publishing" | "mcp" | "search";
+export const BUILTIN_MODULE_IDS = Object.freeze(["story", "diagnostics", "nlp", "semantic", "speaker", "assistant", "publishing", "mcp", "search"] as const);
+export type ModuleId = (typeof BUILTIN_MODULE_IDS)[number];
 export interface RepositoryIdentity {
   provider: "github" | "local";
   repositoryId: string;
