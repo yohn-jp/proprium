@@ -52,6 +52,11 @@ jobs:
           p.write_text('\n'.join(lines) + '\n')
           PY
           python3 .github/issue29-edit.py apply
+          python3 - <<'PY'
+          from pathlib import Path
+          p = Path('app/src/api.ts')
+          p.write_text('\n'.join(line.rstrip() for line in p.read_text().splitlines()) + '\n')
+          PY
           pnpm typecheck
           node --import tsx --test packages/api/src/authorization-error.test.ts packages/api/src/server.test.ts modules/mcp/src/http.test.ts modules/mcp/src/session-lifetime.test.ts app/src/api.test.ts app/src/api-boundary.test.ts
           git diff --check
@@ -67,3 +72,9 @@ jobs:
           git commit -m 'fix: enforce audited API and MCP boundaries (#29)'
           header="$(printf 'x-access-token:%s' "$GH_TOKEN" | base64 -w0)"
           git -c "http.https://github.com/.extraheader=AUTHORIZATION: basic $header" push origin HEAD:refs/heads/fix/29-audit-hardening
+      - name: Diagnose expanded test typing without certifying it
+        if: success()
+        continue-on-error: true
+        run: |
+          node scripts/typecheck-tests.mjs
+          pnpm exec tsc -p tsconfig.safety.json
