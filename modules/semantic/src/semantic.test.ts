@@ -301,7 +301,7 @@ test("default ModuleRuntime composes semantic status, real CPU rebuild/search/re
     assert.deepEqual(runtime.workerSupervisor.activeWorkerPids, [], "enabling semantic must not start a worker or import a model");
 
     const before = await runtime.invokeAction("semantic", "semantic.index.status", {}, initialHost);
-    assert.equal(before.ok, true, `semantic.index.status failed: ${JSON.stringify(before.error)}`);
+    assert.equal(before.ok, true, `semantic.index.status failed: ${JSON.stringify(before.ok ? null : before.error)}`);
     const beforeData = before.data as { modelVersion: string; indexAvailable: boolean; modelLoaded: boolean };
     assert.equal(before.snapshot.remoteCommit, snapshot.remoteCommit);
     assert.equal(beforeData.modelVersion, EMBEDDING_MODEL_VERSION);
@@ -309,7 +309,7 @@ test("default ModuleRuntime composes semantic status, real CPU rebuild/search/re
     assert.equal(beforeData.modelLoaded, false);
 
     const indexed = await runtime.invokeAction("semantic", "semantic.index.rebuild", { taskId: "runtime-index" }, initialHost);
-    assert.equal(indexed.ok, true, `semantic.index.rebuild failed: ${JSON.stringify(indexed.error)}`);
+    assert.equal(indexed.ok, true, `semantic.index.rebuild failed: ${JSON.stringify(indexed.ok ? null : indexed.error)}`);
     const indexedData = indexed.data as { model: string; modelVersion: string; scanned: number; embedded: number; reused: number };
     assert.equal(indexedData.model, EMBEDDING_MODEL_ID);
     assert.equal(indexedData.modelVersion, EMBEDDING_MODEL_VERSION);
@@ -318,7 +318,7 @@ test("default ModuleRuntime composes semantic status, real CPU rebuild/search/re
     assert.equal(indexedData.reused, 0);
 
     const searched = await runtime.invokeAction("semantic", "semantic.search", { query: "夜遅く 駅", mode: "scene", limit: 5 }, initialHost);
-    assert.equal(searched.ok, true, `semantic.search failed: ${JSON.stringify(searched.error)}`);
+    assert.equal(searched.ok, true, `semantic.search failed: ${JSON.stringify(searched.ok ? null : searched.error)}`);
     const searchData = searched.data as { modelVersion: string; results: Array<{ sceneId: string; snippet?: string; scores: { vectorRank?: number } }> };
     assert.equal(searchData.modelVersion, EMBEDDING_MODEL_VERSION);
     assert.equal(searchData.results[0]?.sceneId, "sc-station");
@@ -328,7 +328,7 @@ test("default ModuleRuntime composes semantic status, real CPU rebuild/search/re
     const reranked = await runtime.invokeAction("semantic", "semantic.search", {
       query: "夜の駅の情景", mode: "scene", limit: 5, rerank: true,
     }, initialHost);
-    assert.equal(reranked.ok, true, `semantic.search with reranker failed: ${JSON.stringify(reranked.error)}`);
+    assert.equal(reranked.ok, true, `semantic.search with reranker failed: ${JSON.stringify(reranked.ok ? null : reranked.error)}`);
     const rerankedData = reranked.data as { reranker: { id: string; version: string } | null; results: Array<{ scores: { rerank?: number } }> };
     assert.equal(rerankedData.reranker?.id, "mogolloni/bge-reranker-v2-m3-onnx");
     assert.ok(rerankedData.results.length > 1);
@@ -340,14 +340,14 @@ test("default ModuleRuntime composes semantic status, real CPU rebuild/search/re
     nextFiles.set("plot/volumes/v/scenes/station.yaml", "id: sc-station\ntype: scene\nname: Updated Station\ndescription: 夜明けに駅から遠ざかり、白い切符を手放した。\n");
     const nextReader = makeSemanticReader(nextSnapshot, nextFiles);
     const changed = await runtime.invokeAction("semantic", "semantic.index.rebuild", { taskId: "runtime-index-next" }, semanticActionHost(nextReader));
-    assert.equal(changed.ok, true, `second semantic.index.rebuild failed: ${JSON.stringify(changed.error)}`);
+    assert.equal(changed.ok, true, `second semantic.index.rebuild failed: ${JSON.stringify(changed.ok ? null : changed.error)}`);
     const changedData = changed.data as { embedded: number; reused: number };
     assert.equal(changedData.embedded, 1);
     assert.equal(changedData.reused, 3);
     const oldSnapshotHit = await runtime.invokeAction("semantic", "semantic.search", { query: "駅の切符", mode: "scene", limit: 10 }, initialHost);
     const newSnapshotHit = await runtime.invokeAction("semantic", "semantic.search", { query: "駅の切符", mode: "scene", limit: 10 }, semanticActionHost(nextReader));
-    assert.equal(oldSnapshotHit.ok, true, `old snapshot search failed: ${JSON.stringify(oldSnapshotHit.error)}`);
-    assert.equal(newSnapshotHit.ok, true, `new snapshot search failed: ${JSON.stringify(newSnapshotHit.error)}`);
+    assert.equal(oldSnapshotHit.ok, true, `old snapshot search failed: ${JSON.stringify(oldSnapshotHit.ok ? null : oldSnapshotHit.error)}`);
+    assert.equal(newSnapshotHit.ok, true, `new snapshot search failed: ${JSON.stringify(newSnapshotHit.ok ? null : newSnapshotHit.error)}`);
     const oldStation = (oldSnapshotHit.data as { results: Array<{ sceneId: string; snippet?: string; name?: string }> }).results.find((hit) => hit.sceneId === "sc-station");
     const newStation = (newSnapshotHit.data as { results: Array<{ sceneId: string; snippet?: string; name?: string }> }).results.find((hit) => hit.sceneId === "sc-station");
     assert.equal(oldStation?.snippet, "夜遅く駅に着き、青い切符を握りしめた。");
@@ -360,10 +360,10 @@ test("default ModuleRuntime composes semantic status, real CPU rebuild/search/re
     const modelKey = createHash("sha256").update(`${EMBEDDING_MODEL_ID}@${EMBEDDING_MODEL_VERSION}`).digest("hex").slice(0, 24);
     await rm(path.join(cacheDirectory, "semantic", "semantic", "indexes", `${repositoryKey}-${modelKey}.json`));
     const missing = await runtime.invokeAction("semantic", "semantic.index.status", {}, initialHost);
-    assert.equal(missing.ok, true, `semantic.index.status after cache deletion failed: ${JSON.stringify(missing.error)}`);
+    assert.equal(missing.ok, true, `semantic.index.status after cache deletion failed: ${JSON.stringify(missing.ok ? null : missing.error)}`);
     assert.equal((missing.data as { indexAvailable: boolean }).indexAvailable, false);
     const rebuilt = await runtime.invokeAction("semantic", "semantic.index.rebuild", { taskId: "runtime-index-recovered" }, initialHost);
-    assert.equal(rebuilt.ok, true, `semantic.index.rebuild after cache deletion failed: ${JSON.stringify(rebuilt.error)}`);
+    assert.equal(rebuilt.ok, true, `semantic.index.rebuild after cache deletion failed: ${JSON.stringify(rebuilt.ok ? null : rebuilt.error)}`);
     assert.equal((rebuilt.data as { embedded: number }).embedded, 4);
     const restored = await runtime.invokeAction("semantic", "semantic.index.status", {}, initialHost);
     assert.equal(restored.ok, true);

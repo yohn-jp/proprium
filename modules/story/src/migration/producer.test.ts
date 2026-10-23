@@ -469,7 +469,7 @@ test("converts source workflow tables to Story JSONL with decisions, unknown fie
     evidence_json: JSON.stringify([{ quote: "verified fact", sceneId: "scene-1" }]), status: "pending",
     source: "manuscript", kind: "fact", source_session_id: null, source_turn_range_json: null,
     confidence: "high", created_at: "2026-01-01T00:00:00.000Z", updated_at: "2026-01-02T00:00:00.000Z",
-    future_zukan_field: { keep: true },
+    future_zukan_field: "keep this future column",
   } satisfies SqliteRow;
   const result = await createStoryMigrationProducer().inspect(contextFor({
     sqliteProject: { state_proposals: [state] },
@@ -489,7 +489,7 @@ test("converts source workflow tables to Story JSONL with decisions, unknown fie
   assert.equal(zukanRecord.status, "pending");
   assert.equal(zukanRecord.entityId, "char-1");
   assert.deepEqual(zukanRecord.evidence, [{ quote: "verified fact", sceneId: "scene-1" }]);
-  assert.deepEqual(zukanRecord.future_zukan_field, { keep: true });
+  assert.equal(zukanRecord.future_zukan_field, "keep this future column");
   assert.deepEqual(zukanRecord.migrationSource, { databaseSources: [{ databaseId: "workspace-index", databasePath: "index/story/index.sqlite", table: "zukan_suggestions" }] });
   assert.ok(result.entries.some((entry) => entry.category === "provisional" && entry.disposition === "planned" && entry.source === "sqlite#state_proposals"));
   assert.ok(result.entries.some((entry) => entry.category === "provisional" && entry.disposition === "planned" && entry.source === "sqlite#zukan_suggestions"));

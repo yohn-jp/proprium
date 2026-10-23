@@ -501,7 +501,7 @@ test("recent activity polling pauses while naturally hidden and resumes when vis
     const initialVisibleCount = recentActivityGets;
 
     await page.waitForTimeout(15_500);
-    expect(recentActivityGets).toBe(initialVisibleCount + 1, "visible recent-activity polling should retain its 15-second refresh");
+    expect(recentActivityGets, "visible recent-activity polling should retain its 15-second refresh").toBe(initialVisibleCount + 1);
     const visiblePollCountBeforeHide = recentActivityGets - initialVisibleCount;
     test.info().annotations.push({
       type: "c39-visible-poll-count",
@@ -535,7 +535,7 @@ test("recent activity polling pauses while naturally hidden and resumes when vis
       description: `${hiddenPollCount} GET(s) in 15.5 seconds after Chromium naturally reported hidden.`,
     });
     if (process.env.SCRIPTORIUM_E2E_EXPECT_C39_PAUSED === "1") {
-      expect(recentActivityGets).toBe(hiddenCount, "hidden pages should issue no recent-activity poll");
+      expect(recentActivityGets, "hidden pages should issue no recent-activity poll").toBe(hiddenCount);
     }
 
     const remoteUpdate = await page.request.put(
@@ -545,7 +545,7 @@ test("recent activity polling pauses while naturally hidden and resumes when vis
         headers: { origin: new URL(page.url()).origin },
       },
     );
-    expect(remoteUpdate.ok()).toBe(true, "the other-device cursor should be stored while this page is hidden");
+    expect(remoteUpdate.ok(), "the other-device cursor should be stored while this page is hidden").toBe(true);
 
     const expectsPause = process.env.SCRIPTORIUM_E2E_EXPECT_C39_PAUSED === "1";
     await page.bringToFront();
@@ -556,8 +556,7 @@ test("recent activity polling pauses while naturally hidden and resumes when vis
     const visibleCountAfterImmediateRefresh = recentActivityGets;
     await page.waitForTimeout(15_500);
     if (expectsPause) {
-      expect(recentActivityGets).toBe(visibleCountAfterImmediateRefresh + 1,
-        "the restarted visible interval should add one refresh after the immediate focus refresh");
+      expect(recentActivityGets, "the restarted visible interval should add one refresh after the immediate focus refresh").toBe(visibleCountAfterImmediateRefresh + 1);
     }
     const visiblePollsAfterReturn = recentActivityGets - hiddenCount;
     test.info().annotations.push({
@@ -586,9 +585,9 @@ test("recent activity ignores a refresh response invalidated by natural hide", a
   let projectId: string | null = null;
   let recentActivityGets = 0;
   let interceptedGet = false;
-  let signalIntercepted: (() => void) | null = null;
-  let signalReleased: (() => void) | null = null;
-  let signalCompleted: (() => void) | null = null;
+  let signalIntercepted!: () => void;
+  let signalReleased!: () => void;
+  let signalCompleted!: () => void;
   const heldGet = new Promise<void>((resolveHeld) => { signalIntercepted = resolveHeld; });
   const heldResponseReleased = new Promise<void>((resolveReleased) => { signalReleased = resolveReleased; });
   const heldResponseCompleted = new Promise<void>((resolveCompleted) => { signalCompleted = resolveCompleted; });
@@ -730,7 +729,7 @@ test("recent activity coalesces repeated positions and records 50 input reports"
     expect(positionWrites[initialWriteCount]).toEqual(positionWrites[initialWriteCount - 1]);
 
     await page.waitForTimeout(2_100);
-    expect(positionWrites).toHaveLength(initialWriteCount + 1, "unchanged position reports should settle after their debounced PUT");
+    expect(positionWrites, "unchanged position reports should settle after their debounced PUT").toHaveLength(initialWriteCount + 1);
 
     const inputStartCount = positionWrites.length;
     const inputStartedAt = Date.now();
@@ -741,7 +740,7 @@ test("recent activity coalesces repeated positions and records 50 input reports"
     const inputPutCount = positionWrites.length - inputStartCount;
     expect(inputPutCount).toBeGreaterThan(0);
     if (inputBurstDurationMs < 2_000) {
-      expect(inputPutCount).toBe(1, "a 50-character burst completed within the server debounce window should make one PUT");
+      expect(inputPutCount, "a 50-character burst completed within the server debounce window should make one PUT").toBe(1);
     }
     test.info().annotations.push(
       { type: "c40-identical-position", description: `50 repeated reports in ${repeatedReportDurationMs} ms; 1 PUT; identical cursor input refreshed updatedAt.` },

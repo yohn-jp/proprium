@@ -101,7 +101,7 @@ async function invokeAction(definition: Awaited<ReturnType<typeof createModule>>
   const parsed = action.inputSchema.parse(input);
   const result = await action.invoke(parsed, context);
   assert.equal(result.ok, true, result.ok ? "" : result.error.message);
-  if (!result.ok) throw new Error(result.error.message);
+  if (!result.ok) throw new Error("Expected successful result");
   return result.data as Record<string, unknown>;
 }
 
@@ -293,7 +293,7 @@ test("a share activates only on the remote published snapshot and revocation is 
     tokenHash: hashShareToken(expiredToken), scope: { kind: "scene", id: "sc-1" },
     label: "期限切れ", createdAt: "2024-01-01T00:00:00.000Z", expiresAt: "2024-01-02T00:00:00.000Z",
   };
-  const expiredReader = new MemoryReader(new Map([...remote.files, [SHARE_GRANTS_PATH, JSON.stringify(expired) + "\n"]]), remote.snapshot);
+  const expiredReader = new MemoryReader(new Map<string, Buffer | string>([...remote.files, [SHARE_GRANTS_PATH, JSON.stringify(expired) + "\n"]]), remote.snapshot);
   const expiredUrl = url.slice(0, url.lastIndexOf("/") + 1) + expiredToken;
   assert.equal((await publicBase.handle(new Request(expiredUrl), publicContext(expiredReader))).status, 404);
 });

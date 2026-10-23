@@ -243,7 +243,7 @@ test("a non-cooperative running listener cannot hold a real one-shot child resul
     }
   });
   try {
-    const running = supervisor.run(job, workerEntry);
+    const running = supervisor.run<{ echo: { privateText: string } }>(job, workerEntry);
     await within(runningState, 1_000, "running lifecycle callback");
     const outcome = await within(running, 500, "one-shot child result");
     assert.equal(outcome.ok, true);
@@ -276,7 +276,7 @@ test("a non-cooperative service listener cannot hold AbortSignal cancellation or
     const outcome = await within(requestPromise, 500, "persistent worker cancellation");
     assert.equal(outcome.ok, false);
     if (!outcome.ok) assert.equal(outcome.error.code, "job_cancelled");
-    assert.equal(service.activeJobCount, 0);
+    assert.equal(supervisor.activeJobCount, 0);
     await within(supervisor.shutdown(), 1_000, "service shutdown");
   } finally {
     unsubscribe();
@@ -351,6 +351,7 @@ test("persistent service and per-service job admission are bounded and require c
     supervisor.createService("nlp", "0.1.0", workerServiceEntry),
     (error: unknown) => (error as { code?: string }).code === "worker_overloaded",
   );
+  // @ts-expect-error Missing cancellation is deliberately rejected at runtime.
   const noSignal = await service.request(request());
   assert.equal(noSignal.ok, false);
   if (!noSignal.ok) assert.equal(noSignal.error.code, "job_cancellation_required");

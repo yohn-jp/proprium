@@ -189,7 +189,7 @@ function actionContext(
         state: checkpoints.length ? "partially_approved" : approvedOperationIds.length ? "approved" : "proposed",
       };
     },
-  } satisfies ModuleActionContext;
+  } satisfies ModuleActionContext & { setProposalReview(approvedOperationIds: string[], checkpoints: unknown[]): void; setProposalPayloadIncomplete(approvedOperationIds: string[], checkpoints: unknown[], publishedOperationIds?: string[]): void };
 }
 
 test("SDK Streamable HTTP transport lists and invokes tools through the host action context", async () => {

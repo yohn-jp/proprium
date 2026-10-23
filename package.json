@@ -36,6 +36,8 @@
     "@scriptorium/module-publishing": "workspace:*",
     "@scriptorium/module-mcp": "workspace:*",
     "@scriptorium/module-search": "workspace:*",
-    "@scriptorium/api": "workspace:*"
+    "@scriptorium/api": "workspace:*",
+    "@scriptorium/contracts": "workspace:*",
+    "@scriptorium/module-runtime": "workspace:*"
   }
 }
