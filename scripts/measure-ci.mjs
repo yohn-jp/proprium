@@ -26,7 +26,7 @@ const observations = jobs.map(job => {
     dependencyInstall: phase(/Install frozen|Install exact|Prepare exact/),
     build: phase(/Build required|Build production|Build Core|Build native/),
     test: phase(/Test workspace|Test isolated|Typecheck|Verify native|Verify production OCI|Audit Core/),
-    externalDownload: phase(/Initialize containers|Prepare exact|Install frozen/),
+    externalDownload: phase(/^(?:Initialize containers|Prepare exact|Install frozen|Restore content-addressed|Run actions\/setup-node)/),
     externalDownloadNote: 'Container pull and dependency retrieval are phase timings; download-only time is not exposed separately by Actions API.',
     cache: phase(/Restore content-addressed/), cacheHit: job.steps.find(step => /^Dependency cache hit=/.test(step.name))?.name.split('=')[1] ?? 'NOT_CHECKED',
   };
@@ -38,7 +38,9 @@ const report = { runId, url: run.html_url, sha: run.head_sha, attempt: run.run_a
   wallClockSeconds: run.status === 'completed' && completed.length ? (Math.max(...completed) - Date.parse(run.created_at)) / 1000 : null,
   observedElapsedSeconds: completed.length ? (Math.max(...completed) - Date.parse(run.created_at)) / 1000 : null,
   criticalPath: latestLeaf ? `${latestLeaf.name}${jobs.some(job => job.name === 'certification') ? ' -> certification' : ''}` : null,
-  warmColdClassification: 'Use per-job cache results; a rerun is not automatically warm.', jobs: observations };
+  warmColdClassification: 'Use per-job cache results; a rerun is not automatically warm.',
+  phaseMeasurementNote: 'Empty phase arrays mean not separately instrumented, not zero. Legacy source/browser steps combine phases; OCI combines image build and runtime checks; native verification includes Docker builds and compose. Download-related steps include other work and are not download-only stopwatch measurements.',
+  jobs: observations };
 const output = option('--out');
 if (output) await writeFile(output, JSON.stringify(report, null, 2) + '\n');
 console.log(JSON.stringify(report, null, 2));

@@ -1537,6 +1537,8 @@ test("project details, reconstruction, and guarded removal preserve browser reco
     await signIn(page);
     await page.getByLabel("GitHub リポジトリ URL").fill(isolatedRepositoryUrl);
     await page.getByRole("button", { name: "リポジトリを登録" }).click();
+    await expect(page.getByRole("button", { name: projectLabel(isolatedRepository), exact: true }))
+      .toHaveAttribute("aria-current", "true");
     await expect(page.getByRole("heading", { name: "Volume One" })).toBeVisible();
     await page.getByRole("button", { name: "Chapter One: Scene One" }).click();
     await expect(page.getByRole("heading", { name: "Scene One" })).toBeVisible();
