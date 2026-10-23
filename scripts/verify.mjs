@@ -5,6 +5,8 @@ import { spawn } from "node:child_process";
 const commands = [
   ["pnpm", ["install", "--frozen-lockfile"]],
   ["pnpm", ["typecheck"]],
+  ["pnpm", ["typecheck:tests"]],
+  ["pnpm", ["typecheck:safety"]],
   ["pnpm", ["test"]],
   ["pnpm", ["build"], { SCRIPTORIUM_PROFILE: "core" }],
   ["pnpm", ["audit:core"], { SCRIPTORIUM_PROFILE: "core" }],
