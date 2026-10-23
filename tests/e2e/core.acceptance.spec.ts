@@ -45,6 +45,33 @@ interface ProposalJournalSummary {
   status?: { state: string; payloadComplete?: boolean; originalDigest?: string; operationIds?: string[]; approvedOperationIds: string[]; checkpoints: Array<{ operationId: string }>; publishedOperationIds?: string[] };
 }
 
+interface ProjectListEntry {
+  id: string;
+  url: string;
+  branch: string;
+}
+
+function isProjectListEntry(value: unknown): value is ProjectListEntry {
+  if (typeof value !== "object" || value === null || Array.isArray(value)) return false;
+  const record = value as Record<string, unknown>;
+  return typeof record.id === "string" && typeof record.url === "string" && typeof record.branch === "string";
+}
+
+function isProjectList(value: unknown): value is ProjectListEntry[] {
+  return Array.isArray(value) && value.every(isProjectListEntry);
+}
+
+async function waitForProjectList(page: Page): Promise<ProjectListEntry[]> {
+  const response = await page.waitForResponse((candidate) => {
+    const requestUrl = new URL(candidate.url());
+    return candidate.request().method() === "GET" && requestUrl.pathname === "/api/projects";
+  });
+  if (!response.ok()) throw new Error(`Project list request failed with HTTP ${response.status()}`);
+  const payload: unknown = await response.json();
+  if (!isProjectList(payload)) throw new Error("Project list response does not match the API contract");
+  return payload;
+}
+
 function repositoryInputValue(value: string): string {
   return value.startsWith("https://") || value.startsWith("file://")
     ? value
@@ -60,18 +87,24 @@ function projectLabel(value: string): string {
   }
 }
 
-async function signIn(page: Page): Promise<void> {
+async function signIn(page: Page): Promise<ProjectListEntry[]> {
   await page.goto("/desktop/");
   await page.getByLabel("アクセストークン").fill(authToken);
+  const projectsLoaded = waitForProjectList(page);
   await page.getByRole("button", { name: "ログイン" }).click();
+  const projects = await projectsLoaded;
   await expect(page.getByRole("heading", { name: "作品を追加" })).toBeVisible();
+  return projects;
 }
 
-async function openFixtureProject(page: Page): Promise<void> {
+async function openFixtureProject(page: Page, projects: ProjectListEntry[]): Promise<void> {
   const existing = page.getByRole("button", { name: projectLabel(repositoryUrl), exact: true });
-  if (await existing.isVisible()) {
+  const fixtureIsRegistered = projects.some((project) => projectLabel(project.url) === projectLabel(repositoryUrl));
+  if (fixtureIsRegistered) {
+    await expect(existing).toBeVisible();
     await existing.click();
   } else {
+    await expect(page.locator(".project-list-section .project-button")).toHaveCount(projects.length);
     await page.getByLabel("GitHub リポジトリ URL").fill(repositoryInputValue(repositoryUrl));
     await page.getByRole("button", { name: "リポジトリを登録" }).click();
   }
@@ -258,8 +291,7 @@ test("appearance modes follow system preference initially and persist explicit l
 test("history keeps its pinned response through a foreground observation without rereading the unchanged tree", async ({ page }) => {
   expect(authToken.length).toBeGreaterThanOrEqual(32);
   expect(repositoryUrl).not.toBe("");
-  await signIn(page);
-  await openFixtureProject(page);
+  await openFixtureProject(page, await signIn(page));
 
   let releaseHistory!: () => void;
   let signalHistory!: () => void;
@@ -327,11 +359,12 @@ test("same-origin stale tabs cannot replace an equal-generation journal draft", 
 
   const secondTab = await page.context().newPage();
   try {
-    await signIn(page);
-    await openFixtureProject(page);
+    await openFixtureProject(page, await signIn(page));
+    const secondTabProjectsLoaded = waitForProjectList(secondTab);
     await secondTab.goto("/desktop/");
+    const secondTabProjects = await secondTabProjectsLoaded;
     await expect(secondTab.getByRole("heading", { name: "作品を追加" })).toBeVisible();
-    await openFixtureProject(secondTab);
+    await openFixtureProject(secondTab, secondTabProjects);
 
     const firstEditor = page.locator(".cm-content");
     const secondEditor = secondTab.locator(".cm-content");
@@ -406,8 +439,7 @@ test("coalesced editor state is current for immediate print and history actions"
         document.documentElement.dataset.printedManuscript = document.querySelector(".print-manuscript")?.textContent ?? "";
       };
     });
-    await signIn(page);
-    await openFixtureProject(page);
+    await openFixtureProject(page, await signIn(page));
 
     const editor = page.locator(".cm-content");
     const printDraft = "Printed from the newest editor input.";
@@ -490,8 +522,7 @@ test("coalesced typing restores to its unchanged React value without reviving th
       return originalDelete.call(this, key);
     };
   });
-  await signIn(page);
-  await openFixtureProject(page);
+  await openFixtureProject(page, await signIn(page));
 
   const editor = page.locator(".cm-content");
   const originalText = (await editor.textContent()) ?? "";
@@ -542,8 +573,9 @@ test("coalesced typing restores to its unchanged React value without reviving th
     };
   }), { originalText, stagingText });
 
+  const projectsLoaded = waitForProjectList(page);
   await page.reload();
-  await openFixtureProject(page);
+  await openFixtureProject(page, await projectsLoaded);
   await expect(page.locator(".conflict")).toBeVisible();
   await expect(editor).toHaveText(originalText);
   const prior = (await readJournal(page)).find((entry) => entry.state === "draft" && entry.text === originalText);
@@ -587,8 +619,7 @@ test("writing UI recovers multi-document drafts and separates Draft, Checkpoint,
     }
   });
 
-  await signIn(page);
-  await openFixtureProject(page);
+  await openFixtureProject(page, await signIn(page));
   const nonce = await page.locator('meta[name="scriptorium-style-nonce"]').getAttribute("content");
   expect(nonce).toBeTruthy();
   expect(nonce).not.toBe("__SCRIPTORIUM_STYLE_NONCE__");
@@ -653,8 +684,9 @@ test("writing UI recovers multi-document drafts and separates Draft, Checkpoint,
   await page.getByRole("button", { name: "Chapter One: Scene One" }).click();
   await expect(page.locator(".cm-content")).toHaveText(longReadingDraft);
 
+  const projectsLoaded = waitForProjectList(page);
   await page.reload();
-  await openFixtureProject(page);
+  await openFixtureProject(page, await projectsLoaded);
   await expect(page.locator('output[aria-label="文字サイズ"]')).toHaveText("18px");
   await expect(page.locator(".cm-content")).toHaveText(longReadingDraft);
   await page.getByRole("button", { name: "読書モード" }).click();
@@ -727,8 +759,7 @@ test("writing UI recovers multi-document drafts and separates Draft, Checkpoint,
 test("new typing survives an older in-flight checkpoint and exact publication acknowledgement", async ({ page }) => {
   expect(authToken.length).toBeGreaterThanOrEqual(32);
   expect(repositoryUrl).not.toBe("");
-  await signIn(page);
-  await openFixtureProject(page);
+  await openFixtureProject(page, await signIn(page));
 
   const firstGeneration = "Checkpoint generation one.";
   await page.locator(".cm-content").fill(firstGeneration);
@@ -856,8 +887,7 @@ test("new typing survives a gated browser-draft rebase during checkpoint recover
       },
     });
   });
-  await signIn(page);
-  await openFixtureProject(page);
+  await openFixtureProject(page, await signIn(page));
 
   const checkpointedText = "Checkpoint recovery baseline.";
   const staleDraftText = "Draft written against the prior snapshot.";
@@ -918,8 +948,7 @@ test("new typing survives a gated browser-draft rebase during checkpoint recover
 test("browser recovery is author-scoped and foreign records remain untouched", async ({ page }) => {
   expect(authToken.length).toBeGreaterThanOrEqual(32);
   expect(repositoryUrl).not.toBe("");
-  await signIn(page);
-  await openFixtureProject(page);
+  await openFixtureProject(page, await signIn(page));
   const ownerDraft = "Owner-scoped draft.";
   await page.locator(".cm-content").fill(ownerDraft);
   await expect.poll(async () => (await readJournal(page)).some((entry) => entry.text === ownerDraft)).toBe(true);
@@ -985,8 +1014,7 @@ test("one malformed legacy key does not hide later recoverable drafts", async ({
       savedAt: 1,
     }));
   });
-  await signIn(page);
-  await openFixtureProject(page);
+  await openFixtureProject(page, await signIn(page));
   await expect(page.getByRole("heading", { name: "旧ブラウザー下書き" })).toBeVisible();
   await expect(page.getByText("シーン removed-scene-id")).toBeVisible();
 });
@@ -994,8 +1022,7 @@ test("one malformed legacy key does not hide later recoverable drafts", async ({
 test("external MCP proposals enter owner review before approval, then checkpoint and publish", async ({ page }) => {
   expect(authToken.length).toBeGreaterThanOrEqual(32);
   expect(repositoryUrl).not.toBe("");
-  await signIn(page);
-  await openFixtureProject(page);
+  await openFixtureProject(page, await signIn(page));
 
   const projectResponse = await page.request.get(new URL("/api/projects", page.url()).toString());
   expect(projectResponse.ok()).toBe(true);
@@ -1117,8 +1144,7 @@ test("full browser MCP proposal payload is restored after Core data loss before 
     "This recovery acceptance resets only the disposable local Core data directory.");
   expect(authToken.length).toBeGreaterThanOrEqual(32);
   expect(repositoryUrl).not.toBe("");
-  await signIn(page);
-  await openFixtureProject(page);
+  await openFixtureProject(page, await signIn(page));
 
   const origin = new URL(page.url()).origin;
   const projectsResponse = await page.request.get(new URL("/api/projects", origin).toString());
@@ -1336,8 +1362,7 @@ test("a remote update during author approval keeps the conflicting editor draft 
   test.skip(process.env.SCRIPTORIUM_E2E_EXTERNAL_REPOSITORY === "1", "This conflict acceptance pushes only to the disposable local Git fixture.");
   expect(authToken.length).toBeGreaterThanOrEqual(32);
   expect(repositoryUrl).not.toBe("");
-  await signIn(page);
-  await openFixtureProject(page);
+  await openFixtureProject(page, await signIn(page));
 
   const origin = new URL(page.url()).origin;
   const projectsResponse = await page.request.get(new URL("/api/projects", origin).toString());
@@ -1467,8 +1492,7 @@ test("IndexedDB quota failures remain visible and block checkpointing", async ({
       return originalPut.call(this, value, key);
     };
   });
-  await signIn(page);
-  await openFixtureProject(page);
+  await openFixtureProject(page, await signIn(page));
 
   const canonicalBefore = await page.locator(".cm-content").textContent();
   await page.locator(".cm-content").fill("This edit cannot be journaled because the browser is full.");
@@ -1476,12 +1500,13 @@ test("IndexedDB quota failures remain visible and block checkpointing", async ({
   await expect(page.getByRole("button", { name: "Checkpoint", exact: true })).toBeDisabled();
 
   const unloadDialog = page.waitForEvent("dialog");
+  const projectsLoaded = waitForProjectList(page);
   const reloading = page.reload();
   const dialog = await unloadDialog;
   expect(dialog.type()).toBe("beforeunload");
   await dialog.accept();
   await reloading;
-  await openFixtureProject(page);
+  await openFixtureProject(page, await projectsLoaded);
   await expect(page.locator(".cm-content")).toHaveText(canonicalBefore ?? "");
 });
 
@@ -1587,8 +1612,7 @@ test("unmounting a contribution aborts its in-flight action request", async ({ p
   });
 
   try {
-    await signIn(page);
-    await openFixtureProject(page);
+    await openFixtureProject(page, await signIn(page));
     const publishingPanel = await openWorkspaceContributionPanel(page, "publishing.export.epub", "EPUB 書き出し");
     await expect(publishingPanel.locator('[data-contribution="publishing.export.epub"]')).toBeVisible();
     const actionRequest = await observed;
@@ -1613,8 +1637,7 @@ test("a pending scratch image read is flushed to its captured scene before navig
       window.setTimeout(() => originalRead.call(reader, blob), 1_000);
     };
   });
-  await signIn(page);
-  await openFixtureProject(page);
+  await openFixtureProject(page, await signIn(page));
   await page.locator(".scratch-panel summary").click();
   await page.getByLabel("本文に含まれないメモ").fill("Attachment belongs to Scene One.");
   await page.getByLabel("スクラッチ画像を添付").setInputFiles({

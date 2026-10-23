@@ -346,7 +346,14 @@ jobs:
           CACHE_HIT: ${{ steps.dependencies.outputs.cache-hit }}
         run: echo "Dependency cache hit=${CACHE_HIT:-false}" >> "$GITHUB_STEP_SUMMARY"
       - name: Build native Producer inputs
-        run: pnpm build:workspace
+        env:
+          SELECTION: ${{ matrix.selection }}
+        run: |
+          if [ "$SELECTION" = catalog ]; then
+            pnpm --filter '@scriptorium/module-*...' build
+          else
+            pnpm build:workspace
+          fi
       - name: Verify native catalog and offline composition
         env:
           SCRIPTORIUM_NATIVE_REPORT_PATH: ${{ runner.temp }}/native-results/report.json

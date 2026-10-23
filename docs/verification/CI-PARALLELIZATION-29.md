@@ -23,7 +23,7 @@ Each runner owns its checkout, builds, ephemeral Git repositories, API process, 
 
 Package runners build their declared internal dependency closure on their own host. The coverage validator rejects unregistered workspaces/test sources; root `pnpm test` includes the same root script test discovery as `unit-root`. Production/test-source grouping is an execution partition, not a compiler relaxation.
 
-Hosted Native jobs independently build digest-bound disposable Producer inputs at HEAD. Catalog reports bind source/recipe/lock digests and actual runtime-base/BuildKit OCI digests. Compose keeps online cache preparation followed by the original offline Producer operation. Source inventory, clean checkout, symlink, provenance and signature checks remain enabled. These checks do not certify a deployed Hosted runtime or publish a signed Producer.
+Hosted Native jobs independently build digest-bound disposable Producer inputs at HEAD. Catalog-only host preparation builds module-runtime and all module dependency closures; compose jobs also build the required app/API production outputs. Catalog reports bind source/recipe/lock digests and actual runtime-base/BuildKit OCI digests. Compose keeps online cache preparation followed by the original offline Producer operation. Source inventory, clean checkout, symlink, provenance and signature checks remain enabled. These checks do not certify a deployed Hosted runtime or publish a signed Producer.
 
 ## Browser environment
 
@@ -53,3 +53,5 @@ Baseline: [run 39940436971](https://github.com/yohn-jp/scriptorium/actions/runs/
 Remote cold/warm measurements and final exact-SHA certification: **PENDING**, to be replaced by actual completed-run evidence. A rerun alone is not proof of a warm cache. Approximately five minutes is a target, not a guarantee.
 
 Initial local checks: frozen install; workflow syntax via actionlint 1.7.12; workflow/matrix and release-policy tests; scoped safety typecheck. Final results and independent review will be recorded with actual SHA/run in PR #30 to avoid a self-referential documentation SHA.
+
+Completed-run collection uses `GH_TOKEN=<read token> GITHUB_REPOSITORY=yohn-jp/scriptorium node scripts/measure-ci.mjs --run <run-id> --out <report.json>` after the run terminates. The in-workflow metrics artifact is explicitly a partial snapshot while certification is still running; it cannot by itself certify final wall-clock. The final delivery record uses the completed-run collection.

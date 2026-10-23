@@ -32,7 +32,7 @@ Real DOM/interaction diagnosis identified:
 
 At `ddd68ad8916516bb3be6401524e0ccd328ddc003`, [CI 39937325479](https://github.com/yohn-jp/scriptorium/actions/runs/39937325479) proved native catalog/compose for all three selections, with disposable runtime-base `sha256:d93e8996d2b14e4c36289b0d6c2fd050428b0f067d18c79402d2e942225265dc` and buildkit `sha256:310b5645b420f69d5b568c7bc104337f56bc474b297cd487d5819295348c0d66`. Source and both OCI jobs also passed. That run was superseded after further browser fixes; it is intermediate evidence, not final certification.
 
-## Final verification series
+## Original audit verification series
 
 Local toolchain: Node `24.21.0`, pnpm `12.10.1`; task worktree `/data/scriptorium-29-audit-hardening`. The final integrated command series completed on runtime revision `2cdf1c8c0ce88ae2e983232040cc2c07a5c4990e` (subsequent changes strengthen E2E synchronization/DOM comparison and documentation only):
 
@@ -52,7 +52,7 @@ Local toolchain: Node `24.21.0`, pnpm `12.10.1`; task worktree `/data/scriptoriu
 | Strengthened coalesced proposal recovery regression, Full Chromium | Failed before production correction; passed after; repeated twice with activation-completion synchronization: 2 passed |
 | Undo/redo and cross-Shell recovery/publication flow, Full Chromium | Exact pre-edit CodeMirror line comparison; two consecutive runs against the same disposable remote: 2 passed |
 
-Browser commands use `pnpm exec playwright test --config tests/e2e/playwright.config.ts --project chromium`, with `SCRIPTORIUM_PROFILE=full` after the Full build. On NixOS, `SCRIPTORIUM_E2E_CHROMIUM` selects the actual system Chromium 153 executable; `TMPDIR` locates disposable fixtures on the data disk. These options do not mock application behavior. GitHub runners install the declared Playwright Chromium/WebKit binaries and run both projects against the production Core/Full builds. Final exact-HEAD CI, including WebKit, real OCI startup and the native checks, is linked with its SHA and job results in PR #30.
+Browser commands use `pnpm exec playwright test --config tests/e2e/playwright.config.ts --project chromium`, with `SCRIPTORIUM_PROFILE=full` after the Full build. On NixOS, `SCRIPTORIUM_E2E_CHROMIUM` selects the actual system Chromium 153 executable; `TMPDIR` locates disposable fixtures on the data disk. These options do not mock application behavior. The original GitHub runs installed Playwright browser dependencies at runtime. The subsequent [parallel CI verification](CI-PARALLELIZATION-29.md) replaces that browser environment with the digest-pinned official image and preserves both projects against Core/Full builds. Final exact-HEAD CI, including WebKit, real OCI startup and the native checks, is linked with its SHA and job results in PR #30.
 
 Task-local logs are under `/data/scriptorium-29-scratch`: `typecheck-final.log`, `typecheck-tests-integrated.log`, `typecheck-safety-final.log`, `test-integrated.log`, `build-core-final.log`, `audit-core-final.log`, `build-full-final.log`, `browser-core-final.log`, `browser-full.log`, `proposal-coalescing-before.log`, `proposal-coalescing-final.log`, and `browser-undo-lines-final.log`. Required checks are also repeated remotely on the submitted HEAD; local results are supporting evidence, not a substitute for those jobs.
 
@@ -67,3 +67,7 @@ A separate read-only reviewer examined the whole base-to-HEAD branch and then th
 - Existing conditional semantic-model tests and natural headful-background visibility checks remain conditional. Missing model configuration or a headful display is NOT_CHECKED, never a passing model/background test. Profile/browser-specific skips are recorded in the CI counts; no new skips were introduced.
 - A read-only GHCR probe confirmed an absent `core:v0.3.2` at that repository path. It does not prove rejection of a live existing image tag. Existing-tag/error behavior is covered by the response-policy regressions. Package listing returned 403 because the local token lacks `read:packages`; no scopes were changed. This listing is not required for the disposable verification jobs.
 - Administrator-controlled manual tag/Release/registry operations are outside repository-workflow enforcement, as explained in [OCI release policy](OCI-RELEASE.md).
+
+## Parallel CI continuation
+
+The owner subsequently authorized the 50-job parallel CI structure. See [CI parallelization evidence](CI-PARALLELIZATION-29.md) for the current job inventory, complete test coverage checks, exact-source certification, cold/warm observations and final verification record. The original audit results above remain historical supporting evidence; PR #30 identifies the final submitted source SHA and completed CI result.
