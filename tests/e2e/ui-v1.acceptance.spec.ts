@@ -415,12 +415,13 @@ test("both production Shells preserve recoverable Japanese drafts and the Mobile
 
   await page.getByRole("button", { name: "Chapter One: Scene Two", exact: true }).click();
   await expect(page.getByRole("heading", { name: "Scene Two" })).toBeVisible();
+  const desktopOriginalText = await desktopEditor.innerText();
   const desktopDraft = "Desktop draft with 日本語 and ruby |風《かぜ》。";
   await desktopEditor.fill(desktopDraft);
   await expectJournalDraft(page, "scene-2", desktopDraft);
   await expect(desktopEditor).toHaveText(desktopDraft);
   await desktopEditor.press("Control+z");
-  await expect(desktopEditor).toContainText("The second line of the story.");
+  await expect(desktopEditor).toHaveText(desktopOriginalText);
   await desktopEditor.press("Control+Shift+z");
   await expect(desktopEditor).toHaveText(desktopDraft);
   await expect(page.locator(".manuscript-preview rt")).toContainText("かぜ");
