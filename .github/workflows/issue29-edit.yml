@@ -40,6 +40,17 @@ jobs:
           ! grep -q 'ERR_MODULE_NOT_FOUND' /tmp/issue29-red.log
       - name: Apply bounded corrections and verify
         run: |
+          python3 - <<'PY'
+          from pathlib import Path
+          p = Path('.github/issue29-edit.py')
+          lines = p.read_text().splitlines()
+          for i, line in enumerate(lines):
+              if line.strip() == 'if source.count(target) != 1:':
+                  lines[i] = line.replace('source.count(target) != 1', 'target not in source')
+              if line.strip().startswith('source = source.replace(target,'):
+                  lines[i] = line[:-1] + ', 1)'
+          p.write_text('\n'.join(lines) + '\n')
+          PY
           python3 .github/issue29-edit.py apply
           pnpm typecheck
           node --import tsx --test packages/api/src/authorization-error.test.ts packages/api/src/server.test.ts modules/mcp/src/http.test.ts modules/mcp/src/session-lifetime.test.ts app/src/api.test.ts app/src/api-boundary.test.ts
