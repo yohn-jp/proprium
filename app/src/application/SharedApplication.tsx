@@ -618,7 +618,13 @@ function AuthorWorkspace({
     const owner = repositoryKey(repository);
     const pollKey = JSON.stringify([projectId, owner, scope]);
     const inFlight = proposalPollsRef.current.get(pollKey);
-    if (inFlight) return inFlight;
+    if (inFlight) {
+      await inFlight;
+      if (expectedNavigation === undefined || isCurrentProject(expectedNavigation, projectId, repository)) {
+        await refreshJournal(repository, expectedNavigation);
+      }
+      return;
+    }
     const poll = (async () => {
       let response: Awaited<ReturnType<typeof api.proposalStatuses>>;
       let receipts: Awaited<ReturnType<BrowserJournal["getPublicationReceipts"]>>;

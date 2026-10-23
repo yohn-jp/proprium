@@ -1251,10 +1251,31 @@ test("full browser MCP proposal payload is restored after Core data loss before 
   });
   expect(partial?.proposal.evidence).toBeUndefined();
 
+  let releaseProposalPoll!: () => void;
+  let reportProposalPoll!: () => void;
+  const proposalPollGate = new Promise<void>((resolve) => { releaseProposalPoll = resolve; });
+  const proposalPollStarted = new Promise<void>((resolve) => { reportProposalPoll = resolve; });
+  let heldProposalPoll = false;
+  await page.route(`**/api/projects/${encodeURIComponent(reRegistered.id)}/proposals`, async (route) => {
+    if (route.request().method() !== "GET" || heldProposalPoll) return route.continue();
+    heldProposalPoll = true;
+    const response = await route.fetch();
+    reportProposalPoll();
+    await proposalPollGate;
+    await route.fulfill({ response });
+  });
   await page.goto(new URL("/desktop/", origin).toString());
-  await expect(page.locator(".project-button")).toHaveCount(1);
-  await page.getByRole("button", { name: projectLabel(repositoryUrl), exact: true }).click();
-  await expect(page.getByRole("heading", { name: "Volume One" })).toBeVisible();
+  try {
+    await expect(page.locator(".project-button")).toHaveCount(1);
+    await page.getByRole("button", { name: projectLabel(repositoryUrl), exact: true }).click();
+    await expect(page.getByRole("heading", { name: "Volume One" })).toBeVisible();
+    await proposalPollStarted;
+    // A second activation must share the request, then refresh the current navigation's review state.
+    const secondTree = page.waitForResponse((response) => response.request().method() === "GET" &&
+      new URL(response.url()).pathname === `/api/projects/${reRegistered.id}/tree`);
+    await page.getByRole("button", { name: projectLabel(repositoryUrl), exact: true }).click();
+    await secondTree;
+  } finally { releaseProposalPoll(); }
   await expect.poll(async () => {
     const record = (await readProposalJournal(page)).find((item) => item.proposal.id === proposalId);
     return record?.status?.payloadComplete === true && record.proposal.operations.length === 2 &&
