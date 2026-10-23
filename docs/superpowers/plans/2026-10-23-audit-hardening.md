@@ -18,12 +18,14 @@ Base: 7f698cb943e672c90ec3c60a484124e12fad5ac0
 Malformed/empty successful HTTP responses; 502/503 dependency outages; MCP capacity reservations during concurrent initialization and active streams; clean native Hosted module outputs; exact SHA equality across verification and release publication.
 
 ## Tasks
-- [ ] 1. Preserve dependency errors at both Hosted read/write HTTP boundaries. Add failing HTTP regressions, extract safe classification, rerun boundary suites.
-- [ ] 2. Add browser response decoders using existing shared contract validation. Reject malformed JSON and unexpected 204; validate critical DTOs before state/recovery consumers. Preserve refresh single-flight and legitimate optional fields. Run transport regressions.
-- [ ] 3. Bound MCP session creation/idle retention, including pending initialization, active requests and dispose. Test through actual SDK transport and verify project scoping.
-- [ ] 4. Typecheck excluded test sources and add stricter scoped checks for changed boundary modules and JavaScript release tooling. Repair proven errors without broad suppression or unrelated refactors.
-- [ ] 5. Verify native Hosted catalog/compose and all shipped modules; maintain clean source/digest and symlink rejection. Wire PR/main checks and require them before existing OCI publication; add exact-source verified Release entrypoint.
-- [ ] 6. Reconcile scoped governance, record file/test evidence and external gates, inspect the integrated diff, run final checks, update one non-draft PR. Stop without merge.
+- [x] 1. Preserve dependency errors at both Hosted read/write HTTP boundaries. Add failing HTTP regressions, extract safe classification, rerun boundary suites.
+- [x] 2. Add browser response decoders using existing shared contract validation. Reject malformed JSON and unexpected 204; validate critical DTOs before state/recovery consumers. Preserve refresh single-flight and legitimate optional fields. Run transport regressions.
+- [x] 3. Bound MCP session creation/idle retention, including pending initialization, active requests and dispose. Test through actual SDK transport and verify project scoping.
+- [x] 4. Typecheck excluded test sources and add stricter scoped checks for changed boundary modules and JavaScript release tooling. Repair proven errors without broad suppression or unrelated refactors.
+- [x] 5. Verify native Hosted catalog/compose and all shipped modules; maintain clean source/digest and symlink rejection. Wire PR/main checks and require them before existing OCI publication; add exact-source verified Release entrypoint.
+- [x] 6. Reconcile scoped governance, record file/test evidence and external gates, inspect the integrated diff, run final checks, update one non-draft PR. Stop without merge.
 
 ## Execution environment
-The ChatGPT container cannot resolve github.com and has Node 22 rather than the repository's Node 24. Connected GitHub reads/writes work. Local dependency-dependent/full validation is unavailable; use isolated GitHub runners and report their actual results. Pure dependency-free checks may run locally and are labeled separately.
+The original execution used a Node 22 container without package/GitHub DNS. The continuation uses Node 24.21.0 and pnpm 12.10.1 with working network/package stores. Its issue worktree is `/data/scriptorium-29-audit-hardening` because the root filesystem filled during the initial dependency copy. GitHub verification uses Node 24.22.0. See [audit evidence](../../verification/AUDIT-HARDENING-29.md) and PR #30 for commands, exact revisions, results and remaining NOT_CHECKED boundaries.
+
+Implementation and local verification are complete. Final exact-HEAD CI certification and delivery status are recorded in PR #30; local completion does not substitute for the required remote jobs.
