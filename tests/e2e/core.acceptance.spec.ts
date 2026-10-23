@@ -1275,6 +1275,8 @@ test("full browser MCP proposal payload is restored after Core data loss before 
       new URL(response.url()).pathname === `/api/projects/${reRegistered.id}/tree`);
     await page.getByRole("button", { name: projectLabel(repositoryUrl), exact: true }).click();
     await secondTree;
+    // The tree response alone precedes JSON decoding and activation completion.
+    await expect(page.getByRole("button", { name: "Chapter One: Scene One", exact: true })).toBeEnabled();
   } finally { releaseProposalPoll(); }
   await expect.poll(async () => {
     const record = (await readProposalJournal(page)).find((item) => item.proposal.id === proposalId);
