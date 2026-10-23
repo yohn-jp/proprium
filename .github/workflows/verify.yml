@@ -14,7 +14,7 @@ jobs:
     runs-on: ubuntu-24.04
     timeout-minutes: 30
     env:
-      COREPACK_HOME: ${{ runner.temp }}/scriptorium-corepack
+      COREPACK_HOME: /tmp/scriptorium-corepack
     steps:
       - uses: actions/checkout@v4
         with:
