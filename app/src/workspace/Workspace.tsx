@@ -14,9 +14,9 @@ import {
   type WorkspaceNode,
   type WorkspacePreset,
 } from "./layout";
-import { loadWorkspaceLayout, presetTitle, saveWorkspaceLayout, type WorkspaceLoad, type WorkspaceStorage } from "./persistence";
+import { loadWorkspaceSnapshot, presetTitle, saveWorkspaceSnapshot, type WorkspaceLoad, type WorkspaceStorage } from "./persistence";
 import "./workspace.css";
-import { loadFloatingPanels, saveFloatingPanels, type FloatingPanelLayout } from "./floating";
+import type { FloatingPanelLayout } from "./floating";
 
 const styleNonce = typeof document === "undefined" ? undefined
   : document.querySelector<HTMLMetaElement>('meta[name="scriptorium-style-nonce"]')?.content;
@@ -43,8 +43,8 @@ function browserStorage(): WorkspaceStorage | null {
 
 function loadFor(scope: string, mode: UiMode, panelIds: string[]): WorkspaceLoad {
   const storage = browserStorage();
-  if (!storage) return { layout: createWorkspacePreset("writing", panelIds), state: "unavailable" };
-  return loadWorkspaceLayout(storage, scope, mode, panelIds);
+  if (!storage) return { layout: createWorkspacePreset("writing", panelIds), floating: [], state: "unavailable" };
+  return loadWorkspaceSnapshot(storage, scope, mode, panelIds);
 }
 
 function firstActivePanel(node: WorkspaceNode): string {
@@ -317,8 +317,7 @@ export function Workspace({ scope, mode, panels, beforeLayoutChange, requestedPa
   const catalog = useMemo(() => new Map(panels.map((panel) => [panel.id, panel])), [panels]);
   const [initial] = useState(() => loadFor(scope, mode, panelIds));
   const [layout, setLayout] = useState<WorkspaceLayout>(initial.layout);
-  const [floating, setFloating] = useState<FloatingPanelLayout[]>(() => mode === "desktop"
-    ? loadFloatingPanels(browserStorage(), scope, panelIds, initial.layout.hiddenPanelIds) : []);
+  const [floating, setFloating] = useState<FloatingPanelLayout[]>(initial.floating);
   const [maximizedPanelId, setMaximizedPanelId] = useState<string | null>(null);
   const [persistenceState, setPersistenceState] = useState<WorkspaceLoad["state"]>(initial.state);
   const [mobilePanelId, setMobilePanelId] = useState<string>(() => initialMobilePanel(initial.layout));
@@ -336,7 +335,7 @@ export function Workspace({ scope, mode, panels, beforeLayoutChange, requestedPa
   useEffect(() => {
     const loaded = loadFor(scope, mode, panelIds);
     setLayout(loaded.layout);
-    setFloating(mode === "desktop" ? loadFloatingPanels(browserStorage(), scope, panelIds, loaded.layout.hiddenPanelIds) : []);
+    setFloating(loaded.floating);
     setMaximizedPanelId(null);
     setPersistenceState(loaded.state);
     setMobilePanelId(initialMobilePanel(loaded.layout));
@@ -419,8 +418,10 @@ export function Workspace({ scope, mode, panels, beforeLayoutChange, requestedPa
         .find((candidate) => candidate.dataset.floatingPanel === item.panelId);
       return element ? { ...item, width: Math.round(element.offsetWidth), height: Math.round(element.offsetHeight) } : item;
     });
-    const saved = storage ? saveWorkspaceLayout(storage, scope, mode, layout)
-      && (mode !== "desktop" || saveFloatingPanels(storage, scope, measuredFloating, panelIds, layout.hiddenPanelIds)) : false;
+    const saved = storage ? saveWorkspaceSnapshot(storage, scope, mode, {
+      layout,
+      floating: mode === "desktop" ? measuredFloating : [],
+    }) : false;
     if (saved) {
       setPersistenceState("valid");
       setMessage("Layout saved on this device.");
