@@ -38,7 +38,7 @@ Dependency arrows express authority, not direct package imports: the browser doe
 4. **Recoverability:** retry retains operation ID, generation, repository/author scope, proposal binding and receipt semantics. Abort, response loss, stale snapshot, IndexedDB error and container replacement do not silently discard outstanding records.
 5. **Foreground correctness:** CodeMirror input/IME and the latest editable text remain immediately authoritative. Slow network, background polling, deferred React publication or stale navigation responses cannot replace that text.
 6. **Profiles and trust:** Core-only authoring has no dependency on optional model or module execution. Built-in modules remain trusted; supervised child processes and dynamic browser imports are not third-party security sandboxes.
-7. **Verification truth:** the same submitted source revision must satisfy every required source, test, browser, OCI and native Hosted check in the canonical CI inventory. Conditional skips and external acceptance not exercised are not passing evidence.
+7. **Verification truth:** PR verification must satisfy every validation selected by the canonical change-impact plan at the same submitted source revision; excluded validations remain explicitly unexecuted. Main and release certification require the complete source, test, browser, OCI and native Hosted inventory at the exact source revision. Conditional skips and external acceptance not exercised are not passing evidence.
 
 ## 3. Browser checkpoint protocol: one side-effect sequence
 
@@ -97,7 +97,7 @@ Hosted authorization dependency outages must remain distinguishable from authent
 
 ## 8. Verification graph is declarative, not inferred from prose
 
-`scripts/ci-contract.mjs` retains authority for the required CI job inventory, browser/profile coverage and exact-source certification. Each package's own `package.json` defines its test command and necessary self-build; workspace dependency manifests determine dependency preparation.
+`scripts/ci-contract.mjs` retains authority for the validation inventory, bounded execution groups, browser/profile coverage and exact-source certification. `scripts/ci-impact.mjs` selects affected PR validations; unknown changes or missing diff inputs select the complete inventory. Main pushes and manual verification always select the complete inventory. Grouped execution preserves individual validation results, and certification checks their source and plan identities as well as successful execution. Each package's own `package.json` defines its test command and necessary self-build; workspace dependency manifests determine dependency preparation.
 
 `scripts/ci-workspace.mjs` must **not** infer per-workspace unit-build requirements by splitting and regex-matching the root `package.json` `test` command. A formatting change to root orchestration must not change per-workspace test prerequisites. Prefer existing package scripts and the declared workspace dependency graph over additional parallel registries or custom task runners.
 

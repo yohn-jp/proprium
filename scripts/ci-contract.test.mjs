@@ -4,65 +4,59 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { createRequire } from 'node:module';
 import { test } from 'node:test';
-import { REQUIRED_VERIFICATION_JOBS, VERIFICATION_LEAF_JOBS, UNIT_TARGETS, TYPECHECK_TARGETS, TEST_TYPECHECK_SCOPES, BROWSER_SHARDS, PROFILES, NATIVE_SELECTIONS } from './ci-contract.mjs';
+import { REQUIRED_VERIFICATION_JOBS, VERIFICATION_LEAF_JOBS, UNIT_TARGETS, TYPECHECK_TARGETS, TEST_TYPECHECK_SCOPES, BROWSER_SHARDS, PROFILES, NATIVE_SELECTIONS, VERIFICATION_GROUPS, VERIFICATION_TASKS } from './ci-contract.mjs';
 const require = createRequire(new URL('../packages/core/package.json', import.meta.url));
 const { parse } = require('yaml');
 const workflow = parse(readFileSync(new URL('../.github/workflows/verify.yml', import.meta.url), 'utf8'));
-const values = job => {
-  let rows = [{}];
-  for (const [key, items] of Object.entries(job.strategy?.matrix ?? {})) {
-    assert.ok(Array.isArray(items) && items.length > 0, `Unsupported or empty matrix: ${key}`);
-    rows = rows.flatMap(row => items.map(value => ({ ...row, [key]: value })));
+test('twenty execution jobs retain all forty-nine validation obligations exactly once', () => {
+  assert.equal(REQUIRED_VERIFICATION_JOBS.length, 20);
+  assert.equal(VERIFICATION_LEAF_JOBS.length, 19);
+  assert.equal(VERIFICATION_TASKS.length, 49);
+  const tasks = Object.values(VERIFICATION_GROUPS).flat();
+  assert.equal(new Set(tasks).size, tasks.length);
+  assert.deepEqual(tasks.toSorted(), VERIFICATION_TASKS.toSorted());
+  assert.deepEqual(REQUIRED_VERIFICATION_JOBS, ['plan', ...Object.keys(VERIFICATION_GROUPS), 'certification']);
+  for (const [family, axis] of [['unit', 'group'], ['types', 'group'], ['build', 'profile'], ['oci', 'profile'], ['hosted', 'selection']]) {
+    assert.equal(workflow.jobs[family].strategy.matrix[axis], '${{ fromJSON(needs.plan.outputs.' + family + ') }}');
   }
-  return rows.map(row => job.name.replace(/\$\{\{ matrix\.(\w+) \}\}/g, (_, key) => {
-    assert.ok(key in row); return row[key];
-  }));
-};
-test('every canonical matrix element executes once with no omitted or extra required jobs', () => {
-  const names = Object.values(workflow.jobs).flatMap(values);
-  assert.equal(new Set(names).size, names.length);
-  assert.deepEqual(names.toSorted(), REQUIRED_VERIFICATION_JOBS.toSorted());
-  assert.equal(names.length, 50);
-  assert.deepEqual(workflow.jobs.unit.strategy.matrix.target, UNIT_TARGETS.map(item => item.id));
-  assert.deepEqual(workflow.jobs.typecheck.strategy.matrix.target, TYPECHECK_TARGETS.map(item => item.id));
-  assert.deepEqual(workflow.jobs['test-types'].strategy.matrix.scope, TEST_TYPECHECK_SCOPES);
-  assert.deepEqual(workflow.jobs.browser.strategy.matrix.profile, PROFILES);
-  assert.deepEqual(workflow.jobs.browser.strategy.matrix.suite, BROWSER_SHARDS.map(item => item.id));
-  assert.deepEqual(workflow.jobs.hosted.strategy.matrix.selection, NATIVE_SELECTIONS);
+  assert.equal(workflow.jobs.browser.strategy.matrix.include, '${{ fromJSON(needs.plan.outputs.browser) }}');
 });
-test('independent leaves start immediately and no failure, skip or update cancels unrelated work', () => {
+test('selected groups depend only on planning and failed groups cannot cancel other evidence', () => {
   assert.equal(workflow.concurrency, undefined);
   assert.deepEqual(workflow.permissions, { contents: 'read' });
-  const leaves = Object.entries(workflow.jobs).filter(([id]) => id !== 'certification');
-  for (const [id, job] of leaves) {
-    assert.equal(job.needs, undefined, id);
-    assert.equal(job.if, undefined, id);
+  assert.equal(workflow.jobs.plan.name, 'plan');
+  for (const [id, job] of Object.entries(workflow.jobs).filter(([id]) => !['plan', 'certification'].includes(id))) {
+    assert.deepEqual(job.needs, ['plan'], id);
+    assert.match(job.if, /needs\.plan\.result == 'success'/);
     assert.equal(job['continue-on-error'], undefined, id);
-    if (job.strategy) {
-      assert.equal(job.strategy['fail-fast'], false, id);
-      assert.equal(job.strategy['max-parallel'], undefined, id);
-    }
+    assert.equal(job.strategy['fail-fast'], false, id);
+    assert.ok(job.steps.some(step => step.run?.includes('ci-group.mjs')));
+    assert.ok(job.steps.some(step => step.uses === 'actions/upload-artifact@v4' && step.if === 'always()'));
   }
   const gate = workflow.jobs.certification;
   assert.equal(gate.if, 'always()');
-  assert.deepEqual(gate.needs.toSorted(), leaves.map(([id]) => id).toSorted());
-  assert.equal(VERIFICATION_LEAF_JOBS.length, 49);
+  assert.deepEqual(gate.needs.toSorted(), ['plan', 'unit', 'types', 'build', 'oci', 'browser', 'hosted'].toSorted());
+  assert.ok(gate.steps.some(step => step.uses === 'actions/download-artifact@v4' && step.with.pattern === 'ci-evidence-*'));
 });
-test('browser jobs use immutable official runtime without dynamic APT/browser installation', () => {
+test('browser groups retain immutable runtime and build once before running selected shards', () => {
   const browser = workflow.jobs.browser;
   assert.match(browser.container.image, /^mcr\.microsoft\.com\/playwright@sha256:[a-f0-9]{64}$/);
   assert.equal(browser.container.options, '--ipc=host');
-  const commands = browser.steps.map(step => step.run ?? '').join('\n');
-  assert.doesNotMatch(commands, /(?:apt(?:-get)?\s|playwright install|--with-deps)/);
-  assert.match(commands, /verify-browser-runtime\.mjs/);
-  assert.match(commands, /run-browser-shard\.mjs.*--prebuilt/);
-  assert.ok(browser.steps.findIndex(step => step.run?.includes('verify-browser-runtime')) < browser.steps.findIndex(step => step.run?.includes('pnpm build')));
+  const runner = readFileSync(new URL('./ci-group.mjs', import.meta.url), 'utf8');
+  assert.doesNotMatch(runner, /(?:apt(?:-get)?\s|playwright install|--with-deps)/);
+  assert.ok(runner.indexOf("node('scripts/verify-browser-runtime.mjs')") < runner.indexOf("run('pnpm', ['build']"));
+  assert.match(runner, /run-browser-shard\.mjs.*--prebuilt/);
 });
 test('all source checkouts bind exact PR head/main source without persisted credentials', () => {
   for (const job of Object.values(workflow.jobs)) {
     const checkout = job.steps.find(step => step.uses === 'actions/checkout@v4');
     assert.equal(checkout.with.ref, '${{ github.event.pull_request.head.sha || github.sha }}');
     assert.equal(checkout.with['persist-credentials'], false);
+    const execution = job.steps.find(step => /node scripts\/(?:ci-impact|ci-group|certify-ci)\.mjs/.test(step.run ?? ''));
+    assert.equal(execution.env.SCRIPTORIUM_CI_PLAN_PATH, '${{ runner.temp }}/ci-plan/ci-plan.json');
+    for (const step of job.steps.filter(step => step.uses === 'actions/download-artifact@v4' && step.with.name === 'ci-plan')) {
+      assert.equal(step.with.path, '${{ runner.temp }}/ci-plan');
+    }
   }
 });
 
