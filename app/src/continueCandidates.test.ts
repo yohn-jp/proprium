@@ -90,6 +90,38 @@ test("reusable cursor positions preserve dialogue, UTF-16, and newline offsets",
   assert.equal(blankLine.indexAtOffset(10), 4);
 });
 
+test("sentence position indexing constructs one Segmenter for a multiline document", () => {
+  const descriptor = Object.getOwnPropertyDescriptor(Intl, "Segmenter");
+  const originalSegmenter = Intl.Segmenter;
+  let constructions = 0;
+  Object.defineProperty(Intl, "Segmenter", {
+    configurable: true,
+    value: new Proxy(originalSegmenter, {
+      construct(target, argumentsList, newTarget) {
+        constructions++;
+        return Reflect.construct(target, argumentsList, newTarget);
+      },
+    }),
+  });
+
+  try {
+    const text = Array.from({ length: 256 }, () => "一文目。").join("\n");
+    const index = createUiSentencePositionIndex(text);
+    assert.equal(constructions, 1);
+    for (let sentence = 1; sentence <= 256; sentence++) {
+      const offset = (sentence - 1) * 5;
+      assert.equal(index.indexAtOffset(offset), sentence);
+      assert.equal(index.offsetAtIndex(sentence), offset);
+    }
+
+    constructions = 0;
+    assert.equal(createUiSentencePositionIndex("").indexAtOffset(0), 1);
+    assert.equal(constructions, 0);
+  } finally {
+    if (descriptor) Object.defineProperty(Intl, "Segmenter", descriptor);
+  }
+});
+
 test("selection-only cursor updates reuse the primed CodeMirror document and document index", () => {
   const initialText = "地の文。「台詞です。」続き。\r\n次の行。";
   const state = EditorState.create({ doc: initialText });

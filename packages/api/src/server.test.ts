@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import { execFile as execFileCallback } from "node:child_process";
 import { createHash, generateKeyPairSync, sign as signJwt } from "node:crypto";
 import { request as httpRequest } from "node:http";
-import { lstat, mkdir, mkdtemp, readFile, rename, rm, symlink, writeFile } from "node:fs/promises";
+import { cp, lstat, mkdir, mkdtemp, readFile, rename, rm, symlink, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { resolve } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -913,6 +913,288 @@ describe("Scriptorium HTTP boundary", () => {
       body,
     });
     assert.equal(resumed.status, 204);
+  });
+
+  it("waits for accepted private job-history writes before certifying safe quiesce", async (t) => {
+    const staticDir = await mkdtemp(resolve(tmpdir(), "scriptorium-hosted-history-quiesce-"));
+    tempDirs.push(staticDir);
+    const usageDirectory = resolve(staticDir, "usage");
+    const migratedDirectory = resolve(staticDir, "migrated-usage");
+    const fixture = makeSnapshotStore();
+    const runtime = new InterleavingLifecycleRuntime({ manifests: [], enabled: [], cacheDirectory: resolve(staticDir, "module-cache") });
+    const observation = {
+      snapshot: SNAPSHOT, checkpointHead: SNAPSHOT.remoteCommit,
+      observedAt: new Date().toISOString(), state: "fresh" as const, pending: [],
+    };
+    const store = Object.assign(fixture.store, {
+      async registeredRepositoryIdentity() { return SNAPSHOT.repository; },
+      async observe() { return observation; },
+      async localDurabilityCensus() {
+        const reader = await fixture.store.reader("project-1", "remote", observation.snapshot.remoteCommit);
+        return { observation, reader, pendingCheckpoints: [], pendingProposals: 0, localWorkspaceDirty: false };
+      },
+    }) as CoreStore;
+    const controlFetch: typeof fetch = async (input) => {
+      assert.equal(String(input), HOSTED_ASSIGNMENT.controlServicePolicy.jwksUrl);
+      return Response.json({ keys: [RUNTIME_CONTROL_PUBLIC_JWK] });
+    };
+    const apiServer = await startHostedApi(store, staticDir, hostedTestPolicy(), controlFetch, runtime, usageDirectory);
+    t.after(apiServer.close);
+
+    const createdAt = new Date().toISOString();
+    const runningAt = new Date(Date.parse(createdAt) + 1).toISOString();
+    const finishedAt = new Date(Date.parse(createdAt) + 2).toISOString();
+    const lifecycle = (state: WorkerJobLifecycleSnapshot["state"], updatedAt: string, finishedAtValue: string | null = null): WorkerJobLifecycleSnapshot => ({
+      jobId: "job-history-quiesce-race", module: "story", task: "history-quiesce-race", snapshot: SNAPSHOT,
+      state, createdAt, updatedAt, startedAt: runningAt, finishedAt: finishedAtValue,
+    });
+    await runtime.emitLifecycle(lifecycle("running", runningAt));
+    const historyPath = resolve(usageDirectory, "jobs", "jobs-state.json");
+    assert.equal(((JSON.parse(await readFile(historyPath, "utf8")) as { jobs: Array<{ job: { status: string } }> }).jobs[0]?.job.status), "running");
+
+    let releaseTerminal!: () => void;
+    const terminalGate = new Promise<void>((resolveGate) => { releaseTerminal = resolveGate; });
+    let terminalPersistStarted!: () => void;
+    const terminalStarted = new Promise<void>((resolveStarted) => { terminalPersistStarted = resolveStarted; });
+    let historyBarrierStarted!: () => void;
+    const historyBarrier = new Promise<void>((resolveStarted) => { historyBarrierStarted = resolveStarted; });
+    const prototype = JobHistoryStore.prototype as unknown as {
+      persist: (state: unknown) => Promise<void>;
+      listJobs: () => Promise<unknown[]>;
+    };
+    const originalPersist = prototype.persist;
+    const originalListJobs = prototype.listJobs;
+    prototype.persist = function (state: unknown): Promise<void> {
+      const jobs = (state as { jobs?: Array<{ job?: { id?: string; status?: string } }> }).jobs ?? [];
+      if (jobs.some((record) => record.job?.id === "job-history-quiesce-race" && record.job.status === "done")) {
+        terminalPersistStarted();
+        return terminalGate.then(() => originalPersist.call(this, state));
+      }
+      return originalPersist.call(this, state);
+    };
+    prototype.listJobs = function (): Promise<unknown[]> {
+      historyBarrierStarted();
+      return originalListJobs.call(this);
+    };
+
+    let terminalCallback: Promise<void> | undefined;
+    try {
+      terminalCallback = runtime.emitLifecycle(lifecycle("succeeded", finishedAt, finishedAt));
+      await terminalStarted;
+      const request = {
+        operationId: "quiesce-history-write",
+        instanceId: HOSTED_ASSIGNMENT.instanceId,
+        runtimeEpoch: HOSTED_ASSIGNMENT.runtimeEpoch,
+        reason: "migrate private history",
+        contractVersion: "scriptorium-platform/v1",
+        deadline: new Date(Date.now() + 60_000).toISOString(),
+      };
+      const body = JSON.stringify(request);
+      const quiesce = fetch(`${apiServer.base}${RUNTIME_QUIESCE_PATH}`, {
+        method: "POST",
+        headers: {
+          Authorization: `Bearer ${runtimeControlToken("quiesce", request.operationId, sha256Digest(body))}`,
+          "Content-Type": "application/json",
+        },
+        body,
+      });
+      let barrierTimeout: NodeJS.Timeout | undefined;
+      try {
+        await Promise.race([
+          historyBarrier,
+          new Promise<never>((_resolve, reject) => {
+            barrierTimeout = setTimeout(() => reject(new Error("quiesce did not warm private job history")), 1_000);
+          }),
+        ]);
+      } finally { if (barrierTimeout) clearTimeout(barrierTimeout); }
+      const earlyResponse = await Promise.race([
+        quiesce.then(() => true),
+        new Promise<boolean>((resolveDelay) => setTimeout(() => resolveDelay(false), 25)),
+      ]);
+      assert.equal(earlyResponse, false, "quiesce must await the accepted terminal history write");
+
+      releaseTerminal();
+      const response = await quiesce;
+      assert.equal(response.status, 200);
+      const receipt = await response.json() as { disposition: string; reasonCodes: string[] };
+      assert.equal(receipt.disposition, "safe");
+      assert.ok(!receipt.reasonCodes.includes("PERSISTENCE_UNVERIFIED"));
+
+      await cp(usageDirectory, migratedDirectory, { recursive: true });
+      const migrated = await new JobHistoryStore(migratedDirectory).listJobs();
+      assert.equal(migrated[0]?.status, "done");
+      assert.equal(migrated[0]?.errorCode, undefined, "first read after migration must not orphan a completed worker");
+    } finally {
+      releaseTerminal();
+      prototype.persist = originalPersist;
+      prototype.listJobs = originalListJobs;
+      await terminalCallback?.catch(() => undefined);
+    }
+  });
+
+  it("does not certify safe quiesce when a domain job terminal history write and fallback both fail", async (t) => {
+    const root = await mkdtemp(resolve(tmpdir(), "scriptorium-hosted-domain-history-quiesce-"));
+    tempDirs.push(root);
+    const staticDir = resolve(root, "static");
+    await mkdir(staticDir);
+    const usageDirectory = resolve(root, "usage");
+    const fixture = makeSnapshotStore();
+    const domain = sourceDomainJobRuntime(resolve(root, "module-cache"));
+    const observation = {
+      snapshot: SNAPSHOT, checkpointHead: SNAPSHOT.remoteCommit,
+      observedAt: new Date().toISOString(), state: "fresh" as const, pending: [],
+    };
+    const store = Object.assign(fixture.store, {
+      async registeredRepositoryIdentity() { return SNAPSHOT.repository; },
+      async observe() { return observation; },
+      async localDurabilityCensus() {
+        const reader = await fixture.store.reader("project-1", "remote", observation.snapshot.remoteCommit);
+        return { observation, reader, pendingCheckpoints: [], pendingProposals: 0, localWorkspaceDirty: false };
+      },
+    }) as CoreStore;
+    const controlFetch: typeof fetch = async (input) => {
+      assert.equal(String(input), HOSTED_ASSIGNMENT.controlServicePolicy.jwksUrl);
+      return Response.json({ keys: [RUNTIME_CONTROL_PUBLIC_JWK] });
+    };
+    const apiServer = await startHostedApi(store, staticDir, hostedTestPolicy(), controlFetch, domain.runtime, usageDirectory);
+    t.after(async () => { domain.releaseAsync(); await apiServer.close(); });
+    const prototype = JobHistoryStore.prototype as unknown as { persist: (state: unknown) => Promise<void> };
+    const originalPersist = prototype.persist;
+    let failedTerminalWrites = 0;
+    prototype.persist = function (state: unknown): Promise<void> {
+      const jobs = (state as { jobs?: Array<{ kind?: string; job?: { status?: string } }> }).jobs ?? [];
+      if (jobs.some((entry) => entry.kind === "domain" && (entry.job?.status === "done" || entry.job?.status === "error"))) {
+        failedTerminalWrites += 1;
+        return Promise.reject(new Error("injected private history terminal write failure"));
+      }
+      return originalPersist.call(this, state);
+    };
+    try {
+      const action = await fetch(`${apiServer.base}/api/projects/project-1/actions/speaker.evaluation.run`, {
+        method: "POST",
+        headers: { Authorization: "Bearer write-grant", "Content-Type": "application/json" },
+        body: JSON.stringify({ input: {} }),
+      });
+      assert.equal(action.status, 200);
+      assert.ok(action.headers.get("x-scriptorium-job-id"));
+      assert.equal(failedTerminalWrites, 2, "both the result and explicit retention-failure fallback writes must be exercised");
+      const request = {
+        operationId: "quiesce-domain-history-failure",
+        instanceId: HOSTED_ASSIGNMENT.instanceId,
+        runtimeEpoch: HOSTED_ASSIGNMENT.runtimeEpoch,
+        reason: "migrate private domain history",
+        contractVersion: "scriptorium-platform/v1",
+        deadline: new Date(Date.now() + 60_000).toISOString(),
+      };
+      const body = JSON.stringify(request);
+      const response = await fetch(`${apiServer.base}${RUNTIME_QUIESCE_PATH}`, {
+        method: "POST",
+        headers: {
+          Authorization: `Bearer ${runtimeControlToken("quiesce", request.operationId, sha256Digest(body))}`,
+          "Content-Type": "application/json",
+        },
+        body,
+      });
+      assert.equal(response.status, 200);
+      const receipt = await response.json() as { disposition: string; reasonCodes: string[] };
+      assert.equal(receipt.disposition, "unknown");
+      assert.ok(receipt.reasonCodes.includes("PERSISTENCE_UNVERIFIED"));
+    } finally {
+      prototype.persist = originalPersist;
+    }
+  });
+
+  it("reports unknown when accepted private job history cannot drain before the quiesce deadline", async (t) => {
+    const staticDir = await mkdtemp(resolve(tmpdir(), "scriptorium-hosted-history-deadline-"));
+    tempDirs.push(staticDir);
+    const usageDirectory = resolve(staticDir, "usage");
+    const fixture = makeSnapshotStore();
+    const runtime = new InterleavingLifecycleRuntime({ manifests: [], enabled: [], cacheDirectory: resolve(staticDir, "module-cache") });
+    const observation = {
+      snapshot: SNAPSHOT, checkpointHead: SNAPSHOT.remoteCommit,
+      observedAt: new Date().toISOString(), state: "fresh" as const, pending: [],
+    };
+    const store = Object.assign(fixture.store, {
+      async registeredRepositoryIdentity() { return SNAPSHOT.repository; },
+      async observe() { return observation; },
+      async localDurabilityCensus() {
+        const reader = await fixture.store.reader("project-1", "remote", observation.snapshot.remoteCommit);
+        return { observation, reader, pendingCheckpoints: [], pendingProposals: 0, localWorkspaceDirty: false };
+      },
+    }) as CoreStore;
+    const controlFetch: typeof fetch = async (input) => {
+      assert.equal(String(input), HOSTED_ASSIGNMENT.controlServicePolicy.jwksUrl);
+      return Response.json({ keys: [RUNTIME_CONTROL_PUBLIC_JWK] });
+    };
+    const apiServer = await startHostedApi(store, staticDir, hostedTestPolicy(), controlFetch, runtime, usageDirectory);
+    t.after(apiServer.close);
+    const createdAt = new Date().toISOString();
+    const runningAt = new Date(Date.parse(createdAt) + 1).toISOString();
+    const finishedAt = new Date(Date.parse(createdAt) + 2).toISOString();
+    const lifecycle = (state: WorkerJobLifecycleSnapshot["state"], updatedAt: string, finishedAtValue: string | null = null): WorkerJobLifecycleSnapshot => ({
+      jobId: "job-history-deadline", module: "story", task: "history-deadline", snapshot: SNAPSHOT,
+      state, createdAt, updatedAt, startedAt: runningAt, finishedAt: finishedAtValue,
+    });
+    await runtime.emitLifecycle(lifecycle("running", runningAt));
+    let releaseTerminal!: () => void;
+    const terminalGate = new Promise<void>((resolveGate) => { releaseTerminal = resolveGate; });
+    let terminalPersistStarted!: () => void;
+    const terminalStarted = new Promise<void>((resolveStarted) => { terminalPersistStarted = resolveStarted; });
+    let barrierStarted!: () => void;
+    const barrier = new Promise<void>((resolveStarted) => { barrierStarted = resolveStarted; });
+    const prototype = JobHistoryStore.prototype as unknown as {
+      persist: (state: unknown) => Promise<void>;
+      listJobs: () => Promise<unknown[]>;
+    };
+    const originalPersist = prototype.persist;
+    const originalListJobs = prototype.listJobs;
+    prototype.persist = function (state: unknown): Promise<void> {
+      const jobs = (state as { jobs?: Array<{ job?: { id?: string; status?: string } }> }).jobs ?? [];
+      if (jobs.some((record) => record.job?.id === "job-history-deadline" && record.job.status === "done")) {
+        terminalPersistStarted();
+        return terminalGate.then(() => originalPersist.call(this, state));
+      }
+      return originalPersist.call(this, state);
+    };
+    prototype.listJobs = function (): Promise<unknown[]> {
+      barrierStarted();
+      return originalListJobs.call(this);
+    };
+    let terminalCallback: Promise<void> | undefined;
+    try {
+      terminalCallback = runtime.emitLifecycle(lifecycle("succeeded", finishedAt, finishedAt));
+      await terminalStarted;
+      const request = {
+        operationId: "quiesce-history-deadline",
+        instanceId: HOSTED_ASSIGNMENT.instanceId,
+        runtimeEpoch: HOSTED_ASSIGNMENT.runtimeEpoch,
+        reason: "migrate private history",
+        contractVersion: "scriptorium-platform/v1",
+        deadline: new Date(Date.now() + 100).toISOString(),
+      };
+      const body = JSON.stringify(request);
+      const startedAt = Date.now();
+      const quiesce = fetch(`${apiServer.base}${RUNTIME_QUIESCE_PATH}`, {
+        method: "POST",
+        headers: {
+          Authorization: `Bearer ${runtimeControlToken("quiesce", request.operationId, sha256Digest(body))}`,
+          "Content-Type": "application/json",
+        },
+        body,
+      });
+      await barrier;
+      const response = await quiesce;
+      assert.equal(response.status, 200);
+      const receipt = await response.json() as { disposition: string; reasonCodes: string[] };
+      assert.equal(receipt.disposition, "unknown");
+      assert.ok(receipt.reasonCodes.includes("PERSISTENCE_UNVERIFIED"));
+      assert.ok(Date.now() - startedAt < 2_000, "private-history drain must honor the signed quiesce deadline");
+    } finally {
+      releaseTerminal();
+      prototype.persist = originalPersist;
+      prototype.listJobs = originalListJobs;
+      await terminalCallback?.catch(() => undefined);
+    }
   });
 
   it("safely quiesces an untouched empty remote using the lifecycle request property order", async (t) => {

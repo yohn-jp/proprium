@@ -575,6 +575,7 @@ export function createServer(options: ApiServerOptions): Server {
   const asyncDomainJobControllers = new Set<AbortController>();
   const activeDomainJobIds = new Set<string>();
   const activeWorkerJobIds = new Set<string>();
+  const privateHistoryUncertaintyIds = new Set<string>();
   const workerJobLifecycleStates = new Map<string, WorkerJobLifecycleSnapshot["state"]>();
   const uncertainPublicationBatches = new Set<string>();
   const projectEventStreams = new Set<ServerResponse>();
@@ -665,19 +666,24 @@ export function createServer(options: ApiServerOptions): Server {
   unsubscribeJobLifecycle = runtime.subscribeJobLifecycle(async (lifecycle: WorkerJobLifecycleSnapshot) => {
     const previousState = workerJobLifecycleStates.get(lifecycle.jobId);
     if (previousState !== lifecycle.state) recordRuntimeActivity();
-    if (lifecycle.state === "queued" || lifecycle.state === "running") {
-      workerJobLifecycleStates.set(lifecycle.jobId, lifecycle.state);
-      activeWorkerJobIds.add(lifecycle.jobId);
-    } else {
-      workerJobLifecycleStates.delete(lifecycle.jobId);
-      activeWorkerJobIds.delete(lifecycle.jobId);
-    }
+    workerJobLifecycleStates.set(lifecycle.jobId, lifecycle.state);
+    activeWorkerJobIds.add(lifecycle.jobId);
+    const historyId = `worker:${lifecycle.jobId}`;
     try {
       const event = await jobHistory.record(lifecycle);
+      if (lifecycle.state === "succeeded" || lifecycle.state === "failed" || lifecycle.state === "cancelled") {
+        privateHistoryUncertaintyIds.delete(historyId);
+      }
       publishJobEvent(event);
     } catch (error) {
+      privateHistoryUncertaintyIds.add(historyId);
       const code = error instanceof JobHistoryError ? error.code : "storage_failure";
       console.error(`Scriptorium worker lifecycle history was not retained (${code}).`);
+    } finally {
+      if (lifecycle.state === "succeeded" || lifecycle.state === "failed" || lifecycle.state === "cancelled") {
+        workerJobLifecycleStates.delete(lifecycle.jobId);
+        activeWorkerJobIds.delete(lifecycle.jobId);
+      }
     }
   });
 
@@ -1036,6 +1042,7 @@ export function createServer(options: ApiServerOptions): Server {
         // Reserve synchronously, before the durable registration awaits, so
         // concurrent invokes cannot all observe the same free capacity.
         activeDomainJobIds.add(id);
+        const historyId = `domain:${id}`;
         recordRuntimeActivity();
         let registered = false;
         try {
@@ -1047,11 +1054,13 @@ export function createServer(options: ApiServerOptions): Server {
           publishJobEvent(await jobHistory.markDomainJobRunning(id));
           recordRuntimeActivity();
         } catch (error) {
+          privateHistoryUncertaintyIds.add(historyId);
           if (registered) {
             try {
               publishJobEvent(await jobHistory.finishDomainJob(id, actionFailure(snapshot, {
                 code: "job_history_unavailable", message: "The host could not safely start this task", retryable: true,
               }, "job_history_unavailable")));
+              privateHistoryUncertaintyIds.delete(historyId);
             } catch { /* Keep the original storage failure as the useful boundary error. */ }
           }
           if (activeDomainJobIds.delete(id)) recordRuntimeActivity();
@@ -1069,8 +1078,12 @@ export function createServer(options: ApiServerOptions): Server {
               });
         }
         catch (error) { result = actionFailure(snapshot, error, "domain_job_failed"); }
-        try { publishJobEvent(await jobHistory.finishDomainJob(id, result)); }
+        try {
+          publishJobEvent(await jobHistory.finishDomainJob(id, result));
+          privateHistoryUncertaintyIds.delete(historyId);
+        }
         catch (error) {
+          privateHistoryUncertaintyIds.add(historyId);
           const code = error instanceof JobHistoryError ? error.code : "storage_failure";
           console.error(`Scriptorium domain job result was not retained (${code}).`);
           try {
@@ -1080,6 +1093,7 @@ export function createServer(options: ApiServerOptions): Server {
               retryable: true,
             }, "domain_job_result_not_retained");
             publishJobEvent(await jobHistory.finishDomainJob(id, failed));
+            privateHistoryUncertaintyIds.delete(historyId);
           } catch { /* Startup recovery will mark any still-running record as interrupted. */ }
         } finally {
           if (activeDomainJobIds.delete(id)) recordRuntimeActivity();
@@ -1444,9 +1458,22 @@ export function createServer(options: ApiServerOptions): Server {
     quiesceGate = true;
     quiesceOperationId = body.operationId;
     lastQuiesceOperationId = body.operationId;
-    const censusWaitMs = Math.max(0, Math.min(RUNTIME_CONTROL_CENSUS_TIMEOUT_MS, Date.parse(body.deadline) - Date.now()));
+    const controlDeadline = Math.min(Date.parse(body.deadline), Date.now() + RUNTIME_CONTROL_CENSUS_TIMEOUT_MS);
+    let historyTimer: NodeJS.Timeout | undefined;
+    const historyDeadline = new Promise<boolean>((resolveDeadline) => {
+      historyTimer = setTimeout(() => resolveDeadline(false), Math.max(0, controlDeadline - Date.now()));
+      historyTimer.unref();
+    });
+    const historyBarrier = jobHistory.listJobs()
+      .then(() => jobHistory.flush())
+      .then(() => privateHistoryUncertaintyIds.size === 0, () => false);
+    let historyDurable = false;
+    try { historyDurable = await Promise.race([historyBarrier, historyDeadline]); }
+    finally { if (historyTimer) clearTimeout(historyTimer); }
+    const censusWaitMs = Math.max(0, controlDeadline - Date.now());
     const census = await readHostedRuntimeStatus(censusWaitMs, "local");
     const { status, pendingProposals, complete, localWorkspaceDirty } = census;
+    const historyPersistenceVerified = historyDurable && privateHistoryUncertaintyIds.size === 0;
     const reasonCodes: string[] = [];
     if (status.activity.activeMutations > 0) reasonCodes.push("ACTIVE_MUTATIONS");
     if (status.activity.activeJobs > 0) reasonCodes.push("ACTIVE_JOBS");
@@ -1454,9 +1481,9 @@ export function createServer(options: ApiServerOptions): Server {
     if (pendingProposals > 0) reasonCodes.push("PENDING_PROPOSALS");
     if (status.activity.uncertainPublication) reasonCodes.push("UNCERTAIN_PUBLICATION");
     if (localWorkspaceDirty) reasonCodes.push("LOCAL_WORKSPACE_DIRTY");
-    if (!complete || status.persistence.state !== "verified") reasonCodes.push("PERSISTENCE_UNVERIFIED");
+    if (!complete || status.persistence.state !== "verified" || !historyPersistenceVerified) reasonCodes.push("PERSISTENCE_UNVERIFIED");
     if (Date.parse(body.deadline) <= Date.now()) reasonCodes.push("QUIESCE_DEADLINE_EXPIRED");
-    const unknown = !complete || status.activity.uncertainPublication;
+    const unknown = !complete || status.activity.uncertainPublication || !historyPersistenceVerified;
     const blocked = status.activity.activeMutations > 0 || status.activity.activeJobs > 0 ||
       status.activity.pendingCheckpoints > 0 || pendingProposals > 0 || localWorkspaceDirty;
     const disposition = Date.parse(body.deadline) <= Date.now() ? "unknown" : unknown ? "unknown" : blocked ? "blocked" : "safe";
