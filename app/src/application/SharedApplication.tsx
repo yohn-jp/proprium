@@ -778,7 +778,7 @@ function AuthorWorkspace({
           }
         }
       } catch (error) {
-        if (error instanceof ApiError && error.status === 401) {
+        if (error instanceof ApiError && error.status === 401 && error.code === "UNAUTHORIZED") {
           setAuthState("signed-out");
         } else {
           setGlobalError(messageOf(error));
@@ -786,7 +786,7 @@ function AuthorWorkspace({
       }
     }).catch((error) => {
       if (!cancelled) {
-        if (error instanceof ApiError && error.status === 401) setAuthState("signed-out");
+        if (error instanceof ApiError && error.status === 401 && error.code === "UNAUTHORIZED") setAuthState("signed-out");
         else setGlobalError(messageOf(error));
       }
     });
