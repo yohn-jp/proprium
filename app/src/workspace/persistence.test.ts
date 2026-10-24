@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import { createWorkspacePreset, hideWorkspacePanel, resizeWorkspaceSplit } from "./layout";
+import { floatingStorageKey, saveFloatingPanels } from "./floating";
 import {
   loadWorkspaceLayout,
   loadWorkspaceSnapshot,
@@ -48,6 +49,25 @@ test("a workspace save commits dock layout and floating geometry in one record",
   assert.equal(saveWorkspaceSnapshot(storage, "author:one", "mobile", { layout: desktop, floating: [] }), true);
   assert.notEqual(storage.getItem(workspaceSnapshotStorageKey("author:one", "mobile")), raw);
   assert.equal(storage.getItem(workspaceSnapshotStorageKey("author:one", "desktop")), raw);
+});
+
+test("existing split-key layouts restore together and remain intact until an explicit atomic save", () => {
+  const storage = new MemoryStorage();
+  const layout = hideWorkspacePanel(createWorkspacePreset("writing", panelIds), "outline");
+  const floating = [{ panelId: "outline", left: 100, top: 120, width: 350, height: 390 }];
+  assert.equal(saveWorkspaceLayout(storage, "author:one", "desktop", layout), true);
+  assert.equal(saveFloatingPanels(storage, "author:one", floating, panelIds, layout.hiddenPanelIds), true);
+  const legacyDockBytes = storage.getItem(workspaceStorageKey("author:one", "desktop"));
+  const legacyFloatingBytes = storage.getItem(floatingStorageKey("author:one"));
+
+  assert.deepEqual(loadWorkspaceSnapshot(storage, "author:one", "desktop", panelIds), { layout, floating, state: "valid" });
+  assert.equal(storage.getItem(workspaceStorageKey("author:one", "desktop")), legacyDockBytes);
+  assert.equal(storage.getItem(floatingStorageKey("author:one")), legacyFloatingBytes);
+
+  assert.equal(saveWorkspaceSnapshot(storage, "author:one", "desktop", { layout, floating }), true);
+  assert.deepEqual(loadWorkspaceSnapshot(storage, "author:one", "desktop", panelIds), { layout, floating, state: "valid" });
+  assert.equal(storage.getItem(workspaceStorageKey("author:one", "desktop")), legacyDockBytes);
+  assert.equal(storage.getItem(floatingStorageKey("author:one")), legacyFloatingBytes);
 });
 
 test("a failed workspace record write leaves the previous complete snapshot available after reload", () => {
