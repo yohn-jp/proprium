@@ -2,6 +2,10 @@
   "name": "@scriptorium/module-story",
   "private": true,
   "version": "0.1.0",
+  "scriptoriumDisplay": {
+    "name": "Story",
+    "description": "Organize narrative entities, hierarchy, reference material, plots, and related proposals."
+  },
   "type": "module",
   "main": "./dist/index.js",
   "types": "./dist/index.d.ts",

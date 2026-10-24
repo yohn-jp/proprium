@@ -200,11 +200,16 @@ export async function trustedModuleData() {
     const packageDirectory = path.join(root, 'modules', id);
     const packageManifest = JSON.parse(await readFile(path.join(packageDirectory, 'package.json'), 'utf8'));
     const manifest = packageManifest.scriptoriumModule;
-    if (packageManifest.name !== `${modulePrefix}${id}` || manifest?.id !== id || typeof manifest.version !== 'string') {
+    const display = packageManifest.scriptoriumDisplay;
+    if (packageManifest.name !== `${modulePrefix}${id}` || manifest?.id !== id || typeof manifest.version !== 'string' ||
+        !display || Object.keys(display).sort().join(',') !== 'description,name' ||
+        typeof display.name !== 'string' || !display.name.trim() || display.name.length > 120 ||
+        typeof display.description !== 'string' || !display.description.trim() || display.description.length > 512) {
       throw new Error(`Invalid shipped module manifest for ${id}`);
     }
     trusted.push({
       manifest,
+      display,
       artifactDigest: await packageArtifactDigest(packageDirectory),
       contractRange: '^1',
       conflicts: [],
@@ -235,8 +240,10 @@ export function catalogFor(input, trustedModules) {
     lockDigest: input.lockDigest,
     sourceDigest: input.sourceDigest,
     supportedPlatforms: ['linux/amd64'],
-    modules: trustedModules.map(({ manifest, artifactDigest, contractRange, conflicts, exclusiveResources, sharedResourceGroupIds, workerLimits }) => ({
+    modules: trustedModules.map(({ manifest, display, artifactDigest, contractRange, conflicts, exclusiveResources, sharedResourceGroupIds, workerLimits }) => ({
       id: manifest.id,
+      name: display.name,
+      description: display.description,
       version: manifest.version,
       artifactDigest,
       requires: [...manifest.dependencies].sort(),

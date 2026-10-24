@@ -2,6 +2,10 @@
   "name": "@scriptorium/module-mcp",
   "private": true,
   "version": "0.1.0",
+  "scriptoriumDisplay": {
+    "name": "MCP connections",
+    "description": "Connect an authorized MCP client to Scriptorium tools through Praetorium OAuth; proposed changes still require author approval."
+  },
   "type": "module",
   "main": "./dist/index.js",
   "types": "./dist/index.d.ts",

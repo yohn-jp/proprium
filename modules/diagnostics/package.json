@@ -2,6 +2,10 @@
   "name": "@scriptorium/module-diagnostics",
   "private": true,
   "version": "0.1.0",
+  "scriptoriumDisplay": {
+    "name": "Diagnostics",
+    "description": "Review snapshot-based narrative findings and prose patterns without changing the source text."
+  },
   "type": "module",
   "main": "./dist/index.js",
   "types": "./dist/index.d.ts",

@@ -2,6 +2,10 @@
   "name": "@scriptorium/module-nlp",
   "private": true,
   "version": "0.1.0",
+  "scriptoriumDisplay": {
+    "name": "Language analysis",
+    "description": "Provide tokenization and linguistic analysis shared by optional writing tools."
+  },
   "type": "module",
   "main": "./dist/index.js",
   "types": "./dist/index.d.ts",
