@@ -71,7 +71,10 @@ test('worker timeout also terminates a detached descendant', { skip: process.pla
     // An exited descendant can remain a zombie briefly until the host reaps it.
     let state = 'missing';
     try { state = (await readFile(`/proc/${result.descendantPid}/stat`, 'utf8')).split(') ')[1].split(' ')[0]; }
-    catch (error) { assert.equal(error.code, 'ENOENT'); }
+    catch (error) {
+      // proc_single_show can return ESRCH if the PID exits after the proc inode opens.
+      assert.ok(['ENOENT', 'ESRCH'].includes(error.code), `Unexpected procfs read error: ${error.code}`);
+    }
     assert.ok(['missing', 'Z'].includes(state), `Detached child remained live: ${state}`);
   } finally { await rm(root, { recursive: true, force: true }); }
 });
