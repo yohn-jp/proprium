@@ -575,7 +575,7 @@ export function createServer(options: ApiServerOptions): Server {
   const asyncDomainJobControllers = new Set<AbortController>();
   const activeDomainJobIds = new Set<string>();
   const activeWorkerJobIds = new Set<string>();
-  const workerHistoryPersistenceFailures = new Set<string>();
+  const privateHistoryUncertaintyIds = new Set<string>();
   const workerJobLifecycleStates = new Map<string, WorkerJobLifecycleSnapshot["state"]>();
   const uncertainPublicationBatches = new Set<string>();
   const projectEventStreams = new Set<ServerResponse>();
@@ -668,12 +668,15 @@ export function createServer(options: ApiServerOptions): Server {
     if (previousState !== lifecycle.state) recordRuntimeActivity();
     workerJobLifecycleStates.set(lifecycle.jobId, lifecycle.state);
     activeWorkerJobIds.add(lifecycle.jobId);
+    const historyId = `worker:${lifecycle.jobId}`;
     try {
       const event = await jobHistory.record(lifecycle);
-      workerHistoryPersistenceFailures.delete(lifecycle.jobId);
+      if (lifecycle.state === "succeeded" || lifecycle.state === "failed" || lifecycle.state === "cancelled") {
+        privateHistoryUncertaintyIds.delete(historyId);
+      }
       publishJobEvent(event);
     } catch (error) {
-      workerHistoryPersistenceFailures.add(lifecycle.jobId);
+      privateHistoryUncertaintyIds.add(historyId);
       const code = error instanceof JobHistoryError ? error.code : "storage_failure";
       console.error(`Scriptorium worker lifecycle history was not retained (${code}).`);
     } finally {
@@ -1039,6 +1042,7 @@ export function createServer(options: ApiServerOptions): Server {
         // Reserve synchronously, before the durable registration awaits, so
         // concurrent invokes cannot all observe the same free capacity.
         activeDomainJobIds.add(id);
+        const historyId = `domain:${id}`;
         recordRuntimeActivity();
         let registered = false;
         try {
@@ -1050,11 +1054,13 @@ export function createServer(options: ApiServerOptions): Server {
           publishJobEvent(await jobHistory.markDomainJobRunning(id));
           recordRuntimeActivity();
         } catch (error) {
+          privateHistoryUncertaintyIds.add(historyId);
           if (registered) {
             try {
               publishJobEvent(await jobHistory.finishDomainJob(id, actionFailure(snapshot, {
                 code: "job_history_unavailable", message: "The host could not safely start this task", retryable: true,
               }, "job_history_unavailable")));
+              privateHistoryUncertaintyIds.delete(historyId);
             } catch { /* Keep the original storage failure as the useful boundary error. */ }
           }
           if (activeDomainJobIds.delete(id)) recordRuntimeActivity();
@@ -1072,8 +1078,12 @@ export function createServer(options: ApiServerOptions): Server {
               });
         }
         catch (error) { result = actionFailure(snapshot, error, "domain_job_failed"); }
-        try { publishJobEvent(await jobHistory.finishDomainJob(id, result)); }
+        try {
+          publishJobEvent(await jobHistory.finishDomainJob(id, result));
+          privateHistoryUncertaintyIds.delete(historyId);
+        }
         catch (error) {
+          privateHistoryUncertaintyIds.add(historyId);
           const code = error instanceof JobHistoryError ? error.code : "storage_failure";
           console.error(`Scriptorium domain job result was not retained (${code}).`);
           try {
@@ -1083,6 +1093,7 @@ export function createServer(options: ApiServerOptions): Server {
               retryable: true,
             }, "domain_job_result_not_retained");
             publishJobEvent(await jobHistory.finishDomainJob(id, failed));
+            privateHistoryUncertaintyIds.delete(historyId);
           } catch { /* Startup recovery will mark any still-running record as interrupted. */ }
         } finally {
           if (activeDomainJobIds.delete(id)) recordRuntimeActivity();
@@ -1455,14 +1466,14 @@ export function createServer(options: ApiServerOptions): Server {
     });
     const historyBarrier = jobHistory.listJobs()
       .then(() => jobHistory.flush())
-      .then(() => workerHistoryPersistenceFailures.size === 0, () => false);
+      .then(() => privateHistoryUncertaintyIds.size === 0, () => false);
     let historyDurable = false;
     try { historyDurable = await Promise.race([historyBarrier, historyDeadline]); }
     finally { if (historyTimer) clearTimeout(historyTimer); }
     const censusWaitMs = Math.max(0, controlDeadline - Date.now());
     const census = await readHostedRuntimeStatus(censusWaitMs, "local");
     const { status, pendingProposals, complete, localWorkspaceDirty } = census;
-    const historyPersistenceVerified = historyDurable && workerHistoryPersistenceFailures.size === 0;
+    const historyPersistenceVerified = historyDurable && privateHistoryUncertaintyIds.size === 0;
     const reasonCodes: string[] = [];
     if (status.activity.activeMutations > 0) reasonCodes.push("ACTIVE_MUTATIONS");
     if (status.activity.activeJobs > 0) reasonCodes.push("ACTIVE_JOBS");
