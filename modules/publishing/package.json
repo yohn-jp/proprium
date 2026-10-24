@@ -2,6 +2,10 @@
   "name": "@scriptorium/module-publishing",
   "private": true,
   "version": "0.1.0",
+  "scriptoriumDisplay": {
+    "name": "Publishing",
+    "description": "Manage publication metadata, prepare exports, and control reader sharing."
+  },
   "type": "module",
   "main": "./dist/index.js",
   "types": "./dist/index.d.ts",

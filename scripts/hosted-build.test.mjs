@@ -47,9 +47,12 @@ test('hosted browser artifact binding follows hashed Vite entry and stylesheet f
 async function shippedModuleData() {
   const trustedModules = await Promise.all(moduleIds.map(async (id) => {
     const bytes = await readFile(path.join(root, 'modules', id, 'package.json'));
-    const manifest = JSON.parse(bytes.toString('utf8')).scriptoriumModule;
+    const packageManifest = JSON.parse(bytes.toString('utf8'));
+    const manifest = packageManifest.scriptoriumModule;
+    const display = packageManifest.scriptoriumDisplay;
     return {
       manifest,
+      display,
       artifactDigest: `sha256:${createHash('sha256').update(bytes).digest('hex')}`,
       contractRange: '^1',
       conflicts: [],
@@ -64,6 +67,21 @@ async function shippedModuleData() {
     lockDigest: `sha256:${'4'.repeat(64)}`,
     sourceDigest: `sha256:${'5'.repeat(64)}`,
   }, trustedModules);
+  for (const module of catalog.modules) {
+    const display = trustedModules.find(({ manifest }) => manifest.id === module.id).display;
+    assert.equal(module.name, display.name);
+    assert.equal(module.description, display.description);
+  }
+  const alteredDisplayCatalog = {
+    ...catalog,
+    modules: catalog.modules.map((module) => module.id === 'mcp' ? { ...module, name: 'Untrusted label' } : module),
+  };
+  assert.throws(() => resolveBuildCatalogSelection(alteredDisplayCatalog, [], trustedModules), /differs from the shipped module manifest/u);
+  const historicalCatalog = {
+    ...catalog,
+    modules: catalog.modules.map(({ name: _name, description: _description, ...module }) => module),
+  };
+  assert.deepEqual(resolveBuildCatalogSelection(historicalCatalog, [], trustedModules).resolvedModules, []);
   return { catalog, trustedModules };
 }
 

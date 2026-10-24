@@ -2,6 +2,10 @@
   "name": "@scriptorium/module-search",
   "private": true,
   "version": "0.1.0",
+  "scriptoriumDisplay": {
+    "name": "Search and terminology",
+    "description": "Search manuscript text, manage terminology aliases, and link terms to their references."
+  },
   "type": "module",
   "main": "./dist/index.js",
   "types": "./dist/index.d.ts",

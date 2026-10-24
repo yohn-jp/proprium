@@ -2,6 +2,10 @@
   "name": "@scriptorium/module-assistant",
   "private": true,
   "version": "0.1.0",
+  "scriptoriumDisplay": {
+    "name": "Writing assistant",
+    "description": "Prepare provider-backed context and prompts, stream suggestions, and create reviewable proposals."
+  },
   "type": "module",
   "main": "./dist/index.js",
   "types": "./dist/index.d.ts",

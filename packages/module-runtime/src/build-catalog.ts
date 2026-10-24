@@ -26,6 +26,9 @@ export type ProducerBuildCatalog = {
 
 export type ProducerBuildModule = {
   id: string;
+  /** Optional display data was added without changing the signed catalog version. */
+  name?: string;
+  description?: string;
   version: string;
   artifactDigest: string;
   requires: string[];
@@ -39,6 +42,7 @@ export type ProducerBuildModule = {
 /** Trusted descriptors are generated from the shipped module package manifests. */
 export type TrustedBuildModule = {
   manifest: ModuleManifest;
+  display?: { name: string; description: string };
   /** SHA-256 of the installed package.json + dist file tree for this producer revision. */
   artifactDigest: string;
   contractRange: string;
@@ -164,10 +168,16 @@ export function resolveBuildCatalogSelection(
   const trustedById = new Map(trustedModules.map((item) => [item.manifest.id, item]));
   const catalogById = new Map<string, ProducerBuildModule>();
   for (const module of catalog.modules) {
-    if (!isRecord(module) || !hasExactKeys(module, [
-          "id", "version", "artifactDigest", "requires", "conflicts", "contractRange",
-          "exclusiveResources", "sharedResourceGroupIds", "workerLimits",
-        ]) || typeof module.id !== "string" || !isModuleId(module.id) ||
+    const moduleKeys = [
+      "id", "version", "artifactDigest", "requires", "conflicts", "contractRange",
+      "exclusiveResources", "sharedResourceGroupIds", "workerLimits",
+    ];
+    if (isRecord(module) && Object.hasOwn(module, "name")) moduleKeys.push("name");
+    if (isRecord(module) && Object.hasOwn(module, "description")) moduleKeys.push("description");
+    if (!isRecord(module) || !hasExactKeys(module, moduleKeys) ||
+        typeof module.id !== "string" || !isModuleId(module.id) ||
+        (module.name !== undefined && (typeof module.name !== "string" || !module.name.trim() || module.name.length > 120)) ||
+        (module.description !== undefined && (typeof module.description !== "string" || !module.description.trim() || module.description.length > 512)) ||
         typeof module.version !== "string" || module.version.length === 0 || module.version.length > 512 ||
         !DIGEST.test(module.artifactDigest) || !Array.isArray(module.requires) ||
         !Array.isArray(module.conflicts) || !Array.isArray(module.sharedResourceGroupIds) ||
@@ -186,6 +196,9 @@ export function resolveBuildCatalogSelection(
     const expectedSharedGroups = [...trusted.sharedResourceGroupIds].sort();
     const expectedWorkerLimits = Object.fromEntries(Object.entries(trusted.workerLimits).sort(([a], [b]) => a < b ? -1 : a > b ? 1 : 0));
     const expectedExclusiveResources = resourceAmounts(trusted.exclusiveResources, `${module.id} resources`);
+    const hasDisplayMetadata = module.name !== undefined || module.description !== undefined;
+    const displayMatches = !hasDisplayMetadata || !!trusted.display &&
+      module.name === trusted.display.name && module.description === trusted.display.description;
     resourceAmounts(module.exclusiveResources, `${module.id} resources`);
     if (!DIGEST.test(trusted.artifactDigest) ||
         module.version !== manifest.version || module.artifactDigest !== trusted.artifactDigest ||
@@ -194,7 +207,7 @@ export function resolveBuildCatalogSelection(
         !equalJson([...module.conflicts].sort(), expectedConflicts) ||
         !equalJson([...module.sharedResourceGroupIds].sort(), expectedSharedGroups) ||
         !equalJson(Object.fromEntries(Object.entries(module.workerLimits).sort(([a], [b]) => a < b ? -1 : a > b ? 1 : 0)), expectedWorkerLimits) ||
-        !equalJson(module.exclusiveResources, expectedExclusiveResources)) {
+        !equalJson(module.exclusiveResources, expectedExclusiveResources) || !displayMatches) {
       fail(`Build catalog descriptor for ${module.id} differs from the shipped module manifest`);
     }
     catalogById.set(module.id, module);
