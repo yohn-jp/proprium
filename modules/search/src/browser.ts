@@ -1,4 +1,4 @@
-import type { BrowserModuleContext, BrowserModuleDefinition } from "@scriptorium/contracts";
+import type { ActionResult, BrowserModuleContext, BrowserModuleDefinition } from "@scriptorium/contracts";
 
 type Data = Record<string, unknown>;
 type SearchBrowserContext = BrowserModuleContext & { navigateDocument?(path: string): Promise<void> };
@@ -29,10 +29,29 @@ function field(labelText: string, input: HTMLElement): HTMLLabelElement {
   return label;
 }
 
-async function invoke(context: BrowserModuleContext, id: string, input: unknown): Promise<Data> {
+async function invokeResult(context: BrowserModuleContext, id: string, input: unknown): Promise<Extract<ActionResult, { ok: true }>> {
   const result = await context.invoke(id, input);
   if (!result.ok) throw Object.assign(new Error(result.error.message), { code: result.error.code });
+  return result;
+}
+
+async function invoke(context: BrowserModuleContext, id: string, input: unknown): Promise<Data> {
+  const result = await invokeResult(context, id, input);
   return result.data as Data;
+}
+
+async function invokeWithSnapshot(context: BrowserModuleContext, id: string, input: unknown): Promise<{ data: Data; snapshot: unknown }> {
+  const result = await invokeResult(context, id, input);
+  return { data: result.data as Data, snapshot: result.snapshot };
+}
+
+function snapshotLabel(value: unknown): string | undefined {
+  if (typeof value !== "object" || value === null || Array.isArray(value)) return undefined;
+  const snapshot = value as Record<string, unknown>;
+  if (typeof snapshot.remoteCommit !== "string") return undefined;
+  const remote = snapshot.remoteCommit.slice(0, 12);
+  const overlay = typeof snapshot.overlayCommit === "string" ? `+${snapshot.overlayCommit.slice(0, 12)}` : "";
+  return `${remote}${overlay}`;
 }
 
 function searchPanel(root: HTMLElement, context: SearchBrowserContext, cleanup: Array<() => void>): void {
@@ -55,22 +74,32 @@ function searchPanel(root: HTMLElement, context: SearchBrowserContext, cleanup: 
   const includeSemantic = element("input");
   includeSemantic.type = "checkbox";
   const run = button("検索");
+  run.disabled = context.signal.aborted;
   const status = output();
   const results = element("ol");
   let generation = 0;
-  let running = false;
+  let hasSearched = false;
+  let conditionsInvalidated = false;
+  const onConditionsChange = () => {
+    if (!hasSearched || context.signal.aborted) return;
+    generation += 1;
+    results.replaceChildren();
+    if (!conditionsInvalidated) status.textContent = "検索条件が変更されました。再検索してください。";
+    conditionsInvalidated = true;
+  };
   const onSearch = async () => {
-    if (running || context.signal.aborted) return;
-    running = true;
+    if (context.signal.aborted) return;
+    hasSearched = true;
+    conditionsInvalidated = false;
     const current = ++generation;
-    run.disabled = true;
+    const submitted = {
+      query: query.value, mode: mode.value, scope: scope.value, limit: 50,
+      useNlp: useNlp.checked, includeSemantic: includeSemantic.checked,
+    };
     results.replaceChildren();
     status.textContent = "検索しています…";
     try {
-      const data = await invoke(context, "search.query", {
-        query: query.value, mode: mode.value, scope: scope.value, limit: 50,
-        useNlp: useNlp.checked, includeSemantic: includeSemantic.checked,
-      });
+      const { data, snapshot } = await invokeWithSnapshot(context, "search.query", submitted);
       if (context.signal.aborted || current !== generation) return;
       const hits = Array.isArray(data.results) ? data.results as Array<Record<string, unknown>> : [];
       for (const hit of hits) {
@@ -94,18 +123,36 @@ function searchPanel(root: HTMLElement, context: SearchBrowserContext, cleanup: 
       }
       const warnings = Array.isArray(data.warnings) ? data.warnings.filter((value): value is string => typeof value === "string") : [];
       const semantic = Array.isArray(data.semanticResults) ? data.semanticResults : [];
-      status.textContent = `${hits.length} 件 · ${String(data.indexedDocuments ?? 0)} 文書を索引${warnings.length ? ` · ${warnings.join(" · ")}` : ""}${includeSemantic.checked ? ` · 意味検索 ${semantic.length} 件` : ""}`;
+      const modes: Record<string, string> = { fulltext: "全文", exact: "完全一致", prefix: "前方一致" };
+      const requestSnapshot = snapshotLabel(snapshot);
+      const indexSnapshot = snapshotLabel(data.indexSnapshot);
+      const snapshots = [
+        requestSnapshot ? `対象 snapshot ${requestSnapshot}` : "",
+        indexSnapshot ? `索引 snapshot ${indexSnapshot}` : "",
+      ].filter(Boolean).join(" · ");
+      status.textContent = `${hits.length} 件 · ${String(data.indexedDocuments ?? 0)} 文書を索引 · 「${submitted.query.trim()}」 · ${modes[submitted.mode] ?? submitted.mode} · 範囲 ${submitted.scope.trim() || "全範囲"}${snapshots ? ` · ${snapshots}` : ""}${warnings.length ? ` · ${warnings.join(" · ")}` : ""}${submitted.includeSemantic ? ` · 意味検索 ${semantic.length} 件` : ""}`;
     } catch (error) {
       if (!context.signal.aborted && current === generation) status.textContent = error instanceof Error ? error.message : String(error);
-    } finally {
-      if (current === generation) { running = false; run.disabled = false; }
     }
   };
   run.addEventListener("click", onSearch);
   const onKeyDown = (event: KeyboardEvent) => { if (event.key === "Enter") void onSearch(); };
   query.addEventListener("keydown", onKeyDown);
-  cleanup.push(() => run.removeEventListener("click", onSearch), () => query.removeEventListener("keydown", onKeyDown));
-  const onAbort = () => { generation += 1; running = false; run.disabled = true; };
+  query.addEventListener("input", onConditionsChange);
+  scope.addEventListener("input", onConditionsChange);
+  mode.addEventListener("change", onConditionsChange);
+  useNlp.addEventListener("change", onConditionsChange);
+  includeSemantic.addEventListener("change", onConditionsChange);
+  cleanup.push(
+    () => run.removeEventListener("click", onSearch),
+    () => query.removeEventListener("keydown", onKeyDown),
+    () => query.removeEventListener("input", onConditionsChange),
+    () => scope.removeEventListener("input", onConditionsChange),
+    () => mode.removeEventListener("change", onConditionsChange),
+    () => useNlp.removeEventListener("change", onConditionsChange),
+    () => includeSemantic.removeEventListener("change", onConditionsChange),
+  );
+  const onAbort = () => { generation += 1; run.disabled = true; status.textContent = ""; results.replaceChildren(); };
   context.signal.addEventListener("abort", onAbort, { once: true });
   cleanup.push(() => context.signal.removeEventListener("abort", onAbort));
   root.append(
