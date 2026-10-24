@@ -117,6 +117,17 @@ interface WorkState {
   recoveryStatus: EditorRecoveryStatus;
 }
 
+interface PendingProjectActivation {
+  project: Project;
+  persistSelection: boolean;
+  scopeOverride?: string;
+  authorScope: string;
+  navigation: number;
+  running: boolean;
+  settled: Promise<void>;
+  settle: () => void;
+}
+
 function sameRepository(left: RepositoryIdentity, right: RepositoryIdentity): boolean {
   return repositoryKey(left) === repositoryKey(right);
 }
@@ -399,6 +410,7 @@ function AuthorWorkspace({
   const [busy, setBusy] = useState("");
   const navigationRef = useRef(0);
   const workRef = useRef<WorkState | null>(null);
+  const pendingProjectActivationRef = useRef<PendingProjectActivation | null>(null);
   const workPublishTimerRef = useRef<number | null>(null);
   const journalRef = useRef<BrowserJournal | null>(null);
   const draftQueueRef = useRef<Promise<void>>(Promise.resolve());
@@ -713,6 +725,7 @@ function AuthorWorkspace({
     let resumeAfterCurrentAttempt = false;
     let sceneResumeRunning = false;
     let resumeIncompleteBootstrap!: () => void;
+    let pendingActivationResumeWait: PendingProjectActivation | null = null;
     const startBootstrap = () => {
       if (cancelled || bootstrapRunning || bootstrapFinished) return;
       bootstrapRunning = true;
@@ -778,7 +791,9 @@ function AuthorWorkspace({
         bootstrapFinished = true;
       }).finally(() => {
         bootstrapRunning = false;
-        if (resumeAfterCurrentAttempt && !bootstrapFinished) resumeIncompleteBootstrap();
+        const resume = resumeAfterCurrentAttempt && !bootstrapFinished;
+        resumeAfterCurrentAttempt = false;
+        if (resume) resumeIncompleteBootstrap();
       });
     };
     const resumeSelectedScene = (current: WorkState, sceneId: string, requested?: ApplicationResource) => {
@@ -796,6 +811,7 @@ function AuthorWorkspace({
         return;
       }
       sceneResumeRunning = true;
+      bootstrapFinished = false;
       bootstrapRunning = true;
       resumeAfterCurrentAttempt = false;
       void loadScene(current.project.id, sceneId, current.tree, current.observation.snapshot.repository).finally(() => {
@@ -805,8 +821,47 @@ function AuthorWorkspace({
         if (active && active.project.id === current.project.id && active.editor?.read.scene.id === sceneId) {
           bootstrapFinished = true;
         }
-        if (resumeAfterCurrentAttempt && !bootstrapFinished) resumeIncompleteBootstrap();
+        const resume = resumeAfterCurrentAttempt && !bootstrapFinished;
+        resumeAfterCurrentAttempt = false;
+        if (resume) resumeIncompleteBootstrap();
       });
+    };
+    const resumePendingProjectActivation = (activation: PendingProjectActivation): boolean => {
+      if (pendingProjectActivationRef.current !== activation) return false;
+      if (activation.navigation !== navigationRef.current || activation.authorScope !== authorScopeRef.current) {
+        pendingProjectActivationRef.current = null;
+        return false;
+      }
+      if (activation.running) {
+        if (pendingActivationResumeWait !== activation) {
+          pendingActivationResumeWait = activation;
+          void activation.settled.then(() => {
+            if (pendingActivationResumeWait !== activation) return;
+            pendingActivationResumeWait = null;
+            if (pendingProjectActivationRef.current !== activation) return;
+            resumeIncompleteBootstrap();
+          });
+        }
+        return true;
+      }
+      if (workRef.current?.project.id === activation.project.id) {
+        pendingProjectActivationRef.current = null;
+        return false;
+      }
+      bootstrapFinished = false;
+      bootstrapRunning = true;
+      void activateProject(activation.project, activation.persistSelection, activation.scopeOverride).finally(() => {
+        bootstrapRunning = false;
+        const resume = resumeAfterCurrentAttempt;
+        resumeAfterCurrentAttempt = false;
+        const hasPendingActivation = pendingProjectActivationRef.current !== null;
+        if (workRef.current || (hasPendingActivation && resume)) {
+          resumeIncompleteBootstrap();
+        } else if (!hasPendingActivation) {
+          bootstrapFinished = true;
+        }
+      });
+      return true;
     };
     resumeIncompleteBootstrap = () => {
       if (cancelled) return;
@@ -814,6 +869,8 @@ function AuthorWorkspace({
         resumeAfterCurrentAttempt = true;
         return;
       }
+      const pendingActivation = pendingProjectActivationRef.current;
+      if (pendingActivation && resumePendingProjectActivation(pendingActivation)) return;
       if (workRef.current) {
         const current = workRef.current;
         const requested = requestedResourceRef.current;
@@ -1241,6 +1298,19 @@ function AuthorWorkspace({
 
   const activateProject = useCallback(async (project: Project, persistSelection = true, scopeOverride?: string) => {
     const nav = ++navigationRef.current;
+    let settleActivation!: () => void;
+    const settled = new Promise<void>((resolve) => { settleActivation = resolve; });
+    const activation: PendingProjectActivation = {
+      project,
+      persistSelection,
+      scopeOverride,
+      authorScope: scopeOverride ?? authorScopeRef.current,
+      navigation: nav,
+      running: true,
+      settled,
+      settle: settleActivation,
+    };
+    pendingProjectActivationRef.current = activation;
     setBusy("project");
     setProjectActionError(null);
     setStatus({ message: "リモートの状態を確認しています…", kind: "normal" });
@@ -1250,16 +1320,25 @@ function AuthorWorkspace({
       if (composedText !== null && activeEditor && composedText !== activeEditor.text) editText(composedText);
       recentResume.flush();
       await flushDraft();
-      if (navigationRef.current !== nav) return;
+      if (navigationRef.current !== nav) {
+        if (pendingProjectActivationRef.current === activation) pendingProjectActivationRef.current = null;
+        return;
+      }
       updateWork(() => null);
       setGlobalError("");
       const details = await api.projectDetails(project.id);
-      if (navigationRef.current !== nav) return;
+      if (navigationRef.current !== nav) {
+        if (pendingProjectActivationRef.current === activation) pendingProjectActivationRef.current = null;
+        return;
+      }
       const activeProject = details.project;
       const observed = details.observation;
       const scope = scopeOverride ?? authorScopeRef.current;
       const tree = await api.readTree(activeProject.id, "remote", observed.snapshot);
-      if (navigationRef.current !== nav) return;
+      if (navigationRef.current !== nav) {
+        if (pendingProjectActivationRef.current === activation) pendingProjectActivationRef.current = null;
+        return;
+      }
       if (snapshotKey(tree.snapshot) !== snapshotKey(observed.snapshot)) throw new Error("作品構成が別のリモートスナップショットから返されました。");
       const next: WorkState = {
         project: activeProject,
@@ -1274,6 +1353,7 @@ function AuthorWorkspace({
       if (journalRef.current) recoveredProjectsRef.current.add(recoveryKey);
       workRef.current = next;
       publishWorkState(next);
+      if (pendingProjectActivationRef.current === activation) pendingProjectActivationRef.current = null;
       setModules([]);
       setContributions([]);
       // Optional modules, proposals and recovery must not block opening a locally
@@ -1304,8 +1384,14 @@ function AuthorWorkspace({
       // Refresh GitHub in the background; this never blocks the local tree.
       void refreshRef.current();
     } catch (error) {
+      if (pendingProjectActivationRef.current === activation &&
+          (!isDocumentDepartureAbort(error) || navigationRef.current !== nav || authorScopeRef.current !== activation.authorScope)) {
+        pendingProjectActivationRef.current = null;
+      }
       if (!isDocumentDepartureAbort(error) && navigationRef.current === nav) setStatus({ message: messageOf(error), kind: "error" });
     } finally {
+      activation.running = false;
+      activation.settle();
       if (navigationRef.current === nav) setBusy("");
     }
   }, [importRemoteProposals, recentResume.flush, reconcileProject, reloadJournalForWork, updateWork]);
@@ -1316,7 +1402,18 @@ function AuthorWorkspace({
       const location = parseApplicationLocation(path);
       if (!location || location.mode !== mode) return;
       const target = location.resource;
+      const pendingActivation = pendingProjectActivationRef.current;
+      if (pendingActivation && pendingActivation.project.id !== target?.projectId) {
+        pendingProjectActivationRef.current = null;
+        navigationRef.current++;
+        sceneLoadRef.current++;
+      }
       if (!target?.projectId) {
+        if (pendingProjectActivationRef.current) {
+          pendingProjectActivationRef.current = null;
+          navigationRef.current++;
+          sceneLoadRef.current++;
+        }
         stablePathRef.current = path;
         return;
       }
@@ -1350,6 +1447,7 @@ function AuthorWorkspace({
             await loadScene(active.project.id, target.sceneId, active.tree, active.observation.snapshot.repository);
             if (workRef.current?.editor?.read.scene.id !== target.sceneId) throw new Error("移動先のシーンを読み込めませんでした。");
           } else if (active) {
+            pendingProjectActivationRef.current = null;
             navigationRef.current++;
             sceneLoadRef.current++;
             updateWork((current) => current && current.project.id === target.projectId
@@ -1559,6 +1657,7 @@ function AuthorWorkspace({
       recentResume.flush(true);
       await flushDraft();
       await api.logout();
+      pendingProjectActivationRef.current = null;
       navigationRef.current++;
       updateWork(() => null);
       setAuthState("signed-out");
