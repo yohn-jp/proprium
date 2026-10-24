@@ -590,6 +590,87 @@ test("the launcher remembers an explicit choice while direct Shell links keep th
   await expect(page).toHaveURL(new RegExp("/mobile/"));
 });
 
+for (const departure of ["reload", "pagehide"] as const) {
+  test(`recovery reconciliation is cancelled at ${departure} and retried without losing its checkpoint`, async ({ page }, testInfo) => {
+    test.skip(process.env.SCRIPTORIUM_E2E_EXTERNAL_REPOSITORY === "1" || Boolean(process.env.SCRIPTORIUM_E2E_BASE_URL ?? process.env.SCRIPTORIUM_BASE_URL),
+      "This case controls the generated local server and isolated browser journal.");
+    const errors: string[] = [];
+    page.on("pageerror", (error) => errors.push(error.message));
+    await page.addInitScript(() => {
+      for (const type of ["beforeunload", "pagehide", "unload"]) window.addEventListener(type, () => {
+        const key = "scriptorium:e2e:reconcile-lifecycle";
+        const events = JSON.parse(localStorage.getItem(key) ?? "[]") as unknown[];
+        localStorage.setItem(key, JSON.stringify([...events, { event: type }]));
+      });
+      const original = window.fetch;
+      window.fetch = function (input, init) {
+        if (String(input).endsWith("/reconcile")) {
+          const record = (event: { event: string; signal?: boolean }) => {
+            const key = "scriptorium:e2e:reconcile-lifecycle";
+            const events = JSON.parse(localStorage.getItem(key) ?? "[]") as unknown[];
+            localStorage.setItem(key, JSON.stringify([...events, event]));
+          };
+          record({ event: "start", signal: Boolean(init?.signal) });
+          init?.signal?.addEventListener("abort", () => { record({ event: "abort" }); }, { once: true });
+        }
+        return original.call(window, input, init);
+      };
+    });
+    await signIn(page, "desktop");
+    await openFixtureScene(page, "desktop");
+    const draft = `${testInfo.project.name} ${departure}: a checkpoint must survive interrupted recovery.`;
+    await page.locator(".cm-content").fill(draft);
+    await expectJournalDraft(page, "scene-1", draft);
+    await page.getByRole("button", { name: "Checkpoint", exact: true }).click();
+    await expectJournalState(page, "scene-1", draft, "checkpointed");
+    const checkpoint = await readJournalEntry(page, "scene-1", draft);
+    const control = new URL(page.url());
+    control.port = String(Number(control.port) + 1);
+    const hold = new URL("/__e2e/hold-reconcile", control).href;
+    const release = new URL("/__e2e/release-reconcile", control).href;
+    expect((await page.request.post(hold)).ok()).toBe(true);
+    try {
+      await page.reload();
+      await expect.poll(async () => (await (await page.request.get(new URL("/__e2e/reconcile-state", control).href)).json() as { started: boolean }).started).toBe(true);
+      // A guard that keeps this document open must not cancel its recovery.
+      await page.evaluate(() => {
+        const event = new Event("beforeunload", { cancelable: true });
+        event.preventDefault();
+        window.dispatchEvent(event);
+      });
+      expect(await page.evaluate(() => localStorage.getItem("scriptorium:e2e:reconcile-lifecycle"))).not.toContain('"event":"abort"');
+      if (departure === "reload") await page.reload();
+      else await page.evaluate(() => window.dispatchEvent(new PageTransitionEvent("pagehide", { persisted: true })));
+      expect((await page.request.post(release)).ok()).toBe(true);
+      if (departure === "pagehide") {
+        await expect.poll(() => page.evaluate(() => localStorage.getItem("scriptorium:e2e:reconcile-lifecycle"))).toContain('"event":"abort"');
+        await page.evaluate(() => window.dispatchEvent(new PageTransitionEvent("pageshow", { persisted: true })));
+      }
+      await expect(page.locator(".cm-content[contenteditable=true]")).toHaveText(draft);
+      await expectJournalState(page, "scene-1", draft, "checkpointed");
+      const requests = await page.evaluate(() => JSON.parse(localStorage.getItem("scriptorium:e2e:reconcile-lifecycle") ?? "[]") as Array<{ event: string; signal?: boolean }>);
+      const recovered = await readJournalEntry(page, "scene-1", draft);
+      expect(recovered.operation).toEqual(checkpoint.operation);
+      expect(recovered.checkpoint).toEqual(checkpoint.checkpoint);
+      expect(recovered.key).toBe(checkpoint.key);
+      expect(errors).toEqual([]);
+      expect(requests.some((request) => request.event === "abort")).toBe(true);
+
+      // Real errors in the active document remain visible and retain the operation.
+      await page.route("**/reconcile", (route) => route.fulfill({ status: 503, contentType: "application/json", body: JSON.stringify({ error: "Synthetic reconciliation outage" }) }));
+      await page.reload();
+      await expect(page.locator('[data-recovery-status="unavailable"]')).toBeVisible();
+      expect((await readJournalEntry(page, "scene-1", draft)).operation).toEqual(checkpoint.operation);
+      await page.unroute("**/reconcile");
+      await page.evaluate(() => window.dispatchEvent(new Event("online")));
+      await expect(page.locator(".cm-content[contenteditable=true]")).toHaveText(draft);
+      expect((await readJournalEntry(page, "scene-1", draft)).checkpoint).toEqual(checkpoint.checkpoint);
+    } finally {
+      await page.request.post(release);
+    }
+  });
+}
+
 test("both production Shells preserve recoverable Japanese drafts and the Mobile writing and reading flow", async ({ page }, testInfo) => {
   test.setTimeout(180_000);
   expect(authToken.length).toBeGreaterThanOrEqual(32);

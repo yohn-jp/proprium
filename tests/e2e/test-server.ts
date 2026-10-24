@@ -147,8 +147,19 @@ async function startTestServer(): Promise<void> {
     };
   }
 
+  let heldReconcile: { started: boolean; wait: Promise<void>; release(): void } | undefined;
   const startApi = async (): Promise<Server> => {
     const store = new CoreStore({ dataDir: join(stateDir, "store"), allowLocalRemotes: true });
+    const reconcile = store.reconcile.bind(store);
+    store.reconcile = async (...args) => {
+      const result = await reconcile(...args);
+      const held = heldReconcile;
+      if (held && !held.started) {
+        held.started = true;
+        await held.wait;
+      }
+      return result;
+    };
     const server = createServer({
       store,
       authToken,
@@ -166,6 +177,26 @@ async function startTestServer(): Promise<void> {
   const controlServer = createControlServer((request, response) => {
     if (request.socket.remoteAddress !== "127.0.0.1" && request.socket.remoteAddress !== "::ffff:127.0.0.1") {
       response.writeHead(403).end();
+      return;
+    }
+    if (request.method === "POST" && request.url === "/__e2e/hold-reconcile") {
+      heldReconcile?.release();
+      let release!: () => void;
+      const wait = new Promise<void>((resolve) => { release = resolve; });
+      heldReconcile = { started: false, wait, release };
+      request.resume();
+      response.writeHead(204).end();
+      return;
+    }
+    if (request.method === "POST" && request.url === "/__e2e/release-reconcile") {
+      heldReconcile?.release();
+      heldReconcile = undefined;
+      request.resume();
+      response.writeHead(204).end();
+      return;
+    }
+    if (request.method === "GET" && request.url === "/__e2e/reconcile-state") {
+      response.writeHead(200, { "content-type": "application/json" }).end(JSON.stringify({ started: heldReconcile?.started ?? false }));
       return;
     }
     if (request.method !== "POST" || (request.url !== "/__e2e/reset-core" && request.url !== "/__e2e/restart-api")) {
@@ -204,6 +235,7 @@ async function startTestServer(): Promise<void> {
   const stop = () => {
     if (stopped) return;
     stopped = true;
+    heldReconcile?.release();
     void close(controlServer);
     void close(apiServer).finally(() => {
       if (process.env.SCRIPTORIUM_E2E_TEMP_STATE_DIR === "1") {
