@@ -382,14 +382,38 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: 24.22.0
+      - name: Select latest exact-run plan and job inventory
+        id: select-plan
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GITHUB_REPOSITORY: ${{ github.repository }}
+          GITHUB_RUN_ID: ${{ github.run_id }}
+          RUNNER_TEMP: ${{ runner.temp }}
+          SCRIPTORIUM_EXPECTED_SHA: ${{ github.event.pull_request.head.sha || github.sha }}
+        run: node scripts/select-ci-plan.mjs
       - uses: actions/download-artifact@v4
         with:
-          name: ci-plan
+          artifact-ids: ${{ steps.select-plan.outputs.artifact-id }}
           path: ${{ runner.temp }}/ci-plan
+          merge-multiple: true
+          github-token: ${{ github.token }}
+          repository: ${{ github.repository }}
+          run-id: ${{ github.run_id }}
+      - name: Select latest exact-run execution evidence
+        id: select-evidence
+        env:
+          GITHUB_RUN_ID: ${{ github.run_id }}
+          SCRIPTORIUM_EXPECTED_SHA: ${{ github.event.pull_request.head.sha || github.sha }}
+          SCRIPTORIUM_CI_INVENTORY_PATH: ${{ steps.select-plan.outputs.inventory-path }}
+          SCRIPTORIUM_CI_PLAN_PATH: ${{ runner.temp }}/ci-plan/ci-plan.json
+        run: node scripts/select-ci-evidence.mjs
       - uses: actions/download-artifact@v4
         with:
-          pattern: ci-evidence-*
+          artifact-ids: ${{ steps.select-evidence.outputs.artifact-ids }}
           path: ${{ runner.temp }}/ci-evidence
+          github-token: ${{ github.token }}
+          repository: ${{ github.repository }}
+          run-id: ${{ github.run_id }}
       - name: Certify every required exact-source matrix element
         env:
           GH_TOKEN: ${{ github.token }}

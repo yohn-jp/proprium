@@ -19,6 +19,12 @@ import type {
   UiContribution,
 } from "@scriptorium/contracts";
 
+export class DocumentDepartureError extends DOMException {
+  constructor() {
+    super("The document is leaving.", "AbortError");
+  }
+}
+
 export interface Project {
   id: string;
   url: string;
@@ -187,7 +193,68 @@ export interface RuntimeVersion {
 }
 
 let hostedMode: boolean | undefined;
-let hostedRefresh: Promise<boolean> | undefined;
+type HostedRefreshResult = { status: number; ok: boolean; error?: string; code?: string };
+let hostedRefresh: Promise<HostedRefreshResult> | undefined;
+let documentDeparting = false;
+let documentLifecycle = 0;
+let reauthRedirectedLifecycle: number | undefined;
+
+function markDocumentDeparting(): void {
+  if (documentDeparting) return;
+  documentDeparting = true;
+  documentLifecycle += 1;
+}
+
+function resumeDocument(): void {
+  // pageshow also fires on the first load. Only a real departure invalidates
+  // in-flight work and advances the lifecycle generation.
+  if (!documentDeparting) return;
+  documentDeparting = false;
+  documentLifecycle += 1;
+}
+
+if (typeof window !== "undefined") {
+  window.addEventListener("beforeunload", (event) => {
+    // Wait until every beforeunload handler has had a chance to cancel the
+    // departure before closing the browser API to new ordinary requests.
+    queueMicrotask(() => {
+      if (!event.defaultPrevented) markDocumentDeparting();
+    });
+  }, { capture: true });
+  window.addEventListener("pagehide", markDocumentDeparting, { capture: true });
+  window.addEventListener("pageshow", resumeDocument, { capture: true });
+}
+
+function assertDocumentCanStartRequest(init?: RequestInit): void {
+  if (documentDeparting && init?.keepalive !== true) {
+    throw new DocumentDepartureError();
+  }
+}
+
+function hasLeftDocumentLifecycle(lifecycle: number): boolean {
+  return documentDeparting || documentLifecycle !== lifecycle;
+}
+
+async function withDocumentDepartureClassification<T>(
+  lifecycle: number,
+  init: RequestInit,
+  operation: () => Promise<T>,
+): Promise<T> {
+  try {
+    const result = await operation();
+    if (hasLeftDocumentLifecycle(lifecycle) && init.keepalive !== true) throw new DocumentDepartureError();
+    return result;
+  } catch (error) {
+    if (hasLeftDocumentLifecycle(lifecycle) && init.keepalive !== true) throw new DocumentDepartureError();
+    throw error;
+  }
+}
+
+function returnOrAbortAfterDeparture(response: Response, lifecycle: number, init: RequestInit): Response {
+  if (!hasLeftDocumentLifecycle(lifecycle)) return response;
+  if (init.keepalive === true) return response;
+  throw new DocumentDepartureError();
+}
 
 function csrfToken(): string | undefined {
   if (typeof document === "undefined") return undefined;
@@ -198,7 +265,7 @@ function csrfToken(): string | undefined {
   catch { return undefined; }
 }
 
-function refreshHostedGrant(): Promise<boolean> {
+function refreshHostedGrant(): Promise<HostedRefreshResult> {
   // The Gateway rotates the refresh secret atomically. Parallel API requests
   // must share one exchange so a losing refresh cannot trigger reauthentication.
   hostedRefresh ??= performHostedRefresh().finally(() => { hostedRefresh = undefined; });
@@ -211,25 +278,48 @@ async function isHostedGrantRejection(response: Response): Promise<boolean> {
   return body !== null && typeof body === "object" && (body as Record<string, unknown>).code === "UNAUTHORIZED";
 }
 
-async function performHostedRefresh(): Promise<boolean> {
+async function performHostedRefresh(): Promise<HostedRefreshResult> {
+  assertDocumentCanStartRequest();
   const headers = new Headers();
   const csrf = csrfToken();
   if (csrf) headers.set("X-CSRF-Token", csrf);
   const response = await fetch("/_platform/refresh", { method: "POST", headers, credentials: "same-origin" });
-  if (response.status === 401) {
-    window.location.assign("/_platform/reauth");
+  if (response.ok || response.status === 401) return { status: response.status, ok: response.ok };
+  const body: unknown = await response.json().catch(() => null);
+  const details = body && typeof body === "object" ? (body as Record<string, unknown>) : {};
+  return {
+    status: response.status,
+    ok: false,
+    error: typeof details.error === "string" ? details.error : `Session refresh failed (${response.status})`,
+    code: typeof details.code === "string" ? details.code : "SESSION_REFRESH_FAILED",
+  };
+}
+
+async function refreshHostedGrantForLifecycle(lifecycle: number): Promise<boolean> {
+  let result: HostedRefreshResult;
+  try {
+    result = await refreshHostedGrant();
+  } catch (error) {
+    if (hasLeftDocumentLifecycle(lifecycle)) throw new DocumentDepartureError();
+    throw error;
+  }
+  if (hasLeftDocumentLifecycle(lifecycle)) throw new DocumentDepartureError();
+  if (result.status === 401) {
+    if (reauthRedirectedLifecycle !== lifecycle) {
+      reauthRedirectedLifecycle = lifecycle;
+      window.location.assign("/_platform/reauth");
+    }
     return false;
   }
-  if (!response.ok) {
-    const body: unknown = await response.json().catch(() => null);
-    const details = body && typeof body === "object" ? (body as Record<string, unknown>) : {};
-    throw new ApiError(typeof details.error === "string" ? details.error : `Session refresh failed (${response.status})`, response.status,
-      typeof details.code === "string" ? details.code : "SESSION_REFRESH_FAILED");
+  if (!result.ok) {
+    throw new ApiError(result.error ?? `Session refresh failed (${result.status})`, result.status,
+      result.code ?? "SESSION_REFRESH_FAILED");
   }
   return true;
 }
 
 async function fetchHostedRequest(path: string, init: RequestInit): Promise<Response> {
+  assertDocumentCanStartRequest(init);
   const headers = new Headers(init.headers);
   if (init.body !== undefined && !headers.has("Content-Type")) headers.set("Content-Type", "application/json");
   const csrf = csrfToken();
@@ -238,9 +328,15 @@ async function fetchHostedRequest(path: string, init: RequestInit): Promise<Resp
   return fetch(path, { ...init, headers, credentials: "same-origin" });
 }
 
-async function fetchWithHostedRefresh(path: string, init: RequestInit): Promise<Response> {
+async function fetchHostedResponseForLifecycle(path: string, init: RequestInit, lifecycle: number): Promise<Response> {
   const response = await fetchHostedRequest(path, init);
-  if (hostedMode !== true || path.startsWith("/_platform/") || !(await isHostedGrantRejection(response))) return response;
+  // A response already in flight may settle while this document is leaving.
+  // Do not start a refresh exchange or retry after the departure fence closes.
+  if (hasLeftDocumentLifecycle(lifecycle)) return returnOrAbortAfterDeparture(response, lifecycle, init);
+  if (hostedMode !== true || path.startsWith("/_platform/")) return response;
+  const grantRejected = await isHostedGrantRejection(response);
+  if (hasLeftDocumentLifecycle(lifecycle)) return returnOrAbortAfterDeparture(response, lifecycle, init);
+  if (!grantRejected) return response;
 
   // Web Locks serialize refresh-cookie rotation across tabs. Once inside the
   // lock, retry the rejected request with the current cookies first: another
@@ -248,37 +344,62 @@ async function fetchWithHostedRefresh(path: string, init: RequestInit): Promise<
   const locks = typeof navigator === "undefined" ? undefined : navigator.locks;
   if (locks) {
     return locks.request("scriptorium-hosted-grant-refresh", async () => {
+      if (hasLeftDocumentLifecycle(lifecycle)) return returnOrAbortAfterDeparture(response, lifecycle, init);
       const current = await fetchHostedRequest(path, init);
+      if (hasLeftDocumentLifecycle(lifecycle)) return returnOrAbortAfterDeparture(current, lifecycle, init);
       if (!(await isHostedGrantRejection(current))) return current;
-      if (await refreshHostedGrant()) return fetchHostedRequest(path, init);
+      if (hasLeftDocumentLifecycle(lifecycle)) return returnOrAbortAfterDeparture(current, lifecycle, init);
+      const refreshed = await refreshHostedGrantForLifecycle(lifecycle);
+      if (hasLeftDocumentLifecycle(lifecycle)) return returnOrAbortAfterDeparture(current, lifecycle, init);
+      if (refreshed) {
+        const retried = await fetchHostedRequest(path, init);
+        return returnOrAbortAfterDeparture(retried, lifecycle, init);
+      }
       return current;
     });
   }
 
   // Browsers without Web Locks retain same-tab single-flight refresh.
-  if (await refreshHostedGrant()) return fetchHostedRequest(path, init);
+  const refreshed = await refreshHostedGrantForLifecycle(lifecycle);
+  if (hasLeftDocumentLifecycle(lifecycle)) return returnOrAbortAfterDeparture(response, lifecycle, init);
+  if (refreshed) {
+    const retried = await fetchHostedRequest(path, init);
+    return returnOrAbortAfterDeparture(retried, lifecycle, init);
+  }
   return response;
+}
+
+async function fetchWithHostedRefresh(path: string, init: RequestInit): Promise<Response> {
+  const lifecycle = documentLifecycle;
+  return withDocumentDepartureClassification(lifecycle, init, () => fetchHostedResponseForLifecycle(path, init, lifecycle));
 }
 
 async function request<T>(guard: ResponseGuard<T>, path: string, init: RequestInit = {}): Promise<T> {
-  const headers = new Headers(init.headers);
-  if (init.body !== undefined && !headers.has("Content-Type")) headers.set("Content-Type", "application/json");
-  return readApiResponse(await fetchWithHostedRefresh(path, { ...init, headers }), guard);
+  const lifecycle = documentLifecycle;
+  return withDocumentDepartureClassification(lifecycle, init, async () => {
+    const headers = new Headers(init.headers);
+    if (init.body !== undefined && !headers.has("Content-Type")) headers.set("Content-Type", "application/json");
+    return readApiResponse(await fetchWithHostedRefresh(path, { ...init, headers }), guard);
+  });
 }
 
 async function requestEventStream(path: string, signal: AbortSignal): Promise<Response> {
-  const response = await fetchWithHostedRefresh(path, { headers: { Accept: "text/event-stream" }, signal });
-  if (!response.ok) {
-    const body: unknown = await response.json().catch(() => null);
-    const details = body && typeof body === "object" ? (body as Record<string, unknown>) : {};
-    throw new ApiError(
-      typeof details.error === "string" ? details.error : `Request failed (${response.status})`,
-      response.status,
-      typeof details.code === "string" ? details.code : "REQUEST_FAILED",
-    );
-  }
-  if (!response.body) throw new ApiError("Job event stream is unavailable", response.status, "STREAM_UNAVAILABLE");
-  return response;
+  const init = { headers: { Accept: "text/event-stream" }, signal };
+  const lifecycle = documentLifecycle;
+  return withDocumentDepartureClassification(lifecycle, init, async () => {
+    const response = await fetchWithHostedRefresh(path, init);
+    if (!response.ok) {
+      const body: unknown = await response.json().catch(() => null);
+      const details = body && typeof body === "object" ? (body as Record<string, unknown>) : {};
+      throw new ApiError(
+        typeof details.error === "string" ? details.error : `Request failed (${response.status})`,
+        response.status,
+        typeof details.code === "string" ? details.code : "REQUEST_FAILED",
+      );
+    }
+    if (!response.body) throw new ApiError("Job event stream is unavailable", response.status, "STREAM_UNAVAILABLE");
+    return response;
+  });
 }
 
 function projectPath(projectId: string, suffix: string): string {
@@ -301,18 +422,22 @@ export const api = {
   login: (token: string) => request(dto.loggedIn, "/api/login", { method: "POST", body: JSON.stringify({ token }) }),
   session: () => request(dto.session, "/api/session"),
   logout: async () => {
-    if (hostedMode === true) {
-      const response = await fetchWithHostedRefresh("/_platform/logout", { method: "POST" });
-      if (response.status === 204) return { authenticated: false as const };
-      const body: unknown = await response.json().catch(() => null);
-      if (!response.ok) {
-        const details = body && typeof body === "object" ? (body as Record<string, unknown>) : {};
-        throw new ApiError(typeof details.error === "string" ? details.error : `Logout failed (${response.status})`, response.status,
-          typeof details.code === "string" ? details.code : "LOGOUT_FAILED");
+    const lifecycle = documentLifecycle;
+    const init = { method: "POST" };
+    return withDocumentDepartureClassification(lifecycle, init, async () => {
+      if (hostedMode === true) {
+        const response = await fetchWithHostedRefresh("/_platform/logout", init);
+        if (response.status === 204) return { authenticated: false as const };
+        const body: unknown = await response.json().catch(() => null);
+        if (!response.ok) {
+          const details = body && typeof body === "object" ? (body as Record<string, unknown>) : {};
+          throw new ApiError(typeof details.error === "string" ? details.error : `Logout failed (${response.status})`, response.status,
+            typeof details.code === "string" ? details.code : "LOGOUT_FAILED");
+        }
+        return decodeResponse(body, dto.loggedOut);
       }
-      return decodeResponse(body, dto.loggedOut);
-    }
-    return request(dto.loggedOut, "/api/logout", { method: "POST", body: "{}" });
+      return request(dto.loggedOut, "/api/logout", { method: "POST", body: "{}" });
+    });
   },
   jobs: (signal?: AbortSignal) => request(dto.jobs, "/api/jobs", { ...(signal ? { signal } : {}) }),
   job: (jobId: string, signal?: AbortSignal) =>

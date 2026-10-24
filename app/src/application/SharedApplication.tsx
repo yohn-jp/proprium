@@ -12,7 +12,7 @@ import {
   type SnapshotId,
   type UiContribution,
 } from "@scriptorium/contracts";
-import { ApiError, api, type Project, type SceneRead, type Tree, type TreeRead } from "../api";
+import { ApiError, api, DocumentDepartureError, type Project, type SceneRead, type Tree, type TreeRead } from "../api";
 import { workspaceContributions } from "../contributions/catalog";
 import { Workspace } from "../workspace/Workspace";
 import { ManuscriptHistoryPanel } from "../editor/ManuscriptHistoryPanel";
@@ -49,6 +49,10 @@ import {
 } from "../storage/journal";
 
 const ACTIVE_PROJECT_KEY = "scriptorium:active-project";
+
+function isDocumentDepartureAbort(error: unknown): boolean {
+  return error instanceof DocumentDepartureError;
+}
 
 function readLegacyDrafts(): LegacyDraftRecord[] {
   const records: LegacyDraftRecord[] = [];
@@ -111,6 +115,17 @@ interface WorkState {
   editor: EditorSession | null;
   loadingScene: boolean;
   recoveryStatus: EditorRecoveryStatus;
+}
+
+interface PendingProjectActivation {
+  project: Project;
+  persistSelection: boolean;
+  scopeOverride?: string;
+  authorScope: string;
+  navigation: number;
+  running: boolean;
+  settled: Promise<void>;
+  settle: () => void;
 }
 
 function sameRepository(left: RepositoryIdentity, right: RepositoryIdentity): boolean {
@@ -395,6 +410,7 @@ function AuthorWorkspace({
   const [busy, setBusy] = useState("");
   const navigationRef = useRef(0);
   const workRef = useRef<WorkState | null>(null);
+  const pendingProjectActivationRef = useRef<PendingProjectActivation | null>(null);
   const workPublishTimerRef = useRef<number | null>(null);
   const journalRef = useRef<BrowserJournal | null>(null);
   const draftQueueRef = useRef<Promise<void>>(Promise.resolve());
@@ -704,6 +720,174 @@ function AuthorWorkspace({
 
   useEffect(() => {
     let cancelled = false;
+    let bootstrapRunning = false;
+    let bootstrapFinished = false;
+    let resumeAfterCurrentAttempt = false;
+    let sceneResumeRunning = false;
+    let resumeIncompleteBootstrap!: () => void;
+    let pendingActivationResumeWait: PendingProjectActivation | null = null;
+    const startBootstrap = () => {
+      if (cancelled || bootstrapRunning || bootstrapFinished) return;
+      bootstrapRunning = true;
+      resumeAfterCurrentAttempt = false;
+      void (async () => {
+        const version = await api.version();
+        if (cancelled) return;
+        setHostedMode(version.hosted);
+        const session = await api.session();
+        if (!session || cancelled) return;
+        const scope = session.authorScope || "owner";
+        setCanWrite(session.permissions ? session.permissions.includes("write") : true);
+        authorScopeRef.current = scope;
+        setAuthorScope(scope);
+        void refreshJournal();
+        setAuthState("ready");
+        const registered = await api.projects();
+        if (cancelled) return;
+        setProjects(registered);
+        const stored = localStorageIfAvailable()?.getItem(ACTIVE_PROJECT_KEY) ?? null;
+        const requested = requestedResourceRef.current;
+        const routeProject = requested?.projectId ? registered.find((project) => project.id === requested.projectId) : undefined;
+        if (requested?.projectId && !routeProject) {
+          setGlobalError("この直接リンクの作品は現在のアカウントで開けません。");
+          bootstrapFinished = true;
+          return;
+        }
+        const next = routeProject ?? registered.find((project) => project.id === stored) ?? registered[0];
+        if (next) {
+          const sceneRequest = sceneLoadRef.current;
+          const activation = activateProject(next, false, scope);
+          const navigation = navigationRef.current;
+          await activation;
+          if (cancelled) return;
+          if (navigationRef.current !== navigation || sceneLoadRef.current !== sceneRequest || authorScopeRef.current !== scope) {
+            bootstrapFinished = true;
+            return;
+          }
+          const active = workRef.current;
+          // activateProject reports ordinary failures through the status UI.
+          // If it was interrupted before installing the project, keep bootstrap
+          // resumable for a later pageshow instead of treating the empty shell
+          // as a completed initialization.
+          if (!active || active.project.id !== next.id) return;
+          if (requested?.sceneId) {
+            const location = active?.project.id === requested.projectId && active ? sceneTreeLocation(active.tree.tree, requested.sceneId) : null;
+            if (!active || active.project.id !== requested.projectId || !location ||
+                (requested.volumeId && requested.volumeId !== location.volumeId) ||
+                (requested.chapterId && requested.chapterId !== location.chapterId)) {
+              setGlobalError("直接リンクのシーンが作品構成に見つからないか、URL の巻・章と一致しません。");
+              bootstrapFinished = true;
+              return;
+            }
+            await loadScene(active.project.id, requested.sceneId, active.tree, active.observation.snapshot.repository);
+            if (workRef.current?.editor?.read.scene.id !== requested.sceneId) return;
+          }
+        }
+        bootstrapFinished = true;
+      })().catch((error: unknown) => {
+        if (cancelled || isDocumentDepartureAbort(error)) return;
+        if (error instanceof ApiError && error.status === 401 && error.code === "UNAUTHORIZED") setAuthState("signed-out");
+        else setGlobalError(messageOf(error));
+        bootstrapFinished = true;
+      }).finally(() => {
+        bootstrapRunning = false;
+        const resume = resumeAfterCurrentAttempt && !bootstrapFinished;
+        resumeAfterCurrentAttempt = false;
+        if (resume) resumeIncompleteBootstrap();
+      });
+    };
+    const resumeSelectedScene = (current: WorkState, sceneId: string, requested?: ApplicationResource) => {
+      if (!sceneId || current.editor?.read.scene.id === sceneId) {
+        bootstrapFinished = true;
+        return;
+      }
+      if (sceneResumeRunning) return;
+      const location = sceneTreeLocation(current.tree.tree, sceneId);
+      const isRequestedRouteScene = requested?.projectId === current.project.id && requested.sceneId === sceneId;
+      if (!location || (isRequestedRouteScene && ((requested.volumeId && requested.volumeId !== location.volumeId) ||
+          (requested.chapterId && requested.chapterId !== location.chapterId)))) {
+        bootstrapFinished = true;
+        if (isRequestedRouteScene) setGlobalError("直接リンクのシーンが作品構成に見つからないか、URL の巻・章と一致しません。");
+        return;
+      }
+      sceneResumeRunning = true;
+      bootstrapFinished = false;
+      bootstrapRunning = true;
+      resumeAfterCurrentAttempt = false;
+      void loadScene(current.project.id, sceneId, current.tree, current.observation.snapshot.repository).finally(() => {
+        sceneResumeRunning = false;
+        bootstrapRunning = false;
+        const active = workRef.current;
+        if (active && active.project.id === current.project.id && active.editor?.read.scene.id === sceneId) {
+          bootstrapFinished = true;
+        }
+        const resume = resumeAfterCurrentAttempt && !bootstrapFinished;
+        resumeAfterCurrentAttempt = false;
+        if (resume) resumeIncompleteBootstrap();
+      });
+    };
+    const resumePendingProjectActivation = (activation: PendingProjectActivation): boolean => {
+      if (pendingProjectActivationRef.current !== activation) return false;
+      if (activation.navigation !== navigationRef.current || activation.authorScope !== authorScopeRef.current) {
+        pendingProjectActivationRef.current = null;
+        return false;
+      }
+      if (activation.running) {
+        if (pendingActivationResumeWait !== activation) {
+          pendingActivationResumeWait = activation;
+          void activation.settled.then(() => {
+            if (pendingActivationResumeWait !== activation) return;
+            pendingActivationResumeWait = null;
+            if (pendingProjectActivationRef.current !== activation) return;
+            resumeIncompleteBootstrap();
+          });
+        }
+        return true;
+      }
+      if (workRef.current?.project.id === activation.project.id) {
+        pendingProjectActivationRef.current = null;
+        return false;
+      }
+      bootstrapFinished = false;
+      bootstrapRunning = true;
+      void activateProject(activation.project, activation.persistSelection, activation.scopeOverride).finally(() => {
+        bootstrapRunning = false;
+        const resume = resumeAfterCurrentAttempt;
+        resumeAfterCurrentAttempt = false;
+        const hasPendingActivation = pendingProjectActivationRef.current !== null;
+        if (workRef.current || (hasPendingActivation && resume)) {
+          resumeIncompleteBootstrap();
+        } else if (!hasPendingActivation) {
+          bootstrapFinished = true;
+        }
+      });
+      return true;
+    };
+    resumeIncompleteBootstrap = () => {
+      if (cancelled) return;
+      if (bootstrapRunning) {
+        resumeAfterCurrentAttempt = true;
+        return;
+      }
+      const pendingActivation = pendingProjectActivationRef.current;
+      if (pendingActivation && resumePendingProjectActivation(pendingActivation)) return;
+      if (workRef.current) {
+        const current = workRef.current;
+        const requested = requestedResourceRef.current;
+        const requestedScene = requested?.projectId === current.project.id ? requested.sceneId : undefined;
+        const sceneId = current.selectedSceneId || requestedScene || "";
+        if (sceneId && current.editor?.read.scene.id !== sceneId) {
+          resumeSelectedScene(current, sceneId, requested ?? undefined);
+        } else {
+          bootstrapFinished = true;
+        }
+        return;
+      }
+      if (bootstrapFinished) return;
+      resumeAfterCurrentAttempt = true;
+      startBootstrap();
+    };
+    window.addEventListener("pageshow", resumeIncompleteBootstrap);
     void BrowserJournal.open().then(async (opened) => {
       if (cancelled) {
         opened.close();
@@ -726,66 +910,12 @@ function AuthorWorkspace({
           : current);
       }
     });
-    void api.version().then(async (version) => {
-      if (cancelled) return null;
-      setHostedMode(version.hosted);
-      return api.session();
-    }).then(async (session) => {
-      if (!session) return;
-      if (cancelled) return;
-      const scope = session.authorScope || "owner";
-      setCanWrite(session.permissions ? session.permissions.includes("write") : true);
-      authorScopeRef.current = scope;
-      setAuthorScope(scope);
-      void refreshJournal();
-      setAuthState("ready");
-      try {
-        const registered = await api.projects();
-        if (cancelled) return;
-        setProjects(registered);
-        const stored = localStorageIfAvailable()?.getItem(ACTIVE_PROJECT_KEY) ?? null;
-        const requested = requestedResourceRef.current;
-        const routeProject = requested?.projectId ? registered.find((project) => project.id === requested.projectId) : undefined;
-        if (requested?.projectId && !routeProject) {
-          setGlobalError("この直接リンクの作品は現在のアカウントで開けません。");
-          return;
-        }
-        const next = routeProject ?? registered.find((project) => project.id === stored) ?? registered[0];
-        if (next) {
-          const sceneRequest = sceneLoadRef.current;
-          const activation = activateProject(next, false, scope);
-          const navigation = navigationRef.current;
-          await activation;
-          if (cancelled || navigationRef.current !== navigation || sceneLoadRef.current !== sceneRequest || authorScopeRef.current !== scope) return;
-          const active = workRef.current;
-          if (requested?.sceneId) {
-            const location = active?.project.id === requested.projectId && active ? sceneTreeLocation(active.tree.tree, requested.sceneId) : null;
-            if (!active || active.project.id !== requested.projectId || !location ||
-                (requested.volumeId && requested.volumeId !== location.volumeId) ||
-                (requested.chapterId && requested.chapterId !== location.chapterId)) {
-              setGlobalError("直接リンクのシーンが作品構成に見つからないか、URL の巻・章と一致しません。");
-              return;
-            }
-            await loadScene(active.project.id, requested.sceneId, active.tree, active.observation.snapshot.repository);
-          }
-        }
-      } catch (error) {
-        if (error instanceof ApiError && error.status === 401 && error.code === "UNAUTHORIZED") {
-          setAuthState("signed-out");
-        } else {
-          setGlobalError(messageOf(error));
-        }
-      }
-    }).catch((error) => {
-      if (!cancelled) {
-        if (error instanceof ApiError && error.status === 401 && error.code === "UNAUTHORIZED") setAuthState("signed-out");
-        else setGlobalError(messageOf(error));
-      }
-    });
+    startBootstrap();
     return () => {
       cancelled = true;
+      window.removeEventListener("pageshow", resumeIncompleteBootstrap);
     };
-  // The initial authentication probe is intentionally one-shot.
+  // Initialization resumes only when a browser-restored document was interrupted.
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
@@ -929,7 +1059,7 @@ function AuthorWorkspace({
       recentResume.flush();
       await flushDraft();
     } catch (error) {
-      if (isCurrentLoadContext()) setStatus({ message: messageOf(error), kind: "error" });
+      if (!isDocumentDepartureAbort(error) && isCurrentLoadContext()) setStatus({ message: messageOf(error), kind: "error" });
       return;
     }
     if (!isCurrentLoadContext()) return;
@@ -1155,17 +1285,32 @@ function AuthorWorkspace({
         retainedCurrentEditor = isSameSceneEditorLoad(sceneEditorLoadIdentity(current));
         return { ...current, loadingScene: false, editor: retainedCurrentEditor ? current.editor : null };
       });
-      setStatus({
-        message: retainedCurrentEditor
-          ? `シーンの更新を読み込めませんでした。表示中の編集内容は保持しています。${messageOf(error)}`
-          : messageOf(error),
-        kind: "error",
-      });
+      if (!isDocumentDepartureAbort(error)) {
+        setStatus({
+          message: retainedCurrentEditor
+            ? `シーンの更新を読み込めませんでした。表示中の編集内容は保持しています。${messageOf(error)}`
+            : messageOf(error),
+          kind: "error",
+        });
+      }
     }
   }, [refreshJournal, recentResume.flush, updateWork]);
 
   const activateProject = useCallback(async (project: Project, persistSelection = true, scopeOverride?: string) => {
     const nav = ++navigationRef.current;
+    let settleActivation!: () => void;
+    const settled = new Promise<void>((resolve) => { settleActivation = resolve; });
+    const activation: PendingProjectActivation = {
+      project,
+      persistSelection,
+      scopeOverride,
+      authorScope: scopeOverride ?? authorScopeRef.current,
+      navigation: nav,
+      running: true,
+      settled,
+      settle: settleActivation,
+    };
+    pendingProjectActivationRef.current = activation;
     setBusy("project");
     setProjectActionError(null);
     setStatus({ message: "リモートの状態を確認しています…", kind: "normal" });
@@ -1175,16 +1320,25 @@ function AuthorWorkspace({
       if (composedText !== null && activeEditor && composedText !== activeEditor.text) editText(composedText);
       recentResume.flush();
       await flushDraft();
-      if (navigationRef.current !== nav) return;
+      if (navigationRef.current !== nav) {
+        if (pendingProjectActivationRef.current === activation) pendingProjectActivationRef.current = null;
+        return;
+      }
       updateWork(() => null);
       setGlobalError("");
       const details = await api.projectDetails(project.id);
-      if (navigationRef.current !== nav) return;
+      if (navigationRef.current !== nav) {
+        if (pendingProjectActivationRef.current === activation) pendingProjectActivationRef.current = null;
+        return;
+      }
       const activeProject = details.project;
       const observed = details.observation;
       const scope = scopeOverride ?? authorScopeRef.current;
       const tree = await api.readTree(activeProject.id, "remote", observed.snapshot);
-      if (navigationRef.current !== nav) return;
+      if (navigationRef.current !== nav) {
+        if (pendingProjectActivationRef.current === activation) pendingProjectActivationRef.current = null;
+        return;
+      }
       if (snapshotKey(tree.snapshot) !== snapshotKey(observed.snapshot)) throw new Error("作品構成が別のリモートスナップショットから返されました。");
       const next: WorkState = {
         project: activeProject,
@@ -1199,6 +1353,7 @@ function AuthorWorkspace({
       if (journalRef.current) recoveredProjectsRef.current.add(recoveryKey);
       workRef.current = next;
       publishWorkState(next);
+      if (pendingProjectActivationRef.current === activation) pendingProjectActivationRef.current = null;
       setModules([]);
       setContributions([]);
       // Optional modules, proposals and recovery must not block opening a locally
@@ -1229,8 +1384,14 @@ function AuthorWorkspace({
       // Refresh GitHub in the background; this never blocks the local tree.
       void refreshRef.current();
     } catch (error) {
-      if (navigationRef.current === nav) setStatus({ message: messageOf(error), kind: "error" });
+      if (pendingProjectActivationRef.current === activation &&
+          (!isDocumentDepartureAbort(error) || navigationRef.current !== nav || authorScopeRef.current !== activation.authorScope)) {
+        pendingProjectActivationRef.current = null;
+      }
+      if (!isDocumentDepartureAbort(error) && navigationRef.current === nav) setStatus({ message: messageOf(error), kind: "error" });
     } finally {
+      activation.running = false;
+      activation.settle();
       if (navigationRef.current === nav) setBusy("");
     }
   }, [importRemoteProposals, recentResume.flush, reconcileProject, reloadJournalForWork, updateWork]);
@@ -1241,7 +1402,18 @@ function AuthorWorkspace({
       const location = parseApplicationLocation(path);
       if (!location || location.mode !== mode) return;
       const target = location.resource;
+      const pendingActivation = pendingProjectActivationRef.current;
+      if (pendingActivation && pendingActivation.project.id !== target?.projectId) {
+        pendingProjectActivationRef.current = null;
+        navigationRef.current++;
+        sceneLoadRef.current++;
+      }
       if (!target?.projectId) {
+        if (pendingProjectActivationRef.current) {
+          pendingProjectActivationRef.current = null;
+          navigationRef.current++;
+          sceneLoadRef.current++;
+        }
         stablePathRef.current = path;
         return;
       }
@@ -1275,6 +1447,7 @@ function AuthorWorkspace({
             await loadScene(active.project.id, target.sceneId, active.tree, active.observation.snapshot.repository);
             if (workRef.current?.editor?.read.scene.id !== target.sceneId) throw new Error("移動先のシーンを読み込めませんでした。");
           } else if (active) {
+            pendingProjectActivationRef.current = null;
             navigationRef.current++;
             sceneLoadRef.current++;
             updateWork((current) => current && current.project.id === target.projectId
@@ -1391,7 +1564,9 @@ function AuthorWorkspace({
         await loadScene(projectId, selectedSceneId, tree, observed.snapshot.repository);
       }
     } catch (error) {
-      if (isCurrentProjectContext()) setStatus({ message: `リモートの確認に失敗しました。${messageOf(error)}`, kind: "error" });
+      if (!isDocumentDepartureAbort(error) && isCurrentProjectContext()) {
+        setStatus({ message: `リモートの確認に失敗しました。${messageOf(error)}`, kind: "error" });
+      }
     } finally {
       observationBusyRef.current = false;
     }
@@ -1482,6 +1657,7 @@ function AuthorWorkspace({
       recentResume.flush(true);
       await flushDraft();
       await api.logout();
+      pendingProjectActivationRef.current = null;
       navigationRef.current++;
       updateWork(() => null);
       setAuthState("signed-out");
