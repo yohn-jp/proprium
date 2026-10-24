@@ -188,6 +188,50 @@ export interface RuntimeVersion {
 
 let hostedMode: boolean | undefined;
 let hostedRefresh: Promise<boolean> | undefined;
+let documentDeparting = false;
+let documentLifecycle = 0;
+
+function markDocumentDeparting(): void {
+  if (documentDeparting) return;
+  documentDeparting = true;
+  documentLifecycle += 1;
+}
+
+function resumeDocument(): void {
+  // pageshow also fires on the first load. Only a real departure invalidates
+  // in-flight work and advances the lifecycle generation.
+  if (!documentDeparting) return;
+  documentDeparting = false;
+  documentLifecycle += 1;
+}
+
+if (typeof window !== "undefined") {
+  window.addEventListener("beforeunload", (event) => {
+    // Wait until every beforeunload handler has had a chance to cancel the
+    // departure before closing the browser API to new ordinary requests.
+    queueMicrotask(() => {
+      if (!event.defaultPrevented) markDocumentDeparting();
+    });
+  }, { capture: true });
+  window.addEventListener("pagehide", markDocumentDeparting, { capture: true });
+  window.addEventListener("pageshow", resumeDocument, { capture: true });
+}
+
+function assertDocumentCanStartRequest(init?: RequestInit): void {
+  if (documentDeparting && init?.keepalive !== true) {
+    throw new DOMException("The document is leaving.", "AbortError");
+  }
+}
+
+function hasLeftDocumentLifecycle(lifecycle: number): boolean {
+  return documentDeparting || documentLifecycle !== lifecycle;
+}
+
+function returnOrAbortAfterDeparture(response: Response, lifecycle: number, init: RequestInit): Response {
+  if (!hasLeftDocumentLifecycle(lifecycle)) return response;
+  if (init.keepalive === true) return response;
+  throw new DOMException("The document is leaving.", "AbortError");
+}
 
 function csrfToken(): string | undefined {
   if (typeof document === "undefined") return undefined;
@@ -212,10 +256,13 @@ async function isHostedGrantRejection(response: Response): Promise<boolean> {
 }
 
 async function performHostedRefresh(): Promise<boolean> {
+  const lifecycle = documentLifecycle;
+  assertDocumentCanStartRequest();
   const headers = new Headers();
   const csrf = csrfToken();
   if (csrf) headers.set("X-CSRF-Token", csrf);
   const response = await fetch("/_platform/refresh", { method: "POST", headers, credentials: "same-origin" });
+  if (hasLeftDocumentLifecycle(lifecycle)) throw new DOMException("The document is leaving.", "AbortError");
   if (response.status === 401) {
     window.location.assign("/_platform/reauth");
     return false;
@@ -230,6 +277,7 @@ async function performHostedRefresh(): Promise<boolean> {
 }
 
 async function fetchHostedRequest(path: string, init: RequestInit): Promise<Response> {
+  assertDocumentCanStartRequest(init);
   const headers = new Headers(init.headers);
   if (init.body !== undefined && !headers.has("Content-Type")) headers.set("Content-Type", "application/json");
   const csrf = csrfToken();
@@ -239,8 +287,15 @@ async function fetchHostedRequest(path: string, init: RequestInit): Promise<Resp
 }
 
 async function fetchWithHostedRefresh(path: string, init: RequestInit): Promise<Response> {
+  const lifecycle = documentLifecycle;
   const response = await fetchHostedRequest(path, init);
-  if (hostedMode !== true || path.startsWith("/_platform/") || !(await isHostedGrantRejection(response))) return response;
+  // A response already in flight may settle while this document is leaving.
+  // Do not start a refresh exchange or retry after the departure fence closes.
+  if (hasLeftDocumentLifecycle(lifecycle)) return returnOrAbortAfterDeparture(response, lifecycle, init);
+  if (hostedMode !== true || path.startsWith("/_platform/")) return response;
+  const grantRejected = await isHostedGrantRejection(response);
+  if (hasLeftDocumentLifecycle(lifecycle)) return returnOrAbortAfterDeparture(response, lifecycle, init);
+  if (!grantRejected) return response;
 
   // Web Locks serialize refresh-cookie rotation across tabs. Once inside the
   // lock, retry the rejected request with the current cookies first: another
@@ -248,15 +303,22 @@ async function fetchWithHostedRefresh(path: string, init: RequestInit): Promise<
   const locks = typeof navigator === "undefined" ? undefined : navigator.locks;
   if (locks) {
     return locks.request("scriptorium-hosted-grant-refresh", async () => {
+      if (hasLeftDocumentLifecycle(lifecycle)) return returnOrAbortAfterDeparture(response, lifecycle, init);
       const current = await fetchHostedRequest(path, init);
+      if (hasLeftDocumentLifecycle(lifecycle)) return returnOrAbortAfterDeparture(current, lifecycle, init);
       if (!(await isHostedGrantRejection(current))) return current;
-      if (await refreshHostedGrant()) return fetchHostedRequest(path, init);
+      if (hasLeftDocumentLifecycle(lifecycle)) return returnOrAbortAfterDeparture(current, lifecycle, init);
+      const refreshed = await refreshHostedGrant();
+      if (hasLeftDocumentLifecycle(lifecycle)) return returnOrAbortAfterDeparture(current, lifecycle, init);
+      if (refreshed) return fetchHostedRequest(path, init);
       return current;
     });
   }
 
   // Browsers without Web Locks retain same-tab single-flight refresh.
-  if (await refreshHostedGrant()) return fetchHostedRequest(path, init);
+  const refreshed = await refreshHostedGrant();
+  if (hasLeftDocumentLifecycle(lifecycle)) return returnOrAbortAfterDeparture(response, lifecycle, init);
+  if (refreshed) return fetchHostedRequest(path, init);
   return response;
 }
 
