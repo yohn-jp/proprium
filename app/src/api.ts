@@ -187,9 +187,11 @@ export interface RuntimeVersion {
 }
 
 let hostedMode: boolean | undefined;
-let hostedRefresh: Promise<boolean> | undefined;
+type HostedRefreshResult = { status: number; ok: boolean; error?: string; code?: string };
+let hostedRefresh: Promise<HostedRefreshResult> | undefined;
 let documentDeparting = false;
 let documentLifecycle = 0;
+let reauthRedirectedLifecycle: number | undefined;
 
 function markDocumentDeparting(): void {
   if (documentDeparting) return;
@@ -242,7 +244,7 @@ function csrfToken(): string | undefined {
   catch { return undefined; }
 }
 
-function refreshHostedGrant(): Promise<boolean> {
+function refreshHostedGrant(): Promise<HostedRefreshResult> {
   // The Gateway rotates the refresh secret atomically. Parallel API requests
   // must share one exchange so a losing refresh cannot trigger reauthentication.
   hostedRefresh ??= performHostedRefresh().finally(() => { hostedRefresh = undefined; });
@@ -255,23 +257,42 @@ async function isHostedGrantRejection(response: Response): Promise<boolean> {
   return body !== null && typeof body === "object" && (body as Record<string, unknown>).code === "UNAUTHORIZED";
 }
 
-async function performHostedRefresh(): Promise<boolean> {
-  const lifecycle = documentLifecycle;
+async function performHostedRefresh(): Promise<HostedRefreshResult> {
   assertDocumentCanStartRequest();
   const headers = new Headers();
   const csrf = csrfToken();
   if (csrf) headers.set("X-CSRF-Token", csrf);
   const response = await fetch("/_platform/refresh", { method: "POST", headers, credentials: "same-origin" });
+  if (response.ok || response.status === 401) return { status: response.status, ok: response.ok };
+  const body: unknown = await response.json().catch(() => null);
+  const details = body && typeof body === "object" ? (body as Record<string, unknown>) : {};
+  return {
+    status: response.status,
+    ok: false,
+    error: typeof details.error === "string" ? details.error : `Session refresh failed (${response.status})`,
+    code: typeof details.code === "string" ? details.code : "SESSION_REFRESH_FAILED",
+  };
+}
+
+async function refreshHostedGrantForLifecycle(lifecycle: number): Promise<boolean> {
+  let result: HostedRefreshResult;
+  try {
+    result = await refreshHostedGrant();
+  } catch (error) {
+    if (hasLeftDocumentLifecycle(lifecycle)) throw new DOMException("The document is leaving.", "AbortError");
+    throw error;
+  }
   if (hasLeftDocumentLifecycle(lifecycle)) throw new DOMException("The document is leaving.", "AbortError");
-  if (response.status === 401) {
-    window.location.assign("/_platform/reauth");
+  if (result.status === 401) {
+    if (reauthRedirectedLifecycle !== lifecycle) {
+      reauthRedirectedLifecycle = lifecycle;
+      window.location.assign("/_platform/reauth");
+    }
     return false;
   }
-  if (!response.ok) {
-    const body: unknown = await response.json().catch(() => null);
-    const details = body && typeof body === "object" ? (body as Record<string, unknown>) : {};
-    throw new ApiError(typeof details.error === "string" ? details.error : `Session refresh failed (${response.status})`, response.status,
-      typeof details.code === "string" ? details.code : "SESSION_REFRESH_FAILED");
+  if (!result.ok) {
+    throw new ApiError(result.error ?? `Session refresh failed (${result.status})`, result.status,
+      result.code ?? "SESSION_REFRESH_FAILED");
   }
   return true;
 }
@@ -308,7 +329,7 @@ async function fetchWithHostedRefresh(path: string, init: RequestInit): Promise<
       if (hasLeftDocumentLifecycle(lifecycle)) return returnOrAbortAfterDeparture(current, lifecycle, init);
       if (!(await isHostedGrantRejection(current))) return current;
       if (hasLeftDocumentLifecycle(lifecycle)) return returnOrAbortAfterDeparture(current, lifecycle, init);
-      const refreshed = await refreshHostedGrant();
+      const refreshed = await refreshHostedGrantForLifecycle(lifecycle);
       if (hasLeftDocumentLifecycle(lifecycle)) return returnOrAbortAfterDeparture(current, lifecycle, init);
       if (refreshed) return fetchHostedRequest(path, init);
       return current;
@@ -316,7 +337,7 @@ async function fetchWithHostedRefresh(path: string, init: RequestInit): Promise<
   }
 
   // Browsers without Web Locks retain same-tab single-flight refresh.
-  const refreshed = await refreshHostedGrant();
+  const refreshed = await refreshHostedGrantForLifecycle(lifecycle);
   if (hasLeftDocumentLifecycle(lifecycle)) return returnOrAbortAfterDeparture(response, lifecycle, init);
   if (refreshed) return fetchHostedRequest(path, init);
   return response;

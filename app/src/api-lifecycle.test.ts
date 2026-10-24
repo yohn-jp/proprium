@@ -33,6 +33,17 @@ test("ordinary API requests stop at document departure while keepalive cursor wr
     const refreshAdmission = new Promise<void>((resolve) => { refreshStarted = resolve; });
     let releaseRefresh!: (response: Response) => void;
     const refreshResponse = new Promise<Response>((resolve) => { releaseRefresh = resolve; });
+    let holdPendingRefresh = false;
+    let pendingGrantFresh = false;
+    let pendingRefreshStarted!: () => void;
+    const pendingRefreshAdmission = new Promise<void>((resolve) => { pendingRefreshStarted = resolve; });
+    let releasePendingRefresh!: (response: Response) => void;
+    const pendingRefreshResponse = new Promise<Response>((resolve) => { releasePendingRefresh = resolve; });
+    let holdStaleRefresh = false;
+    let staleRefreshStarted!: () => void;
+    const staleRefreshAdmission = new Promise<void>((resolve) => { staleRefreshStarted = resolve; });
+    let releaseStaleRefresh!: (response: Response) => void;
+    const staleRefreshResponse = new Promise<Response>((resolve) => { releaseStaleRefresh = resolve; });
     globalThis.fetch = async (input, init) => {
       requests.push({ input: String(input), keepalive: init?.keepalive === true });
       if (String(input) === "/api/version") {
@@ -46,7 +57,21 @@ test("ordinary API requests stop at document departure while keepalive cursor wr
         refreshStarted();
         return refreshResponse;
       }
+      if (String(input) === "/_platform/refresh" && holdPendingRefresh) {
+        pendingRefreshStarted();
+        return pendingRefreshResponse;
+      }
+      if (String(input) === "/_platform/refresh" && holdStaleRefresh) {
+        staleRefreshStarted();
+        return staleRefreshResponse;
+      }
       if (String(input) === "/api/projects" && holdRefresh) {
+        return Response.json({ error: "Authentication required", code: "UNAUTHORIZED" }, { status: 401 });
+      }
+      if (String(input) === "/api/projects" && holdPendingRefresh && !pendingGrantFresh) {
+        return Response.json({ error: "Authentication required", code: "UNAUTHORIZED" }, { status: 401 });
+      }
+      if (String(input) === "/api/projects" && holdStaleRefresh) {
         return Response.json({ error: "Authentication required", code: "UNAUTHORIZED" }, { status: 401 });
       }
       if (String(input).endsWith("/recent-activity")) {
@@ -133,6 +158,42 @@ test("ordinary API requests stop at document departure while keepalive cursor wr
     runQueuedLock();
     await assert.rejects(queuedRequest, (error: unknown) => error instanceof DOMException && error.name === "AbortError");
     assert.equal(requests.filter((request) => request.input === "/api/projects").length, 7);
+
+    Object.defineProperty(globalThis, "navigator", { configurable: true, value: { locks: undefined } });
+    holdRefresh = false;
+    holdPendingRefresh = true;
+    const refreshCountBeforeResume = requests.filter((request) => request.input === "/_platform/refresh").length;
+    const departingCaller = api.projects();
+    await pendingRefreshAdmission;
+    dispatch("pagehide", new Event("pagehide"));
+    dispatch("pageshow", new Event("pageshow"));
+    const restoredCaller = api.projects();
+    await new Promise<void>((resolve) => setImmediate(resolve));
+    assert.equal(requests.filter((request) => request.input === "/_platform/refresh").length, refreshCountBeforeResume + 1);
+    pendingGrantFresh = true;
+    releasePendingRefresh(Response.json({ refreshed: true }));
+    await assert.rejects(departingCaller, (error: unknown) => error instanceof DOMException && error.name === "AbortError");
+    assert.deepEqual(await restoredCaller, []);
+    assert.equal(requests.filter((request) => request.input === "/_platform/refresh").length, refreshCountBeforeResume + 1);
+    holdPendingRefresh = false;
+
+    holdStaleRefresh = true;
+    const staleCaller = api.projects();
+    await staleRefreshAdmission;
+    dispatch("pagehide", new Event("pagehide"));
+    dispatch("pageshow", new Event("pageshow"));
+    const refreshCountBeforeShared401 = requests.filter((request) => request.input === "/_platform/refresh").length;
+    const restored401Callers = Promise.allSettled([api.projects(), api.projects()]);
+    await new Promise<void>((resolve) => setImmediate(resolve));
+    assert.equal(requests.filter((request) => request.input === "/_platform/refresh").length, refreshCountBeforeShared401);
+    releaseStaleRefresh(Response.json({ error: "Refresh grant expired", code: "UNAUTHORIZED" }, { status: 401 }));
+    await assert.rejects(staleCaller, (error: unknown) => error instanceof DOMException && error.name === "AbortError");
+    const active401Results = await restored401Callers;
+    assert.equal(active401Results.length, 2);
+    assert.ok(active401Results.every((result) => result.status === "rejected" && result.reason instanceof Error &&
+      "status" in result.reason && result.reason.status === 401));
+    assert.deepEqual(redirects, ["/_platform/reauth"]);
+    holdStaleRefresh = false;
   } finally {
     globalThis.fetch = originalFetch;
     if (originalWindow) Object.defineProperty(globalThis, "window", originalWindow);
