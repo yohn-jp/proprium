@@ -179,6 +179,23 @@ test("local durability census reuses only a recent remote observation and catche
   }
 });
 
+test("local durability accepts the default remote HEAD alias but rejects other remote HEAD targets", async () => {
+  const { tempDir, remote } = await makeRemote();
+  const dataDir = path.join(tempDir, "state");
+  try {
+    const store = new CoreStore({ dataDir, allowLocalRemotes: true });
+    const project = await store.registerProject({ url: remote });
+    await store.observe(project.id);
+    const workspace = await projectWorkspace(dataDir, project.id);
+    await runGit(workspace, "symbolic-ref", "refs/remotes/origin/HEAD", "refs/remotes/origin/main");
+    assert.equal((await store.localDurabilityCensus(project.id)).localWorkspaceDirty, false);
+    await runGit(workspace, "symbolic-ref", "refs/remotes/origin/HEAD", "refs/heads/main");
+    assert.equal((await store.localDurabilityCensus(project.id)).localWorkspaceDirty, true);
+  } finally {
+    await fs.rm(tempDir, { recursive: true, force: true });
+  }
+});
+
 test("local durability census rejects stale observations and changed remote refs without refreshing", async () => {
   const { tempDir, remote } = await makeRemote();
   const dataDir = path.join(tempDir, "state");
