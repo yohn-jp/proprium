@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useRef, useState, type DragEvent, type ReactNode } from "react";
+import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, type DragEvent, type ReactNode } from "react";
 import { Panel, PanelGroup, PanelResizeHandle, setNonce } from "react-resizable-panels";
 import type { UiMode, WorkspacePanel, WorkspacePanelRequest } from "../application/contracts";
 import {
@@ -29,6 +29,20 @@ interface WorkspaceProps {
   beforeLayoutChange?: () => Promise<boolean>;
   requestedPanel?: WorkspacePanelRequest;
   selectedPanelId?: string;
+  routeTransitionSequence?: number;
+  isPanelRequestCurrent?: (sequence: number) => boolean;
+  onPanelRequestResult?: (sequence: number, allowed: boolean) => void;
+  routeSelectionKey?: string;
+  isRouteSelectionCurrent?: (key: string) => boolean;
+  onRouteSelectionResult?: (key: string, allowed: boolean) => void;
+}
+
+interface PendingPanelTransitionCommit {
+  sequence: number;
+  panelId: string;
+  scope: string;
+  mode: UiMode;
+  isCurrent(): boolean;
 }
 
 type Placement = "tab" | DockSide;
@@ -312,7 +326,7 @@ function FloatingFrame({ record, panel, onMove, onDock, onMaximize, maximized }:
   </section>;
 }
 
-export function Workspace({ scope, mode, panels, beforeLayoutChange, requestedPanel, selectedPanelId }: WorkspaceProps): ReactNode {
+export function Workspace({ scope, mode, panels, beforeLayoutChange, requestedPanel, selectedPanelId, routeTransitionSequence, isPanelRequestCurrent, onPanelRequestResult, routeSelectionKey, isRouteSelectionCurrent, onRouteSelectionResult }: WorkspaceProps): ReactNode {
   const panelIds = useMemo(() => [...new Set(panels.map((panel) => panel.id))], [panels]);
   const catalog = useMemo(() => new Map(panels.map((panel) => [panel.id, panel])), [panels]);
   const [initial] = useState(() => loadFor(scope, mode, panelIds));
@@ -326,11 +340,21 @@ export function Workspace({ scope, mode, panels, beforeLayoutChange, requestedPa
   const [placement, setPlacement] = useState<Placement>("tab");
   const [message, setMessage] = useState("");
   const [changing, setChanging] = useState(false);
+  const [committingPanelRequest, setCommittingPanelRequest] = useState<number>();
+  const [routeSelectionRevision, setRouteSelectionRevision] = useState(0);
   const changingRef = useRef(false);
   const workspaceRef = useRef<HTMLElement | null>(null);
   const handledRequestRef = useRef("");
   const routeSuppressedByPanelRequestRef = useRef("");
+  const pendingRouteSelectionRef = useRef(false);
+  const pendingPanelTransitionRef = useRef<PendingPanelTransitionCommit | null>(null);
   const visibleIds = useMemo(() => visiblePanelIds(layout.root), [layout.root]);
+
+  const retryPendingRouteSelection = useCallback((): void => {
+    if (!pendingRouteSelectionRef.current) return;
+    pendingRouteSelectionRef.current = false;
+    setRouteSelectionRevision((revision) => revision + 1);
+  }, []);
 
   useEffect(() => {
     const loaded = loadFor(scope, mode, panelIds);
@@ -352,18 +376,19 @@ export function Workspace({ scope, mode, panels, beforeLayoutChange, requestedPa
     }
   }, [visibleIds, mobilePanelId, moveSource, moveTarget]);
 
-  const changeLayout = useCallback(async (change: (current: WorkspaceLayout) => WorkspaceLayout, success = "Layout updated. Save layout to keep it.", runPreflight = true): Promise<boolean> => {
+  const changeLayout = useCallback(async (change: (current: WorkspaceLayout) => WorkspaceLayout, success = "Layout updated. Save layout to keep it.", runPreflight = true, isCurrent: () => boolean = () => true): Promise<boolean> => {
     if (changingRef.current) return false;
     changingRef.current = true;
     setChanging(true);
     setMessage("");
     try {
       const allowed = runPreflight && beforeLayoutChange ? await beforeLayoutChange() : true;
+      if (!isCurrent()) return false;
       if (!allowed) {
         setMessage("The editor could not confirm its recovery state. The current panel layout is unchanged.");
         return false;
       }
-      setLayout((current) => change(current));
+      setLayout((current) => isCurrent() ? change(current) : current);
       setMessage(success);
       return true;
     } catch (error) {
@@ -372,39 +397,82 @@ export function Workspace({ scope, mode, panels, beforeLayoutChange, requestedPa
     } finally {
       changingRef.current = false;
       setChanging(false);
+      retryPendingRouteSelection();
     }
-  }, [beforeLayoutChange]);
+  }, [beforeLayoutChange, retryPendingRouteSelection]);
 
   useEffect(() => {
     const panelId = requestedPanel?.id;
     const sequence = requestedPanel?.sequence;
-    if (!panelId || !sequence || changingRef.current) return;
+    if (!panelId || !sequence) return;
     const requestKey = `${scope}:${mode}:${panelId}:${sequence}`;
     if (handledRequestRef.current === requestKey) return;
+    if (changingRef.current) return;
     handledRequestRef.current = requestKey;
+    const isRouteTransition = routeTransitionSequence === sequence;
+    const isCurrent = () => isPanelRequestCurrent ? isPanelRequestCurrent(sequence) : true;
     if (!catalog.has(panelId)) {
       setMessage(`The ${panelId} panel is not available.`);
+      if (isRouteTransition) onPanelRequestResult?.(sequence, false);
+      return;
+    }
+    if (!isCurrent()) {
+      if (isRouteTransition) onPanelRequestResult?.(sequence, false);
       return;
     }
     if (mode === "mobile" && selectedPanelId) {
-      routeSuppressedByPanelRequestRef.current = `${scope}:${mode}:${selectedPanelId}`;
+      routeSuppressedByPanelRequestRef.current = `${scope}:${mode}:${isRouteTransition ? panelId : selectedPanelId}`;
     }
     const reveal = async (): Promise<void> => {
+      if (!isCurrent()) {
+        if (isRouteTransition) onPanelRequestResult?.(sequence, false);
+        return;
+      }
       const change = visibleIds.includes(panelId)
         ? (current: WorkspaceLayout) => activateWorkspacePanel(current, panelId)
         : (current: WorkspaceLayout) => showWorkspacePanel(current, panelId);
-      const allowed = await changeLayout(change, "Panel opened. Save layout to keep it.");
-      if (!allowed) return;
-      setFloating((current) => current.filter((item) => item.panelId !== panelId));
-      if (mode === "mobile") setMobilePanelId(panelId);
+      const allowed = await changeLayout(change, "Panel opened. Save layout to keep it.", true, isCurrent);
+      if (!isCurrent()) {
+        if (isRouteTransition) onPanelRequestResult?.(sequence, false);
+        return;
+      }
+      if (!allowed) {
+        if (isRouteTransition && routeSuppressedByPanelRequestRef.current === `${scope}:${mode}:${panelId}`) {
+          routeSuppressedByPanelRequestRef.current = "";
+        }
+        if (isRouteTransition) onPanelRequestResult?.(sequence, false);
+        return;
+      }
+      setFloating((current) => isCurrent() ? current.filter((item) => item.panelId !== panelId) : current);
+      if (mode === "mobile") setMobilePanelId((current) => isCurrent() ? panelId : current);
       window.requestAnimationFrame(() => {
+        if (isPanelRequestCurrent && !isPanelRequestCurrent(sequence)) return;
         const element = Array.from(workspaceRef.current?.querySelectorAll<HTMLElement>("[data-workspace-panel]") ?? [])
           .find((candidate) => candidate.dataset.workspacePanel === panelId);
         element?.focus();
       });
+      if (isRouteTransition) {
+        pendingPanelTransitionRef.current = { sequence, panelId, scope, mode, isCurrent };
+        setCommittingPanelRequest(sequence);
+      }
     };
     void reveal();
-  }, [requestedPanel?.id, requestedPanel?.sequence, scope, mode, catalog, visibleIds, changeLayout, changing]);
+  }, [requestedPanel?.id, requestedPanel?.sequence, scope, mode, catalog, visibleIds, changeLayout, changing, routeTransitionSequence, isPanelRequestCurrent, onPanelRequestResult, selectedPanelId]);
+
+  useLayoutEffect(() => {
+    const pending = pendingPanelTransitionRef.current;
+    if (!pending || pending.sequence !== committingPanelRequest) return;
+    if (!pending.isCurrent() || pending.scope !== scope || pending.mode !== mode) {
+      pendingPanelTransitionRef.current = null;
+      setCommittingPanelRequest((sequence) => sequence === pending.sequence ? undefined : sequence);
+      onPanelRequestResult?.(pending.sequence, false);
+      return;
+    }
+    if (mobilePanelId !== pending.panelId || !visibleIds.includes(pending.panelId)) return;
+    pendingPanelTransitionRef.current = null;
+    setCommittingPanelRequest((sequence) => sequence === pending.sequence ? undefined : sequence);
+    onPanelRequestResult?.(pending.sequence, true);
+  }, [committingPanelRequest, scope, mode, mobilePanelId, visibleIds, onPanelRequestResult]);
 
   const changePreset = (preset: Exclude<WorkspacePreset, "custom">): void => {
     void changeLayout(() => createWorkspacePreset(preset, panelIds), `${presetTitle(preset)} preset applied. Save layout to keep it.`)
@@ -492,28 +560,55 @@ export function Workspace({ scope, mode, panels, beforeLayoutChange, requestedPa
       } finally {
         changingRef.current = false;
         setChanging(false);
+        retryPendingRouteSelection();
       }
     })();
   };
 
   const routeSelectionRef = useRef("");
   useEffect(() => {
-    if (mode !== "mobile" || !selectedPanelId || !catalog.has(selectedPanelId) || changingRef.current) return;
+    if (mode !== "mobile" || !selectedPanelId || !catalog.has(selectedPanelId)) return;
+    if (changingRef.current) {
+      pendingRouteSelectionRef.current = true;
+      return;
+    }
+    pendingRouteSelectionRef.current = false;
     const selectionKey = `${scope}:${mode}:${selectedPanelId}`;
     if (routeSuppressedByPanelRequestRef.current === selectionKey) {
       routeSuppressedByPanelRequestRef.current = "";
       routeSelectionRef.current = selectionKey;
       return;
     }
-    routeSuppressedByPanelRequestRef.current = "";
+    if (routeSuppressedByPanelRequestRef.current) {
+      if (routeSelectionRef.current === selectionKey) return;
+      routeSuppressedByPanelRequestRef.current = "";
+    }
     if (routeSelectionRef.current === selectionKey) return;
     routeSelectionRef.current = selectionKey;
     const change = visibleIds.includes(selectedPanelId)
       ? (current: WorkspaceLayout) => current
       : (current: WorkspaceLayout) => showWorkspacePanel(current, selectedPanelId);
-    void changeLayout(change, "Panel opened for this view. Save layout to keep it.")
-      .then((allowed) => { if (allowed) setMobilePanelId(selectedPanelId); });
-  }, [mode, scope, selectedPanelId, visibleIds, catalog, changeLayout, changing]);
+    const currentRouteKey = routeSelectionKey ?? selectionKey;
+    const isCurrent = () => isRouteSelectionCurrent ? isRouteSelectionCurrent(currentRouteKey) : routeSelectionRef.current === selectionKey;
+    void changeLayout(change, "Panel opened for this view. Save layout to keep it.", true, isCurrent)
+      .then((allowed) => {
+        if (!isCurrent()) {
+          onRouteSelectionResult?.(currentRouteKey, false);
+          return;
+        }
+        if (!allowed) {
+          onRouteSelectionResult?.(currentRouteKey, false);
+          return;
+        }
+        setMobilePanelId(selectedPanelId);
+        window.requestAnimationFrame(() => {
+          const element = Array.from(workspaceRef.current?.querySelectorAll<HTMLElement>("[data-workspace-panel]") ?? [])
+            .find((candidate) => candidate.dataset.workspacePanel === selectedPanelId);
+          element?.focus();
+        });
+        onRouteSelectionResult?.(currentRouteKey, true);
+      });
+  }, [mode, scope, selectedPanelId, visibleIds, catalog, changeLayout, changing, routeSelectionKey, routeSelectionRevision, isRouteSelectionCurrent, onRouteSelectionResult]);
 
   const resize = (splitId: string, sizes: number[]): void => {
     setLayout((current) => resizeWorkspaceSplit(current, splitId, sizes));
