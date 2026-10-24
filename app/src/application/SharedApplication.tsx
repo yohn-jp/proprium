@@ -1330,29 +1330,38 @@ function AuthorWorkspace({
     if (!current || observationBusyRef.current || document.visibilityState === "hidden") return;
     observationBusyRef.current = true;
     const projectId = current.project.id;
+    const repository = current.observation.snapshot.repository;
+    const authorScope = authorScopeRef.current;
     const nav = navigationRef.current;
+    const sceneRequest = sceneLoadRef.current;
+    const isCurrentProjectContext = () => {
+      const latest = workRef.current;
+      return navigationRef.current === nav && authorScopeRef.current === authorScope &&
+        latest?.project.id === projectId && sameRepository(latest.observation.snapshot.repository, repository);
+    };
+    const isCurrentRefreshContext = () => isCurrentProjectContext() && sceneLoadRef.current === sceneRequest;
     try {
       const observed = await api.observation(projectId);
-      if (navigationRef.current !== nav || workRef.current?.project.id !== projectId) return;
-      if (!sameRepository(workRef.current.observation.snapshot.repository, observed.snapshot.repository)) return;
-      void importRemoteProposals(projectId, observed.snapshot.repository, authorScopeRef.current, nav);
+      if (!isCurrentRefreshContext() || !sameRepository(repository, observed.snapshot.repository)) return;
+      void importRemoteProposals(projectId, observed.snapshot.repository, authorScope, nav);
       const latestBeforeRead = workRef.current;
       const changedRemote = Boolean(latestBeforeRead && latestBeforeRead.observation.snapshot.remoteCommit !== observed.snapshot.remoteCommit);
       const changedCheckpoint = Boolean(latestBeforeRead && latestBeforeRead.observation.checkpointHead !== observed.checkpointHead);
       const changedEditorSnapshot = Boolean(latestBeforeRead?.editor &&
         !sameRemoteSnapshot(latestBeforeRead.editor.remote.snapshot, observed.snapshot));
       if (changedRemote) {
-        await reconcileProject(projectId, observed.snapshot.repository, authorScopeRef.current, nav);
-        if (navigationRef.current !== nav || workRef.current?.project.id !== projectId) return;
+        await reconcileProject(projectId, observed.snapshot.repository, authorScope, nav);
+        if (!isCurrentRefreshContext()) return;
       }
       const tree = changedRemote
         ? await api.readTree(projectId, "remote", observed.snapshot)
         : (latestBeforeRead?.tree ?? await api.readTree(projectId, "remote", observed.snapshot));
-      if (navigationRef.current !== nav || snapshotKey(tree.snapshot) !== snapshotKey(observed.snapshot)) return;
+      if (!isCurrentRefreshContext() || snapshotKey(tree.snapshot) !== snapshotKey(observed.snapshot)) return;
       const latestBeforeUpdate = workRef.current;
       const changedTree = snapshotKey(latestBeforeUpdate?.tree.snapshot ?? current.tree.snapshot) !== snapshotKey(tree.snapshot);
       updateWork((latest) => {
-        if (latest?.project.id !== projectId) return latest;
+        if (navigationRef.current !== nav || authorScopeRef.current !== authorScope || latest?.project.id !== projectId ||
+            !sameRepository(latest.observation.snapshot.repository, repository)) return latest;
         const stableSnapshot = snapshotKey(latest.observation.snapshot) === snapshotKey(observed.snapshot)
           ? latest.observation.snapshot
           : observed.snapshot;
@@ -1379,11 +1388,16 @@ function AuthorWorkspace({
       });
       const latest = workRef.current;
       if ((changedRemote || changedCheckpoint || changedTree || changedEditorSnapshot) && latest?.project.id === projectId && latest.selectedSceneId) {
+        const selectedSceneId = latest.selectedSceneId;
+        const selectedRepository = latest.observation.snapshot.repository;
         await flushDraft();
-        await loadScene(projectId, latest.selectedSceneId, tree, observed.snapshot.repository);
+        const afterFlush = workRef.current;
+        if (!isCurrentRefreshContext() || afterFlush?.selectedSceneId !== selectedSceneId ||
+            !sameRepository(afterFlush.observation.snapshot.repository, selectedRepository)) return;
+        await loadScene(projectId, selectedSceneId, tree, observed.snapshot.repository);
       }
     } catch (error) {
-      if (navigationRef.current === nav) setStatus({ message: `リモートの確認に失敗しました。${messageOf(error)}`, kind: "error" });
+      if (isCurrentProjectContext()) setStatus({ message: `リモートの確認に失敗しました。${messageOf(error)}`, kind: "error" });
     } finally {
       observationBusyRef.current = false;
     }
