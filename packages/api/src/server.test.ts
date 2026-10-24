@@ -628,13 +628,15 @@ describe("Scriptorium HTTP boundary", () => {
 
     const noGrant = await fetch(`${apiServer.base}/api/projects`);
     assert.equal(noGrant.status, 401);
-    const discovery = await fetch(`${apiServer.base}/.well-known/oauth-protected-resource`);
-    assert.equal(discovery.status, 200);
-    assert.deepEqual(await discovery.json(), {
-      resource: HOSTED_ASSIGNMENT.grantPolicy.audience,
-      authorization_servers: [HOSTED_ASSIGNMENT.grantPolicy.issuer],
-      scopes_supported: ["read", "write"],
-    });
+    for (const path of ["/.well-known/oauth-protected-resource", "/.well-known/oauth-protected-resource/mcp"]) {
+      const discovery = await fetch(`${apiServer.base}${path}`);
+      assert.equal(discovery.status, 200, `${path} must be public without a grant`);
+      assert.deepEqual(await discovery.json(), {
+        resource: HOSTED_ASSIGNMENT.grantPolicy.audience,
+        authorization_servers: [HOSTED_ASSIGNMENT.grantPolicy.issuer],
+        scopes_supported: ["read", "write"],
+      });
+    }
     const mcpChallenge = await fetch(`${apiServer.base}/mcp`, {
       method: "POST", headers: { "Content-Type": "application/json" },
       body: '{"jsonrpc":"2.0","id":1,"method":"initialize"}',

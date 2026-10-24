@@ -1522,7 +1522,8 @@ export function createServer(options: ApiServerOptions): Server {
     const publicRead = isRead && ["/api/health", "/api/ready", "/api/version", "/health/live", "/health/ready", "/health/startup"].includes(routePath);
     const publicModuleRoute = !hosted && routePath.startsWith("/api/public/repos/") && routePath.includes("/modules/");
 
-    if (hosted && originalPath === "/.well-known/oauth-protected-resource" && method === "GET") {
+    if (hosted && (originalPath === "/.well-known/oauth-protected-resource" ||
+        originalPath === "/.well-known/oauth-protected-resource/mcp") && method === "GET") {
       sendJson(response, 200, {
         resource: assignment!.grantPolicy.audience,
         authorization_servers: [assignment!.grantPolicy.issuer],
