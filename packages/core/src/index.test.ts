@@ -637,6 +637,33 @@ test("hosted CoreStore has no shared-token or local-remote fallback and rejects 
   }
 });
 
+test("hosted Git credential provider authentication failures do not become browser authentication failures", async () => {
+  const tempDir = await fs.mkdtemp(path.join(os.tmpdir(), "scriptorium-hosted-credential-failure-test-"));
+  const binding = {
+    repositoryId: 342_100_803,
+    repositoryLocator: "https://github.com/yohn-jp/credential-failure-work",
+    instanceId: "instance_credential_failure_test",
+    runtimeEpoch: 9,
+  };
+  const providerError = Object.assign(new Error("Runtime identity expired"), { status: 401, code: "invalid_token" });
+  const store = new CoreStore({
+    dataDir: path.join(tempDir, "state"),
+    hostedRepository: binding,
+    gitCredentialProvider: {
+      async getCredential() { throw providerError; },
+    },
+  });
+  try {
+    await assert.rejects(
+      store.registerProject({ url: binding.repositoryLocator }),
+      (error: unknown) => error instanceof CoreError && error.status === 503 && error.code === "git_credential_unavailable",
+      "a Git broker/runtime credential failure must not be surfaced as a browser grant expiry",
+    );
+  } finally {
+    await fs.rm(tempDir, { recursive: true, force: true });
+  }
+});
+
 test("hosted clones omit remote tags but keep manually created tags unsafe", async () => {
   const { tempDir, remote, seed } = await makeRemote();
   const hostedUrl = "https://github.com/yohn-jp/tagged-work.git";
