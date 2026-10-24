@@ -730,7 +730,7 @@ for (const departure of ["reload", "pagehide"] as const) {
         }
         return original.call(window, input, init);
       };
-    }, `${testInfo.project.name} ${departure}: a checkpoint must survive interrupted recovery.`);
+    }, draft);
     await signIn(page, "desktop");
     await openFixtureScene(page, "desktop");
     await page.locator(".cm-content").fill(draft);
