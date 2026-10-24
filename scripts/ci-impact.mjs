@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 import { execFileSync } from 'node:child_process';
-import { appendFileSync, readFileSync, writeFileSync } from 'node:fs';
+import { appendFileSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { createHash } from 'node:crypto';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -73,7 +73,9 @@ if (process.argv[1] && path.resolve(process.argv[1]) === fileURLToPath(import.me
     } catch { /* Missing history must run full verification, never an empty selection. */ }
   }
   const plan = createVerificationPlan({ files, event, sha, base });
-  writeFileSync('ci-plan.json', `${JSON.stringify(plan, null, 2)}\n`);
+  const planPath = process.env.SCRIPTORIUM_CI_PLAN_PATH ?? 'ci-plan.json';
+  mkdirSync(path.dirname(planPath), { recursive: true });
+  writeFileSync(planPath, `${JSON.stringify(plan, null, 2)}\n`);
   if (process.env.GITHUB_OUTPUT) {
     const outputs = {
       plan: JSON.stringify(plan),

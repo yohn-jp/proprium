@@ -52,6 +52,11 @@ test('all source checkouts bind exact PR head/main source without persisted cred
     const checkout = job.steps.find(step => step.uses === 'actions/checkout@v4');
     assert.equal(checkout.with.ref, '${{ github.event.pull_request.head.sha || github.sha }}');
     assert.equal(checkout.with['persist-credentials'], false);
+    const execution = job.steps.find(step => /node scripts\/(?:ci-impact|ci-group|certify-ci)\.mjs/.test(step.run ?? ''));
+    assert.equal(execution.env.SCRIPTORIUM_CI_PLAN_PATH, '${{ runner.temp }}/ci-plan/ci-plan.json');
+    for (const step of job.steps.filter(step => step.uses === 'actions/download-artifact@v4' && step.with.name === 'ci-plan')) {
+      assert.equal(step.with.path, '${{ runner.temp }}/ci-plan');
+    }
   }
 });
 

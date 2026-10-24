@@ -17,7 +17,7 @@ const outcomes = JSON.parse(SCRIPTORIUM_REQUIRED_RESULTS ?? 'null');
 assert.ok(outcomes && Object.keys(outcomes).length === 7, 'All required DAG groups must be present');
 assert.equal(outcomes.plan?.result, 'success', 'Impact planning did not succeed');
 assert.ok(Object.values(outcomes).every(value => ['success', 'skipped'].includes(value.result)), 'A required DAG group failed, was cancelled or unexecuted');
-const plan = validateVerificationPlan(JSON.parse(await readFile('ci-plan.json', 'utf8')));
+const plan = validateVerificationPlan(JSON.parse(await readFile(process.env.SCRIPTORIUM_CI_PLAN_PATH ?? 'ci-plan.json', 'utf8')));
 assert.equal(plan.sha, SCRIPTORIUM_EXPECTED_SHA);
 const request = async endpoint => {
   const response = await fetch(`https://api.github.com/repos/${GITHUB_REPOSITORY}/${endpoint}`, {

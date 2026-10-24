@@ -6,7 +6,7 @@ import { VERIFICATION_GROUPS } from './ci-contract.mjs';
 import { planDigest, validateVerificationPlan } from './ci-impact.mjs';
 
 const group = process.argv[2];
-const plan = validateVerificationPlan(JSON.parse(readFileSync('ci-plan.json', 'utf8')));
+const plan = validateVerificationPlan(JSON.parse(readFileSync(process.env.SCRIPTORIUM_CI_PLAN_PATH ?? 'ci-plan.json', 'utf8')));
 const sha = execFileSync('git', ['rev-parse', 'HEAD'], { encoding: 'utf8' }).trim();
 if (sha !== plan.sha || !plan.groups.includes(group)) throw new Error('Group is not selected for this exact source');
 const tasks = VERIFICATION_GROUPS[group].filter(task => plan.tasks.includes(task));
