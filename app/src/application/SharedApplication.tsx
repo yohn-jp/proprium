@@ -707,6 +707,7 @@ function AuthorWorkspace({
     let bootstrapRunning = false;
     let bootstrapFinished = false;
     let resumeAfterCurrentAttempt = false;
+    let resumeIncompleteBootstrap!: () => void;
     const isDepartureAbort = (error: unknown): boolean =>
       error instanceof DOMException && error.name === "AbortError";
     const startBootstrap = () => {
@@ -763,6 +764,7 @@ function AuthorWorkspace({
               return;
             }
             await loadScene(active.project.id, requested.sceneId, active.tree, active.observation.snapshot.repository);
+            if (workRef.current?.editor?.read.scene.id !== requested.sceneId) return;
           }
         }
         bootstrapFinished = true;
@@ -773,13 +775,52 @@ function AuthorWorkspace({
         bootstrapFinished = true;
       }).finally(() => {
         bootstrapRunning = false;
-        if (resumeAfterCurrentAttempt && !bootstrapFinished) startBootstrap();
+        if (resumeAfterCurrentAttempt && !bootstrapFinished) resumeIncompleteBootstrap();
       });
     };
-    const resumeIncompleteBootstrap = () => {
-      if (bootstrapFinished || cancelled) return;
-      if (workRef.current) {
+    const resumeRequestedScene = (current: WorkState, requested: ApplicationResource) => {
+      if (!requested.sceneId || current.project.id !== requested.projectId) {
         bootstrapFinished = true;
+        return;
+      }
+      if (current.editor) {
+        // A live editor belongs to the user's current navigation. Do not
+        // replace it merely because the page was restored from the back/forward cache.
+        bootstrapFinished = true;
+        return;
+      }
+      const location = sceneTreeLocation(current.tree.tree, requested.sceneId);
+      if (!location || (requested.volumeId && requested.volumeId !== location.volumeId) ||
+          (requested.chapterId && requested.chapterId !== location.chapterId)) {
+        bootstrapFinished = true;
+        setGlobalError("直接リンクのシーンが作品構成に見つからないか、URL の巻・章と一致しません。");
+        return;
+      }
+      bootstrapRunning = true;
+      resumeAfterCurrentAttempt = false;
+      void loadScene(current.project.id, requested.sceneId, current.tree, current.observation.snapshot.repository).finally(() => {
+        bootstrapRunning = false;
+        const active = workRef.current;
+        if (active && active.project.id === requested.projectId && active.editor?.read.scene.id === requested.sceneId) {
+          bootstrapFinished = true;
+        }
+        if (resumeAfterCurrentAttempt && !bootstrapFinished) resumeIncompleteBootstrap();
+      });
+    };
+    resumeIncompleteBootstrap = () => {
+      if (bootstrapFinished || cancelled) return;
+      if (bootstrapRunning) {
+        resumeAfterCurrentAttempt = true;
+        return;
+      }
+      if (workRef.current) {
+        const requested = requestedResourceRef.current;
+        if (requested?.sceneId && workRef.current.project.id === requested.projectId &&
+            workRef.current.editor?.read.scene.id !== requested.sceneId) {
+          resumeRequestedScene(workRef.current, requested);
+        } else {
+          bootstrapFinished = true;
+        }
         return;
       }
       resumeAfterCurrentAttempt = true;
