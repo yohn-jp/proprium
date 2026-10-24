@@ -1659,6 +1659,119 @@ test("a pending scratch image read is flushed to its captured scene before navig
   expect(scratch?.text).toBe("Attachment belongs to Scene One.");
 });
 
+test("resuming an older scratch generation cannot replace newer unprotected input", async ({ page }) => {
+  expect(authToken.length).toBeGreaterThanOrEqual(32);
+  expect(repositoryUrl).not.toBe("");
+  await openFixtureProject(page, await signIn(page));
+  await page.locator(".scratch-panel summary").click();
+
+  const scratch = page.getByLabel("本文に含まれないメモ");
+  const olderText = "Protected older scratch generation.";
+  await scratch.fill(olderText);
+  await page.locator(".cm-content").click();
+  await expect.poll(async () => (await readJournal(page)).some((entry) =>
+    entry.documentPath.startsWith("meta/scratch/") && entry.text === olderText && entry.state === "draft",
+  )).toBe(true);
+  const olderEntry = (await readJournal(page)).find((entry) => entry.text === olderText);
+  expect(olderEntry).toBeTruthy();
+
+  await scratch.fill("Intermediate scratch input during rapid editing.");
+  const newerText = "Newer scratch input still inside the write debounce.";
+  await scratch.fill(newerText);
+  await page.locator(".scratch-panel").getByRole("button", { name: "続ける" }).click();
+
+  await expect(scratch).toHaveValue(newerText);
+  await expect(page.locator(".scratch-panel [role=alert]")).toContainText("新しい入力");
+  await expect.poll(async () => (await readJournal(page)).some((entry) =>
+    entry.operationId === olderEntry!.operationId && entry.generation > olderEntry!.generation && entry.text === newerText,
+  )).toBe(true);
+});
+
+test("failed scratch protection refuses recovery selection and keeps the current error visible", async ({ page }) => {
+  await page.addInitScript(() => {
+    type FailureWindow = Window & { __failCurrentScratchWrite?: boolean; __failedCurrentScratchWrites?: number };
+    const originalPut = IDBObjectStore.prototype.put;
+    IDBObjectStore.prototype.put = function (this: IDBObjectStore, value: unknown, key?: IDBValidKey): IDBRequest<IDBValidKey> {
+      const text = value && typeof value === "object" && "text" in value && typeof value.text === "string" ? value.text : "";
+      const currentWindow = window as FailureWindow;
+      if (this.transaction.db.name === "scriptorium-recovery" && this.name === "operations" &&
+          currentWindow.__failCurrentScratchWrite && text.includes("forced scratch protection failure")) {
+        currentWindow.__failedCurrentScratchWrites = (currentWindow.__failedCurrentScratchWrites ?? 0) + 1;
+        const transaction = this.transaction;
+        const request = originalPut.call(this, value, key);
+        Object.defineProperty(transaction, "error", {
+          configurable: true,
+          get: () => new DOMException("Synthetic quota limit", "QuotaExceededError"),
+        });
+        queueMicrotask(() => transaction.abort());
+        return request;
+      }
+      return originalPut.call(this, value, key);
+    };
+  });
+  await openFixtureProject(page, await signIn(page));
+  await page.locator(".scratch-panel summary").click();
+
+  const scratch = page.getByLabel("本文に含まれないメモ");
+  const olderText = "Previously protected scratch remains available.";
+  await scratch.fill(olderText);
+  await page.locator(".cm-content").click();
+  await expect.poll(async () => (await readJournal(page)).some((entry) => entry.text === olderText && entry.state === "draft")).toBe(true);
+  const olderEntry = (await readJournal(page)).find((entry) => entry.text === olderText);
+  expect(olderEntry).toBeTruthy();
+  await page.evaluate(() => { (window as Window & { __failCurrentScratchWrite?: boolean }).__failCurrentScratchWrite = true; });
+
+  const failedText = "This edit has a forced scratch protection failure.";
+  await scratch.fill(failedText);
+  await page.locator(".scratch-panel").getByRole("button", { name: "続ける" }).click();
+  await page.waitForFunction(() => ((window as Window & { __failedCurrentScratchWrites?: number }).__failedCurrentScratchWrites ?? 0) > 0);
+
+  await expect(scratch).toHaveValue(failedText);
+  await expect(page.locator(".scratch-panel [role=alert]")).toBeVisible();
+  const journal = await readJournal(page);
+  expect(journal.some((entry) => entry.operationId === olderEntry!.operationId && entry.generation === olderEntry!.generation && entry.text === olderText)).toBe(true);
+  expect(journal.some((entry) => entry.text === failedText)).toBe(false);
+});
+
+test("resuming an older scratch entry waits for its pending image read and keeps the latest draft", async ({ page }) => {
+  await page.addInitScript(() => {
+    type ImageWindow = Window & { __pendingScratchReadStarted?: boolean };
+    const originalRead = FileReader.prototype.readAsDataURL;
+    FileReader.prototype.readAsDataURL = function (this: FileReader, blob: Blob): void {
+      const reader = this;
+      (window as ImageWindow).__pendingScratchReadStarted = true;
+      window.setTimeout(() => originalRead.call(reader, blob), 800);
+    };
+  });
+  await openFixtureProject(page, await signIn(page));
+  await page.locator(".scratch-panel summary").click();
+
+  const scratch = page.getByLabel("本文に含まれないメモ");
+  const olderText = "Older scratch with a protected generation.";
+  await scratch.fill(olderText);
+  await page.locator(".cm-content").click();
+  await expect.poll(async () => (await readJournal(page)).some((entry) => entry.text === olderText && entry.state === "draft")).toBe(true);
+  const olderEntry = (await readJournal(page)).find((entry) => entry.text === olderText);
+  expect(olderEntry).toBeTruthy();
+
+  const currentText = "Current scratch text with an image still being read.";
+  await scratch.fill(currentText);
+  await page.getByLabel("スクラッチ画像を添付").setInputFiles({
+    name: "pending-note.png",
+    mimeType: "image/png",
+    buffer: Buffer.from([137, 80, 78, 71, 13, 10, 26, 10]),
+  });
+  await page.waitForFunction(() => (window as Window & { __pendingScratchReadStarted?: boolean }).__pendingScratchReadStarted === true);
+  await page.locator(".scratch-panel").getByRole("button", { name: "続ける" }).click();
+
+  await expect(scratch).toHaveValue(currentText);
+  await expect.poll(async () => {
+    const current = (await readJournal(page)).find((entry) => entry.text === currentText);
+    return current?.attachmentWrites === 1 && current.operationId === olderEntry!.operationId && current.generation > olderEntry!.generation;
+  }).toBe(true);
+  await expect(page.locator(".scratch-panel [role=alert]")).toContainText("新しい入力");
+});
+
 test("public publishing route mounts its source reader without an owner session", async ({ page }) => {
   test.skip(process.env.SCRIPTORIUM_PROFILE !== "full", "The publishing browser module is selected by the full profile.");
   const ownerSessionRequests: string[] = [];
