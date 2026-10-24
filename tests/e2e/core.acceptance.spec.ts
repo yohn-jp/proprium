@@ -2198,6 +2198,11 @@ test("Issue 42: a failed hosted credential observation keeps the author session 
   try {
     await signIn(page);
     const project = await issue42RegisterDisposableProject(page, remote);
+    await page.route("**/api/version", (route) => route.fulfill({
+      status: 200,
+      contentType: "application/json",
+      body: JSON.stringify({ name: "scriptorium", version: "test", hosted: true, profile: "hosted" }),
+    }));
     const observationStarted = issue42Deferred();
     const observationFinished = issue42Deferred();
     let heldObservation = false;
@@ -2226,6 +2231,8 @@ test("Issue 42: a failed hosted credential observation keeps the author session 
       reauthRequests += 1;
       await route.fulfill({ status: 200, contentType: "text/html", body: "reauth fixture" });
     });
+    await page.reload();
+    await expect(page.getByRole("heading", { name: "Scene One" })).toBeVisible();
     await page.evaluate(() => window.dispatchEvent(new Event("online")));
     await observationStarted.promise;
     await page.getByRole("button", { name: "Chapter One: Scene Two", exact: true }).click();

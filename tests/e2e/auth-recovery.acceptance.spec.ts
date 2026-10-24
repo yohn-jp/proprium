@@ -31,6 +31,17 @@ test("an unknown hosted grant requests refresh and retries the initial session c
     contentType: "application/json",
     body: "[]",
   }));
+  await page.route("**/api/jobs", (route) => route.fulfill({
+    status: 200,
+    contentType: "application/json",
+    body: "[]",
+  }));
+  await page.route("**/api/jobs/events", (route) => route.fulfill({ status: 200, headers: { "content-type": "text/event-stream" }, body: "" }));
+  await page.route("**/api/inbox", (route) => route.fulfill({
+    status: 200,
+    contentType: "application/json",
+    body: JSON.stringify({ items: [], unreadCount: 0 }),
+  }));
   await page.route("**/_platform/refresh", async (route) => {
     refreshRequests += 1;
     grantFresh = true;
@@ -59,11 +70,6 @@ test("concurrent tabs serialize a rotated hosted grant through the browser lock"
   let releaseInitialRequests!: () => void;
   const bothInitialRequests = new Promise<void>((resolve) => { releaseInitialRequests = resolve; });
 
-  await context.route("**/api/**", (route) => route.fulfill({
-    status: 200,
-    contentType: "application/json",
-    body: "[]",
-  }));
   await context.route("**/api/version", (route) => route.fulfill({
     status: 200,
     contentType: "application/json",
@@ -91,6 +97,17 @@ test("concurrent tabs serialize a rotated hosted grant through the browser lock"
     status: 200,
     contentType: "application/json",
     body: "[]",
+  }));
+  await context.route("**/api/jobs", (route) => route.fulfill({
+    status: 200,
+    contentType: "application/json",
+    body: "[]",
+  }));
+  await context.route("**/api/jobs/events", (route) => route.fulfill({ status: 200, headers: { "content-type": "text/event-stream" }, body: "" }));
+  await context.route("**/api/inbox", (route) => route.fulfill({
+    status: 200,
+    contentType: "application/json",
+    body: JSON.stringify({ items: [], unreadCount: 0 }),
   }));
   await context.route("**/_platform/refresh", async (route) => {
     refreshRequests += 1;
