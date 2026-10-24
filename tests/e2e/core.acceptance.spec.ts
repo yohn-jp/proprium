@@ -1772,6 +1772,107 @@ test("resuming an older scratch entry waits for its pending image read and keeps
   await expect(page.locator(".scratch-panel [role=alert]")).toContainText("新しい入力");
 });
 
+test("scratch text and image selection pause while a recovery entry is being resumed", async ({ page }) => {
+  await page.addInitScript(() => {
+    type ResumeGate = { armed: boolean; started: boolean; target?: IDBTransaction; release?: () => void };
+    type GateWindow = Window & { __scratchResumeGate?: ResumeGate; __scratchResumeImageReadStarted?: boolean };
+    const gateWindow = window as GateWindow;
+    gateWindow.__scratchResumeGate = { armed: false, started: false };
+
+    const transactionDescriptor = Object.getOwnPropertyDescriptor(IDBTransaction.prototype, "oncomplete");
+    if (!transactionDescriptor?.get || !transactionDescriptor.set) throw new Error("IndexedDB completion hooks are unavailable in this browser.");
+    Object.defineProperty(IDBTransaction.prototype, "oncomplete", {
+      configurable: true,
+      enumerable: transactionDescriptor.enumerable,
+      get() { return transactionDescriptor.get!.call(this); },
+      set(handler: ((this: IDBTransaction, event: Event) => unknown) | null) {
+        if (!handler) {
+          transactionDescriptor.set!.call(this, handler);
+          return;
+        }
+        const transaction = this;
+        transactionDescriptor.set!.call(this, function (this: IDBTransaction, event: Event) {
+          const currentGate = (window as GateWindow).__scratchResumeGate;
+          if (currentGate && currentGate.target === transaction) {
+            currentGate.started = true;
+            currentGate.release = () => {
+              currentGate.target = undefined;
+              handler.call(transaction, event);
+            };
+            return;
+          }
+          return handler.call(this, event);
+        });
+      },
+    });
+
+    const originalPut = IDBObjectStore.prototype.put;
+    IDBObjectStore.prototype.put = function (this: IDBObjectStore, value: unknown, key?: IDBValidKey): IDBRequest<IDBValidKey> {
+      const text = value && typeof value === "object" && "text" in value && typeof value.text === "string" ? value.text : "";
+      const currentGate = (window as GateWindow).__scratchResumeGate;
+      if (this.transaction.db.name === "scriptorium-recovery" && this.name === "operations" &&
+          currentGate?.armed && text.includes("Current scratch write held during resume.")) {
+        currentGate.armed = false;
+        currentGate.target = this.transaction;
+      }
+      return originalPut.call(this, value, key);
+    };
+
+    const originalRead = FileReader.prototype.readAsDataURL;
+    FileReader.prototype.readAsDataURL = function (this: FileReader, blob: Blob): void {
+      const reader = this;
+      (window as GateWindow).__scratchResumeImageReadStarted = true;
+      window.setTimeout(() => originalRead.call(reader, blob), 800);
+    };
+  });
+
+  await openFixtureProject(page, await signIn(page));
+  await page.locator(".scratch-panel summary").click();
+  const scratch = page.getByLabel("本文に含まれないメモ");
+  const olderText = "Saved scratch selected while another scratch is active.";
+  await scratch.fill(olderText);
+  await page.locator(".cm-content").click();
+  await expect.poll(async () => (await readJournal(page)).some((entry) => entry.text === olderText && entry.state === "draft")).toBe(true);
+  const olderEntry = (await readJournal(page)).find((entry) => entry.text === olderText);
+  expect(olderEntry).toBeTruthy();
+
+  const projectsLoaded = waitForProjectList(page);
+  await page.reload();
+  await openFixtureProject(page, await projectsLoaded);
+  await page.locator(".scratch-panel summary").click();
+  const currentText = "Current scratch write held during resume.";
+  await scratch.fill(currentText);
+  await page.evaluate(() => { (window as Window & { __scratchResumeGate?: { armed: boolean } }).__scratchResumeGate!.armed = true; });
+  await page.locator(".scratch-panel").getByRole("button", { name: "続ける" }).click();
+  await page.waitForFunction(() => (window as Window & { __scratchResumeGate?: { started: boolean } }).__scratchResumeGate?.started === true);
+
+  const imageInput = page.getByLabel("スクラッチ画像を添付");
+  await expect(scratch).toBeDisabled();
+  await expect(imageInput).toBeDisabled();
+  expect(await page.evaluate(() => (window as Window & { __scratchResumeImageReadStarted?: boolean }).__scratchResumeImageReadStarted)).toBeUndefined();
+  await page.evaluate(() => (window as Window & { __scratchResumeGate?: { release?: () => void } }).__scratchResumeGate!.release?.());
+
+  await expect(scratch).toHaveValue(olderText);
+  await expect(scratch).toBeEnabled();
+  await expect(imageInput).toBeEnabled();
+  await imageInput.setInputFiles({
+    name: "during-resume.png",
+    mimeType: "image/png",
+    buffer: Buffer.from([137, 80, 78, 71, 13, 10, 26, 10]),
+  });
+  await page.waitForFunction(() => (window as Window & { __scratchResumeImageReadStarted?: boolean }).__scratchResumeImageReadStarted === true);
+  await expect(page.locator(".scratch-panel")).toContainText("画像 1 件");
+  await scratch.click();
+  await page.locator(".cm-content").click();
+  await expect.poll(async () => {
+    const journal = await readJournal(page);
+    const latest = journal.find((entry) => entry.text === olderText);
+    const retainedCurrent = journal.find((entry) => entry.text === currentText);
+    return latest?.attachmentWrites === 1 && latest.operationId === olderEntry!.operationId &&
+      latest.generation > olderEntry!.generation && retainedCurrent?.operationId !== olderEntry!.operationId;
+  }).toBe(true);
+});
+
 test("public publishing route mounts its source reader without an owner session", async ({ page }) => {
   test.skip(process.env.SCRIPTORIUM_PROFILE !== "full", "The publishing browser module is selected by the full profile.");
   const ownerSessionRequests: string[] = [];

@@ -742,7 +742,7 @@ function ScratchPanel({
       <textarea
         id="scratch"
         value={draft.text}
-        disabled={disabled}
+        disabled={disabled || resumingKey !== ""}
         onChange={(event) => editText(event.currentTarget.value)}
         onBlur={() => void flush().catch(() => undefined)}
         placeholder="台詞候補・没文など。本文には入りません"
@@ -750,7 +750,7 @@ function ScratchPanel({
       />
       <label className="scratch-attachment-picker">
         画像を添付
-        <input aria-label="スクラッチ画像を添付" type="file" accept="image/*" capture="environment" multiple disabled={disabled} onChange={(event) => {
+        <input aria-label="スクラッチ画像を添付" type="file" accept="image/*" capture="environment" multiple disabled={disabled || resumingKey !== ""} onChange={(event) => {
           void addImages(event.currentTarget.files);
           event.currentTarget.value = "";
         }} />
