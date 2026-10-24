@@ -1454,9 +1454,10 @@ test("optional terminology cancels work at pagehide and resumes at pageshow", as
 });
 
 test("Full WebKit terminology stays safe across a held native Shell departure window", async ({ page }, testInfo) => {
+  test.skip(process.env.SCRIPTORIUM_E2E_EXTERNAL_REPOSITORY === "1" || Boolean(process.env.SCRIPTORIUM_E2E_BASE_URL ?? process.env.SCRIPTORIUM_BASE_URL),
+    "This timing harness is limited to the generated local fixture.");
   test.skip(process.env.SCRIPTORIUM_PROFILE !== "full", "Terminology is an optional Full contribution.");
   test.skip(testInfo.project.name !== "webkit", "The access-control diagnostic under test is WebKit-specific.");
-  test.setTimeout(120_000);
 
   const pageErrors: string[] = [];
   const diagnostics: Array<Record<string, unknown>> = [];
