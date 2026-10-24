@@ -535,6 +535,8 @@ export function Workspace({ scope, mode, panels, beforeLayoutChange, requestedPa
 
   return (
     <section ref={workspaceRef} className={`st-workspace st-workspace-${mode}`} data-maximized-panel={maximizedPanelId ?? undefined} aria-label="Composable workspace">
+      <details className="st-workspace-configuration" open={mode === "desktop" || undefined}>
+      <summary>ワークスペース配置</summary>
       <div className="st-workspace-toolbar" role="toolbar" aria-label="Workspace layout controls">
         <div className="st-workspace-presets" aria-label="Workspace presets">
           <button type="button" aria-pressed={layout.preset === "writing"} onClick={() => changePreset("writing")} disabled={changing}>Writing</button>
@@ -589,9 +591,10 @@ export function Workspace({ scope, mode, panels, beforeLayoutChange, requestedPa
         </label>
         <button type="button" disabled={changing || !moveSource || !moveTarget} onClick={() => movePanel(moveSource, moveTarget, placement)}>Move panel</button>
       </div></details>
+      </details>
 
       {persistenceState === "invalid" ? <p className="st-workspace-warning" role="alert">{storageLabel}</p> : null}
-      {message ? <p className="st-workspace-message" role="status" aria-live="polite">{message}</p> : null}
+      {message ? <p className="st-workspace-message" tabIndex={0} role="status" aria-live="polite">{message}</p> : null}
       {!message && persistenceState !== "invalid" ? <p className="st-workspace-storage-state">{storageLabel}</p> : null}
 
       {mode === "mobile" ? (

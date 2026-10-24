@@ -82,6 +82,7 @@ export function LibraryOutline({
 }: LibraryOutlineProps) {
   return (
     <aside className="sidebar" aria-label="作品と構成">
+      {tree && <TreeNav tree={tree} selectedSceneId={selectedSceneId} disabled={Boolean(busy)} onSelect={onSelectScene} />}
       {!hostedMode && <form onSubmit={onRegisterProject} className="project-form">
         <h2>作品を追加</h2>
         <label htmlFor="repo-url">GitHub リポジトリ URL</label>
@@ -112,7 +113,6 @@ export function LibraryOutline({
           onRead={(candidate) => onContinue(candidate, true)}
         />
       )}
-      {tree && <TreeNav tree={tree} selectedSceneId={selectedSceneId} disabled={Boolean(busy)} onSelect={onSelectScene} />}
       {legacyDrafts.length > 0 && <LegacyRecoveryPanel drafts={legacyDrafts} selectedSceneId={legacySelectedSceneId} onExport={onExportLegacyDrafts} onMap={onMapLegacyDraft} />}
       {activeProjectId === null && recoverableEntries.length > 0 && (
         <section className="recovery-panel" aria-labelledby="recovery-title">
@@ -235,6 +235,15 @@ export function RecoveryList({ entries }: { entries: JournalEntry[] }) {
           <strong>{entry.documentPath}</strong>
           <span>{entry.state} · {new Date(entry.updatedAt).toLocaleString("ja-JP")}</span>
           <small>{entry.repository.url} · {entry.repository.defaultBranch}</small>
+          <details>
+            <summary>保護した変更の範囲</summary>
+            <dl className="project-facts">
+              <div><dt>操作 / generation</dt><dd><code>{entry.operation.id} / {entry.operation.generation}</code></dd></div>
+              <div><dt>元revision</dt><dd><code>{entry.snapshot.remoteCommit}</code></dd></div>
+              {entry.checkpoint && <div><dt>Checkpoint revision</dt><dd><code>{entry.checkpoint.localCommit}</code></dd></div>}
+              {entry.publicationBatchId && <div><dt>照合する保存バッチ</dt><dd><code>{entry.publicationBatchId}</code></dd></div>}
+            </dl>
+          </details>
         </li>
       ))}
     </ul>

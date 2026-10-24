@@ -1,0 +1,127 @@
+/* Shared presentation only; journal/protocol and editor session remain authoritative. */
+:is(.st-studio-shell, .mobile-shell) {
+  --authoring-control-height: 2.75rem;
+  --authoring-status-height: 2.25rem;
+}
+:is(.st-studio-shell, .mobile-shell) .scene-heading { min-width: 0; }
+:is(.st-studio-shell, .mobile-shell) .scene-heading :is(h1, .eyebrow) { overflow-wrap: anywhere; }
+:is(.st-studio-shell, .mobile-shell) .editor-header { gap: 0.75rem; flex-wrap: wrap; }
+:is(.st-studio-shell, .mobile-shell) .writing-toolbar {
+  display: flex; flex-wrap: wrap; gap: 0.35rem; margin-block: 0.35rem;
+}
+:is(.st-studio-shell, .mobile-shell) .writing-toolbar button {
+  min-height: var(--authoring-control-height); padding: 0.35rem 0.65rem;
+  border-color: transparent; color: var(--ink); background: transparent;
+}
+:is(.st-studio-shell, .mobile-shell) .writing-toolbar button[aria-pressed="true"] {
+  border-color: var(--accent-strong); background: var(--surface-selected);
+}
+:is(.st-studio-shell, .mobile-shell) :is(.typography-settings, .editor-protection) > summary {
+  display: flex; align-items: center; min-height: var(--authoring-control-height);
+  padding: 0.3rem 0.4rem; color: var(--muted); cursor: pointer; font-size: 0.8rem;
+}
+:is(.st-studio-shell, .mobile-shell) :is(.typography-settings, .editor-protection) > summary::before {
+  content: "+"; margin-right: 0.5rem;
+}
+:is(.st-studio-shell, .mobile-shell) :is(.typography-settings, .editor-protection)[open] > summary::before { content: "−"; }
+:is(.st-studio-shell, .mobile-shell) .editor-protection { position: relative; z-index: 3; }
+:is(.st-studio-shell, .mobile-shell) .editor-protection-detail {
+  position: absolute; inset-inline: 0; top: 100%; max-height: 16rem; overflow: auto;
+  padding: 0.75rem 1rem; border: 1px solid var(--line); border-radius: 0.4rem;
+  color: var(--ink); background: var(--paper); box-shadow: 0 0.5rem 1.5rem rgb(0 0 0 / 12%);
+  font-size: 0.85rem; overflow-wrap: anywhere;
+}
+:is(.st-studio-shell, .mobile-shell) .durability-row { margin: 0; min-height: 1.5rem; }
+:is(.st-studio-shell, .mobile-shell) .durability-badge.is-current {
+  margin: 0; padding: 0; border: 0; border-radius: 0; color: var(--accent-strong); background: transparent; font-size: 0.8rem;
+}
+:is(.st-studio-shell, .mobile-shell) .durability-badge[data-state="publication_unknown"] { color: var(--error-text); }
+.st-studio-shell .st-workspace .editor-columns:not(.has-preview) { grid-template-columns: minmax(0, 1fr); }
+:is(.st-studio-shell, .mobile-shell) .preview-column[hidden] { display: none; }
+.st-studio-shell .st-workspace .manuscript-column {
+  border: 0; box-shadow: none; padding: 1rem clamp(0.75rem, 2vw, 2rem);
+}
+.st-studio-shell .st-workspace .cm-content {
+  font-family: var(--editor-font-family); line-height: var(--editor-line-height);
+  letter-spacing: var(--editor-letter-spacing); padding: 1rem 0.5rem;
+}
+.st-studio-shell .st-workspace .editor-header { padding: 0.5rem 0.25rem; margin: 0; }
+.st-studio-shell .st-workspace .editor-header h1 { font-size: clamp(1.4rem, 2vw, 1.9rem); }
+.st-studio-shell .st-workspace .typography-toolbar { margin: 0; }
+.st-studio-shell .st-workspace-configuration > summary { display: none; }
+.st-workspace-configuration { flex: 0 0 auto; }
+.st-workspace-configuration > summary { padding: 0.4rem 0.7rem; cursor: pointer; color: var(--muted); font-size: 0.8rem; }
+/* The shelf always occupies the same space. Only an explicit disclosure or an
+   actionable error opens the bounded detail surface; progress never moves prose. */
+.st-studio-shell .st-desktop-status,
+.mobile-shell .mobile-shell-status {
+  position: relative; inset: auto; z-index: 30; flex: 0 0 var(--authoring-status-height);
+  width: 100%; height: var(--authoring-status-height); max-height: none;
+  overflow: visible; padding: 0; border: 0; border-top: 1px solid var(--line);
+  border-radius: 0; background: var(--paper); color: var(--ink); box-shadow: none;
+}
+.application-status > summary {
+  display: flex; align-items: center; justify-content: space-between; gap: 0.75rem;
+  height: var(--authoring-status-height); padding: 0 0.8rem;
+  cursor: pointer; color: var(--muted); font-size: 0.78rem;
+}
+.application-status[data-attention] > summary { color: var(--error-text); background: var(--error-bg); }
+.application-status-content {
+  position: absolute; bottom: 100%; inset-inline: 0.5rem; max-height: min(35dvh, 18rem);
+  overflow: auto; padding: 0.8rem 1rem; border: 1px solid var(--line);
+  border-radius: 0.4rem; background: var(--paper); color: var(--ink);
+  box-shadow: 0 -0.4rem 1.5rem rgb(0 0 0 / 12%); overflow-wrap: anywhere;
+}
+.application-status-content .topbar-status { white-space: normal; margin: 0; max-width: none; }
+.application-status-content p { margin: 0.35rem 0; }
+.st-studio-shell .st-desktop-switch-error { position: absolute; bottom: 100%; inset-inline: 0; }
+.mobile-shell .mobile-shell-interaction-error { position: absolute; z-index: 31; bottom: 8rem; inset-inline: 0.5rem; max-height: 30dvh; overflow: auto; }
+/* Mobile is a separate composition with Ionic references and native editing. */
+.mobile-shell .st-workspace-configuration .st-workspace-toolbar { flex-wrap: wrap; }
+.mobile-shell :is(.st-workspace-message, .st-workspace-storage-state) {
+  display: block; flex: 0 0 1.6rem; height: 1.6rem; overflow: auto;
+  margin: 0; padding: 0.2rem 0.7rem; line-height: 1.2;
+}
+.mobile-shell .st-workspace-configuration > summary { min-height: 2.75rem; display: flex; align-items: center; }
+.mobile-shell .st-workspace-mobile-tabs { margin: 0; padding: 0.25rem 0.5rem; }
+.mobile-shell .st-workspace-mobile-tabs button { min-height: 2.75rem; }
+.mobile-shell .editor { padding: 0.5rem 0.75rem; }
+.mobile-shell .editor-header { padding: 0; margin: 0; gap: 0.25rem; }
+.mobile-shell .editor-header h1 { font-size: 1.25rem; margin: 0; }
+.mobile-shell .editor-header .eyebrow { margin: 0; font-size: 0.72rem; color: var(--muted); }
+.mobile-shell .editor-actions { gap: 0.25rem; }
+.mobile-shell .editor-actions button { min-height: 2.75rem; font-size: 0.78rem; padding: 0.4rem 0.65rem; }
+.mobile-shell .writing-toolbar { gap: 0.1rem; flex-wrap: nowrap; overflow-x: auto; }
+.mobile-shell .writing-toolbar button { flex: 0 0 auto; font-size: 0.78rem; }
+.mobile-shell .editor-columns { margin: 0; }
+.mobile-shell .manuscript-column { padding: 0.5rem 0; border: 0; box-shadow: none; }
+.mobile-shell .cm-content { padding: 0.75rem 0.25rem; }
+.mobile-shell .mobile-shell-accessories-label { display: none; }
+.mobile-shell .mobile-shell-writing-accessories { gap: 0.35rem; padding: 0.25rem 0.5rem; }
+.mobile-shell .mobile-shell-accessory-button { min-height: 2.75rem; }
+:is(.st-studio-shell, .mobile-shell) :is(button, summary, select, a):focus-visible { outline: 3px solid var(--focus-ring); outline-offset: 2px; }
+@media (max-width: 850px) {
+  .st-studio-topbar { flex: 0 0 auto; height: auto; min-height: 4.5rem; flex-wrap: wrap; padding-block: 0.5rem; }
+  .st-studio-wordmark { font-size: 1.1rem; }
+  .st-studio-masthead-actions { flex-wrap: wrap; gap: 0.35rem; }
+  .st-studio-shell .st-workspace-toolbar { flex-wrap: wrap; }
+  .st-studio-shell .st-workspace .editor-header { align-items: flex-start; }
+  .st-studio-shell .st-workspace .editor-actions { flex-wrap: wrap; }
+}
+@media (prefers-reduced-motion: reduce) {
+  :is(.st-studio-shell, .mobile-shell) * { scroll-behavior: auto !important; }
+}
+.mobile-shell:has(.mobile-shell-writing-accessories) .mobile-shell-status,
+.mobile-shell.mobile-shell-keyboard-open .mobile-shell-status { bottom: auto; max-height: none; }
+.st-studio-shell .st-workspace :is(.project-button, .scene-button),
+.st-studio-shell .st-workspace :is(.project-button, .scene-button)[aria-current="true"] { color: var(--ink); }
+.st-studio-shell .st-workspace :is(.project-button, .scene-button)[aria-current="true"] { background: var(--surface-selected); }
+.st-studio-shell .st-workspace .tree details > summary { color: var(--ink); }
+:is(.st-studio-shell, .mobile-shell) .scene-button { white-space: normal; overflow-wrap: anywhere; }
+@media print {
+  .writing-toolbar, .typography-settings, .editor-protection,
+  .st-studio-rail, .st-studio-topbar, .st-workspace-configuration { display: none !important; }
+}
+.st-studio-shell .st-workspace .manuscript-input {
+  width: 100%; max-width: min(100%, var(--reader-max-width, 960px)); align-self: center;
+}

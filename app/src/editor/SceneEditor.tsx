@@ -51,18 +51,26 @@ const PendingEditorTextBoundary = forwardRef<EditorDurabilityStatusHandle, {
 const EditorDurabilityBadges = memo(function EditorDurabilityBadges({
   durability,
   pendingCount,
+  draftStored,
+  journalError,
 }: {
   durability: Durability;
   pendingCount: number;
+  draftStored: boolean;
+  journalError: string;
 }) {
   const pendingEditorText = useContext(PendingEditorTextContext);
   const currentDurability = pendingEditorText ? "draft" : durability;
-  return <div className="durability-row" aria-label="保存状態">
-    <span className={`durability-badge ${currentDurability === "draft" ? "is-current" : ""}`}>Draft</span>
-    <span className={`durability-badge ${currentDurability === "checkpointing" || currentDurability === "checkpointed" || currentDurability === "publication_unknown" ? "is-current" : ""}`}>Checkpoint</span>
-    <span className={`durability-badge ${currentDurability === "saved" ? "is-current" : ""}`}>Saved to GitHub</span>
+  return <span className="durability-row" aria-label="保存状態">
+    <span className="durability-badge is-current" data-state={currentDurability}>{
+      currentDurability === "draft" ? journalError ? "Draft · 保存要確認" : pendingEditorText || !draftStored ? "Draft · 記録中" : "Draft · このブラウザーに保護済み"
+        : currentDurability === "checkpointing" ? "Checkpoint · 結果確認中"
+        : currentDurability === "checkpointed" ? "Checkpoint · GitHub未保存"
+        : currentDurability === "publication_unknown" ? "GitHub保存 · 結果未確認"
+        : "Saved to GitHub"
+    }</span>
     {pendingCount > 0 && <span className="pending-count">未公開 {pendingCount} 件</span>}
-  </div>;
+  </span>;
 });
 
 const EditorDurabilityMessage = memo(function EditorDurabilityMessage({
@@ -138,6 +146,7 @@ export function SceneEditor({
   flushPendingReactPublish,
   readOnly,
   onTextChange,
+  onRetryDraft,
   onCursorPositionChange,
   onReadingPageChange,
   resumeRequest,
@@ -183,6 +192,7 @@ export function SceneEditor({
   flushPendingReactPublish: () => void;
   readOnly?: boolean;
   onTextChange: (next: string) => void;
+  onRetryDraft: () => void;
   onCursorPositionChange: (sceneId: string, cursorSentenceIndex: number | null, scrollTop: number) => void;
   onReadingPageChange: (sceneId: string, pageIndex: number) => void;
   resumeRequest: ResumeRequest | null;
@@ -219,6 +229,7 @@ export function SceneEditor({
   const editorRef = useRef<ManuscriptInputHandle>(null);
   const [reading, setReading] = useState(false);
   const [vertical, setVertical] = useState(false);
+  const [preview, setPreview] = useState(false);
   const [zen, setZen] = useState(false);
   const [typewriterDim, setTypewriterDim] = useState(true);
   const [typography, setTypography] = useState<TypographySettings>(loadTypographySettings);
@@ -300,9 +311,8 @@ export function SceneEditor({
     <section className={`editor ${zen ? "is-zen" : ""} ${zen && typewriterDim && !vertical ? "is-typewriter-dim" : ""}`} aria-label="原稿エディター">
       <header className="editor-header">
         <div className="scene-heading">
-          <p className="eyebrow">{breadcrumb} · {path}</p>
+          <p className="eyebrow">{breadcrumb}</p>
           <h1>{scene.title}</h1>
-          <EditorDurabilityBadges durability={durability} pendingCount={pendingCount} />
         </div>
         <div className="editor-actions" aria-label="保存と表示">
           <button type="button" onClick={onCheckpoint} disabled={!canCheckpoint || checkpointBusy}>
@@ -317,7 +327,16 @@ export function SceneEditor({
         </div>
       </header>
 
-      <EditorDurabilityMessage durability={durability} draftStored={draftStored} journalError={journalError} />
+      <details className="editor-protection" open={Boolean(journalError) || undefined}>
+        <summary aria-label="原稿の保護範囲を確認"><EditorDurabilityBadges durability={durability} pendingCount={pendingCount} draftStored={draftStored} journalError={journalError} /></summary>
+        <div className="editor-protection-detail">
+          <EditorDurabilityMessage durability={durability} draftStored={draftStored} journalError={journalError} />
+          {journalError && <button type="button" onClick={onRetryDraft}>ブラウザーへの記録を再試行</button>}
+          <p>Draftは同じブラウザー・作者・origin内の回復用です。Checkpointはサーバーのlocal Git、GitHubへの保存は確認したrevisionだけが対象です。</p>
+          <p>原稿 <code>{path}</code></p>
+          <p>読込revision <code>{snapshot.overlayCommit ?? snapshot.remoteCommit}</code></p>
+        </div>
+      </details>
 
       {conflict && (
         <section className="conflict" aria-labelledby="conflict-title">
@@ -334,6 +353,15 @@ export function SceneEditor({
         </section>
       )}
 
+      <nav className="writing-toolbar" aria-label="執筆と閲覧">
+        <button type="button" className="quiet-button" onClick={() => { flushPendingReactPublish(); setReading((current) => !current); }} aria-pressed={reading}>{reading ? "編集に戻る" : "読書モード"}</button>
+        <button type="button" className="quiet-button" onClick={() => setVertical((current) => !current)} aria-pressed={vertical}>{vertical ? "横書き" : "縦書き"}</button>
+        <button type="button" className="quiet-button" onClick={() => setPreview((current) => !current)} aria-pressed={preview}>プレビュー</button>
+        <button type="button" className="quiet-button" onClick={() => setZen((current) => !current)} aria-pressed={zen}>{zen ? "集中を終了" : "集中"}</button>
+        <button type="button" className="quiet-button" onClick={printManuscript}>印刷</button>
+      </nav>
+      <details className="typography-settings">
+      <summary>文字と組版</summary>
       <nav className="typography-toolbar" aria-label="原稿の表示設定">
         <div className="toolbar-group" aria-label="文字サイズ">
           <button type="button" className="quiet-button compact-button" onClick={() => setTypography((value) => ({ ...value, fontSize: Math.max(14, value.fontSize - 2) }))} aria-label="文字を小さく" disabled={typography.fontSize <= 14}>A−</button>
@@ -362,12 +390,9 @@ export function SceneEditor({
           <output aria-label="読書幅">{typography.maxWidth}px</output>
           <button type="button" className="quiet-button compact-button" onClick={() => setTypography((value) => ({ ...value, maxWidth: Math.min(960, value.maxWidth + 40) }))} aria-label="読書幅を広く" disabled={typography.maxWidth >= 960}>幅 ＋</button>
         </div>
-        <button type="button" className="quiet-button" onClick={() => setVertical((current) => !current)} aria-pressed={vertical}>{vertical ? "横書き" : "縦書き"}</button>
-        <button type="button" className="quiet-button" onClick={() => { flushPendingReactPublish(); setReading((current) => !current); }} aria-pressed={reading}>{reading ? "編集に戻る" : "読書モード"}</button>
-        <button type="button" className="quiet-button" onClick={() => setZen((current) => !current)} aria-pressed={zen}>{zen ? "集中を終了" : "集中"}</button>
         {zen && <button type="button" className="quiet-button" onClick={() => setTypewriterDim((current) => !current)} aria-pressed={typewriterDim}>現在行以外を減光</button>}
-        <button type="button" className="quiet-button" onClick={printManuscript}>印刷</button>
       </nav>
+      </details>
 
       {reading && (
         <section
@@ -387,7 +412,7 @@ export function SceneEditor({
           </MobileReadingPager>
         </section>
       )}
-      <div className="editor-columns" hidden={reading} style={reading ? { display: "none" } : undefined}>
+      <div className={`editor-columns ${preview ? "has-preview" : ""}`} hidden={reading} style={reading ? { display: "none" } : undefined}>
           <div className="manuscript-column">
             <label id="manuscript-label" htmlFor="manuscript">原稿 Markdown</label>
             <ManuscriptInput
@@ -430,7 +455,7 @@ export function SceneEditor({
               registerFlush={registerScratchFlush}
             />
           </div>
-          <section className="preview-column" aria-labelledby="preview-title">
+          <section className="preview-column" aria-labelledby="preview-title" hidden={!preview}>
             <h2 id="preview-title">{vertical ? "縦書きプレビュー" : "読みのプレビュー"}</h2>
             <div className={`manuscript-preview ${vertical ? "is-vertical" : ""}`} role="document" aria-label="ルビ付き読み取り専用プレビュー" style={readerStyle(typography)}>
               <RubyText text={displayText} />

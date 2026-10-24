@@ -325,6 +325,7 @@ test("mobile workspace tabs support keyboard navigation and preserve the editor 
   await expect(editorTab).toHaveAttribute("aria-selected", "true");
   await expect(page.locator('[data-workspace-panel="editor"] .cm-content')).toHaveText(draft);
 
+  await page.locator(".st-workspace-configuration > summary").click();
   const mobileToolbar = workspaceToolbar(page);
   await mobileToolbar.getByRole("button", { name: "Save layout", exact: true }).click();
   const mobileStorage = await workspaceStorage(page, "mobile");

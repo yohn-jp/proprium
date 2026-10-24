@@ -29,7 +29,7 @@ import { loadThemeMode, persistThemeMode, type ThemeMode } from "../theme";
 import { clearDraft, loadDraft } from "../drafts";
 import { CheckpointConflictError, runCheckpointProtocol } from "./checkpoint-protocol";
 import type { ApplicationShell, ApplicationShellProps, UiMode } from "./contracts";
-import { ApplicationStatus, hasApplicationStatus } from "./ApplicationStatus";
+import { ApplicationStatus } from "./ApplicationStatus";
 import { availableModulePanels } from "./AvailableModulePanels";
 import { DocumentInspector } from "./DocumentInspector";
 import { LibraryOutline, projectLabel, RecoveryList, type LegacyDraftRecord } from "./LibraryOutline";
@@ -2393,7 +2393,7 @@ function AuthorWorkspace({
     isolatedRecoveryCount,
     remoteState: work?.observation.state ?? null,
   };
-  const statusSlot = hasApplicationStatus(statusProps) ? <ApplicationStatus {...statusProps} /> : null;
+  const statusSlot = <ApplicationStatus {...statusProps} />;
 
   const editorSlot = (
     <>
@@ -2425,6 +2425,12 @@ function AuthorWorkspace({
           flushPendingReactPublish={flushPendingReactPublish}
           readOnly={!editorWritable || busy === "restore"}
           onTextChange={(nextText) => editText(nextText, true)}
+          onRetryDraft={() => {
+            const navigation = navigationRef.current;
+            void prepareLayoutChange().then((stored) => {
+              if (stored && navigationRef.current === navigation) setStatus({ message: "現在の下書きをブラウザーの回復記録に保護しました。", kind: "success" });
+            });
+          }}
           onCursorPositionChange={recentResume.onWritingPosition}
           onReadingPageChange={recentResume.onReadingPage}
           resumeRequest={resumeRequest}
@@ -2528,7 +2534,7 @@ function AuthorWorkspace({
       <button type="button" aria-label="上部バーからCheckpoint" className="st-studio-checkpoint" disabled={!canCheckpoint || busy === "checkpoint" || busy === "publish"}
         onClick={() => void checkpointCurrent()}>{busy === "checkpoint" ? "Checkpoint中…" : "Checkpoint"}</button>
       <button type="button" aria-label="上部バーからPublish" className="st-studio-publish" disabled={!canPublish || busy === "checkpoint" || busy === "publish"}
-        onClick={() => void publishPending()}>{busy === "publish" ? "Publish中…" : "Publish ↗"}</button>
+        onClick={() => void publishPending()}>{busy === "publish" ? "GitHubに保存中…" : "GitHubに保存"}</button>
     </div>
   ) : null;
   return <Shell mode={mode} header={header} desktopActions={desktopActions}

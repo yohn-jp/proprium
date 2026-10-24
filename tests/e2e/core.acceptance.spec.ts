@@ -626,6 +626,7 @@ test("writing UI recovers multi-document drafts and separates Draft, Checkpoint,
 
   const editor = page.locator(".cm-content");
   await editor.fill("彼は|東京《とうきょう》へ行く。");
+  await page.getByRole("button", { name: "プレビュー", exact: true }).click();
   await expect(page.locator(".manuscript-preview ruby")).toContainText("東京");
   await expect(page.locator(".manuscript-preview rt")).toHaveText("とうきょう");
   await page.getByRole("button", { name: "縦書き" }).click();
@@ -638,6 +639,7 @@ test("writing UI recovers multi-document drafts and separates Draft, Checkpoint,
   await page.keyboard.press("Escape");
   await expect(page.locator(".editor.is-zen")).toHaveCount(0);
 
+  await page.locator(".typography-settings > summary").click();
   await page.getByRole("button", { name: "文字を大きく" }).click();
   await expect(page.locator('output[aria-label="文字サイズ"]')).toHaveText("18px");
   await page.getByLabel("組版プリセット").selectOption("bunko");

@@ -20,6 +20,7 @@ import "@ionic/react/css/structure.css";
 import "@ionic/react/css/typography.css";
 import "./mobile.css";
 import "../editorial.css";
+import "../authoring.css";
 
 export type MobileView = "library" | "writing" | "inspection" | "tools" | "settings";
 type ReferenceSheet = "outline" | "inspector";
