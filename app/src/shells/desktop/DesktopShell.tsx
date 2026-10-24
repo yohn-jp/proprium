@@ -20,7 +20,7 @@ function describeFailure(reason: unknown): string {
 
 /** Workspace Studio: the approved desktop composition, retaining the real application controller. */
 export function DesktopShell({
-  header, desktopActions, documentTitle, documentContext, library, editor, tools, status,
+  header, desktopActions, documentTitle, documentContext, library, editor, tools, status, renderStatus,
   onSwitchMode, workspaceScope, panels, beforeLayoutChange, requestedPanel,
 }: ApplicationShellProps) {
   const [switching, setSwitching] = useState(false);
@@ -125,8 +125,7 @@ export function DesktopShell({
           左右矢印キーでパネル幅を変更できます。
         </span>
         <div className="st-desktop-status" role="region" aria-label="保存と接続の状態">
-          {switchError && <p className="st-desktop-switch-error" role="alert">{switchError}</p>}
-          {status}
+          {renderStatus ? renderStatus(switchError) : status}
         </div>
         <footer className="st-studio-footer">
           <span><span className="st-studio-footer-dot" /> Git-backed workspace</span>

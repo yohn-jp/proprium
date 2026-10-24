@@ -66,7 +66,8 @@
   cursor: pointer; color: var(--muted); font-size: 0.78rem;
 }
 .application-status[data-attention] > summary { color: var(--error-text); background: var(--error-bg); }
-.application-status-content {
+.st-desktop-status .application-status-content,
+.mobile-shell-status .application-status-content {
   position: absolute; bottom: 100%; inset-inline: 0.5rem; max-height: min(35dvh, 18rem);
   overflow: auto; padding: 0.8rem 1rem; border: 1px solid var(--line);
   border-radius: 0.4rem; background: var(--paper); color: var(--ink);
@@ -125,3 +126,9 @@
 .st-studio-shell .st-workspace .manuscript-input {
   width: 100%; max-width: min(100%, var(--reader-max-width, 960px)); align-self: center;
 }
+/* Ionic owns the page scroll even when keyboard/landscape leaves less height
+   than the chrome. A nested flex pane must never collapse to zero height. */
+.mobile-shell .mobile-shell-workspace-view,
+.mobile-shell .st-workspace { height: auto; min-height: 100%; overflow: visible; }
+.mobile-shell .st-workspace-mobile-layout,
+.mobile-shell .st-workspace-mobile-pane { height: auto; flex: 1 0 auto; overflow: visible; }

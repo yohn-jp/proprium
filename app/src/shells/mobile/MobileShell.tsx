@@ -85,7 +85,7 @@ function errorMessage(error: unknown): string {
  * Ionic page navigation for the shared application controller.
  * The mobile entry supplies the Ionic React Router context around the controller.
  */
-export function MobileShell({ header, documentTitle, documentContext, desktopDurability, library, editor, tools, status, onSwitchMode, workspaceScope, panels, beforeLayoutChange, requestedPanel }: ApplicationShellProps) {
+export function MobileShell({ header, documentTitle, documentContext, desktopDurability, library, editor, tools, status, renderStatus, onSwitchMode, workspaceScope, panels, beforeLayoutChange, requestedPanel }: ApplicationShellProps) {
   const location = useLocation();
   const navigateRoute = useNavigate();
   const activeView = readViewFromSearch(location.search);
@@ -335,10 +335,9 @@ export function MobileShell({ header, documentTitle, documentContext, desktopDur
           </div>}
         </IonContent>
 
-        {switchError && activeView !== "settings" ? (
-          <p className="mobile-shell-interaction-error" role="alert">{switchError}</p>
-        ) : null}
-        {status && <div className="mobile-shell-status" role="region" aria-label="保存と回復の状態">{status}</div>}
+        <div className="mobile-shell-status" role="region" aria-label="保存と回復の状態">
+          {renderStatus ? renderStatus(switchError) : status}
+        </div>
         <IonFooter className="mobile-shell-footer">
           {hasWritingContext ? (
             <div className="mobile-shell-writing-accessories" aria-label="執筆中の参照">

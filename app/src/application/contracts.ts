@@ -27,6 +27,8 @@ export interface ApplicationShellProps {
   editor: ReactNode;
   tools: ReactNode;
   status: ReactNode;
+  /** Present shell navigation errors in the same persistent status surface. */
+  renderStatus?: (interactionError: string) => ReactNode;
   onSwitchMode(): Promise<boolean>;
   /** Stable author and device scope; desktop and mobile use separate layout keys. */
   workspaceScope?: string;

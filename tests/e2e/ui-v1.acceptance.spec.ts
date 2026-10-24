@@ -533,6 +533,11 @@ test("both production Shells preserve recoverable Japanese drafts and the Mobile
   await expect(mobileEditor).toHaveText(mobileCompositionDraft);
   await expectJournalDraft(page, "scene-2", mobileCompositionDraft);
 
+  // Close the persistent problem disclosure before resuming the interrupted route.
+  // Dismissal does not claim that the protection problem has been resolved.
+  const mobileProblems = page.locator(".mobile-shell-status .application-status");
+  if (await mobileProblems.getAttribute("open") !== null) await mobileProblems.locator("summary").click();
+
   await page.getByRole("navigation", { name: "モバイル画面" }).getByRole("button", { name: "設定", exact: true }).click();
   await expect(page.getByRole("button", { name: "Desktop版へ切り替え" })).toBeVisible();
   await page.getByRole("button", { name: "Desktop版へ切り替え" }).click();

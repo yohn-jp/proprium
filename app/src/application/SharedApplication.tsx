@@ -2541,6 +2541,7 @@ function AuthorWorkspace({
     desktopDurability={editor ? editorDurability(editor) : undefined}
     documentTitle={scene?.title} documentContext={tree?.title}
     library={library} editor={editorSlot} tools={toolsSlot} status={statusSlot}
+    renderStatus={(interactionError) => <ApplicationStatus {...statusProps} interactionError={interactionError} />}
     workspaceScope={authorScope} panels={panels} requestedPanel={panelRequest}
     beforeLayoutChange={prepareLayoutChange} onSwitchMode={switchMode} />;
 }
