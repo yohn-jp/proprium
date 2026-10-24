@@ -30,6 +30,7 @@ import { clearDraft, loadDraft } from "../drafts";
 import { CheckpointConflictError, runCheckpointProtocol } from "./checkpoint-protocol";
 import type { ApplicationShell, ApplicationShellProps, UiMode } from "./contracts";
 import { ApplicationStatus } from "./ApplicationStatus";
+import { messageOf } from "./error-message";
 import { availableModulePanels } from "./AvailableModulePanels";
 import { DocumentInspector } from "./DocumentInspector";
 import { LibraryOutline, projectLabel, RecoveryList, type LegacyDraftRecord } from "./LibraryOutline";
@@ -110,15 +111,6 @@ interface WorkState {
   editor: EditorSession | null;
   loadingScene: boolean;
   recoveryStatus: EditorRecoveryStatus;
-}
-
-function messageOf(error: unknown): string {
-  if (error instanceof ApiError) {
-    if (error.status === 401) return "セッションの有効期限が切れました。もう一度ログインしてください。";
-    if (error.status === 409 || error.status === 412) return "保存先が更新されています。保護された下書きを残して競合を確認してください。";
-    return error.message;
-  }
-  return error instanceof Error ? error.message : "処理に失敗しました。";
 }
 
 function sameRepository(left: RepositoryIdentity, right: RepositoryIdentity): boolean {
