@@ -11,6 +11,7 @@ interface JournalDraft {
   sceneId: string;
   state: string;
   text: string;
+  operationGeneration?: number | null;
 }
 
 interface JournalEntryRecord extends JournalDraft {
@@ -215,22 +216,110 @@ async function readJournal(page: Page): Promise<JournalDraft[]> {
     });
     try {
       const transaction = database.transaction("operations", "readonly");
-      const records = await new Promise<Array<{ sceneId: string; state: string; text: string }>>((resolve, reject) => {
+      const records = await new Promise<Array<{ sceneId: string; state: string; text: string; operation?: { generation?: number } }>>((resolve, reject) => {
         const request = transaction.objectStore("operations").getAll();
         request.onsuccess = () => resolve(request.result);
         request.onerror = () => reject(request.error ?? new Error("IndexedDB journal read failed"));
       });
-      return records.map(({ sceneId, state, text }) => ({ sceneId, state, text }));
+      return records.map(({ sceneId, state, text, operation }) => ({
+        sceneId,
+        state,
+        text,
+        operationGeneration: typeof operation?.generation === "number" ? operation.generation : null,
+      }));
     } finally {
       database.close();
     }
   });
 }
 
-async function expectJournalDraft(page: Page, sceneId: string, text: string): Promise<void> {
-  await expect.poll(async () => (await readJournal(page)).some((draft) =>
-    draft.sceneId === sceneId && draft.text === text && draft.state === "draft",
-  ), { timeout: 20_000 }).toBe(true);
+interface JournalDraftDiagnosticContext {
+  beforeFill: unknown;
+  afterFill: unknown;
+  pageErrors: string[];
+}
+
+async function journalDraftDiagnostic(page: Page, sceneId: string, expectedText: string): Promise<unknown> {
+  return page.evaluate(async ({ sceneId, expectedText }) => {
+    const database = await new Promise<IDBDatabase>((resolve, reject) => {
+      const request = indexedDB.open("scriptorium-recovery", 3);
+      request.onsuccess = () => resolve(request.result);
+      request.onerror = () => reject(request.error ?? new Error("IndexedDB open failed"));
+    });
+    try {
+      const transaction = database.transaction("operations", "readonly");
+      const records = await new Promise<Array<{ sceneId: string; state: string; text: string; operation?: { generation?: number } }>>((resolve, reject) => {
+        const request = transaction.objectStore("operations").getAll();
+        request.onsuccess = () => resolve(request.result);
+        request.onerror = () => reject(request.error ?? new Error("IndexedDB journal diagnostic read failed"));
+      });
+      const editor = document.querySelector<HTMLElement>(".cm-content");
+      const recovery = document.querySelector<HTMLElement>("[data-recovery-status]");
+      return {
+        at: performance.now(),
+        recoveryStatus: recovery?.dataset.recoveryStatus ?? null,
+        editorWritable: recovery?.dataset.editorWritable ?? null,
+        contenteditable: editor?.getAttribute("contenteditable") ?? null,
+        displayedTextLength: editor?.textContent?.length ?? null,
+        displayedTextMatchesDraft: editor?.textContent === expectedText,
+        durabilityMessages: Array.from(document.querySelectorAll<HTMLElement>(".durability-message"), (element) => ({
+          kind: element.dataset.kind ?? null,
+          text: (element.textContent ?? "").trim().slice(0, 200),
+        })),
+        operationRows: records.filter((record) => record.sceneId === sceneId).map((record) => ({
+          sceneId: record.sceneId,
+          state: record.state,
+          textLength: record.text.length,
+          exactDraftMatch: record.text === expectedText,
+          operationGeneration: typeof record.operation?.generation === "number" ? record.operation.generation : null,
+        })),
+      };
+    } finally {
+      database.close();
+    }
+  }, { sceneId, expectedText });
+}
+
+async function expectJournalDraft(page: Page, sceneId: string, text: string, diagnostic?: JournalDraftDiagnosticContext): Promise<void> {
+  const pollSamples: Array<{ at: number; rows: Array<{ state: string; textLength: number; exactDraftMatch: boolean; operationGeneration: number | null }> }> = [];
+  try {
+    await expect.poll(async () => {
+      const drafts = await readJournal(page);
+      if (diagnostic) pollSamples.push({
+        at: Date.now(),
+        rows: drafts.filter((draft) => draft.sceneId === sceneId).map((draft) => ({
+          state: draft.state,
+          textLength: draft.text.length,
+          exactDraftMatch: draft.text === text,
+          operationGeneration: draft.operationGeneration ?? null,
+        })),
+      });
+      return drafts.some((draft) => draft.sceneId === sceneId && draft.text === text && draft.state === "draft");
+    }, { timeout: 20_000 }).toBe(true);
+  } catch (error) {
+    if (diagnostic) {
+      let afterPoll: unknown;
+      try {
+        afterPoll = await journalDraftDiagnostic(page, sceneId, text);
+      } catch (diagnosticError) {
+        afterPoll = { captureError: diagnosticError instanceof Error ? diagnosticError.message : String(diagnosticError) };
+      }
+      await test.info().attach("journal-draft-timeout-diagnostic.json", {
+        body: Buffer.from(JSON.stringify({
+          sceneId,
+          expectedTextLength: text.length,
+          beforeFill: diagnostic.beforeFill,
+          afterFill: diagnostic.afterFill,
+          pollSamples,
+          afterPoll,
+          pageErrors: diagnostic.pageErrors,
+          assertionError: error instanceof Error ? error.message : String(error),
+        }, null, 2)),
+        contentType: "application/json",
+      });
+    }
+    throw error;
+  }
 }
 
 async function expectJournalState(page: Page, sceneId: string, text: string, state: string): Promise<void> {
@@ -619,8 +708,18 @@ for (const departure of ["reload", "pagehide"] as const) {
     await signIn(page, "desktop");
     await openFixtureScene(page, "desktop");
     const draft = `${testInfo.project.name} ${departure}: a checkpoint must survive interrupted recovery.`;
-    await page.locator(".cm-content").fill(draft);
-    await expectJournalDraft(page, "scene-1", draft);
+    const editor = page.locator(".cm-content");
+    const beforeFill = await journalDraftDiagnostic(page, "scene-1", draft);
+    await editor.fill(draft);
+    const afterFill = await journalDraftDiagnostic(page, "scene-1", draft);
+    if (!(afterFill as { displayedTextMatchesDraft?: boolean }).displayedTextMatchesDraft) {
+      await testInfo.attach("journal-draft-fill-diagnostic.json", {
+        body: Buffer.from(JSON.stringify({ beforeFill, afterFill, expectedTextLength: draft.length, pageErrors: errors }, null, 2)),
+        contentType: "application/json",
+      });
+    }
+    expect((afterFill as { displayedTextMatchesDraft?: boolean }).displayedTextMatchesDraft).toBe(true);
+    await expectJournalDraft(page, "scene-1", draft, { beforeFill, afterFill, pageErrors: errors });
     await page.getByRole("button", { name: "Checkpoint", exact: true }).click();
     await expectJournalState(page, "scene-1", draft, "checkpointed");
     const checkpoint = await readJournalEntry(page, "scene-1", draft);

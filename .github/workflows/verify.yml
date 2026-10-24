@@ -284,6 +284,16 @@ jobs:
       - uses: actions/upload-artifact@v4
         if: always()
         with:
+          name: playwright-failure-${{ matrix.group }}-${{ github.event.pull_request.head.sha || github.sha }}
+          path: |
+            tests/e2e/test-results/**/trace.zip
+            tests/e2e/test-results/**/error-context.md
+            tests/e2e/test-results/**/journal-draft-*-diagnostic.json
+          if-no-files-found: ignore
+          retention-days: 7
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
           name: ci-evidence-browser-${{ matrix.group }}
           path: ${{ runner.temp }}/ci-evidence/browser-${{ matrix.group }}
           if-no-files-found: error
