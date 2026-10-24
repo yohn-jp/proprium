@@ -95,6 +95,23 @@ test('root unit preparation builds the API dependency closure before invoking ro
   }
 });
 
+test('grouped unit preparation builds shared dependencies once and retains root API preparation', async () => {
+  const fixture = await makeWorkspaceFixture('pnpm run test:scripts');
+  try {
+    const prepared = runProject(fixture.projectRoot, ['prepare', 'unit-group', 'contracts,module-runtime,migration,core,api,root'], fixture.env);
+    assert.equal(prepared.status, 0, prepared.stderr);
+    const commands = (await readFile(fixture.record, 'utf8')).trim().split('\n').map(line => JSON.parse(line));
+    const packages = commands.map(command => command[1]);
+    assert.equal(new Set(packages).size, packages.length);
+    assert.ok(packages.includes('@scriptorium/contracts'));
+    assert.ok(packages.includes('@scriptorium/core'));
+    assert.equal(packages.at(-1), '@scriptorium/api');
+    assert.ok(commands.every(command => command.slice(2).join(' ') === 'run build'));
+  } finally {
+    await rm(fixture.projectRoot, { recursive: true, force: true });
+  }
+});
+
 test('speaker unit tests own their worker build while preparation follows workspace dependencies', async () => {
   const temporary = await mkdtemp(path.join(tmpdir(), 'scriptorium-ci-workspace-'));
   const bin = path.join(temporary, 'bin');

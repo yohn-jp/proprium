@@ -19,7 +19,7 @@ export const BROWSER_SHARDS = [
   { id: 'webkit', project: 'webkit', file: 'ui-v1.acceptance.spec.ts' },
 ];
 export const NATIVE_SELECTIONS = ['catalog', 'core', 'selected', 'full'];
-export const VERIFICATION_LEAF_JOBS = [
+export const VERIFICATION_TASKS = [
   ...UNIT_TARGETS.map(({ id }) => `unit-${id}`),
   ...TYPECHECK_TARGETS.map(({ id }) => `typecheck-${id}`),
   ...TEST_TYPECHECK_SCOPES.map(id => `test-types-${id}`),
@@ -28,4 +28,22 @@ export const VERIFICATION_LEAF_JOBS = [
   ...NATIVE_SELECTIONS.map(id => `hosted-native-${id}`),
   'coverage',
 ];
+// Execution groups batch work without removing any validation obligation.
+export const VERIFICATION_GROUPS = {
+  'unit-core': ['contracts', 'module-runtime', 'migration', 'core', 'api', 'root'].map(id => `unit-${id}`),
+  'unit-modules': ['app', ...WORKSPACES.filter(item => item.path.startsWith('modules/')).map(item => item.id)].map(id => `unit-${id}`),
+  'types-sources': [...TYPECHECK_TARGETS.map(item => `typecheck-${item.id}`), 'safety'],
+  'types-tests': [...TEST_TYPECHECK_SCOPES.map(id => `test-types-${id}`), 'coverage'],
+  'build-core': ['build-core', 'audit-core'],
+  'build-full': ['build-full'],
+  'oci-core': ['oci-core'],
+  'oci-full': ['oci-full'],
+  ...Object.fromEntries(PROFILES.flatMap(profile => [
+    [`browser-${profile}-writing`, ['core', 'job-inbox', 'recent-activity'].map(id => `browser-${profile}-${id}`)],
+    [`browser-${profile}-reference`, ['modular-workspace', 'review-contributions', 'ui-v1'].map(id => `browser-${profile}-${id}`)],
+    [`browser-${profile}-webkit`, [`browser-${profile}-webkit`]],
+  ])),
+  ...Object.fromEntries(NATIVE_SELECTIONS.map(id => [`hosted-native-${id}`, [`hosted-native-${id}`]])),
+};
+export const VERIFICATION_LEAF_JOBS = ['plan', ...Object.keys(VERIFICATION_GROUPS)];
 export const REQUIRED_VERIFICATION_JOBS = [...VERIFICATION_LEAF_JOBS, 'certification'];
