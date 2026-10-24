@@ -235,6 +235,21 @@ function hasLeftDocumentLifecycle(lifecycle: number): boolean {
   return documentDeparting || documentLifecycle !== lifecycle;
 }
 
+async function withDocumentDepartureClassification<T>(
+  lifecycle: number,
+  init: RequestInit,
+  operation: () => Promise<T>,
+): Promise<T> {
+  try {
+    const result = await operation();
+    if (hasLeftDocumentLifecycle(lifecycle) && init.keepalive !== true) throw new DocumentDepartureError();
+    return result;
+  } catch (error) {
+    if (hasLeftDocumentLifecycle(lifecycle) && init.keepalive !== true) throw new DocumentDepartureError();
+    throw error;
+  }
+}
+
 function returnOrAbortAfterDeparture(response: Response, lifecycle: number, init: RequestInit): Response {
   if (!hasLeftDocumentLifecycle(lifecycle)) return response;
   if (init.keepalive === true) return response;
@@ -313,8 +328,7 @@ async function fetchHostedRequest(path: string, init: RequestInit): Promise<Resp
   return fetch(path, { ...init, headers, credentials: "same-origin" });
 }
 
-async function fetchWithHostedRefresh(path: string, init: RequestInit): Promise<Response> {
-  const lifecycle = documentLifecycle;
+async function fetchHostedResponseForLifecycle(path: string, init: RequestInit, lifecycle: number): Promise<Response> {
   const response = await fetchHostedRequest(path, init);
   // A response already in flight may settle while this document is leaving.
   // Do not start a refresh exchange or retry after the departure fence closes.
@@ -355,25 +369,37 @@ async function fetchWithHostedRefresh(path: string, init: RequestInit): Promise<
   return response;
 }
 
+async function fetchWithHostedRefresh(path: string, init: RequestInit): Promise<Response> {
+  const lifecycle = documentLifecycle;
+  return withDocumentDepartureClassification(lifecycle, init, () => fetchHostedResponseForLifecycle(path, init, lifecycle));
+}
+
 async function request<T>(guard: ResponseGuard<T>, path: string, init: RequestInit = {}): Promise<T> {
-  const headers = new Headers(init.headers);
-  if (init.body !== undefined && !headers.has("Content-Type")) headers.set("Content-Type", "application/json");
-  return readApiResponse(await fetchWithHostedRefresh(path, { ...init, headers }), guard);
+  const lifecycle = documentLifecycle;
+  return withDocumentDepartureClassification(lifecycle, init, async () => {
+    const headers = new Headers(init.headers);
+    if (init.body !== undefined && !headers.has("Content-Type")) headers.set("Content-Type", "application/json");
+    return readApiResponse(await fetchWithHostedRefresh(path, { ...init, headers }), guard);
+  });
 }
 
 async function requestEventStream(path: string, signal: AbortSignal): Promise<Response> {
-  const response = await fetchWithHostedRefresh(path, { headers: { Accept: "text/event-stream" }, signal });
-  if (!response.ok) {
-    const body: unknown = await response.json().catch(() => null);
-    const details = body && typeof body === "object" ? (body as Record<string, unknown>) : {};
-    throw new ApiError(
-      typeof details.error === "string" ? details.error : `Request failed (${response.status})`,
-      response.status,
-      typeof details.code === "string" ? details.code : "REQUEST_FAILED",
-    );
-  }
-  if (!response.body) throw new ApiError("Job event stream is unavailable", response.status, "STREAM_UNAVAILABLE");
-  return response;
+  const init = { headers: { Accept: "text/event-stream" }, signal };
+  const lifecycle = documentLifecycle;
+  return withDocumentDepartureClassification(lifecycle, init, async () => {
+    const response = await fetchWithHostedRefresh(path, init);
+    if (!response.ok) {
+      const body: unknown = await response.json().catch(() => null);
+      const details = body && typeof body === "object" ? (body as Record<string, unknown>) : {};
+      throw new ApiError(
+        typeof details.error === "string" ? details.error : `Request failed (${response.status})`,
+        response.status,
+        typeof details.code === "string" ? details.code : "REQUEST_FAILED",
+      );
+    }
+    if (!response.body) throw new ApiError("Job event stream is unavailable", response.status, "STREAM_UNAVAILABLE");
+    return response;
+  });
 }
 
 function projectPath(projectId: string, suffix: string): string {
@@ -396,18 +422,22 @@ export const api = {
   login: (token: string) => request(dto.loggedIn, "/api/login", { method: "POST", body: JSON.stringify({ token }) }),
   session: () => request(dto.session, "/api/session"),
   logout: async () => {
-    if (hostedMode === true) {
-      const response = await fetchWithHostedRefresh("/_platform/logout", { method: "POST" });
-      if (response.status === 204) return { authenticated: false as const };
-      const body: unknown = await response.json().catch(() => null);
-      if (!response.ok) {
-        const details = body && typeof body === "object" ? (body as Record<string, unknown>) : {};
-        throw new ApiError(typeof details.error === "string" ? details.error : `Logout failed (${response.status})`, response.status,
-          typeof details.code === "string" ? details.code : "LOGOUT_FAILED");
+    const lifecycle = documentLifecycle;
+    const init = { method: "POST" };
+    return withDocumentDepartureClassification(lifecycle, init, async () => {
+      if (hostedMode === true) {
+        const response = await fetchWithHostedRefresh("/_platform/logout", init);
+        if (response.status === 204) return { authenticated: false as const };
+        const body: unknown = await response.json().catch(() => null);
+        if (!response.ok) {
+          const details = body && typeof body === "object" ? (body as Record<string, unknown>) : {};
+          throw new ApiError(typeof details.error === "string" ? details.error : `Logout failed (${response.status})`, response.status,
+            typeof details.code === "string" ? details.code : "LOGOUT_FAILED");
+        }
+        return decodeResponse(body, dto.loggedOut);
       }
-      return decodeResponse(body, dto.loggedOut);
-    }
-    return request(dto.loggedOut, "/api/logout", { method: "POST", body: "{}" });
+      return request(dto.loggedOut, "/api/logout", { method: "POST", body: "{}" });
+    });
   },
   jobs: (signal?: AbortSignal) => request(dto.jobs, "/api/jobs", { ...(signal ? { signal } : {}) }),
   job: (jobId: string, signal?: AbortSignal) =>

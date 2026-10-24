@@ -50,6 +50,27 @@ test("ordinary API requests stop at document departure while keepalive cursor wr
     let releaseFinalRetry!: (response: Response) => void;
     let finalRetryResponse = new Promise<Response>(() => {});
     let signalFinalRetryStarted!: () => void;
+    let rejectHeldProjectFetch = false;
+    let rejectedProjectFetchStarted!: () => void;
+    const rejectedProjectFetchAdmission = new Promise<void>((resolve) => { rejectedProjectFetchStarted = resolve; });
+    let rejectProjectFetch!: (error: Error) => void;
+    const rejectedProjectFetchResponse = new Promise<Response>((_resolve, reject) => { rejectProjectFetch = reject; });
+    let holdProjectBody = false;
+    let projectBodyStarted!: () => void;
+    const projectBodyAdmission = new Promise<void>((resolve) => { projectBodyStarted = resolve; });
+    let rejectProjectBody!: (error: Error) => void;
+    const heldProjectBody = new Promise<unknown>((_resolve, reject) => { rejectProjectBody = reject; });
+    let failProjectFetchWhileActive = false;
+    let holdLogoutBody = false;
+    let logoutBodyStarted!: () => void;
+    const logoutBodyAdmission = new Promise<void>((resolve) => { logoutBodyStarted = resolve; });
+    let rejectLogoutBody!: (error: Error) => void;
+    const heldLogoutBody = new Promise<unknown>((_resolve, reject) => { rejectLogoutBody = reject; });
+    let holdJobStreamFetch = false;
+    let jobStreamFetchStarted!: () => void;
+    const jobStreamFetchAdmission = new Promise<void>((resolve) => { jobStreamFetchStarted = resolve; });
+    let rejectJobStreamFetch!: (error: Error) => void;
+    const rejectedJobStreamFetch = new Promise<Response>((_resolve, reject) => { rejectJobStreamFetch = reject; });
     globalThis.fetch = async (input, init) => {
       requests.push({ input: String(input), keepalive: init?.keepalive === true });
       if (String(input) === "/api/version") {
@@ -82,6 +103,37 @@ test("ordinary API requests stop at document departure while keepalive cursor wr
       }
       if (String(input) === "/api/projects" && holdStaleRefresh) {
         return Response.json({ error: "Authentication required", code: "UNAUTHORIZED" }, { status: 401 });
+      }
+      if (String(input) === "/api/projects" && rejectHeldProjectFetch) {
+        rejectedProjectFetchStarted();
+        return rejectedProjectFetchResponse;
+      }
+      if (String(input) === "/api/projects" && holdProjectBody) {
+        const response = Response.json([]);
+        Object.defineProperty(response, "json", {
+          value: () => {
+            projectBodyStarted();
+            return heldProjectBody;
+          },
+        });
+        return response;
+      }
+      if (String(input) === "/_platform/logout" && holdLogoutBody) {
+        const response = Response.json({ authenticated: false });
+        Object.defineProperty(response, "json", {
+          value: () => {
+            logoutBodyStarted();
+            return heldLogoutBody;
+          },
+        });
+        return response;
+      }
+      if (String(input) === "/api/jobs/events" && holdJobStreamFetch) {
+        jobStreamFetchStarted();
+        return rejectedJobStreamFetch;
+      }
+      if (String(input) === "/api/projects" && failProjectFetchWhileActive) {
+        throw new TypeError("The active network request failed.");
       }
       if (String(input) === "/api/projects" && finalRetryMode !== "none") {
         finalRetryAttempt += 1;
@@ -233,6 +285,46 @@ test("ordinary API requests stop at document departure while keepalive cursor wr
       assert.equal(requests.filter((request) => request.input === "/_platform/refresh").length, refreshCountBeforeRetry + 1);
       finalRetryMode = "none";
     }
+
+    rejectHeldProjectFetch = true;
+    const rejectedFetchRequest = api.projects();
+    await rejectedProjectFetchAdmission;
+    dispatch("pagehide", new Event("pagehide"));
+    dispatch("pageshow", new Event("pageshow"));
+    rejectProjectFetch(new TypeError("The browser canceled the fetch."));
+    await assert.rejects(rejectedFetchRequest, (error: unknown) => error instanceof DocumentDepartureError);
+    rejectHeldProjectFetch = false;
+
+    holdProjectBody = true;
+    const rejectedBodyRequest = api.projects();
+    await projectBodyAdmission;
+    dispatch("pagehide", new Event("pagehide"));
+    dispatch("pageshow", new Event("pageshow"));
+    rejectProjectBody(new TypeError("The browser canceled response body consumption."));
+    await assert.rejects(rejectedBodyRequest, (error: unknown) => error instanceof DocumentDepartureError);
+    holdProjectBody = false;
+
+    failProjectFetchWhileActive = true;
+    await assert.rejects(api.projects(), (error: unknown) => error instanceof TypeError && error.message === "The active network request failed.");
+    failProjectFetchWhileActive = false;
+
+    holdLogoutBody = true;
+    const logoutRequest = api.logout();
+    await logoutBodyAdmission;
+    dispatch("pagehide", new Event("pagehide"));
+    dispatch("pageshow", new Event("pageshow"));
+    rejectLogoutBody(new TypeError("The browser canceled logout response parsing."));
+    await assert.rejects(logoutRequest, (error: unknown) => error instanceof DocumentDepartureError);
+    holdLogoutBody = false;
+
+    holdJobStreamFetch = true;
+    const eventStreamRequest = api.jobEventStream(new AbortController().signal);
+    await jobStreamFetchAdmission;
+    dispatch("pagehide", new Event("pagehide"));
+    dispatch("pageshow", new Event("pageshow"));
+    rejectJobStreamFetch(new TypeError("The browser canceled the stream handshake."));
+    await assert.rejects(eventStreamRequest, (error: unknown) => error instanceof DocumentDepartureError);
+    holdJobStreamFetch = false;
   } finally {
     globalThis.fetch = originalFetch;
     if (originalWindow) Object.defineProperty(globalThis, "window", originalWindow);
