@@ -205,7 +205,7 @@ test("an interrupted initial project bootstrap resumes after persisted pageshow"
   }
 });
 
-test("direct-link and active scene reads resume after persisted pageshow", async ({ page }) => {
+test("direct-link, active scene, and project activation resume after persisted pageshow", async ({ page }) => {
   test.skip(Boolean(process.env.SCRIPTORIUM_E2E_EXTERNAL_REPOSITORY === "1" || process.env.SCRIPTORIUM_E2E_BASE_URL || process.env.SCRIPTORIUM_BASE_URL),
     "The scene lifecycle regression requires the generated local owner repository fixture.");
   expect(authToken).not.toBe("");
@@ -267,18 +267,26 @@ test("direct-link and active scene reads resume after persisted pageshow", async
 
   let releaseSecondViews!: () => void;
   let signalSecondViews!: () => void;
+  let releaseResumedViews!: () => void;
+  let signalResumedViews!: () => void;
   let secondViewsRequests = 0;
   const heldSecondViews = new Promise<void>((resolve) => { releaseSecondViews = resolve; });
   const secondViewsStarted = new Promise<void>((resolve) => { signalSecondViews = resolve; });
+  const heldResumedViews = new Promise<void>((resolve) => { releaseResumedViews = resolve; });
+  const resumedViewsStarted = new Promise<void>((resolve) => { signalResumedViews = resolve; });
   await page.route((url) => url.pathname === `/api/projects/${encodeURIComponent(project!.id)}/scenes/scene-2/views` && url.searchParams.has("snapshot"), async (route) => {
     secondViewsRequests += 1;
-    if (secondViewsRequests > 1) return route.continue();
     const response = await route.fetch();
     const body = await response.text();
     expect(response.status()).toBe(200);
     expect(body).toContain("The second line of the story.");
-    signalSecondViews();
-    await heldSecondViews;
+    if (secondViewsRequests === 1) {
+      signalSecondViews();
+      await heldSecondViews;
+    } else if (secondViewsRequests === 2) {
+      signalResumedViews();
+      await heldResumedViews;
+    }
     await route.fulfill({ response, body }).catch(() => undefined);
   });
 
@@ -287,10 +295,44 @@ test("direct-link and active scene reads resume after persisted pageshow", async
   await page.evaluate(() => window.dispatchEvent(new PageTransitionEvent("pagehide", { persisted: true })));
   await page.evaluate(() => window.dispatchEvent(new PageTransitionEvent("pageshow", { persisted: true })));
   releaseSecondViews();
+  await resumedViewsStarted;
+  await page.evaluate(() => window.dispatchEvent(new PageTransitionEvent("pagehide", { persisted: true })));
+  await page.evaluate(() => window.dispatchEvent(new PageTransitionEvent("pageshow", { persisted: true })));
+  releaseResumedViews();
 
   await expect(editor).toBeVisible({ timeout: 15_000 });
   await expect(editor).toContainText("The second line of the story.");
   await expect(page.locator('[data-recovery-status="ready"]')).toBeVisible();
   await expect(page.getByRole("alert")).toHaveCount(0);
-  expect(secondViewsRequests, "pageshow should resume the interrupted active scene navigation").toBeGreaterThanOrEqual(2);
+  expect(secondViewsRequests, "each pageshow should resume an interrupted active scene navigation").toBeGreaterThanOrEqual(3);
+
+  let releaseProjectDetails!: () => void;
+  let signalProjectDetails!: () => void;
+  let projectDetailsRequests = 0;
+  const heldProjectDetails = new Promise<void>((resolve) => { releaseProjectDetails = resolve; });
+  const projectDetailsStarted = new Promise<void>((resolve) => { signalProjectDetails = resolve; });
+  await page.route((url) => url.pathname === `/api/projects/${encodeURIComponent(project!.id)}` && url.search === "", async (route) => {
+    if (route.request().method() !== "GET") return route.continue();
+    projectDetailsRequests += 1;
+    if (projectDetailsRequests > 1) return route.continue();
+    const response = await route.fetch();
+    const body = await response.text();
+    expect(response.status()).toBe(200);
+    expect(JSON.parse(body)).toEqual(expect.objectContaining({ project: expect.objectContaining({ id: project!.id }) }));
+    signalProjectDetails();
+    await heldProjectDetails;
+    await route.fulfill({ response, body }).catch(() => undefined);
+  });
+
+  await projectButton.click();
+  await projectDetailsStarted;
+  await page.evaluate(() => window.dispatchEvent(new PageTransitionEvent("pagehide", { persisted: true })));
+  await page.evaluate(() => window.dispatchEvent(new PageTransitionEvent("pageshow", { persisted: true })));
+  releaseProjectDetails();
+
+  await expect(page.getByRole("heading", { name: "Volume One" })).toBeVisible({ timeout: 15_000 });
+  await expect(page.getByRole("button", { name: "Chapter One: Scene One", exact: true })).toBeVisible();
+  await expect(projectButton).toHaveAttribute("aria-current", "true");
+  await expect(page.getByRole("alert")).toHaveCount(0);
+  expect(projectDetailsRequests, "pageshow should resume interrupted same-project activation").toBeGreaterThanOrEqual(2);
 });
