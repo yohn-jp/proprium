@@ -237,6 +237,37 @@ test("mobile late panel requests are fenced by route and author-scope changes", 
   }
 });
 
+test("mobile same-view panel requests cannot suppress a newer route and scope selection", async ({ page }) => {
+  const fixture = await openMobileTransitionFixture(page);
+  try {
+    const { navigation } = fixture;
+    const editorPanel = page.locator('[data-workspace-panel="editor"]');
+    await page.getByRole("tablist", { name: "Workspace panels" }).getByRole("tab", { name: "Outline", exact: true }).click();
+    await expect(page.locator('[data-workspace-panel="outline"]')).toBeVisible();
+
+    await armMobileTransitionFixture(page, ["delayed"]);
+    await navigation.getByRole("button", { name: "書く", exact: true }).click();
+    await expect.poll(() => page.evaluate(() => window.__mobileTransitionFixture?.release !== undefined)).toBe(true);
+
+    await page.evaluate(() => window.__mobileTransitionFixture?.changeRoute("tools"));
+    await expect(page.getByTestId("fixture-route")).toHaveText("tools");
+    await page.evaluate(() => window.__mobileTransitionFixture?.changeScope("fixture-author-next"));
+    await expect(page.getByTestId("fixture-scope")).toHaveText("fixture-author-next");
+    await page.evaluate(() => window.__mobileTransitionFixture?.releaseGuard());
+
+    await expect(page.getByTestId("fixture-route")).toHaveText("tools");
+    await expect(page.getByTestId("fixture-scope")).toHaveText("fixture-author-next");
+    await expect.poll(async () => (await mobileTransitionMetrics(page)).guardCalls).toBe(2);
+    await expect(page.locator('[data-workspace-panel="review"]')).toBeVisible();
+    await expect(editorPanel).toHaveCount(0);
+    await expect.poll(() => page.evaluate(() => (document.activeElement as HTMLElement | null)?.dataset.workspacePanel ?? ""))
+      .toBe("review");
+    expect(await mobileTransitionMetrics(page)).toEqual({ guardCalls: 2, journalCalls: 2, journalWrites: 2, unusedOutcomes: 0 });
+  } finally {
+    await fixture.server.stop();
+  }
+});
+
 interface DraftRecord {
   sceneId: string;
   state: string;

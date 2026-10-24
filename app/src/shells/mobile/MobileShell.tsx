@@ -25,11 +25,12 @@ import "../authoring.css";
 export type MobileView = "library" | "writing" | "inspection" | "tools" | "settings";
 type ReferenceSheet = "outline" | "inspector";
 
-interface PendingMobileRouteTransition {
+interface PendingMobilePanelRequest {
   sequence: number;
   origin: { identity: string; key: string; scope?: string };
   expectedIdentity?: string;
-  commit(): void;
+  commit?: () => void;
+  committing?: boolean;
 }
 
 interface MobileLocationSnapshot {
@@ -148,17 +149,22 @@ export function MobileShell({ header, documentTitle, documentContext, desktopDur
   const workspacePanelRequestRef = useRef(workspacePanelRequest);
   workspacePanelRequestRef.current = workspacePanelRequest;
   const [routeTransitionSequence, setRouteTransitionSequence] = useState<number>();
-  const pendingRouteTransitionRef = useRef<PendingMobileRouteTransition | null>(null);
+  const pendingPanelRequestRef = useRef<PendingMobilePanelRequest | null>(null);
   const contentRef = useRef<HTMLIonContentElement | null>(null);
   const activeViewRef = useRef(activeView);
   const scrollPositionsRef = useRef(new Map<MobileView, number>());
 
   useEffect(() => {
-    const pending = pendingRouteTransitionRef.current;
+    const pending = pendingPanelRequestRef.current;
     if (!pending) return;
     const current = routeContextRef.current;
     if (current.key === pending.origin.key && current.identity === pending.origin.identity && current.scope === pending.origin.scope) return;
-    pendingRouteTransitionRef.current = null;
+    if (pending.committing && pending.origin.scope === current.scope && pending.expectedIdentity === current.identity) {
+      pending.origin = { identity: current.identity, key: current.key, scope: current.scope };
+      pending.committing = false;
+      return;
+    }
+    pendingPanelRequestRef.current = null;
     panelRequestSequenceRef.current += 1;
     setRouteTransitionSequence((sequence) => sequence === pending.sequence ? undefined : sequence);
   }, [location.key, location.pathname, location.search, workspaceScope]);
@@ -212,20 +218,19 @@ export function MobileShell({ header, documentTitle, documentContext, desktopDur
 
   const queueWorkspacePanel = useCallback((id: string, commitRoute?: () => void, expectedIdentity?: string) => {
     const sequence = ++panelRequestSequenceRef.current;
+    pendingPanelRequestRef.current = {
+      sequence,
+      origin: {
+        identity: routeContextRef.current.identity,
+        key: routeContextRef.current.key,
+        scope: routeContextRef.current.scope,
+      },
+      expectedIdentity,
+      commit: commitRoute,
+    };
     if (commitRoute) {
-      pendingRouteTransitionRef.current = {
-        sequence,
-        origin: {
-          identity: routeContextRef.current.identity,
-          key: routeContextRef.current.key,
-          scope: routeContextRef.current.scope,
-        },
-        expectedIdentity,
-        commit: commitRoute,
-      };
       setRouteTransitionSequence(sequence);
     } else {
-      pendingRouteTransitionRef.current = null;
       setRouteTransitionSequence(undefined);
     }
     setWorkspacePanelRequest({ id, sequence });
@@ -233,20 +238,25 @@ export function MobileShell({ header, documentTitle, documentContext, desktopDur
 
   const isPanelRequestCurrent = useCallback((sequence: number): boolean => {
     if (panelRequestSequenceRef.current !== sequence || workspacePanelRequestRef.current?.sequence !== sequence) return false;
-    const pending = pendingRouteTransitionRef.current;
+    const pending = pendingPanelRequestRef.current;
     if (!pending || pending.sequence !== sequence) return true;
     const current = routeContextRef.current;
     return current.key === pending.origin.key && current.identity === pending.origin.identity && current.scope === pending.origin.scope;
   }, []);
 
   const onPanelRequestResult = useCallback((sequence: number, allowed: boolean): void => {
-    const pending = pendingRouteTransitionRef.current;
+    const pending = pendingPanelRequestRef.current;
     if (!pending || pending.sequence !== sequence) return;
-    pendingRouteTransitionRef.current = null;
-    setRouteTransitionSequence((current) => current === sequence ? undefined : current);
-    if (!allowed) return;
+    if (!pending.commit) return;
+    if (!allowed) {
+      pendingPanelRequestRef.current = null;
+      setRouteTransitionSequence((current) => current === sequence ? undefined : current);
+      return;
+    }
     const current = routeContextRef.current;
     if (current.key !== pending.origin.key || current.identity !== pending.origin.identity || current.scope !== pending.origin.scope) return;
+    pending.committing = true;
+    setRouteTransitionSequence((currentSequence) => currentSequence === sequence ? undefined : currentSequence);
     authorizedRouteChangeRef.current = { originKey: pending.origin.key, expectedIdentity: pending.expectedIdentity };
     pending.commit();
     setSwitchError("");
