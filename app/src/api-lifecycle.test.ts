@@ -44,6 +44,12 @@ test("ordinary API requests stop at document departure while keepalive cursor wr
     const staleRefreshAdmission = new Promise<void>((resolve) => { staleRefreshStarted = resolve; });
     let releaseStaleRefresh!: (response: Response) => void;
     const staleRefreshResponse = new Promise<Response>((resolve) => { releaseStaleRefresh = resolve; });
+    let finalRetryMode: "none" | "fallback" | "locks" = "none";
+    let finalRetryAttempt = 0;
+    let finalRetryAdmission = new Promise<void>(() => {});
+    let releaseFinalRetry!: (response: Response) => void;
+    let finalRetryResponse = new Promise<Response>(() => {});
+    let signalFinalRetryStarted!: () => void;
     globalThis.fetch = async (input, init) => {
       requests.push({ input: String(input), keepalive: init?.keepalive === true });
       if (String(input) === "/api/version") {
@@ -65,6 +71,9 @@ test("ordinary API requests stop at document departure while keepalive cursor wr
         staleRefreshStarted();
         return staleRefreshResponse;
       }
+      if (String(input) === "/_platform/refresh" && finalRetryMode !== "none") {
+        return Response.json({ refreshed: true });
+      }
       if (String(input) === "/api/projects" && holdRefresh) {
         return Response.json({ error: "Authentication required", code: "UNAUTHORIZED" }, { status: 401 });
       }
@@ -72,6 +81,15 @@ test("ordinary API requests stop at document departure while keepalive cursor wr
         return Response.json({ error: "Authentication required", code: "UNAUTHORIZED" }, { status: 401 });
       }
       if (String(input) === "/api/projects" && holdStaleRefresh) {
+        return Response.json({ error: "Authentication required", code: "UNAUTHORIZED" }, { status: 401 });
+      }
+      if (String(input) === "/api/projects" && finalRetryMode !== "none") {
+        finalRetryAttempt += 1;
+        const retryAttempt = finalRetryMode === "locks" ? 3 : 2;
+        if (finalRetryAttempt === retryAttempt) {
+          signalFinalRetryStarted();
+          return finalRetryResponse;
+        }
         return Response.json({ error: "Authentication required", code: "UNAUTHORIZED" }, { status: 401 });
       }
       if (String(input).endsWith("/recent-activity")) {
@@ -194,6 +212,27 @@ test("ordinary API requests stop at document departure while keepalive cursor wr
       "status" in result.reason && result.reason.status === 401));
     assert.deepEqual(redirects, ["/_platform/reauth"]);
     holdStaleRefresh = false;
+
+    for (const mode of ["fallback", "locks"] as const) {
+      finalRetryMode = mode;
+      finalRetryAttempt = 0;
+      finalRetryAdmission = new Promise<void>((resolve) => { signalFinalRetryStarted = resolve; });
+      finalRetryResponse = new Promise<Response>((resolve) => { releaseFinalRetry = resolve; });
+      Object.defineProperty(globalThis, "navigator", {
+        configurable: true,
+        value: { locks: mode === "locks" ? { request: (_name: string, callback: () => Promise<Response>) => callback() } : undefined },
+      });
+      const refreshCountBeforeRetry = requests.filter((request) => request.input === "/_platform/refresh").length;
+      const finalRetryCaller = api.projects();
+      await finalRetryAdmission;
+      dispatch("pagehide", new Event("pagehide"));
+      dispatch("pageshow", new Event("pageshow"));
+      releaseFinalRetry(Response.json([]));
+      await assert.rejects(finalRetryCaller, (error: unknown) => error instanceof DOMException && error.name === "AbortError");
+      assert.equal(finalRetryAttempt, mode === "locks" ? 3 : 2);
+      assert.equal(requests.filter((request) => request.input === "/_platform/refresh").length, refreshCountBeforeRetry + 1);
+      finalRetryMode = "none";
+    }
   } finally {
     globalThis.fetch = originalFetch;
     if (originalWindow) Object.defineProperty(globalThis, "window", originalWindow);

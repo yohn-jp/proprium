@@ -331,7 +331,10 @@ async function fetchWithHostedRefresh(path: string, init: RequestInit): Promise<
       if (hasLeftDocumentLifecycle(lifecycle)) return returnOrAbortAfterDeparture(current, lifecycle, init);
       const refreshed = await refreshHostedGrantForLifecycle(lifecycle);
       if (hasLeftDocumentLifecycle(lifecycle)) return returnOrAbortAfterDeparture(current, lifecycle, init);
-      if (refreshed) return fetchHostedRequest(path, init);
+      if (refreshed) {
+        const retried = await fetchHostedRequest(path, init);
+        return returnOrAbortAfterDeparture(retried, lifecycle, init);
+      }
       return current;
     });
   }
@@ -339,7 +342,10 @@ async function fetchWithHostedRefresh(path: string, init: RequestInit): Promise<
   // Browsers without Web Locks retain same-tab single-flight refresh.
   const refreshed = await refreshHostedGrantForLifecycle(lifecycle);
   if (hasLeftDocumentLifecycle(lifecycle)) return returnOrAbortAfterDeparture(response, lifecycle, init);
-  if (refreshed) return fetchHostedRequest(path, init);
+  if (refreshed) {
+    const retried = await fetchHostedRequest(path, init);
+    return returnOrAbortAfterDeparture(retried, lifecycle, init);
+  }
   return response;
 }
 
