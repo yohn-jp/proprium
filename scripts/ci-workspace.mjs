@@ -141,6 +141,16 @@ async function runUnit(targetId) {
   run('pnpm', ['--filter', manifest.name, 'run', 'test']);
 }
 
+async function prepareUnitGroup(targets) {
+  const ids = targets.split(',');
+  ids.forEach(getUnitTarget);
+  const workspaceIds = ids.filter(id => id !== 'root');
+  if (ids.includes('root')) workspaceIds.push('api');
+  const dependencies = buildDependencies(workspaceIds);
+  if (ids.includes('root') && !dependencies.includes('api')) dependencies.push('api');
+  buildWorkspaceTargets(dependencies);
+}
+
 function typecheckWorkspaceIds(targetId) {
   const target = getTypecheckTarget(targetId);
   const ids = target.workspaces;
@@ -332,6 +342,7 @@ if (extra.length || !command) {
   fail('Usage: node scripts/ci-workspace.mjs <prepare|unit|typecheck|test-types|coverage> [kind] [target]');
 }
 if (command === 'prepare' && targetId === 'unit' && scopeOrTarget) await prepareUnit(scopeOrTarget);
+else if (command === 'prepare' && targetId === 'unit-group' && scopeOrTarget) await prepareUnitGroup(scopeOrTarget);
 else if (command === 'prepare' && targetId === 'typecheck' && scopeOrTarget) await prepareTypecheck(scopeOrTarget);
 else if (command === 'prepare' && targetId === 'test-types' && scopeOrTarget) await prepareTestTypecheck(scopeOrTarget);
 else if (command === 'unit' && targetId && !scopeOrTarget) await runUnit(targetId);

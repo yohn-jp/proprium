@@ -2132,12 +2132,46 @@ function AuthorWorkspace({
     if (!initial || initial.recoveryStatus !== "ready" || !initial.editor || initial.editor.recoveryStatus !== "ready" || initial.loadingScene || initial.selectedSceneId !== initial.editor.read.scene.id || !currentJournal || busy) return;
     const initialNavigation = navigationRef.current;
     const initialAuthor = authorScopeRef.current;
-    const composedText = await editorFlushRef.current();
+    const initialProjectId = initial.project.id;
+    const initialRepository = initial.observation.snapshot.repository;
+    const initialDocumentPath = initial.editor.read.document.path;
+    const initialSceneId = initial.editor.read.scene.id;
+    const initialSnapshotKey = snapshotKey(initial.editor.read.snapshot);
+    const isInitialEditorCurrent = () => {
+      const latestEditor = workRef.current?.editor;
+      return isCurrentEditor(initialNavigation, initialProjectId, initialRepository, initialDocumentPath, initialSceneId) &&
+        authorScopeRef.current === initialAuthor && journalRef.current === currentJournal &&
+        latestEditor != null && snapshotKey(latestEditor.read.snapshot) === initialSnapshotKey;
+    };
+    let composedText: string | null;
+    try {
+      composedText = await editorFlushRef.current();
+    } catch (error) {
+      if (isInitialEditorCurrent()) {
+        setStatus({
+          message: "日本語入力を確定できなかったため、古い下書きの移行を中止しました。" + messageOf(error) + " 古い記録は保持しています。",
+          kind: "error",
+        });
+      } else {
+        setStatus({
+          message: "移行中に作品やシーンが変わったため、古い下書きの移行を中止しました。元の作品に戻って確認してください。古い記録は保持しています。",
+          kind: "error",
+        });
+      }
+      return;
+    }
+    if (!isInitialEditorCurrent()) {
+      setStatus({
+        message: "移行中に作品やシーンが変わったため、古い下書きの移行を中止しました。元の作品に戻って確認してください。古い記録は保持しています。",
+        kind: "error",
+      });
+      return;
+    }
     const beforeMigration = workRef.current;
     if (composedText !== null && beforeMigration?.editor && composedText !== beforeMigration.editor.text) editText(composedText);
     const current = workRef.current;
     const editor = current?.editor;
-    if (!current || navigationRef.current !== initialNavigation || authorScopeRef.current !== initialAuthor || journalRef.current !== currentJournal ||
+    if (!current || !isInitialEditorCurrent() ||
         current.recoveryStatus !== "ready" || !editor || editor.recoveryStatus !== "ready" || current.loadingScene || current.selectedSceneId !== editor.read.scene.id) return;
     const repository = current.observation.snapshot.repository;
     const documentPath = editor.read.document.path;
