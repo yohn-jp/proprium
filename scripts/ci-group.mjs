@@ -7,7 +7,9 @@ import { planDigest, validateVerificationPlan } from './ci-impact.mjs';
 
 const group = process.argv[2];
 const plan = validateVerificationPlan(JSON.parse(readFileSync(process.env.SCRIPTORIUM_CI_PLAN_PATH ?? 'ci-plan.json', 'utf8')));
-const sha = execFileSync('git', ['rev-parse', 'HEAD'], { encoding: 'utf8' }).trim();
+// Container checkout mounts can have the host runner's UID. Trust only this
+// explicit checkout for the read; do not change global Git trust or other repos.
+const sha = execFileSync('git', ['-c', `safe.directory=${process.cwd()}`, 'rev-parse', 'HEAD'], { encoding: 'utf8' }).trim();
 if (sha !== plan.sha || !plan.groups.includes(group)) throw new Error('Group is not selected for this exact source');
 const tasks = VERIFICATION_GROUPS[group].filter(task => plan.tasks.includes(task));
 const results = [];
