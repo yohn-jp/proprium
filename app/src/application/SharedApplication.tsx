@@ -826,7 +826,16 @@ function AuthorWorkspace({
     const key = recoveryKeyForNavigation(projectId, repository, author, nav);
     const running = reconciliationRef.current.get(key);
     if (running) return running;
-    const isCurrent = () => navigationRef.current === nav && authorScopeRef.current === author &&
+    const controller = new AbortController();
+    const leaveDocument = () => controller.abort();
+    // WebKit can cancel fetch before pagehide. Respect the draft guard if it
+    // keeps this document open, otherwise abort before native teardown starts.
+    const beforeLeaveDocument = (event: BeforeUnloadEvent) => {
+      if (!event.defaultPrevented) leaveDocument();
+    };
+    window.addEventListener("beforeunload", beforeLeaveDocument);
+    window.addEventListener("pagehide", leaveDocument, { once: true });
+    const isCurrent = () => !controller.signal.aborted && navigationRef.current === nav && authorScopeRef.current === author &&
       workRef.current?.project.id === projectId &&
       sameRepository(workRef.current.observation.snapshot.repository, repository);
     const task = (async (): Promise<boolean> => {
@@ -857,7 +866,8 @@ function AuthorWorkspace({
           }
         }
         if (pendingEntries.length > 0 && complete) {
-          const reconciled = await api.reconcile(projectId);
+          if (!isCurrent()) return false;
+          const reconciled = await api.reconcile(projectId, controller.signal);
           if (!isCurrent()) return false;
           for (const result of reconciled.operations) {
             const match = pendingEntries.find((entry) => entry.operation.id === result.operationId);
@@ -891,6 +901,8 @@ function AuthorWorkspace({
     })();
     reconciliationRef.current.set(key, task);
     void task.finally(() => {
+      window.removeEventListener("beforeunload", beforeLeaveDocument);
+      window.removeEventListener("pagehide", leaveDocument);
       if (reconciliationRef.current.get(key) === task) reconciliationRef.current.delete(key);
     }).catch(() => undefined);
     return task;
@@ -1380,7 +1392,7 @@ function AuthorWorkspace({
 
   const refreshForeground = useCallback(() => {
     const current = workRef.current;
-    if (current && journalRef.current && (current.recoveryStatus === "unavailable" || current.editor?.recoveryStatus === "unavailable")) {
+    if (current && journalRef.current && (current.recoveryStatus !== "ready" || current.editor?.recoveryStatus === "unavailable")) {
       const nav = navigationRef.current;
       const repository = current.observation.snapshot.repository;
       const recoveryKey = recoveryKeyForNavigation(current.project.id, repository, authorScopeRef.current, nav);
@@ -1409,10 +1421,12 @@ function AuthorWorkspace({
     const onOnline = () => refreshForeground();
     document.addEventListener("visibilitychange", onForeground);
     window.addEventListener("online", onOnline);
+    window.addEventListener("pageshow", refreshForeground);
     return () => {
       window.clearInterval(timer);
       document.removeEventListener("visibilitychange", onForeground);
       window.removeEventListener("online", onOnline);
+      window.removeEventListener("pageshow", refreshForeground);
     };
   }, [refreshForeground, work?.project.id]);
 

@@ -365,7 +365,8 @@ export const api = {
     method: "POST",
     body: JSON.stringify(operation),
   }),
-  reconcile: (projectId: string) => request(dto.reconcile, projectPath(projectId, "reconcile"), {
+  reconcile: (projectId: string, signal?: AbortSignal) => request(dto.reconcile, projectPath(projectId, "reconcile"), {
+    ...(signal ? { signal } : {}),
     method: "POST",
     body: "{}",
   }),
