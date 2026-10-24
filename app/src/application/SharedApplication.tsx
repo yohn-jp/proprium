@@ -704,6 +704,88 @@ function AuthorWorkspace({
 
   useEffect(() => {
     let cancelled = false;
+    let bootstrapRunning = false;
+    let bootstrapFinished = false;
+    let resumeAfterCurrentAttempt = false;
+    const isDepartureAbort = (error: unknown): boolean =>
+      error instanceof DOMException && error.name === "AbortError";
+    const startBootstrap = () => {
+      if (cancelled || bootstrapRunning || bootstrapFinished) return;
+      bootstrapRunning = true;
+      resumeAfterCurrentAttempt = false;
+      void (async () => {
+        const version = await api.version();
+        if (cancelled) return;
+        setHostedMode(version.hosted);
+        const session = await api.session();
+        if (!session || cancelled) return;
+        const scope = session.authorScope || "owner";
+        setCanWrite(session.permissions ? session.permissions.includes("write") : true);
+        authorScopeRef.current = scope;
+        setAuthorScope(scope);
+        void refreshJournal();
+        setAuthState("ready");
+        const registered = await api.projects();
+        if (cancelled) return;
+        setProjects(registered);
+        const stored = localStorageIfAvailable()?.getItem(ACTIVE_PROJECT_KEY) ?? null;
+        const requested = requestedResourceRef.current;
+        const routeProject = requested?.projectId ? registered.find((project) => project.id === requested.projectId) : undefined;
+        if (requested?.projectId && !routeProject) {
+          setGlobalError("この直接リンクの作品は現在のアカウントで開けません。");
+          bootstrapFinished = true;
+          return;
+        }
+        const next = routeProject ?? registered.find((project) => project.id === stored) ?? registered[0];
+        if (next) {
+          const sceneRequest = sceneLoadRef.current;
+          const activation = activateProject(next, false, scope);
+          const navigation = navigationRef.current;
+          await activation;
+          if (cancelled) return;
+          if (navigationRef.current !== navigation || sceneLoadRef.current !== sceneRequest || authorScopeRef.current !== scope) {
+            bootstrapFinished = true;
+            return;
+          }
+          const active = workRef.current;
+          // activateProject reports ordinary failures through the status UI.
+          // If it was interrupted before installing the project, keep bootstrap
+          // resumable for a later pageshow instead of treating the empty shell
+          // as a completed initialization.
+          if (!active || active.project.id !== next.id) return;
+          if (requested?.sceneId) {
+            const location = active?.project.id === requested.projectId && active ? sceneTreeLocation(active.tree.tree, requested.sceneId) : null;
+            if (!active || active.project.id !== requested.projectId || !location ||
+                (requested.volumeId && requested.volumeId !== location.volumeId) ||
+                (requested.chapterId && requested.chapterId !== location.chapterId)) {
+              setGlobalError("直接リンクのシーンが作品構成に見つからないか、URL の巻・章と一致しません。");
+              bootstrapFinished = true;
+              return;
+            }
+            await loadScene(active.project.id, requested.sceneId, active.tree, active.observation.snapshot.repository);
+          }
+        }
+        bootstrapFinished = true;
+      })().catch((error: unknown) => {
+        if (cancelled || isDepartureAbort(error)) return;
+        if (error instanceof ApiError && error.status === 401 && error.code === "UNAUTHORIZED") setAuthState("signed-out");
+        else setGlobalError(messageOf(error));
+        bootstrapFinished = true;
+      }).finally(() => {
+        bootstrapRunning = false;
+        if (resumeAfterCurrentAttempt && !bootstrapFinished) startBootstrap();
+      });
+    };
+    const resumeIncompleteBootstrap = () => {
+      if (bootstrapFinished || cancelled) return;
+      if (workRef.current) {
+        bootstrapFinished = true;
+        return;
+      }
+      resumeAfterCurrentAttempt = true;
+      startBootstrap();
+    };
+    window.addEventListener("pageshow", resumeIncompleteBootstrap);
     void BrowserJournal.open().then(async (opened) => {
       if (cancelled) {
         opened.close();
@@ -726,66 +808,12 @@ function AuthorWorkspace({
           : current);
       }
     });
-    void api.version().then(async (version) => {
-      if (cancelled) return null;
-      setHostedMode(version.hosted);
-      return api.session();
-    }).then(async (session) => {
-      if (!session) return;
-      if (cancelled) return;
-      const scope = session.authorScope || "owner";
-      setCanWrite(session.permissions ? session.permissions.includes("write") : true);
-      authorScopeRef.current = scope;
-      setAuthorScope(scope);
-      void refreshJournal();
-      setAuthState("ready");
-      try {
-        const registered = await api.projects();
-        if (cancelled) return;
-        setProjects(registered);
-        const stored = localStorageIfAvailable()?.getItem(ACTIVE_PROJECT_KEY) ?? null;
-        const requested = requestedResourceRef.current;
-        const routeProject = requested?.projectId ? registered.find((project) => project.id === requested.projectId) : undefined;
-        if (requested?.projectId && !routeProject) {
-          setGlobalError("この直接リンクの作品は現在のアカウントで開けません。");
-          return;
-        }
-        const next = routeProject ?? registered.find((project) => project.id === stored) ?? registered[0];
-        if (next) {
-          const sceneRequest = sceneLoadRef.current;
-          const activation = activateProject(next, false, scope);
-          const navigation = navigationRef.current;
-          await activation;
-          if (cancelled || navigationRef.current !== navigation || sceneLoadRef.current !== sceneRequest || authorScopeRef.current !== scope) return;
-          const active = workRef.current;
-          if (requested?.sceneId) {
-            const location = active?.project.id === requested.projectId && active ? sceneTreeLocation(active.tree.tree, requested.sceneId) : null;
-            if (!active || active.project.id !== requested.projectId || !location ||
-                (requested.volumeId && requested.volumeId !== location.volumeId) ||
-                (requested.chapterId && requested.chapterId !== location.chapterId)) {
-              setGlobalError("直接リンクのシーンが作品構成に見つからないか、URL の巻・章と一致しません。");
-              return;
-            }
-            await loadScene(active.project.id, requested.sceneId, active.tree, active.observation.snapshot.repository);
-          }
-        }
-      } catch (error) {
-        if (error instanceof ApiError && error.status === 401 && error.code === "UNAUTHORIZED") {
-          setAuthState("signed-out");
-        } else {
-          setGlobalError(messageOf(error));
-        }
-      }
-    }).catch((error) => {
-      if (!cancelled) {
-        if (error instanceof ApiError && error.status === 401 && error.code === "UNAUTHORIZED") setAuthState("signed-out");
-        else setGlobalError(messageOf(error));
-      }
-    });
+    startBootstrap();
     return () => {
       cancelled = true;
+      window.removeEventListener("pageshow", resumeIncompleteBootstrap);
     };
-  // The initial authentication probe is intentionally one-shot.
+  // Initialization resumes only when a browser-restored document was interrupted.
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
