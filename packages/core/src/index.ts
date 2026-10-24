@@ -2300,7 +2300,7 @@ export class CoreStore implements MutationCoordinator {
       if (ref === `refs/heads/${branch}` || ref === `refs/remotes/origin/${branch}` ||
           ref === "refs/scriptorium/checkpoint-head" || ref === "refs/scriptorium/reconciled-head") continue;
       if (ref === "refs/remotes/origin/HEAD") {
-        const target = await git(root, ["symbolic-ref", "-q", ref]).catch(() => "");
+        const target = (await git(root, ["symbolic-ref", "-q", ref]).catch(() => "")).trim();
         if (target === `refs/remotes/origin/${branch}`) continue;
         return true;
       }
