@@ -43,7 +43,8 @@ To build and run the full composition, use `SCRIPTORIUM_PROFILE=full pnpm build`
 
 When the optional `mcp` module is included in a Praetorium Hosted composition,
 the stable application origin exposes `/mcp` (Streamable HTTP) and
-`/.well-known/oauth-protected-resource` (public OAuth resource discovery).
+`/.well-known/oauth-protected-resource` (public OAuth resource discovery), also
+available at `/.well-known/oauth-protected-resource/mcp` for endpoint-path discovery.
 Configure a remote MCP client with `https://<stable-application-origin>/mcp`,
 not the physical Pod hostname or the Praetorium browser entry URL.
 The resource metadata points to Praetorium for GitHub-based OAuth login,
