@@ -548,6 +548,7 @@ function ScratchPanel({
   const [error, setError] = useState("");
   const [checkingId, setCheckingId] = useState("");
   const [resumedId, setResumedId] = useState("");
+  const [resumingKey, setResumingKey] = useState("");
   const timer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const draftRef = useRef(draft);
   const bindingRef = useRef(binding);
@@ -679,20 +680,35 @@ function ScratchPanel({
     }
   }
 
-  function resume(entry: JournalEntry): void {
-    if (timer.current) clearTimeout(timer.current);
-    const resumed: ScratchDraftPayload = {
-      id: entry.operation.id,
-      generation: entry.operation.generation,
-      createdAt: scratchCreatedAt(entry),
-      text: entry.text,
-      attachments: attachmentDrafts(entry),
-    };
-    draftRef.current = resumed;
-    setDraft(resumed);
-    setStored(true);
-    setResumedId(entry.operation.id);
-    setError("");
+  async function resume(entry: JournalEntry): Promise<void> {
+    if (resumingKey) return;
+    const entryKey = `${entry.operation.id}:${entry.operation.generation}`;
+    setResumingKey(entryKey);
+    try {
+      await flush();
+      const current = draftRef.current;
+      if ((current.text.trim() || current.attachments.length > 0) &&
+          current.id === entry.operation.id && current.generation > entry.operation.generation) {
+        setError("このスクラッチより新しい入力をDraftとして保護しました。最新の回復記録を選び直してください。");
+        return;
+      }
+      const resumed: ScratchDraftPayload = {
+        id: entry.operation.id,
+        generation: entry.operation.generation,
+        createdAt: scratchCreatedAt(entry),
+        text: entry.text,
+        attachments: attachmentDrafts(entry),
+      };
+      draftRef.current = resumed;
+      setDraft(resumed);
+      setStored(true);
+      setResumedId(entry.operation.id);
+      setError("");
+    } catch (caught) {
+      setError(caught instanceof Error ? caught.message : "現在のスクラッチを保護できなかったため、回復記録を開きませんでした。");
+    } finally {
+      setResumingKey("");
+    }
   }
 
   async function checkpoint(entry?: JournalEntry): Promise<void> {
@@ -726,7 +742,7 @@ function ScratchPanel({
       <textarea
         id="scratch"
         value={draft.text}
-        disabled={disabled}
+        disabled={disabled || resumingKey !== ""}
         onChange={(event) => editText(event.currentTarget.value)}
         onBlur={() => void flush().catch(() => undefined)}
         placeholder="台詞候補・没文など。本文には入りません"
@@ -734,14 +750,14 @@ function ScratchPanel({
       />
       <label className="scratch-attachment-picker">
         画像を添付
-        <input aria-label="スクラッチ画像を添付" type="file" accept="image/*" capture="environment" multiple disabled={disabled} onChange={(event) => {
+        <input aria-label="スクラッチ画像を添付" type="file" accept="image/*" capture="environment" multiple disabled={disabled || resumingKey !== ""} onChange={(event) => {
           void addImages(event.currentTarget.files);
           event.currentTarget.value = "";
         }} />
       </label>
       {draft.attachments.length > 0 && <p className="muted-list-item">画像 {draft.attachments.length} 件</p>}
       {error && <p className="status" data-kind="error" role="alert">{error}</p>}
-      <button type="button" onClick={() => void checkpoint()} disabled={disabled || !hasActiveDraft || !stored || checkingId !== ""}>
+      <button type="button" onClick={() => void checkpoint()} disabled={disabled || !hasActiveDraft || !stored || checkingId !== "" || resumingKey !== ""}>
         {checkingId === draft.id ? "確認中…" : resumedId === draft.id ? "このスクラッチをチェックポイント" : "スクラッチをチェックポイント"}
       </button>
       {pending.length > 0 && (
@@ -749,8 +765,8 @@ function ScratchPanel({
           {pending.map((entry) => (
             <li key={`${entry.operation.id}:${entry.operation.generation}`}>
               <span>{entry.text.slice(0, 72) || "画像メモ"} · {entry.state === "draft" ? "Draft" : entry.state === "checkpointing" ? "確認中" : entry.state === "conflict" ? "競合" : "Checkpoint"}</span>
-              {entry.state === "draft" && <button type="button" onClick={() => resume(entry)} disabled={disabled}>続ける</button>}
-              {entry.state === "draft" && <button type="button" onClick={() => void checkpoint(entry)} disabled={disabled || checkingId !== ""}>Checkpoint</button>}
+              {entry.state === "draft" && <button type="button" onClick={() => void resume(entry)} disabled={disabled || resumingKey !== ""}>{resumingKey === `${entry.operation.id}:${entry.operation.generation}` ? "保護を確認中…" : "続ける"}</button>}
+              {entry.state === "draft" && <button type="button" onClick={() => void checkpoint(entry)} disabled={disabled || checkingId !== "" || resumingKey !== ""}>Checkpoint</button>}
             </li>
           ))}
         </ul>
