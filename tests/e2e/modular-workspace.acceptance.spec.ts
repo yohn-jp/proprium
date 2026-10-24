@@ -20,6 +20,12 @@ interface WorkspaceState {
   hiddenPanelIds: string[];
 }
 
+interface WorkspaceSnapshotRecord {
+  version: 2;
+  layout: WorkspaceState;
+  floating: Array<{ panelId: string; left: number; top: number; width: number; height: number }>;
+}
+
 function repositoryInputValue(value: string): string {
   return value.startsWith("https://") || value.startsWith("file://") ? value : pathToFileURL(value).href;
 }
@@ -156,7 +162,7 @@ async function closePanelMenu(page: Page): Promise<void> {
 
 async function workspaceStorage(page: Page, mode: "desktop" | "mobile"): Promise<{ key: string; raw: string | null }> {
   return page.evaluate((expectedMode) => {
-    const prefix = "scriptorium:workspace:v1:";
+    const prefix = "scriptorium:workspace:v2:";
     const key = Object.keys(localStorage).find((candidate) => candidate.startsWith(prefix) && candidate.endsWith(`:${expectedMode}`));
     return { key: key ?? "", raw: key ? localStorage.getItem(key) : null };
   }, mode);
@@ -199,7 +205,7 @@ async function saveWorkspace(page: Page): Promise<WorkspaceState> {
   const storage = await workspaceStorage(page, "desktop");
   expect(storage.key).not.toBe("");
   expect(storage.raw).not.toBeNull();
-  return JSON.parse(storage.raw!) as WorkspaceState;
+  return (JSON.parse(storage.raw!) as WorkspaceSnapshotRecord).layout;
 }
 
 test("desktop workspace presets, arbitrary docking, panel visibility and layout persistence preserve drafts", async ({ page }) => {
@@ -295,7 +301,8 @@ test("malformed workspace settings are retained until the owner explicitly saves
 
   const replacement = await saveWorkspace(page);
   expect(replacement.version).toBe(1);
-  expect(JSON.parse((await workspaceStorage(page, "desktop")).raw!)).toMatchObject({ version: 1, preset: "writing" });
+  expect((JSON.parse((await workspaceStorage(page, "desktop")).raw!) as WorkspaceSnapshotRecord).layout)
+    .toMatchObject({ version: 1, preset: "writing" });
 });
 
 test("mobile workspace tabs support keyboard navigation and preserve the editor draft", async ({ page }) => {
@@ -332,7 +339,7 @@ test("mobile workspace tabs support keyboard navigation and preserve the editor 
   const desktopStorage = await workspaceStorage(page, "desktop");
   expect(mobileStorage.key).not.toBe("");
   expect(mobileStorage.key).not.toBe(desktopStorage.key);
-  expect(JSON.parse(mobileStorage.raw!).version).toBe(1);
+  expect((JSON.parse(mobileStorage.raw!) as WorkspaceSnapshotRecord).layout.version).toBe(1);
 });
 
 test("mobile route buttons restore their workspace panel without adding duplicate history entries", async ({ page }) => {
@@ -741,10 +748,18 @@ test("desktop floating panels preserve drafts and saved layout geometry", async 
   await expect(editorPanel).not.toHaveClass(/is-maximized/);
 
   await workspaceToolbar(page).getByRole("button", { name: "Save layout", exact: true }).click();
-  await expect.poll(async () => page.evaluate(() =>
-    Object.keys(localStorage).some((key) => key.startsWith("scriptorium:workspace:floating:v1:")))).toBe(true);
+  const stored = await workspaceStorage(page, "desktop");
+  expect(stored.raw).not.toBeNull();
+  const savedRecord = JSON.parse(stored.raw!) as WorkspaceSnapshotRecord;
+  expect(savedRecord.floating).toHaveLength(1);
+  expect(savedRecord.floating[0]).toMatchObject({ panelId: "outline", width: 350, height: 410 });
+  const savedGeometry = savedRecord.floating[0]!;
   await page.reload();
   await expect(page.locator('[data-floating-panel="outline"]')).toBeVisible();
+  expect(await page.locator('[data-floating-panel="outline"]').evaluate((element) => {
+    const style = (element as HTMLElement).style;
+    return { left: Number.parseInt(style.left, 10), top: Number.parseInt(style.top, 10), width: Number.parseInt(style.width, 10), height: Number.parseInt(style.height, 10) };
+  })).toEqual({ left: savedGeometry.left, top: savedGeometry.top, width: savedGeometry.width, height: savedGeometry.height });
   await expect(page.locator('[data-workspace-panel="editor"] .cm-content')).toHaveText(draft);
 
   await page.locator('[data-floating-panel="outline"]')
@@ -752,6 +767,57 @@ test("desktop floating panels preserve drafts and saved layout geometry", async 
   await expect(page.locator('[data-workspace-panel="outline"]')).toBeVisible();
   await page.getByRole("tab", { name: "Editor", exact: true }).click();
   await expect(page.locator(".cm-content")).toHaveText(draft);
+});
+
+test("a failed workspace record write preserves the previous dock and floating layout on reload", async ({ page }) => {
+  expect(authToken.length).toBeGreaterThanOrEqual(32);
+  expect(repositoryUrl).not.toBe("");
+  await signIn(page, "desktop");
+  await openFixtureScene(page, "desktop");
+
+  const workspace = page.locator(".st-workspace");
+  await workspace.locator('[data-workspace-panel="outline"]')
+    .getByRole("button", { name: "Float Outline" }).click();
+  const floating = workspace.locator('[data-floating-panel="outline"]');
+  await expect(floating).toBeVisible();
+  await saveWorkspace(page);
+  const oldSnapshot = await workspaceStorage(page, "desktop");
+  expect(oldSnapshot.key).not.toBe("");
+  expect(oldSnapshot.raw).not.toBeNull();
+  const previousSnapshotBytes = oldSnapshot.raw;
+  const previousSnapshot = JSON.parse(previousSnapshotBytes!) as WorkspaceSnapshotRecord;
+  expect(previousSnapshot.floating).toHaveLength(1);
+
+  const resizeHandle = page.getByRole("separator", { name: "Resize horizontal workspace panels" });
+  await expect(resizeHandle).toBeVisible();
+  await resizeHandle.focus();
+  await resizeHandle.press("ArrowRight");
+  await floating.locator(".st-workspace-float-handle").press("ArrowRight");
+
+  await page.evaluate((workspaceKey) => {
+    const prototype = Storage.prototype as Storage & { __workspaceOriginalSetItem?: typeof Storage.prototype.setItem };
+    prototype.__workspaceOriginalSetItem = prototype.setItem;
+    Storage.prototype.setItem = function (key: string, value: string): void {
+      if (key === workspaceKey) throw new DOMException("quota exceeded", "QuotaExceededError");
+      prototype.__workspaceOriginalSetItem!.call(this, key, value);
+    };
+  }, oldSnapshot.key);
+  await workspaceToolbar(page).getByRole("button", { name: "Save layout", exact: true }).click();
+  await expect(page.locator(".st-workspace-message")).toContainText("could not be saved");
+  await page.evaluate(() => {
+    const prototype = Storage.prototype as Storage & { __workspaceOriginalSetItem?: typeof Storage.prototype.setItem };
+    if (prototype.__workspaceOriginalSetItem) prototype.setItem = prototype.__workspaceOriginalSetItem;
+    delete prototype.__workspaceOriginalSetItem;
+  });
+  expect(await page.evaluate((key) => localStorage.getItem(key), oldSnapshot.key)).toBe(previousSnapshotBytes);
+
+  await page.reload();
+  await expect(page.locator('[data-floating-panel="outline"]')).toBeVisible();
+  const afterReloadSnapshot = await page.evaluate((key) => localStorage.getItem(key), oldSnapshot.key);
+  expect(afterReloadSnapshot).toBe(previousSnapshotBytes);
+  const restored = JSON.parse(afterReloadSnapshot!) as WorkspaceSnapshotRecord;
+  expect(restored.layout).toEqual(previousSnapshot.layout);
+  expect(restored.floating).toEqual(previousSnapshot.floating);
 });
 
 
