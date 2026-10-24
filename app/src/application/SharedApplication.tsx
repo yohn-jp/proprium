@@ -2127,38 +2127,82 @@ function AuthorWorkspace({
   }
 
   async function mapLegacyDraft(record: LegacyDraftRecord): Promise<void> {
+    const initial = workRef.current;
+    const currentJournal = journalRef.current;
+    if (!initial || initial.recoveryStatus !== "ready" || !initial.editor || initial.editor.recoveryStatus !== "ready" || initial.loadingScene || initial.selectedSceneId !== initial.editor.read.scene.id || !currentJournal || busy) return;
+    const initialNavigation = navigationRef.current;
+    const initialAuthor = authorScopeRef.current;
+    const composedText = await editorFlushRef.current();
+    const beforeMigration = workRef.current;
+    if (composedText !== null && beforeMigration?.editor && composedText !== beforeMigration.editor.text) editText(composedText);
     const current = workRef.current;
     const editor = current?.editor;
-    const currentJournal = journalRef.current;
-    if (!current || current.recoveryStatus !== "ready" || !editor || editor.recoveryStatus !== "ready" || current.loadingScene || current.selectedSceneId !== editor.read.scene.id || !currentJournal) return;
+    if (!current || navigationRef.current !== initialNavigation || authorScopeRef.current !== initialAuthor || journalRef.current !== currentJournal ||
+        current.recoveryStatus !== "ready" || !editor || editor.recoveryStatus !== "ready" || current.loadingScene || current.selectedSceneId !== editor.read.scene.id) return;
+    const repository = current.observation.snapshot.repository;
+    const documentPath = editor.read.document.path;
+    const hasPendingDraft = (candidate: EditorSession) => [...pendingDraftsRef.current.values()].some((entry) =>
+      entry.authorScope === initialAuthor && entry.documentPath === candidate.read.document.path && sameRepository(entry.repository, repository));
+    const needsProtectionBeforeMigration = (candidate: EditorSession) =>
+      candidate.text !== (candidate.entry?.text ?? candidate.read.scene.text) ||
+      candidate.entry?.state === "draft" || candidate.entry?.state === "conflict" || hasPendingDraft(candidate);
+    const blockedMessage = "現在の下書きがあるため、古い記録の移行を中止しました。先に現在の下書きを保存して Checkpoint するか、競合を解決してください。古い記録は保持しています。";
+    if (needsProtectionBeforeMigration(editor)) {
+      setStatus({ message: blockedMessage, kind: "error" });
+      return;
+    }
     const accepted = window.confirm(
-      `この古い記録を現在選択中の作品「${projectLabel(current.project)}」の「${editor.read.scene.title}」へ下書きとして移しますか？本文は Git に送信されません。`,
+      `この古い記録の本文で、現在選択中の作品「${projectLabel(current.project)}」の「${editor.read.scene.title}」を置き換えて、ブラウザー回復記録へ移します。未確定の編集がある場合は移行できません。本文は Git に送信されません。続けますか？`,
     );
     if (!accepted) return;
     const nav = navigationRef.current;
     const projectId = current.project.id;
-    const repository = current.observation.snapshot.repository;
-    const documentPath = editor.read.document.path;
+    const authorScope = initialAuthor;
     const sceneId = editor.read.scene.id;
+    setBusy("legacy-import");
     try {
-      const prior = await currentJournal.getDocument(repository, documentPath, authorScopeRef.current);
+      const prior = await currentJournal.getDocument(repository, documentPath, authorScope);
+      if (!isCurrentEditor(nav, projectId, repository, documentPath, sceneId) || authorScopeRef.current !== authorScope) return;
+      const latest = workRef.current;
+      const latestEditor = latest?.editor;
+      if (!latest || !latestEditor) return;
+      if (snapshotKey(latestEditor.read.snapshot) !== snapshotKey(editor.read.snapshot)) {
+        setStatus({ message: "表示中の原稿の版が変わったため、古い記録の移行を中止しました。再読み込みしてもう一度お試しください。古い記録は保持しています。", kind: "error" });
+        return;
+      }
+      if (needsProtectionBeforeMigration(latestEditor) || prior.some((entry) => entry.state === "draft")) {
+        setStatus({ message: blockedMessage, kind: "error" });
+        return;
+      }
       const existing = prior.at(-1);
       const id = existing?.state === "draft" ? existing.operation.id : crypto.randomUUID();
       const generation = Math.max(generationRef.current, existing?.operation.generation ?? 0) + 1;
-      const operation = buildOperation(editor.read, record.text, id, generation);
-      const entry = makeEntry(repository, authorScopeRef.current, sceneId, editor.read, record.text, editor.read.scene.text, operation, "draft");
+      const operation = buildOperation(latestEditor.read, record.text, id, generation);
+      const entry = makeEntry(repository, authorScope, sceneId, latestEditor.read, record.text, latestEditor.read.scene.text, operation, "draft");
+      generationRef.current = generation;
       if (!await currentJournal.putLatestDraft(entry)) throw new Error("新しい回復記録があるため、この古い下書きは移しませんでした。");
       localStorageIfAvailable()?.removeItem(record.key);
-      generationRef.current = generation;
       setLegacyDrafts(readLegacyDrafts());
-      if (isCurrentEditor(nav, projectId, repository, documentPath, sceneId)) updateWork((state) => state?.editor ? {
-        ...state,
-        editor: { ...state.editor, text: record.text, baseText: editor.read.scene.text, entry, conflict: null, draftStored: true, journalError: "" },
-      } : state);
+      const activeEditor = workRef.current?.editor;
+      const sameVisibleEditor = activeEditor && activeEditor.text === latestEditor.text &&
+        snapshotKey(activeEditor.read.snapshot) === snapshotKey(latestEditor.read.snapshot) &&
+        activeEditor.entry?.operation.id === latestEditor.entry?.operation.id &&
+        activeEditor.entry?.operation.generation === latestEditor.entry?.operation.generation;
+      if (sameVisibleEditor && isCurrentEditor(nav, projectId, repository, documentPath, sceneId) && authorScopeRef.current === authorScope) {
+        updateWork((state) => state?.project.id === projectId && state.selectedSceneId === sceneId && state.editor?.read.document.path === documentPath &&
+          state.editor.text === latestEditor.text && snapshotKey(state.editor.read.snapshot) === snapshotKey(latestEditor.read.snapshot) &&
+          state.editor.entry?.operation.id === latestEditor.entry?.operation.id &&
+          state.editor.entry?.operation.generation === latestEditor.entry?.operation.generation ? {
+          ...state,
+          editor: { ...state.editor, text: record.text, baseText: latestEditor.read.scene.text, entry, conflict: null, draftStored: true, journalError: "" },
+        } : state);
+      }
       await refreshJournal(repository, nav);
       if (isCurrentEditor(nav, projectId, repository, documentPath, sceneId)) setStatus({ message: "古い下書きをこの作品の IndexedDB 回復記録へ移しました。Git への変更はありません。", kind: "success" });
     } catch (error) {
       if (isCurrentEditor(nav, projectId, repository, documentPath, sceneId)) setStatus({ message: `古い下書きを移せませんでした。元の記録は残しています。${messageOf(error)}`, kind: "error" });
+    } finally {
+      setBusy((active) => active === "legacy-import" ? "" : active);
     }
   }
 
@@ -2426,7 +2470,7 @@ function AuthorWorkspace({
           text={editor.text}
           textRevision={editor.textRevision}
           flushPendingReactPublish={flushPendingReactPublish}
-          readOnly={!editorWritable || busy === "restore"}
+          readOnly={!editorWritable || busy === "restore" || busy === "legacy-import"}
           onTextChange={(nextText) => editText(nextText, true)}
           onRetryDraft={() => {
             const navigation = navigationRef.current;
