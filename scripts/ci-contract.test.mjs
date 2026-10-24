@@ -42,6 +42,18 @@ test('browser groups retain immutable runtime and build once before running sele
   const browser = workflow.jobs.browser;
   assert.match(browser.container.image, /^mcr\.microsoft\.com\/playwright@sha256:[a-f0-9]{64}$/);
   assert.equal(browser.container.options, '--ipc=host');
+  const diagnostics = browser.steps.find(step => step.uses === 'actions/upload-artifact@v4' && step.with.name.startsWith('playwright-failure-'));
+  assert.ok(diagnostics);
+  assert.equal(diagnostics.if, 'always()');
+  assert.match(diagnostics.with.name, /playwright-failure-\$\{\{ matrix\.group \}\}-\$\{\{ github\.event\.pull_request\.head\.sha \|\| github\.sha \}\}/);
+  assert.match(diagnostics.with.path, /tests\/e2e\/test-results\/\*\*\/trace\.zip/);
+  assert.match(diagnostics.with.path, /tests\/e2e\/test-results\/\*\*\/error-context\.md/);
+  assert.match(diagnostics.with.path, /tests\/e2e\/test-results\/\*\*\/journal-draft-\*-diagnostic\.json/);
+  assert.equal(diagnostics.with['if-no-files-found'], 'ignore');
+  const runnerIndex = browser.steps.findIndex(step => step.run?.includes('ci-group.mjs'));
+  const diagnosticsIndex = browser.steps.indexOf(diagnostics);
+  const reportIndex = browser.steps.findIndex(step => step.uses === 'actions/upload-artifact@v4' && step.with.name.startsWith('ci-evidence-browser-'));
+  assert.ok(runnerIndex < diagnosticsIndex && diagnosticsIndex < reportIndex);
   const runner = readFileSync(new URL('./ci-group.mjs', import.meta.url), 'utf8');
   assert.doesNotMatch(runner, /(?:apt(?:-get)?\s|playwright install|--with-deps)/);
   assert.ok(runner.indexOf("node('scripts/verify-browser-runtime.mjs')") < runner.indexOf("run('pnpm', ['build']"));

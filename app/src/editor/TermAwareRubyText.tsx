@@ -113,6 +113,15 @@ export function TermAwareRubyText({
       }
       active.clear();
     };
+    const onBeforeUnload = (event: BeforeUnloadEvent) => {
+      // A canceled departure leaves this reading view active; otherwise stop
+      // optional requests before native document teardown starts.
+      queueMicrotask(() => {
+        if (event.defaultPrevented || disposed) return;
+        suspended = true;
+        cancelActive();
+      });
+    };
     const onPageHide = () => {
       suspended = true;
       cancelActive();
@@ -122,11 +131,13 @@ export function TermAwareRubyText({
       suspended = false;
       pump();
     };
+    window.addEventListener("beforeunload", onBeforeUnload);
     window.addEventListener("pagehide", onPageHide);
     window.addEventListener("pageshow", onPageShow);
     for (const line of container.querySelectorAll<HTMLParagraphElement>("[data-source-start][data-source-end]")) observer.observe(line);
     return () => {
       disposed = true;
+      window.removeEventListener("beforeunload", onBeforeUnload);
       window.removeEventListener("pagehide", onPageHide);
       window.removeEventListener("pageshow", onPageShow);
       observer.disconnect();

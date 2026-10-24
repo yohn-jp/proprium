@@ -1,5 +1,6 @@
-import { expect, test, type Page } from "@playwright/test";
+import { expect, test, type Page, type TestInfo } from "@playwright/test";
 import { execFileSync } from "node:child_process";
+import { writeFile } from "node:fs/promises";
 import { fileURLToPath, pathToFileURL } from "node:url";
 
 const authToken = process.env.SCRIPTORIUM_E2E_AUTH_TOKEN ?? "";
@@ -11,6 +12,7 @@ interface JournalDraft {
   sceneId: string;
   state: string;
   text: string;
+  operationGeneration?: number | null;
 }
 
 interface JournalEntryRecord extends JournalDraft {
@@ -215,22 +217,112 @@ async function readJournal(page: Page): Promise<JournalDraft[]> {
     });
     try {
       const transaction = database.transaction("operations", "readonly");
-      const records = await new Promise<Array<{ sceneId: string; state: string; text: string }>>((resolve, reject) => {
+      const records = await new Promise<Array<{ sceneId: string; state: string; text: string; operation?: { generation?: number } }>>((resolve, reject) => {
         const request = transaction.objectStore("operations").getAll();
         request.onsuccess = () => resolve(request.result);
         request.onerror = () => reject(request.error ?? new Error("IndexedDB journal read failed"));
       });
-      return records.map(({ sceneId, state, text }) => ({ sceneId, state, text }));
+      return records.map(({ sceneId, state, text, operation }) => ({
+        sceneId,
+        state,
+        text,
+        operationGeneration: typeof operation?.generation === "number" ? operation.generation : null,
+      }));
     } finally {
       database.close();
     }
   });
 }
 
-async function expectJournalDraft(page: Page, sceneId: string, text: string): Promise<void> {
-  await expect.poll(async () => (await readJournal(page)).some((draft) =>
-    draft.sceneId === sceneId && draft.text === text && draft.state === "draft",
-  ), { timeout: 20_000 }).toBe(true);
+interface JournalDraftDiagnosticContext {
+  pageErrors: string[];
+  testInfo: TestInfo;
+}
+
+async function journalDraftDiagnostic(page: Page, sceneId: string, expectedText: string): Promise<unknown> {
+  return page.evaluate(async ({ sceneId, expectedText }) => {
+    const database = await new Promise<IDBDatabase>((resolve, reject) => {
+      const request = indexedDB.open("scriptorium-recovery", 3);
+      request.onsuccess = () => resolve(request.result);
+      request.onerror = () => reject(request.error ?? new Error("IndexedDB open failed"));
+    });
+    try {
+      const transaction = database.transaction("operations", "readonly");
+      const records = await new Promise<Array<{ sceneId: string; state: string; text: string; operation?: { generation?: number } }>>((resolve, reject) => {
+        const request = transaction.objectStore("operations").getAll();
+        request.onsuccess = () => resolve(request.result);
+        request.onerror = () => reject(request.error ?? new Error("IndexedDB journal diagnostic read failed"));
+      });
+      const editor = document.querySelector<HTMLElement>(".cm-content");
+      const recovery = document.querySelector<HTMLElement>("[data-recovery-status]");
+      const probe = window as Window & { __journalDraftInputProbe?: Array<Record<string, unknown>> };
+      return {
+        at: performance.now(),
+        recoveryStatus: recovery?.dataset.recoveryStatus ?? null,
+        editorWritable: recovery?.dataset.editorWritable ?? null,
+        contenteditable: editor?.getAttribute("contenteditable") ?? null,
+        displayedTextLength: editor?.textContent?.length ?? null,
+        displayedTextMatchesDraft: editor?.textContent === expectedText,
+        inputEvents: probe.__journalDraftInputProbe ?? [],
+        durabilityMessages: Array.from(document.querySelectorAll<HTMLElement>(".durability-message"), (element) => ({
+          kind: element.dataset.kind ?? null,
+          text: (element.textContent ?? "").trim().slice(0, 200),
+        })),
+        operationRows: records.filter((record) => record.sceneId === sceneId).map((record) => ({
+          sceneId: record.sceneId,
+          state: record.state,
+          textLength: record.text.length,
+          exactDraftMatch: record.text === expectedText,
+          operationGeneration: typeof record.operation?.generation === "number" ? record.operation.generation : null,
+        })),
+      };
+    } finally {
+      database.close();
+    }
+  }, { sceneId, expectedText });
+}
+
+async function attachJournalDraftDiagnostic(testInfo: TestInfo, name: string, value: unknown): Promise<void> {
+  const filePath = testInfo.outputPath(name);
+  await writeFile(filePath, JSON.stringify(value, null, 2), "utf8");
+  await testInfo.attach(name, { path: filePath, contentType: "application/json" });
+}
+
+async function expectJournalDraft(page: Page, sceneId: string, text: string, diagnostic?: JournalDraftDiagnosticContext): Promise<void> {
+  const pollSamples: Array<{ at: number; rows: Array<{ state: string; textLength: number; exactDraftMatch: boolean; operationGeneration: number | null }> }> = [];
+  try {
+    await expect.poll(async () => {
+      const drafts = await readJournal(page);
+      if (diagnostic) pollSamples.push({
+        at: Date.now(),
+        rows: drafts.filter((draft) => draft.sceneId === sceneId).map((draft) => ({
+          state: draft.state,
+          textLength: draft.text.length,
+          exactDraftMatch: draft.text === text,
+          operationGeneration: draft.operationGeneration ?? null,
+        })),
+      });
+      return drafts.some((draft) => draft.sceneId === sceneId && draft.text === text && draft.state === "draft");
+    }, { timeout: 20_000 }).toBe(true);
+  } catch (error) {
+    if (diagnostic) {
+      let afterPoll: unknown;
+      try {
+        afterPoll = await journalDraftDiagnostic(page, sceneId, text);
+      } catch (diagnosticError) {
+        afterPoll = { captureError: diagnosticError instanceof Error ? diagnosticError.message : String(diagnosticError) };
+      }
+      await attachJournalDraftDiagnostic(diagnostic.testInfo, "journal-draft-timeout-diagnostic.json", {
+        sceneId,
+        expectedTextLength: text.length,
+        pollSamples,
+        afterPoll,
+        pageErrors: diagnostic.pageErrors,
+        assertionError: error instanceof Error ? error.message : String(error),
+      });
+    }
+    throw error;
+  }
 }
 
 async function expectJournalState(page: Page, sceneId: string, text: string, state: string): Promise<void> {
@@ -596,7 +688,30 @@ for (const departure of ["reload", "pagehide"] as const) {
       "This case controls the generated local server and isolated browser journal.");
     const errors: string[] = [];
     page.on("pageerror", (error) => errors.push(error.message));
-    await page.addInitScript(() => {
+    const draft = `${testInfo.project.name} ${departure}: a checkpoint must survive interrupted recovery.`;
+    await page.addInitScript((expectedDraft: string) => {
+      const state = window as Window & { __journalDraftInputProbe?: Array<Record<string, unknown>> };
+      const events: Array<Record<string, unknown>> = [];
+      state.__journalDraftInputProbe = events;
+      const recordInput = (event: Event) => {
+        const target = event.target instanceof HTMLElement ? event.target.closest<HTMLElement>(".cm-content") : null;
+        if (!target) return;
+        const recovery = document.querySelector<HTMLElement>("[data-recovery-status]");
+        events.push({
+          type: event.type,
+          at: performance.now(),
+          inputType: event instanceof InputEvent ? event.inputType : null,
+          recoveryStatus: recovery?.dataset.recoveryStatus ?? null,
+          editorWritable: recovery?.dataset.editorWritable ?? null,
+          contenteditable: target.getAttribute("contenteditable"),
+          textLength: target.textContent?.length ?? 0,
+          matchesDraft: target.textContent === expectedDraft,
+        });
+        if (events.length > 24) events.shift();
+      };
+      for (const type of ["focusin", "beforeinput", "input", "change", "compositionstart", "compositionend", "focusout"]) {
+        document.addEventListener(type, recordInput, true);
+      }
       for (const type of ["beforeunload", "pagehide", "unload"]) window.addEventListener(type, () => {
         const key = "scriptorium:e2e:reconcile-lifecycle";
         const events = JSON.parse(localStorage.getItem(key) ?? "[]") as unknown[];
@@ -615,12 +730,11 @@ for (const departure of ["reload", "pagehide"] as const) {
         }
         return original.call(window, input, init);
       };
-    });
+    }, draft);
     await signIn(page, "desktop");
     await openFixtureScene(page, "desktop");
-    const draft = `${testInfo.project.name} ${departure}: a checkpoint must survive interrupted recovery.`;
     await page.locator(".cm-content").fill(draft);
-    await expectJournalDraft(page, "scene-1", draft);
+    await expectJournalDraft(page, "scene-1", draft, { pageErrors: errors, testInfo });
     await page.getByRole("button", { name: "Checkpoint", exact: true }).click();
     await expectJournalState(page, "scene-1", draft, "checkpointed");
     const checkpoint = await readJournalEntry(page, "scene-1", draft);
@@ -1337,4 +1451,205 @@ test("optional terminology cancels work at pagehide and resumes at pageshow", as
   } finally {
     release();
   }
+});
+
+test("Full WebKit terminology stays safe across a held native Shell departure window", async ({ page }, testInfo) => {
+  test.skip(process.env.SCRIPTORIUM_E2E_EXTERNAL_REPOSITORY === "1" || Boolean(process.env.SCRIPTORIUM_E2E_BASE_URL ?? process.env.SCRIPTORIUM_BASE_URL),
+    "This timing harness is limited to the generated local fixture.");
+  test.skip(process.env.SCRIPTORIUM_PROFILE !== "full", "Terminology is an optional Full contribution.");
+  test.skip(testInfo.project.name !== "webkit", "The access-control diagnostic under test is WebKit-specific.");
+
+  const pageErrors: string[] = [];
+  const diagnostics: Array<Record<string, unknown>> = [];
+  page.on("pageerror", (error) => pageErrors.push(error.message));
+  page.on("console", (message) => {
+    if (!message.text().startsWith("TERM_LIFECYCLE ")) return;
+    try { diagnostics.push(JSON.parse(message.text().slice("TERM_LIFECYCLE ".length)) as Record<string, unknown>); }
+    catch { diagnostics.push({ name: "invalid-diagnostic" }); }
+  });
+
+  await page.addInitScript(() => {
+    type HeldTimer = { callback: TimerHandler; args: unknown[]; cancelled: boolean; invoked: boolean };
+    const state: {
+      events: number;
+      held?: HeldTimer;
+      heldTimers: number;
+      pagehide: boolean;
+      resolverFetches: number;
+      resolverCompletions: number;
+      preventBeforeUnload: boolean;
+      armTimers: boolean;
+    } = {
+      events: 0,
+      heldTimers: 0,
+      pagehide: false,
+      resolverFetches: 0,
+      resolverCompletions: 0,
+      preventBeforeUnload: false,
+      armTimers: false,
+    };
+    Object.assign(window, { __termLifecycleHarness: state });
+    const record = (name: string, detail: Record<string, unknown> = {}) => {
+      state.events += 1;
+      console.log("TERM_LIFECYCLE " + JSON.stringify({ name, sequence: state.events, ...detail }));
+    };
+
+    addEventListener("error", (event) => {
+      record("window.error", { message: (event as ErrorEvent).message });
+    });
+    addEventListener("unhandledrejection", (event) => {
+      record("unhandledrejection", { reason: String((event as PromiseRejectionEvent).reason) });
+    });
+    addEventListener("beforeunload", (event) => {
+      if (state.preventBeforeUnload) event.preventDefault();
+      record("beforeunload", { trusted: event.isTrusted, defaultPrevented: event.defaultPrevented });
+      queueMicrotask(() => record("beforeunload.settled", { defaultPrevented: event.defaultPrevented }));
+    }, { capture: true });
+    addEventListener("pagehide", (event) => {
+      state.pagehide = true;
+      record("pagehide", { trusted: event.isTrusted });
+      const held = state.held;
+      // Invoke the captured production callback at the teardown boundary. clearTimeout
+      // cannot retract this test-held callback, so the production AbortSignal must
+      // still make its work inert after beforeunload.
+      if (event.isTrusted && held && !held.invoked) {
+        held.invoked = true;
+        record("held-term-callback-at-native-pagehide", { cancelled: held.cancelled });
+        if (typeof held.callback === "function") held.callback(...held.args);
+      }
+    }, { capture: true });
+    addEventListener("pageshow", (event) => {
+      state.pagehide = false;
+      record("pageshow", { persisted: event.persisted });
+    }, { capture: true });
+
+    const nativeFetch = window.fetch;
+    window.fetch = function(input, init) {
+      const url = String(input);
+      const isResolver = url.endsWith("/actions/search.terms.resolve");
+      if (isResolver) {
+        state.resolverFetches += 1;
+        record("resolver.fetch", { afterPagehide: state.pagehide, signalAborted: init?.signal?.aborted ?? false });
+      }
+      const result = nativeFetch.call(this, input, init);
+      if (isResolver) result.then(
+        () => { state.resolverCompletions += 1; record("resolver.completed"); },
+        (error) => record("resolver.rejected", { name: error?.name ?? "", message: String(error) }),
+      );
+      return result;
+    };
+
+    const nativeSetTimeout = window.setTimeout.bind(window);
+    const nativeClearTimeout = window.clearTimeout;
+    const heldTimerId = 9_871_113;
+    window.setTimeout = ((...timerArgs: Parameters<typeof window.setTimeout>) => {
+      const [handler, delay, ...args] = timerArgs;
+      const stack = new Error().stack ?? "";
+      const isProductionTermSchedule = state.armTimers && delay === 80 && /\/desktop\/assets\/index-[\w-]+\.js/u.test(stack)
+        && /(?:^|\n).*?(?:\.schedule(?: \(|@)|\bschedule@)/u.test(stack)
+        && (document.querySelector(".cm-content")?.textContent?.length ?? 0) > 0;
+      if (!isProductionTermSchedule || typeof handler !== "function") return nativeSetTimeout(handler, delay, ...args);
+      state.heldTimers += 1;
+      state.held = { callback: handler, args, cancelled: false, invoked: false };
+      record("production-term-timer-held", { delay, timerCount: state.heldTimers, stack: stack.slice(0, 500) });
+      return heldTimerId;
+    }) as typeof window.setTimeout;
+    window.clearTimeout = function(id) {
+      if (id === heldTimerId && state.held) {
+        state.held.cancelled = true;
+        record("production-term-timer-cancelled", { timerCount: state.heldTimers });
+        return;
+      }
+      nativeClearTimeout.call(this, id);
+    };
+  });
+
+  await signIn(page, "mobile");
+  await openFixtureScene(page, "mobile", "scene-2");
+  await page.getByRole("navigation", { name: "モバイル画面" }).getByRole("button", { name: "設定", exact: true }).click();
+  await page.getByRole("button", { name: "Desktop版へ切り替え" }).click();
+  await expect(page).toHaveURL(/\/desktop\/projects\/.+\/scenes\/scene-2/u);
+  const editor = page.locator(".cm-content[contenteditable=true]");
+  const fillAndHold = async (draft: string, previousCount: number): Promise<void> => {
+    await page.evaluate(() => {
+      const state = (window as Window & { __termLifecycleHarness?: { armTimers: boolean } }).__termLifecycleHarness;
+      if (!state) throw new Error("Terminology lifecycle harness was not installed");
+      state.armTimers = true;
+    });
+    await editor.fill(draft);
+    await expect.poll(() => page.evaluate(() => {
+      const state = (window as Window & { __termLifecycleHarness?: { heldTimers?: number } }).__termLifecycleHarness;
+      return state?.heldTimers ?? 0;
+    })).toBeGreaterThan(previousCount);
+    await page.evaluate(() => {
+      const state = (window as Window & { __termLifecycleHarness?: { armTimers: boolean } }).__termLifecycleHarness;
+      if (state) state.armTimers = false;
+    });
+  };
+  const heldState = () => page.evaluate(() => {
+    const state = (window as Window & { __termLifecycleHarness?: { held?: { cancelled: boolean }; resolverFetches?: number; resolverCompletions?: number } }).__termLifecycleHarness;
+    return {
+      cancelled: state?.held?.cancelled ?? false,
+      resolverFetches: state?.resolverFetches ?? 0,
+      resolverCompletions: state?.resolverCompletions ?? 0,
+    };
+  });
+  const runHeldCallback = () => page.evaluate(() => {
+    const state = (window as Window & { __termLifecycleHarness?: { held?: { callback: TimerHandler; args: unknown[]; invoked: boolean } } }).__termLifecycleHarness;
+    const held = state?.held;
+    if (!held || held.invoked || typeof held.callback !== "function") throw new Error("Expected a held production terminology timer");
+    held.invoked = true;
+    held.callback(...held.args);
+  });
+
+  // A prevented beforeunload keeps the active editor work alive.
+  await fillAndHold("A canceled departure keeps terminology active.", 0);
+  await page.evaluate(() => {
+    const state = (window as Window & { __termLifecycleHarness?: { preventBeforeUnload: boolean } }).__termLifecycleHarness;
+    if (!state) throw new Error("Terminology lifecycle harness was not installed");
+    state.preventBeforeUnload = true;
+    const event = new Event("beforeunload", { cancelable: true }) as BeforeUnloadEvent;
+    window.dispatchEvent(event);
+    state.preventBeforeUnload = false;
+    if (!event.defaultPrevented) throw new Error("The test beforeunload was not canceled");
+  });
+  await expect.poll(async () => (await heldState()).cancelled).toBe(false);
+  await runHeldCallback();
+  await expect.poll(async () => (await heldState()).resolverCompletions).toBeGreaterThan(0);
+
+  // A pagehide event cancels pending work; pageshow schedules terminology again.
+  const beforeSyntheticLifecycle = await page.evaluate(() => Number((window as Window & { __termLifecycleHarness?: { heldTimers?: number } }).__termLifecycleHarness?.heldTimers ?? 0));
+  await fillAndHold("A hidden page pauses terminology work.", beforeSyntheticLifecycle);
+  await page.evaluate(() => window.dispatchEvent(new PageTransitionEvent("pagehide", { persisted: true })));
+  await expect.poll(async () => (await heldState()).cancelled).toBe(true);
+  const fetchesBeforeResume = (await heldState()).resolverFetches;
+  await runHeldCallback();
+  await expect.poll(async () => (await heldState()).resolverFetches).toBe(fetchesBeforeResume);
+  const beforePageshow = await page.evaluate(() => Number((window as Window & { __termLifecycleHarness?: { heldTimers?: number } }).__termLifecycleHarness?.heldTimers ?? 0));
+  await page.evaluate(() => {
+    const state = (window as Window & { __termLifecycleHarness?: { armTimers: boolean } }).__termLifecycleHarness;
+    if (state) state.armTimers = true;
+  });
+  await page.evaluate(() => window.dispatchEvent(new PageTransitionEvent("pageshow", { persisted: true })));
+  await expect.poll(async () => Number(await page.evaluate(() => (window as Window & { __termLifecycleHarness?: { heldTimers?: number } }).__termLifecycleHarness?.heldTimers ?? 0))).toBeGreaterThan(beforePageshow);
+  await page.evaluate(() => {
+    const state = (window as Window & { __termLifecycleHarness?: { armTimers: boolean } }).__termLifecycleHarness;
+    if (state) state.armTimers = false;
+  });
+  await runHeldCallback();
+  await expect.poll(async () => (await heldState()).resolverCompletions).toBeGreaterThan(1);
+
+  // Recreate the race deterministically: the captured production 80 ms callback
+  // is invoked from the native pagehide capture phase before the plugin's handler.
+  const beforeNativeDeparture = await page.evaluate(() => Number((window as Window & { __termLifecycleHarness?: { heldTimers?: number } }).__termLifecycleHarness?.heldTimers ?? 0));
+  const departureDraft = "Native shell navigation keeps the Japanese draft. 日本語の原稿を保つ。";
+  await fillAndHold(departureDraft, beforeNativeDeparture);
+  await page.getByRole("button", { name: "モバイルUIへ" }).click();
+  await expect(page).toHaveURL(/\/mobile\/projects\/.+\/scenes\/scene-2/u);
+  await expect(page.locator(".cm-content[contenteditable=true]")).toHaveText(departureDraft);
+  expect(pageErrors, "Native shell departure must not report runtime errors").toEqual([]);
+  expect(diagnostics.some((item) => item.name === "production-term-timer-held")).toBe(true);
+  expect(diagnostics.some((item) => item.name === "held-term-callback-at-native-pagehide" && item.cancelled === true)).toBe(true);
+  expect(diagnostics.some((item) => item.name === "resolver.fetch" && item.afterPagehide === true)).toBe(false);
+  expect(diagnostics.some((item) => item.name === "window.error" || item.name === "unhandledrejection")).toBe(false);
 });
