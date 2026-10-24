@@ -25,6 +25,24 @@ import "../authoring.css";
 export type MobileView = "library" | "writing" | "inspection" | "tools" | "settings";
 type ReferenceSheet = "outline" | "inspector";
 
+interface PendingMobilePanelRequest {
+  sequence: number;
+  origin: { identity: string; key: string; scope?: string };
+  expectedIdentity?: string;
+  commit?: () => void;
+  committing?: boolean;
+}
+
+interface MobileLocationSnapshot {
+  identity: string;
+  key: string;
+  pathname: string;
+  search: string;
+  hash: string;
+  state: unknown;
+  scope?: string;
+}
+
 const WORKSPACE_PANEL_FOR_VIEW: Readonly<Record<MobileView, string>> = {
   library: "outline",
   writing: "editor",
@@ -99,12 +117,57 @@ export function MobileShell({ header, documentTitle, documentContext, desktopDur
   const referenceOriginRef = useRef("");
   const routeIdentityRef = useRef(location.pathname + location.search);
   routeIdentityRef.current = location.pathname + location.search;
+  const routeContext = {
+    identity: location.pathname + location.search,
+    key: location.key,
+    pathname: location.pathname,
+    search: location.search,
+    hash: location.hash,
+    state: location.state,
+    scope: workspaceScope,
+  } satisfies MobileLocationSnapshot;
+  const routeContextRef = useRef(routeContext);
+  routeContextRef.current = routeContext;
+  const lastLocationRef = useRef(routeContext);
+  const lastStableLocationRef = useRef(routeContext);
+  const authorizedRouteChangeRef = useRef<{ originKey: string; expectedIdentity?: string } | null>(null);
+  if (lastLocationRef.current.key !== routeContext.key) {
+    const authorized = authorizedRouteChangeRef.current;
+    if (authorized && authorized.originKey === lastLocationRef.current.key &&
+        (!authorized.expectedIdentity || authorized.expectedIdentity === routeContext.identity)) {
+      lastStableLocationRef.current = routeContext;
+    }
+    authorizedRouteChangeRef.current = null;
+    lastLocationRef.current = routeContext;
+  }
+  const routeSelectionKey = `${workspaceScope ?? ""}\u001f${location.key}\u001f${location.pathname}${location.search}\u001f${activeView}`;
+  const routeSelectionKeyRef = useRef(routeSelectionKey);
+  routeSelectionKeyRef.current = routeSelectionKey;
   const panelRequestSequenceRef = useRef(0);
   const forwardedPanelRequestRef = useRef("");
   const [workspacePanelRequest, setWorkspacePanelRequest] = useState<WorkspacePanelRequest>();
+  const workspacePanelRequestRef = useRef(workspacePanelRequest);
+  workspacePanelRequestRef.current = workspacePanelRequest;
+  const [routeTransitionSequence, setRouteTransitionSequence] = useState<number>();
+  const pendingPanelRequestRef = useRef<PendingMobilePanelRequest | null>(null);
   const contentRef = useRef<HTMLIonContentElement | null>(null);
   const activeViewRef = useRef(activeView);
   const scrollPositionsRef = useRef(new Map<MobileView, number>());
+
+  useEffect(() => {
+    const pending = pendingPanelRequestRef.current;
+    if (!pending) return;
+    const current = routeContextRef.current;
+    if (current.key === pending.origin.key && current.identity === pending.origin.identity && current.scope === pending.origin.scope) return;
+    if (pending.committing && pending.origin.scope === current.scope && pending.expectedIdentity === current.identity) {
+      pending.origin = { identity: current.identity, key: current.key, scope: current.scope };
+      pending.committing = false;
+      return;
+    }
+    pendingPanelRequestRef.current = null;
+    panelRequestSequenceRef.current += 1;
+    setRouteTransitionSequence((sequence) => sequence === pending.sequence ? undefined : sequence);
+  }, [location.key, location.pathname, location.search, workspaceScope]);
 
   // A sheet only presents already-authorized panels. The Workspace and CodeMirror
   // remain mounted behind it; scene/navigation changes close the sheet.
@@ -153,10 +216,67 @@ export function MobileShell({ header, documentTitle, documentContext, desktopDur
     }
   }, [beforeLayoutChange]);
 
-  const queueWorkspacePanel = useCallback((id: string) => {
+  const queueWorkspacePanel = useCallback((id: string, commitRoute?: () => void, expectedIdentity?: string) => {
     const sequence = ++panelRequestSequenceRef.current;
+    pendingPanelRequestRef.current = {
+      sequence,
+      origin: {
+        identity: routeContextRef.current.identity,
+        key: routeContextRef.current.key,
+        scope: routeContextRef.current.scope,
+      },
+      expectedIdentity,
+      commit: commitRoute,
+    };
+    if (commitRoute) {
+      setRouteTransitionSequence(sequence);
+    } else {
+      setRouteTransitionSequence(undefined);
+    }
     setWorkspacePanelRequest({ id, sequence });
   }, []);
+
+  const isPanelRequestCurrent = useCallback((sequence: number): boolean => {
+    if (panelRequestSequenceRef.current !== sequence || workspacePanelRequestRef.current?.sequence !== sequence) return false;
+    const pending = pendingPanelRequestRef.current;
+    if (!pending || pending.sequence !== sequence) return true;
+    const current = routeContextRef.current;
+    return current.key === pending.origin.key && current.identity === pending.origin.identity && current.scope === pending.origin.scope;
+  }, []);
+
+  const onPanelRequestResult = useCallback((sequence: number, allowed: boolean): void => {
+    const pending = pendingPanelRequestRef.current;
+    if (!pending || pending.sequence !== sequence) return;
+    if (!pending.commit) return;
+    if (!allowed) {
+      pendingPanelRequestRef.current = null;
+      setRouteTransitionSequence((current) => current === sequence ? undefined : current);
+      return;
+    }
+    const current = routeContextRef.current;
+    if (current.key !== pending.origin.key || current.identity !== pending.origin.identity || current.scope !== pending.origin.scope) return;
+    pending.committing = true;
+    setRouteTransitionSequence((currentSequence) => currentSequence === sequence ? undefined : currentSequence);
+    authorizedRouteChangeRef.current = { originKey: pending.origin.key, expectedIdentity: pending.expectedIdentity };
+    pending.commit();
+    setSwitchError("");
+  }, []);
+
+  const isRouteSelectionCurrent = useCallback((key: string): boolean => routeSelectionKeyRef.current === key, []);
+
+  const onRouteSelectionResult = useCallback((key: string, allowed: boolean): void => {
+    if (routeSelectionKeyRef.current !== key) return;
+    if (allowed) {
+      lastStableLocationRef.current = routeContextRef.current;
+      return;
+    }
+    const stable = lastStableLocationRef.current;
+    if (routeContextRef.current.key === stable.key && routeContextRef.current.identity === stable.identity) return;
+    navigateRoute({ pathname: stable.pathname, search: stable.search, hash: stable.hash }, {
+      replace: true,
+      state: stable.state,
+    });
+  }, [navigateRoute]);
 
   useEffect(() => {
     if (!requestedPanel?.id || !requestedPanel.sequence) return;
@@ -170,10 +290,20 @@ export function MobileShell({ header, documentTitle, documentContext, desktopDur
   const navigate = useCallback(async (view: MobileView) => {
     const hasWorkspace = Boolean(workspaceScope && panels?.length);
     const sameRoute = view === activeView;
-    if ((sameRoute && !hasWorkspace) || !(await preparePanelChange())) return;
+    if (sameRoute && !hasWorkspace) return;
     setReferenceSheet(null);
-    if (hasWorkspace) queueWorkspacePanel(WORKSPACE_PANEL_FOR_VIEW[view]);
-    if (sameRoute) return;
+    if (hasWorkspace) {
+      const targetRoute = sameRoute ? "" : withViewInCurrentUrl(view);
+      const commitRoute = sameRoute ? undefined : () => navigateRoute(targetRoute, {
+        state: {
+          ...historyState(location.state),
+          [MOBILE_PREVIOUS_VIEW_STATE]: activeView,
+        },
+      });
+      queueWorkspacePanel(WORKSPACE_PANEL_FOR_VIEW[view], commitRoute, targetRoute || undefined);
+      return;
+    }
+    if (!(await preparePanelChange())) return;
     navigateRoute(withViewInCurrentUrl(view), {
       state: {
         ...historyState(location.state),
@@ -190,12 +320,16 @@ export function MobileShell({ header, documentTitle, documentContext, desktopDur
     }
     const previous = historyState(location.state)[MOBILE_PREVIOUS_VIEW_STATE];
     if (isMobileView(previous)) {
+      if (workspaceScope && panels?.length) {
+        queueWorkspacePanel(WORKSPACE_PANEL_FOR_VIEW[previous], () => navigateRoute(-1), withViewInCurrentUrl(previous));
+        return;
+      }
       if (!(await preparePanelChange())) return;
       navigateRoute(-1);
       return;
     }
     await navigate(activeView === "writing" ? "library" : "writing");
-  }, [activeView, location.state, navigate, navigateRoute, preparePanelChange, referenceSheet]);
+  }, [activeView, location.state, navigate, navigateRoute, panels?.length, preparePanelChange, queueWorkspacePanel, referenceSheet, workspaceScope]);
 
   const switchToDesktop = useCallback(async () => {
     if (switching) return;
@@ -222,17 +356,22 @@ export function MobileShell({ header, documentTitle, documentContext, desktopDur
     openingReferenceRef.current = true;
     referenceTriggerRef.current = trigger;
     const routeAtStart = routeIdentityRef.current;
+    const routeKeyAtStart = routeContextRef.current.key;
+    const scopeAtStart = workspaceScope;
     referenceOriginRef.current = routeAtStart;
     setOpeningReference(true);
     try {
       // Do not hide an editing/composition failure behind a sheet.
       const allowed = await preparePanelChange();
-      if (allowed && routeIdentityRef.current === routeAtStart) setReferenceSheet(kind);
+      const current = routeContextRef.current;
+      if (allowed && current.identity === routeAtStart && current.key === routeKeyAtStart && current.scope === scopeAtStart) {
+        setReferenceSheet(kind);
+      }
     } finally {
       openingReferenceRef.current = false;
       setOpeningReference(false);
     }
-  }, [panels, preparePanelChange, referenceSheet, workspaceScope]);
+  }, [location.key, panels, preparePanelChange, referenceSheet, workspaceScope]);
 
   const closeReferenceSheet = useCallback(() => setReferenceSheet(null), []);
   const onReferenceDismissed = useCallback(() => {
@@ -289,6 +428,12 @@ export function MobileShell({ header, documentTitle, documentContext, desktopDur
                 beforeLayoutChange={beforeLayoutChange}
                 requestedPanel={workspacePanelRequest}
                 selectedPanelId={WORKSPACE_PANEL_FOR_VIEW[activeView]}
+                routeTransitionSequence={routeTransitionSequence}
+                isPanelRequestCurrent={isPanelRequestCurrent}
+                onPanelRequestResult={onPanelRequestResult}
+                routeSelectionKey={routeSelectionKey}
+                isRouteSelectionCurrent={isRouteSelectionCurrent}
+                onRouteSelectionResult={onRouteSelectionResult}
               />
             </div>
           ) : <div className="mobile-shell-view-stack" data-active-view={activeView}>
