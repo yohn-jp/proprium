@@ -1934,3 +1934,293 @@ test("late startup activation cannot report a false route error or replace expli
     release();
   }
 });
+
+interface Issue42JournalGate {
+  targetText: string | null;
+  armed: boolean;
+  started: boolean;
+  release?: () => void;
+}
+
+interface Issue42DisposableRemote {
+  root: string;
+  bare: string;
+  writer: string;
+}
+
+function issue42Git(cwd: string, ...args: string[]): string {
+  return execFileSync("git", args, { cwd, encoding: "utf8", stdio: ["ignore", "pipe", "inherit"] }).trim();
+}
+
+function issue42GitIdentity(): NodeJS.ProcessEnv {
+  return {
+    ...process.env,
+    GIT_AUTHOR_NAME: "Scriptorium Issue 42 Acceptance",
+    GIT_AUTHOR_EMAIL: "issue-42@example.invalid",
+    GIT_COMMITTER_NAME: "Scriptorium Issue 42 Acceptance",
+    GIT_COMMITTER_EMAIL: "issue-42@example.invalid",
+  };
+}
+
+async function issue42CreateDisposableRemote(): Promise<Issue42DisposableRemote> {
+  const root = await mkdtemp(join(tmpdir(), "scriptorium-e2e-refresh-navigation-"));
+  const bare = join(root, "origin.git");
+  const writer = join(root, "writer");
+  try {
+    execFileSync("git", ["clone", "--quiet", "--bare", repositoryUrl, bare], { stdio: "ignore" });
+    execFileSync("git", ["clone", "--quiet", bare, writer], { stdio: "ignore" });
+    const actualBranch = issue42Git(writer, "rev-parse", "--abbrev-ref", "HEAD");
+    if (actualBranch !== (process.env.SCRIPTORIUM_E2E_REPOSITORY_BRANCH ?? "main")) {
+      throw new Error(`Unexpected disposable fixture branch ${actualBranch}`);
+    }
+    return { root, bare, writer };
+  } catch (error) {
+    await rm(root, { recursive: true, force: true });
+    throw error;
+  }
+}
+
+async function issue42RegisterDisposableProject(page: Page, remote: Issue42DisposableRemote): Promise<ProjectListEntry> {
+  await page.getByLabel("GitHub リポジトリ URL").fill(pathToFileURL(remote.bare).href);
+  const registration = page.waitForResponse((response) => response.request().method() === "POST" &&
+    new URL(response.url()).pathname === "/api/projects");
+  await page.getByRole("button", { name: "リポジトリを登録" }).click();
+  const registrationResponse = await registration;
+  if (!registrationResponse.ok()) throw new Error(`Disposable project registration failed with HTTP ${registrationResponse.status()}`);
+  await expect(page.getByRole("button", { name: remote.bare, exact: true })).toHaveAttribute("aria-current", "true", { timeout: 30_000 });
+  await expect(page.getByRole("heading", { name: "Volume One" })).toBeVisible({ timeout: 30_000 });
+  const response = await page.request.get(new URL("/api/projects", page.url()).toString());
+  if (!response.ok()) throw new Error(`Project list failed with HTTP ${response.status()}`);
+  const projects = await response.json() as ProjectListEntry[];
+  const project = projects.find((candidate) => candidate.url === remote.bare);
+  if (!project) throw new Error("The disposable Git remote was not registered as a project.");
+  await page.getByRole("button", { name: "Chapter One: Scene One", exact: true }).click();
+  await expect(page.getByRole("heading", { name: "Scene One" })).toBeVisible();
+  await expect(page.locator(".cm-content")).toBeVisible();
+  return project;
+}
+
+async function issue42InstallJournalGate(page: Page): Promise<void> {
+  await page.addInitScript(() => {
+    type GatedTransaction = IDBTransaction & { __scriptoriumHoldComplete?: boolean };
+    type GateWindow = Window & { __scriptoriumIssue42JournalGate?: Issue42JournalGate };
+    const gate: Issue42JournalGate = { targetText: null, armed: false, started: false };
+    (window as GateWindow).__scriptoriumIssue42JournalGate = gate;
+
+    const transactionDescriptor = Object.getOwnPropertyDescriptor(IDBTransaction.prototype, "oncomplete");
+    const originalPut = IDBObjectStore.prototype.put;
+    if (!transactionDescriptor?.get || !transactionDescriptor.set) {
+      throw new Error("IndexedDB completion hooks are unavailable in this browser.");
+    }
+    Object.defineProperty(IDBTransaction.prototype, "oncomplete", {
+      configurable: true,
+      enumerable: transactionDescriptor.enumerable,
+      get() { return transactionDescriptor.get!.call(this); },
+      set(handler: ((this: IDBTransaction, event: Event) => unknown) | null) {
+        if (!handler) {
+          transactionDescriptor.set!.call(this, handler);
+          return;
+        }
+        const transaction = this as GatedTransaction;
+        transactionDescriptor.set!.call(this, function (this: IDBTransaction, event: Event) {
+          const currentGate = (window as GateWindow).__scriptoriumIssue42JournalGate;
+          if (currentGate?.armed && transaction.__scriptoriumHoldComplete) {
+            currentGate.started = true;
+            currentGate.release = () => {
+              currentGate.armed = false;
+              handler.call(transaction, event);
+            };
+            return;
+          }
+          return handler.call(this, event);
+        });
+      },
+    });
+    IDBObjectStore.prototype.put = function (this: IDBObjectStore, value: unknown, key?: IDBValidKey): IDBRequest<IDBValidKey> {
+      const currentGate = (window as GateWindow).__scriptoriumIssue42JournalGate;
+      if (this.name === "operations" && currentGate?.armed && currentGate.targetText &&
+          typeof value === "object" && value !== null && "text" in value && value.text === currentGate.targetText) {
+        (this.transaction as GatedTransaction).__scriptoriumHoldComplete = true;
+      }
+      return originalPut.call(this, value, key);
+    };
+  });
+}
+
+async function issue42PushRemoteSceneUpdate(remote: Issue42DisposableRemote, path: string, contents: string): Promise<string> {
+  await writeFile(join(remote.writer, path), contents, "utf8");
+  execFileSync("git", ["add", path], { cwd: remote.writer, stdio: "ignore" });
+  execFileSync("git", ["commit", "--quiet", "-m", "Update disposable remote fixture"], {
+    cwd: remote.writer,
+    env: issue42GitIdentity(),
+    stdio: "ignore",
+  });
+  execFileSync("git", ["push", "--quiet", "origin", `HEAD:${process.env.SCRIPTORIUM_E2E_REPOSITORY_BRANCH ?? "main"}`], {
+    cwd: remote.writer,
+    stdio: "ignore",
+  });
+  return issue42Git(remote.writer, "rev-parse", "HEAD");
+}
+
+function issue42Deferred(): { promise: Promise<void>; release: () => void } {
+  let release!: () => void;
+  const promise = new Promise<void>((resolve) => { release = resolve; });
+  return { promise, release };
+}
+
+function issue42ReleaseJournalGate(page: Page): void {
+  void page.evaluate(() => {
+    const gate = (window as Window & { __scriptoriumIssue42JournalGate?: Issue42JournalGate }).__scriptoriumIssue42JournalGate;
+    gate?.release?.();
+  }).catch(() => undefined);
+}
+
+test("Issue 42: an updated remote cannot supersede explicit scene navigation during draft flush", async ({ page }) => {
+  test.skip(process.env.SCRIPTORIUM_E2E_EXTERNAL_REPOSITORY === "1", "This acceptance pushes only to a generated disposable local bare remote.");
+  expect(authToken.length).toBeGreaterThanOrEqual(32);
+  expect(repositoryUrl).not.toBe("");
+  await issue42InstallJournalGate(page);
+  const remote = await issue42CreateDisposableRemote();
+  const observationGate = issue42Deferred();
+  try {
+    await signIn(page);
+    const project = await issue42RegisterDisposableProject(page, remote);
+    const changedCommit = await issue42PushRemoteSceneUpdate(
+      remote,
+      "manuscript/vol-1/ch-1/scene-1.md",
+      "# Scene One\n\nThe first line of the story.\n\nThe remote scene has a new revision.\n",
+    );
+
+    const observationStarted = issue42Deferred();
+    let heldObservation = false;
+    await page.route((url) => url.pathname === `/api/projects/${project.id}/observation`, async (route) => {
+      if (route.request().method() !== "GET" || heldObservation) return route.continue();
+      heldObservation = true;
+      const response = await route.fetch();
+      observationStarted.release();
+      await observationGate.promise;
+      await route.fulfill({ response });
+    });
+    await page.evaluate(() => window.dispatchEvent(new Event("online")));
+    await observationStarted.promise;
+
+    const pendingText = "A protected draft while the remote refresh waits.";
+    await page.evaluate((text) => {
+      const gate = (window as Window & { __scriptoriumIssue42JournalGate?: Issue42JournalGate }).__scriptoriumIssue42JournalGate;
+      if (!gate) throw new Error("The Issue 42 IndexedDB gate is missing.");
+      gate.targetText = text;
+      gate.armed = true;
+    }, pendingText);
+    await page.locator(".cm-content").fill(pendingText);
+    await expect.poll(() => page.evaluate(() => Boolean(
+      (window as Window & { __scriptoriumIssue42JournalGate?: Issue42JournalGate }).__scriptoriumIssue42JournalGate?.started,
+    ))).toBe(true);
+    await expect.poll(async () => (await readJournal(page)).some((entry) => entry.text === pendingText && entry.state === "draft")).toBe(true);
+
+    const refreshedTree = page.waitForResponse((response) => {
+      const url = new URL(response.url());
+      return response.request().method() === "GET" && url.pathname === `/api/projects/${project.id}/tree` &&
+        url.searchParams.get("snapshot") === changedCommit;
+    });
+    observationGate.release();
+    await refreshedTree;
+    await page.evaluate(() => new Promise<void>((resolve) => requestAnimationFrame(() => resolve())));
+    await page.getByRole("button", { name: "Chapter One: Scene Two", exact: true }).click();
+    await page.evaluate(() => {
+      const gate = (window as Window & { __scriptoriumIssue42JournalGate?: Issue42JournalGate }).__scriptoriumIssue42JournalGate;
+      if (!gate?.release) throw new Error("The real browser journal completion is not held.");
+      gate.release();
+    });
+
+    await expect(page.getByRole("heading", { name: "Scene Two" })).toBeVisible({ timeout: 10_000 });
+    await expect(page.locator(".cm-content")).toContainText("The second line of the story.");
+    expect((await readJournal(page)).some((entry) => entry.text === pendingText && entry.state === "draft")).toBe(true);
+  } finally {
+    observationGate.release();
+    issue42ReleaseJournalGate(page);
+    await rm(remote.root, { recursive: true, force: true });
+  }
+});
+
+test("Issue 42: an unmodified remote observation leaves a newer explicit scene selection alone", async ({ page }) => {
+  test.skip(process.env.SCRIPTORIUM_E2E_EXTERNAL_REPOSITORY === "1", "This acceptance uses a generated disposable local bare remote.");
+  expect(authToken.length).toBeGreaterThanOrEqual(32);
+  expect(repositoryUrl).not.toBe("");
+  const remote = await issue42CreateDisposableRemote();
+  const observationGate = issue42Deferred();
+  try {
+    await signIn(page);
+    const project = await issue42RegisterDisposableProject(page, remote);
+    const observationStarted = issue42Deferred();
+    const observationFinished = issue42Deferred();
+    let heldObservation = false;
+    let delayedSceneOneReads = 0;
+    await page.route((url) => url.pathname === `/api/projects/${project.id}/observation`, async (route) => {
+      if (route.request().method() !== "GET" || heldObservation) return route.continue();
+      heldObservation = true;
+      const response = await route.fetch();
+      observationStarted.release();
+      await observationGate.promise;
+      await route.fulfill({ response });
+      observationFinished.release();
+    });
+    await page.route((url) => url.pathname.endsWith("/scenes/scene-1/views") && url.searchParams.has("snapshot"), async (route) => {
+      delayedSceneOneReads += 1;
+      await route.continue();
+    });
+    await page.evaluate(() => window.dispatchEvent(new Event("online")));
+    await observationStarted.promise;
+    await page.getByRole("button", { name: "Chapter One: Scene Two", exact: true }).click();
+    await expect(page.getByRole("heading", { name: "Scene Two" })).toBeVisible();
+    const sceneOneReadsAfterNavigation = delayedSceneOneReads;
+    observationGate.release();
+    await observationFinished.promise;
+    await page.evaluate(() => new Promise<void>((resolve) => requestAnimationFrame(() => requestAnimationFrame(() => resolve()))));
+    await expect(page.locator(".topbar-status")).not.toContainText("リモートの確認に失敗しました");
+    await expect(page.getByRole("heading", { name: "Scene Two" })).toBeVisible();
+    expect(delayedSceneOneReads).toBe(sceneOneReadsAfterNavigation);
+    const currentProject = await page.request.get(new URL(`/api/projects/${encodeURIComponent(project.id)}/observation`, page.url()).toString());
+    expect(currentProject.ok()).toBe(true);
+    const observed = await currentProject.json() as { snapshot: { remoteCommit: string } };
+    expect(observed.snapshot.remoteCommit).toBe(issue42Git(remote.writer, "rev-parse", "HEAD"));
+  } finally {
+    observationGate.release();
+    await rm(remote.root, { recursive: true, force: true });
+  }
+});
+
+test("Issue 42: a failed remote observation reports the error without undoing explicit navigation", async ({ page }) => {
+  test.skip(process.env.SCRIPTORIUM_E2E_EXTERNAL_REPOSITORY === "1", "This acceptance uses a generated disposable local bare remote.");
+  expect(authToken.length).toBeGreaterThanOrEqual(32);
+  expect(repositoryUrl).not.toBe("");
+  const remote = await issue42CreateDisposableRemote();
+  const observationGate = issue42Deferred();
+  try {
+    await signIn(page);
+    const project = await issue42RegisterDisposableProject(page, remote);
+    const observationStarted = issue42Deferred();
+    const observationFinished = issue42Deferred();
+    let heldObservation = false;
+    await page.route((url) => url.pathname === `/api/projects/${project.id}/observation`, async (route) => {
+      if (route.request().method() !== "GET" || heldObservation) return route.continue();
+      heldObservation = true;
+      observationStarted.release();
+      await observationGate.promise;
+      await route.fulfill({ status: 503, body: "Synthetic disposable remote observation failure" });
+      observationFinished.release();
+    });
+    await page.evaluate(() => window.dispatchEvent(new Event("online")));
+    await observationStarted.promise;
+    await page.getByRole("button", { name: "Chapter One: Scene Two", exact: true }).click();
+    await expect(page.getByRole("heading", { name: "Scene Two" })).toBeVisible();
+    observationGate.release();
+    await observationFinished.promise;
+    await page.evaluate(() => new Promise<void>((resolve) => requestAnimationFrame(() => requestAnimationFrame(() => resolve()))));
+    await expect(page.locator(".topbar-status")).toContainText("リモートの確認に失敗しました");
+    await expect(page.getByRole("heading", { name: "Scene Two" })).toBeVisible();
+    await expect(page.locator(".cm-content")).toContainText("The second line of the story.");
+  } finally {
+    observationGate.release();
+    await rm(remote.root, { recursive: true, force: true });
+  }
+});
