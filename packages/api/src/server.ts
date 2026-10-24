@@ -575,6 +575,7 @@ export function createServer(options: ApiServerOptions): Server {
   const asyncDomainJobControllers = new Set<AbortController>();
   const activeDomainJobIds = new Set<string>();
   const activeWorkerJobIds = new Set<string>();
+  const workerHistoryPersistenceFailures = new Set<string>();
   const workerJobLifecycleStates = new Map<string, WorkerJobLifecycleSnapshot["state"]>();
   const uncertainPublicationBatches = new Set<string>();
   const projectEventStreams = new Set<ServerResponse>();
@@ -665,19 +666,21 @@ export function createServer(options: ApiServerOptions): Server {
   unsubscribeJobLifecycle = runtime.subscribeJobLifecycle(async (lifecycle: WorkerJobLifecycleSnapshot) => {
     const previousState = workerJobLifecycleStates.get(lifecycle.jobId);
     if (previousState !== lifecycle.state) recordRuntimeActivity();
-    if (lifecycle.state === "queued" || lifecycle.state === "running") {
-      workerJobLifecycleStates.set(lifecycle.jobId, lifecycle.state);
-      activeWorkerJobIds.add(lifecycle.jobId);
-    } else {
-      workerJobLifecycleStates.delete(lifecycle.jobId);
-      activeWorkerJobIds.delete(lifecycle.jobId);
-    }
+    workerJobLifecycleStates.set(lifecycle.jobId, lifecycle.state);
+    activeWorkerJobIds.add(lifecycle.jobId);
     try {
       const event = await jobHistory.record(lifecycle);
+      workerHistoryPersistenceFailures.delete(lifecycle.jobId);
       publishJobEvent(event);
     } catch (error) {
+      workerHistoryPersistenceFailures.add(lifecycle.jobId);
       const code = error instanceof JobHistoryError ? error.code : "storage_failure";
       console.error(`Scriptorium worker lifecycle history was not retained (${code}).`);
+    } finally {
+      if (lifecycle.state === "succeeded" || lifecycle.state === "failed" || lifecycle.state === "cancelled") {
+        workerJobLifecycleStates.delete(lifecycle.jobId);
+        activeWorkerJobIds.delete(lifecycle.jobId);
+      }
     }
   });
 
@@ -1444,9 +1447,22 @@ export function createServer(options: ApiServerOptions): Server {
     quiesceGate = true;
     quiesceOperationId = body.operationId;
     lastQuiesceOperationId = body.operationId;
-    const censusWaitMs = Math.max(0, Math.min(RUNTIME_CONTROL_CENSUS_TIMEOUT_MS, Date.parse(body.deadline) - Date.now()));
+    const controlDeadline = Math.min(Date.parse(body.deadline), Date.now() + RUNTIME_CONTROL_CENSUS_TIMEOUT_MS);
+    let historyTimer: NodeJS.Timeout | undefined;
+    const historyDeadline = new Promise<boolean>((resolveDeadline) => {
+      historyTimer = setTimeout(() => resolveDeadline(false), Math.max(0, controlDeadline - Date.now()));
+      historyTimer.unref();
+    });
+    const historyBarrier = jobHistory.listJobs()
+      .then(() => jobHistory.flush())
+      .then(() => workerHistoryPersistenceFailures.size === 0, () => false);
+    let historyDurable = false;
+    try { historyDurable = await Promise.race([historyBarrier, historyDeadline]); }
+    finally { if (historyTimer) clearTimeout(historyTimer); }
+    const censusWaitMs = Math.max(0, controlDeadline - Date.now());
     const census = await readHostedRuntimeStatus(censusWaitMs, "local");
     const { status, pendingProposals, complete, localWorkspaceDirty } = census;
+    const historyPersistenceVerified = historyDurable && workerHistoryPersistenceFailures.size === 0;
     const reasonCodes: string[] = [];
     if (status.activity.activeMutations > 0) reasonCodes.push("ACTIVE_MUTATIONS");
     if (status.activity.activeJobs > 0) reasonCodes.push("ACTIVE_JOBS");
@@ -1454,9 +1470,9 @@ export function createServer(options: ApiServerOptions): Server {
     if (pendingProposals > 0) reasonCodes.push("PENDING_PROPOSALS");
     if (status.activity.uncertainPublication) reasonCodes.push("UNCERTAIN_PUBLICATION");
     if (localWorkspaceDirty) reasonCodes.push("LOCAL_WORKSPACE_DIRTY");
-    if (!complete || status.persistence.state !== "verified") reasonCodes.push("PERSISTENCE_UNVERIFIED");
+    if (!complete || status.persistence.state !== "verified" || !historyPersistenceVerified) reasonCodes.push("PERSISTENCE_UNVERIFIED");
     if (Date.parse(body.deadline) <= Date.now()) reasonCodes.push("QUIESCE_DEADLINE_EXPIRED");
-    const unknown = !complete || status.activity.uncertainPublication;
+    const unknown = !complete || status.activity.uncertainPublication || !historyPersistenceVerified;
     const blocked = status.activity.activeMutations > 0 || status.activity.activeJobs > 0 ||
       status.activity.pendingCheckpoints > 0 || pendingProposals > 0 || localWorkspaceDirty;
     const disposition = Date.parse(body.deadline) <= Date.now() ? "unknown" : unknown ? "unknown" : blocked ? "blocked" : "safe";
