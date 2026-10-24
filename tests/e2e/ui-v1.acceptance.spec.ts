@@ -827,3 +827,50 @@ test("UX canon keeps explicit shells usable with long Japanese titles and enlarg
   await expect(page.getByRole("button", { name: "文字を大きく" })).toBeVisible();
   await page.screenshot({ path: testInfo.outputPath("desktop-text-200.png") });
 });
+
+// Lifecycle events are synthetic; this verifies optional work ownership, not OS input.
+test("optional terminology cancels work at pagehide and resumes at pageshow", async ({ page }) => {
+  test.skip(process.env.SCRIPTORIUM_PROFILE !== "full", "Terminology is an optional Full contribution.");
+  await signIn(page, "desktop");
+  await openFixtureScene(page, "desktop");
+  const editor = page.locator(".cm-content[contenteditable=true]");
+  await expect(editor).toBeVisible();
+  await editor.evaluate((element) => element.setAttribute("data-lifecycle-editor", "retained"));
+  await page.evaluate(() => {
+    const originalFetch = window.fetch;
+    Object.assign(window, { uxTermStarted: 0, uxTermAborted: 0 });
+    window.fetch = function(input, init) {
+      if (String(input).endsWith("/actions/search.terms.resolve")) {
+        Reflect.set(window, "uxTermStarted", Number(Reflect.get(window, "uxTermStarted")) + 1);
+        init?.signal?.addEventListener("abort", () => {
+          Reflect.set(window, "uxTermAborted", Number(Reflect.get(window, "uxTermAborted")) + 1);
+        }, { once: true });
+      }
+      return originalFetch.call(window, input, init);
+    };
+  });
+  let release!: () => void;
+  const delayed = new Promise<void>((resolve) => { release = resolve; });
+  await page.route("**/actions/search.terms.resolve", async (route) => {
+    await delayed;
+    await route.continue().catch(() => undefined); // The old document may already have cancelled this request.
+  });
+  const draft = "ページを離れても、この下書きと編集状態は失わない。";
+  try {
+    await editor.fill(draft);
+    await expect.poll(() => page.evaluate(() => Number(Reflect.get(window, "uxTermStarted")))).toBeGreaterThan(0);
+    await page.evaluate(() => window.dispatchEvent(new PageTransitionEvent("pagehide")));
+    await expect.poll(() => page.evaluate(() => Number(Reflect.get(window, "uxTermAborted")))).toBeGreaterThan(0);
+    const pausedCount = await page.evaluate(() => Number(Reflect.get(window, "uxTermStarted")));
+    await page.setViewportSize({ width: 1400, height: 900 });
+    await page.waitForTimeout(160); // Two existing 80ms adornment scheduling windows.
+    expect(await page.evaluate(() => Number(Reflect.get(window, "uxTermStarted")))).toBe(pausedCount);
+    await page.evaluate(() => window.dispatchEvent(new PageTransitionEvent("pageshow", { persisted: true })));
+    await expect.poll(() => page.evaluate(() => Number(Reflect.get(window, "uxTermStarted")))).toBeGreaterThan(pausedCount);
+    await expect(editor).toHaveText(draft);
+    expect(await editor.getAttribute("data-lifecycle-editor")).toBe("retained");
+    await expectJournalDraft(page, "scene-1", draft);
+  } finally {
+    release();
+  }
+});
