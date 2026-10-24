@@ -806,6 +806,7 @@ function AuthorWorkspace({
     repository: RepositoryIdentity,
     entry: JournalEntry,
     author: string,
+    signal: AbortSignal,
   ) => {
     const currentJournal = journalRef.current;
     if (!currentJournal) throw new Error("ブラウザー回復ストレージを開けません。");
@@ -818,6 +819,7 @@ function AuthorWorkspace({
       entry,
       api,
       journal: currentJournal,
+      signal,
     });
   }, []);
 
@@ -849,7 +851,7 @@ function AuthorWorkspace({
         for (const entry of pendingEntries) {
           if (!isCurrent()) return false;
           try {
-            await replayAuthorizedEntry(projectId, repository, entry, author);
+            await replayAuthorizedEntry(projectId, repository, entry, author, controller.signal);
           } catch (error) {
             const conflict = error instanceof CheckpointConflictError ||
               (error instanceof ApiError && (error.status === 409 || error.status === 412));

@@ -671,6 +671,54 @@ for (const departure of ["reload", "pagehide"] as const) {
   });
 }
 
+test("recovery approval is cancelled at pagehide and retried without losing its checkpoint", async ({ page }) => {
+  const errors: string[] = [];
+  page.on("pageerror", (error) => errors.push(error.message));
+  await page.addInitScript(() => {
+    const original = window.fetch;
+    window.fetch = function (input, init) {
+      if (String(input).endsWith("/approvals")) {
+        init?.signal?.addEventListener("abort", () => {
+          document.documentElement.dataset.approvalAborted = "true";
+        }, { once: true });
+      }
+      return original.call(window, input, init);
+    };
+  });
+  await signIn(page, "desktop");
+  await openFixtureScene(page, "desktop");
+  const draft = "Retain this checkpoint when recovery approval is interrupted.";
+  await page.locator(".cm-content").fill(draft);
+  await expectJournalDraft(page, "scene-1", draft);
+  await page.getByRole("button", { name: "Checkpoint", exact: true }).click();
+  await expectJournalState(page, "scene-1", draft, "checkpointed");
+  const checkpoint = await readJournalEntry(page, "scene-1", draft);
+  let releaseApproval!: () => void;
+  const gate = new Promise<void>((resolve) => { releaseApproval = resolve; });
+  let approvalStarted!: () => void;
+  const started = new Promise<void>((resolve) => { approvalStarted = resolve; });
+  await page.route("**/approvals", async (route) => {
+    approvalStarted();
+    await gate;
+    await route.continue().catch(() => undefined);
+  });
+  try {
+    await page.reload();
+    await started;
+    await page.evaluate(() => window.dispatchEvent(new PageTransitionEvent("pagehide", { persisted: true })));
+    await expect(page.locator("html")).toHaveAttribute("data-approval-aborted", "true");
+  } finally {
+    releaseApproval();
+    await page.unrouteAll({ behavior: "wait" });
+  }
+  await page.evaluate(() => window.dispatchEvent(new PageTransitionEvent("pageshow", { persisted: true })));
+  await expect(page.locator(".cm-content[contenteditable=true]")).toHaveText(draft);
+  const recovered = await readJournalEntry(page, "scene-1", draft);
+  expect(recovered.operation).toEqual(checkpoint.operation);
+  expect(recovered.checkpoint).toEqual(checkpoint.checkpoint);
+  expect(errors).toEqual([]);
+});
+
 test("both production Shells preserve recoverable Japanese drafts and the Mobile writing and reading flow", async ({ page }, testInfo) => {
   test.setTimeout(180_000);
   expect(authToken.length).toBeGreaterThanOrEqual(32);

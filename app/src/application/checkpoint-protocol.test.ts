@@ -292,3 +292,44 @@ test("receipt identity and caller repository and author scope are checked before
   await assert.rejects(runCheckpointProtocol(wrongRepository.input({ repository: otherRepository })), /識別情報/u);
   assert.deepEqual(wrongRepository.events, []);
 });
+
+for (const phase of ["propose", "approve", "checkpoint"] as const) {
+  test(`cancelled ${phase} recovery retains the operation for an idempotent retry`, async () => {
+    const worker = harness();
+    const controller = new AbortController();
+    const api: CheckpointApi = {
+      ...worker.api,
+      [phase]: async (_projectId: string, _value: unknown, signal?: AbortSignal) => {
+        assert.equal(signal, controller.signal);
+        controller.abort();
+        signal?.throwIfAborted();
+      },
+    };
+    await assert.rejects(runCheckpointProtocol(worker.input({ api, signal: controller.signal })), { name: "AbortError" });
+    assert.equal(worker.stored.state, "checkpointing");
+    assert.deepEqual(worker.stored.operation, operation());
+
+    const recovered = await runCheckpointProtocol(worker.input({ entry: worker.stored }));
+    assert.equal(recovered.state, "checkpointed");
+    assert.deepEqual(recovered.operation, operation());
+    assert.equal(worker.checkpoints.length, 1);
+  });
+}
+
+test("cancellation during journal persistence prevents the next approval request", async () => {
+  const worker = harness();
+  const controller = new AbortController();
+  const journal: CheckpointJournal = {
+    ...worker.journal,
+    async putProposal(...args) {
+      const ownership = await worker.journal.putProposal(...args);
+      controller.abort();
+      return ownership;
+    },
+  };
+  await assert.rejects(runCheckpointProtocol(worker.input({ journal, signal: controller.signal })), { name: "AbortError" });
+  assert.equal(worker.proposalRecords.size, 1);
+  assert.equal(worker.approvals.length, 0);
+  assert.equal(worker.checkpoints.length, 0);
+  assert.deepEqual(worker.stored.operation, operation());
+});

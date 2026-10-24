@@ -16,9 +16,9 @@ import {
 } from "../storage/journal.js";
 
 export interface CheckpointApi {
-  propose(projectId: string, proposal: ChangeProposal): Promise<ChangeProposal>;
-  approve(projectId: string, approval: Approval): Promise<void>;
-  checkpoint(projectId: string, operation: ChangeOperation): Promise<CheckpointReceipt>;
+  propose(projectId: string, proposal: ChangeProposal, signal?: AbortSignal): Promise<ChangeProposal>;
+  approve(projectId: string, approval: Approval, signal?: AbortSignal): Promise<void>;
+  checkpoint(projectId: string, operation: ChangeOperation, signal?: AbortSignal): Promise<CheckpointReceipt>;
 }
 
 export type CheckpointJournal = Pick<BrowserJournal, "updateState" | "putProposal" | "removeProposal">;
@@ -30,6 +30,7 @@ export interface CheckpointProtocolInput {
   entry: JournalEntry;
   api: CheckpointApi;
   journal: CheckpointJournal;
+  signal?: AbortSignal;
   onCheckpointing?: (entry: JournalEntry) => void;
 }
 
@@ -77,6 +78,7 @@ function assertReceipt(receipt: CheckpointReceipt, operation: ChangeOperation): 
 
 /** Run one durable browser-journal and Core effect sequence for a checkpoint attempt. */
 export async function runCheckpointProtocol(input: CheckpointProtocolInput): Promise<JournalEntry> {
+  input.signal?.throwIfAborted();
   const repository = Object.freeze({ ...input.repository });
   const authorScope = input.authorScope;
   const entry = input.entry;
@@ -100,7 +102,8 @@ export async function runCheckpointProtocol(input: CheckpointProtocolInput): Pro
     operations: [checkpointing.operation],
     source: "author",
   };
-  const accepted = await input.api.propose(input.projectId, proposal);
+  input.signal?.throwIfAborted();
+  const accepted = await input.api.propose(input.projectId, proposal, input.signal);
   assertAcceptedProposal(accepted, proposal);
   await input.journal.putProposal(repository, authorScope, accepted);
 
@@ -109,13 +112,15 @@ export async function runCheckpointProtocol(input: CheckpointProtocolInput): Pro
   if (assigned.state !== "checkpointing" && assigned.state !== "checkpointed") {
     throw new Error("競合または公開状態になった回復記録はチェックポイントできません。");
   }
+  input.signal?.throwIfAborted();
   await input.api.approve(input.projectId, {
     proposalId: accepted.id,
     operationIds: [assigned.operation.id],
     authorScope,
-  });
+  }, input.signal);
 
-  const receipt = await input.api.checkpoint(input.projectId, assigned.operation);
+  input.signal?.throwIfAborted();
+  const receipt = await input.api.checkpoint(input.projectId, assigned.operation, input.signal);
   assertReceipt(receipt, assigned.operation);
   const saved = await input.journal.updateState(assigned, "checkpointed", receipt);
   if (saved.state !== "checkpointed" || !saved.checkpoint ||

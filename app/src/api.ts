@@ -357,13 +357,15 @@ export const api = {
     body: JSON.stringify(proposal),
     ...(signal ? { ...(signal ? { signal } : {}) } : {}),
   }),
-  approve: (projectId: string, approval: Approval) => request(dto.empty, projectPath(projectId, "approvals"), {
+  approve: (projectId: string, approval: Approval, signal?: AbortSignal) => request(dto.empty, projectPath(projectId, "approvals"), {
     method: "POST",
     body: JSON.stringify(approval),
+    ...(signal ? { signal } : {}),
   }),
-  checkpoint: (projectId: string, operation: ChangeOperation) => request(dto.checkpoint, projectPath(projectId, "checkpoints"), {
+  checkpoint: (projectId: string, operation: ChangeOperation, signal?: AbortSignal) => request(dto.checkpoint, projectPath(projectId, "checkpoints"), {
     method: "POST",
     body: JSON.stringify(operation),
+    ...(signal ? { signal } : {}),
   }),
   reconcile: (projectId: string, signal?: AbortSignal) => request(dto.reconcile, projectPath(projectId, "reconcile"), {
     ...(signal ? { signal } : {}),
