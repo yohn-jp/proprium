@@ -205,6 +205,12 @@ function refreshHostedGrant(): Promise<boolean> {
   return hostedRefresh;
 }
 
+async function isHostedGrantRejection(response: Response): Promise<boolean> {
+  if (response.status !== 401) return false;
+  const body: unknown = await response.clone().json().catch(() => null);
+  return body !== null && typeof body === "object" && (body as Record<string, unknown>).code === "UNAUTHORIZED";
+}
+
 async function performHostedRefresh(): Promise<boolean> {
   const headers = new Headers();
   const csrf = csrfToken();
@@ -223,16 +229,34 @@ async function performHostedRefresh(): Promise<boolean> {
   return true;
 }
 
-async function fetchWithHostedRefresh(path: string, init: RequestInit, retry = true): Promise<Response> {
+async function fetchHostedRequest(path: string, init: RequestInit): Promise<Response> {
   const headers = new Headers(init.headers);
   if (init.body !== undefined && !headers.has("Content-Type")) headers.set("Content-Type", "application/json");
   const csrf = csrfToken();
   const method = (init.method ?? "GET").toUpperCase();
   if (csrf && !["GET", "HEAD", "OPTIONS"].includes(method)) headers.set("X-CSRF-Token", csrf);
-  const response = await fetch(path, { ...init, headers, credentials: "same-origin" });
-  if (response.status === 401 && retry && hostedMode === true && !path.startsWith("/_platform/")) {
-    if (await refreshHostedGrant()) return fetchWithHostedRefresh(path, init, false);
+  return fetch(path, { ...init, headers, credentials: "same-origin" });
+}
+
+async function fetchWithHostedRefresh(path: string, init: RequestInit): Promise<Response> {
+  const response = await fetchHostedRequest(path, init);
+  if (hostedMode !== true || path.startsWith("/_platform/") || !(await isHostedGrantRejection(response))) return response;
+
+  // Web Locks serialize refresh-cookie rotation across tabs. Once inside the
+  // lock, retry the rejected request with the current cookies first: another
+  // tab may already have refreshed while this request waited.
+  const locks = typeof navigator === "undefined" ? undefined : navigator.locks;
+  if (locks) {
+    return locks.request("scriptorium-hosted-grant-refresh", async () => {
+      const current = await fetchHostedRequest(path, init);
+      if (!(await isHostedGrantRejection(current))) return current;
+      if (await refreshHostedGrant()) return fetchHostedRequest(path, init);
+      return current;
+    });
   }
+
+  // Browsers without Web Locks retain same-tab single-flight refresh.
+  if (await refreshHostedGrant()) return fetchHostedRequest(path, init);
   return response;
 }
 
@@ -278,7 +302,7 @@ export const api = {
   session: () => request(dto.session, "/api/session"),
   logout: async () => {
     if (hostedMode === true) {
-      const response = await fetchWithHostedRefresh("/_platform/logout", { method: "POST" }, false);
+      const response = await fetchWithHostedRefresh("/_platform/logout", { method: "POST" });
       if (response.status === 204) return { authenticated: false as const };
       const body: unknown = await response.json().catch(() => null);
       if (!response.ok) {

@@ -334,6 +334,48 @@ test("broker refuses a different repository binding before contacting the creden
   }
 });
 
+test("invalid runtime identity is a service failure, not a browser access grant failure", async (context) => {
+  const directory = await fs.mkdtemp(path.join(os.tmpdir(), "scriptorium-hosted-auth-expired-identity-"));
+  context.after(() => fs.rm(directory, { recursive: true, force: true }));
+  const identityPath = path.join(directory, "runtime-identity.jwt");
+  await fs.writeFile(identityPath, runtimeIdentityJwt({
+    contractVersion: "praetorium-runtime-identity/v1",
+    iss: CONTROL_ISSUER,
+    aud: "praetorium-git-broker",
+    sub: "runtime-77",
+    runtimeId: "runtime-77",
+    instanceId: INSTANCE_ID,
+    repositoryId: REPOSITORY_ID,
+    installationId: 927,
+    runtimeEpoch: RUNTIME_EPOCH,
+    leaseId: "lease-19",
+    iat: NOW_SECONDS - 120,
+    nbf: NOW_SECONDS - 120,
+    exp: NOW_SECONDS - 1,
+    jti: "identity-expired",
+  }));
+  let contactedBroker = false;
+  const provider = createHostedGitCredentialProvider({
+    assignment: assignment(),
+    runtimeIdentityPath: identityPath,
+    now: () => NOW,
+    fetch: (async (input: RequestInfo | URL) => {
+      const pathname = new URL(String(input)).pathname;
+      if (pathname === "/.well-known/control-jwks.json") return response({ keys: [publicJwk] });
+      if (pathname === "/.well-known/runtime-identity-jwks.json") return response({ keys: [runtimeIdentityJwk] });
+      contactedBroker = true;
+      return response({});
+    }) as typeof fetch,
+  });
+  await assert.rejects(provider.getCredential({
+    operation: "fetch",
+    repositoryId: REPOSITORY_ID,
+    instanceId: INSTANCE_ID,
+    runtimeEpoch: RUNTIME_EPOCH,
+  }), (error: unknown) => error instanceof HostedAuthorizationError && error.status === 503);
+  assert.equal(contactedBroker, false);
+});
+
 test("broker refuses a renewed runtime proof from an old epoch before issuing a GitHub credential", async (context) => {
   const directory = await fs.mkdtemp(path.join(os.tmpdir(), "scriptorium-hosted-auth-old-proof-"));
   context.after(() => fs.rm(directory, { recursive: true, force: true }));

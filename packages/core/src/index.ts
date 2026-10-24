@@ -1159,11 +1159,16 @@ export class CoreStore implements MutationCoordinator {
           } as const;
       credential = await this.gitCredentialProvider.getCredential(request);
     } catch (error) {
-      if (error instanceof CoreError) throw error;
       const status = error && typeof error === "object" && "status" in error ? error.status : undefined;
-      if (status === 401 || status === 403) {
-        throw coreError(status, status === 403 ? "git_credential_denied" : "git_credential_unavailable",
-          status === 403 ? "The repository credential request was denied" : "The repository credential service is unavailable");
+      // A provider 401 describes its own runtime identity or broker credential
+      // boundary, not the author's Browser Grant. Keep it out of the browser
+      // authentication path so remote freshness failures remain recoverable.
+      if (status === 401) {
+        throw coreError(503, "git_credential_unavailable", "The repository credential service is unavailable");
+      }
+      if (error instanceof CoreError) throw error;
+      if (status === 403) {
+        throw coreError(403, "git_credential_denied", "The repository credential request was denied");
       }
       throw coreError(503, "git_credential_unavailable", "A repository-scoped Git credential could not be issued");
     }

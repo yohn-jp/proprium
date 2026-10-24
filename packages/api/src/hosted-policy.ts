@@ -493,14 +493,22 @@ export function createHostedGitCredentialProvider(options: {
       throw new HostedAuthorizationError(503, "runtime_identity_unavailable", "The runtime identity is unavailable");
     }
     const identityJwksUrl = new URL(RUNTIME_IDENTITY_JWKS_PATH, assignment.controlServicePolicy.issuer).toString();
-    const payload = await verifyCompactJwt(
-      token,
-      identityJwksUrl,
-      assignment.controlServicePolicy.issuer,
-      "praetorium-git-broker",
-      now(),
-      fetcher,
-    );
+    let payload: unknown;
+    try {
+      payload = await verifyCompactJwt(
+        token,
+        identityJwksUrl,
+        assignment.controlServicePolicy.issuer,
+        "praetorium-git-broker",
+        now(),
+        fetcher,
+      );
+    } catch (error) {
+      if (error instanceof HostedAuthorizationError && error.status === 401) {
+        throw new HostedAuthorizationError(503, "runtime_identity_invalid", "The runtime identity is invalid or expired");
+      }
+      throw error;
+    }
     const parsed = RuntimeIdentitySchema.safeParse(payload);
     if (!parsed.success || parsed.data.instanceId !== assignment.instanceId ||
         parsed.data.repositoryId !== assignment.repositoryId || parsed.data.runtimeEpoch !== assignment.runtimeEpoch) {
