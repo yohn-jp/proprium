@@ -146,6 +146,7 @@ function sentenceOffsets(text: string): SentenceOffset[] {
   const result: SentenceOffset[] = [];
   let lineStart = 0;
   let justSplit = false;
+  let segmenter: Intl.Segmenter | null = null;
   for (let index = 0; index <= text.length; index++) {
     const atNewline = index < text.length && text[index] === "\n";
     const atEnd = index === text.length;
@@ -153,7 +154,7 @@ function sentenceOffsets(text: string): SentenceOffset[] {
     const lineEnd = index;
     if (lineEnd > lineStart) {
       const line = text.slice(lineStart, lineEnd);
-      const segmenter = new Intl.Segmenter("ja", { granularity: "sentence" });
+      segmenter ??= new Intl.Segmenter("ja", { granularity: "sentence" });
       const raw = [...segmenter.segment(line)].map(({ segment, index: start }) => ({ start, end: start + segment.length }));
       const merged: SentenceOffset[] = [];
       const depthAt = (end: number) => {
