@@ -11,6 +11,7 @@ import { promisify } from "node:util";
 import { MODEL_USAGE_CAPABILITY, type ActionResult, type ChangeOperation, type ChangeProposal, type JobRequest, type ModelUsageEvent, type ModelUsageStore, type ModuleAction, type ModuleContext, type ModuleDefinition, type ModuleManifest, type ProposalStatus, type RepositoryIdentity, type SnapshotId, type ValueSchema } from "@scriptorium/contracts";
 import { CoreStore, type CoreStore as CoreStoreShape } from "@scriptorium/core";
 import { ModuleRuntime, type ModuleLoader, type ModuleRuntimeOptions, type WorkerJobLifecycleListener, type WorkerJobLifecycleSnapshot } from "@scriptorium/module-runtime";
+import { createHostedAuthorizationPolicy } from "./hosted-policy.js";
 import { HistoricalModelUsageError, HistoricalModelUsageStore } from "./historical-store.js";
 import { JobHistoryError, JobHistoryStore, type WorkerJobLifecycle } from "./job-history-store.js";
 import "./recent-activity-store.test.js";
@@ -53,6 +54,49 @@ const RUNTIME_CONTROL_PUBLIC_JWK = {
   alg: "ES256",
   kid: "runtime-control-test-key",
 };
+const HOSTED_GRANT_KEY = generateKeyPairSync("ec", { namedCurve: "prime256v1" });
+const HOSTED_GRANT_PUBLIC_JWK = {
+  ...HOSTED_GRANT_KEY.publicKey.export({ format: "jwk" }),
+  use: "sig",
+  alg: "ES256",
+  kid: "hosted-grant-test-key",
+};
+
+function hostedGrantToken(expired = false): string {
+  const now = Math.floor(Date.now() / 1000);
+  const encode = (value: unknown): string => Buffer.from(JSON.stringify(value), "utf8").toString("base64url");
+  const issuedAt = expired ? now - 120 : now;
+  const unsigned = `${encode({ alg: "ES256", kid: "hosted-grant-test-key", typ: "JWT" })}.${encode({
+    iss: HOSTED_ASSIGNMENT.grantPolicy.issuer,
+    sub: "hosted-user-1",
+    aud: HOSTED_ASSIGNMENT.grantPolicy.audience,
+    instanceId: HOSTED_ASSIGNMENT.instanceId,
+    repositoryId: HOSTED_ASSIGNMENT.repositoryId,
+    runtimeEpoch: HOSTED_ASSIGNMENT.runtimeEpoch,
+    permissions: ["read", "write"],
+    sessionRevision: 2,
+    authorizationRevision: 3,
+    iat: issuedAt,
+    nbf: issuedAt,
+    exp: expired ? now - 1 : now + 120,
+    jti: expired ? "expired-browser-grant" : "valid-browser-grant",
+  })}`;
+  const signature = signJwt("sha256", Buffer.from(unsigned, "ascii"), {
+    key: HOSTED_GRANT_KEY.privateKey,
+    dsaEncoding: "ieee-p1363",
+  });
+  return `${unsigned}.${signature.toString("base64url")}`;
+}
+
+function realHostedGrantPolicy(): HostedAuthorizationPolicy {
+  return createHostedAuthorizationPolicy({
+    assignment: HOSTED_ASSIGNMENT,
+    fetch: async (input) => {
+      assert.equal(String(input), HOSTED_ASSIGNMENT.grantPolicy.jwksUrl);
+      return Response.json({ keys: [HOSTED_GRANT_PUBLIC_JWK] });
+    },
+  });
+}
 
 function makeStore(onSaveScene: () => void = () => undefined): CoreStoreShape {
   const project = { id: "project-1", url: "https://github.com/owner/work.git", branch: "main" };
@@ -1800,6 +1844,55 @@ describe("Scriptorium HTTP boundary", () => {
     });
     assert.equal(logout.status, 200);
     assert.equal((await fetch(`${apiServer.base}/api/projects`, { headers: { Cookie: cookie } })).status, 401);
+  });
+
+  it("keeps hosted repository service failures separate from an expired Browser Grant", async (t) => {
+    const staticDir = await mkdtemp(resolve(tmpdir(), "scriptorium-api-hosted-auth-boundary-"));
+    tempDirs.push(staticDir);
+    let failRemoteObservation = true;
+    const store = Object.assign(makeStore(), {
+      async observe() {
+        if (failRemoteObservation) {
+          failRemoteObservation = false;
+          throw Object.assign(new Error("The repository credential service is unavailable"), {
+            status: 503,
+            code: "git_credential_unavailable",
+          });
+        }
+        return {
+          snapshot: SNAPSHOT,
+          checkpointHead: SNAPSHOT.remoteCommit,
+          observedAt: new Date().toISOString(),
+          state: "fresh",
+          pending: [],
+        };
+      },
+    }) as CoreStore;
+    const apiServer = await startHostedApi(store, staticDir, realHostedGrantPolicy());
+    t.after(apiServer.close);
+
+    const validGrant = hostedGrantToken();
+    const observation = await fetch(`${apiServer.base}/api/projects/project-1/observation`, {
+      headers: { Authorization: `Bearer ${validGrant}` },
+    });
+    assert.equal(observation.status, 503);
+    assert.equal((await observation.json() as { code: string }).code, "git_credential_unavailable");
+
+    const session = await fetch(`${apiServer.base}/api/session`, {
+      headers: { Authorization: `Bearer ${validGrant}` },
+    });
+    assert.equal(session.status, 200);
+    assert.deepEqual(await session.json(), {
+      authenticated: true,
+      authorScope: "hosted:hosted-user-1",
+      permissions: ["read", "write"],
+    });
+
+    const expiredGrant = await fetch(`${apiServer.base}/api/session`, {
+      headers: { Authorization: `Bearer ${hostedGrantToken(true)}` },
+    });
+    assert.equal(expiredGrant.status, 401);
+    assert.equal((await expiredGrant.json() as { code: string }).code, "UNAUTHORIZED");
   });
 
   it("marks a session cookie Secure when HTTPS is asserted by a trusted proxy", async (t) => {
