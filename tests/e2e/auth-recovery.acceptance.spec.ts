@@ -160,7 +160,12 @@ test("an interrupted initial project bootstrap resumes after persisted pageshow"
   }
   await page.close();
 
-  for (const releaseOrder of ["before-pageshow", "after-pageshow"] as const) {
+  for (const scenario of [
+    { name: "fulfill-before-pageshow", timing: "before-pageshow", abort: false },
+    { name: "fulfill-after-pageshow", timing: "after-pageshow", abort: false },
+    { name: "abort-before-pageshow", timing: "before-pageshow", abort: true },
+    { name: "abort-after-pageshow", timing: "after-pageshow", abort: true },
+  ] as const) {
     const resumedPage = await page.context().newPage();
     let projectRequests = 0;
     let releaseFirst!: () => void;
@@ -181,14 +186,18 @@ test("an interrupted initial project bootstrap resumes after persisted pageshow"
       expect(JSON.parse(body)).toEqual(expect.arrayContaining([expect.objectContaining({ branch: "main" })]));
       firstStarted();
       await heldFirst;
-      await route.fulfill({ response, body }).catch(() => undefined);
-      firstReleased();
+      try {
+        if (scenario.abort) await route.abort("failed").catch(() => undefined);
+        else await route.fulfill({ response, body }).catch(() => undefined);
+      } finally {
+        firstReleased();
+      }
     });
 
     await resumedPage.goto("/desktop/");
     await started;
     await resumedPage.evaluate(() => window.dispatchEvent(new PageTransitionEvent("pagehide", { persisted: true })));
-    if (releaseOrder === "before-pageshow") {
+    if (scenario.timing === "before-pageshow") {
       releaseFirst();
       await released;
       await resumedPage.evaluate(() => window.dispatchEvent(new PageTransitionEvent("pageshow", { persisted: true })));
@@ -198,9 +207,9 @@ test("an interrupted initial project bootstrap resumes after persisted pageshow"
       await released;
     }
 
-    await expect(projectButton(resumedPage), `project list should recover when the response is released ${releaseOrder}`).toBeVisible({ timeout: 15_000 });
+    await expect(projectButton(resumedPage), `project list should recover when the original request is ${scenario.name}`).toBeVisible({ timeout: 15_000 });
     await expect(resumedPage.getByRole("alert")).toHaveCount(0);
-    expect(projectRequests, `${releaseOrder} should restart the interrupted project bootstrap`).toBeGreaterThanOrEqual(2);
+    expect(projectRequests, `${scenario.name} should restart the interrupted project bootstrap`).toBeGreaterThanOrEqual(2);
     await resumedPage.close();
   }
 });
