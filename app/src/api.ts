@@ -19,6 +19,12 @@ import type {
   UiContribution,
 } from "@scriptorium/contracts";
 
+export class DocumentDepartureError extends DOMException {
+  constructor() {
+    super("The document is leaving.", "AbortError");
+  }
+}
+
 export interface Project {
   id: string;
   url: string;
@@ -221,7 +227,7 @@ if (typeof window !== "undefined") {
 
 function assertDocumentCanStartRequest(init?: RequestInit): void {
   if (documentDeparting && init?.keepalive !== true) {
-    throw new DOMException("The document is leaving.", "AbortError");
+    throw new DocumentDepartureError();
   }
 }
 
@@ -232,7 +238,7 @@ function hasLeftDocumentLifecycle(lifecycle: number): boolean {
 function returnOrAbortAfterDeparture(response: Response, lifecycle: number, init: RequestInit): Response {
   if (!hasLeftDocumentLifecycle(lifecycle)) return response;
   if (init.keepalive === true) return response;
-  throw new DOMException("The document is leaving.", "AbortError");
+  throw new DocumentDepartureError();
 }
 
 function csrfToken(): string | undefined {
@@ -279,10 +285,10 @@ async function refreshHostedGrantForLifecycle(lifecycle: number): Promise<boolea
   try {
     result = await refreshHostedGrant();
   } catch (error) {
-    if (hasLeftDocumentLifecycle(lifecycle)) throw new DOMException("The document is leaving.", "AbortError");
+    if (hasLeftDocumentLifecycle(lifecycle)) throw new DocumentDepartureError();
     throw error;
   }
-  if (hasLeftDocumentLifecycle(lifecycle)) throw new DOMException("The document is leaving.", "AbortError");
+  if (hasLeftDocumentLifecycle(lifecycle)) throw new DocumentDepartureError();
   if (result.status === 401) {
     if (reauthRedirectedLifecycle !== lifecycle) {
       reauthRedirectedLifecycle = lifecycle;

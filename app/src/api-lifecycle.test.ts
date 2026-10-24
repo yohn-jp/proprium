@@ -21,7 +21,7 @@ test("ordinary API requests stop at document departure while keepalive cursor wr
   Object.defineProperty(globalThis, "window", { configurable: true, value: fakeWindow });
 
   try {
-    const { api } = await import("./api.js");
+    const { api, DocumentDepartureError } = await import("./api.js");
     const requests: Array<{ input: string; keepalive: boolean }> = [];
     let holdInitialProject = false;
     let initialProjectStarted!: () => void;
@@ -132,11 +132,11 @@ test("ordinary API requests stop at document departure while keepalive cursor wr
     dispatch("beforeunload", new Event("beforeunload", { cancelable: true }));
     await afterMicrotasks();
     releaseRefresh(Response.json({ error: "Refresh grant expired", code: "UNAUTHORIZED" }, { status: 401 }));
-    await assert.rejects(refreshingRequest, (error: unknown) => error instanceof DOMException && error.name === "AbortError");
+    await assert.rejects(refreshingRequest, (error: unknown) => error instanceof DocumentDepartureError && error.name === "AbortError");
     assert.deepEqual(redirects, []);
     assert.equal(requests.filter((request) => request.input === "/api/projects").length, 4);
 
-    await assert.rejects(api.projects(), (error: unknown) => error instanceof DOMException && error.name === "AbortError");
+    await assert.rejects(api.projects(), (error: unknown) => error instanceof DocumentDepartureError && error.name === "AbortError");
     assert.equal(requests.filter((request) => request.input === "/api/projects").length, 4);
 
     holdRefresh = false;
@@ -148,7 +148,7 @@ test("ordinary API requests stop at document departure while keepalive cursor wr
     assert.equal(requests.filter((request) => request.input === "/api/projects").length, 5);
 
     dispatch("pagehide", new Event("pagehide"));
-    await assert.rejects(api.projects(), (error: unknown) => error instanceof DOMException && error.name === "AbortError");
+    await assert.rejects(api.projects(), (error: unknown) => error instanceof DocumentDepartureError && error.name === "AbortError");
     assert.equal(requests.filter((request) => request.input === "/api/projects").length, 5);
     dispatch("pageshow", new Event("pageshow"));
     assert.deepEqual(await api.projects(), []);
@@ -174,7 +174,7 @@ test("ordinary API requests stop at document departure while keepalive cursor wr
     dispatch("pagehide", new Event("pagehide"));
     dispatch("pageshow", new Event("pageshow"));
     runQueuedLock();
-    await assert.rejects(queuedRequest, (error: unknown) => error instanceof DOMException && error.name === "AbortError");
+    await assert.rejects(queuedRequest, (error: unknown) => error instanceof DocumentDepartureError && error.name === "AbortError");
     assert.equal(requests.filter((request) => request.input === "/api/projects").length, 7);
 
     Object.defineProperty(globalThis, "navigator", { configurable: true, value: { locks: undefined } });
@@ -190,7 +190,7 @@ test("ordinary API requests stop at document departure while keepalive cursor wr
     assert.equal(requests.filter((request) => request.input === "/_platform/refresh").length, refreshCountBeforeResume + 1);
     pendingGrantFresh = true;
     releasePendingRefresh(Response.json({ refreshed: true }));
-    await assert.rejects(departingCaller, (error: unknown) => error instanceof DOMException && error.name === "AbortError");
+    await assert.rejects(departingCaller, (error: unknown) => error instanceof DocumentDepartureError && error.name === "AbortError");
     assert.deepEqual(await restoredCaller, []);
     assert.equal(requests.filter((request) => request.input === "/_platform/refresh").length, refreshCountBeforeResume + 1);
     holdPendingRefresh = false;
@@ -205,7 +205,7 @@ test("ordinary API requests stop at document departure while keepalive cursor wr
     await new Promise<void>((resolve) => setImmediate(resolve));
     assert.equal(requests.filter((request) => request.input === "/_platform/refresh").length, refreshCountBeforeShared401);
     releaseStaleRefresh(Response.json({ error: "Refresh grant expired", code: "UNAUTHORIZED" }, { status: 401 }));
-    await assert.rejects(staleCaller, (error: unknown) => error instanceof DOMException && error.name === "AbortError");
+    await assert.rejects(staleCaller, (error: unknown) => error instanceof DocumentDepartureError && error.name === "AbortError");
     const active401Results = await restored401Callers;
     assert.equal(active401Results.length, 2);
     assert.ok(active401Results.every((result) => result.status === "rejected" && result.reason instanceof Error &&
@@ -228,7 +228,7 @@ test("ordinary API requests stop at document departure while keepalive cursor wr
       dispatch("pagehide", new Event("pagehide"));
       dispatch("pageshow", new Event("pageshow"));
       releaseFinalRetry(Response.json([]));
-      await assert.rejects(finalRetryCaller, (error: unknown) => error instanceof DOMException && error.name === "AbortError");
+      await assert.rejects(finalRetryCaller, (error: unknown) => error instanceof DocumentDepartureError && error.name === "AbortError");
       assert.equal(finalRetryAttempt, mode === "locks" ? 3 : 2);
       assert.equal(requests.filter((request) => request.input === "/_platform/refresh").length, refreshCountBeforeRetry + 1);
       finalRetryMode = "none";

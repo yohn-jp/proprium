@@ -12,7 +12,7 @@ import {
   type SnapshotId,
   type UiContribution,
 } from "@scriptorium/contracts";
-import { ApiError, api, type Project, type SceneRead, type Tree, type TreeRead } from "../api";
+import { ApiError, api, DocumentDepartureError, type Project, type SceneRead, type Tree, type TreeRead } from "../api";
 import { workspaceContributions } from "../contributions/catalog";
 import { Workspace } from "../workspace/Workspace";
 import { ManuscriptHistoryPanel } from "../editor/ManuscriptHistoryPanel";
@@ -49,6 +49,10 @@ import {
 } from "../storage/journal";
 
 const ACTIVE_PROJECT_KEY = "scriptorium:active-project";
+
+function isDocumentDepartureAbort(error: unknown): boolean {
+  return error instanceof DocumentDepartureError;
+}
 
 function readLegacyDrafts(): LegacyDraftRecord[] {
   const records: LegacyDraftRecord[] = [];
@@ -707,9 +711,8 @@ function AuthorWorkspace({
     let bootstrapRunning = false;
     let bootstrapFinished = false;
     let resumeAfterCurrentAttempt = false;
+    let sceneResumeRunning = false;
     let resumeIncompleteBootstrap!: () => void;
-    const isDepartureAbort = (error: unknown): boolean =>
-      error instanceof DOMException && error.name === "AbortError";
     const startBootstrap = () => {
       if (cancelled || bootstrapRunning || bootstrapFinished) return;
       bootstrapRunning = true;
@@ -769,7 +772,7 @@ function AuthorWorkspace({
         }
         bootstrapFinished = true;
       })().catch((error: unknown) => {
-        if (cancelled || isDepartureAbort(error)) return;
+        if (cancelled || isDocumentDepartureAbort(error)) return;
         if (error instanceof ApiError && error.status === 401 && error.code === "UNAUTHORIZED") setAuthState("signed-out");
         else setGlobalError(messageOf(error));
         bootstrapFinished = true;
@@ -778,51 +781,52 @@ function AuthorWorkspace({
         if (resumeAfterCurrentAttempt && !bootstrapFinished) resumeIncompleteBootstrap();
       });
     };
-    const resumeRequestedScene = (current: WorkState, requested: ApplicationResource) => {
-      if (!requested.sceneId || current.project.id !== requested.projectId) {
+    const resumeSelectedScene = (current: WorkState, sceneId: string, requested?: ApplicationResource) => {
+      if (!sceneId || current.editor?.read.scene.id === sceneId) {
         bootstrapFinished = true;
         return;
       }
-      if (current.editor) {
-        // A live editor belongs to the user's current navigation. Do not
-        // replace it merely because the page was restored from the back/forward cache.
+      if (sceneResumeRunning) return;
+      const location = sceneTreeLocation(current.tree.tree, sceneId);
+      const isRequestedRouteScene = requested?.projectId === current.project.id && requested.sceneId === sceneId;
+      if (!location || (isRequestedRouteScene && ((requested.volumeId && requested.volumeId !== location.volumeId) ||
+          (requested.chapterId && requested.chapterId !== location.chapterId)))) {
         bootstrapFinished = true;
+        if (isRequestedRouteScene) setGlobalError("直接リンクのシーンが作品構成に見つからないか、URL の巻・章と一致しません。");
         return;
       }
-      const location = sceneTreeLocation(current.tree.tree, requested.sceneId);
-      if (!location || (requested.volumeId && requested.volumeId !== location.volumeId) ||
-          (requested.chapterId && requested.chapterId !== location.chapterId)) {
-        bootstrapFinished = true;
-        setGlobalError("直接リンクのシーンが作品構成に見つからないか、URL の巻・章と一致しません。");
-        return;
-      }
+      sceneResumeRunning = true;
       bootstrapRunning = true;
       resumeAfterCurrentAttempt = false;
-      void loadScene(current.project.id, requested.sceneId, current.tree, current.observation.snapshot.repository).finally(() => {
+      void loadScene(current.project.id, sceneId, current.tree, current.observation.snapshot.repository).finally(() => {
+        sceneResumeRunning = false;
         bootstrapRunning = false;
         const active = workRef.current;
-        if (active && active.project.id === requested.projectId && active.editor?.read.scene.id === requested.sceneId) {
+        if (active && active.project.id === current.project.id && active.editor?.read.scene.id === sceneId) {
           bootstrapFinished = true;
         }
         if (resumeAfterCurrentAttempt && !bootstrapFinished) resumeIncompleteBootstrap();
       });
     };
     resumeIncompleteBootstrap = () => {
-      if (bootstrapFinished || cancelled) return;
+      if (cancelled) return;
       if (bootstrapRunning) {
         resumeAfterCurrentAttempt = true;
         return;
       }
       if (workRef.current) {
+        const current = workRef.current;
         const requested = requestedResourceRef.current;
-        if (requested?.sceneId && workRef.current.project.id === requested.projectId &&
-            workRef.current.editor?.read.scene.id !== requested.sceneId) {
-          resumeRequestedScene(workRef.current, requested);
+        const requestedScene = requested?.projectId === current.project.id ? requested.sceneId : undefined;
+        const sceneId = current.selectedSceneId || requestedScene || "";
+        if (sceneId && current.editor?.read.scene.id !== sceneId) {
+          resumeSelectedScene(current, sceneId, requested ?? undefined);
         } else {
           bootstrapFinished = true;
         }
         return;
       }
+      if (bootstrapFinished) return;
       resumeAfterCurrentAttempt = true;
       startBootstrap();
     };
@@ -998,7 +1002,7 @@ function AuthorWorkspace({
       recentResume.flush();
       await flushDraft();
     } catch (error) {
-      if (isCurrentLoadContext()) setStatus({ message: messageOf(error), kind: "error" });
+      if (!isDocumentDepartureAbort(error) && isCurrentLoadContext()) setStatus({ message: messageOf(error), kind: "error" });
       return;
     }
     if (!isCurrentLoadContext()) return;
@@ -1224,12 +1228,14 @@ function AuthorWorkspace({
         retainedCurrentEditor = isSameSceneEditorLoad(sceneEditorLoadIdentity(current));
         return { ...current, loadingScene: false, editor: retainedCurrentEditor ? current.editor : null };
       });
-      setStatus({
-        message: retainedCurrentEditor
-          ? `シーンの更新を読み込めませんでした。表示中の編集内容は保持しています。${messageOf(error)}`
-          : messageOf(error),
-        kind: "error",
-      });
+      if (!isDocumentDepartureAbort(error)) {
+        setStatus({
+          message: retainedCurrentEditor
+            ? `シーンの更新を読み込めませんでした。表示中の編集内容は保持しています。${messageOf(error)}`
+            : messageOf(error),
+          kind: "error",
+        });
+      }
     }
   }, [refreshJournal, recentResume.flush, updateWork]);
 
@@ -1298,7 +1304,7 @@ function AuthorWorkspace({
       // Refresh GitHub in the background; this never blocks the local tree.
       void refreshRef.current();
     } catch (error) {
-      if (navigationRef.current === nav) setStatus({ message: messageOf(error), kind: "error" });
+      if (!isDocumentDepartureAbort(error) && navigationRef.current === nav) setStatus({ message: messageOf(error), kind: "error" });
     } finally {
       if (navigationRef.current === nav) setBusy("");
     }
@@ -1460,7 +1466,9 @@ function AuthorWorkspace({
         await loadScene(projectId, selectedSceneId, tree, observed.snapshot.repository);
       }
     } catch (error) {
-      if (isCurrentProjectContext()) setStatus({ message: `リモートの確認に失敗しました。${messageOf(error)}`, kind: "error" });
+      if (!isDocumentDepartureAbort(error) && isCurrentProjectContext()) {
+        setStatus({ message: `リモートの確認に失敗しました。${messageOf(error)}`, kind: "error" });
+      }
     } finally {
       observationBusyRef.current = false;
     }
