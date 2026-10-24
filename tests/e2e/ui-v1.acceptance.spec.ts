@@ -15,6 +15,16 @@ interface JournalDraft {
 
 interface JournalEntryRecord extends JournalDraft {
   key: string;
+  authorScope: string | null;
+  repository: {
+    provider: "github" | "local";
+    repositoryId: string;
+    defaultBranch: string;
+    ownerScope: string;
+    url: string;
+  };
+  snapshot: { remoteCommit: string; overlayCommit?: string };
+  checkpoint?: { localCommit: string };
   publicationBatchId?: string;
   operation: { id: string; generation: number };
 }
@@ -94,6 +104,45 @@ async function openFixtureScene(page: Page, mode: "desktop" | "mobile", sceneId 
   const project = projects.find((item) => item.url === repositoryUrl || item.url === repositoryInputValue(repositoryUrl));
   expect(project, "the synthetic Git repository should be registered in Core").toBeTruthy();
   return project!.id;
+}
+
+async function seedLegacyDraft(page: Page, text: string): Promise<string> {
+  const key = "scriptorium:draft:issue-41";
+  await page.addInitScript(({ key, text }) => {
+    localStorage.setItem(key, JSON.stringify({
+      version: 1,
+      projectId: "legacy-project",
+      sceneId: "scene-1",
+      text,
+      revision: "legacy-revision",
+      savedAt: Date.now(),
+    }));
+  }, { key, text });
+  return key;
+}
+
+async function failNextJournalWriteForText(page: Page, text: string): Promise<void> {
+  await page.evaluate((targetText) => {
+    const originalPut = IDBObjectStore.prototype.put;
+    let failurePending = true;
+    (window as Window & { __failedIssue41JournalPuts?: number }).__failedIssue41JournalPuts = 0;
+    IDBObjectStore.prototype.put = function (this: IDBObjectStore, value: unknown, key?: IDBValidKey): IDBRequest<IDBValidKey> {
+      const entryText = value && typeof value === "object" && "text" in value && typeof value.text === "string" ? value.text : "";
+      if (failurePending && this.transaction.db.name === "scriptorium-recovery" && this.name === "operations" && entryText === targetText) {
+        failurePending = false;
+        const transaction = this.transaction;
+        const request = originalPut.call(this, value, key);
+        Object.defineProperty(transaction, "error", {
+          configurable: true,
+          get: () => new DOMException("Synthetic strict journal write failure", "QuotaExceededError"),
+        });
+        (window as Window & { __failedIssue41JournalPuts?: number }).__failedIssue41JournalPuts = 1;
+        queueMicrotask(() => transaction.abort());
+        return request;
+      }
+      return originalPut.call(this, value, key);
+    };
+  }, text);
 }
 
 async function readJournal(page: Page): Promise<JournalDraft[]> {
@@ -218,6 +267,178 @@ async function hasJournalEntryForOperation(page: Page, operationId: string, gene
     }
   }, { operationId, generation });
 }
+
+test("legacy draft import preserves active input when its journal debounce is pending", async ({ page }) => {
+  expect(authToken.length).toBeGreaterThanOrEqual(32);
+  expect(repositoryUrl).not.toBe("");
+
+  const legacyText = "Legacy text must remain available for a deliberate import.";
+  const legacyKey = await seedLegacyDraft(page, legacyText);
+  await signIn(page, "desktop");
+  await openFixtureScene(page, "desktop");
+
+  await page.evaluate(() => {
+    const originalSetTimeout = window.setTimeout.bind(window);
+    window.setTimeout = ((handler: TimerHandler, timeout = 0, ...arguments_: unknown[]) =>
+      originalSetTimeout(handler, timeout === 350 ? 2_000 : timeout, ...arguments_)) as typeof window.setTimeout;
+  });
+  const activeText = "New active editor text before the legacy import.";
+  const editor = page.locator(".cm-content");
+  await editor.fill(activeText);
+  await expect(editor).toHaveText(activeText);
+  expect((await readJournal(page)).some((entry) => entry.sceneId === "scene-1" && entry.text === activeText)).toBe(false);
+
+  page.on("dialog", (dialog) => dialog.accept());
+  await page.getByRole("button", { name: "選択中のシーンに下書きとして移す", exact: true }).click();
+
+  await expect(page.getByText(/現在の下書きがあるため、古い記録の移行を中止しました/u)).toBeVisible();
+  await expect(editor).toHaveText(activeText);
+  expect(await page.evaluate((key) => localStorage.getItem(key) !== null, legacyKey)).toBe(true);
+  await expectJournalDraft(page, "scene-1", activeText);
+  expect(await page.evaluate((key) => localStorage.getItem(key) !== null, legacyKey)).toBe(true);
+
+  await page.reload();
+  if (await page.getByLabel("アクセストークン").isVisible().catch(() => false)) {
+    await signIn(page, "desktop");
+  }
+  if (!await page.locator(".cm-content").isVisible().catch(() => false)) {
+    await openFixtureScene(page, "desktop");
+  }
+  await expect(page.locator('[data-recovery-status="ready"]')).toBeVisible();
+  await expect(page.locator(".cm-content")).toHaveText(activeText);
+  expect(await page.evaluate((key) => localStorage.getItem(key) !== null, legacyKey)).toBe(true);
+});
+
+test("legacy draft import can be canceled, reloads its source, and removes it only after journal durability", async ({ page }) => {
+  expect(authToken.length).toBeGreaterThanOrEqual(32);
+  expect(repositoryUrl).not.toBe("");
+
+  const legacyText = "A clean editor can safely receive this legacy draft.";
+  const legacyKey = await seedLegacyDraft(page, legacyText);
+  await signIn(page, "desktop");
+  const projectId = await openFixtureScene(page, "desktop");
+  const editor = page.locator(".cm-content");
+  const originalText = await editor.innerText();
+
+  page.on("dialog", (dialog) => dialog.dismiss());
+  await page.getByRole("button", { name: "選択中のシーンに下書きとして移す", exact: true }).click();
+  expect(await editor.innerText()).toBe(originalText);
+  expect(await page.evaluate((key) => localStorage.getItem(key) !== null, legacyKey)).toBe(true);
+  expect((await readJournal(page)).some((entry) => entry.sceneId === "scene-1" && entry.text === legacyText)).toBe(false);
+
+  await page.reload();
+  if (await page.getByLabel("アクセストークン").isVisible().catch(() => false)) {
+    await signIn(page, "desktop");
+  }
+  if (!await page.locator(".cm-content").isVisible().catch(() => false)) {
+    await openFixtureScene(page, "desktop");
+  }
+  await expect(page.getByRole("button", { name: "選択中のシーンに下書きとして移す", exact: true })).toBeVisible();
+  page.removeAllListeners("dialog");
+  page.on("dialog", (dialog) => dialog.accept());
+  await page.getByRole("button", { name: "選択中のシーンに下書きとして移す", exact: true }).click();
+
+  await expect(editor).toHaveText(legacyText);
+  await expectJournalDraft(page, "scene-1", legacyText);
+  const migrated = await readJournalEntry(page, "scene-1", legacyText);
+  expect(migrated.operation.id).not.toBe("");
+  expect(migrated.operation.generation).toBe(1);
+  expect(migrated.authorScope).toBe("owner");
+  const observationResponse = await page.request.get(new URL(`/api/projects/${encodeURIComponent(projectId)}/observation`, page.url()).toString());
+  expect(observationResponse.ok()).toBe(true);
+  const observation = await observationResponse.json() as { snapshot?: { repository?: JournalEntryRecord["repository"] } };
+  expect(migrated.repository).toEqual(observation.snapshot?.repository);
+  expect(await page.evaluate((key) => localStorage.getItem(key) === null, legacyKey)).toBe(true);
+
+  await page.reload();
+  if (await page.getByLabel("アクセストークン").isVisible().catch(() => false)) {
+    await signIn(page, "desktop");
+  }
+  await expect(page.locator(".cm-content")).toHaveText(legacyText);
+  await expectJournalDraft(page, "scene-1", legacyText);
+});
+
+test("legacy draft import preserves a checkpointed operation and advances its generation", async ({ page }) => {
+  expect(authToken.length).toBeGreaterThanOrEqual(32);
+  expect(repositoryUrl).not.toBe("");
+
+  const legacyText = "This older legacy text follows a durable checkpoint.";
+  const legacyKey = await seedLegacyDraft(page, legacyText);
+  await signIn(page, "desktop");
+  const projectId = await openFixtureScene(page, "desktop");
+  const currentText = "The author's existing operation must remain checkpointed.";
+  await page.locator(".cm-content").fill(currentText);
+  await expectJournalDraft(page, "scene-1", currentText);
+  await page.getByRole("button", { name: "Checkpoint", exact: true }).click();
+  await expectJournalState(page, "scene-1", currentText, "checkpointed");
+  const checkpointedBefore = await readJournalEntry(page, "scene-1", currentText);
+  expect(checkpointedBefore.checkpoint?.localCommit).toBeTruthy();
+
+  await page.reload();
+  if (await page.getByLabel("アクセストークン").isVisible().catch(() => false)) {
+    await signIn(page, "desktop");
+  }
+  if (!await page.locator(".cm-content").isVisible().catch(() => false)) {
+    await openFixtureScene(page, "desktop");
+  }
+  await expect(page.locator(".cm-content")).toHaveText(currentText);
+  await expect(page.locator('[data-recovery-status="ready"]')).toBeVisible();
+  page.on("dialog", (dialog) => dialog.accept());
+  await page.getByRole("button", { name: "選択中のシーンに下書きとして移す", exact: true }).click();
+
+  await expect(page.locator(".cm-content")).toHaveText(legacyText);
+  await expectJournalDraft(page, "scene-1", legacyText);
+  const checkpointedAfter = await readJournalEntry(page, "scene-1", currentText);
+  const migrated = await readJournalEntry(page, "scene-1", legacyText);
+  expect(checkpointedAfter.state).toBe("checkpointed");
+  expect(checkpointedAfter.operation.id).toBe(checkpointedBefore.operation.id);
+  expect(checkpointedAfter.operation.generation).toBe(checkpointedBefore.operation.generation);
+  expect(checkpointedAfter.checkpoint?.localCommit).toBe(checkpointedBefore.checkpoint?.localCommit);
+  expect(migrated.operation.id).not.toBe(checkpointedBefore.operation.id);
+  expect(migrated.operation.generation).toBe(checkpointedBefore.operation.generation + 1);
+  expect(migrated.authorScope).toBe(checkpointedBefore.authorScope);
+  expect(migrated.repository).toEqual(checkpointedBefore.repository);
+  expect(await page.evaluate((key) => localStorage.getItem(key) === null, legacyKey)).toBe(true);
+});
+
+test("legacy draft import preserves input after its strict journal write fails", async ({ page }) => {
+  expect(authToken.length).toBeGreaterThanOrEqual(32);
+  expect(repositoryUrl).not.toBe("");
+
+  const legacyText = "Legacy source must remain when active input cannot be journaled.";
+  const legacyKey = await seedLegacyDraft(page, legacyText);
+  await signIn(page, "desktop");
+  await openFixtureScene(page, "desktop");
+  const activeText = "Active text survives a strict journal write failure.";
+  await failNextJournalWriteForText(page, activeText);
+  const editor = page.locator(".cm-content");
+  await editor.fill(activeText);
+  await expect(editor).toHaveText(activeText);
+  await page.waitForFunction(() => (window as Window & { __failedIssue41JournalPuts?: number }).__failedIssue41JournalPuts === 1);
+  await expect(page.getByRole("region", { name: "原稿エディター" }).getByRole("alert").filter({ hasText: "Browser storage is full" })).toBeVisible();
+
+  page.on("dialog", (dialog) => dialog.accept());
+  await page.getByRole("button", { name: "選択中のシーンに下書きとして移す", exact: true }).click();
+
+  await expect(page.getByText(/現在の下書きがあるため、古い記録の移行を中止しました/u)).toBeVisible();
+  await expect(editor).toHaveText(activeText);
+  expect(await page.evaluate((key) => localStorage.getItem(key) !== null, legacyKey)).toBe(true);
+  expect((await readJournal(page)).some((entry) => entry.sceneId === "scene-1" && entry.text === activeText)).toBe(false);
+
+  await page.getByRole("button", { name: "ブラウザーへの記録を再試行", exact: true }).click();
+  await expectJournalDraft(page, "scene-1", activeText);
+  expect(await page.evaluate((key) => localStorage.getItem(key) !== null, legacyKey)).toBe(true);
+  await page.reload();
+  if (await page.getByLabel("アクセストークン").isVisible().catch(() => false)) {
+    await signIn(page, "desktop");
+  }
+  if (!await page.locator(".cm-content").isVisible().catch(() => false)) {
+    await openFixtureScene(page, "desktop");
+  }
+  await expect(page.locator('[data-recovery-status="ready"]')).toBeVisible();
+  await expect(page.locator(".cm-content")).toHaveText(activeText);
+  expect(await page.evaluate((key) => localStorage.getItem(key) !== null, legacyKey)).toBe(true);
+});
 
 function readLocalRemoteDocument(path: string): string | null {
   if (repositoryUrl.startsWith("https://") || repositoryUrl.startsWith("http://")) return null;
