@@ -1678,3 +1678,45 @@ test("public publishing route mounts its source reader without an owner session"
     "/api/public/repos/123/modules/publishing/share/e2e-invalid-token",
   ]);
 });
+
+test("late startup activation cannot report a false route error or replace explicit scene navigation", async ({ page }) => {
+  await openFixtureProject(page, await signIn(page));
+  const projectId = new URL(page.url()).pathname.match(/\/projects\/([^/]+)/u)?.[1];
+  expect(projectId).toBeTruthy();
+  let release!: () => void;
+  const delayed = new Promise<void>((resolve) => { release = resolve; });
+  let started!: () => void;
+  const admission = new Promise<void>((resolve) => { started = resolve; });
+  let completed!: () => void;
+  const completion = new Promise<void>((resolve) => { completed = resolve; });
+  let first = true;
+  await page.route(`**/api/projects/${projectId}`, async (route) => {
+    if (!first || route.request().method() !== "GET") return route.continue();
+    first = false;
+    const response = await route.fetch();
+    started();
+    await delayed;
+    await route.fulfill({ response });
+    completed();
+  });
+  try {
+    await page.reload();
+    await admission;
+    await page.getByRole("button", { name: projectLabel(repositoryUrl), exact: true }).click();
+    await expect(page.getByRole("heading", { name: "Volume One" })).toBeVisible();
+    await page.getByRole("button", { name: "Chapter One: Scene Two", exact: true }).click();
+    const editor = page.locator(".cm-content[contenteditable=true]");
+    await expect(editor).toBeVisible();
+    const draft = "明示的に開いたシーンで、この続きを書いている。";
+    await editor.fill(draft);
+    await expect.poll(async () => (await readJournal(page)).some((entry) => entry.text === draft && entry.sceneId === "scene-2")).toBe(true);
+    release();
+    await completion;
+    await page.evaluate(() => new Promise<void>((resolve) => requestAnimationFrame(() => requestAnimationFrame(() => resolve()))));
+    await expect(page.locator(".application-status")).not.toContainText("直接リンクのシーンが作品構成に見つからない");
+    await expect(page).toHaveURL(/\/scenes\/scene-2/u);
+    await expect(editor).toHaveText(draft);
+  } finally {
+    release();
+  }
+});

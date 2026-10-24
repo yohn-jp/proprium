@@ -760,8 +760,11 @@ function AuthorWorkspace({
         }
         const next = routeProject ?? registered.find((project) => project.id === stored) ?? registered[0];
         if (next) {
-          await activateProject(next, false, scope);
-          if (cancelled) return;
+          const sceneRequest = sceneLoadRef.current;
+          const activation = activateProject(next, false, scope);
+          const navigation = navigationRef.current;
+          await activation;
+          if (cancelled || navigationRef.current !== navigation || sceneLoadRef.current !== sceneRequest || authorScopeRef.current !== scope) return;
           const active = workRef.current;
           if (requested?.sceneId) {
             const location = active?.project.id === requested.projectId && active ? sceneTreeLocation(active.tree.tree, requested.sceneId) : null;
