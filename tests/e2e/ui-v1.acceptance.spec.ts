@@ -145,6 +145,67 @@ async function failNextJournalWriteForText(page: Page, text: string): Promise<vo
   }, text);
 }
 
+async function holdCompositionFlush(page: Page, delayMs = 1_500): Promise<void> {
+  await page.evaluate((delayMs) => {
+    const editor = document.querySelector<HTMLElement>(".cm-content");
+    if (!editor) throw new Error("The manuscript editor is not mounted");
+    const originalSetTimeout = window.setTimeout.bind(window);
+    const state = window as Window & {
+      __issue41DelayedFlushTimers?: number;
+      __issue41CompletedFlushTimers?: number;
+      __issue41ReleaseComposition?: () => void;
+    };
+    state.__issue41DelayedFlushTimers = 0;
+    state.__issue41CompletedFlushTimers = 0;
+    let suppressCompositionEnd = true;
+    editor.addEventListener("compositionend", (event) => {
+      if (suppressCompositionEnd) event.stopImmediatePropagation();
+    }, true);
+    const suppressCompositionBlur = (event: Event) => {
+      if (event.target === editor) event.stopImmediatePropagation();
+    };
+    document.addEventListener("blur", suppressCompositionBlur, true);
+    document.addEventListener("focusout", suppressCompositionBlur, true);
+    editor.blur = () => undefined;
+    window.setTimeout = ((handler: TimerHandler, timeout = 0, ...arguments_: unknown[]) => {
+      if (timeout === 0 && new Error().stack?.includes("flushComposition") && state.__issue41DelayedFlushTimers! < 2) {
+        state.__issue41DelayedFlushTimers = (state.__issue41DelayedFlushTimers ?? 0) + 1;
+        const delayedHandler = typeof handler === "function" ? (...callbackArguments: unknown[]) => {
+          state.__issue41CompletedFlushTimers = (state.__issue41CompletedFlushTimers ?? 0) + 1;
+          handler.apply(window, callbackArguments);
+        } : handler;
+        return originalSetTimeout(delayedHandler, delayMs, ...arguments_);
+      }
+      return originalSetTimeout(handler, timeout, ...arguments_);
+    }) as typeof window.setTimeout;
+    editor.dispatchEvent(new CompositionEvent("compositionstart", { data: "にほんご", bubbles: true }));
+    state.__issue41ReleaseComposition = () => {
+      suppressCompositionEnd = false;
+      editor.dispatchEvent(new CompositionEvent("compositionend", { data: "日本語", bubbles: true }));
+    };
+  }, delayMs);
+}
+
+async function rejectNextCompositionFlush(page: Page): Promise<void> {
+  await page.evaluate(() => {
+    const editor = document.querySelector<HTMLElement>(".cm-content");
+    if (!editor) throw new Error("The manuscript editor is not mounted");
+    editor.dispatchEvent(new CompositionEvent("compositionstart", { data: "にほんご", bubbles: true }));
+    const originalSetTimeout = window.setTimeout.bind(window);
+    const state = window as Window & { __issue41CompositionFlushRejected?: number };
+    state.__issue41CompositionFlushRejected = 0;
+    let rejectionPending = true;
+    window.setTimeout = ((handler: TimerHandler, timeout = 0, ...arguments_: unknown[]) => {
+      if (rejectionPending && timeout === 0 && new Error().stack?.includes("flushComposition")) {
+        rejectionPending = false;
+        state.__issue41CompositionFlushRejected = 1;
+        throw new Error("日本語入力の変換が完了していません。変換を確定してから画面を切り替えてください。");
+      }
+      return originalSetTimeout(handler, timeout, ...arguments_);
+    }) as typeof window.setTimeout;
+  });
+}
+
 async function readJournal(page: Page): Promise<JournalDraft[]> {
   return page.evaluate(async () => {
     const database = await new Promise<IDBDatabase>((resolve, reject) => {
@@ -438,6 +499,59 @@ test("legacy draft import preserves input after its strict journal write fails",
   await expect(page.locator('[data-recovery-status="ready"]')).toBeVisible();
   await expect(page.locator(".cm-content")).toHaveText(activeText);
   expect(await page.evaluate((key) => localStorage.getItem(key) !== null, legacyKey)).toBe(true);
+});
+
+test("legacy draft import reports a rejected composition flush and keeps its source", async ({ page }) => {
+  expect(authToken.length).toBeGreaterThanOrEqual(32);
+  expect(repositoryUrl).not.toBe("");
+
+  const legacyText = "Keep this source if Japanese input is still composing.";
+  const legacyKey = await seedLegacyDraft(page, legacyText);
+  await signIn(page, "desktop");
+  await openFixtureScene(page, "desktop");
+  const editor = page.locator(".cm-content");
+  const originalText = await editor.innerText();
+  await rejectNextCompositionFlush(page);
+
+  await page.getByRole("button", { name: "選択中のシーンに下書きとして移す", exact: true }).click();
+  await expect.poll(() => page.evaluate(() => (window as Window & { __issue41CompositionFlushRejected?: number }).__issue41CompositionFlushRejected ?? 0)).toBe(1);
+  await expect(page.getByRole("alert").filter({ hasText: "日本語入力の変換が完了していません" })).toBeVisible();
+  await expect.poll(() => editor.innerText()).toBe(originalText);
+  expect(await page.evaluate((key) => localStorage.getItem(key) !== null, legacyKey)).toBe(true);
+});
+
+test("legacy draft composition cannot write old scene text into a newly selected scene", async ({ page }) => {
+  expect(authToken.length).toBeGreaterThanOrEqual(32);
+  expect(repositoryUrl).not.toBe("");
+
+  const legacyKey = await seedLegacyDraft(page, "The legacy source stays with its original scene.");
+  await signIn(page, "desktop");
+  const projectId = await openFixtureScene(page, "desktop");
+  await page.getByRole("button", { name: "Chapter One: Scene Two", exact: true }).click();
+  await expect(page.getByRole("heading", { name: "Scene Two" })).toBeVisible();
+  const sceneTwoText = await page.locator(".cm-content").innerText();
+  await page.getByRole("button", { name: "Chapter One: Scene One", exact: true }).click();
+  await expect(page.getByRole("heading", { name: "Scene One" })).toBeVisible();
+  const sceneOneText = await page.locator(".cm-content").innerText();
+  expect(sceneOneText).not.toBe(sceneTwoText);
+
+  await holdCompositionFlush(page);
+  await page.getByRole("button", { name: "選択中のシーンに下書きとして移す", exact: true }).click();
+  await expect.poll(() => page.evaluate(() => (window as Window & { __issue41DelayedFlushTimers?: number }).__issue41DelayedFlushTimers ?? 0)).toBe(2);
+  await page.evaluate((projectId) => {
+    const state = window as Window & { __issue41ReleaseComposition?: () => void };
+    state.__issue41ReleaseComposition?.();
+    const target = new URL(window.location.href);
+    target.pathname = target.pathname.replace(/\/scenes\/scene-1\/?$/u, "/scenes/scene-2");
+    target.pathname = target.pathname.replace(/\/projects\/[^/]+\/scenes/u, "/projects/" + encodeURIComponent(projectId) + "/scenes");
+    window.history.pushState(window.history.state, "", target);
+    window.dispatchEvent(new PopStateEvent("popstate", { state: window.history.state }));
+  }, projectId);
+  await expect(page.getByRole("heading", { name: "Scene Two" })).toBeVisible();
+  await expect.poll(() => page.evaluate(() => (window as Window & { __issue41CompletedFlushTimers?: number }).__issue41CompletedFlushTimers ?? 0)).toBe(2);
+  await expect.poll(() => page.locator(".cm-content").innerText()).toBe(sceneTwoText);
+  await expect(page.getByRole("alert").filter({ hasText: "移行中に作品やシーンが変わったため" })).toBeVisible();
+  await expect.poll(() => page.evaluate((key) => localStorage.getItem(key) !== null, legacyKey)).toBe(true);
 });
 
 function readLocalRemoteDocument(path: string): string | null {
