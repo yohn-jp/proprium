@@ -19,6 +19,15 @@ export function termAdornmentsExtension(resolverRef: ResolverRef, navigatorRef: 
     private generation = 0;
     private composing: boolean;
     private suspended = false;
+    private readonly onBeforeUnload = (event: BeforeUnloadEvent) => {
+      // Let all beforeunload handlers finish so a canceled leave keeps this
+      // editor's optional work available in the still-open document.
+      queueMicrotask(() => {
+        if (event.defaultPrevented || !this.view.dom.isConnected) return;
+        this.suspended = true;
+        this.cancel();
+      });
+    };
     private readonly onPageHide = () => {
       this.suspended = true;
       this.cancel();
@@ -31,6 +40,7 @@ export function termAdornmentsExtension(resolverRef: ResolverRef, navigatorRef: 
 
     constructor(private readonly view: EditorView) {
       this.composing = isViewComposing(view);
+      window.addEventListener("beforeunload", this.onBeforeUnload);
       window.addEventListener("pagehide", this.onPageHide);
       window.addEventListener("pageshow", this.onPageShow);
       this.schedule();
@@ -63,6 +73,7 @@ export function termAdornmentsExtension(resolverRef: ResolverRef, navigatorRef: 
     }
 
     destroy(): void {
+      window.removeEventListener("beforeunload", this.onBeforeUnload);
       window.removeEventListener("pagehide", this.onPageHide);
       window.removeEventListener("pageshow", this.onPageShow);
       this.cancel();
