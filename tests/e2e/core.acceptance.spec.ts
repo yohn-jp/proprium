@@ -2189,7 +2189,7 @@ test("Issue 42: an unmodified remote observation leaves a newer explicit scene s
   }
 });
 
-test("Issue 42: a failed remote observation reports the error without undoing explicit navigation", async ({ page }) => {
+test("Issue 42: a failed hosted credential observation keeps the author session and recovers on a fresh observation", async ({ page }) => {
   test.skip(process.env.SCRIPTORIUM_E2E_EXTERNAL_REPOSITORY === "1", "This acceptance uses a generated disposable local bare remote.");
   expect(authToken.length).toBeGreaterThanOrEqual(32);
   expect(repositoryUrl).not.toBe("");
@@ -2201,13 +2201,30 @@ test("Issue 42: a failed remote observation reports the error without undoing ex
     const observationStarted = issue42Deferred();
     const observationFinished = issue42Deferred();
     let heldObservation = false;
+    let observationReads = 0;
+    let refreshRequests = 0;
+    let reauthRequests = 0;
     await page.route((url) => url.pathname === `/api/projects/${project.id}/observation`, async (route) => {
-      if (route.request().method() !== "GET" || heldObservation) return route.continue();
+      if (route.request().method() !== "GET") return route.continue();
+      observationReads += 1;
+      if (heldObservation) return route.continue();
       heldObservation = true;
       observationStarted.release();
       await observationGate.promise;
-      await route.fulfill({ status: 503, body: "Synthetic disposable remote observation failure" });
+      await route.fulfill({
+        status: 503,
+        contentType: "application/json",
+        body: JSON.stringify({ error: "Repository credentials are temporarily unavailable", code: "git_credential_unavailable" }),
+      });
       observationFinished.release();
+    });
+    await page.route("**/_platform/refresh", async (route) => {
+      refreshRequests += 1;
+      await route.fulfill({ status: 401, contentType: "application/json", body: JSON.stringify({ code: "UNAUTHORIZED" }) });
+    });
+    await page.route("**/_platform/reauth", async (route) => {
+      reauthRequests += 1;
+      await route.fulfill({ status: 200, contentType: "text/html", body: "reauth fixture" });
     });
     await page.evaluate(() => window.dispatchEvent(new Event("online")));
     await observationStarted.promise;
@@ -2219,6 +2236,15 @@ test("Issue 42: a failed remote observation reports the error without undoing ex
     await expect(page.locator(".topbar-status")).toContainText("リモートの確認に失敗しました");
     await expect(page.getByRole("heading", { name: "Scene Two" })).toBeVisible();
     await expect(page.locator(".cm-content")).toContainText("The second line of the story.");
+    expect(refreshRequests).toBe(0);
+    expect(reauthRequests).toBe(0);
+
+    await page.evaluate(() => window.dispatchEvent(new Event("online")));
+    await expect.poll(() => observationReads, { message: "a fresh remote observation should run after connectivity returns" }).toBeGreaterThan(1);
+    await expect(page.locator(".topbar-status")).not.toContainText("リモートの確認に失敗しました");
+    await expect(page.locator(".cm-content")).toContainText("The second line of the story.");
+    expect(refreshRequests).toBe(0);
+    expect(reauthRequests).toBe(0);
   } finally {
     observationGate.release();
     await rm(remote.root, { recursive: true, force: true });

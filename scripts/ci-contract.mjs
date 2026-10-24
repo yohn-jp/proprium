@@ -15,6 +15,7 @@ export const TYPECHECK_TARGETS = [
 export const TEST_TYPECHECK_SCOPES = ['app-e2e', 'packages', 'modules'];
 export const PROFILES = ['core', 'full'];
 export const BROWSER_SHARDS = [
+  { id: 'auth-recovery', project: 'chromium', file: 'auth-recovery.acceptance.spec.ts' },
   ...['core', 'job-inbox', 'modular-workspace', 'recent-activity', 'review-contributions', 'ui-v1'].map(id => ({ id, project: 'chromium', file: `${id}.acceptance.spec.ts` })),
   { id: 'webkit', project: 'webkit', file: 'ui-v1.acceptance.spec.ts' },
 ];
@@ -39,7 +40,7 @@ export const VERIFICATION_GROUPS = {
   'oci-core': ['oci-core'],
   'oci-full': ['oci-full'],
   ...Object.fromEntries(PROFILES.flatMap(profile => [
-    [`browser-${profile}-writing`, ['core', 'job-inbox', 'recent-activity'].map(id => `browser-${profile}-${id}`)],
+    [`browser-${profile}-writing`, ['auth-recovery', 'core', 'job-inbox', 'recent-activity'].map(id => `browser-${profile}-${id}`)],
     [`browser-${profile}-reference`, ['modular-workspace', 'review-contributions', 'ui-v1'].map(id => `browser-${profile}-${id}`)],
     [`browser-${profile}-webkit`, [`browser-${profile}-webkit`]],
   ])),
