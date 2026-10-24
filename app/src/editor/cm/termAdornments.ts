@@ -18,9 +18,21 @@ export function termAdornmentsExtension(resolverRef: ResolverRef, navigatorRef: 
     private controller: AbortController | null = null;
     private generation = 0;
     private composing: boolean;
+    private suspended = false;
+    private readonly onPageHide = () => {
+      this.suspended = true;
+      this.cancel();
+    };
+    private readonly onPageShow = () => {
+      if (!this.suspended) return;
+      this.suspended = false;
+      this.schedule();
+    };
 
     constructor(private readonly view: EditorView) {
       this.composing = isViewComposing(view);
+      window.addEventListener("pagehide", this.onPageHide);
+      window.addEventListener("pageshow", this.onPageShow);
       this.schedule();
     }
 
@@ -51,6 +63,8 @@ export function termAdornmentsExtension(resolverRef: ResolverRef, navigatorRef: 
     }
 
     destroy(): void {
+      window.removeEventListener("pagehide", this.onPageHide);
+      window.removeEventListener("pageshow", this.onPageShow);
       this.cancel();
     }
 
@@ -64,7 +78,7 @@ export function termAdornmentsExtension(resolverRef: ResolverRef, navigatorRef: 
 
     private schedule(): void {
       const resolver = resolverRef.current;
-      if (this.composing || !resolver) return;
+      if (this.suspended || this.composing || !resolver) return;
       const generation = this.generation;
       const controller = new AbortController();
       this.controller = controller;

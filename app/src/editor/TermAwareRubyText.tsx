@@ -33,6 +33,7 @@ export function TermAwareRubyText({
     if (!container || !root || !resolveTerms || !onTermNavigate || typeof IntersectionObserver === "undefined") return;
 
     let disposed = false;
+    let suspended = false;
     const visibleLines = new Map<number, HTMLParagraphElement>();
     const active = new Map<number, { controller: AbortController; timer: ReturnType<typeof setTimeout> }>();
     const completed = new Set<number>();
@@ -47,7 +48,7 @@ export function TermAwareRubyText({
     };
 
     const pump = () => {
-      if (disposed) return;
+      if (disposed || suspended) return;
       const pending = selectPendingTermLines([...visibleLines.keys()], new Set(active.keys()), completed, MAX_ACTIVE_LINES);
       for (const lineStart of pending) {
         const element = visibleLines.get(lineStart);
@@ -105,15 +106,31 @@ export function TermAwareRubyText({
       pump();
     }, { root, rootMargin: "48px 0px" });
 
-    for (const line of container.querySelectorAll<HTMLParagraphElement>("[data-source-start][data-source-end]")) observer.observe(line);
-    return () => {
-      disposed = true;
-      observer.disconnect();
+    const cancelActive = () => {
       for (const request of active.values()) {
         clearTimeout(request.timer);
         request.controller.abort();
       }
       active.clear();
+    };
+    const onPageHide = () => {
+      suspended = true;
+      cancelActive();
+    };
+    const onPageShow = () => {
+      if (!suspended) return;
+      suspended = false;
+      pump();
+    };
+    window.addEventListener("pagehide", onPageHide);
+    window.addEventListener("pageshow", onPageShow);
+    for (const line of container.querySelectorAll<HTMLParagraphElement>("[data-source-start][data-source-end]")) observer.observe(line);
+    return () => {
+      disposed = true;
+      window.removeEventListener("pagehide", onPageHide);
+      window.removeEventListener("pageshow", onPageShow);
+      observer.disconnect();
+      cancelActive();
       visibleLines.clear();
     };
   }, [generation, text, resolveTerms, onTermNavigate]);

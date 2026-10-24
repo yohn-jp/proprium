@@ -1,4 +1,4 @@
-/* The approved Workspace Studio desktop art direction (2026-10-22).
+/* Desktop workspace presentation.
    Only the Desktop Shell uses these tokens; Mobile is an independent frontend. */
 .st-studio-shell {
   --studio-rail: #18342d;
@@ -7,7 +7,7 @@
   --studio-tint: #eff4ee;
   --studio-tint-strong: #e3ebe2;
   --studio-ink: #2b4b3d;
-  --studio-muted: #748779;
+  --studio-muted: #52695a;
   --studio-border: #dce5db;
   --studio-primary: #2e5a49;
   display: grid;
@@ -114,11 +114,11 @@
 .st-studio-shell .st-workspace .editor {max-width:1320px}
 .st-studio-shell .st-workspace .editor-header {align-items:center;border-bottom:1px solid var(--studio-border);padding:12px 4px 19px;margin:0 0 17px}
 .st-studio-shell .st-workspace .editor-header h1 {font:600 clamp(25px,2.4vw,35px) var(--manuscript-serif);letter-spacing:-.035em;color:var(--studio-ink)}
-.st-studio-shell .st-workspace .eyebrow {letter-spacing:.12em;font-size:10px;color:#91a696}
+.st-studio-shell .st-workspace .eyebrow {letter-spacing:.12em;font-size:10px;color:var(--studio-muted)}
 .st-studio-shell .st-workspace .editor-columns {grid-template-columns:minmax(0,1fr) minmax(240px,.38fr);gap:12px}
 .st-studio-shell .st-workspace .manuscript-column,.st-studio-shell .st-workspace .preview-column {border-color:var(--studio-border);background:var(--studio-sheet);border-radius:5px}
 .st-studio-shell .st-workspace .manuscript-column {padding:clamp(18px,2.4vw,36px);box-shadow:0 3px 25px #214b3310}
-.st-studio-shell .st-workspace .manuscript-column > label {font-size:10px;letter-spacing:1.5px;color:#90a694;text-transform:uppercase}
+.st-studio-shell .st-workspace .manuscript-column > label {font-size:10px;letter-spacing:1.5px;color:var(--studio-muted);text-transform:uppercase}
 .st-studio-shell .st-workspace .cm-editor {color:var(--studio-ink);background:var(--studio-sheet)}
 .st-studio-shell .st-workspace .cm-content {padding:22px 10px;font-family:var(--manuscript-serif);font-size:var(--editor-font-size,18px);line-height:2.1}
 .st-studio-shell .st-workspace .typography-toolbar {background:var(--studio-tint);border-color:var(--studio-border)}

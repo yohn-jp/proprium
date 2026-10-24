@@ -29,7 +29,7 @@ import { loadThemeMode, persistThemeMode, type ThemeMode } from "../theme";
 import { clearDraft, loadDraft } from "../drafts";
 import { CheckpointConflictError, runCheckpointProtocol } from "./checkpoint-protocol";
 import type { ApplicationShell, ApplicationShellProps, UiMode } from "./contracts";
-import { ApplicationStatus, hasApplicationStatus } from "./ApplicationStatus";
+import { ApplicationStatus } from "./ApplicationStatus";
 import { availableModulePanels } from "./AvailableModulePanels";
 import { DocumentInspector } from "./DocumentInspector";
 import { LibraryOutline, projectLabel, RecoveryList, type LegacyDraftRecord } from "./LibraryOutline";
@@ -760,8 +760,11 @@ function AuthorWorkspace({
         }
         const next = routeProject ?? registered.find((project) => project.id === stored) ?? registered[0];
         if (next) {
-          await activateProject(next, false, scope);
-          if (cancelled) return;
+          const sceneRequest = sceneLoadRef.current;
+          const activation = activateProject(next, false, scope);
+          const navigation = navigationRef.current;
+          await activation;
+          if (cancelled || navigationRef.current !== navigation || sceneLoadRef.current !== sceneRequest || authorScopeRef.current !== scope) return;
           const active = workRef.current;
           if (requested?.sceneId) {
             const location = active?.project.id === requested.projectId && active ? sceneTreeLocation(active.tree.tree, requested.sceneId) : null;
@@ -2393,7 +2396,7 @@ function AuthorWorkspace({
     isolatedRecoveryCount,
     remoteState: work?.observation.state ?? null,
   };
-  const statusSlot = hasApplicationStatus(statusProps) ? <ApplicationStatus {...statusProps} /> : null;
+  const statusSlot = <ApplicationStatus {...statusProps} />;
 
   const editorSlot = (
     <>
@@ -2425,6 +2428,12 @@ function AuthorWorkspace({
           flushPendingReactPublish={flushPendingReactPublish}
           readOnly={!editorWritable || busy === "restore"}
           onTextChange={(nextText) => editText(nextText, true)}
+          onRetryDraft={() => {
+            const navigation = navigationRef.current;
+            void prepareLayoutChange().then((stored) => {
+              if (stored && navigationRef.current === navigation) setStatus({ message: "現在の下書きをブラウザーの回復記録に保護しました。", kind: "success" });
+            });
+          }}
           onCursorPositionChange={recentResume.onWritingPosition}
           onReadingPageChange={recentResume.onReadingPage}
           resumeRequest={resumeRequest}
@@ -2528,13 +2537,14 @@ function AuthorWorkspace({
       <button type="button" aria-label="上部バーからCheckpoint" className="st-studio-checkpoint" disabled={!canCheckpoint || busy === "checkpoint" || busy === "publish"}
         onClick={() => void checkpointCurrent()}>{busy === "checkpoint" ? "Checkpoint中…" : "Checkpoint"}</button>
       <button type="button" aria-label="上部バーからPublish" className="st-studio-publish" disabled={!canPublish || busy === "checkpoint" || busy === "publish"}
-        onClick={() => void publishPending()}>{busy === "publish" ? "Publish中…" : "Publish ↗"}</button>
+        onClick={() => void publishPending()}>{busy === "publish" ? "GitHubに保存中…" : "GitHubに保存"}</button>
     </div>
   ) : null;
   return <Shell mode={mode} header={header} desktopActions={desktopActions}
     desktopDurability={editor ? editorDurability(editor) : undefined}
     documentTitle={scene?.title} documentContext={tree?.title}
     library={library} editor={editorSlot} tools={toolsSlot} status={statusSlot}
+    renderStatus={(interactionError) => <ApplicationStatus {...statusProps} interactionError={interactionError} />}
     workspaceScope={authorScope} panels={panels} requestedPanel={panelRequest}
     beforeLayoutChange={prepareLayoutChange} onSwitchMode={switchMode} />;
 }

@@ -312,6 +312,7 @@ test("both production Shells preserve recoverable Japanese drafts and the Mobile
   await expect(mobileEditor).toContainText("日本語入力");
   await expectJournalDraft(page, "scene-1", composedDraft);
 
+  await page.getByRole("button", { name: "プレビュー", exact: true }).click();
   await page.getByRole("button", { name: "縦書き", exact: true }).click();
   await expect(page.locator(".manuscript-preview.is-vertical")).toBeVisible();
   await page.getByRole("button", { name: "読書モード", exact: true }).tap();
@@ -469,7 +470,7 @@ test("both production Shells preserve recoverable Japanese drafts and the Mobile
   const desktopWorkspaceTop = await page.locator(".st-workspace-desktop, .st-desktop-workbench").first()
     .evaluate((node) => node.getBoundingClientRect().top);
   await page.getByRole("button", { name: "Checkpoint", exact: true }).click();
-  await expect(page.locator(".st-desktop-status")).toHaveCSS("position", "fixed");
+  await expect(page.locator(".st-desktop-status")).toHaveCSS("position", "relative");
   expect(await page.locator(".st-workspace-desktop, .st-desktop-workbench").first()
     .evaluate((node) => node.getBoundingClientRect().top)).toBeCloseTo(desktopWorkspaceTop, 1);
   await expect(page.locator(".durability-message")).toContainText("ローカルチェックポイント");
@@ -532,6 +533,11 @@ test("both production Shells preserve recoverable Japanese drafts and the Mobile
   await expect(mobileEditor).toHaveText(mobileCompositionDraft);
   await expectJournalDraft(page, "scene-2", mobileCompositionDraft);
 
+  // Close the persistent problem disclosure before resuming the interrupted route.
+  // Dismissal does not claim that the protection problem has been resolved.
+  const mobileProblems = page.locator(".mobile-shell-status .application-status");
+  if (await mobileProblems.getAttribute("open") !== null) await mobileProblems.locator("summary").click();
+
   await page.getByRole("navigation", { name: "モバイル画面" }).getByRole("button", { name: "設定", exact: true }).click();
   await expect(page.getByRole("button", { name: "Desktop版へ切り替え" })).toBeVisible();
   await page.getByRole("button", { name: "Desktop版へ切り替え" }).click();
@@ -550,7 +556,7 @@ test("both production Shells preserve recoverable Japanese drafts and the Mobile
   const mobileHeaderHeight = await page.locator(".mobile-shell-ion-header")
     .evaluate((node) => node.getBoundingClientRect().height);
   await page.getByRole("button", { name: "Checkpoint", exact: true }).click();
-  await expect(page.locator(".mobile-shell-status")).toHaveCSS("position", "fixed");
+  await expect(page.locator(".mobile-shell-status")).toHaveCSS("position", "relative");
   expect(await page.locator(".mobile-shell-ion-header")
     .evaluate((node) => node.getBoundingClientRect().height)).toBeCloseTo(mobileHeaderHeight, 1);
   await expect(page.locator(".durability-message")).toContainText("ローカルチェックポイント");
@@ -623,6 +629,7 @@ test("profile-selected workspace panels match contribution kinds and mount one a
       await page.getByRole("button", { name: "モバイルUIへ" }).click();
       await expect(page).toHaveURL(new RegExp("/mobile/projects/.+/scenes/scene-1"));
     }
+    if (mode === "mobile") await page.locator(".st-workspace-configuration > summary").click();
     const toolbar = page.getByRole("toolbar", { name: "Workspace layout controls" });
     await expect(toolbar).toBeVisible();
     const panelMenu = page.locator(".st-workspace-panel-menu");
@@ -674,4 +681,196 @@ test("profile-selected workspace panels match contribution kinds and mount one a
   expect(mountedByShell.mobile.sort()).toEqual(mountedByShell.desktop.sort());
 
   if (expectedPanels.length === 0) await expect(page.locator(".st-workspace-panel-menu-item")).toHaveCount(5);
+});
+
+
+// S-A02/05/12/14: production bundles and real journal/Core/Git, isolated generated work.
+test("UX canon keeps the manuscript visible and stable through checkpoint responses", async ({ page }, testInfo) => {
+  await page.setViewportSize({ width: 1440, height: 1000 });
+  await signIn(page, "desktop");
+  await openFixtureScene(page, "desktop");
+  const editor = page.locator(".cm-content");
+  const text = "夜明けの港で、|灯台《とうだい》を見上げた。\n「続きを、ここから書こう。」\n".repeat(2);
+  await editor.fill(text);
+  await expectJournalDraft(page, "scene-1", text);
+  // Preserve the actual DOM node and CodeMirror history across background status updates.
+  await editor.evaluate((element) => { element.setAttribute("data-ux-editor", "original"); });
+  const before = await editor.boundingBox();
+  expect(before).not.toBeNull();
+  let release!: () => void;
+  const delayed = new Promise<void>((resolve) => { release = resolve; });
+  let admitted!: () => void;
+  const admission = new Promise<void>((resolve) => { admitted = resolve; });
+  await page.route("**/checkpoints", async (route) => { admitted(); await delayed; await route.continue(); });
+  try {
+    await page.getByRole("button", { name: "Checkpoint", exact: true }).click();
+    await admission;
+    await expect(page.locator(".durability-message")).toContainText("結果を確認");
+    expect(await editor.getAttribute("data-ux-editor")).toBe("original");
+    expect((await editor.boundingBox())!.y).toBe(before!.y);
+    await editor.press("Control+End");
+    await page.keyboard.insertText("後続入力を保存済みにしない。");
+    await expectJournalDraft(page, "scene-1", text + "後続入力を保存済みにしない。");
+    await page.screenshot({ path: testInfo.outputPath("checkpoint-delayed.png") });
+  } finally {
+    release();
+  }
+  await expect(page.getByRole("button", { name: "Save to GitHub", exact: true })).toBeEnabled();
+  expect(await editor.getAttribute("data-ux-editor")).toBe("original");
+  expect((await editor.boundingBox())!.y).toBe(before!.y);
+  await page.getByRole("button", { name: "Save to GitHub", exact: true }).click();
+  await expect(page.locator(".durability-message")).toContainText("下書きはこのブラウザー");
+  await expect(editor).toContainText("後続入力を保存済みにしない。");
+  await editor.press("Control+z");
+  await expect(editor).not.toContainText("後続入力を保存済みにしない。");
+});
+
+test("UX canon puts Japanese prose before optional chrome at every shell width", async ({ page }, testInfo) => {
+  await signIn(page, "mobile");
+  await openFixtureScene(page, "mobile");
+  const editor = page.locator(".cm-content");
+  await editor.fill("夜明けの港で、|灯台《とうだい》を見上げた。\n「物語の続きを書こう。」\n".repeat(40));
+  await editor.evaluate((element) => element.setAttribute("data-ux-editor", "original"));
+  for (const width of [320, 375, 390, 430, 900]) {
+    await page.setViewportSize({ width, height: 844 });
+    await page.evaluate(async () => {
+      for (const element of document.querySelectorAll("*")) element.scrollTop = 0;
+      const content = document.querySelector("ion-content") as HTMLElement & { getScrollElement(): Promise<HTMLElement> };
+      (await content.getScrollElement()).scrollTop = 0;
+    });
+    const bounds = await editor.boundingBox();
+    expect(bounds).not.toBeNull();
+    expect(bounds!.y, `manuscript starts above fold at ${width}px`).toBeLessThan(560);
+    expect(bounds!.width).toBeGreaterThan(width < 500 ? width * 0.7 : 400);
+    expect(await page.locator(".mobile-shell").count()).toBe(1);
+    expect(await page.evaluate(() => document.documentElement.scrollWidth)).toBeLessThanOrEqual(width);
+    expect(await editor.getAttribute("data-ux-editor")).toBe("original");
+    await page.screenshot({ path: testInfo.outputPath(`mobile-${width}.png`) });
+  }
+  await page.getByRole("button", { name: "構成を参照", exact: true }).click();
+  const sheet = page.locator("ion-modal.mobile-shell-reference-modal");
+  await expect(sheet.getByRole("heading", { name: "原稿の参照" })).toBeVisible();
+  await sheet.getByRole("button", { name: "閉じる", exact: true }).click();
+  await expect(sheet).toBeHidden();
+  expect(await editor.getAttribute("data-ux-editor")).toBe("original");
+  await expect(page.getByRole("button", { name: "構成を参照", exact: true })).toBeFocused();
+});
+
+
+test("UX canon preserves focus and recovery when journal storage fails and returns", async ({ page }) => {
+  await signIn(page, "desktop");
+  await openFixtureScene(page, "desktop");
+  await expect(page.locator(".cm-content")).toHaveAttribute("contenteditable", "true");
+  await page.evaluate(() => {
+    const put = IDBObjectStore.prototype.put;
+    Object.assign(window, { uxDenyJournal: true });
+    IDBObjectStore.prototype.put = function(value: unknown, key?: IDBValidKey) {
+      if (this.name === "operations" && value && typeof value === "object" && "text" in value && value.text === "保存先が戻るまで、この文章とUndoを失わない。" && Reflect.get(window, "uxDenyJournal")) throw new DOMException("Synthetic quota", "QuotaExceededError");
+      return key === undefined ? put.call(this, value) : put.call(this, value, key);
+    };
+  });
+  const editor = page.locator(".cm-content");
+  const text = "保存先が戻るまで、この文章とUndoを失わない。";
+  await editor.fill(text);
+  await expect(page.locator(".application-status[data-attention]")).toBeVisible();
+  await expect(page.getByRole("button", { name: "Checkpoint", exact: true })).toBeDisabled();
+  await expect(editor).toBeFocused();
+  await expect(page.locator(".editor-protection > summary")).toContainText("保存要確認");
+  const before = await editor.boundingBox();
+  // Dismissing the notification never clears the storage failure.
+  await page.locator(".st-desktop-status .application-status > summary").click();
+  await expect(page.locator(".st-desktop-status .application-status > summary")).toContainText("要確認");
+  await expect(page.locator(".editor-protection > summary")).toContainText("保存要確認");
+  expect((await editor.boundingBox())!.y).toBe(before!.y);
+  await page.evaluate(() => Reflect.set(window, "uxDenyJournal", false));
+  if (await page.locator(".editor-protection").getAttribute("open") === null) await page.locator(".editor-protection > summary").click();
+  await page.getByRole("button", { name: "ブラウザーへの記録を再試行" }).click();
+  await expectJournalDraft(page, "scene-1", text);
+  await expect(page.locator(".editor-protection > summary")).toContainText("このブラウザーに保護済み");
+  await expect(page.getByRole("button", { name: "Checkpoint", exact: true })).toBeEnabled();
+  await expect(editor).toHaveText(text);
+});
+
+test("UX canon keeps explicit shells usable with long Japanese titles and enlarged text", async ({ page }, testInfo) => {
+  await page.route("**/scenes/scene-1/views?*", async (route) => {
+    const response = await route.fetch();
+    const body = await response.json();
+    body.remote.scene.title = "夜明けの港と名もない旅人の長い物語".repeat(6);
+    body.effective.scene.title = body.remote.scene.title;
+    await route.fulfill({ response, json: body });
+  });
+  await signIn(page, "desktop");
+  // Open directly through the outline; this fixture changes presentation only.
+  const existing = page.getByRole("button", { name: projectLabel(repositoryUrl), exact: true });
+  if (await existing.isVisible().catch(() => false)) await existing.click();
+  else {
+    await page.getByLabel("GitHub リポジトリ URL").fill(repositoryInputValue(repositoryUrl));
+    await page.getByRole("button", { name: "リポジトリを登録" }).click();
+  }
+  await page.getByRole("button", { name: "Chapter One: Scene One", exact: true }).click();
+  const editor = page.locator(".cm-content[contenteditable=true]");
+  await expect(editor).toBeVisible();
+  await editor.fill("彼は|東京《とうきょう》へ向かった。括弧（と句読点）、ABC 123。\n".repeat(100));
+  await page.emulateMedia({ reducedMotion: "reduce" });
+  for (const width of [1440, 1920, 640]) {
+    await page.setViewportSize({ width, height: 1000 });
+    expect(await page.locator(".st-desktop-shell").count()).toBe(1);
+    expect(await page.evaluate(() => document.documentElement.scrollWidth)).toBeLessThanOrEqual(width);
+    await expect(page.getByRole("button", { name: "Checkpoint", exact: true })).toBeVisible();
+    await page.screenshot({ path: testInfo.outputPath(`desktop-long-${width}.png`) });
+  }
+  // 200% text size, preserving the explicit Desktop route and recovery identity.
+  await page.locator(".typography-settings > summary").click();
+  await page.evaluate(() => { document.documentElement.style.fontSize = "200%"; });
+  expect(await page.locator(".st-desktop-shell").count()).toBe(1);
+  await expect(editor).toContainText("東京");
+  await expect(page.getByRole("button", { name: "文字を大きく" })).toBeVisible();
+  await page.screenshot({ path: testInfo.outputPath("desktop-text-200.png") });
+});
+
+// Lifecycle events are synthetic; this verifies optional work ownership, not OS input.
+test("optional terminology cancels work at pagehide and resumes at pageshow", async ({ page }) => {
+  test.skip(process.env.SCRIPTORIUM_PROFILE !== "full", "Terminology is an optional Full contribution.");
+  await signIn(page, "desktop");
+  await openFixtureScene(page, "desktop");
+  const editor = page.locator(".cm-content[contenteditable=true]");
+  await expect(editor).toBeVisible();
+  await editor.evaluate((element) => element.setAttribute("data-lifecycle-editor", "retained"));
+  await page.evaluate(() => {
+    const originalFetch = window.fetch;
+    Object.assign(window, { uxTermStarted: 0, uxTermAborted: 0 });
+    window.fetch = function(input, init) {
+      if (String(input).endsWith("/actions/search.terms.resolve")) {
+        Reflect.set(window, "uxTermStarted", Number(Reflect.get(window, "uxTermStarted")) + 1);
+        init?.signal?.addEventListener("abort", () => {
+          Reflect.set(window, "uxTermAborted", Number(Reflect.get(window, "uxTermAborted")) + 1);
+        }, { once: true });
+      }
+      return originalFetch.call(window, input, init);
+    };
+  });
+  let release!: () => void;
+  const delayed = new Promise<void>((resolve) => { release = resolve; });
+  await page.route("**/actions/search.terms.resolve", async (route) => {
+    await delayed;
+    await route.continue().catch(() => undefined); // The old document may already have cancelled this request.
+  });
+  const draft = "ページを離れても、この下書きと編集状態は失わない。";
+  try {
+    await editor.fill(draft);
+    await expect.poll(() => page.evaluate(() => Number(Reflect.get(window, "uxTermStarted")))).toBeGreaterThan(0);
+    await page.evaluate(() => window.dispatchEvent(new PageTransitionEvent("pagehide")));
+    await expect.poll(() => page.evaluate(() => Number(Reflect.get(window, "uxTermAborted")))).toBeGreaterThan(0);
+    const pausedCount = await page.evaluate(() => Number(Reflect.get(window, "uxTermStarted")));
+    await page.setViewportSize({ width: 1400, height: 900 });
+    await page.waitForTimeout(160); // Two existing 80ms adornment scheduling windows.
+    expect(await page.evaluate(() => Number(Reflect.get(window, "uxTermStarted")))).toBe(pausedCount);
+    await page.evaluate(() => window.dispatchEvent(new PageTransitionEvent("pageshow", { persisted: true })));
+    await expect.poll(() => page.evaluate(() => Number(Reflect.get(window, "uxTermStarted")))).toBeGreaterThan(pausedCount);
+    await expect(editor).toHaveText(draft);
+    expect(await editor.getAttribute("data-lifecycle-editor")).toBe("retained");
+    await expectJournalDraft(page, "scene-1", draft);
+  } finally {
+    release();
+  }
 });

@@ -7,6 +7,7 @@ import { Workspace } from "../../workspace/Workspace";
 import "./desktop.css";
 import "../editorial.css";
 import "./studio.css";
+import "../authoring.css";
 
 const styleNonce = document.querySelector<HTMLMetaElement>('meta[name="scriptorium-style-nonce"]')?.content;
 if (styleNonce) setNonce(styleNonce);
@@ -19,7 +20,7 @@ function describeFailure(reason: unknown): string {
 
 /** Workspace Studio: the approved desktop composition, retaining the real application controller. */
 export function DesktopShell({
-  header, desktopActions, desktopDurability, documentTitle, documentContext, library, editor, tools, status,
+  header, desktopActions, documentTitle, documentContext, library, editor, tools, status, renderStatus,
   onSwitchMode, workspaceScope, panels, beforeLayoutChange, requestedPanel,
 }: ApplicationShellProps) {
   const [switching, setSwitching] = useState(false);
@@ -87,17 +88,11 @@ export function DesktopShell({
             </div>
           </div>
           <div className="st-studio-masthead-actions">
-            {desktopDurability ? <span className={"st-studio-durability is-" + desktopDurability}
-              aria-label="原稿の保存状態">{{
-                draft: "Draft", checkpointing: "Checkpoint確認中", checkpointed: "Checkpoint",
-                publication_unknown: "Publish未確認", saved: "GitHub保存済み",
-              }[desktopDurability]}</span> : null}
             {desktopActions}
             <div className="st-studio-header-slot">{header}</div>
           </div>
         </div>
-        {switchError && <p className="st-desktop-switch-error" role="alert">{switchError}</p>}
-        {status && <div className="st-desktop-status" role="region" aria-label="保存と接続の状態">{status}</div>}
+
         {workspaceScope && panels?.length ? (
           <Workspace scope={workspaceScope} mode="desktop" panels={panels}
             beforeLayoutChange={beforeLayoutChange} requestedPanel={effectiveRequest} />
@@ -129,6 +124,9 @@ export function DesktopShell({
         <span className="st-desktop-visually-hidden" id="st-desktop-resize-help">
           左右矢印キーでパネル幅を変更できます。
         </span>
+        <div className="st-desktop-status" role="region" aria-label="保存と接続の状態">
+          {renderStatus ? renderStatus(switchError) : status}
+        </div>
         <footer className="st-studio-footer">
           <span><span className="st-studio-footer-dot" /> Git-backed workspace</span>
           <span>Markdown · 日本語原稿 · Desktop</span>

@@ -27,7 +27,8 @@ test("status presentation hides an empty state and exposes current errors and re
   } as const;
   assert.equal(hasApplicationStatus(emptyProps), false);
   const empty = renderToStaticMarkup(createElement(ApplicationStatus, emptyProps));
-  assert.equal(empty, "");
+  assert.match(empty, /保存と接続/u);
+  assert.doesNotMatch(empty, /<details[^>]* open/u);
 
   const visible = renderToStaticMarkup(createElement(ApplicationStatus, {
     status: { message: "保存に失敗しました", kind: "error" },

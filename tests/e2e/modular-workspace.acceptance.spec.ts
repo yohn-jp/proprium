@@ -325,6 +325,7 @@ test("mobile workspace tabs support keyboard navigation and preserve the editor 
   await expect(editorTab).toHaveAttribute("aria-selected", "true");
   await expect(page.locator('[data-workspace-panel="editor"] .cm-content')).toHaveText(draft);
 
+  await page.locator(".st-workspace-configuration > summary").click();
   const mobileToolbar = workspaceToolbar(page);
   await mobileToolbar.getByRole("button", { name: "Save layout", exact: true }).click();
   const mobileStorage = await workspaceStorage(page, "mobile");
@@ -831,7 +832,7 @@ test("mobile contextual reference refuses to cover a composing manuscript", asyn
   const urlBefore = page.url();
   await page.getByRole("button", { name: "構成を参照" }).click();
   await expect(page.locator("ion-modal.mobile-shell-reference-modal")).not.toBeVisible();
-  await expect(page.locator(".mobile-shell-interaction-error")).toContainText("下書きの回復状態");
+  await expect(page.locator(".mobile-shell-status").getByRole("alert").filter({ hasText: "下書きの回復状態" })).toBeVisible();
   await expect(page).toHaveURL(urlBefore);
   await expect(editor).toHaveText(draft);
   await expectDraft(page, "scene-1", draft);
