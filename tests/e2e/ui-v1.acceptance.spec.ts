@@ -1,5 +1,6 @@
-import { expect, test, type Page } from "@playwright/test";
+import { expect, test, type Page, type TestInfo } from "@playwright/test";
 import { execFileSync } from "node:child_process";
+import { writeFile } from "node:fs/promises";
 import { fileURLToPath, pathToFileURL } from "node:url";
 
 const authToken = process.env.SCRIPTORIUM_E2E_AUTH_TOKEN ?? "";
@@ -234,9 +235,8 @@ async function readJournal(page: Page): Promise<JournalDraft[]> {
 }
 
 interface JournalDraftDiagnosticContext {
-  beforeFill: unknown;
-  afterFill: unknown;
   pageErrors: string[];
+  testInfo: TestInfo;
 }
 
 async function journalDraftDiagnostic(page: Page, sceneId: string, expectedText: string): Promise<unknown> {
@@ -255,6 +255,7 @@ async function journalDraftDiagnostic(page: Page, sceneId: string, expectedText:
       });
       const editor = document.querySelector<HTMLElement>(".cm-content");
       const recovery = document.querySelector<HTMLElement>("[data-recovery-status]");
+      const probe = window as Window & { __journalDraftInputProbe?: Array<Record<string, unknown>> };
       return {
         at: performance.now(),
         recoveryStatus: recovery?.dataset.recoveryStatus ?? null,
@@ -262,6 +263,7 @@ async function journalDraftDiagnostic(page: Page, sceneId: string, expectedText:
         contenteditable: editor?.getAttribute("contenteditable") ?? null,
         displayedTextLength: editor?.textContent?.length ?? null,
         displayedTextMatchesDraft: editor?.textContent === expectedText,
+        inputEvents: probe.__journalDraftInputProbe ?? [],
         durabilityMessages: Array.from(document.querySelectorAll<HTMLElement>(".durability-message"), (element) => ({
           kind: element.dataset.kind ?? null,
           text: (element.textContent ?? "").trim().slice(0, 200),
@@ -278,6 +280,12 @@ async function journalDraftDiagnostic(page: Page, sceneId: string, expectedText:
       database.close();
     }
   }, { sceneId, expectedText });
+}
+
+async function attachJournalDraftDiagnostic(testInfo: TestInfo, name: string, value: unknown): Promise<void> {
+  const filePath = testInfo.outputPath(name);
+  await writeFile(filePath, JSON.stringify(value, null, 2), "utf8");
+  await testInfo.attach(name, { path: filePath, contentType: "application/json" });
 }
 
 async function expectJournalDraft(page: Page, sceneId: string, text: string, diagnostic?: JournalDraftDiagnosticContext): Promise<void> {
@@ -304,18 +312,13 @@ async function expectJournalDraft(page: Page, sceneId: string, text: string, dia
       } catch (diagnosticError) {
         afterPoll = { captureError: diagnosticError instanceof Error ? diagnosticError.message : String(diagnosticError) };
       }
-      await test.info().attach("journal-draft-timeout-diagnostic.json", {
-        body: Buffer.from(JSON.stringify({
-          sceneId,
-          expectedTextLength: text.length,
-          beforeFill: diagnostic.beforeFill,
-          afterFill: diagnostic.afterFill,
-          pollSamples,
-          afterPoll,
-          pageErrors: diagnostic.pageErrors,
-          assertionError: error instanceof Error ? error.message : String(error),
-        }, null, 2)),
-        contentType: "application/json",
+      await attachJournalDraftDiagnostic(diagnostic.testInfo, "journal-draft-timeout-diagnostic.json", {
+        sceneId,
+        expectedTextLength: text.length,
+        pollSamples,
+        afterPoll,
+        pageErrors: diagnostic.pageErrors,
+        assertionError: error instanceof Error ? error.message : String(error),
       });
     }
     throw error;
@@ -685,7 +688,30 @@ for (const departure of ["reload", "pagehide"] as const) {
       "This case controls the generated local server and isolated browser journal.");
     const errors: string[] = [];
     page.on("pageerror", (error) => errors.push(error.message));
-    await page.addInitScript(() => {
+    const draft = `${testInfo.project.name} ${departure}: a checkpoint must survive interrupted recovery.`;
+    await page.addInitScript((expectedDraft: string) => {
+      const state = window as Window & { __journalDraftInputProbe?: Array<Record<string, unknown>> };
+      const events: Array<Record<string, unknown>> = [];
+      state.__journalDraftInputProbe = events;
+      const recordInput = (event: Event) => {
+        const target = event.target instanceof HTMLElement ? event.target.closest<HTMLElement>(".cm-content") : null;
+        if (!target) return;
+        const recovery = document.querySelector<HTMLElement>("[data-recovery-status]");
+        events.push({
+          type: event.type,
+          at: performance.now(),
+          inputType: event instanceof InputEvent ? event.inputType : null,
+          recoveryStatus: recovery?.dataset.recoveryStatus ?? null,
+          editorWritable: recovery?.dataset.editorWritable ?? null,
+          contenteditable: target.getAttribute("contenteditable"),
+          textLength: target.textContent?.length ?? 0,
+          matchesDraft: target.textContent === expectedDraft,
+        });
+        if (events.length > 24) events.shift();
+      };
+      for (const type of ["focusin", "beforeinput", "input", "change", "compositionstart", "compositionend", "focusout"]) {
+        document.addEventListener(type, recordInput, true);
+      }
       for (const type of ["beforeunload", "pagehide", "unload"]) window.addEventListener(type, () => {
         const key = "scriptorium:e2e:reconcile-lifecycle";
         const events = JSON.parse(localStorage.getItem(key) ?? "[]") as unknown[];
@@ -704,22 +730,11 @@ for (const departure of ["reload", "pagehide"] as const) {
         }
         return original.call(window, input, init);
       };
-    });
+    }, `${testInfo.project.name} ${departure}: a checkpoint must survive interrupted recovery.`);
     await signIn(page, "desktop");
     await openFixtureScene(page, "desktop");
-    const draft = `${testInfo.project.name} ${departure}: a checkpoint must survive interrupted recovery.`;
-    const editor = page.locator(".cm-content");
-    const beforeFill = await journalDraftDiagnostic(page, "scene-1", draft);
-    await editor.fill(draft);
-    const afterFill = await journalDraftDiagnostic(page, "scene-1", draft);
-    if (!(afterFill as { displayedTextMatchesDraft?: boolean }).displayedTextMatchesDraft) {
-      await testInfo.attach("journal-draft-fill-diagnostic.json", {
-        body: Buffer.from(JSON.stringify({ beforeFill, afterFill, expectedTextLength: draft.length, pageErrors: errors }, null, 2)),
-        contentType: "application/json",
-      });
-    }
-    expect((afterFill as { displayedTextMatchesDraft?: boolean }).displayedTextMatchesDraft).toBe(true);
-    await expectJournalDraft(page, "scene-1", draft, { beforeFill, afterFill, pageErrors: errors });
+    await page.locator(".cm-content").fill(draft);
+    await expectJournalDraft(page, "scene-1", draft, { pageErrors: errors, testInfo });
     await page.getByRole("button", { name: "Checkpoint", exact: true }).click();
     await expectJournalState(page, "scene-1", draft, "checkpointed");
     const checkpoint = await readJournalEntry(page, "scene-1", draft);
