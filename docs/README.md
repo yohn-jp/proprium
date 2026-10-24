@@ -4,6 +4,7 @@ Scriptorium is a Git-backed writing workspace with a minimal Core and optional t
 
 | Topic | Reference |
 | --- | --- |
+| Design, information architecture and UX acceptance | [Design and UX contract](design/UX-CONTRACT.md) — normative target, not a runtime certification |
 | Installation and local startup | [Repository README](../README.md) |
 | Editing, recovery, publication and layouts | [Authoring](authoring.md) |
 | Shared internal ownership and maintainability | [Internal boundaries](architecture/INTERNAL-BOUNDARIES.md) |
