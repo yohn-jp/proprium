@@ -148,7 +148,12 @@ function stableVersions(entries: readonly PluginRegistryEntry[], id: string): Pl
 
 function activeStateKey(pluginId: string): string { return `active:${pluginId}`; }
 function previousStateKey(pluginId: string): string { return `previous:${pluginId}`; }
-function latestRegistryStateKey(registryUrl: string): string { return `registry-latest:${registryUrl}`; }
+function registryRootFingerprint(publicKey: Uint8Array): string {
+  return Array.from(publicKey, byte => byte.toString(16).padStart(2, "0")).join("");
+}
+function latestRegistryStateKey(trust: PluginRegistryTrust): string {
+  return `registry-latest:${trust.url}:${registryRootFingerprint(trust.publicKey)}`;
+}
 
 /** Host-owned install and lifecycle coordinator for signed, independently distributed WASM plugins. */
 export class BrowserPluginManager {
@@ -491,7 +496,7 @@ export class BrowserPluginManager {
     }
     return Object.freeze({
       key: pluginKey(entry.id, entry.version), id: entry.id, version: entry.version,
-      registryUrl: registry.url, registryDigest: registry.digest,
+      registryUrl: registry.url, registryDigest: registry.digest, registryRootFingerprint: registryRootFingerprint(trust.publicKey),
       manifestBytes, manifestSha256: entry.manifestSha256,
       manifestSignature: entry.manifestSignature, publisherKey: entry.publisherKey,
       dependencies: entry.dependencies.map(dependency => ({ ...dependency })),
@@ -510,6 +515,9 @@ export class BrowserPluginManager {
     visiting.add(key);
     const record = await this.requireInstalledByKey(key);
     const trust = this.requireTrust(record.registryUrl);
+    if (record.registryRootFingerprint !== registryRootFingerprint(trust.publicKey)) {
+      throw new PluginManagerError("invalid_plugin", "Installed plugin was admitted under a different registry root");
+    }
     const snapshot = await this.store.getRegistry(record.registryUrl, record.registryDigest);
     if (!snapshot) throw new PluginManagerError("invalid_plugin", "Signed registry proof for this installed version is missing");
     const registry = await admitRegistry(snapshot.bytes, snapshot.signature, trust);
@@ -518,7 +526,7 @@ export class BrowserPluginManager {
     if (!entry || entry.manifestSha256 !== record.manifestSha256 || entry.manifestSignature !== record.manifestSignature || entry.publisherKey !== record.publisherKey) {
       throw new PluginManagerError("invalid_plugin", "Installed plugin publisher proof does not match the signed registry");
     }
-    const latestDigest = await this.store.getState(latestRegistryStateKey(record.registryUrl));
+    const latestDigest = await this.store.getState(latestRegistryStateKey(trust));
     let revoked = false;
     if (latestDigest && latestDigest !== record.registryDigest) {
       const latestSnapshot = await this.store.getRegistry(record.registryUrl, latestDigest);
@@ -573,7 +581,7 @@ export class BrowserPluginManager {
     const raw = await this.fetchBytes(trust.url, 1024 * 1024);
     const signature = await this.fetchBytes(registrySignatureUrl(trust.url), MAX_SIGNATURE_BYTES);
     const registry = await admitRegistry(raw, signature, trust);
-    const latestDigest = await this.store.getState(latestRegistryStateKey(trust.url));
+    const latestDigest = await this.store.getState(latestRegistryStateKey(trust));
     if (latestDigest) {
       const latestSnapshot = await this.store.getRegistry(trust.url, latestDigest);
       if (!latestSnapshot) throw new PluginManagerError("invalid_plugin", "Latest signed registry proof is missing");
@@ -586,7 +594,7 @@ export class BrowserPluginManager {
       }
     }
     await this.store.putRegistry(registry);
-    await this.store.setState(latestRegistryStateKey(trust.url), registry.digest);
+    await this.store.setState(latestRegistryStateKey(trust), registry.digest);
     return registry;
   }
 

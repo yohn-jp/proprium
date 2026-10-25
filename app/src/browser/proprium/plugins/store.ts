@@ -6,6 +6,8 @@ export interface InstalledPluginRecord {
   readonly version: string;
   readonly registryUrl: string;
   readonly registryDigest: string;
+  /** Root key that admitted this installed package; root rotation invalidates the old admission. */
+  readonly registryRootFingerprint: string;
   readonly manifestBytes: Uint8Array;
   readonly manifestSha256: string;
   readonly manifestSignature: string;

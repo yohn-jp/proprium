@@ -45,6 +45,7 @@ async function fixture() {
   await addPlugin("example.math", "1.2.0");
   await addPlugin("example.calc", "1.0.0", [{ id: "example.math", range: "^1.0.0" }]);
   await addPlugin("example.calc", "1.1.0", [{ id: "example.math", range: "^1.0.0" }]);
+  await addPlugin("example.other", "1.0.0");
   await addPlugin("example.loop-a", "1.0.0", [{ id: "example.loop-b", range: "1.0.0" }]);
   await addPlugin("example.loop-b", "1.0.0", [{ id: "example.loop-a", range: "1.0.0" }]);
   const registryBytes = new TextEncoder().encode(JSON.stringify({
@@ -191,6 +192,39 @@ test("rotating the Host-pinned registry key revokes cached code and leaves it re
   await rotated.uninstall("example.calc", "1.0.0");
   await rotated.uninstall("example.math", "1.2.0");
   assert.deepEqual(await rotated.installed(), []);
+});
+
+test("rotating the registry root at the same URL starts a separate monotonic index and revokes old installs", async () => {
+  const { manager, store, fetcher, content } = await fixture();
+  await manager.installFromRegistry(await manager.previewInstall({ registryUrl, pluginId: "example.calc", version: "1.0.0" }));
+
+  const nextKeys = await crypto.subtle.generateKey({ name: "Ed25519" }, true, ["sign", "verify"]);
+  const nextPublicKey = new Uint8Array(await crypto.subtle.exportKey("raw", nextKeys.publicKey));
+  // Re-sign exactly the same bytes at the new root. The URL+digest cache slot
+  // is shared, but old installations must remain bound to the previous root.
+  const nextBytes = Uint8Array.from(content.get(registryUrl)!);
+  const nextSignature = new Uint8Array(await crypto.subtle.sign({ name: "Ed25519" }, nextKeys.privateKey, nextBytes));
+  content.set(registryUrl, nextBytes);
+  content.set(`${registryUrl}.sig`, nextSignature);
+
+  const rotated = new BrowserPluginManager({
+    registries: [{ url: registryUrl, publicKey: nextPublicKey, artifactOrigins: approvedOrigins }], fetcher, store,
+  });
+  const preview = await rotated.previewInstall({ registryUrl, pluginId: "example.other", version: "1.0.0" });
+  await rotated.installFromRegistry(preview);
+  const listed = await rotated.installed();
+  assert.equal(listed.find(plugin => plugin.id === "example.other")?.state, "installed");
+  assert.equal(listed.find(plugin => plugin.id === "example.calc" && plugin.version === "1.0.0")?.state, "revoked");
+  await rotated.uninstall("example.calc", "1.0.0");
+  await rotated.uninstall("example.math", "1.2.0");
+});
+
+test("a missing latest proof is rejected within the same pinned registry root", async () => {
+  const { manager, store, registryPublicKey } = await fixture();
+  await manager.previewInstall({ registryUrl, pluginId: "example.math", version: "1.2.0" });
+  const rootFingerprint = Array.from(registryPublicKey, byte => byte.toString(16).padStart(2, "0")).join("");
+  await store.setState(`registry-latest:${registryUrl}:${rootFingerprint}`, "0".repeat(64));
+  await assert.rejects(manager.previewInstall({ registryUrl, pluginId: "example.math", version: "1.2.0" }), /latest signed registry proof is missing/i);
 });
 
 test("the default fetch adapter preserves the browser global receiver", async () => {
