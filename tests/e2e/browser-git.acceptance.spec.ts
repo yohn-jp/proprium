@@ -16,6 +16,20 @@ const workspaceId = () => `pw-${crypto.randomUUID()}`;
 
 test("Worker Git commits preserve exact SHAs and binary bytes across a page restart", async ({ page }) => {
   const id = workspaceId();
+  await page.route("**/git.worker.ts*", async (route) => {
+    const response = await route.fetch();
+    const source = await response.text();
+    const workerStart = /const\s+scope\s*=\s*self(?:\s+as\s+DedicatedWorkerGlobalScope)?;/u;
+    if (!workerStart.test(source)) throw new Error("The Browser Git worker clock fixture could not find the worker entry point.");
+    const frozenClock = `const NativeDate = Date;
+class FrozenDate extends NativeDate {
+  constructor(...args) { super(...(args.length ? args : [1700000000000])); }
+  static now() { return 1700000000000; }
+}
+globalThis.Date = FrozenDate;
+`;
+    await route.fulfill({ response, body: source.replace(workerStart, (entry) => `${frozenClock}${entry}`) });
+  });
   await page.goto("/browser-git-test.html");
   await expect(page.locator("#ready")).toHaveText("ready");
   const first = await page.evaluate(async (workspaceId) => {
@@ -39,6 +53,7 @@ test("Worker Git commits preserve exact SHAs and binary bytes across a page rest
     await git.write("assets/sample.bin", bytes, { oid: null });
     const remaining = await git.write("draft.txt", new TextEncoder().encode("still draft"), { oid: null });
     const diff = await git.diff();
+    const preCommitStatus = await git.status();
     const binary = diff.find((entry) => entry.path === "assets/sample.bin");
     const binaryRoundTrip = binary?.worktreeFile?.data ? Array.from(binary.worktreeFile.data) : null;
     const textDiff = diff.find((entry) => entry.path === "notes/日記.md");
@@ -52,7 +67,7 @@ test("Worker Git commits preserve exact SHAs and binary bytes across a page rest
     const log = await git.log();
     const branch = await git.createBranch("review", secondCommit.oid);
     git.close();
-    return { secondCommit, status, log, branch, binaryRoundTrip, textDiffBytes, diffPaths: diff.map((entry) => entry.path), remaining };
+    return { secondCommit, status, log, branch, binaryRoundTrip, textDiffBytes, diffPaths: diff.map((entry) => entry.path), preCommitStatus, remaining };
   }, { workspaceId: id, expectedHead: first.firstCommit.oid });
   expect(second.secondCommit.oid).toMatch(/^[a-f0-9]{40}$/u);
   expect(second.secondCommit.oid).not.toBe(first.firstCommit.oid);
@@ -62,6 +77,7 @@ test("Worker Git commits preserve exact SHAs and binary bytes across a page rest
   expect(second.log.map((entry) => entry.oid)).toEqual([second.secondCommit.oid, first.firstCommit.oid]);
   expect(second.branch).toEqual({ branch: "review", head: second.secondCommit.oid });
   expect(second.binaryRoundTrip).toEqual([0, 255, 128, 1, 13, 10]);
+  expect(second.preCommitStatus.entries.map((entry) => entry.path)).toContain("notes/日記.md");
   expect(second.diffPaths).toContain("notes/日記.md");
   expect(second.textDiffBytes).toEqual({ head: Array.from(new TextEncoder().encode("one\n")), worktree: Array.from(new TextEncoder().encode("two\n")) });
 

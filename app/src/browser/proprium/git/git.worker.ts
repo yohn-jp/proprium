@@ -104,9 +104,55 @@ async function assertRevision(dir: string, expected: string | null): Promise<voi
 }
 
 async function status(dir: string): Promise<StatusEntry[]> {
-  const matrix = await git.statusMatrix({ fs, dir });
-  return matrix.filter(([, head, worktree, stage]) => head !== worktree || head !== stage)
-    .map(([path, head, worktree, stage]) => ({ path, head, worktree, stage }));
+  return (await worktreeMatrix(dir, "HEAD")).filter((entry) => entry.head !== entry.worktree || entry.head !== entry.stage)
+    .map(({ path, head, worktree, stage }) => ({ path, head, worktree, stage }));
+}
+
+interface WorkingMatrixEntry extends StatusEntry {
+  headFile: Uint8Array | null;
+  worktreeFile: Uint8Array | null;
+}
+
+async function worktreeMatrix(dir: string, ref: string): Promise<WorkingMatrixEntry[]> {
+  const rows = await git.walk({
+    fs,
+    dir,
+    trees: [git.TREE({ ref }), git.WORKDIR({ refresh: false }), git.STAGE()],
+    map: async (path, [head, worktree, stage]) => {
+      if (path === ".git" || path.startsWith(".git/")) return null;
+      const [headType, worktreeType, stageType] = await Promise.all([
+        head?.type(), worktree?.type(), stage?.type(),
+      ]);
+      const isBlob = [headType, worktreeType, stageType].includes("blob");
+      if (headType === "commit" || stageType === "commit") return null;
+      if (!isBlob && [headType, worktreeType, stageType].some((type) => type === "tree" || type === "special")) return;
+      if (!isBlob) return;
+      if (!head && !stage && worktree && await git.isIgnored({ fs, dir, filepath: path })) return null;
+      validateGitPath(path);
+      await assertNoSymlinkParents(dir, path, true);
+      const headOid = headType === "blob" ? await head!.oid() : undefined;
+      const stageOid = stageType === "blob" ? await stage!.oid() : undefined;
+      let worktreeOid: string | undefined;
+      if (worktreeType === "blob") {
+        const content = await worktree!.content();
+        if (content === undefined) failure("storage_unknown", "A worktree file disappeared during Git status inspection.");
+        worktreeOid = (await git.hashBlob({ object: content as Uint8Array })).oid;
+      }
+      const values = [undefined, headOid, worktreeOid, stageOid];
+      const [headState, worktreeState, stageState] = values.map((value) => values.indexOf(value)).slice(1);
+      if (headState === worktreeState && headState === stageState) return;
+      const headFile = headType === "blob" ? new Uint8Array((await head!.content()) ?? []) : null;
+      let worktreeFile: Uint8Array | null = null;
+      if (worktreeType === "blob") {
+        const mode = await worktree!.mode();
+        worktreeFile = mode >> 12 === 0b1010
+          ? new TextEncoder().encode(await fs.readlink(`${dir}/${path}`))
+          : new Uint8Array(await fs.readFile(`${dir}/${path}`));
+      }
+      return { path, head: headState!, worktree: worktreeState!, stage: stageState!, headFile, worktreeFile };
+    },
+  }) as WorkingMatrixEntry[];
+  return rows.filter(Boolean);
 }
 
 async function verifyObjects(dir: string): Promise<void> {
@@ -133,7 +179,7 @@ async function verifyObjects(dir: string): Promise<void> {
       pending.push(...commit.parent);
     }
   }
-  await git.statusMatrix({ fs, dir });
+  await status(dir);
 }
 
 async function operation(request: LocalGitRequest): Promise<unknown> {
@@ -202,25 +248,16 @@ async function operation(request: LocalGitRequest): Promise<unknown> {
     return { head, entries, localState: entries.length || !head ? "draft" : "local-committed" };
   }
   if (request.operation === "diff") {
-    const head = await currentHead(paths.dir);
-    const entries = await status(paths.dir);
-    const changes = [];
-    for (const entry of entries) {
-      validateGitPath(entry.path);
-      await assertNoSymlinkParents(paths.dir, entry.path, true);
-      const old = head && entry.head !== 0 ? await git.readBlob({ fs, dir: paths.dir, oid: head, filepath: entry.path }) : null;
-      const existsInWorktree = entry.worktree !== 0;
-      const data = existsInWorktree ? new Uint8Array(await fs.readFile(`${paths.dir}/${entry.path}`)) : null;
-      if (existsInWorktree && !(await fs.lstat(`${paths.dir}/${entry.path}`)).isFile()) failure("invalid_path", "Only regular files are included in a Browser Git diff.");
-      const current = data ? await git.hashBlob({ object: data }) : null;
-      changes.push({
-        ...entry,
-        kind: entry.head === 0 ? "added" : entry.worktree === 0 ? "deleted" : entry.worktree === 2 ? "modified" : "staged",
-        headFile: old ? { oid: old.oid, data: old.blob } : null,
-        worktreeFile: current && data ? { oid: current.oid, data } : null,
-      });
-    }
-    return changes;
+    const entries = await worktreeMatrix(paths.dir, request.workspace.branch);
+    return Promise.all(entries.map(async (entry) => ({
+      path: entry.path,
+      head: entry.head,
+      worktree: entry.worktree,
+      stage: entry.stage,
+      kind: entry.head === 0 ? "added" : entry.worktree === 0 ? "deleted" : entry.worktree === 2 ? "modified" : "staged",
+      headFile: entry.headFile ? { oid: (await git.hashBlob({ object: entry.headFile })).oid, data: entry.headFile } : null,
+      worktreeFile: entry.worktreeFile ? { oid: (await git.hashBlob({ object: entry.worktreeFile })).oid, data: entry.worktreeFile } : null,
+    })));
   }
   if (request.operation === "add") {
     await assertRevision(paths.dir, request.expectedHead);

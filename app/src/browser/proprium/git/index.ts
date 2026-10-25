@@ -145,7 +145,7 @@ export class BrowserLocalGit {
     return this.call({ operation: "add", paths, expectedHead });
   }
 
-  commit(message: string, author: CommitAuthor, expectedHead: string | null): Promise<{ oid: string; head: string; localState: "local-committed" }> {
+  commit(message: string, author: CommitAuthor, expectedHead: string | null): Promise<{ oid: string; head: string; localState: "draft" | "local-committed" }> {
     return this.call({ operation: "commit", message, author, expectedHead });
   }
 
