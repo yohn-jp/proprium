@@ -656,7 +656,11 @@ test("Smart HTTP preserves REST-incompatible commit SHAs and falls back for publ
       if (path === "/repos/proprium-test/browser-git-fixture/commits") {
         const result: RemoteCommitFixture["commitApi"][] = [];
         let oid: string | null = url.searchParams.get("sha");
-        while (oid && commits.has(oid)) { const commit = commits.get(oid)!; result.push(commit.commitApi); oid = commit.commitApi.parents[0]?.sha ?? null; }
+        while (oid && commits.has(oid)) {
+          const commit = commits.get(oid)!;
+          result.push(commit.commitApi);
+          oid = (commit.commitApi as { parents: Array<{ sha: string }> }).parents[0]?.sha ?? null;
+        }
         const offset = (Number(url.searchParams.get("page") ?? "1") - 1) * 100;
         return json(result.slice(offset, offset + 100));
       }
@@ -845,5 +849,136 @@ test("cold history is bounded in REST and fetched as one pack with paginated anc
     expect(ancestryPages).toBe(2);
     expect(objectReads).toBe(0);
     expect(backend.diagnostics().some(line => line.includes("git-upload-pack"))).toBe(true);
+  } finally { activeSmartHttpFixture = null; await backend.close(); }
+});
+
+test("malformed paginated ancestry rows fail closed before Git pack transfer", async ({ page }) => {
+  const backend = await createSmartHttpFixture();
+  activeSmartHttpFixture = backend;
+  try {
+    const history: RemoteCommitFixture[] = [];
+    for (let index = 0; index < 12; index += 1) history.push(backend.commit(`history ${index}\n`, history.at(-1)?.sha ?? null, "plain"));
+    let malformedRow: "sha" | "parent" = "sha";
+    let individualReads = 0;
+    let ancestryPages = 0;
+    await page.route("https://api.github.com/**", async route => {
+      if (route.request().method() === "OPTIONS") return route.fulfill({ status: 204, headers: corsHeaders() });
+      const url = new URL(route.request().url()), path = url.pathname;
+      const json = (value: unknown, status = 200) => route.fulfill({ status, headers: corsHeaders(), contentType: "application/json", body: JSON.stringify(value) });
+      if (path === "/user") return json({ id: 88, login: "writer" });
+      if (path === "/repos/proprium-test/browser-git-fixture") return json({
+        id: repositoryId, full_name: "proprium-test/browser-git-fixture", owner: { login: "proprium-test" }, permissions: { pull: true, push: true },
+      });
+      if (path === "/repos/proprium-test/browser-git-fixture/git/ref/heads/main") return json({
+        ref: "refs/heads/main", object: { type: "commit", sha: backend.head() },
+      });
+      if (path === "/repos/proprium-test/browser-git-fixture/commits") {
+        ancestryPages += 1;
+        expect(url.searchParams.get("sha")).toBe(backend.head());
+        expect(url.searchParams.get("per_page")).toBe("100");
+        expect(url.searchParams.get("page")).toBe("1");
+        return malformedRow === "sha"
+          ? json([{ sha: "not-a-git-sha", parents: [] }])
+          : json([{ sha: backend.head(), parents: [{ sha: "not-a-git-sha" }] }]);
+      }
+      const match = /\/commits\/([a-f0-9]{40})$/u.exec(path);
+      if (match && history.some(commit => commit.sha === match[1])) {
+        individualReads += 1;
+        return json(history.find(commit => commit.sha === match[1])!.commitApi);
+      }
+      return json({ message: `Unexpected ${route.request().method()} ${path}` }, 404);
+    });
+
+    await page.goto("/browser-git-test.html");
+    await expect(page.locator("#ready")).toHaveText("ready");
+    for (const rowKind of ["sha", "parent"] as const) {
+      malformedRow = rowKind;
+      individualReads = 0;
+      ancestryPages = 0;
+      const result = await page.evaluate(async ({ id, relayUrl }) => {
+        const git = window.browserGitTest.open(id);
+        await git.init();
+        await git.write("local.txt", new TextEncoder().encode("keep local head\n"), { oid: null });
+        await git.add(["local.txt"], null);
+        const local = await git.commit("local seed", { name: "Browser Fixture", email: "fixture@example.test" }, null);
+        const sync = git.connectGitHub(relayUrl);
+        await sync.beginAuthorization();
+        await sync.completeAuthorization();
+        let errorCode = "none";
+        try { await sync.pull(); }
+        catch (error) { errorCode = (error as { code?: string }).code ?? "unknown"; }
+        const status = await git.status();
+        sync.signOut();
+        git.close();
+        return { errorCode, localHead: local.oid, headAfterFailure: status.head };
+      }, { id: `bad-ancestry-${rowKind}-${crypto.randomUUID()}`, relayUrl: relayOrigin });
+      expect(result.errorCode).toBe("git_error");
+      expect(result.headAfterFailure).toBe(result.localHead);
+      expect(individualReads).toBe(8);
+      expect(ancestryPages).toBe(1);
+      expect(backend.diagnostics()).toEqual([]);
+    }
+  } finally { activeSmartHttpFixture = null; await backend.close(); }
+});
+
+test("a short ancestry page omitting a required parent fails before Git pack transfer", async ({ page }) => {
+  const backend = await createSmartHttpFixture();
+  activeSmartHttpFixture = backend;
+  try {
+    const history: RemoteCommitFixture[] = [];
+    for (let index = 0; index < 12; index += 1) history.push(backend.commit(`history ${index}\n`, history.at(-1)?.sha ?? null, "plain"));
+    const head = history.at(-1)!;
+    let individualReads = 0;
+    let ancestryPages = 0;
+    await page.route("https://api.github.com/**", async route => {
+      if (route.request().method() === "OPTIONS") return route.fulfill({ status: 204, headers: corsHeaders() });
+      const url = new URL(route.request().url()), path = url.pathname;
+      const json = (value: unknown, status = 200) => route.fulfill({ status, headers: corsHeaders(), contentType: "application/json", body: JSON.stringify(value) });
+      if (path === "/user") return json({ id: 88, login: "writer" });
+      if (path === "/repos/proprium-test/browser-git-fixture") return json({
+        id: repositoryId, full_name: "proprium-test/browser-git-fixture", owner: { login: "proprium-test" }, permissions: { pull: true, push: true },
+      });
+      if (path === "/repos/proprium-test/browser-git-fixture/git/ref/heads/main") return json({
+        ref: "refs/heads/main", object: { type: "commit", sha: head.sha },
+      });
+      if (path === "/repos/proprium-test/browser-git-fixture/commits") {
+        ancestryPages += 1;
+        expect(url.searchParams.get("sha")).toBe(head.sha);
+        expect(url.searchParams.get("per_page")).toBe("100");
+        expect(url.searchParams.get("page")).toBe("1");
+        return json([head.commitApi]);
+      }
+      const match = /\/commits\/([a-f0-9]{40})$/u.exec(path);
+      if (match && history.some(commit => commit.sha === match[1])) {
+        individualReads += 1;
+        return json(history.find(commit => commit.sha === match[1])!.commitApi);
+      }
+      return json({ message: `Unexpected ${route.request().method()} ${path}` }, 404);
+    });
+
+    await page.goto("/browser-git-test.html");
+    await expect(page.locator("#ready")).toHaveText("ready");
+    const result = await page.evaluate(async ({ id, relayUrl }) => {
+      const git = window.browserGitTest.open(id);
+      await git.init();
+      await git.write("local.txt", new TextEncoder().encode("keep local head\n"), { oid: null });
+      await git.add(["local.txt"], null);
+      const local = await git.commit("local seed", { name: "Browser Fixture", email: "fixture@example.test" }, null);
+      const sync = git.connectGitHub(relayUrl);
+      await sync.beginAuthorization();
+      await sync.completeAuthorization();
+      let errorCode = "none";
+      try { await sync.pull(); }
+      catch (error) { errorCode = (error as { code?: string }).code ?? "unknown"; }
+      const status = await git.status();
+      sync.signOut();
+      git.close();
+      return { errorCode, localHead: local.oid, headAfterFailure: status.head };
+    }, { id: `missing-ancestor-${crypto.randomUUID()}`, relayUrl: relayOrigin });
+    expect(result.errorCode).toBe("git_error");
+    expect(result.headAfterFailure).toBe(result.localHead);
+    expect(individualReads).toBe(8);
+    expect(ancestryPages).toBe(1);
+    expect(backend.diagnostics()).toEqual([]);
   } finally { activeSmartHttpFixture = null; await backend.close(); }
 });
