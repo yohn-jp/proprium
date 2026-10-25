@@ -63,6 +63,8 @@ type livePending struct {
 	client           *liveClient
 	result           chan liveResponse
 	cancel           func()
+	response         liveResponse
+	settled          bool
 }
 type liveEvent struct {
 	name string
@@ -436,23 +438,38 @@ func (r *LiveRegistry) expireSession(s *liveSession) {
 		s.connectTimer.Stop()
 		s.connectTimer = nil
 	}
-	close(s.closed)
+	var cancels []context.CancelFunc
+	var results []struct {
+		channel chan liveResponse
+		value   liveResponse
+	}
 	for _, c := range s.clients {
 		delete(r.clients, c.tokenHash)
 		r.rememberInactiveTokenLocked(c.tokenHash)
 		for _, cancel := range c.inflight {
-			cancel()
+			cancels = append(cancels, cancel)
 		}
+		clear(c.inflight)
+		clear(c.rpcIDs)
 	}
 	for _, p := range s.pending {
-		p.cancel()
-		select {
-		case p.result <- liveResponse{status: "unavailable", err: "workspace_disconnected"}:
-		default:
-		}
+		p.response = liveResponse{status: "unavailable", err: "workspace_disconnected"}
+		p.settled = true
+		cancels = append(cancels, p.cancel)
+		results = append(results, struct {
+			channel chan liveResponse
+			value   liveResponse
+		}{p.result, p.response})
 	}
 	s.pending = make(map[string]*livePending)
 	r.mu.Unlock()
+	close(s.closed)
+	for _, result := range results {
+		result.channel <- result.value
+	}
+	for _, cancel := range cancels {
+		cancel()
+	}
 }
 
 // rememberInactiveTokenLocked retains only a bounded, short-lived hash so a
@@ -520,16 +537,15 @@ func (r *LiveRegistry) acceptResponse(w http.ResponseWriter, req *http.Request, 
 		liveJSON(w, req, r.config.HostOrigin, http.StatusConflict, map[string]string{"error": "request_unknown_or_expired"})
 		return
 	}
+	p.response = liveResponse{status: input.Status, result: input.Result, err: input.Error}
+	p.settled = true
 	delete(s.pending, input.RequestID)
 	if p.client != nil {
 		delete(p.client.inflight, input.RequestID)
 		delete(p.client.rpcIDs, p.rpcID)
 	}
 	r.mu.Unlock()
-	select {
-	case p.result <- liveResponse{status: input.Status, result: input.Result, err: input.Error}:
-	default:
-	}
+	p.result <- p.response
 	liveJSON(w, req, r.config.HostOrigin, http.StatusAccepted, map[string]bool{"accepted": true})
 }
 func (r *LiveRegistry) createClient(w http.ResponseWriter, req *http.Request, id string) {
@@ -620,23 +636,44 @@ func (r *LiveRegistry) revokeClient(w http.ResponseWriter, req *http.Request, id
 	}
 	delete(s.clients, clientID)
 	delete(r.clients, c.tokenHash)
+	var cancels []context.CancelFunc
+	var results []struct {
+		channel chan liveResponse
+		value   liveResponse
+	}
+	queueOverflow := false
 	for reqID, cancel := range c.inflight {
-		cancel()
 		if p := s.pending[reqID]; p != nil {
 			delete(s.pending, reqID)
 			delete(c.rpcIDs, p.rpcID)
-			select {
-			case p.result <- liveResponse{status: "revoked", err: "client_revoked"}:
-			default:
-			}
+			p.response = liveResponse{status: "revoked", err: "client_revoked"}
+			p.settled = true
+			results = append(results, struct {
+				channel chan liveResponse
+				value   liveResponse
+			}{p.result, p.response})
+			cancels = append(cancels, cancel)
 			select {
 			case s.events <- liveEvent{name: "cancel", data: map[string]string{"requestId": reqID, "workspaceId": s.workspaceID, "generation": s.generation, "reason": "client_revoked"}}:
 			default:
-				go r.expireSession(s)
+				queueOverflow = true
 			}
+		} else {
+			cancels = append(cancels, cancel)
 		}
 	}
+	clear(c.inflight)
+	clear(c.rpcIDs)
 	r.mu.Unlock()
+	for _, result := range results {
+		result.channel <- result.value
+	}
+	for _, cancel := range cancels {
+		cancel()
+	}
+	if queueOverflow {
+		r.expireSession(s)
+	}
 	liveNoContent(w, req, r.config.HostOrigin)
 }
 func (r *LiveRegistry) revokeSession(w http.ResponseWriter, req *http.Request, id string) {
@@ -715,31 +752,81 @@ func (r *LiveRegistry) dispatch(req *http.Request, client *liveClient, tool stri
 		cancel()
 		return response, nil
 	case <-s.closed:
-		cancel()
+		select {
+		case response := <-p.result:
+			cancel()
+			return response, nil
+		default:
+		}
+		if response, settled := r.pendingOutcome(p); settled {
+			cancel()
+			return response, nil
+		}
 		return liveResponse{status: "unavailable", err: "workspace_disconnected"}, nil
 	case <-ctx.Done():
+		select {
+		case response := <-p.result:
+			cancel()
+			return response, nil
+		default:
+		}
+		select {
+		case <-s.closed:
+			if response, settled := r.pendingOutcome(p); settled {
+				cancel()
+				return response, nil
+			}
+			return liveResponse{status: "unavailable", err: "workspace_disconnected"}, nil
+		default:
+		}
 		reason, outcome, message := "cancelled", "cancelled", "request_cancelled"
 		if errors.Is(ctx.Err(), context.DeadlineExceeded) {
 			reason, outcome, message = "timeout", "timeout", "request_timeout"
 		}
-		r.cancelPending(s, p, reason)
+		response := r.cancelPending(s, p, reason)
 		cancel()
-		return liveResponse{status: outcome, err: message}, nil
+		if response.status == "" {
+			response = liveResponse{status: outcome, err: message}
+		}
+		return response, nil
 	}
 }
-func (r *LiveRegistry) cancelPending(s *liveSession, p *livePending, reason string) {
+func (r *LiveRegistry) pendingOutcome(p *livePending) (liveResponse, bool) {
 	r.mu.Lock()
+	defer r.mu.Unlock()
+	return p.response, p.settled
+}
+
+func (r *LiveRegistry) cancelPending(s *liveSession, p *livePending, reason string) liveResponse {
+	r.mu.Lock()
+	response := liveResponse{}
+	queueOverflow := false
 	if s.pending[p.requestID] == p {
+		outcome := "cancelled"
+		message := "request_cancelled"
+		if reason == "timeout" {
+			outcome, message = "timeout", "request_timeout"
+		}
+		p.response = liveResponse{status: outcome, err: message}
+		p.settled = true
 		delete(s.pending, p.requestID)
 		delete(p.client.inflight, p.requestID)
 		delete(p.client.rpcIDs, p.rpcID)
 		select {
 		case s.events <- liveEvent{name: "cancel", data: map[string]string{"requestId": p.requestID, "workspaceId": s.workspaceID, "generation": s.generation, "reason": reason}}:
 		default:
-			go r.expireSession(s)
+			queueOverflow = true
+			p.response = liveResponse{status: "unavailable", err: "workspace_disconnected"}
 		}
+		response = p.response
+	} else if p.settled {
+		response = p.response
 	}
 	r.mu.Unlock()
+	if queueOverflow {
+		r.expireSession(s)
+	}
+	return response
 }
 
 var errCapabilityDenied = errors.New("capability_denied")

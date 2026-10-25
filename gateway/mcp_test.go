@@ -145,6 +145,55 @@ func TestLiveMCPHTTPCancellationIsForwardedToBrowser(t *testing.T) {
 	}
 }
 
+func TestClientRevocationIsReportedSeparatelyFromRequestCancellation(t *testing.T) {
+	f := newLiveFixture(t, []string{"workspace_info"}, []string{"workspace_info"})
+	f.openEvents()
+	defer f.cancelStream()
+	done := make(chan struct {
+		resp *http.Response
+		body []byte
+	}, 1)
+	go func() {
+		params := map[string]any{"name": "workspace_info", "arguments": map[string]any{}, "_meta": map[string]any{"io.modelcontextprotocol/protocolVersion": currentMCPVersion}}
+		resp, body := f.mcpRequest("tools/call", 19, params, f.clientToken, currentMCPVersion)
+		done <- struct {
+			resp *http.Response
+			body []byte
+		}{resp, body}
+	}()
+	event := f.readEvent()
+	if event["event"] != "request" {
+		t.Fatalf("expected pending browser request, got %#v", event)
+	}
+	var pending map[string]any
+	if err := json.Unmarshal([]byte(event["data"]), &pending); err != nil {
+		t.Fatal(err)
+	}
+	revoked := f.ownerJSON(http.MethodDelete, "/live/sessions/"+f.sessionID+"/clients/"+f.clientID, f.ownerToken, nil)
+	if revoked.Code != http.StatusNoContent {
+		t.Fatalf("revoke pending client: %d %s", revoked.Code, revoked.Body.String())
+	}
+	select {
+	case result := <-done:
+		if result.resp.StatusCode != http.StatusUnauthorized || !bytes.Contains(result.body, []byte("MCP client authorization was revoked")) {
+			t.Fatalf("revocation was misreported as request cancellation: %d %s", result.resp.StatusCode, result.body)
+		}
+	case <-time.After(2 * time.Second):
+		t.Fatal("revocation did not wake the pending call")
+	}
+	cancelEvent := f.readEvent()
+	if cancelEvent["event"] != "cancel" {
+		t.Fatalf("expected browser cancellation event, got %#v", cancelEvent)
+	}
+	var cancellation map[string]string
+	if err := json.Unmarshal([]byte(cancelEvent["data"]), &cancellation); err != nil {
+		t.Fatal(err)
+	}
+	if cancellation["requestId"] != pending["requestId"] || cancellation["reason"] != "client_revoked" {
+		t.Fatalf("revocation event does not match pending request: %#v", cancellation)
+	}
+}
+
 func TestLiveMCPInitializationCompatibilityAndOriginChecks(t *testing.T) {
 	f := newLiveFixture(t, []string{"workspace_info"}, []string{"workspace_info"})
 	resp, body := f.mcpRequest("initialize", 1, map[string]any{"protocolVersion": legacyMCPVersion, "capabilities": map[string]any{}, "clientInfo": map[string]any{"name": "test", "version": "1"}}, f.clientToken, legacyMCPVersion)
