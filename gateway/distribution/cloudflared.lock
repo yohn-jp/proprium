@@ -1,0 +1,19 @@
+# Pin and SHA-256 digests copied from the official GitHub Release API response:
+# https://api.github.com/repos/cloudflare/cloudflared/releases/tags/2026.10.3
+# LICENSE is fetched from the matching official source tag and pinned by hash.
+# Cloudflared third-party license/NOTICE texts were collected from commit
+# de6376c5af4a67cbc65258682e5a01781827643d using go-licenses v1.6.0 for all
+# five CGO_ENABLED=0 release targets. Go runtime texts are from the official
+# go1.27.3 tag and both are pinned by the aggregate hash below.
+version=2026.10.3
+license_sha256=58d1e17ffe5109a7ae296caafcadfdbe6a7d176f0bc4ab01e12a689b0499d8bd
+go_version=1.27.3
+go_commit=2aae1000ea1d4b28923b96db28acf4e3b99d6aff
+go_license_sha256=911f8f5782931320f5b8d1160a76365b83aea6447ee6c04fa6d5591467db9dad
+go_patents_sha256=96f408bfae65bf137fc2525d3ecb030271c50c1e90799f87abf8846d8dd505cc
+third_party_licenses_sha256=143072e856d7ba7d220e2afd42254528d3ff5b271ffc3c8fa8f8136308b8ca1e
+linux_amd64=053b80b0a23031a038fdbf3c073f59f82b8f1f152aa67971d7383ffafc0dbab0
+linux_arm64=89297ebfb9e8c99c0dc013a1140601453cf3798d8306c5591651f4a3f5210be8
+windows_amd64=76b2805253d0d6ffacb092a7acfbee99e7af6917835c0c5410e23f3ef5052da2
+darwin_amd64=81b7b85f2376815c4f59b1aa323887b62e16ce8b67555c2e1577dc23f2a82000
+darwin_arm64=1165d14b6f6360a3b8c283d7d1100024d6ec7cd9bc9e32519e96150645f3ec55

@@ -50,7 +50,7 @@ DesktopはWorkspace未選択時、左の「作品ライブラリ」にrecentsを
 | FT19 | Mobile 5 view・戻る・参照sheet・keyboard／focus保持：[mobile] | Desktopの縮小版にしない。履歴遷移もflushと世代検証の対象 | F14 |
 | FT20 | ライト／ダーク／紙、UI mode、Git author、接続設定：[theme]、[host] | 設定が複数箇所に分散。統合入口は契約として整理する | F15 |
 | FT21 | unsaved離脱・journal回復・`storage_unknown`検証：[host]、[editor]、[recovery] | native dialogはstatus shelfの外。reset/deleteを検証の代替にしない | F04, F16 |
-| FT22 | Gateway release取得・設定・Tunnel・user service・更新：[operations]、[release] | 現行は手動配布手順。latest解決／統合setup・update UIは実装済みでない | F17 |
+| FT22 | Gateway release取得・設定・Tunnel・user service・更新：[operations]、[release] | Linux CLIがlatest解決とsystemd user serviceを管理する。Windows/macOSのCLI管理は未対応 | F17 |
 
 ## 4. 画面IDと配置契約
 

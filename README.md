@@ -2,7 +2,7 @@
 
 **A browser-native, local-first, Git-native workspace with WASM-first plugins and an optional Go Gateway.**
 
-Proprium runs editing, local Git operations and optional plugin computation in the browser. GitHub remains the authoritative remote for committed work; browser workspaces are local copies. The Host is built for static delivery, and independently built plugins and large assets can be distributed as immutable artifacts such as Cloudflare R2 objects. An optional single-binary Go Gateway provides GitHub OAuth Device Flow, restricted Smart HTTP fallback and Live Workspace MCP behind a reverse proxy such as Cloudflare Tunnel. It stores no durable user, workspace or Git data and does not replace the browser as the workspace runtime.
+Proprium runs editing, local Git operations and optional plugin computation in the browser. GitHub remains the authoritative remote for committed work; browser workspaces are local copies. The Host is built for static delivery, and independently built plugins and large assets can be distributed as immutable artifacts such as Cloudflare R2 objects. An optional Go Gateway provides GitHub OAuth Device Flow, restricted Smart HTTP fallback and Live Workspace MCP behind a reverse proxy such as Cloudflare Tunnel. On Linux amd64 and arm64, the `proprium` CLI installs and manages the Gateway and pinned `cloudflared` binary from the verified release bundle through one systemd user service. The Gateway and Tunnel remain separate executables. The Gateway stores no durable user, workspace or Git data and does not replace the browser as the workspace runtime.
 
 No Gateway URL or login is needed to open the static Host, edit locally, commit locally, or run available WASM plugins. The [optional Gateway contract](docs/architecture/OPTIONAL-GATEWAY-AND-MCP.md) defines the separation.
 
@@ -26,6 +26,10 @@ Browser, GitHub and plugin security claims depend on the acceptance checks for t
 - [Source provenance and licenses](docs/architecture/SOURCE-PROVENANCE.md)
 
 The complete documentation index is at [docs/README.md](docs/README.md).
+
+Gateway management commands and the Linux support boundary are documented in [Gateway installation and operations](docs/deployment/GATEWAY.md). Managed CLI installation and service operations are supported on Linux amd64 and arm64; they are unsupported on Windows and macOS even though Gateway runtime bundles are published for those systems.
+
+The Gateway release workflow publishes verified release bundles automatically on pushes to `main`. This lifecycle is separate from the static Host release, which deploys Host assets only.
 
 ## Contributing
 

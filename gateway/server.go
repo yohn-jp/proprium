@@ -35,6 +35,10 @@ type Server struct {
 	live   interface {
 		MCPHandler() http.Handler
 	}
+	controlServer   *http.Server
+	controlListener net.Listener
+	controlPath     string
+	controlInfo     os.FileInfo
 }
 
 func NewServer(config Config) (*Server, error) {
@@ -261,6 +265,11 @@ func main() {
 		log.Printf("listen error: %v", err)
 		os.Exit(1)
 	}
+	if err := gateway.startControlSocket(); err != nil {
+		_ = listener.Close()
+		log.Printf("control socket error: %v", err)
+		os.Exit(1)
+	}
 	httpServer := &http.Server{
 		Handler:           gateway.Handler(),
 		ReadTimeout:       config.UpstreamTimeout,
@@ -271,11 +280,14 @@ func main() {
 	}
 	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
 	defer stop()
+	shutdownDone := make(chan struct{})
 	go func() {
+		defer close(shutdownDone)
 		<-ctx.Done()
 		gateway.Close()
 		shutdownCtx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
 		defer cancel()
+		gateway.shutdownControl(shutdownCtx)
 		if err := httpServer.Shutdown(shutdownCtx); err != nil {
 			_ = httpServer.Close()
 		}
@@ -286,6 +298,7 @@ func main() {
 		log.Printf("serve error: %v", err)
 		os.Exit(1)
 	}
+	<-shutdownDone
 }
 
 // limitListener bounds accepted TCP connections, including keep-alive and SSE connections.

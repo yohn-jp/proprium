@@ -33,6 +33,7 @@ func TestConfigValidation(t *testing.T) {
 		{"invalid listen address", func(c *Config) { c.ListenAddr = "localhost" }},
 		{"invalid oauth client id", func(c *Config) { c.GitHubClientID = "with spaces" }},
 		{"out of range timeout", func(c *Config) { c.UpstreamTimeout = 11 * time.Minute }},
+		{"relative control socket", func(c *Config) { c.ControlSocket = "run/gateway.sock" }},
 	} {
 		t.Run(test.name, func(t *testing.T) {
 			c := valid
@@ -45,7 +46,7 @@ func TestConfigValidation(t *testing.T) {
 }
 
 func TestLoadConfigRequiresConfiguredHostOriginAndClientID(t *testing.T) {
-	for _, key := range []string{"PROPRIUM_LISTEN_ADDR", "PROPRIUM_HOST_ORIGIN", "PROPRIUM_PUBLIC_URL", "GITHUB_CLIENT_ID", "PROPRIUM_OWNER_KEY", "PROPRIUM_UPSTREAM_TIMEOUT"} {
+	for _, key := range []string{"PROPRIUM_LISTEN_ADDR", "PROPRIUM_CONTROL_SOCKET", "PROPRIUM_HOST_ORIGIN", "PROPRIUM_PUBLIC_URL", "GITHUB_CLIENT_ID", "PROPRIUM_OWNER_KEY", "PROPRIUM_UPSTREAM_TIMEOUT"} {
 		t.Setenv(key, "")
 	}
 	if _, err := LoadConfig(); err == nil {
@@ -54,7 +55,7 @@ func TestLoadConfigRequiresConfiguredHostOriginAndClientID(t *testing.T) {
 }
 
 func TestLoadConfigDefaults(t *testing.T) {
-	for _, key := range []string{"PROPRIUM_LISTEN_ADDR", "PROPRIUM_HOST_ORIGIN", "PROPRIUM_PUBLIC_URL", "GITHUB_CLIENT_ID", "PROPRIUM_OWNER_KEY", "PROPRIUM_UPSTREAM_TIMEOUT"} {
+	for _, key := range []string{"PROPRIUM_LISTEN_ADDR", "PROPRIUM_CONTROL_SOCKET", "PROPRIUM_HOST_ORIGIN", "PROPRIUM_PUBLIC_URL", "GITHUB_CLIENT_ID", "PROPRIUM_OWNER_KEY", "PROPRIUM_UPSTREAM_TIMEOUT"} {
 		t.Setenv(key, "")
 	}
 	t.Setenv("PROPRIUM_HOST_ORIGIN", "https://host.example")
@@ -65,6 +66,9 @@ func TestLoadConfigDefaults(t *testing.T) {
 	}
 	if c.ListenAddr != defaultListenAddr || c.UpstreamTimeout != defaultUpstreamTimeout {
 		t.Fatalf("unexpected defaults: %+v", c)
+	}
+	if c.ControlSocket != "" {
+		t.Fatalf("control socket should be disabled by default, got %q", c.ControlSocket)
 	}
 }
 
