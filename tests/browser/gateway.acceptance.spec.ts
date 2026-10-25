@@ -86,39 +86,44 @@ test.beforeAll(() => {
 
 test.afterAll(() => rmSync(fixtureDirectory, { recursive: true, force: true }));
 
-async function mcpRequest(page: import("@playwright/test").Page, token: string, request: Record<string, unknown>, version = "2026-07-28"): Promise<{ status: number; body: JsonRpcResponse | null }> {
-  return page.evaluate(async ({ gatewayOrigin, token, request, version }) => {
-    const method = String(request.method);
-    const params = request.params as Record<string, unknown> | undefined;
-    const name = typeof params?.name === "string" ? params.name : undefined;
-    const headers: Record<string, string> = {
-      Accept: "application/json, text/event-stream",
-      Authorization: `Bearer ${token}`,
-      "Content-Type": "application/json",
-      "MCP-Protocol-Version": version,
-      "Mcp-Method": method,
+async function mcpRequest(token: string, request: Record<string, unknown>, version = "2026-07-28"): Promise<{ status: number; body: JsonRpcResponse | null }> {
+  const method = String(request.method);
+  const params = { ...(request.params as Record<string, unknown> | undefined) };
+  if (version === "2026-07-28") {
+    params._meta = {
+      "io.modelcontextprotocol/protocolVersion": version,
+      "io.modelcontextprotocol/clientInfo": { name: "Proprium Browser E2E", version: "1.0.0" },
+      "io.modelcontextprotocol/clientCapabilities": {},
     };
-    if (name) headers["Mcp-Name"] = name;
-    const response = await fetch(`${gatewayOrigin}/mcp`, {
-      method: "POST",
-      headers,
-      body: JSON.stringify(request),
-      cache: "no-store",
-      credentials: "omit",
-      redirect: "error",
-    });
-    const source = await response.text();
-    let body: JsonRpcResponse | null = null;
-    if (source.trim()) {
-      const json = source.startsWith("data:") ? source.split(/\r?\n/u).find(line => line.startsWith("data:"))?.slice(5).trim() : source;
-      if (json) body = JSON.parse(json) as JsonRpcResponse;
-    }
-    return { status: response.status, body };
-  }, { gatewayOrigin, token, request, version });
+  }
+  const wireRequest = { ...request, ...(request.params ? { params } : {}) };
+  const name = typeof params.name === "string" ? params.name : undefined;
+  const headers: Record<string, string> = {
+    Accept: "application/json, text/event-stream",
+    Authorization: `Bearer ${token}`,
+    "Content-Type": "application/json",
+    "MCP-Protocol-Version": version,
+    "Mcp-Method": method,
+  };
+  if (name) headers["Mcp-Name"] = name;
+  const response = await fetch(`${gatewayOrigin}/mcp`, {
+    method: "POST",
+    headers,
+    body: JSON.stringify(wireRequest),
+    cache: "no-store",
+    redirect: "error",
+  });
+  const source = await response.text();
+  let body: JsonRpcResponse | null = null;
+  if (source.trim()) {
+    const json = source.startsWith("data:") ? source.split(/\r?\n/u).find(line => line.startsWith("data:"))?.slice(5).trim() : source;
+    if (json) body = JSON.parse(json) as JsonRpcResponse;
+  }
+  return { status: response.status, body };
 }
 
-async function mcpCall(page: import("@playwright/test").Page, token: string, id: string, name: string, args: Record<string, unknown>): Promise<JsonRpcResponse> {
-  const response = await mcpRequest(page, token, { jsonrpc: "2.0", id, method: "tools/call", params: { name, arguments: args } });
+async function mcpCall(token: string, id: string, name: string, args: Record<string, unknown>): Promise<JsonRpcResponse> {
+  const response = await mcpRequest(token, { jsonrpc: "2.0", id, method: "tools/call", params: { name, arguments: args } });
   expect(response.status, JSON.stringify(response.body)).toBe(200);
   expect(response.body?.error).toBeUndefined();
   return response.body!;
@@ -148,8 +153,8 @@ async function openWorkspace(page: import("@playwright/test").Page): Promise<voi
 }
 
 async function enableLiveMcp(page: import("@playwright/test").Page): Promise<void> {
-  const live = page.getByText("Live MCP", { exact: true });
-  await expect(live).toBeVisible();
+  const panel = page.locator("details.live-mcp-panel");
+  await panel.locator("summary").click();
   await page.locator("#live-gateway-url").fill(gatewayOrigin);
   await page.locator("#live-owner-key").fill(ownerKey);
   const toolNames = ["capabilities_list", "files_list", "file_read", "git_log", "git_status", "plugin_call", "proposal_submit", "workspace_info"];
@@ -204,7 +209,7 @@ test("a live browser Workspace serves real MCP calls through Go SSE and HTTP, an
 
   // Exercise the current stable Streamable HTTP transport with its required
   // routing headers, through the real browser-to-Go HTTP connection.
-  const listed = await mcpRequest(page, token, { jsonrpc: "2.0", id: "tools-modern", method: "tools/list", params: {} });
+  const listed = await mcpRequest(token, { jsonrpc: "2.0", id: "tools-modern", method: "tools/list", params: {} });
   expect(listed.status).toBe(200);
   const available = (listed.body?.result as { tools?: Array<{ name: string }> }).tools?.map(tool => tool.name) ?? [];
   expect(available).toEqual(expect.arrayContaining(["workspace_info", "files_list", "file_read", "git_status", "git_log", "capabilities_list", "plugin_call", "proposal_submit"]));
@@ -212,34 +217,33 @@ test("a live browser Workspace serves real MCP calls through Go SSE and HTTP, an
   // Keep compatibility with the 2025-11-25 initialize handshake requested
   // for existing MCP clients while the published transport uses the latest
   // stable revision above.
-  const initialized = await mcpRequest(page, token, {
+  const initialized = await mcpRequest(token, {
     jsonrpc: "2.0", id: "initialize-legacy", method: "initialize",
     params: { protocolVersion: "2025-11-25", capabilities: {}, clientInfo: { name: "Proprium Browser E2E", version: "1.0.0" } },
   }, "2025-11-25");
   expect(initialized.status).toBe(200);
   expect((initialized.body?.result as { protocolVersion?: string }).protocolVersion).toBe("2025-11-25");
-  await mcpRequest(page, token, { jsonrpc: "2.0", method: "notifications/initialized" }, "2025-11-25");
+  await mcpRequest(token, { jsonrpc: "2.0", method: "notifications/initialized" }, "2025-11-25");
 
-  expect(textResult(await mcpCall(page, token, "info-1", "workspace_info", {}))).toMatchObject({ id: expect.stringContaining("gateway-") });
-  expect(textResult(await mcpCall(page, token, "files-1", "files_list", {}))).toMatchObject({ files: expect.arrayContaining([expect.objectContaining({ path: "README.md" })]) });
-  const read = textResult(await mcpCall(page, token, "read-1", "file_read", { path: "README.md" }));
+  expect(textResult(await mcpCall(token, "info-1", "workspace_info", {}))).toMatchObject({ workspaceId: expect.stringContaining("gateway-") });
+  expect(textResult(await mcpCall(token, "files-1", "files_list", {}))).toEqual(expect.arrayContaining([expect.objectContaining({ path: "README.md" })]));
+  const read = textResult(await mcpCall(token, "read-1", "file_read", { path: "README.md" }));
   expect(read).toMatchObject({ path: "README.md", content: "Gateway browser integration fixture.\n" });
   expect(read.revision).toBeTruthy();
-  expect(textResult(await mcpCall(page, token, "git-status", "git_status", {}))).toHaveProperty("entries");
-  expect(textResult(await mcpCall(page, token, "git-log", "git_log", { limit: 10 }))).toHaveProperty("commits");
-  expect(textResult(await mcpCall(page, token, "caps", "capabilities_list", {}))).toHaveProperty("capabilities");
+  expect(textResult(await mcpCall(token, "git-status", "git_status", {}))).toHaveProperty("entries");
+  expect(textResult(await mcpCall(token, "git-log", "git_log", { limit: 10 }))).toEqual([]);
+  expect(textResult(await mcpCall(token, "caps", "capabilities_list", {}))).toEqual(expect.arrayContaining(["file_read", "plugin_call", "proposal_submit"]));
 
-  const pluginRun = textResult(await mcpCall(page, token, "plugin-run", "plugin_call", {
+  const pluginRun = textResult(await mcpCall(token, "plugin-run", "plugin_call", {
     pluginId: "fixture.compute-sum",
     operation: "run",
     input: { request: JSON.stringify({ left: 20, right: 22 }) },
   }));
   expect(pluginRun).toMatchObject({ value: '{"result":42}' });
 
-  const revision = read.revision as string | { oid?: string | null };
-  const expectedRevision = typeof revision === "string" ? revision : revision.oid;
+  const expectedRevision = read.revision as string;
   expect(expectedRevision).toBeTruthy();
-  const proposal = await mcpCall(page, token, "proposal-1", "proposal_submit", {
+  const proposal = await mcpCall(token, "proposal-1", "proposal_submit", {
     title: "Review a change from the MCP client",
     changes: [{ path: "README.md", content: "Approved by the workspace owner.\n", expectedRevision }],
   });
@@ -249,9 +253,16 @@ test("a live browser Workspace serves real MCP calls through Go SSE and HTTP, an
   await page.getByRole("button", { name: "Review and approve" }).click();
   await expect(page.getByLabel("File contents")).toHaveValue("Approved by the workspace owner.\n");
 
-  await page.getByRole("button", { name: "Disable Live MCP" }).click();
-  await expect(page.getByText("Live MCP is disabled", { exact: true })).toBeVisible();
-  const afterDisconnect = await mcpRequest(page, token, { jsonrpc: "2.0", id: "after-close", method: "tools/list", params: {} });
+  await page.getByRole("button", { name: "Revoke", exact: true }).click();
+  const revoked = await mcpRequest(token, { jsonrpc: "2.0", id: "revoked", method: "tools/list", params: {} });
+  expect(revoked.status).toBe(401);
+  const nextToken = await authorizeClient(page);
+
+  await page.getByRole("button", { name: "Stop Live MCP" }).click();
+  await expect(page.locator("details.live-mcp-panel").getByRole("status")).toHaveCount(0);
+  await page.locator("details.live-mcp-panel summary").click();
+  await expect(page.getByRole("button", { name: "Enable Live MCP" })).toBeVisible();
+  const afterDisconnect = await mcpRequest(nextToken, { jsonrpc: "2.0", id: "after-close", method: "tools/list", params: {} });
   expect(afterDisconnect.status).toBeGreaterThanOrEqual(400);
   expect(afterDisconnect.body?.error).toBeDefined();
 
