@@ -17,11 +17,11 @@ The contracts in [Git and storage](GIT-AND-STORAGE.md) remain normative: **GitHu
 
 ## GitHub transport selection
 
-Use **GitHub REST Git Data API** as the first transport candidate, with a narrow Host-owned adapter. For every object uploaded, verify that returned SHA is the expected local Git object ID. Preserve tree modes, commit parents, identity, timestamps and exact commit SHA; if an endpoint cannot preserve these bytes/semantics, do **not** fabricate equivalent history or claim an ordinary Git push. For that unsupported path, fail closed and test a narrowly scoped Git Smart HTTP relay instead.
+The Host-owned adapter uses **GitHub REST Git Data API** where it can preserve the local Git objects and exact commit SHA. It verifies returned object IDs and preserves tree modes, parent commits, identity and timestamps. When REST cannot represent a commit or safely perform an update, the adapter uses the narrowly scoped Git Smart HTTP relay. It must never fabricate equivalent history or claim an ordinary push when the resulting remote commit differs.
 
-Normal non-force branch updates must be protected by an actual current remote ref/ancestry check. A pre-read followed by an unconditional ref update is not a cross-request CAS and may be unsafe; verify GitHub endpoint semantics against concurrent writers before enabling publish. If safe conditional update semantics are unavailable in REST, use a transport that supports a verifiable non-force update without overwriting concurrent changes. Verify commit reachability after upload/update; a request's HTTP 2xx is not a remote-save receipt.
+Normal non-force branch updates are protected by a current remote ref/ancestry check, with Smart HTTP used where REST cannot safely update the ref. Verify the intended commit is reachable after publication; an HTTP 2xx response alone is not a remote-save receipt. Live concurrent-writer and lost-response behavior remains part of deployment acceptance.
 
-Auth uses an authorized GitHub flow supporting PKCE with a public client where applicable. **PKCE support does not prove a pure SPA can exchange its code directly under CORS or securely hold a long-lived shared secret.** Verify the current GitHub browser/token-exchange contract. If a minimal authentication/transport Worker is necessary, it is an optional narrowly scoped network edge component, never a user workspace store or compute server. Never embed a client secret in Vite assets. Never expose tokens to WASM guest imports.
+Auth uses GitHub's device authorization flow through the optional restricted Worker, which keeps the public Host from embedding a client secret. The Worker is a network edge component only; it is never a user workspace store or compute server. Never expose tokens to WASM guest imports. The configured endpoint and real account permission behavior must be verified before live sync is advertised.
 
 ## Required implementation tests
 
@@ -31,4 +31,4 @@ Auth uses an authorized GitHub flow supporting PKCE with a public client where a
 4. Offline: edit/commit from a warm local repository without fetching new assets, and report unavailable remote sync honestly.
 5. No plugin, remote API, self-hosted server or Git CLI is necessary for local editing and local Git operations.
 
-Until these run and pass, browser Git and GitHub publishing remain **unverified capabilities**, not shipped behavior.
+The Browser Git adapter, GitHub authorization/transport code and browser fixture acceptance cases are implemented. Those fixtures do not by themselves certify live GitHub behavior, storage crash consistency, or mobile device support; use the required checks above before claiming those environments are verified.

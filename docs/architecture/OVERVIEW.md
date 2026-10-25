@@ -1,6 +1,6 @@
 # Proprium — browser-native architecture
 
-**Status: normative target contract.** The inherited Scriptorium source does not yet implement this architecture. Component and transport choices noted as candidates require technical validation, not silent assumptions.
+**Status: normative product and ownership contract.** The Browser Host, browser Git adapter, WASM component runtime and static Host build are implemented in this repository. This document defines their required boundaries; live-provider, storage-failure, mobile-device and deployed-service coverage must still be established by the corresponding acceptance checks.
 
 ## Product boundary
 

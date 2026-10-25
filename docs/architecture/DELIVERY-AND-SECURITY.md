@@ -1,6 +1,6 @@
 # Static delivery, resource distribution and trust
 
-**Status: Proprium target contract, not a claim that this fork currently ships static-only.**
+**Status: delivery and security contract for the implemented static Host build.** CI checks the local bundle and Wrangler package with dry-run. The repository does not provision Cloudflare resources or establish that a production Host, R2 artifact origin or auth Worker has been deployed and tested.
 
 ## Delivery model
 
@@ -17,7 +17,7 @@ A static delivery model removes **home-server bandwidth and compute from ordinar
 
 The only mandatory remote service for publishing is the user's GitHub repository. Initial UI and plugin downloads are static delivery. No Proprium-managed database, user account service, daemon or continuously running sync worker is required for local editing.
 
-GitHub browser sync transport and authentication remain **open implementation questions**. A direct authenticated REST/Git Data path and a minimal restricted transport proxy are candidate approaches. A proxy, if required for Git Smart HTTP CORS, may only relay authorized transport; it must not become a hidden data store or plugin execution service. Transport must be validated on real browsers and documented before claiming fully serverless sync.
+Browser GitHub sync is implemented through the Host-owned Git transport and the optional restricted Worker under `workers/github-auth` for device authorization and Smart HTTP relay. The Worker checks repository identity and permissions, then streams Git traffic; it is not a worktree store or plugin runtime. Live authorization and publishing still depend on configuring and testing the intended GitHub and Worker endpoints.
 
 For private repositories, prevent credentials from reaching plugins, remote artifact origins, analytics, URLs or logs. Prefer short-lived/scoped grants where feasible; token acquisition and persistence strategy require threat-model and browser verification. A static page is not an authorization server and cannot safely embed a long-lived shared secret.
 

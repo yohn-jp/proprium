@@ -1,12 +1,12 @@
 # Contributing to Proprium
 
-The canonical proposed design is indexed at [docs/README.md](docs/README.md). [COMPATIBILITY](docs/architecture/COMPATIBILITY.md) separates inherited Scriptorium code from Proprium's intended runtime.
+The architecture contracts are indexed at [docs/README.md](docs/README.md). [COMPATIBILITY](docs/architecture/COMPATIBILITY.md) records the retired Scriptorium runtime paths and identifies inherited source that is not part of the Browser Host.
 
 - Work on an isolated branch and submit a PR; do not alter main directly.
-- Treat architecture documents as target contracts, not claims that the inherited source is conformant.
+- Treat architecture documents as product invariants. Check implementation claims against browser tests and any required live-provider evidence.
 - Limit changes to the accepted scope. Keep author workspaces, Git credentials, tokens, model weights, cached indexes, and private material out of commits and test fixtures.
 - Preserve GitHub remote authority, browser-local failure semantics, host-owned writes, plugin capability boundaries, and current-data provenance.
-- Record exact checks performed and checks unavailable. Passing legacy Node/OCI tests does not certify mobile Safari, browser Git, WASM isolation, or a static Proprium deployment.
+- Record exact checks performed and checks unavailable. Tests of preserved legacy Node packages do not certify mobile Safari, browser Git, WASM isolation, or a public static deployment.
 - Follow the [organization agent governance](https://github.com/yohn-jp/.github/blob/main/.github/agent-governance/AGENTS.md).
 
 ## Browser Host checks
