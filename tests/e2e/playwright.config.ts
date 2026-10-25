@@ -6,6 +6,7 @@ import { join, resolve } from "node:path";
 const externalRepository = Boolean(process.env.SCRIPTORIUM_E2E_REPOSITORY_URL);
 const selectedTestFile = process.env.SCRIPTORIUM_E2E_TEST_FILE;
 const browserGitSuite = ["browser-git.acceptance.spec.ts", "browser-git-sync.acceptance.spec.ts"].includes(selectedTestFile ?? "");
+const pluginRuntimeSuite = selectedTestFile === "plugin-runtime.acceptance.spec.ts";
 const coverageFile = process.env.SCRIPTORIUM_E2E_COVERAGE_FILE;
 const configuredBaseURL = process.env.SCRIPTORIUM_E2E_BASE_URL ?? process.env.SCRIPTORIUM_BASE_URL;
 const baseURL = configuredBaseURL ?? `http://127.0.0.1:${process.env.SCRIPTORIUM_E2E_PORT ?? "4173"}`;
@@ -68,7 +69,9 @@ export default defineConfig({
     },
     {
       name: "webkit",
-      testMatch: ["**/ui-v1.acceptance.spec.ts", "**/browser-git-sync.acceptance.spec.ts"],
+      testMatch: pluginRuntimeSuite
+        ? "**/plugin-runtime.acceptance.spec.ts"
+        : ["**/ui-v1.acceptance.spec.ts", "**/browser-git-sync.acceptance.spec.ts"],
       use: {
         browserName: "webkit",
         launchOptions: process.env.SCRIPTORIUM_E2E_WEBKIT
@@ -80,11 +83,11 @@ export default defineConfig({
   webServer: externalServer
     ? undefined
     : {
-        command: browserGitSuite
+        command: browserGitSuite || pluginRuntimeSuite
           ? `pnpm --dir app exec vite --config vite.config.ts --host 127.0.0.1 --port ${configuredPort}`
           : "node --import tsx/esm tests/e2e/test-server.ts",
         cwd: resolve("."),
-        url: browserGitSuite ? `${baseURL}/browser-git-test.html` : `${baseURL}/api/health`,
+        url: browserGitSuite ? `${baseURL}/browser-git-test.html` : pluginRuntimeSuite ? `${baseURL}/plugin-runtime-test.html` : `${baseURL}/api/health`,
         reuseExistingServer: false,
         timeout: 120_000,
       },
