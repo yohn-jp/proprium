@@ -1,65 +1,24 @@
-import { expect, test, type Page } from "@playwright/test";
-import { handleGitHubAuthRequest } from "../../workers/github-auth/github-auth-worker.js";
-
-const liveGitHubToken = process.env.PROPRIUM_E2E_GITHUB_TOKEN ?? process.env.SCRIPTORIUM_GITHUB_LIVE_TEST_TOKEN ?? "";
-const liveGitHubOwner = process.env.PROPRIUM_E2E_GITHUB_OWNER ?? process.env.SCRIPTORIUM_GITHUB_LIVE_TEST_OWNER ?? "";
-const liveGitHubRepository = process.env.PROPRIUM_E2E_GITHUB_REPOSITORY ?? process.env.SCRIPTORIUM_GITHUB_LIVE_TEST_REPOSITORY ?? "";
-const liveGitHubRepositoryId = Number(process.env.PROPRIUM_E2E_GITHUB_REPOSITORY_ID ?? process.env.SCRIPTORIUM_GITHUB_LIVE_TEST_REPOSITORY_ID ?? "0");
-const liveGitHubBranch = process.env.PROPRIUM_E2E_GITHUB_BRANCH ?? process.env.SCRIPTORIUM_GITHUB_LIVE_TEST_BRANCH ?? "";
-const liveGitHubLogin = process.env.PROPRIUM_E2E_GITHUB_LOGIN ?? process.env.SCRIPTORIUM_GITHUB_LIVE_TEST_LOGIN ?? "";
-const relayOrigin = "https://oauth.example.test";
-
-async function routeFixtureRelay(page: Page, hostOrigin: string): Promise<void> {
-  await page.route(`${relayOrigin}/**`, async route => {
-    const source = route.request();
-    const body = source.postDataBuffer();
-    const request = new Request(source.url(), {
-      method: source.method(),
-      headers: source.headers(),
-      body: body?.byteLength ? new Uint8Array(body) : undefined,
-    });
-    const response = await handleGitHubAuthRequest(request, {
-      GITHUB_CLIENT_ID: "Iv23liExampleClientId",
-      HOST_ORIGIN: hostOrigin,
-    }, async (input, init) => {
-      if (String(input) === "https://github.com/login/device/code") return Response.json({
-        device_code: "a".repeat(40), user_code: "ABCD-EFGH", verification_uri: "https://github.com/login/device",
-        expires_in: 900, interval: 1,
-      });
-      if (String(input) === "https://github.com/login/oauth/access_token") return Response.json({
-        access_token: liveGitHubToken,
-        token_type: "bearer",
-      });
-      return fetch(String(input), init);
-    });
-    await route.fulfill({
-      status: response.status,
-      headers: Object.fromEntries(response.headers.entries()),
-      body: Buffer.from(await response.arrayBuffer()),
-    });
-  });
-}
+import { expect, test } from "@playwright/test";
+import {
+  connectAndOpenGitHubBranch,
+  liveGitHubBranch,
+  liveGitHubOwner,
+  liveGitHubRepository,
+  liveGitHubRepositoryId,
+  liveGitHubToken,
+} from "./github-fixture-relay.js";
 
 test("Host signs in, opens a real GitHub branch, commits locally and publishes the exact SHA", async ({ page }) => {
   test.setTimeout(180_000);
   test.skip(!liveGitHubToken || !liveGitHubOwner || !liveGitHubRepository || !liveGitHubBranch ||
+    ["main", "master"].includes(liveGitHubBranch.toLowerCase()) ||
     !Number.isSafeInteger(liveGitHubRepositoryId) || liveGitHubRepositoryId <= 0,
-  "Requires the in-memory GitHub test token and its disposable repository branch.");
+  "Requires the in-memory GitHub test token and an explicit disposable non-main repository branch.");
 
   await page.addInitScript(() => { window.open = () => null; });
   await page.goto("/");
   const hostOrigin = new URL(page.url()).origin;
-  await routeFixtureRelay(page, hostOrigin);
-
-  await page.getByLabel("GitHub auth relay URL").fill(relayOrigin);
-  await page.getByRole("button", { name: "Connect GitHub" }).click();
-  await expect(page.getByRole("status")).toContainText("Connected to GitHub as");
-  const accountText = await page.getByRole("status").innerText();
-  if (liveGitHubLogin) expect(accountText.toLowerCase()).toContain(liveGitHubLogin.toLowerCase());
-
-  await page.getByLabel("Repository").selectOption(String(liveGitHubRepositoryId));
-  await page.getByLabel("Branch").fill(liveGitHubBranch);
-  await page.getByRole("button", { name: "Open workspace" }).click();
+  await connectAndOpenGitHubBranch(page, hostOrigin);
   await expect(page.getByText(new RegExp(`${liveGitHubRepository}.*${liveGitHubBranch}`))).toBeVisible();
 
   const mobileFiles = page.getByRole("button", { name: /^Files(?:\s|$)/u });

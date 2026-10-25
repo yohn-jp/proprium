@@ -28,7 +28,7 @@ const liveGitHubToken = process.env.PROPRIUM_E2E_GITHUB_TOKEN ?? process.env.SCR
 const liveGitHubOwner = process.env.PROPRIUM_E2E_GITHUB_OWNER ?? process.env.SCRIPTORIUM_GITHUB_LIVE_TEST_OWNER ?? "";
 const liveGitHubRepository = process.env.PROPRIUM_E2E_GITHUB_REPOSITORY ?? process.env.SCRIPTORIUM_GITHUB_LIVE_TEST_REPOSITORY ?? "";
 const liveGitHubRepositoryId = Number(process.env.PROPRIUM_E2E_GITHUB_REPOSITORY_ID ?? process.env.SCRIPTORIUM_GITHUB_LIVE_TEST_REPOSITORY_ID ?? "0");
-const liveGitHubBranch = process.env.PROPRIUM_E2E_GITHUB_BRANCH ?? process.env.SCRIPTORIUM_GITHUB_LIVE_TEST_BRANCH ?? "main";
+const liveGitHubBranch = process.env.PROPRIUM_E2E_GITHUB_BRANCH ?? process.env.SCRIPTORIUM_GITHUB_LIVE_TEST_BRANCH ?? "";
 const liveGitHubLogin = process.env.PROPRIUM_E2E_GITHUB_LOGIN ?? process.env.SCRIPTORIUM_GITHUB_LIVE_TEST_LOGIN ?? "";
 const fixtureOAuthToken = liveGitHubToken || `ghu_${"x".repeat(36)}`;
 
@@ -748,8 +748,9 @@ test("Smart HTTP preserves REST-incompatible commit SHAs and falls back for publ
 });
 
 test("live disposable GitHub sync fetches, fast-forwards, publishes and confirms the exact remote SHA", async ({ page }) => {
-  test.skip(!liveGitHubToken || !liveGitHubOwner || !liveGitHubRepository || !Number.isSafeInteger(liveGitHubRepositoryId) || liveGitHubRepositoryId <= 0,
-    "Requires the private synthetic GitHub fixture and an in-memory test token.");
+  test.skip(!liveGitHubToken || !liveGitHubOwner || !liveGitHubRepository || !liveGitHubBranch ||
+    ["main", "master"].includes(liveGitHubBranch.toLowerCase()) || !Number.isSafeInteger(liveGitHubRepositoryId) || liveGitHubRepositoryId <= 0,
+  "Requires the in-memory test token and an explicit disposable non-main GitHub branch.");
   liveSmartHttpRequests = [];
   await page.goto("/browser-git-test.html");
   await expect(page.locator("#ready")).toHaveText("ready");
