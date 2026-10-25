@@ -45,43 +45,24 @@ jobs:
           cache: pnpm
       - name: Install locked dependencies
         run: pnpm install --frozen-lockfile
-      - name: Validate release configuration
+      - name: Validate Host configuration
         env:
-          PROPRIUM_HOST_ORIGIN: ${{ vars.PROPRIUM_HOST_ORIGIN }}
-          PROPRIUM_GITHUB_OAUTH_CLIENT_ID: ${{ vars.PROPRIUM_GITHUB_OAUTH_CLIENT_ID }}
-          VITE_PROPRIUM_GITHUB_AUTH_RELAY: ${{ vars.VITE_PROPRIUM_GITHUB_AUTH_RELAY }}
+          VITE_PROPRIUM_GATEWAY_URL: ${{ vars.VITE_PROPRIUM_GATEWAY_URL }}
           VITE_PROPRIUM_PLUGIN_REGISTRY_URL: ${{ vars.VITE_PROPRIUM_PLUGIN_REGISTRY_URL }}
           VITE_PROPRIUM_PLUGIN_REGISTRY_KEY: ${{ vars.VITE_PROPRIUM_PLUGIN_REGISTRY_KEY }}
           VITE_PROPRIUM_PLUGIN_ARTIFACT_ORIGINS: ${{ vars.VITE_PROPRIUM_PLUGIN_ARTIFACT_ORIGINS }}
         run: |
-          test -n "$PROPRIUM_HOST_ORIGIN"
-          test -n "$PROPRIUM_GITHUB_OAUTH_CLIENT_ID"
-          test -n "$VITE_PROPRIUM_GITHUB_AUTH_RELAY"
+          test -n "$VITE_PROPRIUM_GATEWAY_URL"
           test -n "$VITE_PROPRIUM_PLUGIN_REGISTRY_URL"
           test -n "$VITE_PROPRIUM_PLUGIN_REGISTRY_KEY"
           test -n "$VITE_PROPRIUM_PLUGIN_ARTIFACT_ORIGINS"
       - name: Run Browser Host checks and static packaging rehearsal
         env:
-          VITE_PROPRIUM_GITHUB_AUTH_RELAY: ${{ vars.VITE_PROPRIUM_GITHUB_AUTH_RELAY }}
+          VITE_PROPRIUM_GATEWAY_URL: ${{ vars.VITE_PROPRIUM_GATEWAY_URL }}
           VITE_PROPRIUM_PLUGIN_REGISTRY_URL: ${{ vars.VITE_PROPRIUM_PLUGIN_REGISTRY_URL }}
           VITE_PROPRIUM_PLUGIN_REGISTRY_KEY: ${{ vars.VITE_PROPRIUM_PLUGIN_REGISTRY_KEY }}
           VITE_PROPRIUM_PLUGIN_ARTIFACT_ORIGINS: ${{ vars.VITE_PROPRIUM_PLUGIN_ARTIFACT_ORIGINS }}
         run: pnpm verify:browser
-      - name: Deploy the minimal GitHub OAuth and Smart HTTP relay
-        env:
-          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
-          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
-          PROPRIUM_HOST_ORIGIN: ${{ vars.PROPRIUM_HOST_ORIGIN }}
-          PROPRIUM_GITHUB_OAUTH_CLIENT_ID: ${{ vars.PROPRIUM_GITHUB_OAUTH_CLIENT_ID }}
-          TARGET_ENVIRONMENT: ${{ inputs.target_environment }}
-        run: |
-          test -n "$CLOUDFLARE_API_TOKEN"
-          test -n "$CLOUDFLARE_ACCOUNT_ID"
-          pnpm exec wrangler deploy --config workers/github-auth/wrangler.jsonc \
-            --env "${TARGET_ENVIRONMENT}" \
-            --name "proprium-github-auth-relay-${TARGET_ENVIRONMENT}" \
-            --var "HOST_ORIGIN:${PROPRIUM_HOST_ORIGIN}" \
-            --var "GITHUB_CLIENT_ID:${PROPRIUM_GITHUB_OAUTH_CLIENT_ID}"
       - name: Deploy Workers Static Assets
         env:
           CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}

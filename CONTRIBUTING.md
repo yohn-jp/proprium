@@ -2,7 +2,7 @@
 
 The architecture contracts are indexed at [docs/README.md](docs/README.md). [COMPATIBILITY](docs/architecture/COMPATIBILITY.md) records the retired Scriptorium runtime paths and identifies inherited source that is not part of the Browser Host.
 
-- Work on an isolated branch and submit a PR; do not alter main directly.
+- Work in an isolated branch/worktree and submit a PR unless the accepted task explicitly authorizes another integration path; do not bypass branch protection.
 - Treat architecture documents as product invariants. Check implementation claims against browser tests and any required live-provider evidence.
 - Limit changes to the accepted scope. Keep author workspaces, Git credentials, tokens, model weights, cached indexes, and private material out of commits and test fixtures.
 - Preserve GitHub remote authority, browser-local failure semantics, host-owned writes, plugin capability boundaries, and current-data provenance.
@@ -25,6 +25,8 @@ pnpm exec wrangler deploy --dry-run --config wrangler.jsonc
 ~~~
 
 `pnpm build` emits the static Proprium Host at `dist/proprium/`; it does not invoke Scriptorium profile builds or the retired Node server. `pnpm verify:browser` runs typechecking, focused unit tests, a static build and Wrangler dry-run. CI also runs the Chromium and WebKit acceptance suite. The dry-run does not contact or change a Cloudflare account.
+
+Gateway source lives in `gateway/`. Use the repository-pinned Go toolchain and run `cd gateway && go test -race ./... && go vet ./...`. `.github/workflows/verify-gateway.yml` runs those checks and builds a CGO-free Linux binary on push and pull requests. Gateway release binaries are published only by the dedicated version-tag or manual-tag workflow described in [Gateway operations](docs/deployment/GATEWAY.md).
 
 These checks exercise the browser-native runtime. Tests of preserved inherited libraries remain limited to the packages and execution mode they actually cover; they do not certify browser storage behavior, live GitHub sync, mobile browser behavior, WASM isolation or a public static deployment.
 

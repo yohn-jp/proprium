@@ -10,8 +10,11 @@ These documents define Proprium's architecture and implementation boundaries. Th
 | [Plugin platform](architecture/PLUGIN-PLATFORM.md) | WASM-first installation, packaging, registry, capabilities, UI and lifecycle |
 | [WASM plugin ABI](architecture/WASM-PLUGIN-ABI.md) | Component Model/WIT, Worker adapter, grants and versioned messages |
 | [Plugin distribution](architecture/PLUGIN-DISTRIBUTION.md) | Immutable signed artifacts, registry, installs, updates and rollback |
-| [Delivery and security](architecture/DELIVERY-AND-SECURITY.md) | Static host, R2 artifacts, cache, privacy, supply chain and trust boundaries |
-| [Cloudflare deployment](deployment/CLOUDFLARE.md) | Wrangler Workers Static Assets, R2 artifact publication and release gates |
+| [Delivery and security](architecture/DELIVERY-AND-SECURITY.md) | Static host, Go Gateway, R2 artifacts, privacy and trust boundaries |
+| [Live Workspace MCP Gateway](architecture/MCP-GATEWAY.md) | Live-only scope, Host/Gateway ownership, pairing, MCP transport, tools and errors |
+| [Gateway configuration and operation](deployment/GATEWAY.md) | Environment settings, non-root operation, Cloudflare Tunnel, binary release and checks |
+| [Cloudflare deployment](deployment/CLOUDFLARE.md) | Workers Static Assets, R2 artifact publication and Host release gates |
+| [Local development](development/LOCAL-DEVELOPMENT.md) | Browser Host and Gateway setup, checks, mock/live test boundaries |
 | [Workspace UX](architecture/WORKSPACE-UX.md) | Desktop/mobile interaction, durable user feedback, extension experience |
 | [Compatibility](architecture/COMPATIBILITY.md) | Inherited Scriptorium assets and boundaries of their reuse |
 | [Source provenance](architecture/SOURCE-PROVENANCE.md) | Copyright, extraction history and asset/model license requirements |

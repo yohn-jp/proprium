@@ -8,6 +8,8 @@ Desktop and mobile share repository identity, Git state, permission checks and p
 
 The Host always provides a usable basic file browser/editor/diff/history and synchronization surface even with no plugins, model, network or unsupported device acceleration. Plugins offer optional panels, commands and contextual views; missing/failed plugin content cannot hide the editor or the user's Git state.
 
+Live Workspace MCP is separate and explicit. It is off by default, and the Host opens no Gateway SSE connection while it is disabled. The owner selects a Gateway, enables the current workspace, reviews its published capabilities and authorizes or revokes individual MCP clients. The Host shows connection state and pending calls. A requested file change becomes a Host review proposal; an MCP call cannot silently apply it or publish a commit. Closing or suspending the browser can disconnect the workspace, and MCP clients then see it as unavailable until the owner reconnects.
+
 ## Save semantics and visible statuses
 
 - **Edited locally:** uncommitted worktree changes; may be lost.

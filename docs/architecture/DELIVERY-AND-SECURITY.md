@@ -1,49 +1,53 @@
-# Static delivery, resource distribution and trust
+# Static delivery, Gateway operations and trust
 
-**Status: delivery and security contract for the implemented static Host build.** CI checks the local bundle and Wrangler package with dry-run. The repository does not provision Cloudflare resources or establish that a production Host, R2 artifact origin or auth Worker has been deployed and tested.
+**Status: normative delivery and security contract.** CI builds the static Browser Host and tests/builds the Go Gateway. Local checks do not establish that a production Host, Gateway, Tunnel or R2 artifact origin is deployed and working.
 
 ## Delivery model
 
-- The Host is built as static HTML/CSS/TypeScript bundles plus any essential runtime data. Deploy through an ordinary static asset host/CDN; no Node/Fastify/OCI process runs for each Proprium user.
-- Browser computation (Git object operations, Markdown, analysis and enabled plugin WASM) stays on the user's device.
-- Independent plugin builds produce immutable versioned artifact sets. A registry publishes identities, compatibility and verified digests; a static object store such as **Cloudflare R2** can hold large WASM, dictionaries, model weights and optional resources.
-- Host deploys and plugin deploys have separate release lifecycles. No container composition, server runtime install, or bundle regeneration per plugin installation.
-- Proper cache headers and digest-based asset paths permit browser/CDN reuse. Configure correct MIME for wasm, CORS for cross-origin fetch, CSP and any WebAssembly/Worker isolation headers supported by deployed browser targets.
-- The origin of a downloaded WASM file does not by itself make the code trusted. Integrity validation precedes execution, and Host-granted capabilities determine what it may do.
+- The Host is built as static HTML/CSS/TypeScript bundles plus essential runtime data. Deploy it to an ordinary static asset host/CDN; it requires no Node application server or container.
+- Workspace editing, local Git operations and enabled plugin WASM compute run in the user's browser.
+- Independent plugin builds produce immutable versioned artifact sets. A registry publishes identities, compatibility and verified digests; a static object store such as Cloudflare R2 can hold large WASM and optional resources.
+- Host deploys, Gateway binaries and plugin artifacts have separate release lifecycles.
+- Proper cache headers and digest-based asset paths permit browser/CDN reuse. Configure correct MIME for WASM, CORS for cross-origin fetch, CSP and any WebAssembly/Worker isolation headers supported by deployed browser targets.
+- A downloaded WASM file's origin does not by itself make the code trusted. Integrity validation precedes execution, and Host-granted capabilities determine what it may do.
 
-A static delivery model removes **home-server bandwidth and compute from ordinary application traffic**, not all network or provider costs. Initial host/assets downloads, GitHub synchronization, cache misses and optional external services still consume network. R2, CDN and GitHub have usage limits/costs; no claim of limitless free distribution is made.
+A static delivery model removes home-server bandwidth and compute from ordinary Host traffic, not all network or provider costs. Initial Host/assets downloads, GitHub synchronization, cache misses, Gateway traffic and optional external services still use network. CDN, Tunnel and GitHub services have usage limits and costs; no unlimited capacity is promised.
 
-## Browser-only data boundary
+## Browser data and Gateway boundary
 
-The only mandatory remote service for publishing is the user's GitHub repository. Initial UI and plugin downloads are static delivery. No Proprium-managed database, user account service, daemon or continuously running sync worker is required for local editing.
+GitHub is the remote authority for published repositories. Initial UI and plugin downloads are static delivery. No Proprium-managed database, account service, daemon or continuous sync worker is required for local editing. An operator may run the optional Go Gateway as a non-root process for GitHub OAuth Device Flow, restricted Git Smart HTTP fallback and Live Workspace MCP.
 
-Browser GitHub sync is implemented through the Host-owned Git transport and the optional restricted Worker under `workers/github-auth` for device authorization and Smart HTTP relay. The Worker checks repository identity and permissions, then streams Git traffic; it is not a worktree store or plugin runtime. Live authorization and publishing still depend on configuring and testing the intended GitHub and Worker endpoints.
+The Host makes authenticated GitHub REST requests directly when the existing adapter can preserve the local commit SHA. For Smart HTTP fallback, the Gateway validates the requested repository ID and read/write permission before streaming Git traffic. Device OAuth and Git relay use fixed GitHub upstreams and routes; the Gateway is not a generic HTTP proxy. It does not persist GitHub tokens, workspaces, workspace files, search indexes or Git objects.
 
-For private repositories, prevent credentials from reaching plugins, remote artifact origins, analytics, URLs or logs. Prefer short-lived/scoped grants where feasible; token acquisition and persistence strategy require threat-model and browser verification. A static page is not an authorization server and cannot safely embed a long-lived shared secret.
+Live MCP connects only to a workspace currently open in the browser. The owner explicitly publishes that workspace and authorizes clients. The Gateway maps each authorized MCP client to its selected live workspace and relays tool calls through a browser SSE connection. Workspace and Git operations, WASM plugin execution and user approval remain in the Browser Host. The Gateway keeps only in-flight session and request state in memory; restart invalidates grants and disconnects MCP access. There is no WebSocket or timer-driven polling.
+
+For private repositories, credentials must not reach plugins, remote artifact origins, analytics, URLs or logs. GitHub OAuth tokens and MCP client tokens are different credentials and cannot be substituted for each other. A static Host does not embed a client secret or a shared long-lived MCP credential.
 
 ## Threat model
 
 | Threat | Required boundary |
 | --- | --- |
-| Tampered/misattributed plugin bundle | Immutable artifact digest plus publisher trust/signature or approved registry admission |
-| Arbitrary plugin JS / DOM / storage access | Standard external plugins provide WASM plus declarative UI; no publisher-controlled JS executing in Host origin |
-| Excessive compute / hang / memory exhaustion | Per-plugin Worker, bounded Host RPC, cancellation and termination; disclose limits of browser OOM containment |
-| Forged Host requests / stale revision | Host validates instance/epoch/workspace, capabilities and expected revision on each operation |
-| Git credential theft / cross-repo writes | Host-only credentials, explicit repo scope, least privilege and GitHub permission/revision checks |
+| Tampered plugin bundle | Immutable artifact digest plus publisher trust/signature or approved registry admission |
+| Arbitrary plugin JS / DOM / storage access | External plugins provide WASM and declarative UI; no publisher-controlled JS executes in the Host origin |
+| Excessive plugin compute | Per-plugin Worker, bounded Host RPC, cancellation and termination; disclose limits of browser OOM containment |
+| Forged Host request or stale revision | Host validates workspace, generation, capability, expected revision and proposal state on each operation |
+| Git credential theft or cross-repository writes | Host-owned credentials; Gateway restricts relay routes and verifies repository identity and permission |
+| Token disclosure | No credential in a URL or log; owner and client tokens are not exposed to plugins or GitHub OAuth calls |
+| Unauthorized MCP client | Explicit owner pairing, per-client capability subset, revocation and in-memory client/workspace binding |
+| Cross-origin, CSRF or DNS rebinding | Exact allowed Origin/Host checks, no cookie authorization, bounded inputs and public-URL validation |
+| Stale browser response or duplicate mutation | Workspace/generation/request identity checks, deadlines, cancellation and no mutation retry after disconnect |
 | Unintended off-device data transmission | Default-deny plugin network capability; user-visible consent and restricted destinations where allowed |
-| Evicted browser storage | Local draft/commit/push state clearly distinguished; optional export, no guaranteed local recovery |
-| Stale CDN cache or artifact replacement | Content-addressed immutable URLs, pinned versions, atomic publication of registry metadata and integrity checks |
+| Evicted browser storage | Draft/commit/publish states remain distinct; no guaranteed local recovery |
+| Stale CDN cache or artifact replacement | Content-addressed immutable URLs, pinned versions, atomic publication and integrity checks |
 
-Separate-origin iframe UI is a future exceptional path for plugins that genuinely need custom rendering. It is not the default runtime for WASM-only plugins; isolate only what is actually executable in that realm. Third-party JS in an opaque sandbox still requires CSP, origin checks, schema validation and device crash tests.
+Separate-origin iframe UI is an exceptional path for plugins that need custom rendering; it is not the default runtime for WASM plugins. Third-party JavaScript in a sandbox still requires CSP, origin checks, schema validation and device crash tests.
 
 ## Offline and mobile
 
-After a user has loaded the Host and required plugin bytes, offline authoring can work from a local workspace. A cold visit or a missing uncached dependency **cannot** be claimed offline-capable without an actual tested service-worker/cache plan. Safari and Android differ in storage eviction, long-task suspension, thread/WebGPU support and memory limits. R2 placement does not make a plugin available while offline unless cached.
+After a user has loaded the Host and required plugin bytes, offline authoring can work from a local workspace. The Gateway is unavailable when its process or browser connection is down. Mobile background execution is not guaranteed; a suspended or terminated browser may disconnect Live MCP. A cold visit or missing uncached dependency cannot be claimed offline-capable without an actual tested caching plan. Safari and Android differ in storage eviction, task suspension, threading and memory limits.
 
 ## Release verification
 
-Require exact-source build and checks: static production bundle without Node runtime dependencies, bounded cold-start asset set, offline/restart tests, plugin integrity/capability fault injection, mobile WebKit/Android/desktop Chromium, actual GitHub sync and conflict paths, security headers/CORS, cache/version pinning and credentials inspection. Report skipped checks as unverified, not passed.
+Require exact-source checks for the static production bundle, Go Gateway tests and build, browser storage/plugin behavior, supported Chromium/WebKit classes, actual GitHub sync, request security, credentials inspection and any deployed Tunnel. Report skipped environment checks as unverified, not passed.
 
-See [plugin platform](PLUGIN-PLATFORM.md) and [Git/worktree contract](GIT-AND-STORAGE.md).
-
-For actual Wrangler command structure, R2 publication, release ordering, and the no-deploy-before-browser-build constraint, see [Cloudflare deployment](../deployment/CLOUDFLARE.md).
+See [plugin platform](PLUGIN-PLATFORM.md), [Git/worktree contract](GIT-AND-STORAGE.md), [MCP Gateway](MCP-GATEWAY.md), and [Gateway deployment](../deployment/GATEWAY.md).

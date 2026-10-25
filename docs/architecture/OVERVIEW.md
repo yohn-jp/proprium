@@ -13,23 +13,25 @@ A Proprium user's ordinary editing and plugin compute must not traverse a self-h
 ## Logical architecture
 
 ~~~text
-       Static hosting / CDN                         GitHub
-   Host JS/CSS + versioned artifacts         authoritative repository
-                   |                                  ^
-                   v                                  | explicit sync
-        +--------------------------+                  |
-        | Browser Host             |------------------+
-        | - Desktop / Mobile UI    |  Git adapter / optional transport
-        | - Local repository port  |
-        | - Host-authorized writes |
-        | - Plugin manager/broker  |
-        +------------+-------------+
-                     |
-         +-----------+-----------+
-         |                       |
-    Local Git/worktree       WASM-first plugins
-    browser storage         Worker / bounded RPC
-    transient local state   declarative UI contributions
+   Static hosting / CDN             Internet / MCP Client
+  Host JS/CSS + plugin assets                 |
+           |                                HTTPS
+           v                                  v
+  +------------------+                Cloudflare Tunnel
+  | Browser Host     |                       |
+  | - Desktop/Mobile |   SSE + HTTP           v
+  | - Local Git      |<----------------> Proprium Gateway
+  | - Host writes    |                 local non-root process
+  | - Plugin broker |                        |
+  +--------+---------+                        | OAuth / Smart HTTP
+           |                                  v
+           +---- GitHub REST -----------> GitHub remote
+           |
+   +-------+----------+
+   |                  |
+ Local Git/worktree  WASM-first plugins
+ browser storage     Worker / bounded RPC
+ transient local     declarative UI contributions
 ~~~
 
 ## Ownership and dependency direction
@@ -44,6 +46,8 @@ A Proprium user's ordinary editing and plugin compute must not traverse a self-h
 | Optional analyses, indexes, models | Installed plugins | Derived data, never independent repository authorities |
 | Workspace layout, editor and navigation | Host UI | Plugins may contribute declared surfaces, not mutate Host DOM or global layout |
 | Distribution | Static host and artifact origin(s) | Integrity and publisher trust checked before activation; assets lazy-loaded |
+| OAuth/Smart HTTP transport | Optional Proprium Gateway | Transient request relay; no repository, workspace or Git object persistence |
+| Live Workspace MCP | Browser Host plus Gateway | Browser owns tools, current workspace, capabilities, review and mutation |
 
 The Host owns document identity, revision, approved change application and Git synchronization. A plugin can be written in any language that produces a supported WASM artifact but obtains no ambient filesystem, network, cookie, browser DOM, or Git permission. A plugin crash must not corrupt saved workspace data; complete process isolation is not guaranteed by WASM alone.
 
@@ -58,6 +62,12 @@ The Host owns document identity, revision, approved change application and Git s
 7. **Source-independent Core.** Core operates on repository files. Writer-specific hierarchies, canvases, terms, graphs and model computations belong to optional adapters/plugins, not mandatory file formats.
 8. **Target device support.** Desktop and mobile are distinct interaction experiences sharing one storage and mutation contract. Browser-specific limitations must be measured rather than inferred.
 9. **Local privacy by default.** User content is processed on-device unless a specific user-authorized feature explicitly transmits it.
+
+## Optional Gateway
+
+The Go Gateway is an optional single binary for GitHub OAuth Device Flow, repository-scoped Git Smart HTTP fallback, and explicitly enabled Live Workspace MCP. GitHub REST calls continue directly from the Browser Host. When Live MCP is enabled, the current browser workspace opens an outbound SSE connection; the Gateway relays authorized MCP tool calls over that connection. Workspace reads, Git operations, plugin execution, proposals and approval stay in the Browser Host. Closing the browser disconnects the live workspace and makes it unavailable to MCP clients.
+
+The Gateway retains only active in-memory connections and requests. It does not store user identities, GitHub repositories, workspaces, workspace files, search indexes or Git objects. Owner and client grants expire on Gateway restart. See [MCP Gateway](MCP-GATEWAY.md) and [Gateway deployment](../deployment/GATEWAY.md).
 
 ## Accepted out of scope
 

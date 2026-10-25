@@ -1,14 +1,14 @@
 # Proprium
 
-Proprium's target product is a browser-native, Git-native workspace with WASM-first plugins. Read [architecture](docs/architecture/OVERVIEW.md), [Git and storage](docs/architecture/GIT-AND-STORAGE.md), [plugin platform](docs/architecture/PLUGIN-PLATFORM.md), and [delivery/security](docs/architecture/DELIVERY-AND-SECURITY.md) before changing their boundaries. Read [workspace UX](docs/architecture/WORKSPACE-UX.md) for UI work and [compatibility](docs/architecture/COMPATIBILITY.md) when using inherited code.
+Proprium is a browser-native, Git-native workspace with WASM-first plugins and an optional Go Gateway for OAuth, restricted Git Smart HTTP and explicitly enabled Live Workspace MCP. Read [architecture](docs/architecture/OVERVIEW.md), [Git and storage](docs/architecture/GIT-AND-STORAGE.md), [plugin platform](docs/architecture/PLUGIN-PLATFORM.md), and [delivery/security](docs/architecture/DELIVERY-AND-SECURITY.md) before changing their boundaries. Read [workspace UX](docs/architecture/WORKSPACE-UX.md) for UI work, [MCP Gateway](docs/architecture/MCP-GATEWAY.md) for its protocol contract, and [compatibility](docs/architecture/COMPATIBILITY.md) when using inherited code.
 
 ## Authority and scope
 
 The user request and accepted implementation contract take priority. Proprium's architecture documents define **target behavior**, not assertions of existing support. Most application code remains inherited from Scriptorium until explicitly migrated. Do not silently reinterpret server-based Scriptorium functionality as Proprium functionality or change Scriptorium's own repository.
 
-GitHub is the authoritative remote for user data. Browser drafts and local Git commits remain at risk until remotely confirmed. Plugin code cannot directly own Git publishing, credentials, global browser storage, or host UI authority. Atlas integration is explicitly deferred; do not import or implement it without authorization.
+GitHub is the authoritative remote for user data. Browser drafts and local Git commits remain at risk until remotely confirmed. The Gateway has no durable state and cannot store repositories, workspace contents, indexes or Git objects. Plugin code cannot directly own Git publishing, credentials, global browser storage, or host UI authority. Atlas integration is explicitly deferred; do not import or implement it without authorization.
 
-Follow the [organization governance](https://github.com/yohn-jp/.github/blob/main/.github/agent-governance/AGENTS.md) and applicable skills. Inari is suspended. Use a separate branch/worktree and PR; do not write to main, merge, publish or deploy without explicit authorization.
+Follow the [organization governance](https://github.com/yohn-jp/.github/blob/main/.github/agent-governance/AGENTS.md) and applicable skills. Inari is suspended. Use an isolated branch/worktree unless the user explicitly authorizes a different lifecycle. Never force-push or destroy remote resources without confirming their identity and use.
 
 ## Verification
 

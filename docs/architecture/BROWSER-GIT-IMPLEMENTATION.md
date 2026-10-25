@@ -17,11 +17,11 @@ The contracts in [Git and storage](GIT-AND-STORAGE.md) remain normative: **GitHu
 
 ## GitHub transport selection
 
-The Host-owned adapter uses **GitHub REST Git Data API** where it can preserve the local Git objects and exact commit SHA. It verifies returned object IDs and preserves tree modes, parent commits, identity and timestamps. When REST cannot represent a commit or safely perform an update, the adapter uses the narrowly scoped Git Smart HTTP relay. It must never fabricate equivalent history or claim an ordinary push when the resulting remote commit differs.
+The Host-owned adapter uses the **GitHub REST Git Data API** where it can preserve the local Git objects and exact commit SHA. It verifies returned object IDs and preserves tree modes, parent commits, identity and timestamps. When REST cannot represent a commit or safely perform an update, the adapter uses the Proprium Gateway's narrowly scoped Git Smart HTTP relay. It must never fabricate equivalent history or claim an ordinary push when the resulting remote commit differs. Authenticated GitHub REST requests continue directly from the browser.
 
 Normal non-force branch updates are protected by a current remote ref/ancestry check, with Smart HTTP used where REST cannot safely update the ref. Verify the intended commit is reachable after publication; an HTTP 2xx response alone is not a remote-save receipt. Live concurrent-writer and lost-response behavior remains part of deployment acceptance.
 
-Auth uses GitHub's device authorization flow through the optional restricted Worker, which keeps the public Host from embedding a client secret. The Worker is a network edge component only; it is never a user workspace store or compute server. Never expose tokens to WASM guest imports. The configured endpoint and real account permission behavior must be verified before live sync is advertised.
+Auth uses GitHub's device authorization flow through the optional Proprium Gateway, which keeps the public Host from embedding a client secret. The Gateway holds no durable GitHub token, workspace or Git data. Never expose tokens to WASM guest imports or logs. The configured endpoint and real account permission behavior must be verified before live sync is advertised. See [Gateway configuration](../deployment/GATEWAY.md) and [Live Workspace MCP](MCP-GATEWAY.md).
 
 ## Required implementation tests
 
