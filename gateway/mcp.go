@@ -156,6 +156,9 @@ func (r *LiveRegistry) serveMCP(w http.ResponseWriter, req *http.Request) {
 		mcpHTTPError(w, http.StatusBadRequest, message.ID, -32020, err.Error())
 		return
 	}
+	if req.Header.Get("MCP-Protocol-Version") == currentMCPVersion {
+		w.Header().Set("MCP-Protocol-Version", currentMCPVersion)
+	}
 	client, clientState := r.findClient(bearerToken(req))
 	if client == nil {
 		if clientState == "workspace_unavailable" {
@@ -185,6 +188,17 @@ func (r *LiveRegistry) serveMCP(w http.ResponseWriter, req *http.Request) {
 		return
 	}
 	switch message.Method {
+	case "server/discover":
+		if req.Header.Get("MCP-Protocol-Version") != currentMCPVersion || !emptyOrObject(message.Params) {
+			mcpHTTPError(w, http.StatusBadRequest, message.ID, -32602, "server/discover requires current MCP protocol metadata")
+			return
+		}
+		writeMCP(w, http.StatusOK, mcpEnvelope{JSONRPC: "2.0", ID: message.ID, Result: map[string]any{
+			"supportedVersions": []string{currentMCPVersion},
+			"capabilities":      map[string]any{"tools": map[string]any{"listChanged": false}},
+			"ttlMs":             0, "cacheScope": "private",
+			"instructions": "Tools operate on the currently connected Browser Host. Changes require explicit Host review.",
+		}})
 	case "ping":
 		writeMCP(w, http.StatusOK, mcpEnvelope{JSONRPC: "2.0", ID: message.ID, Result: map[string]any{}})
 	case "tools/list":
@@ -345,7 +359,7 @@ func (r *LiveRegistry) serveToolList(w http.ResponseWriter, message mcpRequest, 
 	for _, name := range names {
 		tools = append(tools, liveTools[name])
 	}
-	writeMCP(w, http.StatusOK, mcpEnvelope{JSONRPC: "2.0", ID: message.ID, Result: map[string]any{"tools": tools}})
+	writeMCP(w, http.StatusOK, mcpEnvelope{JSONRPC: "2.0", ID: message.ID, Result: map[string]any{"tools": tools, "ttlMs": 0, "cacheScope": "private"}})
 }
 func emptyOrObject(raw json.RawMessage) bool {
 	if len(raw) == 0 {
@@ -576,6 +590,15 @@ func mcpHTTPError(w http.ResponseWriter, status int, id json.RawMessage, code in
 func writeMCP(w http.ResponseWriter, status int, message mcpEnvelope) {
 	if !validRPCID(message.ID) {
 		message.ID = json.RawMessage("null")
+	}
+	if message.Result != nil && w.Header().Get("MCP-Protocol-Version") == currentMCPVersion {
+		encoded, err := json.Marshal(message.Result)
+		var result map[string]json.RawMessage
+		if err == nil && json.Unmarshal(encoded, &result) == nil && result != nil {
+			result["resultType"] = json.RawMessage(`"complete"`)
+			result["_meta"], _ = json.Marshal(map[string]any{"io.modelcontextprotocol/serverInfo": map[string]string{"name": "proprium-gateway", "version": version}})
+			message.Result = result
+		}
 	}
 	data, err := json.Marshal(message)
 	if err != nil || len(data) > maxMCPResponseBytes {

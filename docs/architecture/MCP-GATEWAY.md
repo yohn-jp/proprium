@@ -13,7 +13,7 @@ The Gateway terminates MCP Streamable HTTP, authenticates paired clients, checks
 The MCP protocol revision is pinned to the current stable [Streamable HTTP specification](https://modelcontextprotocol.io/specification/2026-07-28/basic/transports/streamable-http).
 
 - MCP endpoint: `POST /mcp` using JSON-RPC over the current stable Streamable HTTP protocol revision `2026-07-28`.
-- MCP initialization and the `Mcp-Session-Id` session model are not needed by this revision; the server also accepts legacy initialization from revision `2025-11-25` for clients that use that handshake.
+- Current clients discover supported versions and capabilities with authenticated `server/discover`. Successful current-protocol results carry `resultType: complete` and server identity metadata; discovery and tool lists use `ttlMs: 0` and `cacheScope: private` so grants are checked on each request. This revision needs no `Mcp-Session-Id`. The server also accepts legacy initialization from revision `2025-11-25` for clients that use that handshake.
 - MCP requests and notifications use HTTP. The server may return a JSON response or a Streamable HTTP SSE response as allowed by the negotiated protocol. `GET /mcp` is rejected when no server-initiated stream is active.
 - Browser-to-Gateway live transport is a separate authenticated SSE connection at `GET /live/sessions/{id}/events`, with JSON result delivery over HTTP POST. This is an outbound browser connection. There is no WebSocket and no periodic poll.
 - Each call has a request ID, workspace ID, connection generation and deadline. The Host rejects stale or duplicate work. Disconnect cancels pending reads and proposals and invalidates that generation. Reconnecting creates a new session and requires fresh client authorization.

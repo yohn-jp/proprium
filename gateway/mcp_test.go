@@ -301,3 +301,38 @@ func TestLiveSessionDisconnectInvalidatesClientAndRejectsStaleResponse(t *testin
 		t.Fatalf("stale response accepted: %s", fmt.Sprint(request))
 	}
 }
+
+func TestCurrentMCPDiscoveryAndCacheMetadata(t *testing.T) {
+	f := newLiveFixture(t, []string{"workspace_info"}, []string{"workspace_info"})
+	params := map[string]any{"_meta": map[string]any{"io.modelcontextprotocol/protocolVersion": currentMCPVersion, "io.modelcontextprotocol/clientInfo": map[string]string{"name": "sdk-test", "version": "1"}, "io.modelcontextprotocol/clientCapabilities": map[string]any{}}}
+	for _, method := range []string{"server/discover", "tools/list"} {
+		response, body := f.mcpRequest(method, 1, params, f.clientToken, currentMCPVersion)
+		if response.StatusCode != http.StatusOK {
+			t.Fatalf("%s: %d %s", method, response.StatusCode, body)
+		}
+		var envelope struct {
+			Result map[string]any `json:"result"`
+		}
+		if err := json.Unmarshal(body, &envelope); err != nil {
+			t.Fatal(err)
+		}
+		if envelope.Result["resultType"] != "complete" || envelope.Result["cacheScope"] != "private" || envelope.Result["ttlMs"] != float64(0) {
+			t.Fatalf("invalid modern result: %s", body)
+		}
+		meta, _ := envelope.Result["_meta"].(map[string]any)
+		info, _ := meta["io.modelcontextprotocol/serverInfo"].(map[string]any)
+		if info["name"] != "proprium-gateway" {
+			t.Fatalf("missing server identity: %s", body)
+		}
+		if method == "server/discover" {
+			versions, _ := envelope.Result["supportedVersions"].([]any)
+			if len(versions) != 1 || versions[0] != currentMCPVersion {
+				t.Fatalf("invalid protocol discovery: %s", body)
+			}
+		}
+	}
+	response, _ := f.mcpRequest("server/discover", 2, params, "invalid-token", currentMCPVersion)
+	if response.StatusCode != http.StatusUnauthorized {
+		t.Fatalf("unauthenticated discovery returned %d", response.StatusCode)
+	}
+}
