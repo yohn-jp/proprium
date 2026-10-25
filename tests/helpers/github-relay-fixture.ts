@@ -11,9 +11,10 @@ export interface OAuthFixtureOptions {
 const corsMethods = "GET, POST, OPTIONS";
 const corsHeaders = "Accept, Authorization, Content-Type, Git-Protocol, X-Proprium-Repository-Id";
 
-function cors(origin: string): Record<string, string> {
+function cors(origin: string, allowCredentials = false): Record<string, string> {
   return {
     "Access-Control-Allow-Origin": origin,
+    ...(allowCredentials ? { "Access-Control-Allow-Credentials": "true" } : {}),
     "Access-Control-Allow-Methods": corsMethods,
     "Access-Control-Allow-Headers": corsHeaders,
     "Access-Control-Expose-Headers": "Git-Protocol",
@@ -34,7 +35,7 @@ export async function installMockGitHubOAuth(page: Page, options: OAuthFixtureOp
   await page.context().route(`${origin}/oauth/**`, async route => {
     const request = route.request();
     const path = new URL(request.url()).pathname;
-    const headers = cors(hostOrigin);
+    const headers = cors(hostOrigin, true);
     if (request.method() === "OPTIONS") return route.fulfill({ status: 204, headers });
     if (request.method() !== "POST") return route.fulfill({ status: 405, headers });
     if (path === "/oauth/device/code") return route.fulfill({ status: 200, headers, json: {

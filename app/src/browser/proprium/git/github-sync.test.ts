@@ -44,6 +44,10 @@ test("device authorization validates the user and holds the access token only in
   assert.deepEqual(await client.completeAuthorization(), { id: 44, login: "writer" });
   assert.deepEqual(client.account(), { id: 44, login: "writer" });
   await client.remoteHead();
+  const gatewayCalls = calls.filter(call => call.url.startsWith("https://oauth.example.test/"));
+  const directGitHubCalls = calls.filter(call => call.url.startsWith("https://api.github.com/"));
+  assert.ok(gatewayCalls.length > 0 && gatewayCalls.every(call => call.init?.credentials === "include"));
+  assert.ok(directGitHubCalls.length > 0 && directGitHubCalls.every(call => call.init?.credentials === "omit"));
   assert.equal(suppliedToken, "gho_fixture_secret");
   assert.equal(JSON.stringify(prompt).includes("gho_fixture_secret"), false);
   assert.equal(calls.at(-1)?.init?.credentials, "omit");
