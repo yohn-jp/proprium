@@ -33,7 +33,7 @@ MCP clients commonly connect without a browser Origin header. If an Origin is pr
 
 The authenticated SSE stream sends `ready`, `request` and `cancel` events. Each request includes request ID, workspace ID, generation, tool name, arguments and deadline. The Browser Host replies through the matching session's HTTP response route with status `completed`, `failed` or `cancelled`, the same workspace and generation, and a bounded result or error. The Gateway verifies session token, request ID, workspace, generation and one-time completion before returning the MCP result. It rejects stale events, cross-client calls and responses from another workspace.
 
-Session creation, event and response bodies, pairing changes and MCP calls have byte, concurrency and deadline limits. If a bounded queue is full, the request fails closed. Logs report route, duration and status without request bodies, file contents or credentials.
+Session creation, event and response bodies, pairing changes and MCP calls have byte, concurrency and deadline limits. If a bounded queue is full, the request fails closed. Logs report startup and Live connection lifecycle events without request bodies, file contents, workspace identifiers or credentials.
 
 ## Initial tools
 

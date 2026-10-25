@@ -10,6 +10,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"log"
 	"net"
 	"net/http"
 	"net/url"
@@ -391,6 +392,8 @@ func (r *LiveRegistry) events(w http.ResponseWriter, req *http.Request, id strin
 	}
 	r.mu.Unlock()
 	defer r.expireSession(s)
+	log.Print("Live Workspace stream connected")
+	defer log.Print("Live Workspace stream disconnected")
 	w.Header().Set("Content-Type", "text/event-stream; charset=utf-8")
 	w.Header().Set("Cache-Control", "no-cache, no-store")
 	w.Header().Set("X-Accel-Buffering", "no")
