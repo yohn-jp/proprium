@@ -1,0 +1,171 @@
+# Proprium UI・導線アーキテクチャ
+
+**Status: normative design contract.** UIの実装変更や公開環境の動作証明ではない。[機能・画面台帳](SCREEN-CATALOG.md)が到達可能な実装と不足を区別し、[全遷移図](USER-FLOWS.md)が操作・成功・拒否・復旧経路を定める。本書はそれらを支える状態、認証、責務、受入条件の正本である。
+
+## 1. 設計の固定点
+
+Propriumはgeneric Git filesを扱うbrowser-native workspaceである。ローカル編集・local Git・検証済みcached WASM利用にGateway、GitHubログイン、外部modelを要求しない。GitHubは公開済みデータの正本であり、browser journal、worktree、local commitをremote保存と呼ばない。
+
+Desktop/Mobileの既存shell、CodeMirror、読書・組版、dock/split/floating、retained editor/toolsを再利用する。旧Node application controller、Hosted/OCI、常設Workspace backendを復活させない。見た目を全面置換することもこの設計の目的ではない。
+
+初回開始・認証・repository選択は編集用sidebarとは異なるタスクである。Desktopでは主領域、Mobileでは全幅のタスク面に置く。Workspace選択後は既存の多ペイン構成／mobile task navigationへ移る。Home、設定、認証面を整理するためにeditorやplugin/MCP runtimeを複製しない。
+
+### 文書の責務
+
+| 文書 | 正本とする内容 |
+| --- | --- |
+| [Overview](OVERVIEW.md) | 製品境界・依存方向・データ所有者 |
+| [Workspace UX](WORKSPACE-UX.md) | 編集継続性・端末別操作・表示の基本原則 |
+| [Screen catalogue](SCREEN-CATALOG.md) | 機能、画面ID、実装への接続、未整備導線 |
+| [User flows](USER-FLOWS.md) | 利用者操作と遷移・中止・再試行・戻り先 |
+| 本書 | 画面を支える状態・責務・認可・受入条件 |
+| [Git/storage](GIT-AND-STORAGE.md)、[Plugin platform](PLUGIN-PLATFORM.md)、[MCP](MCP-GATEWAY.md) | 各ドメインのmutation、revision、capability、transport契約 |
+| [Gateway operations](../deployment/GATEWAY.md) | 実在するCLI、設定、配布・運用手順 |
+
+画面IDは論理識別子であり、新規URL・API・CLIの実装宣言ではない。画面だけを追加してドメインのguardを弱めない。ソース実装の到達点と目標設計を混ぜず、後続の実装差分に応じて台帳を更新する。
+
+## 2. 機能の所有者と実装境界
+
+```mermaid
+flowchart TD
+  User["利用者の明示操作"] --> Shell["DesktopShell / MobileShell"]
+  Shell --> Nav["Host-owned navigation intent / dirty・flush・世代guard"]
+  Nav --> Host["HostApp / Workspace scope / orchestration"]
+  Shell --> Layout["Workspace / declarative layout・panel catalogue"]
+  Host --> Editor["RestoredEditor / SceneEditor / CodeMirror"]
+  Editor --> Journal["BrowserJournal / recovery only"]
+  Host --> Git["BrowserLocalGit / Worker / expected revisions"]
+  Host --> Plugins["BrowserPluginManager / capability broker / WASM Worker"]
+  Host --> Live["LiveMcpPanel / scoped requests・proposal review"]
+  Plugins -->|変更提案のみ| Review["Host approval / 同一Workspaceの単一writer"]
+  Live -->|変更提案のみ| Review
+  Review --> Git
+  Git --> Local["browser worktree・objects・refs"]
+  Host --> Sync["GitHubAccountSession / GitHubSyncClient"]
+  Sync -->|REST直接 / 明示remote操作| GitHub["GitHub / published authority"]
+  Sync -->|OAuth・限定Smart HTTP| Gateway["optional Go Gateway / memory-only live state"]
+  Live <-->|SSE + response POST| Gateway
+  Gateway --> GitHub
+  Client["認可済みMCP client"] --> Gateway
+```
+
+この図のnavigation intentとHost approvalは論理責務であり、新しい汎用frameworkや別runtimeの導入要求ではない。既存`beforeLayoutChange`、`requestedPanel`、世代検証、Git adapterを利用する。pluginとMCPが別のreview表示を持っていても、revision検証とHost-owned writeという契約は同じである。
+
+| 層 | 保有する状態／許される処理 | 保有しない権限 |
+| --- | --- | --- |
+| Shell / Workspace | view、panel配置、focus、scroll、戻り先、非秘密の設定 | token発行、Git commit/push、plugin実行の独立所有 |
+| Host orchestration | active Workspace、file、操作intent、GitHub session参照、明示的な効果の開始 | 古い画面の応答で別Workspaceを変更する権限 |
+| Editor / journal | 入力、selection、IME、undo、回復記録、表示設定 | GitHub保存完了の独自判定 |
+| Browser Git / sync | revision付き読書き、local commit、remote比較、非force公開、確認 | 無承認の内容消去／force push |
+| Plugin manager / broker | verified artifact、workspace grants、実行lease、derived result | Git認証情報・Host DOM・無制限filesystem・独立publication |
+| Live bridge / Gateway | scoped client、session generation、deadline、request correlation | 永続Workspace、server-side Git、owner承認を省略した適用 |
+
+UI構成変更は表示の所有権を変えるだけである。panelを非表示にしてもeditor入力、undo、active plugin、Live接続を終了しない。Workspace変更／明示Stop・Disable／session失効では、対応する実行・認可を無効化する。二重mountや見えない別の接続を作らない。
+
+## 3. 状態を独立した軸として扱う
+
+一つの`busy`、`connected`、`saved`で全機能の状態を表さない。以下は論理モデルであり、型名や既存stateの一括書換えを要求しない。
+
+| 軸 | 区別する状態 | 表示・操作の帰結 |
+| --- | --- | --- |
+| navigation | Home / task / Workspace / dialog / sheet、復帰先 | URLやpanel selectionだけで認証済みにならない |
+| editor buffer | clean / dirty / IME中 | 最新の未保存入力を古いasync結果で置換しない |
+| recovery journal | pending / recorded / unavailable / failed | recordedはworktree保存・commit・publishではない |
+| local Git | no commit / worktree changed / clean at OID / storage unknown | 不確実なobject/ref整合性を検証するまで成功扱いしない |
+| remote sync | disconnected / idle / fetching / pulling / publishing / local-ahead / conflict / remote-unknown / confirmed | confirmedは対象revisionとremoteを示す。次の編集を保存済みと誤認させない |
+| GitHub auth | absent / device pending / authenticated / expired / denied | remote要求だけを制限。local作業をログインで塞がない |
+| Live MCP | disabled / connecting / connected / disconnected / error | GitHub authとは独立。再起動後はfresh sessionと再認可 |
+| plugin | not installed / installed-disabled / enabled-idle / active / failed / revoked | install、権限同意、実行を分ける。停止とpanel非表示を分ける |
+| layout/preferences | unsaved / saved / invalid / unavailable | 保存失敗を文書消失に結び付けず、入力を維持する |
+
+すべての非同期効果は必要なWorkspace ID、generation、file revision、operation ID、キャンセル信号を持つ。画面を切り替えても結果の帰属は変えない。同一Workspaceのmutationは既存writer経由で直列化し、提案に含まれるread/write setを適用直前に検証する。
+
+### ローカル開始とremote binding
+
+台帳のH02は既存local-first契約を満たすための未整備導線である。現行`WorkspaceIdentity`のGitHub repository情報を必須とする形を、そのまま架空のrepository IDで埋めない。ローカルWorkspace identityと検証済みremote bindingを区別する必要がある。具体的なschema変更は後続実装で既存Git adapterと整合させる。
+
+remoteを結び付ける際はH03でrepository ID、branch、本人権限と既存local内容を確認する。bindingなしではlocal commitは可能、remote fetch/publishは理由付きで不可。新規GitHub repository作成、branch CRUD、強制上書きは本設計で追加しない。
+
+## 4. 遷移の共通プロトコル
+
+遷移は「発火元と行先の捕捉 → 必要な入力flush／回復確認 → dirty離脱の判断 → 最新intent・scopeの再確認 → 表示切替 → focus／戻り先復元」とする。flushが失敗した場合は入力を残し、その画面で再試行できるようにする。古い非同期確認が、新しい戻る操作や別Workspaceへの移動を後から覆さない。
+
+ファイル／Workspaceを離れるときは、保存して進む、明示的に破棄、留まるを区別する。保存に失敗しても破棄扱いで進まない。配置のresizeなど文書を離れない操作で不要な保存を強制せず、再parent・mode変更・文書切替に必要なguardを既存境界へ置く。Homeロゴ、ブラウザーBack/Forward、mobile footer、sheetを閉じる操作も意図を区別する。
+
+認証中止はpollingと後続応答の採用を止め、秘密を残さず元のタスクへ戻す。認証成功は操作可能性を回復するだけで、保留していたPublish・提案適用を自動実行しない。UI mode変更やtheme変更はlocal commitや権限付与を生まない。
+
+同じ面を再度開く場合も、一覧選択、入力、未完了理由を可能な範囲で保持する。tokenや認可codeをURL・history state・localStorageに入れて復元しない。再読込で復元できる非秘密設定と、再認証が必要なメモリ状態を明示する。
+
+## 5. 認証・認可と入口の信頼境界
+
+| 経路 | 誰が何を確認するか | 認可の範囲／失効 |
+| --- | --- | --- |
+| 静的Host・local作業 | browser storageとlocal identity | login不要。公開Hostの表示はprivate repositoryアクセスではない |
+| Device OAuth開始／token交換 | Gatewayの固定GitHub upstream、configured client ID、Host/Origin／入力検証 | まだGitHub tokenを持たないbootstrap。Owner Keyで代用しない |
+| GitHub API／Smart HTTP | 本人token、immutable repository ID、read/write permission | GitHub上の本人権限。Git author名/emailやUI入力のusernameを認証根拠にしない |
+| Live session作成 | Gatewayが`PROPRIUM_OWNER_KEY`を照合 | 設置者のLive公開権限。GitHubログインだけでは得られない |
+| Live session管理・SSE・応答 | session owner token、Workspace、generation | 当該sessionのみ。panel非表示で失効せず、終了・切断等では無効化 |
+| MCP tool呼出し | 個別client token、session availability、tool grant、deadline | 一つのlive Workspaceと承認されたcapability subsetのみ |
+| proposal適用 | Browser Hostの明示承認と最新revision | local worktree変更まで。commit/publishは別操作 |
+
+Origin/Host照合、CORS、Tunnelの存在は利用者認証の代替ではない。特に現行Owner Keyは**Live作成**の認可であり、OAuth/Git relay全体を一人に制限する共通loginではない。GitHub tokenをGatewayに提示することと、第三者に自分のWorkspaceを公開することも別である。
+
+共用Gatewayを不特定利用者へ開放するか、operatorによる利用者allowlistを必要とするかは未確定である。この設計で共有Owner Keyを一般利用者へ配らず、GitHub loginをLive所有者認可へ昇格させない。一般ユーザー登録・組織管理・永続account DBを追加しない。共用化を採用する場合は、identity検証、admission、quota、失効の追加契約が別途必要となる。
+
+Gateway選択は信頼の選択である。OAuth交換、限定Git転送、公開したLive結果を通す相手と説明する。URL変更時は旧Live接続を明示終了し、新しい接続先へ古いOwner Keyやsession/client tokenを転送しない。GitHub sign-outとLive停止は独立操作として状態を示す。すべてを切断する操作を設ける場合は両方を明示する。
+
+GitHub token・Live owner/client tokenはHostのメモリに限定し、plugin、logs、URLs、static build設定へ渡さない。Gatewayの設定・Owner Key・Tunnel credentialはOSユーザーのprivate設定であり、「sessionがin-memory」を理由に毎回紛失させるものではない。Gateway再起動後に過去のclient grantを永続設定から復活させない。
+
+## 6. 利用者権限でのGateway導入・運用
+
+F17は運用端末での目標導線であり、まだ存在しない`setup`や`update`サブコマンドが使えるという説明ではない。既存の`serve`、`version`と設定項目の正本は[Gateway operations](../deployment/GATEWAY.md)に置く。
+
+### 配布と更新
+
+利用者の標準選択は**latestの安定版Gateway**とする。手動version指定を必須にしない。[GitHub Releases API](https://docs.github.com/en/rest/releases/releases#get-the-latest-release)のrepository全体のlatestとGateway release系列は混同しない。draft/prereleaseを除いた`proprium-gateway-vX.Y.Z`の公開releaseを対象とし、Host等の別系列にGateway資材がない場合は誤取得せず、Gateway系列を選び直す。
+
+取得開始時に対象release ID/tagとOS/archを一度確定し、そのreleaseのbinary、`SHA256SUMS`、`SOURCE.txt`を取得する。処理中にlatestが変わっても別releaseのchecksumを混ぜない。対象platformの一つのファイルを検証し、未取得の他platformまで`sha256sum --check`して導入失敗にしない。checksumはbyte整合性の検査であり、単独でpublisher認証を証明するものではない。
+
+user領域の一時配置で検証後に切り替え、失敗時は稼働中binaryを保持する。更新は明示実行し、latest採用を無断の自動再起動と同義にしない。稼働確認失敗時は旧binaryへ戻せるようにするが、旧Live session・client認可・途中mutationは復活／再送しない。
+
+### OS権限と常駐
+
+| 操作 | 通常ユーザーで扱う範囲 | 別途確認が必要な境界 |
+| --- | --- | --- |
+| 配置・設定 | `$HOME/.local/bin`、`$HOME/.config/proprium`、private env（0600） | 他ユーザーのファイル、system directoryを上書きしない |
+| Gateway listen | loopbackの非特権port。public URLとHost originを照合 | wildcard listenは明示判断。HTTPS公開経路と一致させる |
+| cloudflared | 別binary／別user process。既存導入も利用可能 | Tunnel作成・DNS routeはCloudflare account権限。OS rootとは別 |
+| 常駐 | foreground、任意の`systemd --user` unit、user journal | user manager、利用可能なsandbox設定、logout/boot時の継続可否 |
+| logout後の稼働 | hostが許可するuser-service/linger policyに従う | [loginctlのlinger](https://www.freedesktop.org/software/systemd/man/devel/loginctl.html)設定には環境の認可が必要。実行可能とは推定しない |
+| 更新・復旧 | user-owned binaryの切替、user service再起動 | system-wide service installやroot取得を必須にしない |
+
+Gatewayとcloudflaredを同一binaryに埋め込まない。両者の生存・version・local疎通・public疎通を別に診断する。user service非対応ならforegroundを使い、`nohup`やterminal multiplexingだけでlogout後の常時稼働を保証しない。
+
+local/publicの`/healthz`成功だけを認証・MCP利用成功としない。OAuth、Host/Origin検証、SSE streaming、認可済みread、拒否される無認可要求、切断後の再認可をそれぞれ検証する。静的Host、Gateway、plugin artifactの更新・障害を一つの「接続済み」にまとめない。
+
+## 7. 表示・アクセシビリティ契約
+
+ライト、ダーク、紙の全themeで本文・label・code・error・disabled状態の役割が読めること。通常文字は[WCAGの最低contrast](https://www.w3.org/WAI/WCAG22/Understanding/contrast-minimum.html)4.5:1、大きな文字は3:1を基準とする。認証code、承認link、状態、操作buttonを別領域にし、重ね書き・極端な低contrast・status shelfだけの必須操作を禁止する。
+
+操作名と保存範囲を日本語UI内で一貫させる。「この端末へ保存」「ローカルcommit」「GitHubへ公開」「結果未確認」を区別する。既存のCheckpoint／Save to GitHub表記を残す場合も同じ意味に対応させる。色、icon、tooltipだけに依存しない。errorには失敗した機能、保持されるデータ、利用可能な次の操作を示す。
+
+Desktopはkeyboardと同時閲覧、Mobileは単一タスク、thumb操作、IME・virtual keyboard、参照sheetを優先する。画面幅だけで能力を断定せず、明示mode選択を維持する。[focusが隠れないこと](https://www.w3.org/WAI/WCAG22/Understanding/focus-not-obscured-minimum.html)、dialog/sheetのfocus管理、閉じた後の発火元復帰、Back/Forward、読書中の位置を確認する。gestureには操作button等の代替を用意する。
+
+## 8. 後続実装の受入条件
+
+台帳・図・以下の条件を一緒に満たす。存在しない導線をソースに追加しただけ、buildが通っただけでは画面の受入完了としない。Desktop ChromiumとMobile WebKit相当のブラウザー操作、必要な実機・公開経路の検証を区別する。
+
+| 対象機能 | 受入に必要な操作・失敗時確認 | 図 |
+| --- | --- | --- |
+| FT01–02 | Gateway/loginなしの初回local開始、再訪、cold offlineとの差、evicted保存領域の説明 | F01 |
+| FT03–04 | codeの判読とcopy/link、popup不可、pending/slow_down、拒否/期限/中止、別account、repo0件、permission/branchエラー | F02–03 |
+| FT05–06 | text/binary、新規path、delete、dirty離脱の3選択、IME中/遅延読込、journalとworktree保存失敗で入力を保持 | F04, F16 |
+| FT07–09 | 読書/preview/縦横/集中/印刷/組版、scratch画像拒否・中止・回復・local checkpoint。本文と無関係な削除をしない | F05–06 |
+| FT10–12 | diff/author/commit、履歴、fetch不変、pull/local-ahead/conflict、publish exact SHA、失われた応答の再照合、無断再送なし | F07–08 |
+| FT13–15 | signed preview同意前に大容量転送しない、disabled install、権限拒否、run/stop、stale result、update失敗・rollback・uninstall、proposal拒否/競合 | F09–10 |
+| FT16–17 | Live offでSSEなし、正しいOwner Key、client subset、token一回表示、無認可/他Workspace拒否、cancel/deadline、停止・再起動・再認可 | F11–12 |
+| FT18–20 | panel移動/float/closeでeditor/plugin/MCPを重複・終了しない、layout保存失敗、mode切替、全theme、Mobile5view/back/sheet/keyboard | F13–15 |
+| FT21 | shell外から到達できるstorage verification、失敗時markerとbytes保持、journal再試行・回復、削除を復旧に代用しない | F16 |
+| FT22 | clean user領域にlatest導入、OS/arch・release一致、不正checksum拒否、foreground/user-service分岐、公開SSE確認、更新失敗復帰 | F17 |
+
+未接続の汎用機能、placeholder、test-only入口を受入証拠に数えない。runtime未変更の文書PRではリンク・ID・図・ドメイン整合を検証し、browser/Tunnel/認証の実動作は未検証として報告する。
