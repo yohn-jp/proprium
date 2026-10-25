@@ -47,6 +47,6 @@ pnpm test:browser:adapters
 pnpm build:browser
 ~~~
 
-Browser acceptance fixtures use mocks unless a test is explicitly configured for live GitHub. Set up a dedicated disposable test repository and the documented `PROPRIUM_E2E_GITHUB_*` variables only for live GitHub sync checks. A local Gateway mock or loopback run does not prove public Tunnel behavior. Report a real Cloudflare Tunnel, GitHub account, desktop/mobile device or production Host check as `NOT_CHECKED` until that environment is actually exercised.
+`pnpm test:browser:e2e` starts the real Go Gateway from `gateway/` alongside the Vite Host and runs the Live MCP acceptance scenarios in Chromium and mobile WebKit. It does not need live GitHub credentials for those Gateway/MCP scenarios. Tests configured for live GitHub sync use a dedicated disposable repository and the documented `PROPRIUM_E2E_GITHUB_*` variables. A local Gateway proves the browser integration and loopback transport, not public Tunnel behavior. Report a real Cloudflare Tunnel, live GitHub account, physical mobile device or production Host check as `NOT_CHECKED` until that environment is actually exercised.
 
 See [Contributing](../../CONTRIBUTING.md), [Gateway operations](../deployment/GATEWAY.md), and [Cloudflare static Host deployment](../deployment/CLOUDFLARE.md).

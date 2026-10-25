@@ -84,8 +84,8 @@ jobs:
               -trimpath \
               -ldflags "-s -w -X main.version=${VERSION} -X main.commit=${COMMIT}" \
               -o "../release-assets/${name}" .
-            strings "../release-assets/${name}" | grep -Fq "$VERSION"
-            strings "../release-assets/${name}" | grep -Fq "$COMMIT"
+            strings "../release-assets/${name}" | grep -F "$VERSION" >/dev/null
+            strings "../release-assets/${name}" | grep -F "$COMMIT" >/dev/null
           done
           cd ../release-assets
           sha256sum proprium-gateway_* > SHA256SUMS
