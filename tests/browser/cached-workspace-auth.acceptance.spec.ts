@@ -173,3 +173,23 @@ test("repository list failure does not attach sync or show an empty signed-in pi
   await expect(page.getByRole("button", { name: "Connect GitHub", exact: true })).toBeVisible();
   await expect(page.getByLabel("Connected to GitHub", { exact: true })).toHaveCount(0);
 });
+
+test("Workspace sign-in stays in view above a long file list and while editing", async ({ page }) => {
+  await page.goto("/");
+  await page.waitForFunction(() => !!window.propriumHostTest);
+  await page.evaluate(async identity => {
+    const files = Object.fromEntries(Array.from({ length: 80 }, (_, index) => [`notes/${index}.md`, `note ${index}\n`]));
+    await window.propriumHostTest!.openWorkspace(identity, files);
+  }, { ...staticFixtureIdentity, localWorkspaceId: `long-file-list-${crypto.randomUUID()}` });
+  await showPanel(page, "outline");
+  await page.getByRole("list", { name: "Repository files" }).getByRole("button").last().scrollIntoViewIfNeeded();
+  const connect = page.getByRole("button", { name: "GitHubに接続", exact: true });
+  await expect(connect).toBeInViewport({ ratio: 1 });
+  await chooseFile(page, "notes/0.md");
+  await expect(connect).toBeInViewport({ ratio: 1 });
+  await connect.click();
+  const dialog = page.getByRole("dialog", { name: "このWorkspaceをGitHubに接続", exact: true });
+  await expect(dialog).toBeVisible();
+  await dialog.getByRole("button", { name: "キャンセル", exact: true }).click();
+  await expectEditorText(page, "note 0\n");
+});
