@@ -208,6 +208,8 @@ test("static Host imports a GitHub REST commit, reloads offline, and edits with 
   await expect(page.getByText(/^Committed locally · [a-f0-9]{8}$/u)).toBeVisible();
 
   const reopenedPluginPanel = page.locator("details.plugin-manager-panel");
+  await expect(mobileFiles).toBeVisible();
+  if (await mobileFiles.isVisible() && !(await reopenedPluginPanel.isVisible())) await mobileFiles.click();
   await reopenedPluginPanel.locator("summary").click();
   const reopenedPlugin = reopenedPluginPanel.getByRole("listitem").filter({ hasText: staticPluginId }).filter({ hasText: `v${staticPluginVersion}` });
   await expect(reopenedPlugin).toContainText(`v${staticPluginVersion} · installed, disabled`);
