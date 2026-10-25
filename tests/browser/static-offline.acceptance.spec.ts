@@ -186,6 +186,7 @@ test("static Host imports a GitHub REST commit, reloads offline, and edits with 
     .filter({ hasText: workspaceTitle });
   await expect(recentWorkspace).toBeVisible();
   await recentWorkspace.click();
+  await expect(mobileFiles).toBeVisible();
 
   const recentFiles = page.getByRole("list", { name: "Repository files" });
   if (await mobileFiles.isVisible() && !(await recentFiles.isVisible())) await mobileFiles.click();
