@@ -324,11 +324,11 @@ export function LiveMcpPanel({ gatewayUrl, workspaceId, identity, repositories, 
     <div className="live-mcp-content">
       <strong>MCP</strong>
       <p role="status">{state === "connected" ? "ブラウザーに接続中" : state === "connecting" ? "接続中…" : "未接続"}</p>
-      {endpoint && <p>接続先: <code>{endpoint}</code></p>}
+      {endpoint && <div className="sync-actions"><span>Gateway接続先</span><button type="button" onClick={() => { void navigator.clipboard.writeText(endpoint).catch(() => setError("MCP接続先をコピーできませんでした。")); }}>URLをコピー</button></div>}
       {(state === "disconnected" || state === "error") && <button type="button" onClick={() => void connect()}>再接続</button>}
       {error && <p role="alert">{error}</p>}
       {activeRequests.length > 0 && <p role="status">MCP requests: {activeRequests.length}</p>}
-      {proposals.map(proposal => <article key={proposal.id}><h3>{proposal.title}</h3><p>{proposal.target.owner}/{proposal.target.repository} · {proposal.target.branch}</p><ul>{proposal.changes.map(change => <li key={change.path}>{change.path}<pre>{change.content.slice(0,1200)}</pre></li>)}</ul><button type="button" disabled={proposal.target.localWorkspaceId === identity.localWorkspaceId && !canApply} onClick={() => void approveProposal(proposal)}>Review and approve</button><button type="button" onClick={() => setProposals(value => value.filter(item => item.id !== proposal.id))}>Reject</button></article>)}
+      {proposals.map(proposal => <article key={proposal.id}><h3>{proposal.title}</h3><p>{proposal.target.owner}/{proposal.target.repository} · {proposal.target.branch}</p><ul>{proposal.changes.map(change => <li key={change.path}>{change.path}<details><summary>提案内容を全文確認</summary><pre>{change.content}</pre></details></li>)}</ul><button type="button" disabled={proposal.target.localWorkspaceId === identity.localWorkspaceId && !canApply} onClick={() => void approveProposal(proposal)}>Review and approve</button><button type="button" onClick={() => setProposals(value => value.filter(item => item.id !== proposal.id))}>Reject</button></article>)}
     </div>
   </section>;
 }
