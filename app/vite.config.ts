@@ -19,6 +19,7 @@ const uiDirectory = ui === "launcher" ? "" : ui;
 
 export default defineConfig({
   root: appRoot,
+  optimizeDeps: { exclude: ["@bytecodealliance/jco-transpile"] },
   plugins: [react(), {
     name: "scriptorium-ui-entry",
     transformIndexHtml: {
