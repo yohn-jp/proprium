@@ -1,0 +1,605 @@
+import { useCallback, useEffect, useMemo, useRef, useState, type ReactElement } from "react";
+import { BrowserLocalGit, BrowserLocalGitError } from "../git/index.js";
+import type { CommitSummary, FileRevision, StatusEntry, WorkspaceIdentity } from "../git/protocol.js";
+import { createGitHubAccountSession } from "../git/github-sync.js";
+import type { GitHubAccount, GitHubDevicePrompt, GitHubRepository, GitHubAccountSession, GitHubSyncClient } from "../git/github-sync.js";
+import { PluginPanel } from "./PluginPanel.js";
+
+interface RecentWorkspace {
+  identity: WorkspaceIdentity;
+  title: string;
+  lastOpened: number;
+}
+declare global {
+  interface Window { propriumHostOpenLocalWorkspace?: (entry: RecentWorkspace) => Promise<void>; }
+}
+interface OpenFile {
+  path: string;
+  data: Uint8Array | null;
+  revision: FileRevision;
+  text: string | null;
+  binary: boolean;
+  dirty: boolean;
+}
+type SyncState = "editing" | "local-draft" | "local-committed" | "published" | "syncing" | "offline" | "conflict" | "remote-unknown";
+interface OperationMessage { tone: "info" | "error" | "success"; text: string; }
+
+const RECENTS_KEY = "proprium.host.recent-workspaces.v1";
+const PREFERENCES_KEY = "proprium.host.preferences.v1";
+const RELAY_KEY = "proprium.host.github-relay.v1";
+const DEFAULT_RELAY = import.meta.env.VITE_PROPRIUM_GITHUB_AUTH_RELAY ?? "";
+
+function readRecentWorkspaces(): RecentWorkspace[] {
+  try {
+    const raw = localStorage.getItem(RECENTS_KEY);
+    if (!raw) return [];
+    const value: unknown = JSON.parse(raw);
+    if (!Array.isArray(value)) return [];
+    return value.filter((item): item is RecentWorkspace => !!item && typeof item === "object" &&
+      typeof item.title === "string" && typeof item.lastOpened === "number" && item.identity &&
+      typeof item.identity.localWorkspaceId === "string");
+  } catch { return []; }
+}
+function persistRecents(value: RecentWorkspace[]): void {
+  try { localStorage.setItem(RECENTS_KEY, JSON.stringify(value.slice(0, 20))); }
+  catch { /* Workspace metadata is convenience only; Git storage remains in LightningFS. */ }
+}
+function readRelay(): string { try { return localStorage.getItem(RELAY_KEY) || DEFAULT_RELAY; } catch { return DEFAULT_RELAY; } }
+function readPreferences(): { name: string; email: string } {
+  try {
+    const value = JSON.parse(localStorage.getItem(PREFERENCES_KEY) || "null") as unknown;
+    if (value && typeof value === "object" && "name" in value && "email" in value && typeof value.name === "string" && typeof value.email === "string") {
+      return { name: value.name, email: value.email };
+    }
+  } catch { /* Use defaults. */ }
+  return { name: "", email: "" };
+}
+async function loadWorkspaceState(targetGit: BrowserLocalGit): Promise<{
+  status: { head: string | null; entries: StatusEntry[]; localState: "draft" | "local-committed" };
+  files: Array<{ path: string; type: "blob"; oid: string; bytes: number }>;
+  history: CommitSummary[];
+}> {
+  const [status, files, history] = await Promise.all([targetGit.status(), targetGit.listFiles(), targetGit.log(40)]);
+  return { status, files, history };
+}
+function rememberWorkspace(entry: RecentWorkspace, current: RecentWorkspace[]): RecentWorkspace[] {
+  const next = [{ ...entry, lastOpened: Date.now() }, ...current.filter(item => item.identity.localWorkspaceId !== entry.identity.localWorkspaceId)];
+  persistRecents(next);
+  return next;
+}
+function localWorkspaceId(repositoryId: number, branch: string): string {
+  const key = `${repositoryId}:${branch}`;
+  let digest = 0x811c9dc5;
+  for (let index = 0; index < key.length; index += 1) digest = Math.imul(digest ^ key.charCodeAt(index), 0x01000193);
+  return `gh${(digest >>> 0).toString(16).padStart(8, "0")}${crypto.randomUUID().replaceAll("-", "").slice(0, 24)}`;
+}
+function errorMessage(error: unknown): string {
+  if (error instanceof BrowserLocalGitError) return `${error.code}: ${error.message}`;
+  if (error instanceof Error && "code" in error && typeof error.code === "string") return `${error.code}: ${error.message}`;
+  return error instanceof Error ? error.message : "The operation could not be completed.";
+}
+function asText(data: Uint8Array): string | null {
+  try { return new TextDecoder("utf-8", { fatal: true }).decode(data); }
+  catch { return null; }
+}
+function fileIcon(path: string): string { return path.includes("/") ? "↳" : "▤"; }
+
+export function HostApp(): ReactElement {
+  const [recent, setRecent] = useState<RecentWorkspace[]>(readRecentWorkspaces);
+  const [relayDraft, setRelayDraft] = useState(readRelay);
+  const [session, setSession] = useState<GitHubAccountSession | null>(null);
+  const [account, setAccount] = useState<GitHubAccount | null>(null);
+  const [repositories, setRepositories] = useState<GitHubRepository[]>([]);
+  const [devicePrompt, setDevicePrompt] = useState<GitHubDevicePrompt | null>(null);
+  const [busy, setBusy] = useState(false);
+  const [selectedRepository, setSelectedRepository] = useState<number | null>(null);
+  const [selectedBranch, setSelectedBranch] = useState("");
+  const [workspace, setWorkspace] = useState<RecentWorkspace | null>(null);
+  const [git, setGit] = useState<BrowserLocalGit | null>(null);
+  const [syncClient, setSyncClient] = useState<GitHubSyncClient | null>(null);
+  const [files, setFiles] = useState<Array<{ path: string; type: "blob" | "tree"; oid: string; bytes: number }>>([]);
+  const [status, setStatus] = useState<{ head: string | null; entries: StatusEntry[]; localState: "draft" | "local-committed" }>({ head: null, entries: [], localState: "draft" });
+  const [history, setHistory] = useState<CommitSummary[]>([]);
+  const [currentFile, setCurrentFile] = useState<OpenFile | null>(null);
+  const [newPath, setNewPath] = useState("");
+  const [commitMessage, setCommitMessage] = useState("");
+  const [preferences, setPreferences] = useState(readPreferences);
+  const [syncState, setSyncState] = useState<SyncState>("local-draft");
+  const [message, setMessage] = useState<OperationMessage | null>(null);
+  const [mobileNavigationOpen, setMobileNavigationOpen] = useState(false);
+  const editorRef = useRef<HTMLTextAreaElement>(null);
+  const gitRef = useRef<BrowserLocalGit | null>(null);
+  const sessionRef = useRef<GitHubAccountSession | null>(null);
+  const currentFileRef = useRef<OpenFile | null>(currentFile);
+  currentFileRef.current = currentFile;
+  const activeWorkspaceId = workspace?.identity.localWorkspaceId ?? null;
+  const selectedRepositoryEntry = repositories.find(item => item.id === selectedRepository) ?? null;
+  const changedPaths = useMemo(() => new Set(status.entries.map(entry => entry.path)), [status.entries]);
+
+  const refresh = useCallback(async (targetGit: BrowserLocalGit, targetWorkspace: RecentWorkspace): Promise<void> => {
+    const next = await loadWorkspaceState(targetGit);
+    setStatus(next.status);
+    setFiles(next.files);
+    setHistory(next.history);
+    const liveFile = currentFileRef.current;
+    setSyncState(liveFile?.dirty ? "editing" : next.status.entries.length || !next.status.head ? "local-draft" : "local-committed");
+    if (liveFile && !liveFile.dirty && !next.files.some(file => file.path === liveFile.path) && liveFile.data !== null) setCurrentFile(null);
+    setRecent(existing => rememberWorkspace(targetWorkspace, existing));
+  }, [currentFile]);
+
+  const openLocalWorkspace = useCallback(async (entry: RecentWorkspace, attachedSession?: GitHubAccountSession): Promise<void> => {
+    const initialFile = currentFileRef.current;
+    const discardConfirmed = Boolean(initialFile?.dirty && window.confirm("This file has edits that are not saved to the local workspace. Leave it and discard those edits?"));
+    if (initialFile?.dirty && !discardConfirmed) return;
+    setBusy(true);
+    setMessage(null);
+    let nextGit: BrowserLocalGit | null = null;
+    try {
+      nextGit = new BrowserLocalGit(entry.identity);
+      const nextSync = attachedSession ? nextGit.connectGitHubSession(attachedSession) : null;
+      await nextGit.init();
+      const nextState = await loadWorkspaceState(nextGit);
+      const liveFile = currentFileRef.current;
+      if (liveFile?.dirty && (!discardConfirmed || liveFile.path !== initialFile?.path || liveFile.text !== initialFile?.text) &&
+          !window.confirm("The editor changed while the workspace was loading. Discard the newer text and continue?")) {
+        nextGit.close();
+        return;
+      }
+      const previousGit = gitRef.current;
+      gitRef.current = nextGit;
+      setGit(nextGit);
+      setSyncClient(nextSync);
+      setWorkspace(entry);
+      setCurrentFile(null);
+      setMobileNavigationOpen(false);
+      setStatus(nextState.status);
+      setFiles(nextState.files);
+      setHistory(nextState.history);
+      setSyncState(nextState.status.entries.length || !nextState.status.head ? "local-draft" : "local-committed");
+      setRecent(existing => rememberWorkspace(entry, existing));
+      previousGit?.close();
+      setMessage({ tone: "info", text: "Workspace opened on this device. Local drafts and commits remain in this browser until published to GitHub." });
+    } catch (error) {
+      if (gitRef.current !== nextGit) nextGit?.close();
+      setMessage({ tone: "error", text: errorMessage(error) });
+    } finally { setBusy(false); }
+  }, [currentFile]);
+
+  useEffect(() => {
+    if (import.meta.env.VITE_PROPRIUM_E2E !== "true") return;
+    window.propriumHostOpenLocalWorkspace = openLocalWorkspace;
+    return () => { window.propriumHostOpenLocalWorkspace = undefined; };
+  }, [openLocalWorkspace]);
+
+  useEffect(() => () => { gitRef.current?.close(); sessionRef.current?.signOut(); }, []);
+
+  async function connectGitHub(): Promise<void> {
+    const configuredRelay = relayDraft.trim();
+    if (!configuredRelay) { setMessage({ tone: "error", text: "Enter the GitHub auth relay URL configured for this Proprium Host." }); return; }
+    setBusy(true);
+    setMessage(null);
+    let accountSession: GitHubAccountSession | null = null;
+    try {
+      accountSession = createGitHubAccountSession(configuredRelay);
+      const verificationWindow = window.open("https://github.com/login/device", "_blank", "noopener,noreferrer");
+      const prompt = await accountSession.beginAuthorization();
+      sessionRef.current?.signOut();
+      sessionRef.current = accountSession;
+      setSession(accountSession);
+      setDevicePrompt(prompt);
+      setMessage({ tone: "info", text: `Enter code ${prompt.userCode} at GitHub, then return here. This page will finish sign-in automatically.` });
+      if (!verificationWindow) setMessage({ tone: "info", text: `Enter code ${prompt.userCode} at ${prompt.verificationUri}, then return here. This page will finish sign-in automatically.` });
+      const signedIn = await accountSession.completeAuthorization();
+      setAccount(signedIn);
+      const available = await accountSession.repositories();
+      setRepositories(available);
+      setDevicePrompt(null);
+      try { localStorage.setItem(RELAY_KEY, configuredRelay); } catch { /* Configuration can be entered again. */ }
+      setMessage({ tone: "success", text: `Connected to GitHub as ${signedIn.login}. Choose a repository to open.` });
+    } catch (error) {
+      setDevicePrompt(null);
+      setMessage({ tone: "error", text: errorMessage(error) });
+      accountSession?.signOut();
+      if (sessionRef.current === accountSession) sessionRef.current = null;
+      setSession(null);
+    } finally { setBusy(false); }
+  }
+
+  async function openRemoteRepository(): Promise<void> {
+    if (!session || !selectedRepositoryEntry) return;
+    const initialFile = currentFileRef.current;
+    const discardConfirmed = Boolean(initialFile?.dirty && window.confirm("This file has edits that are not saved to the local worktree. Leave it and discard those edits?"));
+    if (initialFile?.dirty && !discardConfirmed) return;
+    const branch = selectedBranch.trim() || selectedRepositoryEntry.defaultBranch;
+    const identity: WorkspaceIdentity = {
+      origin: "https://github.com",
+      repositoryId: selectedRepositoryEntry.id,
+      owner: selectedRepositoryEntry.owner,
+      repository: selectedRepositoryEntry.name,
+      branch,
+      localWorkspaceId: localWorkspaceId(selectedRepositoryEntry.id, branch),
+    };
+    const entry = recent.find(item => item.identity.repositoryId === identity.repositoryId && item.identity.branch === identity.branch)
+      ?? { identity, title: `${selectedRepositoryEntry.fullName} · ${branch}`, lastOpened: Date.now() };
+    setBusy(true);
+    setMessage(null);
+    let nextGit: BrowserLocalGit | null = null;
+    try {
+      nextGit = new BrowserLocalGit(entry.identity);
+      await nextGit.init();
+      const nextSync = nextGit.connectGitHubSession(session);
+      const initial = await loadWorkspaceState(nextGit);
+      const liveFile = currentFileRef.current;
+      if (liveFile?.dirty && (!discardConfirmed || liveFile.path !== initialFile?.path || liveFile.text !== initialFile?.text) &&
+          !window.confirm("The editor changed while the repository was loading. Discard the newer text and continue?")) {
+        nextGit.close();
+        return;
+      }
+      const previousGit = gitRef.current;
+      gitRef.current = nextGit;
+      setGit(nextGit);
+      setSyncClient(nextSync);
+      setWorkspace(entry);
+      setCurrentFile(null);
+      setStatus(initial.status);
+      setFiles(initial.files);
+      setHistory(initial.history);
+      setSyncState(initial.status.entries.length || !initial.status.head ? "local-draft" : "local-committed");
+      setMobileNavigationOpen(false);
+      setRecent(existing => rememberWorkspace(entry, existing));
+      previousGit?.close();
+      const pulled = await nextSync.pull();
+      await refresh(nextGit, entry);
+      if (pulled.state === "conflict") {
+        setSyncState("conflict");
+        setMessage({ tone: "error", text: `The local branch and GitHub branch diverged. Local ${pulled.localHead ?? "(empty)"}; GitHub ${pulled.remoteHead ?? "(empty)"}. Local files were preserved.` });
+      } else {
+        setMessage({ tone: "success", text: pulled.state === "fast-forwarded" ? `Opened ${entry.title} at GitHub commit ${pulled.head}.` : `Opened ${entry.title}; local branch matches GitHub.` });
+      }
+    } catch (error) {
+      const text = errorMessage(error);
+      setSyncState(text.includes("network_unavailable") ? "offline" : text.includes("remote_unknown") ? "remote-unknown" : "local-draft");
+      setMessage({ tone: "error", text });
+      if (gitRef.current !== nextGit) nextGit?.close();
+    } finally { setBusy(false); }
+  }
+
+  async function selectRecent(entry: RecentWorkspace): Promise<void> {
+    await openLocalWorkspace(entry);
+  }
+
+  async function refreshAfterPlugin(): Promise<void> {
+    if (!git || !workspace) return;
+    await refresh(git, workspace);
+    if (currentFile && !currentFileRef.current?.dirty) {
+      const read = await git.read(currentFile.path);
+      const text = read.data === null ? "" : asText(read.data);
+      setCurrentFile({ ...currentFile, data: read.data, revision: read.revision, text, binary: read.data !== null && text === null, dirty: false });
+    }
+  }
+
+  async function loadFile(path: string): Promise<void> {
+    if (!git || !workspace) return;
+    const initialFile = currentFileRef.current;
+    const discardConfirmed = Boolean(initialFile?.dirty && window.confirm("Discard unsaved editor text and open another file?"));
+    if (initialFile?.dirty && !discardConfirmed) return;
+    setBusy(true);
+    setMessage(null);
+    try {
+      const read = await git.read(path);
+      const liveFile = currentFileRef.current;
+      if (liveFile?.dirty && (!discardConfirmed || liveFile.path !== initialFile?.path || liveFile.text !== initialFile?.text) &&
+          !window.confirm("The editor changed while the file was loading. Discard the newer text and continue?")) return;
+      const data = read.data;
+      const text = data === null ? "" : asText(data);
+      const entry: OpenFile = { path, data, revision: read.revision, text, binary: data !== null && text === null, dirty: false };
+      setCurrentFile(entry);
+      setMobileNavigationOpen(false);
+      requestAnimationFrame(() => editorRef.current?.focus());
+    } catch (error) { setMessage({ tone: "error", text: errorMessage(error) }); }
+    finally { setBusy(false); }
+  }
+
+  async function createFile(): Promise<void> {
+    if (!git || !workspace) return;
+    const initialFile = currentFileRef.current;
+    const discardConfirmed = Boolean(initialFile?.dirty && window.confirm("Discard unsaved editor text and create another file?"));
+    if (initialFile?.dirty && !discardConfirmed) return;
+    const path = newPath.trim();
+    if (!path) { setMessage({ tone: "error", text: "Enter a repository-relative file path." }); return; }
+    setBusy(true);
+    try {
+      const read = await git.read(path);
+      const liveFile = currentFileRef.current;
+      if (liveFile?.dirty && (!discardConfirmed || liveFile.path !== initialFile?.path || liveFile.text !== initialFile?.text) &&
+          !window.confirm("The editor changed while the new file was loading. Discard the newer text and continue?")) return;
+      if (read.data !== null) throw new Error(`File already exists: ${path}`);
+      setCurrentFile({ path, data: null, revision: read.revision, text: "", binary: false, dirty: true });
+      setSyncState("editing");
+      setNewPath("");
+      setMobileNavigationOpen(false);
+      requestAnimationFrame(() => editorRef.current?.focus());
+    } catch (error) { setMessage({ tone: "error", text: errorMessage(error) }); }
+    finally { setBusy(false); }
+  }
+
+  async function saveDraft(): Promise<void> {
+    if (!git || !currentFile || currentFile.binary || currentFile.text === null) return;
+    const savingFile = currentFile;
+    setBusy(true);
+    try {
+      if (savingFile.text === null) return;
+      const data = new TextEncoder().encode(savingFile.text);
+      const revision = await git.write(savingFile.path, data, savingFile.revision);
+      const latest = currentFileRef.current;
+      if (latest?.path === savingFile.path && latest.dirty && latest.text !== savingFile.text) {
+        setCurrentFile({ ...latest, data, revision, dirty: true });
+      } else {
+        setCurrentFile({ ...savingFile, data, revision, dirty: false });
+      }
+      await refresh(git, workspace!);
+      if (currentFileRef.current?.dirty) setSyncState("editing");
+      setMessage({ tone: "success", text: `${savingFile.path} saved to this browser's local Git worktree. It is not published to GitHub.` });
+    } catch (error) { setMessage({ tone: "error", text: errorMessage(error) }); }
+    finally { setBusy(false); }
+  }
+
+  async function deleteFile(): Promise<void> {
+    if (!git || !currentFile || !window.confirm(currentFile.dirty ? `Delete ${currentFile.path} from the local worktree and discard its unsaved editor text?` : `Delete ${currentFile.path} from the local worktree?`)) return;
+    setBusy(true);
+    try {
+      await git.delete(currentFile.path, currentFile.revision);
+      setCurrentFile(null);
+      await refresh(git, workspace!);
+      setMessage({ tone: "info", text: `${currentFile.path} is deleted in the local worktree. Commit and publish to share the deletion.` });
+    } catch (error) { setMessage({ tone: "error", text: errorMessage(error) }); }
+    finally { setBusy(false); }
+  }
+
+  async function commitLocal(): Promise<void> {
+    if (!git || !workspace) return;
+    if (currentFile?.dirty) { setMessage({ tone: "error", text: "Save the current editor text to the local worktree before committing." }); return; }
+    if (!commitMessage.trim()) { setMessage({ tone: "error", text: "Enter a commit message." }); return; }
+    if (!preferences.name.trim() || !preferences.email.includes("@")) { setMessage({ tone: "error", text: "Enter a Git author name and valid email address." }); return; }
+    setBusy(true);
+    try {
+      const before = await git.status();
+      if (!before.entries.length) { setMessage({ tone: "info", text: "There are no local changes to commit." }); return; }
+      const staged = await git.add(before.entries.map(entry => entry.path), before.head);
+      const committed = await git.commit(commitMessage, preferences, staged.head);
+      setCommitMessage("");
+      setSyncState("local-committed");
+      await refresh(git, workspace);
+      setMessage({ tone: "success", text: `Committed locally as ${committed.oid}. This commit is still only on this device.` });
+    } catch (error) { setMessage({ tone: "error", text: errorMessage(error) }); }
+    finally { setBusy(false); }
+  }
+
+  async function fetchRemote(): Promise<void> {
+    if (!git || !syncClient) { setMessage({ tone: "error", text: "Connect to GitHub to fetch this repository." }); return; }
+    if (currentFile?.dirty) { setMessage({ tone: "error", text: "Save the current editor text before fetching remote changes." }); return; }
+    setBusy(true); setSyncState("syncing");
+    try {
+      const result = await syncClient.fetch();
+      await refresh(git, workspace!);
+      setMessage({ tone: "success", text: `Fetched ${result.importedCommits} commit(s). The working tree was not changed.` });
+    } catch (error) { applySyncError(error); }
+    finally { setBusy(false); }
+  }
+
+  async function pullRemote(): Promise<void> {
+    if (!git || !syncClient) { setMessage({ tone: "error", text: "Connect to GitHub to pull this repository." }); return; }
+    if (currentFile?.dirty) { setMessage({ tone: "error", text: "Save the current editor text before pulling remote changes." }); return; }
+    setBusy(true); setSyncState("syncing");
+    try {
+      const result = await syncClient.pull();
+      if (result.state === "conflict") {
+        setSyncState("conflict");
+        setMessage({ tone: "error", text: `GitHub and this device have diverged. Local ${result.localHead ?? "(empty)"}; remote ${result.remoteHead ?? "(empty)"}. Nothing was overwritten. Commit, inspect history, or choose another workspace before resolving.` });
+      } else {
+        setSyncState("local-committed");
+        setMessage({ tone: "success", text: result.state === "fast-forwarded" ? `Updated to GitHub commit ${result.head}.` : "This workspace already matches GitHub." });
+      }
+      await refresh(git, workspace!);
+      if (result.state === "conflict") setSyncState("conflict");
+      else {
+        const liveFile = currentFileRef.current;
+        if (liveFile?.dirty) {
+          setMessage({ tone: "info", text: "The pull completed, and the editor has newer unsaved text. It was left untouched; save it and reopen the file to load the updated branch." });
+        } else if (liveFile) {
+          const read = await git.read(liveFile.path);
+          if (currentFileRef.current?.dirty) {
+            setMessage({ tone: "info", text: "The editor changed while GitHub updates loaded. Its unsaved text was left untouched." });
+          } else if (currentFileRef.current?.path === liveFile.path) {
+            if (read.data === null) setCurrentFile(null);
+            else {
+              const text = asText(read.data);
+              setCurrentFile({ path: liveFile.path, data: read.data, revision: read.revision, text, binary: text === null, dirty: false });
+            }
+          }
+        }
+      }
+    } catch (error) { applySyncError(error); }
+    finally { setBusy(false); }
+  }
+
+  async function publishRemote(): Promise<void> {
+    if (!git || !syncClient) { setMessage({ tone: "error", text: "Connect to GitHub to publish this repository." }); return; }
+    if (currentFile?.dirty) { setMessage({ tone: "error", text: "Save the current editor text before publishing." }); return; }
+    setBusy(true); setSyncState("syncing");
+    try {
+      const local = await git.status();
+      if (!local.head || local.entries.length) throw new Error("Commit all local worktree changes before publishing.");
+      const remote = await syncClient.remoteHead();
+      const result = await syncClient.publish(local.head, remote.head);
+      if (result.state === "published") {
+        if (result.head === local.head && result.remoteHead === local.head) {
+          setSyncState(currentFileRef.current?.dirty ? "editing" : "published");
+          setMessage({ tone: "success", text: `Published commit ${local.head} to GitHub and confirmed the remote branch SHA.` });
+        } else {
+          setSyncState("remote-unknown");
+          setMessage({ tone: "error", text: `GitHub returned a publication receipt for ${result.remoteHead}, but this Host requested ${local.head}. Check the remote branch before retrying.` });
+        }
+      } else if (result.state === "conflict") {
+        setSyncState("conflict");
+        setMessage({ tone: "error", text: `GitHub changed before publication. Expected ${result.expectedRemoteHead ?? "(empty)"}; found ${result.remoteHead ?? "(empty)"}. Fetch and pull or inspect the history before retrying.` });
+      } else if (result.state === "remote-unknown") {
+        setSyncState("remote-unknown");
+        setMessage({ tone: "error", text: `GitHub could not confirm publication. Expected ${local.head}; observed ${result.observedRemoteHead ?? "(unknown)"}. Check the remote branch before retrying.` });
+      }
+    } catch (error) { applySyncError(error); }
+    finally { setBusy(false); }
+  }
+
+  function applySyncError(error: unknown): void {
+    const text = errorMessage(error);
+    if (text.includes("network_unavailable")) setSyncState("offline");
+    else if (text.includes("remote_unknown")) setSyncState("remote-unknown");
+    else if (text.includes("remote_conflict")) setSyncState("conflict");
+    else setSyncState("local-committed");
+    if (text.includes("authentication_expired")) {
+      setAccount(null);
+      setRepositories([]);
+      setSession(null);
+      sessionRef.current = null;
+    }
+    setMessage({ tone: "error", text });
+  }
+
+  function leaveWorkspace(): void {
+    if (currentFile?.dirty && !window.confirm("This file has edits not saved to the local worktree. Leave and discard those edits?")) return;
+    gitRef.current?.close();
+    gitRef.current = null;
+    setWorkspace(null);
+    setGit(null);
+    setSyncClient(null);
+    setCurrentFile(null);
+    setMessage(null);
+  }
+
+  const signOut = (): void => {
+    session?.signOut();
+    sessionRef.current = null;
+    setSession(null); setAccount(null); setRepositories([]); setDevicePrompt(null);
+    setMessage({ tone: "info", text: "Signed out. Local workspaces remain on this device." });
+  };
+
+  const pluginRevisionKey = JSON.stringify([
+    workspace?.identity.localWorkspaceId,
+    status.head,
+    status.entries.map(entry => [entry.path, entry.head, entry.worktree, entry.stage]),
+    currentFile?.dirty ?? false,
+    currentFile?.dirty ? currentFile.text : null,
+  ]);
+
+  return <main className="proprium-host">
+    <header className="host-topbar">
+      <a className="wordmark" href="/proprium.html" aria-label="Proprium home"><span className="wordmark-mark">P</span><span>Proprium</span></a>
+      {workspace ? <div className="active-location"><span className="location-title">{workspace.title}</span><span className="location-branch">{workspace.identity.branch}</span></div> : <div className="topbar-subtitle">Browser workspace</div>}
+      {workspace && <div className={`save-state save-${syncState}`} aria-live="polite">{saveStateLabel(syncState, status.head)}</div>}
+      {workspace && <button type="button" className="quiet-button change-workspace" onClick={leaveWorkspace}>Workspaces</button>}
+    </header>
+
+    {message && <div className={`host-message message-${message.tone}`} role={message.tone === "error" ? "alert" : "status"}>{message.text}<button aria-label="Dismiss message" type="button" onClick={() => setMessage(null)}>×</button></div>}
+
+    {!workspace ? <section className="workspace-picker" aria-labelledby="picker-heading">
+      <div className="welcome-copy"><p className="eyebrow">A workspace that stays yours</p><h1 id="picker-heading">Open a GitHub workspace</h1><p>Open a repository in this browser, edit files offline, commit locally, and publish when you are ready.</p></div>
+      <div className="picker-grid">
+        <section className="picker-card" aria-labelledby="connect-heading">
+          <div className="card-heading"><div><p className="eyebrow">REMOTE WORKSPACE</p><h2 id="connect-heading">GitHub</h2></div><span className="card-icon">↗</span></div>
+          {account ? <>
+            <p className="signed-in">Connected as <strong>{account.login}</strong><button type="button" className="text-button" onClick={signOut}>Sign out</button></p>
+            <label htmlFor="repository-picker">Repository</label>
+            <select id="repository-picker" value={selectedRepository ?? ""} onChange={event => {
+              const id = Number(event.target.value) || null;
+              setSelectedRepository(id);
+              setSelectedBranch(repositories.find(item => item.id === id)?.defaultBranch ?? "");
+            }}>
+              <option value="">Choose a repository</option>
+              {repositories.map(repository => <option key={repository.id} value={repository.id}>{repository.fullName}{repository.private ? " · private" : ""}</option>)}
+            </select>
+            {selectedRepositoryEntry && <><label htmlFor="workspace-branch">Branch</label><input id="workspace-branch" value={selectedBranch} onChange={event => setSelectedBranch(event.target.value)} placeholder={selectedRepositoryEntry.defaultBranch} autoComplete="off" /><p className="repository-branch">Default: <code>{selectedRepositoryEntry.defaultBranch}</code></p></>}
+            <button className="primary-button full-width" type="button" disabled={busy || !selectedRepositoryEntry || !selectedRepositoryEntry.permissions.pull || !selectedBranch.trim()} onClick={() => void openRemoteRepository()}>{busy ? "Opening…" : "Open workspace"}</button>
+          </> : <>
+            <label htmlFor="github-relay">GitHub auth relay URL</label>
+            <input id="github-relay" type="url" value={relayDraft} onChange={event => setRelayDraft(event.target.value)} placeholder="https://github-auth.example.com" autoComplete="url" />
+            <p className="field-help">The relay exchanges GitHub device codes. It does not store repository files or local Git data.</p>
+            {devicePrompt && <div className="device-prompt"><span>Enter this code on GitHub</span><strong>{devicePrompt.userCode}</strong><a href={devicePrompt.verificationUri} target="_blank" rel="noreferrer">Open GitHub device sign-in</a><span className="field-help">Waiting for authorization…</span></div>}
+            <button className="primary-button full-width" type="button" disabled={busy} onClick={() => void connectGitHub()}>{busy ? "Connecting…" : "Connect GitHub"}</button>
+          </>}
+        </section>
+        <section className="picker-card recent-card" aria-labelledby="recent-heading">
+          <div className="card-heading"><div><p className="eyebrow">THIS DEVICE</p><h2 id="recent-heading">Recent workspaces</h2></div><span className="card-icon">◷</span></div>
+          <p className="field-help">Available offline after they have been opened in this browser. Local changes remain vulnerable to browser storage loss until GitHub confirms publication.</p>
+          {recent.length ? <ul className="recent-list">{recent.map(entry => <li key={entry.identity.localWorkspaceId}><button type="button" className="recent-workspace" disabled={busy} onClick={() => void selectRecent(entry)}><span><strong>{entry.title}</strong><small>{entry.identity.branch} · opened {new Date(entry.lastOpened).toLocaleDateString()}</small></span><span aria-hidden="true">→</span></button></li>)}</ul> : <div className="empty-state"><span>◇</span><p>No local workspaces yet</p></div>}
+        </section>
+      </div>
+      <p className="locality-note"><span>●</span> Editing and Git run in this browser. GitHub is the shared source of truth; local commits are not published automatically.</p>
+    </section> : <div className="workspace-shell">
+      <button type="button" className="mobile-files-toggle" aria-expanded={mobileNavigationOpen} aria-controls="workspace-sidebar" onClick={() => setMobileNavigationOpen(value => !value)}>Files <span>{files.filter(file => file.type === "blob").length}</span></button>
+      <aside id="workspace-sidebar" className={`workspace-sidebar ${mobileNavigationOpen ? "sidebar-open" : ""}`} aria-label="Workspace tools">
+        <div className="sidebar-scroll">
+          <section className="sidebar-section">
+            <div className="section-title-row"><h2>Files</h2><span className="count-badge">{files.filter(file => file.type === "blob").length}</span></div>
+            <form className="new-file-form" onSubmit={event => { event.preventDefault(); void createFile(); }}>
+              <label className="sr-only" htmlFor="new-file-path">New file path</label><input id="new-file-path" value={newPath} onChange={event => setNewPath(event.target.value)} placeholder="New file path" maxLength={1024} />
+              <button type="submit" aria-label="Create new file" title="Create new file" disabled={busy}>+</button>
+            </form>
+            {files.length ? <ul className="file-list" aria-label="Repository files">{files.filter(file => file.type === "blob").map(file => <li key={file.path}><button type="button" aria-current={currentFile?.path === file.path ? "page" : undefined} className={`file-row ${currentFile?.path === file.path ? "file-selected" : ""}`} onClick={() => void loadFile(file.path)}><span className="file-icon" aria-hidden="true">{fileIcon(file.path)}</span><span className="file-path">{file.path}</span>{changedPaths.has(file.path) && <span className="change-dot" aria-label="Local change" />}</button></li>)}</ul> : <p className="sidebar-empty">This repository has no files yet.</p>}
+          </section>
+          <section className="sidebar-section sync-sidebar-section">
+            <div className="section-title-row"><h2>GitHub</h2><span className={`connection-indicator ${syncClient ? "connected" : "local-only"}`} aria-label={syncClient ? "Connected to GitHub" : "Local workspace only"} /></div>
+            {syncClient ? <div className="sync-actions"><button type="button" onClick={() => void fetchRemote()} disabled={busy}>Fetch</button><button type="button" onClick={() => void pullRemote()} disabled={busy}>Pull</button><button type="button" className="publish-button" onClick={() => void publishRemote()} disabled={busy || status.localState !== "local-committed"}>Publish</button></div> : <p className="sidebar-empty">Sign in to enable remote sync. Local editing remains available offline.</p>}
+          </section>
+          {git && workspace && <PluginPanel
+            workspaceId={activeWorkspaceId!}
+            git={git}
+            revisionKey={pluginRevisionKey}
+            canApplyChanges={!currentFile?.dirty}
+            hostBusy={busy}
+            onBusyChange={setBusy}
+            onWorkspaceChanged={refreshAfterPlugin}
+          />}
+        </div>
+        <div className="sidebar-user"><span className="avatar">{account?.login.slice(0, 1).toUpperCase() ?? "P"}</span><span><strong>{account?.login ?? "Local workspace"}</strong><small>Browser storage</small></span></div>
+      </aside>
+      <section className="editor-region" aria-label="Editor and Git history">
+        <div className="editor-toolbar">
+          <div className="editor-breadcrumb"><span>{workspace.identity.repository}</span><span aria-hidden="true">/</span><strong id="current-file-name" aria-label="Current file">{currentFile?.path ?? "Choose a file"}</strong>{currentFile?.dirty && <span className="unsaved-dot" title="Unsaved editor text" aria-label="Unsaved editor text">●</span>}</div>
+          {currentFile && <div className="file-actions"><button type="button" onClick={() => void saveDraft()} disabled={busy || !currentFile.dirty || currentFile.binary}>Save draft</button><button type="button" className="danger-quiet" onClick={() => void deleteFile()} disabled={busy}>Delete file</button></div>}
+        </div>
+        {currentFile ? currentFile.binary ? <div className="binary-notice"><span>◇</span><h2>Binary file</h2><p>This file is stored as {currentFile.data?.byteLength ?? 0} bytes. The Host preserves binary bytes; text editing is disabled.</p></div> : <label className="editor-label" htmlFor="file-editor"><span className="sr-only">File contents</span><textarea id="file-editor" ref={editorRef} aria-label="File contents" spellCheck={false} value={currentFile.text ?? ""} onChange={event => { setCurrentFile({ ...currentFile, text: event.target.value, dirty: true }); setSyncState("editing"); }} onKeyDown={event => { if ((event.metaKey || event.ctrlKey) && event.key.toLowerCase() === "s") { event.preventDefault(); void saveDraft(); } }} /> </label> : <div className="editor-empty"><div className="empty-glyph">⌘</div><h2>Choose a file to edit</h2><p>Edits are saved to this device first. Commit and publish are separate actions.</p></div>}
+        <div className="git-dock">
+          <section className="commit-panel" aria-labelledby="commit-heading">
+            <div className="dock-heading"><div><p className="eyebrow">LOCAL GIT</p><h2 id="commit-heading">Changes</h2></div><span className="count-badge">{status.entries.length}</span></div>
+            <div className="change-summary" aria-live="polite">{status.entries.length ? `${status.entries.length} changed file${status.entries.length === 1 ? "" : "s"}` : status.head ? `Clean at ${status.head.slice(0, 10)}` : "No local commit yet"}</div>
+            <label htmlFor="commit-message">Commit message</label><input id="commit-message" value={commitMessage} onChange={event => setCommitMessage(event.target.value)} placeholder="Describe your changes" maxLength={100_000} />
+            <div className="author-fields"><label>Git author name<input aria-label="Git author name" value={preferences.name} onChange={event => updatePreferences({ ...preferences, name: event.target.value })} placeholder="Name" /></label><label>Git author email<input aria-label="Git author email" type="email" value={preferences.email} onChange={event => updatePreferences({ ...preferences, email: event.target.value })} placeholder="name@example.com" /></label></div>
+            <button type="button" className="primary-button commit-button" disabled={busy || !status.entries.length || !!currentFile?.dirty} onClick={() => void commitLocal()}>Commit locally</button>
+            <p className="local-commit-note">A local commit stays on this device until you explicitly publish it.</p>
+          </section>
+          <section className="history-panel" aria-labelledby="history-heading">
+            <div className="dock-heading"><div><p className="eyebrow">REPOSITORY</p><h2 id="history-heading">History</h2></div><button type="button" className="text-button" disabled={busy} onClick={() => git && void git.log(40).then(setHistory).catch(error => setMessage({ tone: "error", text: errorMessage(error) }))}>Refresh</button></div>
+            {history.length ? <ol className="history-list">{history.map(commit => <li key={commit.oid}><span className="commit-rail" aria-hidden="true" /><div><strong>{commit.message.split("\n")[0]}</strong><code>{commit.oid.slice(0, 10)}</code><small>{commit.author.name} · {new Date(commit.timestamp * 1000).toLocaleString()}</small></div></li>)}</ol> : <p className="sidebar-empty">No commits in this local workspace.</p>}
+          </section>
+        </div>
+      </section>
+    </div>}
+  </main>;
+
+  function updatePreferences(value: { name: string; email: string }): void {
+    setPreferences(value);
+    try { localStorage.setItem(PREFERENCES_KEY, JSON.stringify(value)); } catch { /* Optional local preference. */ }
+  }
+}
+
+function saveStateLabel(state: SyncState, head: string | null): string {
+  if (state === "editing") return "Unsaved editor text";
+  if (state === "syncing") return "Syncing with GitHub";
+  if (state === "published") return `Published · ${head?.slice(0, 8) ?? "confirmed"}`;
+  if (state === "conflict") return "Conflict · local work preserved";
+  if (state === "remote-unknown") return "Remote state unknown";
+  if (state === "offline") return "Offline · local only";
+  if (state === "local-committed") return `Committed locally · ${head?.slice(0, 8) ?? "unpublished"}`;
+  return "Draft on this device";
+}
