@@ -11,6 +11,14 @@ declare global {
     propriumHostTest?: {
       openWorkspace(identity: import("../../app/src/browser/proprium/git/protocol.js").WorkspaceIdentity, files?: Record<string, string>): Promise<void>;
     };
+    propriumDropLiveEventStream?: () => Promise<void>;
+    propriumGatewayRequestPaths?: string[];
+    propriumHoldGitStatus?: boolean;
+    propriumGitStatusStarted?: boolean;
+    propriumReleaseGitStatus?: () => void;
+    propriumGatewayDeleteStarted?: boolean;
+    propriumReleaseGatewayDelete?: () => void;
+    __propriumGatewayFetches?: Array<{ path: string; credentials: RequestCredentials }>;
   }
 }
 
@@ -285,9 +293,7 @@ test("a live browser Workspace serves real MCP calls through Go SSE and HTTP, an
   await expect(page.getByText("Review a change from the MCP client", { exact: true })).toBeVisible();
   await expectEditorText(page, "Gateway browser integration fixture.\n");
   expect(textResult(await mcpCall(token, "read-with-tools-hidden", "file_read", { path: "README.md" }))).toMatchObject({ content: "Gateway browser integration fixture.\n" });
-  const gatewayFetches = await page.evaluate(() => (window as Window & {
-    __propriumGatewayFetches: Array<{ path: string; credentials: RequestCredentials }>;
-  }).__propriumGatewayFetches);
+  const gatewayFetches = await page.evaluate(() => window.__propriumGatewayFetches ?? []);
   expect(gatewayFetches.length).toBeGreaterThan(0);
   expect(gatewayFetches.every(call => call.credentials === "include")).toBe(true);
   expect(gatewayFetches.some(call => call.path === "/live/sessions")).toBe(true);
@@ -335,4 +341,120 @@ test("a live browser Workspace serves real MCP calls through Go SSE and HTTP, an
   await page.getByLabel("Plugin request").fill(JSON.stringify({ left: 20, right: 22 }));
   await plugin.getByRole("button", { name: "Run" }).click();
   await expect(page.getByLabel("fixture.compute-sum output")).toHaveText('{"result":42}');
+});
+
+test("an unexpected Live SSE disconnect clears the Browser Host session and cancels pending MCP work", async ({ page }) => {
+  await page.addInitScript(({ origin }) => {
+    const paths: string[] = [];
+    Object.defineProperty(window, "propriumGatewayRequestPaths", { value: paths });
+    const originalFetch = window.fetch.bind(window);
+    window.fetch = async (input, init) => {
+      const rawUrl = typeof input === "string" || input instanceof URL ? String(input) : input.url;
+      const requestUrl = new URL(rawUrl, window.location.href);
+      const method = init?.method ?? (input instanceof Request ? input.method : "GET");
+      if (requestUrl.origin === origin && requestUrl.pathname.startsWith("/live/")) {
+        paths.push(`${method} ${requestUrl.pathname}`);
+      }
+      if (requestUrl.origin === origin && method === "DELETE" && /^\/live\/sessions\/[^/]+$/u.test(requestUrl.pathname)) {
+        window.propriumGatewayDeleteStarted = true;
+        await new Promise<void>(resolve => { window.propriumReleaseGatewayDelete = resolve; });
+      }
+      const response = await originalFetch(input, init);
+      if (requestUrl.origin !== origin || !requestUrl.pathname.endsWith("/events") || !response.body) return response;
+
+      const source = response.body.getReader();
+      let dropped = false;
+      Object.defineProperty(window, "propriumDropLiveEventStream", {
+        configurable: true,
+        value: async () => {
+          if (dropped) return;
+          dropped = true;
+          await source.cancel("fixture SSE transport failure").catch(() => undefined);
+        },
+      });
+      const body = new ReadableStream<Uint8Array>({
+        start(destination) {
+          void (async () => {
+            try {
+              while (true) {
+                const { done, value } = await source.read();
+                if (done) {
+                  if (dropped) destination.error(new Error("fixture SSE transport failure"));
+                  else destination.close();
+                  return;
+                }
+                destination.enqueue(value);
+              }
+            } catch (error) { destination.error(error); }
+          })();
+        },
+        cancel(reason) {
+          dropped = true;
+          void source.cancel(reason).catch(() => undefined);
+        },
+      });
+      return new Response(body, { status: response.status, statusText: response.statusText, headers: response.headers });
+    };
+  }, { origin: gatewayOrigin });
+
+  await openWorkspace(page);
+  await page.evaluate(async () => {
+    const moduleUrl = new URL("/src/browser/proprium/git/index.ts", location.origin).href;
+    const runtime = await import(/* @vite-ignore */ moduleUrl) as unknown as {
+      BrowserLocalGit: { prototype: Record<string, (...args: unknown[]) => unknown> };
+    };
+    const prototype = runtime.BrowserLocalGit.prototype;
+    const originalStatus = prototype.status;
+    prototype.status = async function (this: unknown, ...args: unknown[]): Promise<unknown> {
+      if (window.propriumHoldGitStatus) {
+        window.propriumGitStatusStarted = true;
+        await new Promise<void>(resolve => { window.propriumReleaseGitStatus = resolve; });
+      }
+      return Reflect.apply(originalStatus, this, args);
+    };
+    window.propriumHoldGitStatus = true;
+    window.propriumGitStatusStarted = false;
+  });
+
+  const eventConnections: string[] = [];
+  page.on("request", request => {
+    if (request.url().includes("/live/sessions/") && request.url().endsWith("/events")) eventConnections.push(request.url());
+  });
+  await enableLiveMcp(page);
+  const token = await authorizeClient(page);
+  const pendingCall = mcpRequest(token, { jsonrpc: "2.0", id: "disconnect-pending-status", method: "tools/call", params: { name: "git_status", arguments: {} } });
+  await expect.poll(() => page.evaluate(() => window.propriumGitStatusStarted === true)).toBe(true);
+  await expect(page.locator("details.live-mcp-panel")).toContainText("Running: git_status");
+
+  await page.evaluate(async () => {
+    if (!window.propriumDropLiveEventStream) throw new Error("The fixture did not capture the live event stream.");
+    await window.propriumDropLiveEventStream();
+  });
+  const unavailable = await pendingCall;
+  expect(unavailable.status).toBe(503);
+  expect(unavailable.body?.error?.message).toBe("Workspace unavailable");
+  const livePanel = page.locator("details.live-mcp-panel");
+  await expect(livePanel.getByRole("status")).toContainText("Gateway disconnected");
+  await expect(livePanel.getByRole("alert")).toContainText("connection to the Gateway was lost");
+  await expect(page.getByRole("button", { name: "Enable Live MCP" })).toBeVisible();
+  await expect(page.getByLabel("New MCP client token")).toHaveCount(0);
+  await expect(livePanel.getByRole("list", { name: "Authorized MCP clients" }).getByRole("listitem")).toHaveCount(0);
+  await expect(livePanel).not.toContainText("Running: git_status");
+  await expect(livePanel.getByRole("status")).not.toContainText("Live on");
+
+  await page.evaluate(() => window.propriumReleaseGitStatus?.());
+  await expect(livePanel.getByText("git_status: cancelled", { exact: true })).toBeVisible();
+  await expect.poll(() => page.evaluate(() => window.propriumGatewayRequestPaths?.filter(path => path.endsWith("/responses")).length ?? 0)).toBe(0);
+  await page.waitForTimeout(500);
+  expect(eventConnections).toHaveLength(1);
+  expect(await page.evaluate(() => window.propriumGatewayRequestPaths?.filter(path => path.endsWith("/events")).length)).toBe(1);
+  await expect.poll(() => page.evaluate(() => window.propriumGatewayDeleteStarted === true)).toBe(true);
+  await page.evaluate(() => window.propriumReleaseGatewayDelete?.());
+
+  await page.getByLabel("Gateway owner key").fill(ownerKey);
+  await page.getByRole("button", { name: "Enable Live MCP" }).click();
+  await expect(page.getByText(/^Live on .+\/mcp\./u)).toBeVisible({ timeout: 15_000 });
+  await expect(livePanel).toContainText("No requests running.");
+  await expect(livePanel.getByRole("list", { name: "Authorized MCP clients" }).getByRole("listitem")).toHaveCount(0);
+  expect(eventConnections).toHaveLength(2);
 });

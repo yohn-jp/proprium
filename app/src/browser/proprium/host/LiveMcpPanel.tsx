@@ -180,7 +180,9 @@ export function LiveMcpPanel({ gatewayUrl, onGatewayUrlChange, workspaceId, gene
     } catch (caught) {
       const cancelled = controller.signal.aborted;
       const message = caught instanceof Error ? caught.message.slice(0, 2048) : "The Browser Host could not complete this request.";
-      await postResponse(bearer, request, expectedGeneration, cancelled ? { status: "cancelled", error: message } : { status: "failed", error: message }).catch(() => undefined);
+      if (liveSessionRef.current === expectedSession) {
+        await postResponse(bearer, request, expectedGeneration, cancelled ? { status: "cancelled", error: message } : { status: "failed", error: message }).catch(() => undefined);
+      }
       const status: RecentRequest["status"] = cancelled ? "cancelled" : "failed";
       setRecentRequests(value => [{ id: request.requestId, tool: request.tool, status }, ...value].slice(0, 5));
     } finally {
@@ -230,6 +232,7 @@ export function LiveMcpPanel({ gatewayUrl, onGatewayUrlChange, workspaceId, gene
     if (key.length < 32) { setState("error"); setError("Enter the Gateway owner key (at least 32 characters). It stays in this tab's memory."); return; }
     let created: { sessionId: string; ownerToken: string } | null = null;
     let eventController: AbortController | null = null;
+    let eventStreamConnected = false;
     const liveGeneration = crypto.randomUUID();
     try {
       created = await ownerRequest<{ sessionId: string; ownerToken: string }>("/live/sessions", {
@@ -252,6 +255,7 @@ export function LiveMcpPanel({ gatewayUrl, onGatewayUrlChange, workspaceId, gene
         credentials: "include", cache: "no-store", redirect: "error", referrerPolicy: "no-referrer", signal: controller.signal,
       });
       if (!events.ok || !events.body) throw new Error(`Gateway event stream failed (${events.status}).`);
+      eventStreamConnected = true;
       setState("connected");
       void refreshClients(activeSession.sessionId).catch(caught => {
         if (mountedRef.current && liveSessionRef.current === activeSession.sessionId) setError(caught instanceof Error ? caught.message : "MCP clients could not be listed.");
@@ -267,24 +271,56 @@ export function LiveMcpPanel({ gatewayUrl, onGatewayUrlChange, workspaceId, gene
           pendingRef.current.get(payload.requestId)?.abort(new DOMException("The MCP client cancelled this request.", "AbortError"));
         }
       }, controller.signal);
-      if (liveSessionRef.current === activeSession.sessionId) {
+      if (!controller.signal.aborted && liveSessionRef.current === activeSession.sessionId) {
         liveSessionRef.current = "";
         setSessionId("");
         setClients([]);
         sessionOwnerTokenRef.current = "";
+        setNewToken("");
+        for (const pending of pendingRef.current.values()) pending.abort(new DOMException("The Browser Host event stream disconnected.", "AbortError"));
+        pendingRef.current.clear();
+        if (mountedRef.current) {
+          setActiveRequests([]);
+          setState("disconnected");
+          setEnabled(true);
+        }
       }
-      for (const pending of pendingRef.current.values()) pending.abort(new DOMException("The Browser Host event stream disconnected.", "AbortError"));
-      pendingRef.current.clear();
-      if (mountedRef.current) setActiveRequests([]);
-      if (mountedRef.current) setState("disconnected");
     } catch (caught) {
+      const explicitlyCancelled = eventController?.signal.aborted === true;
+      const currentAttempt = connectAttemptRef.current === attempt;
       const abandonedSession = created?.sessionId;
-      if (liveSessionRef.current) liveSessionRef.current = "";
-      abortRef.current?.abort(); abortRef.current = null;
-      if (abandonedSession && created) await ownerRequest(`/live/sessions/${encodeURIComponent(abandonedSession)}`, { method: "DELETE" }, created.ownerToken).catch(() => undefined);
-      sessionOwnerTokenRef.current = "";
-      setSessionId(""); setClients([]);
-      if (connectAttemptRef.current === attempt && mountedRef.current && !eventController?.signal.aborted) { setState("error"); setError(caught instanceof Error ? caught.message : "Could not connect to the Gateway."); }
+      const ownsSession = Boolean(abandonedSession && liveSessionRef.current === abandonedSession);
+      if (ownsSession) liveSessionRef.current = "";
+      if (eventController && abortRef.current === eventController) {
+        eventController.abort();
+        abortRef.current = null;
+      }
+      if (abandonedSession && created && !explicitlyCancelled) {
+        void ownerRequest(`/live/sessions/${encodeURIComponent(abandonedSession)}`, { method: "DELETE" }, created.ownerToken).catch(() => undefined);
+      }
+      if (!created || sessionOwnerTokenRef.current === created.ownerToken) sessionOwnerTokenRef.current = "";
+      if (currentAttempt || ownsSession) {
+        for (const pending of pendingRef.current.values()) pending.abort(new DOMException("The Browser Host event stream disconnected.", "AbortError"));
+        pendingRef.current.clear();
+      }
+      if (currentAttempt && mountedRef.current) {
+        setSessionId("");
+        setClients([]);
+        setNewToken("");
+        setActiveRequests([]);
+        if (!explicitlyCancelled) {
+          if (created) {
+            setState("disconnected");
+            setEnabled(true);
+            setError(eventStreamConnected
+              ? "The Live Workspace connection to the Gateway was lost. Reconnect to create a new session; authorized clients must pair again."
+              : "The Gateway session could not connect to its Browser Host event stream. Reconnect to create a new session.");
+          } else {
+            setState("error");
+            setError(caught instanceof Error ? caught.message : "Could not connect to the Gateway.");
+          }
+        }
+      }
     }
   }
 
