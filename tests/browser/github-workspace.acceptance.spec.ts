@@ -19,7 +19,7 @@ test("Host signs in, opens a real GitHub branch, commits locally and publishes t
   await page.goto("/");
   const hostOrigin = new URL(page.url()).origin;
   await connectAndOpenGitHubBranch(page, hostOrigin);
-  await expect(page.getByText(new RegExp(`${liveGitHubRepository}.*${liveGitHubBranch}`))).toBeVisible();
+  await expect(page.getByRole("status").filter({ hasText: `Opened ${liveGitHubOwner}/${liveGitHubRepository} · ${liveGitHubBranch}` })).toBeVisible();
 
   const mobileFiles = page.getByRole("button", { name: /^Files(?:\s|$)/u });
   if (await mobileFiles.isVisible()) await mobileFiles.click();
@@ -43,7 +43,9 @@ test("Host signs in, opens a real GitHub branch, commits locally and publishes t
   await page.getByRole("button", { name: "Fetch" }).click();
   await expect(page.getByRole("status")).toContainText(/Fetched \d+ commit\(s\)/u);
   await page.getByRole("button", { name: "Pull" }).click();
-  await expect(page.getByRole("status")).toContainText(/already matches GitHub|Updated to GitHub commit/u);
+  const pullStatus = page.getByRole("status");
+  await expect(pullStatus).toContainText(`Local commits through ${publishedCandidate} are waiting to be published.`);
+  await expect(pullStatus).toContainText(/GitHub is at (?:[a-f0-9]{40}|no published commit); local history and editor contents were preserved\./u);
 
   await page.getByRole("button", { name: "Publish" }).click();
   const published = page.getByRole("status").filter({ hasText: "Published commit" });

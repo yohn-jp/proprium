@@ -57,5 +57,7 @@ export async function connectAndOpenGitHubBranch(page: Page, hostOrigin: string)
   await page.getByLabel("Repository").selectOption(String(liveGitHubRepositoryId));
   await page.getByLabel("Branch").fill(liveGitHubBranch);
   await page.getByRole("button", { name: "Open workspace" }).click();
-  await page.getByText(new RegExp(`${liveGitHubRepository}.*${liveGitHubBranch}`)).waitFor();
+  await page.getByRole("status").filter({
+    hasText: `Opened ${liveGitHubOwner}/${liveGitHubRepository} · ${liveGitHubBranch}`,
+  }).waitFor();
 }

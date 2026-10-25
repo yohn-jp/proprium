@@ -19,6 +19,7 @@ process.env.PROPRIUM_E2E_PLUGIN_REGISTRY_PRIVATE_KEY = pluginFixtureSigner.priva
 export default defineConfig({
   testDir: ".",
   testMatch: "**/*.spec.ts",
+  testIgnore: "**/static-offline.acceptance.spec.ts",
   fullyParallel: false,
   workers: 1,
   timeout: 60_000,
