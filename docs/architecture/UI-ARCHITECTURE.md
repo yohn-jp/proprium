@@ -98,23 +98,21 @@ remoteを結び付ける際はH03でrepository ID、branch、本人権限と既�
 
 ## 5. 認証・認可と入口の信頼境界
 
-| 経路 | 誰が何を確認するか | 認可の範囲／失効 |
+Gateway公開経路はCloudflare Accessを唯一のネットワーク認証境界とし、Proprium独自のOwner Key、MCP Client Token、クライアントペアリング、capability公開選択を要求しない。Tunnelの転送先GatewayはLoopbackにのみbindし、直接公開しない。Origin/Host/CORS検証は維持するが、これ自体をネットワーク認証と呼ばない。Cloudflare Access未保護の別公開経路を追加してはならない。
+
+| 経路 | 検証主体 | 保持する権限・状態 |
 | --- | --- | --- |
-| 静的Host・local作業 | browser storageとlocal identity | login不要。公開Hostの表示はprivate repositoryアクセスではない |
-| Device OAuth開始／token交換 | Gatewayの固定GitHub upstream、configured client ID、Host/Origin／入力検証 | まだGitHub tokenを持たないbootstrap。Owner Keyで代用しない |
-| GitHub API／Smart HTTP | 本人token、immutable repository ID、read/write permission | GitHub上の本人権限。Git author名/emailやUI入力のusernameを認証根拠にしない |
-| Live session作成 | Gatewayが`PROPRIUM_OWNER_KEY`を照合 | 設置者のLive公開権限。GitHubログインだけでは得られない |
-| Live session管理・SSE・応答 | session owner token、Workspace、generation | 当該sessionのみ。panel非表示で失効せず、終了・切断等では無効化 |
-| MCP tool呼出し | 個別client token、session availability、tool grant、deadline | 一つのlive Workspaceと承認されたcapability subsetのみ |
-| proposal適用 | Browser Hostの明示承認と最新revision | local worktree変更まで。commit/publishは別操作 |
+| 静的Hostとローカル編集 | ブラウザー内の保存領域 | ログイン不要、変更内容はローカルに保存 |
+| 公開Gatewayへのアクセス | Cloudflare Access | 許可されたIdentityのみ。Managed OAuthはMCPクライアント用 |
+| GitHub Device OAuthとAPI・Smart HTTP | GitHub OAuthとGatewayの既存Repository ID・permission検証 | GitHub TokenはBrowser Hostのメモリのみ |
+| Live Browser Host登録・SSE・結果返却 | Access、厳密なHost/Origin、ランダムなセッションID・generation照合 | Gatewayの揮発メモリ。Owner Keyや永続Tokenを発行しない |
+| MCPツール一覧 | Gateway | 8ツールを接続状態と無関係に常時公開 |
+| MCPツール呼出し | Access、現在アクティブなBrowser Host、明示repository_id | 対象Repositoryのローカル権限と実データはBrowser Hostが管理 |
+| ファイル変更提案 | Browser Hostの明示承認とrevision再照合 | ローカルworktree変更のみ。commit/publishは別操作 |
 
-Origin/Host照合、CORS、Tunnelの存在は利用者認証の代替ではない。特に現行Owner Keyは**Live作成**の認可であり、OAuth/Git relay全体を一人に制限する共通loginではない。GitHub tokenをGatewayに提示することと、第三者に自分のWorkspaceを公開することも別である。
+複数Browser Hostが接続した場合は、フォーカス・可視状態に基づく明示activationで操作先を切り替える。アクティブHostが切断したら古いHostへ自動でfailoverしない。Clientごとのツール公開状態、Owner Key、Owner TokenをUI・秘密設定・URL・ログに残さない。
 
-共用Gatewayを不特定利用者へ開放するか、operatorによる利用者allowlistを必要とするかは未確定である。この設計で共有Owner Keyを一般利用者へ配らず、GitHub loginをLive所有者認可へ昇格させない。一般ユーザー登録・組織管理・永続account DBを追加しない。共用化を採用する場合は、identity検証、admission、quota、失効の追加契約が別途必要となる。
-
-Gateway選択は信頼の選択である。OAuth交換、限定Git転送、公開したLive結果を通す相手と説明する。URL変更時は旧Live接続を明示終了し、新しい接続先へ古いOwner Keyやsession/client tokenを転送しない。GitHub sign-outとLive停止は独立操作として状態を示す。すべてを切断する操作を設ける場合は両方を明示する。
-
-GitHub token・Live owner/client tokenはHostのメモリに限定し、plugin、logs、URLs、static build設定へ渡さない。Gatewayの設定・Owner Key・Tunnel credentialはOSユーザーのprivate設定であり、「sessionがin-memory」を理由に毎回紛失させるものではない。Gateway再起動後に過去のclient grantを永続設定から復活させない。
+Gateway URLを変更すると既存Live接続を終了し、新しいGatewayへ再登録する。GitHubの認証とGatewayのアクセス認証は別目的であり、GitHub TokenをMCPアクセス認証に流用しない。MCP要求をGitHubへの自動Publishや提案の自動適用へ昇格させない。
 
 ## 6. 利用者権限でのGateway導入・運用
 
@@ -161,7 +159,7 @@ Desktopはkeyboardと同時閲覧、Mobileは単一タスク、thumb操作、IME
 | FT07–09 | 読書/preview/縦横/集中/印刷/組版、scratch画像拒否・中止・回復・local checkpoint。本文と無関係な削除をしない | F05–06 |
 | FT10–12 | diff/author/commit、履歴、fetch不変、pull/local-ahead/conflict、publish exact SHA、失われた応答の再照合、無断再送なし | F07–08 |
 | FT13–15 | signed preview同意前に大容量転送しない、disabled install、権限拒否、run/stop、stale result、update失敗・rollback・uninstall、proposal拒否/競合 | F09–10 |
-| FT16–17 | Live offでSSEなし、正しいOwner Key、client subset、token一回表示、無認可/他Workspace拒否、cancel/deadline、停止・再起動・再認可 | F11–12 |
+| FT16–17 | Live自動登録と再接続、固定8ツールの切断時表示、repository_id選択・未知ID拒否、active Host切替・切断時fail-closed、deadline、提案の明示承認、Owner Key/Client Token UI不在 | F11–12 |
 | FT18–20 | panel移動/float/closeでeditor/plugin/MCPを重複・終了しない、layout保存失敗、mode切替、全theme、Mobile5view/back/sheet/keyboard | F13–15 |
 | FT21 | shell外から到達できるstorage verification、失敗時markerとbytes保持、journal再試行・回復、削除を復旧に代用しない | F16 |
 | FT22 | clean user領域にlatest導入、OS/arch・release一致、不正checksum拒否、foreground/user-service分岐、公開SSE確認、更新失敗復帰 | F17 |

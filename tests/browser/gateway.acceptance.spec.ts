@@ -281,6 +281,36 @@ test("exposes the fixed MCP tools without any client token and executes against 
   await context.setOffline(false);
 });
 
+test("selects locally cached repositories by immutable ID without switching the active workspace", async ({ page }) => {
+  await openWorkspace(page);
+  await waitForMCP(page);
+  const secondRepositoryId = 923456790;
+  await page.evaluate(async ({ id }) => {
+    await window.propriumHostTest!.openWorkspace({
+      origin: "https://github.com",
+      repositoryId: id,
+      owner: "proprium-test",
+      repository: "another-workspace",
+      branch: "main",
+      localWorkspaceId: "other-" + crypto.randomUUID(),
+    }, { "README.md": "Second repository content.\n" });
+  }, { id: secondRepositoryId });
+  await waitForMCP(page);
+  const available = textResult(await mcpCall("both", "repositories_list", {})) as unknown as Array<{ repository_id: number; active: boolean }>;
+  expect(available).toEqual(expect.arrayContaining([
+    expect.objectContaining({ repository_id: sampleRepositoryId, active: false }),
+    expect.objectContaining({ repository_id: secondRepositoryId, active: true }),
+  ]));
+  const first = textResult(await mcpCall("read-original", "file_read", {
+    repository_id: sampleRepositoryId, branch: "main", path: "README.md",
+  }));
+  expect(first.content).toBe("Gateway browser integration fixture.\n");
+  const second = textResult(await mcpCall("read-second", "file_read", {
+    repository_id: secondRepositoryId, branch: "main", path: "README.md",
+  }));
+  expect(second.content).toBe("Second repository content.\n");
+});
+
 test("a disconnected Browser Host leaves tools listed but rejects calls without implicit failover", async ({ page }) => {
   await openWorkspace(page);
   await waitForMCP(page);

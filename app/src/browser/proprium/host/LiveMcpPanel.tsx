@@ -126,7 +126,13 @@ export function LiveMcpPanel({ gatewayUrl, workspaceId, identity, repositories, 
 
   function knownRepositories(): Array<{ identity: WorkspaceIdentity; title: string }> {
     const entries = [{ identity, title: `${identity.owner}/${identity.repository} · ${identity.branch}` }, ...repositories];
-    return [...new Map(entries.map(entry => [entry.identity.localWorkspaceId, entry])).values()];
+    const seen = new Set<string>();
+    return entries.filter(entry => {
+      const key = `${entry.identity.repositoryId}:${entry.identity.branch}`;
+      if (seen.has(key)) return false;
+      seen.add(key);
+      return true;
+    });
   }
 
   function resolveRepository(args: Record<string, unknown>): WorkspaceIdentity {
