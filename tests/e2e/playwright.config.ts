@@ -5,7 +5,7 @@ import { join, resolve } from "node:path";
 
 const externalRepository = Boolean(process.env.SCRIPTORIUM_E2E_REPOSITORY_URL);
 const selectedTestFile = process.env.SCRIPTORIUM_E2E_TEST_FILE;
-const browserGitSuite = selectedTestFile === "browser-git.acceptance.spec.ts";
+const browserGitSuite = ["browser-git.acceptance.spec.ts", "browser-git-sync.acceptance.spec.ts"].includes(selectedTestFile ?? "");
 const coverageFile = process.env.SCRIPTORIUM_E2E_COVERAGE_FILE;
 const configuredBaseURL = process.env.SCRIPTORIUM_E2E_BASE_URL ?? process.env.SCRIPTORIUM_BASE_URL;
 const baseURL = configuredBaseURL ?? `http://127.0.0.1:${process.env.SCRIPTORIUM_E2E_PORT ?? "4173"}`;
@@ -66,7 +66,7 @@ export default defineConfig({
     },
     {
       name: "webkit",
-      testMatch: "**/ui-v1.acceptance.spec.ts",
+      testMatch: ["**/ui-v1.acceptance.spec.ts", "**/browser-git-sync.acceptance.spec.ts"],
       use: {
         browserName: "webkit",
         launchOptions: process.env.SCRIPTORIUM_E2E_WEBKIT
