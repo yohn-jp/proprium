@@ -7,7 +7,7 @@ import { join, resolve } from "node:path";
 declare global {
   interface Window {
     pluginRuntimeTest: {
-      execute(scenario: "success" | "denied" | "stale" | "snapshot-advanced" | "snapshot-mutated-after-invoke" | "cancel" | "destroy" | "hang" | "trap" | "tampered" | "mutated-after-create" | "unadmitted-manifest" | "unknown-capability"): Promise<unknown>;
+      execute(scenario: "success" | "denied" | "stale" | "snapshot-advanced" | "snapshot-mutated-after-invoke" | "cancel" | "destroy" | "hang" | "trap" | "tampered" | "mutated-after-create" | "unadmitted-manifest" | "constructor-bypass" | "unknown-capability"): Promise<unknown>;
     };
   }
 }
@@ -86,6 +86,15 @@ test("admitted WIT Components execute in a bounded Worker with scoped Host capab
 
   const unadmitted = await page.evaluate(() => window.pluginRuntimeTest.execute("unadmitted-manifest")) as { code: string; workerCreated: boolean };
   expect(unadmitted).toEqual({ code: "untrusted_publisher", workerCreated: false });
+
+  const constructorBypass = await page.evaluate(() => window.pluginRuntimeTest.execute("constructor-bypass")) as {
+    reflectCode: string;
+    objectCreateCode: string;
+    workerCreated: boolean;
+  };
+  expect(constructorBypass).toEqual({
+    reflectCode: "untrusted_publisher", objectCreateCode: "untrusted_publisher", workerCreated: false,
+  });
 
   const incompatible = await page.evaluate(() => window.pluginRuntimeTest.execute("unknown-capability")) as { code: string; workerCreated: boolean };
   expect(incompatible).toEqual({ code: "incompatible_abi", workerCreated: false });

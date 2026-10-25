@@ -5,7 +5,7 @@ import { CAPABILITIES, type PluginCapability, type RuntimeSnapshot } from "./pro
 declare global {
   interface Window {
     pluginRuntimeTest: {
-      execute(scenario: "success" | "denied" | "stale" | "snapshot-advanced" | "snapshot-mutated-after-invoke" | "cancel" | "destroy" | "hang" | "trap" | "tampered" | "mutated-after-create" | "unadmitted-manifest" | "unknown-capability"): Promise<unknown>;
+      execute(scenario: "success" | "denied" | "stale" | "snapshot-advanced" | "snapshot-mutated-after-invoke" | "cancel" | "destroy" | "hang" | "trap" | "tampered" | "mutated-after-create" | "unadmitted-manifest" | "constructor-bypass" | "unknown-capability"): Promise<unknown>;
     };
   }
 }
@@ -15,7 +15,7 @@ async function sha256(bytes: Uint8Array): Promise<string> {
   return Array.from(hash, value => value.toString(16).padStart(2, "0")).join("");
 }
 
-async function execute(bytes: Uint8Array, scenario: "success" | "denied" | "stale" | "snapshot-advanced" | "snapshot-mutated-after-invoke" | "cancel" | "destroy" | "hang" | "trap" | "tampered" | "mutated-after-create" | "unadmitted-manifest" | "unknown-capability"): Promise<unknown> {
+async function execute(bytes: Uint8Array, scenario: "success" | "denied" | "stale" | "snapshot-advanced" | "snapshot-mutated-after-invoke" | "cancel" | "destroy" | "hang" | "trap" | "tampered" | "mutated-after-create" | "unadmitted-manifest" | "constructor-bypass" | "unknown-capability"): Promise<unknown> {
   const raw = new TextEncoder().encode(JSON.stringify({
     schema: "proprium.plugin/v1", id: "example.runtime", version: "1.0.0", abi: "proprium.component/v1",
     entrypoint: "dist/plugin.component.wasm",
@@ -28,6 +28,36 @@ async function execute(bytes: Uint8Array, scenario: "success" | "denied" | "stal
   const manifest = await admitPluginManifest(raw, {
     expectedPluginId: "example.runtime", expectedSha256: await sha256(raw), trustedPublisherKey, signature,
   });
+  if (scenario === "constructor-bypass") {
+    let workerCreated = false;
+    const originalWorker = globalThis.Worker;
+    globalThis.Worker = new Proxy(originalWorker, {
+      construct(target, args, newTarget) {
+        workerCreated = true;
+        return Reflect.construct(target, args, newTarget);
+      },
+    }) as typeof Worker;
+    const context = { pluginId: manifest.id, version: manifest.version, workspaceId: "browser-plugin-workspace" };
+    const options = { context, userGrants: [...CAPABILITIES], hostAllowed: [...CAPABILITIES] };
+    const constructor = BrowserPluginRuntime as unknown as Function;
+    let reflectCode = "accepted";
+    let objectCreateCode = "accepted";
+    try {
+      const direct = Reflect.construct(constructor, [{ ...manifest }, bytes.slice(), manifest.artifacts[0]!.sha256, Symbol("forged")]) as BrowserPluginRuntime;
+      await direct.start(options);
+      await direct.stop();
+    } catch (error) {
+      reflectCode = (error as { code?: string }).code ?? "unknown";
+    }
+    try {
+      await (Object.create(BrowserPluginRuntime.prototype) as BrowserPluginRuntime).start(options);
+    } catch (error) {
+      objectCreateCode = (error as { code?: string }).code ?? "unknown";
+    } finally {
+      globalThis.Worker = originalWorker;
+    }
+    return { reflectCode, objectCreateCode, workerCreated };
+  }
   const input = bytes.slice();
   if (scenario === "tampered") input[input.length - 1] ^= 1;
   const admitted = scenario === "unadmitted-manifest" ? { ...manifest } : manifest;

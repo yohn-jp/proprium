@@ -213,7 +213,7 @@ function respond(request: WorkerRequest, error?: { code: RuntimeErrorCode; messa
 function toRuntimeError(error: unknown): { code: RuntimeErrorCode; message: string } {
   if (error instanceof PluginRuntimeError) return { code: error.code, message: error.message.slice(0, 512) };
   const code = (error as { code?: string } | null)?.code;
-  if (code === "capability_denied" || code === "snapshot_stale" || code === "invalid_input" || code === "timeout") {
+  if (code === "untrusted_publisher" || code === "capability_denied" || code === "snapshot_stale" || code === "invalid_input" || code === "timeout") {
     return { code, message: error instanceof Error ? error.message.slice(0, 512) : code };
   }
   return { code: "guest_trap", message: error instanceof Error ? error.message.slice(0, 512) : "Plugin component trapped" };

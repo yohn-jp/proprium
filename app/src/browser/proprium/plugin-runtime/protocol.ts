@@ -61,6 +61,7 @@ export interface PluginTranscript {
 }
 
 export type RuntimeErrorCode =
+  | "untrusted_publisher"
   | "incompatible_abi"
   | "capability_denied"
   | "invalid_input"

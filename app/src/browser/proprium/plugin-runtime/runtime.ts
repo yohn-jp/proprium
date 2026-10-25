@@ -27,6 +27,8 @@ interface PendingRequest {
 
 let activeWorkers = 0;
 let nextEpoch = 1;
+const runtimeAdmissionToken = Symbol("proprium.plugin-runtime.admitted");
+const admittedRuntimes = new WeakSet<object>();
 
 function pinSnapshot(source: RuntimeSnapshot): RuntimeSnapshot {
   assertSnapshot(source);
@@ -45,6 +47,12 @@ function assertCurrentSnapshot(snapshot: RuntimeSnapshot, guard: RuntimeInvokeOp
   if (current !== true) throw new PluginRuntimeError("snapshot_stale", "The workspace snapshot changed during plugin execution");
 }
 
+function assertAdmittedRuntime(runtime: object): void {
+  if (!admittedRuntimes.has(runtime)) {
+    throw new PluginRuntimeError("untrusted_publisher", "Plugin runtime was not created through artifact admission");
+  }
+}
+
 /** One lazy, host-owned Worker and one admitted Component instance. */
 export class BrowserPluginRuntime {
   static async create(manifest: PluginManifestV1, component: Uint8Array): Promise<BrowserPluginRuntime> {
@@ -58,7 +66,7 @@ export class BrowserPluginRuntime {
     await verifyPluginArtifact(manifest, manifest.entrypoint, admittedBytes);
     const artifact = manifest.artifacts.find(item => item.path === manifest.entrypoint);
     if (!artifact) throw new PluginRuntimeError("invalid_input", "Admitted manifest has no Component entrypoint");
-    return new BrowserPluginRuntime(manifest, admittedBytes, artifact.sha256);
+    return new BrowserPluginRuntime(manifest, admittedBytes, artifact.sha256, runtimeAdmissionToken);
   }
 
   private readonly sessionId = crypto.randomUUID();
@@ -73,14 +81,19 @@ export class BrowserPluginRuntime {
   private grants = new Set<PluginCapability>();
   private readonly pending = new Map<string, PendingRequest>();
 
-  private constructor(readonly manifest: PluginManifestV1, component: Uint8Array, digest: string) {
+  private constructor(readonly manifest: PluginManifestV1, component: Uint8Array, digest: string, admissionToken: symbol) {
+    if (admissionToken !== runtimeAdmissionToken) {
+      throw new PluginRuntimeError("untrusted_publisher", "Plugin runtime must be created through artifact admission");
+    }
     this.component = component;
     this.digest = digest;
+    admittedRuntimes.add(this);
   }
 
-  get state(): PluginRuntimeState { return this.stateValue; }
+  get state(): PluginRuntimeState { assertAdmittedRuntime(this); return this.stateValue; }
 
   async start(options: RuntimeStartOptions): Promise<void> {
+    assertAdmittedRuntime(this);
     if (this.stateValue !== "idle") throw new PluginRuntimeError("unavailable", `Cannot start a plugin in ${this.stateValue} state`);
     if (!this.component) throw new PluginRuntimeError("stopped", "Plugin Component has been destroyed");
     if (activeWorkers >= LIMITS.activeWorkers) throw new PluginRuntimeError("overloaded", "The browser plugin Worker limit is reached");
@@ -116,6 +129,7 @@ export class BrowserPluginRuntime {
   }
 
   async invoke(options: RuntimeInvokeOptions): Promise<PluginTranscript> {
+    assertAdmittedRuntime(this);
     if (this.stateValue !== "active" || !this.worker) throw new PluginRuntimeError("unavailable", "Plugin is not active");
     if (this.inFlight) throw new PluginRuntimeError("overloaded", "A plugin request is already running");
     if (typeof options.request !== "string" || utf8Size(options.request) > LIMITS.requestBytes) {
@@ -144,6 +158,7 @@ export class BrowserPluginRuntime {
   }
 
   async stop(): Promise<void> {
+    assertAdmittedRuntime(this);
     if (this.stateValue === "stopped") return;
     if (this.inFlight) { this.cancel(); return; }
     if (this.stateValue === "idle") { this.releaseWorker(); this.stateValue = "stopped"; return; }
@@ -162,10 +177,12 @@ export class BrowserPluginRuntime {
   }
 
   async destroy(): Promise<void> {
+    assertAdmittedRuntime(this);
     await this.stop();
   }
 
   cancel(): void {
+    assertAdmittedRuntime(this);
     this.fail(new PluginRuntimeError("canceled", "Plugin execution was canceled"));
   }
 
