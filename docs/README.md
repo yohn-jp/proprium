@@ -17,8 +17,13 @@ These documents define Proprium's architecture and implementation boundaries. Th
 | [Cloudflare deployment](deployment/CLOUDFLARE.md) | Workers Static Assets, R2 artifact publication and Host release gates |
 | [Local development](development/LOCAL-DEVELOPMENT.md) | Browser Host and Gateway setup, checks, mock/live test boundaries |
 | [Workspace UX](architecture/WORKSPACE-UX.md) | Desktop/mobile interaction, durable user feedback, extension experience |
+| [Feature and screen catalogue](architecture/SCREEN-CATALOG.md) | Reachable Browser Host functions, logical screen IDs, source mapping and missing user paths |
+| [User flows](architecture/USER-FLOWS.md) | Function-based transition diagrams, guards, cancellation, recovery and operator journeys |
+| [UI architecture](architecture/UI-ARCHITECTURE.md) | Navigation/state ownership, distinct authentication boundaries, non-root Gateway lifecycle and acceptance contracts |
 | [Compatibility](architecture/COMPATIBILITY.md) | Inherited Scriptorium assets and boundaries of their reuse |
 | [Source provenance](architecture/SOURCE-PROVENANCE.md) | Copyright, extraction history and asset/model license requirements |
+
+For UI work, read the [screen catalogue](architecture/SCREEN-CATALOG.md), [transition diagrams](architecture/USER-FLOWS.md), and [UI architecture](architecture/UI-ARCHITECTURE.md) together with Workspace UX. They distinguish connected source surfaces from target interactions; neither a diagram nor a retained component proves that an end-to-end feature is implemented.
 
 Legacy Scriptorium-specific Hosted/OCI/release, authoring, module, performance and historical UX documents are not Proprium product authority. They remain available in the original [Scriptorium repository](https://github.com/yohn-jp/scriptorium) and its Git history; immutable evidence already committed in this repository has not been modified.
 
