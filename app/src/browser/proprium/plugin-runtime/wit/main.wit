@@ -1,0 +1,22 @@
+package proprium:plugin@1.0.0;
+
+interface host {
+  snapshot-read: func(path: string) -> result<option<string>, string>;
+}
+
+interface guest {
+  record plugin-context {
+    plugin-id: string,
+    version: string,
+    workspace-id: string,
+  }
+
+  initialize: func(context: plugin-context) -> result<_, string>;
+  invoke: func(request: string) -> result<string, string>;
+  dispose: func();
+}
+
+world plugin {
+  import host;
+  export guest;
+}
