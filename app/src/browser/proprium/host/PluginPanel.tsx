@@ -284,7 +284,7 @@ export function PluginPanel({ workspaceId, git, revisionKey, canApplyChanges, ho
         {transcripts[plugin.id]?.value && <pre className="plugin-output" aria-label={`${plugin.id} output`}>{transcripts[plugin.id]!.value}</pre>}
         {transcripts[plugin.id]?.proposals.length ? <div className="plugin-proposals"><strong>Proposed changes</strong>{transcripts[plugin.id]!.proposals.flatMap((proposal, index) => proposal.changes.map(change => <article key={`${plugin.id}:${index}:${change.path}`}><span>{change.path}</span><pre>{change.content.slice(0, 1200)}{change.content.length > 1200 ? "…" : ""}</pre></article>))}<button type="button" onClick={() => void applyProposals(plugin)} disabled={busy || !canApplyChanges}>Review and apply to local worktree</button></div> : null}
       </li>)}</ul>}
-      {plugins.some(plugin => plugin.state === "active") && <label className="plugin-request">Plugin request<textarea value={request} onChange={event => setRequest(event.target.value)} maxLength={256 * 1024} /></label>}
+      {plugins.some(plugin => plugin.state === "active" || plugin.state === "enabled-idle") && <label className="plugin-request">Plugin request<textarea value={request} onChange={event => setRequest(event.target.value)} maxLength={256 * 1024} /></label>}
     </div>
   </details>;
 }
