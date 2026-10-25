@@ -89,6 +89,7 @@ export class BrowserLocalGit {
 
   private call<T>(command: LocalGitCommand): Promise<T> {
     if (this.closed) return Promise.reject(new BrowserLocalGitError("git_error", "This Browser Git session has been closed."));
+    this.uncertain ||= this.readUncertaintyMarker();
     if (this.uncertain && command.operation !== "verify") {
       return Promise.reject(new BrowserLocalGitError("storage_unknown", "A previous local Git operation has an uncertain result. Verify browser storage before continuing."));
     }

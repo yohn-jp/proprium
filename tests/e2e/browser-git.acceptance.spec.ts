@@ -108,12 +108,19 @@ test("file revisions, repository bindings, unsafe paths, and browser writer lock
     try { await git.write("b.txt", new TextEncoder().encode("blocked"), { oid: null }); }
     catch (error) { busy = (error as { code?: string }).code ?? "unknown"; }
     window.browserGitTest.releaseLock();
+    localStorage.setItem(`proprium.git.storage-unknown.${workspaceId}`, "1");
+    let uncertain = "none";
+    try { await git.status(); }
+    catch (error) { uncertain = (error as { code?: string }).code ?? "unknown"; }
+    const verification = await git.verifyStorage();
     git.close();
-    return { initialized, first, stale, traversal, identity, acquired, busy };
+    return { initialized, first, stale, traversal, identity, acquired, busy, uncertain, verification };
   }, id);
   expect(result.stale).toBe("revision_conflict");
   expect(result.traversal).toBe("invalid_path");
   expect(result.identity).toBe("identity_mismatch");
   expect(result.acquired).toBe(true);
   expect(result.busy).toBe("workspace_busy");
+  expect(result.uncertain).toBe("storage_unknown");
+  expect(result.verification.verified).toBe(true);
 });
