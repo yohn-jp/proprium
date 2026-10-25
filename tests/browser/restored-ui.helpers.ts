@@ -19,3 +19,9 @@ export async function chooseFile(page: Page, path: string): Promise<void> {
   await page.getByRole("list", { name: "Repository files" }).getByRole("button", { name: path }).click();
   await showPanel(page, "editor");
 }
+
+export async function configureGateway(page: Page, url: string): Promise<void> {
+  const settings = page.locator("details.gateway-settings");
+  if (await settings.getAttribute("open") === null) await settings.locator("summary").click();
+  await page.getByLabel("Proprium Gateway URL").fill(url);
+}

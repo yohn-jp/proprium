@@ -115,9 +115,11 @@ export function HostApp(): ReactElement {
   const [toolsNode] = useState(() => document.createElement("div"));
   const [recent, setRecent] = useState<RecentWorkspace[]>(readRecentWorkspaces);
   const [gatewayDraft, setGatewayDraft] = useState(readGateway);
+  const [gatewaySettingsOpen, setGatewaySettingsOpen] = useState(() => !readGateway());
   const [session, setSession] = useState<GitHubAccountSession | null>(null);
   const [account, setAccount] = useState<GitHubAccount | null>(null);
   const [repositories, setRepositories] = useState<GitHubRepository[]>([]);
+  const [authStage, setAuthStage] = useState<"waiting" | "repositories" | null>(null);
   const [devicePrompt, setDevicePrompt] = useState<GitHubDevicePrompt | null>(null);
   const [busy, setBusy] = useState(false);
   const [selectedRepository, setSelectedRepository] = useState<number | null>(null);
@@ -155,6 +157,7 @@ export function HostApp(): ReactElement {
   }, [workspace, mode, navigate]);
   const gitRef = useRef<BrowserLocalGit | null>(null);
   const sessionRef = useRef<GitHubAccountSession | null>(null);
+  const authorizationRef = useRef<AbortController | null>(null);
   const currentFileRef = useRef<OpenFile | null>(currentFile);
   const livePluginInvoker = useRef<((args: Record<string, unknown>, signal: AbortSignal) => Promise<unknown>) | null>(null);
   currentFileRef.current = currentFile;
@@ -218,38 +221,49 @@ export function HostApp(): ReactElement {
     return () => { window.propriumHostOpenLocalWorkspace = undefined; };
   }, [openLocalWorkspace]);
 
-  useEffect(() => () => { gitRef.current?.close(); sessionRef.current?.signOut(); }, []);
+  useEffect(() => () => { authorizationRef.current?.abort(); gitRef.current?.close(); sessionRef.current?.signOut(); }, []);
 
   async function connectGitHub(): Promise<void> {
     const configuredGateway = gatewayDraft.trim();
     if (!configuredGateway) { setMessage({ tone: "error", text: "Enter the Proprium Gateway URL configured for this Host." }); return; }
     setBusy(true);
     setMessage(null);
+    const controller = new AbortController();
+    authorizationRef.current?.abort(); authorizationRef.current = controller;
     let accountSession: GitHubAccountSession | null = null;
     try {
       accountSession = createGitHubAccountSession(configuredGateway);
-      const verificationWindow = window.open("https://github.com/login/device", "_blank", "noopener,noreferrer");
       const prompt = await accountSession.beginAuthorization();
       sessionRef.current?.signOut();
       sessionRef.current = accountSession;
       setSession(accountSession);
-      setDevicePrompt(prompt);
+      setDevicePrompt(prompt); setAuthStage("waiting");
       setMessage({ tone: "info", text: `Enter code ${prompt.userCode} at GitHub, then return here. This page will finish sign-in automatically.` });
-      if (!verificationWindow) setMessage({ tone: "info", text: `Enter code ${prompt.userCode} at ${prompt.verificationUri}, then return here. This page will finish sign-in automatically.` });
-      const signedIn = await accountSession.completeAuthorization();
-      setAccount(signedIn);
+      const signedIn = await accountSession.completeAuthorization(controller.signal);
+      if (controller.signal.aborted || authorizationRef.current !== controller) return;
+      setAuthStage("repositories");
       const available = await accountSession.repositories();
+      if (controller.signal.aborted || authorizationRef.current !== controller) return;
+      setAccount(signedIn);
       setRepositories(available);
       setDevicePrompt(null);
       try { localStorage.setItem(GATEWAY_KEY, configuredGateway); } catch { /* Configuration can be entered again. */ }
       setMessage({ tone: "success", text: `Connected to GitHub as ${signedIn.login}. Choose a repository to open.` });
     } catch (error) {
+      accountSession?.signOut();
+      if (authorizationRef.current !== controller) return;
       setDevicePrompt(null);
       setMessage({ tone: "error", text: errorMessage(error) });
-      accountSession?.signOut();
       if (sessionRef.current === accountSession) sessionRef.current = null;
-      setSession(null);
-    } finally { setBusy(false); }
+      setSession(null); setAccount(null); setRepositories([]);
+    } finally { if (authorizationRef.current === controller) { authorizationRef.current = null; setAuthStage(null); setBusy(false); } }
+  }
+
+  function cancelGitHubAuthorization(): void {
+    authorizationRef.current?.abort(); authorizationRef.current = null;
+    sessionRef.current?.signOut(); sessionRef.current = null;
+    setSession(null); setAccount(null); setRepositories([]); setDevicePrompt(null); setAuthStage(null); setBusy(false);
+    setMessage({ tone: "info", text: "GitHub sign-in canceled. Local workspaces remain available." });
   }
 
   async function openRemoteRepository(): Promise<void> {
@@ -316,7 +330,7 @@ export function HostApp(): ReactElement {
   }
 
   async function selectRecent(entry: RecentWorkspace): Promise<void> {
-    await openLocalWorkspace(entry);
+    await openLocalWorkspace(entry, session ?? undefined);
   }
 
   async function refreshAfterPlugin(): Promise<void> {
@@ -543,7 +557,8 @@ export function HostApp(): ReactElement {
       setAccount(null);
       setRepositories([]);
       setSession(null);
-      sessionRef.current = null;
+      setSyncClient(null);
+      sessionRef.current?.signOut(); sessionRef.current = null;
     }
     setMessage({ tone: "error", text });
   }
@@ -611,6 +626,11 @@ export function HostApp(): ReactElement {
   };
   const recoveryEntry = recoveryTarget ?? (message?.text.startsWith("storage_unknown:") ? workspace : null);
 
+  const recentCard = <section className="picker-card recent-card" aria-labelledby="recent-heading">
+          <div className="card-heading"><div><p className="eyebrow">THIS DEVICE</p><h2 id="recent-heading">Recent workspaces</h2></div><span className="card-icon">◷</span></div>
+          <p className="field-help">Available offline after they have been opened in this browser. Local changes remain vulnerable to browser storage loss until GitHub confirms publication.</p>
+          {recent.length ? <ul className="recent-list">{recent.map(entry => <li key={entry.identity.localWorkspaceId}><button type="button" className="recent-workspace" disabled={busy} onClick={() => void selectRecent(entry)}><span><strong>{entry.title}</strong><small>{entry.identity.branch} · opened {new Date(entry.lastOpened).toLocaleDateString()}</small></span><span aria-hidden="true">→</span></button></li>)}</ul> : <div className="empty-state"><span>◇</span><p>No local workspaces yet</p></div>}
+        </section>;
   const picker = <section className="workspace-picker" aria-labelledby="picker-heading">
       <div className="welcome-copy"><p className="eyebrow">A workspace that stays yours</p><h1 id="picker-heading">Open a GitHub workspace</h1><p>Open a repository in this browser, edit files offline, commit locally, and publish when you are ready.</p></div>
       <div className="picker-grid">
@@ -630,18 +650,16 @@ export function HostApp(): ReactElement {
             {selectedRepositoryEntry && <><label htmlFor="workspace-branch">Branch</label><input id="workspace-branch" value={selectedBranch} onChange={event => setSelectedBranch(event.target.value)} placeholder={selectedRepositoryEntry.defaultBranch} autoComplete="off" /><p className="repository-branch">Default: <code>{selectedRepositoryEntry.defaultBranch}</code></p></>}
             <button className="primary-button full-width" type="button" disabled={busy || !selectedRepositoryEntry || !selectedRepositoryEntry.permissions.pull || !selectedBranch.trim()} onClick={() => void openRemoteRepository()}>{busy ? "Opening…" : "Open workspace"}</button>
           </> : <>
-            <label htmlFor="github-gateway">Proprium Gateway URL</label>
-            <input id="github-gateway" type="url" value={gatewayDraft} onChange={event => updateGateway(event.target.value)} placeholder="https://gateway.example.com" autoComplete="url" />
-            <p className="field-help">The Gateway handles GitHub device authorization and restricted Git transport. Browser GitHub REST calls remain direct. It does not store repository files or local Git data.</p>
-            {devicePrompt && <div className="device-prompt"><span>Enter this code on GitHub</span><strong>{devicePrompt.userCode}</strong><a href={devicePrompt.verificationUri} target="_blank" rel="noreferrer">Open GitHub device sign-in</a><span className="field-help">Waiting for authorization…</span></div>}
+            <details className="gateway-settings" open={gatewaySettingsOpen} onToggle={event => setGatewaySettingsOpen(event.currentTarget.open)}><summary>接続先設定</summary>
+              <label htmlFor="github-gateway">Proprium Gateway URL</label>
+              <input id="github-gateway" type="url" value={gatewayDraft} onChange={event => updateGateway(event.target.value)} placeholder="https://gateway.example.com" autoComplete="url" />
+              <p className="field-help">通常は変更不要です。セルフホストのGatewayを利用する場合だけ変更してください。</p>
+            </details>
+            {devicePrompt && <section className="device-prompt" aria-label="GitHub device authorization"><h3>GitHubの認証コード</h3><strong>{devicePrompt.userCode}</strong><p>このコードを控えてから認証画面を開き、入力してください。認証後、この画面へ戻ると接続が完了します。</p><a href={devicePrompt.verificationUri} target="_blank" rel="noopener noreferrer">Open GitHub device sign-in</a><p className="field-help" role="status">{authStage === "repositories" ? "認証済み。Repository一覧を取得しています…" : "GitHubでの認証を待っています…"}</p><button type="button" onClick={cancelGitHubAuthorization}>Cancel GitHub sign-in</button></section>}
             <button className="primary-button full-width" type="button" disabled={busy} onClick={() => void connectGitHub()}>{busy ? "Connecting…" : "Connect GitHub"}</button>
           </>}
         </section>
-        <section className="picker-card recent-card" aria-labelledby="recent-heading">
-          <div className="card-heading"><div><p className="eyebrow">THIS DEVICE</p><h2 id="recent-heading">Recent workspaces</h2></div><span className="card-icon">◷</span></div>
-          <p className="field-help">Available offline after they have been opened in this browser. Local changes remain vulnerable to browser storage loss until GitHub confirms publication.</p>
-          {recent.length ? <ul className="recent-list">{recent.map(entry => <li key={entry.identity.localWorkspaceId}><button type="button" className="recent-workspace" disabled={busy} onClick={() => void selectRecent(entry)}><span><strong>{entry.title}</strong><small>{entry.identity.branch} · opened {new Date(entry.lastOpened).toLocaleDateString()}</small></span><span aria-hidden="true">→</span></button></li>)}</ul> : <div className="empty-state"><span>◇</span><p>No local workspaces yet</p></div>}
-        </section>
+        {mode === "mobile" && recentCard}
       </div>
       <p className="locality-note"><span>●</span> Editing and Git run in this browser. GitHub is the shared source of truth; local commits are not published automatically.</p>
     </section>;
@@ -654,10 +672,10 @@ export function HostApp(): ReactElement {
             {files.length ? <ul className="file-list" aria-label="Repository files">{files.filter(file => file.type === "blob").map(file => <li key={file.path}><button type="button" aria-current={currentFile?.path === file.path ? "page" : undefined} className={`file-row ${currentFile?.path === file.path ? "file-selected" : ""}`} onClick={() => void loadFile(file.path)}><span className="file-icon" aria-hidden="true">{fileIcon(file.path)}</span><span className="file-path">{file.path}</span>{changedPaths.has(file.path) && <span className="change-dot" aria-label="Local change" />}</button></li>)}</ul> : <p className="sidebar-empty">This repository has no files yet.</p>}
           </section>
           <section className="sidebar-section sync-sidebar-section">
-            <div className="section-title-row"><h2>GitHub</h2><span className={`connection-indicator ${syncClient ? "connected" : "local-only"}`} aria-label={syncClient ? "Connected to GitHub" : "Local workspace only"} /></div>
+            <div className="section-title-row"><h2>GitHub</h2><span className={`connection-indicator ${syncClient ? "connected" : "local-only"}`} aria-label={syncClient ? "Connected to GitHub" : "Local workspace only"}>{syncClient ? "GitHub接続済み" : "このブラウザーのみ"}</span></div>
             {syncClient ? <div className="sync-actions"><button type="button" onClick={() => void fetchRemote()} disabled={busy}>Fetch</button><button type="button" onClick={() => void pullRemote()} disabled={busy}>Pull</button><button type="button" className="publish-button" onClick={() => void publishRemote()} disabled={busy || status.localState !== "local-committed"}>Publish</button></div> : <p className="sidebar-empty">Sign in to enable remote sync. Local editing remains available offline.</p>}
           </section>
-</div> : picker;
+</div> : mode === "desktop" ? <div className="host-controls">{recentCard}</div> : picker;
   const tools = <div className="host-controls">{git && workspace && <PluginPanel
             workspaceId={activeWorkspaceId!}
             git={git}
@@ -700,7 +718,7 @@ export function HostApp(): ReactElement {
       onChange={text => { setCurrentFile(previous => previous ? { ...previous, text, dirty: true } : previous); setSyncState("editing"); }}
       onSave={() => void saveDraft()} onCommit={() => revealPanel("inspector")} onPublish={() => void publishRemote()} canPublish={!!syncClient && status.localState === "local-committed" && !currentFile.dirty}
       onHistory={() => revealPanel("history")} onRegisterFlush={registerEditorFlush} onScratchApplied={refreshAfterPlugin} />}
-  </section> : workspace ? <p>Choose a file to edit</p> : <p>作品ライブラリからWorkspaceを開いてください。</p>;
+  </section> : workspace ? <p>Choose a file to edit</p> : mode === "desktop" ? picker : <p>作品ライブラリからWorkspaceを開いてください。</p>;
   const panels: WorkspacePanel[] = [
     { id: "editor", title: "原稿", render: () => <RetainedPanelSlot node={editorNode} /> },
     { id: "outline", title: "作品と構成", render: () => library },

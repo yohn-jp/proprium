@@ -28,3 +28,31 @@
 .storage-recovery-error { color: var(--error); }
 .storage-recovery-actions { display: flex; flex-wrap: wrap; gap: .5rem; }
 .storage-recovery-actions button { min-height: 2.75rem; }
+/* Studio's light navigation surfaces must not inherit the earlier dark-rail palette. */
+:root[data-zp-theme] .restored-host .st-studio-shell .st-desktop-navigation {
+  --ink: var(--studio-ink); --muted: var(--studio-muted); --paper: var(--studio-sheet);
+  --line: var(--studio-border); --sidebar-bg: var(--studio-sheet); --toolbar-bg: var(--studio-tint);
+  --accent: var(--studio-primary); --accent-strong: var(--studio-primary);
+  --button-foreground: var(--studio-sheet); --input-border: var(--studio-muted);
+  --surface-hover: var(--studio-tint-strong); --surface-selected: var(--studio-tint-strong);
+  --surface-selected-border: var(--studio-primary); --placeholder: var(--studio-muted);
+  --error: var(--error-text); --badge-bg: var(--studio-tint);
+  color: var(--studio-ink); background: var(--studio-sheet);
+}
+.restored-host .st-studio-shell .st-desktop-panel-tabs { background: var(--studio-tint); border-color: var(--studio-border); }
+.restored-host .st-studio-shell .st-desktop-panel-tab,
+.restored-host .st-studio-shell .st-desktop-panel-tab[data-state="active"],
+.restored-host .st-studio-shell .st-desktop-panel-tab:hover { color: var(--studio-ink); }
+.device-prompt { margin-block: 1rem; padding: 1rem; border: 1px solid var(--line); border-radius: .5rem; color: var(--ink); background: var(--paper); }
+.device-prompt strong { display: block; margin-block: .5rem; font: 700 1.75rem ui-monospace, monospace; letter-spacing: .1em; }
+.device-prompt a { display: inline-flex; align-items: center; min-height: 2.75rem; color: var(--accent-strong); font-weight: 700; }
+.connection-indicator { display: inline-flex; padding: .2rem .4rem; font-size: .8rem; line-height: 1.4; color: var(--muted); }
+.connection-indicator.connected { color: var(--success); }
+.section-title-row { display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: .5rem; }
+/* Before opening a document, use the main pane for GitHub setup and the index for recents. */
+.st-studio-shell .st-desktop-editor-slot .workspace-picker { max-width: 52rem; margin-inline: auto; padding: clamp(1rem, 4vw, 3rem); color: var(--studio-ink); }
+.st-studio-shell .st-desktop-editor-slot .workspace-picker { --ink: var(--studio-ink); --muted: var(--studio-muted); --paper: var(--studio-sheet); --line: var(--studio-border); --accent: var(--studio-primary); --accent-strong: var(--studio-primary); --button-foreground: var(--studio-sheet); --input-border: var(--studio-muted); }
+.workspace-picker .welcome-copy h1 { margin-block: .5rem 1rem; }
+.workspace-picker .picker-card { margin-block: 1.5rem; padding: 1rem; border: 1px solid var(--line); border-radius: .5rem; background: var(--paper); }
+.workspace-picker .field-help { color: var(--muted); font-size: .85rem; line-height: 1.6; }
+.workspace-picker .full-width { width: 100%; margin-block-start: .75rem; }

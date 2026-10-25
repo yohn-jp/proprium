@@ -1,3 +1,4 @@
+import { configureGateway } from "./restored-ui.helpers.js";
 import type { Page } from "@playwright/test";
 import { installMockGitHubOAuth } from "../helpers/github-relay-fixture.js";
 
@@ -21,7 +22,7 @@ export async function connectAndOpenGitHubBranch(page: Page, hostOrigin: string,
     throw new Error("GitHub browser acceptance requires an explicit disposable non-main branch.");
   }
   await routeFixtureRelay(page, hostOrigin, relayUrl);
-  await page.getByLabel("Proprium Gateway URL").fill(relayUrl);
+  await configureGateway(page, relayUrl);
   await page.getByRole("button", { name: "Connect GitHub" }).click();
   const operationNotice = page.locator(".host-message[role='status']");
   await operationNotice.getByText(/Connected to GitHub as/u).waitFor();

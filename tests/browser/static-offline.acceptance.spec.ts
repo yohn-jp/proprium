@@ -1,4 +1,4 @@
-import { showPanel, expectEditorText, chooseFile } from "./restored-ui.helpers.js";
+import { showPanel, expectEditorText, chooseFile, configureGateway } from "./restored-ui.helpers.js";
 import { expect, test } from "@playwright/test";
 import { execFileSync } from "node:child_process";
 import { mkdtempSync, readFileSync, rmSync } from "node:fs";
@@ -114,7 +114,7 @@ test("static Host imports a GitHub REST commit, reloads offline, and edits with 
   const origin = new URL(page.url()).origin;
   expect(origin).toBe(configuredOrigin);
   if (useLiveGitHub) {
-    await page.getByLabel("Proprium Gateway URL").fill(liveGatewayUrl);
+    await configureGateway(page, liveGatewayUrl);
     await page.getByRole("button", { name: "Connect GitHub" }).click();
     await expect(operationNotice).toContainText(/Connected to GitHub as /u);
     if (liveGitHubLogin) await expect(operationNotice).toContainText(liveGitHubLogin);
@@ -123,7 +123,7 @@ test("static Host imports a GitHub REST commit, reloads offline, and edits with 
     await page.getByRole("button", { name: "Open workspace" }).click();
     await expect(operationNotice).toContainText(`Opened ${workspaceTitle}`);
   } else {
-    await page.getByLabel("Proprium Gateway URL").fill(configuredOrigin);
+    await configureGateway(page, configuredOrigin);
     await page.getByRole("button", { name: "Connect GitHub" }).click();
     await expect(operationNotice).toContainText(`Connected to GitHub as ${staticFixtureLogin}`);
     await page.getByLabel("Repository").selectOption(String(staticFixtureIdentity.repositoryId));
