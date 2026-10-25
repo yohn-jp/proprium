@@ -1,0 +1,313 @@
+{
+  "schema": "proprium.execution-evidence/v1",
+  "recordedAt": "2026-10-25T05:32:05.014146+00:00",
+  "baseMain": "0b88fb25f5df825121ade6d4921fa46798daa3b5",
+  "sourceHead": "af45252bd4dc4a124007ca4b8b54f52578e3b977",
+  "scope": {
+    "G1": "Browser Git and GitHub workspace synchronization",
+    "G2": "Generic browser Host and responsive desktop/mobile interface",
+    "G3": "WIT Component Worker, capability control and Host-rendered plugin interface",
+    "G4": "Signed registry, immutable artifacts, dependencies, reviewed install/update, rollback and removal",
+    "G5": "Static build, offline shell, Wrangler assets and manual release workflows",
+    "G6": "Retired Node API, legacy app, OCI, Hosted and profile runtime paths"
+  },
+  "implementationCommits": [
+    {
+      "sha": "37273694949aa1064d08938e4cebfb5eb00af74c",
+      "subject": "test(browser-git): separate GitHub account from repo owner"
+    },
+    {
+      "sha": "da4d7aabe134824d2755903dbc0c91771022462c",
+      "subject": "feat(browser-git): complete workspace repository operations"
+    },
+    {
+      "sha": "da1b29f4f9aac3d80460c5d981029b0761eb4691",
+      "subject": "test(browser): add Proprium workspace and plugin acceptance coverage"
+    },
+    {
+      "sha": "db626696f7ef187b1f62a428d1e10b911af6459e",
+      "subject": "test(plugins): resolve fixture artifact from registry base"
+    },
+    {
+      "sha": "1abfe9edf65c7b8c2ff84fc9c5ec76c2750b8f95",
+      "subject": "test(browser): honor selected suite in WebKit"
+    },
+    {
+      "sha": "0408efd990276986dc3a3ca81d635c5422685b10",
+      "subject": "test(browser): retire legacy Node e2e harness"
+    },
+    {
+      "sha": "a28d984fa039d5360cf71157a94384c2c7e3c7c8",
+      "subject": "test(browser-host): exercise GitHub workspace publication UI"
+    },
+    {
+      "sha": "09d0b9f7fa59d4eef3ca139afcf61491ce923451",
+      "subject": "refactor(runtime): retire inherited server and OCI runtime"
+    },
+    {
+      "sha": "d8a6314b2df1a593929c8024a6acfc727a1c1ce2",
+      "subject": "feat(delivery): add browser static build and release path"
+    },
+    {
+      "sha": "010335c76a28251d7bcbd535abdc6c03bfdecb8a",
+      "subject": "feat(plugins): add signed registry manager and artifact lifecycle"
+    },
+    {
+      "sha": "9f3f4ec1636df944c89badbee85ae765ae710cf3",
+      "subject": "test(plugins): confirm signed install and update plans"
+    },
+    {
+      "sha": "a93e74d27537ba1486b1b156899475d59e983b79",
+      "subject": "test(browser): pass Vite flags and configurable port"
+    },
+    {
+      "sha": "be4f77b06e392f354578a6336d7ed2c0a376628c",
+      "subject": "test(plugins): exercise Host panel with verified registry"
+    },
+    {
+      "sha": "00bf76e13a015be3f625a54400f889e492ecd269",
+      "subject": "fix(plugins): surface revoked cached installs safely"
+    },
+    {
+      "sha": "3d1c09309329984bbb57dcdd89f01fa2b3b49244",
+      "subject": "feat(browser-git): apply approved changes as one batch"
+    },
+    {
+      "sha": "239aa2141812ffc918aa7ba014a1e0597d7908fe",
+      "subject": "feat(host): ship browser-native workspace UI"
+    },
+    {
+      "sha": "b045930fe19e2f4988f5196d2ad74206fc114928",
+      "subject": "docs: align runtime contracts with browser implementation"
+    },
+    {
+      "sha": "013b8d379d23dedc956860c63732a754878273a6",
+      "subject": "fix(plugins): bind default browser fetch adapter"
+    },
+    {
+      "sha": "55b479f87bfc7a33331d593c538113483e808586",
+      "subject": "test(browser): cover static offline workspace recovery"
+    },
+    {
+      "sha": "99963147d6157bf6b2f8c6808074820009102f4d",
+      "subject": "fix(delivery): cache worker chunks and wasm for offline use"
+    },
+    {
+      "sha": "10b0d97472f6cf74f82f6f0fa9d84f24ed785a0f",
+      "subject": "fix(browser-git): report local commits ahead of remote"
+    },
+    {
+      "sha": "81cf211d9708dd38bccf84de26a8e3f369f232ea",
+      "subject": "fix(host): report local commits ahead of GitHub"
+    },
+    {
+      "sha": "0def743ebaead0edac8c8c194eeae14e14fd88be",
+      "subject": "test(browser): assert local-ahead GitHub pull status"
+    },
+    {
+      "sha": "1547eee23be6e2400b3d2f34b3112de2fdebb9e6",
+      "subject": "feat(plugins): preserve immutable registry releases"
+    },
+    {
+      "sha": "739bca9c58295b3272a515e95679f4f68b8d4585",
+      "subject": "test(plugins): keep pinned fixture key stable in workers"
+    },
+    {
+      "sha": "30dcd928833d92d207b1d777fa304096badd8141",
+      "subject": "test(browser): reveal mobile Git tools before status check"
+    },
+    {
+      "sha": "cfec10aca8b522e96d5f52112fe3e8758dce4fd7",
+      "subject": "feat(delivery): finalize browser release and CI paths"
+    },
+    {
+      "sha": "cafff7e9002016cdea8516d2acb05666c3877d6e",
+      "subject": "fix(delivery): resolve and bound plugin artifact uploads"
+    },
+    {
+      "sha": "abecf9d9778c8f0279b349a5c4e62d7612551e8b",
+      "subject": "fix(host): show plugin request before first run"
+    },
+    {
+      "sha": "2859fd402855cc43034d7a77fcfba04bf48688ad",
+      "subject": "test(plugins): expect disabled state after stop"
+    },
+    {
+      "sha": "7b3a3a2d53418bfd85470e9a4d693e482e06e587",
+      "subject": "test(browser): scope GitHub notices away from save state"
+    },
+    {
+      "sha": "d71ab7f18f2c3287e49f3675d274ad13657eb289",
+      "subject": "test(browser): verify static offline plugin runtime"
+    },
+    {
+      "sha": "e51a13005438808193069bdc54db2045d410035d",
+      "subject": "test(browser): reopen mobile Git actions when needed"
+    },
+    {
+      "sha": "7717cd8dd93f665f414f12b93fb255a3584f88bd",
+      "subject": "fix(delivery): materialize cached offline navigation response"
+    },
+    {
+      "sha": "28881f2863465840d86ca1c13530e67a184e3c7d",
+      "subject": "test(browser): run fixtures with static service worker"
+    },
+    {
+      "sha": "8f9c4eae7e68b71a2f0a7cfbdecb41060c6ec2c3",
+      "subject": "test(browser): route fixtures across service workers"
+    },
+    {
+      "sha": "942d3facea074edc416e0401ca307d07af2c5880",
+      "subject": "fix(host): preserve editor drafts across async refreshes"
+    },
+    {
+      "sha": "ff1220ab40ca78f16374d615e2d6cc48bb29af96",
+      "subject": "test(browser): preserve edits during file deletion"
+    },
+    {
+      "sha": "ce5bf4a20825cc84fb473d7c9cbff7532e0d46fb",
+      "subject": "test(browser): defer fixture worker on mobile static run"
+    },
+    {
+      "sha": "b98e9503666af47ed8bdd3cc728ccf6bfed93525",
+      "subject": "test(browser): await mobile worker activation"
+    },
+    {
+      "sha": "8f0534d39f9dbb8bfb100eca9d9f0742a7e3c0ae",
+      "subject": "test(browser): wait for offline workspace navigation"
+    },
+    {
+      "sha": "2f68ab23b131c772be09a501ca16e3ad0b18a032",
+      "subject": "test(browser): reopen mobile plugin sidebar offline"
+    },
+    {
+      "sha": "af45252bd4dc4a124007ca4b8b54f52578e3b977",
+      "subject": "test(browser): preserve edits during plugin refresh"
+    }
+  ],
+  "checks": [
+    {
+      "name": "frozen dependency installation",
+      "command": "pnpm install --frozen-lockfile",
+      "result": "PASS",
+      "detail": "Two workspace projects: repository tooling and @proprium/host; inherited Node packages are outside the product workspace."
+    },
+    {
+      "name": "browser typecheck",
+      "command": "pnpm typecheck:browser",
+      "result": "PASS"
+    },
+    {
+      "name": "browser security and synchronization unit tests",
+      "command": "pnpm test:browser:unit",
+      "result": "PASS",
+      "passed": 31
+    },
+    {
+      "name": "Git and Component browser adapters",
+      "command": "pnpm exec playwright test --config tests/e2e/playwright.config.ts",
+      "result": "PASS",
+      "passed": 15,
+      "skipped": 2,
+      "detail": "Skipped opt-in live GitHub cases are covered separately below. Aggregate config omits WebKit local-only suite; CI adapter runner separately selects each suite."
+    },
+    {
+      "name": "Host plugin and offline workspace UI",
+      "result": "PASS",
+      "passed": 6,
+      "detail": "Chromium desktop and WebKit mobile emulation: signed installation, real Component execution, stop/update/rollback, local offline edit/commit and reopen."
+    },
+    {
+      "name": "delete versus foreground typing",
+      "result": "PASS",
+      "passed": 2,
+      "detail": "Delayed real Git deletion; newer editor input survives and recreates the file."
+    },
+    {
+      "name": "plugin refresh versus foreground typing",
+      "result": "PASS",
+      "passed": 2,
+      "detail": "Real reviewed Component proposal and delayed Git read; newer editor input remains a dirty draft."
+    },
+    {
+      "name": "live GitHub Host publication",
+      "result": "PASS",
+      "passed": 2,
+      "detail": "Chromium desktop and WebKit mobile emulation use real GitHub profile, repository and Git HTTP traffic. Device-code/token exchange is a test relay supplying an in-memory existing credential. Host opens the disposable branch, edits, commits, fetches, pulls, publishes and asserts exact remote SHA."
+    },
+    {
+      "name": "static Host offline runtime",
+      "command": "pnpm test:browser:static:e2e",
+      "result": "PASS",
+      "passed": 2,
+      "detail": "Verified separately in Chromium desktop and WebKit mobile emulation through local Wrangler Static Assets with CSP. Real Git object import, independently downloaded WIT Component, offline page reload, a fresh Git Worker, offline commit and cached Component execution. WebKit test defers native Service Worker registration until synthetic network fixtures complete because Playwright cannot intercept its controlled requests; it then asserts an active controlling production worker before all offline checks."
+    },
+    {
+      "name": "static packaging",
+      "command": "pnpm build:browser && pnpm exec wrangler deploy --dry-run --config wrangler.jsonc",
+      "result": "PASS",
+      "detail": "dist/proprium entry, hashed JS/CSS/Worker/WASM closure, security headers and offline precache; no application bindings."
+    },
+    {
+      "name": "independent plugin release producer",
+      "result": "PASS",
+      "detail": "Built and verified signed 1.0.0 and 1.0.1 with ephemeral signing keys, preserved both immutable versions, rejected duplicate version, then re-verified unchanged index."
+    },
+    {
+      "name": "R2 publication planning",
+      "command": "node scripts/publish-plugin-registry.mjs artifacts --plan",
+      "result": "PASS",
+      "detail": "No-network plan resolves existing absolute local artifact paths to content-addressed R2 keys with WASM MIME and immutable cache policy."
+    },
+    {
+      "name": "documentation and retained evidence",
+      "result": "PASS",
+      "detail": "15 maintained Markdown files have no missing local links; 2 immutable legacy evidence retention tests pass; git diff --check passes."
+    }
+  ],
+  "liveGitHubFixture": {
+    "repository": "yohn-jp/proprium",
+    "branch": "acceptance/browser-6e2783d1-dccf-41db-bc81-f9bb9a82ff31",
+    "initialHead": "6b759aea216123b930588c950ff48fddff6402fc",
+    "lastConfirmedPublishedHead": "1f9bdcd9aea835cecce5b9fed425dcf0f579a61d",
+    "credentialsPersisted": false,
+    "cleanup": "Disposable branch is removed after verification; commit IDs remain evidence, not a durability guarantee."
+  },
+  "browserEnvironment": {
+    "chromium": "Chromium 155.0.8059.84 on Linux",
+    "webkit": "Playwright WebKit 2370 WPE on Linux, mobile viewport/touch emulation",
+    "physicalMobileDevices": "NOT_CHECKED"
+  },
+  "notChecked": [
+    {
+      "item": "Production GitHub OAuth device authorization/token exchange and deployed relay",
+      "reason": "No OAuth Client ID or relay endpoint is configured; user confirmed none is available."
+    },
+    {
+      "item": "R2 public deployment, public CORS/cache/header verification and production Host URLs",
+      "reason": "No bucket/domain/account credentials configured; production Cloudflare deployment is explicitly excluded."
+    },
+    {
+      "item": "Physical Android/iOS, actual mobile Safari, browser eviction/quota and OS termination certification",
+      "reason": "Only the explicitly listed Linux desktop/mobile-emulated browser configurations were measured."
+    }
+  ],
+  "ci": {
+    "authority": "Check runs attached to the main commit containing this record are authoritative; local checks and remote CI are separate.",
+    "workflow": ".github/workflows/verify.yml",
+    "initialSuccessfulRun": "https://github.com/yohn-jp/proprium/actions/runs/40164899681",
+    "initialSuccessfulHead": "7b3a3a2d53418bfd85470e9a4d693e482e06e587",
+    "detail": "The initial run predates always-on static fixture coverage; final verification must use the later main check run."
+  },
+  "deployment": {
+    "productionDeployed": false,
+    "releaseWorkflowsExecuted": false,
+    "forcePushUsed": false,
+    "pullRequestCreated": false
+  },
+  "limitations": [
+    "Browser drafts and local commits remain disposable until GitHub confirmation.",
+    "WASM isolation and terminable Workers do not establish hard OS memory isolation.",
+    "Inherited retained source/evidence does not define a second supported product runtime."
+  ]
+}
