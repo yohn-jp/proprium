@@ -143,17 +143,15 @@ function signedHostPanelFixture(
 }
 
 const gatewayOrigin = process.env.VITE_PROPRIUM_GATEWAY_URL ?? "http://127.0.0.1:4174";
-const ownerKey = "proprium-gateway-browser-e2e-owner-key-32-bytes";
 
 interface JsonRpcResponse { jsonrpc: string; id: string; result?: unknown; error?: { code: number; message: string }; }
 
-async function mcpCall(token: string, id: string, name: string, args: Record<string, unknown>): Promise<JsonRpcResponse> {
+async function mcpCall(id: string, name: string, args: Record<string, unknown>): Promise<JsonRpcResponse> {
   const version = "2026-07-28";
   const response = await fetch(`${gatewayOrigin}/mcp`, {
     method: "POST",
     headers: {
       Accept: "application/json, text/event-stream",
-      Authorization: `Bearer ${token}`,
       "Content-Type": "application/json",
       "MCP-Protocol-Version": version,
       "Mcp-Method": "tools/call",
@@ -398,29 +396,17 @@ test("Host runs a signed no-capability Component without workspace reads in UI o
   await expect(page.getByLabel(`${pluginId} output`)).toHaveText('{"result":42}');
   await expect.poll(() => page.evaluate(() => window.propriumPluginGitCalls)).toEqual({ listFiles: 0, read: 0 });
 
-  const livePanel = page.locator("details.live-mcp-panel");
-  await livePanel.locator("summary").click();
-  await page.locator("#live-gateway-url").fill(gatewayOrigin);
-  await page.locator("#live-owner-key").fill(ownerKey);
-  const toolNames = ["capabilities_list", "files_list", "file_read", "git_log", "git_status", "plugin_call", "proposal_submit", "workspace_info"];
-  for (const tool of toolNames) await page.getByLabel(tool, { exact: true }).check();
-  await page.getByRole("button", { name: "Enable Live MCP" }).click();
-  await expect(page.getByText(/^Live on .+\/mcp\./u)).toBeVisible({ timeout: 15_000 });
-  await page.locator("#mcp-client-name").fill("No capability plugin test client");
-  for (const tool of toolNames) await page.getByLabel(tool, { exact: true }).last().check();
-  await page.getByRole("button", { name: "Authorize client" }).click();
-  const tokenField = page.getByLabel("New MCP client token");
-  await expect(tokenField).toBeVisible();
-  const token = (await tokenField.inputValue()).trim();
+  const livePanel = page.locator(".live-mcp-panel");
+  await expect(livePanel.getByRole("status").first()).toContainText("ブラウザーに接続中", { timeout: 20_000 });
+  await expect(livePanel).not.toContainText("Gateway owner key");
+  await expect(livePanel).not.toContainText("Tools published for this workspace");
 
   await page.evaluate(() => { window.propriumPluginGitCalls = { listFiles: 0, read: 0 }; });
-  const liveResult = mcpTextResult(await mcpCall(token, "plugin-run-no-capability", "plugin_call", {
-    pluginId, operation: "run", input: { request },
+  const liveResult = mcpTextResult(await mcpCall("plugin-run-no-capability", "plugin_call", {
+    repository_id: 923456791, branch: "main", pluginId, operation: "run", input: { request },
   }));
   expect(liveResult).toMatchObject({ pluginId, value: '{"result":42}' });
   await expect.poll(() => page.evaluate(() => window.propriumPluginGitCalls)).toEqual({ listFiles: 0, read: 0 });
-
-  await page.getByRole("button", { name: "Stop Live MCP" }).click();
 });
 
 test("Host keeps newer editor text when a reviewed plugin proposal refresh finishes late", async ({ page }) => {
