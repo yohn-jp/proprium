@@ -8,7 +8,7 @@ usage() {
   cat <<'EOF'
 Usage: bootstrap.sh [--bin-dir DIRECTORY] [--help]
 
-Download and verify the standalone Linux amd64 Proprium CLI from the latest
+Download and verify the standalone Linux amd64/arm64 Proprium CLI from the latest
 GitHub Release, then install it into ${XDG_BIN_HOME:-$HOME/.local/bin}.
 
 The installer does not edit shell startup files. Add the chosen directory to
