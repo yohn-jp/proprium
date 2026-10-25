@@ -125,21 +125,23 @@ loopback() {
  ((10#${BASH_REMATCH[1]} >= 1024 && 10#${BASH_REMATCH[1]} <= 65535))
 }
 validate_config() {
+ local owner=${G[PROPRIUM_OWNER_KEY]:-} token=${T[TUNNEL_TOKEN]:-}
+ # Check lengths separately: large regex repetitions can exhaust libc regex memory.
  loopback "${G[PROPRIUM_LISTEN_ADDR]:-}" || fail 'Gateway listen must be 127.0.0.1:1024-65535.'
  if ! origin "${G[PROPRIUM_HOST_ORIGIN]:-}" || ! origin "${G[PROPRIUM_PUBLIC_URL]:-}"; then fail 'Host and public URL must be canonical HTTPS origins.'; fi
  [[ ${G[GITHUB_CLIENT_ID]:-} =~ ^[a-zA-Z0-9_-]{10,128}$ ]] || fail 'Invalid GitHub Client ID; run proprium setup.'
- [[ ${G[PROPRIUM_OWNER_KEY]:-} =~ ^[[:graph:]]{32,4096}$ ]] || fail 'Invalid Owner Key; keep a private printable key of at least 32 bytes.'
+ [[ ${#owner} -ge 32 && ${#owner} -le 4096 && ${owner} =~ ^[[:graph:]]+$ ]] || fail 'Invalid Owner Key; keep a private printable key of at least 32 bytes.'
  loopback "${S[METRICS]:-}" || fail 'Tunnel metrics must be 127.0.0.1:1024-65535.'
  [[ ${S[METRICS]} != "${G[PROPRIUM_LISTEN_ADDR]}" ]] || fail 'Gateway and Tunnel metrics ports must differ.'
  case ${S[TUNNEL_MODE]:-} in
- token) [[ ${T[TUNNEL_TOKEN]:-} =~ ^[a-zA-Z0-9_+/=-]{20,16384}$ ]] || fail 'Invalid Tunnel token file.';;
+ token) [[ ${#token} -ge 20 && ${#token} -le 16384 && ${token} =~ ^[a-zA-Z0-9_+/=-]+$ ]] || fail 'Invalid Tunnel token file.';;
  credentials)
   [[ ${S[TUNNEL_ID]:-} =~ ^[a-fA-F0-9]{8}(-[a-fA-F0-9]{4}){3}-[a-fA-F0-9]{12}$ ]] || fail 'A Tunnel UUID is required.'
   private_file "$CONFIG/tunnel.json"
   jq -e --arg id "${S[TUNNEL_ID]}" '.TunnelID == $id and (.AccountTag|type=="string") and (.TunnelSecret|type=="string")' "$CONFIG/tunnel.json" >/dev/null || fail 'Tunnel credentials do not match the selected UUID.';;
  *) fail 'Tunnel not configured; run proprium setup.';;
  esac
- for key in "${!A[@]}"; do [[ ${A[$key]} =~ ^[a-zA-Z0-9._=-]{1,4096}$ ]] || fail 'Invalid Access probe credentials.'; done
+ for key in "${!A[@]}"; do [[ ${#A[$key]} -ge 1 && ${#A[$key]} -le 4096 && ${A[$key]} =~ ^[a-zA-Z0-9._=-]+$ ]] || fail 'Invalid Access probe credentials.'; done
  if ((${#A[@]})); then [[ -n ${A[CF_ACCESS_CLIENT_ID]:-} && -n ${A[CF_ACCESS_CLIENT_SECRET]:-} ]] || fail 'Both Access probe credentials are required.'; fi
 }
 load_config() {
