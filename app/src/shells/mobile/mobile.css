@@ -232,7 +232,7 @@
    It is selected by /mobile/, never by the browser width. */
 .mobile-shell {
   --mobile-ink: #273c32;
-  --mobile-muted: #6e7f72;
+  --mobile-muted: #53685a;
   --mobile-paper: #fcfbf5;
   --mobile-stage: #f2f2e8;
   --mobile-line: #e3e7dc;
@@ -375,7 +375,7 @@
   --color:var(--mobile-muted);--color-activated:var(--mobile-accent);
   --background:transparent;--box-shadow:none;
 }
-.mobile-shell .mobile-shell-navigation ion-button[aria-current="page"] {--color:var(--mobile-accent);--background:#e8eee4}
+.mobile-shell .mobile-shell-navigation ion-button[fill="solid"] {--color:var(--mobile-ink);--background:var(--surface-selected)}
 .mobile-shell .mobile-shell-nav-content {display:flex;flex-direction:column;align-items:center;gap:1px;font-size:10px;line-height:1.45}
 .mobile-shell .mobile-shell-nav-mark {font-size:20px;line-height:1.1}
 .mobile-shell .mobile-shell-status {bottom:calc(4rem + env(safe-area-inset-bottom,0px))}
@@ -390,9 +390,11 @@
 :root[data-zp-theme="dark"] .mobile-shell .st-workspace-mobile-tabs button[aria-selected="true"],
 :root[data-zp-theme="dark"] .mobile-shell .st-workspace-save {color:#132218}
 :root[data-zp-theme="paper"] .mobile-shell {
-  --mobile-ink:#38352a;--mobile-muted:#756a58;--mobile-paper:#f7f0e2;
+  --mobile-ink:#38352a;--mobile-muted:#6f644f;--mobile-paper:#f7f0e2;
   --mobile-stage:#e9e0d0;--mobile-line:#d4c8b4;--mobile-accent:#564b37;
 }
+.mobile-shell .st-workspace button:disabled { opacity:1;color:var(--mobile-muted);cursor:not-allowed; }
+.mobile-shell .st-workspace .st-workspace-save:disabled { color:var(--mobile-ink);background:var(--surface-selected);border-color:var(--mobile-line); }
 .mobile-shell :is(button,ion-button,a,[role="tab"],select,input):focus-visible {outline:3px solid var(--focus-ring);outline-offset:2px}
 @media(min-width:800px){
   .mobile-shell .mobile-shell-identity-bar,.mobile-shell .mobile-shell-shared-header {padding-left:clamp(25px,9vw,160px);padding-right:clamp(25px,9vw,160px)}
@@ -425,7 +427,7 @@
   font-size:12px;font-weight:650;display:flex;align-items:center;justify-content:center;gap:7px;
 }
 .mobile-shell .mobile-shell-accessory-button > span {font-size:18px;line-height:1}
-.mobile-shell .mobile-shell-accessory-button:disabled {opacity:.6}
+.mobile-shell .mobile-shell-accessory-button:disabled {opacity:1;color:var(--mobile-muted);background:var(--mobile-paper);cursor:not-allowed}
 .mobile-shell .mobile-shell-accessory-button:focus-visible {outline:3px solid var(--focus-ring);outline-offset:2px}
 .mobile-shell-interaction-error {
   position:fixed;z-index:35;left:max(12px,env(safe-area-inset-left,0px));

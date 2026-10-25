@@ -7,7 +7,7 @@
   --studio-tint: #eff4ee;
   --studio-tint-strong: #e3ebe2;
   --studio-ink: #2b4b3d;
-  --studio-muted: #52695a;
+  --studio-muted: #53685a;
   --studio-border: #dce5db;
   --studio-primary: #2e5a49;
   display: grid;
@@ -35,7 +35,7 @@
 .st-studio-rail-item:hover:not(:disabled),.st-studio-rail-item.is-current {
   color:#f7f9ef; background:#385f50;
 }
-.st-studio-rail-item:disabled {opacity:.35;cursor:default}
+.st-studio-rail-item:disabled {opacity:.5;cursor:default}
 .st-studio-avatar {
   height: 28px;width:28px;border-radius:50%;background:#dbc8a8;color:#294437;
   display:grid;place-items:center;font:700 13px Georgia,serif;
@@ -68,40 +68,40 @@
 .st-studio-shell .st-desktop-status {right:20px;bottom:48px;background:var(--studio-sheet);box-shadow:0 12px 30px #17352920}
 .st-studio-shell .st-workspace {background:var(--studio-canvas);--ink:var(--studio-ink);--muted:var(--studio-muted);--paper:var(--studio-sheet);--line:var(--studio-border);--accent:var(--studio-primary);--accent-strong:var(--studio-primary);--surface-hover:var(--studio-tint-strong);--surface-selected:var(--studio-tint-strong);--toolbar-bg:var(--studio-sheet);--surface-subtle:var(--studio-tint)}
 .st-studio-shell .st-workspace-toolbar {
-  min-height:53px;gap:12px;padding:7px 19px;background:#f7faf6;
+  min-height:53px;gap:12px;padding:7px 19px;background:var(--studio-tint);
   border-bottom:1px solid var(--studio-border); flex-wrap:nowrap;
 }
 .st-studio-shell .st-workspace-toolbar::before {
-  content:"VIEW";font:600 9px ui-monospace,monospace;color:#98a99e;
+  content:"VIEW";font:600 9px ui-monospace,monospace;color:var(--studio-muted);
   letter-spacing:2px;margin-right:4px;
 }
 .st-studio-shell .st-workspace-presets {flex-wrap:nowrap;gap:5px}
 .st-studio-shell .st-workspace-presets button {
-  border:0;border-radius:5px;background:transparent;color:#7b8f80;
+  border:0;border-radius:5px;background:transparent;color:var(--studio-muted);
   min-height:34px;padding:6px 11px;font-size:12px;font-weight:600;
 }
 .st-studio-shell .st-workspace-presets button[aria-pressed="true"] {background:#e4ece3;color:#2e5a49}
 .st-studio-shell .st-workspace-panel-menu summary {
-  border:0;color:#698073;background:transparent;min-height:32px;font-size:12px;
+  border:0;color:var(--studio-muted);background:transparent;min-height:32px;font-size:12px;
 }
 .st-studio-shell .st-workspace-save {
   background:var(--studio-primary);color:white;border:0;min-height:36px;
   padding:8px 13px;font-size:12px;border-radius:5px;
 }
-.st-studio-shell .st-workspace-move-controls {padding:9px 14px;gap:10px;background:#f5f8f3}
+.st-studio-shell .st-workspace-move-controls {padding:9px 14px;gap:10px;background:var(--studio-tint)}
 .st-studio-shell .st-workspace-layout {padding:10px; background:var(--studio-canvas)}
 .st-studio-shell .st-workspace-split {gap:6px;background:transparent}
 .st-studio-shell .st-workspace-panel {
   background:var(--studio-sheet);border:1px solid var(--studio-border);
   border-radius:7px;overflow:hidden;
 }
-.st-studio-shell .st-workspace-panel-heading {height:39px;min-height:39px;background:#f5f8f3;padding:4px 10px;border-bottom:1px solid var(--studio-border)}
-.st-studio-shell .st-workspace-panel-heading h2 {font-size:12px;color:#4c6856;font-weight:700}
-.st-studio-shell .st-workspace-drag-grip {border:0;background:transparent;padding:4px;color:#92a395}
+.st-studio-shell .st-workspace-panel-heading {height:39px;min-height:39px;background:var(--studio-tint);padding:4px 10px;border-bottom:1px solid var(--studio-border)}
+.st-studio-shell .st-workspace-panel-heading h2 {font-size:12px;color:var(--studio-ink);font-weight:700}
+.st-studio-shell .st-workspace-drag-grip {border:0;background:transparent;padding:4px;color:var(--studio-muted)}
 .st-studio-shell .st-workspace-drop-zones {display:none}
 .st-studio-shell .st-workspace-panel:hover .st-workspace-drop-zones,.st-studio-shell .st-workspace-panel:focus-within .st-workspace-drop-zones {display:flex}
 .st-studio-shell .st-workspace-drop-zone {width:20px;height:20px;font-size:10px}
-.st-studio-shell .st-workspace-hide {border:0;color:#829789;background:transparent;min-width:27px;padding:3px 5px!important}
+.st-studio-shell .st-workspace-hide {border:0;color:var(--studio-muted);background:transparent;min-width:27px;padding:3px 5px!important}
 .st-studio-shell .st-workspace-resize-handle {background:transparent}
 .st-studio-shell .st-workspace-resize-horizontal {width:7px}
 .st-studio-shell .st-workspace-resize-vertical {height:7px}
@@ -131,8 +131,8 @@
 .st-studio-shell .st-desktop-slot {background:var(--studio-sheet)}
 .st-studio-footer {
   min-height:31px; flex:0 0 31px; display:flex;align-items:center;justify-content:space-between;
-  gap:12px;padding:0 15px;background:#f8fbf6;border-top:1px solid var(--studio-border);
-  color:#809587;font:10px ui-monospace,monospace;white-space:nowrap;
+  gap:12px;padding:0 15px;background:var(--studio-sheet);border-top:1px solid var(--studio-border);
+  color:var(--studio-muted);font:10px ui-monospace,monospace;white-space:nowrap;
 }
 .st-studio-footer-dot{display:inline-block;height:6px;width:6px;border-radius:50%;background:#65a47a;margin-right:7px}
 :root[data-zp-theme="dark"] .st-studio-shell {
@@ -148,8 +148,10 @@
 :root[data-zp-theme="dark"] .st-studio-shell .st-workspace-presets button[aria-pressed="true"] {background:var(--studio-tint-strong);color:var(--studio-ink)}
 :root[data-zp-theme="paper"] .st-studio-shell {
   --studio-canvas:#eee9dc;--studio-sheet:#faf5e9;--studio-tint:#f3ede0;--studio-tint-strong:#e8dfcc;
-  --studio-border:#d3c9b5;--studio-ink:#324639;--studio-muted:#6c806f;
+  --studio-border:#d3c9b5;--studio-ink:#324639;--studio-muted:#6f644f;
 }
+.st-studio-shell .st-workspace button:disabled { opacity:1;color:var(--studio-muted);cursor:not-allowed; }
+.st-studio-shell .st-workspace .st-workspace-save:disabled { color:var(--studio-sheet); }
 .st-studio-shell :is(button,a,summary,select,[tabindex]):focus-visible {outline:3px solid var(--focus-ring);outline-offset:2px}
 @media(max-width:1050px) {
   .st-studio-breadcrumb {display:none}
