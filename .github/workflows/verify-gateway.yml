@@ -38,6 +38,7 @@ jobs:
         run: |
           bash -n distribution/proprium distribution/bootstrap.sh distribution/package-release.sh distribution/verify-release-assets.sh
           bash distribution/test-bootstrap.sh
+          python3 distribution/test-cli-config.py
       - name: Test with race detector
         run: go test -race ./...
       - name: Vet Gateway
