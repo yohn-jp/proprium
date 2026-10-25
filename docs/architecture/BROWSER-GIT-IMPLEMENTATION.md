@@ -23,6 +23,8 @@ Normal non-force branch updates are protected by a current remote ref/ancestry c
 
 Auth uses GitHub's device authorization flow through the optional Proprium Gateway, which keeps the public Host from embedding a client secret. The Gateway holds no durable GitHub token, workspace or Git data. Never expose tokens to WASM guest imports or logs. The configured endpoint and real account permission behavior must be verified before live sync is advertised. See [Gateway configuration](../deployment/GATEWAY.md) and [Live Workspace MCP](MCP-GATEWAY.md).
 
+Local Git remains available without a Gateway or authentication. Unavailable remote capabilities never prompt for PAT entry or block local operations. See the [optional Gateway boundary](OPTIONAL-GATEWAY-AND-MCP.md).
+
 ## Required implementation tests
 
 1. Desktop Chromium, Android Chromium and mobile Safari/WebKit: initialize or materialize a repository, edit text and binary files, create two commits, reload, inspect refs and exact SHA.

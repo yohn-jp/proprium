@@ -5,8 +5,9 @@ These documents define Proprium's architecture and implementation boundaries. Th
 | Contract | Responsibility |
 | --- | --- |
 | [Overview](architecture/OVERVIEW.md) | Product boundary, component ownership, local-first invariants |
+| [Optional Gateway and Live MCP](architecture/OPTIONAL-GATEWAY-AND-MCP.md) | Browser-alone baseline; optional Go GitHub relay and Live Workspace MCP; binary/Tunnel/security/availability contracts |
 | [Git and storage](architecture/GIT-AND-STORAGE.md) | GitHub as remote authority, local Git, durability states, sync/conflict handling |
-| [Browser Git implementation](architecture/BROWSER-GIT-IMPLEMENTATION.md) | isomorphic-git + LightningFS, GitHub REST with scoped Smart HTTP fallback, and browser acceptance requirements |
+| [Browser Git implementation](architecture/BROWSER-GIT-IMPLEMENTATION.md) | isomorphic-git + LightningFS, GitHub REST with optional Gateway Smart HTTP fallback, and browser acceptance requirements |
 | [Plugin platform](architecture/PLUGIN-PLATFORM.md) | WASM-first installation, packaging, registry, capabilities, UI and lifecycle |
 | [WASM plugin ABI](architecture/WASM-PLUGIN-ABI.md) | Component Model/WIT, Worker adapter, grants and versioned messages |
 | [Plugin distribution](architecture/PLUGIN-DISTRIBUTION.md) | Immutable signed artifacts, registry, installs, updates and rollback |

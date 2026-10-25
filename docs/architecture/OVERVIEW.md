@@ -8,7 +8,7 @@ Proprium is a general-purpose, user-owned, composable workspace running in deskt
 
 **GitHub is the authoritative remote** for shared/published work. The browser's worktree, local Git object database, and draft cache are disposable local copies. Local work is not remotely durable until the remote push is confirmed. The Host works offline on already available local data; offline operation does not imply offline GitHub synchronization.
 
-A Proprium user's ordinary editing and plugin compute must not traverse a self-hosted or permanently running Proprium application server. Delivery of the Host is static; plugins/assets can be fetched and cached as static artifacts. External services remain optional transport capabilities, never invisible authorities over the local working copy.
+A Proprium user's ordinary editing, local Git and plugin compute must not require any running Proprium server, configured Gateway or login. Delivery of the Host is static; plugins/assets can be fetched and cached as static artifacts. A separately installed **optional Go Gateway** extends the Host with GitHub OAuth/Smart HTTP fallback and Live Workspace MCP. It must never become a hidden authority over the local working copy. See [Optional Gateway and MCP](OPTIONAL-GATEWAY-AND-MCP.md).
 
 ## Logical architecture
 
@@ -53,7 +53,7 @@ The Host owns document identity, revision, approved change application and Git s
 
 ## Architectural invariants
 
-1. **No required runtime server or container.** Building and distributing static assets does not require users to run a server. A transport proxy is not permitted to become a hidden worktree/compute authority.
+1. **Host first, Gateway optional.** Visiting the static site provides local Workspace editing, local Git and WASM plugin use without a server, login or Gateway configuration. GitHub OAuth and Live MCP are explicitly additional capabilities provided by an optional independently hosted Gateway; they do not gate basic use.
 2. **One GitHub remote authority.** Browser copies and caches are locally useful but are not a second published source of truth.
 3. **Honest save states.** Draft, local Git commit, GitHub-confirmed publication, conflict and unknown remote state are distinct.
 4. **No implicit publication.** Plugins, navigation and autosave cannot silently push or force-update remote refs.
@@ -73,4 +73,4 @@ The Gateway retains only active in-memory connections and requests. It does not 
 
 Praetorium Hosting and OCI profile building are not part of Proprium's intended runtime. Atlas integration is deferred. Neither a collaborative CRDT backend nor a permanent synchronization daemon is implicit in this contract. WASM is the default plugin compute format, not a requirement to rewrite all existing trusted TypeScript UI code.
 
-Detailed contracts: [Git and storage](GIT-AND-STORAGE.md), [plugins](PLUGIN-PLATFORM.md), [delivery and security](DELIVERY-AND-SECURITY.md), [UX](WORKSPACE-UX.md), and [legacy code boundary](COMPATIBILITY.md).
+Detailed contracts: [Optional Gateway and Live MCP](OPTIONAL-GATEWAY-AND-MCP.md), [Git and storage](GIT-AND-STORAGE.md), [plugins](PLUGIN-PLATFORM.md), [delivery and security](DELIVERY-AND-SECURITY.md), [UX](WORKSPACE-UX.md), and [legacy code boundary](COMPATIBILITY.md).
