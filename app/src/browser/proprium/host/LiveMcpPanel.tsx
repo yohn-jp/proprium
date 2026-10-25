@@ -132,6 +132,7 @@ export function LiveMcpPanel({ gatewayUrl, onGatewayUrlChange, workspaceId, gene
 
   async function execute(request: LiveRequest, bearer: string, expectedSession: string, expectedGeneration: string): Promise<void> {
     if (request.workspaceId !== workspaceId || request.generation !== expectedGeneration || !LIVE_MCP_TOOLS.includes(request.tool) || !selected.includes(request.tool) || !isObject(request.arguments)) return;
+    if (pendingRef.current.has(request.requestId) || !Number.isFinite(request.deadline)) return;
     const controller = new AbortController();
     pendingRef.current.set(request.requestId, controller);
     setActiveRequests(value => [...value.filter(item => item.id !== request.requestId), { id: request.requestId, tool: request.tool }]);
@@ -140,7 +141,7 @@ export function LiveMcpPanel({ gatewayUrl, onGatewayUrlChange, workspaceId, gene
     try {
       let result: unknown;
       if (request.tool === "capabilities_list") {
-        result = request.clientCapabilities ?? [];
+        result = [...new Set((request.clientCapabilities ?? []).filter((tool): tool is LiveMcpTool => LIVE_MCP_TOOLS.includes(tool) && selected.includes(tool)))].sort();
       } else if (request.tool === "workspace_info") {
         const status = await git.status();
         result = { workspaceId, repositoryId: identity.repositoryId, owner: identity.owner, repository: identity.repository, branch: identity.branch, head: status.head };
@@ -341,10 +342,10 @@ export function LiveMcpPanel({ gatewayUrl, onGatewayUrlChange, workspaceId, gene
         {newToken && <div role="alert"><strong>Copy this client token now. It is shown only once.</strong><textarea aria-label="New MCP client token" readOnly value={newToken} /><p>Endpoint: <code>{endpoint}</code></p></div>}
         <ul aria-label="Authorized MCP clients">{clients.map(client => <li key={client.clientId}><span>{client.name} · {client.capabilities.join(", ")}</span><button type="button" onClick={() => void revokeClient(client.clientId)}>Revoke</button></li>)}</ul>
         <p>{activeRequests.length ? `Running: ${activeRequests.map(item => item.tool).join(", ")}` : "No requests running."}</p>
-        {recentRequests.length > 0 && <ul aria-label="Recent MCP requests">{recentRequests.map(item => <li key={item.id}>{item.tool}: {item.status}</li>)}</ul>}
       </> : <button type="button" disabled={state === "connecting" || !gatewayUrl} onClick={() => void connect()}>{state === "connecting" ? "Connecting…" : "Enable Live MCP"}</button>}
       {state === "disconnected" && <p role="status">Gateway disconnected. Reconnect to create a new session; authorized clients must pair again.</p>}
       {error && <p role="alert">{error}</p>}
+      {recentRequests.length > 0 && <ul aria-label="Recent MCP requests">{recentRequests.map(item => <li key={item.id}>{item.tool}: {item.status}</li>)}</ul>}
       {proposals.map(proposal => <article key={proposal.id}><h3>{proposal.title}</h3><ul>{proposal.changes.map(change => <li key={change.path}>{change.path} · {change.content.length} characters<pre>{change.content.slice(0, 1200)}{change.content.length > 1200 ? "…" : ""}</pre></li>)}</ul><button type="button" disabled={!canApply} onClick={() => void approveProposal(proposal)}>Review and approve</button><button type="button" onClick={() => setProposals(value => value.filter(item => item.id !== proposal.id))}>Reject</button></article>)}
       {enabled && state !== "connected" && <button type="button" onClick={() => { void stop(); }}>Disable</button>}
     </div>
