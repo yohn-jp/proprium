@@ -35,7 +35,7 @@ WASM memory isolation does not guarantee browser/process isolation, memory safet
 - A single machine-verifiable schema/protocol is the logical source of truth. Derive TypeScript validators and any WASM binding representation from it; do not maintain contradictory schemas or treat existing Scriptorium internal ModuleId values as public ABI.
 - Artifact versions are immutable. A user-selected installed version remains pinned until an explicit verified upgrade; a registry index change must not silently swap active code.
 
-Exact wire schema, signing format, registry policy and WASM ABI are implementation decisions requiring a proof-of-concept. Examples in this document name capabilities conceptually; they are not claims of existing SDK endpoints.
+The technical baseline is **Component Model + WIT**, with a tested browser transform/binding toolchain; exact generated wire signatures, signing format and publisher trust policy require proof and conformance. See [WASM plugin ABI](WASM-PLUGIN-ABI.md) and [plugin distribution](PLUGIN-DISTRIBUTION.md). Examples in this document name capabilities conceptually; they are not claims of existing SDK endpoints.
 
 ## Distribution and installation
 

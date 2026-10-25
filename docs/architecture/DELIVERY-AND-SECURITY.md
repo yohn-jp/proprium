@@ -45,3 +45,5 @@ After a user has loaded the Host and required plugin bytes, offline authoring ca
 Require exact-source build and checks: static production bundle without Node runtime dependencies, bounded cold-start asset set, offline/restart tests, plugin integrity/capability fault injection, mobile WebKit/Android/desktop Chromium, actual GitHub sync and conflict paths, security headers/CORS, cache/version pinning and credentials inspection. Report skipped checks as unverified, not passed.
 
 See [plugin platform](PLUGIN-PLATFORM.md) and [Git/worktree contract](GIT-AND-STORAGE.md).
+
+For actual Wrangler command structure, R2 publication, release ordering, and the no-deploy-before-browser-build constraint, see [Cloudflare deployment](../deployment/CLOUDFLARE.md).
