@@ -329,16 +329,25 @@ test("an empty remote branch opens as an empty workspace without a false conflic
     await sync.beginAuthorization();
     await sync.completeAuthorization();
     const pulled = await sync.pull();
-    const files = await git.listFiles();
+    const emptyFiles = await git.listFiles();
+    const emptyStatus = await git.status();
+    const draft = await git.write("local.txt", new TextEncoder().encode("local only\n"), { oid: null });
+    await git.add(["local.txt"], null);
+    const commit = await git.commit("local-only", { name: "Browser Fixture", email: "fixture@example.test" }, null);
+    const localAhead = await sync.pull();
     const status = await git.status();
+    const file = await git.read("local.txt");
     sync.signOut();
     git.close();
-    return { initialized, pulled, files, status };
+    return { initialized, pulled, emptyFiles, emptyStatus, draft, commit, localAhead, status, file };
   }, { id: `empty-${crypto.randomUUID()}`, relayUrl: relayOrigin });
   expect(result.initialized.head).toBeNull();
   expect(result.pulled).toEqual({ state: "up-to-date", head: null });
-  expect(result.files).toEqual([]);
-  expect(result.status).toMatchObject({ head: null, localState: "draft", entries: [] });
+  expect(result.emptyFiles).toEqual([]);
+  expect(result.emptyStatus).toMatchObject({ head: null, localState: "draft", entries: [] });
+  expect(result.localAhead).toEqual({ state: "local-ahead", head: result.commit.oid, remoteHead: null });
+  expect(result.status).toMatchObject({ head: result.commit.oid, localState: "local-committed", entries: [] });
+  expect(result.file.data && Array.from(result.file.data)).toEqual(Array.from(new TextEncoder().encode("local only\n")));
 });
 
 test("GitHub REST fetch and pull preserve local Git objects and commit SHA", async ({ page }) => {
@@ -516,10 +525,16 @@ test("non-force publish detects a racing writer and reconciles a lost ref respon
     await git.write("file.txt", new TextEncoder().encode("local\n"), current.revision);
     await git.add(["file.txt"], baseSha);
     const commit = await git.commit("local", { name: "Browser Fixture", email: "fixture@example.test" }, baseSha);
+    const localAhead = await sync.pull();
+    const localStatus = await git.status();
+    const localFile = await git.read("file.txt");
     const result = await sync.publish(commit.oid, baseSha);
     git.close();
-    return { result, localHead: commit.oid };
+    return { result, localHead: commit.oid, localAhead, localStatus, localFile: localFile.data ? new TextDecoder().decode(localFile.data) : null };
   }, { id: `race-${crypto.randomUUID()}`, baseSha: base.sha, relayUrl: relayOrigin });
+  expect(result.localAhead).toEqual({ state: "local-ahead", head: result.localHead, remoteHead: base.sha });
+  expect(result.localStatus).toMatchObject({ head: result.localHead, localState: "local-committed", entries: [] });
+  expect(result.localFile).toBe("local\n");
   expect(injectedRace).toBe(true);
   expect(forceValue).toBe(false);
   expect(localPublishedSha).toBe(result.localHead);

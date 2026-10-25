@@ -50,6 +50,7 @@ export interface GitHubFetchResult extends GitHubRemoteHead {
 
 export type GitHubPullResult =
   | { state: "up-to-date"; head: string | null }
+  | { state: "local-ahead"; head: string; remoteHead: string | null }
   | { state: "fast-forwarded"; previousHead: string | null; head: string }
   | { state: "conflict"; localHead: string | null; remoteHead: string | null };
 

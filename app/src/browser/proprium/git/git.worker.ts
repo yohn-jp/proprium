@@ -712,7 +712,10 @@ async function operation(request: LocalGitRequest): Promise<unknown> {
     if (remoteHead === localHead) return { state: "up-to-date", head: localHead };
     if (!remoteHead) {
       if (!localHead) return { state: "up-to-date", head: null };
-      return { state: "conflict", localHead, remoteHead };
+      return { state: "local-ahead", head: localHead, remoteHead };
+    }
+    if (localHead && await isAncestor(paths.dir, remoteHead, localHead)) {
+      return { state: "local-ahead", head: localHead, remoteHead };
     }
     if (localHead && !(await isAncestor(paths.dir, localHead, remoteHead))) {
       return { state: "conflict", localHead, remoteHead };
