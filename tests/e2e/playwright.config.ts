@@ -5,9 +5,11 @@ import { join, resolve } from "node:path";
 
 const externalRepository = Boolean(process.env.SCRIPTORIUM_E2E_REPOSITORY_URL);
 const selectedTestFile = process.env.SCRIPTORIUM_E2E_TEST_FILE;
+const browserGitSuite = selectedTestFile === "browser-git.acceptance.spec.ts";
 const coverageFile = process.env.SCRIPTORIUM_E2E_COVERAGE_FILE;
 const configuredBaseURL = process.env.SCRIPTORIUM_E2E_BASE_URL ?? process.env.SCRIPTORIUM_BASE_URL;
 const baseURL = configuredBaseURL ?? `http://127.0.0.1:${process.env.SCRIPTORIUM_E2E_PORT ?? "4173"}`;
+const configuredPort = process.env.SCRIPTORIUM_E2E_PORT ?? "4173";
 const externalServer = Boolean(configuredBaseURL);
 const isTemporaryStateDir = !process.env.SCRIPTORIUM_E2E_STATE_DIR && !externalServer;
 const stateDir = process.env.SCRIPTORIUM_E2E_STATE_DIR
@@ -76,9 +78,11 @@ export default defineConfig({
   webServer: externalServer
     ? undefined
     : {
-        command: "node --import tsx/esm tests/e2e/test-server.ts",
+        command: browserGitSuite
+          ? `pnpm --dir app exec vite --config vite.config.ts --host 127.0.0.1 --port ${configuredPort}`
+          : "node --import tsx/esm tests/e2e/test-server.ts",
         cwd: resolve("."),
-        url: `${baseURL}/api/health`,
+        url: browserGitSuite ? `${baseURL}/browser-git-test.html` : `${baseURL}/api/health`,
         reuseExistingServer: false,
         timeout: 120_000,
       },
