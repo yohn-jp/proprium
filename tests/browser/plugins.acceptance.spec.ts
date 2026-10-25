@@ -263,7 +263,7 @@ test("Host Plugin panel previews, installs, runs, stops, updates and rolls back 
   await pluginV1.getByRole("button", { name: "Run" }).click();
   await expect(page.getByLabel("fixture.compute-sum output")).toHaveText('{"result":42}');
   await pluginV1.getByRole("button", { name: "Stop" }).click();
-  await expect(pluginV1).toContainText("v1.0.0 · installed, idle");
+  await expect(pluginV1).toContainText("v1.0.0 · installed, disabled");
 
   await page.once("dialog", dialog => dialog.accept("1.0.1"));
   await pluginV1.getByRole("button", { name: "Update version" }).click();
