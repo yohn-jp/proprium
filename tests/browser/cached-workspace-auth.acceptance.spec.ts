@@ -54,7 +54,7 @@ async function startWorkspaceSignIn(page: Page, origin: string): Promise<import(
   return dialog;
 }
 
-test("cached Workspace signs in in place and enables Fetch without changing dirty editor text", async ({ page }, testInfo) => {
+test("cached Workspace signs in in place, preserves dirty text, and fills Home repository options", async ({ page }, testInfo) => {
   const { origin, identity, fixture } = await openCachedWorkspaceWithDirtyEditor(page);
   const dialog = await startWorkspaceSignIn(page, origin);
 
@@ -73,6 +73,14 @@ test("cached Workspace signs in in place and enables Fetch without changing dirt
   expect(apiPaths.some(path => path.endsWith(`/repos/${identity.owner}/${identity.repository}`))).toBe(true);
   expect(apiPaths.some(path => path.endsWith(`/repos/${identity.owner}/${identity.repository}/git/ref/heads/${identity.branch}`))).toBe(true);
   expect(apiPaths.some(path => /\/commits(?:\/|$)|\/git\/(?:trees|blobs)\//u.test(path))).toBe(false);
+
+  await showPanel(page, "editor");
+  await page.getByRole("button", { name: "Save draft", exact: true }).click();
+  await expectEditorText(page, dirtyEditorText);
+  await page.getByRole("button", { name: "Workspaces", exact: true }).click();
+  const repositoryPicker = page.getByLabel("Repository", { exact: true });
+  await expect(repositoryPicker).toBeVisible();
+  await expect(repositoryPicker.locator(`option[value="${identity.repositoryId}"]`)).toHaveText(`${identity.owner}/${identity.repository}`);
 });
 
 test("cancel and repository verification failure leave the cached editor and Workspace intact", async ({ page }) => {
@@ -136,4 +144,32 @@ test("cancel before the Device code arrives does not revive an old authorization
   await expect(dialog.getByRole("button", { name: "GitHubに接続", exact: true })).toBeEnabled();
   await dialog.getByRole("button", { name: "キャンセル", exact: true }).click();
   await expectEditorText(page, dirtyEditorText);
+});
+
+test("repository list failure does not attach sync or show an empty signed-in picker", async ({ page }) => {
+  const { origin } = await openCachedWorkspaceWithDirtyEditor(page);
+  await page.context().route("https://api.github.com/user/repos?**", async route => {
+    if (route.request().method() === "OPTIONS") {
+      return route.fulfill({ status: 204, headers: {
+        "Access-Control-Allow-Origin": origin,
+        "Access-Control-Allow-Methods": "GET, OPTIONS",
+        "Access-Control-Allow-Headers": "Authorization, Accept, Content-Type, X-GitHub-Api-Version",
+      } });
+    }
+    return route.fulfill({ status: 503, contentType: "application/json", headers: { "Access-Control-Allow-Origin": origin }, json: { message: "Fixture repository list unavailable" } });
+  });
+
+  const dialog = await startWorkspaceSignIn(page, origin);
+  await expect(dialog.getByRole("alert")).toContainText("GitHub could not list repositories for this account");
+  await expect(page.getByLabel("Connected to GitHub", { exact: true })).toHaveCount(0);
+  await expect(page.getByRole("button", { name: "Fetch", exact: true })).toHaveCount(0);
+  await dialog.getByRole("button", { name: "キャンセル", exact: true }).click();
+  await expectEditorText(page, dirtyEditorText);
+
+  await showPanel(page, "editor");
+  await page.getByRole("button", { name: "Save draft", exact: true }).click();
+  await page.getByRole("button", { name: "Workspaces", exact: true }).click();
+  await expect(page.getByLabel("Repository", { exact: true })).toHaveCount(0);
+  await expect(page.getByRole("button", { name: "Connect GitHub", exact: true })).toBeVisible();
+  await expect(page.getByLabel("Connected to GitHub", { exact: true })).toHaveCount(0);
 });

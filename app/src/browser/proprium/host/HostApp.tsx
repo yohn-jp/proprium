@@ -300,9 +300,14 @@ export function HostApp(): ReactElement {
         if (confirmed.repositoryId !== target.identity.repositoryId || confirmed.branch !== target.identity.branch) {
           throw new GitHubSyncError("repository_mismatch", "GitHub did not confirm the immutable repository ID and branch for this Workspace.");
         }
+        const available = await accountSession.repositories();
+        if (controller.signal.aborted || authorizationRef.current !== controller) return;
+        if (!workspaceAuthTargetIsCurrent(target)) {
+          throw new GitHubSyncError("authentication_required", "The active Workspace changed while GitHub loaded the repository picker. No connection was attached.");
+        }
         setSyncClient(attachedClient);
         setAccount(signedIn);
-        setRepositories([]);
+        setRepositories(available);
         setDevicePrompt(null);
         try { localStorage.setItem(GATEWAY_KEY, configuredGateway); } catch { /* Configuration can be entered again. */ }
         workspaceAuthTarget.current = null;
