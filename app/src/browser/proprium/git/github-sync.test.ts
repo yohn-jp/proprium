@@ -80,6 +80,30 @@ test("device flow rejects untrusted URLs, clears revoked tokens, and maps offlin
   await assert.rejects(offline.beginAuthorization(), (error: unknown) => error instanceof GitHubSyncError && error.code === "network_unavailable");
 });
 
+test("authentication network errors identify the failed destination without exposing transport details", async () => {
+  const relay = createGitHubAccountSession("https://oauth.example.test", async () => { throw new TypeError("private transport detail"); });
+  await assert.rejects(relay.beginAuthorization(), (error: unknown) => {
+    assert.ok(error instanceof GitHubSyncError);
+    assert.equal(error.code, "network_unavailable");
+    assert.match(error.message, /configured Gateway/u);
+    assert.doesNotMatch(error.message, /private transport detail/u);
+    return true;
+  });
+  const github = createGitHubAccountSession("https://oauth.example.test", async input => {
+    if (String(input).endsWith("/oauth/device/code")) return response(pendingDevice);
+    if (String(input).endsWith("/oauth/token")) return response({ access_token: "private-fixture-token", token_type: "bearer" });
+    throw new TypeError("private transport detail");
+  });
+  await github.beginAuthorization();
+  await assert.rejects(github.completeAuthorization(), (error: unknown) => {
+    assert.ok(error instanceof GitHubSyncError);
+    assert.equal(error.code, "network_unavailable");
+    assert.match(error.message, /reach GitHub/u);
+    assert.doesNotMatch(error.message, /private-fixture-token|private transport detail/u);
+    return true;
+  });
+});
+
 test("authorization polling can be cancelled and clears the pending device code", async () => {
   const client = createGitHubSyncClient("https://oauth.example.test", async () => null as never, async (input) => {
     if (String(input).endsWith("/oauth/device/code")) return response({ ...pendingDevice, interval: 60 });

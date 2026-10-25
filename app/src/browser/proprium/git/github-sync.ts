@@ -96,8 +96,11 @@ interface AccessTokenResponse {
   interval?: number;
 }
 
-function networkError(): GitHubSyncError {
+function networkError(target: "GitHub" | "Gateway" = "GitHub"): GitHubSyncError {
   const offline = typeof navigator !== "undefined" && navigator.onLine === false;
+  if (target === "Gateway") return new GitHubSyncError("network_unavailable", offline
+    ? "The Gateway is unavailable while this device is offline. Local editing remains available."
+    : "The browser could not reach the configured Gateway. Check its URL and availability. If Cloudflare Access is enabled, check Gateway sign-in and CORS preflight settings. Local editing remains available.");
   return new GitHubSyncError("network_unavailable", offline
     ? "GitHub is unavailable while this device is offline. Local changes remain on this device."
     : "The browser could not reach GitHub. Check connectivity and GitHub CORS availability, then retry.");
@@ -126,7 +129,7 @@ async function jsonRequest(fetcher: typeof fetch, url: string, init: RequestInit
       redirect: "error",
       referrerPolicy: "no-referrer",
     });
-  } catch { throw networkError(); }
+  } catch { throw networkError(new URL(url).origin === "https://api.github.com" ? "GitHub" : "Gateway"); }
   let body: unknown;
   try { body = await response.json(); }
   catch { body = null; }
