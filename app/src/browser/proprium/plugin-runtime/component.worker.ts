@@ -1,21 +1,37 @@
 import { $init as initializeJco, generate } from "@bytecodealliance/jco-transpile/component";
 import type * as Guest from "./wit/generated/interfaces/proprium-plugin-guest.js";
-import { LIMITS, PLUGIN_GUEST_EXPORT, PLUGIN_HOST_IMPORT, PluginRuntimeError, utf8Size, type RuntimeContext, type RuntimeErrorCode, type WorkerRequest, type WorkerResponse } from "./protocol.js";
+import { CapabilityBroker } from "./capability-broker.js";
+import { assertSnapshot, CAPABILITIES, LIMITS, PLUGIN_GUEST_EXPORT, PLUGIN_HOST_IMPORT, PluginRuntimeError, utf8Size, type PluginCapability, type RuntimeContext, type RuntimeErrorCode, type WorkerEnvelope, type WorkerRequest, type WorkerResponse } from "./protocol.js";
 
 const scope = self as DedicatedWorkerGlobalScope;
+const brokerKey = Symbol.for("proprium.plugin.worker.broker.v1");
 const failureKey = Symbol.for("proprium.plugin.worker.failure.v1");
 const hostModule = `
-const denied = () => {
-  const error = Object.assign(new Error("Plugin Host capabilities are disabled"), { code: "capability_denied" });
-  globalThis[Symbol.for("proprium.plugin.worker.failure.v1")] = error;
-  return { tag: "err", val: "capability_denied" };
+const broker = () => globalThis[Symbol.for("proprium.plugin.worker.broker.v1")];
+const call = (name, value) => {
+  try {
+    const target = broker();
+    if (!target) throw Object.assign(new Error("No active Host capability request"), { code: "capability_denied" });
+    return target[name](value);
+  } catch (error) {
+    globalThis[Symbol.for("proprium.plugin.worker.failure.v1")] = error;
+    return { tag: "err", val: error && typeof error === "object" && "code" in error ? error.code : "invalid_input" };
+  }
 };
-export const snapshotRead = () => denied();
+export const snapshotList = () => call("snapshotList");
+export const snapshotRead = path => call("snapshotRead", path);
+export const proposeChange = proposal => call("proposeChange", proposal);
+export const uiContribute = contribution => call("uiContribute", contribution);
 `;
 
 let guest: typeof Guest | undefined;
+let sessionId = "";
+let pluginId = "";
+let version = "";
+let digest = "";
 let workspaceId = "";
 let epoch = 0;
+let capabilities = new Set<PluginCapability>();
 let running = false;
 let invoking = false;
 
@@ -24,10 +40,9 @@ scope.addEventListener("message", event => {
 });
 
 async function handle(request: WorkerRequest): Promise<void> {
-  if (!request || typeof request !== "object" || typeof request.id !== "string" ||
-      !Number.isSafeInteger(request.epoch) || request.epoch < 1 || typeof request.workspaceId !== "string") return;
-  if (running && (request.epoch !== epoch || request.workspaceId !== workspaceId)) {
-    respond(request, { code: "malformed_message", message: "Request belongs to an inactive plugin epoch or workspace" });
+  if (!validEnvelope(request)) return;
+  if (running && !sameInstance(request)) {
+    respond(request, { code: "malformed_message", message: "Request belongs to a different plugin session or epoch" });
     return;
   }
   try {
@@ -40,14 +55,37 @@ async function handle(request: WorkerRequest): Promise<void> {
   }
 }
 
+function validEnvelope(request: WorkerRequest): request is WorkerRequest {
+  const now = Date.now();
+  return Boolean(request && typeof request === "object" && ["start", "invoke", "stop"].includes(request.type) &&
+    typeof request.id === "string" && request.id.length <= 128 &&
+    typeof request.sessionId === "string" && request.sessionId.length <= 128 && Number.isSafeInteger(request.epoch) && request.epoch > 0 &&
+    typeof request.pluginId === "string" && request.pluginId.length <= 128 && typeof request.version === "string" && request.version.length <= 128 &&
+    /^[a-f0-9]{64}$/u.test(request.digest) && typeof request.workspaceId === "string" && request.workspaceId.length <= 256 &&
+    Array.isArray(request.grants) && request.grants.every(capability => CAPABILITIES.includes(capability)) &&
+    Number.isSafeInteger(request.deadlineAt) && request.deadlineAt > now && request.deadlineAt <= now + LIMITS.maxDeadlineMs);
+}
+
+function sameInstance(request: WorkerEnvelope): boolean {
+  return request.sessionId === sessionId && request.epoch === epoch && request.pluginId === pluginId &&
+    request.version === version && request.digest === digest && request.workspaceId === workspaceId &&
+    request.grants.length === capabilities.size && request.grants.every(capability => capabilities.has(capability));
+}
+
 async function start(request: Extract<WorkerRequest, { type: "start" }>): Promise<void> {
   if (running || request.component.byteLength === 0 || request.component.byteLength > LIMITS.componentBytes ||
-      request.pluginId.length > 128 || request.version.length > 128 || request.context.workspaceId !== request.workspaceId ||
-      request.context.pluginId !== request.pluginId || request.context.version !== request.version) {
+      request.context.workspaceId !== request.workspaceId || request.context.pluginId !== request.pluginId ||
+      request.context.version !== request.version || request.grants.some(capability => !CAPABILITIES.includes(capability))) {
     throw new PluginRuntimeError("invalid_input", "Plugin activation request is invalid");
   }
+  if (await sha256(request.component) !== request.digest) throw new PluginRuntimeError("invalid_input", "Component bytes no longer match the admitted digest");
+  sessionId = request.sessionId;
+  pluginId = request.pluginId;
+  version = request.version;
+  digest = request.digest;
   workspaceId = request.workspaceId;
   epoch = request.epoch;
+  capabilities = new Set(request.grants);
   const hostUrl = URL.createObjectURL(new Blob([hostModule], { type: "text/javascript" }));
   try {
     await initializeJco;
@@ -88,21 +126,35 @@ async function start(request: Extract<WorkerRequest, { type: "start" }>): Promis
   respond(request);
 }
 
+async function sha256(bytes: Uint8Array): Promise<string> {
+  const hash = new Uint8Array(await crypto.subtle.digest("SHA-256", Uint8Array.from(bytes)));
+  return Array.from(hash, value => value.toString(16).padStart(2, "0")).join("");
+}
+
 function invoke(request: Extract<WorkerRequest, { type: "invoke" }>): void {
-  if (!running || !guest || request.epoch !== epoch || request.workspaceId !== workspaceId) {
+  if (!running || !guest || !sameInstance(request)) {
     respond(request, { code: "stopped", message: "Plugin is not active for this workspace epoch" });
     return;
   }
-  if (request.request.length > LIMITS.requestBytes || typeof request.snapshotId !== "string" || request.snapshotId.length > 256 ||
-      typeof request.snapshotRevision !== "string" || request.snapshotRevision.length > 256) {
+  if (typeof request.request !== "string" || utf8Size(request.request) > LIMITS.requestBytes) {
     respond(request, { code: "invalid_input", message: "Plugin invocation exceeds the input limit" });
     return;
   }
+  try { assertSnapshot(request.snapshot); }
+  catch (error) { respond(request, toRuntimeError(error)); return; }
   if (invoking) {
     respond(request, { code: "overloaded", message: "A plugin request is already running" });
     return;
   }
+  let broker: CapabilityBroker;
+  try {
+    broker = new CapabilityBroker(capabilities, request);
+  } catch (error) {
+    respond(request, toRuntimeError(error));
+    return;
+  }
   (globalThis as Record<PropertyKey, unknown>)[failureKey] = undefined;
+  (globalThis as Record<PropertyKey, unknown>)[brokerKey] = broker;
   invoking = true;
   void (async () => {
     try {
@@ -113,15 +165,12 @@ function invoke(request: Extract<WorkerRequest, { type: "invoke" }>): void {
         respond(request, toRuntimeError(hostFailure));
         return;
       }
-      const response: WorkerResponse = {
-        type: request.type, id: request.id, epoch, workspaceId, snapshotId: request.snapshotId,
-        result: { requestId: request.id, epoch, workspaceId, snapshotId: request.snapshotId, value },
-      };
-      scope.postMessage(response);
+      scope.postMessage({ ...envelope(request), snapshotId: request.snapshot.id, snapshotRevision: request.snapshot.revision, result: broker.transcript(value) });
     } catch (error) {
       const hostFailure = (globalThis as Record<PropertyKey, unknown>)[failureKey];
       respond(request, toRuntimeError(hostFailure ?? error));
     } finally {
+      (globalThis as Record<PropertyKey, unknown>)[brokerKey] = undefined;
       (globalThis as Record<PropertyKey, unknown>)[failureKey] = undefined;
       invoking = false;
     }
@@ -132,25 +181,39 @@ async function stop(request: Extract<WorkerRequest, { type: "stop" }>): Promise<
   if (guest) await guest.dispose();
   guest = undefined;
   running = false;
+  capabilities.clear();
+  sessionId = pluginId = version = digest = workspaceId = "";
+  epoch = 0;
   respond(request);
 }
 
-function respond(request: WorkerRequest, error?: { code: RuntimeErrorCode; message: string }): void {
-  const response: WorkerResponse = {
+function envelope(request: WorkerRequest) {
+  return {
     type: request.type,
     id: request.id,
+    sessionId: request.sessionId,
     epoch: request.epoch,
+    pluginId: request.pluginId,
+    version: request.version,
+    digest: request.digest,
     workspaceId: request.workspaceId,
-    ...(request.type === "invoke" ? { snapshotId: request.snapshotId } : {}),
-    ...(error ? { error } : {}),
+    deadlineAt: request.deadlineAt,
+    grants: request.grants,
   };
-  scope.postMessage(response);
+}
+
+function respond(request: WorkerRequest, error?: { code: RuntimeErrorCode; message: string }): void {
+  scope.postMessage({
+    ...envelope(request),
+    ...(request.type === "invoke" ? { snapshotId: request.snapshot.id, snapshotRevision: request.snapshot.revision } : {}),
+    ...(error ? { error } : {}),
+  } satisfies WorkerResponse);
 }
 
 function toRuntimeError(error: unknown): { code: RuntimeErrorCode; message: string } {
   if (error instanceof PluginRuntimeError) return { code: error.code, message: error.message.slice(0, 512) };
   const code = (error as { code?: string } | null)?.code;
-  if (code === "capability_denied" || code === "snapshot_stale" || code === "invalid_input") {
+  if (code === "capability_denied" || code === "snapshot_stale" || code === "invalid_input" || code === "timeout") {
     return { code, message: error instanceof Error ? error.message.slice(0, 512) : code };
   }
   return { code: "guest_trap", message: error instanceof Error ? error.message.slice(0, 512) : "Plugin component trapped" };

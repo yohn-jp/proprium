@@ -1,7 +1,44 @@
 package proprium:plugin@1.0.0;
 
 interface host {
+  record snapshot-entry {
+    path: string,
+    revision: string,
+  }
+
+  record file-change {
+    path: string,
+    expected-revision: option<string>,
+    content: string,
+  }
+
+  record read-revision {
+    path: string,
+    revision: option<string>,
+  }
+
+  record change-proposal {
+    snapshot-id: string,
+    snapshot-revision: string,
+    read-set: list<read-revision>,
+    changes: list<file-change>,
+  }
+
+  enum contribution-kind {
+    panel,
+    command,
+  }
+
+  record ui-contribution {
+    kind: contribution-kind,
+    id: string,
+    title: string,
+  }
+
+  snapshot-list: func() -> result<list<snapshot-entry>, string>;
   snapshot-read: func(path: string) -> result<option<string>, string>;
+  propose-change: func(proposal: change-proposal) -> result<_, string>;
+  ui-contribute: func(contribution: ui-contribution) -> result<_, string>;
 }
 
 interface guest {
