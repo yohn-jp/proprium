@@ -1,6 +1,16 @@
 {
   "name": "proprium-host",
   "compatibility_date": "2026-10-25",
+  "env": {
+    "preview": {
+      "name": "proprium-host-preview",
+      "routes": [{ "pattern": "proprium-preview.yohn.jp", "custom_domain": true }]
+    },
+    "production": {
+      "name": "proprium-host-production",
+      "routes": [{ "pattern": "proprium.yohn.jp", "custom_domain": true }]
+    }
+  },
   "assets": {
     "directory": "./dist/proprium",
     "not_found_handling": "single-page-application"

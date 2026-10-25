@@ -78,6 +78,7 @@ jobs:
           test -n "$CLOUDFLARE_API_TOKEN"
           test -n "$CLOUDFLARE_ACCOUNT_ID"
           pnpm exec wrangler deploy --config workers/github-auth/wrangler.jsonc \
+            --env "${TARGET_ENVIRONMENT}" \
             --name "proprium-github-auth-relay-${TARGET_ENVIRONMENT}" \
             --var "HOST_ORIGIN:${PROPRIUM_HOST_ORIGIN}" \
             --var "GITHUB_CLIENT_ID:${PROPRIUM_GITHUB_OAUTH_CLIENT_ID}"
@@ -89,4 +90,4 @@ jobs:
         run: |
           test -n "$CLOUDFLARE_API_TOKEN"
           test -n "$CLOUDFLARE_ACCOUNT_ID"
-          pnpm exec wrangler deploy --config wrangler.jsonc --name "proprium-host-${TARGET_ENVIRONMENT}"
+          pnpm exec wrangler deploy --config wrangler.jsonc --env "${TARGET_ENVIRONMENT}" --name "proprium-host-${TARGET_ENVIRONMENT}"
