@@ -57,7 +57,7 @@ func envOr(key, fallback string) string {
 }
 
 func (c Config) Validate() error {
-	_, rawPort, err := net.SplitHostPort(c.ListenAddr)
+	listenHost, rawPort, err := net.SplitHostPort(c.ListenAddr)
 	if err != nil {
 		return fmt.Errorf("PROPRIUM_LISTEN_ADDR must be host:port: %w", err)
 	}
@@ -71,11 +71,21 @@ func (c Config) Validate() error {
 	if err := validateOrigin("PROPRIUM_PUBLIC_URL", c.PublicURL, false); err != nil {
 		return err
 	}
+	if c.PublicURL == "" && (listenHost == "" || listenHost == "0.0.0.0" || listenHost == "::") {
+		return errors.New("PROPRIUM_PUBLIC_URL is required when listening on a wildcard address")
+	}
 	if !validClientID(c.GitHubClientID) {
 		return errors.New("GITHUB_CLIENT_ID must contain 10-128 letters, digits, underscores, or hyphens")
 	}
-	if c.OwnerKey != "" && len([]byte(c.OwnerKey)) < 32 {
-		return errors.New("PROPRIUM_OWNER_KEY must be at least 32 bytes when configured")
+	if c.OwnerKey != "" {
+		if len([]byte(c.OwnerKey)) < 32 || len([]byte(c.OwnerKey)) > 4096 {
+			return errors.New("PROPRIUM_OWNER_KEY must be between 32 and 4096 bytes when configured")
+		}
+		for _, b := range []byte(c.OwnerKey) {
+			if b < 0x21 || b > 0x7e {
+				return errors.New("PROPRIUM_OWNER_KEY must use printable ASCII without spaces")
+			}
+		}
 	}
 	if c.OwnerKey != "" && c.PublicURL == "" {
 		return errors.New("PROPRIUM_PUBLIC_URL is required when Live Workspace MCP is enabled")
@@ -106,7 +116,7 @@ func validateOrigin(name, value string, required bool) error {
 		return nil
 	}
 	u, err := url.Parse(value)
-	if err != nil || u.Scheme == "" || u.Host == "" || u.User != nil || u.RawQuery != "" || u.Fragment != "" || u.Path != "" && u.Path != "/" || u.Opaque != "" {
+	if err != nil || u.Scheme == "" || u.Host == "" || u.User != nil || u.RawQuery != "" || u.Fragment != "" || u.Path != "" || u.Opaque != "" || u.Hostname() == "" || strings.HasSuffix(u.Host, ":") {
 		return fmt.Errorf("%s must be an exact origin without credentials, path, query, or fragment", name)
 	}
 	if u.Scheme != "https" && !(u.Scheme == "http" && isLoopbackHost(u.Hostname())) {

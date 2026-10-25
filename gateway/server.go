@@ -5,10 +5,12 @@ import (
 	"encoding/json"
 	"errors"
 	"flag"
+	"fmt"
 	"io"
 	"log"
 	"net"
 	"net/http"
+	"net/url"
 	"os"
 	"os/signal"
 	"strings"
@@ -68,7 +70,30 @@ func NewServer(config Config) (*Server, error) {
 }
 
 func (s *Server) Handler() http.Handler {
-	return s.limit(s.timeout(s.mux))
+	return s.limit(s.timeout(deadlineWriterHandler{next: s.hostGuard(s.mux), timeout: s.config.UpstreamTimeout}))
+}
+
+func (s *Server) hostGuard(next http.Handler) http.Handler {
+	expected := []string{s.config.ListenAddr}
+	if s.config.PublicURL != "" {
+		parsed, _ := url.Parse(s.config.PublicURL)
+		expected = append(expected, parsed.Host)
+	}
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		allowed := false
+		for _, host := range expected {
+			if strings.EqualFold(r.Host, host) {
+				allowed = true
+				break
+			}
+		}
+		if !allowed {
+			w.Header().Set("Cache-Control", "no-store")
+			w.WriteHeader(http.StatusMisdirectedRequest)
+			return
+		}
+		next.ServeHTTP(w, r)
+	})
 }
 
 // Close invalidates ephemeral Live Workspace sessions before the HTTP server drains.
@@ -116,6 +141,46 @@ func (s *Server) timeout(next http.Handler) http.Handler {
 	})
 }
 
+type deadlineWriterHandler struct {
+	next    http.Handler
+	timeout time.Duration
+}
+
+func (h deadlineWriterHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
+	h.next.ServeHTTP(&deadlineWriter{ResponseWriter: w, timeout: h.timeout, ctx: r.Context()}, r)
+}
+
+type deadlineWriter struct {
+	http.ResponseWriter
+	timeout time.Duration
+	ctx     context.Context
+}
+
+func (w *deadlineWriter) Unwrap() http.ResponseWriter { return w.ResponseWriter }
+
+func (w *deadlineWriter) setDeadline() {
+	deadline := time.Now().Add(w.timeout)
+	if requestDeadline, ok := w.ctx.Deadline(); ok {
+		deadline = requestDeadline
+	}
+	_ = http.NewResponseController(w.ResponseWriter).SetWriteDeadline(deadline)
+}
+
+func (w *deadlineWriter) WriteHeader(status int) {
+	w.setDeadline()
+	w.ResponseWriter.WriteHeader(status)
+}
+
+func (w *deadlineWriter) Write(body []byte) (int, error) {
+	w.setDeadline()
+	return w.ResponseWriter.Write(body)
+}
+
+func (w *deadlineWriter) Flush() {
+	w.setDeadline()
+	_ = http.NewResponseController(w.ResponseWriter).Flush()
+}
+
 func jsonResponse(w http.ResponseWriter, status int, value any) {
 	w.Header().Set("Cache-Control", "no-store, private")
 	w.Header().Set("Content-Type", "application/json; charset=utf-8")
@@ -145,7 +210,7 @@ func bearer(r *http.Request) (string, bool) {
 
 func main() {
 	if len(os.Args) == 2 && os.Args[1] == "version" {
-		log.Printf("proprium-gateway version=%s commit=%s", version, commit)
+		fmt.Printf("proprium-gateway version=%s commit=%s\n", version, commit)
 		return
 	}
 	if len(os.Args) < 2 || os.Args[1] != "serve" {
@@ -180,6 +245,7 @@ func main() {
 	}
 	httpServer := &http.Server{
 		Handler:           gateway.Handler(),
+		ReadTimeout:       config.UpstreamTimeout,
 		ReadHeaderTimeout: 10 * time.Second,
 		IdleTimeout:       90 * time.Second,
 		WriteTimeout:      0, // Streaming Git and MCP SSE writes are bounded by request contexts.

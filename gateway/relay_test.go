@@ -363,3 +363,30 @@ func TestBoundedReaderAndGitResponseLimit(t *testing.T) {
 		t.Fatalf("Git stream cap violated: %d", target.Body.Len())
 	}
 }
+
+func TestHostValidationRejectsDNSRebindingAndAllowsConfiguredHostnames(t *testing.T) {
+	server, err := NewServer(testConfig())
+	if err != nil {
+		t.Fatal(err)
+	}
+	request := httptest.NewRequest(http.MethodGet, "https://gateway.example/healthz", nil)
+	request.Host = "attacker.example"
+	response := httptest.NewRecorder()
+	server.Handler().ServeHTTP(response, request)
+	if response.Code != http.StatusMisdirectedRequest {
+		t.Fatalf("unconfigured Host accepted: %d", response.Code)
+	}
+	request = httptest.NewRequest(http.MethodGet, "https://gateway.example/healthz", nil)
+	request.Host = "GATEWAY.EXAMPLE"
+	response = httptest.NewRecorder()
+	server.Handler().ServeHTTP(response, request)
+	if response.Code != http.StatusOK {
+		t.Fatalf("configured case-insensitive Host rejected: %d", response.Code)
+	}
+	request = httptest.NewRequest(http.MethodGet, "http://127.0.0.1:8080/healthz", nil)
+	response = httptest.NewRecorder()
+	server.Handler().ServeHTTP(response, request)
+	if response.Code != http.StatusOK {
+		t.Fatalf("configured local listener Host rejected: %d", response.Code)
+	}
+}

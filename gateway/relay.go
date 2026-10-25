@@ -56,13 +56,13 @@ func parseSmartRoute(r *http.Request) (smartRoute, bool) {
 }
 
 func (s *Server) handleGit(w http.ResponseWriter, r *http.Request) {
-	route, ok := parseSmartRoute(r)
-	if !ok {
-		s.writeRelayError(w, http.StatusNotFound, "route_not_found")
-		return
-	}
 	origin, ok := s.checkOrigin(w, r)
 	if !ok {
+		return
+	}
+	route, ok := parseSmartRoute(r)
+	if !ok {
+		s.writeCorsError(w, http.StatusNotFound, "route_not_found", origin)
 		return
 	}
 	service := route.service
