@@ -1,0 +1,64 @@
+import { test, expect } from "@playwright/test";
+import { chooseFile, expectEditorText, showPanel } from "./restored-ui.helpers.js";
+const identity = () => ({ origin: "https://github.com", repositoryId: 923456789, owner: "proprium-test", repository: "ui-restoration", branch: "main", localWorkspaceId: `restored-${crypto.randomUUID()}` });
+test("recovered shells retain CodeMirror, typography, reading, theme and unsaved text across panels", async ({ page }, testInfo) => {
+  await page.goto("/");
+  await page.waitForFunction(() => !!window.propriumHostTest);
+  await page.evaluate(async workspace => window.propriumHostTest!.openWorkspace(workspace, { "chapter.md": "元の原稿です。|漢字《かんじ》\n" }), identity());
+  await chooseFile(page, "chapter.md");
+  await expect(page.locator(".cm-editor")).toBeVisible();
+  const editor = page.getByRole("textbox", { name: "原稿 Markdown" });
+  await editor.fill("未保存の原稿。|漢字《かんじ》\n");
+  await page.getByRole("button", { name: "プレビュー", exact: true }).click();
+  await expect(page.getByRole("document", { name: "ルビ付き読み取り専用プレビュー" }).locator("ruby")).toHaveCount(1);
+  await page.getByRole("button", { name: "縦書き", exact: true }).click();
+  await page.getByRole("button", { name: "読書モード", exact: true }).click();
+  await expect(page.getByRole("document", { name: "縦書き読書モード" })).toBeVisible();
+  await page.getByRole("button", { name: "編集に戻る", exact: true }).click();
+  await page.getByLabel("外観", { exact: true }).selectOption("paper");
+  await expect(page.locator("html")).toHaveAttribute("data-zp-theme", "paper");
+  await showPanel(page, "inspector");
+  await expectEditorText(page, "未保存の原稿。|漢字《かんじ》\n");
+  const floating = page.getByRole("button", { name: "Float 原稿", exact: true });
+  if (await floating.isVisible()) {
+    await floating.click();
+    await expect(page.locator('[data-floating-panel="editor"]')).toBeVisible();
+    await page.getByRole("button", { name: "パネルをドックへ戻す" }).click();
+    await expect(page.locator('[data-floating-panel="editor"]')).toHaveCount(0);
+  }
+  await editor.press("Control+z");
+  await expectEditorText(page, "元の原稿です。|漢字《かんじ》\n");
+  await page.screenshot({ path: testInfo.outputPath("restored-ui.png"), fullPage: true });
+  await testInfo.attach("restored-ui", { path: testInfo.outputPath("restored-ui.png"), contentType: "image/png" });
+});
+test("storage_unknown offers non-destructive verification and preserves workspace bytes", async ({ page }) => {
+  const workspace = identity();
+  await page.goto("/");
+  await page.waitForFunction(() => !!window.propriumHostTest);
+  await page.evaluate(async workspace => window.propriumHostTest!.openWorkspace(workspace, { "chapter.md": "消さない原稿\n" }), workspace);
+  await page.getByRole("button", { name: "Workspaces", exact: true }).first().click();
+  await page.evaluate(workspace => localStorage.setItem(`proprium.git.storage-unknown.${workspace.localWorkspaceId}`, "1"), workspace);
+  await page.getByRole("button", { name: /proprium-test\/ui-restoration/u }).click();
+  await expect(page.getByText(/storage_unknown:/u)).toBeVisible();
+  await page.getByRole("button", { name: "保存データの整合性を確認" }).click();
+  await chooseFile(page, "chapter.md");
+  await expectEditorText(page, "消さない原稿\n");
+  expect(await page.evaluate(workspace => localStorage.getItem(`proprium.git.storage-unknown.${workspace.localWorkspaceId}`), workspace)).toBeNull();
+});
+test("a protected uncommitted draft can be recovered explicitly without replacing the worktree", async ({ page }) => {
+  const workspace = identity();
+  await page.goto("/");
+  await page.waitForFunction(() => !!window.propriumHostTest);
+  await page.evaluate(async workspace => window.propriumHostTest!.openWorkspace(workspace, { "chapter.md": "保存済みの本文\n" }), workspace);
+  await chooseFile(page, "chapter.md");
+  await page.getByRole("textbox", { name: "原稿 Markdown" }).fill("回復する未保存の本文\n");
+  await expect(page.getByLabel("原稿の保護範囲を確認")).toContainText("Draft · このブラウザーに保護済み");
+  page.once("dialog", dialog => dialog.accept());
+  await page.getByRole("button", { name: "Workspaces", exact: true }).click();
+  await page.getByRole("button", { name: /proprium-test\/ui-restoration/u }).click();
+  await chooseFile(page, "chapter.md");
+  await expectEditorText(page, "保存済みの本文\n");
+  await page.getByRole("button", { name: "この下書きをエディターで開く" }).click();
+  await expectEditorText(page, "回復する未保存の本文\n");
+  await expect(page.locator(".save-state")).toHaveText("Unsaved editor text");
+});

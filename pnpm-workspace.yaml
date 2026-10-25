@@ -1,5 +1,6 @@
 packages:
   - app
+  - packages/contracts
 allowBuilds:
   esbuild: true
   workerd: false

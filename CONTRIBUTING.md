@@ -17,6 +17,7 @@ The product build and canonical local checks target the Proprium Browser Host:
 pnpm install --frozen-lockfile
 pnpm typecheck:browser
 pnpm test:browser:unit
+pnpm test:ui:unit
 pnpm test:browser:e2e
 pnpm test:browser:static:e2e
 pnpm test:browser:adapters

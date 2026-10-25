@@ -1,3 +1,4 @@
+import { showPanel, expectEditorText, chooseFile } from "./restored-ui.helpers.js";
 import { expect, test } from "@playwright/test";
 import { createHash, createPrivateKey, generateKeyPairSync, sign as ed25519Sign, type KeyObject } from "node:crypto";
 import { execFileSync } from "node:child_process";
@@ -251,11 +252,11 @@ test("Host Plugin panel previews, installs, runs, stops, updates and rolls back 
     origin: "https://github.com", repositoryId: 923456789, owner: "proprium-test", repository: "plugin-e2e",
     branch: "main", localWorkspaceId: `plugin-${crypto.randomUUID()}`,
   }, { "notes.md": "before" }));
-  const mobileFiles = page.getByRole("button", { name: /^Files(?:\s|$)/u });
-  if (await mobileFiles.isVisible()) await mobileFiles.click();
+  await showPanel(page, "outline");
 
   const panel = page.locator("details.plugin-manager-panel");
   const panelNotice = panel.getByRole("status");
+  await showPanel(page, "review");
   await panel.locator("summary").click();
   await page.getByLabel("Install from trusted registry").fill("fixture.compute-sum");
   await page.getByLabel("Version (optional: latest stable)").fill("1.0.0");
@@ -310,15 +311,14 @@ test("Host keeps newer editor text when a reviewed plugin proposal refresh finis
   };
   await page.waitForFunction(() => typeof window.propriumHostTest?.openWorkspace === "function");
   await page.evaluate(async workspace => window.propriumHostTest!.openWorkspace(workspace, { "README.md": "before\n" }), identity);
-  const mobileFiles = page.getByRole("button", { name: /^Files(?:\s|$)/u });
-  if (await mobileFiles.isVisible()) await mobileFiles.click();
+  await showPanel(page, "outline");
   const files = page.getByRole("list", { name: "Repository files" });
-  await files.getByRole("button", { name: "README.md" }).click();
-  const editor = page.getByRole("textbox", { name: "File contents" });
-  await expect(editor).toHaveValue("before\n");
+  await chooseFile(page, "README.md");
+  const editor = page.getByRole("textbox", { name: "原稿 Markdown" });
+  await expectEditorText(page, "before\n");
 
   const panel = page.locator("details.plugin-manager-panel");
-  if (await mobileFiles.isVisible() && !(await panel.isVisible())) await mobileFiles.click();
+  await showPanel(page, "review");
   await panel.locator("summary").click();
   await page.getByLabel("Install from trusted registry").fill(pluginId);
   await page.getByLabel("Version (optional: latest stable)").fill("1.0.0");
@@ -380,8 +380,9 @@ test("Host keeps newer editor text when a reviewed plugin proposal refresh finis
   });
   await plugin.getByRole("button", { name: "Review and apply to local worktree" }).click();
   await expect.poll(() => page.evaluate(() => window.propriumReadRace?.started ?? false)).toBe(true);
+  await showPanel(page, "editor");
   await editor.fill("newer local text while plugin refresh is pending\n");
-  await expect(editor).toHaveValue("newer local text while plugin refresh is pending\n");
+  await expectEditorText(page, "newer local text while plugin refresh is pending\n");
   await page.evaluate(() => {
     const race = window.propriumReadRace;
     if (!race?.started || !race.release) throw new Error("The plugin refresh read was not held.");
@@ -389,8 +390,10 @@ test("Host keeps newer editor text when a reviewed plugin proposal refresh finis
     race.release = undefined;
   });
 
-  await expect(editor).toHaveValue("newer local text while plugin refresh is pending\n");
+  await expectEditorText(page, "newer local text while plugin refresh is pending\n");
+  await showPanel(page, "review");
   await expect(panel.getByRole("status")).toContainText("Applied 1 proposed file change(s) to the local worktree.");
   await expect(page.locator(".save-state")).toHaveText("Unsaved editor text");
+  await showPanel(page, "editor");
   await expect(editor).toBeEnabled();
 });

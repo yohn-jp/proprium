@@ -1,6 +1,10 @@
 # Proprium workspace UX
 
-**Status: target behavior.** Legacy Scriptorium Desktop/Mobile implementations can be reference material but are not evidence of support for this contract.
+**Status: UX contract with browser implementation.** The Host uses the recovered Scriptorium Desktop/Mobile shells and original CodeMirror manuscript editor through browser-owned adapters. It retains dock/split/floating layouts, device-specific navigation, three appearance modes, typography, preview, ruby and reading controls. The former Node application controller is not used. Requirements below still need change-appropriate browser verification.
+
+`HostApp` owns repository selection, Browser Git, GitHub OAuth, plugins and Live MCP. `RestoredEditor` binds the original editor to generic file paths and a local IndexedDB recovery journal. Layout and appearance storage keys are retained. Switching panels retains editor input, undo and reading state, plus the single plugin/MCP instance; closing a tool panel does not revoke clients or restart plugins. Checkpoint opens local Git review; Save draft writes the local worktree, and GitHub publication remains explicit.
+
+When Browser Git reports `storage_unknown`, the workspace picker exposes **保存データの整合性を確認**. It invokes the existing worker verification and only clears the uncertainty marker on success. Failure preserves the marker and stored bytes; no reset/delete action is substituted for verification.
 
 ## Shared intent, distinct device interactions
 

@@ -1,3 +1,4 @@
+import { showPanel, expectEditorText, chooseFile } from "./restored-ui.helpers.js";
 import { expect, test } from "@playwright/test";
 import { execFileSync } from "node:child_process";
 import { mkdtempSync, readFileSync, rmSync } from "node:fs";
@@ -131,21 +132,22 @@ test("static Host imports a GitHub REST commit, reloads offline, and edits with 
     await expect(operationNotice).toContainText(`Opened ${staticFixtureTitle} at GitHub commit ${fixture!.head}.`);
   }
   const files = page.getByRole("list", { name: "Repository files" });
-  const mobileFiles = page.getByRole("button", { name: /^Files(?:\s|$)/u });
   const revealFilesSidebar = async (): Promise<void> => {
-    if (await mobileFiles.isVisible() && !(await files.isVisible())) await mobileFiles.click();
+    await showPanel(page, "outline");
     await expect(files).toBeVisible();
   };
   await revealFilesSidebar();
   if (fixture) {
-    await files.getByRole("button", { name: "README.md" }).click();
-    await expect(page.getByRole("textbox", { name: "File contents" })).toHaveValue(fixture.content);
+    await chooseFile(page, "README.md");
+    await expectEditorText(page, fixture.content);
+    await showPanel(page, "history");
     await expect(page.getByText("Static browser acceptance fixture", { exact: true })).toBeVisible();
     await expect(page.locator("code").filter({ hasText: fixture.head.slice(0, 10) })).toBeVisible();
   }
 
   await revealFilesSidebar();
   const panel = page.locator("details.plugin-manager-panel");
+  await showPanel(page, "review");
   await expect(panel).toBeVisible();
   await panel.locator("summary").click();
   await page.getByLabel("Install from trusted registry").fill(staticPluginId);
@@ -196,11 +198,12 @@ test("static Host imports a GitHub REST commit, reloads offline, and edits with 
   const offlineFile = `.proprium-static-${crypto.randomUUID()}.txt`;
   await page.getByLabel("New file path").fill(offlineFile);
   await page.getByRole("button", { name: "Create new file" }).click();
-  const editor = page.getByRole("textbox", { name: "File contents" });
+  const editor = page.getByRole("textbox", { name: "原稿 Markdown" });
   await expect(editor).toBeVisible();
   await editor.fill("Edited and committed from the cached static Host while offline.\n");
   await page.getByRole("button", { name: "Save draft" }).click();
   await expect(operationNotice).toContainText("saved to this browser's local Git worktree");
+  await showPanel(page, "inspector");
   await page.getByLabel("Commit message").fill("Verify offline editing from the static Host");
   await page.getByLabel("Git author name").fill("Proprium Static Acceptance");
   await page.getByLabel("Git author email").fill("static-acceptance@example.invalid");
@@ -211,6 +214,7 @@ test("static Host imports a GitHub REST commit, reloads offline, and edits with 
 
   const reopenedPluginPanel = page.locator("details.plugin-manager-panel");
   await revealFilesSidebar();
+  await showPanel(page, "review");
   await reopenedPluginPanel.locator("summary").click();
   const reopenedPlugin = reopenedPluginPanel.getByRole("listitem").filter({ hasText: staticPluginId }).filter({ hasText: `v${staticPluginVersion}` });
   await expect(reopenedPlugin).toContainText(`v${staticPluginVersion} · installed, disabled`);

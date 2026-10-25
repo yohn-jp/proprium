@@ -17,7 +17,17 @@
     "buffer": "6.0.3",
     "isomorphic-git": "1.44.4",
     "react": "^19.1.0",
-    "react-dom": "^19.1.0"
+    "react-dom": "^19.1.0",
+    "@codemirror/commands": "^6.10.4",
+    "@codemirror/state": "^6.7.1",
+    "@codemirror/view": "^6.43.6",
+    "@ionic/core": "9.0.8",
+    "@ionic/react": "9.0.8",
+    "@radix-ui/react-separator": "1.2.0",
+    "@radix-ui/react-tabs": "1.2.1",
+    "@scriptorium/contracts": "workspace:*",
+    "react-resizable-panels": "2.1.9",
+    "react-router-dom": "6.30.6"
   },
   "devDependencies": {
     "@types/react": "^19.1.2",

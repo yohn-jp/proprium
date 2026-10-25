@@ -8,10 +8,10 @@
     "node": ">=24.0.0"
   },
   "scripts": {
-    "dev:browser": "pnpm --dir app exec vite --config vite.proprium.config.ts",
-    "build:browser": "pnpm --dir app exec vite build --config vite.proprium.config.ts && node scripts/verify-proprium-static.mjs",
-    "typecheck:browser": "pnpm --filter @proprium/host typecheck:proprium",
-    "test:browser:unit": "pnpm --filter @proprium/host test:proprium",
+    "dev:browser": "pnpm --filter @scriptorium/contracts build && pnpm --dir app exec vite --config vite.proprium.config.ts",
+    "build:browser": "pnpm --filter @scriptorium/contracts build && pnpm --dir app exec vite build --config vite.proprium.config.ts && node scripts/verify-proprium-static.mjs",
+    "typecheck:browser": "pnpm --filter @scriptorium/contracts build && pnpm --filter @proprium/host typecheck:proprium",
+    "test:browser:unit": "pnpm --filter @scriptorium/contracts build && pnpm --filter @proprium/host test:proprium",
     "test:browser:e2e": "node scripts/run-proprium-e2e.mjs",
     "test:browser:adapters": "node scripts/run-proprium-adapters-e2e.mjs",
     "test:browser:static:e2e": "playwright test --config tests/browser/static-playwright.config.ts",
@@ -20,7 +20,8 @@
     "typecheck": "pnpm typecheck:browser",
     "test": "pnpm test:browser:unit && pnpm test:browser:e2e && pnpm test:browser:static:e2e && pnpm test:browser:adapters",
     "test:e2e": "pnpm test:browser:e2e && pnpm test:browser:static:e2e && pnpm test:browser:adapters",
-    "verify": "pnpm verify:browser"
+    "verify": "pnpm verify:browser",
+    "test:ui:unit": "pnpm --filter @scriptorium/contracts build && pnpm --dir app exec node --import tsx --test 'src/workspace/*.test.ts' 'src/editor/cm/*.test.ts' 'src/theme.test.ts' 'src/editor.test.ts' 'src/editor/terms.test.ts' 'src/journal.test.ts' 'src/continueCandidates.test.ts'"
   },
   "devDependencies": {
     "@bytecodealliance/jco": "1.39.0",

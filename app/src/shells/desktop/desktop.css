@@ -1,0 +1,264 @@
+.st-desktop-shell {
+  display: flex;
+  width: 100%;
+  min-width: 0;
+  height: 100vh;
+  height: 100dvh;
+  min-height: 0;
+  flex-direction: column;
+  overflow: hidden;
+  color: var(--ink);
+  background: var(--page-bg);
+}
+
+.st-desktop-chrome {
+  position: relative;
+  z-index: 2;
+  flex: 0 0 auto;
+  border-bottom: 1px solid var(--line);
+  background: var(--paper);
+}
+
+.st-desktop-header-slot {
+  min-width: 0;
+}
+
+.st-desktop-controls {
+  display: flex;
+  min-width: 0;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.8rem;
+  padding: 0 0.8rem;
+  border-top: 1px solid var(--line);
+  background: var(--toolbar-bg);
+}
+
+.st-desktop-workbench-label {
+  min-width: 0;
+  color: var(--muted);
+  font-size: 0.8rem;
+}
+
+.st-desktop-panel-tab {
+  min-height: 2.45rem;
+  padding: 0.45rem 0.8rem;
+  border: 0;
+  border-radius: 0;
+  color: var(--muted);
+  background: transparent;
+  font-size: 0.84rem;
+  font-weight: 650;
+  white-space: nowrap;
+}
+
+.st-desktop-panel-tab:hover {
+  color: var(--ink);
+  background: var(--surface-hover);
+}
+
+.st-desktop-panel-tab[data-state="active"] {
+  border-bottom: 2px solid var(--accent);
+  color: var(--accent-strong);
+  background: transparent;
+}
+
+.st-desktop-panel-tab:focus-visible,
+.st-desktop-switch:focus-visible,
+.st-desktop-resize-handle:focus-visible {
+  position: relative;
+  z-index: 1;
+  outline: 3px solid var(--focus-ring);
+  outline-offset: 2px;
+}
+
+.st-desktop-switch {
+  min-height: 2.2rem;
+  flex: 0 0 auto;
+  padding: 0.35rem 0.7rem;
+  border-color: var(--line);
+  border-radius: 0.4rem;
+  color: var(--accent-strong);
+  background: var(--paper);
+  font-size: 0.82rem;
+  font-weight: 650;
+}
+
+.st-desktop-switch:hover:not(:disabled) {
+  color: var(--button-foreground);
+  background: var(--accent-strong);
+}
+
+.st-desktop-status {
+  position: fixed;
+  z-index: 30;
+  right: max(1rem, env(safe-area-inset-right, 0px));
+  bottom: max(1rem, env(safe-area-inset-bottom, 0px));
+  width: min(27rem, calc(100vw - 2.5rem));
+  max-height: min(45vh, 18rem);
+  padding: 0.8rem 1rem;
+  overflow: auto;
+  border: 1px solid var(--line);
+  border-radius: 0.7rem;
+  background: var(--paper);
+  box-shadow: 0 0.75rem 2rem rgb(0 0 0 / 16%);
+  font-size: 0.84rem;
+}
+
+.st-desktop-switch-error {
+  flex: 0 0 auto;
+  margin: 0;
+  padding: 0.55rem 0.85rem;
+  border-bottom: 1px solid var(--error-border);
+  color: var(--error-text);
+  background: var(--error-bg);
+  font-size: 0.84rem;
+}
+
+.st-desktop-workbench {
+  min-width: 0;
+  min-height: 0;
+  flex: 1 1 auto;
+  overflow: hidden;
+  background: var(--paper);
+}
+
+.st-desktop-navigation-panel,
+.st-desktop-editor-panel {
+  min-width: 0;
+  min-height: 0;
+  overflow: hidden;
+}
+
+.st-desktop-navigation {
+  display: flex;
+  width: 100%;
+  height: 100%;
+  min-width: 0;
+  min-height: 0;
+  flex-direction: column;
+  background: var(--sidebar-bg);
+}
+
+.st-desktop-panel-tabs {
+  display: flex;
+  min-width: 0;
+  flex: 0 0 auto;
+  align-items: center;
+  gap: 0.1rem;
+  padding: 0.35rem 0.45rem 0;
+  overflow-x: auto;
+  border-bottom: 1px solid var(--line);
+  background: var(--toolbar-bg);
+}
+
+.st-desktop-panel-tab {
+  padding-inline: 0.65rem;
+  font-size: 0.78rem;
+}
+
+.st-desktop-tab-content {
+  min-width: 0;
+  min-height: 0;
+  flex: 1 1 auto;
+  overflow: auto;
+  overscroll-behavior: contain;
+}
+
+.st-desktop-tab-content[data-state="inactive"] {
+  display: none;
+}
+
+.st-desktop-slot {
+  min-width: 0;
+  min-height: 100%;
+  padding: 0.85rem;
+  overflow-wrap: anywhere;
+}
+
+.st-desktop-library-slot {
+  background: var(--sidebar-bg);
+}
+
+.st-desktop-tools-slot {
+  background: var(--page-bg);
+}
+
+.st-desktop-editor-slot {
+  width: 100%;
+  height: 100%;
+  min-width: 0;
+  min-height: 0;
+  overflow: auto;
+  overscroll-behavior: contain;
+  outline: none;
+  background: var(--page-bg);
+}
+
+.st-desktop-resize-handle {
+  position: relative;
+  z-index: 1;
+  display: flex;
+  width: 0.65rem;
+  min-width: 0.65rem;
+  flex: 0 0 0.65rem;
+  align-items: stretch;
+  justify-content: center;
+  cursor: col-resize;
+  touch-action: none;
+  background: var(--paper-dark);
+}
+
+.st-desktop-resize-handle:hover,
+.st-desktop-resize-handle[data-resize-handle-active] {
+  background: var(--surface-selected);
+}
+
+.st-desktop-resize-line {
+  width: 1px;
+  height: 100%;
+  background: var(--line);
+}
+
+.st-desktop-visually-hidden {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+  clip-path: inset(50%);
+}
+
+@media (max-width: 680px) {
+  .st-desktop-controls {
+    gap: 0.35rem;
+    padding-inline: 0.4rem;
+  }
+
+  .st-desktop-panel-tab {
+    padding-inline: 0.45rem;
+    font-size: 0.74rem;
+  }
+
+  .st-desktop-switch {
+    padding-inline: 0.45rem;
+    font-size: 0.73rem;
+  }
+
+  .st-desktop-status {
+    max-height: 6rem;
+    padding-inline: 0.55rem;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .st-desktop-shell *,
+  .st-desktop-shell *::before,
+  .st-desktop-shell *::after {
+    scroll-behavior: auto !important;
+    animation-duration: 0.01ms !important;
+    transition-duration: 0.01ms !important;
+  }
+}

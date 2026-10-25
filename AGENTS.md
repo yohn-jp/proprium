@@ -12,6 +12,10 @@ GitHub is the authoritative remote for user data. Browser drafts and local Git c
 
 Follow the [organization governance](https://github.com/yohn-jp/.github/blob/main/.github/agent-governance/AGENTS.md) and applicable skills. Inari is suspended. Use an isolated branch/worktree unless the user explicitly authorizes a different lifecycle. Never force-push or destroy remote resources without confirming their identity and use.
 
+## UI continuity
+
+Preserve the recovered Desktop/Mobile shells, workspace composition, CodeMirror editor, reading/typography and appearance controls. Runtime migration does not authorize replacing or deleting the product UI. Keep Browser Git/Gateway integration behind those UI components; do not reactivate the former Node application controller.
+
 ## Verification
 
 For changes to inherited code, use existing package scripts and change-appropriate checks, recording that they cover the **legacy** implementation. Browser-native, mobile Git, plugin sandbox and static-delivery claims require their own real-browser/e2e proofs once implemented. For documentation-only changes, check that links resolve, retired documentation is no longer indexed, and wording distinguishes targets from implemented behavior. Follow [CONTRIBUTING.md](CONTRIBUTING.md) for documentation hygiene.

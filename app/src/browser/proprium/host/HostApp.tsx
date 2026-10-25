@@ -1,10 +1,25 @@
-import { useCallback, useEffect, useMemo, useRef, useState, type ReactElement } from "react";
+import { lazy, Suspense, useLayoutEffect, useCallback, useEffect, useMemo, useRef, useState, type ReactElement } from "react";
+import { createPortal } from "react-dom";
+import { useNavigate } from "react-router-dom";
 import { BrowserLocalGit, BrowserLocalGitError } from "../git/index.js";
 import type { CommitSummary, FileRevision, StatusEntry, WorkspaceIdentity } from "../git/protocol.js";
 import { createGitHubAccountSession } from "../git/github-sync.js";
 import type { GitHubAccount, GitHubDevicePrompt, GitHubRepository, GitHubAccountSession, GitHubSyncClient } from "../git/github-sync.js";
 import { PluginPanel } from "./PluginPanel.js";
 import { LiveMcpPanel } from "./LiveMcpPanel.js";
+
+import { DesktopShell } from "../../../shells/desktop/DesktopShell.js";
+import { ThemeControl } from "../../../components/ThemeControl.js";
+import { applyThemeMode, loadThemeMode, persistThemeMode } from "../../../theme.js";
+import type { WorkspacePanel } from "../../../application/contracts.js";
+import { RestoredEditor } from "./RestoredEditor.js";
+const MobileShell = lazy(() => import("../../../shells/mobile/MobileShell.js").then(module => ({ default: module.MobileShell })));
+
+function RetainedPanelSlot({ node }: { node: HTMLElement }): ReactElement {
+  const slot = useRef<HTMLDivElement>(null);
+  useLayoutEffect(() => { slot.current?.append(node); return () => { node.remove(); }; }, [node]);
+  return <div ref={slot} />;
+}
 
 interface RecentWorkspace {
   identity: WorkspaceIdentity;
@@ -94,6 +109,9 @@ function asText(data: Uint8Array): string | null {
 function fileIcon(path: string): string { return path.includes("/") ? "↳" : "▤"; }
 
 export function HostApp(): ReactElement {
+  const navigate = useNavigate();
+  const [editorNode] = useState(() => document.createElement("div"));
+  const [toolsNode] = useState(() => document.createElement("div"));
   const [recent, setRecent] = useState<RecentWorkspace[]>(readRecentWorkspaces);
   const [gatewayDraft, setGatewayDraft] = useState(readGateway);
   const [session, setSession] = useState<GitHubAccountSession | null>(null);
@@ -116,8 +134,24 @@ export function HostApp(): ReactElement {
   const [preferences, setPreferences] = useState(readPreferences);
   const [syncState, setSyncState] = useState<SyncState>("local-draft");
   const [message, setMessage] = useState<OperationMessage | null>(null);
-  const [mobileNavigationOpen, setMobileNavigationOpen] = useState(false);
-  const editorRef = useRef<HTMLTextAreaElement>(null);
+  const [mode, setMode] = useState<"desktop" | "mobile">(() => {
+    if (location.pathname.startsWith("/mobile")) return "mobile";
+    if (location.pathname.startsWith("/desktop")) return "desktop";
+    try { const saved = localStorage.getItem("scriptorium:ui-mode"); if (saved === "desktop" || saved === "mobile") return saved; } catch { /* Use device default. */ }
+    return window.matchMedia("(max-width: 760px)").matches ? "mobile" : "desktop";
+  });
+  const [theme, setTheme] = useState(loadThemeMode);
+  const [requestedPanel, setRequestedPanel] = useState({ id: "editor", sequence: 0 });
+  const [recoveryTarget, setRecoveryTarget] = useState<RecentWorkspace | null>(null);
+  const editorFlush = useRef<(() => Promise<string | null>) | null>(null);
+  const registerEditorFlush = useCallback((flush: (() => Promise<string | null>) | null) => { editorFlush.current = flush; }, []);
+  useEffect(() => applyThemeMode(theme), [theme]);
+  useEffect(() => {
+    if (!workspace && mode === "mobile") {
+      const search = new URLSearchParams(location.search);
+      if (search.get("view") !== "library") { search.set("view", "library"); navigate({ search: search.toString() }, { replace: true }); }
+    }
+  }, [workspace, mode, navigate]);
   const gitRef = useRef<BrowserLocalGit | null>(null);
   const sessionRef = useRef<GitHubAccountSession | null>(null);
   const currentFileRef = useRef<OpenFile | null>(currentFile);
@@ -163,7 +197,6 @@ export function HostApp(): ReactElement {
       setWorkspace(entry);
       setWorkspaceGeneration(crypto.randomUUID());
       setCurrentFile(null);
-      setMobileNavigationOpen(false);
       setStatus(nextState.status);
       setFiles(nextState.files);
       setHistory(nextState.history);
@@ -172,6 +205,7 @@ export function HostApp(): ReactElement {
       previousGit?.close();
       setMessage({ tone: "info", text: "Workspace opened on this device. Local drafts and commits remain in this browser until published to GitHub." });
     } catch (error) {
+      if (error instanceof BrowserLocalGitError && error.code === "storage_unknown") setRecoveryTarget(entry);
       if (gitRef.current !== nextGit) nextGit?.close();
       setMessage({ tone: "error", text: errorMessage(error) });
     } finally { setBusy(false); }
@@ -258,7 +292,6 @@ export function HostApp(): ReactElement {
       setFiles(initial.files);
       setHistory(initial.history);
       setSyncState(initial.status.entries.length || !initial.status.head ? "local-draft" : "local-committed");
-      setMobileNavigationOpen(false);
       setRecent(existing => rememberWorkspace(entry, existing));
       previousGit?.close();
       const pulled = await nextSync.pull();
@@ -276,6 +309,7 @@ export function HostApp(): ReactElement {
       const text = errorMessage(error);
       setSyncState(text.includes("network_unavailable") ? "offline" : text.includes("remote_unknown") ? "remote-unknown" : "local-draft");
       setMessage({ tone: "error", text });
+      if (error instanceof BrowserLocalGitError && error.code === "storage_unknown") setRecoveryTarget(entry);
       if (gitRef.current !== nextGit) nextGit?.close();
     } finally { setBusy(false); }
   }
@@ -320,8 +354,8 @@ export function HostApp(): ReactElement {
       const text = data === null ? "" : asText(data);
       const entry: OpenFile = { path, data, revision: read.revision, text, binary: data !== null && text === null, dirty: false };
       setCurrentFile(entry);
-      setMobileNavigationOpen(false);
-      requestAnimationFrame(() => editorRef.current?.focus());
+      setRequestedPanel(value => ({ id: "editor", sequence: value.sequence + 1 }));
+      requestAnimationFrame(() => document.querySelector<HTMLElement>(".cm-content")?.focus());
     } catch (error) { setMessage({ tone: "error", text: errorMessage(error) }); }
     finally { setBusy(false); }
   }
@@ -342,9 +376,9 @@ export function HostApp(): ReactElement {
       if (read.data !== null) throw new Error(`File already exists: ${path}`);
       setCurrentFile({ path, data: null, revision: read.revision, text: "", binary: false, dirty: true });
       setSyncState("editing");
+      setRequestedPanel(value => ({ id: "editor", sequence: value.sequence + 1 }));
       setNewPath("");
-      setMobileNavigationOpen(false);
-      requestAnimationFrame(() => editorRef.current?.focus());
+      requestAnimationFrame(() => document.querySelector<HTMLElement>(".cm-content")?.focus());
     } catch (error) { setMessage({ tone: "error", text: errorMessage(error) }); }
     finally { setBusy(false); }
   }
@@ -553,17 +587,22 @@ export function HostApp(): ReactElement {
     currentFile?.dirty ? currentFile.text : null,
   ]);
 
-  return <main className="proprium-host">
-    <header className="host-topbar">
-      <a className="wordmark" href="/" aria-label="Proprium home"><span className="wordmark-mark">P</span><span>Proprium</span></a>
-      {workspace ? <div className="active-location"><span className="location-title">{workspace.title}</span><span className="location-branch">{workspace.identity.branch}</span></div> : <div className="topbar-subtitle">Browser workspace</div>}
-      {workspace && <div className={`save-state save-${syncState}`} role="status" aria-live="polite">{saveStateLabel(syncState, status.head)}</div>}
-      {workspace && <button type="button" className="quiet-button change-workspace" onClick={leaveWorkspace}>Workspaces</button>}
-    </header>
-
-    {message && <div className={`host-message message-${message.tone}`} role={message.tone === "error" ? "alert" : "status"}>{message.text}<button aria-label="Dismiss message" type="button" onClick={() => setMessage(null)}>×</button></div>}
-
-    {!workspace ? <section className="workspace-picker" aria-labelledby="picker-heading">
+  const revealPanel = (id: string): void => setRequestedPanel(value => ({ id, sequence: value.sequence + 1 }));
+  const beforeLayoutChange = async (): Promise<boolean> => {
+    try { await editorFlush.current?.(); return true; }
+    catch (error) { setMessage({ tone: "error", text: errorMessage(error) }); return false; }
+  };
+  const recoverStorage = async (entry: RecentWorkspace): Promise<void> => {
+    setBusy(true);
+    const candidate = new BrowserLocalGit(entry.identity);
+    try {
+      await candidate.verifyStorage(); candidate.close(); setRecoveryTarget(null);
+      await openLocalWorkspace(entry, session ?? undefined);
+    } catch (error) { candidate.close(); setMessage({ tone: "error", text: errorMessage(error) }); }
+    finally { setBusy(false); }
+  };
+  const recovery = recoveryTarget && <section role="alert"><h2>ブラウザー内Gitの整合性確認</h2><p>前回の操作結果が未確定です。保存データを削除せず、Gitオブジェクトと作業状態を検証します。</p><button disabled={busy} onClick={() => void recoverStorage(recoveryTarget)}>保存データの整合性を確認</button></section>;
+  const picker = <section className="workspace-picker" aria-labelledby="picker-heading">
       <div className="welcome-copy"><p className="eyebrow">A workspace that stays yours</p><h1 id="picker-heading">Open a GitHub workspace</h1><p>Open a repository in this browser, edit files offline, commit locally, and publish when you are ready.</p></div>
       <div className="picker-grid">
         <section className="picker-card" aria-labelledby="connect-heading">
@@ -596,11 +635,8 @@ export function HostApp(): ReactElement {
         </section>
       </div>
       <p className="locality-note"><span>●</span> Editing and Git run in this browser. GitHub is the shared source of truth; local commits are not published automatically.</p>
-    </section> : <div className="workspace-shell">
-      <button type="button" className="mobile-files-toggle" aria-expanded={mobileNavigationOpen} aria-controls="workspace-sidebar" onClick={() => setMobileNavigationOpen(value => !value)}>Files <span>{files.filter(file => file.type === "blob").length}</span></button>
-      <aside id="workspace-sidebar" className={`workspace-sidebar ${mobileNavigationOpen ? "sidebar-open" : ""}`} aria-label="Workspace tools">
-        <div className="sidebar-scroll">
-          <section className="sidebar-section">
+    </section>;
+  const library = workspace ? <div className="host-controls"><section className="sidebar-section">
             <div className="section-title-row"><h2>Files</h2><span className="count-badge">{files.filter(file => file.type === "blob").length}</span></div>
             <form className="new-file-form" onSubmit={event => { event.preventDefault(); void createFile(); }}>
               <label className="sr-only" htmlFor="new-file-path">New file path</label><input id="new-file-path" value={newPath} onChange={event => setNewPath(event.target.value)} placeholder="New file path" maxLength={1024} />
@@ -612,7 +648,8 @@ export function HostApp(): ReactElement {
             <div className="section-title-row"><h2>GitHub</h2><span className={`connection-indicator ${syncClient ? "connected" : "local-only"}`} aria-label={syncClient ? "Connected to GitHub" : "Local workspace only"} /></div>
             {syncClient ? <div className="sync-actions"><button type="button" onClick={() => void fetchRemote()} disabled={busy}>Fetch</button><button type="button" onClick={() => void pullRemote()} disabled={busy}>Pull</button><button type="button" className="publish-button" onClick={() => void publishRemote()} disabled={busy || status.localState !== "local-committed"}>Publish</button></div> : <p className="sidebar-empty">Sign in to enable remote sync. Local editing remains available offline.</p>}
           </section>
-          {git && workspace && <PluginPanel
+</div> : picker;
+  const tools = <div className="host-controls">{git && workspace && <PluginPanel
             workspaceId={activeWorkspaceId!}
             git={git}
             revisionKey={pluginRevisionKey}
@@ -633,17 +670,8 @@ export function HostApp(): ReactElement {
             onWorkspaceChanged={refreshAfterPlugin}
             onExecutePlugin={executeLivePlugin}
           />}
-        </div>
-        <div className="sidebar-user"><span className="avatar">{account?.login.slice(0, 1).toUpperCase() ?? "P"}</span><span><strong>{account?.login ?? "Local workspace"}</strong><small>Browser storage</small></span></div>
-      </aside>
-      <section className="editor-region" aria-label="Editor and Git history">
-        <div className="editor-toolbar">
-          <div className="editor-breadcrumb"><span>{workspace.identity.repository}</span><span aria-hidden="true">/</span><strong id="current-file-name" aria-label="Current file">{currentFile?.path ?? "Choose a file"}</strong>{currentFile?.dirty && <span className="unsaved-dot" title="Unsaved editor text" aria-label="Unsaved editor text">●</span>}</div>
-          {currentFile && <div className="file-actions"><button type="button" onClick={() => void saveDraft()} disabled={busy || !currentFile.dirty || currentFile.binary}>Save draft</button><button type="button" className="danger-quiet" onClick={() => void deleteFile()} disabled={busy}>Delete file</button></div>}
-        </div>
-        {currentFile ? currentFile.binary ? <div className="binary-notice"><span>◇</span><h2>Binary file</h2><p>This file is stored as {currentFile.data?.byteLength ?? 0} bytes. The Host preserves binary bytes; text editing is disabled.</p></div> : <label className="editor-label" htmlFor="file-editor"><span className="sr-only">File contents</span><textarea id="file-editor" ref={editorRef} aria-label="File contents" spellCheck={false} value={currentFile.text ?? ""} onChange={event => { setCurrentFile({ ...currentFile, text: event.target.value, dirty: true }); setSyncState("editing"); }} onKeyDown={event => { if ((event.metaKey || event.ctrlKey) && event.key.toLowerCase() === "s") { event.preventDefault(); void saveDraft(); } }} /> </label> : <div className="editor-empty"><div className="empty-glyph">⌘</div><h2>Choose a file to edit</h2><p>Edits are saved to this device first. Commit and publish are separate actions.</p></div>}
-        <div className="git-dock">
-          <section className="commit-panel" aria-labelledby="commit-heading">
+</div>;
+  const inspector = <div className="host-controls"><button onClick={() => revealPanel("history")}>History</button>{recovery}<section className="commit-panel" aria-labelledby="commit-heading">
             <div className="dock-heading"><div><p className="eyebrow">LOCAL GIT</p><h2 id="commit-heading">Changes</h2></div><span className="count-badge">{status.entries.length}</span></div>
             <div className="change-summary" aria-live="polite">{status.entries.length ? `${status.entries.length} changed file${status.entries.length === 1 ? "" : "s"}` : status.head ? `Clean at ${status.head.slice(0, 10)}` : "No local commit yet"}</div>
             <label htmlFor="commit-message">Commit message</label><input id="commit-message" value={commitMessage} onChange={event => setCommitMessage(event.target.value)} placeholder="Describe your changes" maxLength={100_000} />
@@ -651,14 +679,36 @@ export function HostApp(): ReactElement {
             <button type="button" className="primary-button commit-button" disabled={busy || !status.entries.length || !!currentFile?.dirty} onClick={() => void commitLocal()}>Commit locally</button>
             <p className="local-commit-note">A local commit stays on this device until you explicitly publish it.</p>
           </section>
-          <section className="history-panel" aria-labelledby="history-heading">
+</div>;
+  const historyPanel = <div className="host-controls"><section className="history-panel" aria-labelledby="history-heading">
             <div className="dock-heading"><div><p className="eyebrow">REPOSITORY</p><h2 id="history-heading">History</h2></div><button type="button" className="text-button" disabled={busy} onClick={() => git && void git.log(40).then(setHistory).catch(error => setMessage({ tone: "error", text: errorMessage(error) }))}>Refresh</button></div>
             {history.length ? <ol className="history-list">{history.map(commit => <li key={commit.oid}><span className="commit-rail" aria-hidden="true" /><div><strong>{commit.message.split("\n")[0]}</strong><code>{commit.oid.slice(0, 10)}</code><small>{commit.author.name} · {new Date(commit.timestamp * 1000).toLocaleString()}</small></div></li>)}</ol> : <p className="sidebar-empty">No commits in this local workspace.</p>}
           </section>
-        </div>
-      </section>
-    </div>}
-  </main>;
+</div>;
+  const editor = workspace && git && currentFile ? <section className="restored-editor">
+    <div className="host-file-actions"><strong aria-label="Current file">{currentFile.path}</strong><button disabled={busy || !currentFile.dirty || currentFile.binary} onClick={() => void saveDraft()}>Save draft</button><button disabled={busy} onClick={() => void deleteFile()}>Delete file</button></div>
+    {currentFile.binary ? <p>Binary file · {currentFile.data?.byteLength ?? 0} bytes</p> : <RestoredEditor key={`${workspace.identity.localWorkspaceId}:${currentFile.path}`} workspace={workspace.identity} file={currentFile} head={status.head} published={syncState === "published"} localCommitted={!!status.head && status.entries.length === 0} busy={busy} authorScope={preferences.email || "local"} author={preferences} git={git}
+      onChange={text => { setCurrentFile(previous => previous ? { ...previous, text, dirty: true } : previous); setSyncState("editing"); }}
+      onSave={() => void saveDraft()} onCommit={() => revealPanel("inspector")} onPublish={() => void publishRemote()} canPublish={!!syncClient && status.localState === "local-committed" && !currentFile.dirty}
+      onHistory={() => revealPanel("history")} onRegisterFlush={registerEditorFlush} onScratchApplied={refreshAfterPlugin} />}
+  </section> : workspace ? <p>Choose a file to edit</p> : <p>作品ライブラリからWorkspaceを開いてください。</p>;
+  const panels: WorkspacePanel[] = [
+    { id: "editor", title: "原稿", render: () => <RetainedPanelSlot node={editorNode} /> },
+    { id: "outline", title: "作品と構成", render: () => library },
+    { id: "inspector", title: "文書と保存状態", render: () => inspector },
+    { id: "history", title: "履歴", render: () => historyPanel },
+    { id: "review", title: "レビューとツール", render: () => <RetainedPanelSlot node={toolsNode} /> },
+  ];
+  const statusSurface = <>{recovery}{message && <div className={`host-message message-${message.tone}`} role={message.tone === "error" ? "alert" : "status"}>{message.text}<button aria-label="Dismiss message" onClick={() => setMessage(null)}>×</button></div>}<span className="save-state" role="status">{workspace ? saveStateLabel(syncState, status.head) : "Browser workspace"}</span></>;
+  const Shell = mode === "desktop" ? DesktopShell : MobileShell;
+  return <main className="proprium-host restored-host" onKeyDown={event => { if ((event.metaKey || event.ctrlKey) && event.key.toLowerCase() === "s") { event.preventDefault(); if (!busy) void saveDraft(); } }}><Suspense fallback={<p>ワークスペースを開いています…</p>}><Shell mode={mode}
+    header={<header className="topbar">{workspace && <button onClick={leaveWorkspace}>Workspaces</button>}<span>{workspace?.title ?? "Proprium"}</span><ThemeControl mode={theme} onChange={value => { setTheme(value); try { persistThemeMode(value); } catch { setMessage({ tone: "error", text: "外観設定を保存できませんでした。" }); } }} />{workspace && account && <button onClick={signOut}>Sign out</button>}</header>}
+    documentTitle={currentFile?.path ?? workspace?.title ?? "Proprium"} documentContext={workspace?.identity.branch}
+    desktopDurability={syncState === "published" ? "saved" : busy ? "checkpointing" : status.head && status.entries.length === 0 && !currentFile?.dirty ? "checkpointed" : "draft"}
+    library={library} editor={workspace ? <RetainedPanelSlot node={editorNode} /> : editor} tools={<RetainedPanelSlot node={toolsNode} />} status={statusSurface} renderStatus={error => <>{statusSurface}{error && <p role="alert">{error}</p>}</>}
+    onSwitchMode={async () => { if (!(await beforeLayoutChange())) return false; const next = mode === "desktop" ? "mobile" : "desktop"; setMode(next); try { localStorage.setItem("scriptorium:ui-mode", next); } catch { /* The active mode remains usable. */ } return true; }}
+    workspaceScope={workspace?.identity.localWorkspaceId} panels={workspace ? panels : undefined} beforeLayoutChange={beforeLayoutChange} requestedPanel={requestedPanel} />
+  </Suspense>{workspace && createPortal(tools, toolsNode, workspace.identity.localWorkspaceId)}{workspace && createPortal(editor, editorNode, `editor:${workspace.identity.localWorkspaceId}`)}</main>;
 
   function updatePreferences(value: { name: string; email: string }): void {
     setPreferences(value);

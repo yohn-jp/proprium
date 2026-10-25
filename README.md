@@ -6,7 +6,7 @@ Proprium runs editing, local Git operations and optional plugin computation in t
 
 No Gateway URL or login is needed to open the static Host, edit locally, commit locally, or run available WASM plugins. The [optional Gateway contract](docs/architecture/OPTIONAL-GATEWAY-AND-MCP.md) defines the separation.
 
-The browser Host is implemented under `app/src/browser/proprium/host`, using the Browser Git adapter and WASM Component Model runtime in `app/src/browser/proprium`. The retired Scriptorium API, OCI, Hosted and profile-build entrypoints are not part of the Proprium product. Retained Core and module packages are inherited source; they do not establish additional supported runtimes.
+The original Desktop/Mobile shells, dockable workspace, CodeMirror editor, reading/typography and appearance controls are connected to Browser Git through `RestoredEditor`. The browser Host is implemented under `app/src/browser/proprium/host`, using the Browser Git adapter and WASM Component Model runtime in `app/src/browser/proprium`. The retired Scriptorium API, OCI, Hosted and profile-build entrypoints are not part of the Proprium product. Retained Core and module packages are inherited source; they do not establish additional supported runtimes.
 
 Browser, GitHub and plugin security claims depend on the acceptance checks for the supported browsers and release build. A passing legacy Node test does not certify browser storage, mobile Git, WASM isolation or static delivery.
 

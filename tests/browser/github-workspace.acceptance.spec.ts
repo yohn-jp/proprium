@@ -1,3 +1,4 @@
+import { showPanel, expectEditorText, chooseFile } from "./restored-ui.helpers.js";
 import { expect, test } from "@playwright/test";
 import {
   connectAndOpenGitHubBranch,
@@ -12,8 +13,7 @@ import {
 async function showRepositoryFiles(page: import("@playwright/test").Page): Promise<void> {
   const files = page.getByRole("list", { name: "Repository files" });
   if (await files.isVisible()) return;
-  const mobileFiles = page.getByRole("button", { name: /^Files(?:\s|$)/u });
-  if (await mobileFiles.isVisible()) await mobileFiles.click();
+  await showPanel(page, "outline");
   await expect(files).toBeVisible();
 }
 
@@ -31,15 +31,15 @@ test("Host signs in, opens a real GitHub branch, commits locally and publishes t
   const operationNotice = page.locator(".host-message[role='status']");
   await expect(operationNotice).toContainText(`Opened ${liveGitHubOwner}/${liveGitHubRepository} · ${liveGitHubBranch}`);
 
-  const mobileFiles = page.getByRole("button", { name: /^Files(?:\s|$)/u });
-  if (await mobileFiles.isVisible()) await mobileFiles.click();
+  await showPanel(page, "outline");
   await expect(page.getByRole("list", { name: "Repository files" })).toBeVisible();
   await page.getByLabel("New file path").fill(`.proprium-e2e-${crypto.randomUUID()}.txt`);
   await page.getByRole("button", { name: "Create new file" }).click();
-  await page.getByRole("textbox", { name: "File contents" }).fill("Published from the Proprium browser Host.\n");
+  await page.getByRole("textbox", { name: "原稿 Markdown" }).fill("Published from the Proprium browser Host.\n");
   await page.getByRole("button", { name: "Save draft" }).click();
   await expect(operationNotice).toContainText("saved to this browser's local Git worktree");
 
+  await showPanel(page, "inspector");
   await page.getByLabel("Commit message").fill("Verify Proprium browser Host publication");
   await page.getByLabel("Git author name").fill("Proprium Browser Acceptance");
   await page.getByLabel("Git author email").fill("browser-acceptance@example.invalid");

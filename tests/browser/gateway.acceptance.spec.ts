@@ -1,3 +1,4 @@
+import { showPanel, expectEditorText, chooseFile } from "./restored-ui.helpers.js";
 import { expect, test } from "@playwright/test";
 import { createHash, createPrivateKey, generateKeyPairSync, sign as ed25519Sign, type KeyObject } from "node:crypto";
 import { execFileSync } from "node:child_process";
@@ -147,24 +148,17 @@ async function openWorkspace(page: import("@playwright/test").Page): Promise<voi
     branch: "main",
     localWorkspaceId: `gateway-${crypto.randomUUID()}`,
   }, { "README.md": "Gateway browser integration fixture.\n" }));
-  const filesToggle = page.getByRole("button", { name: /^Files(?:\s|$)/u });
-  if (await filesToggle.isVisible()) await filesToggle.click();
-  await page.getByRole("list", { name: "Repository files" }).getByRole("button", { name: "README.md" }).click();
+  await showPanel(page, "outline");
+  await chooseFile(page, "README.md");
 }
 
-async function showWorkspaceTools(page: import("@playwright/test").Page): Promise<void> {
-  const toggle = page.getByRole("button", { name: /^Files(?:\s|$)/u });
-  if (await toggle.isVisible() && await toggle.getAttribute("aria-expanded") !== "true") await toggle.click();
-}
-
-async function hideWorkspaceTools(page: import("@playwright/test").Page): Promise<void> {
-  const toggle = page.getByRole("button", { name: /^Files(?:\s|$)/u });
-  if (await toggle.isVisible() && await toggle.getAttribute("aria-expanded") === "true") await toggle.click();
-}
+async function showWorkspaceTools(page: import("@playwright/test").Page): Promise<void> { await showPanel(page, "review"); }
+async function hideWorkspaceTools(page: import("@playwright/test").Page): Promise<void> { await showPanel(page, "editor"); }
 
 async function enableLiveMcp(page: import("@playwright/test").Page): Promise<void> {
   await showWorkspaceTools(page);
   const panel = page.locator("details.live-mcp-panel");
+  await showPanel(page, "review");
   await panel.locator("summary").click();
   await page.locator("#live-gateway-url").fill(gatewayOrigin);
   await page.locator("#live-owner-key").fill(ownerKey);
@@ -197,6 +191,7 @@ test("a live browser Workspace serves real MCP calls through Go SSE and HTTP, an
 
   await showWorkspaceTools(page);
   const panel = page.locator("details.plugin-manager-panel");
+  await showPanel(page, "review");
   await panel.locator("summary").click();
   await page.getByLabel("Install from trusted registry").fill("fixture.compute-sum");
   await page.getByLabel("Version (optional: latest stable)").fill("1.0.0");
@@ -261,10 +256,13 @@ test("a live browser Workspace serves real MCP calls through Go SSE and HTTP, an
   });
   expect(proposal.error).toBeUndefined();
   await expect(page.getByText("Review a change from the MCP client", { exact: true })).toBeVisible();
-  await expect(page.getByLabel("File contents")).toHaveValue("Gateway browser integration fixture.\n");
+  await expectEditorText(page, "Gateway browser integration fixture.\n");
+  expect(textResult(await mcpCall(token, "read-with-tools-hidden", "file_read", { path: "README.md" }))).toMatchObject({ content: "Gateway browser integration fixture.\n" });
+  await showWorkspaceTools(page);
   await page.getByRole("button", { name: "Review and approve" }).click();
-  await expect(page.getByLabel("File contents")).toHaveValue("Approved by the workspace owner.\n");
+  await expectEditorText(page, "Approved by the workspace owner.\n");
 
+  await showWorkspaceTools(page);
   await page.getByRole("button", { name: "Revoke", exact: true }).click();
   const revoked = await mcpRequest(token, { jsonrpc: "2.0", id: "revoked", method: "tools/list", params: {} });
   expect(revoked.status).toBe(401);
@@ -280,10 +278,11 @@ test("a live browser Workspace serves real MCP calls through Go SSE and HTTP, an
 
   await hideWorkspaceTools(page);
   await context.setOffline(true);
-  const editor = page.getByLabel("File contents");
+  const editor = page.getByLabel("原稿 Markdown");
   await editor.fill("Local work continues while the Gateway is disconnected.\n");
   await page.getByRole("button", { name: "Save draft" }).click();
   await expect(page.getByText("Draft on this device", { exact: true })).toBeVisible();
+  await showPanel(page, "inspector");
   await page.getByLabel("Commit message").fill("Commit while disconnected from the Gateway");
   await page.getByLabel("Git author name").fill("Proprium Gateway E2E");
   await page.getByLabel("Git author email").fill("gateway-e2e@example.invalid");

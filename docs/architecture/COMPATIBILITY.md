@@ -7,10 +7,11 @@
 | `app/src/browser/proprium/git` | Browser-owned Git adapter and GitHub synchronization. This is the only Git workspace runtime used by the Host. |
 | `app/src/browser/proprium/plugin-runtime` and `app/src/browser/proprium/plugin-artifact.ts` | Browser Worker, WIT component runtime, capability broker and artifact admission. External plugins use this runtime; the Host remains trusted TypeScript. |
 | `app/src/browser/proprium/host` | Browser Host UI and workspace. It handles generic repository files and does not require Scriptorium's manuscript hierarchy. |
-| Former app API/editor/shell layer | Retired. Those screens depended on server sessions, manuscript scenes and server-managed saves; the browser Host replaces that product entrypoint. |
+| `app/src/shells`, `app/src/workspace`, `app/src/editor` and `app/src/storage/journal.ts` | Recovered original Desktop/Mobile UI, dock/floating layouts, CodeMirror, reading/typography and recovery journal. `RestoredEditor` connects these components to Browser Git; the former Node application controller is not activated. |
 | `packages/api` | Retired. No Node HTTP application server, Hosted authorization service or server-managed Git path is part of the Proprium runtime. |
 | `packages/core` and `packages/module-runtime` | Inherited Scriptorium packages retained as source for provenance and reusable algorithms. They are not imported by or required to run the browser Host. Their Node-backed execution is not Proprium product support. |
-| `packages/contracts` and `packages/migration` | Inherited Scriptorium-specific contracts and import tooling. They are not required for a generic Git workspace; migration data is not silently treated as Proprium Core state. |
+| `packages/contracts` | Shared value types and validation used by the recovered UI/recovery journal. It does not provide a server or impose a manuscript hierarchy on repository files. |
+| `packages/migration` | Inherited import tooling; migration data is not silently treated as Proprium Core state. |
 | `modules/*` | Inherited optional Scriptorium modules. Their presence does not mean they are installed Proprium plugins or part of the default Host. New external plugin execution uses the versioned WASM/WIT platform. |
 | Docker, BuildKit, OCI, Hosted and profile build paths | Retired from the repository's product build and release path. Static Host delivery and independently published plugin artifacts have separate build lifecycles. |
 

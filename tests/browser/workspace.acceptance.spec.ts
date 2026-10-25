@@ -1,3 +1,4 @@
+import { showPanel, expectEditorText, chooseFile } from "./restored-ui.helpers.js";
 import { expect, test } from "@playwright/test";
 import type { WorkspaceIdentity } from "../../app/src/browser/proprium/git/protocol.js";
 
@@ -25,8 +26,7 @@ function identity(localWorkspaceId: string): WorkspaceIdentity {
 async function showRepositoryFiles(page: import("@playwright/test").Page): Promise<void> {
   const fileTree = page.getByRole("list", { name: "Repository files" });
   if (await fileTree.isVisible()) return;
-  const toggle = page.getByRole("button", { name: /^Files(?:\s|$)/u });
-  if (await toggle.isVisible()) await toggle.click();
+  await showPanel(page, "outline");
   await expect(fileTree).toBeVisible();
 }
 
@@ -41,21 +41,24 @@ test("Host edits and commits a generic repository offline, then reopens the save
 
   const fileTree = page.getByRole("list", { name: "Repository files" });
   await showRepositoryFiles(page);
-  await fileTree.getByRole("button", { name: "README.md" }).click();
-  await expect(page.getByLabel("File contents")).toHaveValue("A generic Git repository.\n");
+  await chooseFile(page, "README.md");
+  await expectEditorText(page, "A generic Git repository.\n");
 
   await context.setOffline(true);
-  await page.getByLabel("File contents").fill("Edited on this browser with no network.\n");
+  await page.getByLabel("原稿 Markdown").fill("Edited on this browser with no network.\n");
   await page.getByRole("button", { name: "Save draft" }).click();
   await expect(page.getByText("Draft on this device", { exact: true })).toBeVisible();
 
+  await showPanel(page, "inspector");
   await page.getByLabel("Commit message").fill("Save offline workspace edit");
   await page.getByLabel("Git author name").fill("Proprium Browser Test");
   await page.getByLabel("Git author email").fill("browser-test@example.invalid");
   await page.getByRole("button", { name: "Commit locally" }).click();
 
   await expect(page.getByText(/^Committed locally · [a-f0-9]{8}$/u)).toBeVisible();
+  await showPanel(page, "history");
   const historyEntry = page.getByRole("listitem").filter({ hasText: "Save offline workspace edit" });
+  await showPanel(page, "history");
   await expect(historyEntry).toBeVisible();
   await expect(historyEntry.locator("code")).toHaveText(/^[a-f0-9]{10}$/u);
   await showRepositoryFiles(page);
@@ -69,8 +72,9 @@ test("Host edits and commits a generic repository offline, then reopens the save
     await window.propriumHostTest!.openWorkspace(workspace);
   }, { workspace });
   await showRepositoryFiles(page);
-  await fileTree.getByRole("button", { name: "README.md" }).click();
-  await expect(page.getByLabel("File contents")).toHaveValue("Edited on this browser with no network.\n");
+  await chooseFile(page, "README.md");
+  await expectEditorText(page, "Edited on this browser with no network.\n");
+  await showPanel(page, "history");
   await expect(historyEntry).toBeVisible();
 });
 
@@ -84,9 +88,9 @@ test("Host preserves editor text typed while a deleted file is pending, then sav
 
   await showRepositoryFiles(page);
   const files = page.getByRole("list", { name: "Repository files" });
-  await files.getByRole("button", { name: "README.md" }).click();
-  const editor = page.getByRole("textbox", { name: "File contents" });
-  await expect(editor).toHaveValue("Original file contents.\n");
+  await chooseFile(page, "README.md");
+  const editor = page.getByRole("textbox", { name: "原稿 Markdown" });
+  await expectEditorText(page, "Original file contents.\n");
 
   await page.evaluate(async () => {
     const moduleUrl = new URL("/src/browser/proprium/git/index.ts", location.origin).href;
@@ -111,7 +115,7 @@ test("Host preserves editor text typed while a deleted file is pending, then sav
   const newerText = "Typed while the local delete was completing.\n";
   await editor.fill(newerText);
   await page.evaluate(() => window.propriumReleaseDeleteTest?.());
-  await expect(editor).toHaveValue(newerText);
+  await expectEditorText(page, newerText);
   await expect(page.locator(".save-state")).toHaveText("Unsaved editor text");
   await expect(page.locator(".host-message[role='status']")).toContainText(
     "README.md is deleted in the local worktree. Newer editor text is preserved as an unsaved draft; save it to recreate the file.",
@@ -121,5 +125,5 @@ test("Host preserves editor text typed while a deleted file is pending, then sav
   await expect(page.locator(".host-message[role='status']")).toContainText("README.md saved to this browser's local Git worktree");
   await showRepositoryFiles(page);
   await expect(files.getByRole("button", { name: "README.md" })).toBeVisible();
-  await expect(editor).toHaveValue(newerText);
+  await expectEditorText(page, newerText);
 });

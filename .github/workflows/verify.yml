@@ -41,6 +41,8 @@ jobs:
         run: pnpm typecheck:browser
       - name: Test browser Git and plugin security units
         run: pnpm test:browser:unit
+      - name: Test recovered editor, appearance and workspace layouts
+        run: pnpm test:ui:unit
       - name: Build the static Proprium Host
         run: pnpm build:browser
       - name: Validate Workers Static Assets packaging without deployment

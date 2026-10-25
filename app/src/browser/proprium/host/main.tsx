@@ -3,12 +3,14 @@ import { BrowserLocalGit } from "../git/index.js";
 import type { WorkspaceIdentity } from "../git/protocol.js";
 import "../register-offline-shell.js";
 import { HostApp } from "./HostApp.js";
-import "./host.css";
+import { BrowserRouter } from "react-router-dom";
+import "../../../../styles.css";
+import "./restored-host.css";
 
 const root = document.getElementById("root");
 if (!root) throw new Error("Missing Proprium Host root");
 
-createRoot(root).render(<HostApp />);
+createRoot(root).render(<BrowserRouter><HostApp /></BrowserRouter>);
 
 interface PropriumHostTestApi {
   openWorkspace(identity: WorkspaceIdentity, files?: Record<string, string>): Promise<void>;
