@@ -68,12 +68,13 @@ function corsHeaders(origin: string): Record<string, string> {
 
 /** Emulates only the GitHub OAuth and read APIs needed to open one real Git commit. */
 export async function installStaticGitHubFixture(page: Page, hostOrigin: string): Promise<{ head: string; content: string; apiRequests(): number }> {
+  const context = page.context();
   const fixtureContent = "A synthetic GitHub commit imported through the static Host.\n";
   const fixture = commitFixture(fixtureContent);
   const fakeToken = "proprium-static-fixture-only-token";
   let apiRequestCount = 0;
 
-  await page.route(`${hostOrigin}/oauth/**`, async route => {
+  await context.route(`${hostOrigin}/oauth/**`, async route => {
     const source = route.request();
     const body = source.postDataBuffer();
     const request = new Request(source.url(), {
@@ -101,7 +102,7 @@ export async function installStaticGitHubFixture(page: Page, hostOrigin: string)
     });
   });
 
-  await page.route("https://api.github.com/**", async route => {
+  await context.route("https://api.github.com/**", async route => {
     const source = route.request();
     const requestUrl = new URL(source.url());
     const cors = corsHeaders(hostOrigin);

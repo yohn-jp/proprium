@@ -18,7 +18,7 @@ process.env.VITE_PROPRIUM_PLUGIN_ARTIFACT_ORIGINS = origin;
 export default defineConfig({
   testDir: ".",
   testMatch: "**/static-offline.acceptance.spec.ts",
-  outputDir: "tests/browser/test-results/static",
+  outputDir: "test-results/static",
   fullyParallel: false,
   workers: 1,
   timeout: 180_000,

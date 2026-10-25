@@ -23,7 +23,7 @@ export default defineConfig({
   testDir: ".",
   testMatch: "**/*.spec.ts",
   testIgnore: "**/static-offline.acceptance.spec.ts",
-  outputDir: "tests/browser/test-results/host",
+  outputDir: "test-results/host",
   fullyParallel: false,
   workers: 1,
   timeout: 60_000,

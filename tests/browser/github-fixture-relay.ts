@@ -40,8 +40,8 @@ export async function routeFixtureRelay(page: Page, hostOrigin: string, relayUrl
       body: Buffer.from(await response.arrayBuffer()),
     });
   };
-  await page.route(`${selectedRelayOrigin}/oauth/**`, handleRelayRoute);
-  await page.route(`${selectedRelayOrigin}/git/**`, handleRelayRoute);
+  await page.context().route(`${selectedRelayOrigin}/oauth/**`, handleRelayRoute);
+  await page.context().route(`${selectedRelayOrigin}/git/**`, handleRelayRoute);
 }
 
 export async function connectAndOpenGitHubBranch(page: Page, hostOrigin: string, relayUrl = relayOrigin): Promise<void> {

@@ -52,7 +52,7 @@ test("static Host imports a GitHub REST commit, reloads offline, and edits with 
   const workspaceTitle = useLiveGitHub ? `${liveGitHubOwner}/${liveGitHubRepository} · ${liveGitHubBranch}` : staticFixtureTitle;
   const pluginFiles = signedStaticPluginFixture(configuredOrigin, pluginComponent);
   let pluginRequestCount = 0;
-  await page.route(`${configuredOrigin}/plugin-fixture/**`, async route => {
+  await page.context().route(`${configuredOrigin}/plugin-fixture/**`, async route => {
     pluginRequestCount += 1;
     const file = pluginFiles.get(new URL(route.request().url()).pathname);
     if (!file) return route.fulfill({ status: 404 });
