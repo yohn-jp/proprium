@@ -306,6 +306,7 @@ test("a live browser Workspace serves real MCP calls through Go SSE and HTTP, an
 
   await showWorkspaceTools(page);
   await page.getByRole("button", { name: "Revoke", exact: true }).click();
+  await expect(page.getByRole("list", { name: "Authorized MCP clients" }).getByRole("listitem")).toHaveCount(0);
   const revoked = await mcpRequest(token, { jsonrpc: "2.0", id: "revoked", method: "tools/list", params: {} });
   expect(revoked.status).toBe(401);
   const nextToken = await authorizeClient(page);
