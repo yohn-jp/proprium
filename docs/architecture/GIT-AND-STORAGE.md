@@ -8,7 +8,7 @@
 - Each browser/device maintains its own **local Git clone or equivalent Git object database and worktree**. Local repository operations run within the browser; they must not require a constantly running backend.
 - The Host, not a plugin, owns Git objects, refs, indexes, worktree contents, mutation authorization and synchronization.
 - Repository files are generic. YAML/Markdown writer-specific structures may be supported by optional plugins but cannot be required by the core repository format.
-- An implementation may use an existing JS Git engine (for example isomorphic-git), WASM Git, and a compatible browser filesystem adapter. Select and verify the actual library/adapter before declaring support; a conceptual clone is not an implemented Git clone.
+- The initial implementation selects **isomorphic-git + LightningFS (IndexedDB)** with a browser Git adapter and Worker execution. This is an accepted implementation choice, but support claims still require the browser and failure tests in [Browser Git implementation](BROWSER-GIT-IMPLEMENTATION.md).
 
 ## User-visible data states
 
@@ -36,7 +36,7 @@ The browser storage adapter needs a tested crash-consistency policy. Atomic Inde
 
 - Fetch, compare and push are explicit remote operations. Offline editing and local commits must not wait for network access.
 - Verify GitHub permissions at the operation boundary and target only the intended repository/branch. Use least-privilege credentials; keep them in Host-controlled state and never hand them to plugins.
-- Normal Git push requires a browser-compatible transport. Cross-origin Git Smart HTTP may require a restricted proxy; GitHub REST/Git Data APIs may be another path with different semantics. This choice is **unresolved until real-browser tests** demonstrate CORS, auth, ancestry, atomicity and error reconciliation. Do not quietly insert a permanent server into the architecture.
+- Normal Git push requires a browser-compatible transport. Cross-origin Git Smart HTTP may require a restricted proxy; GitHub REST/Git Data APIs may be another path with different semantics. The selected first candidate is REST Git Data transport. Its exact-SHA, CORS/auth, ancestry and race semantics remain **unverified until real-browser tests** as specified in [Browser Git implementation](BROWSER-GIT-IMPLEMENTATION.md). A restricted Smart HTTP relay is a fallback only when evidence requires it. Do not quietly insert a permanent server into the architecture.
 - Publication uses a normal non-force update with optimistic remote ref validation. Check that the intended local commit is actually reachable from the authenticated remote branch before displaying Published; network success alone is insufficient.
 - If remote HEAD has advanced or histories diverge, stop automatic publication and expose review/rebase/merge choices. Never auto-merge manuscript prose, reset pending changes, or force push without separately authorized policy.
 - If a push response is lost or ambiguous, re-read remote state. Until confirmed, show a remote-unknown state. Retried operations must not overwrite a newer remote ref.
