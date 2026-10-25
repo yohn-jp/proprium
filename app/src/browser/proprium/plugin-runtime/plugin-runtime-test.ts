@@ -15,19 +15,30 @@ async function sha256(bytes: Uint8Array): Promise<string> {
   return Array.from(hash, value => value.toString(16).padStart(2, "0")).join("");
 }
 
+let signedManifest: Promise<Awaited<ReturnType<typeof admitPluginManifest>>> | undefined;
+
+function admitFixtureManifest(bytes: Uint8Array): Promise<Awaited<ReturnType<typeof admitPluginManifest>>> {
+  signedManifest ??= (async () => {
+    const raw = new TextEncoder().encode(JSON.stringify({
+      schema: "proprium.plugin/v1", id: "example.runtime", version: "1.0.0", abi: "proprium.component/v1",
+      entrypoint: "dist/plugin.component.wasm", capabilities: [...CAPABILITIES],
+      artifacts: [{ path: "dist/plugin.component.wasm", bytes: bytes.byteLength, sha256: await sha256(bytes), mediaType: "application/wasm" }],
+    }));
+    const keys = await crypto.subtle.generateKey({ name: "Ed25519" }, true, ["sign", "verify"]);
+    const trustedPublisherKey = new Uint8Array(await crypto.subtle.exportKey("raw", keys.publicKey));
+    const signature = new Uint8Array(await crypto.subtle.sign({ name: "Ed25519" }, keys.privateKey, raw));
+    return admitPluginManifest(raw, {
+      expectedPluginId: "example.runtime", expectedSha256: await sha256(raw), trustedPublisherKey, signature,
+    });
+  })();
+  return signedManifest;
+}
+
 async function execute(bytes: Uint8Array, scenario: "success" | "denied" | "stale" | "snapshot-advanced" | "snapshot-mutated-after-invoke" | "cancel" | "destroy" | "hang" | "trap" | "tampered" | "mutated-after-create" | "unadmitted-manifest" | "constructor-bypass" | "unknown-capability"): Promise<unknown> {
-  const raw = new TextEncoder().encode(JSON.stringify({
-    schema: "proprium.plugin/v1", id: "example.runtime", version: "1.0.0", abi: "proprium.component/v1",
-    entrypoint: "dist/plugin.component.wasm",
-    capabilities: scenario === "unknown-capability" ? ["workspace.unknown.use"] : [...CAPABILITIES],
-    artifacts: [{ path: "dist/plugin.component.wasm", bytes: bytes.byteLength, sha256: await sha256(bytes), mediaType: "application/wasm" }],
-  }));
-  const keys = await crypto.subtle.generateKey({ name: "Ed25519" }, true, ["sign", "verify"]);
-  const trustedPublisherKey = new Uint8Array(await crypto.subtle.exportKey("raw", keys.publicKey));
-  const signature = new Uint8Array(await crypto.subtle.sign({ name: "Ed25519" }, keys.privateKey, raw));
-  const manifest = await admitPluginManifest(raw, {
-    expectedPluginId: "example.runtime", expectedSha256: await sha256(raw), trustedPublisherKey, signature,
-  });
+  const admittedManifest = await admitFixtureManifest(bytes);
+  const manifest = scenario === "unknown-capability"
+    ? { ...admittedManifest, capabilities: ["workspace.unknown.use"] }
+    : admittedManifest;
   if (scenario === "constructor-bypass") {
     let workerCreated = false;
     const originalWorker = globalThis.Worker;
