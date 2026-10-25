@@ -594,14 +594,21 @@ export function HostApp(): ReactElement {
   };
   const recoverStorage = async (entry: RecentWorkspace): Promise<void> => {
     setBusy(true);
-    const candidate = new BrowserLocalGit(entry.identity);
+    const active = workspace?.identity.localWorkspaceId === entry.identity.localWorkspaceId ? gitRef.current : null;
+    const candidate = active ?? new BrowserLocalGit(entry.identity);
     try {
-      await candidate.verifyStorage(); candidate.close(); setRecoveryTarget(null);
-      await openLocalWorkspace(entry, session ?? undefined);
-    } catch (error) { candidate.close(); setMessage({ tone: "error", text: errorMessage(error) }); }
+      await candidate.verifyStorage(); setRecoveryTarget(null);
+      if (active) {
+        await refresh(active, entry);
+        setMessage({ tone: "success", text: "ブラウザー内Gitの整合性を確認しました。原稿と保存データを保持しています。" });
+      } else {
+        candidate.close(); await openLocalWorkspace(entry, session ?? undefined);
+      }
+    } catch (error) { if (!active) candidate.close(); setMessage({ tone: "error", text: errorMessage(error) }); }
     finally { setBusy(false); }
   };
-  const recovery = recoveryTarget && <section role="alert"><h2>ブラウザー内Gitの整合性確認</h2><p>前回の操作結果が未確定です。保存データを削除せず、Gitオブジェクトと作業状態を検証します。</p><button disabled={busy} onClick={() => void recoverStorage(recoveryTarget)}>保存データの整合性を確認</button></section>;
+  const recoveryEntry = recoveryTarget ?? (message?.text.startsWith("storage_unknown:") ? workspace : null);
+  const recovery = recoveryEntry && <section role="alert"><h2>ブラウザー内Gitの整合性確認</h2><p>前回の操作結果が未確定です。保存データを削除せず、Gitオブジェクトと作業状態を検証します。</p><button disabled={busy} onClick={() => void recoverStorage(recoveryEntry)}>保存データの整合性を確認</button></section>;
   const picker = <section className="workspace-picker" aria-labelledby="picker-heading">
       <div className="welcome-copy"><p className="eyebrow">A workspace that stays yours</p><h1 id="picker-heading">Open a GitHub workspace</h1><p>Open a repository in this browser, edit files offline, commit locally, and publish when you are ready.</p></div>
       <div className="picker-grid">

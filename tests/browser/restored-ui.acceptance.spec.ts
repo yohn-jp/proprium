@@ -62,3 +62,18 @@ test("a protected uncommitted draft can be recovered explicitly without replacin
   await expectEditorText(page, "回復する未保存の本文\n");
   await expect(page.locator(".save-state")).toHaveText("Unsaved editor text");
 });
+test("verification of an active uncertain workspace keeps unsaved editor text", async ({ page }) => {
+  const workspace = identity();
+  await page.goto("/");
+  await page.waitForFunction(() => !!window.propriumHostTest);
+  await page.evaluate(async workspace => window.propriumHostTest!.openWorkspace(workspace, { "chapter.md": "元の本文\n" }), workspace);
+  await chooseFile(page, "chapter.md");
+  await page.getByRole("textbox", { name: "原稿 Markdown" }).fill("入力中の本文を保持\n");
+  await page.evaluate(workspace => localStorage.setItem(`proprium.git.storage-unknown.${workspace.localWorkspaceId}`, "1"), workspace);
+  await page.getByRole("button", { name: "Save draft", exact: true }).click();
+  await expect(page.getByText(/storage_unknown:/u)).toBeVisible();
+  await page.getByRole("button", { name: "保存データの整合性を確認" }).click();
+  await expectEditorText(page, "入力中の本文を保持\n");
+  await page.getByRole("button", { name: "Save draft", exact: true }).click();
+  await expect(page.locator(".host-message[role='status']")).toContainText("saved to this browser's local Git worktree");
+});

@@ -37,4 +37,3 @@ export interface SceneRead {
   /** Exact scene YAML, used only when the manuscript link needs to be added. */
   metadata: FileDocument;
 }
-
