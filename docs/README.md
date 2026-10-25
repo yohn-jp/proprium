@@ -1,6 +1,6 @@
 # Proprium documentation
 
-These documents define the **target architecture** for Proprium, not the current state of the forked implementation. The checked-in Node/API/container code still reflects Scriptorium until explicitly replaced.
+These documents define Proprium's architecture and implementation boundaries. The browser Host, Browser Git and WASM plugin runtime are the product runtime. Inherited Scriptorium API, container, Hosted and profile-build entrypoints have been retired; retained module and Core source is not evidence that those paths remain supported.
 
 | Contract | Responsibility |
 | --- | --- |

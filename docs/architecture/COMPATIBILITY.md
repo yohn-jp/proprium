@@ -1,30 +1,28 @@
-# Inherited code and target compatibility boundary
+# Inherited code and the Proprium runtime boundary
 
-**Status: inventory/ownership guidance, not an implementation progress report.**
+**Status: implementation boundary.** Proprium uses a browser-native Host, Browser Git and a WASM Component Model plugin runtime. Scriptorium source is not a second supported product runtime.
 
-Proprium began from [Scriptorium](https://github.com/yohn-jp/scriptorium). Its existing TypeScript monorepo, Git-backed authoring code, Node API, container packaging, CI and optional modules remain physically present at this fork until deliberately changed. Retiring Scriptorium-specific **documentation** does not delete those files, establish static-only deployment, or certify the new runtime.
+| Inherited area | Proprium status |
+| --- | --- |
+| `app/src/browser/proprium/git` | Browser-owned Git adapter and GitHub synchronization. This is the only Git workspace runtime used by the Host. |
+| `app/src/browser/proprium/plugin-runtime` and `app/src/browser/proprium/plugin-artifact.ts` | Browser Worker, WIT component runtime, capability broker and artifact admission. External plugins use this runtime; the Host remains trusted TypeScript. |
+| `app/src/browser/proprium/host` | Browser Host UI and workspace. It handles generic repository files and does not require Scriptorium's manuscript hierarchy. |
+| Former app API/editor/shell layer | Retired. Those screens depended on server sessions, manuscript scenes and server-managed saves; the browser Host replaces that product entrypoint. |
+| `packages/api` | Retired. No Node HTTP application server, Hosted authorization service or server-managed Git path is part of the Proprium runtime. |
+| `packages/core` and `packages/module-runtime` | Inherited Scriptorium packages retained as source for provenance and reusable algorithms. They are not imported by or required to run the browser Host. Their Node-backed execution is not Proprium product support. |
+| `packages/contracts` and `packages/migration` | Inherited Scriptorium-specific contracts and import tooling. They are not required for a generic Git workspace; migration data is not silently treated as Proprium Core state. |
+| `modules/*` | Inherited optional Scriptorium modules. Their presence does not mean they are installed Proprium plugins or part of the default Host. New external plugin execution uses the versioned WASM/WIT platform. |
+| Docker, BuildKit, OCI, Hosted and profile build paths | Retired from the repository's product build and release path. Static Host delivery and independently published plugin artifacts have separate build lifecycles. |
 
-| Inherited area | Potentially reusable responsibility | Target boundary |
-| --- | --- | --- |
-| app / Editor / Desktop and Mobile shells | Editing, Japanese typography, layout and interaction components | Browser Host UI with distinct mobile and desktop experiences; no mandatory API for editing |
-| app / BrowserJournal and draft logic | Local temporary work/recovery conventions | Noncanonical browser worktree/cache; no stronger durability claim |
-| packages/contracts | Snapshot identity, file revision, mutation/proposal types | Browser-neutral Host ports and public versioned plugin contracts; no leaking private TypeScript ABI |
-| packages/core | Git-backed document reads, operations and safe publication semantics | Must replace Node filesystem, subprocess Git and server-managed clone assumptions with browser-local Git |
-| packages/api | Server HTTP/auth admission, session and static serving | Not in target runtime; transport-only functionality may survive if justified and optional |
-| packages/module-runtime | Metadata, dependency resolution, capabilities and cancellation patterns | WASM-first browser Plugin Manager; replace Node child-process supervisor and container profiles |
-| modules | Search, story, NLP, semantic, diagnostics, speaker, assistant, publishing and MCP algorithms | Classify each by browser compatibility, local compute, permitted external services and public Plugin API |
-| Dockerfile, buildkit, hosted scripts and OCI CI | Legacy packaging/verification | Do not treat as Proprium deployment requirements; removal is a later implementation change |
-| Atlas/Story Knowledge external repository | Existing independent browser Host, graph and canvas experiments | Separate product integration; deliberately deferred |
+The Core work repository format is **generic Git files**, not the Arcadia-specific plot, scene or manuscript hierarchy. Optional migration tooling may inspect Scriptorium exports, but it cannot make those formats mandatory or silently rewrite user files.
 
-The core work repository format is **generic Git files**, not the Scriptorium-only Arcadia hierarchy. Optional writer-specific editors may interpret legacy structures without making those structures mandatory.
-
-Migration shall preserve legally reusable application code and documented artifact provenance; do not blindly transplant server-only dependencies, private source fixtures, copyrighted works, credential material or historical Scriptorium hosting assumptions. An existing test may continue to pass while the new browser product remains unimplemented.
+Migration preserves legally reusable application code and documented artifact provenance. It does not copy server-only execution into the Host, private source fixtures, copyrighted works, credential material, model weights or historical Scriptorium hosting assumptions. Immutable evidence committed with the fork remains historical evidence; it does not certify the Proprium browser runtime.
 
 ## Verification authority
 
-- Existing package scripts and tests prove behavior only for the inherited source revision and execution mode they actually exercise.
-- New product implementation requires browser-native Git/permission/storage tests, actual GitHub sync tests, plugin WASM/lifecycle/sandbox tests and static distribution verification.
-- Do not delete the immutable evidence or source provenance retained by the fork merely because the Scriptorium product documentation has been retired.
-- Original Scriptorium documentation and application evolution remain in its own repository. Proprium is not obliged to preserve Scriptorium's container deployment features.
+- Existing Scriptorium package tests prove only the inherited behavior and execution mode they exercise. They do not certify Proprium.
+- Proprium acceptance requires browser Git, GitHub synchronization, actual WASM plugin lifecycle and admission, static build/delivery, and desktop/mobile browser proofs.
+- Do not delete immutable provenance or verification evidence when retiring the implementation paths it records.
+- Original Scriptorium documentation and application evolution remain in its own repository. Proprium's product runtime does not include Scriptorium's server or container features.
 
-Canonical target: [overview](OVERVIEW.md), [Git](GIT-AND-STORAGE.md), [plugin platform](PLUGIN-PLATFORM.md), [delivery/security](DELIVERY-AND-SECURITY.md) and [UX](WORKSPACE-UX.md).
+Canonical target and implementation contracts: [overview](OVERVIEW.md), [Git](GIT-AND-STORAGE.md), [plugins](PLUGIN-PLATFORM.md), [delivery/security](DELIVERY-AND-SECURITY.md), [UX](WORKSPACE-UX.md), and [provenance](SOURCE-PROVENANCE.md).

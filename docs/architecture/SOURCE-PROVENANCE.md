@@ -5,7 +5,7 @@ Proprium was derived from the MIT-licensed [Scriptorium repository](https://gith
 | Inherited source | Source area in this fork |
 | --- | --- |
 | Manuscript formats and revision/mutation contracts | packages/contracts and packages/core |
-| Node Git clone, synchronization and server HTTP integration | packages/core and packages/api |
+| Original Node Git clone, synchronization and server HTTP integration | Historically inherited in `packages/core` and `packages/api`; `packages/api` was retired from the product runtime, while `packages/core` remains legacy source |
 | Editing, Japanese typography, layout and browser recovery | app |
 | Optional writing, search, diagnostics, models and assistant logic | modules |
 
