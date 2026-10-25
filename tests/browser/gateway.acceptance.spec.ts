@@ -179,7 +179,34 @@ async function authorizeClient(page: import("@playwright/test").Page): Promise<s
   return (await tokenField.inputValue()).trim();
 }
 
-test("a live browser Workspace serves real MCP calls through Go SSE and HTTP, and stops on disconnect", async ({ page, context }) => {
+test("a live browser Workspace serves real MCP calls through Go SSE and HTTP, and stops on disconnect", async ({ page, context }, testInfo) => {
+  const accessCookie = "CF_Authorization_fixture=browser-e2e-edge-cookie";
+  const accessCookiePaths = new Set<string>();
+  await page.addInitScript(({ origin }) => {
+    const calls: Array<{ path: string; credentials: RequestCredentials }> = [];
+    Object.defineProperty(window, "__propriumGatewayFetches", { value: calls });
+    const originalFetch = window.fetch.bind(window);
+    window.fetch = (input, init) => {
+      const rawUrl = typeof input === "string" || input instanceof URL ? String(input) : input.url;
+      const requestUrl = new URL(rawUrl, window.location.href);
+      if (requestUrl.origin === origin && requestUrl.pathname.startsWith("/live/")) {
+        calls.push({
+          path: requestUrl.pathname,
+          credentials: init?.credentials ?? (input instanceof Request ? input.credentials : "same-origin"),
+        });
+      }
+      return originalFetch(input, init);
+    };
+  }, { origin: gatewayOrigin });
+  await context.addCookies([{ name: "CF_Authorization_fixture", value: "browser-e2e-edge-cookie", url: gatewayOrigin, sameSite: "Lax" }]);
+  await context.route(`${gatewayOrigin}/live/**`, async route => {
+    const request = route.request();
+    const headers = await request.allHeaders();
+    if (request.method() !== "OPTIONS" && (headers.cookie ?? "").split(";").some(value => value.trim() === accessCookie)) {
+      accessCookiePaths.add(`${request.method()} ${new URL(request.url()).pathname}`);
+    }
+    await route.continue();
+  });
   await openWorkspace(page);
   const origin = new URL(page.url()).origin;
   const pluginFiles = signedHostPanelFixture(origin);
@@ -258,6 +285,21 @@ test("a live browser Workspace serves real MCP calls through Go SSE and HTTP, an
   await expect(page.getByText("Review a change from the MCP client", { exact: true })).toBeVisible();
   await expectEditorText(page, "Gateway browser integration fixture.\n");
   expect(textResult(await mcpCall(token, "read-with-tools-hidden", "file_read", { path: "README.md" }))).toMatchObject({ content: "Gateway browser integration fixture.\n" });
+  const gatewayFetches = await page.evaluate(() => (window as Window & {
+    __propriumGatewayFetches: Array<{ path: string; credentials: RequestCredentials }>;
+  }).__propriumGatewayFetches);
+  expect(gatewayFetches.length).toBeGreaterThan(0);
+  expect(gatewayFetches.every(call => call.credentials === "include")).toBe(true);
+  expect(gatewayFetches.some(call => call.path === "/live/sessions")).toBe(true);
+  expect(gatewayFetches.some(call => call.path.endsWith("/events"))).toBe(true);
+  expect(gatewayFetches.some(call => call.path.endsWith("/responses"))).toBe(true);
+  // Chromium additionally exposes the fake Access cookie on intercepted
+  // requests; WebKit's synthetic route does not establish cookie forwarding.
+  if (testInfo.project.name === "desktop-chromium") {
+    expect([...accessCookiePaths]).toContain("POST /live/sessions");
+    expect([...accessCookiePaths].some(path => path.endsWith("/events"))).toBe(true);
+    expect([...accessCookiePaths].some(path => path.endsWith("/responses"))).toBe(true);
+  }
   await showWorkspaceTools(page);
   await page.getByRole("button", { name: "Review and approve" }).click();
   await expectEditorText(page, "Approved by the workspace owner.\n");

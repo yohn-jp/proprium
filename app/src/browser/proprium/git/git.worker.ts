@@ -283,7 +283,7 @@ function smartHttpClient(workspace: WorkspaceIdentity, token: string, relayUrl: 
           headers,
           fetchOptions: {
             ...request.fetchOptions,
-            credentials: "omit",
+            credentials: "include",
             cache: "no-store",
             redirect: "error",
             referrerPolicy: "no-referrer",

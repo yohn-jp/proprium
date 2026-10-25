@@ -77,7 +77,7 @@ func TestDeviceAuthorizationCodeRequestAndSanitizedResponse(t *testing.T) {
 	if response.Code != http.StatusOK || !called.Load() {
 		t.Fatalf("status=%d upstream=%v", response.Code, called.Load())
 	}
-	if response.Header().Get("Access-Control-Allow-Origin") != "https://host.example" {
+	if response.Header().Get("Access-Control-Allow-Origin") != "https://host.example" || response.Header().Get("Access-Control-Allow-Credentials") != "true" {
 		t.Fatal("missing exact CORS origin")
 	}
 	if strings.Contains(response.Body.String(), "access_token") || strings.Contains(response.Body.String(), "extra") {
@@ -179,7 +179,7 @@ func TestSmartHTTPUploadStreamsAndPreservesGitBytes(t *testing.T) {
 	if response.Code != http.StatusOK || !bytes.Equal(response.Body.Bytes(), pack) {
 		t.Fatalf("Git bytes changed: status=%d body=%v", response.Code, response.Body.Bytes())
 	}
-	if response.Header().Get("Git-Protocol") != "version=2" || response.Header().Get("Access-Control-Allow-Origin") != "https://host.example" {
+	if response.Header().Get("Git-Protocol") != "version=2" || response.Header().Get("Access-Control-Allow-Origin") != "https://host.example" || response.Header().Get("Access-Control-Allow-Credentials") != "true" {
 		t.Fatalf("missing Git/CORS headers: %#v", response.Header())
 	}
 }
@@ -279,7 +279,7 @@ func TestPreflightAllowlist(t *testing.T) {
 	server := testServer(t, func(*http.Request) (*http.Response, error) { t.Fatal("preflight contacted upstream"); return nil, nil })
 	headers := http.Header{"Access-Control-Request-Method": []string{"GET"}, "Access-Control-Request-Headers": []string{"Authorization, X-Proprium-Repository-Id"}}
 	response := sendRequest(t, server, http.MethodOptions, "/git/Acme/Notes.git/info/refs?service=git-upload-pack", "https://host.example", headers, "")
-	if response.Code != http.StatusNoContent || response.Header().Get("Access-Control-Allow-Origin") != "https://host.example" {
+	if response.Code != http.StatusNoContent || response.Header().Get("Access-Control-Allow-Origin") != "https://host.example" || response.Header().Get("Access-Control-Allow-Credentials") != "true" {
 		t.Fatalf("valid preflight rejected: %d", response.Code)
 	}
 	headers.Set("Access-Control-Request-Headers", "Authorization, X-Evil")

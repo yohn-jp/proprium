@@ -68,6 +68,9 @@ func (f *liveFixture) ownerJSON(method, path, token string, payload any) *httpte
 	req.Header.Set("Content-Type", "application/json")
 	rec := httptest.NewRecorder()
 	f.registry.ServeHTTP(rec, req)
+	if rec.Header().Get("Access-Control-Allow-Origin") != testHostOrigin || rec.Header().Get("Access-Control-Allow-Credentials") != "true" {
+		f.t.Fatalf("live response did not allow credentialed Host origin: %d %#v", rec.Code, rec.Header())
+	}
 	return rec
 }
 
@@ -89,6 +92,11 @@ func (f *liveFixture) openEvents() {
 		body, _ := io.ReadAll(resp.Body)
 		cancel()
 		f.t.Fatalf("events: %d %s", resp.StatusCode, body)
+	}
+	if resp.Header.Get("Access-Control-Allow-Origin") != testHostOrigin || resp.Header.Get("Access-Control-Allow-Credentials") != "true" {
+		cancel()
+		_ = resp.Body.Close()
+		f.t.Fatalf("SSE response did not allow credentialed Host origin: %#v", resp.Header)
 	}
 	f.cancelStream = func() { cancel(); _ = resp.Body.Close() }
 	f.stream = bufio.NewReader(resp.Body)
@@ -160,7 +168,7 @@ func TestLivePreflightAndRequestBodyLimit(t *testing.T) {
 	req.Header.Set("Access-Control-Request-Headers", "authorization, content-type")
 	rec := httptest.NewRecorder()
 	r.ServeHTTP(rec, req)
-	if rec.Code != http.StatusNoContent || rec.Header().Get("Access-Control-Allow-Origin") != testHostOrigin {
+	if rec.Code != http.StatusNoContent || rec.Header().Get("Access-Control-Allow-Origin") != testHostOrigin || rec.Header().Get("Access-Control-Allow-Credentials") != "true" {
 		t.Fatalf("valid preflight failed: %d %#v", rec.Code, rec.Header())
 	}
 	req = httptest.NewRequest(http.MethodOptions, "/live/sessions", nil)
@@ -169,8 +177,8 @@ func TestLivePreflightAndRequestBodyLimit(t *testing.T) {
 	req.Header.Set("Access-Control-Request-Method", "PUT")
 	rec = httptest.NewRecorder()
 	r.ServeHTTP(rec, req)
-	if rec.Code != http.StatusForbidden {
-		t.Fatalf("invalid method preflight accepted: %d", rec.Code)
+	if rec.Code != http.StatusForbidden || rec.Header().Get("Access-Control-Allow-Credentials") != "true" {
+		t.Fatalf("invalid method preflight response: %d %#v", rec.Code, rec.Header())
 	}
 	body := `{"workspaceId":"` + strings.Repeat("x", maxLiveBodyBytes) + `","generation":"g","capabilities":[]}`
 	req = httptest.NewRequest(http.MethodPost, "/live/sessions", strings.NewReader(body))
@@ -180,7 +188,33 @@ func TestLivePreflightAndRequestBodyLimit(t *testing.T) {
 	req.Header.Set("Content-Type", "application/json")
 	rec = httptest.NewRecorder()
 	r.ServeHTTP(rec, req)
-	if rec.Code != http.StatusRequestEntityTooLarge {
-		t.Fatalf("large body not rejected with 413: %d", rec.Code)
+	if rec.Code != http.StatusRequestEntityTooLarge || rec.Header().Get("Access-Control-Allow-Credentials") != "true" {
+		t.Fatalf("large body response: %d %#v", rec.Code, rec.Header())
+	}
+}
+
+func TestLiveEdgeCookieDoesNotReplaceBearerOrExactOrigin(t *testing.T) {
+	r := NewLiveRegistry(LiveConfig{OwnerKey: testOwnerKey, HostOrigin: testHostOrigin, PublicURL: "https://gateway.proprium.test", ListenAddr: "127.0.0.1:8080"})
+	body := `{"workspaceId":"workspace","generation":"generation","capabilities":[]}`
+	req := httptest.NewRequest(http.MethodPost, "/live/sessions", strings.NewReader(body))
+	req.Host = "gateway.proprium.test"
+	req.Header.Set("Origin", testHostOrigin)
+	req.Header.Set("Cookie", "CF_Authorization=edge-only")
+	req.Header.Set("Content-Type", "application/json")
+	withoutBearer := httptest.NewRecorder()
+	r.ServeHTTP(withoutBearer, req)
+	if withoutBearer.Code != http.StatusUnauthorized || withoutBearer.Header().Get("Access-Control-Allow-Origin") != testHostOrigin || withoutBearer.Header().Get("Access-Control-Allow-Credentials") != "true" {
+		t.Fatalf("edge cookie replaced owner bearer or exact-origin CORS: %d %#v", withoutBearer.Code, withoutBearer.Header())
+	}
+
+	req = httptest.NewRequest(http.MethodPost, "/live/sessions", strings.NewReader(body))
+	req.Host = "gateway.proprium.test"
+	req.Header.Set("Origin", "https://attacker.example")
+	req.Header.Set("Authorization", "Bearer "+testOwnerKey)
+	req.Header.Set("Content-Type", "application/json")
+	foreignOrigin := httptest.NewRecorder()
+	r.ServeHTTP(foreignOrigin, req)
+	if foreignOrigin.Code != http.StatusForbidden || foreignOrigin.Header().Get("Access-Control-Allow-Origin") != "" || foreignOrigin.Header().Get("Access-Control-Allow-Credentials") != "" {
+		t.Fatalf("foreign origin received credentialed CORS: %d %#v", foreignOrigin.Code, foreignOrigin.Header())
 	}
 }

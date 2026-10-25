@@ -121,7 +121,7 @@ export function LiveMcpPanel({ gatewayUrl, onGatewayUrlChange, workspaceId, gene
     return jsonResponse<T>(await fetch(`${origin}${path}`, {
       ...init,
       headers: { Authorization: `Bearer ${bearer}`, "Content-Type": "application/json", ...init.headers },
-      credentials: "omit", cache: "no-store", redirect: "error", referrerPolicy: "no-referrer",
+      credentials: "include", cache: "no-store", redirect: "error", referrerPolicy: "no-referrer",
     }));
   };
 
@@ -218,7 +218,7 @@ export function LiveMcpPanel({ gatewayUrl, onGatewayUrlChange, workspaceId, gene
     await jsonResponse(await fetch(`${origin}/live/sessions/${encodeURIComponent(liveSessionRef.current)}/responses`, {
       method: "POST", headers: { Authorization: `Bearer ${bearer}`, "Content-Type": "application/json" },
       body: JSON.stringify({ requestId: request.requestId, workspaceId, generation: requestGeneration, ...payload }),
-      credentials: "omit", cache: "no-store", redirect: "error", referrerPolicy: "no-referrer",
+      credentials: "include", cache: "no-store", redirect: "error", referrerPolicy: "no-referrer",
     }));
   }
 
@@ -249,7 +249,7 @@ export function LiveMcpPanel({ gatewayUrl, onGatewayUrlChange, workspaceId, gene
       const origin = normalizedGateway(gatewayUrl.trim());
       const events = await fetch(`${origin}/live/sessions/${encodeURIComponent(activeSession.sessionId)}/events`, {
         headers: { Authorization: `Bearer ${activeSession.ownerToken}`, Accept: "text/event-stream" },
-        credentials: "omit", cache: "no-store", redirect: "error", referrerPolicy: "no-referrer", signal: controller.signal,
+        credentials: "include", cache: "no-store", redirect: "error", referrerPolicy: "no-referrer", signal: controller.signal,
       });
       if (!events.ok || !events.body) throw new Error(`Gateway event stream failed (${events.status}).`);
       setState("connected");

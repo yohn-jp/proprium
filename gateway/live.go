@@ -185,6 +185,7 @@ func (r *LiveRegistry) validLiveRequest(w http.ResponseWriter, req *http.Request
 		return false
 	}
 	w.Header().Set("Access-Control-Allow-Origin", r.config.HostOrigin)
+	w.Header().Set("Access-Control-Allow-Credentials", "true")
 	w.Header().Set("Vary", "Origin")
 	return true
 }
@@ -233,6 +234,7 @@ func isJSONContentType(value string) bool {
 func liveJSON(w http.ResponseWriter, req *http.Request, origin string, status int, body any) {
 	if req != nil && req.Header.Get("Origin") != "" && req.Header.Get("Origin") == origin {
 		w.Header().Set("Access-Control-Allow-Origin", origin)
+		w.Header().Set("Access-Control-Allow-Credentials", "true")
 		w.Header().Set("Vary", "Origin")
 	}
 	w.Header().Set("Cache-Control", "no-store, private")
@@ -244,6 +246,7 @@ func liveJSON(w http.ResponseWriter, req *http.Request, origin string, status in
 func liveNoContent(w http.ResponseWriter, req *http.Request, origin string) {
 	if req != nil && req.Header.Get("Origin") == origin {
 		w.Header().Set("Access-Control-Allow-Origin", origin)
+		w.Header().Set("Access-Control-Allow-Credentials", "true")
 		w.Header().Set("Vary", "Origin")
 	}
 	w.Header().Set("Cache-Control", "no-store, private")
@@ -399,6 +402,7 @@ func (r *LiveRegistry) events(w http.ResponseWriter, req *http.Request, id strin
 	w.Header().Set("X-Accel-Buffering", "no")
 	w.Header().Set("X-Content-Type-Options", "nosniff")
 	w.Header().Set("Access-Control-Allow-Origin", r.config.HostOrigin)
+	w.Header().Set("Access-Control-Allow-Credentials", "true")
 	w.Header().Set("Vary", "Origin")
 	_ = http.NewResponseController(w).SetWriteDeadline(time.Time{})
 	w.WriteHeader(http.StatusOK)

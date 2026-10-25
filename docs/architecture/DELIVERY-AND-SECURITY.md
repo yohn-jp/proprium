@@ -35,7 +35,7 @@ For private repositories, credentials must not reach plugins, remote artifact or
 | Git credential theft or cross-repository writes | Host-owned credentials; Gateway restricts relay routes and verifies repository identity and permission |
 | Token disclosure | No credential in a URL or log; owner and client tokens are not exposed to plugins or GitHub OAuth calls |
 | Unauthorized MCP client | Explicit owner pairing, per-client capability subset, revocation and in-memory client/workspace binding |
-| Cross-origin, CSRF or DNS rebinding | Exact allowed Origin/Host checks, no cookie authorization, bounded inputs and public-URL validation |
+| Cross-origin, CSRF or DNS rebinding | Exact allowed Origin/Host checks, bearer authorization at the Gateway, bounded inputs and public-URL validation; an optional Cloudflare Access edge cookie never replaces Gateway authorization |
 | Stale browser response or duplicate mutation | Workspace/generation/request identity checks, deadlines, cancellation and no mutation retry after disconnect |
 | Unintended off-device data transmission | Default-deny plugin network capability; user-visible consent and restricted destinations where allowed |
 | Evicted browser storage | Draft/commit/publish states remain distinct; no guaranteed local recovery |

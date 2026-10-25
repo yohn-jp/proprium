@@ -23,7 +23,7 @@ declare global {
 
 const hostOrigin = new URL(process.env.PROPRIUM_E2E_BASE_URL ??
   `http://127.0.0.1:${process.env.PROPRIUM_E2E_PORT ?? process.env.SCRIPTORIUM_E2E_PORT ?? "4173"}`).origin;
-const relayOrigin = "https://oauth.example.test";
+const relayOrigin = "http://127.0.0.1:4174";
 const liveGatewayUrl = process.env.PROPRIUM_E2E_GATEWAY_URL ?? "";
 const repositoryId = 923456789;
 const liveGitHubToken = process.env.PROPRIUM_E2E_GITHUB_TOKEN ?? process.env.SCRIPTORIUM_GITHUB_LIVE_TEST_TOKEN ?? "";
@@ -47,6 +47,7 @@ interface SmartHttpFixture {
 
 let activeSmartHttpFixture: SmartHttpFixture | null = null;
 let liveSmartHttpRequests: string[] = [];
+let smartHttpAccessCookieObserved = false;
 
 function createSmartHttpFixture(): Promise<SmartHttpFixture> {
   const root = mkdtempSync(join(tmpdir(), "proprium-github-smart-http-"));
@@ -200,6 +201,7 @@ async function mockOAuthRelay(page: Page): Promise<void> {
     accessToken: fixtureOAuthToken,
     backendUrl: () => activeSmartHttpFixture?.backendUrl ?? null,
     onBasicAuthorization: authorization => activeSmartHttpFixture?.noteGitHubBasicAuth(new Headers({ Authorization: authorization })),
+    onAccessCookie: present => { smartHttpAccessCookieObserved ||= present; },
   });
 }
 
@@ -798,7 +800,7 @@ test("live disposable GitHub sync fetches, fast-forwards, publishes and confirms
   expect(liveSmartHttpRequests.some(request => request.includes("git-upload-pack"))).toBe(true);
 });
 
-test("cold history is bounded in REST and fetched as one pack with paginated ancestry", async ({ page }) => {
+test("cold history is bounded in REST and fetched as one pack with paginated ancestry", async ({ page }, testInfo) => {
   const backend = await createSmartHttpFixture();
   activeSmartHttpFixture = backend;
   try {
@@ -809,9 +811,18 @@ test("cold history is bounded in REST and fetched as one pack with paginated anc
     let individualReads = 0;
     let ancestryPages = 0;
     let objectReads = 0;
+    let githubRestCookieObserved = false;
+    smartHttpAccessCookieObserved = false;
+    await page.context().addCookies([
+      { name: "CF_Authorization_fixture", value: "gateway-access-cookie", url: relayOrigin, sameSite: "Lax" },
+      { name: "GitHub_cookie_fixture", value: "must-not-be-forwarded", url: "https://api.github.com", sameSite: "None", secure: true },
+    ]);
     await page.route("https://api.github.com/**", async route => {
       if (route.request().method() === "OPTIONS") return route.fulfill({ status: 204, headers: corsHeaders() });
       const url = new URL(route.request().url()), path = url.pathname;
+      if (route.request().method() !== "OPTIONS" && (await route.request().allHeaders()).cookie?.includes("GitHub_cookie_fixture=must-not-be-forwarded")) {
+        githubRestCookieObserved = true;
+      }
       const json = (value: unknown, status = 200) => route.fulfill({ status, headers: corsHeaders(), contentType: "application/json", body: JSON.stringify(value) });
       if (path === "/user") return json({ id: 88, login: "writer" });
       if (path === "/repos/proprium-test/browser-git-fixture") return json({ id: repositoryId, full_name: "proprium-test/browser-git-fixture", owner: { login: "proprium-test" }, permissions: { pull: true, push: true } });
@@ -848,6 +859,13 @@ test("cold history is bounded in REST and fetched as one pack with paginated anc
     expect(individualReads).toBeLessThanOrEqual(8);
     expect(ancestryPages).toBe(2);
     expect(objectReads).toBe(0);
+    // WebKit's intercepted-request fixture does not expose Cookie in the
+    // Playwright request headers; the live-server cookie path is exercised by
+    // the browser Gateway acceptance test.
+    if (testInfo.project.name === "chromium") {
+      expect(smartHttpAccessCookieObserved).toBe(true);
+      expect(githubRestCookieObserved).toBe(false);
+    }
     expect(backend.diagnostics().some(line => line.includes("git-upload-pack"))).toBe(true);
   } finally { activeSmartHttpFixture = null; await backend.close(); }
 });

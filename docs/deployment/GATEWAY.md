@@ -89,6 +89,14 @@ cloudflared tunnel --config "$HOME/.cloudflared/config.yml" run YOUR-TUNNEL-NAME
 
 Check `https://gateway.example.org/healthz` and the Gateway's local `http://127.0.0.1:8080/healthz`. In the Host, enable Live MCP for a workspace and verify that the session becomes connected. Use the browser Network panel to confirm a long-lived `text/event-stream` response on the browser SSE endpoint, then make a read-only tool call and observe its HTTP request and result. Stop/restart the browser or Tunnel and confirm the Host reports disconnected and the MCP call reports unavailable; reconnect from the Host and authorize clients again if their session was revoked. This checks the actual proxy path and reconnection behavior; a local mock does not prove a public Tunnel works.
 
+### Cloudflare Access for browser requests
+
+When Cloudflare Access protects the Gateway hostname, sign in to that hostname from the Host before starting GitHub authorization or enabling Live MCP. The Host sends the Access edge cookie only to the explicitly configured Gateway for OAuth, Git Smart HTTP and Live Workspace requests. The Go Gateway still checks the exact Host Origin, HTTP Host, repository identity and its existing bearer/session tokens; the Access cookie does not replace any Proprium authorization.
+
+Cross-origin browser requests send a CORS `OPTIONS` preflight before the credentialed request. In the Access application for the Gateway hostname, enable **Advanced settings → Cross-Origin Resource Sharing (CORS) settings → Bypass options requests to origin**. This sends the preflight to the Gateway, where its exact-Origin CORS handler validates the method and headers. Keep Access authentication on the actual `/oauth/`, `/git/` and `/live/` requests; do not add a broad Access Bypass policy for those paths. The Gateway returns `Access-Control-Allow-Credentials: true` only with the configured Host Origin. See Cloudflare's [Access CORS guidance](https://developers.cloudflare.com/cloudflare-one/access-controls/applications/http-apps/authorization-cookie/cors/) for the current dashboard flow and alternatives.
+
+The Host browser's Access cookie is not shared with an external MCP client. If Access also protects `/mcp`, configure the Access application so that the MCP client can independently satisfy its edge policy, for example with separate Access service-token headers if the client supports them. Keep `Authorization: Bearer` for the Proprium-paired MCP token; the Gateway checks it after Access admits the request. Do not configure an Access credential that overwrites the Authorization header expected by the Gateway.
+
 ## Optional user services
 
 The following user unit runs the Gateway. Store the environment in `~/.config/proprium/gateway.env` with mode `0600` and replace the binary path with its actual location:

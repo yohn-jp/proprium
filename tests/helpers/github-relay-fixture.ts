@@ -63,6 +63,7 @@ export interface SyntheticSmartHttpOptions {
   backendUrl: () => string | null;
   onBasicAuthorization?: (authorization: string) => void;
   onRequest?: (method: string, pathname: string) => void;
+  onAccessCookie?: (present: boolean) => void;
 }
 
 /**
@@ -80,7 +81,7 @@ export async function installSyntheticSmartHttpRelay(page: Page, options: Synthe
   await page.context().route(`${origin}/git/**`, async route => {
     const request = route.request();
     const url = new URL(request.url());
-    const headers = cors(hostOrigin);
+    const headers = cors(hostOrigin, true);
     if (request.method() === "OPTIONS") return route.fulfill({ status: 204, headers });
 
     const endpoint = url.pathname.slice(repositoryPath.length + 1);
@@ -94,7 +95,8 @@ export async function installSyntheticSmartHttpRelay(page: Page, options: Synthe
       return route.fulfill({ status: 404, headers, json: { error: "fixture_route_not_found" } });
     }
 
-    const sourceHeaders = request.headers();
+    const sourceHeaders = await request.allHeaders();
+    options.onAccessCookie?.(Boolean(sourceHeaders.cookie));
     if (sourceHeaders.authorization !== `Bearer ${options.accessToken}` ||
         sourceHeaders["x-proprium-repository-id"] !== expectedRepositoryId) {
       return route.fulfill({ status: 401, headers, json: { error: "fixture_authentication_required" } });
@@ -121,7 +123,7 @@ export async function installSyntheticSmartHttpRelay(page: Page, options: Synthe
       ...(body?.byteLength ? { body: new Uint8Array(body) } : {}),
       redirect: "manual",
     });
-    const responseHeaders = cors(hostOrigin);
+    const responseHeaders = cors(hostOrigin, true);
     const type = upstream.headers.get("Content-Type");
     const protocol = upstream.headers.get("Git-Protocol");
     if (type) responseHeaders["Content-Type"] = type;
