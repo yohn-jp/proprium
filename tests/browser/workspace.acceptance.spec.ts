@@ -21,8 +21,11 @@ function identity(localWorkspaceId: string): WorkspaceIdentity {
 }
 
 async function showRepositoryFiles(page: import("@playwright/test").Page): Promise<void> {
+  const fileTree = page.getByRole("list", { name: "Repository files" });
+  if (await fileTree.isVisible()) return;
   const toggle = page.getByRole("button", { name: /^Files(?:\s|$)/u });
   if (await toggle.isVisible()) await toggle.click();
+  await expect(fileTree).toBeVisible();
 }
 
 test("Host edits and commits a generic repository offline, then reopens the saved workspace", async ({ page, context }) => {
@@ -53,6 +56,7 @@ test("Host edits and commits a generic repository offline, then reopens the save
   const historyEntry = page.getByRole("listitem").filter({ hasText: "Save offline workspace edit" });
   await expect(historyEntry).toBeVisible();
   await expect(historyEntry.locator("code")).toHaveText(/^[a-f0-9]{10}$/u);
+  await showRepositoryFiles(page);
   await expect(page.getByText("Sign in to enable remote sync. Local editing remains available offline.")).toBeVisible();
 
   // The dev server cannot supply a newly-created worker while offline. Keep the
