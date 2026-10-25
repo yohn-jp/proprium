@@ -37,9 +37,9 @@ function signedFixture(origin: string): { files: Map<string, ServedFile>; regist
       id: pluginId,
       version,
       abi: "proprium.component/v1",
-      entrypoint: "plugin.component.wasm",
+      entrypoint: assetPath,
       capabilities,
-      artifacts: [{ path: "plugin.component.wasm", bytes: artifactBytes.byteLength, sha256: sha256(artifactBytes), mediaType: "application/wasm" }],
+      artifacts: [{ path: assetPath, bytes: artifactBytes.byteLength, sha256: sha256(artifactBytes), mediaType: "application/wasm" }],
     });
     const manifestBytes = Buffer.from(manifest, "utf8");
     const manifestSignature = ed25519Sign(null, manifestBytes, publisher.privateKey);
