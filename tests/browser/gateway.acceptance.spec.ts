@@ -208,7 +208,7 @@ test("a live browser Workspace serves real MCP calls through Go SSE and HTTP, an
   const token = await authorizeClient(page);
 
   // Exercise the current stable Streamable HTTP transport with its required
-  // routing headers, through the real browser-to-Go HTTP connection.
+  // routing headers as a native MCP client against the real Go Gateway.
   const listed = await mcpRequest(token, { jsonrpc: "2.0", id: "tools-modern", method: "tools/list", params: {} });
   expect(listed.status).toBe(200);
   const available = (listed.body?.result as { tools?: Array<{ name: string }> }).tools?.map(tool => tool.name) ?? [];
