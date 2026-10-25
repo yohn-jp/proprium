@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useRef, useState, type MouseEventHandler } from "react";
 import * as Separator from "@radix-ui/react-separator";
 import * as Tabs from "@radix-ui/react-tabs";
 import { Panel, PanelGroup, PanelResizeHandle, setNonce } from "react-resizable-panels";
@@ -21,7 +21,7 @@ function describeFailure(reason: unknown): string {
 /** Workspace Studio: the approved desktop composition, retaining the real application controller. */
 export function DesktopShell({
   header, desktopActions, documentTitle, documentContext, library, editor, tools, status, renderStatus,
-  onSwitchMode, workspaceScope, panels, beforeLayoutChange, requestedPanel,
+  onSwitchMode, onNavigateHome, workspaceScope, panels, beforeLayoutChange, requestedPanel,
 }: ApplicationShellProps) {
   const [switching, setSwitching] = useState(false);
   const [switchError, setSwitchError] = useState("");
@@ -62,10 +62,15 @@ export function DesktopShell({
     { id: "review", mark: "◇", title: "レビューとツール" },
   ];
   const activeRequest = effectiveRequest;
+  const navigateHome: MouseEventHandler<HTMLAnchorElement> = event => {
+    if (!onNavigateHome || event.button !== 0 || event.metaKey || event.ctrlKey || event.shiftKey || event.altKey) return;
+    event.preventDefault();
+    onNavigateHome();
+  };
   return (
     <div className="st-desktop-shell st-studio-shell">
       <aside className="st-studio-rail" aria-label="デスクトップ操作">
-        <a href="/" className="st-studio-monogram" aria-label="Proprium ホーム">P<span>.</span></a>
+        <a href="/" className="st-studio-monogram" aria-label="Proprium ホーム" onClick={navigateHome}>P<span>.</span></a>
         <nav aria-label="パネルを開く" className="st-studio-rail-nav">
           {rail.map((item) => <button key={item.id} type="button"
             className={"st-studio-rail-item" + (activeRequest?.id === item.id || (!activeRequest && item.id === "editor") ? " is-current" : "")}
@@ -81,7 +86,7 @@ export function DesktopShell({
       <div className="st-studio-main">
         <div className="st-studio-topbar">
           <div className="st-studio-identity">
-            <a className="st-studio-wordmark" href="/">proprium<span>.</span></a>
+            <a className="st-studio-wordmark" href="/" onClick={navigateHome}>proprium<span>.</span></a>
             <div className="st-studio-breadcrumb" aria-label="現在の原稿">
               <span>{documentContext || "作品ライブラリ"}</span>
               {documentTitle ? <><span aria-hidden="true">/</span><strong>{documentTitle}</strong></> : null}
@@ -128,7 +133,7 @@ export function DesktopShell({
           {renderStatus ? renderStatus(switchError) : status}
         </div>
         <footer className="st-studio-footer">
-          <span><span className="st-studio-footer-dot" /> Git-backed workspace</span>
+          <span>{workspaceScope ? <><span className="st-studio-footer-dot" /> Git-backed workspace</> : "Workspaceを選択"}</span>
           <span>Markdown · 日本語原稿 · Desktop</span>
         </footer>
       </div>

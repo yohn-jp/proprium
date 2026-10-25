@@ -30,6 +30,8 @@ export interface ApplicationShellProps {
   /** Present shell navigation errors in the same persistent status surface. */
   renderStatus?: (interactionError: string) => ReactNode;
   onSwitchMode(): Promise<boolean>;
+  /** Let the Host guard leaving the workspace without reloading its authentication session. */
+  onNavigateHome?: () => void;
   /** Stable author and device scope; desktop and mobile use separate layout keys. */
   workspaceScope?: string;
   /** Host-approved core and activated module panels available in this workspace. */
