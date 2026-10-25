@@ -21,6 +21,7 @@ import (
 
 const maxConcurrentRequests = 128
 const maxConnections = 256
+const maxMCPRequestTimeout = 65 * time.Second
 
 var version = "dev"
 var commit = "unknown"
@@ -73,6 +74,10 @@ func (s *Server) Handler() http.Handler {
 	return s.limit(s.timeout(deadlineWriterHandler{next: s.hostGuard(s.mux), timeout: s.config.UpstreamTimeout}))
 }
 
+func isLiveEventsPath(path string) bool {
+	return strings.HasPrefix(path, "/live/sessions/") && strings.HasSuffix(path, "/events")
+}
+
 func (s *Server) hostGuard(next http.Handler) http.Handler {
 	expected := []string{s.config.ListenAddr}
 	if s.config.PublicURL != "" {
@@ -120,11 +125,15 @@ func (s *Server) limit(next http.Handler) http.Handler {
 
 func (s *Server) timeout(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		if strings.HasPrefix(r.URL.Path, "/live/sessions/") && strings.HasSuffix(r.URL.Path, "/events") {
+		requestTimeout := s.config.UpstreamTimeout
+		if r.URL.Path == "/mcp" {
+			requestTimeout = maxMCPRequestTimeout
+		}
+		if isLiveEventsPath(r.URL.Path) {
 			next.ServeHTTP(w, r)
 			return
 		}
-		ctx, cancel := context.WithTimeout(r.Context(), s.config.UpstreamTimeout)
+		ctx, cancel := context.WithTimeout(r.Context(), requestTimeout)
 		defer cancel()
 		if r.Body != nil {
 			done := make(chan struct{})
@@ -147,13 +156,14 @@ type deadlineWriterHandler struct {
 }
 
 func (h deadlineWriterHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
-	h.next.ServeHTTP(&deadlineWriter{ResponseWriter: w, timeout: h.timeout, ctx: r.Context()}, r)
+	h.next.ServeHTTP(&deadlineWriter{ResponseWriter: w, timeout: h.timeout, ctx: r.Context(), eventStream: isLiveEventsPath(r.URL.Path)}, r)
 }
 
 type deadlineWriter struct {
 	http.ResponseWriter
-	timeout time.Duration
-	ctx     context.Context
+	timeout     time.Duration
+	ctx         context.Context
+	eventStream bool
 }
 
 func (w *deadlineWriter) Unwrap() http.ResponseWriter { return w.ResponseWriter }
@@ -167,7 +177,9 @@ func (w *deadlineWriter) setDeadline() {
 }
 
 func (w *deadlineWriter) WriteHeader(status int) {
-	w.setDeadline()
+	if !w.eventStream {
+		w.setDeadline()
+	}
 	w.ResponseWriter.WriteHeader(status)
 }
 
