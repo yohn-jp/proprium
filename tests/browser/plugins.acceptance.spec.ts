@@ -103,7 +103,8 @@ test("signed registry installs a real Component, enforces grants, stops and upda
       registries: [{ url: registryUrl, publicKey: Uint8Array.from(pinnedRegistryKey), artifactOrigins: [location.origin] }],
       store: new MemoryPluginStore(),
     });
-    const installed = await manager.installFromRegistry({ registryUrl, pluginId, version: "1.0.0" });
+    const installPlan = await manager.previewInstall({ registryUrl, pluginId, version: "1.0.0" });
+    const installed = await manager.installFromRegistry(installPlan);
     let denied = "none";
     try {
       await manager.enable({ pluginId, version: "1.0.0", workspaceId: "host-e2e", grants: ["workspace.snapshot.read", "workspace.change.propose", "workspace.ui.contribute"], hostAllowed: ["workspace.snapshot.read", "workspace.ui.contribute"] });
@@ -126,7 +127,8 @@ test("signed registry installs a real Component, enforces grants, stops and upda
     });
     await manager.disable(pluginId);
     const afterStop = await manager.installed();
-    const upgraded = await manager.update(pluginId, "1.0.1");
+    const updatePlan = await manager.previewUpdate({ registryUrl, pluginId, version: "1.0.1" });
+    const upgraded = await manager.update(updatePlan);
     await manager.enable({ pluginId, version: "1.0.1", workspaceId: "host-e2e", grants: ["workspace.snapshot.read", "workspace.change.propose", "workspace.ui.contribute"], hostAllowed: ["workspace.snapshot.read", "workspace.change.propose", "workspace.ui.contribute"] });
     const secondRun = await manager.invoke({
       pluginId,
