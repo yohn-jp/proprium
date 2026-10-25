@@ -28,6 +28,21 @@
 .storage-recovery-error { color: var(--error); }
 .storage-recovery-actions { display: flex; flex-wrap: wrap; gap: .5rem; }
 .storage-recovery-actions button { min-height: 2.75rem; }
+.github-connection-dialog {
+  --ink: var(--studio-ink); --muted: var(--studio-muted); --paper: var(--studio-sheet);
+  --line: var(--studio-border); --accent: var(--studio-primary); --accent-strong: var(--studio-primary);
+  --button-foreground: var(--studio-sheet); --surface-subtle: var(--studio-tint);
+  line-height: 1.55;
+}
+.github-connection-dialog h2 { margin-block: 0 .75rem; font-size: 1.3rem; }
+.github-connection-dialog h3 { margin-block: 0 .5rem; font-size: 1rem; }
+.github-connection-dialog a { color: var(--accent-strong); }
+.github-connection-dialog .gateway-settings { margin-block: 1rem; }
+.github-connection-dialog input { box-sizing: border-box; width: 100%; }
+.github-connection-dialog .device-prompt { margin-block: 1rem; }
+.github-connection-dialog .device-prompt p { margin-block: .75rem; }
+.github-connection-dialog .storage-recovery-actions { justify-content: flex-end; }
+.github-connection-dialog button:disabled { opacity: 1; color: var(--muted); background: var(--surface-subtle); border-color: var(--line); }
 /* Studio's light navigation surfaces must not inherit the earlier dark-rail palette. */
 :root[data-zp-theme] .restored-host .st-studio-shell .st-desktop-navigation {
   --ink: var(--studio-ink); --muted: var(--studio-muted); --paper: var(--studio-sheet);

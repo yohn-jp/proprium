@@ -128,6 +128,8 @@ export function HostApp(): ReactElement {
   const [devicePrompt, setDevicePrompt] = useState<GitHubDevicePrompt | null>(null);
   const [workspaceAuthOpen, setWorkspaceAuthOpen] = useState(false);
   const [busy, setBusy] = useState(false);
+  const [checkpointBusy, setCheckpointBusy] = useState(false);
+  const [publishBusy, setPublishBusy] = useState(false);
   const [selectedRepository, setSelectedRepository] = useState<number | null>(null);
   const [selectedBranch, setSelectedBranch] = useState("");
   const [workspace, setWorkspace] = useState<RecentWorkspace | null>(null);
@@ -273,6 +275,10 @@ export function HostApp(): ReactElement {
     try {
       accountSession = createGitHubAccountSession(configuredGateway);
       const prompt = await accountSession.beginAuthorization();
+      if (controller.signal.aborted || authorizationRef.current !== controller) {
+        accountSession.signOut();
+        return;
+      }
       sessionRef.current?.signOut();
       sessionRef.current = accountSession;
       setSession(accountSession);
@@ -531,7 +537,7 @@ export function HostApp(): ReactElement {
     if (currentFile?.dirty) { setMessage({ tone: "error", text: "Save the current editor text to the local worktree before committing." }); return; }
     if (!commitMessage.trim()) { setMessage({ tone: "error", text: "Enter a commit message." }); return; }
     if (!preferences.name.trim() || !preferences.email.includes("@")) { setMessage({ tone: "error", text: "Enter a Git author name and valid email address." }); return; }
-    setBusy(true);
+    setBusy(true); setCheckpointBusy(true);
     try {
       const before = await git.status();
       if (!before.entries.length) { setMessage({ tone: "info", text: "There are no local changes to commit." }); return; }
@@ -542,7 +548,7 @@ export function HostApp(): ReactElement {
       await refresh(git, workspace);
       setMessage({ tone: "success", text: `Committed locally as ${committed.oid}. This commit is still only on this device.` });
     } catch (error) { setMessage({ tone: "error", text: errorMessage(error) }); }
-    finally { setBusy(false); }
+    finally { setBusy(false); setCheckpointBusy(false); }
   }
 
   async function fetchRemote(): Promise<void> {
@@ -600,7 +606,7 @@ export function HostApp(): ReactElement {
   async function publishRemote(): Promise<void> {
     if (!git || !syncClient) { setMessage({ tone: "error", text: "Connect to GitHub to publish this repository." }); return; }
     if (currentFile?.dirty) { setMessage({ tone: "error", text: "Save the current editor text before publishing." }); return; }
-    setBusy(true); setSyncState("syncing");
+    setBusy(true); setPublishBusy(true); setSyncState("syncing");
     try {
       const local = await git.status();
       if (!local.head || local.entries.length) throw new Error("Commit all local worktree changes before publishing.");
@@ -622,7 +628,7 @@ export function HostApp(): ReactElement {
         setMessage({ tone: "error", text: `GitHub could not confirm publication. Expected ${local.head}; observed ${result.observedRemoteHead ?? "(unknown)"}. Check the remote branch before retrying.` });
       }
     } catch (error) { applySyncError(error); }
-    finally { setBusy(false); }
+    finally { setBusy(false); setPublishBusy(false); }
   }
 
   function applySyncError(error: unknown): void {
@@ -757,7 +763,7 @@ export function HostApp(): ReactElement {
           </section>
           <section className="sidebar-section sync-sidebar-section">
             <div className="section-title-row"><h2>GitHub</h2><span className={`connection-indicator ${syncClient ? "connected" : "local-only"}`} aria-label={syncClient ? "Connected to GitHub" : "Local workspace only"}>{syncClient ? "GitHub接続済み" : "このブラウザーのみ"}</span></div>
-            {syncClient ? <div className="sync-actions"><button type="button" onClick={() => void fetchRemote()} disabled={busy}>Fetch</button><button type="button" onClick={() => void pullRemote()} disabled={busy}>Pull</button><button type="button" className="publish-button" onClick={() => void publishRemote()} disabled={busy || status.localState !== "local-committed"}>Publish</button></div> : <><p className="sidebar-empty">Sign in to enable remote sync. Local editing remains available offline.</p><button type="button" className="text-button" aria-haspopup="dialog" aria-controls="workspace-github-auth" disabled={busy} onClick={openWorkspaceGitHubAuth}>Sign in to GitHub</button></>}
+            {syncClient ? <div className="sync-actions"><button type="button" onClick={() => void fetchRemote()} disabled={busy}>Fetch</button><button type="button" onClick={() => void pullRemote()} disabled={busy}>Pull</button><button type="button" className="publish-button" onClick={() => void publishRemote()} disabled={busy || status.localState !== "local-committed"}>Publish</button></div> : <><p className="sidebar-empty">Sign in to enable remote sync. Local editing remains available offline.</p><button type="button" className="text-button" aria-haspopup="dialog" aria-controls="workspace-github-auth" disabled={busy} onClick={openWorkspaceGitHubAuth}>GitHubに接続</button></>}
           </section>
 </div> : mode === "desktop" ? <div className="host-controls">{recentCard}</div> : picker;
   const tools = <div className="host-controls">{git && workspace && <PluginPanel
@@ -798,7 +804,7 @@ export function HostApp(): ReactElement {
 </div>;
   const editor = workspace && git && currentFile ? <section className="restored-editor">
     <div className="host-file-actions"><strong aria-label="Current file">{currentFile.path}</strong><button disabled={busy || !currentFile.dirty || currentFile.binary} onClick={() => void saveDraft()}>Save draft</button><button disabled={busy} onClick={() => void deleteFile()}>Delete file</button></div>
-    {currentFile.binary ? <p>Binary file · {currentFile.data?.byteLength ?? 0} bytes</p> : <RestoredEditor key={`${workspace.identity.localWorkspaceId}:${currentFile.path}`} workspace={workspace.identity} file={currentFile} head={status.head} published={syncState === "published"} localCommitted={!!status.head && status.entries.length === 0} busy={busy} authorScope={preferences.email || "local"} author={preferences} git={git}
+    {currentFile.binary ? <p>Binary file · {currentFile.data?.byteLength ?? 0} bytes</p> : <RestoredEditor key={`${workspace.identity.localWorkspaceId}:${currentFile.path}`} workspace={workspace.identity} file={currentFile} head={status.head} published={syncState === "published"} localCommitted={!!status.head && status.entries.length === 0} busy={busy} checkpointBusy={checkpointBusy} publishBusy={publishBusy} authorScope={preferences.email || "local"} author={preferences} git={git}
       onChange={text => { setCurrentFile(previous => previous ? { ...previous, text, dirty: true } : previous); setSyncState("editing"); }}
       onSave={() => void saveDraft()} onCommit={() => revealPanel("inspector")} onPublish={() => void publishRemote()} canPublish={!!syncClient && status.localState === "local-committed" && !currentFile.dirty}
       onHistory={() => revealPanel("history")} onRegisterFlush={registerEditorFlush} onScratchApplied={refreshAfterPlugin} />}
@@ -825,13 +831,13 @@ export function HostApp(): ReactElement {
   return <main className="proprium-host restored-host" onKeyDown={event => { if ((event.metaKey || event.ctrlKey) && event.key.toLowerCase() === "s") { event.preventDefault(); if (!busy && !recoveryEntry) void saveDraft(); } }}><Suspense fallback={<p>ワークスペースを開いています…</p>}><Shell mode={mode} onNavigateHome={leaveWorkspace}
     header={<header className="topbar">{workspace && <button className="quiet-button" onClick={leaveWorkspace}>Workspaces</button>}{account && <span className="host-account-label" aria-label="GitHub account">{account.login}</span>}<ThemeControl mode={theme} onChange={value => { setTheme(value); try { persistThemeMode(value); } catch { setMessage({ tone: "error", text: "外観設定を保存できませんでした。" }); } }} />{workspace && account && <button className="quiet-button" onClick={signOut}>Sign out</button>}</header>}
     documentTitle={currentFile?.path ?? workspace?.title ?? "Proprium"} documentContext={workspace?.identity.branch}
-    desktopDurability={syncState === "published" ? "saved" : busy ? "checkpointing" : status.head && status.entries.length === 0 && !currentFile?.dirty ? "checkpointed" : "draft"}
+    desktopDurability={syncState === "published" ? "saved" : checkpointBusy ? "checkpointing" : status.head && status.entries.length === 0 && !currentFile?.dirty ? "checkpointed" : "draft"}
     library={library} editor={workspace ? <RetainedPanelSlot node={editorNode} /> : editor} tools={<RetainedPanelSlot node={toolsNode} />} status={statusSurface} renderStatus={error => <>{statusSurface}{error && <p role="alert">{error}</p>}</>}
     onSwitchMode={async () => { if (!(await beforeLayoutChange())) return false; const next = mode === "desktop" ? "mobile" : "desktop"; setMode(next); try { localStorage.setItem("scriptorium:ui-mode", next); } catch { /* The active mode remains usable. */ } return true; }}
     workspaceScope={workspace?.identity.localWorkspaceId} panels={workspace ? panels : undefined} beforeLayoutChange={beforeLayoutChange} requestedPanel={requestedPanel} />
   </Suspense>{workspaceAuthOpen && <dialog ref={workspaceAuthDialog} id="workspace-github-auth" className="storage-recovery-dialog github-connection-dialog" aria-labelledby="workspace-github-auth-title" aria-describedby="workspace-github-auth-description" onCancel={event => { event.preventDefault(); closeWorkspaceGitHubAuth(); }}>
-    <h2 id="workspace-github-auth-title">Connect this Workspace to GitHub</h2>
-    <p id="workspace-github-auth-description">Sign in to verify this Workspace's repository and branch. Your editor stays open; no files are fetched or published.</p>
+    <h2 id="workspace-github-auth-title">このWorkspaceをGitHubに接続</h2>
+    <p id="workspace-github-auth-description">開いている原稿を保持したまま、Repositoryを確認して接続します。取得・公開は接続後に操作できます。</p>
     <details className="gateway-settings" open={gatewaySettingsOpen} onToggle={event => setGatewaySettingsOpen(event.currentTarget.open)}>
       <summary>接続先設定</summary>
       <label htmlFor="workspace-github-gateway">Proprium Gateway URL</label>
@@ -839,11 +845,11 @@ export function HostApp(): ReactElement {
       <p className="field-help">通常は変更不要です。Cloudflare Accessで保護されたGatewayは、先にログインしてください。</p>
       <a href={gatewayDraft.trim() ? `${gatewayDraft.trim().replace(/\/$/u, "")}/healthz` : "#"} target="_blank" rel="noopener noreferrer" aria-disabled={!gatewayDraft.trim()} onClick={event => { if (!gatewayDraft.trim()) event.preventDefault(); }}>Authenticate with Cloudflare Access</a>
     </details>
-    {devicePrompt && <section className="device-prompt" aria-label="GitHub device authorization"><h3>GitHub device code</h3><strong>{devicePrompt.userCode}</strong><p>Enter this code on GitHub, then return here. Authorization continues in this dialog.</p><a href={devicePrompt.verificationUri} target="_blank" rel="noopener noreferrer">Open GitHub device sign-in</a><p className="field-help" role="status">{authStage === "verifying" ? "GitHub authorized. Verifying this Workspace's repository identity…" : "Waiting for GitHub authorization…"}</p></section>}
+    {devicePrompt && <section className="device-prompt" aria-label="GitHub device authorization"><h3>GitHubの認証コード</h3><strong>{devicePrompt.userCode}</strong><p>このコードをGitHubに入力し、この画面へ戻ってください。</p><a href={devicePrompt.verificationUri} target="_blank" rel="noopener noreferrer">GitHubの認証画面を開く</a><p className="field-help" role="status">{authStage === "verifying" ? "認証済み。Repositoryを確認しています…" : "GitHubでの承認を待っています…"}</p></section>}
     {message?.tone === "error" && <p role="alert">{message.text}</p>}
     <div className="storage-recovery-actions">
-      <button type="button" onClick={closeWorkspaceGitHubAuth}>Cancel</button>
-      <button type="button" className="primary-button" disabled={busy} onClick={() => { const target = workspaceAuthTarget.current; if (target) void connectGitHub(target); }}>{busy ? "Connecting…" : "Connect GitHub"}</button>
+      <button type="button" className="quiet-button" onClick={closeWorkspaceGitHubAuth}>キャンセル</button>
+      <button type="button" className="primary-button" disabled={busy} onClick={() => { const target = workspaceAuthTarget.current; if (target) void connectGitHub(target); }}>{busy ? "接続中…" : "GitHubに接続"}</button>
     </div>
   </dialog>}{recoveryEntry && <StorageRecoveryDialog key={`recovery:${recoveryEntry.identity.localWorkspaceId}`} title={recoveryEntry.title} busy={busy} error={message?.tone === "error" ? message.text : ""} onVerify={() => void recoverStorage(recoveryEntry)} />}{workspace && createPortal(tools, toolsNode, workspace.identity.localWorkspaceId)}{workspace && createPortal(editor, editorNode, `editor:${workspace.identity.localWorkspaceId}`)}</main>;
 

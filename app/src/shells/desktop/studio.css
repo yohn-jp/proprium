@@ -1,6 +1,5 @@
-/* Desktop workspace presentation.
-   Only the Desktop Shell uses these tokens; Mobile is an independent frontend. */
-.st-studio-shell {
+/* Workspace appearance shared with Host dialogs; Mobile keeps its own layout. */
+.st-studio-shell, .github-connection-dialog {
   --studio-rail: #18342d;
   --studio-canvas: #e9eee8;
   --studio-sheet: #fdfefa;
@@ -10,6 +9,8 @@
   --studio-muted: #53685a;
   --studio-border: #dce5db;
   --studio-primary: #2e5a49;
+}
+.st-studio-shell {
   display: grid;
   grid-template-columns: 56px minmax(0, 1fr);
   color: var(--studio-ink);
@@ -135,7 +136,7 @@
   color:var(--studio-muted);font:10px ui-monospace,monospace;white-space:nowrap;
 }
 .st-studio-footer-dot{display:inline-block;height:6px;width:6px;border-radius:50%;background:#65a47a;margin-right:7px}
-:root[data-zp-theme="dark"] .st-studio-shell {
+:root[data-zp-theme="dark"] :is(.st-studio-shell, .github-connection-dialog) {
   --studio-canvas:#17251f;--studio-sheet:#172a22;--studio-tint:#233b2f;--studio-tint-strong:#2c4c3a;
   --studio-ink:#e5f2e8;--studio-muted:#b4c9b8;--studio-border:#3a5946;--studio-primary:#a5dcc0;
 }
@@ -146,7 +147,7 @@
 :root[data-zp-theme="dark"] .st-studio-real-actions .st-studio-publish,
 :root[data-zp-theme="dark"] .st-studio-shell .st-workspace-save {color:#133126}
 :root[data-zp-theme="dark"] .st-studio-shell .st-workspace-presets button[aria-pressed="true"] {background:var(--studio-tint-strong);color:var(--studio-ink)}
-:root[data-zp-theme="paper"] .st-studio-shell {
+:root[data-zp-theme="paper"] :is(.st-studio-shell, .github-connection-dialog) {
   --studio-canvas:#eee9dc;--studio-sheet:#faf5e9;--studio-tint:#f3ede0;--studio-tint-strong:#e8dfcc;
   --studio-border:#d3c9b5;--studio-ink:#324639;--studio-muted:#6f644f;
 }

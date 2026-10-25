@@ -37,20 +37,20 @@ async function openCachedWorkspaceWithDirtyEditor(page: Page): Promise<{
   await expectEditorText(page, localWorkspaceText);
   await page.getByRole("textbox", { name: "原稿 Markdown" }).fill(dirtyEditorText);
   await showPanel(page, "outline");
-  await expect(page.getByRole("button", { name: "Sign in to GitHub", exact: true })).toBeVisible();
+  await expect(page.getByRole("button", { name: "GitHubに接続", exact: true })).toBeVisible();
   return { origin, identity, fixture };
 }
 
 async function startWorkspaceSignIn(page: Page, origin: string): Promise<import("@playwright/test").Locator> {
   await showPanel(page, "outline");
-  await page.getByRole("button", { name: "Sign in to GitHub", exact: true }).click();
-  const dialog = page.getByRole("dialog", { name: "Connect this Workspace to GitHub" });
+  await page.getByRole("button", { name: "GitHubに接続", exact: true }).click();
+  const dialog = page.getByRole("dialog", { name: "このWorkspaceをGitHubに接続" });
   await expect(dialog).toBeVisible();
   const gatewaySettings = dialog.locator("details.gateway-settings");
   if (await gatewaySettings.getAttribute("open") === null) await gatewaySettings.locator("summary").click();
   await dialog.getByLabel("Proprium Gateway URL").fill(origin);
   if (await gatewaySettings.getAttribute("open") !== null) await gatewaySettings.locator("summary").click();
-  await dialog.getByRole("button", { name: "Connect GitHub", exact: true }).click();
+  await dialog.getByRole("button", { name: "GitHubに接続", exact: true }).click();
   return dialog;
 }
 
@@ -59,7 +59,8 @@ test("cached Workspace signs in in place and enables Fetch without changing dirt
   const dialog = await startWorkspaceSignIn(page, origin);
 
   await expect(dialog.getByRole("region", { name: "GitHub device authorization" })).toContainText("STAT-IC01");
-  await expect(dialog.getByRole("status")).toContainText("Waiting for GitHub authorization");
+  await expect(dialog.getByRole("status")).toContainText("GitHubでの承認を待っています");
+  if (testInfo.project.name === "desktop-chromium") await expect(page.locator(".editor-protection")).not.toContainText("結果確認中");
   await page.screenshot({ path: testInfo.outputPath("cached-workspace-github-auth.png"), fullPage: true });
   await expect(dialog).toBeHidden();
   await expect(page.locator(".host-message[role='status']")).toContainText(`Connected this Workspace to GitHub as ${staticFixtureLogin}`);
@@ -83,7 +84,7 @@ test("cancel and repository verification failure leave the cached editor and Wor
 
   let dialog = await startWorkspaceSignIn(page, origin);
   await expect(dialog.getByRole("region", { name: "GitHub device authorization" })).toContainText("STAT-IC01");
-  await dialog.getByRole("button", { name: "Cancel", exact: true }).click();
+  await dialog.getByRole("button", { name: "キャンセル", exact: true }).click();
   await expect(dialog).toBeHidden();
   await expect(page.getByLabel("Connected to GitHub", { exact: true })).toHaveCount(0);
   await expect(page.getByRole("button", { name: "Fetch", exact: true })).toHaveCount(0);
@@ -110,7 +111,29 @@ test("cancel and repository verification failure leave the cached editor and Wor
   await expect(dialog.getByRole("alert")).toContainText("repository_mismatch");
   await expect(page.getByLabel("Connected to GitHub", { exact: true })).toHaveCount(0);
   await expect(page.getByRole("button", { name: "Fetch", exact: true })).toHaveCount(0);
-  await dialog.getByRole("button", { name: "Cancel", exact: true }).click();
+  await dialog.getByRole("button", { name: "キャンセル", exact: true }).click();
   await expectEditorText(page, dirtyEditorText);
   await expect(page.locator(".save-state")).toHaveText("Unsaved editor text");
+});
+
+test("cancel before the Device code arrives does not revive an old authorization screen", async ({ page }) => {
+  const { origin } = await openCachedWorkspaceWithDirtyEditor(page);
+  let releaseCode!: () => void;
+  const gate = new Promise<void>(resolve => { releaseCode = resolve; });
+  await page.context().route(`${origin}/oauth/device/code`, async route => { await gate; await route.fallback(); });
+  const requested = page.waitForRequest(request => request.method() === "POST" && request.url() === `${origin}/oauth/device/code`);
+  const dialog = await startWorkspaceSignIn(page, origin);
+  await requested;
+  await dialog.getByRole("button", { name: "キャンセル", exact: true }).click();
+  await expect(dialog).toBeHidden();
+  const finished = page.waitForEvent("requestfinished", { predicate: request => request.method() === "POST" && request.url() === `${origin}/oauth/device/code` });
+  releaseCode();
+  await finished;
+  await showPanel(page, "outline");
+  await page.getByRole("button", { name: "GitHubに接続", exact: true }).click();
+  await expect(dialog).toBeVisible();
+  await expect(dialog.getByRole("region", { name: "GitHub device authorization" })).toHaveCount(0);
+  await expect(dialog.getByRole("button", { name: "GitHubに接続", exact: true })).toBeEnabled();
+  await dialog.getByRole("button", { name: "キャンセル", exact: true }).click();
+  await expectEditorText(page, dirtyEditorText);
 });

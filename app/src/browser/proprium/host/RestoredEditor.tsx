@@ -12,6 +12,8 @@ interface Props {
   published: boolean;
   localCommitted: boolean;
   busy: boolean;
+  checkpointBusy?: boolean;
+  publishBusy?: boolean;
   authorScope: string;
   author: { name: string; email: string };
   onChange(text: string): void;
@@ -27,7 +29,7 @@ interface Props {
 
 /** The recovered Scriptorium editor, with Browser Host-owned storage and Git ports. */
 export function RestoredEditor(props: Props): ReactElement {
-  const { workspace, file, head, published, busy, authorScope, onRegisterFlush } = props;
+  const { workspace, file, head, published, busy, checkpointBusy = false, publishBusy = false, authorScope, onRegisterFlush } = props;
   const repo = useMemo<RepositoryIdentity>(() => ({ provider: "github", repositoryId: String(workspace.repositoryId), defaultBranch: workspace.branch, ownerScope: workspace.localWorkspaceId, url: `${workspace.origin}/${workspace.owner}/${workspace.repository}` }), [workspace]);
   const snapshot = useMemo<SnapshotId>(() => ({ repository: repo, remoteCommit: published ? head ?? "" : "", ...(head ? { overlayCommit: head } : {}) }), [repo, head, published]);
   const journalRef = useRef<BrowserJournal | null>(null);
@@ -122,9 +124,9 @@ export function RestoredEditor(props: Props): ReactElement {
       text={file.text ?? ""} textRevision={fileVersion.current.value} flushPendingReactPublish={() => undefined}
       onTextChange={props.onChange} onRetryDraft={() => { void persistText(file.text ?? "").catch(error => setJournalError(String(error))); }}
       onCursorPositionChange={() => undefined} onReadingPageChange={() => undefined} resumeRequest={null} onResumeRequestApplied={() => undefined}
-      durability={published ? "saved" : busy ? "checkpointing" : props.localCommitted && !file.dirty ? "checkpointed" : "draft"} draftStored={!file.dirty || storedText === file.text} journalError={journalError}
+      durability={published ? "saved" : checkpointBusy ? "checkpointing" : props.localCommitted && !file.dirty ? "checkpointed" : "draft"} draftStored={!file.dirty || storedText === file.text} journalError={journalError}
       conflict={null} canResolveDraft={false} onRebase={() => undefined} onRestoreRemote={() => undefined}
-      canCheckpoint={!busy} checkpointBusy={busy} onCheckpoint={props.onCommit} canPublish={props.canPublish && !busy} publishBusy={busy} onPublish={props.onPublish}
+      canCheckpoint={!busy} checkpointBusy={checkpointBusy} onCheckpoint={props.onCommit} canPublish={props.canPublish && !busy} publishBusy={publishBusy} onPublish={props.onPublish}
       onHistory={props.onHistory} historyOpen={false} historyExternal={true} onRestoreHistoryBody={props.onChange}
       scratchEntries={entries.filter(entry => entry.documentPath.startsWith("meta/scratch/"))} onDraftScratch={draftScratch} onCheckpointScratch={checkpointScratch}
       registerScratchFlush={registerScratchFlush} registerNavigationFlush={registerInputFlush} scratchBusy={busy} pendingCount={file.dirty ? 1 : 0} />
