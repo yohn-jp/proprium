@@ -52,7 +52,9 @@ export default defineConfig({
   use: {
     baseURL,
     headless: true,
-    trace: "retain-on-failure",
+    trace: process.env.SCRIPTORIUM_GITHUB_LIVE_TEST_TOKEN ? "off" : "retain-on-failure",
+    screenshot: "off",
+    video: "off",
   },
   projects: [
     {

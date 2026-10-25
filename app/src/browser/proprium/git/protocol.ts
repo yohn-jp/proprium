@@ -22,6 +22,7 @@ export type LocalGitErrorCode =
   | "repository_mismatch"
   | "remote_conflict"
   | "remote_unknown"
+  | "rest_unsupported"
   | "network_unavailable"
   | "git_error";
 
@@ -78,9 +79,9 @@ export type LocalGitRequest =
   | { id: string; workspace: WorkspaceIdentity; operation: "branches" }
   | { id: string; workspace: WorkspaceIdentity; operation: "create-branch"; name: string; expectedHead: string }
   | { id: string; workspace: WorkspaceIdentity; operation: "remote-head"; token: string }
-  | { id: string; workspace: WorkspaceIdentity; operation: "remote-fetch"; token: string }
-  | { id: string; workspace: WorkspaceIdentity; operation: "remote-pull"; token: string }
-  | { id: string; workspace: WorkspaceIdentity; operation: "remote-publish"; token: string; expectedHead: string; expectedRemoteHead: string | null };
+  | { id: string; workspace: WorkspaceIdentity; operation: "remote-fetch"; token: string; authRelayUrl: string }
+  | { id: string; workspace: WorkspaceIdentity; operation: "remote-pull"; token: string; authRelayUrl: string }
+  | { id: string; workspace: WorkspaceIdentity; operation: "remote-publish"; token: string; authRelayUrl: string; expectedHead: string; expectedRemoteHead: string | null };
 
 export interface LocalGitResponse {
   id: string;

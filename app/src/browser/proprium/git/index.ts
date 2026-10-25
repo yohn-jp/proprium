@@ -12,12 +12,12 @@ import type {
 } from "./protocol.js";
 import { validateGitPath, validateWorkspaceIdentity } from "./protocol.js";
 import { createGitHubSyncClient, GitHubSyncError } from "./github-sync.js";
-import type { GitHubFetchResult, GitHubPullResult, GitHubPublishResult, GitHubRemoteHead, GitHubSyncClient, GitHubRemoteOperation } from "./github-sync.js";
+import type { GitHubAccount, GitHubDevicePrompt, GitHubFetchResult, GitHubPullResult, GitHubPublishResult, GitHubRemoteHead, GitHubSyncClient, GitHubRemoteOperation } from "./github-sync.js";
 
 export { validateGitPath, validateWorkspaceIdentity } from "./protocol.js";
 export type { CommitAuthor, CommitSummary, DiffChange, FileRevision, LocalGitError, LocalGitErrorCode, StatusEntry, WorkspaceIdentity };
 export { GitHubSyncError } from "./github-sync.js";
-export type { GitHubFetchResult, GitHubPullResult, GitHubPublishResult, GitHubRemoteHead, GitHubSyncClient } from "./github-sync.js";
+export type { GitHubAccount, GitHubDevicePrompt, GitHubFetchResult, GitHubPullResult, GitHubPublishResult, GitHubRemoteHead, GitHubSyncClient } from "./github-sync.js";
 
 type LocalGitCommand = LocalGitRequest extends infer Request
   ? Request extends { id: string; workspace: WorkspaceIdentity } ? Omit<Request, "id" | "workspace"> : never
@@ -163,27 +163,29 @@ export class BrowserLocalGit {
   }
 
   /** Host-only GitHub sync surface. Keep this object out of plugin capability grants. */
-  connectGitHub(accessToken: string): GitHubSyncClient {
+  connectGitHub(authRelayUrl: string, fetcher: typeof fetch = fetch): GitHubSyncClient {
     const send: GitHubRemoteOperation = async <T>(
       operation: "remote-head" | "remote-fetch" | "remote-pull" | "remote-publish",
       token: string,
+      relayUrl: string,
       expected?: { head: string; remoteHead: string | null },
     ): Promise<T> => {
       try {
         if (operation === "remote-publish") {
           if (!expected) throw new GitHubSyncError("git_error", "Publishing requires an expected local and remote head.");
-          return await this.call<T>({ operation, token, expectedHead: expected.head, expectedRemoteHead: expected.remoteHead });
+          return await this.call<T>({ operation, token, authRelayUrl: relayUrl, expectedHead: expected.head, expectedRemoteHead: expected.remoteHead });
         }
+        if (operation === "remote-fetch" || operation === "remote-pull") return await this.call<T>({ operation, token, authRelayUrl: relayUrl });
         return await this.call<T>({ operation, token });
       } catch (error) {
         if (error instanceof BrowserLocalGitError) {
-          const known: GitHubSyncError["code"][] = ["authentication_required", "authentication_expired", "permission_denied", "repository_mismatch", "remote_conflict", "remote_unknown", "network_unavailable", "git_error"];
+          const known: GitHubSyncError["code"][] = ["authentication_required", "authentication_expired", "permission_denied", "repository_mismatch", "remote_conflict", "remote_unknown", "rest_unsupported", "network_unavailable", "git_error"];
           if (known.includes(error.code as GitHubSyncError["code"])) throw new GitHubSyncError(error.code as GitHubSyncError["code"], error.message);
         }
         throw error;
       }
     };
-    const session = createGitHubSyncClient(accessToken, send);
+    const session = createGitHubSyncClient(authRelayUrl, send, fetcher);
     this.githubSessions.add(session);
     return session;
   }
