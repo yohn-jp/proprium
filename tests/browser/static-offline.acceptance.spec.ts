@@ -20,6 +20,12 @@ import {
 } from "./static-github-fixture.js";
 import { signedStaticPluginFixture, staticPluginId, staticPluginVersion } from "./static-plugin-fixture.js";
 
+declare global {
+  interface Window {
+    propriumReleaseStaticServiceWorker?: () => Promise<ServiceWorkerRegistration>;
+  }
+}
+
 let pluginFixtureDirectory: string;
 let pluginComponent: Buffer;
 
@@ -38,7 +44,8 @@ test.beforeAll(() => {
 
 test.afterAll(() => rmSync(pluginFixtureDirectory, { recursive: true, force: true }));
 
-test("static Host imports a GitHub REST commit, reloads offline, and edits with a new cached Git worker", async ({ page, context }) => {
+test("static Host imports a GitHub REST commit, reloads offline, and edits with a new cached Git worker", async ({ page, context }, testInfo) => {
+  const deferMobileServiceWorker = testInfo.project.name === "static-mobile-webkit";
   const useLiveGitHub = process.env.PROPRIUM_E2E_STATIC_LIVE_GITHUB === "true";
   test.skip(useLiveGitHub && (!liveGitHubToken || !liveGitHubOwner || !liveGitHubRepository || !liveGitHubBranch ||
     ["main", "master"].includes(liveGitHubBranch.toLowerCase()) || !Number.isSafeInteger(liveGitHubRepositoryId) || liveGitHubRepositoryId <= 0),
@@ -59,14 +66,48 @@ test("static Host imports a GitHub REST commit, reloads offline, and edits with 
     await route.fulfill({ status: 200, contentType: file.contentType, body: file.body });
   });
 
-  await page.addInitScript(() => { window.open = () => null; });
+  await page.addInitScript((deferRegistration: boolean) => {
+    window.open = () => null;
+    if (!deferRegistration || !("serviceWorker" in navigator)) return;
+
+    // Playwright WebKit does not reliably route requests initiated by a page after
+    // its Service Worker takes control. Keep this Host's registration call queued
+    // until the synthetic OAuth/GitHub/plugin HTTP fixtures are done. The test
+    // explicitly releases the actual production registration before going offline.
+    const container = navigator.serviceWorker;
+    const original = container.register.bind(container);
+    let pending: { scriptURL: string | URL; options?: RegistrationOptions } | undefined;
+    let resolveRegistration: ((registration: ServiceWorkerRegistration) => void) | undefined;
+    let rejectRegistration: ((error: unknown) => void) | undefined;
+    const queued = new Promise<ServiceWorkerRegistration>((resolve, reject) => {
+      resolveRegistration = resolve;
+      rejectRegistration = reject;
+    });
+    Object.defineProperty(container, "register", {
+      configurable: true,
+      value: (scriptURL: string | URL, options?: RegistrationOptions) => {
+        pending = { scriptURL, options };
+        return queued;
+      },
+    });
+    window.propriumReleaseStaticServiceWorker = async () => {
+      if (!pending || !resolveRegistration || !rejectRegistration) throw new Error("The Host did not request its offline Service Worker.");
+      const request = pending;
+      pending = undefined;
+      delete window.propriumReleaseStaticServiceWorker;
+      Object.defineProperty(container, "register", { configurable: true, value: original });
+      try {
+        const registration = await original(request.scriptURL, request.options);
+        resolveRegistration(registration);
+        return registration;
+      } catch (error) {
+        rejectRegistration(error);
+        throw error;
+      }
+    };
+  }, deferMobileServiceWorker);
   await page.goto("/");
   const operationNotice = page.locator(".host-message[role='status']");
-  await expect.poll(() => page.evaluate(async () => {
-    const registration = await navigator.serviceWorker.ready;
-    return registration.active !== null;
-  })).toBe(true);
-  await expect.poll(() => page.evaluate(() => navigator.serviceWorker.controller !== null)).toBe(true);
 
   const origin = new URL(page.url()).origin;
   expect(origin).toBe(configuredOrigin);
@@ -122,6 +163,21 @@ test("static Host imports a GitHub REST commit, reloads offline, and edits with 
   await expect(plugin).toContainText(`v${staticPluginVersion} · installed, disabled`);
   const pluginRequestsAfterInstall = pluginRequestCount;
   const githubRequestsBeforeOffline = fixture?.apiRequests();
+
+  if (deferMobileServiceWorker) {
+    const registration = await page.evaluate(async () => {
+      if (!window.propriumReleaseStaticServiceWorker) throw new Error("Expected the WebKit fixture registration hold.");
+      const registered = await window.propriumReleaseStaticServiceWorker();
+      return { active: registered.active !== null, scope: registered.scope };
+    });
+    expect(registration.active).toBe(true);
+    expect(registration.scope).toBe(`${configuredOrigin}/`);
+  }
+  await expect.poll(() => page.evaluate(async () => {
+    const registration = await navigator.serviceWorker.ready;
+    return registration.active !== null;
+  })).toBe(true);
+  await expect.poll(() => page.evaluate(() => navigator.serviceWorker.controller !== null)).toBe(true);
 
   await context.setOffline(true);
   await page.reload();
