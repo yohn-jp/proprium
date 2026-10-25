@@ -131,8 +131,11 @@ test("static Host imports a GitHub REST commit, reloads offline, and edits with 
   }
   const files = page.getByRole("list", { name: "Repository files" });
   const mobileFiles = page.getByRole("button", { name: /^Files(?:\s|$)/u });
-  if (await mobileFiles.isVisible() && !(await files.isVisible())) await mobileFiles.click();
-  await expect(files).toBeVisible();
+  const revealFilesSidebar = async (): Promise<void> => {
+    if (await mobileFiles.isVisible() && !(await files.isVisible())) await mobileFiles.click();
+    await expect(files).toBeVisible();
+  };
+  await revealFilesSidebar();
   if (fixture) {
     await files.getByRole("button", { name: "README.md" }).click();
     await expect(page.getByRole("textbox", { name: "File contents" })).toHaveValue(fixture.content);
@@ -140,7 +143,7 @@ test("static Host imports a GitHub REST commit, reloads offline, and edits with 
     await expect(page.locator("code").filter({ hasText: fixture.head.slice(0, 10) })).toBeVisible();
   }
 
-  if (await mobileFiles.isVisible() && !(await files.isVisible())) await mobileFiles.click();
+  await revealFilesSidebar();
   const panel = page.locator("details.plugin-manager-panel");
   await expect(panel).toBeVisible();
   await panel.locator("summary").click();
@@ -186,11 +189,9 @@ test("static Host imports a GitHub REST commit, reloads offline, and edits with 
     .filter({ hasText: workspaceTitle });
   await expect(recentWorkspace).toBeVisible();
   await recentWorkspace.click();
-  await expect(mobileFiles).toBeVisible();
+  await expect(operationNotice).toContainText("Workspace opened on this device.");
 
-  const recentFiles = page.getByRole("list", { name: "Repository files" });
-  if (await mobileFiles.isVisible() && !(await recentFiles.isVisible())) await mobileFiles.click();
-  await expect(recentFiles).toBeVisible();
+  await revealFilesSidebar();
   const offlineFile = `.proprium-static-${crypto.randomUUID()}.txt`;
   await page.getByLabel("New file path").fill(offlineFile);
   await page.getByRole("button", { name: "Create new file" }).click();
@@ -208,8 +209,7 @@ test("static Host imports a GitHub REST commit, reloads offline, and edits with 
   await expect(page.getByText(/^Committed locally · [a-f0-9]{8}$/u)).toBeVisible();
 
   const reopenedPluginPanel = page.locator("details.plugin-manager-panel");
-  await expect(mobileFiles).toBeVisible();
-  if (await mobileFiles.isVisible() && !(await reopenedPluginPanel.isVisible())) await mobileFiles.click();
+  await revealFilesSidebar();
   await reopenedPluginPanel.locator("summary").click();
   const reopenedPlugin = reopenedPluginPanel.getByRole("listitem").filter({ hasText: staticPluginId }).filter({ hasText: `v${staticPluginVersion}` });
   await expect(reopenedPlugin).toContainText(`v${staticPluginVersion} · installed, disabled`);
