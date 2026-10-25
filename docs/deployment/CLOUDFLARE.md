@@ -26,20 +26,20 @@ pnpm exec wrangler deploy --dry-run --config wrangler.jsonc
 
 `pnpm verify:browser` runs the browser typecheck, focused unit tests, static build and Wrangler dry-run. CI also installs Chromium and WebKit and runs the browser acceptance suite. The dry-run verifies the local static asset bundle and configuration without authenticating to Cloudflare or changing remote state.
 
-The host release workflow is `.github/workflows/release-proprium-host.yml`. It is available only by manual dispatch from `main`, requires a selected GitHub environment (`proprium-preview` or `proprium-production`), validates the public browser endpoints and public registry key, reruns verification, and then invokes Wrangler with a scoped Cloudflare token. Configure `VITE_PROPRIUM_GITHUB_AUTH_RELAY`, `VITE_PROPRIUM_PLUGIN_REGISTRY_URL`, `VITE_PROPRIUM_PLUGIN_REGISTRY_KEY`, and `VITE_PROPRIUM_PLUGIN_ARTIFACT_ORIGINS` as GitHub environment variables. These values are public and are embedded in the Host build; never put private signing keys or API tokens in `VITE_*` variables.
+The host release workflow is `.github/workflows/release-proprium-host.yml`. It is available only by manual dispatch from `main`, requires a selected GitHub environment (`proprium-preview` or `proprium-production`), validates the public browser endpoints and public registry key, reruns verification, deploys the minimal OAuth/Smart HTTP relay, then publishes the static Host with a scoped Cloudflare token. Configure `PROPRIUM_HOST_ORIGIN`, `PROPRIUM_GITHUB_OAUTH_CLIENT_ID`, `VITE_PROPRIUM_GITHUB_AUTH_RELAY`, `VITE_PROPRIUM_PLUGIN_REGISTRY_URL`, `VITE_PROPRIUM_PLUGIN_REGISTRY_KEY`, and `VITE_PROPRIUM_PLUGIN_ARTIFACT_ORIGINS` as GitHub environment variables. These values are public and are embedded in the Worker or Host configuration; never put private signing keys or API tokens in `VITE_*` variables.
 
 The workflow does not create account resources, DNS records, custom domains, or R2 buckets. Configure those separately. A configured Worker name does not prove the public domain, OAuth redirect, cache policy or GitHub authorization works; test the deployed URL and approved sync flow before advertising a release.
 
 ## R2 plugin artifacts
 
-`.github/workflows/publish-plugin-registry.yml` is a manual release workflow. It accepts artifacts built by `scripts/build-plugin-registry.mjs`, verifies the signed registry with independently pinned public keys, uploads content-addressed immutable plugin files with explicit MIME/cache metadata, checks their public cross-origin responses, and writes signed registry metadata last. It requires an existing R2 bucket and public custom domain; it never creates either resource.
+`.github/workflows/publish-plugin-registry.yml` is a manual release workflow. It builds the independent example plugin with `scripts/build-plugin-registry.mjs`, verifies the signed registry and every artifact against the registry's separately pinned Ed25519 public key, and invokes `scripts/publish-plugin-registry.mjs` to upload content-addressed immutable files. The publisher fetches each object from the public origin and checks its bytes, MIME, cache headers, `nosniff`, and Host CORS response before it publishes the signature sidecar and registry index last. It requires an existing R2 bucket and public custom domain; it never creates either resource.
 
 Configure the `proprium-plugin-release` GitHub environment with:
 
 - `PROPRIUM_PLUGIN_R2_BUCKET`: an existing bucket name.
 - `PROPRIUM_PLUGIN_ARTIFACT_BASE`: the HTTPS custom-domain directory ending in `/plugins/`.
 - `PROPRIUM_HOST_ORIGIN`: the exact HTTPS Host origin allowed by bucket CORS.
-- `PROPRIUM_PLUGIN_REGISTRY_PUBLIC_KEY` and `PROPRIUM_PLUGIN_PUBLISHER_PUBLIC_KEY`: pinned verification keys.
+- `VITE_PROPRIUM_PLUGIN_REGISTRY_KEY`: the pinned base64 Ed25519 public key used by the Host and release verification.
 - `CLOUDFLARE_ACCOUNT_ID` and a least-privilege `CLOUDFLARE_API_TOKEN` secret.
 - `PROPRIUM_PLUGIN_REGISTRY_PRIVATE_KEY` and `PROPRIUM_PLUGIN_PUBLISHER_PRIVATE_KEY` secrets, available only to this environment.
 

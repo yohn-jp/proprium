@@ -1,0 +1,120 @@
+name: Publish Proprium Plugin Registry to R2
+
+on:
+  workflow_dispatch:
+    inputs:
+      plugin_version:
+        description: New immutable SemVer for proprium.compute-sum
+        required: true
+        type: string
+      registry_mode:
+        description: Choose bootstrap only for an empty R2 registry
+        required: true
+        type: choice
+        options:
+          - bootstrap
+          - update
+
+permissions:
+  contents: read
+
+concurrency:
+  group: proprium-plugin-registry-release
+  cancel-in-progress: false
+
+jobs:
+  publish:
+    name: Sign, publish, and verify immutable plugin artifacts
+    if: github.ref == 'refs/heads/main'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    environment: proprium-plugin-release
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.sha }}
+          persist-credentials: false
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 12.10.1
+          run_install: false
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24.21.0
+          cache: pnpm
+      - name: Install locked dependencies
+        run: pnpm install --frozen-lockfile
+      - name: Validate release configuration
+        env:
+          PROPRIUM_PLUGIN_VERSION: ${{ inputs.plugin_version }}
+          PROPRIUM_PLUGIN_RELEASE_MODE: ${{ inputs.registry_mode }}
+          PROPRIUM_PLUGIN_R2_BUCKET: ${{ vars.PROPRIUM_PLUGIN_R2_BUCKET }}
+          PROPRIUM_PLUGIN_ARTIFACT_BASE: ${{ vars.PROPRIUM_PLUGIN_ARTIFACT_BASE }}
+          PROPRIUM_HOST_ORIGIN: ${{ vars.PROPRIUM_HOST_ORIGIN }}
+          PROPRIUM_PLUGIN_REGISTRY_PUBLIC_KEY: ${{ vars.VITE_PROPRIUM_PLUGIN_REGISTRY_KEY }}
+          PROPRIUM_PLUGIN_REGISTRY_PRIVATE_KEY: ${{ secrets.PROPRIUM_PLUGIN_REGISTRY_PRIVATE_KEY }}
+          PROPRIUM_PLUGIN_PUBLISHER_PRIVATE_KEY: ${{ secrets.PROPRIUM_PLUGIN_PUBLISHER_PRIVATE_KEY }}
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+        run: |
+          test -n "$PROPRIUM_PLUGIN_VERSION"
+          test -n "$PROPRIUM_PLUGIN_R2_BUCKET"
+          test -n "$PROPRIUM_PLUGIN_ARTIFACT_BASE"
+          test -n "$PROPRIUM_HOST_ORIGIN"
+          test -n "$PROPRIUM_PLUGIN_REGISTRY_PUBLIC_KEY"
+          test -n "$PROPRIUM_PLUGIN_REGISTRY_PRIVATE_KEY"
+          test -n "$PROPRIUM_PLUGIN_PUBLISHER_PRIVATE_KEY"
+          test -n "$CLOUDFLARE_API_TOKEN"
+          test -n "$CLOUDFLARE_ACCOUNT_ID"
+      - name: Fetch and verify prior registry for updates
+        id: previous
+        env:
+          PROPRIUM_PLUGIN_R2_BUCKET: ${{ vars.PROPRIUM_PLUGIN_R2_BUCKET }}
+          PROPRIUM_PLUGIN_ARTIFACT_BASE: ${{ vars.PROPRIUM_PLUGIN_ARTIFACT_BASE }}
+          PROPRIUM_HOST_ORIGIN: ${{ vars.PROPRIUM_HOST_ORIGIN }}
+          PROPRIUM_PLUGIN_REGISTRY_PUBLIC_KEY: ${{ vars.VITE_PROPRIUM_PLUGIN_REGISTRY_KEY }}
+          PROPRIUM_PLUGIN_RELEASE_MODE: ${{ inputs.registry_mode }}
+        run: node scripts/fetch-previous-plugin-registry.mjs
+      - name: Build the signed independent plugin registry
+        env:
+          PROPRIUM_PLUGIN_VERSION: ${{ inputs.plugin_version }}
+          PROPRIUM_PLUGIN_ARTIFACT_BASE: ${{ vars.PROPRIUM_PLUGIN_ARTIFACT_BASE }}
+          PROPRIUM_PLUGIN_REGISTRY_PUBLIC_KEY: ${{ vars.VITE_PROPRIUM_PLUGIN_REGISTRY_KEY }}
+          PROPRIUM_PLUGIN_REGISTRY_PRIVATE_KEY: ${{ secrets.PROPRIUM_PLUGIN_REGISTRY_PRIVATE_KEY }}
+          PROPRIUM_PLUGIN_PUBLISHER_PRIVATE_KEY: ${{ secrets.PROPRIUM_PLUGIN_PUBLISHER_PRIVATE_KEY }}
+          PROPRIUM_PLUGIN_PREVIOUS_REGISTRY_DIR: ${{ steps.previous.outputs.has_previous == 'true' && 'dist/previous-plugin-registry' || '' }}
+        run: node scripts/build-plugin-registry.mjs
+      - name: Verify registry and every content-addressed artifact
+        env:
+          PROPRIUM_PLUGIN_REGISTRY_PUBLIC_KEY: ${{ vars.VITE_PROPRIUM_PLUGIN_REGISTRY_KEY }}
+        run: node scripts/verify-plugin-registry.mjs
+      - uses: actions/upload-artifact@v4
+        with:
+          name: proprium-plugin-registry-${{ github.sha }}
+          path: dist/plugin-registry/**
+          if-no-files-found: error
+          retention-days: 90
+      - name: Upload immutable assets and verify public CORS, MIME, cache and digests
+        env:
+          PROPRIUM_PLUGIN_R2_BUCKET: ${{ vars.PROPRIUM_PLUGIN_R2_BUCKET }}
+          PROPRIUM_PLUGIN_ARTIFACT_BASE: ${{ vars.PROPRIUM_PLUGIN_ARTIFACT_BASE }}
+          PROPRIUM_HOST_ORIGIN: ${{ vars.PROPRIUM_HOST_ORIGIN }}
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+        run: node scripts/publish-plugin-registry.mjs artifacts
+      - name: Publish the signed registry sidecar
+        env:
+          PROPRIUM_PLUGIN_R2_BUCKET: ${{ vars.PROPRIUM_PLUGIN_R2_BUCKET }}
+          PROPRIUM_PLUGIN_ARTIFACT_BASE: ${{ vars.PROPRIUM_PLUGIN_ARTIFACT_BASE }}
+          PROPRIUM_HOST_ORIGIN: ${{ vars.PROPRIUM_HOST_ORIGIN }}
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+        run: node scripts/publish-plugin-registry.mjs registry-signature
+      - name: Publish signed registry index last
+        env:
+          PROPRIUM_PLUGIN_R2_BUCKET: ${{ vars.PROPRIUM_PLUGIN_R2_BUCKET }}
+          PROPRIUM_PLUGIN_ARTIFACT_BASE: ${{ vars.PROPRIUM_PLUGIN_ARTIFACT_BASE }}
+          PROPRIUM_HOST_ORIGIN: ${{ vars.PROPRIUM_HOST_ORIGIN }}
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+        run: node scripts/publish-plugin-registry.mjs registry-index

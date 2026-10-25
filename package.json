@@ -10,22 +10,22 @@
   "scripts": {
     "dev:browser": "pnpm --dir app exec vite --config vite.proprium.config.ts",
     "build:browser": "pnpm --dir app exec vite build --config vite.proprium.config.ts && node scripts/verify-proprium-static.mjs",
-    "typecheck:browser": "pnpm --filter @scriptorium/app typecheck:proprium",
-    "test:browser:unit": "pnpm --filter @scriptorium/app test:proprium",
+    "typecheck:browser": "pnpm --filter @proprium/host typecheck:proprium",
+    "test:browser:unit": "pnpm --filter @proprium/host test:proprium",
     "test:browser:e2e": "node scripts/run-proprium-e2e.mjs",
+    "test:browser:adapters": "node scripts/run-proprium-adapters-e2e.mjs",
+    "test:browser:static:e2e": "playwright test --config tests/browser/static-playwright.config.ts",
     "verify:browser": "pnpm typecheck:browser && pnpm test:browser:unit && pnpm build:browser && pnpm exec wrangler deploy --dry-run --config wrangler.jsonc",
     "build": "pnpm build:browser",
     "typecheck": "pnpm typecheck:browser",
-    "test": "pnpm test:browser:unit && pnpm test:browser:e2e",
-    "test:e2e": "pnpm test:browser:e2e",
+    "test": "pnpm test:browser:unit && pnpm test:browser:e2e && pnpm test:browser:static:e2e && pnpm test:browser:adapters",
+    "test:e2e": "pnpm test:browser:e2e && pnpm test:browser:static:e2e && pnpm test:browser:adapters",
     "verify": "pnpm verify:browser"
   },
   "devDependencies": {
     "@bytecodealliance/jco": "1.39.0",
     "@playwright/test": "^1.64.1",
     "@types/node": "^24.0.0",
-    "@types/react": "^19.1.2",
-    "@types/react-dom": "^19.1.2",
     "tsx": "^4.20.0",
     "typescript": "~5.9.3",
     "wrangler": "4.152.0"

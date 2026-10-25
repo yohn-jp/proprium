@@ -3,5 +3,5 @@
   "name": "proprium-github-auth-relay",
   "main": "./github-auth-worker.ts",
   "compatibility_date": "2025-04-01",
-  "workers_dev": false
+  "workers_dev": true
 }

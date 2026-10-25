@@ -44,7 +44,29 @@ jobs:
       - name: Install desktop and mobile browser engines
         run: pnpm exec playwright install --with-deps chromium webkit
       - name: Exercise browser acceptance scenarios
+        env:
+          PROPRIUM_E2E_GITHUB_TOKEN: ${{ secrets.PROPRIUM_E2E_GITHUB_TOKEN }}
+          PROPRIUM_E2E_GITHUB_OWNER: ${{ vars.PROPRIUM_E2E_GITHUB_OWNER }}
+          PROPRIUM_E2E_GITHUB_REPOSITORY: ${{ vars.PROPRIUM_E2E_GITHUB_REPOSITORY }}
+          PROPRIUM_E2E_GITHUB_REPOSITORY_ID: ${{ vars.PROPRIUM_E2E_GITHUB_REPOSITORY_ID }}
+          PROPRIUM_E2E_GITHUB_BRANCH: ${{ vars.PROPRIUM_E2E_GITHUB_BRANCH }}
         run: pnpm test:browser:e2e
+      - name: Exercise the production static shell offline
+        env:
+          PROPRIUM_E2E_GITHUB_TOKEN: ${{ secrets.PROPRIUM_E2E_GITHUB_TOKEN }}
+          PROPRIUM_E2E_GITHUB_OWNER: ${{ vars.PROPRIUM_E2E_GITHUB_OWNER }}
+          PROPRIUM_E2E_GITHUB_REPOSITORY: ${{ vars.PROPRIUM_E2E_GITHUB_REPOSITORY }}
+          PROPRIUM_E2E_GITHUB_REPOSITORY_ID: ${{ vars.PROPRIUM_E2E_GITHUB_REPOSITORY_ID }}
+          PROPRIUM_E2E_GITHUB_BRANCH: ${{ vars.PROPRIUM_E2E_GITHUB_BRANCH }}
+        run: pnpm test:browser:static:e2e
+      - name: Exercise existing Browser Git and Component Worker adapter scenarios
+        env:
+          SCRIPTORIUM_GITHUB_LIVE_TEST_TOKEN: ${{ secrets.PROPRIUM_E2E_GITHUB_TOKEN }}
+          SCRIPTORIUM_GITHUB_LIVE_TEST_OWNER: ${{ vars.PROPRIUM_E2E_GITHUB_OWNER }}
+          SCRIPTORIUM_GITHUB_LIVE_TEST_REPOSITORY: ${{ vars.PROPRIUM_E2E_GITHUB_REPOSITORY }}
+          SCRIPTORIUM_GITHUB_LIVE_TEST_REPOSITORY_ID: ${{ vars.PROPRIUM_E2E_GITHUB_REPOSITORY_ID }}
+          SCRIPTORIUM_GITHUB_LIVE_TEST_BRANCH: ${{ vars.PROPRIUM_E2E_GITHUB_BRANCH }}
+        run: pnpm test:browser:adapters
       - uses: actions/upload-artifact@v4
         if: always()
         with:
@@ -52,5 +74,6 @@ jobs:
           path: |
             tests/browser/test-results/**
             tests/browser/playwright-report/**
+            tests/e2e/test-results/**
           if-no-files-found: ignore
           retention-days: 14
