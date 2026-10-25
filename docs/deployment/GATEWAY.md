@@ -29,12 +29,12 @@ CGO_ENABLED=0 go build -trimpath -o proprium-gateway .
 | --- | --- | --- |
 | `PROPRIUM_LISTEN_ADDR` | no | HTTP listen address, default `127.0.0.1:8080`; use an unprivileged port |
 | `PROPRIUM_HOST_ORIGIN` | yes | One exact Host origin, for example `https://app.example.org`; local HTTP is permitted only for loopback development |
-| `PROPRIUM_PUBLIC_URL` | yes | Exact public Gateway origin, for example `https://gateway.example.org`; used for Host and proxy request validation |
-| `GITHUB_CLIENT_ID` | OAuth use | GitHub OAuth App client ID for Device Flow; public identifier, not a secret |
+| `PROPRIUM_PUBLIC_URL` | required for Live MCP or wildcard listen | Exact public Gateway origin, for example `https://gateway.example.org`; used for Host and proxy request validation. May be omitted for loopback-only, relay-only operation |
+| `GITHUB_CLIENT_ID` | yes | GitHub OAuth App client ID for Device Flow; 10–128 ASCII letters, digits, underscores or hyphens. It is a public identifier, not a secret |
 | `PROPRIUM_OWNER_KEY` | Live MCP use | Random owner bearer secret of at least 32 bytes; keep private. If absent, Live MCP owner management is disabled |
 | `PROPRIUM_UPSTREAM_TIMEOUT` | no | Maximum upstream request time, default `2m` |
 
-All configured origins must be canonical origins without credentials, path, query or fragment. The Host origin must match the deployed static Host exactly. `PROPRIUM_PUBLIC_URL` must match the HTTPS hostname routed to this Gateway. The GitHub OAuth client ID must belong to the OAuth App configured for Device Flow. The executable contains no client secret or token.
+All configured origins must be canonical origins without credentials, path, query or fragment. `PROPRIUM_HOST_ORIGIN` is always required and must match the Host exactly. `PROPRIUM_PUBLIC_URL` must match the HTTPS hostname routed to this Gateway when Live MCP is enabled or the listen address is a wildcard; it may be omitted only for a loopback relay-only service. `GITHUB_CLIENT_ID` is always required at startup and must belong to the OAuth App configured for Device Flow. The executable contains no client secret or token.
 
 Generate an owner key locally and enter it only into the Host's Live MCP settings:
 
@@ -42,7 +42,7 @@ Generate an owner key locally and enter it only into the Host's Live MCP setting
 openssl rand -base64 48
 ~~~
 
-Do not put the owner key in a `VITE_*` setting, command argument, MCP endpoint URL, shell history or log. Keep it in an environment file readable only by the Gateway user. The Host keeps it in memory only. If the owner key is absent, OAuth and Git relay can still run but Live MCP publication is unavailable.
+Do not put the owner key in a `VITE_*` setting, command argument, MCP endpoint URL, shell history or log. It must contain 32–4096 printable ASCII bytes without spaces. Keep it in an environment file readable only by the Gateway user. The Host keeps it in memory only. If the owner key is absent, OAuth and Git relay can still run but Live MCP publication is unavailable. A wildcard listen address such as `0.0.0.0:8080` also requires `PROPRIUM_PUBLIC_URL`; prefer binding to loopback behind the Tunnel.
 
 ## Local run
 
@@ -124,6 +124,6 @@ Restarting Gateway or cloudflared drops live MCP connections. The Host detects d
 
 ## Releases and CI
 
-[Gateway CI](../../.github/workflows/verify-gateway.yml) runs Go tests with the race detector, `go vet` and a static Linux build. Browser Verification installs the pinned Go toolchain, starts the actual Gateway with the Browser Host, and exercises Live MCP in Chromium and mobile WebKit. Those loopback tests do not verify a public Cloudflare Tunnel. [Gateway release](../../.github/workflows/release-proprium-gateway.yml) repeats tests and vet, builds Linux amd64/arm64, Windows amd64, and macOS amd64/arm64 binaries, embeds the version and source commit, and publishes checksums and artifacts to a GitHub Release for `proprium-gateway-vX.Y.Z` tags. Manual dispatch requires an existing matching tag that points to a commit on `main`. Ordinary CI does not publish releases.
+[Gateway CI](../../.github/workflows/verify-gateway.yml) runs Go tests with the race detector and `go vet`, then cross-builds CGO-free Linux amd64/arm64, Windows amd64, and macOS amd64/arm64 binaries with version `dev` and the current commit embedded. It uploads them under the Actions artifact name `proprium-gateway-<commit-sha>` with `SHA256SUMS` and `SOURCE.txt`; this is a build artifact, not a GitHub Release. Browser Verification installs the pinned Go toolchain, starts the actual Gateway with the Browser Host, and exercises Live MCP in Chromium and mobile WebKit. Those loopback tests do not verify a public Cloudflare Tunnel. [Gateway release](../../.github/workflows/release-proprium-gateway.yml) repeats tests and vet, builds the same five targets with the tag version and source commit, and publishes checksums and binaries to a GitHub Release for `proprium-gateway-vX.Y.Z` tags. Manual dispatch requires an existing matching tag that points to a commit on `main`. Ordinary CI does not publish releases.
 
 The Host release remains separate and deploys Workers Static Assets only; it does not deploy or remove a Gateway. See [Cloudflare static Host deployment](CLOUDFLARE.md), [MCP contract](../architecture/MCP-GATEWAY.md), and [security boundaries](../architecture/DELIVERY-AND-SECURITY.md).

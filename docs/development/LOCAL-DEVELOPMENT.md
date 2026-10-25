@@ -25,7 +25,7 @@ export PROPRIUM_OWNER_KEY="$(openssl rand -base64 48)"
 go run . serve --listen 127.0.0.1:8080
 ~~~
 
-For device authorization, configure the OAuth App for Device Flow. The client ID is public; there is no client secret in the binary or Host. Do not use a real GitHub token as the MCP owner key. Keep the owner key in the Gateway process environment only and enter it in the Host's optional Live MCP settings when testing that feature.
+For device authorization, configure the OAuth App for Device Flow. The client ID is required at Gateway startup and is public; there is no client secret in the binary or Host. Live MCP also requires a loopback `PROPRIUM_PUBLIC_URL` even in development. Do not use a real GitHub token as the MCP owner key. Keep the owner key in the Gateway process environment only and enter it in the Host's optional Live MCP settings when testing that feature.
 
 Set `VITE_PROPRIUM_GATEWAY_URL=http://127.0.0.1:8080` before starting the Host if using a custom Gateway URL. The Host sends GitHub REST requests directly to GitHub when supported; the Gateway is needed for Device Flow and Smart HTTP fallback. Without the Gateway, local file editing, local commits and plugin execution continue.
 

@@ -18,7 +18,7 @@ jobs:
   verify:
     name: Test, vet and build Gateway
     runs-on: ubuntu-24.04
-    timeout-minutes: 20
+    timeout-minutes: 30
     defaults:
       run:
         working-directory: gateway
@@ -38,9 +38,33 @@ jobs:
         run: go test -race ./...
       - name: Vet Gateway
         run: go vet ./...
-      - name: Build static Linux amd64 Gateway
+      - name: Build release-compatible binaries for supported platforms
         env:
-          CGO_ENABLED: "0"
-          GOOS: linux
-          GOARCH: amd64
-        run: go build -trimpath -o /tmp/proprium-gateway .
+          COMMIT: ${{ github.sha }}
+          VERSION: dev
+        run: |
+          set -eu
+          mkdir -p ../gateway-artifacts
+          for target in linux/amd64 linux/arm64 windows/amd64 darwin/amd64 darwin/arm64; do
+            GOOS="${target%/*}"
+            GOARCH="${target#*/}"
+            extension=""
+            if [ "$GOOS" = windows ]; then extension=".exe"; fi
+            name="proprium-gateway_${VERSION}_${GOOS}_${GOARCH}${extension}"
+            CGO_ENABLED=0 GOOS="$GOOS" GOARCH="$GOARCH" go build \
+              -trimpath \
+              -ldflags "-s -w -X main.version=${VERSION} -X main.commit=${COMMIT}" \
+              -o "../gateway-artifacts/${name}" .
+            strings "../gateway-artifacts/${name}" | grep -F "$VERSION" >/dev/null
+            strings "../gateway-artifacts/${name}" | grep -F "$COMMIT" >/dev/null
+          done
+          cd ../gateway-artifacts
+          sha256sum proprium-gateway_* > SHA256SUMS
+          printf 'version=%s\ncommit=%s\ngo=%s\n' \
+            "$VERSION" "$COMMIT" "$(go version)" > SOURCE.txt
+      - uses: actions/upload-artifact@v4
+        with:
+          name: proprium-gateway-${{ github.sha }}
+          path: gateway-artifacts/*
+          if-no-files-found: error
+          retention-days: 14
