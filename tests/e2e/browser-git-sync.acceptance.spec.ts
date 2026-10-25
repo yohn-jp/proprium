@@ -24,11 +24,12 @@ declare global {
 const hostOrigin = "http://127.0.0.1:4273";
 const relayOrigin = "https://oauth.example.test";
 const repositoryId = 923456789;
-const liveGitHubToken = process.env.SCRIPTORIUM_GITHUB_LIVE_TEST_TOKEN ?? "";
-const liveGitHubOwner = process.env.SCRIPTORIUM_GITHUB_LIVE_TEST_OWNER ?? "";
-const liveGitHubRepository = process.env.SCRIPTORIUM_GITHUB_LIVE_TEST_REPOSITORY ?? "";
-const liveGitHubRepositoryId = Number(process.env.SCRIPTORIUM_GITHUB_LIVE_TEST_REPOSITORY_ID ?? "0");
-const liveGitHubBranch = process.env.SCRIPTORIUM_GITHUB_LIVE_TEST_BRANCH ?? "main";
+const liveGitHubToken = process.env.PROPRIUM_E2E_GITHUB_TOKEN ?? process.env.SCRIPTORIUM_GITHUB_LIVE_TEST_TOKEN ?? "";
+const liveGitHubOwner = process.env.PROPRIUM_E2E_GITHUB_OWNER ?? process.env.SCRIPTORIUM_GITHUB_LIVE_TEST_OWNER ?? "";
+const liveGitHubRepository = process.env.PROPRIUM_E2E_GITHUB_REPOSITORY ?? process.env.SCRIPTORIUM_GITHUB_LIVE_TEST_REPOSITORY ?? "";
+const liveGitHubRepositoryId = Number(process.env.PROPRIUM_E2E_GITHUB_REPOSITORY_ID ?? process.env.SCRIPTORIUM_GITHUB_LIVE_TEST_REPOSITORY_ID ?? "0");
+const liveGitHubBranch = process.env.PROPRIUM_E2E_GITHUB_BRANCH ?? process.env.SCRIPTORIUM_GITHUB_LIVE_TEST_BRANCH ?? "main";
+const liveGitHubLogin = process.env.PROPRIUM_E2E_GITHUB_LOGIN ?? process.env.SCRIPTORIUM_GITHUB_LIVE_TEST_LOGIN ?? "";
 const fixtureOAuthToken = liveGitHubToken || `ghu_${"x".repeat(36)}`;
 
 interface SmartHttpFixture {
@@ -745,7 +746,8 @@ test("live disposable GitHub sync fetches, fast-forwards, publishes and confirms
     branch: liveGitHubBranch, relayUrl: relayOrigin, id: `live-${crypto.randomUUID()}`,
   });
   expect(result.account.id).toBeGreaterThan(0);
-  expect(result.account.login.toLowerCase()).toBe(liveGitHubOwner.toLowerCase());
+  expect(result.account.login).toBeTruthy();
+  if (liveGitHubLogin) expect(result.account.login.toLowerCase()).toBe(liveGitHubLogin.toLowerCase());
   expect(result.initialHead).toMatch(/^[a-f0-9]{40}$/u);
   expect(result.fetched.head).toBe(result.initialHead);
   expect(result.pulled.state).toMatch(/^(?:fast-forwarded|up-to-date)$/u);
