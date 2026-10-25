@@ -64,6 +64,7 @@ export interface InvokePluginOptions {
   readonly request: string;
   readonly snapshot: RuntimeSnapshot;
   readonly isSnapshotCurrent: (snapshotId: string, revision: string) => boolean;
+  readonly signal?: AbortSignal;
 }
 
 export interface InstalledPlugin {
@@ -339,7 +340,14 @@ export class BrowserPluginManager {
 
   /** Runs against a revision-pinned Host snapshot. Plugin changes remain proposals for Host review. */
   async invoke(options: InvokePluginOptions): Promise<PluginTranscript> {
+    if (options.signal?.aborted) throw new DOMException("Plugin execution was canceled", "AbortError");
     const active = await this.ensureActive(options.pluginId);
+    if (options.signal?.aborted) {
+      active.runtime.cancel();
+      throw new DOMException("Plugin execution was canceled", "AbortError");
+    }
+    const cancel = (): void => active.runtime.cancel();
+    options.signal?.addEventListener("abort", cancel, { once: true });
     try {
       const transcript = await active.runtime.invoke(options);
       active.transcript = transcript;
@@ -350,6 +358,8 @@ export class BrowserPluginManager {
         await active.runtime.destroy().catch(() => undefined);
       }
       throw error;
+    } finally {
+      options.signal?.removeEventListener("abort", cancel);
     }
   }
 

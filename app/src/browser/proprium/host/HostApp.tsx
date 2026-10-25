@@ -4,6 +4,7 @@ import type { CommitSummary, FileRevision, StatusEntry, WorkspaceIdentity } from
 import { createGitHubAccountSession } from "../git/github-sync.js";
 import type { GitHubAccount, GitHubDevicePrompt, GitHubRepository, GitHubAccountSession, GitHubSyncClient } from "../git/github-sync.js";
 import { PluginPanel } from "./PluginPanel.js";
+import { LiveMcpPanel } from "./LiveMcpPanel.js";
 
 interface RecentWorkspace {
   identity: WorkspaceIdentity;
@@ -26,8 +27,8 @@ interface OperationMessage { tone: "info" | "error" | "success"; text: string; }
 
 const RECENTS_KEY = "proprium.host.recent-workspaces.v1";
 const PREFERENCES_KEY = "proprium.host.preferences.v1";
-const RELAY_KEY = "proprium.host.github-relay.v1";
-const DEFAULT_RELAY = import.meta.env.VITE_PROPRIUM_GITHUB_AUTH_RELAY ?? "";
+const GATEWAY_KEY = "proprium.host.gateway-url.v1";
+const DEFAULT_GATEWAY = import.meta.env.VITE_PROPRIUM_GATEWAY_URL ?? "";
 
 function readRecentWorkspaces(): RecentWorkspace[] {
   try {
@@ -44,7 +45,15 @@ function persistRecents(value: RecentWorkspace[]): void {
   try { localStorage.setItem(RECENTS_KEY, JSON.stringify(value.slice(0, 20))); }
   catch { /* Workspace metadata is convenience only; Git storage remains in LightningFS. */ }
 }
-function readRelay(): string { try { return localStorage.getItem(RELAY_KEY) || DEFAULT_RELAY; } catch { return DEFAULT_RELAY; } }
+function readGateway(): string { try { return localStorage.getItem(GATEWAY_KEY) || DEFAULT_GATEWAY; } catch { return DEFAULT_GATEWAY; } }
+function persistGateway(value: string): void {
+  try {
+    const url = new URL(value);
+    const loopback = url.protocol === "http:" && ["localhost", "127.0.0.1"].includes(url.hostname);
+    if ((!loopback && url.protocol !== "https:") || url.username || url.password || url.pathname !== "/" || url.search || url.hash) return;
+    localStorage.setItem(GATEWAY_KEY, url.origin);
+  } catch { /* Do not persist incomplete or credential-bearing URLs. */ }
+}
 function readPreferences(): { name: string; email: string } {
   try {
     const value = JSON.parse(localStorage.getItem(PREFERENCES_KEY) || "null") as unknown;
@@ -86,7 +95,7 @@ function fileIcon(path: string): string { return path.includes("/") ? "↳" : "�
 
 export function HostApp(): ReactElement {
   const [recent, setRecent] = useState<RecentWorkspace[]>(readRecentWorkspaces);
-  const [relayDraft, setRelayDraft] = useState(readRelay);
+  const [gatewayDraft, setGatewayDraft] = useState(readGateway);
   const [session, setSession] = useState<GitHubAccountSession | null>(null);
   const [account, setAccount] = useState<GitHubAccount | null>(null);
   const [repositories, setRepositories] = useState<GitHubRepository[]>([]);
@@ -95,6 +104,7 @@ export function HostApp(): ReactElement {
   const [selectedRepository, setSelectedRepository] = useState<number | null>(null);
   const [selectedBranch, setSelectedBranch] = useState("");
   const [workspace, setWorkspace] = useState<RecentWorkspace | null>(null);
+  const [workspaceGeneration, setWorkspaceGeneration] = useState("");
   const [git, setGit] = useState<BrowserLocalGit | null>(null);
   const [syncClient, setSyncClient] = useState<GitHubSyncClient | null>(null);
   const [files, setFiles] = useState<Array<{ path: string; type: "blob" | "tree"; oid: string; bytes: number }>>([]);
@@ -111,6 +121,7 @@ export function HostApp(): ReactElement {
   const gitRef = useRef<BrowserLocalGit | null>(null);
   const sessionRef = useRef<GitHubAccountSession | null>(null);
   const currentFileRef = useRef<OpenFile | null>(currentFile);
+  const livePluginInvoker = useRef<((args: Record<string, unknown>, signal: AbortSignal) => Promise<unknown>) | null>(null);
   currentFileRef.current = currentFile;
   const activeWorkspaceId = workspace?.identity.localWorkspaceId ?? null;
   const selectedRepositoryEntry = repositories.find(item => item.id === selectedRepository) ?? null;
@@ -150,6 +161,7 @@ export function HostApp(): ReactElement {
       setGit(nextGit);
       setSyncClient(nextSync);
       setWorkspace(entry);
+      setWorkspaceGeneration(crypto.randomUUID());
       setCurrentFile(null);
       setMobileNavigationOpen(false);
       setStatus(nextState.status);
@@ -174,13 +186,13 @@ export function HostApp(): ReactElement {
   useEffect(() => () => { gitRef.current?.close(); sessionRef.current?.signOut(); }, []);
 
   async function connectGitHub(): Promise<void> {
-    const configuredRelay = relayDraft.trim();
-    if (!configuredRelay) { setMessage({ tone: "error", text: "Enter the GitHub auth relay URL configured for this Proprium Host." }); return; }
+    const configuredGateway = gatewayDraft.trim();
+    if (!configuredGateway) { setMessage({ tone: "error", text: "Enter the Proprium Gateway URL configured for this Host." }); return; }
     setBusy(true);
     setMessage(null);
     let accountSession: GitHubAccountSession | null = null;
     try {
-      accountSession = createGitHubAccountSession(configuredRelay);
+      accountSession = createGitHubAccountSession(configuredGateway);
       const verificationWindow = window.open("https://github.com/login/device", "_blank", "noopener,noreferrer");
       const prompt = await accountSession.beginAuthorization();
       sessionRef.current?.signOut();
@@ -194,7 +206,7 @@ export function HostApp(): ReactElement {
       const available = await accountSession.repositories();
       setRepositories(available);
       setDevicePrompt(null);
-      try { localStorage.setItem(RELAY_KEY, configuredRelay); } catch { /* Configuration can be entered again. */ }
+      try { localStorage.setItem(GATEWAY_KEY, configuredGateway); } catch { /* Configuration can be entered again. */ }
       setMessage({ tone: "success", text: `Connected to GitHub as ${signedIn.login}. Choose a repository to open.` });
     } catch (error) {
       setDevicePrompt(null);
@@ -240,6 +252,7 @@ export function HostApp(): ReactElement {
       setGit(nextGit);
       setSyncClient(nextSync);
       setWorkspace(entry);
+      setWorkspaceGeneration(crypto.randomUUID());
       setCurrentFile(null);
       setStatus(initial.status);
       setFiles(initial.files);
@@ -505,6 +518,7 @@ export function HostApp(): ReactElement {
     gitRef.current?.close();
     gitRef.current = null;
     setWorkspace(null);
+    setWorkspaceGeneration("");
     setGit(null);
     setSyncClient(null);
     setCurrentFile(null);
@@ -517,6 +531,19 @@ export function HostApp(): ReactElement {
     setSession(null); setAccount(null); setRepositories([]); setDevicePrompt(null);
     setMessage({ tone: "info", text: "Signed out. Local workspaces remain on this device." });
   };
+
+  const registerLivePluginInvoker = useCallback((invoker: ((args: Record<string, unknown>, signal: AbortSignal) => Promise<unknown>) | null): void => {
+    livePluginInvoker.current = invoker;
+  }, []);
+  const executeLivePlugin = useCallback(async (args: Record<string, unknown>, signal: AbortSignal): Promise<unknown> => {
+    const invoke = livePluginInvoker.current;
+    if (!invoke) throw new Error("Open the Plugins panel and enable a WASM plugin before calling plugin_call.");
+    return invoke(args, signal);
+  }, []);
+  const updateGateway = useCallback((value: string): void => {
+    setGatewayDraft(value);
+    persistGateway(value);
+  }, []);
 
   const pluginRevisionKey = JSON.stringify([
     workspace?.identity.localWorkspaceId,
@@ -555,9 +582,9 @@ export function HostApp(): ReactElement {
             {selectedRepositoryEntry && <><label htmlFor="workspace-branch">Branch</label><input id="workspace-branch" value={selectedBranch} onChange={event => setSelectedBranch(event.target.value)} placeholder={selectedRepositoryEntry.defaultBranch} autoComplete="off" /><p className="repository-branch">Default: <code>{selectedRepositoryEntry.defaultBranch}</code></p></>}
             <button className="primary-button full-width" type="button" disabled={busy || !selectedRepositoryEntry || !selectedRepositoryEntry.permissions.pull || !selectedBranch.trim()} onClick={() => void openRemoteRepository()}>{busy ? "Opening…" : "Open workspace"}</button>
           </> : <>
-            <label htmlFor="github-relay">GitHub auth relay URL</label>
-            <input id="github-relay" type="url" value={relayDraft} onChange={event => setRelayDraft(event.target.value)} placeholder="https://github-auth.example.com" autoComplete="url" />
-            <p className="field-help">The relay exchanges GitHub device codes. It does not store repository files or local Git data.</p>
+            <label htmlFor="github-gateway">Proprium Gateway URL</label>
+            <input id="github-gateway" type="url" value={gatewayDraft} onChange={event => updateGateway(event.target.value)} placeholder="https://gateway.example.com" autoComplete="url" />
+            <p className="field-help">The Gateway handles GitHub device authorization and restricted Git transport. Browser GitHub REST calls remain direct. It does not store repository files or local Git data.</p>
             {devicePrompt && <div className="device-prompt"><span>Enter this code on GitHub</span><strong>{devicePrompt.userCode}</strong><a href={devicePrompt.verificationUri} target="_blank" rel="noreferrer">Open GitHub device sign-in</a><span className="field-help">Waiting for authorization…</span></div>}
             <button className="primary-button full-width" type="button" disabled={busy} onClick={() => void connectGitHub()}>{busy ? "Connecting…" : "Connect GitHub"}</button>
           </>}
@@ -593,6 +620,18 @@ export function HostApp(): ReactElement {
             hostBusy={busy}
             onBusyChange={setBusy}
             onWorkspaceChanged={refreshAfterPlugin}
+            onRegisterLiveInvoker={registerLivePluginInvoker}
+          />}
+          {git && workspace && <LiveMcpPanel
+            gatewayUrl={gatewayDraft}
+            onGatewayUrlChange={updateGateway}
+            workspaceId={workspace.identity.localWorkspaceId}
+            generation={workspaceGeneration}
+            identity={workspace.identity}
+            git={git}
+            canApply={!currentFile?.dirty}
+            onWorkspaceChanged={refreshAfterPlugin}
+            onExecutePlugin={executeLivePlugin}
           />}
         </div>
         <div className="sidebar-user"><span className="avatar">{account?.login.slice(0, 1).toUpperCase() ?? "P"}</span><span><strong>{account?.login ?? "Local workspace"}</strong><small>Browser storage</small></span></div>

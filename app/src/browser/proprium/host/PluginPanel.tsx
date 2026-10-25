@@ -20,6 +20,7 @@ interface PluginPanelProps {
   hostBusy: boolean;
   onBusyChange(value: boolean): void;
   onWorkspaceChanged(): Promise<void>;
+  onRegisterLiveInvoker(invoker: ((args: Record<string, unknown>, signal: AbortSignal) => Promise<unknown>) | null): void;
 }
 interface SnapshotState { value: RuntimeSnapshot; inputRevisionKey: string; }
 
@@ -32,6 +33,9 @@ function registryConfig(): { url: string; publicKey: Uint8Array; artifactOrigins
     const publicKey = decodeRegistryBytes(encodedKey, 32, "registry public key");
     return { url, publicKey, artifactOrigins };
   } catch { return null; }
+}
+function isPlainRecord(value: unknown): value is Record<string, unknown> {
+  return !!value && typeof value === "object" && !Array.isArray(value);
 }
 function formatBytes(bytes: number): string {
   if (bytes < 1024) return `${bytes} B`;
@@ -59,7 +63,7 @@ async function takeSnapshot(git: BrowserLocalGit, workspaceId: string): Promise<
   return Object.freeze({ id: `${workspaceId}:${crypto.randomUUID()}`, revision, files: Object.freeze(files) });
 }
 
-export function PluginPanel({ workspaceId, git, revisionKey, canApplyChanges, hostBusy, onBusyChange, onWorkspaceChanged }: PluginPanelProps): ReactElement {
+export function PluginPanel({ workspaceId, git, revisionKey, canApplyChanges, hostBusy, onBusyChange, onWorkspaceChanged, onRegisterLiveInvoker }: PluginPanelProps): ReactElement {
   const config = useMemo(registryConfig, []);
   const manager = useMemo(() => new BrowserPluginManager({
     registries: config ? [{ url: config.url, publicKey: config.publicKey, artifactOrigins: config.artifactOrigins }] : [],
@@ -79,6 +83,33 @@ export function PluginPanel({ workspaceId, git, revisionKey, canApplyChanges, ho
   const currentRevisionKey = useRef(revisionKey);
   const currentSnapshots = useRef(new Map<string, SnapshotState>());
   currentRevisionKey.current = revisionKey;
+
+  useEffect(() => {
+    onRegisterLiveInvoker(async (args, signal) => {
+      if (typeof args.pluginId !== "string" || !/^[A-Za-z0-9._-]{1,128}$/u.test(args.pluginId) || args.operation !== "run") {
+        throw new Error("plugin_call requires an installed pluginId and operation 'run'.");
+      }
+      const input = typeof args.input === "string" ? args.input : isPlainRecord(args.input) && typeof args.input.request === "string" ? args.input.request : "";
+      if (!input || input.length > 256 * 1024) throw new Error("plugin_call input must contain a request up to 256 KiB.");
+      const plugin = (await manager.installed()).find(item => item.id === args.pluginId && (item.state === "active" || item.state === "enabled-idle"));
+      if (!plugin) throw new Error("Enable the plugin and grant its capabilities in the Browser Host before calling it.");
+      const inputRevisionKey = currentRevisionKey.current;
+      const snapshot = await takeSnapshot(git, workspaceId);
+      if (signal.aborted) throw new DOMException("Plugin execution was canceled", "AbortError");
+      const snapshotState = { value: snapshot, inputRevisionKey };
+      const transcript = await manager.invoke({
+        pluginId: plugin.id, request: input, snapshot,
+        signal,
+        isSnapshotCurrent: (snapshotId, revision) => currentRevisionKey.current === inputRevisionKey && snapshot.id === snapshotId && snapshot.revision === revision,
+      });
+      if (currentRevisionKey.current !== inputRevisionKey) throw new Error("The workspace changed while the plugin ran; its result was discarded.");
+      currentSnapshots.current.set(plugin.id, snapshotState);
+      setPendingSnapshot(current => ({ ...current, [plugin.id]: snapshotState }));
+      setTranscripts(current => ({ ...current, [plugin.id]: transcript }));
+      return { pluginId: plugin.id, value: transcript.value, proposals: transcript.proposals };
+    });
+    return () => onRegisterLiveInvoker(null);
+  }, [manager, workspaceId, git, onRegisterLiveInvoker]);
 
   async function refreshPlugins(): Promise<void> { setPlugins(await manager.installed()); }
   const lastWorkspaceId = useRef(workspaceId);

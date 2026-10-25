@@ -9,7 +9,7 @@ const appRoot = fileURLToPath(new URL(".", import.meta.url));
 const workspaceRoot = resolve(appRoot, "..");
 
 const publicVariables = new Set([
-  "VITE_PROPRIUM_GITHUB_AUTH_RELAY",
+  "VITE_PROPRIUM_GATEWAY_URL",
   "VITE_PROPRIUM_PLUGIN_REGISTRY_URL",
   "VITE_PROPRIUM_PLUGIN_REGISTRY_KEY",
   "VITE_PROPRIUM_PLUGIN_ARTIFACT_ORIGINS",
@@ -18,11 +18,11 @@ const publicVariables = new Set([
 
 function publicOrigins(env: Record<string, string>): string[] {
   const origins = new Set<string>();
-  for (const name of ["VITE_PROPRIUM_GITHUB_AUTH_RELAY", "VITE_PROPRIUM_PLUGIN_REGISTRY_URL"]) {
+  for (const name of ["VITE_PROPRIUM_GATEWAY_URL", "VITE_PROPRIUM_PLUGIN_REGISTRY_URL"]) {
     const value = env[name];
     if (!value) continue;
     const parsed = new URL(value);
-    if (!["https:", "http:"].includes(parsed.protocol) || parsed.username || parsed.password ||
+    if (!["https:", "http:"].includes(parsed.protocol) || parsed.username || parsed.password || parsed.pathname !== "/" || parsed.search || parsed.hash ||
         (parsed.protocol === "http:" && !["localhost", "127.0.0.1"].includes(parsed.hostname))) {
       throw new Error(`${name} must use HTTPS and contain no credentials`);
     }
