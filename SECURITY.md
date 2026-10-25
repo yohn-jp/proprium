@@ -1,25 +1,16 @@
-# Security Policy
+# Proprium security policy
 
-Scriptorium Core is a single-owner writing application. No supported public release or external hosting service is claimed by this initial source delivery.
+Report vulnerabilities privately through GitHub Security Advisories. Never publish repository credentials, private workspace content, artifacts containing secrets, or unredacted diagnostics in public issues.
 
-## Reporting
+## Target trust boundaries (not yet implemented)
 
-Report suspected vulnerabilities through private GitHub Security Advisories. Do not publish tokens, manuscript contents, private repository URLs, or unredacted server logs in public Issues.
+- GitHub is the authenticated remote authority for published user data. The browser retains a local work copy, unpushed commits, drafts and optionally a credential. No credential belongs in Git files, plugin-visible state, static assets, browser logs or artifact URLs.
+- The Browser Host alone authorizes persistent mutations and Git operations. Plugins receive bounded, versioned capabilities, not direct tokens, unrestricted filesystem access, DOM access, or Git publishing authority.
+- WASM code runs under a host-controlled Web Worker and explicit imports. WebAssembly alone does not bound total CPU, memory use, or malicious host bindings; quotas, cancellation, Worker termination, and fault tests are required before an isolation claim.
+- Artifact digests establish byte integrity, **not publisher trust**. Install/upgrade must verify identity and authorization, constrain origins and egress, and fail closed for incompatible or tampered artifacts.
+- Local browser storage may be evicted or cleared. Uncommitted and unpushed data may be lost; only a verified GitHub push establishes remote publication. Display that state honestly.
+- The intended static web deployment does not require a Proprium application server. Optional Git transport or identity services, if actually required, must be documented and threat-modeled rather than concealed as 'serverless'.
 
-## Deployment boundary
+The current source still includes Scriptorium's Node.js single-owner server and OCI deployment code. Those paths are **legacy code**, not a supported Proprium production architecture. Do not publish the inherited server as a Proprium service without a separate security review. The historical [Scriptorium security document](https://github.com/yohn-jp/scriptorium/blob/main/SECURITY.md) describes that upstream runtime.
 
-Set a unique `SCRIPTORIUM_AUTH_TOKEN` of at least 32 characters. The browser exchanges it for an HttpOnly, SameSite=Strict session cookie; session state lives in server memory. Restarting the server requires signing in again. Every authenticated session can access all projects registered with that instance. Separate tenants require separate instances and data directories.
-
-The default local listener is localhost. The OCI image listens on all container interfaces; bind its published port to localhost or put it behind a trusted HTTPS reverse proxy. Set `SCRIPTORIUM_TRUST_PROXY=1` only when that proxy controls and replaces `X-Forwarded-Proto`; this enables Secure cookies for externally HTTPS requests. Mutating API requests require a matching Origin. Never expose the instance through plain HTTP on an untrusted network.
-
-Use a least-privilege `SCRIPTORIUM_GITHUB_TOKEN` for the intended work repositories. The token stays in server process state and Git authentication environment, outside clone URLs, Git configuration, browser assets, and image layers. Do not use token-bearing URLs. Work repositories and the persistent data directory contain private writing: restrict filesystem access and protect backups accordingly.
-
-## Persistence and recovery
-
-Git-controlled YAML/Markdown is canonical. Saves compare the loaded revision under project writer coordination and retain unsaved browser drafts on conflict. Synchronization refuses divergent histories; reconcile those histories with Git before retrying. A reported commit or sync failure must be inspected before assuming the remote has the new text.
-
-Browser drafts are local recovery copies and may contain private text. They remain on the browser after logout; use a trusted browser profile and clear it deliberately when retiring the device. Private browsing, storage limits, or clearing site data can prevent recovery. The UI reports inability to store a draft; save or copy the text before leaving.
-
-Keep the data volume persistent, owned by the application user, and exclusively assigned to one running instance. Never mount unrelated host directories or user Git configuration into the container. Excluded analysis files may remain in work repositories; Core does not load models, run repository hooks, or initialize submodules.
-
-If a crash leaves `dataDir/.locks/<project-id>` behind, the Core fails closed rather than reclaiming it during another writer’s operation. Stop every process using that data directory, inspect the project’s Git status, and remove only the abandoned lock directory named by the error before restarting. Inspect any uncommitted files after interrupted saves before synchronizing.
+See [delivery and security](docs/architecture/DELIVERY-AND-SECURITY.md) for the target operational contract.

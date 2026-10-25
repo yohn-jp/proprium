@@ -1,13 +1,14 @@
 # Source provenance and licensing
 
-Scriptorium incorporates owner-authored application code extracted from `yohn-jp/arcadia-loom` with the repository owner's authorization for public MIT-licensed distribution. That authorization applies to the extracted application responsibilities; it does not grant rights to private works or unrelated third-party material. Arcadia Loom is not a runtime dependency or submodule, and its Git ancestry is not imported.
+Proprium was derived from the MIT-licensed [Scriptorium repository](https://github.com/yohn-jp/scriptorium) and preserves that repository's Git history. Some inherited owner-authored Scriptorium application code was previously extracted, with the owner's authorization, from **yohn-jp/arcadia-loom**. That authorization applies to the extracted application responsibilities; it does not license private manuscripts or unrelated material, and Arcadia Loom is not a Proprium runtime dependency.
 
-| Source responsibility | Scriptorium owner |
+| Inherited source | Source area in this fork |
 | --- | --- |
-| Manuscript/scene types and format validation | `packages/contracts`, `packages/core` |
-| Repository acquisition, ownership and synchronization | `packages/core`, `packages/api` |
-| Authoring, snapshots and mutation | Core services and public action contracts |
-| Editing, Japanese typography and recovery | `app` |
-| Narrative analysis and provider integration | Optional `modules` packages |
+| Manuscript formats and revision/mutation contracts | packages/contracts and packages/core |
+| Node Git clone, synchronization and server HTTP integration | packages/core and packages/api |
+| Editing, Japanese typography, layout and browser recovery | app |
+| Optional writing, search, diagnostics, models and assistant logic | modules |
 
-The [MIT license](../../LICENSE) covers the Scriptorium application. Third-party dependencies retain their own licenses. Check publication rights for imported code, assets, dictionaries and model artifacts before distribution. Do not include manuscripts, private evaluation corpora, credentials, cached weights or user workspaces in public source or images.
+The [repository MIT license](../../LICENSE) covers the application code subject to its terms; independent third-party packages, fonts, assets, datasets, model weights and plugin artifacts retain their respective licenses. Check license, attribution, provenance and redistribution rights **before** copying a model or plugin bundle to R2/CDN. Signing or hashing an artifact does not confer distribution rights.
+
+Do not commit or publish user workspaces, manuscripts, private evaluation inputs, credentials, caches, downloaded private models or unrelated third-party materials. Historical verification evidence committed with the fork remains distinct from Proprium's normative product documents.
