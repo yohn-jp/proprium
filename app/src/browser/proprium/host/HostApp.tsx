@@ -21,7 +21,7 @@ interface OpenFile {
   binary: boolean;
   dirty: boolean;
 }
-type SyncState = "editing" | "local-draft" | "local-committed" | "published" | "syncing" | "offline" | "conflict" | "remote-unknown";
+type SyncState = "editing" | "local-draft" | "local-committed" | "local-ahead" | "published" | "syncing" | "offline" | "conflict" | "remote-unknown";
 interface OperationMessage { tone: "info" | "error" | "success"; text: string; }
 
 const RECENTS_KEY = "proprium.host.recent-workspaces.v1";
@@ -253,6 +253,9 @@ export function HostApp(): ReactElement {
       if (pulled.state === "conflict") {
         setSyncState("conflict");
         setMessage({ tone: "error", text: `The local branch and GitHub branch diverged. Local ${pulled.localHead ?? "(empty)"}; GitHub ${pulled.remoteHead ?? "(empty)"}. Local files were preserved.` });
+      } else if (pulled.state === "local-ahead") {
+        setSyncState("local-ahead");
+        setMessage({ tone: "info", text: `Opened ${entry.title}. Local commits through ${pulled.head} are waiting to be published; GitHub is at ${pulled.remoteHead ?? "no published commit"}. Local history and files were preserved.` });
       } else {
         setMessage({ tone: "success", text: pulled.state === "fast-forwarded" ? `Opened ${entry.title} at GitHub commit ${pulled.head}.` : `Opened ${entry.title}; local branch matches GitHub.` });
       }
@@ -396,12 +399,16 @@ export function HostApp(): ReactElement {
       if (result.state === "conflict") {
         setSyncState("conflict");
         setMessage({ tone: "error", text: `GitHub and this device have diverged. Local ${result.localHead ?? "(empty)"}; remote ${result.remoteHead ?? "(empty)"}. Nothing was overwritten. Commit, inspect history, or choose another workspace before resolving.` });
+      } else if (result.state === "local-ahead") {
+        setSyncState("local-ahead");
+        setMessage({ tone: "info", text: `Local commits through ${result.head} are waiting to be published. GitHub is at ${result.remoteHead ?? "no published commit"}; local history and editor contents were preserved.` });
       } else {
         setSyncState("local-committed");
         setMessage({ tone: "success", text: result.state === "fast-forwarded" ? `Updated to GitHub commit ${result.head}.` : "This workspace already matches GitHub." });
       }
       await refresh(git, workspace!);
       if (result.state === "conflict") setSyncState("conflict");
+      else if (result.state === "local-ahead") setSyncState("local-ahead");
       else {
         const liveFile = currentFileRef.current;
         if (liveFile?.dirty) {
@@ -494,9 +501,9 @@ export function HostApp(): ReactElement {
 
   return <main className="proprium-host">
     <header className="host-topbar">
-      <a className="wordmark" href="/proprium.html" aria-label="Proprium home"><span className="wordmark-mark">P</span><span>Proprium</span></a>
+      <a className="wordmark" href="/" aria-label="Proprium home"><span className="wordmark-mark">P</span><span>Proprium</span></a>
       {workspace ? <div className="active-location"><span className="location-title">{workspace.title}</span><span className="location-branch">{workspace.identity.branch}</span></div> : <div className="topbar-subtitle">Browser workspace</div>}
-      {workspace && <div className={`save-state save-${syncState}`} aria-live="polite">{saveStateLabel(syncState, status.head)}</div>}
+      {workspace && <div className={`save-state save-${syncState}`} role="status" aria-live="polite">{saveStateLabel(syncState, status.head)}</div>}
       {workspace && <button type="button" className="quiet-button change-workspace" onClick={leaveWorkspace}>Workspaces</button>}
     </header>
 
@@ -598,6 +605,7 @@ function saveStateLabel(state: SyncState, head: string | null): string {
   if (state === "syncing") return "Syncing with GitHub";
   if (state === "published") return `Published · ${head?.slice(0, 8) ?? "confirmed"}`;
   if (state === "conflict") return "Conflict · local work preserved";
+  if (state === "local-ahead") return `Local commits await Publish · ${head?.slice(0, 8) ?? "unpublished"}`;
   if (state === "remote-unknown") return "Remote state unknown";
   if (state === "offline") return "Offline · local only";
   if (state === "local-committed") return `Committed locally · ${head?.slice(0, 8) ?? "unpublished"}`;
