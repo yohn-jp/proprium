@@ -26,6 +26,8 @@ assert.doesNotMatch(pageContents, /SCRIPTORIUM|launcher\.tsx|api\/health/u, "The
 const serviceWorker = readFileSync(serviceWorkerPath, "utf8");
 assert.match(serviceWorker, /cache\.addAll\(SHELL\)/u, "The offline shell must precache all emitted static entry assets");
 assert.match(serviceWorker, /request\.mode === "navigate"/u, "The offline shell must fall back to cached index.html for navigations");
+assert.match(serviceWorker, /new Response\(cached\.body, \{ status: cached\.status, statusText: cached\.statusText, headers: cached\.headers \}\)/u,
+  "The navigation fallback must materialize a fresh response from cached HTML and preserve its security headers");
 assert.match(serviceWorker, /proprium-static-/u, "Each Host build must use a versioned shell cache");
 assert.doesNotMatch(serviceWorker, /github\.com|plugins\//u, "The shell cache must not include remote workspaces or plugin artifacts");
 function filesUnder(directory) {

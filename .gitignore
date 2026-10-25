@@ -14,6 +14,7 @@ data/
 /host-history/
 .arcadia/
 .pnpm-store/
+.wrangler/
 *.sqlite
 *.sqlite-shm
 *.sqlite-wal
