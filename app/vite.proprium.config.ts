@@ -22,9 +22,12 @@ function publicOrigins(env: Record<string, string>): string[] {
     const value = env[name];
     if (!value) continue;
     const parsed = new URL(value);
-    if (!["https:", "http:"].includes(parsed.protocol) || parsed.username || parsed.password || parsed.pathname !== "/" || parsed.search || parsed.hash ||
+    if (!["https:", "http:"].includes(parsed.protocol) || parsed.username || parsed.password ||
         (parsed.protocol === "http:" && !["localhost", "127.0.0.1"].includes(parsed.hostname))) {
       throw new Error(`${name} must use HTTPS and contain no credentials`);
+    }
+    if (name === "VITE_PROPRIUM_GATEWAY_URL" && (parsed.pathname !== "/" || parsed.search || parsed.hash)) {
+      throw new Error(`${name} must be an origin without a path, query, or fragment`);
     }
     origins.add(parsed.origin);
   }
