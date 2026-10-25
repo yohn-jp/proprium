@@ -63,6 +63,7 @@
   --button-foreground: var(--studio-sheet); --input-border: var(--studio-muted);
 }
 .restored-host .topbar button { white-space: nowrap; }
+.restored-host .quiet-button:hover:not(:disabled) { color: var(--button-foreground); background: var(--accent-strong); }
 .host-account-label { min-width: 0; max-width: 10rem; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: .85rem; }
 .restored-host .application-status > summary { min-width: 0; box-sizing: border-box; }
 .restored-host .application-status > summary .save-state { flex: 0 0 auto; font-size: .78rem; }

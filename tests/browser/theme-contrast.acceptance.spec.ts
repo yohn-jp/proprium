@@ -117,6 +117,10 @@ test("selection, supporting copy and disabled editor controls remain readable in
     const saveDraft = page.getByRole("button", { name: "Save draft", exact: true });
     await expect(saveDraft).toBeDisabled();
     await expectReadable(saveDraft, `${testInfo.project.name} ${theme} disabled Save draft`);
+    const workspaces = page.getByRole("button", { name: "Workspaces", exact: true });
+    await workspaces.hover();
+    await expectReadable(workspaces, `${testInfo.project.name} ${theme} hovered Workspaces`);
+    await page.mouse.move(0, 0);
     if (!isMobile) {
       await expectReadable(page.locator(".st-studio-footer > span").first(), `${testInfo.project.name} ${theme} footer text`);
       await expectReadable(page.locator(".st-workspace-toolbar"), `${testInfo.project.name} ${theme} VIEW label`, "::before");
