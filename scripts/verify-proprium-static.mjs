@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import { existsSync, readFileSync } from "node:fs";
+import { existsSync, readdirSync, readFileSync } from "node:fs";
 import { resolve } from "node:path";
 
 const root = process.cwd();
@@ -28,6 +28,16 @@ assert.match(serviceWorker, /cache\.addAll\(SHELL\)/u, "The offline shell must p
 assert.match(serviceWorker, /request\.mode === "navigate"/u, "The offline shell must fall back to cached index.html for navigations");
 assert.match(serviceWorker, /proprium-static-/u, "Each Host build must use a versioned shell cache");
 assert.doesNotMatch(serviceWorker, /github\.com|plugins\//u, "The shell cache must not include remote workspaces or plugin artifacts");
+function filesUnder(directory) {
+  return readdirSync(directory, { withFileTypes: true }).flatMap(entry => {
+    const path = resolve(directory, entry.name);
+    return entry.isDirectory() ? filesUnder(path) : [path];
+  });
+}
+for (const wasmPath of filesUnder(output).filter(path => path.endsWith(".wasm"))) {
+  const publicPath = `/${wasmPath.slice(output.length + 1).split("\\").join("/")}`;
+  assert.ok(serviceWorker.includes(publicPath), `Essential browser WASM runtime ${publicPath} must be cached for offline activation`);
+}
 
 const headers = readFileSync(headersPath, "utf8");
 assert.match(headers, /X-Content-Type-Options: nosniff/u);

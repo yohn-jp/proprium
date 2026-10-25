@@ -72,7 +72,7 @@ export default defineConfig(({ command, mode }) => {
       const precache = Object.values(bundle)
         .filter(file => file.type === "asset" || file.type === "chunk")
         .map(file => file.fileName)
-        .filter(fileName => /\.(?:js|css|woff2?|svg|png|webp|ico)$/u.test(fileName))
+        .filter(fileName => /\.(?:js|css|wasm|woff2?|svg|png|webp|ico)$/u.test(fileName))
         .sort();
       const cacheVersion = createHash("sha256").update(precache.join("\n")).digest("hex").slice(0, 16);
       const serviceWorker = `const CACHE = "proprium-static-${cacheVersion}";\nconst SHELL = ["/", "/index.html", ${precache.map(file => JSON.stringify(`/${file}`)).join(", ")}];\nconst SHELL_PATHS = new Set(SHELL.map(path => new URL(path, self.location.origin).pathname));\nself.addEventListener("install", event => event.waitUntil(caches.open(CACHE).then(cache => cache.addAll(SHELL))));\nself.addEventListener("activate", event => event.waitUntil(caches.keys().then(keys => Promise.all(keys.filter(key => key.startsWith("proprium-static-") && key !== CACHE).map(key => caches.delete(key)))).then(() => self.clients.claim())));\nself.addEventListener("fetch", event => { const request = event.request; const url = new URL(request.url); if (request.method !== "GET" || url.origin !== self.location.origin) return; if (request.mode === "navigate") { event.respondWith(fetch(request).catch(async () => { const cache = await caches.open(CACHE); return (await cache.match("/index.html")) ?? (await cache.match("/")) ?? Response.error(); })); return; } if (SHELL_PATHS.has(url.pathname)) event.respondWith(caches.match(request).then(response => response ?? fetch(request))); });\n`;
@@ -88,7 +88,7 @@ export default defineConfig(({ command, mode }) => {
     envDir: workspaceRoot,
     plugins: [react(), staticHeaders],
     optimizeDeps: {
-      include: ["@isomorphic-git/lightning-fs", "buffer", "isomorphic-git", "react", "react-dom/client"],
+      include: ["@isomorphic-git/lightning-fs", "buffer", "isomorphic-git", "isomorphic-git/http/web", "react", "react-dom/client"],
       exclude: ["@bytecodealliance/jco-transpile"],
     },
     define: Object.fromEntries([...publicVariables].map(name => [
@@ -100,6 +100,9 @@ export default defineConfig(({ command, mode }) => {
     },
     server: {
       fs: { allow: [workspaceRoot] },
+    },
+    worker: {
+      format: "es",
     },
     build: {
       outDir: resolve(workspaceRoot, "dist/proprium"),
