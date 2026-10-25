@@ -19,3 +19,5 @@
 .restored-host .mobile-shell .mobile-shell-status { position: relative; inset: auto; width: auto; flex: 0 0 auto; max-height: 7rem; margin: 0; border-radius: 0; padding: .35rem .65rem; box-shadow: none; }
 .restored-host .host-message { display: flex; align-items: start; gap: .5rem; }
 .restored-host .host-message button { flex: 0 0 auto; margin-inline-start: auto; }
+.restored-host .mobile-shell:has(.mobile-shell-writing-accessories) .mobile-shell-status,
+.restored-host .mobile-shell.mobile-shell-keyboard-open .mobile-shell-status { bottom: auto; }

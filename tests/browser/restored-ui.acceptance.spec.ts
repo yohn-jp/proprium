@@ -28,6 +28,13 @@ test("recovered shells retain CodeMirror, typography, reading, theme and unsaved
   }
   await editor.press("Control+z");
   await expectEditorText(page, "元の原稿です。|漢字《かんじ》\n");
+  const mobileFooter = page.locator(".mobile-shell-footer");
+  if (await mobileFooter.isVisible()) {
+    const shelf = await page.locator(".mobile-shell-status").boundingBox();
+    const footer = await mobileFooter.boundingBox();
+    expect(shelf).not.toBeNull(); expect(footer).not.toBeNull();
+    expect(Math.abs(shelf!.y + shelf!.height - footer!.y)).toBeLessThan(2);
+  }
   await page.screenshot({ path: testInfo.outputPath("restored-ui.png"), fullPage: true });
   await testInfo.attach("restored-ui", { path: testInfo.outputPath("restored-ui.png"), contentType: "image/png" });
 });
