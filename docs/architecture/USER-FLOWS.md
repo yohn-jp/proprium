@@ -248,46 +248,41 @@ flowchart TD
 
 閉じるだけでRejectと扱わず、未処理提案を保持する。承認はcommit/publishの許可ではない。previewの切り詰め表示だけで全変更を承認させず、完全な対象と差分へ到達できること。切断した外部要求を再接続後に自動replayしない。
 
-## F11 — Live MCP公開・接続・切断
+## F11 — Active Browser HostへのMCP中継
 
 ```mermaid
 flowchart TD
-  W01["W01 Workspace / Live off"] -->|任意で公開設定| M01["M01 Gateway・Owner Key・tool選択"]
-  M01 -->|Enable / owner認証| Connecting["session作成 / owner token / SSE接続"]
-  Connecting -->|接続確認| M02["M02 接続中 / Workspace・generation表示"]
-  Connecting -->|owner無効・Live無効・proxy失敗| X04["X04 理由と再設定 / editor維持"]
-  X04 --> M01
-  M02 -->|clientを認可| M03["M03 F12"]
-  M02 -->|panelを閉じるだけ| Hidden["UI非表示 / 同一session維持"]
-  Hidden -->|panelを再表示| M02
-  M02 -->|明示Stop・Workspace終了| Off["SSE終了 / session・client grants失効"]
-  M02 -->|browser停止・network断・Gateway再起動| Lost["切断 / pending要求終了 / 旧認可失効"]
-  Lost -->|所有者が再接続を選ぶ| M01
-  Off -->|local作業継続| W01
+  W01["W01 Browser HostがWorkspaceを開く"] -->|自動SSE接続| Active["Gatewayが最新接続HostをActiveに設定"]
+  Active --> Client["MCP ClientがCloudflare Access認証"]
+  Client -->|tools/list| Fixed["常に8ツールを列挙"]
+  Client -->|tools/call + repository_id| Resolve["Active Hostが対象Repositoryとbranchを解決"]
+  Resolve -->|既知・利用可能| Run["Git/ファイル/Plugin実行"]
+  Resolve -->|未登録・曖昧| Failed["明示エラー / 暗黙fallbackなし"]
+  Run -->|Proposal| Q01["Q01 Browser Hostで明示レビュー / F10"]
+  Run -->|結果| Client
+  Active -->|タブ・通信切断| Lost["Activeなし / tools/list維持・callsはUnavailable"]
+  Lost -->|別Hostが新規接続| Active
 ```
 
-再接続は新しいsession/generationを作り、M03でclientを再認可する。GitHub OAuth tokenをOwner Keyに代用しない。ブラウザーを閉じたままの常時MCPを約束しない。
+Gatewayはリポジトリを保持せず、同時に複数のBrowser Hostが接続していても最後に接続した1つだけをActiveにする。Active切断後は古い接続へ暗黙の切替をしない。ユーザーのOwner Key、個別MCP Client Token、クライアント権限・ツール公開選択UIは存在しない。
 
-## F12 — MCP client認可・呼出し・失効
+## F12 — repository_id付きMCP呼出し
 
 ```mermaid
 flowchart TD
-  M02["M02 live Workspace"] -->|client名・tool subset選択| M03["M03 client管理"]
-  M03 -->|Authorize| Token["個別tokenを一度表示 / endpointは別表示"]
-  Token -->|外部clientに安全に設定| Client["外部MCP client"]
-  Client -->|Authorization bearer| Check{"token・session・capability・deadline"}
-  Check -->|無効・失効・scope外| Denied["拒否 / Workspace内容を返さない"]
-  Check -->|有効| Host["matching Browser HostへSSE / readまたはproposal"]
-  Host -->|revision付き結果POST| Client
-  Host -->|proposal| Q01["Q01 Hostの明示review / F10"]
-  Host -->|timeout・cancel・切断| Unavailable["未完了を区別 / mutation再送なし"]
-  Unavailable --> Client
-  M03 -->|Revoke| Revoked["対象client失効 / 他clientと分離"]
-  Revoked --> M02
-  Denied -->|所有者が再認可する場合| M03
+  Client["MCP Client"] -->|Cloudflare Access| Gateway["Gateway"]
+  Gateway -->|tools/list| Registry["固定8ツール / 接続不要"]
+  Gateway -->|tools/call| Active{"Active Browser Host?"}
+  Active -->|なし| Unavailable["503 Unavailable"]
+  Active -->|あり| Repository{"repository_idとbranchを解決"}
+  Repository -->|解決不可| Failed["repository_unavailable / ambiguous"]
+  Repository -->|解決成功| Tool["対象Repositoryの処理"]
+  Tool -->|読み取り| Client
+  Tool -->|提案| Review["Browser Hostが内容・revisionを承認"]
+  Review -->|明示承認| Worktree["ローカルWorktreeへ適用。commit/publishなし"]
 ```
 
-読取は`workspace_info / files_list / file_read / git_status / git_log / capabilities_list`のgrant内、`plugin_call`は有効なpluginとHost grant内、`proposal_submit`は提案のみ。tokenの再表示・URL格納・log出力はしない。`/healthz`成功はこの認可の証明ではない。
+`repositories_list` は引数なしでローカル既知リポジトリを列挙する。それ以外のツールはimmutable `repository_id` を必須とし、複数branchがある場合は `branch` を要求する。未アクティブRepositoryのPlugin呼出しは明示エラーとする。GitHub OAuthの有無や公開GitHub HEADはローカルWorktreeの黙示的な切替を許可しない。ブラウザーが閉じれば実行できないが、ツール一覧は一定とする。
 
 ## F13 — Desktop配置・panelの生存期間
 
@@ -343,11 +338,11 @@ flowchart TD
   Stop -->|新originを確認して設定 / 秘密の再利用なし| S01
   S01 -->|GitHub sign out| Signout["GitHub session終了 / local files・commitsを保持"]
   Signout --> S01
-  S01 -->|Live認可の管理| M03["M03 F12 / GitHub accountとは別"]
+  S01 -->|MCP接続状態の確認| M03["M03 接続先URLとActive状態 / F11"]
   S01 -->|戻る| W01
 ```
 
-接続先URL以外のtoken/Owner Keyをpreferencesへ保存しない。GitHub sign outはlocal削除でもMCP grant管理の代替でもない。Gateway変更時は新originへ旧秘密情報を自動送信せず、別の信頼判断を要求する。
+Proprium MCP認証TokenやOwner Keyは発行も保存もしない。GitHub OAuth Tokenは既存どおりブラウザー内で保持し、MCP認証には使わない。Gateway接続先変更時は新Originへの接続を再確立する。
 
 ## F16 — 不確実な保存・journal回復・機能別error
 

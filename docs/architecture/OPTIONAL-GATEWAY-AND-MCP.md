@@ -14,26 +14,26 @@ The Gateway is an **optional enhancement**, deployable independently on a server
 | WASM plugins on local approved/cached artifacts | Available | Available |
 | GitHub OAuth login via this product | Unavailable | Available |
 | GitHub sync / Smart HTTP fallback | Only with independently available valid authentication and compatible direct REST operations; never imply unauthenticated push | OAuth through Gateway; direct REST first and bounded Smart HTTP relay as needed |
-| Live Workspace MCP | Unavailable | Available only while the authorized Browser Host is connected |
+| Live Workspace MCP | Unavailable | Fixed eight-tool registry; execution available only while an active Browser Host is connected |
 
 ## One optional Go executable
 
-The target distribution is a **single Go executable** running as a regular, unprivileged user on a configurable non-privileged port, normally `127.0.0.1:8080`. No Node server, OCI container, administrator/root privilege, database, durable worktree, queue, KV, Redis or constantly running per-user compute is required. Memory-only session/connection/request metadata is allowed; restart invalidates live sessions and requires reconnection/re-authorization. Binding to a public interface is an explicit operator security decision, never the default.
+The target distribution is a **single Go executable** running as a regular, unprivileged user on a configurable non-privileged port, normally `127.0.0.1:8080`. No Node server, OCI container, administrator/root privilege, database, durable worktree, queue, KV, Redis or constantly running per-user compute is required. Memory-only session/connection/request metadata is allowed; restart invalidates live sessions and requires Browser Host reconnection. The listener is restricted to loopback behind a Cloudflare Access-protected Tunnel; public binding is not supported.
 
 Only two capabilities are served:
 
 1. **GitHub OAuth/transport**: narrowly scoped device-code and token exchange, and Smart HTTP `upload-pack` / `receive-pack` fallback. Check Host origin, repository immutable identity, permissions, upstream route/method, body limits, redirection and credentials. Do not turn this into an open proxy. GitHub tokens remain Host-owned and must not be persisted by the Gateway.
-2. **Live Workspace MCP**: an authenticated Streamable HTTP MCP endpoint that exposes tools for the actively connected Browser Host. No separate GitHub-backed MCP, repository clone, source index or server-side plugin execution.
+2. **Live Workspace MCP**: a Cloudflare Access-protected Streamable HTTP MCP endpoint with a fixed tool list and dispatch to the latest connected active Browser Host. No separate GitHub-backed MCP, repository clone, source index or server-side plugin execution.
 
 The Gateway does **not** store user files, Git objects, search indexes, credentials or Workspace snapshots. It must not publish/commit changes or bypass Host approval. A Gateway restart may interrupt outstanding operations; an ambiguous mutation must not be blindly replayed.
 
 ## Live Workspace connection and authority
 
-The Browser Host explicitly opts in, initiates an outbound **SSE subscription over HTTP**, receives scoped MCP requests, and returns bounded results using authenticated HTTP POST. No WebSocket or fixed-interval polling is part of the target. The Gateway holds only active connection registrations and pending request correlations in memory. MCP tools delegate to the current Host's existing revision-aware repository and capability interfaces; MCP clients never receive unrestricted browser filesystem, plugin, Git, or credential authority.
+The Browser Host automatically initiates an outbound **SSE subscription over HTTP** while open, receives repository-scoped MCP requests, and returns bounded results through HTTP POST. Gateway never issues separate Proprium owner/client bearer tokens. No WebSocket or fixed-interval polling is part of the target. The Gateway holds only active connection registrations and pending request correlations in memory. MCP tools delegate to the current Host's existing revision-aware repository and capability interfaces; MCP clients never receive unrestricted browser filesystem, plugin, Git, or credential authority.
 
-- Associate every request/result with an authenticated MCP client, approved Workspace, connection generation, unique request ID, allowed capability and deadline. Reject stale/duplicate/cross-workspace responses and honor cancellation and size budgets.
+- Associate every request/result with the active Browser Host session, connection generation, unique request ID, requested repository_id and deadline. Reject stale/duplicate/cross-session responses and honor cancellation and size budgets. All eight tools are always discoverable, but execution requires an active Browser Host.
 - Read tools expose only files and metadata permitted by the Host. Mutations are reviewable **proposals**, not direct apply/commit/push; the owner must approve in the Browser Host with expected revisions verified.
-- Explicit opt-in, revocation and short-lived connection authorization are mandatory. Do not accept anonymous public MCP access, rely only on browser CORS for authentication, or treat a GitHub access token as a Gateway-wide MCP authorization without validation.
+- Cloudflare Access is the network authentication boundary for all externally reachable Gateway routes. No Owner Key, client pairing/token, or capability publication UI. Do not expose the loopback Gateway publicly, rely on CORS for internet authentication, or treat GitHub access tokens as MCP credentials.
 - When the tab/browser is suspended, closed, disconnected or the server restarts, tools report Workspace unavailable; there is no offline/always-on MCP guarantee. Desktop foreground is the principal use case; mobile background execution is not promised.
 - The target MCP transport must conform to the selected stable MCP specification; pin and test its initialize, tools/list, tools/call, cancellations and errors. Do not copy deprecated Scriptorium session semantics without verification.
 
@@ -47,7 +47,7 @@ Cloudflare Tunnel does not imply unlimited bandwidth/request counts or a particu
 
 ## Implementation and release gates
 
-The Go relay must pass equivalent security and GitHub interoperability tests when its transport or authorization boundaries change. Browser Host must demonstrate a zero-Gateway cold start and local edit/commit/plugin execution, then opt-in connection, GitHub authorization, exact-SHA publication with fallback, authenticated MCP read and proposal, rejection of unauthenticated/foreign requests, disconnect/restart handling, desktop/mobile browser behavior and actual HTTPS proxy forwarding. Distinguish emulated browser tests from physical-device certification.
+The Go relay must pass equivalent security and GitHub interoperability tests when its transport or authorization boundaries change. Browser Host must demonstrate a zero-Gateway cold start and local edit/commit/plugin execution, then active Browser Host connection, GitHub authorization, exact-SHA publication with fallback, edge-authenticated MCP read and proposal, rejection of foreign-origin requests, disconnect/restart handling, desktop/mobile browser behavior and actual HTTPS proxy forwarding. Distinguish emulated browser tests from physical-device certification.
 
 The release pipeline must (a) build/test the Go executable with no privileged runtime or persistent database, (b) publish versioned binaries and checksums as artifacts/releases, (c) remove the obsolete relay Worker deployment path while preserving the static Host release, and (d) validate no legacy worker configuration remains active after cutover. Repository removal of the former Relay implementation does not delete any remote Worker. Public Gateway cutover and remote resource retirement require independent operational verification.
 

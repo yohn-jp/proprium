@@ -268,16 +268,11 @@ shutil.copyfile(src,out)
         gateway_url = f"http://{listen}"
         request = urllib.request.Request(gateway_url + "/live/sessions", data=json.dumps({"workspaceId": "test", "generation": "1", "capabilities": []}).encode(),
             headers={"Content-Type": "application/json", "Origin": "https://proprium.yohn.jp"})
-        # Owner Key is generated during setup and held only in the private gateway config.
-        owner_line = next(line for line in (config_home / "proprium/gateway.env").read_text().splitlines() if line.startswith("PROPRIUM_OWNER_KEY="))
-        owner = owner_line.split("=", 1)[1]
-        request.add_header("Authorization", "Bearer " + owner)
         with urllib.request.urlopen(request, timeout=5) as response:
             session = json.load(response)
         event_request = urllib.request.Request(
             f"{gateway_url}/live/sessions/{session['sessionId']}/events",
-            headers={"Authorization": "Bearer " + session["ownerToken"],
-                     "Origin": "https://proprium.yohn.jp", "Accept": "text/event-stream"})
+            headers={"Origin": "https://proprium.yohn.jp", "Accept": "text/event-stream"})
         stream_ready = threading.Event()
         stream_finished = threading.Event()
         stream_errors = []
@@ -301,7 +296,7 @@ shutil.copyfile(src,out)
         assert blocked_update.returncode != 0 and "Active MCP" in blocked_update.stderr, "active stream did not protect update"
         assert os.readlink(data / "current") == "releases/1.0.0"
         assert not stream_finished.is_set(), "blocked update closed the active MCP stream"
-        assert_no_secret_argv(env, unit, runtime, secret_token, access_secret, owner, session["ownerToken"])
+        assert_no_secret_argv(env, unit, runtime, secret_token, access_secret)
         stop = cli_run("stop", check=False)
         assert stop.returncode != 0 and "Active MCP" in stop.stderr, "active MCP session did not protect stop"
         run([cli, "stop", "--non-interactive", "--maintenance"] + options[1:], env=env, check=True, timeout=30)
@@ -312,7 +307,7 @@ shutil.copyfile(src,out)
         marker = work / "shell-executed"
         injection = f"$(touch${{IFS}}{marker})" + "x" * 40
         gateway_config.write_text("\n".join(
-            f"PROPRIUM_OWNER_KEY={injection}" if line.startswith("PROPRIUM_OWNER_KEY=") else line
+            f"GITHUB_CLIENT_ID={injection}" if line.startswith("GITHUB_CLIENT_ID=") else line
             for line in original_config.splitlines()) + "\n")
         gateway_config.chmod(0o600)
         cli_run("status", check=False)
@@ -401,7 +396,7 @@ os.execv(os.environ['LIFECYCLE_REAL_MV'], [os.environ['LIFECYCLE_REAL_MV']]+args
         assert os.readlink(data / "current") == "releases/1.0.0"
         assert cli_run("status").returncode == 0
         journal = run(["journalctl", "--user", "-u", unit, "--no-pager"], env=env).stdout
-        assert secret_token not in journal and access_secret not in journal and owner not in journal and session["ownerToken"] not in journal, "service journal leaked a secret"
+        assert secret_token not in journal and access_secret not in journal, "service journal leaked a secret"
 
         # A second real unit exercises credentials-file cloudflared argv/config and environment isolation.
         credential_unit = unit.removesuffix(".service") + "-credentials.service"

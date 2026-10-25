@@ -103,7 +103,8 @@ load_map() {
   key=${line%%=*}; value=${line#*=}
   [[ $key =~ ^[A-Z][A-Z0-9_]*$ && ! -v map[$key] && $value != *$'\r'* && $value != *$'\n'* ]] || fail "Invalid or duplicate setting in $file."
   case "$name:$key" in
-   G:PROPRIUM_LISTEN_ADDR|G:PROPRIUM_HOST_ORIGIN|G:PROPRIUM_PUBLIC_URL|G:GITHUB_CLIENT_ID|G:PROPRIUM_OWNER_KEY|G:PROPRIUM_UPSTREAM_TIMEOUT|T:TUNNEL_TOKEN|S:TUNNEL_MODE|S:TUNNEL_ID|S:METRICS|A:CF_ACCESS_CLIENT_ID|A:CF_ACCESS_CLIENT_SECRET) ;;
+   G:PROPRIUM_OWNER_KEY) continue ;; # obsolete, discarded on migration
+   G:PROPRIUM_LISTEN_ADDR|G:PROPRIUM_HOST_ORIGIN|G:PROPRIUM_PUBLIC_URL|G:GITHUB_CLIENT_ID|G:PROPRIUM_UPSTREAM_TIMEOUT|T:TUNNEL_TOKEN|S:TUNNEL_MODE|S:TUNNEL_ID|S:METRICS|A:CF_ACCESS_CLIENT_ID|A:CF_ACCESS_CLIENT_SECRET) ;;
    *) fail "Unknown setting $key in $file.";;
   esac
   # shellcheck disable=SC2004
@@ -125,12 +126,11 @@ loopback() {
  ((10#${BASH_REMATCH[1]} >= 1024 && 10#${BASH_REMATCH[1]} <= 65535))
 }
 validate_config() {
- local owner=${G[PROPRIUM_OWNER_KEY]:-} token=${T[TUNNEL_TOKEN]:-}
+ local token=${T[TUNNEL_TOKEN]:-}
  # Check lengths separately: large regex repetitions can exhaust libc regex memory.
  loopback "${G[PROPRIUM_LISTEN_ADDR]:-}" || fail 'Gateway listen must be 127.0.0.1:1024-65535.'
  if ! origin "${G[PROPRIUM_HOST_ORIGIN]:-}" || ! origin "${G[PROPRIUM_PUBLIC_URL]:-}"; then fail 'Host and public URL must be canonical HTTPS origins.'; fi
  [[ ${G[GITHUB_CLIENT_ID]:-} =~ ^[a-zA-Z0-9_-]{10,128}$ ]] || fail 'Invalid GitHub Client ID; run proprium setup.'
- [[ ${#owner} -ge 32 && ${#owner} -le 4096 && ${owner} =~ ^[[:graph:]]+$ ]] || fail 'Invalid Owner Key; keep a private printable key of at least 32 bytes.'
  loopback "${S[METRICS]:-}" || fail 'Tunnel metrics must be 127.0.0.1:1024-65535.'
  [[ ${S[METRICS]} != "${G[PROPRIUM_LISTEN_ADDR]}" ]] || fail 'Gateway and Tunnel metrics ports must differ.'
  case ${S[TUNNEL_MODE]:-} in
@@ -149,6 +149,7 @@ load_config() {
  load_map "$CONFIG/gateway.env" G; load_map "$CONFIG/tunnel.env" T; load_map "$CONFIG/settings" S
  A=(); [[ ! -e $CONFIG/access.env ]] || load_map "$CONFIG/access.env" A
  validate_config
+ if grep -q '^PROPRIUM_OWNER_KEY=' "$CONFIG/gateway.env"; then write_map "$CONFIG/gateway.env" G; fi
 }
 ask() {
  local name=$1 prompt=$2 secret=${3:-0} value
@@ -169,7 +170,6 @@ setup() {
  PUBLIC=${PUBLIC:-${G[PROPRIUM_PUBLIC_URL]:-}}; [[ -n $PUBLIC ]] || ask PUBLIC 'Gateway public HTTPS origin'
  CLIENT=${CLIENT:-${G[GITHUB_CLIENT_ID]:-}}; [[ -n $CLIENT ]] || ask CLIENT 'GitHub OAuth Client ID'
  G[PROPRIUM_PUBLIC_URL]=$PUBLIC; G[GITHUB_CLIENT_ID]=$CLIENT
- if [[ -z ${G[PROPRIUM_OWNER_KEY]:-} ]]; then G[PROPRIUM_OWNER_KEY]=$(od -An -N48 -tx1 /dev/urandom | tr -d ' \n'); fi
  S[METRICS]=${METRICS:-${S[METRICS]:-127.0.0.1:20000}}
  [[ -z $TOKEN_FILE || -z $CREDS_FILE ]] || fail 'Choose token or credentials, not both.'
  if [[ -z ${S[TUNNEL_MODE]:-} ]]; then
@@ -463,7 +463,7 @@ child_environment() {
 }
 supervise() {
  private_dir "$RUNTIME"; load_config
- unset PROPRIUM_OWNER_KEY TUNNEL_TOKEN CF_ACCESS_CLIENT_ID CF_ACCESS_CLIENT_SECRET
+ unset TUNNEL_TOKEN CF_ACCESS_CLIENT_ID CF_ACCESS_CLIENT_SECRET
  [[ ! -L $RUNTIME/supervisor.lock ]] || fail 'Unsafe supervisor lock.'
  exec 8>"$RUNTIME/supervisor.lock"; flock -n 8 || fail 'Supervisor already running.'
  local ver gateway_pid='' tunnel_pid='' code=0 key

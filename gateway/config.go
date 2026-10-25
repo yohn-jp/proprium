@@ -24,7 +24,6 @@ type Config struct {
 	HostOrigin      string
 	PublicURL       string
 	GitHubClientID  string
-	OwnerKey        string
 	UpstreamTimeout time.Duration
 }
 
@@ -36,7 +35,6 @@ func LoadConfig() (Config, error) {
 		HostOrigin:      strings.TrimSpace(os.Getenv("PROPRIUM_HOST_ORIGIN")),
 		PublicURL:       strings.TrimSpace(os.Getenv("PROPRIUM_PUBLIC_URL")),
 		GitHubClientID:  strings.TrimSpace(os.Getenv("GITHUB_CLIENT_ID")),
-		OwnerKey:        os.Getenv("PROPRIUM_OWNER_KEY"),
 		UpstreamTimeout: defaultUpstreamTimeout,
 	}
 	if raw := os.Getenv("PROPRIUM_UPSTREAM_TIMEOUT"); raw != "" {
@@ -71,6 +69,9 @@ func (c Config) Validate() error {
 	if err != nil || port < 0 || port > 65535 || port > 0 && port < 1024 {
 		return errors.New("PROPRIUM_LISTEN_ADDR must use an unprivileged port (1024-65535), or 0 for an ephemeral port")
 	}
+	if !isLoopbackHost(listenHost) {
+		return errors.New("PROPRIUM_LISTEN_ADDR must bind to loopback: Cloudflare Tunnel is the only public ingress")
+	}
 	if err := validateOrigin("PROPRIUM_HOST_ORIGIN", c.HostOrigin, true); err != nil {
 		return err
 	}
@@ -82,19 +83,6 @@ func (c Config) Validate() error {
 	}
 	if !validClientID(c.GitHubClientID) {
 		return errors.New("GITHUB_CLIENT_ID must contain 10-128 letters, digits, underscores, or hyphens")
-	}
-	if c.OwnerKey != "" {
-		if len([]byte(c.OwnerKey)) < 32 || len([]byte(c.OwnerKey)) > 4096 {
-			return errors.New("PROPRIUM_OWNER_KEY must be between 32 and 4096 bytes when configured")
-		}
-		for _, b := range []byte(c.OwnerKey) {
-			if b < 0x21 || b > 0x7e {
-				return errors.New("PROPRIUM_OWNER_KEY must use printable ASCII without spaces")
-			}
-		}
-	}
-	if c.OwnerKey != "" && c.PublicURL == "" {
-		return errors.New("PROPRIUM_PUBLIC_URL is required when Live Workspace MCP is enabled")
 	}
 	if c.UpstreamTimeout < time.Second || c.UpstreamTimeout > 10*time.Minute {
 		return errors.New("upstream timeout must be between 1s and 10m")

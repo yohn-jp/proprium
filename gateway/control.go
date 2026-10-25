@@ -7,7 +7,6 @@ import (
 type controlSnapshot struct {
 	Sessions  int  `json:"sessions"`
 	Streams   int  `json:"streams"`
-	Clients   int  `json:"clients"`
 	Pending   int  `json:"pending"`
 	Quiescing bool `json:"quiescing"`
 }
@@ -15,7 +14,7 @@ type controlSnapshot struct {
 func (r *LiveRegistry) controlSnapshot() controlSnapshot {
 	r.mu.Lock()
 	defer r.mu.Unlock()
-	snapshot := controlSnapshot{Sessions: len(r.sessions), Clients: len(r.clients), Pending: r.registrations, Quiescing: r.quiescing}
+	snapshot := controlSnapshot{Sessions: len(r.sessions), Pending: r.registrations, Quiescing: r.quiescing}
 	for _, session := range r.sessions {
 		if session.stream {
 			snapshot.Streams++
@@ -32,7 +31,7 @@ func (r *LiveRegistry) quiesce(maintenance bool) bool {
 	for _, session := range r.sessions {
 		pending += len(session.pending)
 	}
-	if !maintenance && (len(r.sessions) != 0 || len(r.clients) != 0 || pending != 0) {
+	if !maintenance && (len(r.sessions) != 0 || pending != 0) {
 		return false
 	}
 	r.quiescing = true

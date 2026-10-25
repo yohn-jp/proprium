@@ -3,8 +3,6 @@ package main
 import (
 	"context"
 	"crypto/rand"
-	"crypto/sha256"
-	"crypto/subtle"
 	"encoding/hex"
 	"encoding/json"
 	"errors"
@@ -14,7 +12,6 @@ import (
 	"net"
 	"net/http"
 	"net/url"
-	"sort"
 	"strings"
 	"sync"
 	"time"
@@ -23,53 +20,37 @@ import (
 const (
 	maxLiveBodyBytes        = 1 << 20
 	maxLiveSessions         = 32
-	maxLiveClients          = 16
 	maxLivePending          = 64
 	liveEventQueue          = 128
 	maxLiveName             = 128
 	liveConnectWindow       = 60 * time.Second
-	liveInactiveTokenWindow = 5 * time.Minute
-	maxInactiveClientTokens = maxLiveSessions * maxLiveClients
 	liveKeepaliveInterval   = 30 * time.Second
 )
 
-type LiveConfig struct{ OwnerKey, HostOrigin, PublicURL, ListenAddr string }
+type LiveConfig struct{ HostOrigin, PublicURL, ListenAddr string }
 type LiveRegistry struct {
-	config            LiveConfig
-	keepaliveInterval time.Duration
-	mu                sync.Mutex
-	sessions          map[string]*liveSession
-	clients           map[[32]byte]*liveClient
-	inactiveTokens    map[[32]byte]time.Time
-	registrations     int
-	quiescing         bool
+    config LiveConfig
+    keepaliveInterval time.Duration
+    mu sync.Mutex
+    sessions map[string]*liveSession
+    activeSessionID string
+    registrations int
+    quiescing bool
 }
 type liveSession struct {
-	id, workspaceID, generation string
-	ownerHash                   [32]byte
-	capabilities                map[string]struct{}
-	clients                     map[string]*liveClient
-	pending                     map[string]*livePending
-	events                      chan liveEvent
-	closed                      chan struct{}
-	connectTimer                *time.Timer
-	stream, dead                bool
-}
-type liveClient struct {
-	id, name     string
-	tokenHash    [32]byte
-	capabilities map[string]struct{}
-	session      *liveSession
-	inflight     map[string]func()
-	rpcIDs       map[string]string
+    id, workspaceID, generation string
+    pending map[string]*livePending
+    events chan liveEvent
+    closed chan struct{}
+    connectTimer *time.Timer
+    stream, dead bool
 }
 type livePending struct {
-	requestID, rpcID string
-	client           *liveClient
-	result           chan liveResponse
-	cancel           func()
-	response         liveResponse
-	settled          bool
+    requestID string
+    result chan liveResponse
+    cancel func()
+    response liveResponse
+    settled bool
 }
 type liveEvent struct {
 	name string
@@ -81,29 +62,24 @@ type liveResponse struct {
 	err    string
 }
 type liveSessionRequest struct {
-	WorkspaceID  string   `json:"workspaceId"`
-	Generation   string   `json:"generation"`
-	Capabilities []string `json:"capabilities"`
+    WorkspaceID string `json:"workspaceId"`
+    Generation string `json:"generation"`
 }
 type liveResponseRequest struct {
-	RequestID   string          `json:"requestId"`
-	WorkspaceID string          `json:"workspaceId"`
-	Generation  string          `json:"generation"`
-	Status      string          `json:"status"`
-	Result      json.RawMessage `json:"result,omitempty"`
-	Error       string          `json:"error,omitempty"`
-}
-type liveClientRequest struct {
-	Name         string   `json:"name"`
-	Capabilities []string `json:"capabilities"`
+    RequestID string `json:"requestId"`
+    WorkspaceID string `json:"workspaceId"`
+    Generation string `json:"generation"`
+    Status string `json:"status"`
+    Result json.RawMessage `json:"result,omitempty"`
+    Error string `json:"error,omitempty"`
 }
 
 func NewLiveRegistry(config LiveConfig) *LiveRegistry {
-	return &LiveRegistry{config: config, keepaliveInterval: liveKeepaliveInterval, sessions: make(map[string]*liveSession), clients: make(map[[32]byte]*liveClient), inactiveTokens: make(map[[32]byte]time.Time)}
+	return &LiveRegistry{config: config, keepaliveInterval: liveKeepaliveInterval, sessions: make(map[string]*liveSession)}
 }
 
 func registerLiveRoutes(s *Server) {
-	r := NewLiveRegistry(LiveConfig{OwnerKey: s.config.OwnerKey, HostOrigin: s.config.HostOrigin, PublicURL: s.config.PublicURL, ListenAddr: s.config.ListenAddr})
+	r := NewLiveRegistry(LiveConfig{HostOrigin: s.config.HostOrigin, PublicURL: s.config.PublicURL, ListenAddr: s.config.ListenAddr})
 	s.live = r
 	s.mux.HandleFunc("/live/sessions", r.ServeHTTP)
 	s.mux.HandleFunc("/live/sessions/", r.ServeHTTP)
@@ -111,10 +87,6 @@ func registerLiveRoutes(s *Server) {
 func registerMCPRoute(s *Server) { s.mux.Handle("/mcp", s.live.MCPHandler()) }
 
 func (r *LiveRegistry) ServeHTTP(w http.ResponseWriter, req *http.Request) {
-	if r.config.OwnerKey == "" {
-		liveJSON(w, req, r.config.HostOrigin, http.StatusServiceUnavailable, map[string]string{"error": "live_mcp_disabled"})
-		return
-	}
 	if !r.validLiveRequest(w, req) {
 		return
 	}
@@ -157,17 +129,6 @@ func (r *LiveRegistry) ServeHTTP(w http.ResponseWriter, req *http.Request) {
 		r.events(w, req, parts[0])
 	case len(parts) == 2 && parts[1] == "responses" && req.Method == http.MethodPost:
 		r.acceptResponse(w, req, parts[0])
-	case len(parts) == 2 && parts[1] == "clients":
-		switch req.Method {
-		case http.MethodGet:
-			r.listClients(w, req, parts[0])
-		case http.MethodPost:
-			r.createClient(w, req, parts[0])
-		default:
-			liveJSON(w, req, r.config.HostOrigin, http.StatusMethodNotAllowed, map[string]string{"error": "method_not_allowed"})
-		}
-	case len(parts) == 3 && parts[1] == "clients" && req.Method == http.MethodDelete:
-		r.revokeClient(w, req, parts[0], parts[2])
 	case len(parts) == 1 && req.Method == http.MethodDelete:
 		r.revokeSession(w, req, parts[0])
 	default:
@@ -281,15 +242,6 @@ func readLiveJSON(w http.ResponseWriter, req *http.Request, out any) bool {
 	}
 	return true
 }
-func bearerToken(req *http.Request) string {
-	v := req.Header.Get("Authorization")
-	const p = "Bearer "
-	if !strings.HasPrefix(v, p) || len(v) <= len(p) || len(v) > len(p)+4096 || strings.ContainsAny(v[len(p):], " \t\r\n") {
-		return ""
-	}
-	return v[len(p):]
-}
-func secureHash(v string) [32]byte { return sha256.Sum256([]byte(v)) }
 func randomLiveToken(bytes int) (string, error) {
 	b := make([]byte, bytes)
 	if _, err := rand.Read(b); err != nil {
@@ -298,26 +250,13 @@ func randomLiveToken(bytes int) (string, error) {
 	return hex.EncodeToString(b), nil
 }
 
-func (r *LiveRegistry) ownerSession(req *http.Request, id string) (*liveSession, bool) {
-	token := bearerToken(req)
-	if token == "" {
-		return nil, false
-	}
-	hash := secureHash(token)
+func (r *LiveRegistry) sessionByID(_ *http.Request, id string) (*liveSession, bool) {
 	r.mu.Lock()
 	defer r.mu.Unlock()
 	s := r.sessions[id]
-	if s == nil || s.dead || subtle.ConstantTimeCompare(s.ownerHash[:], hash[:]) != 1 {
-		return nil, false
-	}
-	return s, true
+	return s, s != nil && !s.dead
 }
 func (r *LiveRegistry) createSession(w http.ResponseWriter, req *http.Request) {
-	token := bearerToken(req)
-	if token == "" || len(token) != len(r.config.OwnerKey) || subtle.ConstantTimeCompare([]byte(token), []byte(r.config.OwnerKey)) != 1 {
-		liveJSON(w, req, r.config.HostOrigin, http.StatusUnauthorized, map[string]string{"error": "owner_authorization_required"})
-		return
-	}
 	r.mu.Lock()
 	if r.quiescing {
 		r.mu.Unlock()
@@ -339,57 +278,35 @@ func (r *LiveRegistry) createSession(w http.ResponseWriter, req *http.Request) {
 	if !readLiveJSON(w, req, &input) {
 		return
 	}
-	if len(input.WorkspaceID) < 1 || len(input.WorkspaceID) > maxLiveName || len(input.Generation) < 1 || len(input.Generation) > maxLiveName || !validCapabilities(input.Capabilities) {
-		liveJSON(w, req, r.config.HostOrigin, http.StatusBadRequest, map[string]string{"error": "invalid_session"})
-		return
-	}
-	id, err := randomLiveToken(16)
-	if err != nil {
-		liveJSON(w, req, r.config.HostOrigin, http.StatusInternalServerError, map[string]string{"error": "internal_error"})
-		return
-	}
-	ownerToken, err := randomLiveToken(32)
-	if err != nil {
-		liveJSON(w, req, r.config.HostOrigin, http.StatusInternalServerError, map[string]string{"error": "internal_error"})
-		return
-	}
-	caps := make(map[string]struct{}, len(input.Capabilities))
-	for _, v := range input.Capabilities {
-		caps[v] = struct{}{}
-	}
-	s := &liveSession{id: id, workspaceID: input.WorkspaceID, generation: input.Generation, ownerHash: secureHash(ownerToken), capabilities: caps, clients: make(map[string]*liveClient), pending: make(map[string]*livePending), events: make(chan liveEvent, liveEventQueue), closed: make(chan struct{})}
-	r.mu.Lock()
-	if r.quiescing {
-		r.mu.Unlock()
-		liveJSON(w, req, r.config.HostOrigin, http.StatusServiceUnavailable, map[string]string{"error": "gateway_quiescing"})
-		return
-	}
-	if len(r.sessions) >= maxLiveSessions {
-		r.mu.Unlock()
-		liveJSON(w, req, r.config.HostOrigin, http.StatusServiceUnavailable, map[string]string{"error": "session_capacity_reached"})
-		return
-	}
-	r.sessions[id] = s
-	s.connectTimer = time.AfterFunc(liveConnectWindow, func() { r.expireSession(s) })
-	r.mu.Unlock()
-	liveJSON(w, req, r.config.HostOrigin, http.StatusCreated, map[string]string{"sessionId": id, "ownerToken": ownerToken})
-}
-func validCapabilities(values []string) bool {
-	seen := make(map[string]struct{}, len(values))
-	for _, v := range values {
-		if _, ok := liveTools[v]; !ok {
-			return false
-		}
-		if _, ok := seen[v]; ok {
-			return false
-		}
-		seen[v] = struct{}{}
-	}
-	return true
+    if len(input.WorkspaceID)<1 || len(input.WorkspaceID)>maxLiveName || len(input.Generation)<1 || len(input.Generation)>maxLiveName {
+        liveJSON(w,req,r.config.HostOrigin,http.StatusBadRequest,map[string]string{"error":"invalid_session"})
+        return
+    }
+    id,err:=randomLiveToken(16)
+    if err!=nil {
+        liveJSON(w,req,r.config.HostOrigin,http.StatusInternalServerError,map[string]string{"error":"internal_error"})
+        return
+    }
+    session:=&liveSession{id:id,workspaceID:input.WorkspaceID,generation:input.Generation,pending:make(map[string]*livePending),events:make(chan liveEvent,liveEventQueue),closed:make(chan struct{})}
+    r.mu.Lock()
+    if r.quiescing {
+        r.mu.Unlock()
+        liveJSON(w,req,r.config.HostOrigin,http.StatusServiceUnavailable,map[string]string{"error":"gateway_quiescing"})
+        return
+    }
+    if len(r.sessions)>=maxLiveSessions {
+        r.mu.Unlock()
+        liveJSON(w,req,r.config.HostOrigin,http.StatusServiceUnavailable,map[string]string{"error":"session_capacity_reached"})
+        return
+    }
+    r.sessions[id]=session
+    session.connectTimer=time.AfterFunc(liveConnectWindow,func(){r.expireSession(session)})
+    r.mu.Unlock()
+    liveJSON(w,req,r.config.HostOrigin,http.StatusCreated,map[string]string{"sessionId":id})
 }
 
 func (r *LiveRegistry) events(w http.ResponseWriter, req *http.Request, id string) {
-	s, ok := r.ownerSession(req, id)
+	s, ok := r.sessionByID(req, id)
 	if !ok {
 		liveJSON(w, req, r.config.HostOrigin, http.StatusUnauthorized, map[string]string{"error": "session_authorization_required"})
 		return
@@ -415,6 +332,8 @@ func (r *LiveRegistry) events(w http.ResponseWriter, req *http.Request, id strin
 		return
 	}
 	s.stream = true
+	// The most recently connected Browser Host is the active route.
+	r.activeSessionID = s.id
 	if s.connectTimer != nil {
 		s.connectTimer.Stop()
 		s.connectTimer = nil
@@ -478,6 +397,7 @@ func (r *LiveRegistry) expireSession(s *liveSession) {
 	}
 	s.dead = true
 	delete(r.sessions, s.id)
+	if r.activeSessionID == s.id { r.activeSessionID = "" }
 	if s.connectTimer != nil {
 		s.connectTimer.Stop()
 		s.connectTimer = nil
@@ -486,15 +406,6 @@ func (r *LiveRegistry) expireSession(s *liveSession) {
 	var results []struct {
 		channel chan liveResponse
 		value   liveResponse
-	}
-	for _, c := range s.clients {
-		delete(r.clients, c.tokenHash)
-		r.rememberInactiveTokenLocked(c.tokenHash)
-		for _, cancel := range c.inflight {
-			cancels = append(cancels, cancel)
-		}
-		clear(c.inflight)
-		clear(c.rpcIDs)
 	}
 	for _, p := range s.pending {
 		p.response = liveResponse{status: "unavailable", err: "workspace_disconnected"}
@@ -516,29 +427,6 @@ func (r *LiveRegistry) expireSession(s *liveSession) {
 	}
 }
 
-// rememberInactiveTokenLocked retains only a bounded, short-lived hash so a
-// formerly authorized client receives an explicit unavailable response after
-// a browser disconnects. It never keeps a usable bearer token.
-func (r *LiveRegistry) rememberInactiveTokenLocked(hash [32]byte) {
-	now := time.Now()
-	for token, expiry := range r.inactiveTokens {
-		if !now.Before(expiry) {
-			delete(r.inactiveTokens, token)
-		}
-	}
-	if len(r.inactiveTokens) >= maxInactiveClientTokens {
-		var oldest [32]byte
-		var earliest time.Time
-		for token, expiry := range r.inactiveTokens {
-			if earliest.IsZero() || expiry.Before(earliest) {
-				oldest, earliest = token, expiry
-			}
-		}
-		delete(r.inactiveTokens, oldest)
-	}
-	r.inactiveTokens[hash] = now.Add(liveInactiveTokenWindow)
-}
-
 // Close invalidates every process-local authorization and wakes pending requests.
 func (r *LiveRegistry) Close() {
 	r.mu.Lock()
@@ -552,7 +440,7 @@ func (r *LiveRegistry) Close() {
 	}
 }
 func (r *LiveRegistry) acceptResponse(w http.ResponseWriter, req *http.Request, id string) {
-	s, ok := r.ownerSession(req, id)
+	s, ok := r.sessionByID(req, id)
 	if !ok {
 		liveJSON(w, req, r.config.HostOrigin, http.StatusUnauthorized, map[string]string{"error": "session_authorization_required"})
 		return
@@ -584,149 +472,12 @@ func (r *LiveRegistry) acceptResponse(w http.ResponseWriter, req *http.Request, 
 	p.response = liveResponse{status: input.Status, result: input.Result, err: input.Error}
 	p.settled = true
 	delete(s.pending, input.RequestID)
-	if p.client != nil {
-		delete(p.client.inflight, input.RequestID)
-		delete(p.client.rpcIDs, p.rpcID)
-	}
 	r.mu.Unlock()
 	p.result <- p.response
 	liveJSON(w, req, r.config.HostOrigin, http.StatusAccepted, map[string]bool{"accepted": true})
 }
-func (r *LiveRegistry) createClient(w http.ResponseWriter, req *http.Request, id string) {
-	s, ok := r.ownerSession(req, id)
-	if !ok {
-		liveJSON(w, req, r.config.HostOrigin, http.StatusUnauthorized, map[string]string{"error": "session_authorization_required"})
-		return
-	}
-	if !isJSONContentType(req.Header.Get("Content-Type")) {
-		liveJSON(w, req, r.config.HostOrigin, http.StatusUnsupportedMediaType, map[string]string{"error": "json_required"})
-		return
-	}
-	var input liveClientRequest
-	if !readLiveJSON(w, req, &input) {
-		return
-	}
-	if len(strings.TrimSpace(input.Name)) < 1 || len(input.Name) > maxLiveName || !validCapabilities(input.Capabilities) {
-		liveJSON(w, req, r.config.HostOrigin, http.StatusBadRequest, map[string]string{"error": "invalid_client"})
-		return
-	}
-	idToken, err := randomLiveToken(16)
-	if err != nil {
-		liveJSON(w, req, r.config.HostOrigin, http.StatusInternalServerError, map[string]string{"error": "internal_error"})
-		return
-	}
-	token, err := randomLiveToken(32)
-	if err != nil {
-		liveJSON(w, req, r.config.HostOrigin, http.StatusInternalServerError, map[string]string{"error": "internal_error"})
-		return
-	}
-	caps := make(map[string]struct{}, len(input.Capabilities))
-	for _, name := range input.Capabilities {
-		if _, ok := s.capabilities[name]; !ok {
-			liveJSON(w, req, r.config.HostOrigin, http.StatusForbidden, map[string]string{"error": "capability_not_published"})
-			return
-		}
-		caps[name] = struct{}{}
-	}
-	client := &liveClient{id: idToken, name: strings.TrimSpace(input.Name), tokenHash: secureHash(token), capabilities: caps, session: s, inflight: make(map[string]func()), rpcIDs: make(map[string]string)}
-	r.mu.Lock()
-	if r.quiescing {
-		r.mu.Unlock()
-		liveJSON(w, req, r.config.HostOrigin, http.StatusServiceUnavailable, map[string]string{"error": "gateway_quiescing"})
-		return
-	}
-	if s.dead || r.sessions[id] != s {
-		r.mu.Unlock()
-		liveJSON(w, req, r.config.HostOrigin, http.StatusGone, map[string]string{"error": "session_expired"})
-		return
-	}
-	if len(s.clients) >= maxLiveClients {
-		r.mu.Unlock()
-		liveJSON(w, req, r.config.HostOrigin, http.StatusServiceUnavailable, map[string]string{"error": "client_capacity_reached"})
-		return
-	}
-	s.clients[client.id] = client
-	r.clients[client.tokenHash] = client
-	r.mu.Unlock()
-	liveJSON(w, req, r.config.HostOrigin, http.StatusCreated, map[string]any{"clientId": client.id, "token": token})
-}
-func (r *LiveRegistry) listClients(w http.ResponseWriter, req *http.Request, id string) {
-	s, ok := r.ownerSession(req, id)
-	if !ok {
-		liveJSON(w, req, r.config.HostOrigin, http.StatusUnauthorized, map[string]string{"error": "session_authorization_required"})
-		return
-	}
-	r.mu.Lock()
-	clients := make([]map[string]any, 0, len(s.clients))
-	for _, c := range s.clients {
-		clients = append(clients, map[string]any{"clientId": c.id, "name": c.name, "capabilities": sortedKeys(c.capabilities)})
-	}
-	r.mu.Unlock()
-	sort.Slice(clients, func(i, j int) bool { return clients[i]["clientId"].(string) < clients[j]["clientId"].(string) })
-	liveJSON(w, req, r.config.HostOrigin, http.StatusOK, map[string]any{"clients": clients})
-}
-func (r *LiveRegistry) revokeClient(w http.ResponseWriter, req *http.Request, id, clientID string) {
-	s, ok := r.ownerSession(req, id)
-	if !ok {
-		liveJSON(w, req, r.config.HostOrigin, http.StatusUnauthorized, map[string]string{"error": "session_authorization_required"})
-		return
-	}
-	r.mu.Lock()
-	if s.dead || r.sessions[id] != s {
-		r.mu.Unlock()
-		liveJSON(w, req, r.config.HostOrigin, http.StatusGone, map[string]string{"error": "session_expired"})
-		return
-	}
-	c := s.clients[clientID]
-	if c == nil {
-		r.mu.Unlock()
-		liveJSON(w, req, r.config.HostOrigin, http.StatusNotFound, map[string]string{"error": "client_not_found"})
-		return
-	}
-	delete(s.clients, clientID)
-	delete(r.clients, c.tokenHash)
-	var cancels []context.CancelFunc
-	var results []struct {
-		channel chan liveResponse
-		value   liveResponse
-	}
-	queueOverflow := false
-	for reqID, cancel := range c.inflight {
-		if p := s.pending[reqID]; p != nil {
-			delete(s.pending, reqID)
-			delete(c.rpcIDs, p.rpcID)
-			p.response = liveResponse{status: "revoked", err: "client_revoked"}
-			p.settled = true
-			results = append(results, struct {
-				channel chan liveResponse
-				value   liveResponse
-			}{p.result, p.response})
-			cancels = append(cancels, cancel)
-			select {
-			case s.events <- liveEvent{name: "cancel", data: map[string]string{"requestId": reqID, "workspaceId": s.workspaceID, "generation": s.generation, "reason": "client_revoked"}}:
-			default:
-				queueOverflow = true
-			}
-		} else {
-			cancels = append(cancels, cancel)
-		}
-	}
-	clear(c.inflight)
-	clear(c.rpcIDs)
-	r.mu.Unlock()
-	for _, result := range results {
-		result.channel <- result.value
-	}
-	for _, cancel := range cancels {
-		cancel()
-	}
-	if queueOverflow {
-		r.expireSession(s)
-	}
-	liveNoContent(w, req, r.config.HostOrigin)
-}
 func (r *LiveRegistry) revokeSession(w http.ResponseWriter, req *http.Request, id string) {
-	s, ok := r.ownerSession(req, id)
+	s, ok := r.sessionByID(req, id)
 	if !ok {
 		liveJSON(w, req, r.config.HostOrigin, http.StatusUnauthorized, map[string]string{"error": "session_authorization_required"})
 		return
@@ -734,111 +485,45 @@ func (r *LiveRegistry) revokeSession(w http.ResponseWriter, req *http.Request, i
 	r.expireSession(s)
 	liveNoContent(w, req, r.config.HostOrigin)
 }
-func (r *LiveRegistry) findClient(token string) (*liveClient, string) {
-	if token == "" {
-		return nil, "unauthorized"
-	}
-	hash := secureHash(token)
-	r.mu.Lock()
-	defer r.mu.Unlock()
-	c := r.clients[hash]
-	if c == nil || c.session.dead || subtle.ConstantTimeCompare(c.tokenHash[:], hash[:]) != 1 {
-		if expiry, ok := r.inactiveTokens[hash]; ok {
-			if time.Now().Before(expiry) {
-				return nil, "workspace_unavailable"
-			}
-			delete(r.inactiveTokens, hash)
-		}
-		return nil, "unauthorized"
-	}
-	return c, ""
-}
-
-func (r *LiveRegistry) dispatch(req *http.Request, client *liveClient, tool string, args json.RawMessage, rpcID string) (liveResponse, error) {
-	requestID, err := randomLiveToken(16)
-	if err != nil {
-		return liveResponse{}, err
-	}
-	ctx, cancel := context.WithTimeout(req.Context(), 60*time.Second)
-	p := &livePending{requestID: requestID, rpcID: rpcID, client: client, result: make(chan liveResponse, 1), cancel: cancel}
-	s := client.session
-	r.mu.Lock()
-	if r.quiescing || s.dead || r.sessions[s.id] != s || !s.stream || r.clients[client.tokenHash] != client {
-		r.mu.Unlock()
-		cancel()
-		return liveResponse{status: "unavailable", err: "workspace_unavailable"}, nil
-	}
-	if _, ok := client.capabilities[tool]; !ok {
-		r.mu.Unlock()
-		cancel()
-		return liveResponse{}, errCapabilityDenied
-	}
-	if len(s.pending) >= maxLivePending {
-		r.mu.Unlock()
-		cancel()
-		return liveResponse{}, errCapacity
-	}
-	if _, exists := client.rpcIDs[rpcID]; exists {
-		r.mu.Unlock()
-		cancel()
-		return liveResponse{}, errCapacity
-	}
-	deadline := time.Now().Add(60 * time.Second).UnixMilli()
-	event := liveEvent{name: "request", data: map[string]any{"requestId": requestID, "workspaceId": s.workspaceID, "generation": s.generation, "tool": tool, "arguments": json.RawMessage(args), "deadline": deadline, "clientCapabilities": sortedKeys(client.capabilities)}}
-	select {
-	case s.events <- event:
-	default:
-		r.mu.Unlock()
-		cancel()
-		return liveResponse{}, errCapacity
-	}
-	s.pending[requestID] = p
-	client.inflight[requestID] = cancel
-	client.rpcIDs[rpcID] = requestID
-	r.mu.Unlock()
-	select {
-	case response := <-p.result:
-		cancel()
-		return response, nil
-	case <-s.closed:
-		select {
-		case response := <-p.result:
-			cancel()
-			return response, nil
-		default:
-		}
-		if response, settled := r.pendingOutcome(p); settled {
-			cancel()
-			return response, nil
-		}
-		return liveResponse{status: "unavailable", err: "workspace_disconnected"}, nil
-	case <-ctx.Done():
-		select {
-		case response := <-p.result:
-			cancel()
-			return response, nil
-		default:
-		}
-		select {
-		case <-s.closed:
-			if response, settled := r.pendingOutcome(p); settled {
-				cancel()
-				return response, nil
-			}
-			return liveResponse{status: "unavailable", err: "workspace_disconnected"}, nil
-		default:
-		}
-		reason, outcome, message := "cancelled", "cancelled", "request_cancelled"
-		if errors.Is(ctx.Err(), context.DeadlineExceeded) {
-			reason, outcome, message = "timeout", "timeout", "request_timeout"
-		}
-		response := r.cancelPending(s, p, reason)
-		cancel()
-		if response.status == "" {
-			response = liveResponse{status: outcome, err: message}
-		}
-		return response, nil
-	}
+func (r *LiveRegistry) dispatch(req *http.Request, tool string, args json.RawMessage) (liveResponse,error) {
+    requestID,err:=randomLiveToken(16)
+    if err!=nil {return liveResponse{},err}
+    ctx,cancel:=context.WithTimeout(req.Context(),60*time.Second)
+    defer cancel()
+    p:=&livePending{requestID:requestID,result:make(chan liveResponse,1),cancel:cancel}
+    r.mu.Lock()
+    s:=r.sessions[r.activeSessionID]
+    if r.quiescing || s==nil || s.dead || !s.stream {
+        r.mu.Unlock()
+        return liveResponse{status:"unavailable",err:"browser_unavailable"},nil
+    }
+    if len(s.pending)>=maxLivePending {
+        r.mu.Unlock()
+        return liveResponse{},errCapacity
+    }
+    event:=liveEvent{name:"request",data:map[string]any{"requestId":requestID,"workspaceId":s.workspaceID,"generation":s.generation,"tool":tool,"arguments":json.RawMessage(args),"deadline":time.Now().Add(60*time.Second).UnixMilli()}}
+    select {
+    case s.events<-event:
+    default:
+        r.mu.Unlock()
+        return liveResponse{},errCapacity
+    }
+    s.pending[requestID]=p
+    r.mu.Unlock()
+    select {
+    case result:=<-p.result:
+        return result,nil
+    case <-s.closed:
+        if result,settled:=r.pendingOutcome(p);settled{return result,nil}
+        return liveResponse{status:"unavailable",err:"workspace_disconnected"},nil
+    case <-ctx.Done():
+        if result,settled:=r.pendingOutcome(p);settled{return result,nil}
+        reason,outcome:="cancelled","cancelled"
+        if errors.Is(ctx.Err(),context.DeadlineExceeded) {reason,outcome="timeout","timeout"}
+        response:=r.cancelPending(s,p,reason)
+        if response.status=="" {response=liveResponse{status:outcome,err:"request_"+reason}}
+        return response,nil
+    }
 }
 func (r *LiveRegistry) pendingOutcome(p *livePending) (liveResponse, bool) {
 	r.mu.Lock()
@@ -859,8 +544,6 @@ func (r *LiveRegistry) cancelPending(s *liveSession, p *livePending, reason stri
 		p.response = liveResponse{status: outcome, err: message}
 		p.settled = true
 		delete(s.pending, p.requestID)
-		delete(p.client.inflight, p.requestID)
-		delete(p.client.rpcIDs, p.rpcID)
 		select {
 		case s.events <- liveEvent{name: "cancel", data: map[string]string{"requestId": p.requestID, "workspaceId": s.workspaceID, "generation": s.generation, "reason": reason}}:
 		default:
@@ -889,11 +572,10 @@ func contains(items []string, value string) bool {
 	}
 	return false
 }
-func sortedKeys(m map[string]struct{}) []string {
-	out := make([]string, 0, len(m))
-	for k := range m {
-		out = append(out, k)
-	}
-	sort.Strings(out)
-	return out
+// The active Host is selected by its latest SSE connection, not an MCP client token.
+func (r *LiveRegistry) activeHostConnected() bool {
+    r.mu.Lock()
+    defer r.mu.Unlock()
+    session:=r.sessions[r.activeSessionID]
+    return !r.quiescing && session!=nil && !session.dead && session.stream
 }

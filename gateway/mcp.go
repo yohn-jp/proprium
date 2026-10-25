@@ -9,6 +9,7 @@ import (
 	"io"
 	"net/http"
 	"strings"
+	"sort"
 )
 
 const (
@@ -45,14 +46,20 @@ type toolResult struct {
 }
 
 var liveTools = map[string]mcpTool{
-	"capabilities_list": {Name: "capabilities_list", Description: "List the capabilities currently available in this live workspace.", InputSchema: objectSchema(nil, nil)},
-	"files_list":        {Name: "files_list", Description: "List files in the currently open workspace.", InputSchema: objectSchema(nil, nil)},
-	"file_read":         {Name: "file_read", Description: "Read a text file from the currently open workspace.", InputSchema: objectSchema(map[string]any{"path": stringSchema("Workspace relative file path")}, []string{"path"})},
-	"git_log":           {Name: "git_log", Description: "Read recent local Git commits from the currently open workspace.", InputSchema: objectSchema(map[string]any{"limit": map[string]any{"type": "integer", "minimum": 1, "maximum": 100, "description": "Maximum commits to return"}}, nil)},
-	"git_status":        {Name: "git_status", Description: "Read local Git status for the currently open workspace.", InputSchema: objectSchema(nil, nil)},
-	"plugin_call":       {Name: "plugin_call", Description: "Invoke a currently published WASM plugin operation in the Browser Host.", InputSchema: objectSchema(map[string]any{"pluginId": stringSchema("Installed plugin identifier"), "operation": stringSchema("Published plugin operation"), "input": map[string]any{"description": "JSON input for the operation"}}, []string{"pluginId", "operation"})},
-	"proposal_submit":   {Name: "proposal_submit", Description: "Submit file changes as a Host review proposal. This never applies changes directly.", InputSchema: objectSchema(map[string]any{"title": map[string]any{"type": "string", "description": "Short review title", "maxLength": 200}, "changes": map[string]any{"type": "array", "minItems": 1, "maxItems": 32, "items": objectSchema(map[string]any{"path": stringSchema("Workspace relative file path"), "content": stringSchema("Proposed UTF-8 file content"), "expectedRevision": map[string]any{"anyOf": []map[string]string{{"type": "string"}, {"type": "null"}}, "description": "Revision observed before proposing this change, or null for a new file"}}, []string{"path", "content", "expectedRevision"})}}, []string{"title", "changes"})},
-	"workspace_info":    {Name: "workspace_info", Description: "Read identity and state information for the currently open workspace.", InputSchema: objectSchema(nil, nil)},
+    "repositories_list": {Name: "repositories_list", Description: "List local repositories visible to the active Browser Host.", InputSchema: objectSchema(nil,nil)},
+    "repository_info": {Name: "repository_info", Description: "Inspect a repository by immutable GitHub ID.", InputSchema: repoSchema(nil,nil)},
+    "files_list": {Name: "files_list", Description: "List files in the selected repository.", InputSchema: repoSchema(nil,nil)},
+    "file_read": {Name: "file_read", Description: "Read text from the selected repository.", InputSchema: repoSchema(map[string]any{"path":stringSchema("Repository relative file path")},[]string{"path"})},
+    "git_status": {Name: "git_status", Description: "Inspect the selected repository local Git status.", InputSchema: repoSchema(nil,nil)},
+    "git_log": {Name: "git_log", Description: "Inspect the selected repository local Git history.", InputSchema: repoSchema(map[string]any{"limit":map[string]any{"type":"integer","minimum":1,"maximum":100}},nil)},
+    "plugin_call": {Name: "plugin_call", Description: "Call the Browser Host plugin for the selected repository.", InputSchema: repoSchema(map[string]any{"pluginId":stringSchema("Plugin identifier"),"operation":stringSchema("Plugin operation"),"input":map[string]any{"description":"JSON input"}},[]string{"pluginId","operation"})},
+    "proposal_submit": {Name: "proposal_submit", Description: "Submit a file-change proposal for explicit Browser Host review.", InputSchema: repoSchema(map[string]any{"title":map[string]any{"type":"string","maxLength":200},"changes":map[string]any{"type":"array","minItems":1,"maxItems":32,"items":objectSchema(map[string]any{"path":stringSchema("Repository relative file path"),"content":stringSchema("Proposed UTF-8 text"),"expectedRevision":map[string]any{"anyOf":[]map[string]string{{"type":"string"},{"type":"null"}}}},[]string{"path","content","expectedRevision"})}},[]string{"title","changes"})},
+}
+func repoSchema(properties map[string]any, required []string) map[string]any {
+    if properties == nil { properties = map[string]any{} }
+    properties["repository_id"] = map[string]any{"type":"integer","minimum":1,"description":"Immutable GitHub repository ID"}
+    properties["branch"] = map[string]any{"type":"string","description":"Optional branch; required when the repository has multiple known branches"}
+    return objectSchema(properties,append([]string{"repository_id"},required...))
 }
 
 func stringSchema(description string) map[string]any {
@@ -111,11 +118,7 @@ func (r *LiveRegistry) serveMCP(w http.ResponseWriter, req *http.Request) {
 		mcpHTTPError(w, http.StatusMethodNotAllowed, json.RawMessage("null"), -32000, "Method not allowed")
 		return
 	}
-	if r.config.OwnerKey == "" {
-		mcpHTTPError(w, http.StatusServiceUnavailable, json.RawMessage("null"), -32000, "Live MCP is disabled")
-		return
-	}
-	if !acceptsMCP(req.Header.Get("Accept")) {
+		if !acceptsMCP(req.Header.Get("Accept")) {
 		mcpHTTPError(w, http.StatusNotAcceptable, json.RawMessage("null"), -32000, "Accept must include application/json and text/event-stream")
 		return
 	}
@@ -159,23 +162,13 @@ func (r *LiveRegistry) serveMCP(w http.ResponseWriter, req *http.Request) {
 	if req.Header.Get("MCP-Protocol-Version") == currentMCPVersion {
 		w.Header().Set("MCP-Protocol-Version", currentMCPVersion)
 	}
-	client, clientState := r.findClient(bearerToken(req))
-	if client == nil {
-		if clientState == "workspace_unavailable" {
-			mcpHTTPError(w, http.StatusServiceUnavailable, message.ID, -32000, "Workspace unavailable")
-			return
-		}
-		w.Header().Set("WWW-Authenticate", "Bearer")
-		mcpHTTPError(w, http.StatusUnauthorized, message.ID, -32000, "Client authorization required")
-		return
-	}
 	if isNotification {
 		switch message.Method {
 		case "notifications/initialized":
 			mcpHTTPNoContent(w, http.StatusAccepted)
 			return
 		case "notifications/cancelled":
-			r.cancelRPCRequest(client, message.Params)
+			// HTTP cancellation propagates via dispatch; external JSON-RPC IDs are not shared between clients
 			mcpHTTPNoContent(w, http.StatusAccepted)
 			return
 		default:
@@ -202,9 +195,9 @@ func (r *LiveRegistry) serveMCP(w http.ResponseWriter, req *http.Request) {
 	case "ping":
 		writeMCP(w, http.StatusOK, mcpEnvelope{JSONRPC: "2.0", ID: message.ID, Result: map[string]any{}})
 	case "tools/list":
-		r.serveToolList(w, message, client)
+		r.serveToolList(w, message)
 	case "tools/call":
-		r.serveToolCall(w, req, message, client)
+		r.serveToolCall(w, req, message)
 	default:
 		mcpHTTPError(w, http.StatusNotFound, message.ID, -32601, "Method not found")
 	}
@@ -342,24 +335,17 @@ func (r *LiveRegistry) serveInitialize(w http.ResponseWriter, message mcpRequest
 	result := map[string]any{"protocolVersion": legacyMCPVersion, "capabilities": map[string]any{"tools": map[string]any{"listChanged": false}}, "serverInfo": map[string]string{"name": "proprium-live-workspace", "version": "1.0.0"}, "instructions": "Tools operate on the workspace currently open in the Proprium Browser Host. File changes are proposals for explicit Host review."}
 	writeMCP(w, http.StatusOK, mcpEnvelope{JSONRPC: "2.0", ID: message.ID, Result: result})
 }
-func (r *LiveRegistry) serveToolList(w http.ResponseWriter, message mcpRequest, client *liveClient) {
-	if !emptyOrObject(message.Params) {
-		mcpHTTPError(w, http.StatusBadRequest, message.ID, -32602, "tools/list params must be an object")
-		return
-	}
-	r.mu.Lock()
-	live := !client.session.dead && r.sessions[client.session.id] == client.session && r.clients[client.tokenHash] == client
-	r.mu.Unlock()
-	if !live {
-		mcpHTTPError(w, http.StatusServiceUnavailable, message.ID, -32000, "Workspace unavailable")
-		return
-	}
-	names := sortedKeys(client.capabilities)
-	tools := make([]mcpTool, 0, len(names))
-	for _, name := range names {
-		tools = append(tools, liveTools[name])
-	}
-	writeMCP(w, http.StatusOK, mcpEnvelope{JSONRPC: "2.0", ID: message.ID, Result: map[string]any{"tools": tools, "ttlMs": 0, "cacheScope": "private"}})
+func (r *LiveRegistry) serveToolList(w http.ResponseWriter, message mcpRequest) {
+    if !emptyOrObject(message.Params) {
+        mcpHTTPError(w,http.StatusBadRequest,message.ID,-32602,"tools/list params must be an object")
+        return
+    }
+    names := make([]string,0,len(liveTools))
+    for name := range liveTools { names = append(names,name) }
+    sort.Strings(names)
+    tools := make([]mcpTool,0,len(names))
+    for _,name := range names { tools = append(tools,liveTools[name]) }
+    writeMCP(w,http.StatusOK,mcpEnvelope{JSONRPC:"2.0",ID:message.ID,Result:map[string]any{"tools":tools,"ttlMs":0,"cacheScope":"private"}})
 }
 func emptyOrObject(raw json.RawMessage) bool {
 	if len(raw) == 0 {
@@ -369,7 +355,7 @@ func emptyOrObject(raw json.RawMessage) bool {
 	return json.Unmarshal(raw, &value) == nil && value != nil
 }
 
-func (r *LiveRegistry) serveToolCall(w http.ResponseWriter, req *http.Request, message mcpRequest, client *liveClient) {
+func (r *LiveRegistry) serveToolCall(w http.ResponseWriter, req *http.Request, message mcpRequest) {
 	var params struct {
 		Name      string          `json:"name"`
 		Arguments json.RawMessage `json:"arguments"`
@@ -383,10 +369,6 @@ func (r *LiveRegistry) serveToolCall(w http.ResponseWriter, req *http.Request, m
 		mcpHTTPError(w, http.StatusNotFound, message.ID, -32601, "Tool not found")
 		return
 	}
-	if _, allowed := client.capabilities[params.Name]; !allowed {
-		mcpHTTPError(w, http.StatusForbidden, message.ID, -32000, "Client is not authorized for this capability")
-		return
-	}
 	if len(params.Arguments) == 0 {
 		params.Arguments = json.RawMessage(`{}`)
 	}
@@ -394,12 +376,8 @@ func (r *LiveRegistry) serveToolCall(w http.ResponseWriter, req *http.Request, m
 		mcpHTTPError(w, http.StatusBadRequest, message.ID, -32602, err.Error())
 		return
 	}
-	response, err := r.dispatch(req, client, params.Name, params.Arguments, rpcIDKey(message.ID))
+	response, err := r.dispatch(req, params.Name, params.Arguments)
 	if err != nil {
-		if errors.Is(err, errCapabilityDenied) {
-			mcpHTTPError(w, http.StatusForbidden, message.ID, -32000, "Client is not authorized for this capability")
-			return
-		}
 		if errors.Is(err, errCapacity) {
 			mcpHTTPError(w, http.StatusServiceUnavailable, message.ID, -32000, "Workspace request capacity reached")
 			return
@@ -416,9 +394,6 @@ func (r *LiveRegistry) serveToolCall(w http.ResponseWriter, req *http.Request, m
 		return
 	case "timeout":
 		mcpHTTPError(w, http.StatusGatewayTimeout, message.ID, -32001, "Workspace request timed out")
-		return
-	case "revoked":
-		mcpHTTPError(w, http.StatusUnauthorized, message.ID, -32000, "MCP client authorization was revoked")
 		return
 	}
 	if response.status == "failed" {
@@ -564,22 +539,6 @@ func requiredKeys(schema map[string]any) []string {
 	return nil
 }
 
-func (r *LiveRegistry) cancelRPCRequest(client *liveClient, params json.RawMessage) {
-	var input struct {
-		RequestID json.RawMessage `json:"requestId"`
-	}
-	if json.Unmarshal(params, &input) != nil || !validRPCID(input.RequestID) {
-		return
-	}
-	id := rpcIDKey(input.RequestID)
-	r.mu.Lock()
-	internal := client.rpcIDs[id]
-	cancel := client.inflight[internal]
-	r.mu.Unlock()
-	if cancel != nil {
-		cancel()
-	}
-}
 func mcpHTTPNoContent(w http.ResponseWriter, status int) {
 	w.Header().Set("Cache-Control", "no-store")
 	w.WriteHeader(status)

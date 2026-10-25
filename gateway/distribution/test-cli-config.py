@@ -16,7 +16,7 @@ def limit_memory():
 
 
 class ConfigValidation(unittest.TestCase):
-    def setup_config(self, *, owner="o" * 32, token="t" * 20,
+    def setup_config(self, *, token="t" * 20,
                      access_id="i", access_secret="s", valid=True):
         with tempfile.TemporaryDirectory(prefix="proprium-config-") as directory:
             root = Path(directory)
@@ -28,7 +28,6 @@ class ConfigValidation(unittest.TestCase):
                     "PROPRIUM_HOST_ORIGIN=https://host.invalid\n"
                     "PROPRIUM_PUBLIC_URL=https://gateway.invalid\n"
                     "GITHUB_CLIENT_ID=fixture-client-id\n"
-                    f"PROPRIUM_OWNER_KEY={owner}\n"
                 ),
                 "tunnel.env": f"TUNNEL_TOKEN={token}\n",
                 "settings": "TUNNEL_MODE=token\nMETRICS=127.0.0.1:20000\n",
@@ -58,14 +57,13 @@ class ConfigValidation(unittest.TestCase):
 
     def test_valid_bounds(self):
         self.setup_config()
-        self.setup_config(owner="!~:@" * 8, token="aA0_+/=-" * 3,
+        self.setup_config(token="aA0_+/=-" * 3,
                           access_id="aA0._=-", access_secret="aA0._=-")
-        self.setup_config(owner="o" * 4096, token="t" * 16384,
+        self.setup_config(token="t" * 16384,
                           access_id="i" * 4096, access_secret="s" * 4096)
 
     def test_invalid_lengths_and_characters(self):
         for field, values in {
-            "owner": ["o" * 31, "o" * 4097, "o" * 32 + " "],
             "token": ["", "t" * 19, "t" * 16385, "t" * 20 + "!"],
             "access_id": ["", "i" * 4097, "i!"],
             "access_secret": ["", "s" * 4097, "s "],

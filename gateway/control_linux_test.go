@@ -38,7 +38,6 @@ func (b *gateBody) Close() error { return nil }
 func controlTestServer(t *testing.T) (*Server, string) {
 	t.Helper()
 	cfg := testConfig()
-	cfg.OwnerKey = testOwnerKey
 	cfg.ControlSocket = filepath.Join(t.TempDir(), "gateway.sock")
 	s, err := NewServer(cfg)
 	if err != nil {
@@ -84,7 +83,6 @@ func createControlTestSession(t *testing.T, s *Server) *httptest.ResponseRecorde
 	req := httptest.NewRequest(http.MethodPost, "https://gateway.example/live/sessions", strings.NewReader(`{"workspaceId":"workspace","generation":"generation","capabilities":[]}`))
 	req.Host = "gateway.example"
 	req.Header.Set("Origin", s.config.HostOrigin)
-	req.Header.Set("Authorization", "Bearer "+testOwnerKey)
 	req.Header.Set("Content-Type", "application/json")
 	response := httptest.NewRecorder()
 	s.Handler().ServeHTTP(response, req)
@@ -190,7 +188,6 @@ func TestControlQuiesceCountsSessionRegistrationBeforeBodyCompletes(t *testing.T
 	req := httptest.NewRequest(http.MethodPost, "https://gateway.example/live/sessions", body)
 	req.Host = "gateway.example"
 	req.Header.Set("Origin", s.config.HostOrigin)
-	req.Header.Set("Authorization", "Bearer "+testOwnerKey)
 	req.Header.Set("Content-Type", "application/json")
 	done := make(chan *httptest.ResponseRecorder, 1)
 	go func() {

@@ -20,9 +20,9 @@ GitHub is the remote authority for published repositories. Initial UI and plugin
 
 The Host makes authenticated GitHub REST requests directly when the existing adapter can preserve the local commit SHA. For Smart HTTP fallback, the Gateway validates the requested repository ID and read/write permission before streaming Git traffic. Device OAuth and Git relay use fixed GitHub upstreams and routes; the Gateway is not a generic HTTP proxy. It does not persist GitHub tokens, workspaces, workspace files, search indexes or Git objects.
 
-Live MCP connects only to a workspace currently open in the browser. The owner explicitly publishes that workspace and authorizes clients. The Gateway maps each authorized MCP client to its selected live workspace and relays tool calls through a browser SSE connection. Workspace and Git operations, WASM plugin execution and user approval remain in the Browser Host. The Gateway keeps only in-flight session and request state in memory; restart invalidates grants and disconnects MCP access. There is no WebSocket or timer-driven polling.
+Live MCP advertises a fixed set of eight tools. Each call targets an explicit immutable GitHub repository ID and is forwarded to the most recently connected active Browser Host via SSE. Browser Host owns cached repository selection, local Git, WASM plugin execution and human review of proposed changes. Gateway keeps only ephemeral transport and in-flight request state; browser disconnect makes calls unavailable without concealing tool definitions. Cloudflare Access authenticates ingress; Proprium does not issue owner/client MCP bearer tokens.
 
-For private repositories, credentials must not reach plugins, remote artifact origins, analytics, URLs or logs. GitHub OAuth tokens and MCP client tokens are different credentials and cannot be substituted for each other. A static Host does not embed a client secret or a shared long-lived MCP credential.
+For private repositories, credentials must not reach plugins, remote artifact origins, analytics, URLs or logs. GitHub OAuth tokens remain Browser Host-owned and are never used to authorize MCP clients. The static Host contains no OAuth client secret or shared MCP bearer credential.
 
 ## Threat model
 
@@ -33,9 +33,9 @@ For private repositories, credentials must not reach plugins, remote artifact or
 | Excessive plugin compute | Per-plugin Worker, bounded Host RPC, cancellation and termination; disclose limits of browser OOM containment |
 | Forged Host request or stale revision | Host validates workspace, generation, capability, expected revision and proposal state on each operation |
 | Git credential theft or cross-repository writes | Host-owned credentials; Gateway restricts relay routes and verifies repository identity and permission |
-| Token disclosure | No credential in a URL or log; owner and client tokens are not exposed to plugins or GitHub OAuth calls |
-| Unauthorized MCP client | Explicit owner pairing, per-client capability subset, revocation and in-memory client/workspace binding |
-| Cross-origin, CSRF or DNS rebinding | Exact allowed Origin/Host checks, bearer authorization at the Gateway, bounded inputs and public-URL validation; an optional Cloudflare Access edge cookie never replaces Gateway authorization |
+| Credential disclosure | No credential in URL/log/plugin; GitHub OAuth tokens and Tunnel credentials are never exposed to MCP |
+| Unauthorized MCP client | Cloudflare Access must reject unauthenticated external callers on every Gateway hostname and route; Gateway is loopback-only |
+| Cross-origin, CSRF or DNS rebinding | Exact configured Origin/Host checks, loopback-only listener, Cloudflare Access enforcement on public ingress, bounded inputs and public-URL validation |
 | Stale browser response or duplicate mutation | Workspace/generation/request identity checks, deadlines, cancellation and no mutation retry after disconnect |
 | Unintended off-device data transmission | Default-deny plugin network capability; user-visible consent and restricted destinations where allowed |
 | Evicted browser storage | Draft/commit/publish states remain distinct; no guaranteed local recovery |

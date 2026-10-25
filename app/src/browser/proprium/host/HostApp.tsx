@@ -782,8 +782,9 @@ export function HostApp(): ReactElement {
             onRegisterLiveInvoker={registerLivePluginInvoker}
           />}
           {git && workspace && <LiveMcpPanel
+            key={`${workspaceGeneration}:${gatewayDraft}`}
+            repositories={recent}
             gatewayUrl={gatewayDraft}
-            onGatewayUrlChange={updateGateway}
             workspaceId={workspace.identity.localWorkspaceId}
             generation={workspaceGeneration}
             identity={workspace.identity}

@@ -18,8 +18,8 @@ DesktopはWorkspace未選択時、左の「作品ライブラリ」にrecentsを
 | --- | --- | --- |
 | ローカル利用者 | 作成・再開・編集・local Git・検証済みプラグイン利用 | ブラウザーの利用可能なローカル保存領域。Gateway・GitHubログインは不要 |
 | GitHub利用者 | リポジトリ選択・fetch・pull・publish | Device OAuthで得た本人のGitHub権限。Git author名/emailは認証ではない |
-| Gateway設置者／Live MCP所有者 | バイナリ運用、Workspace公開、クライアント認可 | OSユーザー領域と必要なCloudflare権限。Live作成はOwner Key |
-| MCPクライアント | 接続中Workspaceの許可されたツール呼出し | Workspace・セッション・capabilityに束縛した個別Bearer Token |
+| Gateway設置者／Live MCP所有者 | バイナリ運用、接続状況確認、提案承認 | OSユーザー領域とCloudflare Accessによる外部接続認証 |
+| MCPクライアント | Cloudflare Access認証で固定ツールを利用 | Active Browser Hostへ転送。repository_idを必須指定 |
 
 共有Gatewayの一般利用者登録・GitHub ID allowlist・組織管理画面は採用済み要件ではない。GitHubログイン成功をGateway所有者認可に読み替えない。
 
@@ -44,7 +44,7 @@ DesktopはWorkspace未選択時、左の「作品ライブラリ」にrecentsを
 | FT13 | プラグイン検証・install/update preview・明示download：[plugins] | trusted registryはHost build設定。任意URLや未知publisherの実行入口ではない | F09 |
 | FT14 | capability選択・Enable・Run・Stop/Disable・Rollback・Uninstall：[plugins] | 権限とWorkspace revisionに束縛。contribution一覧は任意UI実装済みの証明ではない | F09 |
 | FT15 | plugin提案／MCP提案の確認・ローカル適用：[plugins]、[live] | 現行は別々の表示面。共通のHost mutation契約を守り、commit/publishしない | F10 |
-| FT16 | Live MCP opt-in・SSE接続・停止・切断：[live] | Owner KeyはGitHub tokenとは別。常時利用・mobile background保証なし | F11 |
+| FT16 | Live MCP自動接続・SSE切断/再接続：[live] | Owner KeyやClient Tokenは廃止。常時利用・mobile background保証なし | F11 |
 | FT17 | client認可・token一回表示・一覧・失効・実行履歴：[live] | Gateway再起動／session切断後に旧tokenを復活させない | F12 |
 | FT18 | Writing/Research/Review・tab/split・float/dock・maximize・Save layout：[layout] | 配置を閉じることと実行終了を区別。保存失敗／invalid layoutを表示 | F13 |
 | FT19 | Mobile 5 view・戻る・参照sheet・keyboard／focus保持：[mobile] | Desktopの縮小版にしない。履歴遷移もflushと世代検証の対象 | F14 |
@@ -81,7 +81,7 @@ IDは機能面の識別子であり、新しいHTTP path/APIの定義ではな�
 | P02 | signed install/update preview・容量・依存・権限 | 既存preview。転送前同意 | P01 |
 | P03 | plugin要求・実行・結果・stale/failure | 既存PluginPanel | P01／Q01 |
 | Q01 | proposal内容・revision・approve/reject | 既存plugin/MCP表示に共通の論理契約。Host | 呼出元P03/M02／G01 |
-| M01 | Live MCP公開先・tool選択・Owner Key | 既存LiveMcpPanel、offが初期値 | W01／M02 |
+| M01 | MCP接続状態とURL、提案承認 | 接続はWorkspace表示時に自動開始。全8ツール常時列挙 | W01／M02 |
 | M02 | 接続中Workspace・実行中／履歴・停止／切断 | 既存LiveMcpPanel | M01／Q01 |
 | M03 | client認可・token一回表示・一覧・失効 | 既存LiveMcpPanel。tokenは設定URLに含めない | M02 |
 | S01 | 外観・account・Gateway・Git authorへの設定入口 | 既存分散設定をまとめる目標。Mobile設定面は既存 | 呼出元 |

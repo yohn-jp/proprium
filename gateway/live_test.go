@@ -1,270 +1,175 @@
 package main
 
 import (
-	"bufio"
-	"bytes"
-	"context"
-	"encoding/json"
-	"errors"
-	"io"
-	"net/http"
-	"net/http/httptest"
-	"strings"
-	"testing"
-	"time"
+    "bufio"
+    "bytes"
+    "context"
+    "encoding/json"
+    "fmt"
+    "net/http"
+    "net/http/httptest"
+    "net/url"
+    "strings"
+    "testing"
+    "time"
 )
 
-const testOwnerKey = "0123456789abcdef0123456789abcdef"
-const testHostOrigin = "https://host.proprium.test"
+const testHostOrigin = "https://proprium.example"
 
 type liveFixture struct {
-	t                                                                     *testing.T
-	registry                                                              *LiveRegistry
-	server                                                                *httptest.Server
-	workspaceID, generation, sessionID, ownerToken, clientID, clientToken string
-	cancelStream                                                          context.CancelFunc
-	stream                                                                *bufio.Reader
+    t *testing.T
+    registry *LiveRegistry
+    server *httptest.Server
 }
 
-func newLiveFixture(t *testing.T, capabilities, clientCapabilities []string) *liveFixture {
-	t.Helper()
-	r := NewLiveRegistry(LiveConfig{OwnerKey: testOwnerKey, HostOrigin: testHostOrigin, ListenAddr: "127.0.0.1:8080"})
-	mux := http.NewServeMux()
-	mux.HandleFunc("/live/sessions", r.ServeHTTP)
-	mux.HandleFunc("/live/sessions/", r.ServeHTTP)
-	mux.Handle("/mcp", r.MCPHandler())
-	srv := httptest.NewServer(mux)
-	t.Cleanup(func() { r.Close(); srv.Close() })
-	r.config.PublicURL = srv.URL
-	f := &liveFixture{t: t, registry: r, server: srv, workspaceID: "workspace-123", generation: "generation-4"}
-	created := f.ownerJSON(http.MethodPost, "/live/sessions", testOwnerKey, map[string]any{"workspaceId": f.workspaceID, "generation": f.generation, "capabilities": capabilities})
-	if created.Code != http.StatusCreated {
-		t.Fatalf("create session: %d %s", created.Code, created.Body.String())
-	}
-	var session map[string]string
-	if err := json.Unmarshal(created.Body.Bytes(), &session); err != nil {
-		t.Fatal(err)
-	}
-	f.sessionID = session["sessionId"]
-	f.ownerToken = session["ownerToken"]
-	client := f.ownerJSON(http.MethodPost, "/live/sessions/"+f.sessionID+"/clients", f.ownerToken, map[string]any{"name": "test client", "capabilities": clientCapabilities})
-	if client.Code != http.StatusCreated {
-		t.Fatalf("create client: %d %s", client.Code, client.Body.String())
-	}
-	var auth map[string]string
-	if err := json.Unmarshal(client.Body.Bytes(), &auth); err != nil {
-		t.Fatal(err)
-	}
-	f.clientID = auth["clientId"]
-	f.clientToken = auth["token"]
-	return f
+func newLiveFixture(t *testing.T) *liveFixture {
+    t.Helper()
+    r := NewLiveRegistry(LiveConfig{HostOrigin:testHostOrigin})
+    mux := http.NewServeMux()
+    mux.HandleFunc("/live/sessions",r.ServeHTTP)
+    mux.HandleFunc("/live/sessions/",r.ServeHTTP)
+    mux.Handle("/mcp",r.MCPHandler())
+    srv := httptest.NewServer(mux)
+    host,err := url.Parse(srv.URL)
+    if err != nil { t.Fatal(err) }
+    r.config.ListenAddr = host.Host
+    f := &liveFixture{t:t,registry:r,server:srv}
+    t.Cleanup(func(){r.Close();srv.Close()})
+    return f
 }
 
-func (f *liveFixture) ownerJSON(method, path, token string, payload any) *httptest.ResponseRecorder {
-	f.t.Helper()
-	data, _ := json.Marshal(payload)
-	req := httptest.NewRequest(method, path, bytes.NewReader(data))
-	req.Host = strings.TrimPrefix(strings.TrimPrefix(f.server.URL, "http://"), "https://")
-	req.Header.Set("Origin", testHostOrigin)
-	req.Header.Set("Authorization", "Bearer "+token)
-	req.Header.Set("Content-Type", "application/json")
-	rec := httptest.NewRecorder()
-	f.registry.ServeHTTP(rec, req)
-	if rec.Header().Get("Access-Control-Allow-Origin") != testHostOrigin || rec.Header().Get("Access-Control-Allow-Credentials") != "true" {
-		f.t.Fatalf("live response did not allow credentialed Host origin: %d %#v", rec.Code, rec.Header())
-	}
-	return rec
+func (f *liveFixture) httpJSON(method,path string, input any) (int,[]byte) {
+    f.t.Helper()
+    var body []byte
+    if input!=nil { body,_=json.Marshal(input) }
+    req,err:=http.NewRequest(method,f.server.URL+path,bytes.NewReader(body))
+    if err!=nil { f.t.Fatal(err) }
+    req.Header.Set("Origin",testHostOrigin)
+    req.Header.Set("Content-Type","application/json")
+    resp,err:=http.DefaultClient.Do(req)
+    if err!=nil {f.t.Fatal(err)}
+    defer resp.Body.Close()
+    b:=make([]byte,1<<20)
+    n,_:=resp.Body.Read(b)
+    return resp.StatusCode,b[:n]
 }
 
-func (f *liveFixture) openEvents() {
-	f.t.Helper()
-	ctx, cancel := context.WithCancel(context.Background())
-	req, err := http.NewRequestWithContext(ctx, http.MethodGet, f.server.URL+"/live/sessions/"+f.sessionID+"/events", nil)
-	if err != nil {
-		f.t.Fatal(err)
-	}
-	req.Header.Set("Origin", testHostOrigin)
-	req.Header.Set("Authorization", "Bearer "+f.ownerToken)
-	resp, err := http.DefaultClient.Do(req)
-	if err != nil {
-		cancel()
-		f.t.Fatal(err)
-	}
-	if resp.StatusCode != http.StatusOK {
-		body, _ := io.ReadAll(resp.Body)
-		cancel()
-		f.t.Fatalf("events: %d %s", resp.StatusCode, body)
-	}
-	if resp.Header.Get("Access-Control-Allow-Origin") != testHostOrigin || resp.Header.Get("Access-Control-Allow-Credentials") != "true" {
-		cancel()
-		_ = resp.Body.Close()
-		f.t.Fatalf("SSE response did not allow credentialed Host origin: %#v", resp.Header)
-	}
-	f.cancelStream = func() { cancel(); _ = resp.Body.Close() }
-	f.stream = bufio.NewReader(resp.Body)
-	event := f.readEvent()
-	if event["event"] != "ready" {
-		f.t.Fatalf("expected ready event, got %#v", event)
-	}
-	var ready map[string]string
-	_ = json.Unmarshal([]byte(event["data"]), &ready)
-	if ready["workspaceId"] != f.workspaceID || ready["generation"] != f.generation {
-		f.t.Fatalf("wrong ready binding: %#v", ready)
-	}
+func (f *liveFixture) createSession(name string) string {
+    f.t.Helper()
+    status,body:=f.httpJSON("POST","/live/sessions",map[string]any{"workspaceId":name,"generation":"generation-1"})
+    if status!=201 { f.t.Fatalf("session create: %d %s",status,body)}
+    var obj map[string]any
+    if json.Unmarshal(body,&obj)!=nil {f.t.Fatal("not json")}
+    if _,ok:=obj["ownerToken"];ok { f.t.Fatal("owner token must never be returned") }
+    return obj["sessionId"].(string)
 }
 
-func (f *liveFixture) readEvent() map[string]string {
-	f.t.Helper()
-	out := map[string]string{}
-	for {
-		line, err := f.stream.ReadString('\n')
-		if err != nil {
-			f.t.Fatalf("read SSE: %v", err)
-		}
-		line = strings.TrimRight(line, "\r\n")
-		if line == "" {
-			return out
-		}
-		key, value, ok := strings.Cut(line, ":")
-		if !ok {
-			continue
-		}
-		out[key] = strings.TrimPrefix(value, " ")
-	}
+func (f *liveFixture) openEvents(session string) (*http.Response,*bufio.Reader,context.CancelFunc) {
+    f.t.Helper()
+    ctx,cancel:=context.WithCancel(context.Background())
+    req,err:=http.NewRequestWithContext(ctx,"GET",f.server.URL+"/live/sessions/"+session+"/events",nil)
+    if err!=nil {f.t.Fatal(err)}
+    req.Header.Set("Origin",testHostOrigin)
+    resp,err:=http.DefaultClient.Do(req)
+    if err!=nil {cancel();f.t.Fatal(err)}
+    if resp.StatusCode!=200 {resp.Body.Close();cancel();f.t.Fatalf("SSE status %d",resp.StatusCode)}
+    reader:=bufio.NewReader(resp.Body)
+    f.readEvent(reader) // ready
+    return resp,reader,func(){cancel();resp.Body.Close()}
 }
 
-func currentMCPRequest(method string, id int, params any) []byte {
-	value := map[string]any{"jsonrpc": "2.0", "method": method, "id": id, "params": params}
-	encoded, _ := json.Marshal(value)
-	return encoded
+func (f *liveFixture) readEvent(reader *bufio.Reader) map[string]any {
+    f.t.Helper()
+    for i:=0;i<20;i++ {
+        line,err:=reader.ReadString('\n')
+        if err!=nil {f.t.Fatalf("SSE read: %v",err)}
+        if strings.HasPrefix(line,"data: ") {
+            var value map[string]any
+            if err:=json.Unmarshal([]byte(strings.TrimSpace(strings.TrimPrefix(line,"data: "))),&value);err!=nil {f.t.Fatal(err)}
+            return value
+        }
+    }
+    f.t.Fatal("SSE event not received")
+    return nil
 }
 
-type failingHeartbeatWriter struct {
-	header         http.Header
-	wroteHeartbeat bool
+func (f *liveFixture) mcp(method string, params any) (int,[]byte) {
+    f.t.Helper()
+    return f.mcpContext(context.Background(),method,params)
 }
 
-func (w *failingHeartbeatWriter) Header() http.Header {
-	if w.header == nil {
-		w.header = make(http.Header)
-	}
-	return w.header
-}
-func (w *failingHeartbeatWriter) WriteHeader(int) {}
-func (w *failingHeartbeatWriter) Write(body []byte) (int, error) {
-	if bytes.Contains(body, []byte(": keepalive")) {
-		w.wroteHeartbeat = true
-	}
-	return len(body), nil
-}
-func (w *failingHeartbeatWriter) Flush() {}
-func (w *failingHeartbeatWriter) FlushError() error {
-	if w.wroteHeartbeat {
-		return errors.New("downstream disconnected")
-	}
-	return nil
+func (f *liveFixture) mcpContext(ctx context.Context,method string,params any) (int,[]byte) {
+    f.t.Helper()
+    raw,_:=json.Marshal(map[string]any{"jsonrpc":"2.0","id":1,"method":method,"params":params})
+    req,err:=http.NewRequestWithContext(ctx,"POST",f.server.URL+"/mcp",bytes.NewReader(raw))
+    if err!=nil {f.t.Fatal(err)}
+    req.Header.Set("Content-Type","application/json")
+    req.Header.Set("Accept","application/json, text/event-stream")
+    req.Header.Set("MCP-Protocol-Version",legacyMCPVersion)
+    resp,err:=http.DefaultClient.Do(req)
+    if err!=nil { f.t.Fatal(err) }
+    defer resp.Body.Close()
+    var b bytes.Buffer
+    _,_ = b.ReadFrom(resp.Body)
+    return resp.StatusCode,b.Bytes()
 }
 
-func TestLiveHeartbeatWriteFailureExpiresSession(t *testing.T) {
-	f := newLiveFixture(t, []string{"workspace_info"}, []string{"workspace_info"})
-	f.registry.keepaliveInterval = 5 * time.Millisecond
-	request := httptest.NewRequest(http.MethodGet, "/live/sessions/"+f.sessionID+"/events", nil)
-	request.Host = strings.TrimPrefix(strings.TrimPrefix(f.server.URL, "http://"), "https://")
-	request.Header.Set("Origin", testHostOrigin)
-	request.Header.Set("Authorization", "Bearer "+f.ownerToken)
-	response := &failingHeartbeatWriter{}
-	f.registry.ServeHTTP(response, request)
-
-	if !response.wroteHeartbeat {
-		t.Fatal("SSE handler did not attempt an idle heartbeat")
-	}
-	f.registry.mu.Lock()
-	_, stillActive := f.registry.sessions[f.sessionID]
-	f.registry.mu.Unlock()
-	if stillActive {
-		t.Fatal("failed heartbeat left its live session available")
-	}
+func TestToolsAlwaysListedWithoutSessionOrClientToken(t *testing.T) {
+    f:=newLiveFixture(t)
+    status,body:=f.mcp("tools/list",map[string]any{})
+    if status!=200 {t.Fatalf("tools/list: %d %s",status,body)}
+    for _,name:=range []string{"repositories_list","repository_info","files_list","file_read","git_status","git_log","plugin_call","proposal_submit"} {
+        if !bytes.Contains(body,[]byte(fmt.Sprintf("\"name\":\"%s\"",name))) {t.Fatalf("missing %s: %s",name,body)}
+    }
+    if bytes.Contains(body,[]byte("capabilities_list")) || bytes.Contains(body,[]byte("workspace_info")) {t.Fatal("retired tools exposed")}
+    status,_=f.mcp("tools/call",map[string]any{"name":"repositories_list","arguments":map[string]any{}})
+    if status!=503 {t.Fatalf("expected no active browser, got %d",status)}
 }
 
-func (f *liveFixture) mcpRequest(method string, id int, params any, clientToken string, protocol string) (*http.Response, []byte) {
-	f.t.Helper()
-	req, err := http.NewRequest(http.MethodPost, f.server.URL+"/mcp", bytes.NewReader(currentMCPRequest(method, id, params)))
-	if err != nil {
-		f.t.Fatal(err)
-	}
-	req.Header.Set("Authorization", "Bearer "+clientToken)
-	req.Header.Set("Content-Type", "application/json")
-	req.Header.Set("Accept", "application/json, text/event-stream")
-	req.Header.Set("MCP-Protocol-Version", protocol)
-	req.Header.Set("Mcp-Method", method)
-	if name, ok := params.(map[string]any)["name"].(string); ok {
-		req.Header.Set("Mcp-Name", name)
-	}
-	resp, err := http.DefaultClient.Do(req)
-	if err != nil {
-		f.t.Fatal(err)
-	}
-	body, _ := io.ReadAll(resp.Body)
-	_ = resp.Body.Close()
-	return resp, body
+func TestActiveBrowserDispatchAndRepositoryID(t *testing.T) {
+    f:=newLiveFixture(t)
+    session:=f.createSession("host-A")
+    _,reader,closeStream:=f.openEvents(session)
+    defer closeStream()
+    status,_:=f.httpJSON("GET","/live/sessions/"+session+"/clients",nil)
+    if status!=404 {t.Fatalf("client token endpoint should not exist: %d",status)}
+    done:=make(chan struct{status int;body []byte},1)
+    go func(){code,body:=f.mcp("tools/call",map[string]any{"name":"repository_info","arguments":map[string]any{"repository_id":123,"branch":"main"}});done<-struct{status int;body []byte}{code,body}}()
+    request:=f.readEvent(reader)
+    if request["tool"]!="repository_info" {t.Fatalf("wrong tool %v",request)}
+    args:=request["arguments"].(map[string]any)
+    if args["repository_id"]!=float64(123) {t.Fatalf("lost repository ID %v",args)}
+    code,payload:=f.httpJSON("POST","/live/sessions/"+session+"/responses",map[string]any{"requestId":request["requestId"],"workspaceId":"host-A","generation":"generation-1","status":"completed","result":map[string]any{"repository_id":123,"head":"abc"}})
+    if code!=202 {t.Fatalf("Browser response rejected: %d %s",code,payload)}
+    select {case result:=<-done:
+        if result.status!=200||!bytes.Contains(result.body,[]byte("abc")) {t.Fatalf("MCP call %d %s",result.status,result.body)}
+    case <-time.After(3*time.Second): t.Fatal("tool response timed out")}
 }
 
-func TestLivePreflightAndRequestBodyLimit(t *testing.T) {
-	r := NewLiveRegistry(LiveConfig{OwnerKey: testOwnerKey, HostOrigin: testHostOrigin, PublicURL: "https://gateway.proprium.test", ListenAddr: "127.0.0.1:8080"})
-	req := httptest.NewRequest(http.MethodOptions, "/live/sessions", nil)
-	req.Host = "gateway.proprium.test"
-	req.Header.Set("Origin", testHostOrigin)
-	req.Header.Set("Access-Control-Request-Method", "POST")
-	req.Header.Set("Access-Control-Request-Headers", "authorization, content-type")
-	rec := httptest.NewRecorder()
-	r.ServeHTTP(rec, req)
-	if rec.Code != http.StatusNoContent || rec.Header().Get("Access-Control-Allow-Origin") != testHostOrigin || rec.Header().Get("Access-Control-Allow-Credentials") != "true" {
-		t.Fatalf("valid preflight failed: %d %#v", rec.Code, rec.Header())
-	}
-	req = httptest.NewRequest(http.MethodOptions, "/live/sessions", nil)
-	req.Host = "gateway.proprium.test"
-	req.Header.Set("Origin", testHostOrigin)
-	req.Header.Set("Access-Control-Request-Method", "PUT")
-	rec = httptest.NewRecorder()
-	r.ServeHTTP(rec, req)
-	if rec.Code != http.StatusForbidden || rec.Header().Get("Access-Control-Allow-Credentials") != "true" {
-		t.Fatalf("invalid method preflight response: %d %#v", rec.Code, rec.Header())
-	}
-	body := `{"workspaceId":"` + strings.Repeat("x", maxLiveBodyBytes) + `","generation":"g","capabilities":[]}`
-	req = httptest.NewRequest(http.MethodPost, "/live/sessions", strings.NewReader(body))
-	req.Host = "gateway.proprium.test"
-	req.Header.Set("Origin", testHostOrigin)
-	req.Header.Set("Authorization", "Bearer "+testOwnerKey)
-	req.Header.Set("Content-Type", "application/json")
-	rec = httptest.NewRecorder()
-	r.ServeHTTP(rec, req)
-	if rec.Code != http.StatusRequestEntityTooLarge || rec.Header().Get("Access-Control-Allow-Credentials") != "true" {
-		t.Fatalf("large body response: %d %#v", rec.Code, rec.Header())
-	}
+func TestHostSelectionDoesNotFailOverAfterDisconnect(t *testing.T) {
+    f:=newLiveFixture(t)
+    first:=f.createSession("host-A")
+    _,_,closeA:=f.openEvents(first)
+    defer closeA()
+    second:=f.createSession("host-B")
+    _,_,closeB:=f.openEvents(second)
+    defer closeB()
+    if client:=f.registry.activeClient();client==nil || client.session.workspaceID!="host-B" {t.Fatal("latest connected host must be active")}
+    closeB()
+    deadline:=time.Now().Add(2*time.Second)
+    for time.Now().Before(deadline) {
+        if f.registry.activeClient()==nil {break}
+        time.Sleep(10*time.Millisecond)
+    }
+    if f.registry.activeClient()!=nil {t.Fatal("unexpected failover to stale Host A")}
+    status,_:=f.mcp("tools/list",map[string]any{})
+    if status!=200 {t.Fatalf("tools must remain discoverable: %d",status)}
+    status,_=f.mcp("tools/call",map[string]any{"name":"repositories_list","arguments":map[string]any{}})
+    if status!=503 {t.Fatalf("no active Host must fail closed, got %d",status)}
 }
 
-func TestLiveEdgeCookieDoesNotReplaceBearerOrExactOrigin(t *testing.T) {
-	r := NewLiveRegistry(LiveConfig{OwnerKey: testOwnerKey, HostOrigin: testHostOrigin, PublicURL: "https://gateway.proprium.test", ListenAddr: "127.0.0.1:8080"})
-	body := `{"workspaceId":"workspace","generation":"generation","capabilities":[]}`
-	req := httptest.NewRequest(http.MethodPost, "/live/sessions", strings.NewReader(body))
-	req.Host = "gateway.proprium.test"
-	req.Header.Set("Origin", testHostOrigin)
-	req.Header.Set("Cookie", "CF_Authorization=edge-only")
-	req.Header.Set("Content-Type", "application/json")
-	withoutBearer := httptest.NewRecorder()
-	r.ServeHTTP(withoutBearer, req)
-	if withoutBearer.Code != http.StatusUnauthorized || withoutBearer.Header().Get("Access-Control-Allow-Origin") != testHostOrigin || withoutBearer.Header().Get("Access-Control-Allow-Credentials") != "true" {
-		t.Fatalf("edge cookie replaced owner bearer or exact-origin CORS: %d %#v", withoutBearer.Code, withoutBearer.Header())
-	}
-
-	req = httptest.NewRequest(http.MethodPost, "/live/sessions", strings.NewReader(body))
-	req.Host = "gateway.proprium.test"
-	req.Header.Set("Origin", "https://attacker.example")
-	req.Header.Set("Authorization", "Bearer "+testOwnerKey)
-	req.Header.Set("Content-Type", "application/json")
-	foreignOrigin := httptest.NewRecorder()
-	r.ServeHTTP(foreignOrigin, req)
-	if foreignOrigin.Code != http.StatusForbidden || foreignOrigin.Header().Get("Access-Control-Allow-Origin") != "" || foreignOrigin.Header().Get("Access-Control-Allow-Credentials") != "" {
-		t.Fatalf("foreign origin received credentialed CORS: %d %#v", foreignOrigin.Code, foreignOrigin.Header())
-	}
+func TestRepositoryIDRequired(t *testing.T) {
+    f:=newLiveFixture(t)
+    _,body:=f.mcp("tools/call",map[string]any{"name":"git_status","arguments":map[string]any{}})
+    if !bytes.Contains(body,[]byte("missing required tool argument")) {t.Fatalf("missing repository_id accepted: %s",body)}
 }
