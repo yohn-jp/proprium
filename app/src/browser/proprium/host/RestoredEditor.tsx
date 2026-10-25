@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useRef, useState, type ReactElement } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState, type ReactElement, type ReactNode } from "react";
 import { SceneEditor, type ScratchDraftBinding, type ScratchDraftPayload } from "../../../editor/SceneEditor.js";
 import { BrowserJournal, documentKey, repositoryKey, type JournalEntry } from "../../../storage/journal.js";
 import type { RepositoryIdentity, SnapshotId } from "@scriptorium/contracts";
@@ -20,6 +20,7 @@ interface Props {
   onSave(): void;
   onCommit(): void;
   onPublish(): void;
+  hostFileActions?: ReactNode;
   onHistory(): void;
   canPublish: boolean;
   onRegisterFlush(flush: (() => Promise<string | null>) | null): void;
@@ -126,7 +127,7 @@ export function RestoredEditor(props: Props): ReactElement {
       onCursorPositionChange={() => undefined} onReadingPageChange={() => undefined} resumeRequest={null} onResumeRequestApplied={() => undefined}
       durability={published ? "saved" : checkpointBusy ? "checkpointing" : props.localCommitted && !file.dirty ? "checkpointed" : "draft"} draftStored={!file.dirty || storedText === file.text} journalError={journalError}
       conflict={null} canResolveDraft={false} onRebase={() => undefined} onRestoreRemote={() => undefined}
-      canCheckpoint={!busy} checkpointBusy={checkpointBusy} onCheckpoint={props.onCommit} canPublish={props.canPublish && !busy} publishBusy={publishBusy} onPublish={props.onPublish}
+      canCheckpoint={!busy} checkpointBusy={checkpointBusy} onCheckpoint={props.onCommit} canPublish={props.canPublish && !busy} publishBusy={publishBusy} onPublish={props.onPublish} hostFileActions={props.hostFileActions}
       onHistory={props.onHistory} historyOpen={false} historyExternal={true} onRestoreHistoryBody={props.onChange}
       scratchEntries={entries.filter(entry => entry.documentPath.startsWith("meta/scratch/"))} onDraftScratch={draftScratch} onCheckpointScratch={checkpointScratch}
       registerScratchFlush={registerScratchFlush} registerNavigationFlush={registerInputFlush} scratchBusy={busy} pendingCount={file.dirty ? 1 : 0} />

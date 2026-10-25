@@ -163,6 +163,7 @@ export function SceneEditor({
   canPublish,
   publishBusy,
   onPublish,
+  hostFileActions,
   onHistory,
   historyOpen,
   historyExternal,
@@ -210,6 +211,8 @@ export function SceneEditor({
   canPublish: boolean;
   publishBusy: boolean;
   onPublish: () => void;
+  /** Optional Browser Host actions for the currently edited file. */
+  hostFileActions?: ReactNode;
   onHistory: () => void;
   historyOpen: boolean;
   /** Use when History is mounted as an independent workspace panel. */
@@ -314,6 +317,7 @@ export function SceneEditor({
         <div className="scene-heading">
           <p className="eyebrow">{breadcrumb}</p>
           <h1>{scene.title}</h1>
+          <strong className="sr-only" aria-label="Current file">{path}</strong>
         </div>
         <div className="editor-actions" aria-label="保存と表示">
           <button type="button" onClick={onCheckpoint} disabled={!canCheckpoint || checkpointBusy}>
@@ -325,6 +329,7 @@ export function SceneEditor({
           <button type="button" className="quiet-button" onClick={onHistory} aria-expanded={historyOpen}>
             履歴
           </button>
+          {hostFileActions}
         </div>
       </header>
 
@@ -354,6 +359,7 @@ export function SceneEditor({
         </section>
       )}
 
+      <div className="editor-display-controls">
       <nav className="writing-toolbar" aria-label="執筆と閲覧">
         <button type="button" className="quiet-button" onClick={() => { flushPendingReactPublish(); setReading((current) => !current); }} aria-pressed={reading}>{reading ? "編集に戻る" : "読書モード"}</button>
         <button type="button" className="quiet-button" onClick={() => setVertical((current) => !current)} aria-pressed={vertical}>{vertical ? "横書き" : "縦書き"}</button>
@@ -394,6 +400,7 @@ export function SceneEditor({
         {zen && <button type="button" className="quiet-button" onClick={() => setTypewriterDim((current) => !current)} aria-pressed={typewriterDim}>現在行以外を減光</button>}
       </nav>
       </details>
+      </div>
 
       {reading && (
         <section

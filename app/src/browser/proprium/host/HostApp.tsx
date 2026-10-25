@@ -807,9 +807,16 @@ export function HostApp(): ReactElement {
             {history.length ? <ol className="history-list">{history.map(commit => <li key={commit.oid}><span className="commit-rail" aria-hidden="true" /><div><strong>{commit.message.split("\n")[0]}</strong><code>{commit.oid.slice(0, 10)}</code><small>{commit.author.name} · {new Date(commit.timestamp * 1000).toLocaleString()}</small></div></li>)}</ol> : <p className="sidebar-empty">No commits in this local workspace.</p>}
           </section>
 </div>;
+  const hostFileActions = <div className="host-file-action-group" role="group" aria-label="Current file actions">
+    <button type="button" disabled={busy || !currentFile?.dirty || currentFile?.binary} onClick={() => void saveDraft()}>Save draft</button>
+    <button type="button" disabled={busy} onClick={() => void deleteFile()}>Delete file</button>
+  </div>;
   const editor = workspace && git && currentFile ? <section className="restored-editor">
-    <div className="host-file-actions"><strong aria-label="Current file">{currentFile.path}</strong><button disabled={busy || !currentFile.dirty || currentFile.binary} onClick={() => void saveDraft()}>Save draft</button><button disabled={busy} onClick={() => void deleteFile()}>Delete file</button></div>
-    {currentFile.binary ? <p>Binary file · {currentFile.data?.byteLength ?? 0} bytes</p> : <RestoredEditor key={`${workspace.identity.localWorkspaceId}:${currentFile.path}`} workspace={workspace.identity} file={currentFile} head={status.head} published={syncState === "published"} localCommitted={!!status.head && status.entries.length === 0} busy={busy} checkpointBusy={checkpointBusy} publishBusy={publishBusy} authorScope={preferences.email || "local"} author={preferences} git={git}
+    {currentFile.binary ? <>
+      <strong aria-label="Current file">{currentFile.path}</strong>
+      <p>Binary file · {currentFile.data?.byteLength ?? 0} bytes</p>
+      {hostFileActions}
+    </> : <RestoredEditor key={`${workspace.identity.localWorkspaceId}:${currentFile.path}`} workspace={workspace.identity} file={currentFile} head={status.head} published={syncState === "published"} localCommitted={!!status.head && status.entries.length === 0} busy={busy} checkpointBusy={checkpointBusy} publishBusy={publishBusy} authorScope={preferences.email || "local"} author={preferences} git={git} hostFileActions={hostFileActions}
       onChange={text => { setCurrentFile(previous => previous ? { ...previous, text, dirty: true } : previous); setSyncState("editing"); }}
       onSave={() => void saveDraft()} onCommit={() => revealPanel("inspector")} onPublish={() => void publishRemote()} canPublish={!!syncClient && status.localState === "local-committed" && !currentFile.dirty}
       onHistory={() => revealPanel("history")} onRegisterFlush={registerEditorFlush} onScratchApplied={refreshAfterPlugin} />}
