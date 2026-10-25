@@ -658,9 +658,6 @@ export function Workspace({ scope, mode, panels, beforeLayoutChange, requestedPa
             })}
           </div>
         </details>
-        <button className="st-workspace-save" type="button" onClick={save} disabled={changing}>Save layout</button>
-      </div>
-
       <details className="st-workspace-move-menu"><summary>配置変更</summary>
       <div className="st-workspace-move-controls" aria-label="Move panel controls">
         <label>
@@ -687,11 +684,12 @@ export function Workspace({ scope, mode, panels, beforeLayoutChange, requestedPa
         </label>
         <button type="button" disabled={changing || !moveSource || !moveTarget} onClick={() => movePanel(moveSource, moveTarget, placement)}>Move panel</button>
       </div></details>
+      <span className="st-workspace-layout-feedback" tabIndex={0} role="status" aria-live="polite" title={message || storageLabel}>{message || storageLabel}</span>
+        <button className="st-workspace-save" type="button" onClick={save} disabled={changing}>Save layout</button>
+      </div>
       </details>
 
       {persistenceState === "invalid" ? <p className="st-workspace-warning" role="alert">{storageLabel}</p> : null}
-      {message ? <p className="st-workspace-message" tabIndex={0} role="status" aria-live="polite">{message}</p> : null}
-      {!message && persistenceState !== "invalid" ? <p className="st-workspace-storage-state">{storageLabel}</p> : null}
 
       {mode === "mobile" ? (
         <div className="st-workspace-mobile-layout">
