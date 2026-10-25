@@ -2,6 +2,7 @@ import { createHash, createPublicKey, verify } from "node:crypto";
 import { mkdir, readFile, rm, writeFile } from "node:fs/promises";
 import { relative, resolve, sep } from "node:path";
 import { fileURLToPath } from "node:url";
+import { fetchBoundedResponse } from "./fetch-bounded-response.mjs";
 
 const root = resolve(fileURLToPath(new URL("..", import.meta.url)));
 const output = resolve(root, "dist/previous-plugin-registry");
@@ -47,9 +48,12 @@ await mkdir(output, { recursive: true });
 
 async function fetchObject(path, expectedType, { missing = false, maxAge = 60 } = {}) {
   safePath(path);
-  const response = await fetch(new URL(path, artifactBase), {
-    headers: { Origin: hostOrigin }, cache: "no-store", credentials: "omit",
-  });
+  const { response, bytes } = await fetchBoundedResponse(
+    new URL(path, artifactBase),
+    { headers: { Origin: hostOrigin }, cache: "no-store", credentials: "omit" },
+    MAX_ASSET_BYTES,
+    `Previous registry object ${path}`,
+  );
   if (response.status === 404 && missing) return null;
   if (!response.ok) throw new Error(`Previous registry object ${path} returned HTTP ${response.status}`);
   if (response.headers.get("access-control-allow-origin") !== hostOrigin) throw new Error(`Previous registry object ${path} did not allow the Host origin`);
@@ -63,8 +67,6 @@ async function fetchObject(path, expectedType, { missing = false, maxAge = 60 } 
       (maxAge > 60 && (!/\bimmutable\b/iu.test(cache) || age < 31_536_000))) {
     throw new Error(`Previous registry object ${path} has unexpected Cache-Control: ${cache}`);
   }
-  const bytes = new Uint8Array(await response.arrayBuffer());
-  if (bytes.byteLength > MAX_ASSET_BYTES) throw new Error(`Previous registry object ${path} exceeds the copy limit`);
   return bytes;
 }
 

@@ -34,6 +34,8 @@ The workflow does not create account resources, DNS records, custom domains, or 
 
 `.github/workflows/publish-plugin-registry.yml` is a manual release workflow. It builds the independent example plugin with `scripts/build-plugin-registry.mjs`, verifies the signed registry and every artifact against the registry's separately pinned Ed25519 public key, and invokes `scripts/publish-plugin-registry.mjs` to upload content-addressed immutable files. The publisher fetches each object from the public origin and checks its bytes, MIME, cache headers, `nosniff`, and Host CORS response before it publishes the signature sidecar and registry index last. It requires an existing R2 bucket and public custom domain; it never creates either resource.
 
+With `PROPRIUM_PLUGIN_R2_BUCKET`, `PROPRIUM_PLUGIN_ARTIFACT_BASE`, and `PROPRIUM_HOST_ORIGIN` set, `node scripts/publish-plugin-registry.mjs artifacts --plan` prints the exact local source files and R2 object keys it would publish without Cloudflare credentials or network access.
+
 Configure the `proprium-plugin-release` GitHub environment with:
 
 - `PROPRIUM_PLUGIN_R2_BUCKET`: an existing bucket name.

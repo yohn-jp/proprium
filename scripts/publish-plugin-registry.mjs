@@ -4,6 +4,7 @@ import { readdir, readFile } from "node:fs/promises";
 import { resolve, relative, sep } from "node:path";
 import { spawnSync } from "node:child_process";
 import { fileURLToPath } from "node:url";
+import { fetchBoundedResponse } from "./fetch-bounded-response.mjs";
 
 const root = resolve(fileURLToPath(new URL("..", import.meta.url)));
 const output = resolve(root, "dist/plugin-registry");
@@ -11,12 +12,14 @@ const bucket = process.env.PROPRIUM_PLUGIN_R2_BUCKET ?? "";
 const artifactBase = process.env.PROPRIUM_PLUGIN_ARTIFACT_BASE ?? "";
 const hostOrigin = process.env.PROPRIUM_HOST_ORIGIN ?? "";
 const stage = process.argv[2];
+const planning = process.argv[3] === "--plan";
 
 if (!["artifacts", "registry-signature", "registry-index"].includes(stage)) {
-  throw new Error("Usage: node scripts/publish-plugin-registry.mjs <artifacts|registry-signature|registry-index>");
+  throw new Error("Usage: node scripts/publish-plugin-registry.mjs <artifacts|registry-signature|registry-index> [--plan]");
 }
+if (process.argv.length > (planning ? 4 : 3)) throw new Error("Unexpected plugin publication command-line argument");
 if (!/^[a-z0-9](?:[a-z0-9-]{1,61}[a-z0-9])$/u.test(bucket)) throw new Error("PROPRIUM_PLUGIN_R2_BUCKET is invalid");
-if (!process.env.CLOUDFLARE_API_TOKEN || !process.env.CLOUDFLARE_ACCOUNT_ID) {
+if (!planning && (!process.env.CLOUDFLARE_API_TOKEN || !process.env.CLOUDFLARE_ACCOUNT_ID)) {
   throw new Error("Cloudflare API token and account ID are required for R2 publication");
 }
 const base = new URL(artifactBase);
@@ -60,11 +63,18 @@ function contentType(path) {
   if (path.endsWith(".sig")) return "application/octet-stream";
   throw new Error(`Unsupported plugin release media type: ${path}`);
 }
-function wranglerPut(path, mime, cacheControl) {
-  const objectPath = `${bucket}/plugins/${path}`;
+function sourceFileForKey(key) {
+  const sourceFile = resolve(output, ...key.split("/"));
+  const back = relative(output, sourceFile);
+  if (back === ".." || back.startsWith(`..${sep}`) || back.startsWith(sep)) {
+    throw new Error(`Local plugin artifact escaped the build output: ${key}`);
+  }
+  return sourceFile;
+}
+function wranglerPut(sourceFile, objectPath, mime, cacheControl) {
   const result = spawnSync(process.platform === "win32" ? "pnpm.cmd" : "pnpm", [
     "exec", "wrangler", "r2", "object", "put", objectPath,
-    "--file", path,
+    "--file", sourceFile,
     "--content-type", mime,
     "--cache-control", cacheControl,
     "--remote",
@@ -76,9 +86,10 @@ function cacheMaxAge(value) {
   return Number(/(?:^|,)\s*max-age=(\d+)/iu.exec(value)?.[1] ?? NaN);
 }
 async function verifyPublicObject(path, expected, immutable) {
-  const response = await fetch(new URL(path, base), { headers: { Origin: hostOrigin }, cache: "no-store", credentials: "omit" });
+  const { response, bytes: actual } = await fetchBoundedResponse(
+    new URL(path, base), { headers: { Origin: hostOrigin }, cache: "no-store", credentials: "omit" }, expected.byteLength, `Public artifact ${path}`,
+  );
   if (!response.ok) throw new Error(`Public artifact ${path} returned HTTP ${response.status}`);
-  const actual = new Uint8Array(await response.arrayBuffer());
   if (sha256(actual) !== sha256(expected)) throw new Error(`Public artifact ${path} differs from the signed bytes`);
   if (response.headers.get("access-control-allow-origin") !== hostOrigin) throw new Error(`Public artifact ${path} did not allow the configured Host origin`);
   if (response.headers.get("x-content-type-options")?.toLowerCase() !== "nosniff") throw new Error(`Public artifact ${path} is missing X-Content-Type-Options: nosniff`);
@@ -90,6 +101,7 @@ async function verifyPublicObject(path, expected, immutable) {
   if (!immutable && (!Number.isFinite(age) || age > 60)) throw new Error(`Mutable registry metadata ${path} must use Cache-Control max-age of 60 seconds or less`);
 }
 
+const uploads = [];
 if (stage === "artifacts") {
   const immutableFiles = paths.filter(path => path !== registryPath && path !== signaturePath);
   if (immutableFiles.length === 0) throw new Error("No immutable plugin files were produced");
@@ -99,15 +111,55 @@ if (stage === "artifacts") {
     const bytes = await readFile(path);
     const digest = sha256(bytes);
     if (!key.includes(digest)) throw new Error(`Immutable R2 key must contain its exact SHA-256 digest: ${key}`);
-    wranglerPut(key, contentType(key), "public, max-age=31536000, immutable");
-    await verifyPublicObject(key, bytes, true);
+    uploads.push({
+      key,
+      sourceFile: sourceFileForKey(key),
+      contentType: contentType(key),
+      cacheControl: "public, max-age=31536000, immutable",
+      immutable: true,
+      sha256: digest,
+      bytes: bytes.byteLength,
+    });
   }
-  console.info(`Published and verified ${immutableFiles.length} immutable plugin object(s).`);
 } else {
   const path = stage === "registry-signature" ? signaturePath : registryPath;
   const key = relativeKey(path);
   const bytes = await readFile(path);
-  wranglerPut(key, contentType(key), "public, max-age=60, must-revalidate");
-  await verifyPublicObject(key, bytes, false);
-  console.info(`Published and verified signed registry metadata ${key}.`);
+  uploads.push({
+    key,
+    sourceFile: sourceFileForKey(key),
+    contentType: contentType(key),
+    cacheControl: "public, max-age=60, must-revalidate",
+    immutable: false,
+    sha256: sha256(bytes),
+    bytes: bytes.byteLength,
+  });
 }
+
+if (planning) {
+  console.log(JSON.stringify({
+    mode: "plan-only",
+    stage,
+    uploads: uploads.map(upload => ({
+      localFile: upload.sourceFile,
+      objectKey: `${bucket}/plugins/${upload.key}`,
+      contentType: upload.contentType,
+      cacheControl: upload.cacheControl,
+      sha256: upload.sha256,
+      bytes: upload.bytes,
+    })),
+  }, null, 2));
+  process.exit(0);
+}
+
+for (const upload of uploads) {
+  const bytes = await readFile(upload.sourceFile);
+  if (bytes.byteLength !== upload.bytes || sha256(bytes) !== upload.sha256) {
+    throw new Error(`Local plugin artifact changed while preparing upload: ${upload.key}`);
+  }
+  const objectPath = `${bucket}/plugins/${upload.key}`;
+  wranglerPut(upload.sourceFile, objectPath, upload.contentType, upload.cacheControl);
+  await verifyPublicObject(upload.key, bytes, upload.immutable);
+}
+if (stage === "artifacts") console.info(`Published and verified ${uploads.length} immutable plugin object(s).`);
+else console.info(`Published and verified signed registry metadata ${uploads[0].key}.`);
