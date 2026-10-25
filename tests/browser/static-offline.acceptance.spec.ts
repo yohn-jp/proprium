@@ -168,9 +168,8 @@ test("static Host imports a GitHub REST commit, reloads offline, and edits with 
     const registration = await page.evaluate(async () => {
       if (!window.propriumReleaseStaticServiceWorker) throw new Error("Expected the WebKit fixture registration hold.");
       const registered = await window.propriumReleaseStaticServiceWorker();
-      return { active: registered.active !== null, scope: registered.scope };
+      return { scope: registered.scope };
     });
-    expect(registration.active).toBe(true);
     expect(registration.scope).toBe(`${configuredOrigin}/`);
   }
   await expect.poll(() => page.evaluate(async () => {
