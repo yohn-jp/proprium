@@ -34,6 +34,10 @@ jobs:
         run: test -f go.mod
       - name: Verify Go toolchain
         run: test "$(go version | awk '{print $3}')" = "go1.27.3"
+      - name: Verify Bash CLI and bootstrap acquisition
+        run: |
+          bash -n distribution/proprium distribution/bootstrap.sh distribution/package-release.sh distribution/verify-release-assets.sh
+          bash distribution/test-bootstrap.sh
       - name: Test with race detector
         run: go test -race ./...
       - name: Vet Gateway
