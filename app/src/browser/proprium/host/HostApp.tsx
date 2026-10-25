@@ -3,7 +3,7 @@ import { createPortal } from "react-dom";
 import { useNavigate } from "react-router-dom";
 import { BrowserLocalGit, BrowserLocalGitError } from "../git/index.js";
 import type { CommitSummary, FileRevision, StatusEntry, WorkspaceIdentity } from "../git/protocol.js";
-import { createGitHubAccountSession } from "../git/github-sync.js";
+import { createGitHubAccountSession, GitHubSyncError } from "../git/github-sync.js";
 import type { GitHubAccount, GitHubDevicePrompt, GitHubRepository, GitHubAccountSession, GitHubSyncClient } from "../git/github-sync.js";
 import { PluginPanel } from "./PluginPanel.js";
 import { LiveMcpPanel } from "./LiveMcpPanel.js";
@@ -26,6 +26,11 @@ interface RecentWorkspace {
   identity: WorkspaceIdentity;
   title: string;
   lastOpened: number;
+}
+interface WorkspaceAuthTarget {
+  git: BrowserLocalGit;
+  identity: WorkspaceIdentity;
+  generation: string;
 }
 declare global {
   interface Window { propriumHostOpenLocalWorkspace?: (entry: RecentWorkspace) => Promise<void>; }
@@ -119,8 +124,9 @@ export function HostApp(): ReactElement {
   const [session, setSession] = useState<GitHubAccountSession | null>(null);
   const [account, setAccount] = useState<GitHubAccount | null>(null);
   const [repositories, setRepositories] = useState<GitHubRepository[]>([]);
-  const [authStage, setAuthStage] = useState<"waiting" | "repositories" | null>(null);
+  const [authStage, setAuthStage] = useState<"waiting" | "repositories" | "verifying" | null>(null);
   const [devicePrompt, setDevicePrompt] = useState<GitHubDevicePrompt | null>(null);
+  const [workspaceAuthOpen, setWorkspaceAuthOpen] = useState(false);
   const [busy, setBusy] = useState(false);
   const [selectedRepository, setSelectedRepository] = useState<number | null>(null);
   const [selectedBranch, setSelectedBranch] = useState("");
@@ -147,8 +153,16 @@ export function HostApp(): ReactElement {
   const [requestedPanel, setRequestedPanel] = useState({ id: "editor", sequence: 0 });
   const [recoveryTarget, setRecoveryTarget] = useState<RecentWorkspace | null>(null);
   const editorFlush = useRef<(() => Promise<string | null>) | null>(null);
+  const workspaceAuthDialog = useRef<HTMLDialogElement | null>(null);
+  const workspaceAuthTarget = useRef<WorkspaceAuthTarget | null>(null);
   const registerEditorFlush = useCallback((flush: (() => Promise<string | null>) | null) => { editorFlush.current = flush; }, []);
   useEffect(() => applyThemeMode(theme), [theme]);
+  useEffect(() => {
+    const dialog = workspaceAuthDialog.current;
+    if (!dialog) return;
+    if (workspaceAuthOpen && !dialog.open) dialog.showModal();
+    else if (!workspaceAuthOpen && dialog.open) dialog.close();
+  }, [workspaceAuthOpen]);
   useEffect(() => {
     if (!workspace && mode === "mobile") {
       const search = new URLSearchParams(location.search);
@@ -156,11 +170,15 @@ export function HostApp(): ReactElement {
     }
   }, [workspace, mode, navigate]);
   const gitRef = useRef<BrowserLocalGit | null>(null);
+  const workspaceRef = useRef<RecentWorkspace | null>(workspace);
+  const workspaceGenerationRef = useRef(workspaceGeneration);
   const sessionRef = useRef<GitHubAccountSession | null>(null);
   const authorizationRef = useRef<AbortController | null>(null);
   const currentFileRef = useRef<OpenFile | null>(currentFile);
   const livePluginInvoker = useRef<((args: Record<string, unknown>, signal: AbortSignal) => Promise<unknown>) | null>(null);
   currentFileRef.current = currentFile;
+  workspaceRef.current = workspace;
+  workspaceGenerationRef.current = workspaceGeneration;
   const activeWorkspaceId = workspace?.identity.localWorkspaceId ?? null;
   const selectedRepositoryEntry = repositories.find(item => item.id === selectedRepository) ?? null;
   const changedPaths = useMemo(() => new Set(status.entries.map(entry => entry.path)), [status.entries]);
@@ -195,11 +213,14 @@ export function HostApp(): ReactElement {
         return;
       }
       const previousGit = gitRef.current;
+      const generation = crypto.randomUUID();
       gitRef.current = nextGit;
+      workspaceRef.current = entry;
+      workspaceGenerationRef.current = generation;
       setGit(nextGit);
       setSyncClient(nextSync);
       setWorkspace(entry);
-      setWorkspaceGeneration(crypto.randomUUID());
+      setWorkspaceGeneration(generation);
       setCurrentFile(null);
       setStatus(nextState.status);
       setFiles(nextState.files);
@@ -223,7 +244,25 @@ export function HostApp(): ReactElement {
 
   useEffect(() => () => { authorizationRef.current?.abort(); gitRef.current?.close(); sessionRef.current?.signOut(); }, []);
 
-  async function connectGitHub(): Promise<void> {
+  function workspaceAuthTargetIsCurrent(target: WorkspaceAuthTarget): boolean {
+    const active = workspaceRef.current;
+    return gitRef.current === target.git && workspaceGenerationRef.current === target.generation && !!active &&
+      active.identity.localWorkspaceId === target.identity.localWorkspaceId &&
+      active.identity.origin === target.identity.origin &&
+      active.identity.repositoryId === target.identity.repositoryId &&
+      active.identity.owner === target.identity.owner &&
+      active.identity.repository === target.identity.repository &&
+      active.identity.branch === target.identity.branch;
+  }
+
+  function openWorkspaceGitHubAuth(): void {
+    if (!workspace || !git) return;
+    workspaceAuthTarget.current = { git, identity: { ...workspace.identity }, generation: workspaceGeneration };
+    setMessage(null);
+    setWorkspaceAuthOpen(true);
+  }
+
+  async function connectGitHub(target?: WorkspaceAuthTarget): Promise<void> {
     const configuredGateway = gatewayDraft.trim();
     if (!configuredGateway) { setMessage({ tone: "error", text: "Enter the Proprium Gateway URL configured for this Host." }); return; }
     setBusy(true);
@@ -241,6 +280,30 @@ export function HostApp(): ReactElement {
       setMessage({ tone: "info", text: `Enter code ${prompt.userCode} at GitHub, then return here. This page will finish sign-in automatically.` });
       const signedIn = await accountSession.completeAuthorization(controller.signal);
       if (controller.signal.aborted || authorizationRef.current !== controller) return;
+      if (target) {
+        if (!workspaceAuthTargetIsCurrent(target)) {
+          throw new GitHubSyncError("authentication_required", "The active Workspace changed during GitHub sign-in. Local work was left untouched; reopen its GitHub connection.");
+        }
+        setAuthStage("verifying");
+        const attachedClient = target.git.connectGitHubSession(accountSession);
+        const confirmed = await attachedClient.remoteHead();
+        if (controller.signal.aborted || authorizationRef.current !== controller) return;
+        if (!workspaceAuthTargetIsCurrent(target)) {
+          throw new GitHubSyncError("authentication_required", "The active Workspace changed while GitHub verified its repository. No connection was attached.");
+        }
+        if (confirmed.repositoryId !== target.identity.repositoryId || confirmed.branch !== target.identity.branch) {
+          throw new GitHubSyncError("repository_mismatch", "GitHub did not confirm the immutable repository ID and branch for this Workspace.");
+        }
+        setSyncClient(attachedClient);
+        setAccount(signedIn);
+        setRepositories([]);
+        setDevicePrompt(null);
+        try { localStorage.setItem(GATEWAY_KEY, configuredGateway); } catch { /* Configuration can be entered again. */ }
+        workspaceAuthTarget.current = null;
+        setWorkspaceAuthOpen(false);
+        setMessage({ tone: "success", text: `Connected this Workspace to GitHub as ${signedIn.login}. Fetch is available when you are ready; no remote changes were fetched or published.` });
+        return;
+      }
       setAuthStage("repositories");
       const available = await accountSession.repositories();
       if (controller.signal.aborted || authorizationRef.current !== controller) return;
@@ -256,14 +319,24 @@ export function HostApp(): ReactElement {
       setMessage({ tone: "error", text: errorMessage(error) });
       if (sessionRef.current === accountSession) sessionRef.current = null;
       setSession(null); setAccount(null); setRepositories([]);
+      if (target && !workspaceAuthTargetIsCurrent(target)) {
+        workspaceAuthTarget.current = null;
+        setWorkspaceAuthOpen(false);
+      }
     } finally { if (authorizationRef.current === controller) { authorizationRef.current = null; setAuthStage(null); setBusy(false); } }
   }
 
   function cancelGitHubAuthorization(): void {
     authorizationRef.current?.abort(); authorizationRef.current = null;
     sessionRef.current?.signOut(); sessionRef.current = null;
+    workspaceAuthTarget.current = null;
     setSession(null); setAccount(null); setRepositories([]); setDevicePrompt(null); setAuthStage(null); setBusy(false);
     setMessage({ tone: "info", text: "GitHub sign-in canceled. Local workspaces remain available." });
+  }
+
+  function closeWorkspaceGitHubAuth(): void {
+    cancelGitHubAuthorization();
+    setWorkspaceAuthOpen(false);
   }
 
   async function openRemoteRepository(): Promise<void> {
@@ -297,11 +370,14 @@ export function HostApp(): ReactElement {
         return;
       }
       const previousGit = gitRef.current;
+      const generation = crypto.randomUUID();
       gitRef.current = nextGit;
+      workspaceRef.current = entry;
+      workspaceGenerationRef.current = generation;
       setGit(nextGit);
       setSyncClient(nextSync);
       setWorkspace(entry);
-      setWorkspaceGeneration(crypto.randomUUID());
+      setWorkspaceGeneration(generation);
       setCurrentFile(null);
       setStatus(initial.status);
       setFiles(initial.files);
@@ -567,6 +643,10 @@ export function HostApp(): ReactElement {
 
   function leaveWorkspace(): void {
     if (currentFile?.dirty && !window.confirm("This file has edits not saved to the local worktree. Leave and discard those edits?")) return;
+    workspaceRef.current = null;
+    workspaceGenerationRef.current = "";
+    workspaceAuthTarget.current = null;
+    setWorkspaceAuthOpen(false);
     gitRef.current?.close();
     gitRef.current = null;
     setWorkspace(null);
@@ -580,7 +660,7 @@ export function HostApp(): ReactElement {
   const signOut = (): void => {
     session?.signOut();
     sessionRef.current = null;
-    setSession(null); setAccount(null); setRepositories([]); setDevicePrompt(null);
+    setSession(null); setAccount(null); setRepositories([]); setDevicePrompt(null); setSyncClient(null);
     setMessage({ tone: "info", text: "Signed out. Local workspaces remain on this device." });
   };
 
@@ -677,7 +757,7 @@ export function HostApp(): ReactElement {
           </section>
           <section className="sidebar-section sync-sidebar-section">
             <div className="section-title-row"><h2>GitHub</h2><span className={`connection-indicator ${syncClient ? "connected" : "local-only"}`} aria-label={syncClient ? "Connected to GitHub" : "Local workspace only"}>{syncClient ? "GitHub接続済み" : "このブラウザーのみ"}</span></div>
-            {syncClient ? <div className="sync-actions"><button type="button" onClick={() => void fetchRemote()} disabled={busy}>Fetch</button><button type="button" onClick={() => void pullRemote()} disabled={busy}>Pull</button><button type="button" className="publish-button" onClick={() => void publishRemote()} disabled={busy || status.localState !== "local-committed"}>Publish</button></div> : <p className="sidebar-empty">Sign in to enable remote sync. Local editing remains available offline.</p>}
+            {syncClient ? <div className="sync-actions"><button type="button" onClick={() => void fetchRemote()} disabled={busy}>Fetch</button><button type="button" onClick={() => void pullRemote()} disabled={busy}>Pull</button><button type="button" className="publish-button" onClick={() => void publishRemote()} disabled={busy || status.localState !== "local-committed"}>Publish</button></div> : <><p className="sidebar-empty">Sign in to enable remote sync. Local editing remains available offline.</p><button type="button" className="text-button" aria-haspopup="dialog" aria-controls="workspace-github-auth" disabled={busy} onClick={openWorkspaceGitHubAuth}>Sign in to GitHub</button></>}
           </section>
 </div> : mode === "desktop" ? <div className="host-controls">{recentCard}</div> : picker;
   const tools = <div className="host-controls">{git && workspace && <PluginPanel
@@ -749,7 +829,23 @@ export function HostApp(): ReactElement {
     library={library} editor={workspace ? <RetainedPanelSlot node={editorNode} /> : editor} tools={<RetainedPanelSlot node={toolsNode} />} status={statusSurface} renderStatus={error => <>{statusSurface}{error && <p role="alert">{error}</p>}</>}
     onSwitchMode={async () => { if (!(await beforeLayoutChange())) return false; const next = mode === "desktop" ? "mobile" : "desktop"; setMode(next); try { localStorage.setItem("scriptorium:ui-mode", next); } catch { /* The active mode remains usable. */ } return true; }}
     workspaceScope={workspace?.identity.localWorkspaceId} panels={workspace ? panels : undefined} beforeLayoutChange={beforeLayoutChange} requestedPanel={requestedPanel} />
-  </Suspense>{recoveryEntry && <StorageRecoveryDialog key={`recovery:${recoveryEntry.identity.localWorkspaceId}`} title={recoveryEntry.title} busy={busy} error={message?.tone === "error" ? message.text : ""} onVerify={() => void recoverStorage(recoveryEntry)} />}{workspace && createPortal(tools, toolsNode, workspace.identity.localWorkspaceId)}{workspace && createPortal(editor, editorNode, `editor:${workspace.identity.localWorkspaceId}`)}</main>;
+  </Suspense>{workspaceAuthOpen && <dialog ref={workspaceAuthDialog} id="workspace-github-auth" className="storage-recovery-dialog github-connection-dialog" aria-labelledby="workspace-github-auth-title" aria-describedby="workspace-github-auth-description" onCancel={event => { event.preventDefault(); closeWorkspaceGitHubAuth(); }}>
+    <h2 id="workspace-github-auth-title">Connect this Workspace to GitHub</h2>
+    <p id="workspace-github-auth-description">Sign in to verify this Workspace's repository and branch. Your editor stays open; no files are fetched or published.</p>
+    <details className="gateway-settings" open={gatewaySettingsOpen} onToggle={event => setGatewaySettingsOpen(event.currentTarget.open)}>
+      <summary>接続先設定</summary>
+      <label htmlFor="workspace-github-gateway">Proprium Gateway URL</label>
+      <input id="workspace-github-gateway" type="url" value={gatewayDraft} onChange={event => updateGateway(event.target.value)} placeholder="https://gateway.example.com" autoComplete="url" />
+      <p className="field-help">通常は変更不要です。Cloudflare Accessで保護されたGatewayは、先にログインしてください。</p>
+      <a href={gatewayDraft.trim() ? `${gatewayDraft.trim().replace(/\/$/u, "")}/healthz` : "#"} target="_blank" rel="noopener noreferrer" aria-disabled={!gatewayDraft.trim()} onClick={event => { if (!gatewayDraft.trim()) event.preventDefault(); }}>Authenticate with Cloudflare Access</a>
+    </details>
+    {devicePrompt && <section className="device-prompt" aria-label="GitHub device authorization"><h3>GitHub device code</h3><strong>{devicePrompt.userCode}</strong><p>Enter this code on GitHub, then return here. Authorization continues in this dialog.</p><a href={devicePrompt.verificationUri} target="_blank" rel="noopener noreferrer">Open GitHub device sign-in</a><p className="field-help" role="status">{authStage === "verifying" ? "GitHub authorized. Verifying this Workspace's repository identity…" : "Waiting for GitHub authorization…"}</p></section>}
+    {message?.tone === "error" && <p role="alert">{message.text}</p>}
+    <div className="storage-recovery-actions">
+      <button type="button" onClick={closeWorkspaceGitHubAuth}>Cancel</button>
+      <button type="button" className="primary-button" disabled={busy} onClick={() => { const target = workspaceAuthTarget.current; if (target) void connectGitHub(target); }}>{busy ? "Connecting…" : "Connect GitHub"}</button>
+    </div>
+  </dialog>}{recoveryEntry && <StorageRecoveryDialog key={`recovery:${recoveryEntry.identity.localWorkspaceId}`} title={recoveryEntry.title} busy={busy} error={message?.tone === "error" ? message.text : ""} onVerify={() => void recoverStorage(recoveryEntry)} />}{workspace && createPortal(tools, toolsNode, workspace.identity.localWorkspaceId)}{workspace && createPortal(editor, editorNode, `editor:${workspace.identity.localWorkspaceId}`)}</main>;
 
   function updatePreferences(value: { name: string; email: string }): void {
     setPreferences(value);

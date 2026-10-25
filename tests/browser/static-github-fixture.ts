@@ -67,12 +67,13 @@ function corsHeaders(origin: string): Record<string, string> {
 }
 
 /** Emulates only the GitHub OAuth and read APIs needed to open one real Git commit. */
-export async function installStaticGitHubFixture(page: Page, hostOrigin: string): Promise<{ head: string; content: string; apiRequests(): number }> {
+export async function installStaticGitHubFixture(page: Page, hostOrigin: string): Promise<{ head: string; content: string; apiRequests(): number; apiPaths(): string[] }> {
   const context = page.context();
   const fixtureContent = "A synthetic GitHub commit imported through the static Host.\n";
   const fixture = commitFixture(fixtureContent);
   const fakeToken = "proprium-static-fixture-only-token";
   let apiRequestCount = 0;
+  const apiPaths: string[] = [];
 
   await installMockGitHubOAuth(page, {
     relayUrl: hostOrigin, hostOrigin, accessToken: fakeToken,
@@ -85,6 +86,7 @@ export async function installStaticGitHubFixture(page: Page, hostOrigin: string)
     const cors = corsHeaders(hostOrigin);
     if (source.method() === "OPTIONS") return route.fulfill({ status: 204, headers: cors });
     apiRequestCount += 1;
+    apiPaths.push(`${source.method()} ${requestUrl.pathname}`);
     const json = (payload: unknown, status = 200) => route.fulfill({
       status,
       headers: cors,
@@ -129,5 +131,5 @@ export async function installStaticGitHubFixture(page: Page, hostOrigin: string)
     return json({ message: `Unexpected ${source.method()} ${requestUrl.pathname}` }, 404);
   });
 
-  return { head: fixture.sha, content: fixtureContent, apiRequests: () => apiRequestCount };
+  return { head: fixture.sha, content: fixtureContent, apiRequests: () => apiRequestCount, apiPaths: () => [...apiPaths] };
 }
