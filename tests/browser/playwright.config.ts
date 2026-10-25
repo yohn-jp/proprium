@@ -1,20 +1,23 @@
 import { defineConfig } from "@playwright/test";
-import { generateKeyPairSync } from "node:crypto";
+import { createPrivateKey, createPublicKey, generateKeyPairSync } from "node:crypto";
 
 const configuredPort = process.env.PROPRIUM_E2E_PORT ?? "4173";
 const baseURL = process.env.PROPRIUM_E2E_BASE_URL ?? `http://127.0.0.1:${configuredPort}/`;
 const externalServer = Boolean(process.env.PROPRIUM_E2E_BASE_URL);
 process.env.VITE_PROPRIUM_E2E = "true";
 const hasLiveGitHubToken = Boolean(process.env.PROPRIUM_E2E_GITHUB_TOKEN || process.env.SCRIPTORIUM_GITHUB_LIVE_TEST_TOKEN);
-const pluginFixtureSigner = generateKeyPairSync("ed25519");
-const pluginFixturePublicKey = pluginFixtureSigner.publicKey.export({ format: "der", type: "spki" }).subarray(-32);
+const pluginFixturePrivateKey = process.env.PROPRIUM_E2E_PLUGIN_REGISTRY_PRIVATE_KEY
+  ? createPrivateKey(process.env.PROPRIUM_E2E_PLUGIN_REGISTRY_PRIVATE_KEY)
+  : generateKeyPairSync("ed25519").privateKey;
+const pluginFixturePublicKey = createPublicKey(pluginFixturePrivateKey);
+const pluginFixturePublicKeyBytes = pluginFixturePublicKey.export({ format: "der", type: "spki" }).subarray(-32);
 const pluginFixtureOrigin = new URL(baseURL).origin;
 process.env.VITE_PROPRIUM_PLUGIN_REGISTRY_URL = `${pluginFixtureOrigin}/plugin-fixture/registry.json`;
-process.env.VITE_PROPRIUM_PLUGIN_REGISTRY_KEY = pluginFixturePublicKey.toString("base64");
+process.env.VITE_PROPRIUM_PLUGIN_REGISTRY_KEY = pluginFixturePublicKeyBytes.toString("base64");
 process.env.VITE_PROPRIUM_PLUGIN_ARTIFACT_ORIGINS = pluginFixtureOrigin;
 // This per-run key signs the test server's fixture data. It has no relationship
 // to a production trust root and is never exposed through Vite's VITE_ prefix.
-process.env.PROPRIUM_E2E_PLUGIN_REGISTRY_PRIVATE_KEY = pluginFixtureSigner.privateKey.export({ format: "pem", type: "pkcs8" }).toString();
+process.env.PROPRIUM_E2E_PLUGIN_REGISTRY_PRIVATE_KEY = pluginFixturePrivateKey.export({ format: "pem", type: "pkcs8" }).toString();
 
 export default defineConfig({
   testDir: ".",
