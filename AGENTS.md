@@ -1,6 +1,6 @@
 # Proprium
 
-Proprium's target product is a browser-native, Git-native workspace with WASM-first plugins. Read [architecture](docs/architecture/OVERVIEW.md), [Git and storage](docs/architecture/GIT-AND-STORAGE.md), [plugin platform](docs/architecture/PLUGIN-PLATFORM.md), and [delivery/security](docs/architecture/DELIVERY-AND-SECURITY.md) before changing their boundaries. Read [workspace UX](docs/architecture/WORKSPACE-UX.md) for UI work and [compatibility](docs/architecture/COMPATIBILITY.md) when using inherited code.
+Proprium's target product is a browser-native, Git-native workspace with WASM-first plugins. **A user must be able to open the static Host and use local editing, local Git and cached WASM plugins without any Gateway or login.** The separately deployable optional Go Gateway adds GitHub OAuth/Smart HTTP fallback and Live Workspace MCP; it never owns Workspace state or compute. [Gateway/MCP architecture](docs/architecture/OPTIONAL-GATEWAY-AND-MCP.md) defines this target; existing Cloudflare auth Worker is transitional, not the final system. Read [architecture](docs/architecture/OVERVIEW.md), [Git and storage](docs/architecture/GIT-AND-STORAGE.md), [plugin platform](docs/architecture/PLUGIN-PLATFORM.md), and [delivery/security](docs/architecture/DELIVERY-AND-SECURITY.md) before changing their boundaries. Read [workspace UX](docs/architecture/WORKSPACE-UX.md) for UI work and [compatibility](docs/architecture/COMPATIBILITY.md) when using inherited code.
 
 ## Authority and scope
 

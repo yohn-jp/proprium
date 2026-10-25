@@ -6,7 +6,7 @@ The repository builds a dedicated Browser Host at `dist/proprium/`. `wrangler.js
 
 - The Host is a React/Vite static site. Workspace editing, local Git, GitHub sync and WASM plugin compute run in the browser.
 - Workers Static Assets serves the Host without a Worker handler, R2 binding, D1, KV, scheduled job or per-user application server.
-- The only edge service in this design is a narrowly scoped GitHub authentication/transport Worker when browser OAuth or Smart HTTP CORS needs it. It does not hold a worktree or become the Git authority.
+- The **target** GitHub OAuth/Smart HTTP and Live MCP service is an **optional non-root Go Gateway** run by the operator, optionally behind Cloudflare Tunnel or another HTTPS reverse proxy. The existing Cloudflare GitHub relay Worker is transitional and must be retired after Go equivalence tests and cutover. It does not define the final deployment architecture.
 - Plugin artifacts use an independently versioned R2 origin. R2 serves immutable WASM and signed registry data; the Host validates publisher identity and artifact digests before execution.
 
 The selected toolchain is Node 24, pnpm 12.10.1 and Wrangler 4.152.0, pinned in the repository. The static build uses `app/vite.proprium.config.ts` and `app/index.html`; it does not use the inherited profile build. The build validates the output location, writes a restrictive `_headers` file for the configured GitHub and plugin origins, and rejects the test-only Host seam. A generated service worker precaches only the entry page and hashed static JavaScript, CSS, workers and fonts so a warm workspace can reopen offline. It does not cache repository data or downloaded plugin artifacts; those have their own browser storage and digest checks.
@@ -26,7 +26,7 @@ pnpm exec wrangler deploy --dry-run --config wrangler.jsonc
 
 `pnpm verify:browser` runs the browser typecheck, focused unit tests, static build and Wrangler dry-run. CI also installs Chromium and WebKit and runs the browser acceptance suite. The dry-run verifies the local static asset bundle and configuration without authenticating to Cloudflare or changing remote state.
 
-The host release workflow is `.github/workflows/release-proprium-host.yml`. It is available only by manual dispatch from `main`, requires a selected GitHub environment (`proprium-preview` or `proprium-production`), validates the public browser endpoints and public registry key, reruns verification, deploys the minimal OAuth/Smart HTTP relay, then publishes the static Host with a scoped Cloudflare token. Configure `PROPRIUM_HOST_ORIGIN`, `PROPRIUM_GITHUB_OAUTH_CLIENT_ID`, `VITE_PROPRIUM_GITHUB_AUTH_RELAY`, `VITE_PROPRIUM_PLUGIN_REGISTRY_URL`, `VITE_PROPRIUM_PLUGIN_REGISTRY_KEY`, and `VITE_PROPRIUM_PLUGIN_ARTIFACT_ORIGINS` as GitHub environment variables. These values are public and are embedded in the Worker or Host configuration; never put private signing keys or API tokens in `VITE_*` variables.
+The current host release workflow is `.github/workflows/release-proprium-host.yml`. **Current implementation, pending migration:** it still deploys the old Cloudflare GitHub OAuth/Smart HTTP Worker. This is not the target. The implementation migration must remove that Worker step, leaving **static Host delivery only**, and introduce a separate Go Gateway test/binary release workflow. Configure the Host's static plugin registry origin, artifact origins and pinned public signing key independently of any optional Gateway endpoint. A Gateway URL is not a prerequisite for the static Host's initial load. Never put private signing keys, OAuth tokens or API secrets in `VITE_*` variables.
 
 The workflow does not create account resources, DNS records, custom domains, or R2 buckets. Configure those separately. A configured Worker name does not prove the public domain, OAuth redirect, cache policy or GitHub authorization works; test the deployed URL and approved sync flow before advertising a release.
 
@@ -56,3 +56,9 @@ Do not upload user repositories, credentials, browser storage or plugin private 
 - [Wrangler configuration](https://developers.cloudflare.com/workers/wrangler/configuration/)
 - [Wrangler R2 commands](https://developers.cloudflare.com/workers/wrangler/commands/r2/)
 - [R2 custom domain caching](https://developers.cloudflare.com/cache/interaction-cloudflare-products/r2/)
+
+## Optional Gateway and Tunnel target (not deployed by this documentation PR)
+
+The target Gateway is a downloadable, versioned Go single executable. It runs without root on a non-privileged loopback listener and requires neither a DB nor Node/container runtime. Its external HTTPS endpoint may be offered by `cloudflared` (a separate operator-managed process) or another HTTPS reverse proxy. Live MCP uses authenticated Streamable HTTP to the Gateway, which forwards requests over the Browser Host's opted-in SSE/HTTP connection. The browser must be active; the Gateway stores no Workspace data. The Go release and replacement of the old relay workflow must be separately implemented and verified.
+
+Cloudflare Tunnel is not an unconditional unlimited-traffic service. Static Host and R2 publication remain distinct from this optional runtime. See [Gateway/MCP contract](../architecture/OPTIONAL-GATEWAY-AND-MCP.md).
