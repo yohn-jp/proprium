@@ -264,7 +264,7 @@ flowchart TD
   Lost -->|別Hostが新規接続| Active
 ```
 
-Gatewayはリポジトリを保持せず、同時に複数のBrowser Hostが接続していても最後に接続した1つだけをActiveにする。Active切断後は古い接続へ暗黙の切替をしない。ユーザーのOwner Key、個別MCP Client Token、クライアント権限・ツール公開選択UIは存在しない。
+Gatewayはリポジトリを保持せず、同時に複数のBrowser Hostが接続していても最初の接続を初期Activeとし、以後はフォーカスされたBrowser Hostが明示的にActiveを引き継ぐ。Active切断後は古い接続へ暗黙の切替をしない。ユーザーのOwner Key、個別MCP Client Token、クライアント権限・ツール公開選択UIは存在しない。
 
 ## F12 — repository_id付きMCP呼出し
 

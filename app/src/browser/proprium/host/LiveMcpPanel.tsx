@@ -107,6 +107,23 @@ export function LiveMcpPanel({ gatewayUrl, workspaceId, identity, repositories, 
     }));
   };
 
+  useEffect(() => {
+    const activate = (): void => {
+      const id = liveSessionRef.current;
+      if (id && !document.hidden && document.hasFocus()) {
+        void gatewayRequest(`/live/sessions/${encodeURIComponent(id)}/activate`, { method: "POST" }).catch(() => undefined);
+      }
+    };
+    window.addEventListener("focus", activate);
+    document.addEventListener("visibilitychange", activate);
+    return () => {
+      window.removeEventListener("focus", activate);
+      document.removeEventListener("visibilitychange", activate);
+    };
+    // The HostApp key changes when the Gateway or workspace changes.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
   function knownRepositories(): Array<{ identity: WorkspaceIdentity; title: string }> {
     const entries = [{ identity, title: `${identity.owner}/${identity.repository} · ${identity.branch}` }, ...repositories];
     return [...new Map(entries.map(entry => [entry.identity.localWorkspaceId, entry])).values()];
@@ -260,6 +277,9 @@ export function LiveMcpPanel({ gatewayUrl, workspaceId, identity, repositories, 
       });
       if (!events.ok || !events.body) throw new Error(`Gateway event stream failed (${events.status}).`);
       setState("connected");
+      if (!document.hidden && document.hasFocus()) {
+        void gatewayRequest(`/live/sessions/${encodeURIComponent(activeSession.sessionId)}/activate`, { method: "POST" }).catch(() => undefined);
+      }
       await readSse(events.body.getReader(), (name, data) => {
         let payload: unknown;
         try { payload = JSON.parse(data); } catch { return; }

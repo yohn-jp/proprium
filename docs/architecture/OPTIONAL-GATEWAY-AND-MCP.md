@@ -23,7 +23,7 @@ The target distribution is a **single Go executable** running as a regular, unpr
 Only two capabilities are served:
 
 1. **GitHub OAuth/transport**: narrowly scoped device-code and token exchange, and Smart HTTP `upload-pack` / `receive-pack` fallback. Check Host origin, repository immutable identity, permissions, upstream route/method, body limits, redirection and credentials. Do not turn this into an open proxy. GitHub tokens remain Host-owned and must not be persisted by the Gateway.
-2. **Live Workspace MCP**: a Cloudflare Access-protected Streamable HTTP MCP endpoint with a fixed tool list and dispatch to the latest connected active Browser Host. No separate GitHub-backed MCP, repository clone, source index or server-side plugin execution.
+2. **Live Workspace MCP**: a Cloudflare Access-protected Streamable HTTP MCP endpoint with a fixed tool list and dispatch to the most recently foreground-activated Browser Host. No separate GitHub-backed MCP, repository clone, source index or server-side plugin execution.
 
 The Gateway does **not** store user files, Git objects, search indexes, credentials or Workspace snapshots. It must not publish/commit changes or bypass Host approval. A Gateway restart may interrupt outstanding operations; an ambiguous mutation must not be blindly replayed.
 

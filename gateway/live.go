@@ -129,6 +129,8 @@ func (r *LiveRegistry) ServeHTTP(w http.ResponseWriter, req *http.Request) {
 		r.events(w, req, parts[0])
 	case len(parts) == 2 && parts[1] == "responses" && req.Method == http.MethodPost:
 		r.acceptResponse(w, req, parts[0])
+	case len(parts) == 2 && parts[1] == "activate" && req.Method == http.MethodPost:
+		r.activateSession(w, req, parts[0])
 	case len(parts) == 1 && req.Method == http.MethodDelete:
 		r.revokeSession(w, req, parts[0])
 	default:
@@ -305,6 +307,21 @@ func (r *LiveRegistry) createSession(w http.ResponseWriter, req *http.Request) {
     liveJSON(w,req,r.config.HostOrigin,http.StatusCreated,map[string]string{"sessionId":id})
 }
 
+// activateSession selects the Browser Host most recently focused by its operator.
+// This route only accepts a session with a live SSE stream and the exact Host Origin.
+func (r *LiveRegistry) activateSession(w http.ResponseWriter, req *http.Request, id string) {
+    r.mu.Lock()
+    session:=r.sessions[id]
+    if r.quiescing || session==nil || session.dead || !session.stream {
+        r.mu.Unlock()
+        liveJSON(w,req,r.config.HostOrigin,http.StatusGone,map[string]string{"error":"session_unavailable"})
+        return
+    }
+    r.activeSessionID=id
+    r.mu.Unlock()
+    liveJSON(w,req,r.config.HostOrigin,http.StatusOK,map[string]bool{"active":true})
+}
+
 func (r *LiveRegistry) events(w http.ResponseWriter, req *http.Request, id string) {
 	s, ok := r.sessionByID(req, id)
 	if !ok {
@@ -332,8 +349,8 @@ func (r *LiveRegistry) events(w http.ResponseWriter, req *http.Request, id strin
 		return
 	}
 	s.stream = true
-	// The most recently connected Browser Host is the active route.
-	r.activeSessionID = s.id
+	// First connected Host becomes active; a foreground tab can explicitly activate.
+	if r.activeSessionID == "" { r.activeSessionID = s.id }
 	if s.connectTimer != nil {
 		s.connectTimer.Stop()
 		s.connectTimer = nil
