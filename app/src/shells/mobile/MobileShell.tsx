@@ -392,6 +392,10 @@ export function MobileShell({ header, documentTitle, documentContext, desktopDur
 
   const title = VIEWS.find((view) => view.id === activeView)?.title ?? "Proprium";
   const mobileTitle = activeView === "writing" && documentTitle ? documentTitle : title;
+  const statusContent = switchError
+    ? renderStatus?.(switchError) ?? status
+    : status;
+  const hasStatusContent = statusContent !== null && statusContent !== undefined && statusContent !== false;
   return (
     <IonApp className={"mobile-shell" + (writingKeyboardVisible ? " mobile-shell-keyboard-open" : "")}>
       <IonPage className="mobile-shell-page">
@@ -438,7 +442,7 @@ export function MobileShell({ header, documentTitle, documentContext, desktopDur
             </div>
           ) : <div className="mobile-shell-view-stack" data-active-view={activeView}>
             <section className="mobile-shell-view" aria-labelledby="mobile-library-title" hidden={activeView !== "library"}>
-              <h1 id="mobile-library-title" className="mobile-shell-page-title">作品ライブラリ</h1>
+              <h1 id="mobile-library-title" className="mobile-shell-page-title sr-only">作品ライブラリ</h1>
               <div className="mobile-shell-slot mobile-shell-library">{library}</div>
             </section>
 
@@ -480,9 +484,9 @@ export function MobileShell({ header, documentTitle, documentContext, desktopDur
           </div>}
         </IonContent>
 
-        <div className="mobile-shell-status" role="region" aria-label="保存と回復の状態">
-          {renderStatus ? renderStatus(switchError) : status}
-        </div>
+        {hasStatusContent ? <div className="mobile-shell-status" role="region" aria-label="保存と回復の状態">
+          {statusContent}
+        </div> : null}
         <IonFooter className="mobile-shell-footer">
           {hasWritingContext ? (
             <div className="mobile-shell-writing-accessories" aria-label="執筆中の参照">
