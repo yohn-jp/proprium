@@ -56,3 +56,16 @@
 .workspace-picker .picker-card { margin-block: 1.5rem; padding: 1rem; border: 1px solid var(--line); border-radius: .5rem; background: var(--paper); }
 .workspace-picker .field-help { color: var(--muted); font-size: .85rem; line-height: 1.6; }
 .workspace-picker .full-width { width: 100%; margin-block-start: .75rem; }
+/* Bind every Studio control, including the masthead, to its selected appearance. */
+:root[data-zp-theme] .restored-host .st-studio-shell {
+  --ink: var(--studio-ink); --muted: var(--studio-muted); --paper: var(--studio-sheet);
+  --line: var(--studio-border); --accent: var(--studio-primary); --accent-strong: var(--studio-primary);
+  --button-foreground: var(--studio-sheet); --input-border: var(--studio-muted);
+}
+.restored-host .topbar button { white-space: nowrap; }
+.host-account-label { min-width: 0; max-width: 10rem; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: .85rem; }
+.restored-host .application-status > summary { min-width: 0; box-sizing: border-box; }
+.restored-host .application-status > summary .save-state { flex: 0 0 auto; font-size: .78rem; }
+.restored-host .application-status > summary .host-message { flex: 1 1 auto; min-width: 0; padding: 0; margin: 0; }
+.host-message-text { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.host-status-disclosure { flex: 0 0 auto; font-size: .75rem; color: var(--muted); }

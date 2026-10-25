@@ -728,10 +728,20 @@ export function HostApp(): ReactElement {
     { id: "history", title: "履歴", render: () => historyPanel },
     { id: "review", title: "レビューとツール", render: () => <RetainedPanelSlot node={toolsNode} /> },
   ];
-  const statusSurface = <>{message && !recoveryEntry && <div className={`host-message message-${message.tone}`} role={message.tone === "error" ? "alert" : "status"}>{message.text}<button aria-label="Dismiss message" onClick={() => setMessage(null)}>×</button></div>}<span className="save-state" role="status">{workspace ? saveStateLabel(syncState, status.head) : "Browser workspace"}</span></>;
+  const statusMessage = recoveryEntry ? null : message;
+  const statusSurface = <details className="application-status" data-attention={statusMessage?.tone === "error" || undefined}>
+    <summary>
+      <span className="save-state" role="status">{workspace ? saveStateLabel(syncState, status.head) : "Browser workspace"}</span>
+      {statusMessage && <span className={`host-message message-${statusMessage.tone}`} role={statusMessage.tone === "error" ? "alert" : "status"}><span className="host-message-text">{statusMessage.text}</span></span>}
+      <span className="host-status-disclosure">詳細</span>
+    </summary>
+    <div className="application-status-content">
+      {statusMessage ? <><p>{statusMessage.text}</p><button type="button" aria-label="Dismiss message" onClick={() => setMessage(null)}>通知を閉じる</button></> : <p>{workspace ? saveStateLabel(syncState, status.head) : "Workspaceを開いてください。"}</p>}
+    </div>
+  </details>;
   const Shell = mode === "desktop" ? DesktopShell : MobileShell;
   return <main className="proprium-host restored-host" onKeyDown={event => { if ((event.metaKey || event.ctrlKey) && event.key.toLowerCase() === "s") { event.preventDefault(); if (!busy && !recoveryEntry) void saveDraft(); } }}><Suspense fallback={<p>ワークスペースを開いています…</p>}><Shell mode={mode}
-    header={<header className="topbar">{workspace && <button onClick={leaveWorkspace}>Workspaces</button>}<span>{workspace?.title ?? "Proprium"}</span><ThemeControl mode={theme} onChange={value => { setTheme(value); try { persistThemeMode(value); } catch { setMessage({ tone: "error", text: "外観設定を保存できませんでした。" }); } }} />{workspace && account && <button onClick={signOut}>Sign out</button>}</header>}
+    header={<header className="topbar">{workspace && <button className="quiet-button" onClick={leaveWorkspace}>Workspaces</button>}{account && <span className="host-account-label" aria-label="GitHub account">{account.login}</span>}<ThemeControl mode={theme} onChange={value => { setTheme(value); try { persistThemeMode(value); } catch { setMessage({ tone: "error", text: "外観設定を保存できませんでした。" }); } }} />{workspace && account && <button className="quiet-button" onClick={signOut}>Sign out</button>}</header>}
     documentTitle={currentFile?.path ?? workspace?.title ?? "Proprium"} documentContext={workspace?.identity.branch}
     desktopDurability={syncState === "published" ? "saved" : busy ? "checkpointing" : status.head && status.entries.length === 0 && !currentFile?.dirty ? "checkpointed" : "draft"}
     library={library} editor={workspace ? <RetainedPanelSlot node={editorNode} /> : editor} tools={<RetainedPanelSlot node={toolsNode} />} status={statusSurface} renderStatus={error => <>{statusSurface}{error && <p role="alert">{error}</p>}</>}
