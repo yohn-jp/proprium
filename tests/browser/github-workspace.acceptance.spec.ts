@@ -6,6 +6,7 @@ import {
   liveGitHubRepository,
   liveGitHubRepositoryId,
   liveGitHubToken,
+  liveGatewayUrl,
 } from "./github-fixture-relay.js";
 
 async function showRepositoryFiles(page: import("@playwright/test").Page): Promise<void> {
@@ -18,10 +19,10 @@ async function showRepositoryFiles(page: import("@playwright/test").Page): Promi
 
 test("Host signs in, opens a real GitHub branch, commits locally and publishes the exact SHA", async ({ page }) => {
   test.setTimeout(180_000);
-  test.skip(!liveGitHubToken || !liveGitHubOwner || !liveGitHubRepository || !liveGitHubBranch ||
+  test.skip(!liveGatewayUrl || !liveGitHubToken || !liveGitHubOwner || !liveGitHubRepository || !liveGitHubBranch ||
     ["main", "master"].includes(liveGitHubBranch.toLowerCase()) ||
     !Number.isSafeInteger(liveGitHubRepositoryId) || liveGitHubRepositoryId <= 0,
-  "Requires the in-memory GitHub test token and an explicit disposable non-main repository branch.");
+  "Requires PROPRIUM_E2E_GATEWAY_URL, the in-memory GitHub test token, and an explicit disposable non-main repository branch.");
 
   await page.addInitScript(() => { window.open = () => null; });
   await page.goto("/");

@@ -10,6 +10,7 @@ import {
   liveGitHubRepository,
   liveGitHubRepositoryId,
   liveGitHubToken,
+  liveGatewayUrl,
   routeFixtureRelay,
 } from "./github-fixture-relay.js";
 import {
@@ -47,15 +48,15 @@ test.afterAll(() => rmSync(pluginFixtureDirectory, { recursive: true, force: tru
 test("static Host imports a GitHub REST commit, reloads offline, and edits with a new cached Git worker", async ({ page, context }, testInfo) => {
   const deferMobileServiceWorker = testInfo.project.name === "static-mobile-webkit";
   const useLiveGitHub = process.env.PROPRIUM_E2E_STATIC_LIVE_GITHUB === "true";
-  test.skip(useLiveGitHub && (!liveGitHubToken || !liveGitHubOwner || !liveGitHubRepository || !liveGitHubBranch ||
+  test.skip(useLiveGitHub && (!liveGatewayUrl || !liveGitHubToken || !liveGitHubOwner || !liveGitHubRepository || !liveGitHubBranch ||
     ["main", "master"].includes(liveGitHubBranch.toLowerCase()) || !Number.isSafeInteger(liveGitHubRepositoryId) || liveGitHubRepositoryId <= 0),
-  "Live static acceptance requires an in-memory test token and an explicit disposable non-main branch.");
+  "Live static acceptance requires PROPRIUM_E2E_GATEWAY_URL, an in-memory test token, and an explicit disposable non-main branch.");
 
   const configuredOrigin = process.env.PROPRIUM_E2E_STATIC_BASE_URL
     ? new URL(process.env.PROPRIUM_E2E_STATIC_BASE_URL).origin
     : `http://127.0.0.1:${process.env.PROPRIUM_E2E_STATIC_PORT ?? "4276"}`;
   const fixture = useLiveGitHub ? null : await installStaticGitHubFixture(page, configuredOrigin);
-  if (useLiveGitHub) await routeFixtureRelay(page, configuredOrigin, configuredOrigin);
+  if (useLiveGitHub) await routeFixtureRelay(page, configuredOrigin, liveGatewayUrl);
   const workspaceTitle = useLiveGitHub ? `${liveGitHubOwner}/${liveGitHubRepository} · ${liveGitHubBranch}` : staticFixtureTitle;
   const pluginFiles = signedStaticPluginFixture(configuredOrigin, pluginComponent);
   let pluginRequestCount = 0;
@@ -112,7 +113,7 @@ test("static Host imports a GitHub REST commit, reloads offline, and edits with 
   const origin = new URL(page.url()).origin;
   expect(origin).toBe(configuredOrigin);
   if (useLiveGitHub) {
-    await page.getByLabel("GitHub auth relay URL").fill(origin);
+    await page.getByLabel("Proprium Gateway URL").fill(liveGatewayUrl);
     await page.getByRole("button", { name: "Connect GitHub" }).click();
     await expect(operationNotice).toContainText(/Connected to GitHub as /u);
     if (liveGitHubLogin) await expect(operationNotice).toContainText(liveGitHubLogin);
@@ -121,7 +122,7 @@ test("static Host imports a GitHub REST commit, reloads offline, and edits with 
     await page.getByRole("button", { name: "Open workspace" }).click();
     await expect(operationNotice).toContainText(`Opened ${workspaceTitle}`);
   } else {
-    await page.getByLabel("GitHub auth relay URL").fill(origin);
+    await page.getByLabel("Proprium Gateway URL").fill(configuredOrigin);
     await page.getByRole("button", { name: "Connect GitHub" }).click();
     await expect(operationNotice).toContainText(`Connected to GitHub as ${staticFixtureLogin}`);
     await page.getByLabel("Repository").selectOption(String(staticFixtureIdentity.repositoryId));

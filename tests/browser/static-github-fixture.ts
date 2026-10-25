@@ -1,6 +1,6 @@
 import { createHash } from "node:crypto";
 import type { Page } from "@playwright/test";
-import { handleGitHubAuthRequest } from "../../workers/github-auth/github-auth-worker.js";
+import { installMockGitHubOAuth } from "../helpers/github-relay-fixture.js";
 
 export const staticFixtureIdentity = {
   origin: "https://github.com",
@@ -74,32 +74,9 @@ export async function installStaticGitHubFixture(page: Page, hostOrigin: string)
   const fakeToken = "proprium-static-fixture-only-token";
   let apiRequestCount = 0;
 
-  await context.route(`${hostOrigin}/oauth/**`, async route => {
-    const source = route.request();
-    const body = source.postDataBuffer();
-    const request = new Request(source.url(), {
-      method: source.method(),
-      headers: source.headers(),
-      body: body?.byteLength ? new Uint8Array(body) : undefined,
-    });
-    const response = await handleGitHubAuthRequest(request, {
-      GITHUB_CLIENT_ID: "Iv23liExampleClientId",
-      HOST_ORIGIN: hostOrigin,
-    }, async input => {
-      if (String(input) === "https://github.com/login/device/code") return Response.json({
-        device_code: "static-fixture-device-code", user_code: "STAT-IC01", verification_uri: "https://github.com/login/device",
-        expires_in: 900, interval: 1,
-      });
-      if (String(input) === "https://github.com/login/oauth/access_token") return Response.json({
-        access_token: fakeToken, token_type: "bearer",
-      });
-      return Response.json({ error: "unrecognized_upstream" }, { status: 404 });
-    });
-    await route.fulfill({
-      status: response.status,
-      headers: Object.fromEntries(response.headers.entries()),
-      body: Buffer.from(await response.arrayBuffer()),
-    });
+  await installMockGitHubOAuth(page, {
+    relayUrl: hostOrigin, hostOrigin, accessToken: fakeToken,
+    deviceCode: "static-fixture-device-code", userCode: "STAT-IC01",
   });
 
   await context.route("https://api.github.com/**", async route => {

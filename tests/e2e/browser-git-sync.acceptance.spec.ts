@@ -8,7 +8,7 @@ import { join } from "node:path";
 import { expect, test, type Page } from "@playwright/test";
 import type { BrowserLocalGit, GitHubSyncClient } from "../../app/src/browser/proprium/git/index.js";
 import type { WorkspaceIdentity } from "../../app/src/browser/proprium/git/protocol.js";
-import { handleGitHubAuthRequest } from "../../workers/github-auth/github-auth-worker.js";
+import { installMockGitHubOAuth, installSyntheticSmartHttpRelay } from "../helpers/github-relay-fixture.js";
 
 declare global {
   interface Window {
@@ -21,8 +21,10 @@ declare global {
   }
 }
 
-const hostOrigin = "http://127.0.0.1:4273";
+const hostOrigin = new URL(process.env.PROPRIUM_E2E_BASE_URL ??
+  `http://127.0.0.1:${process.env.PROPRIUM_E2E_PORT ?? process.env.SCRIPTORIUM_E2E_PORT ?? "4173"}`).origin;
 const relayOrigin = "https://oauth.example.test";
+const liveGatewayUrl = process.env.PROPRIUM_E2E_GATEWAY_URL ?? "";
 const repositoryId = 923456789;
 const liveGitHubToken = process.env.PROPRIUM_E2E_GITHUB_TOKEN ?? process.env.SCRIPTORIUM_GITHUB_LIVE_TEST_TOKEN ?? "";
 const liveGitHubOwner = process.env.PROPRIUM_E2E_GITHUB_OWNER ?? process.env.SCRIPTORIUM_GITHUB_LIVE_TEST_OWNER ?? "";
@@ -189,51 +191,27 @@ function createSmartHttpFixture(): Promise<SmartHttpFixture> {
 }
 
 async function mockOAuthRelay(page: Page): Promise<void> {
-  await page.route(`${relayOrigin}/**`, async (route) => {
-    const source = route.request();
-    const body = source.postDataBuffer();
-    const request = new Request(source.url(), {
-      method: source.method(),
-      headers: source.headers(),
-      body: body?.byteLength ? new Uint8Array(body) : undefined,
-    });
-    const response = await handleGitHubAuthRequest(request, {
-      GITHUB_CLIENT_ID: "Iv23liExampleClientId",
-      HOST_ORIGIN: hostOrigin,
-    }, async (input, init) => {
-      if (String(input) === "https://github.com/login/device/code") return Response.json({
-        device_code: "a".repeat(40), user_code: "ABCD-EFGH", verification_uri: "https://github.com/login/device",
-        expires_in: 900, interval: 1,
-      });
-      if (String(input) === "https://github.com/login/oauth/access_token") return Response.json({
-        access_token: fixtureOAuthToken, token_type: "bearer", refresh_token: "filtered",
-      });
-      if (String(input) === "https://api.github.com/repos/proprium-test/browser-git-fixture" && activeSmartHttpFixture) return Response.json({
-        id: repositoryId, full_name: "proprium-test/browser-git-fixture", permissions: { pull: true, push: true },
-      });
-      if (String(input).startsWith("https://github.com/proprium-test/browser-git-fixture.git/") && activeSmartHttpFixture) {
-        const headers = new Headers(init?.headers);
-        activeSmartHttpFixture.noteGitHubBasicAuth(headers);
-        const upstreamUrl = new URL(String(input));
-        const destination = new URL(`${upstreamUrl.pathname}${upstreamUrl.search}`, activeSmartHttpFixture.backendUrl);
-        return fetch(destination, init);
-      }
-      if (liveGitHubToken
-          && (String(input) === `https://api.github.com/repos/${liveGitHubOwner}/${liveGitHubRepository}`
-            || String(input).startsWith(`https://github.com/${liveGitHubOwner}/${liveGitHubRepository}.git/`))) {
-        if (String(input).startsWith("https://github.com/")) {
-          const upstreamUrl = new URL(String(input));
-          liveSmartHttpRequests.push(`${init?.method ?? "GET"} ${upstreamUrl.pathname}`);
-        }
-        return fetch(String(input), init);
-      }
-      return Response.json({ error: "unrecognized_upstream" }, { status: 404 });
-    });
-    return route.fulfill({
-      status: response.status,
-      headers: Object.fromEntries(response.headers.entries()),
-      body: Buffer.from(await response.arrayBuffer()),
-    });
+  await installMockGitHubOAuth(page, {
+    relayUrl: relayOrigin, hostOrigin, accessToken: fixtureOAuthToken,
+  });
+  await installSyntheticSmartHttpRelay(page, {
+    relayUrl: relayOrigin, hostOrigin,
+    owner: "proprium-test", repository: "browser-git-fixture", repositoryId,
+    accessToken: fixtureOAuthToken,
+    backendUrl: () => activeSmartHttpFixture?.backendUrl ?? null,
+    onBasicAuthorization: authorization => activeSmartHttpFixture?.noteGitHubBasicAuth(new Headers({ Authorization: authorization })),
+  });
+}
+
+async function mockGatewayOAuth(page: Page): Promise<void> {
+  await installMockGitHubOAuth(page, {
+    relayUrl: liveGatewayUrl, hostOrigin, accessToken: liveGitHubToken,
+  });
+  const gatewayOrigin = new URL(liveGatewayUrl).origin;
+  await page.context().route(`${gatewayOrigin}/git/**`, async route => {
+    const request = route.request();
+    liveSmartHttpRequests.push(`${request.method()} ${new URL(request.url()).pathname}`);
+    await route.continue();
   });
 }
 
@@ -763,10 +741,11 @@ test("Smart HTTP preserves REST-incompatible commit SHAs and falls back for publ
 });
 
 test("live disposable GitHub sync fetches, fast-forwards, publishes and confirms the exact remote SHA", async ({ page }) => {
-  test.skip(!liveGitHubToken || !liveGitHubOwner || !liveGitHubRepository || !liveGitHubBranch ||
+  test.skip(!liveGatewayUrl || !liveGitHubToken || !liveGitHubOwner || !liveGitHubRepository || !liveGitHubBranch ||
     ["main", "master"].includes(liveGitHubBranch.toLowerCase()) || !Number.isSafeInteger(liveGitHubRepositoryId) || liveGitHubRepositoryId <= 0,
-  "Requires the in-memory test token and an explicit disposable non-main GitHub branch.");
+  "Requires PROPRIUM_E2E_GATEWAY_URL, an in-memory test token, and an explicit disposable non-main GitHub branch.");
   liveSmartHttpRequests = [];
+  await mockGatewayOAuth(page);
   await page.goto("/browser-git-test.html");
   await expect(page.locator("#ready")).toHaveText("ready");
   const result = await page.evaluate(async ({ owner, repository, repoId, branch, relayUrl, id }) => {
@@ -793,7 +772,7 @@ test("live disposable GitHub sync fetches, fast-forwards, publishes and confirms
       return { account, initialHead: initialHead.head, fetched, pulled, stagedHead: staged.head, localHead: committed.oid, published, confirmedHead: confirmed.head, finalState };
   }, {
     owner: liveGitHubOwner, repository: liveGitHubRepository, repoId: liveGitHubRepositoryId,
-    branch: liveGitHubBranch, relayUrl: relayOrigin, id: `live-${crypto.randomUUID()}`,
+    branch: liveGitHubBranch, relayUrl: liveGatewayUrl, id: `live-${crypto.randomUUID()}`,
   });
   expect(result.account.id).toBeGreaterThan(0);
   expect(result.account.login).toBeTruthy();

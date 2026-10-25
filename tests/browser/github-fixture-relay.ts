@@ -1,5 +1,5 @@
-import type { Page, Route } from "@playwright/test";
-import { handleGitHubAuthRequest } from "../../workers/github-auth/github-auth-worker.js";
+import type { Page } from "@playwright/test";
+import { installMockGitHubOAuth } from "../helpers/github-relay-fixture.js";
 
 export const liveGitHubToken = process.env.PROPRIUM_E2E_GITHUB_TOKEN ?? process.env.SCRIPTORIUM_GITHUB_LIVE_TEST_TOKEN ?? "";
 export const liveGitHubOwner = process.env.PROPRIUM_E2E_GITHUB_OWNER ?? process.env.SCRIPTORIUM_GITHUB_LIVE_TEST_OWNER ?? "";
@@ -7,49 +7,21 @@ export const liveGitHubRepository = process.env.PROPRIUM_E2E_GITHUB_REPOSITORY ?
 export const liveGitHubRepositoryId = Number(process.env.PROPRIUM_E2E_GITHUB_REPOSITORY_ID ?? process.env.SCRIPTORIUM_GITHUB_LIVE_TEST_REPOSITORY_ID ?? "0");
 export const liveGitHubBranch = process.env.PROPRIUM_E2E_GITHUB_BRANCH ?? process.env.SCRIPTORIUM_GITHUB_LIVE_TEST_BRANCH ?? "";
 export const liveGitHubLogin = process.env.PROPRIUM_E2E_GITHUB_LOGIN ?? process.env.SCRIPTORIUM_GITHUB_LIVE_TEST_LOGIN ?? "";
-export const relayOrigin = "https://oauth.example.test";
+export const liveGatewayUrl = process.env.PROPRIUM_E2E_GATEWAY_URL ?? "";
 
-/** Supplies a test OAuth relay while preserving real GitHub profile, repo, Git, and ref traffic. */
-export async function routeFixtureRelay(page: Page, hostOrigin: string, relayUrl = relayOrigin): Promise<void> {
-  const selectedRelayOrigin = new URL(relayUrl).origin;
-  const handleRelayRoute = async (route: Route): Promise<void> => {
-    const source = route.request();
-    const body = source.postDataBuffer();
-    const request = new Request(source.url(), {
-      method: source.method(),
-      headers: source.headers(),
-      body: body?.byteLength ? new Uint8Array(body) : undefined,
-    });
-    const response = await handleGitHubAuthRequest(request, {
-      GITHUB_CLIENT_ID: "Iv23liExampleClientId",
-      HOST_ORIGIN: hostOrigin,
-    }, async (input, init) => {
-      if (String(input) === "https://github.com/login/device/code") return Response.json({
-        device_code: "a".repeat(40), user_code: "ABCD-EFGH", verification_uri: "https://github.com/login/device",
-        expires_in: 900, interval: 1,
-      });
-      if (String(input) === "https://github.com/login/oauth/access_token") return Response.json({
-        access_token: liveGitHubToken,
-        token_type: "bearer",
-      });
-      return fetch(String(input), init);
-    });
-    await route.fulfill({
-      status: response.status,
-      headers: Object.fromEntries(response.headers.entries()),
-      body: Buffer.from(await response.arrayBuffer()),
-    });
-  };
-  await page.context().route(`${selectedRelayOrigin}/oauth/**`, handleRelayRoute);
-  await page.context().route(`${selectedRelayOrigin}/git/**`, handleRelayRoute);
+/** Mocks only GitHub OAuth; Smart HTTP Git requests travel to the configured Go Gateway. */
+export async function routeFixtureRelay(page: Page, hostOrigin: string, relayUrl = liveGatewayUrl): Promise<void> {
+  if (!relayUrl) throw new Error("Live GitHub acceptance requires PROPRIUM_E2E_GATEWAY_URL.");
+  await installMockGitHubOAuth(page, { relayUrl, hostOrigin, accessToken: liveGitHubToken });
 }
 
-export async function connectAndOpenGitHubBranch(page: Page, hostOrigin: string, relayUrl = relayOrigin): Promise<void> {
+export async function connectAndOpenGitHubBranch(page: Page, hostOrigin: string, relayUrl = liveGatewayUrl): Promise<void> {
+  if (!relayUrl) throw new Error("Live GitHub acceptance requires PROPRIUM_E2E_GATEWAY_URL.");
   if (!liveGitHubBranch || ["main", "master"].includes(liveGitHubBranch.toLowerCase())) {
     throw new Error("GitHub browser acceptance requires an explicit disposable non-main branch.");
   }
   await routeFixtureRelay(page, hostOrigin, relayUrl);
-  await page.getByLabel("GitHub auth relay URL").fill(relayUrl);
+  await page.getByLabel("Proprium Gateway URL").fill(relayUrl);
   await page.getByRole("button", { name: "Connect GitHub" }).click();
   const operationNotice = page.locator(".host-message[role='status']");
   await operationNotice.getByText(/Connected to GitHub as/u).waitFor();
