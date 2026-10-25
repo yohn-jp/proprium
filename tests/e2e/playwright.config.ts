@@ -12,6 +12,7 @@ const configuredBaseURL = process.env.SCRIPTORIUM_E2E_BASE_URL ?? process.env.SC
 const baseURL = configuredBaseURL ?? `http://127.0.0.1:${process.env.SCRIPTORIUM_E2E_PORT ?? "4173"}`;
 const configuredPort = process.env.SCRIPTORIUM_E2E_PORT ?? "4173";
 const externalServer = Boolean(configuredBaseURL);
+const hasLiveGitHubToken = Boolean(process.env.PROPRIUM_E2E_GITHUB_TOKEN || process.env.SCRIPTORIUM_GITHUB_LIVE_TEST_TOKEN);
 const isTemporaryStateDir = !process.env.SCRIPTORIUM_E2E_STATE_DIR && !externalServer;
 const stateDir = process.env.SCRIPTORIUM_E2E_STATE_DIR
   ?? (externalServer ? tmpdir() : mkdtempSync(join(tmpdir(), "scriptorium-e2e-")));
@@ -53,7 +54,7 @@ export default defineConfig({
   use: {
     baseURL,
     headless: true,
-    trace: process.env.SCRIPTORIUM_GITHUB_LIVE_TEST_TOKEN ? "off" : "retain-on-failure",
+    trace: hasLiveGitHubToken ? "off" : "retain-on-failure",
     screenshot: "off",
     video: "off",
   },
