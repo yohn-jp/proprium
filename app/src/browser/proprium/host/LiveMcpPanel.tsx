@@ -298,7 +298,7 @@ export function LiveMcpPanel({ gatewayUrl, onGatewayUrlChange, workspaceId, gene
       if (abandonedSession && created && !explicitlyCancelled) {
         void ownerRequest(`/live/sessions/${encodeURIComponent(abandonedSession)}`, { method: "DELETE" }, created.ownerToken).catch(() => undefined);
       }
-      if (!created || sessionOwnerTokenRef.current === created.ownerToken) sessionOwnerTokenRef.current = "";
+      if ((currentAttempt || ownsSession) && (!created || sessionOwnerTokenRef.current === created.ownerToken)) sessionOwnerTokenRef.current = "";
       if (currentAttempt || ownsSession) {
         for (const pending of pendingRef.current.values()) pending.abort(new DOMException("The Browser Host event stream disconnected.", "AbortError"));
         pendingRef.current.clear();
