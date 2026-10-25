@@ -3,7 +3,7 @@ import test from "node:test";
 import { admitPluginManifest, PluginArtifactError, verifyPluginArtifact } from "./plugin-artifact";
 
 const encoder = new TextEncoder();
-const hash = async (content: Uint8Array) => Array.from(new Uint8Array(await crypto.subtle.digest("SHA-256", content)), byte => byte.toString(16).padStart(2, "0")).join("");
+const hash = async (content: Uint8Array) => Array.from(new Uint8Array(await crypto.subtle.digest("SHA-256", Uint8Array.from(content))), byte => byte.toString(16).padStart(2, "0")).join("");
 
 async function fixture(patch?: (value: Record<string, unknown>) => void) {
   const wasm = Uint8Array.of(0, 97, 115, 109, 1, 0, 0, 0);
