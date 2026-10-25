@@ -254,6 +254,7 @@ test("exposes the fixed MCP tools without any client token and executes against 
   expect(textResult(proposed)).toMatchObject({ status: "awaiting_host_review", repository_id: sampleRepositoryId });
   await expect(page.getByText("Review a change from MCP", { exact: true })).toBeVisible();
   await expectEditorText(page, "Gateway browser integration fixture.\n");
+  await showPanel(page, "review");
   await page.getByRole("button", { name: "Review and approve" }).click();
   await expectEditorText(page, "Approved in Browser Host.\n");
 
