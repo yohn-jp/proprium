@@ -19,7 +19,8 @@ test("Host signs in, opens a real GitHub branch, commits locally and publishes t
   await page.goto("/");
   const hostOrigin = new URL(page.url()).origin;
   await connectAndOpenGitHubBranch(page, hostOrigin);
-  await expect(page.getByRole("status").filter({ hasText: `Opened ${liveGitHubOwner}/${liveGitHubRepository} · ${liveGitHubBranch}` })).toBeVisible();
+  const operationNotice = page.locator(".host-message[role='status']");
+  await expect(operationNotice).toContainText(`Opened ${liveGitHubOwner}/${liveGitHubRepository} · ${liveGitHubBranch}`);
 
   const mobileFiles = page.getByRole("button", { name: /^Files(?:\s|$)/u });
   if (await mobileFiles.isVisible()) await mobileFiles.click();
@@ -28,27 +29,27 @@ test("Host signs in, opens a real GitHub branch, commits locally and publishes t
   await page.getByRole("button", { name: "Create new file" }).click();
   await page.getByRole("textbox", { name: "File contents" }).fill("Published from the Proprium browser Host.\n");
   await page.getByRole("button", { name: "Save draft" }).click();
-  await expect(page.getByRole("status")).toContainText("saved to this browser's local Git worktree");
+  await expect(operationNotice).toContainText("saved to this browser's local Git worktree");
 
   await page.getByLabel("Commit message").fill("Verify Proprium browser Host publication");
   await page.getByLabel("Git author name").fill("Proprium Browser Acceptance");
   await page.getByLabel("Git author email").fill("browser-acceptance@example.invalid");
   await page.getByRole("button", { name: "Commit locally" }).click();
-  const localCommit = page.getByRole("status").filter({ hasText: "Committed locally as" });
+  const localCommit = operationNotice.filter({ hasText: "Committed locally as" });
   await expect(localCommit).toContainText("This commit is still only on this device.");
   const commitMessage = await localCommit.innerText();
   const publishedCandidate = /Committed locally as ([a-f0-9]{40})/u.exec(commitMessage)?.[1];
   expect(publishedCandidate).toMatch(/^[a-f0-9]{40}$/u);
 
   await page.getByRole("button", { name: "Fetch" }).click();
-  await expect(page.getByRole("status")).toContainText(/Fetched \d+ commit\(s\)/u);
+  await expect(operationNotice).toContainText(/Fetched \d+ commit\(s\)/u);
   await page.getByRole("button", { name: "Pull" }).click();
-  const pullStatus = page.getByRole("status");
+  const pullStatus = operationNotice;
   await expect(pullStatus).toContainText(`Local commits through ${publishedCandidate} are waiting to be published.`);
   await expect(pullStatus).toContainText(/GitHub is at (?:[a-f0-9]{40}|no published commit); local history and editor contents were preserved\./u);
 
   await page.getByRole("button", { name: "Publish" }).click();
-  const published = page.getByRole("status").filter({ hasText: "Published commit" });
+  const published = operationNotice.filter({ hasText: "Published commit" });
   await expect(published).toContainText("confirmed the remote branch SHA");
   const publishedMessage = await published.innerText();
   const publishedSha = /Published commit ([a-f0-9]{40}) to GitHub/u.exec(publishedMessage)?.[1];

@@ -48,8 +48,9 @@ export async function connectAndOpenGitHubBranch(page: Page, hostOrigin: string)
   await routeFixtureRelay(page, hostOrigin);
   await page.getByLabel("GitHub auth relay URL").fill(relayOrigin);
   await page.getByRole("button", { name: "Connect GitHub" }).click();
-  await page.getByRole("status").getByText(/Connected to GitHub as/u).waitFor();
-  const accountText = await page.getByRole("status").innerText();
+  const operationNotice = page.locator(".host-message[role='status']");
+  await operationNotice.getByText(/Connected to GitHub as/u).waitFor();
+  const accountText = await operationNotice.innerText();
   if (liveGitHubLogin) {
     const normalized = accountText.toLowerCase();
     if (!normalized.includes(liveGitHubLogin.toLowerCase())) throw new Error("Host connected account did not match the configured GitHub test login.");
@@ -57,7 +58,7 @@ export async function connectAndOpenGitHubBranch(page: Page, hostOrigin: string)
   await page.getByLabel("Repository").selectOption(String(liveGitHubRepositoryId));
   await page.getByLabel("Branch").fill(liveGitHubBranch);
   await page.getByRole("button", { name: "Open workspace" }).click();
-  await page.getByRole("status").filter({
+  await page.locator(".host-message[role='status']").filter({
     hasText: `Opened ${liveGitHubOwner}/${liveGitHubRepository} · ${liveGitHubBranch}`,
   }).waitFor();
 }
