@@ -6,7 +6,6 @@ const buildEnvironment = { ...process.env };
 delete buildEnvironment.VITE_PROPRIUM_E2E;
 delete buildEnvironment.PROPRIUM_E2E_PLUGIN_REGISTRY_PRIVATE_KEY;
 delete buildEnvironment.PROPRIUM_E2E_STATIC_PLUGIN_REGISTRY_PRIVATE_KEY;
-buildEnvironment.VITE_PROPRIUM_GITHUB_AUTH_RELAY = "https://oauth.example.test";
 
 const build = spawn(command, ["--config.verifyDepsBeforeRun=false", "build:browser"], {
   cwd: process.cwd(), stdio: "inherit", env: buildEnvironment,

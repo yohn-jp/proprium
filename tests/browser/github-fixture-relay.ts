@@ -1,4 +1,4 @@
-import type { Page } from "@playwright/test";
+import type { Page, Route } from "@playwright/test";
 import { handleGitHubAuthRequest } from "../../workers/github-auth/github-auth-worker.js";
 
 export const liveGitHubToken = process.env.PROPRIUM_E2E_GITHUB_TOKEN ?? process.env.SCRIPTORIUM_GITHUB_LIVE_TEST_TOKEN ?? "";
@@ -10,8 +10,9 @@ export const liveGitHubLogin = process.env.PROPRIUM_E2E_GITHUB_LOGIN ?? process.
 export const relayOrigin = "https://oauth.example.test";
 
 /** Supplies a test OAuth relay while preserving real GitHub profile, repo, Git, and ref traffic. */
-export async function routeFixtureRelay(page: Page, hostOrigin: string): Promise<void> {
-  await page.route(`${relayOrigin}/**`, async route => {
+export async function routeFixtureRelay(page: Page, hostOrigin: string, relayUrl = relayOrigin): Promise<void> {
+  const selectedRelayOrigin = new URL(relayUrl).origin;
+  const handleRelayRoute = async (route: Route): Promise<void> => {
     const source = route.request();
     const body = source.postDataBuffer();
     const request = new Request(source.url(), {
@@ -38,15 +39,17 @@ export async function routeFixtureRelay(page: Page, hostOrigin: string): Promise
       headers: Object.fromEntries(response.headers.entries()),
       body: Buffer.from(await response.arrayBuffer()),
     });
-  });
+  };
+  await page.route(`${selectedRelayOrigin}/oauth/**`, handleRelayRoute);
+  await page.route(`${selectedRelayOrigin}/git/**`, handleRelayRoute);
 }
 
-export async function connectAndOpenGitHubBranch(page: Page, hostOrigin: string): Promise<void> {
+export async function connectAndOpenGitHubBranch(page: Page, hostOrigin: string, relayUrl = relayOrigin): Promise<void> {
   if (!liveGitHubBranch || ["main", "master"].includes(liveGitHubBranch.toLowerCase())) {
     throw new Error("GitHub browser acceptance requires an explicit disposable non-main branch.");
   }
-  await routeFixtureRelay(page, hostOrigin);
-  await page.getByLabel("GitHub auth relay URL").fill(relayOrigin);
+  await routeFixtureRelay(page, hostOrigin, relayUrl);
+  await page.getByLabel("GitHub auth relay URL").fill(relayUrl);
   await page.getByRole("button", { name: "Connect GitHub" }).click();
   const operationNotice = page.locator(".host-message[role='status']");
   await operationNotice.getByText(/Connected to GitHub as/u).waitFor();

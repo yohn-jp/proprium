@@ -2,7 +2,6 @@ import { createHash } from "node:crypto";
 import type { Page } from "@playwright/test";
 import { handleGitHubAuthRequest } from "../../workers/github-auth/github-auth-worker.js";
 
-export const staticFixtureRelay = "https://oauth.example.test";
 export const staticFixtureIdentity = {
   origin: "https://github.com",
   repositoryId: 923456789,
@@ -74,7 +73,7 @@ export async function installStaticGitHubFixture(page: Page, hostOrigin: string)
   const fakeToken = "proprium-static-fixture-only-token";
   let apiRequestCount = 0;
 
-  await page.route(`${staticFixtureRelay}/**`, async route => {
+  await page.route(`${hostOrigin}/oauth/**`, async route => {
     const source = route.request();
     const body = source.postDataBuffer();
     const request = new Request(source.url(), {

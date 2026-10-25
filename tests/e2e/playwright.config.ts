@@ -18,6 +18,7 @@ if (selectedTestFile && !browserAcceptanceFiles.includes(selectedTestFile)) {
 
 export default defineConfig({
   testDir: ".",
+  outputDir: "tests/e2e/test-results",
   testMatch: selectedPattern ?? browserAcceptanceFiles.map(file => `**/${file}`),
   fullyParallel: false,
   workers: 1,

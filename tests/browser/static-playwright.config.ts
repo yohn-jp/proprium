@@ -10,7 +10,7 @@ const fixturePrivateKey = process.env.PROPRIUM_E2E_STATIC_PLUGIN_REGISTRY_PRIVAT
   : generateKeyPairSync("ed25519").privateKey;
 const fixturePublicKey = createPublicKey(fixturePrivateKey).export({ format: "der", type: "spki" }).subarray(-32);
 process.env.PROPRIUM_E2E_STATIC_PLUGIN_REGISTRY_PRIVATE_KEY = fixturePrivateKey.export({ format: "pem", type: "pkcs8" }).toString();
-process.env.VITE_PROPRIUM_GITHUB_AUTH_RELAY = "https://oauth.example.test";
+process.env.VITE_PROPRIUM_GITHUB_AUTH_RELAY = origin;
 process.env.VITE_PROPRIUM_PLUGIN_REGISTRY_URL = `${origin}/plugin-fixture/registry.json`;
 process.env.VITE_PROPRIUM_PLUGIN_REGISTRY_KEY = fixturePublicKey.toString("base64");
 process.env.VITE_PROPRIUM_PLUGIN_ARTIFACT_ORIGINS = origin;
@@ -18,6 +18,7 @@ process.env.VITE_PROPRIUM_PLUGIN_ARTIFACT_ORIGINS = origin;
 export default defineConfig({
   testDir: ".",
   testMatch: "**/static-offline.acceptance.spec.ts",
+  outputDir: "tests/browser/test-results/static",
   fullyParallel: false,
   workers: 1,
   timeout: 180_000,

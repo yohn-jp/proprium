@@ -4,18 +4,18 @@ import { mkdtempSync, readFileSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 import {
-  connectAndOpenGitHubBranch,
   liveGitHubBranch,
+  liveGitHubLogin,
   liveGitHubOwner,
   liveGitHubRepository,
   liveGitHubRepositoryId,
   liveGitHubToken,
+  routeFixtureRelay,
 } from "./github-fixture-relay.js";
 import {
   installStaticGitHubFixture,
   staticFixtureIdentity,
   staticFixtureLogin,
-  staticFixtureRelay,
   staticFixtureTitle,
 } from "./static-github-fixture.js";
 import { signedStaticPluginFixture, staticPluginId, staticPluginVersion } from "./static-plugin-fixture.js";
@@ -44,6 +44,21 @@ test("static Host imports a GitHub REST commit, reloads offline, and edits with 
     ["main", "master"].includes(liveGitHubBranch.toLowerCase()) || !Number.isSafeInteger(liveGitHubRepositoryId) || liveGitHubRepositoryId <= 0),
   "Live static acceptance requires an in-memory test token and an explicit disposable non-main branch.");
 
+  const configuredOrigin = process.env.PROPRIUM_E2E_STATIC_BASE_URL
+    ? new URL(process.env.PROPRIUM_E2E_STATIC_BASE_URL).origin
+    : `http://127.0.0.1:${process.env.PROPRIUM_E2E_STATIC_PORT ?? "4276"}`;
+  const fixture = useLiveGitHub ? null : await installStaticGitHubFixture(page, configuredOrigin);
+  if (useLiveGitHub) await routeFixtureRelay(page, configuredOrigin, configuredOrigin);
+  const workspaceTitle = useLiveGitHub ? `${liveGitHubOwner}/${liveGitHubRepository} · ${liveGitHubBranch}` : staticFixtureTitle;
+  const pluginFiles = signedStaticPluginFixture(configuredOrigin, pluginComponent);
+  let pluginRequestCount = 0;
+  await page.route(`${configuredOrigin}/plugin-fixture/**`, async route => {
+    pluginRequestCount += 1;
+    const file = pluginFiles.get(new URL(route.request().url()).pathname);
+    if (!file) return route.fulfill({ status: 404 });
+    await route.fulfill({ status: 200, contentType: file.contentType, body: file.body });
+  });
+
   await page.addInitScript(() => { window.open = () => null; });
   await page.goto("/");
   const operationNotice = page.locator(".host-message[role='status']");
@@ -54,20 +69,18 @@ test("static Host imports a GitHub REST commit, reloads offline, and edits with 
   await expect.poll(() => page.evaluate(() => navigator.serviceWorker.controller !== null)).toBe(true);
 
   const origin = new URL(page.url()).origin;
-  const fixture = useLiveGitHub ? null : await installStaticGitHubFixture(page, origin);
-  const workspaceTitle = useLiveGitHub ? `${liveGitHubOwner}/${liveGitHubRepository} · ${liveGitHubBranch}` : staticFixtureTitle;
-  const pluginFiles = signedStaticPluginFixture(origin, pluginComponent);
-  let pluginRequestCount = 0;
-  await page.route(`${origin}/plugin-fixture/**`, async route => {
-    pluginRequestCount += 1;
-    const file = pluginFiles.get(new URL(route.request().url()).pathname);
-    if (!file) return route.fulfill({ status: 404 });
-    await route.fulfill({ status: 200, contentType: file.contentType, body: file.body });
-  });
+  expect(origin).toBe(configuredOrigin);
   if (useLiveGitHub) {
-    await connectAndOpenGitHubBranch(page, origin);
+    await page.getByLabel("GitHub auth relay URL").fill(origin);
+    await page.getByRole("button", { name: "Connect GitHub" }).click();
+    await expect(operationNotice).toContainText(/Connected to GitHub as /u);
+    if (liveGitHubLogin) await expect(operationNotice).toContainText(liveGitHubLogin);
+    await page.getByLabel("Repository").selectOption(String(liveGitHubRepositoryId));
+    await page.getByLabel("Branch").fill(liveGitHubBranch);
+    await page.getByRole("button", { name: "Open workspace" }).click();
+    await expect(operationNotice).toContainText(`Opened ${workspaceTitle}`);
   } else {
-    await page.getByLabel("GitHub auth relay URL").fill(staticFixtureRelay);
+    await page.getByLabel("GitHub auth relay URL").fill(origin);
     await page.getByRole("button", { name: "Connect GitHub" }).click();
     await expect(operationNotice).toContainText(`Connected to GitHub as ${staticFixtureLogin}`);
     await page.getByLabel("Repository").selectOption(String(staticFixtureIdentity.repositoryId));
