@@ -272,13 +272,23 @@ export function HostApp(): ReactElement {
   }
 
   async function refreshAfterPlugin(): Promise<void> {
-    if (!git || !workspace) return;
-    await refresh(git, workspace);
-    if (currentFile && !currentFileRef.current?.dirty) {
-      const read = await git.read(currentFile.path);
-      const text = read.data === null ? "" : asText(read.data);
-      setCurrentFile({ ...currentFile, data: read.data, revision: read.revision, text, binary: read.data !== null && text === null, dirty: false });
-    }
+    const targetGit = git;
+    const targetWorkspace = workspace;
+    if (!targetGit || !targetWorkspace) return;
+    const initialFile = currentFileRef.current;
+    await refresh(targetGit, targetWorkspace);
+    if (!initialFile || initialFile.dirty || gitRef.current !== targetGit) return;
+    const fileBeforeRead = currentFileRef.current;
+    if (!fileBeforeRead || fileBeforeRead.path !== initialFile.path || fileBeforeRead.dirty) return;
+    const read = await targetGit.read(fileBeforeRead.path);
+    const latestFile = currentFileRef.current;
+    if (gitRef.current !== targetGit || latestFile?.path !== fileBeforeRead.path || latestFile.dirty ||
+        latestFile.text !== fileBeforeRead.text || latestFile.revision.oid !== fileBeforeRead.revision.oid) return;
+    const data = read.data;
+    const text = data === null ? "" : asText(data);
+    const updatedFile: OpenFile = { ...latestFile, data, revision: read.revision, text, binary: data !== null && text === null, dirty: false };
+    currentFileRef.current = updatedFile;
+    setCurrentFile(updatedFile);
   }
 
   async function loadFile(path: string): Promise<void> {
@@ -348,13 +358,30 @@ export function HostApp(): ReactElement {
   }
 
   async function deleteFile(): Promise<void> {
-    if (!git || !currentFile || !window.confirm(currentFile.dirty ? `Delete ${currentFile.path} from the local worktree and discard its unsaved editor text?` : `Delete ${currentFile.path} from the local worktree?`)) return;
+    const targetGit = git;
+    const targetWorkspace = workspace;
+    const deletingFile = currentFileRef.current;
+    if (!targetGit || !targetWorkspace || !deletingFile || !window.confirm(deletingFile.dirty ? `Delete ${deletingFile.path} from the local worktree and discard its unsaved editor text?` : `Delete ${deletingFile.path} from the local worktree?`)) return;
     setBusy(true);
     try {
-      await git.delete(currentFile.path, currentFile.revision);
-      setCurrentFile(null);
-      await refresh(git, workspace!);
-      setMessage({ tone: "info", text: `${currentFile.path} is deleted in the local worktree. Commit and publish to share the deletion.` });
+      await targetGit.delete(deletingFile.path, deletingFile.revision);
+      const stillInWorkspace = gitRef.current === targetGit;
+      const latestFile = currentFileRef.current;
+      const sameFileStillOpen = stillInWorkspace && latestFile?.path === deletingFile.path;
+      const preserveNewerText = sameFileStillOpen && latestFile.dirty && (!deletingFile.dirty || latestFile.text !== deletingFile.text);
+      if (sameFileStillOpen && preserveNewerText) {
+        const preservedDraft: OpenFile = { ...latestFile, data: null, revision: { oid: null }, dirty: true };
+        currentFileRef.current = preservedDraft;
+        setCurrentFile(preservedDraft);
+        setSyncState("editing");
+      } else if (sameFileStillOpen) {
+        currentFileRef.current = null;
+        setCurrentFile(null);
+      }
+      if (stillInWorkspace) await refresh(targetGit, targetWorkspace);
+      const workspacePrefix = stillInWorkspace ? "" : `${targetWorkspace.title} · `;
+      const editorNotice = preserveNewerText ? " Newer editor text is preserved as an unsaved draft; save it to recreate the file." : "";
+      setMessage({ tone: "info", text: `${workspacePrefix}${deletingFile.path} is deleted in the local worktree.${editorNotice} Commit and publish to share the deletion.` });
     } catch (error) { setMessage({ tone: "error", text: errorMessage(error) }); }
     finally { setBusy(false); }
   }
