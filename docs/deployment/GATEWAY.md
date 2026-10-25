@@ -1,143 +1,147 @@
-# Proprium Gateway configuration and operations
+# Proprium Gateway installation and operations
 
-The Gateway is a single Go executable. It needs no root account, database, Node.js runtime, container or writable data directory. It serves GitHub OAuth Device Flow, restricted Git Smart HTTP fallback and, when configured with an owner key, the optional Live Workspace MCP control plane. It does not store GitHub tokens, repositories, workspace contents, search indexes or Git objects.
+The optional Go Gateway provides GitHub OAuth Device Flow, restricted Git Smart HTTP fallback, and explicitly enabled Live Workspace MCP. The static Browser Host still supports local editing, local Git and admitted/cached WASM plugins without a Gateway or login. The Gateway is a transient relay: it does not store GitHub tokens, repositories, workspaces, workspace contents, indexes or Git objects.
 
-## Automated releases from main
+## Supported management path
 
-Every push to `main` runs the Gateway release workflow. After the race-enabled Go tests, vet and cross-platform builds pass, GitHub Actions publishes an immutable `proprium-gateway-v0.0.<workflow-run-number>` release containing platform binaries, `SHA256SUMS`, and `SOURCE.txt`. The run number is a monotonically increasing CI build identifier, **not** a claim of semantic-version compatibility. GitHub's latest release points to the newest published successful release; a failed build must not publish one. The workflow retains manual dispatch for an existing canonical Gateway tag on main. Release publication does not deploy or restart the server; operators explicitly fetch and verify the desired release.
+The production management interface is the `proprium` CLI on Linux amd64 and arm64. It installs and updates the Gateway and a pinned `cloudflared` binary in the current user's XDG directories, configures one systemd **user** service for both processes, and supports `install`, `setup`, `start`, `stop`, `restart`, `status`, `update`, `rollback`, `logs`, `doctor`, `version`, and `help`. It does not require root, a system service, Node.js, a container or a database. The Gateway and `cloudflared` remain separate executables; the user service coordinates their lifecycle. Each child receives only its own secrets. Both Tunnel modes use an explicit private managed config, so a pre-existing `~/.cloudflared/config.yml` is not implicitly loaded.
 
-## Download and verify
+The manager uses `$XDG_BIN_HOME` when set, otherwise `$HOME/.local/bin`; `$XDG_CONFIG_HOME/proprium` when set, otherwise `$HOME/.config/proprium`; and `$XDG_DATA_HOME/proprium` when set, otherwise `$HOME/.local/share/proprium`. Configuration, active release metadata and rollback material are kept in their respective user-owned directories. The installed launcher remembers custom config/data/bin locations for later commands. Do not place these paths in a shared/system directory or run the manager with `sudo`.
 
-Download the release binary for the target OS/architecture and `SHA256SUMS` from the matching `proprium-gateway-vX.Y.Z` GitHub Release. Verify it before use:
+The CLI is the supported operational path. Do not install a second `cloudflared`, create a separate Tunnel service, or replace the managed binaries by hand as part of routine setup or updating. A user who needs direct manual operation should use the pinned release's own help and treat the service state as unmanaged until returned to the CLI workflow.
 
-~~~sh
-sha256sum --check SHA256SUMS
-chmod 0755 proprium-gateway_1.2.3_linux_amd64
-./proprium-gateway_1.2.3_linux_amd64 version
-~~~
+### Requirements and path rules
 
-Rename or symlink the platform binary to `proprium-gateway` if convenient. Release artifacts are self-contained executables built with CGO disabled. Linux amd64 and arm64 are supported for Gateway operation; Windows amd64 and macOS amd64/arm64 binaries are also published.
+Use Linux amd64 or arm64, Bash 5 or newer, `curl`, `jq`, `awk`, GNU coreutils, GNU `tar`, util-linux `flock`, and a running systemd user manager (`systemctl --user`). `logs` also requires `journalctl` and a working user journal; `loginctl` is used to report linger state. The CLI refuses to create a system service or escalate privileges when the user manager is unavailable.
 
-Build from source with the [pinned Go 1.27.3 toolchain](https://go.dev/dl/#go1.27.3):
+The default paths follow `XDG_BIN_HOME` (or `~/.local/bin`), `XDG_CONFIG_HOME/proprium` (or `~/.config/proprium`), and `XDG_DATA_HOME/proprium` (or `~/.local/share/proprium`). Path overrides must be absolute and cannot be `/`. The manager rejects symlink path components, `.`/`..` components, and paths containing newline, carriage return, `%`, double quote, or backslash. It requires configuration/data directories to be owned by the current user, sets them to mode `0700`, and stores secret/configuration files at mode `0600`. Use plain, user-owned directories for all overrides.
 
-~~~sh
-cd gateway
-go test -race ./...
-go vet ./...
-CGO_ENABLED=0 go build -trimpath -o proprium-gateway .
-~~~
+### Install and configure
 
-## Configuration
-
-| Setting | Required | Meaning |
-| --- | --- | --- |
-| `PROPRIUM_LISTEN_ADDR` | no | HTTP listen address, default `127.0.0.1:8080`; use an unprivileged port |
-| `PROPRIUM_HOST_ORIGIN` | yes | One exact Host origin, for example `https://app.example.org`; local HTTP is permitted only for loopback development |
-| `PROPRIUM_PUBLIC_URL` | required for Live MCP or wildcard listen | Exact public Gateway origin, for example `https://gateway.example.org`; used for Host and proxy request validation. May be omitted for loopback-only, relay-only operation |
-| `GITHUB_CLIENT_ID` | yes | GitHub OAuth App client ID for Device Flow; 10–128 ASCII letters, digits, underscores or hyphens. It is a public identifier, not a secret |
-| `PROPRIUM_OWNER_KEY` | Live MCP use | Random owner bearer secret of at least 32 bytes; keep private. If absent, Live MCP owner management is disabled |
-| `PROPRIUM_UPSTREAM_TIMEOUT` | no | Maximum upstream request time, default `2m` |
-
-All configured origins must be canonical origins without credentials, path, query or fragment. `PROPRIUM_HOST_ORIGIN` is always required and must match the Host exactly. `PROPRIUM_PUBLIC_URL` must match the HTTPS hostname routed to this Gateway when Live MCP is enabled or the listen address is a wildcard; it may be omitted only for a loopback relay-only service. `GITHUB_CLIENT_ID` is always required at startup and must belong to the OAuth App configured for Device Flow. The executable contains no client secret or token.
-
-Generate an owner key locally and enter it only into the Host's Live MCP settings:
+First verify the standalone bootstrap against both the latest-release API asset digest and the matching release checksum file. This captures one release ID/tag from the API, downloads both assets from that tag, checks their API SHA-256 digests, and cross-checks the bootstrap checksum before execution:
 
 ~~~sh
-openssl rand -base64 48
+set -euo pipefail
+api=https://api.github.com/repos/yohn-jp/proprium/releases/latest
+release_base=https://github.com/yohn-jp/proprium/releases/download
+tmp=$(mktemp -d)
+trap 'rm -rf -- "$tmp"' EXIT
+curl --fail --silent --show-error --location --proto '=https' --proto-redir '=https' --tlsv1.2 --connect-timeout 10 --max-time 60 "$api" -o "$tmp/release.json"
+tag=$(jq -er '.tag_name | select(test("^proprium-gateway-v(0|[1-9][0-9]*)\\.(0|[1-9][0-9]*)\\.(0|[1-9][0-9]*)$"))' "$tmp/release.json")
+asset_digest() {
+  jq -er --arg name "$1" '[.assets[]? | select(.name == $name)] as $a | if ($a | length) == 1 then $a[0].digest // empty else empty end' "$tmp/release.json"
+}
+asset_url() {
+  jq -er --arg name "$1" '[.assets[]? | select(.name == $name)] as $a | if ($a | length) == 1 then $a[0].browser_download_url // empty else empty end' "$tmp/release.json"
+}
+bootstrap_api=$(asset_digest bootstrap.sh)
+sums_api=$(asset_digest SHA256SUMS)
+[[ $bootstrap_api =~ ^sha256:[0-9a-f]{64}$ && $sums_api =~ ^sha256:[0-9a-f]{64}$ ]]
+bootstrap_url="$release_base/$tag/bootstrap.sh"
+sums_url="$release_base/$tag/SHA256SUMS"
+[[ $(asset_url bootstrap.sh) == "$bootstrap_url" && $(asset_url SHA256SUMS) == "$sums_url" ]]
+curl --fail --silent --show-error --location --proto '=https' --proto-redir '=https' --tlsv1.2 --connect-timeout 10 --max-time 60 "$bootstrap_url" -o "$tmp/bootstrap.sh"
+curl --fail --silent --show-error --location --proto '=https' --proto-redir '=https' --tlsv1.2 --connect-timeout 10 --max-time 60 "$sums_url" -o "$tmp/SHA256SUMS"
+printf '%s  %s\n' "${bootstrap_api#sha256:}" "$tmp/bootstrap.sh" | sha256sum --check -
+printf '%s  %s\n' "${sums_api#sha256:}" "$tmp/SHA256SUMS" | sha256sum --check -
+bootstrap_sum=$(awk '$2 == "bootstrap.sh" { if (n++) exit 1; print $1 } END { if (n != 1) exit 1 }' "$tmp/SHA256SUMS")
+[[ $bootstrap_sum =~ ^[0-9a-f]{64}$ && $bootstrap_sum == "${bootstrap_api#sha256:}" ]]
+bash "$tmp/bootstrap.sh"
+bin_dir=${XDG_BIN_HOME:-$HOME/.local/bin}
+"$bin_dir/proprium" install
+"$bin_dir/proprium" status
 ~~~
 
-Do not put the owner key in a `VITE_*` setting, command argument, MCP endpoint URL, shell history or log. It must contain 32–4096 printable ASCII bytes without spaces. Keep it in an environment file readable only by the Gateway user. The Host keeps it in memory only. If the owner key is absent, OAuth and Git relay can still run but Live MCP publication is unavailable. A wildcard listen address such as `0.0.0.0:8080` also requires `PROPRIUM_PUBLIC_URL`; prefer binding to loopback behind the Tunnel.
+`bootstrap.sh` installs the verified CLI but does not edit shell startup files. The example invokes it by its default path rather than assuming the directory is already on `PATH`; if a custom `--bin-dir` is used, invoke the CLI from that directory. `install` stages and verifies the Gateway bundle, runs setup to collect required values, checks that both the Gateway listen port and Tunnel metrics port are available, then registers and starts the managed user service. On an initial install, a bounded loopback TCP probe makes `install` fail if either port is occupied or unresponsive, before it changes the release pointer, registers a unit, or stops any existing process. Use `setup` later to change configuration; it saves private settings and tells you to restart the service to apply them. See the migration notes below before stopping any existing service.
 
-## Local run
+The operator verifies the downloaded `bootstrap.sh` bytes against `SHA256SUMS` before running it. The script resolves the latest release through the GitHub Releases API and verifies both the standalone Linux CLI asset and `SHA256SUMS` against their API SHA-256 digests, then cross-checks the CLI checksum before installing it. It pins the selected release metadata for that acquisition; it does not accept an unchecked tag or asset from another release. `proprium install` resolves the Gateway release, selects the Linux amd64 or arm64 bundle, and obtains that release's `SHA256SUMS`. It verifies the API SHA-256 asset digest and release checksum, then validates the embedded archive manifest and component hashes before activation. The bundle contains the Gateway and the pinned, separately executable `cloudflared`. Each stage uses files from the same release ID/tag. A checksum verifies bytes against a release checksum file; it is not a separate publisher signature.
 
-Set configuration in the process environment or a private environment file, then run as an ordinary account:
+`setup` gathers the public Gateway URL, exact static Host origin, GitHub OAuth App client ID, and Cloudflare Tunnel authentication material. The default Host origin is `https://proprium.yohn.jp`; the default Gateway listener is `127.0.0.1:8080`. The CLI can also accept these setup options:
+
+~~~text
+--non-interactive
+--maintenance
+--config-dir PATH
+--data-dir PATH
+--bin-dir PATH
+--public-url URL
+--host-origin ORIGIN
+--github-client-id ID
+--tunnel-token-file PATH
+--tunnel-credentials-file PATH --tunnel-id UUID
+--access-credentials-file PATH
+--listen 127.0.0.1:8080
+--metrics 127.0.0.1:20000
+~~~
+
+Use either a Tunnel token file or the credentials JSON file together with its Tunnel ID. Secret input files must be regular files owned by the current user with mode `0600`; copy older root-owned files into a private user directory before setup. The optional Access credentials file is private `KEY=value` data containing `CF_ACCESS_CLIENT_ID` and `CF_ACCESS_CLIENT_SECRET`; it is used only for the CLI's public health probe and does not change Cloudflare Access policy. The CLI reads secret input files as data; it never sources them as shell code. Setup generates the MCP owner key locally and stores it in the private Gateway configuration; enter it privately in the Host's Live MCP settings. Do not pass a Tunnel token, credentials JSON, owner key, Access secret, or OAuth secret in arguments, environment dumps, command history, logs or issue reports. Secret input is accepted through these files or hidden terminal input; `--non-interactive` requires the documented file inputs. The GitHub client ID is a public identifier. The CLI does not create or change Cloudflare accounts, Tunnel resources, DNS routes, Access applications, or GitHub OAuth Apps; those provider resources and their authorization must already be available.
+
+The installation creates private configuration, stages the Gateway plus pinned `cloudflared` under the configured user paths, and registers one `systemd --user` unit that starts, stops and restarts both managed processes. It does not promise that user services continue after logout or boot: that depends on the host's systemd user manager and linger policy. `doctor` reports local installation, service, version and connectivity conditions; a local health response alone does not prove the public proxy or Live MCP path.
+
+### Migrate an existing manual Gateway
+
+Before migration, record and preserve the current `PROPRIUM_OWNER_KEY`, `GITHUB_CLIENT_ID`, `PROPRIUM_PUBLIC_URL`, `PROPRIUM_HOST_ORIGIN`, Gateway listen address, and existing Tunnel credentials. Keep the same Owner Key so the Host's owner setting does not have to be replaced; the Gateway restart still ends active client grants and Live sessions, which must be reconnected or reauthorized. The GitHub client ID is public, but keep the Owner Key and Tunnel credentials private.
+
+Create the manager's `gateway.env` as a plain `KEY=value` data file containing the existing Gateway values. Its relevant entries are:
+
+~~~text
+PROPRIUM_LISTEN_ADDR=127.0.0.1:8080
+PROPRIUM_HOST_ORIGIN=https://proprium.yohn.jp
+PROPRIUM_PUBLIC_URL=https://your-existing-gateway-host.example
+GITHUB_CLIENT_ID=your-existing-public-client-id
+PROPRIUM_OWNER_KEY=your-existing-owner-key
+~~~
+
+This is a schematic example; replace every sample value and do not use the placeholder Owner Key. Retain the existing Owner Key exactly (it must meet the Gateway's 32-byte minimum). Do not write `export`, shell quoting, command substitution or other shell syntax. Use a private editor; ensure the config directory is mode `0700` and the file is mode `0600`. Do this before `proprium install` so `setup` reads and preserves the existing Owner Key and client ID instead of generating a new key. Pass the existing public URL and Host origin with `--public-url` and `--host-origin`, if needed. Supply either the current token through `--tunnel-token-file` or the existing credentials JSON through `--tunnel-credentials-file` plus its matching `--tunnel-id`; the manager copies credentials into its private config. The optional Access probe file does not change the Cloudflare Access policy.
+
+If the old service owns either required loopback port, the new install safely refuses to register or start the managed service. Identify the exact old process, service unit, user, Tunnel and hostname first. Only stop or disable an old unit after confirming its identity and that you are authorized to change it. Do not run a blanket `systemctl disable` or stop another user's/system service by guess. Keep the old unit available for recovery until the managed Gateway, Tunnel and public path have been checked; after successful cutover, disable only the exact old unit(s) you confirmed. Do not leave an old `cloudflared` service running alongside the managed Tunnel when both would publish the same route.
+
+### Operate and recover
 
 ~~~sh
-export PROPRIUM_HOST_ORIGIN=https://app.example.org
-export PROPRIUM_PUBLIC_URL=https://gateway.example.org
-export GITHUB_CLIENT_ID=Iv1.exampleclientid
-export PROPRIUM_OWNER_KEY='generated-random-owner-key'
-./proprium-gateway serve --listen 127.0.0.1:8080
+proprium start
+proprium status
+proprium logs
+proprium doctor
+proprium restart
+proprium stop
 ~~~
 
-For local Host development, use the exact dev-server origin and a loopback Gateway URL. Do not expose the development listener publicly. `GET /healthz` is a small health response and does not make a Workspace available. SIGTERM and SIGINT request graceful HTTP shutdown. The Gateway writes no persistent application data; logs go to its standard output/error.
+`status` reports the managed Gateway and Tunnel service state and installed versions. `logs` reads the combined user-service journal. `doctor` checks the local files, permissions, configured listener and public health endpoints; if Cloudflare Access protects the public health route, provide the optional Access probe credentials file. Verify the Host integration separately when validating a live deployment. An unsafe or failed operation returns nonzero; `status` and `doctor` return nonzero when the service is degraded. `help` is informational. If the systemd user manager is unavailable, the CLI fails without installing a system unit. If linger is off, it reports logout persistence as unverified and prints the administrator action needed; it does not escalate privileges or enable linger itself.
 
-## Cloudflare Tunnel
-
-Run `cloudflared` as a separate user process. The Tunnel creates an outbound connection to Cloudflare and forwards HTTPS traffic to the loopback Gateway. The static Host remains a separate Workers Static Assets deployment. Cloudflare Tunnel does not guarantee unlimited request count or bandwidth.
-
-1. Install `cloudflared` using the official instructions for the Linux distribution.
-2. Authenticate and create or select a Tunnel for this Gateway account; route only `gateway.example.org` to it. These commands change Cloudflare account state, so review the selected account and hostname before running them.
-3. Create `~/.cloudflared/config.yml` with the created Tunnel ID and credentials path:
-
-~~~yaml
-tunnel: YOUR-TUNNEL-UUID
-credentials-file: /home/proprium/.cloudflared/YOUR-TUNNEL-UUID.json
-ingress:
-  - hostname: gateway.example.org
-    service: http://127.0.0.1:8080
-  - service: http_status:404
-~~~
-
-Set `PROPRIUM_PUBLIC_URL=https://gateway.example.org`. Preserve the original public HTTPS Host header; the Gateway validates it against this URL. Configure `PROPRIUM_HOST_ORIGIN` as the static Host's exact HTTPS origin. Do not enable caching or body transformation for `/live/` or `/mcp`. The browser SSE response must carry `Content-Type: text/event-stream`; Cloudflare documents that this response type makes `cloudflared` stream events rather than buffer the response ([Tunnel streaming troubleshooting](https://developers.cloudflare.com/cloudflare-one/troubleshooting/tunnel/)). Allow long-lived responses through any other proxy in the path.
-
-For a foreground Tunnel, after the Gateway is listening, run:
+Updating is explicit; installing a newer release does not silently replace the running service. `stop`, `restart`, `update`, and `rollback` check the Gateway's private local control socket before changing service state. The default protects active MCP clients: an interactive invocation asks whether to revoke sessions, while a non-interactive invocation fails without changing the service. Use `--maintenance` to explicitly permit the operation and revoke active sessions:
 
 ~~~sh
-cloudflared tunnel --config "$HOME/.cloudflared/config.yml" run YOUR-TUNNEL-NAME
+proprium update --maintenance
+proprium rollback --maintenance
 ~~~
 
-Check `https://gateway.example.org/healthz` and the Gateway's local `http://127.0.0.1:8080/healthz`. In the Host, enable Live MCP for a workspace and verify that the session becomes connected. Use the browser Network panel to confirm a long-lived `text/event-stream` response on the browser SSE endpoint, then make a read-only tool call and observe its HTTP request and result. Stop/restart the browser or Tunnel and confirm the Host reports disconnected and the MCP call reports unavailable; reconnect from the Host and authorize clients again if their session was revoked. This checks the actual proxy path and reconnection behavior; a local mock does not prove a public Tunnel works.
+An accepted stop, restart or binary switch disconnects live sessions. Old client grants expire with Gateway restart, and no pending mutation is replayed. The CLI retains the last known-good Gateway and Tunnel release files and restores them if a staged update fails validation or fails its service health check. `rollback` switches back to that retained release and restarts the managed service. Rollback restores executable versions, not volatile sessions, client authorizations or provider-side configuration.
 
-The Gateway sends a small SSE comment every 30 seconds while a Live stream is connected. This keeps bytes flowing during idle periods without polling or executing tools. Cloudflare documents a [125-second proxy read timeout](https://developers.cloudflare.com/fundamentals/reference/connection-limits/); proxies must pass the SSE comments incrementally. Verify the deployed path by leaving Live MCP idle for at least three minutes, then calling a read-only tool with the same client authorization. A stream write or flush failure expires the session and pending requests; the Browser Host must show the disconnect and require a new connection rather than replay a mutation.
+Do not manually delete the retained release or edit active release metadata. If the service cannot start after a failed operation, use `proprium status`, `proprium logs`, and `proprium doctor` to identify the failure before retrying or restoring the previous release.
 
-### Cloudflare Access for browser requests
+## Gateway and Tunnel behavior
 
-When Cloudflare Access protects the Gateway hostname, sign in to that hostname from the Host before starting GitHub authorization or enabling Live MCP. The Host sends the Access edge cookie only to the explicitly configured Gateway for OAuth, Git Smart HTTP and Live Workspace requests. The Go Gateway still checks the exact Host Origin, HTTP Host, repository identity and its existing bearer/session tokens; the Access cookie does not replace any Proprium authorization.
+The Gateway defaults to `127.0.0.1:8080`; the managed Tunnel publishes its configured HTTPS hostname and forwards to that loopback listener. Configure the public URL to match the routed HTTPS Gateway origin and the Host origin to match the static site's exact origin. Keep the Gateway listener private. Do not enable caching or body transformation for `/live/` or `/mcp`; SSE must stream incrementally through the proxy. Cloudflare Tunnel does not guarantee unlimited request count or bandwidth.
 
-Cross-origin browser requests send a CORS `OPTIONS` preflight before the credentialed request. In the Access application for the Gateway hostname, enable **Advanced settings → Cross-Origin Resource Sharing (CORS) settings → Bypass options requests to origin**. This sends the preflight to the Gateway, where its exact-Origin CORS handler validates the method and headers. Keep Access authentication on the actual `/oauth/`, `/git/` and `/live/` requests; do not add a broad Access Bypass policy for those paths. The Gateway returns `Access-Control-Allow-Credentials: true` only with the configured Host Origin. See Cloudflare's [Access CORS guidance](https://developers.cloudflare.com/cloudflare-one/access-controls/applications/http-apps/authorization-cookie/cors/) for the current dashboard flow and alternatives.
+Cloudflare Access remains an edge policy and does not replace Proprium checks. When Access protects the Gateway hostname, sign in to that hostname from the Host before starting GitHub authorization or enabling Live MCP. The Host sends the Access edge cookie only to the explicitly configured Gateway for OAuth, Git Smart HTTP and Live Workspace requests. The Gateway still checks the exact Host Origin, HTTP Host, repository identity and its existing bearer/session tokens.
 
-The Host browser's Access cookie is not shared with an external MCP client. If Access also protects `/mcp`, configure the Access application so that the MCP client can independently satisfy its edge policy, for example with separate Access service-token headers if the client supports them. Keep `Authorization: Bearer` for the Proprium-paired MCP token; the Gateway checks it after Access admits the request. Do not configure an Access credential that overwrites the Authorization header expected by the Gateway.
+Cross-origin browser requests send a CORS `OPTIONS` preflight before the credentialed request. In the Access application for the Gateway hostname, enable **Advanced settings → Cross-Origin Resource Sharing (CORS) settings → Bypass options requests to origin**. This sends the preflight to the Gateway, where its exact-Origin CORS handler validates the method and headers. Keep Access authentication on actual `/oauth/`, `/git/` and `/live/` requests; do not add a broad Access Bypass policy for those paths. The Gateway returns `Access-Control-Allow-Credentials: true` only with the configured Host Origin. See Cloudflare's [Access CORS guidance](https://developers.cloudflare.com/cloudflare-one/access-controls/applications/http-apps/authorization-cookie/cors/) for current dashboard behavior.
 
-## Optional user services
+The Host browser's Access cookie is not shared with an external MCP client. If Access also protects `/mcp`, configure the Access application so the MCP client can independently satisfy its edge policy, for example with separate Access service-token headers if the client supports them. Keep `Authorization: Bearer` for the Proprium-paired MCP token; the Gateway checks it after Access admits the request. Do not configure an Access credential that overwrites the Authorization header expected by the Gateway.
 
-The following user unit runs the Gateway. Store the environment in `~/.config/proprium/gateway.env` with mode `0600` and replace the binary path with its actual location:
+The Gateway's Live Workspace transport is authenticated Streamable HTTP to the Gateway and an outbound SSE/HTTP connection to the active Browser Host. The Gateway sends an SSE comment every 30 seconds while a Live stream is connected. Proxies must pass these bytes incrementally; Cloudflare documents a [125-second proxy read timeout](https://developers.cloudflare.com/fundamentals/reference/connection-limits/). A local `/healthz` success does not prove public SSE forwarding. Verify the public path by leaving Live MCP idle for at least three minutes, then making a read-only tool call with the same client authorization. A stream failure expires the session and pending requests; the Host must show the disconnect and require a new connection instead of replaying a mutation.
 
-~~~ini
-# ~/.config/systemd/user/proprium-gateway.service
-[Unit]
-Description=Proprium Gateway
-After=network.target
+When validating a deployment, check `https://<gateway-host>/healthz` and `http://127.0.0.1:8080/healthz`, connect Live MCP from an active Host workspace, confirm an SSE response with `Content-Type: text/event-stream`, and make an authorized read-only call. Stop/restart the browser or managed service and confirm the Host reports disconnected and the MCP call reports unavailable. Reconnect and authorize clients again after Gateway restart. These checks exercise the actual proxy path; a local mock does not prove a public Tunnel works.
 
-[Service]
-Type=simple
-EnvironmentFile=%h/.config/proprium/gateway.env
-ExecStart=%h/bin/proprium-gateway serve --listen 127.0.0.1:8080
-Restart=on-failure
-RestartSec=5s
-NoNewPrivileges=true
-PrivateTmp=true
-ProtectSystem=strict
+## Release and verification boundaries
 
-[Install]
-WantedBy=default.target
-~~~
+Pull request verification runs Go tests with the race detector and `go vet`, then cross-builds CGO-free Linux amd64/arm64, Windows amd64, and macOS amd64/arm64 binaries with version `dev` and the current commit embedded. It uploads a commit-named Actions artifact with `SHA256SUMS` and `SOURCE.txt`; that PR artifact is not a GitHub Release. Browser Verification starts the Gateway beside the Host and exercises Live MCP in Chromium and mobile WebKit. Those loopback tests do not verify a public Cloudflare Tunnel.
 
-Start and inspect it without a system service or root permission:
+The release workflow also runs on every push to `main`. After successful source validation, tests, vet, bundle verification and builds, it publishes `proprium-gateway-v0.0.<workflow-run-number>` as a GitHub Release. A failed build does not publish a release. Manual dispatch is available for an existing canonical `proprium-gateway-vX.Y.Z` tag that points to a commit on `main`. Bootstrap and `proprium install` select the latest published Gateway Release and verify the API SHA-256 digest of each downloaded asset, then the matching `SHA256SUMS`; install also checks the bundle manifest and component hashes.
 
-~~~sh
-systemctl --user daemon-reload
-systemctl --user enable --now proprium-gateway.service
-systemctl --user status proprium-gateway.service
-journalctl --user -u proprium-gateway.service
-~~~
+Each release has these five platform bundles: `proprium-gateway_${VERSION}_linux_amd64.tar.gz`, `proprium-gateway_${VERSION}_linux_arm64.tar.gz`, `proprium-gateway_${VERSION}_windows_amd64.tar.gz`, `proprium-gateway_${VERSION}_darwin_amd64.tar.gz`, and `proprium-gateway_${VERSION}_darwin_arm64.tar.gz`. It also publishes the standalone Linux CLI `proprium`, `bootstrap.sh`, `SHA256SUMS` and top-level `SOURCE.txt`. The bundles contain the Gateway and the pinned `cloudflared` executable, manifest, source metadata, and license/notice files. `THIRD-PARTY-LICENSES.txt` includes the union of cloudflared dependency licenses/notices for all five targets and the pinned Go runtime license/patent texts. The current pinned `cloudflared` version is **2026.10.3**, sourced from the official [Cloudflare cloudflared release](https://github.com/cloudflare/cloudflared/releases/tag/2026.10.3), with its upstream asset SHA-256 and Apache-2.0 license checksum verified during packaging. The release `SHA256SUMS` covers all five bundles and the standalone CLI/bootstrap assets; GitHub API digests are checked for the published release assets.
 
-A separate user unit can run `cloudflared tunnel --config %h/.cloudflared/config.yml run YOUR-TUNNEL-NAME` with the same restart policy. User services normally stop when the account logs out; continuous operation after logout depends on the host's user-service/linger policy and is not a Gateway requirement. A shared host must permit long-running user processes and outbound Tunnel connections.
-
-Restarting Gateway or cloudflared drops live MCP connections. The Host detects disconnect; the owner re-enables publication and client tokens are reissued after a Gateway restart. No in-flight mutation is replayed.
-
-## Releases and CI
-
-[Gateway CI](../../.github/workflows/verify-gateway.yml) runs Go tests with the race detector and `go vet`, then cross-builds CGO-free Linux amd64/arm64, Windows amd64, and macOS amd64/arm64 binaries with version `dev` and the current commit embedded. It uploads them under the Actions artifact name `proprium-gateway-<commit-sha>` with `SHA256SUMS` and `SOURCE.txt`; this is a build artifact, not a GitHub Release. Browser Verification installs the pinned Go toolchain, starts the actual Gateway with the Browser Host, and exercises Live MCP in Chromium and mobile WebKit. Those loopback tests do not verify a public Cloudflare Tunnel. [Gateway release](../../.github/workflows/release-proprium-gateway.yml) repeats tests and vet, builds the same five targets with the tag version and source commit, and publishes checksums and binaries to a GitHub Release for `proprium-gateway-vX.Y.Z` tags. Manual dispatch requires an existing matching tag that points to a commit on `main`. Ordinary CI does not publish releases.
+Windows and macOS runtime bundles are available, but managed CLI installation and service operations are unsupported on those operating systems. Release integrity checks do not prove Cloudflare provider configuration or a production OAuth/MCP deployment.
 
 The Host release remains separate and deploys Workers Static Assets only; it does not deploy or remove a Gateway. See [Cloudflare static Host deployment](CLOUDFLARE.md), [MCP contract](../architecture/MCP-GATEWAY.md), and [security boundaries](../architecture/DELIVERY-AND-SECURITY.md).

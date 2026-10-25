@@ -370,28 +370,24 @@ flowchart TD
 
 markerを消すためのresetやデータ削除は禁止。回復不能なevictionでは未公開データを救出済みと称さない。ブロッキングerrorを高さ制限のあるstatus shelf内だけに置かない。X04のretryはmutationの無条件再実行ではない。
 
-## F17 — Gateway設置者・latest・user service・更新
+## F17 — Gateway設置者・Linux CLI・統合user service・更新
 
 ```mermaid
 flowchart TD
-  O01["O01 latest Gateway release解決"] --> Verify["OS/arch asset・SHA256SUMS・SOURCEを同一releaseで検証"]
+  O01["O01 main pushで自動公開された最新Gateway releaseを解決"] --> Verify["Linux asset・API digest・SHA256SUMS・manifestを同一releaseで検証"]
   Verify -->|失敗・releaseなし| Retry["既存binary不変 / 原因修正・再試行"]
   Retry --> O01
-  Verify -->|成功 / user領域へ配置| O02["O02 env・OAuth App・HTTPS・別cloudflared"]
-  O02 -->|設定確認| Run{"実行方式"}
-  Run -->|foreground| O03["O03 GatewayとTunnelを実行"]
-  Run -->|利用可能なsystemd --userを選ぶ| Service["user unit・private env・再起動方針 / linger診断"]
-  Service --> O03
-  Service -->|user manager・sandbox設定が利用不可| Run
-  O03 -->|設定・Tunnel失敗| O02
-  O03 -->|local・公開経路・認証を段階検証| Ready["稼働状態 / Hostへ接続先を案内"]
+  Verify -->|成功 / XDG user領域へ配置| O02["O02 origin・OAuth client ID・Tunnel secret fileを設定"]
+  O02 --> Service["O03 Gatewayとpinned cloudflaredを一つのsystemd --user serviceで管理"]
+  Service -->|設定・Tunnel失敗| O02
+  Service -->|local・公開経路・認証を段階検証| Ready["稼働状態 / Hostへ接続先を案内"]
   Ready -->|所有者の明示公開| M01["M01 F11"]
-  O03 -->|更新を選ぶ| O04["O04 latestを一度解決 / staged検証・切替"]
-  O04 -->|取得・検証失敗 / 旧binary維持| O03
-  O04 -->|新binaryと経路を確認| O03
-  O04 -->|起動・health失敗| Rollback["旧binaryへ戻す / 旧Live認可は戻らない"]
-  Rollback --> O03
-  O03 -->|停止・再起動| Lost["Live session終了 / 再接続・再認可が必要"]
+  Service -->|更新／rollback / active MCP時は確認または--maintenance| O04["O04 stage・検証・切替"]
+  O04 -->|取得・検証失敗 / 現行binary維持| Service
+  O04 -->|新binaryとhealth check成功| Service
+  O04 -->|起動・health失敗| Rollback["旧Gateway/cloudflared releaseへ復旧"]
+  Rollback --> Service
+  Service -->|停止・再起動| Lost["Live session終了 / 再接続・再認可が必要"]
 ```
 
-`latest`利用を既定の取得方針とする。利用者にversion固定の手入力を要求しないが、一回の取得では解決したreleaseとassetを固定して検証する。継続的な自動更新・再起動を無断で有効にしない。詳細は[UIアーキテクチャ](UI-ARCHITECTURE.md)と既存の[運用手順](../deployment/GATEWAY.md)を参照する。
+Linux amd64/arm64の`proprium` CLIがlatestのGateway releaseを選択し、pinned `cloudflared`とともにuser領域へ配置して、両者を一つのsystemd user serviceで管理する。main push後にrelease workflowが検証済み資材を自動公開する。非対話設定はsecret fileをデータとして読む。Cloudflare TunnelやDNSの作成は行わない。active MCP connectionがあると通常操作は拒否され、対話では確認し、非対話では失敗する。`--maintenance`は明示的にsessionを終了させてservice変更を許可する。再起動後のsession・認可・未確定mutationは復元しない。継続的な自動更新・再起動を無断で有効にしない。詳細は[UIアーキテクチャ](UI-ARCHITECTURE.md)と[Gateway operations](../deployment/GATEWAY.md)を参照する。

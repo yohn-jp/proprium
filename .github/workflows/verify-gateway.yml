@@ -34,6 +34,10 @@ jobs:
         run: test -f go.mod
       - name: Verify Go toolchain
         run: test "$(go version | awk '{print $3}')" = "go1.27.3"
+      - name: Verify Bash CLI and bootstrap acquisition
+        run: |
+          bash -n distribution/proprium distribution/bootstrap.sh distribution/package-release.sh distribution/verify-release-assets.sh
+          bash distribution/test-bootstrap.sh
       - name: Test with race detector
         run: go test -race ./...
       - name: Vet Gateway
@@ -62,6 +66,47 @@ jobs:
           sha256sum proprium-gateway_* > SHA256SUMS
           printf 'version=%s\ncommit=%s\ngo=%s\n' \
             "$VERSION" "$COMMIT" "$(go version)" > SOURCE.txt
+      - name: Exercise installer and service lifecycle with a real user manager
+        run: |
+          set -euo pipefail
+          sudo loginctl enable-linger "$(id -un)"
+          runtime_dir="/run/user/$(id -u)"
+          mkdir -p "$runtime_dir"
+          chmod 700 "$runtime_dir"
+          export XDG_RUNTIME_DIR="$runtime_dir"
+          export DBUS_SESSION_BUS_ADDRESS="unix:path=$runtime_dir/bus"
+          for attempt in $(seq 1 60); do
+            if systemctl --user show-environment >/dev/null 2>&1; then
+              python3 distribution/test-lifecycle.py
+              exit 0
+            fi
+            sleep 1
+          done
+          echo "systemd --user did not become ready" >&2
+          exit 1
+      - name: Package and verify release assets
+        env:
+          COMMIT: ${{ github.sha }}
+          VERSION: 0.0.0
+          GATEWAY_BINARIES: ${{ runner.temp }}/gateway-package-binaries
+          RELEASE_ASSETS: ${{ runner.temp }}/gateway-package-assets
+        run: |
+          set -euo pipefail
+          mkdir -p "$GATEWAY_BINARIES" "$RELEASE_ASSETS"
+          for target in linux/amd64 linux/arm64 windows/amd64 darwin/amd64 darwin/arm64; do
+            GOOS="${target%/*}"
+            GOARCH="${target#*/}"
+            extension=""
+            if [ "$GOOS" = windows ]; then extension=".exe"; fi
+            name="proprium-gateway_${VERSION}_${GOOS}_${GOARCH}${extension}"
+            CGO_ENABLED=0 GOOS="$GOOS" GOARCH="$GOARCH" go build \
+              -trimpath \
+              -ldflags "-s -w -X main.version=${VERSION} -X main.commit=${COMMIT}" \
+              -o "$GATEWAY_BINARIES/$name" .
+          done
+          export VERSION COMMIT GATEWAY_BINARIES RELEASE_ASSETS
+          ../gateway/distribution/package-release.sh
+          ../gateway/distribution/verify-release-assets.sh "$RELEASE_ASSETS" "$VERSION" "$COMMIT"
       - uses: actions/upload-artifact@v4
         with:
           name: proprium-gateway-${{ github.sha }}

@@ -41,6 +41,8 @@ type LiveRegistry struct {
 	sessions          map[string]*liveSession
 	clients           map[[32]byte]*liveClient
 	inactiveTokens    map[[32]byte]time.Time
+	registrations     int
+	quiescing         bool
 }
 type liveSession struct {
 	id, workspaceID, generation string
@@ -316,6 +318,19 @@ func (r *LiveRegistry) createSession(w http.ResponseWriter, req *http.Request) {
 		liveJSON(w, req, r.config.HostOrigin, http.StatusUnauthorized, map[string]string{"error": "owner_authorization_required"})
 		return
 	}
+	r.mu.Lock()
+	if r.quiescing {
+		r.mu.Unlock()
+		liveJSON(w, req, r.config.HostOrigin, http.StatusServiceUnavailable, map[string]string{"error": "gateway_quiescing"})
+		return
+	}
+	r.registrations++
+	r.mu.Unlock()
+	defer func() {
+		r.mu.Lock()
+		r.registrations--
+		r.mu.Unlock()
+	}()
 	if !isJSONContentType(req.Header.Get("Content-Type")) {
 		liveJSON(w, req, r.config.HostOrigin, http.StatusUnsupportedMediaType, map[string]string{"error": "json_required"})
 		return
@@ -344,6 +359,11 @@ func (r *LiveRegistry) createSession(w http.ResponseWriter, req *http.Request) {
 	}
 	s := &liveSession{id: id, workspaceID: input.WorkspaceID, generation: input.Generation, ownerHash: secureHash(ownerToken), capabilities: caps, clients: make(map[string]*liveClient), pending: make(map[string]*livePending), events: make(chan liveEvent, liveEventQueue), closed: make(chan struct{})}
 	r.mu.Lock()
+	if r.quiescing {
+		r.mu.Unlock()
+		liveJSON(w, req, r.config.HostOrigin, http.StatusServiceUnavailable, map[string]string{"error": "gateway_quiescing"})
+		return
+	}
 	if len(r.sessions) >= maxLiveSessions {
 		r.mu.Unlock()
 		liveJSON(w, req, r.config.HostOrigin, http.StatusServiceUnavailable, map[string]string{"error": "session_capacity_reached"})
@@ -379,6 +399,11 @@ func (r *LiveRegistry) events(w http.ResponseWriter, req *http.Request, id strin
 		return
 	}
 	r.mu.Lock()
+	if r.quiescing {
+		r.mu.Unlock()
+		liveJSON(w, req, r.config.HostOrigin, http.StatusServiceUnavailable, map[string]string{"error": "gateway_quiescing"})
+		return
+	}
 	if s.dead || r.sessions[id] != s {
 		r.mu.Unlock()
 		liveJSON(w, req, r.config.HostOrigin, http.StatusGone, map[string]string{"error": "session_expired"})
@@ -605,6 +630,11 @@ func (r *LiveRegistry) createClient(w http.ResponseWriter, req *http.Request, id
 	}
 	client := &liveClient{id: idToken, name: strings.TrimSpace(input.Name), tokenHash: secureHash(token), capabilities: caps, session: s, inflight: make(map[string]func()), rpcIDs: make(map[string]string)}
 	r.mu.Lock()
+	if r.quiescing {
+		r.mu.Unlock()
+		liveJSON(w, req, r.config.HostOrigin, http.StatusServiceUnavailable, map[string]string{"error": "gateway_quiescing"})
+		return
+	}
 	if s.dead || r.sessions[id] != s {
 		r.mu.Unlock()
 		liveJSON(w, req, r.config.HostOrigin, http.StatusGone, map[string]string{"error": "session_expired"})
@@ -733,7 +763,7 @@ func (r *LiveRegistry) dispatch(req *http.Request, client *liveClient, tool stri
 	p := &livePending{requestID: requestID, rpcID: rpcID, client: client, result: make(chan liveResponse, 1), cancel: cancel}
 	s := client.session
 	r.mu.Lock()
-	if s.dead || r.sessions[s.id] != s || !s.stream || r.clients[client.tokenHash] != client {
+	if r.quiescing || s.dead || r.sessions[s.id] != s || !s.stream || r.clients[client.tokenHash] != client {
 		r.mu.Unlock()
 		cancel()
 		return liveResponse{status: "unavailable", err: "workspace_unavailable"}, nil

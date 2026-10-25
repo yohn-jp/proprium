@@ -13,7 +13,7 @@ These documents define Proprium's architecture and implementation boundaries. Th
 | [Plugin distribution](architecture/PLUGIN-DISTRIBUTION.md) | Immutable signed artifacts, registry, installs, updates and rollback |
 | [Delivery and security](architecture/DELIVERY-AND-SECURITY.md) | Static host, Go Gateway, R2 artifacts, privacy and trust boundaries |
 | [Live Workspace MCP Gateway](architecture/MCP-GATEWAY.md) | Live-only scope, Host/Gateway ownership, pairing, MCP transport, tools and errors |
-| [Gateway configuration and operation](deployment/GATEWAY.md) | Environment settings, non-root operation, Cloudflare Tunnel, binary release and checks |
+| [Gateway installation and operation](deployment/GATEWAY.md) | Linux CLI, XDG user paths, verified releases, combined Gateway/Tunnel service, update/rollback and deployment checks |
 | [Cloudflare deployment](deployment/CLOUDFLARE.md) | Workers Static Assets, R2 artifact publication and Host release gates |
 | [Local development](development/LOCAL-DEVELOPMENT.md) | Browser Host and Gateway setup, checks, mock/live test boundaries |
 | [Workspace UX](architecture/WORKSPACE-UX.md) | Desktop/mobile interaction, durable user feedback, extension experience |

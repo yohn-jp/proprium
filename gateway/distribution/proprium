@@ -1,0 +1,531 @@
+#!/usr/bin/env bash
+# Proprium lifecycle CLI. Configuration is data, never shell code.
+set -Eeuo pipefail
+umask 077
+export LC_ALL=C
+CONFIG=${PROPRIUM_CONFIG_DIR:-${XDG_CONFIG_HOME:-$HOME/.config}/proprium}
+DATA=${PROPRIUM_DATA_DIR:-${XDG_DATA_HOME:-$HOME/.local/share}/proprium}
+BIN=${PROPRIUM_BIN_DIR:-${XDG_BIN_HOME:-$HOME/.local/bin}}
+UNIT=${PROPRIUM_UNIT:-proprium.service}
+UNIT_DIR=${XDG_CONFIG_HOME:-$HOME/.config}/systemd/user
+RUNTIME=${XDG_RUNTIME_DIR:-${XDG_DATA_HOME:-$HOME/.local/share}}/proprium-${UNIT%.service}
+NONINTERACTIVE=0 MAINTENANCE=0
+TOKEN_FILE='' CREDS_FILE='' ACCESS_FILE='' PUBLIC='' HOST='' CLIENT='' TUNNEL_ID='' LISTEN='' METRICS=''
+declare -A G=() T=() S=() A=() M=()
+[[ -n ${HOME:-} ]] || { printf 'proprium: HOME is required\n' >&2; exit 1; }
+fail() { printf 'proprium: %s\n' "$*" >&2; exit 1; }
+info() { printf '%s\n' "$*"; }
+help() {
+ cat <<'HELP'
+Usage: proprium COMMAND [OPTIONS]
+Commands: install setup start stop restart status update rollback logs doctor version help
+Linux user-service management; macOS/Windows bundles contain runtimes only.
+Options:
+  --non-interactive      Never prompt (also automatic without a terminal)
+  --maintenance          Explicitly permit dropping active Live MCP sessions
+  --config-dir PATH     Private configuration directory
+  --data-dir PATH       Installed releases directory
+  --bin-dir PATH        CLI directory (add it to PATH)
+  --public-url ORIGIN   Existing Tunnel's public HTTPS origin
+  --host-origin ORIGIN  Default: https://proprium.yohn.jp
+  --github-client-id ID GitHub Device OAuth App public client ID
+  --listen ADDR         Loopback IPv4 address:port (default 127.0.0.1:8080)
+  --metrics ADDR        Tunnel loopback readiness address (default 127.0.0.1:20000)
+  --tunnel-token-file PATH       Private file containing existing Tunnel token
+  --tunnel-credentials-file PATH Private existing Tunnel JSON credentials
+  --tunnel-id UUID               Required with credentials file
+  --access-credentials-file PATH Private KEY=value file with CF_ACCESS_CLIENT_ID
+                                 and CF_ACCESS_CLIENT_SECRET for public health probe
+Secrets are accepted through private files or hidden terminal input, never arguments.
+Exit 0: verified success; exit 1: failure, degraded status, or unsafe operation.
+HELP
+}
+command=${1:-help}; (($# == 0)) || shift
+while (($#)); do
+ case "$1" in
+ --non-interactive) NONINTERACTIVE=1; shift;;
+ --maintenance) MAINTENANCE=1; shift;;
+ --help|-h) help; exit 0;;
+ --config-dir|--data-dir|--bin-dir|--public-url|--host-origin|--github-client-id|--tunnel-token-file|--tunnel-credentials-file|--tunnel-id|--listen|--metrics|--access-credentials-file)
+  (($# >= 2)) || fail "Missing value for $1; run proprium help."
+  case "$1" in
+   --config-dir) CONFIG=$2;; --data-dir) DATA=$2;; --bin-dir) BIN=$2;;
+   --public-url) PUBLIC=$2;; --host-origin) HOST=$2;; --github-client-id) CLIENT=$2;;
+   --tunnel-token-file) TOKEN_FILE=$2;; --tunnel-credentials-file) CREDS_FILE=$2;;
+   --tunnel-id) TUNNEL_ID=$2;; --listen) LISTEN=$2;; --metrics) METRICS=$2;; --access-credentials-file) ACCESS_FILE=$2;;
+  esac; shift 2;;
+ *) fail 'Unknown option; run proprium help.';;
+ esac
+done
+[[ -t 0 ]] || NONINTERACTIVE=1
+[[ $command != help ]] || { help; exit 0; }
+[[ $(uname -s) == Linux ]] || fail 'Management CLI supports Linux only; this OS has runtime-only bundles.'
+[[ ${BASH_VERSINFO[0]} -ge 5 ]] || fail 'Bash 5 or newer is required.'
+[[ $UNIT =~ ^proprium([a-zA-Z0-9_-]*)\.service$ ]] || fail 'Invalid PROPRIUM_UNIT.'
+for dep in curl jq sha256sum tar flock stat readlink systemctl timeout; do command -v "$dep" >/dev/null || fail "Missing $dep; install the OS package and retry."; done
+case $(uname -m) in x86_64) ARCH=amd64;; aarch64|arm64) ARCH=arm64;; *) fail 'Supported Linux architectures: amd64, arm64.';; esac
+# Reject symlink path components, including dangling links. Never change another owner's tree.
+check_path() {
+ local p=$1 part='' item
+ [[ $p == /* && $p != / && $p != *$'\n'* && $p != *$'\r'* && $p != *'%'* && $p != *'"'* && $p != *\\* ]] || fail 'Paths must be absolute and contain no newline, percent, quote or backslash.'
+ IFS=/ read -ra components <<< "$p"
+ for item in "${components[@]}"; do
+  [[ -z $item ]] && continue
+  [[ $item != . && $item != .. ]] || fail 'Paths must not contain dot components.'
+  part+=/$item
+  [[ ! -L $part ]] || fail "Refusing symbolic link path: $part"
+ done
+}
+private_dir() {
+ check_path "$1"; mkdir -p -- "$1"
+ [[ -d $1 && $(stat -c %u -- "$1") == "$UID" ]] || fail "Directory must be owned by current user: $1"
+ chmod 700 -- "$1"
+}
+trusted_dir() {
+ check_path "$1"
+ [[ -d $1 && $(stat -c %u -- "$1") == "$UID" ]] || fail "Expected user-owned directory: $1"
+ local mode; mode=$(stat -c %a -- "$1")
+ (( (8#$mode & 0022) == 0 )) || fail "Directory must not be group/world writable: $1"
+}
+private_file() {
+ check_path "$1"
+ [[ -f $1 && $(stat -c %u -- "$1") == "$UID" && $(stat -c %a -- "$1") == 600 ]] || fail "Expected user-owned regular 0600 file: $1"
+ [[ $(stat -c %s -- "$1") -le 65536 ]] || fail 'Configuration file is too large.'
+}
+load_map() {
+ local file=$1 name=$2 key value line
+ # shellcheck disable=SC2178
+ local -n map=$name
+ map=(); private_file "$file"
+ while IFS= read -r line || [[ -n $line ]]; do
+  [[ -z $line || $line == \#* ]] && continue
+  [[ $line == *=* ]] || fail "Expected KEY=value data in $file (shell quoting is unsupported)."
+  key=${line%%=*}; value=${line#*=}
+  [[ $key =~ ^[A-Z][A-Z0-9_]*$ && ! -v map[$key] && $value != *$'\r'* && $value != *$'\n'* ]] || fail "Invalid or duplicate setting in $file."
+  case "$name:$key" in
+   G:PROPRIUM_LISTEN_ADDR|G:PROPRIUM_HOST_ORIGIN|G:PROPRIUM_PUBLIC_URL|G:GITHUB_CLIENT_ID|G:PROPRIUM_OWNER_KEY|G:PROPRIUM_UPSTREAM_TIMEOUT|T:TUNNEL_TOKEN|S:TUNNEL_MODE|S:TUNNEL_ID|S:METRICS|A:CF_ACCESS_CLIENT_ID|A:CF_ACCESS_CLIENT_SECRET) ;;
+   *) fail "Unknown setting $key in $file.";;
+  esac
+  # shellcheck disable=SC2004
+  map[$key]=$value
+ done < "$file"
+}
+write_map() {
+ local file=$1 name=$2 key tmp
+ # shellcheck disable=SC2178
+ local -n map=$name
+ [[ ! -e $file && ! -L $file ]] || private_file "$file"
+ tmp=$(mktemp "${file}.XXXXXX")
+ for key in "${!map[@]}"; do printf '%s=%s\n' "$key" "${map[$key]}"; done | sort > "$tmp"
+ chmod 600 "$tmp"; mv -fT -- "$tmp" "$file"
+}
+origin() { [[ $1 =~ ^https://[a-zA-Z0-9]([a-zA-Z0-9.-]*[a-zA-Z0-9])?(:[0-9]{1,5})?$ ]]; }
+loopback() {
+ [[ $1 =~ ^127\.0\.0\.1:([0-9]{4,5})$ ]] || return 1
+ ((10#${BASH_REMATCH[1]} >= 1024 && 10#${BASH_REMATCH[1]} <= 65535))
+}
+validate_config() {
+ loopback "${G[PROPRIUM_LISTEN_ADDR]:-}" || fail 'Gateway listen must be 127.0.0.1:1024-65535.'
+ if ! origin "${G[PROPRIUM_HOST_ORIGIN]:-}" || ! origin "${G[PROPRIUM_PUBLIC_URL]:-}"; then fail 'Host and public URL must be canonical HTTPS origins.'; fi
+ [[ ${G[GITHUB_CLIENT_ID]:-} =~ ^[a-zA-Z0-9_-]{10,128}$ ]] || fail 'Invalid GitHub Client ID; run proprium setup.'
+ [[ ${G[PROPRIUM_OWNER_KEY]:-} =~ ^[[:graph:]]{32,4096}$ ]] || fail 'Invalid Owner Key; keep a private printable key of at least 32 bytes.'
+ loopback "${S[METRICS]:-}" || fail 'Tunnel metrics must be 127.0.0.1:1024-65535.'
+ [[ ${S[METRICS]} != "${G[PROPRIUM_LISTEN_ADDR]}" ]] || fail 'Gateway and Tunnel metrics ports must differ.'
+ case ${S[TUNNEL_MODE]:-} in
+ token) [[ ${T[TUNNEL_TOKEN]:-} =~ ^[a-zA-Z0-9_+/=-]{20,16384}$ ]] || fail 'Invalid Tunnel token file.';;
+ credentials)
+  [[ ${S[TUNNEL_ID]:-} =~ ^[a-fA-F0-9]{8}(-[a-fA-F0-9]{4}){3}-[a-fA-F0-9]{12}$ ]] || fail 'A Tunnel UUID is required.'
+  private_file "$CONFIG/tunnel.json"
+  jq -e --arg id "${S[TUNNEL_ID]}" '.TunnelID == $id and (.AccountTag|type=="string") and (.TunnelSecret|type=="string")' "$CONFIG/tunnel.json" >/dev/null || fail 'Tunnel credentials do not match the selected UUID.';;
+ *) fail 'Tunnel not configured; run proprium setup.';;
+ esac
+ for key in "${!A[@]}"; do [[ ${A[$key]} =~ ^[a-zA-Z0-9._=-]{1,4096}$ ]] || fail 'Invalid Access probe credentials.'; done
+ if ((${#A[@]})); then [[ -n ${A[CF_ACCESS_CLIENT_ID]:-} && -n ${A[CF_ACCESS_CLIENT_SECRET]:-} ]] || fail 'Both Access probe credentials are required.'; fi
+}
+load_config() {
+ trusted_dir "$CONFIG"; [[ $(stat -c %a "$CONFIG") == 700 ]] || fail "Configuration directory must be 0700."
+ load_map "$CONFIG/gateway.env" G; load_map "$CONFIG/tunnel.env" T; load_map "$CONFIG/settings" S
+ A=(); [[ ! -e $CONFIG/access.env ]] || load_map "$CONFIG/access.env" A
+ validate_config
+}
+ask() {
+ local name=$1 prompt=$2 secret=${3:-0} value
+ ((NONINTERACTIVE == 0)) || fail "$prompt is required; supply the documented option/private file to proprium setup --non-interactive."
+ if ((secret)); then read -r -s -p "$prompt: " value || fail "No value supplied for $prompt."; printf '\n' >&2; else read -r -p "$prompt: " value || fail "No value supplied for $prompt."; fi
+ [[ -n $value ]] || fail "$prompt is required."
+ printf -v "$name" '%s' "$value"
+}
+setup() {
+ private_dir "$CONFIG"
+ [[ ! -e $CONFIG/gateway.env ]] || load_map "$CONFIG/gateway.env" G
+ [[ ! -e $CONFIG/tunnel.env ]] || load_map "$CONFIG/tunnel.env" T
+ [[ ! -e $CONFIG/settings ]] || load_map "$CONFIG/settings" S
+ [[ ! -e $CONFIG/access.env ]] || load_map "$CONFIG/access.env" A
+ # Existing secrets and settings win on re-install; explicit public settings can be changed with setup.
+ G[PROPRIUM_LISTEN_ADDR]=${LISTEN:-${G[PROPRIUM_LISTEN_ADDR]:-127.0.0.1:8080}}
+ G[PROPRIUM_HOST_ORIGIN]=${HOST:-${G[PROPRIUM_HOST_ORIGIN]:-https://proprium.yohn.jp}}
+ PUBLIC=${PUBLIC:-${G[PROPRIUM_PUBLIC_URL]:-}}; [[ -n $PUBLIC ]] || ask PUBLIC 'Gateway public HTTPS origin'
+ CLIENT=${CLIENT:-${G[GITHUB_CLIENT_ID]:-}}; [[ -n $CLIENT ]] || ask CLIENT 'GitHub OAuth Client ID'
+ G[PROPRIUM_PUBLIC_URL]=$PUBLIC; G[GITHUB_CLIENT_ID]=$CLIENT
+ if [[ -z ${G[PROPRIUM_OWNER_KEY]:-} ]]; then G[PROPRIUM_OWNER_KEY]=$(od -An -N48 -tx1 /dev/urandom | tr -d ' \n'); fi
+ S[METRICS]=${METRICS:-${S[METRICS]:-127.0.0.1:20000}}
+ [[ -z $TOKEN_FILE || -z $CREDS_FILE ]] || fail 'Choose token or credentials, not both.'
+ if [[ -z ${S[TUNNEL_MODE]:-} ]]; then
+  if [[ -n $CREDS_FILE ]]; then
+   private_file "$CREDS_FILE"; [[ -n $TUNNEL_ID ]] || ask TUNNEL_ID 'Existing Tunnel UUID'
+   if [[ -e $CONFIG/tunnel.json || -L $CONFIG/tunnel.json ]]; then
+    private_file "$CONFIG/tunnel.json"
+    cmp -s -- "$CREDS_FILE" "$CONFIG/tunnel.json" || fail 'Managed Tunnel credentials already exist; existing secret retained.'
+   else
+    cp -- "$CREDS_FILE" "$CONFIG/tunnel.json"; chmod 600 "$CONFIG/tunnel.json"
+   fi
+   S[TUNNEL_MODE]=credentials; S[TUNNEL_ID]=$TUNNEL_ID
+  else
+   local token
+   if [[ -n $TOKEN_FILE ]]; then private_file "$TOKEN_FILE"; token=$(cat -- "$TOKEN_FILE"); else ask token 'Existing Cloudflare Tunnel token' 1; fi
+   T[TUNNEL_TOKEN]=$token; S[TUNNEL_MODE]=token
+  fi
+ fi
+ if [[ -n $ACCESS_FILE && ${#A[@]} == 0 ]]; then load_map "$ACCESS_FILE" A; fi
+ validate_config
+ write_map "$CONFIG/gateway.env" G; write_map "$CONFIG/tunnel.env" T; write_map "$CONFIG/settings" S
+ ((${#A[@]} == 0)) || write_map "$CONFIG/access.env" A
+ if [[ ${S[TUNNEL_MODE]} == credentials ]]; then
+  local yml="$CONFIG/tunnel.yml" tmp
+  [[ ! -e $yml && ! -L $yml ]] || private_file "$yml"
+  tmp=$(mktemp "$CONFIG/tunnel.yml.XXXXXX")
+  { printf 'tunnel: %s\ncredentials-file: %s\ningress:\n  - hostname: %s\n    service: http://%s\n  - service: http_status:404\n' "${S[TUNNEL_ID]}" "$(printf '%s' "$CONFIG/tunnel.json" | jq -Rs .)" "${G[PROPRIUM_PUBLIC_URL]#https://}" "${G[PROPRIUM_LISTEN_ADDR]}"; } > "$tmp"
+  chmod 600 "$tmp"; mv -fT "$tmp" "$yml"
+ else
+  local yml="$CONFIG/tunnel.yml" tmp
+  [[ ! -e $yml && ! -L $yml ]] || private_file "$yml"
+  tmp=$(mktemp "$CONFIG/tunnel.yml.XXXXXX")
+  printf '{}\n' > "$tmp"; chmod 600 "$tmp"; mv -fT "$tmp" "$yml"
+ fi
+ info "Configuration saved in $CONFIG; existing secrets retained. Owner Key stays in gateway.env (enter privately in Host Live MCP settings)."
+}
+lock() {
+ private_dir "$DATA"; [[ ! -L $DATA/.lock ]] || fail 'Refusing symbolic lock file.'
+ exec 9>"$DATA/.lock"; flock -n 9 || fail 'Another lifecycle operation is running; retry after it finishes.'
+}
+systemd_available() { systemctl --user show-environment >/dev/null 2>&1 || fail 'systemd user manager unavailable. Start a user login session/user bus, then retry.'; }
+unit_quote() { printf '%s' "$1" | sed 's/\\/\\\\/g; s/"/\\"/g'; }
+register_service() {
+ systemd_available
+ check_path "$UNIT_DIR"; mkdir -p "$UNIT_DIR"; trusted_dir "$UNIT_DIR"
+ local file="$UNIT_DIR/$UNIT" tmp
+ [[ ! -L $file ]] || fail 'Refusing symbolic service unit.'
+ if [[ -e $file ]]; then grep -qx '# Managed by proprium' "$file" || fail "Unmanaged unit $file exists; inspect and migrate it first."; fi
+ tmp=$(mktemp "$UNIT_DIR/.proprium.XXXXXX")
+ cat > "$tmp" <<UNIT
+# Managed by proprium
+[Unit]
+Description=Proprium Gateway and Cloudflare Tunnel
+After=network-online.target
+StartLimitIntervalSec=120
+StartLimitBurst=4
+[Service]
+Type=simple
+Environment="PROPRIUM_CONFIG_DIR=$(unit_quote "$CONFIG")"
+Environment="PROPRIUM_DATA_DIR=$(unit_quote "$DATA")"
+Environment="PROPRIUM_BIN_DIR=$(unit_quote "$BIN")"
+Environment="PROPRIUM_UNIT=$UNIT"
+Environment="XDG_RUNTIME_DIR=$(unit_quote "${XDG_RUNTIME_DIR:-${XDG_DATA_HOME:-$HOME/.local/share}}")"
+ExecStart="$(unit_quote "$BIN/proprium")" _supervise
+Restart=on-failure
+RestartSec=5
+RuntimeDirectory=proprium-${UNIT%.service}
+RuntimeDirectoryMode=0700
+KillMode=mixed
+TimeoutStopSec=25
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=strict
+ProtectHome=read-only
+ReadWritePaths="$(unit_quote "$RUNTIME")"
+UMask=0077
+[Install]
+WantedBy=default.target
+UNIT
+ private_dir "$RUNTIME"
+ chmod 600 "$tmp"; mv -fT "$tmp" "$file"
+ systemctl --user daemon-reload
+ systemctl --user enable "$UNIT" >/dev/null
+}
+current_version() {
+ local target
+ [[ -L $DATA/current ]] || return 1
+ target=$(readlink -- "$DATA/current")
+ [[ $target =~ ^releases/([0-9]+\.[0-9]+\.[0-9]+)$ ]] || fail 'Invalid current release link.'
+ printf '%s' "${BASH_REMATCH[1]}"
+}
+# Trust root: HTTPS GitHub API asset digests, independently checked SHA256SUMS and manifest.
+fetch() { curl -q --fail --silent --show-error --proto '=https' --proto-redir '=https' --tlsv1.2 --connect-timeout 15 --max-time 300 --max-filesize 200000000 --location "$1" -o "$2"; }
+asset() {
+ local name=$1 out=$2 url digest expected
+ expected="https://github.com/yohn-jp/proprium/releases/download/$TAG/$name"
+ url=$(jq -er --arg n "$name" '[.assets[]|select(.name==$n)]|select(length==1)|.[0].browser_download_url' "$STAGE/release.json") || fail "Release lacks $name; select a lifecycle-capable release."
+ digest=$(jq -er --arg n "$name" '.assets[]|select(.name==$n)|.digest' "$STAGE/release.json") || fail "Release asset $name lacks trusted digest."
+ [[ $url == "$expected" && $digest =~ ^sha256:([a-f0-9]{64})$ ]] || fail 'Invalid Release URL or missing trusted SHA256 API digest.'
+ fetch "$url" "$out" || fail "Download failed for $name; running service untouched."
+ [[ $(sha256sum "$out" | cut -d' ' -f1) == "${digest#sha256:}" ]] || fail "GitHub API digest mismatch for $name; running service untouched."
+}
+manifest() {
+ local key value line dir=${1%/*}
+ M=()
+ while IFS= read -r line || [[ -n $line ]]; do
+  [[ $line == *=* ]] || fail 'Invalid manifest data.'
+  key=${line%%=*}; value=${line#*=}
+  [[ $key =~ ^[a-z][a-z0-9_]*$ && ! -v M[$key] && $value =~ ^[a-zA-Z0-9._:+/-]+$ ]] || fail 'Invalid/duplicate manifest key.'
+  M[$key]=$value
+ done < "$1"
+ [[ ${M[schema]:-} == proprium-gateway-bundle-v1 && ${M[version]:-} == "$NEW" && ${M[os]:-} == linux && ${M[arch]:-} == "$ARCH" && ${M[commit]:-} =~ ^[a-f0-9]{40}$ ]] || fail 'Release manifest source, version or platform mismatch.'
+ for key in gateway cloudflared proprium; do
+  [[ -f $dir/$key && ! -L $dir/$key ]] || fail "Release contains a nonregular runtime file."
+  value=${key}_sha256
+  [[ ${M[$value]:-} =~ ^[a-f0-9]{64}$ && $(sha256sum "$dir/$key" | cut -d' ' -f1) == "${M[$value]}" ]] || fail "Manifest checksum mismatch: $key"
+ done
+ grep -qx "commit=${M[commit]}" "$dir/SOURCE.txt" || fail 'Source commit mismatch.'
+}
+stage_release() {
+ private_dir "$DATA/releases"
+ STAGE=$(mktemp -d "$DATA/.download.XXXXXX")
+ trap '[[ -z ${STAGE:-} ]] || rm -rf -- "$STAGE"' EXIT
+ fetch https://api.github.com/repos/yohn-jp/proprium/releases/latest "$STAGE/release.json" || fail 'Cannot obtain latest GitHub Release; service untouched.'
+ TAG=$(jq -er 'select(.draft==false and .prerelease==false)|.tag_name' "$STAGE/release.json") || fail 'Invalid latest Release metadata.'
+ [[ $TAG =~ ^proprium-gateway-v((0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*))$ ]] || fail 'Invalid Release tag.'
+ NEW=${TAG#proprium-gateway-v}
+ local name="proprium-gateway_${NEW}_linux_${ARCH}.tar.gz" sum file type
+ asset SHA256SUMS "$STAGE/SHA256SUMS"; asset "$name" "$STAGE/bundle.tar.gz"
+ sum=$(awk -v n="$name" '$2==n {print $1}' "$STAGE/SHA256SUMS")
+ [[ $sum =~ ^[a-f0-9]{64}$ && $sum == "$(sha256sum "$STAGE/bundle.tar.gz" | cut -d' ' -f1)" ]] || fail 'Release SHA256SUMS mismatch.'
+ # Only flat, regular files from the exact distribution contract; no symlinks, dirs or duplicate names.
+ tar -tzf "$STAGE/bundle.tar.gz" > "$STAGE/members" || fail "Invalid archive listing."
+ tar -tvzf "$STAGE/bundle.tar.gz" > "$STAGE/types" || fail "Invalid archive types."
+ declare -A seen=()
+ while IFS= read -r file; do
+  case "$file" in gateway|cloudflared|proprium|manifest|SOURCE.txt|LICENSE-GATEWAY.txt|LICENSE-CLOUDFLARED.txt|NOTICE-CLOUDFLARED.txt|THIRD-PARTY-LICENSES.txt) ;;
+   *) fail 'Unsafe or unexpected archive member.';; esac
+  [[ ! -v seen[$file] ]] || fail 'Duplicate archive member.'; seen[$file]=1
+ done < "$STAGE/members"
+ [[ ${#seen[@]} == 9 ]] || fail 'Incomplete archive.'
+ while IFS= read -r type; do [[ $type == -* ]] || fail 'Archive links/special files are forbidden.'; done < "$STAGE/types"
+ awk '{n += $3} END {exit n > 536870912}' "$STAGE/types" || fail 'Archive exceeds unpacked size limit.'
+ mkdir "$STAGE/unpack"
+ tar -xzf "$STAGE/bundle.tar.gz" --no-same-owner --no-same-permissions -C "$STAGE/unpack" || fail 'Archive extraction failed.'
+ manifest "$STAGE/unpack/manifest"
+ chmod 755 "$STAGE/unpack/"{gateway,cloudflared,proprium}
+ [[ ! -e $DATA/releases/$NEW && ! -L $DATA/releases/$NEW ]] || {
+  [[ ! -L $DATA/releases/$NEW ]] || fail 'Refusing linked release directory.'
+  diff -qr "$STAGE/unpack" "$DATA/releases/$NEW" >/dev/null || fail 'Installed release differs from verified archive.'
+  return
+ }
+ mv -T "$STAGE/unpack" "$DATA/releases/$NEW"
+}
+atomic_current() {
+ local ver=$1 link="$DATA/.current.$$.${RANDOM}"
+ [[ $ver =~ ^[0-9]+\.[0-9]+\.[0-9]+$ && -d $DATA/releases/$ver && ! -L $DATA/releases/$ver ]] || fail 'Invalid release switch target.'
+ [[ ! -e $link && ! -L $link ]] || fail 'Unexpected switch temporary path.'
+ [[ ! -e $DATA/current || -L $DATA/current ]] || fail 'Current release must be a managed symbolic link.'
+ ln -s "releases/$ver" "$link"
+ if ! mv -fT -- "$link" "$DATA/current"; then
+  rm -f -- "$link"
+  fail 'Atomic version switch failed; restoring the previous release.'
+ fi
+}
+install_cli() {
+ check_path "$BIN"; mkdir -p "$BIN"
+ [[ $(stat -c %u "$BIN") == "$UID" && ! -L $BIN/proprium ]] || fail 'CLI path must be user-owned and not a symbolic link.'
+ local tmp
+ if [[ -e $BIN/proprium ]]; then
+  [[ -f $BIN/proprium && $(stat -c %u "$BIN/proprium") == "$UID" ]] || fail 'CLI file must be owned by current user.'
+  grep -Eq '^# Proprium (lifecycle CLI\. Configuration is data, never shell code\.|managed launcher\.)$' "$BIN/proprium" || fail 'Refusing to replace an unmanaged proprium command.'
+ fi
+ tmp=$(mktemp "$BIN/.proprium.XXXXXX")
+ {
+  printf '#!/usr/bin/env bash\n# Proprium managed launcher.\n'
+  printf 'export PROPRIUM_CONFIG_DIR=%q\n' "$CONFIG"
+  printf 'export PROPRIUM_DATA_DIR=%q\n' "$DATA"
+  printf 'export PROPRIUM_BIN_DIR=%q\n' "$BIN"
+  printf 'export PROPRIUM_UNIT=%q\n' "$UNIT"
+  printf 'exec %q "$@"\n' "$DATA/current/proprium"
+ } > "$tmp"
+ chmod 755 "$tmp"; mv -fT "$tmp" "$BIN/proprium"
+}
+local_health() { [[ $(curl -q --noproxy '*' --fail --silent --max-time 3 "http://${G[PROPRIUM_LISTEN_ADDR]}/healthz") == ok ]]; }
+tunnel_health() { curl -q --noproxy '*' --fail --silent --max-time 3 "http://${S[METRICS]}/ready" >/dev/null; }
+public_health() {
+ local result
+ result=$({
+  printf 'url = "%s/healthz"\n' "${G[PROPRIUM_PUBLIC_URL]}"
+  if ((${#A[@]})); then printf 'header = "CF-Access-Client-Id: %s"\nheader = "CF-Access-Client-Secret: %s"\n' "${A[CF_ACCESS_CLIENT_ID]}" "${A[CF_ACCESS_CLIENT_SECRET]}"; fi
+ } | curl -q --config - --fail --silent --proto '=https' --tlsv1.2 --connect-timeout 3 --max-time 5) || return 1
+ [[ $result == ok ]]
+}
+healthy() {
+ local ver; ver=$(current_version) || return 1
+ systemctl --user is-active --quiet "$UNIT" && process_running gateway "$DATA/releases/$ver/gateway" && process_running cloudflared "$DATA/releases/$ver/cloudflared" && local_health && tunnel_health && public_health
+}
+wait_health() {
+ local i
+ for ((i=0;i<20;i++)); do healthy && return 0; sleep 1; done
+ return 1
+}
+quiesce() {
+ systemctl --user is-active --quiet "$UNIT" || return 0
+ local args=() code
+ ((MAINTENANCE == 0)) || args=(-H 'X-Proprium-Maintenance: true')
+ code=$(curl -q --noproxy '*' --silent --max-time 5 --unix-socket "$RUNTIME/control.sock" -X POST "${args[@]}" -o /dev/null -w '%{http_code}' http://localhost/quiesce) || fail 'Cannot safely inspect Gateway MCP state; service untouched. Run proprium doctor.'
+ if [[ $code == 409 && $NONINTERACTIVE == 0 && $MAINTENANCE == 0 ]]; then
+  local reply; read -r -p 'Active Live MCP sessions will be revoked. Type maintenance to continue: ' reply || fail 'No confirmation received; sessions retained.'
+  [[ $reply == maintenance ]] || fail 'Operation cancelled; sessions retained.'
+  MAINTENANCE=1; quiesce; return
+ fi
+ [[ $code == 200 ]] || fail 'Active MCP or unsafe control state; service untouched. Disconnect Live MCP or explicitly use --maintenance.'
+}
+resume() { curl -q --noproxy '*' --silent --max-time 3 --unix-socket "$RUNTIME/control.sock" -X DELETE http://localhost/quiesce >/dev/null || true; }
+save_previous() {
+ local tmp; [[ ! -L $DATA/previous ]] || fail 'Refusing symbolic previous-version file.'
+ tmp=$(mktemp "$DATA/.previous.XXXXXX"); printf '%s\n' "$1" > "$tmp"; mv -fT "$tmp" "$DATA/previous"
+}
+linger() {
+ local state; state=$(loginctl show-user "$UID" -p Linger --value 2>/dev/null || true)
+ if [[ $state == yes ]]; then info 'Linger: enabled (continues after logout).'; else info "Linger: ${state:-unknown}; logout persistence unverified. Administrator may need: loginctl enable-linger $(id -un). No privilege escalation was performed."; fi
+}
+switch_release() {
+ local old=$1 target=$2
+ quiesce
+ # Recover the old service and CLI even when interrupted between stop and switch.
+ RECOVER=$old
+ trap 'if [[ -n ${RECOVER:-} ]]; then if [[ $(current_version) != "$RECOVER" ]]; then atomic_current "$RECOVER"; fi; install_cli; systemctl --user reset-failed "$UNIT" || true; systemctl --user restart "$UNIT" || true; if wait_health; then info "Recovered healthy release $RECOVER."; else info "Recovery health failed; run proprium doctor." >&2; fi; fi; [[ -z ${STAGE:-} ]] || rm -rf -- "$STAGE"' EXIT
+ trap 'exit 130' INT
+ trap 'exit 143' TERM
+ if ! systemctl --user stop "$UNIT"; then resume; fail 'Service stop failed; current release retained.'; fi
+ atomic_current "$target"
+ systemctl --user reset-failed "$UNIT"
+ if systemctl --user start "$UNIT" && wait_health; then
+  install_cli; save_previous "$old"; RECOVER=''
+  info "Running verified release $target (previous: $old)."
+ else
+  atomic_current "$old"; install_cli; systemctl --user reset-failed "$UNIT" || true; systemctl --user restart "$UNIT" || true
+  RECOVER=''
+  if wait_health; then fail "Release $target failed health checks; restored healthy release $old."; else fail "Release $target failed; restored $old but health is degraded. Run proprium doctor."; fi
+ fi
+}
+process_running() {
+ local name=$1 expected=$2 pid
+ [[ -f $RUNTIME/$name.pid && ! -L $RUNTIME/$name.pid ]] || return 1
+ read -r pid < "$RUNTIME/$name.pid"
+ [[ $pid =~ ^[0-9]+$ && $(readlink "/proc/$pid/exe" 2>/dev/null || true) == "$expected" ]]
+}
+ports_available() {
+ local address rc
+ for address in "${G[PROPRIUM_LISTEN_ADDR]}" "${S[METRICS]}"; do
+  rc=0
+  # shellcheck disable=SC2016
+  timeout 2 bash -c 'exec 3<>/dev/tcp/127.0.0.1/"$1"' _ "${address##*:}" 2>/dev/null || rc=$?
+  [[ $rc != 0 && $rc != 124 ]] || fail "Port $address is occupied or unresponsive. Inspect existing services before installing."
+ done
+}
+process_status() {
+ local name=$1 expected=$2 pid
+ if [[ -f $RUNTIME/$name.pid && ! -L $RUNTIME/$name.pid ]]; then
+  read -r pid < "$RUNTIME/$name.pid"
+  if [[ $pid =~ ^[0-9]+$ && $(readlink "/proc/$pid/exe" 2>/dev/null || true) == "$expected" ]]; then info "$name process: running"; return; fi
+ fi
+ info "$name process: absent/unknown"; return 1
+}
+status() {
+ local result=0 ver
+ ver=$(current_version) || fail 'No installed release; run proprium install.'
+ info "Version: $ver (linux/$ARCH)"
+ if [[ -f $DATA/releases/$ver/manifest && ! -L $DATA/releases/$ver/manifest ]]; then
+  awk -F= '$1=="commit" || $1=="cloudflared_version" {print $1 ": " $2}' "$DATA/releases/$ver/manifest"
+ fi
+ systemctl --user is-active "$UNIT" || result=1
+ process_status gateway "$DATA/releases/$ver/gateway" || result=1
+ process_status cloudflared "$DATA/releases/$ver/cloudflared" || result=1
+ if local_health; then info 'Gateway health: ok'; else info 'Gateway health: failed'; result=1; fi
+ if tunnel_health; then info 'Tunnel readiness: connected'; else info 'Tunnel readiness: disconnected'; result=1; fi
+ if public_health; then info 'Public route: ok'; else info 'Public route: failed or Access denied (configure private probe credentials)'; result=1; fi
+ curl -q --noproxy '*' --fail --silent --max-time 3 --unix-socket "$RUNTIME/control.sock" http://localhost/status || result=1
+ printf '\n'; linger
+ return "$result"
+}
+child_environment() {
+ local name
+ while IFS= read -r name; do export -n "${name?}"; done < <(compgen -e)
+ for name in PATH HOME SSL_CERT_FILE SSL_CERT_DIR HTTP_PROXY HTTPS_PROXY NO_PROXY http_proxy https_proxy no_proxy; do
+  [[ ! -v $name ]] || export "${name?}"
+ done
+}
+supervise() {
+ private_dir "$RUNTIME"; load_config
+ unset PROPRIUM_OWNER_KEY TUNNEL_TOKEN CF_ACCESS_CLIENT_ID CF_ACCESS_CLIENT_SECRET
+ [[ ! -L $RUNTIME/supervisor.lock ]] || fail 'Unsafe supervisor lock.'
+ exec 8>"$RUNTIME/supervisor.lock"; flock -n 8 || fail 'Supervisor already running.'
+ local ver gateway_pid='' tunnel_pid='' code=0 key
+ ver=$(current_version) || fail 'No current release.'
+ # shellcheck disable=SC2329
+ cleanup() {
+  trap '' TERM INT
+  [[ -z $tunnel_pid ]] || kill -TERM "$tunnel_pid" 2>/dev/null || true
+  [[ -z $gateway_pid ]] || kill -TERM "$gateway_pid" 2>/dev/null || true
+  [[ -z $gateway_pid ]] || wait "$gateway_pid" 2>/dev/null || true
+  [[ -z $tunnel_pid ]] || wait "$tunnel_pid" 2>/dev/null || true
+  rm -f "$RUNTIME/gateway.pid" "$RUNTIME/cloudflared.pid"
+ }
+ trap cleanup EXIT
+ trap 'exit 0' TERM INT
+ ( child_environment; for key in "${!G[@]}"; do export "$key=${G[$key]}"; done; export PROPRIUM_CONTROL_SOCKET="$RUNTIME/control.sock"; exec "$DATA/releases/$ver/gateway" serve ) & gateway_pid=$!
+ printf '%s\n' "$gateway_pid" > "$RUNTIME/gateway.pid"
+ if [[ ${S[TUNNEL_MODE]} == token ]]; then
+  ( child_environment; export TUNNEL_TOKEN="${T[TUNNEL_TOKEN]}"; exec "$DATA/releases/$ver/cloudflared" --no-autoupdate tunnel --config "$CONFIG/tunnel.yml" --metrics "${S[METRICS]}" --loglevel error run ) &
+ else
+  ( child_environment; exec "$DATA/releases/$ver/cloudflared" --no-autoupdate tunnel --config "$CONFIG/tunnel.yml" --metrics "${S[METRICS]}" --loglevel error run "${S[TUNNEL_ID]}" ) &
+ fi
+ tunnel_pid=$!; printf '%s\n' "$tunnel_pid" > "$RUNTIME/cloudflared.pid"
+ wait -n "$gateway_pid" "$tunnel_pid" || code=$?
+ info 'A managed process exited; stopping its peer for systemd recovery.'
+ ((code != 0)) || code=1
+ exit "$code"
+}
+for path in "$CONFIG" "$DATA" "$BIN" "$RUNTIME"; do check_path "$path"; done
+case "$command" in
+ _supervise) supervise;;
+ setup) lock; setup; info 'Run proprium restart to apply changed settings (active MCP is protected).';;
+ install)
+  lock; systemd_available; stage_release; setup
+  if old=$(current_version); then
+   [[ $old == "$NEW" ]] || fail 'A different release is installed. Use proprium update; existing running service retained.'
+  else ports_available; atomic_current "$NEW"; fi
+  install_cli; register_service
+  systemctl --user start "$UNIT"
+  wait_health || fail 'Installed, but health verification failed. Run proprium doctor; check Tunnel routing and Access probe credentials.'
+  info "Installed $NEW. CLI: $BIN/proprium; ensure $BIN is on PATH."
+  status;;
+ start) lock; load_config; systemd_available; systemctl --user start "$UNIT"; wait_health || fail 'Start health verification failed; run proprium doctor.';;
+ stop) lock; load_config; systemd_available; quiesce; systemctl --user stop "$UNIT" || { resume; fail 'Stop failed; run proprium doctor.'; };;
+ restart) lock; load_config; systemd_available; quiesce; systemctl --user restart "$UNIT" || { resume; fail 'Restart failed; run proprium doctor.'; }; wait_health || fail 'Restart health verification failed; run proprium doctor.';;
+ update)
+  lock; load_config; systemd_available; old=$(current_version) || fail 'Not installed; run proprium install.'
+  stage_release
+  if [[ $old == "$NEW" ]]; then info "Already at $NEW."; status; else
+   healthy || fail 'Current Gateway, Tunnel and public route must be healthy before update; run proprium doctor.'
+   switch_release "$old" "$NEW"
+  fi;;
+ rollback)
+  lock; load_config; systemd_available; old=$(current_version) || fail 'Not installed.'
+  private_file "$DATA/previous"; read -r target < "$DATA/previous"
+  [[ $target =~ ^[0-9]+\.[0-9]+\.[0-9]+$ && ! -L $DATA/releases/$target ]] || fail 'Invalid previous version.'
+  NEW=$target; manifest "$DATA/releases/$target/manifest"
+  [[ $target != "$old" ]] || fail 'No different previous release is available.'
+  switch_release "$old" "$target";;
+ status) load_config; status;;
+ doctor)
+  load_config; info "Config permissions and syntax: ok ($CONFIG)"; systemd_available
+  status; info 'Diagnostics omit secret values. Inspect proprium logs for process failures.';;
+ logs) systemd_available; exec journalctl --user -u "$UNIT" --no-pager -n 100;;
+ version) ver=$(current_version) || fail 'Not installed; run proprium install.'; info "proprium $ver linux/$ARCH";;
+ *) fail 'Unknown command; run proprium help.';;
+esac

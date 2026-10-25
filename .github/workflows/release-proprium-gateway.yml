@@ -23,6 +23,10 @@ jobs:
     name: Verify main source and build binaries
     runs-on: ubuntu-24.04
     timeout-minutes: 30
+    permissions:
+      contents: read
+      id-token: write
+      attestations: write
     outputs:
       tag: ${{ steps.source.outputs.tag }}
       version: ${{ steps.source.outputs.version }}
@@ -72,14 +76,13 @@ jobs:
         run: go test -race ./...
       - name: Vet Gateway
         run: go vet ./...
-      - name: Build single-file binaries for supported platforms
+      - name: Build Gateway binaries for supported platforms
         env:
-          TAG: ${{ steps.source.outputs.tag }}
           VERSION: ${{ steps.source.outputs.version }}
           COMMIT: ${{ steps.source.outputs.commit }}
         run: |
           set -eu
-          mkdir -p ../release-assets
+          mkdir -p ../gateway-binaries ../release-assets
           for target in linux/amd64 linux/arm64 windows/amd64 darwin/amd64 darwin/arm64; do
             GOOS="${target%/*}"
             GOARCH="${target#*/}"
@@ -89,14 +92,30 @@ jobs:
             CGO_ENABLED=0 GOOS="$GOOS" GOARCH="$GOARCH" go build \
               -trimpath \
               -ldflags "-s -w -X main.version=${VERSION} -X main.commit=${COMMIT}" \
-              -o "../release-assets/${name}" .
-            strings "../release-assets/${name}" | grep -F "$VERSION" >/dev/null
-            strings "../release-assets/${name}" | grep -F "$COMMIT" >/dev/null
+              -o "../gateway-binaries/${name}" .
+            strings "../gateway-binaries/${name}" | grep -F "$VERSION" >/dev/null
+            strings "../gateway-binaries/${name}" | grep -F "$COMMIT" >/dev/null
           done
-          cd ../release-assets
-          sha256sum proprium-gateway_* > SHA256SUMS
-          printf 'tag=%s\nversion=%s\ncommit=%s\ngo=%s\n' \
-            "$TAG" "$VERSION" "$COMMIT" "$(go version)" > SOURCE.txt
+          VERSION="$VERSION" COMMIT="$COMMIT" \
+            GATEWAY_BINARIES="$PWD/../gateway-binaries" \
+            RELEASE_ASSETS="$PWD/../release-assets" \
+            bash distribution/package-release.sh
+          bash distribution/verify-release-assets.sh ../release-assets "$VERSION" "$COMMIT"
+          test "$(find ../release-assets -maxdepth 1 -type f -name 'proprium-gateway_*.tar.gz' | wc -l)" -eq 5
+          for archive in ../release-assets/proprium-gateway_*.tar.gz; do
+            tar -tzf "$archive" | grep -Eq '(^|/)manifest$'
+            if tar -tzf "$archive" | grep -Eq '^\./[^/]+/'; then
+              echo "Bundle contains nested files: $archive" >&2; exit 1
+            fi
+          done
+          (cd ../release-assets && sha256sum --check SHA256SUMS)
+          grep -Fx "tag=${{ steps.source.outputs.tag }}" ../release-assets/SOURCE.txt
+          grep -Fx "version=$VERSION" ../release-assets/SOURCE.txt
+          grep -Fx "commit=$COMMIT" ../release-assets/SOURCE.txt
+      - name: Attest release assets
+        uses: actions/attest-build-provenance@v2
+        with:
+          subject-path: release-assets/*
       - uses: actions/upload-artifact@v4
         with:
           name: proprium-gateway-${{ steps.source.outputs.version }}-${{ steps.source.outputs.commit }}
@@ -144,6 +163,14 @@ jobs:
           grep -Fx "version=${INPUT_TAG#proprium-gateway-v}" release-assets/SOURCE.txt
           grep -Fx "commit=${tag_commit}" release-assets/SOURCE.txt
           (cd release-assets && sha256sum --check SHA256SUMS)
+          test "$(find release-assets -maxdepth 1 -type f -name 'proprium-gateway_*.tar.gz' | wc -l)" -eq 5
+          test -s release-assets/proprium
+          test -s release-assets/bootstrap.sh
+          bash gateway/distribution/verify-release-assets.sh release-assets \
+            "${INPUT_TAG#proprium-gateway-v}" "$tag_commit"
+          if find release-assets -maxdepth 1 -type f -name 'proprium-gateway_*' ! -name '*.tar.gz' | grep -q .; then
+            echo 'Unexpected unbundled Gateway binary in release assets.' >&2; exit 1
+          fi
           printf 'tag=%s\nversion=%s\ncommit=%s\n' \
             "$INPUT_TAG" "${INPUT_TAG#proprium-gateway-v}" "$tag_commit" >> "$GITHUB_OUTPUT"
       - name: Publish GitHub Release
@@ -152,9 +179,26 @@ jobs:
           TAG: ${{ steps.source.outputs.tag }}
           COMMIT: ${{ steps.source.outputs.commit }}
         run: |
-          printf 'Proprium Gateway %s.\n\nSource commit: %s. Verify downloaded files with SHA256SUMS. Each platform artifact is one self-contained executable; it requires neither a container nor a database.\n' \
+          printf 'Proprium Gateway %s.\n\nSource commit: %s. Download the matching platform bundle, the standalone Linux proprium CLI, and bootstrap.sh as needed. Verify release assets against their GitHub API SHA-256 digests; SHA256SUMS also covers each bundle and the standalone CLI/bootstrap files.\n' \
             "${TAG#proprium-gateway-v}" "$COMMIT" > /tmp/proprium-release-notes.md
           gh release create "$TAG" release-assets/* \
             --target "$COMMIT" \
             --title "$TAG" \
             --notes-file /tmp/proprium-release-notes.md
+      - name: Verify GitHub API asset digests
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TAG: ${{ steps.source.outputs.tag }}
+        run: |
+          set -eu
+          api="repos/${GITHUB_REPOSITORY}/releases/tags/${TAG}"
+          gh api "$api" > /tmp/proprium-release.json
+          for asset in release-assets/*; do
+            name="${asset##*/}"
+            expected="sha256:$(sha256sum "$asset" | cut -d' ' -f1)"
+            actual="$(jq -r --arg name "$name" '.assets[] | select(.name == $name) | .digest // ""' /tmp/proprium-release.json)"
+            if [ -z "$actual" ] || [ "$actual" != "$expected" ]; then
+              echo "GitHub did not report the expected SHA-256 asset digest for $name (got '$actual')." >&2
+              exit 1
+            fi
+          done

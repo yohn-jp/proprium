@@ -118,28 +118,26 @@ GitHub token・Live owner/client tokenはHostのメモリに限定し、plugin�
 
 ## 6. 利用者権限でのGateway導入・運用
 
-F17は運用端末での目標導線であり、まだ存在しない`setup`や`update`サブコマンドが使えるという説明ではない。既存の`serve`、`version`と設定項目の正本は[Gateway operations](../deployment/GATEWAY.md)に置く。
+Linux amd64/arm64の標準管理導線は[Gateway operations](../deployment/GATEWAY.md)に記載した`proprium` CLIである。`install`、`setup`、`start`、`stop`、`restart`、`status`、`update`、`rollback`、`logs`、`doctor`、`version`、`help`を提供し、Gatewayとpinned `cloudflared`の別々の実行ファイルを一つのsystemd user serviceで管理する。Gateway executableにTunnelを埋め込む契約ではない。検証済みreleaseはmain push後に自動公開される。
 
 ### 配布と更新
 
-利用者の標準選択は**latestの安定版Gateway**とする。手動version指定を必須にしない。[GitHub Releases API](https://docs.github.com/en/rest/releases/releases#get-the-latest-release)のrepository全体のlatestとGateway release系列は混同しない。draft/prereleaseを除いた`proprium-gateway-vX.Y.Z`の公開releaseを対象とし、Host等の別系列にGateway資材がない場合は誤取得せず、Gateway系列を選び直す。
+CLIはGitHub Releases APIからGateway releaseを選び、同一release ID/tagのLinux bundleと`SHA256SUMS`を取得する。APIが示すbundleのSHA-256 digest、release checksum、embedded archive manifest、各component hashを照合する。checksumはbyte整合性の検査であり、単独でpublisher認証を証明するものではない。リリース切替前の検証が失敗した場合は現行ファイルを維持し、起動・health checkに失敗した場合は直前の既知正常バージョンへ復旧する。
 
-取得開始時に対象release ID/tagとOS/archを一度確定し、そのreleaseのbinary、`SHA256SUMS`、`SOURCE.txt`を取得する。処理中にlatestが変わっても別releaseのchecksumを混ぜない。対象platformの一つのファイルを検証し、未取得の他platformまで`sha256sum --check`して導入失敗にしない。checksumはbyte整合性の検査であり、単独でpublisher認証を証明するものではない。
-
-user領域の一時配置で検証後に切り替え、失敗時は稼働中binaryを保持する。更新は明示実行し、latest採用を無断の自動再起動と同義にしない。稼働確認失敗時は旧binaryへ戻せるようにするが、旧Live session・client認可・途中mutationは復活／再送しない。
+更新は明示操作とする。`stop`、`restart`、`update`、`rollback`はGatewayのprivate local control socketでLive MCP状態を確認する。active connectionがあれば、対話操作はsession終了の明示確認を求め、非対話操作はserviceを変更せず失敗する。`--maintenance`は明示的にsession終了を許可する。受理された更新／rollbackはGatewayを再起動して既存Live sessionを切断する。以前のsession、client grant、未確定mutationを復元または再送しない。
 
 ### OS権限と常駐
 
 | 操作 | 通常ユーザーで扱う範囲 | 別途確認が必要な境界 |
 | --- | --- | --- |
-| 配置・設定 | `$HOME/.local/bin`、`$HOME/.config/proprium`、private env（0600） | 他ユーザーのファイル、system directoryを上書きしない |
+| 配置・設定 | XDG user pathsの`bin`、`config/proprium`、`data/proprium` | 他ユーザーのファイル、system directoryを上書きしない |
 | Gateway listen | loopbackの非特権port。public URLとHost originを照合 | wildcard listenは明示判断。HTTPS公開経路と一致させる |
-| cloudflared | 別binary／別user process。既存導入も利用可能 | Tunnel作成・DNS routeはCloudflare account権限。OS rootとは別 |
-| 常駐 | foreground、任意の`systemd --user` unit、user journal | user manager、利用可能なsandbox設定、logout/boot時の継続可否 |
+| cloudflared | CLIがpinned binaryを配置・更新し、Gatewayと同じuser serviceで起動／停止 | Tunnel作成・DNS routeはCloudflare account権限。OS rootとは別 |
+| 常駐 | systemd user serviceとuser journal | user manager、logout/boot時の継続可否 |
 | logout後の稼働 | hostが許可するuser-service/linger policyに従う | [loginctlのlinger](https://www.freedesktop.org/software/systemd/man/devel/loginctl.html)設定には環境の認可が必要。実行可能とは推定しない |
-| 更新・復旧 | user-owned binaryの切替、user service再起動 | system-wide service installやroot取得を必須にしない |
+| 更新・復旧 | CLIによるuser-owned asset切替とuser service再起動 | system-wide service installやroot取得を必須にしない |
 
-Gatewayとcloudflaredを同一binaryに埋め込まない。両者の生存・version・local疎通・public疎通を別に診断する。user service非対応ならforegroundを使い、`nohup`やterminal multiplexingだけでlogout後の常時稼働を保証しない。
+管理対象のassetやservice metadataを手動で置換・削除しない。`status`、`logs`、`doctor`はローカルプロセスと疎通を診断するが、public HTTPS、OAuth、SSE経路の運用検証の代替にはならない。CLI managementはLinux amd64/arm64を対象とし、Windows/macOSでは未対応である。Gateway runtime archiveの公開はCLI service管理の対応を意味しない。
 
 local/publicの`/healthz`成功だけを認証・MCP利用成功としない。OAuth、Host/Origin検証、SSE streaming、認可済みread、拒否される無認可要求、切断後の再認可をそれぞれ検証する。静的Host、Gateway、plugin artifactの更新・障害を一つの「接続済み」にまとめない。
 

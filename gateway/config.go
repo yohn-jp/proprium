@@ -6,6 +6,7 @@ import (
 	"net"
 	"net/url"
 	"os"
+	"path/filepath"
 	"strconv"
 	"strings"
 	"time"
@@ -19,6 +20,7 @@ const (
 // Config contains only process configuration. Runtime sessions and request bodies stay in memory.
 type Config struct {
 	ListenAddr      string
+	ControlSocket   string
 	HostOrigin      string
 	PublicURL       string
 	GitHubClientID  string
@@ -30,6 +32,7 @@ type Config struct {
 func LoadConfig() (Config, error) {
 	cfg := Config{
 		ListenAddr:      envOr("PROPRIUM_LISTEN_ADDR", defaultListenAddr),
+		ControlSocket:   os.Getenv("PROPRIUM_CONTROL_SOCKET"),
 		HostOrigin:      strings.TrimSpace(os.Getenv("PROPRIUM_HOST_ORIGIN")),
 		PublicURL:       strings.TrimSpace(os.Getenv("PROPRIUM_PUBLIC_URL")),
 		GitHubClientID:  strings.TrimSpace(os.Getenv("GITHUB_CLIENT_ID")),
@@ -57,6 +60,9 @@ func envOr(key, fallback string) string {
 }
 
 func (c Config) Validate() error {
+	if c.ControlSocket != "" && (!filepath.IsAbs(c.ControlSocket) || strings.IndexByte(c.ControlSocket, 0) >= 0) {
+		return errors.New("PROPRIUM_CONTROL_SOCKET must be an absolute filesystem path")
+	}
 	listenHost, rawPort, err := net.SplitHostPort(c.ListenAddr)
 	if err != nil {
 		return fmt.Errorf("PROPRIUM_LISTEN_ADDR must be host:port: %w", err)

@@ -1,0 +1,19 @@
+cloudflared is developed by Cloudflare, Inc. and distributed under the
+Apache License, Version 2.0. The upstream cloudflare/cloudflared repository at
+the pinned release tag contains a root LICENSE and no root NOTICE file. The
+binary also includes code from Go dependencies. The accompanying
+THIRD-PARTY-LICENSES.txt contains the component report, full license texts,
+and upstream NOTICE files discovered for the supported platform builds. It
+also includes the BSD license and patent grant text for the Go 1.27.3 runtime
+used to build the Gateway and the pinned cloudflared release.
+
+That dependency audit found Apache-2.0, BSD-2-Clause, BSD-3-Clause, and MIT
+license identifiers, with no copyleft license identifier detected. This is a
+description of the pinned source dependency graph, not a legal opinion.
+SOURCE.txt identifies the exact source tag, upstream asset digest, and
+third-party license collection digest. This notice makes no claim that
+cloudflared is authored by or endorsed by Proprium.
+
+Upstream project: https://github.com/cloudflare/cloudflared
+Pinned release: https://github.com/cloudflare/cloudflared/releases/tag/2026.10.3
+Pinned source commit: de6376c5af4a67cbc65258682e5a01781827643d
