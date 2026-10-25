@@ -62,7 +62,9 @@ export default defineConfig(({ command, mode }) => {
     throw new Error("The test-only Host seam cannot be included in a static build");
   }
   const origins = publicOrigins(env);
-  const connectSources = ["'self'", "https://api.github.com", "https://github.com", ...origins].join(" ");
+  // The Host lets an owner select a self-hosted Gateway after the static build,
+  // so CSP must permit the explicitly configured HTTPS destination at runtime.
+  const connectSources = ["'self'", "https:", "http://localhost:*", "http://127.0.0.1:*", "https://api.github.com", "https://github.com", ...origins].join(" ");
   const imageSources = ["'self'", "data:", "blob:", ...origins].join(" ");
   const headers = `/index.html\n  Cache-Control: no-cache\n/proprium-sw.js\n  Cache-Control: no-cache\n/assets/*\n  Cache-Control: public, max-age=31536000, immutable\n/*\n  X-Content-Type-Options: nosniff\n  Referrer-Policy: strict-origin-when-cross-origin\n  X-Frame-Options: DENY\n  Permissions-Policy: camera=(), microphone=(), geolocation=()\n  Content-Security-Policy: default-src 'self'; base-uri 'none'; object-src 'none'; frame-ancestors 'none'; form-action 'self'; script-src 'self' 'wasm-unsafe-eval' blob:; style-src 'self' 'unsafe-inline'; img-src ${imageSources}; font-src 'self' data:; connect-src ${connectSources}; worker-src 'self' blob:; manifest-src 'self'\n`;
   const staticHeaders = {
