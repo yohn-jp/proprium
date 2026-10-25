@@ -152,7 +152,13 @@ async function openWorkspace(page: import("@playwright/test").Page): Promise<voi
   await page.getByRole("list", { name: "Repository files" }).getByRole("button", { name: "README.md" }).click();
 }
 
+async function showWorkspaceTools(page: import("@playwright/test").Page): Promise<void> {
+  const toggle = page.getByRole("button", { name: /^Files(?:\s|$)/u });
+  if (await toggle.isVisible() && await toggle.getAttribute("aria-expanded") !== "true") await toggle.click();
+}
+
 async function enableLiveMcp(page: import("@playwright/test").Page): Promise<void> {
+  await showWorkspaceTools(page);
   const panel = page.locator("details.live-mcp-panel");
   await panel.locator("summary").click();
   await page.locator("#live-gateway-url").fill(gatewayOrigin);
@@ -184,6 +190,7 @@ test("a live browser Workspace serves real MCP calls through Go SSE and HTTP, an
     await route.fulfill({ status: 200, contentType: file.contentType, body: file.body });
   });
 
+  await showWorkspaceTools(page);
   const panel = page.locator("details.plugin-manager-panel");
   await panel.locator("summary").click();
   await page.getByLabel("Install from trusted registry").fill("fixture.compute-sum");
@@ -276,6 +283,7 @@ test("a live browser Workspace serves real MCP calls through Go SSE and HTTP, an
   await page.getByLabel("Git author email").fill("gateway-e2e@example.invalid");
   await page.getByRole("button", { name: "Commit locally" }).click();
   await expect(page.getByText(/^Committed locally · [a-f0-9]{8}$/u)).toBeVisible();
+  await showWorkspaceTools(page);
   await page.getByLabel("Plugin request").fill(JSON.stringify({ left: 20, right: 22 }));
   await plugin.getByRole("button", { name: "Run" }).click();
   await expect(page.getByLabel("fixture.compute-sum output")).toHaveText('{"result":42}');
