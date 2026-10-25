@@ -3,6 +3,7 @@ import { defineConfig } from "@playwright/test";
 const baseURL = process.env.PROPRIUM_E2E_BASE_URL ?? "http://127.0.0.1:4173/";
 const externalServer = Boolean(process.env.PROPRIUM_E2E_BASE_URL);
 process.env.VITE_PROPRIUM_E2E = "true";
+const hasLiveGitHubToken = Boolean(process.env.PROPRIUM_E2E_GITHUB_TOKEN || process.env.SCRIPTORIUM_GITHUB_LIVE_TEST_TOKEN);
 
 export default defineConfig({
   testDir: ".",
@@ -15,7 +16,7 @@ export default defineConfig({
   use: {
     baseURL,
     headless: true,
-    trace: "retain-on-failure",
+    trace: hasLiveGitHubToken ? "off" : "retain-on-failure",
     screenshot: "off",
     video: "off",
   },
