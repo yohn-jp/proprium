@@ -88,6 +88,7 @@ export function LiveMcpPanel({ gatewayUrl, onGatewayUrlChange, workspaceId, gene
   const abortRef = useRef<AbortController | null>(null);
   const pendingRef = useRef(new Map<string, AbortController>());
   const liveSessionRef = useRef("");
+  const connectAttemptRef = useRef("");
   const sessionOwnerTokenRef = useRef("");
   const workspaceBindingRef = useRef(`${workspaceId}:${generation}`);
   const mountedRef = useRef(true);
@@ -223,6 +224,8 @@ export function LiveMcpPanel({ gatewayUrl, onGatewayUrlChange, workspaceId, gene
 
   async function connect(): Promise<void> {
     setError(""); setNewToken(""); setState("connecting"); setEnabled(true);
+    const attempt = crypto.randomUUID();
+    connectAttemptRef.current = attempt;
     const key = ownerKey.trim();
     if (key.length < 32) { setState("error"); setError("Enter the Gateway owner key (at least 32 characters). It stays in this tab's memory."); return; }
     let created: { sessionId: string; ownerToken: string } | null = null;
@@ -232,13 +235,16 @@ export function LiveMcpPanel({ gatewayUrl, onGatewayUrlChange, workspaceId, gene
       created = await ownerRequest<{ sessionId: string; ownerToken: string }>("/live/sessions", {
         method: "POST", body: JSON.stringify({ workspaceId, generation: liveGeneration, capabilities: selected }),
       });
+      if (connectAttemptRef.current !== attempt) {
+        await ownerRequest(`/live/sessions/${encodeURIComponent(created.sessionId)}`, { method: "DELETE" }, created.ownerToken).catch(() => undefined);
+        return;
+      }
       setOwnerKey("");
       const activeSession = created;
       sessionOwnerTokenRef.current = activeSession.ownerToken;
       liveSessionRef.current = activeSession.sessionId;
       setSessionId(activeSession.sessionId);
       setEndpoint(`${normalizedGateway(gatewayUrl.trim())}/mcp`);
-      await refreshClients(activeSession.sessionId);
       const controller = new AbortController(); eventController = controller; abortRef.current = controller;
       const origin = normalizedGateway(gatewayUrl.trim());
       const events = await fetch(`${origin}/live/sessions/${encodeURIComponent(activeSession.sessionId)}/events`, {
@@ -247,6 +253,9 @@ export function LiveMcpPanel({ gatewayUrl, onGatewayUrlChange, workspaceId, gene
       });
       if (!events.ok || !events.body) throw new Error(`Gateway event stream failed (${events.status}).`);
       setState("connected");
+      void refreshClients(activeSession.sessionId).catch(caught => {
+        if (mountedRef.current && liveSessionRef.current === activeSession.sessionId) setError(caught instanceof Error ? caught.message : "MCP clients could not be listed.");
+      });
       await readSse(events.body.getReader(), (name, data) => {
         let payload: unknown;
         try { payload = JSON.parse(data); } catch { return; }
@@ -275,11 +284,12 @@ export function LiveMcpPanel({ gatewayUrl, onGatewayUrlChange, workspaceId, gene
       if (abandonedSession && created) await ownerRequest(`/live/sessions/${encodeURIComponent(abandonedSession)}`, { method: "DELETE" }, created.ownerToken).catch(() => undefined);
       sessionOwnerTokenRef.current = "";
       setSessionId(""); setClients([]);
-      if (mountedRef.current && !eventController?.signal.aborted) { setState("error"); setError(caught instanceof Error ? caught.message : "Could not connect to the Gateway."); }
+      if (connectAttemptRef.current === attempt && mountedRef.current && !eventController?.signal.aborted) { setState("error"); setError(caught instanceof Error ? caught.message : "Could not connect to the Gateway."); }
     }
   }
 
   async function stop(): Promise<void> {
+    connectAttemptRef.current = "";
     const id = liveSessionRef.current;
     const sessionOwnerToken = sessionOwnerTokenRef.current;
     liveSessionRef.current = "";
