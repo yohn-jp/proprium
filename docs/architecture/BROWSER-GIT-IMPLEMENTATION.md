@@ -21,7 +21,7 @@ The Host-owned adapter uses **GitHub REST Git Data API** where it can preserve t
 
 Normal non-force branch updates are protected by a current remote ref/ancestry check, with Smart HTTP used where REST cannot safely update the ref. Verify the intended commit is reachable after publication; an HTTP 2xx response alone is not a remote-save receipt. Live concurrent-writer and lost-response behavior remains part of deployment acceptance.
 
-Auth uses GitHub's device authorization flow through the optional restricted Worker, which keeps the public Host from embedding a client secret. The Worker is a network edge component only; it is never a user workspace store or compute server. Never expose tokens to WASM guest imports. The configured endpoint and real account permission behavior must be verified before live sync is advertised.
+The target uses user-approved GitHub Device OAuth via the **optional Go Gateway**. Existing Cloudflare `workers/github-auth/` code is transitional and must be removed once the Go relay is verified. The Host must be useful without a configured Gateway; neither PAT input nor a remote connection is required for local Git. The Gateway does not store credentials, repository objects or user workspaces. Never expose tokens to WASM guest imports. Verify the configured OAuth and live repository permissions before advertising remote sync. See [Gateway/MCP contract](OPTIONAL-GATEWAY-AND-MCP.md).
 
 ## Required implementation tests
 

@@ -1,6 +1,6 @@
 # Static delivery, resource distribution and trust
 
-**Status: delivery and security contract for the implemented static Host build.** CI checks the local bundle and Wrangler package with dry-run. The repository does not provision Cloudflare resources or establish that a production Host, R2 artifact origin or auth Worker has been deployed and tested.
+**Status: delivery and security contract for the implemented static Host build.** CI checks the local bundle and Wrangler package with dry-run. The repository does not provision Cloudflare resources or establish that a production Host, R2 artifact origin or optional Go Gateway has been deployed and tested.
 
 ## Delivery model
 
@@ -17,7 +17,7 @@ A static delivery model removes **home-server bandwidth and compute from ordinar
 
 The only mandatory remote service for publishing is the user's GitHub repository. Initial UI and plugin downloads are static delivery. No Proprium-managed database, user account service, daemon or continuously running sync worker is required for local editing.
 
-Browser GitHub sync is implemented through the Host-owned Git transport and the optional restricted Worker under `workers/github-auth` for device authorization and Smart HTTP relay. The Worker checks repository identity and permissions, then streams Git traffic; it is not a worktree store or plugin runtime. Live authorization and publishing still depend on configuring and testing the intended GitHub and Worker endpoints.
+**Target:** An independently deployable optional Go binary provides GitHub Device OAuth, narrowly scoped Smart HTTP fallback and Live Workspace MCP. No Gateway connection is required for local editing, local commits or already admitted/cached WASM plugins. The existing `workers/github-auth/` Cloudflare relay is transitional code, not the target or a second required application server. Gateway mediation is confined to explicitly enabled remote capabilities. See [Optional Gateway and MCP](OPTIONAL-GATEWAY-AND-MCP.md).
 
 For private repositories, prevent credentials from reaching plugins, remote artifact origins, analytics, URLs or logs. Prefer short-lived/scoped grants where feasible; token acquisition and persistence strategy require threat-model and browser verification. A static page is not an authorization server and cannot safely embed a long-lived shared secret.
 
@@ -30,6 +30,8 @@ For private repositories, prevent credentials from reaching plugins, remote arti
 | Excessive compute / hang / memory exhaustion | Per-plugin Worker, bounded Host RPC, cancellation and termination; disclose limits of browser OOM containment |
 | Forged Host requests / stale revision | Host validates instance/epoch/workspace, capabilities and expected revision on each operation |
 | Git credential theft / cross-repo writes | Host-only credentials, explicit repo scope, least privilege and GitHub permission/revision checks |
+| Unauthorized MCP client / cross-workspace requests | Explicit Live MCP opt-in, authenticated client and Workspace binding, scoped capability grants, revision and connection-generation fences |
+| Gateway request replay / credential leakage | In-memory bounded request correlations, cancel/deadline enforcement, no token/body logging or persistence; reject replay after disconnect |
 | Unintended off-device data transmission | Default-deny plugin network capability; user-visible consent and restricted destinations where allowed |
 | Evicted browser storage | Local draft/commit/push state clearly distinguished; optional export, no guaranteed local recovery |
 | Stale CDN cache or artifact replacement | Content-addressed immutable URLs, pinned versions, atomic publication of registry metadata and integrity checks |

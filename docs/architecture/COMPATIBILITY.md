@@ -26,3 +26,7 @@ Migration preserves legally reusable application code and documented artifact pr
 - Original Scriptorium documentation and application evolution remain in its own repository. Proprium's product runtime does not include Scriptorium's server or container features.
 
 Canonical target and implementation contracts: [overview](OVERVIEW.md), [Git](GIT-AND-STORAGE.md), [plugins](PLUGIN-PLATFORM.md), [delivery/security](DELIVERY-AND-SECURITY.md), [UX](WORKSPACE-UX.md), and [provenance](SOURCE-PROVENANCE.md).
+
+## Optional server-side compatibility boundary
+
+The target Go Gateway is an **optional transport/MCP bridge**, not restoration of Scriptorium's Node API or Hosted runtime. It must never take over Browser Host files, local Git, WASM compute or proposal approval. The existing `workers/github-auth/` Cloudflare relay remains transitional until equivalent Go behavior is implemented and cutover is verified. Live MCP provides only a connection to the active Browser Host, **not** Scriptorium's server-owned project or narrative tools. See [Optional Gateway and MCP](OPTIONAL-GATEWAY-AND-MCP.md).
