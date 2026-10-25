@@ -57,7 +57,7 @@ export default defineConfig({
     },
   ],
   webServer: {
-    command: `pnpm --config.verifyDepsBeforeRun=false dev:browser -- --host 127.0.0.1 --port ${configuredPort} --strictPort`,
+    command: `pnpm --config.verifyDepsBeforeRun=false dev:browser --host 127.0.0.1 --port ${configuredPort} --strictPort`,
     cwd: process.cwd(),
     url: baseURL,
     reuseExistingServer: false,
