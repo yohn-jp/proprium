@@ -62,7 +62,8 @@ test("Host edits and commits a generic repository offline, then reopens the save
   await expect(historyEntry).toBeVisible();
   await expect(historyEntry.locator("code")).toHaveText(/^[a-f0-9]{10}$/u);
   await showRepositoryFiles(page);
-  await expect(page.getByText("Sign in to enable remote sync. Local editing remains available offline.")).toBeVisible();
+  await expect(page.getByLabel("Local workspace only", { exact: true })).toBeVisible();
+  await expect(page.locator(".topbar").getByRole("button", { name: "GitHubに接続", exact: true })).toBeVisible();
 
   // The dev server cannot supply a newly-created worker while offline. Keep the
   // editing and local Git operations offline, then restore transport before
