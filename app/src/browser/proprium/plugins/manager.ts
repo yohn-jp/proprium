@@ -1,7 +1,7 @@
-import { verifyPluginArtifact, type PluginManifestV1 } from "../plugin-artifact.js";
+import { PluginArtifactError, verifyPluginArtifact, type PluginManifestV1 } from "../plugin-artifact.js";
 import { BrowserPluginRuntime } from "../plugin-runtime/runtime.js";
 import type { PluginCapability, PluginTranscript, RuntimeContext, RuntimeSnapshot } from "../plugin-runtime/protocol.js";
-import { admitRegistry, admitRegistryManifest, compareVersions, registryArtifactURL, registryManifestEntry, registrySignatureUrl, satisfiesVersion, type PluginDependency, type PluginRegistryEntry, type PluginRegistryTrust, type SignedRegistrySnapshot } from "./registry.js";
+import { admitRegistry, admitRegistryManifest, compareVersions, PluginRegistryError, registryArtifactURL, registryManifestEntry, registrySignatureUrl, satisfiesVersion, type PluginDependency, type PluginRegistryEntry, type PluginRegistryTrust, type SignedRegistrySnapshot } from "./registry.js";
 import { IndexedDbPluginStore, pluginKey, type InstalledPluginRecord, type PluginStore } from "./store.js";
 
 export { PluginRegistryError } from "./registry.js";
@@ -277,15 +277,27 @@ export class BrowserPluginManager {
       const records = await this.store.listPlugins();
       const result: InstalledPlugin[] = [];
       for (const record of records) {
-        const { manifest, revoked } = await this.verifyStoredPlugin(record.key, false, true);
+        if (!record || typeof record.id !== "string" || typeof record.version !== "string" ||
+            pluginKey(record.id, record.version) !== record.key || typeof record.registryUrl !== "string") {
+          throw new PluginManagerError("storage_error", "Installed plugin record identity is malformed");
+        }
+        let manifest: PluginManifestV1 | undefined;
+        let revoked = false;
+        try { ({ manifest, revoked } = await this.verifyStoredPlugin(record.key, false, true)); }
+        catch (error) {
+          if (!(error instanceof PluginManagerError && error.code === "invalid_plugin") &&
+              !(error instanceof PluginRegistryError) && !(error instanceof PluginArtifactError)) throw error;
+          revoked = true;
+        }
         const activeVersion = await this.store.getState(activeStateKey(record.id)) ?? null;
         const live = this.active.get(record.id);
         const enabled = this.enabled.get(record.id);
         result.push(Object.freeze({
           id: record.id, version: record.version, activeVersion,
           state: revoked ? "revoked" : live?.version === record.version ? "active" : enabled?.version === record.version ? "enabled-idle" : "installed",
-          capabilities: manifest.capabilities,
-          dependencies: Object.freeze(record.resolvedDependencies.map(dependency => ({ ...dependency }))),
+          capabilities: manifest?.capabilities ?? [],
+          dependencies: Object.freeze(Array.isArray(record.resolvedDependencies) ? record.resolvedDependencies.filter(dependency =>
+            dependency && typeof dependency.id === "string" && typeof dependency.range === "string" && typeof dependency.version === "string").map(dependency => ({ ...dependency })) : []),
           contributions: !revoked && live?.version === record.version ? live.transcript?.contributions ?? [] : [],
           registryUrl: record.registryUrl,
         }));

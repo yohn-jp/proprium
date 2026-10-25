@@ -153,3 +153,17 @@ test("dependency cycles fail closed and revoked transitive dependencies block ac
   await assert.rejects(closure.manager.previewInstall({ registryUrl, pluginId: "example.calc", version: "1.1.0" }), /revoked/i);
   await assert.rejects(closure.manager.enable({ pluginId: "example.calc", version: "1.0.0", workspaceId: "workspace", grants: [], hostAllowed: [] }), /revoked/i);
 });
+
+test("rotating the Host-pinned registry key revokes cached code and leaves it removable", async () => {
+  const { manager, store, fetcher } = await fixture();
+  await manager.installFromRegistry(await manager.previewInstall({ registryUrl, pluginId: "example.calc", version: "1.0.0" }));
+  const rotated = new BrowserPluginManager({
+    registries: [{ url: registryUrl, publicKey: new Uint8Array(32), artifactOrigins: approvedOrigins }], fetcher, store,
+  });
+  const plugins = await rotated.installed();
+  assert.equal(plugins.find(plugin => plugin.id === "example.calc")?.state, "revoked");
+  assert.deepEqual(plugins.find(plugin => plugin.id === "example.calc")?.capabilities, []);
+  await rotated.uninstall("example.calc", "1.0.0");
+  await rotated.uninstall("example.math", "1.2.0");
+  assert.deepEqual(await rotated.installed(), []);
+});
