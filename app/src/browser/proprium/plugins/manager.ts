@@ -161,7 +161,7 @@ export class BrowserPluginManager {
   private closed = false;
 
   constructor(options: BrowserPluginManagerOptions = {}) {
-    this.fetcher = options.fetcher ?? fetch;
+    this.fetcher = options.fetcher ?? globalThis.fetch.bind(globalThis);
     this.store = options.store ?? new IndexedDbPluginStore();
     this.trusts = new Map((options.registries ?? []).map(trust => [trust.url, Object.freeze({
       url: trust.url,

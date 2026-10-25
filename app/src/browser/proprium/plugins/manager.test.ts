@@ -167,3 +167,22 @@ test("rotating the Host-pinned registry key revokes cached code and leaves it re
   await rotated.uninstall("example.math", "1.2.0");
   assert.deepEqual(await rotated.installed(), []);
 });
+
+test("the default fetch adapter preserves the browser global receiver", async () => {
+  const { registryPublicKey, content } = await fixture();
+  const previousFetch = globalThis.fetch;
+  let receivedGlobal = false;
+  globalThis.fetch = function (this: unknown, input: RequestInfo | URL): Promise<Response> {
+    receivedGlobal = this === globalThis;
+    const bytes = content.get(String(input));
+    return Promise.resolve(bytes ? new Response(Uint8Array.from(bytes), { status: 200 }) : new Response("missing", { status: 404 }));
+  } as typeof fetch;
+  try {
+    const manager = new BrowserPluginManager({
+      registries: [{ url: registryUrl, publicKey: registryPublicKey, artifactOrigins: approvedOrigins }],
+      store: new MemoryPluginStore(),
+    });
+    await manager.previewInstall({ registryUrl, pluginId: "example.calc", version: "1.0.0" });
+    assert.equal(receivedGlobal, true);
+  } finally { globalThis.fetch = previousFetch; }
+});
