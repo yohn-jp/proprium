@@ -63,6 +63,22 @@ async function takeSnapshot(git: BrowserLocalGit, workspaceId: string): Promise<
   return Object.freeze({ id: `${workspaceId}:${crypto.randomUUID()}`, revision, files: Object.freeze(files) });
 }
 
+function needsWorkspaceSnapshot(plugin: InstalledPlugin): boolean {
+  return plugin.capabilities.includes("workspace.snapshot.read") || plugin.capabilities.includes("workspace.change.propose");
+}
+
+function emptySnapshot(workspaceId: string): RuntimeSnapshot {
+  return Object.freeze({
+    id: `${workspaceId}:${crypto.randomUUID()}`,
+    revision: crypto.randomUUID(),
+    files: Object.freeze([]),
+  });
+}
+
+function snapshotForPlugin(plugin: InstalledPlugin, git: BrowserLocalGit, workspaceId: string): Promise<RuntimeSnapshot> {
+  return needsWorkspaceSnapshot(plugin) ? takeSnapshot(git, workspaceId) : Promise.resolve(emptySnapshot(workspaceId));
+}
+
 export function PluginPanel({ workspaceId, git, revisionKey, canApplyChanges, hostBusy, onBusyChange, onWorkspaceChanged, onRegisterLiveInvoker }: PluginPanelProps): ReactElement {
   const config = useMemo(registryConfig, []);
   const manager = useMemo(() => new BrowserPluginManager({
@@ -94,7 +110,7 @@ export function PluginPanel({ workspaceId, git, revisionKey, canApplyChanges, ho
       const plugin = (await manager.installed()).find(item => item.id === args.pluginId && (item.state === "active" || item.state === "enabled-idle"));
       if (!plugin) throw new Error("Enable the plugin and grant its capabilities in the Browser Host before calling it.");
       const inputRevisionKey = currentRevisionKey.current;
-      const snapshot = await takeSnapshot(git, workspaceId);
+      const snapshot = await snapshotForPlugin(plugin, git, workspaceId);
       if (signal.aborted) throw new DOMException("Plugin execution was canceled", "AbortError");
       const snapshotState = { value: snapshot, inputRevisionKey };
       const transcript = await manager.invoke({
@@ -185,7 +201,7 @@ export function PluginPanel({ workspaceId, git, revisionKey, canApplyChanges, ho
     if (currentRevisionKey.current !== revisionKey) { setNotice("The workspace changed. Reload the plugin snapshot and try again."); return; }
     setOwnBusy(true); onBusyChange(true); setNotice("");
     try {
-      const snapshot = await takeSnapshot(git, workspaceId);
+      const snapshot = await snapshotForPlugin(plugin, git, workspaceId);
       const selected: SnapshotState = { value: snapshot, inputRevisionKey: revisionKey };
       currentSnapshots.current.set(plugin.id, selected);
       const transcript = await manager.invoke({
@@ -198,8 +214,8 @@ export function PluginPanel({ workspaceId, git, revisionKey, canApplyChanges, ho
             current.value.id === snapshotId && current.value.revision === revision;
         },
       });
-      const after = await takeSnapshot(git, workspaceId);
-      if (after.revision !== snapshot.revision || currentRevisionKey.current !== revisionKey) {
+      const after = needsWorkspaceSnapshot(plugin) ? await takeSnapshot(git, workspaceId) : null;
+      if ((after && after.revision !== snapshot.revision) || currentRevisionKey.current !== revisionKey) {
         throw new Error("The workspace changed while the plugin was running. Its result was discarded; run it again on the current snapshot.");
       }
       setTranscripts(current => ({ ...current, [plugin.id]: transcript }));
@@ -315,7 +331,7 @@ export function PluginPanel({ workspaceId, git, revisionKey, canApplyChanges, ho
         {transcripts[plugin.id]?.value && <pre className="plugin-output" aria-label={`${plugin.id} output`}>{transcripts[plugin.id]!.value}</pre>}
         {transcripts[plugin.id]?.proposals.length ? <div className="plugin-proposals"><strong>Proposed changes</strong>{transcripts[plugin.id]!.proposals.flatMap((proposal, index) => proposal.changes.map(change => <article key={`${plugin.id}:${index}:${change.path}`}><span>{change.path}</span><pre>{change.content.slice(0, 1200)}{change.content.length > 1200 ? "…" : ""}</pre></article>))}<button type="button" onClick={() => void applyProposals(plugin)} disabled={busy || !canApplyChanges}>Review and apply to local worktree</button></div> : null}
       </li>)}</ul>}
-      {plugins.some(plugin => plugin.state === "active" || plugin.state === "enabled-idle") && <label className="plugin-request">Plugin request<textarea value={request} onChange={event => setRequest(event.target.value)} maxLength={256 * 1024} /></label>}
+      {plugins.some(plugin => plugin.state === "active" || plugin.state === "enabled-idle") && <label className="plugin-request">Plugin request<textarea aria-label="Plugin request" value={request} onChange={event => setRequest(event.target.value)} maxLength={256 * 1024} /></label>}
     </div>
   </details>;
 }

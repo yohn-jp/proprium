@@ -15,6 +15,7 @@ declare global {
       started: boolean;
       release?: () => void;
     };
+    propriumPluginGitCalls?: { listFiles: number; read: number };
     propriumHostTest?: {
       openWorkspace(identity: import("../../app/src/browser/proprium/git/protocol.js").WorkspaceIdentity, files?: Record<string, string>): Promise<void>;
     };
@@ -87,7 +88,7 @@ function signedFixture(origin: string): { files: Map<string, ServedFile>; regist
 
 function signedHostPanelFixture(
   origin: string,
-  options: { pluginId?: string; artifact?: Buffer; capabilities?: string[] } = {},
+  options: { pluginId?: string; artifact?: Buffer; capabilities?: string[]; versions?: readonly string[] } = {},
 ): Map<string, ServedFile> {
   const registryUrl = `${origin}/plugin-fixture/registry.json`;
   const artifactBase = `${origin}/plugin-fixture/artifacts/`;
@@ -101,7 +102,7 @@ function signedHostPanelFixture(
   const files = new Map<string, ServedFile>();
   const entries = [];
 
-  for (const version of ["1.0.0", "1.0.1"]) {
+  for (const version of options.versions ?? ["1.0.0", "1.0.1"]) {
     const artifactSha = sha256(artifactBytes);
     const assetPath = `${pluginId}/${version}/${artifactSha}/plugin.component.wasm`;
     const manifestBytes = Buffer.from(JSON.stringify({
@@ -139,6 +140,53 @@ function signedHostPanelFixture(
   files.set(new URL(registryUrl).pathname, { body: registryBytes, contentType: "application/json" });
   files.set(`${new URL(registryUrl).pathname}.sig`, { body: registrySignature, contentType: "application/octet-stream" });
   return files;
+}
+
+const gatewayOrigin = process.env.VITE_PROPRIUM_GATEWAY_URL ?? "http://127.0.0.1:4174";
+const ownerKey = "proprium-gateway-browser-e2e-owner-key-32-bytes";
+
+interface JsonRpcResponse { jsonrpc: string; id: string; result?: unknown; error?: { code: number; message: string }; }
+
+async function mcpCall(token: string, id: string, name: string, args: Record<string, unknown>): Promise<JsonRpcResponse> {
+  const version = "2026-07-28";
+  const response = await fetch(`${gatewayOrigin}/mcp`, {
+    method: "POST",
+    headers: {
+      Accept: "application/json, text/event-stream",
+      Authorization: `Bearer ${token}`,
+      "Content-Type": "application/json",
+      "MCP-Protocol-Version": version,
+      "Mcp-Method": "tools/call",
+      "Mcp-Name": name,
+    },
+    body: JSON.stringify({
+      jsonrpc: "2.0", id, method: "tools/call",
+      params: {
+        name,
+        arguments: args,
+        _meta: {
+          "io.modelcontextprotocol/protocolVersion": version,
+          "io.modelcontextprotocol/clientInfo": { name: "Proprium Plugin E2E", version: "1.0.0" },
+          "io.modelcontextprotocol/clientCapabilities": {},
+        },
+      },
+    }),
+    cache: "no-store",
+    redirect: "error",
+  });
+  const source = await response.text();
+  const json = source.startsWith("data:") ? source.split(/\r?\n/u).find(line => line.startsWith("data:"))?.slice(5).trim() : source;
+  const result = json ? JSON.parse(json) as JsonRpcResponse : null;
+  expect(response.status, JSON.stringify(result)).toBe(200);
+  expect(result?.error).toBeUndefined();
+  return result!;
+}
+
+function mcpTextResult(response: JsonRpcResponse): Record<string, unknown> {
+  const result = response.result as { content?: Array<{ type: string; text?: string }> };
+  const text = result.content?.find(item => item.type === "text")?.text;
+  if (!text) throw new Error(`MCP response did not contain text content: ${JSON.stringify(result)}`);
+  return JSON.parse(text) as Record<string, unknown>;
 }
 
 test.beforeAll(() => {
@@ -288,6 +336,91 @@ test("Host Plugin panel previews, installs, runs, stops, updates and rolls back 
   await pluginV2.getByRole("button", { name: "Rollback" }).click();
   await expect(panelNotice).toContainText("fixture.compute-sum was rolled back to its retained verified version");
   await expect(pluginV1).toContainText("pinned 1.0.0");
+});
+
+test("Host runs a signed no-capability Component without workspace reads in UI or Live MCP", async ({ page }) => {
+  test.setTimeout(120_000);
+  await page.goto("/");
+  const origin = new URL(page.url()).origin;
+  const pluginId = "proprium.compute-sum";
+  const version = "0.1.0";
+  const fixtureFiles = signedHostPanelFixture(origin, { pluginId, artifact: sumComponent, capabilities: [], versions: [version] });
+  await page.route(`${origin}/plugin-fixture/**`, async route => {
+    const file = fixtureFiles.get(new URL(route.request().url()).pathname);
+    if (!file) return route.fulfill({ status: 404 });
+    await route.fulfill({ status: 200, contentType: file.contentType, body: file.body });
+  });
+
+  const files = Object.fromEntries(Array.from({ length: 521 }, (_, index) => [
+    `fixture/file-${String(index).padStart(4, "0")}.txt`, `file ${index}\n`,
+  ]));
+  await page.waitForFunction(() => typeof window.propriumHostTest?.openWorkspace === "function");
+  await page.evaluate(async ({ files }) => window.propriumHostTest!.openWorkspace({
+    origin: "https://github.com", repositoryId: 923456791, owner: "proprium-test", repository: "large-plugin-workspace",
+    branch: "main", localWorkspaceId: `plugin-large-${crypto.randomUUID()}`,
+  }, files), { files });
+  await showPanel(page, "outline");
+  await showPanel(page, "review");
+
+  const panel = page.locator("details.plugin-manager-panel");
+  await panel.locator("summary").click();
+  await page.getByLabel("Install from trusted registry").fill(pluginId);
+  await page.getByLabel("Version (optional: latest stable)").fill(version);
+  await page.getByRole("button", { name: "Verify and preview" }).click();
+  const preview = page.getByRole("region", { name: "Plugin installation preview" });
+  await expect(preview).toContainText(`${pluginId}@${version}`);
+  await expect(preview).toContainText("Capabilities: none");
+  await page.getByRole("button", { name: "Download and install disabled" }).click();
+  const plugin = panel.getByRole("listitem").filter({ hasText: pluginId }).filter({ hasText: `v${version}` });
+  await plugin.getByRole("button", { name: "Enable" }).click();
+  await expect(panel.getByRole("status")).toContainText(`${pluginId}@${version} is enabled`);
+
+  await page.evaluate(async () => {
+    const moduleUrl = new URL("/src/browser/proprium/git/index.ts", location.origin).href;
+    const { BrowserLocalGit } = await import(/* @vite-ignore */ moduleUrl);
+    const prototype = BrowserLocalGit.prototype;
+    const listFiles = prototype.listFiles;
+    const read = prototype.read;
+    window.propriumPluginGitCalls = { listFiles: 0, read: 0 };
+    prototype.listFiles = async function () {
+      window.propriumPluginGitCalls!.listFiles += 1;
+      return listFiles.call(this);
+    };
+    prototype.read = async function (path: string) {
+      window.propriumPluginGitCalls!.read += 1;
+      return read.call(this, path);
+    };
+  });
+
+  const request = JSON.stringify({ left: 20, right: 22 });
+  await page.getByLabel("Plugin request", { exact: true }).fill(request);
+  await plugin.getByRole("button", { name: "Run" }).click();
+  await expect(page.getByLabel(`${pluginId} output`)).toHaveText('{"result":42}');
+  await expect.poll(() => page.evaluate(() => window.propriumPluginGitCalls)).toEqual({ listFiles: 0, read: 0 });
+
+  const livePanel = page.locator("details.live-mcp-panel");
+  await livePanel.locator("summary").click();
+  await page.locator("#live-gateway-url").fill(gatewayOrigin);
+  await page.locator("#live-owner-key").fill(ownerKey);
+  const toolNames = ["capabilities_list", "files_list", "file_read", "git_log", "git_status", "plugin_call", "proposal_submit", "workspace_info"];
+  for (const tool of toolNames) await page.getByLabel(tool, { exact: true }).check();
+  await page.getByRole("button", { name: "Enable Live MCP" }).click();
+  await expect(page.getByText(/^Live on .+\/mcp\./u)).toBeVisible({ timeout: 15_000 });
+  await page.locator("#mcp-client-name").fill("No capability plugin test client");
+  for (const tool of toolNames) await page.getByLabel(tool, { exact: true }).last().check();
+  await page.getByRole("button", { name: "Authorize client" }).click();
+  const tokenField = page.getByLabel("New MCP client token");
+  await expect(tokenField).toBeVisible();
+  const token = (await tokenField.inputValue()).trim();
+
+  await page.evaluate(() => { window.propriumPluginGitCalls = { listFiles: 0, read: 0 }; });
+  const liveResult = mcpTextResult(await mcpCall(token, "plugin-run-no-capability", "plugin_call", {
+    pluginId, operation: "run", input: { request },
+  }));
+  expect(liveResult).toMatchObject({ pluginId, value: '{"result":42}' });
+  await expect.poll(() => page.evaluate(() => window.propriumPluginGitCalls)).toEqual({ listFiles: 0, read: 0 });
+
+  await page.getByRole("button", { name: "Stop Live MCP" }).click();
 });
 
 test("Host keeps newer editor text when a reviewed plugin proposal refresh finishes late", async ({ page }) => {
