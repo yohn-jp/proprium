@@ -1,13 +1,16 @@
 {
   "name": "proprium-host",
+  "workers_dev": false,
   "compatibility_date": "2026-10-25",
   "env": {
     "preview": {
       "name": "proprium-host-preview",
+      "workers_dev": false,
       "routes": [{ "pattern": "proprium-preview.yohn.jp", "custom_domain": true }]
     },
     "production": {
       "name": "proprium-host-production",
+      "workers_dev": false,
       "routes": [{ "pattern": "proprium.yohn.jp", "custom_domain": true }]
     }
   },

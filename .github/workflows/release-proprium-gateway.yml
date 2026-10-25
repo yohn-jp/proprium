@@ -2,8 +2,8 @@ name: Release Proprium Gateway
 
 on:
   push:
-    tags:
-      - proprium-gateway-v*
+    branches:
+      - main
   workflow_dispatch:
     inputs:
       tag:
@@ -15,12 +15,12 @@ permissions:
   contents: read
 
 concurrency:
-  group: proprium-gateway-release-${{ github.event_name == 'workflow_dispatch' && inputs.tag || github.ref }}
+  group: proprium-gateway-release-${{ github.ref }}
   cancel-in-progress: false
 
 jobs:
   build:
-    name: Verify tagged source and build binaries
+    name: Verify main source and build binaries
     runs-on: ubuntu-24.04
     timeout-minutes: 30
     outputs:
@@ -33,7 +33,7 @@ jobs:
     steps:
       - uses: actions/checkout@v4
         with:
-          ref: ${{ github.event_name == 'workflow_dispatch' && inputs.tag || github.ref }}
+          ref: ${{ github.event_name == 'workflow_dispatch' && inputs.tag || github.sha }}
           fetch-depth: 0
           persist-credentials: false
       - uses: actions/setup-go@v6
@@ -43,7 +43,7 @@ jobs:
       - name: Verify tag identifies a commit on main
         id: source
         env:
-          INPUT_TAG: ${{ github.event_name == 'workflow_dispatch' && inputs.tag || github.ref_name }}
+          INPUT_TAG: ${{ github.event_name == 'workflow_dispatch' && inputs.tag || format('proprium-gateway-v0.0.{0}', github.run_number) }}
         run: |
           set -eu
           case "$INPUT_TAG" in
@@ -54,10 +54,16 @@ jobs:
             echo "Tag must use canonical semantic version syntax." >&2
             exit 1
           fi
-          git fetch --no-tags origin \
-            '+refs/heads/main:refs/remotes/origin/main' \
-            "+refs/tags/${INPUT_TAG}:refs/tags/${INPUT_TAG}"
-          tag_commit="$(git rev-parse "refs/tags/${INPUT_TAG}^{commit}")"
+          git fetch --no-tags origin '+refs/heads/main:refs/remotes/origin/main'
+          if [ "$GITHUB_EVENT_NAME" = workflow_dispatch ]; then
+            git fetch --no-tags origin "+refs/tags/${INPUT_TAG}:refs/tags/${INPUT_TAG}"
+            tag_commit="$(git rev-parse "refs/tags/${INPUT_TAG}^{commit}")"
+          else
+            tag_commit="$(git rev-parse HEAD)"
+            if git ls-remote --exit-code --tags origin "refs/tags/${INPUT_TAG}" >/dev/null; then
+              echo 'Automatic release tag already exists.' >&2; exit 1
+            fi
+          fi
           test "$tag_commit" = "$(git rev-parse HEAD)"
           git merge-base --is-ancestor "$tag_commit" origin/main
           version="${INPUT_TAG#proprium-gateway-v}"
@@ -107,7 +113,7 @@ jobs:
     steps:
       - uses: actions/checkout@v4
         with:
-          ref: ${{ github.event_name == 'workflow_dispatch' && inputs.tag || github.ref }}
+          ref: ${{ github.event_name == 'workflow_dispatch' && inputs.tag || github.sha }}
           fetch-depth: 0
           persist-credentials: false
       - name: Download binaries from this workflow run
@@ -118,17 +124,20 @@ jobs:
       - name: Verify source manifest and checksums before publishing
         id: source
         env:
-          INPUT_TAG: ${{ github.event_name == 'workflow_dispatch' && inputs.tag || github.ref_name }}
+          INPUT_TAG: ${{ github.event_name == 'workflow_dispatch' && inputs.tag || format('proprium-gateway-v0.0.{0}', github.run_number) }}
         run: |
           set -eu
           case "$INPUT_TAG" in
             proprium-gateway-v[0-9]*.[0-9]*.[0-9]*) ;;
             *) echo "Expected proprium-gateway-vX.Y.Z." >&2; exit 1 ;;
           esac
-          git fetch --no-tags origin \
-            '+refs/heads/main:refs/remotes/origin/main' \
-            "+refs/tags/${INPUT_TAG}:refs/tags/${INPUT_TAG}"
-          tag_commit="$(git rev-parse "refs/tags/${INPUT_TAG}^{commit}")"
+          git fetch --no-tags origin '+refs/heads/main:refs/remotes/origin/main'
+          if [ "$GITHUB_EVENT_NAME" = workflow_dispatch ]; then
+            git fetch --no-tags origin "+refs/tags/${INPUT_TAG}:refs/tags/${INPUT_TAG}"
+            tag_commit="$(git rev-parse "refs/tags/${INPUT_TAG}^{commit}")"
+          else
+            tag_commit="$(git rev-parse HEAD)"
+          fi
           git merge-base --is-ancestor "$tag_commit" origin/main
           test "$tag_commit" = "$(git rev-parse HEAD)"
           grep -Fx "tag=${INPUT_TAG}" release-assets/SOURCE.txt
@@ -146,6 +155,6 @@ jobs:
           printf 'Proprium Gateway %s.\n\nSource commit: %s. Verify downloaded files with SHA256SUMS. Each platform artifact is one self-contained executable; it requires neither a container nor a database.\n' \
             "${TAG#proprium-gateway-v}" "$COMMIT" > /tmp/proprium-release-notes.md
           gh release create "$TAG" release-assets/* \
-            --verify-tag \
+            --target "$COMMIT" \
             --title "$TAG" \
             --notes-file /tmp/proprium-release-notes.md

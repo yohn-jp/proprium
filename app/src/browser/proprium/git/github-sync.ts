@@ -122,7 +122,7 @@ async function jsonRequest(fetcher: typeof fetch, url: string, init: RequestInit
     response = await fetcher(url, {
       ...init,
       cache: "no-store",
-      credentials: init.credentials ?? "omit",
+      credentials: "omit",
       redirect: "error",
       referrerPolicy: "no-referrer",
     });
@@ -256,7 +256,6 @@ export function createGitHubAccountSession(
       authorization = null;
       const payload = object(await jsonRequest(fetcher, `${relayOrigin}/oauth/device/code`, {
         method: "POST",
-        credentials: "include",
         headers: { Accept: "application/json", "Content-Type": "application/json" },
         body: "{}",
       }));
@@ -287,7 +286,6 @@ export function createGitHubAccountSession(
           }
           const raw = await jsonRequest(fetcher, `${relayOrigin}/oauth/token`, {
             method: "POST",
-            credentials: "include",
             headers: { Accept: "application/json", "Content-Type": "application/json" },
             body: JSON.stringify({ deviceCode: pending.deviceCode }),
           });

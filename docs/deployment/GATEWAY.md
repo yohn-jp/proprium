@@ -2,6 +2,10 @@
 
 The Gateway is a single Go executable. It needs no root account, database, Node.js runtime, container or writable data directory. It serves GitHub OAuth Device Flow, restricted Git Smart HTTP fallback and, when configured with an owner key, the optional Live Workspace MCP control plane. It does not store GitHub tokens, repositories, workspace contents, search indexes or Git objects.
 
+## Automated releases from main
+
+Every push to `main` runs the Gateway release workflow. After the race-enabled Go tests, vet and cross-platform builds pass, GitHub Actions publishes an immutable `proprium-gateway-v0.0.<workflow-run-number>` release containing platform binaries, `SHA256SUMS`, and `SOURCE.txt`. The run number is a monotonically increasing CI build identifier, **not** a claim of semantic-version compatibility. GitHub's latest release points to the newest published successful release; a failed build must not publish one. The workflow retains manual dispatch for an existing canonical Gateway tag on main. Release publication does not deploy or restart the server; operators explicitly fetch and verify the desired release.
+
 ## Download and verify
 
 Download the release binary for the target OS/architecture and `SHA256SUMS` from the matching `proprium-gateway-vX.Y.Z` GitHub Release. Verify it before use:
