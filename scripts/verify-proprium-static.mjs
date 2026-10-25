@@ -45,7 +45,11 @@ const headers = readFileSync(headersPath, "utf8");
 assert.match(headers, /X-Content-Type-Options: nosniff/u);
 assert.match(headers, /Content-Security-Policy:/u);
 assert.match(headers, /script-src 'self' 'wasm-unsafe-eval' blob:/u);
-assert.match(headers, /connect-src 'self' https:\/\/api\.github\.com https:\/\/github\.com/u);
+const connectionSources = /connect-src ([^;\n]+)/u.exec(headers)?.[1].split(/\s+/u) ?? [];
+for (const required of ["'self'", "https:", "http://localhost:*", "http://127.0.0.1:*", "https://api.github.com", "https://github.com"]) {
+  assert.ok(connectionSources.includes(required), `Host must allow its configured HTTPS Gateway and local development transport: ${required}`);
+}
+assert.ok(!connectionSources.some(source => ["*", "http:", "ws:", "wss:"].includes(source)), "Runtime Gateway selection must not enable unrestricted plaintext or WebSocket transport");
 assert.match(headers, /worker-src 'self' blob:/u);
 assert.match(headers, /\/index\.html\n\s+Cache-Control: no-cache/u);
 assert.match(headers, /\/proprium-sw\.js\n\s+Cache-Control: no-cache/u);
