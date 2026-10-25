@@ -182,6 +182,9 @@ elif url.startswith("https://github.com/yohn-jp/proprium/releases/download/"):
 else:
     os.execv(os.environ["LIFECYCLE_REAL_CURL"], [os.environ["LIFECYCLE_REAL_CURL"]]+args)
 out=args[args.index("-o")+1] if "-o" in args else args[args.index("--output")+1]
+if os.environ.get("LIFECYCLE_PARTIAL_DOWNLOAD") == "1" and str(src).endswith(".tar.gz"):
+    pathlib.Path(out).write_bytes(src.read_bytes()[:4096])
+    sys.exit(18)
 shutil.copyfile(src,out)
 ''')
         shim.chmod(0o755)
@@ -223,6 +226,8 @@ shutil.copyfile(src,out)
             return result
 
         unit_path = unit_config_home / "systemd/user" / unit
+        missing = run([cli, "setup", "--non-interactive"], env=env, check=False)
+        assert missing.returncode != 0 and "required" in missing.stderr, "missing noninteractive settings did not fail clearly"
         cli_run("install", timeout=150)
         assert unit_path.is_file()
         assert secret_token not in unit_path.read_text() and access_secret not in unit_path.read_text()
@@ -359,7 +364,14 @@ shutil.copyfile(src,out)
         assert failed.returncode != 0 and os.readlink(data / "current") == "releases/1.0.0"
         env.pop("LIFECYCLE_NETWORK_FAIL")
 
+        # An interrupted bundle transfer must leave the current service and version untouched.
         env["LIFECYCLE_VERSION"] = "1.0.5"
+        existing_gateway_pid = (runtime / "gateway.pid").read_text()
+        failed = cli_run("update", check=False, timeout=45, env_extra={"LIFECYCLE_PARTIAL_DOWNLOAD": "1"})
+        assert failed.returncode != 0 and "Download failed" in failed.stderr
+        assert os.readlink(data / "current") == "releases/1.0.0"
+        assert (runtime / "gateway.pid").read_text() == existing_gateway_pid
+        assert cli_run("status").returncode == 0
         mv_shim_dir = work / "mv-shim"
         mv_shim_dir.mkdir()
         real_mv = shutil.which("mv", path=env["PATH"])
