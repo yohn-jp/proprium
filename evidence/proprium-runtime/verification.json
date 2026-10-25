@@ -1,8 +1,8 @@
 {
   "schema": "proprium.execution-evidence/v1",
-  "recordedAt": "2026-10-25T05:32:05.014146+00:00",
+  "recordedAt": "2026-10-25T05:54:30.006062+00:00",
   "baseMain": "0b88fb25f5df825121ade6d4921fa46798daa3b5",
-  "sourceHead": "af45252bd4dc4a124007ca4b8b54f52578e3b977",
+  "sourceHead": "f73a049089db4deb280be93dda402a2b749bac6c",
   "scope": {
     "G1": "Browser Git and GitHub workspace synchronization",
     "G2": "Generic browser Host and responsive desktop/mobile interface",
@@ -183,6 +183,22 @@
     {
       "sha": "af45252bd4dc4a124007ca4b8b54f52578e3b977",
       "subject": "test(browser): preserve edits during plugin refresh"
+    },
+    {
+      "sha": "fc1c918c2eb0c084232b9d0dda33f9ead23dff63",
+      "subject": "docs(evidence): record browser runtime verification"
+    },
+    {
+      "sha": "265d45fcf4931e30108b1eb1c81353d467d37228",
+      "subject": "test(browser): make static sidebar waits responsive"
+    },
+    {
+      "sha": "ab4b48248bd78601d92a788eadf52db8c2c4d04f",
+      "subject": "fix(plugins): reject signed registry replay rollback"
+    },
+    {
+      "sha": "f73a049089db4deb280be93dda402a2b749bac6c",
+      "subject": "fix(plugins): scope registry state to pinned root"
     }
   ],
   "checks": [
@@ -201,15 +217,15 @@
       "name": "browser security and synchronization unit tests",
       "command": "pnpm test:browser:unit",
       "result": "PASS",
-      "passed": 31
+      "passed": 34
     },
     {
       "name": "Git and Component browser adapters",
-      "command": "pnpm exec playwright test --config tests/e2e/playwright.config.ts",
+      "command": "pnpm test:browser:adapters",
       "result": "PASS",
-      "passed": 15,
+      "passed": 18,
       "skipped": 2,
-      "detail": "Skipped opt-in live GitHub cases are covered separately below. Aggregate config omits WebKit local-only suite; CI adapter runner separately selects each suite."
+      "detail": "The full successful CI at 265d45fcf4931e30108b1eb1c81353d467d37228 selects each preserved suite separately, including mobile local Git; only opt-in live GitHub cases skip. Actual live GitHub Host checks passed separately."
     },
     {
       "name": "Host plugin and offline workspace UI",
@@ -263,6 +279,11 @@
       "name": "documentation and retained evidence",
       "result": "PASS",
       "detail": "15 maintained Markdown files have no missing local links; 2 immutable legacy evidence retention tests pass; git diff --check passes."
+    },
+    {
+      "name": "signed registry replay and pinned-root rotation",
+      "result": "PASS",
+      "detail": "A previously observed revocation cannot be undone by an older signed index; exact replay is allowed; same-version changed bytes or missing proof fails closed. New pinned roots have separate observed-version state and cannot reauthorize old cached install records. The 10 manager unit tests and 6 Chromium/WebKit plugin browser cases pass after these fixes."
     }
   ],
   "liveGitHubFixture": {
@@ -271,7 +292,7 @@
     "initialHead": "6b759aea216123b930588c950ff48fddff6402fc",
     "lastConfirmedPublishedHead": "1f9bdcd9aea835cecce5b9fed425dcf0f579a61d",
     "credentialsPersisted": false,
-    "cleanup": "Disposable branch is removed after verification; commit IDs remain evidence, not a durability guarantee."
+    "cleanup": "REMOVED: the task-created disposable branch was deleted after verification; its confirmed commit SHAs above remain evidence."
   },
   "browserEnvironment": {
     "chromium": "Chromium 155.0.8059.84 on Linux",
@@ -297,7 +318,17 @@
     "workflow": ".github/workflows/verify.yml",
     "initialSuccessfulRun": "https://github.com/yohn-jp/proprium/actions/runs/40164899681",
     "initialSuccessfulHead": "7b3a3a2d53418bfd85470e9a4d693e482e06e587",
-    "detail": "The initial run predates always-on static fixture coverage; final verification must use the later main check run."
+    "detail": "The linked full run passed every step including always-on static Chromium and WebKit offline/Component tests. Source changes after that run add signed-registry replay/root-scope protection (unit count is now 34); final CI must use check runs attached to the later main commit.",
+    "latestFullSuccessfulRun": "https://github.com/yohn-jp/proprium/actions/runs/40166621545",
+    "latestFullSuccessfulHead": "265d45fcf4931e30108b1eb1c81353d467d37228",
+    "latestFullSuccessfulCounts": {
+      "unitPassed": 31,
+      "hostPassed": 10,
+      "hostSkippedOptInLive": 2,
+      "staticPassed": 2,
+      "adapterPassed": 18,
+      "adapterSkippedOptInLive": 2
+    }
   },
   "deployment": {
     "productionDeployed": false,
