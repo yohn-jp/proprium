@@ -29,6 +29,7 @@ test('shared app changes retain both profile browser coverage without backend un
     assert.ok(selected.tasks.includes(`build-${profile}`));
     assert.ok(selected.tasks.includes(`browser-${profile}-webkit`));
     assert.ok(selected.tasks.includes(`browser-${profile}-core`));
+    assert.ok(selected.tasks.includes(`browser-${profile}-git`));
   }
   assert.ok(!selected.tasks.includes('unit-api'));
   assert.ok(!selected.tasks.some(task => task.startsWith('hosted-native-')));

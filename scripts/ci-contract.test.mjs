@@ -8,10 +8,10 @@ import { REQUIRED_VERIFICATION_JOBS, VERIFICATION_LEAF_JOBS, UNIT_TARGETS, TYPEC
 const require = createRequire(new URL('../packages/core/package.json', import.meta.url));
 const { parse } = require('yaml');
 const workflow = parse(readFileSync(new URL('../.github/workflows/verify.yml', import.meta.url), 'utf8'));
-test('twenty execution jobs retain all fifty-one validation obligations exactly once', () => {
+test('twenty execution jobs retain all fifty-three validation obligations exactly once', () => {
   assert.equal(REQUIRED_VERIFICATION_JOBS.length, 20);
   assert.equal(VERIFICATION_LEAF_JOBS.length, 19);
-  assert.equal(VERIFICATION_TASKS.length, 51);
+  assert.equal(VERIFICATION_TASKS.length, 53);
   const tasks = Object.values(VERIFICATION_GROUPS).flat();
   assert.equal(new Set(tasks).size, tasks.length);
   assert.deepEqual(tasks.toSorted(), VERIFICATION_TASKS.toSorted());
