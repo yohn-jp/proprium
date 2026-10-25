@@ -52,6 +52,13 @@ globalThis.Date = FrozenDate;
     await git.write("notes/日記.md", new TextEncoder().encode("two\n"), text.revision);
     await git.write("assets/sample.bin", bytes, { oid: null });
     const remaining = await git.write("draft.txt", new TextEncoder().encode("still draft"), { oid: null });
+    const temporary = await git.write("remove-me.txt", new TextEncoder().encode("temporary"), { oid: null });
+    const listedBeforeDelete = await git.listFiles();
+    await git.delete("remove-me.txt", temporary);
+    const listedAfterDelete = await git.listFiles();
+    let staleDelete = "none";
+    try { await git.delete("remove-me.txt", temporary); }
+    catch (error) { staleDelete = (error as { code?: string }).code ?? "unknown"; }
     const diff = await git.diff();
     const preCommitStatus = await git.status();
     const binary = diff.find((entry) => entry.path === "assets/sample.bin");
@@ -67,7 +74,7 @@ globalThis.Date = FrozenDate;
     const log = await git.log();
     const branch = await git.createBranch("review", secondCommit.oid);
     git.close();
-    return { secondCommit, status, log, branch, binaryRoundTrip, textDiffBytes, diffPaths: diff.map((entry) => entry.path), preCommitStatus, remaining };
+    return { secondCommit, status, log, branch, binaryRoundTrip, textDiffBytes, diffPaths: diff.map((entry) => entry.path), preCommitStatus, remaining, listedBeforeDelete, listedAfterDelete, staleDelete };
   }, { workspaceId: id, expectedHead: first.firstCommit.oid });
   expect(second.secondCommit.oid).toMatch(/^[a-f0-9]{40}$/u);
   expect(second.secondCommit.oid).not.toBe(first.firstCommit.oid);
@@ -78,6 +85,9 @@ globalThis.Date = FrozenDate;
   expect(second.branch).toEqual({ branch: "review", head: second.secondCommit.oid });
   expect(second.binaryRoundTrip).toEqual([0, 255, 128, 1, 13, 10]);
   expect(second.preCommitStatus.entries.map((entry) => entry.path)).toContain("notes/日記.md");
+  expect(second.listedBeforeDelete.map((entry) => entry.path)).toContain("remove-me.txt");
+  expect(second.listedAfterDelete.map((entry) => entry.path)).not.toContain("remove-me.txt");
+  expect(second.staleDelete).toBe("revision_conflict");
   expect(second.diffPaths).toContain("notes/日記.md");
   expect(second.textDiffBytes).toEqual({ head: Array.from(new TextEncoder().encode("one\n")), worktree: Array.from(new TextEncoder().encode("two\n")) });
 

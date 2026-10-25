@@ -7,17 +7,19 @@ import type {
   LocalGitRequest,
   LocalGitResponse,
   StatusEntry,
+  WorkspaceFile,
   DiffChange,
   WorkspaceIdentity,
 } from "./protocol.js";
 import { validateGitPath, validateWorkspaceIdentity } from "./protocol.js";
-import { createGitHubSyncClient, GitHubSyncError } from "./github-sync.js";
-import type { GitHubAccount, GitHubDevicePrompt, GitHubFetchResult, GitHubPullResult, GitHubPublishResult, GitHubRemoteHead, GitHubSyncClient, GitHubRemoteOperation } from "./github-sync.js";
+import { createGitHubAccountSession, GitHubSyncError } from "./github-sync.js";
+import type { GitHubAccount, GitHubAccountSession, GitHubDevicePrompt, GitHubFetchResult, GitHubPullResult, GitHubPublishResult, GitHubRemoteHead, GitHubRepository, GitHubSyncClient, GitHubRemoteOperation } from "./github-sync.js";
 
 export { validateGitPath, validateWorkspaceIdentity } from "./protocol.js";
-export type { CommitAuthor, CommitSummary, DiffChange, FileRevision, LocalGitError, LocalGitErrorCode, StatusEntry, WorkspaceIdentity };
+export type { CommitAuthor, CommitSummary, DiffChange, FileRevision, LocalGitError, LocalGitErrorCode, StatusEntry, WorkspaceFile, WorkspaceIdentity };
 export { GitHubSyncError } from "./github-sync.js";
-export type { GitHubAccount, GitHubDevicePrompt, GitHubFetchResult, GitHubPullResult, GitHubPublishResult, GitHubRemoteHead, GitHubSyncClient } from "./github-sync.js";
+export { createGitHubAccountSession } from "./github-sync.js";
+export type { GitHubAccount, GitHubAccountSession, GitHubDevicePrompt, GitHubFetchResult, GitHubPullResult, GitHubPublishResult, GitHubRemoteHead, GitHubRepository, GitHubSyncClient } from "./github-sync.js";
 
 type LocalGitCommand = LocalGitRequest extends infer Request
   ? Request extends { id: string; workspace: WorkspaceIdentity } ? Omit<Request, "id" | "workspace"> : never
@@ -125,6 +127,13 @@ export class BrowserLocalGit {
     return { oid: result.oid };
   }
 
+  async delete(path: string, expected: FileRevision): Promise<void> {
+    validateGitPath(path);
+    await this.call({ operation: "delete", path, expected });
+  }
+
+  listFiles(): Promise<WorkspaceFile[]> { return this.call({ operation: "list-files" }); }
+
   status(): Promise<LocalGitStatus> { return this.call({ operation: "status" }); }
 
   diff(): Promise<DiffChange[]> {
@@ -162,8 +171,16 @@ export class BrowserLocalGit {
     return this.call({ operation: "create-branch", name, expectedHead });
   }
 
-  /** Host-only GitHub sync surface. Keep this object out of plugin capability grants. */
+  /** Create an OAuth session already bound to this verified workspace identity. */
   connectGitHub(authRelayUrl: string, fetcher: typeof fetch = fetch): GitHubSyncClient {
+    const session = createGitHubAccountSession(authRelayUrl, fetcher);
+    const client = this.connectGitHubSession(session);
+    this.githubSessions.add(client);
+    return client;
+  }
+
+  /** Bind an existing account session so repository selection does not sign in a second time. */
+  connectGitHubSession(session: GitHubAccountSession): GitHubSyncClient {
     const send: GitHubRemoteOperation = async <T>(
       operation: "remote-head" | "remote-fetch" | "remote-pull" | "remote-publish",
       token: string,
@@ -185,9 +202,7 @@ export class BrowserLocalGit {
         throw error;
       }
     };
-    const session = createGitHubSyncClient(authRelayUrl, send, fetcher);
-    this.githubSessions.add(session);
-    return session;
+    return session.connect(send);
   }
 
   close(): void {

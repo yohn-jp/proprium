@@ -42,6 +42,13 @@ export interface StatusEntry {
   stage: number;
 }
 
+export interface WorkspaceFile {
+  path: string;
+  type: "blob";
+  oid: string;
+  bytes: number;
+}
+
 export interface FileVersion {
   oid: string;
   data: Uint8Array;
@@ -71,6 +78,8 @@ export type LocalGitRequest =
   | { id: string; workspace: WorkspaceIdentity; operation: "verify" }
   | { id: string; workspace: WorkspaceIdentity; operation: "read"; path: string }
   | { id: string; workspace: WorkspaceIdentity; operation: "write"; path: string; data: Uint8Array; expected: FileRevision }
+  | { id: string; workspace: WorkspaceIdentity; operation: "delete"; path: string; expected: FileRevision }
+  | { id: string; workspace: WorkspaceIdentity; operation: "list-files" }
   | { id: string; workspace: WorkspaceIdentity; operation: "status" }
   | { id: string; workspace: WorkspaceIdentity; operation: "diff" }
   | { id: string; workspace: WorkspaceIdentity; operation: "add"; paths: string[]; expectedHead: string | null }

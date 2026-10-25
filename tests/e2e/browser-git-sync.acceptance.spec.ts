@@ -307,6 +307,40 @@ function corsHeaders(origin = hostOrigin): Record<string, string> {
   };
 }
 
+test("an empty remote branch opens as an empty workspace without a false conflict", async ({ page }) => {
+  await page.route("https://api.github.com/**", async (route) => {
+    if (route.request().method() === "OPTIONS") return route.fulfill({ status: 204, headers: corsHeaders() });
+    const url = new URL(route.request().url());
+    const json = (value: unknown, status = 200) => route.fulfill({ status, headers: corsHeaders(), contentType: "application/json", body: JSON.stringify(value) });
+    if (url.pathname === "/user") return json({ id: 88, login: "writer" });
+    if (url.pathname === "/repos/proprium-test/browser-git-fixture") return json({
+      id: repositoryId, full_name: "proprium-test/browser-git-fixture", owner: { login: "proprium-test" }, permissions: { pull: true, push: true },
+    });
+    if (url.pathname === "/repos/proprium-test/browser-git-fixture/git/ref/heads/main") return json({ message: "Not Found" }, 404);
+    return json({ message: `Unexpected ${route.request().method()} ${url.pathname}` }, 404);
+  });
+
+  await page.goto("/browser-git-test.html");
+  await expect(page.locator("#ready")).toHaveText("ready");
+  const result = await page.evaluate(async ({ id, relayUrl }) => {
+    const git = window.browserGitTest.open(id);
+    const initialized = await git.init();
+    const sync = git.connectGitHub(relayUrl);
+    await sync.beginAuthorization();
+    await sync.completeAuthorization();
+    const pulled = await sync.pull();
+    const files = await git.listFiles();
+    const status = await git.status();
+    sync.signOut();
+    git.close();
+    return { initialized, pulled, files, status };
+  }, { id: `empty-${crypto.randomUUID()}`, relayUrl: relayOrigin });
+  expect(result.initialized.head).toBeNull();
+  expect(result.pulled).toEqual({ state: "up-to-date", head: null });
+  expect(result.files).toEqual([]);
+  expect(result.status).toMatchObject({ head: null, localState: "draft", entries: [] });
+});
+
 test("GitHub REST fetch and pull preserve local Git objects and commit SHA", async ({ page }) => {
   const initial = fixtureCommit("remote bytes\n", "remote commit", null, "2024-01-01T00:00:00Z");
   const commits = new Map([[initial.sha, initial]]);

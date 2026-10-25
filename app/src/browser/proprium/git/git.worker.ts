@@ -694,7 +694,10 @@ async function operation(request: LocalGitRequest): Promise<unknown> {
       return { repositoryId: request.workspace.repositoryId, branch: request.workspace.branch, head: remoteHead, localHead, importedCommits };
     }
     if (remoteHead === localHead) return { state: "up-to-date", head: localHead };
-    if (!remoteHead) return { state: "conflict", localHead, remoteHead };
+    if (!remoteHead) {
+      if (!localHead) return { state: "up-to-date", head: null };
+      return { state: "conflict", localHead, remoteHead };
+    }
     if (localHead && !(await isAncestor(paths.dir, localHead, remoteHead))) {
       return { state: "conflict", localHead, remoteHead };
     }
@@ -822,6 +825,42 @@ async function operation(request: LocalGitRequest): Promise<unknown> {
     } catch { failure("storage_unknown", "The local write could not be confirmed in browser storage."); }
     return { oid: updated.oid, localState: "draft" };
   }
+  if (request.operation === "delete") {
+    validateGitPath(request.path);
+    await assertNoSymlinkParents(paths.dir, request.path, true);
+    const file = `${paths.dir}/${request.path}`;
+    const found = await exists(file);
+    if (!found) {
+      if (request.expected.oid !== null) failure("revision_conflict", "The file disappeared since it was read; reload it before deleting.");
+      return;
+    }
+    const stats = await fs.lstat(file);
+    if (!stats.isFile()) failure("invalid_path", "Only regular repository files can be deleted.");
+    const current = await git.hashBlob({ object: new Uint8Array(await fs.readFile(file)) });
+    if (current.oid !== request.expected.oid) failure("revision_conflict", "The file changed since it was read; reload it before deleting.");
+    try {
+      await fs.unlink(file);
+      await flush();
+    } catch { failure("storage_unknown", "The local deletion could not be confirmed in browser storage."); }
+    return;
+  }
+  if (request.operation === "list-files") {
+    const rows = await git.statusMatrix({ fs, dir: paths.dir });
+    const files: Array<{ path: string; type: "blob"; oid: string; bytes: number }> = [];
+    for (const [path, , worktree] of rows) {
+      if (!worktree || path === ".git" || path.startsWith(".git/")) continue;
+      if (await git.isIgnored({ fs, dir: paths.dir, filepath: path })) continue;
+      validateGitPath(path);
+      await assertNoSymlinkParents(paths.dir, path, true);
+      const file = `${paths.dir}/${path}`;
+      const stats = await fs.lstat(file);
+      if (!stats.isFile()) failure("invalid_path", "Only regular repository files can be listed in the workspace.");
+      const data = new Uint8Array(await fs.readFile(file));
+      const { oid } = await git.hashBlob({ object: data });
+      files.push({ path, type: "blob", oid, bytes: data.byteLength });
+    }
+    return files.sort((left, right) => left.path.localeCompare(right.path));
+  }
   if (request.operation === "status") {
     const entries = await status(paths.dir);
     const head = await currentHead(paths.dir);
@@ -919,7 +958,7 @@ scope.addEventListener("message", async (event: MessageEvent<LocalGitRequest>) =
   const workspaceId = request.workspace?.localWorkspaceId ?? "";
   try {
     if (!scope.navigator.locks) failure("lock_unavailable", "This browser does not provide Web Locks; local Git workspace access is disabled.");
-    const write = ["init", "write", "add", "commit", "create-branch", "verify", "remote-fetch", "remote-pull", "remote-publish"].includes(request.operation);
+    const write = ["init", "write", "delete", "add", "commit", "create-branch", "verify", "remote-fetch", "remote-pull", "remote-publish"].includes(request.operation);
     const paths = await workspacePaths(request.workspace);
     const result = await scope.navigator.locks.request(paths.lock, { mode: write ? "exclusive" : "shared", ifAvailable: true }, async (lock) => {
       if (!lock) failure("workspace_busy", "Another tab is using this local workspace. Retry when its operation finishes.");
