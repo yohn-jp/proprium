@@ -21,3 +21,10 @@
 .restored-host .host-message button { flex: 0 0 auto; margin-inline-start: auto; }
 .restored-host .mobile-shell:has(.mobile-shell-writing-accessories) .mobile-shell-status,
 .restored-host .mobile-shell.mobile-shell-keyboard-open .mobile-shell-status { bottom: auto; }
+.storage-recovery-launcher { position: fixed; z-index: 1000; top: 1rem; right: 1rem; min-height: 2.75rem; }
+.storage-recovery-dialog { box-sizing: border-box; width: min(36rem, calc(100vw - 2rem)); max-height: calc(100dvh - 2rem); padding: 1.25rem; overflow: auto; color: var(--ink); background: var(--paper); border: 1px solid var(--line); border-radius: .5rem; }
+.storage-recovery-dialog::backdrop { background: rgb(0 0 0 / 45%); }
+.storage-recovery-dialog p { overflow-wrap: anywhere; }
+.storage-recovery-error { color: var(--error); }
+.storage-recovery-actions { display: flex; flex-wrap: wrap; gap: .5rem; }
+.storage-recovery-actions button { min-height: 2.75rem; }

@@ -12,6 +12,7 @@ import { DesktopShell } from "../../../shells/desktop/DesktopShell.js";
 import { ThemeControl } from "../../../components/ThemeControl.js";
 import { applyThemeMode, loadThemeMode, persistThemeMode } from "../../../theme.js";
 import type { WorkspacePanel } from "../../../application/contracts.js";
+import { StorageRecoveryDialog } from "./StorageRecoveryDialog.js";
 import { RestoredEditor } from "./RestoredEditor.js";
 const MobileShell = lazy(() => import("../../../shells/mobile/MobileShell.js").then(module => ({ default: module.MobileShell })));
 
@@ -594,6 +595,7 @@ export function HostApp(): ReactElement {
   };
   const recoverStorage = async (entry: RecentWorkspace): Promise<void> => {
     setBusy(true);
+    setRecoveryTarget(entry);
     const active = workspace?.identity.localWorkspaceId === entry.identity.localWorkspaceId ? gitRef.current : null;
     const candidate = active ?? new BrowserLocalGit(entry.identity);
     try {
@@ -608,7 +610,7 @@ export function HostApp(): ReactElement {
     finally { setBusy(false); }
   };
   const recoveryEntry = recoveryTarget ?? (message?.text.startsWith("storage_unknown:") ? workspace : null);
-  const recovery = recoveryEntry && <section role="alert"><h2>ブラウザー内Gitの整合性確認</h2><p>前回の操作結果が未確定です。保存データを削除せず、Gitオブジェクトと作業状態を検証します。</p><button disabled={busy} onClick={() => void recoverStorage(recoveryEntry)}>保存データの整合性を確認</button></section>;
+
   const picker = <section className="workspace-picker" aria-labelledby="picker-heading">
       <div className="welcome-copy"><p className="eyebrow">A workspace that stays yours</p><h1 id="picker-heading">Open a GitHub workspace</h1><p>Open a repository in this browser, edit files offline, commit locally, and publish when you are ready.</p></div>
       <div className="picker-grid">
@@ -678,7 +680,7 @@ export function HostApp(): ReactElement {
             onExecutePlugin={executeLivePlugin}
           />}
 </div>;
-  const inspector = <div className="host-controls"><button onClick={() => revealPanel("history")}>History</button>{recovery}<section className="commit-panel" aria-labelledby="commit-heading">
+  const inspector = <div className="host-controls"><button onClick={() => revealPanel("history")}>History</button><section className="commit-panel" aria-labelledby="commit-heading">
             <div className="dock-heading"><div><p className="eyebrow">LOCAL GIT</p><h2 id="commit-heading">Changes</h2></div><span className="count-badge">{status.entries.length}</span></div>
             <div className="change-summary" aria-live="polite">{status.entries.length ? `${status.entries.length} changed file${status.entries.length === 1 ? "" : "s"}` : status.head ? `Clean at ${status.head.slice(0, 10)}` : "No local commit yet"}</div>
             <label htmlFor="commit-message">Commit message</label><input id="commit-message" value={commitMessage} onChange={event => setCommitMessage(event.target.value)} placeholder="Describe your changes" maxLength={100_000} />
@@ -706,16 +708,16 @@ export function HostApp(): ReactElement {
     { id: "history", title: "履歴", render: () => historyPanel },
     { id: "review", title: "レビューとツール", render: () => <RetainedPanelSlot node={toolsNode} /> },
   ];
-  const statusSurface = <>{recovery}{message && <div className={`host-message message-${message.tone}`} role={message.tone === "error" ? "alert" : "status"}>{message.text}<button aria-label="Dismiss message" onClick={() => setMessage(null)}>×</button></div>}<span className="save-state" role="status">{workspace ? saveStateLabel(syncState, status.head) : "Browser workspace"}</span></>;
+  const statusSurface = <>{message && !recoveryEntry && <div className={`host-message message-${message.tone}`} role={message.tone === "error" ? "alert" : "status"}>{message.text}<button aria-label="Dismiss message" onClick={() => setMessage(null)}>×</button></div>}<span className="save-state" role="status">{workspace ? saveStateLabel(syncState, status.head) : "Browser workspace"}</span></>;
   const Shell = mode === "desktop" ? DesktopShell : MobileShell;
-  return <main className="proprium-host restored-host" onKeyDown={event => { if ((event.metaKey || event.ctrlKey) && event.key.toLowerCase() === "s") { event.preventDefault(); if (!busy) void saveDraft(); } }}><Suspense fallback={<p>ワークスペースを開いています…</p>}><Shell mode={mode}
+  return <main className="proprium-host restored-host" onKeyDown={event => { if ((event.metaKey || event.ctrlKey) && event.key.toLowerCase() === "s") { event.preventDefault(); if (!busy && !recoveryEntry) void saveDraft(); } }}><Suspense fallback={<p>ワークスペースを開いています…</p>}><Shell mode={mode}
     header={<header className="topbar">{workspace && <button onClick={leaveWorkspace}>Workspaces</button>}<span>{workspace?.title ?? "Proprium"}</span><ThemeControl mode={theme} onChange={value => { setTheme(value); try { persistThemeMode(value); } catch { setMessage({ tone: "error", text: "外観設定を保存できませんでした。" }); } }} />{workspace && account && <button onClick={signOut}>Sign out</button>}</header>}
     documentTitle={currentFile?.path ?? workspace?.title ?? "Proprium"} documentContext={workspace?.identity.branch}
     desktopDurability={syncState === "published" ? "saved" : busy ? "checkpointing" : status.head && status.entries.length === 0 && !currentFile?.dirty ? "checkpointed" : "draft"}
     library={library} editor={workspace ? <RetainedPanelSlot node={editorNode} /> : editor} tools={<RetainedPanelSlot node={toolsNode} />} status={statusSurface} renderStatus={error => <>{statusSurface}{error && <p role="alert">{error}</p>}</>}
     onSwitchMode={async () => { if (!(await beforeLayoutChange())) return false; const next = mode === "desktop" ? "mobile" : "desktop"; setMode(next); try { localStorage.setItem("scriptorium:ui-mode", next); } catch { /* The active mode remains usable. */ } return true; }}
     workspaceScope={workspace?.identity.localWorkspaceId} panels={workspace ? panels : undefined} beforeLayoutChange={beforeLayoutChange} requestedPanel={requestedPanel} />
-  </Suspense>{workspace && createPortal(tools, toolsNode, workspace.identity.localWorkspaceId)}{workspace && createPortal(editor, editorNode, `editor:${workspace.identity.localWorkspaceId}`)}</main>;
+  </Suspense>{recoveryEntry && <StorageRecoveryDialog key={`recovery:${recoveryEntry.identity.localWorkspaceId}`} title={recoveryEntry.title} busy={busy} error={message?.tone === "error" ? message.text : ""} onVerify={() => void recoverStorage(recoveryEntry)} />}{workspace && createPortal(tools, toolsNode, workspace.identity.localWorkspaceId)}{workspace && createPortal(editor, editorNode, `editor:${workspace.identity.localWorkspaceId}`)}</main>;
 
   function updatePreferences(value: { name: string; email: string }): void {
     setPreferences(value);

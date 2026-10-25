@@ -4,7 +4,7 @@
 
 `HostApp` owns repository selection, Browser Git, GitHub OAuth, plugins and Live MCP. `RestoredEditor` binds the original editor to generic file paths and a local IndexedDB recovery journal. Layout and appearance storage keys are retained. Switching panels retains editor input, undo and reading state, plus the single plugin/MCP instance; closing a tool panel does not revoke clients or restart plugins. Checkpoint opens local Git review; Save draft writes the local worktree, and GitHub publication remains explicit.
 
-When Browser Git reports `storage_unknown`, the workspace picker exposes **保存データの整合性を確認**. It invokes the existing worker verification and only clears the uncertainty marker on success. Failure preserves the marker and stored bytes; no reset/delete action is substituted for verification.
+When Browser Git reports `storage_unknown`, a native dialog outside the shell/status shelf exposes **保存データの整合性を確認**. It invokes the existing worker verification and only clears the uncertainty marker on success. The dialog names the workspace, shows verification failures, and can be reopened with **Git保存状態を確認** after dismissal. Failure preserves the marker and stored bytes; no reset/delete action is substituted for verification.
 
 ## Shared intent, distinct device interactions
 

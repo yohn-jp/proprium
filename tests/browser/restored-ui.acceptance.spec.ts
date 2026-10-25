@@ -47,7 +47,19 @@ test("storage_unknown offers non-destructive verification and preserves workspac
   await page.evaluate(workspace => localStorage.setItem(`proprium.git.storage-unknown.${workspace.localWorkspaceId}`, "1"), workspace);
   await page.getByRole("button", { name: /proprium-test\/ui-restoration/u }).click();
   await expect(page.getByText(/storage_unknown:/u)).toBeVisible();
-  await page.getByRole("button", { name: "保存データの整合性を確認" }).click();
+  const recovery = page.getByRole("dialog", { name: "ブラウザー内Gitの整合性確認" });
+  await expect(recovery).toBeVisible();
+  expect(await recovery.evaluate(element => element.matches(":modal"))).toBe(true);
+  const verify = recovery.getByRole("button", { name: "保存データの整合性を確認" });
+  const bounds = await verify.boundingBox();
+  expect(bounds).not.toBeNull();
+  expect(bounds!.y).toBeGreaterThanOrEqual(0);
+  expect(bounds!.y + bounds!.height).toBeLessThanOrEqual(page.viewportSize()!.height);
+  await recovery.getByRole("button", { name: "後で確認" }).click();
+  await expect(recovery).not.toBeVisible();
+  await page.getByRole("button", { name: "Git保存状態を確認", exact: true }).click();
+  await expect(recovery).toBeVisible();
+  await verify.click();
   await chooseFile(page, "chapter.md");
   await expectEditorText(page, "消さない原稿\n");
   expect(await page.evaluate(workspace => localStorage.getItem(`proprium.git.storage-unknown.${workspace.localWorkspaceId}`), workspace)).toBeNull();
@@ -83,4 +95,31 @@ test("verification of an active uncertain workspace keeps unsaved editor text", 
   await expectEditorText(page, "入力中の本文を保持\n");
   await page.getByRole("button", { name: "Save draft", exact: true }).click();
   await expect(page.locator(".host-message[role='status']")).toContainText("saved to this browser's local Git worktree");
+});
+test("failed storage verification remains visible and retryable without clearing the guard", async ({ page }) => {
+  const workspace = identity();
+  await page.goto("/");
+  await page.waitForFunction(() => !!window.propriumHostTest);
+  await page.evaluate(async workspace => window.propriumHostTest!.openWorkspace(workspace, { "chapter.md": "保持する本文\n" }), workspace);
+  await chooseFile(page, "chapter.md");
+  await page.getByRole("textbox", { name: "原稿 Markdown" }).fill("保持する入力\n");
+  await page.evaluate(async workspace => {
+    const moduleUrl = new URL("/src/browser/proprium/git/index.ts", location.origin).href;
+    const { BrowserLocalGit, BrowserLocalGitError } = await import(/* @vite-ignore */ moduleUrl);
+    const original = BrowserLocalGit.prototype.verifyStorage;
+    let first = true;
+    BrowserLocalGit.prototype.verifyStorage = function () {
+      if (first) { first = false; return Promise.reject(new BrowserLocalGitError("storage_unknown", "Verification could not confirm browser storage. Retry is available.")); }
+      return original.call(this);
+    };
+    localStorage.setItem(`proprium.git.storage-unknown.${workspace.localWorkspaceId}`, "1");
+  }, workspace);
+  await page.getByRole("button", { name: "Save draft", exact: true }).click();
+  const recovery = page.getByRole("dialog", { name: "ブラウザー内Gitの整合性確認" });
+  await recovery.getByRole("button", { name: "保存データの整合性を確認" }).click();
+  await expect(recovery.getByRole("alert")).toContainText("Verification could not confirm browser storage");
+  expect(await page.evaluate(workspace => localStorage.getItem(`proprium.git.storage-unknown.${workspace.localWorkspaceId}`), workspace)).toBe("1");
+  await recovery.getByRole("button", { name: "保存データの整合性を確認" }).click();
+  await expect(recovery).not.toBeVisible();
+  await expectEditorText(page, "保持する入力\n");
 });
