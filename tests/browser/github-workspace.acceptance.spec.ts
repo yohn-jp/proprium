@@ -8,6 +8,14 @@ import {
   liveGitHubToken,
 } from "./github-fixture-relay.js";
 
+async function showRepositoryFiles(page: import("@playwright/test").Page): Promise<void> {
+  const files = page.getByRole("list", { name: "Repository files" });
+  if (await files.isVisible()) return;
+  const mobileFiles = page.getByRole("button", { name: /^Files(?:\s|$)/u });
+  if (await mobileFiles.isVisible()) await mobileFiles.click();
+  await expect(files).toBeVisible();
+}
+
 test("Host signs in, opens a real GitHub branch, commits locally and publishes the exact SHA", async ({ page }) => {
   test.setTimeout(180_000);
   test.skip(!liveGitHubToken || !liveGitHubOwner || !liveGitHubRepository || !liveGitHubBranch ||
@@ -41,13 +49,16 @@ test("Host signs in, opens a real GitHub branch, commits locally and publishes t
   const publishedCandidate = /Committed locally as ([a-f0-9]{40})/u.exec(commitMessage)?.[1];
   expect(publishedCandidate).toMatch(/^[a-f0-9]{40}$/u);
 
+  await showRepositoryFiles(page);
   await page.getByRole("button", { name: "Fetch" }).click();
   await expect(operationNotice).toContainText(/Fetched \d+ commit\(s\)/u);
+  await showRepositoryFiles(page);
   await page.getByRole("button", { name: "Pull" }).click();
   const pullStatus = operationNotice;
   await expect(pullStatus).toContainText(`Local commits through ${publishedCandidate} are waiting to be published.`);
   await expect(pullStatus).toContainText(/GitHub is at (?:[a-f0-9]{40}|no published commit); local history and editor contents were preserved\./u);
 
+  await showRepositoryFiles(page);
   await page.getByRole("button", { name: "Publish" }).click();
   const published = operationNotice.filter({ hasText: "Published commit" });
   await expect(published).toContainText("confirmed the remote branch SHA");
