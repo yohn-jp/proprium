@@ -5,7 +5,7 @@ import { join, resolve } from "node:path";
 
 const externalRepository = Boolean(process.env.SCRIPTORIUM_E2E_REPOSITORY_URL);
 const selectedTestFile = process.env.SCRIPTORIUM_E2E_TEST_FILE;
-const browserGitSuite = selectedTestFile === "browser-git.acceptance.spec.ts";
+const browserGitSuite = ["browser-git.acceptance.spec.ts", "browser-git-sync.acceptance.spec.ts"].includes(selectedTestFile ?? "");
 const pluginRuntimeSuite = selectedTestFile === "plugin-runtime.acceptance.spec.ts";
 const coverageFile = process.env.SCRIPTORIUM_E2E_COVERAGE_FILE;
 const configuredBaseURL = process.env.SCRIPTORIUM_E2E_BASE_URL ?? process.env.SCRIPTORIUM_BASE_URL;
@@ -53,7 +53,9 @@ export default defineConfig({
   use: {
     baseURL,
     headless: true,
-    trace: "retain-on-failure",
+    trace: process.env.SCRIPTORIUM_GITHUB_LIVE_TEST_TOKEN ? "off" : "retain-on-failure",
+    screenshot: "off",
+    video: "off",
   },
   projects: [
     {
@@ -67,7 +69,9 @@ export default defineConfig({
     },
     {
       name: "webkit",
-      testMatch: pluginRuntimeSuite ? "**/plugin-runtime.acceptance.spec.ts" : "**/ui-v1.acceptance.spec.ts",
+      testMatch: pluginRuntimeSuite
+        ? "**/plugin-runtime.acceptance.spec.ts"
+        : ["**/ui-v1.acceptance.spec.ts", "**/browser-git-sync.acceptance.spec.ts"],
       use: {
         browserName: "webkit",
         launchOptions: process.env.SCRIPTORIUM_E2E_WEBKIT

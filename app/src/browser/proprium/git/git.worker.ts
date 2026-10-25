@@ -2,6 +2,9 @@
 import { Buffer } from "buffer";
 import LightningFS from "@isomorphic-git/lightning-fs";
 import * as git from "isomorphic-git";
+import webHttp from "isomorphic-git/http/web";
+import type { HttpClient } from "isomorphic-git";
+import type { CommitObject, TreeObject } from "isomorphic-git";
 import type { LocalGitErrorCode, LocalGitRequest, LocalGitResponse, StatusEntry, WorkspaceIdentity } from "./protocol.js";
 import { validateGitPath, validateWorkspaceIdentity } from "./protocol.js";
 
@@ -14,6 +17,447 @@ const dataRoot = "/proprium";
 const uncertainWorkspaces = new Set<string>();
 const knownHeads = new Map<string, string | null>();
 const failure = (code: LocalGitErrorCode, message: string): never => { throw Object.assign(new Error(message), { propriumCode: code }); };
+
+class GitHubApiError extends Error {
+  constructor(readonly status: number, message: string) { super(message); }
+}
+
+function apiMessage(code: number): string {
+  if (code === 401) return "GitHub authorization expired or was revoked. Sign in again.";
+  if (code === 403) return "GitHub denied this operation. Check repository access and the granted permissions.";
+  if (code === 404) return "The GitHub repository, branch, or Git object was not found or is not accessible.";
+  if (code === 409) return "GitHub reported a remote reference conflict. Fetch the latest branch before retrying.";
+  return `GitHub returned HTTP ${code} for a Git synchronization request.`;
+}
+
+async function githubApi<T>(workspace: WorkspaceIdentity, token: string, path: string, init: RequestInit = {}, missing: false | "null" = false): Promise<T> {
+  if (!token || token.length > 4096) failure("authentication_required", "Sign in to GitHub before synchronizing this workspace.");
+  let response: Response | null = null;
+  try {
+    response = await fetch(`https://api.github.com/repos/${encodeURIComponent(workspace.owner)}/${encodeURIComponent(workspace.repository)}${path}`, {
+      ...init,
+      headers: {
+        Accept: "application/vnd.github+json",
+        Authorization: `Bearer ${token}`,
+        "X-GitHub-Api-Version": "2022-11-28",
+        ...(init.body ? { "Content-Type": "application/json" } : {}),
+        ...init.headers,
+      },
+    });
+  } catch {
+    const offline = scope.navigator.onLine === false;
+    return failure("network_unavailable", offline
+      ? "GitHub is unavailable while this device is offline. Local changes remain on this device."
+      : "The browser could not reach GitHub. Check connectivity and GitHub CORS availability, then retry.");
+  }
+  if (!response) return failure("network_unavailable", "The browser could not reach GitHub.");
+  if (response.status === 404 && missing === "null") return null as T;
+  if (!response.ok) {
+    const code = response.status === 401 ? "authentication_expired"
+      : response.status === 403 ? "permission_denied"
+        : response.status === 409 ? "remote_conflict" : "git_error";
+    throw Object.assign(new GitHubApiError(response.status, apiMessage(response.status)), { propriumCode: code });
+  }
+  try { return await response.json() as T; }
+  catch { return failure("remote_unknown", "GitHub returned a successful response that could not be read safely."); }
+}
+
+interface GitHubRepository { id: number; full_name: string; owner: { login: string }; permissions?: { pull?: boolean; push?: boolean }; }
+interface GitHubRef { ref: string; object: { sha: string; type: string }; }
+interface GitHubTreeEntry { path: string; mode: string; type: "blob" | "tree" | "commit"; sha: string; }
+interface GitHubTree { sha: string; truncated: boolean; tree: GitHubTreeEntry[]; }
+interface GitHubPerson { name: string; email: string; date: string; }
+interface GitHubCommit {
+  sha: string;
+  commit: { tree: { sha: string }; message: string; author: GitHubPerson; committer: GitHubPerson; verification?: { signature?: string | null } };
+  parents: Array<{ sha: string }>;
+}
+
+async function verifyRemoteRepository(workspace: WorkspaceIdentity, token: string, write: boolean): Promise<GitHubRepository> {
+  const repository = await githubApi<GitHubRepository | null>(workspace, token, "");
+  if (!repository || repository.id !== workspace.repositoryId || typeof repository.owner?.login !== "string" || repository.owner.login.toLowerCase() !== workspace.owner.toLowerCase()
+      || repository.full_name?.toLowerCase() !== `${workspace.owner}/${workspace.repository}`.toLowerCase()) {
+    return failure("repository_mismatch", "The authenticated GitHub repository does not match this local workspace identity.");
+  }
+  if (repository.permissions?.pull !== true || (write && repository.permissions?.push !== true)) {
+    return failure("permission_denied", write
+      ? "This GitHub account does not have write access to the selected repository."
+      : "This GitHub account does not have read access to the selected repository.");
+  }
+  return repository;
+}
+
+function branchRef(workspace: WorkspaceIdentity): string {
+  return `/git/ref/heads/${workspace.branch.split("/").map(encodeURIComponent).join("/")}`;
+}
+
+async function readRemoteHead(workspace: WorkspaceIdentity, token: string): Promise<string | null> {
+  const ref = await githubApi<GitHubRef | null>(workspace, token, branchRef(workspace), {}, "null");
+  if (!ref) return null;
+  if (!/^refs\/heads\/[A-Za-z0-9._/-]+$/u.test(ref.ref) || ref.ref !== `refs/heads/${workspace.branch}`
+      || ref.object?.type !== "commit" || !/^[a-f0-9]{40}$/u.test(ref.object.sha)) {
+    return failure("remote_unknown", "GitHub returned a malformed branch reference.");
+  }
+  return ref.object.sha;
+}
+
+async function localCommitExists(dir: string, oid: string): Promise<boolean> {
+  try { await git.readCommit({ fs, dir, oid }); return true; }
+  catch { return false; }
+}
+
+interface HydrationState {
+  commits: Map<string, GitHubCommit>;
+  trees: Set<string>;
+  blobs: Set<string>;
+  imported: Set<string>;
+  objects: number;
+}
+
+const MAX_REMOTE_COMMITS = 2_000;
+const MAX_REMOTE_OBJECTS = 20_000;
+const MAX_REMOTE_BLOB_BYTES = 50 * 1024 * 1024;
+
+function createHydrationState(): HydrationState {
+  return { commits: new Map(), trees: new Set(), blobs: new Set(), imported: new Set(), objects: 0 };
+}
+
+async function hydrateTree(workspace: WorkspaceIdentity, token: string, dir: string, oid: string, state: HydrationState): Promise<void> {
+  if (state.trees.has(oid)) return;
+  state.trees.add(oid);
+  if (++state.objects > MAX_REMOTE_OBJECTS) failure("git_error", "This repository exceeds the Browser Git import object limit.");
+  const tree = await githubApi<GitHubTree | null>(workspace, token, `/git/trees/${oid}`);
+  if (!tree || tree.sha !== oid || !Array.isArray(tree.tree)) {
+    return failure("git_error", "GitHub returned an invalid Git tree; no remote ref was applied locally.");
+  }
+  if (tree.truncated) {
+    return failure("rest_unsupported", "GitHub REST returned a truncated tree; retry with the scoped Git transport.");
+  }
+  const entries: TreeObject = [];
+  for (const entry of tree.tree) {
+    if (!entry || typeof entry.path !== "string" || entry.path.includes("/") || !/^[a-f0-9]{40}$/u.test(entry.sha)
+        || !/^(?:100644|100755|120000|040000|160000)$/u.test(entry.mode)) {
+      return failure("git_error", "GitHub returned an invalid Git tree entry.");
+    }
+    if (entry.type === "tree" && entry.mode === "040000") {
+      await hydrateTree(workspace, token, dir, entry.sha, state);
+    } else if (entry.type === "blob" && ["100644", "100755", "120000"].includes(entry.mode)) {
+      if (!state.blobs.has(entry.sha)) {
+        if (++state.objects > MAX_REMOTE_OBJECTS) failure("git_error", "This repository exceeds the Browser Git import object limit.");
+        const blob = await githubApi<{ sha: string; encoding: string; content: string; size: number } | null>(workspace, token, `/git/blobs/${entry.sha}`);
+        if (!blob || blob.sha !== entry.sha || !Number.isSafeInteger(blob.size) || blob.size < 0) {
+          return failure("git_error", "GitHub returned an invalid Git blob.");
+        }
+        if (blob.encoding !== "base64" || blob.size > MAX_REMOTE_BLOB_BYTES) {
+          return failure("rest_unsupported", "GitHub REST cannot represent this blob safely; retry with the scoped Git transport.");
+        }
+        let bytes: Uint8Array;
+        try {
+          const binary = atob(blob.content.replace(/\s+/gu, ""));
+          bytes = Uint8Array.from(binary, character => character.charCodeAt(0));
+        } catch { return failure("git_error", "GitHub returned a malformed base64 Git blob."); }
+        if (bytes.byteLength !== blob.size) {
+          failure("git_error", "GitHub returned a Git blob whose decoded size did not match its metadata.");
+        }
+        if (await git.writeBlob({ fs, dir, blob: bytes }) !== entry.sha) {
+          failure("rest_unsupported", "GitHub REST did not preserve the original blob SHA; retry with the scoped Git transport.");
+        }
+        state.blobs.add(entry.sha);
+      }
+    } else {
+      failure("rest_unsupported", "GitHub REST cannot import this Git tree mode; retry with the scoped Git transport.");
+    }
+    entries.push({ mode: entry.mode, path: entry.path, oid: entry.sha, type: entry.type });
+  }
+  if (await git.writeTree({ fs, dir, tree: entries }) !== oid) {
+    failure("rest_unsupported", "GitHub REST did not preserve the original tree SHA; retry with the scoped Git transport.");
+  }
+}
+
+function gitDate(person: GitHubPerson): { name: string; email: string; timestamp: number; timezoneOffset: number } {
+  if (!person || typeof person.name !== "string" || typeof person.email !== "string" || typeof person.date !== "string") {
+    return failure("git_error", "GitHub returned incomplete Git commit identity metadata.");
+  }
+  const match = /(Z|([+-])(\d{2}):(\d{2}))$/u.exec(person.date);
+  const timestamp = Date.parse(person.date);
+  if (!match || !Number.isFinite(timestamp)) return failure("git_error", "GitHub returned an unsupported Git commit date.");
+  const minutes = Number(match[3] ?? 0) * 60 + Number(match[4] ?? 0);
+  const offset = match[1] === "Z" ? 0 : minutes === 0 ? (match[2] === "-" ? -0 : 0) : minutes * (match[2] === "+" ? -1 : 1);
+  return { name: person.name, email: person.email, timestamp: Math.floor(timestamp / 1000), timezoneOffset: offset };
+}
+
+async function hydrateCommit(workspace: WorkspaceIdentity, token: string, dir: string, oid: string, state: HydrationState, visiting = new Set<string>()): Promise<void> {
+  if (state.imported.has(oid) || await localCommitExists(dir, oid)) return;
+  if (visiting.has(oid)) failure("git_error", "GitHub returned a cyclic commit graph.");
+  if (state.commits.size >= MAX_REMOTE_COMMITS) failure("git_error", "This repository exceeds the Browser Git history import limit.");
+  visiting.add(oid);
+  let remote = state.commits.get(oid);
+  if (!remote) {
+    const fetched = await githubApi<GitHubCommit | null>(workspace, token, `/commits/${oid}`);
+    if (!fetched || fetched.sha !== oid || !/^[a-f0-9]{40}$/u.test(fetched.commit?.tree?.sha)
+        || !Array.isArray(fetched.parents) || fetched.parents.some(parent => !/^[a-f0-9]{40}$/u.test(parent.sha))) {
+      return failure("git_error", "GitHub returned an invalid Git commit object.");
+    }
+    remote = fetched;
+    state.commits.set(oid, remote);
+  }
+  for (const parent of remote.parents) await hydrateCommit(workspace, token, dir, parent.sha, state, visiting);
+  await hydrateTree(workspace, token, dir, remote.commit.tree.sha, state);
+  const commit: CommitObject = {
+    tree: remote.commit.tree.sha,
+    parent: remote.parents.map(parent => parent.sha),
+    author: gitDate(remote.commit.author),
+    committer: gitDate(remote.commit.committer),
+    message: remote.commit.message,
+    ...(remote.commit.verification?.signature ? { gpgsig: remote.commit.verification.signature } : {}),
+  };
+  const written = await git.writeCommit({ fs, dir, commit });
+  if (written !== oid) {
+    failure("rest_unsupported", `GitHub REST could not preserve the original commit SHA (expected ${oid}, computed ${written}); retry with the scoped Git transport.`);
+  }
+  state.imported.add(oid);
+  state.objects += 1;
+  visiting.delete(oid);
+}
+
+async function hydrateRemoteHead(workspace: WorkspaceIdentity, token: string, dir: string, head: string | null, state = createHydrationState()): Promise<HydrationState> {
+  if (head) await hydrateCommit(workspace, token, dir, head, state);
+  return state;
+}
+
+function isRestUnsupported(error: unknown): boolean {
+  return Boolean(error && typeof error === "object" && "propriumCode" in error && error.propriumCode === "rest_unsupported");
+}
+
+function smartHttpClient(workspace: WorkspaceIdentity, token: string, relayUrl: string): HttpClient {
+  let relay: URL;
+  try { relay = new URL(relayUrl); }
+  catch { return failure("git_error", "A configured GitHub relay origin is required for Git transport."); }
+  const loopback = relay.protocol === "http:" && ["localhost", "127.0.0.1"].includes(relay.hostname);
+  if ((!loopback && relay.protocol !== "https:") || relay.username || relay.password || relay.search || relay.hash || relay.pathname !== "/") {
+    return failure("git_error", "The GitHub relay must be a trusted HTTPS origin (or loopback during local development).");
+  }
+  const githubRepositoryPath = `/${workspace.owner}/${workspace.repository}.git`;
+  const relayRepositoryPath = `/git/${workspace.owner}/${workspace.repository}.git`;
+  return {
+    request: async (request) => {
+      let source: URL;
+      try { source = new URL(request.url); }
+      catch { return failure("git_error", "Git requested an invalid transport URL."); }
+      const prefix = `${githubRepositoryPath}/`;
+      if (source.origin !== "https://github.com" || source.username || source.password || source.hash || !source.pathname.startsWith(prefix)) {
+        return failure("git_error", "Git transport requested a URL outside the selected GitHub repository.");
+      }
+      const endpoint = source.pathname.slice(prefix.length);
+      const isAdvertisement = endpoint === "info/refs";
+      const service = source.searchParams.get("service");
+      const method = request.method ?? "GET";
+      const validAdvertisement = isAdvertisement && [...source.searchParams.keys()].length === 1
+        && (service === "git-upload-pack" || service === "git-receive-pack") && method === "GET";
+      const validPack = !source.search && ((endpoint === "git-upload-pack" && method === "POST")
+        || (endpoint === "git-receive-pack" && method === "POST"));
+      if (!validAdvertisement && !validPack) return failure("git_error", "Git transport requested an unsupported GitHub endpoint.");
+      const destination = new URL(`${relayRepositoryPath}/${endpoint}${source.search}`, relay.origin);
+      const headers = { ...(request.headers ?? {}) };
+      for (const name of Object.keys(headers)) if (name.toLowerCase() === "authorization" || name.toLowerCase() === "x-proprium-repository-id") delete headers[name];
+      headers.Authorization = `Bearer ${token}`;
+      headers["X-Proprium-Repository-Id"] = String(workspace.repositoryId);
+      let response;
+      try {
+        response = await webHttp.request({
+          ...request,
+          url: destination.toString(),
+          headers,
+          fetchOptions: {
+            ...request.fetchOptions,
+            credentials: "omit",
+            cache: "no-store",
+            redirect: "error",
+            referrerPolicy: "no-referrer",
+          },
+        });
+      } catch {
+        return failure("network_unavailable", scope.navigator.onLine === false
+          ? "GitHub Smart HTTP is unavailable while this device is offline. Local Git data remains on this device."
+          : "The browser could not reach the configured GitHub Git relay.");
+      }
+      if (response.statusCode === 401) failure("authentication_expired", "GitHub authorization expired or was revoked. Sign in again.");
+      if (response.statusCode === 403) failure("permission_denied", "GitHub denied this Git transport request. Check repository access.");
+      if (response.statusCode === 404) failure("repository_mismatch", "The configured relay could not access the selected GitHub repository.");
+      if (response.statusCode === 409 || response.statusCode === 422) failure("remote_conflict", "GitHub rejected the Git ref update because the remote branch changed or is protected.");
+      return { ...response, url: request.url };
+    },
+  };
+}
+
+async function countMissingRemoteCommits(workspace: WorkspaceIdentity, token: string, dir: string, head: string): Promise<number> {
+  const pending = [head];
+  const seen = new Set<string>();
+  let missing = 0;
+  while (pending.length) {
+    const oid = pending.pop()!;
+    if (seen.has(oid)) continue;
+    seen.add(oid);
+    if (seen.size > MAX_REMOTE_COMMITS) failure("git_error", "This repository exceeds the Browser Git history import limit.");
+    if (await localCommitExists(dir, oid)) continue;
+    const commit = await githubApi<GitHubCommit>(workspace, token, `/commits/${oid}`);
+    if (!commit || commit.sha !== oid || !Array.isArray(commit.parents)
+        || commit.parents.some(parent => !/^[a-f0-9]{40}$/u.test(parent.sha))) {
+      failure("git_error", "GitHub returned invalid commit ancestry while preparing Git transport.");
+    }
+    missing += 1;
+    pending.push(...commit.parents.map(parent => parent.sha));
+  }
+  return missing;
+}
+
+async function fetchViaSmartHttp(workspace: WorkspaceIdentity, token: string, relayUrl: string, dir: string, expectedHead: string): Promise<void> {
+  const url = `https://github.com/${workspace.owner}/${workspace.repository}.git`;
+  let result: Awaited<ReturnType<typeof git.fetch>>;
+  try {
+    result = await git.fetch({
+      fs, dir, url, http: smartHttpClient(workspace, token, relayUrl),
+      ref: workspace.branch, remoteRef: workspace.branch, singleBranch: true, tags: false,
+    });
+  } catch (error) {
+    if (error && typeof error === "object" && "propriumCode" in error) throw error;
+    failure("git_error", "GitHub Smart HTTP could not import the advertised Git objects.");
+  }
+  if (!result!.fetchHead || result!.fetchHead !== expectedHead) {
+    failure("remote_unknown", "The GitHub branch changed during Smart HTTP fetch; the local branch was not updated.");
+  }
+}
+
+async function isAncestor(dir: string, ancestor: string, descendant: string): Promise<boolean> {
+  const pending = [descendant];
+  const seen = new Set<string>();
+  while (pending.length) {
+    const oid = pending.pop()!;
+    if (oid === ancestor) return true;
+    if (seen.has(oid)) continue;
+    seen.add(oid);
+    const { commit } = await git.readCommit({ fs, dir, oid });
+    pending.push(...commit.parent);
+  }
+  return false;
+}
+
+function encodeBase64(bytes: Uint8Array): string {
+  let binary = "";
+  for (let index = 0; index < bytes.length; index += 0x8000) binary += String.fromCharCode(...bytes.subarray(index, Math.min(index + 0x8000, bytes.length)));
+  return btoa(binary);
+}
+
+function isoGitDate(person: CommitObject["author"]): string {
+  const east = -person.timezoneOffset;
+  const local = new Date((person.timestamp + east * 60) * 1000);
+  const sign = east < 0 || Object.is(person.timezoneOffset, -0) ? "-" : "+";
+  const absolute = Math.abs(east);
+  const offset = `${sign}${String(Math.floor(absolute / 60)).padStart(2, "0")}:${String(absolute % 60).padStart(2, "0")}`;
+  return `${local.getUTCFullYear()}-${String(local.getUTCMonth() + 1).padStart(2, "0")}-${String(local.getUTCDate()).padStart(2, "0")}T${String(local.getUTCHours()).padStart(2, "0")}:${String(local.getUTCMinutes()).padStart(2, "0")}:${String(local.getUTCSeconds()).padStart(2, "0")}${offset}`;
+}
+
+interface UploadedTreeEntry { path: string; mode: string; type: "blob" | "tree" | "commit"; sha: string; }
+
+async function uploadTree(workspace: WorkspaceIdentity, token: string, dir: string, oid: string, uploadedTrees: Set<string>, uploadedBlobs: Set<string>, uploadedObjects: number): Promise<number> {
+  if (uploadedTrees.has(oid)) return uploadedObjects;
+  uploadedTrees.add(oid);
+  const { tree } = await git.readTree({ fs, dir, oid });
+  const entries: UploadedTreeEntry[] = [];
+  for (const entry of tree) {
+    if (entry.type === "tree") {
+      uploadedObjects = await uploadTree(workspace, token, dir, entry.oid, uploadedTrees, uploadedBlobs, uploadedObjects);
+    } else if (entry.type === "blob") {
+      if (!uploadedBlobs.has(entry.oid)) {
+        const { blob } = await git.readBlob({ fs, dir, oid: entry.oid });
+        if (blob.byteLength > MAX_REMOTE_BLOB_BYTES) failure("git_error", "This Git blob exceeds the Browser Git publish size limit.");
+        const response = await githubApi<{ sha: string }>(workspace, token, "/git/blobs", { method: "POST", body: JSON.stringify({ content: encodeBase64(blob), encoding: "base64" }) });
+        if (response?.sha !== entry.oid) failure("rest_unsupported", "GitHub REST did not preserve a local blob SHA; retry with the scoped Git transport.");
+        uploadedBlobs.add(entry.oid);
+        if (++uploadedObjects > MAX_REMOTE_OBJECTS) failure("git_error", "This local history exceeds the Browser Git publish object limit.");
+      }
+    } else {
+      failure("rest_unsupported", "GitHub REST cannot publish this Git tree mode; retry with the scoped Git transport.");
+    }
+    entries.push({ path: entry.path, mode: entry.mode, type: entry.type, sha: entry.oid });
+  }
+  const created = await githubApi<{ sha: string }>(workspace, token, "/git/trees", { method: "POST", body: JSON.stringify({ tree: entries }) });
+  if (created?.sha !== oid) failure("rest_unsupported", "GitHub REST did not preserve a local tree SHA; retry with the scoped Git transport.");
+  if (++uploadedObjects > MAX_REMOTE_OBJECTS) failure("git_error", "This local history exceeds the Browser Git publish object limit.");
+  return uploadedObjects;
+}
+
+async function uploadCommitGraph(workspace: WorkspaceIdentity, token: string, dir: string, head: string, stopAt: string | null): Promise<void> {
+  const ordered: string[] = [];
+  const seen = new Set<string>();
+  const pending = [head];
+  while (pending.length) {
+    const oid = pending.pop()!;
+    if (oid === stopAt || seen.has(oid)) continue;
+    seen.add(oid);
+    if (seen.size > MAX_REMOTE_COMMITS) failure("git_error", "This local history exceeds the Browser Git publish limit.");
+    const { commit } = await git.readCommit({ fs, dir, oid });
+    ordered.push(oid);
+    pending.push(...commit.parent);
+  }
+  const uploadedTrees = new Set<string>();
+  const uploadedBlobs = new Set<string>();
+  let uploadedObjects = 0;
+  for (const oid of ordered.reverse()) {
+    const { commit } = await git.readCommit({ fs, dir, oid });
+    uploadedObjects = await uploadTree(workspace, token, dir, commit.tree, uploadedTrees, uploadedBlobs, uploadedObjects);
+    const response = await githubApi<{ sha: string }>(workspace, token, "/git/commits", {
+      method: "POST",
+      body: JSON.stringify({
+        message: commit.message,
+        tree: commit.tree,
+        parents: commit.parent,
+        author: { name: commit.author.name, email: commit.author.email, date: isoGitDate(commit.author) },
+        committer: { name: commit.committer.name, email: commit.committer.email, date: isoGitDate(commit.committer) },
+        ...(commit.gpgsig ? { signature: commit.gpgsig } : {}),
+      }),
+    });
+    if (response?.sha !== oid) failure("rest_unsupported", "GitHub REST did not preserve a local commit SHA; retry with the scoped Git transport.");
+    if (++uploadedObjects > MAX_REMOTE_OBJECTS) failure("git_error", "This local history exceeds the Browser Git publish object limit.");
+  }
+}
+
+async function remoteContains(workspace: WorkspaceIdentity, token: string, head: string, wanted: string): Promise<boolean> {
+  const pending = [head];
+  const seen = new Set<string>();
+  while (pending.length) {
+    const oid = pending.pop()!;
+    if (oid === wanted) return true;
+    if (seen.has(oid)) continue;
+    seen.add(oid);
+    if (seen.size > MAX_REMOTE_COMMITS) return false;
+    const commit = await githubApi<GitHubCommit>(workspace, token, `/commits/${oid}`);
+    if (!commit || commit.sha !== oid) return false;
+    pending.push(...commit.parents.map(parent => parent.sha));
+  }
+  return false;
+}
+
+async function reconcilePublish(workspace: WorkspaceIdentity, token: string, expectedRemoteHead: string | null, targetHead: string): Promise<{ state: "published"; head: string; remoteHead: string } | { state: "conflict"; expectedRemoteHead: string | null; remoteHead: string | null } | { state: "remote-unknown"; expectedRemoteHead: string | null; observedRemoteHead: string | null }> {
+  let observed: string | null;
+  try { observed = await readRemoteHead(workspace, token); }
+  catch (error) {
+    if (error && typeof error === "object" && "propriumCode" in error
+        && ["authentication_expired", "permission_denied"].includes(String(error.propriumCode))) throw error;
+    return { state: "remote-unknown", expectedRemoteHead, observedRemoteHead: null };
+  }
+  try {
+    if (observed === targetHead || (observed && await remoteContains(workspace, token, observed, targetHead))) {
+      return { state: "published", head: targetHead, remoteHead: observed! };
+    }
+  } catch (error) {
+    if (error && typeof error === "object" && "propriumCode" in error
+        && ["authentication_expired", "permission_denied"].includes(String(error.propriumCode))) throw error;
+    return { state: "remote-unknown", expectedRemoteHead, observedRemoteHead: observed };
+  }
+  if (observed !== expectedRemoteHead) return { state: "conflict", expectedRemoteHead, remoteHead: observed };
+  return { state: "remote-unknown", expectedRemoteHead, observedRemoteHead: observed };
+}
 
 async function digest(value: string): Promise<string> {
   const bytes = new TextEncoder().encode(value);
@@ -106,6 +550,16 @@ async function assertRevision(dir: string, expected: string | null): Promise<voi
 async function status(dir: string): Promise<StatusEntry[]> {
   return (await worktreeMatrix(dir, "HEAD")).filter((entry) => entry.head !== entry.worktree || entry.head !== entry.stage)
     .map(({ path, head, worktree, stage }) => ({ path, head, worktree, stage }));
+}
+
+async function hasUnbornWorktreeChanges(dir: string): Promise<boolean> {
+  const rows = await git.statusMatrix({ fs, dir });
+  for (const [path, head, worktree, stage] of rows) {
+    if (head === worktree && head === stage) continue;
+    if (head === 0 && stage === 0 && worktree === 2 && await git.isIgnored({ fs, dir, filepath: path })) continue;
+    return true;
+  }
+  return false;
 }
 
 interface WorkingMatrixEntry extends StatusEntry {
@@ -204,6 +658,132 @@ async function operation(request: LocalGitRequest): Promise<unknown> {
     return { head, branch: request.workspace.branch, localState: head && (await status(paths.dir)).length === 0 ? "local-committed" : "draft" };
   }
   if (!bound || !(await exists(`${paths.dir}/.git/HEAD`))) failure("not_initialized", "Initialize this local workspace before using Git operations.");
+  if (request.operation === "remote-head") {
+    await verifyRemoteRepository(request.workspace, request.token, false);
+    return { repositoryId: request.workspace.repositoryId, branch: request.workspace.branch, head: await readRemoteHead(request.workspace, request.token) };
+  }
+  if (request.operation === "remote-fetch" || request.operation === "remote-pull") {
+    await verifyRemoteRepository(request.workspace, request.token, false);
+    const remoteHead = await readRemoteHead(request.workspace, request.token);
+    const localHead = await currentHead(paths.dir);
+    if (request.operation === "remote-pull") {
+      const dirty = localHead ? (await status(paths.dir)).length > 0 : await hasUnbornWorktreeChanges(paths.dir);
+      if (dirty) return { state: "conflict", localHead, remoteHead };
+    }
+    let importedCommits: number;
+    const hydrationState = createHydrationState();
+    try {
+      await hydrateRemoteHead(request.workspace, request.token, paths.dir, remoteHead, hydrationState);
+      importedCommits = hydrationState.imported.size;
+    } catch (error) {
+      if (!isRestUnsupported(error) || !remoteHead) throw error;
+      importedCommits = hydrationState.imported.size
+        + await countMissingRemoteCommits(request.workspace, request.token, paths.dir, remoteHead);
+      await fetchViaSmartHttp(request.workspace, request.token, request.authRelayUrl, paths.dir, remoteHead);
+      if (await readRemoteHead(request.workspace, request.token) !== remoteHead) {
+        failure("remote_unknown", "The GitHub branch changed during Smart HTTP fetch; fetched objects remain unreferenced locally.");
+      }
+    }
+    const trackingRef = `refs/remotes/origin/${request.workspace.branch}`;
+    try {
+      if (remoteHead) await git.writeRef({ fs, dir: paths.dir, ref: trackingRef, value: remoteHead, force: true });
+      else if (await git.resolveRef({ fs, dir: paths.dir, ref: trackingRef }).then(() => true, () => false)) await git.deleteRef({ fs, dir: paths.dir, ref: trackingRef });
+      await flush();
+    } catch { failure("storage_unknown", "Fetched Git objects could not be confirmed in browser storage."); }
+    if (request.operation === "remote-fetch") {
+      return { repositoryId: request.workspace.repositoryId, branch: request.workspace.branch, head: remoteHead, localHead, importedCommits };
+    }
+    if (remoteHead === localHead) return { state: "up-to-date", head: localHead };
+    if (!remoteHead) return { state: "conflict", localHead, remoteHead };
+    if (localHead && !(await isAncestor(paths.dir, localHead, remoteHead))) {
+      return { state: "conflict", localHead, remoteHead };
+    }
+    const previousHead = localHead;
+    try {
+      await git.writeRef({ fs, dir: paths.dir, ref: `refs/heads/${request.workspace.branch}`, value: remoteHead, force: true });
+      await git.checkout({ fs, dir: paths.dir, ref: request.workspace.branch, force: false });
+      await flush();
+      if (await currentHead(paths.dir) !== remoteHead || (await status(paths.dir)).length) {
+        failure("storage_unknown", "The local worktree did not confirm the fetched GitHub commit after pull.");
+      }
+    } catch (error) {
+      if (error && typeof error === "object" && "propriumCode" in error) throw error;
+      failure("storage_unknown", "The local branch or worktree could not be confirmed after pull.");
+    }
+    return { state: "fast-forwarded", previousHead, head: remoteHead };
+  }
+  if (request.operation === "remote-publish") {
+    await verifyRemoteRepository(request.workspace, request.token, true);
+    const localHead = await currentHead(paths.dir);
+    const localStatus = await status(paths.dir);
+    if (localHead !== request.expectedHead || localStatus.length) failure("revision_conflict", "Publishing requires the unchanged local commit and a clean worktree.");
+    const observedRemoteHead = await readRemoteHead(request.workspace, request.token);
+    if (observedRemoteHead !== request.expectedRemoteHead) {
+      return { state: "conflict", expectedRemoteHead: request.expectedRemoteHead, remoteHead: observedRemoteHead };
+    }
+    if (observedRemoteHead && !(await isAncestor(paths.dir, observedRemoteHead, request.expectedHead))) {
+      return { state: "conflict", expectedRemoteHead: request.expectedRemoteHead, remoteHead: observedRemoteHead };
+    }
+    if (observedRemoteHead === request.expectedHead) {
+      return { state: "published", head: request.expectedHead, remoteHead: observedRemoteHead };
+    }
+    try {
+      await uploadCommitGraph(request.workspace, request.token, paths.dir, request.expectedHead, observedRemoteHead);
+    } catch (error) {
+      if (!isRestUnsupported(error)) throw error;
+      let rejected = false;
+      let pushFailure: unknown;
+      try {
+        const pushed = await git.push({
+          fs, dir: paths.dir,
+          url: `https://github.com/${request.workspace.owner}/${request.workspace.repository}.git`,
+          http: smartHttpClient(request.workspace, request.token, request.authRelayUrl),
+          ref: request.workspace.branch,
+          remoteRef: request.workspace.branch,
+          force: false,
+        });
+        rejected = !pushed.ok;
+      } catch (failureValue) { pushFailure = failureValue; }
+      const result = await reconcilePublish(request.workspace, request.token, request.expectedRemoteHead, request.expectedHead);
+      if (result.state === "published" || result.state === "conflict") return result;
+      if (pushFailure && typeof pushFailure === "object" && "propriumCode" in pushFailure) {
+        if (["authentication_expired", "permission_denied"].includes(String(pushFailure.propriumCode))) throw pushFailure;
+      }
+      if (rejected && result.observedRemoteHead === request.expectedRemoteHead) {
+        failure("permission_denied", "GitHub rejected the Smart HTTP ref update. Check repository write access and branch protection.");
+      }
+      return result;
+    }
+    let updateFailure: unknown;
+    try {
+      const refPath = observedRemoteHead ? `/git/refs/heads/${request.workspace.branch.split("/").map(encodeURIComponent).join("/")}` : "/git/refs";
+      const result = observedRemoteHead
+        ? await githubApi<GitHubRef>(request.workspace, request.token, refPath, { method: "PATCH", body: JSON.stringify({ sha: request.expectedHead, force: false }) })
+        : await githubApi<GitHubRef>(request.workspace, request.token, refPath, { method: "POST", body: JSON.stringify({ ref: `refs/heads/${request.workspace.branch}`, sha: request.expectedHead }) });
+      if (result?.object?.sha !== request.expectedHead) {
+        failure("remote_unknown", "GitHub accepted a ref update without confirming the requested commit SHA.");
+      }
+    } catch (error) {
+      updateFailure = error;
+    }
+    const reconciled = await reconcilePublish(request.workspace, request.token, request.expectedRemoteHead, request.expectedHead);
+    if (reconciled.state === "published" || reconciled.state === "conflict" || reconciled.state === "remote-unknown") {
+      if (reconciled.state === "conflict") return reconciled;
+      if (reconciled.state === "published") return reconciled;
+    }
+    if (updateFailure) {
+      const statusCode = updateFailure instanceof GitHubApiError ? updateFailure.status : 0;
+      if (statusCode === 401) failure("authentication_expired", "GitHub authorization expired while publishing. Reauthorize and verify the remote branch.");
+      if (statusCode === 403) failure("permission_denied", "GitHub rejected publication. Check repository write access and branch protection.");
+      if (statusCode >= 500) return reconciled;
+      if (statusCode === 409 || statusCode === 422) {
+        if (reconciled.state === "remote-unknown") return { state: "conflict", expectedRemoteHead: request.expectedRemoteHead, remoteHead: reconciled.observedRemoteHead };
+      }
+      if (updateFailure instanceof GitHubApiError) throw Object.assign(updateFailure, { propriumCode: "git_error" as const });
+      return reconciled;
+    }
+    return reconciled;
+  }
   if (request.operation === "verify") {
     try {
       await flush();
@@ -339,7 +919,7 @@ scope.addEventListener("message", async (event: MessageEvent<LocalGitRequest>) =
   const workspaceId = request.workspace?.localWorkspaceId ?? "";
   try {
     if (!scope.navigator.locks) failure("lock_unavailable", "This browser does not provide Web Locks; local Git workspace access is disabled.");
-    const write = ["init", "write", "add", "commit", "create-branch", "verify"].includes(request.operation);
+    const write = ["init", "write", "add", "commit", "create-branch", "verify", "remote-fetch", "remote-pull", "remote-publish"].includes(request.operation);
     const paths = await workspacePaths(request.workspace);
     const result = await scope.navigator.locks.request(paths.lock, { mode: write ? "exclusive" : "shared", ifAvailable: true }, async (lock) => {
       if (!lock) failure("workspace_busy", "Another tab is using this local workspace. Retry when its operation finishes.");
