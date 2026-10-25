@@ -121,6 +121,9 @@ interface HydrationState {
   objects: number;
 }
 
+// REST is efficient for small deltas; bulk history belongs in one Git pack.
+const MAX_REST_HYDRATION_COMMITS = 8;
+const MAX_REST_HYDRATION_OBJECTS = 64;
 const MAX_REMOTE_COMMITS = 2_000;
 const MAX_REMOTE_OBJECTS = 20_000;
 const MAX_REMOTE_BLOB_BYTES = 50 * 1024 * 1024;
@@ -132,6 +135,7 @@ function createHydrationState(): HydrationState {
 async function hydrateTree(workspace: WorkspaceIdentity, token: string, dir: string, oid: string, state: HydrationState): Promise<void> {
   if (state.trees.has(oid)) return;
   state.trees.add(oid);
+  if (state.objects >= MAX_REST_HYDRATION_OBJECTS) failure("rest_unsupported", "This import needs bulk Git object transfer; retry with the scoped Git transport.");
   if (++state.objects > MAX_REMOTE_OBJECTS) failure("git_error", "This repository exceeds the Browser Git import object limit.");
   const tree = await githubApi<GitHubTree | null>(workspace, token, `/git/trees/${oid}`);
   if (!tree || tree.sha !== oid || !Array.isArray(tree.tree)) {
@@ -150,6 +154,7 @@ async function hydrateTree(workspace: WorkspaceIdentity, token: string, dir: str
       await hydrateTree(workspace, token, dir, entry.sha, state);
     } else if (entry.type === "blob" && ["100644", "100755", "120000"].includes(entry.mode)) {
       if (!state.blobs.has(entry.sha)) {
+        if (state.objects >= MAX_REST_HYDRATION_OBJECTS) failure("rest_unsupported", "This import needs bulk Git object transfer; retry with the scoped Git transport.");
         if (++state.objects > MAX_REMOTE_OBJECTS) failure("git_error", "This repository exceeds the Browser Git import object limit.");
         const blob = await githubApi<{ sha: string; encoding: string; content: string; size: number } | null>(workspace, token, `/git/blobs/${entry.sha}`);
         if (!blob || blob.sha !== entry.sha || !Number.isSafeInteger(blob.size) || blob.size < 0) {
@@ -197,6 +202,7 @@ async function hydrateCommit(workspace: WorkspaceIdentity, token: string, dir: s
   if (state.imported.has(oid) || await localCommitExists(dir, oid)) return;
   if (visiting.has(oid)) failure("git_error", "GitHub returned a cyclic commit graph.");
   if (state.commits.size >= MAX_REMOTE_COMMITS) failure("git_error", "This repository exceeds the Browser Git history import limit.");
+  if (state.commits.size >= MAX_REST_HYDRATION_COMMITS) failure("rest_unsupported", "This history needs bulk Git transfer; retry with the scoped Git transport.");
   visiting.add(oid);
   let remote = state.commits.get(oid);
   if (!remote) {
@@ -300,6 +306,9 @@ function smartHttpClient(workspace: WorkspaceIdentity, token: string, relayUrl: 
 async function countMissingRemoteCommits(workspace: WorkspaceIdentity, token: string, dir: string, head: string): Promise<number> {
   const pending = [head];
   const seen = new Set<string>();
+  const metadata = new Map<string, GitHubCommit>();
+  let page = 1;
+  let exhausted = false;
   let missing = 0;
   while (pending.length) {
     const oid = pending.pop()!;
@@ -307,13 +316,25 @@ async function countMissingRemoteCommits(workspace: WorkspaceIdentity, token: st
     seen.add(oid);
     if (seen.size > MAX_REMOTE_COMMITS) failure("git_error", "This repository exceeds the Browser Git history import limit.");
     if (await localCommitExists(dir, oid)) continue;
-    const commit = await githubApi<GitHubCommit>(workspace, token, `/commits/${oid}`);
-    if (!commit || commit.sha !== oid || !Array.isArray(commit.parents)
-        || commit.parents.some(parent => !/^[a-f0-9]{40}$/u.test(parent.sha))) {
-      failure("git_error", "GitHub returned invalid commit ancestry while preparing Git transport.");
+    // Fetch ancestry metadata in pages, rather than one HTTP round trip per parent.
+    // The immutable head pins the enumeration even if the branch advances.
+    while (!metadata.has(oid) && !exhausted) {
+      if (page > Math.ceil(MAX_REMOTE_COMMITS / 100) + 1) failure("git_error", "This repository exceeds the Browser Git history import limit.");
+      const rows = await githubApi<GitHubCommit[]>(workspace, token, `/commits?sha=${head}&per_page=100&page=${page++}`);
+      if (!Array.isArray(rows) || rows.length > 100) failure("git_error", "GitHub returned invalid commit ancestry while preparing Git transport.");
+      for (const row of rows) {
+        if (!row || !/^[a-f0-9]{40}$/u.test(row.sha) || !Array.isArray(row.parents) || row.parents.some(parent => !/^[a-f0-9]{40}$/u.test(parent.sha))) {
+          failure("git_error", "GitHub returned invalid commit ancestry while preparing Git transport.");
+        }
+        metadata.set(row.sha, row);
+        if (metadata.size > MAX_REMOTE_COMMITS) failure("git_error", "This repository exceeds the Browser Git history import limit.");
+      }
+      exhausted = rows.length < 100;
     }
+    const commit = metadata.get(oid);
+    if (!commit) failure("git_error", "GitHub omitted required commit ancestry while preparing Git transport.");
     missing += 1;
-    pending.push(...commit.parents.map(parent => parent.sha));
+    pending.push(...commit!.parents.map(parent => parent.sha));
   }
   return missing;
 }

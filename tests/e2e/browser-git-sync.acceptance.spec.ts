@@ -36,7 +36,7 @@ const fixtureOAuthToken = liveGitHubToken || `ghu_${"x".repeat(36)}`;
 
 interface SmartHttpFixture {
   backendUrl: string;
-  commit(content: string, parent: string | null, mode: "encoding" | "signature"): RemoteCommitFixture;
+  commit(content: string, parent: string | null, mode: "plain" | "encoding" | "signature"): RemoteCommitFixture;
   head(): string;
   close(): Promise<void>;
   sawGitHubBasicAuth: () => boolean;
@@ -154,9 +154,9 @@ function createSmartHttpFixture(): Promise<SmartHttpFixture> {
             ...(parent ? [`parent ${parent}`] : []),
             `author ${identity}`,
             `committer ${identity}`,
-            ...(mode === "encoding" ? ["encoding ISO-8859-1"] : [
+            ...(mode === "encoding" ? ["encoding ISO-8859-1"] : mode === "signature" ? [
               "gpgsig -----BEGIN PGP SIGNATURE-----", " ", " c3ludGhldGljLXNpZ25hdHVyZQ==", " -----END PGP SIGNATURE-----",
-            ]),
+            ] : []),
           ];
           const message = Buffer.from(`${mode} fixture\n`, "utf8");
           const commitBytes = Buffer.concat([Buffer.from(`${headers.join("\n")}\n\n`), message]);
@@ -653,6 +653,13 @@ test("Smart HTTP preserves REST-incompatible commit SHAs and falls back for publ
       if (path === "/repos/proprium-test/browser-git-fixture/git/ref/heads/main") return json({
         ref: "refs/heads/main", object: { type: "commit", sha: backend.head() },
       });
+      if (path === "/repos/proprium-test/browser-git-fixture/commits") {
+        const result: RemoteCommitFixture["commitApi"][] = [];
+        let oid: string | null = url.searchParams.get("sha");
+        while (oid && commits.has(oid)) { const commit = commits.get(oid)!; result.push(commit.commitApi); oid = commit.commitApi.parents[0]?.sha ?? null; }
+        const offset = (Number(url.searchParams.get("page") ?? "1") - 1) * 100;
+        return json(result.slice(offset, offset + 100));
+      }
       const commitMatch = /^\/repos\/proprium-test\/browser-git-fixture\/commits\/([a-f0-9]{40})$/u.exec(path);
       if (commitMatch) return commits.has(commitMatch[1]!) ? json(commits.get(commitMatch[1]!)!.commitApi) : json({ message: "Not Found" }, 404);
       const treeMatch = /^\/repos\/proprium-test\/browser-git-fixture\/git\/trees\/([a-f0-9]{40})$/u.exec(path);
@@ -785,4 +792,58 @@ test("live disposable GitHub sync fetches, fast-forwards, publishes and confirms
   expect(result.confirmedHead).toBe(result.localHead);
   expect(result.finalState).toEqual({ head: result.localHead, entries: [], localState: "local-committed" });
   expect(liveSmartHttpRequests.some(request => request.includes("git-upload-pack"))).toBe(true);
+});
+
+test("cold history is bounded in REST and fetched as one pack with paginated ancestry", async ({ page }) => {
+  const backend = await createSmartHttpFixture();
+  activeSmartHttpFixture = backend;
+  try {
+    const history: RemoteCommitFixture[] = [];
+    for (let index = 0; index < 121; index += 1) history.push(backend.commit(`history ${index}\n`, history.at(-1)?.sha ?? null, "plain"));
+    const commits = new Map(history.map(commit => [commit.sha, commit]));
+    const ordered = [...history].reverse();
+    let individualReads = 0;
+    let ancestryPages = 0;
+    let objectReads = 0;
+    await page.route("https://api.github.com/**", async route => {
+      if (route.request().method() === "OPTIONS") return route.fulfill({ status: 204, headers: corsHeaders() });
+      const url = new URL(route.request().url()), path = url.pathname;
+      const json = (value: unknown, status = 200) => route.fulfill({ status, headers: corsHeaders(), contentType: "application/json", body: JSON.stringify(value) });
+      if (path === "/user") return json({ id: 88, login: "writer" });
+      if (path === "/repos/proprium-test/browser-git-fixture") return json({ id: repositoryId, full_name: "proprium-test/browser-git-fixture", owner: { login: "proprium-test" }, permissions: { pull: true, push: true } });
+      if (path === "/repos/proprium-test/browser-git-fixture/git/ref/heads/main") return json({ ref: "refs/heads/main", object: { type: "commit", sha: backend.head() } });
+      if (path === "/repos/proprium-test/browser-git-fixture/commits") {
+        ancestryPages += 1;
+        expect(url.searchParams.get("sha")).toBe(backend.head());
+        const offset = (Number(url.searchParams.get("page")) - 1) * 100;
+        return json(ordered.slice(offset, offset + 100).map(commit => commit.commitApi));
+      }
+      const match = /\/commits\/([a-f0-9]{40})$/u.exec(path);
+      if (match && commits.has(match[1]!)) { individualReads += 1; return json(commits.get(match[1]!)!.commitApi); }
+      if (path.includes("/git/trees/") || path.includes("/git/blobs/")) objectReads += 1;
+      return json({ message: "Unexpected REST request in bulk fixture" }, 404);
+    });
+    await page.goto("/browser-git-test.html");
+    await expect(page.locator("#ready")).toHaveText("ready");
+    const result = await page.evaluate(async ({ id, relayUrl }) => {
+      const git = window.browserGitTest.open(id);
+      await git.init();
+      const sync = git.connectGitHub(relayUrl);
+      await sync.beginAuthorization(); await sync.completeAuthorization();
+      const fetched = await sync.fetch();
+      const pulled = await sync.pull();
+      const log = await git.log(150);
+      const file = await git.read("file.txt");
+      git.close();
+      return { fetched, pulled, log, text: new TextDecoder().decode(file.data!) };
+    }, { id: `bulk-${crypto.randomUUID()}`, relayUrl: relayOrigin });
+    expect(result.fetched).toMatchObject({ head: backend.head(), importedCommits: 121 });
+    expect(result.pulled).toMatchObject({ state: "fast-forwarded", head: backend.head() });
+    expect(result.log.map(commit => commit.oid)).toEqual(ordered.map(commit => commit.sha));
+    expect(result.text).toBe("history 120\n");
+    expect(individualReads).toBeLessThanOrEqual(8);
+    expect(ancestryPages).toBe(2);
+    expect(objectReads).toBe(0);
+    expect(backend.diagnostics().some(line => line.includes("git-upload-pack"))).toBe(true);
+  } finally { activeSmartHttpFixture = null; await backend.close(); }
 });

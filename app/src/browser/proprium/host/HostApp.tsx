@@ -309,6 +309,8 @@ export function HostApp(): ReactElement {
       setSyncState(initial.status.entries.length || !initial.status.head ? "local-draft" : "local-committed");
       setRecent(existing => rememberWorkspace(entry, existing));
       previousGit?.close();
+      setSyncState("syncing");
+      setMessage({ tone: "info", text: "GitHubからWorkspaceを取得しています。初回はGit履歴とファイルをこのブラウザーへ取り込みます。" });
       const pulled = await nextSync.pull();
       await refresh(nextGit, entry);
       if (pulled.state === "conflict") {
@@ -718,7 +720,7 @@ export function HostApp(): ReactElement {
       onChange={text => { setCurrentFile(previous => previous ? { ...previous, text, dirty: true } : previous); setSyncState("editing"); }}
       onSave={() => void saveDraft()} onCommit={() => revealPanel("inspector")} onPublish={() => void publishRemote()} canPublish={!!syncClient && status.localState === "local-committed" && !currentFile.dirty}
       onHistory={() => revealPanel("history")} onRegisterFlush={registerEditorFlush} onScratchApplied={refreshAfterPlugin} />}
-  </section> : workspace ? <p>Choose a file to edit</p> : mode === "desktop" ? picker : <p>作品ライブラリからWorkspaceを開いてください。</p>;
+  </section> : workspace ? syncState === "syncing" ? <section className="host-controls" role="status"><h2>Workspaceを取得しています</h2><p>GitHubからGit履歴とファイルを読み込んでいます。完了後にファイル一覧を表示します。</p></section> : <p>Choose a file to edit</p> : mode === "desktop" ? picker : <p>作品ライブラリからWorkspaceを開いてください。</p>;
   const panels: WorkspacePanel[] = [
     { id: "editor", title: "原稿", render: () => <RetainedPanelSlot node={editorNode} /> },
     { id: "outline", title: "作品と構成", render: () => library },
