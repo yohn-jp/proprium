@@ -154,14 +154,14 @@ func TestHostSelectionDoesNotFailOverAfterDisconnect(t *testing.T) {
     second:=f.createSession("host-B")
     _,_,closeB:=f.openEvents(second)
     defer closeB()
-    if client:=f.registry.activeClient();client==nil || client.session.workspaceID!="host-B" {t.Fatal("latest connected host must be active")}
+    if !f.registry.activeHostConnected() || f.registry.activeSessionID!=second {t.Fatal("latest connected host must be active")}
     closeB()
     deadline:=time.Now().Add(2*time.Second)
     for time.Now().Before(deadline) {
-        if f.registry.activeClient()==nil {break}
+        if !f.registry.activeHostConnected() {break}
         time.Sleep(10*time.Millisecond)
     }
-    if f.registry.activeClient()!=nil {t.Fatal("unexpected failover to stale Host A")}
+    if f.registry.activeHostConnected() {t.Fatal("unexpected failover to stale Host A")}
     status,_:=f.mcp("tools/list",map[string]any{})
     if status!=200 {t.Fatalf("tools must remain discoverable: %d",status)}
     status,_=f.mcp("tools/call",map[string]any{"name":"repositories_list","arguments":map[string]any{}})

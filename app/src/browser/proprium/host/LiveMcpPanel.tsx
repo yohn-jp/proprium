@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState, type ReactElement } from "react";
-import type { BrowserLocalGit } from "../git/index.js";
+import { BrowserLocalGit } from "../git/index.js";
 import type { FileRevisionExpectation, WorkspaceChange, WorkspaceIdentity } from "../git/protocol.js";
 import { validateGitPath } from "../git/protocol.js";
 
