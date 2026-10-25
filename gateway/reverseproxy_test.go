@@ -221,6 +221,52 @@ func readProxySSEEvent(t *testing.T, reader *bufio.Reader) map[string]string {
 	}
 }
 
+func readProxySSEComment(t *testing.T, reader *bufio.Reader) {
+	t.Helper()
+	line, err := reader.ReadString('\n')
+	if err != nil {
+		t.Fatalf("read proxied SSE comment: %v", err)
+	}
+	if line != ": keepalive\n" {
+		t.Fatalf("unexpected proxied SSE comment %q", line)
+	}
+	line, err = reader.ReadString('\n')
+	if err != nil {
+		t.Fatalf("read proxied SSE comment terminator: %v", err)
+	}
+	if line != "\n" {
+		t.Fatalf("SSE keepalive comment was not terminated: %q", line)
+	}
+}
+
+func TestIdleLiveSSEHeartbeatPassesThroughHTTPSProxyAndStopsOnCancellation(t *testing.T) {
+	f := newGatewayProxyFixture(t)
+	registry := f.gateway.live.(*LiveRegistry)
+	registry.keepaliveInterval = 20 * time.Millisecond
+	sessionID, ownerToken, _, _ := f.createWorkspace("idle-heartbeat-workspace")
+	stream, reader, closeStream := f.openWorkspaceStream(sessionID, ownerToken)
+	defer closeStream()
+	if contentType := stream.Header.Get("Content-Type"); !strings.HasPrefix(contentType, "text/event-stream") {
+		t.Fatalf("Tunnel stream content type %q does not enable live streaming", contentType)
+	}
+	readProxySSEComment(t, reader)
+	closeStream()
+
+	deadline := time.Now().Add(2 * time.Second)
+	for {
+		registry.mu.Lock()
+		active := registry.sessions[sessionID] != nil
+		registry.mu.Unlock()
+		if !active {
+			break
+		}
+		if time.Now().After(deadline) {
+			t.Fatal("cancelled SSE stream kept its live session active")
+		}
+		time.Sleep(5 * time.Millisecond)
+	}
+}
+
 type proxiedToolResult struct {
 	status int
 	body   []byte

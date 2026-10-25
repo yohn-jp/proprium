@@ -191,8 +191,12 @@ func (w *deadlineWriter) Write(body []byte) (int, error) {
 }
 
 func (w *deadlineWriter) Flush() {
+	_ = w.FlushError()
+}
+
+func (w *deadlineWriter) FlushError() error {
 	w.setDeadline()
-	_ = http.NewResponseController(w.ResponseWriter).Flush()
+	return http.NewResponseController(w.ResponseWriter).Flush()
 }
 
 func jsonResponse(w http.ResponseWriter, status int, value any) {

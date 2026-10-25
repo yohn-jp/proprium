@@ -30,15 +30,17 @@ const (
 	liveConnectWindow       = 60 * time.Second
 	liveInactiveTokenWindow = 5 * time.Minute
 	maxInactiveClientTokens = maxLiveSessions * maxLiveClients
+	liveKeepaliveInterval   = 30 * time.Second
 )
 
 type LiveConfig struct{ OwnerKey, HostOrigin, PublicURL, ListenAddr string }
 type LiveRegistry struct {
-	config         LiveConfig
-	mu             sync.Mutex
-	sessions       map[string]*liveSession
-	clients        map[[32]byte]*liveClient
-	inactiveTokens map[[32]byte]time.Time
+	config            LiveConfig
+	keepaliveInterval time.Duration
+	mu                sync.Mutex
+	sessions          map[string]*liveSession
+	clients           map[[32]byte]*liveClient
+	inactiveTokens    map[[32]byte]time.Time
 }
 type liveSession struct {
 	id, workspaceID, generation string
@@ -95,7 +97,7 @@ type liveClientRequest struct {
 }
 
 func NewLiveRegistry(config LiveConfig) *LiveRegistry {
-	return &LiveRegistry{config: config, sessions: make(map[string]*liveSession), clients: make(map[[32]byte]*liveClient), inactiveTokens: make(map[[32]byte]time.Time)}
+	return &LiveRegistry{config: config, keepaliveInterval: liveKeepaliveInterval, sessions: make(map[string]*liveSession), clients: make(map[[32]byte]*liveClient), inactiveTokens: make(map[[32]byte]time.Time)}
 }
 
 func registerLiveRoutes(s *Server) {
@@ -372,8 +374,7 @@ func (r *LiveRegistry) events(w http.ResponseWriter, req *http.Request, id strin
 		liveJSON(w, req, r.config.HostOrigin, http.StatusUnauthorized, map[string]string{"error": "session_authorization_required"})
 		return
 	}
-	flusher, ok := w.(http.Flusher)
-	if !ok {
+	if _, ok := w.(http.Flusher); !ok {
 		liveJSON(w, req, r.config.HostOrigin, http.StatusInternalServerError, map[string]string{"error": "streaming_unavailable"})
 		return
 	}
@@ -406,23 +407,29 @@ func (r *LiveRegistry) events(w http.ResponseWriter, req *http.Request, id strin
 	w.Header().Set("Vary", "Origin")
 	_ = http.NewResponseController(w).SetWriteDeadline(time.Time{})
 	w.WriteHeader(http.StatusOK)
-	if !writeSSE(w, flusher, "ready", map[string]string{"sessionId": s.id, "workspaceId": s.workspaceID, "generation": s.generation}) {
+	if !writeSSE(w, "ready", map[string]string{"sessionId": s.id, "workspaceId": s.workspaceID, "generation": s.generation}) {
 		return
 	}
+	keepalive := time.NewTicker(r.keepaliveInterval)
+	defer keepalive.Stop()
 	for {
 		select {
 		case <-req.Context().Done():
 			return
 		case <-s.closed:
 			return
+		case <-keepalive.C:
+			if !writeSSEComment(w) {
+				return
+			}
 		case event := <-s.events:
-			if !writeSSE(w, flusher, event.name, event.data) {
+			if !writeSSE(w, event.name, event.data) {
 				return
 			}
 		}
 	}
 }
-func writeSSE(w http.ResponseWriter, f http.Flusher, name string, value any) bool {
+func writeSSE(w http.ResponseWriter, name string, value any) bool {
 	data, err := json.Marshal(value)
 	if err != nil {
 		return false
@@ -430,8 +437,13 @@ func writeSSE(w http.ResponseWriter, f http.Flusher, name string, value any) boo
 	if _, err = fmt.Fprintf(w, "event: %s\ndata: %s\n\n", name, data); err != nil {
 		return false
 	}
-	f.Flush()
-	return true
+	return http.NewResponseController(w).Flush() == nil
+}
+func writeSSEComment(w http.ResponseWriter) bool {
+	if _, err := io.WriteString(w, ": keepalive\n\n"); err != nil {
+		return false
+	}
+	return http.NewResponseController(w).Flush() == nil
 }
 func (r *LiveRegistry) expireSession(s *liveSession) {
 	r.mu.Lock()

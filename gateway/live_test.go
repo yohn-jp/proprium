@@ -5,11 +5,13 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"errors"
 	"io"
 	"net/http"
 	"net/http/httptest"
 	"strings"
 	"testing"
+	"time"
 )
 
 const testOwnerKey = "0123456789abcdef0123456789abcdef"
@@ -136,6 +138,54 @@ func currentMCPRequest(method string, id int, params any) []byte {
 	encoded, _ := json.Marshal(value)
 	return encoded
 }
+
+type failingHeartbeatWriter struct {
+	header         http.Header
+	wroteHeartbeat bool
+}
+
+func (w *failingHeartbeatWriter) Header() http.Header {
+	if w.header == nil {
+		w.header = make(http.Header)
+	}
+	return w.header
+}
+func (w *failingHeartbeatWriter) WriteHeader(int) {}
+func (w *failingHeartbeatWriter) Write(body []byte) (int, error) {
+	if bytes.Contains(body, []byte(": keepalive")) {
+		w.wroteHeartbeat = true
+	}
+	return len(body), nil
+}
+func (w *failingHeartbeatWriter) Flush() {}
+func (w *failingHeartbeatWriter) FlushError() error {
+	if w.wroteHeartbeat {
+		return errors.New("downstream disconnected")
+	}
+	return nil
+}
+
+func TestLiveHeartbeatWriteFailureExpiresSession(t *testing.T) {
+	f := newLiveFixture(t, []string{"workspace_info"}, []string{"workspace_info"})
+	f.registry.keepaliveInterval = 5 * time.Millisecond
+	request := httptest.NewRequest(http.MethodGet, "/live/sessions/"+f.sessionID+"/events", nil)
+	request.Host = strings.TrimPrefix(strings.TrimPrefix(f.server.URL, "http://"), "https://")
+	request.Header.Set("Origin", testHostOrigin)
+	request.Header.Set("Authorization", "Bearer "+f.ownerToken)
+	response := &failingHeartbeatWriter{}
+	f.registry.ServeHTTP(response, request)
+
+	if !response.wroteHeartbeat {
+		t.Fatal("SSE handler did not attempt an idle heartbeat")
+	}
+	f.registry.mu.Lock()
+	_, stillActive := f.registry.sessions[f.sessionID]
+	f.registry.mu.Unlock()
+	if stillActive {
+		t.Fatal("failed heartbeat left its live session available")
+	}
+}
+
 func (f *liveFixture) mcpRequest(method string, id int, params any, clientToken string, protocol string) (*http.Response, []byte) {
 	f.t.Helper()
 	req, err := http.NewRequest(http.MethodPost, f.server.URL+"/mcp", bytes.NewReader(currentMCPRequest(method, id, params)))
