@@ -20,6 +20,7 @@ async function fixture() {
   const publisherKey = new Uint8Array(await crypto.subtle.exportKey("raw", publisherKeys.publicKey));
   const content = new Map<string, Uint8Array>();
   const plugins: Array<Record<string, unknown>> = [];
+  let registryPatch = 0;
 
   async function addPlugin(id: string, version: string, dependencies: unknown[] = []) {
     const entrypoint = `${id}/${version}/${await digest(rawComponent)}/plugin.wasm`;
@@ -52,9 +53,9 @@ async function fixture() {
   const registrySignature = new Uint8Array(await crypto.subtle.sign({ name: "Ed25519" }, registryKeys.privateKey, registryBytes));
   content.set(registryUrl, registryBytes);
   content.set(`${registryUrl}.sig`, registrySignature);
-  async function publishRegistry(versions: readonly string[]) {
+  async function publishRegistry(versions: readonly string[], registryVersion = `1.0.${++registryPatch}`) {
     const registryBytes = new TextEncoder().encode(JSON.stringify({
-      schema: "proprium.registry/v1", id: "example.public", version: versions.includes("1.1.0") ? "1.1.0" : "1.0.0", artifactBase,
+      schema: "proprium.registry/v1", id: "example.public", version: registryVersion, artifactBase,
       plugins: plugins.filter(plugin => versions.includes(String(plugin.version))),
     }));
     const signature = new Uint8Array(await crypto.subtle.sign({ name: "Ed25519" }, registryKeys.privateKey, registryBytes));
@@ -141,6 +142,30 @@ test("a failed update keeps the current pin, while the latest signed index can r
   const listed = await manager.installed();
   assert.equal(listed.find(plugin => plugin.id === "example.calc" && plugin.version === "1.0.0")?.state, "revoked");
   await assert.rejects(manager.enable({ pluginId: "example.calc", version: "1.0.0", workspaceId: "workspace", grants: [], hostAllowed: [] }));
+});
+
+test("observed revocations cannot be undone by replaying an older signed registry", async () => {
+  const { manager, publishRegistry, content } = await fixture();
+  await manager.installFromRegistry(await manager.previewInstall({ registryUrl, pluginId: "example.calc", version: "1.0.0" }));
+  const originalBytes = Uint8Array.from(content.get(registryUrl)!);
+  const originalSignature = Uint8Array.from(content.get(`${registryUrl}.sig`)!);
+
+  // Re-fetching the exact observed snapshot is idempotent.
+  await manager.previewInstall({ registryUrl, pluginId: "example.math", version: "1.2.0" });
+  await publishRegistry(["1.2.0", "1.1.0"], "1.0.1");
+  await manager.previewInstall({ registryUrl, pluginId: "example.math", version: "1.2.0" });
+  assert.equal((await manager.installed()).find(plugin => plugin.id === "example.calc" && plugin.version === "1.0.0")?.state, "revoked");
+
+  // A changed snapshot cannot reuse the version number already observed.
+  await publishRegistry(["1.2.0"], "1.0.1");
+  await assert.rejects(manager.previewInstall({ registryUrl, pluginId: "example.math", version: "1.2.0" }), /reuse an observed registry version/i);
+
+  // Nor can a compromised distribution serve the previously valid, older root-signed index.
+  content.set(registryUrl, originalBytes);
+  content.set(`${registryUrl}.sig`, originalSignature);
+  await assert.rejects(manager.previewInstall({ registryUrl, pluginId: "example.math", version: "1.2.0" }), /version rollback/i);
+  assert.equal((await manager.installed()).find(plugin => plugin.id === "example.calc" && plugin.version === "1.0.0")?.state, "revoked");
+  await assert.rejects(manager.enable({ pluginId: "example.calc", version: "1.0.0", workspaceId: "workspace", grants: [], hostAllowed: [] }), /revoked/i);
 });
 
 test("dependency cycles fail closed and revoked transitive dependencies block activation", async () => {

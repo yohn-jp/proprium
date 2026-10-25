@@ -573,6 +573,18 @@ export class BrowserPluginManager {
     const raw = await this.fetchBytes(trust.url, 1024 * 1024);
     const signature = await this.fetchBytes(registrySignatureUrl(trust.url), MAX_SIGNATURE_BYTES);
     const registry = await admitRegistry(raw, signature, trust);
+    const latestDigest = await this.store.getState(latestRegistryStateKey(trust.url));
+    if (latestDigest) {
+      const latestSnapshot = await this.store.getRegistry(trust.url, latestDigest);
+      if (!latestSnapshot) throw new PluginManagerError("invalid_plugin", "Latest signed registry proof is missing");
+      const latest = await admitRegistry(latestSnapshot.bytes, latestSnapshot.signature, trust);
+      if (latest.digest !== latestDigest) throw new PluginManagerError("invalid_plugin", "Latest signed registry digest does not match its stored state");
+      if (registry.digest !== latest.digest) {
+        const order = compareVersions(registry.document.version, latest.document.version);
+        if (order < 0) throw new PluginManagerError("invalid_plugin", "Signed registry version rollback is rejected");
+        if (order === 0) throw new PluginManagerError("invalid_plugin", "Conflicting signed registry bytes reuse an observed registry version");
+      }
+    }
     await this.store.putRegistry(registry);
     await this.store.setState(latestRegistryStateKey(trust.url), registry.digest);
     return registry;
