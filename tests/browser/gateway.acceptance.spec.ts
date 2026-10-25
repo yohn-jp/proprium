@@ -157,6 +157,11 @@ async function showWorkspaceTools(page: import("@playwright/test").Page): Promis
   if (await toggle.isVisible() && await toggle.getAttribute("aria-expanded") !== "true") await toggle.click();
 }
 
+async function hideWorkspaceTools(page: import("@playwright/test").Page): Promise<void> {
+  const toggle = page.getByRole("button", { name: /^Files(?:\s|$)/u });
+  if (await toggle.isVisible() && await toggle.getAttribute("aria-expanded") === "true") await toggle.click();
+}
+
 async function enableLiveMcp(page: import("@playwright/test").Page): Promise<void> {
   await showWorkspaceTools(page);
   const panel = page.locator("details.live-mcp-panel");
@@ -273,6 +278,7 @@ test("a live browser Workspace serves real MCP calls through Go SSE and HTTP, an
   expect(afterDisconnect.status).toBeGreaterThanOrEqual(400);
   expect(afterDisconnect.body?.error).toBeDefined();
 
+  await hideWorkspaceTools(page);
   await context.setOffline(true);
   const editor = page.getByLabel("File contents");
   await editor.fill("Local work continues while the Gateway is disconnected.\n");
