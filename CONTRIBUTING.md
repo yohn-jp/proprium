@@ -1,22 +1,30 @@
-# Contributing to Scriptorium
+# Contributing to Proprium
 
-Start with the [documentation index](docs/README.md), [Core architecture](docs/architecture/CORE.md) and the contract for the area being changed.
+The canonical proposed design is indexed at [docs/README.md](docs/README.md). [COMPATIBILITY](docs/architecture/COMPATIBILITY.md) separates inherited Scriptorium code from Proprium's intended runtime.
 
-- Agree on a scoped problem and acceptance criteria before implementation.
-- Work on an isolated branch and submit a pull request; do not write directly to `main`.
-- Preserve Core's dependency boundary and shared authorization, mutation and recovery contracts.
-- Describe behavior changes, relevant dependencies and validation actually executed.
-- Keep work repositories, manuscripts, credentials, caches, embeddings and model artifacts out of source control.
-- Use the applicable organization agent governance for agent-assisted changes.
+- Work on an isolated branch and submit a PR; do not alter main directly.
+- Treat architecture documents as target contracts, not claims that the inherited source is conformant.
+- Limit changes to the accepted scope. Keep author workspaces, Git credentials, tokens, model weights, cached indexes, and private material out of commits and test fixtures.
+- Preserve GitHub remote authority, browser-local failure semantics, host-owned writes, plugin capability boundaries, and current-data provenance.
+- Record exact checks performed and checks unavailable. Passing legacy Node/OCI tests does not certify mobile Safari, browser Git, WASM isolation, or a static Proprium deployment.
+- Follow the [organization agent governance](https://github.com/yohn-jp/.github/blob/main/.github/agent-governance/AGENTS.md).
 
-Run `pnpm install --frozen-lockfile`, `pnpm typecheck`, `pnpm test`, `pnpm build` and `pnpm audit:core`. Run test-source/safety type checks and the browser, integration or image checks appropriate to the changed paths; see [verification](docs/verification/README.md). Verification does not publish or deploy. Publication uses the [gated release workflow](docs/verification/OCI-RELEASE.md).
+## Existing tooling
+
+The inherited Node/pnpm monorepo still exposes **legacy Scriptorium** checks such as:
+
+~~~sh
+pnpm install --frozen-lockfile
+pnpm typecheck
+pnpm test
+pnpm build
+pnpm audit:core
+~~~
+
+Use them when changing the inherited implementation. They are not a verification plan for the proposed browser-native runtime. Do not remove or weaken historical tests merely to align them with documentation. New components will need targeted browser, mobile, Git/sync, artifact and sandbox acceptance tests before claiming support.
 
 ## Documentation
 
-Write documentation as a maintained reference for users, contributors or operators. Describe supported behavior, ownership, invariants and reproducible procedures. Identify design proposals by their intended contract and keep them separate from supported runtime behavior.
+Maintain documentation as durable product/architecture contracts: responsibilities, invariants, declared limitations, and acceptance conditions. Keep dates, branch/commit reports, Issues/PR numbers, progress logs, campaign phases, and raw test results in PRs/checks rather than the product documents. If a legacy document is retired, update every maintained documentation link to it. Do not delete immutable provenance/verification evidence or reinterpret the original Scriptorium codebase as already migrated.
 
-Do not put dates, dated filenames, inspected branch/commit snapshots, Issue/PR/Epic numbers, waves, implementation phases, campaign instructions, progress checklists or execution results in documentation. Put work tracking in issues and pull requests, and machine results in check artifacts. A required API identifier, configuration name, dependency version or artifact-digest placeholder belongs in the procedure that uses it.
-
-Update references when moving or removing documents. Check relative links and verify commands against the repository entry points. Preserve licensing/provenance requirements and immutable verification inputs without treating historical audit material as product instructions.
-
-For security concerns, use [SECURITY.md](SECURITY.md).
+See [SECURITY.md](SECURITY.md) for vulnerability reporting.
