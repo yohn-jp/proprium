@@ -1,3 +1,8 @@
+export const MAX_WORKSPACE_CHANGE_COUNT = 256;
+export const MAX_WORKSPACE_READ_SET_COUNT = 1024;
+export const MAX_WORKSPACE_CHANGE_BYTES = 64 * 1024 * 1024;
+export const MAX_WORKSPACE_READ_BYTES = 64 * 1024 * 1024;
+
 export interface WorkspaceIdentity {
   origin: string;
   repositoryId: number;
@@ -33,6 +38,22 @@ export interface LocalGitError {
 
 export interface FileRevision {
   oid: string | null;
+}
+
+export interface FileRevisionExpectation {
+  path: string;
+  revision: FileRevision;
+}
+
+export interface WorkspaceChange {
+  path: string;
+  content: Uint8Array | null;
+  expectedRevision: FileRevision;
+}
+
+export interface AppliedWorkspaceChange {
+  path: string;
+  revision: FileRevision;
 }
 
 export interface StatusEntry {
@@ -79,6 +100,7 @@ export type LocalGitRequest =
   | { id: string; workspace: WorkspaceIdentity; operation: "read"; path: string }
   | { id: string; workspace: WorkspaceIdentity; operation: "write"; path: string; data: Uint8Array; expected: FileRevision }
   | { id: string; workspace: WorkspaceIdentity; operation: "delete"; path: string; expected: FileRevision }
+  | { id: string; workspace: WorkspaceIdentity; operation: "apply-changes"; changes: WorkspaceChange[]; readSet: FileRevisionExpectation[] }
   | { id: string; workspace: WorkspaceIdentity; operation: "list-files" }
   | { id: string; workspace: WorkspaceIdentity; operation: "status" }
   | { id: string; workspace: WorkspaceIdentity; operation: "diff" }

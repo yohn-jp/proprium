@@ -150,3 +150,68 @@ test("file revisions, repository bindings, unsafe paths, and browser writer lock
   expect(result.uncertain).toBe("storage_unknown");
   expect(result.verification.verified).toBe(true);
 });
+
+
+test("approved batch changes validate every read and write revision before applying any file", async ({ page }) => {
+  const id = workspaceId();
+  await page.goto("/browser-git-test.html");
+  await expect(page.locator("#ready")).toHaveText("ready");
+  const result = await page.evaluate(async (workspaceId) => {
+    const git = window.browserGitTest.open(workspaceId);
+    await git.init();
+    const firstBytes = new TextEncoder().encode("first stays\n");
+    const secondBytes = new TextEncoder().encode("second stays\n");
+    const dependencyBytes = new TextEncoder().encode("dependency\n");
+    const first = await git.write("first.txt", firstBytes, { oid: null });
+    const second = await git.write("second.txt", secondBytes, { oid: null });
+    const dependency = await git.write("dependency.txt", dependencyBytes, { oid: null });
+    const changed = new TextEncoder().encode("would change\n");
+    let staleReadSet = "none";
+    try {
+      await git.applyChanges(
+        [{ path: "first.txt", content: changed, expectedRevision: first }],
+        [{ path: "dependency.txt", revision: { oid: "0".repeat(40) } }],
+      );
+    } catch (error) { staleReadSet = (error as { code?: string }).code ?? "unknown"; }
+    const afterStaleReadSet = await git.read("first.txt");
+
+    let staleWriteSet = "none";
+    try {
+      await git.applyChanges([
+        { path: "first.txt", content: changed, expectedRevision: first },
+        { path: "second.txt", content: changed, expectedRevision: { oid: "f".repeat(40) } },
+      ]);
+    } catch (error) { staleWriteSet = (error as { code?: string }).code ?? "unknown"; }
+    const afterStaleWriteSet = await git.read("first.txt");
+    const secondAfterStaleWriteSet = await git.read("second.txt");
+
+    const applied = await git.applyChanges(
+      [
+        { path: "first.txt", content: changed, expectedRevision: first },
+        { path: "second.txt", content: null, expectedRevision: second },
+      ],
+      [{ path: "dependency.txt", revision: dependency }],
+    );
+    const firstAfterApply = await git.read("first.txt");
+    const secondAfterApply = await git.read("second.txt");
+    git.close();
+    return {
+      staleReadSet,
+      staleWriteSet,
+      afterStaleReadSet: afterStaleReadSet.data ? new TextDecoder().decode(afterStaleReadSet.data) : null,
+      afterStaleWriteSet: afterStaleWriteSet.data ? new TextDecoder().decode(afterStaleWriteSet.data) : null,
+      secondAfterStaleWriteSet: secondAfterStaleWriteSet.data ? new TextDecoder().decode(secondAfterStaleWriteSet.data) : null,
+      applied,
+      firstAfterApply: firstAfterApply.data ? new TextDecoder().decode(firstAfterApply.data) : null,
+      secondAfterApply: secondAfterApply.data,
+    };
+  }, id);
+  expect(result.staleReadSet).toBe("revision_conflict");
+  expect(result.staleWriteSet).toBe("revision_conflict");
+  expect(result.afterStaleReadSet).toBe("first stays\n");
+  expect(result.afterStaleWriteSet).toBe("first stays\n");
+  expect(result.secondAfterStaleWriteSet).toBe("second stays\n");
+  expect(result.applied).toEqual([{ path: "first.txt", revision: { oid: expect.any(String) } }, { path: "second.txt", revision: { oid: null } }]);
+  expect(result.firstAfterApply).toBe("would change\n");
+  expect(result.secondAfterApply).toBeNull();
+});

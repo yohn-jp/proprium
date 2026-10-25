@@ -6,7 +6,14 @@ import webHttp from "isomorphic-git/http/web";
 import type { HttpClient } from "isomorphic-git";
 import type { CommitObject, TreeObject } from "isomorphic-git";
 import type { LocalGitErrorCode, LocalGitRequest, LocalGitResponse, StatusEntry, WorkspaceIdentity } from "./protocol.js";
-import { validateGitPath, validateWorkspaceIdentity } from "./protocol.js";
+import {
+  MAX_WORKSPACE_CHANGE_BYTES,
+  MAX_WORKSPACE_CHANGE_COUNT,
+  MAX_WORKSPACE_READ_BYTES,
+  MAX_WORKSPACE_READ_SET_COUNT,
+  validateGitPath,
+  validateWorkspaceIdentity,
+} from "./protocol.js";
 
 const scope = self as DedicatedWorkerGlobalScope;
 globalThis.Buffer = Buffer;
@@ -520,6 +527,15 @@ async function assertNoSymlinkParents(dir: string, path: string, includeLeaf: bo
   }
 }
 
+async function fileRevision(dir: string, path: string): Promise<string | null> {
+  const file = `${dir}/${path}`;
+  if (!(await exists(file))) return null;
+  const stats = await fs.lstat(file);
+  if (!stats.isFile()) failure("invalid_path", "Only regular repository files can be revision checked.");
+  const content = new Uint8Array(await fs.readFile(file));
+  return (await git.hashBlob({ object: content })).oid;
+}
+
 async function currentHead(dir: string): Promise<string | null> {
   try { return await git.resolveRef({ fs, dir, ref: "HEAD" }); }
   catch (error) {
@@ -844,6 +860,103 @@ async function operation(request: LocalGitRequest): Promise<unknown> {
     } catch { failure("storage_unknown", "The local deletion could not be confirmed in browser storage."); }
     return;
   }
+  if (request.operation === "apply-changes") {
+    if (!Array.isArray(request.changes) || request.changes.length > MAX_WORKSPACE_CHANGE_COUNT ||
+        !Array.isArray(request.readSet) || request.readSet.length > MAX_WORKSPACE_READ_SET_COUNT) {
+      failure("invalid_path", "The approved change set exceeds browser workspace limits.");
+    }
+    let totalBytes = 0;
+    const changes = new Map<string, { content: Uint8Array | null; expectedRevision: string | null; resultingRevision: string | null }>();
+    const expectations = new Map<string, string | null>();
+    const validRevision = (revision: unknown): revision is { oid: string | null } => Boolean(
+      revision && typeof revision === "object" && !Array.isArray(revision) && Object.hasOwn(revision, "oid") &&
+      ((revision as { oid?: unknown }).oid === null || typeof (revision as { oid?: unknown }).oid === "string" && /^[a-f0-9]{40}$/u.test((revision as { oid: string }).oid)),
+    );
+    for (const expected of request.readSet) {
+      if (!expected || typeof expected !== "object" || typeof expected.path !== "string" || !validRevision(expected.revision)) {
+        failure("invalid_path", "The approved read set contains an invalid revision check.");
+      }
+      validateGitPath(expected.path);
+      if (expectations.has(expected.path)) failure("invalid_path", "The approved read set contains a duplicate path.");
+      expectations.set(expected.path, expected.revision.oid);
+    }
+    for (const change of request.changes) {
+      if (!change || typeof change !== "object" || typeof change.path !== "string" || !validRevision(change.expectedRevision) ||
+          !(change.content === null || change.content instanceof Uint8Array)) {
+        failure("invalid_path", "The approved change set contains an invalid file change.");
+      }
+      validateGitPath(change.path);
+      if (changes.has(change.path)) failure("invalid_path", "The approved change set contains a duplicate path.");
+      const previousExpectation = expectations.get(change.path);
+      if (expectations.has(change.path) && previousExpectation !== change.expectedRevision.oid) {
+        failure("revision_conflict", "The approved read set and write set disagree about a file revision.");
+      }
+      if (change.content) {
+        totalBytes += change.content.byteLength;
+        if (totalBytes > MAX_WORKSPACE_CHANGE_BYTES) failure("invalid_path", "The approved change content exceeds the browser workspace limit.");
+      }
+      expectations.set(change.path, change.expectedRevision.oid);
+      const resultingRevision = change.content ? (await git.hashBlob({ object: change.content })).oid : null;
+      changes.set(change.path, { content: change.content, expectedRevision: change.expectedRevision.oid, resultingRevision });
+    }
+
+    // A proposal cannot treat one file path as the parent directory of another.
+    const expectedPaths = [...expectations.keys()].sort();
+    for (let index = 0; index + 1 < expectedPaths.length; index += 1) {
+      if (expectedPaths[index + 1]!.startsWith(`${expectedPaths[index]!}/`)) {
+        failure("invalid_path", "The approved read and write paths contain a file/directory collision.");
+      }
+    }
+
+    // Verify every read dependency and every write/delete base while holding the workspace lock.
+    let totalReadBytes = 0;
+    for (const [path, expectedRevision] of expectations) {
+      validateGitPath(path);
+      await assertNoSymlinkParents(paths.dir, path, true);
+      const currentFile = `${paths.dir}/${path}`;
+      if (await exists(currentFile)) {
+        const stats = await fs.lstat(currentFile);
+        if (!stats.isFile()) failure("invalid_path", "Only regular repository files can be revision checked.");
+        totalReadBytes += stats.size;
+        if (totalReadBytes > MAX_WORKSPACE_READ_BYTES) failure("invalid_path", "The approved read set exceeds the browser workspace limit.");
+      }
+      let actualRevision: string | null = null;
+      try { actualRevision = await fileRevision(paths.dir, path); }
+      catch (error) {
+        if (error && typeof error === "object" && "propriumCode" in error) throw error;
+        failure("storage_unknown", "A workspace file revision could not be read safely before applying changes.");
+      }
+      if (actualRevision !== expectedRevision) failure("revision_conflict", `The file ${path} changed since the approved proposal was prepared.`);
+    }
+
+    let mutationStarted = false;
+    try {
+      for (const [path, change] of changes) {
+        const file = `${paths.dir}/${path}`;
+        if (change.content === null) {
+          if (change.expectedRevision === null) continue;
+          mutationStarted = true;
+          await fs.unlink(file);
+        } else {
+          mutationStarted = true;
+          await ensureDirectory(file.slice(0, file.lastIndexOf("/")));
+          await fs.writeFile(file, change.content);
+        }
+      }
+      if (mutationStarted) await flush();
+      const applied: Array<{ path: string; revision: { oid: string | null } }> = [];
+      for (const [path, change] of changes) {
+        const actualRevision = await fileRevision(paths.dir, path);
+        if (actualRevision !== change.resultingRevision) failure("storage_unknown", "The complete approved change set could not be confirmed after browser storage flush.");
+        applied.push({ path, revision: { oid: actualRevision } });
+      }
+      return applied;
+    } catch (error) {
+      if (!mutationStarted) throw error;
+      if (error && typeof error === "object" && "propriumCode" in error && error.propriumCode === "storage_unknown") throw error;
+      failure("storage_unknown", "Applying the approved change set did not reach a confirmed browser storage state; verify this workspace before continuing.");
+    }
+  }
   if (request.operation === "list-files") {
     const rows = await git.statusMatrix({ fs, dir: paths.dir });
     const files: Array<{ path: string; type: "blob"; oid: string; bytes: number }> = [];
@@ -958,7 +1071,7 @@ scope.addEventListener("message", async (event: MessageEvent<LocalGitRequest>) =
   const workspaceId = request.workspace?.localWorkspaceId ?? "";
   try {
     if (!scope.navigator.locks) failure("lock_unavailable", "This browser does not provide Web Locks; local Git workspace access is disabled.");
-    const write = ["init", "write", "delete", "add", "commit", "create-branch", "verify", "remote-fetch", "remote-pull", "remote-publish"].includes(request.operation);
+    const write = ["init", "write", "delete", "apply-changes", "add", "commit", "create-branch", "verify", "remote-fetch", "remote-pull", "remote-publish"].includes(request.operation);
     const paths = await workspacePaths(request.workspace);
     const result = await scope.navigator.locks.request(paths.lock, { mode: write ? "exclusive" : "shared", ifAvailable: true }, async (lock) => {
       if (!lock) failure("workspace_busy", "Another tab is using this local workspace. Retry when its operation finishes.");

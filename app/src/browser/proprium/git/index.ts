@@ -2,6 +2,9 @@ import type {
   CommitAuthor,
   CommitSummary,
   FileRevision,
+  FileRevisionExpectation,
+  WorkspaceChange,
+  AppliedWorkspaceChange,
   LocalGitError,
   LocalGitErrorCode,
   LocalGitRequest,
@@ -11,12 +14,18 @@ import type {
   DiffChange,
   WorkspaceIdentity,
 } from "./protocol.js";
-import { validateGitPath, validateWorkspaceIdentity } from "./protocol.js";
+import {
+  MAX_WORKSPACE_CHANGE_BYTES,
+  MAX_WORKSPACE_CHANGE_COUNT,
+  MAX_WORKSPACE_READ_SET_COUNT,
+  validateGitPath,
+  validateWorkspaceIdentity,
+} from "./protocol.js";
 import { createGitHubAccountSession, GitHubSyncError } from "./github-sync.js";
 import type { GitHubAccount, GitHubAccountSession, GitHubDevicePrompt, GitHubFetchResult, GitHubPullResult, GitHubPublishResult, GitHubRemoteHead, GitHubRepository, GitHubSyncClient, GitHubRemoteOperation } from "./github-sync.js";
 
 export { validateGitPath, validateWorkspaceIdentity } from "./protocol.js";
-export type { CommitAuthor, CommitSummary, DiffChange, FileRevision, LocalGitError, LocalGitErrorCode, StatusEntry, WorkspaceFile, WorkspaceIdentity };
+export type { AppliedWorkspaceChange, CommitAuthor, CommitSummary, DiffChange, FileRevision, FileRevisionExpectation, LocalGitError, LocalGitErrorCode, StatusEntry, WorkspaceChange, WorkspaceFile, WorkspaceIdentity };
 export { GitHubSyncError } from "./github-sync.js";
 export { createGitHubAccountSession } from "./github-sync.js";
 export type { GitHubAccount, GitHubAccountSession, GitHubDevicePrompt, GitHubFetchResult, GitHubPullResult, GitHubPublishResult, GitHubRemoteHead, GitHubRepository, GitHubSyncClient } from "./github-sync.js";
@@ -130,6 +139,26 @@ export class BrowserLocalGit {
   async delete(path: string, expected: FileRevision): Promise<void> {
     validateGitPath(path);
     await this.call({ operation: "delete", path, expected });
+  }
+
+  applyChanges(changes: readonly WorkspaceChange[], readSet: readonly FileRevisionExpectation[] = []): Promise<AppliedWorkspaceChange[]> {
+    if (!Array.isArray(changes) || changes.length > MAX_WORKSPACE_CHANGE_COUNT ||
+        !Array.isArray(readSet) || readSet.length > MAX_WORKSPACE_READ_SET_COUNT) {
+      return Promise.reject(new BrowserLocalGitError("invalid_path", "The approved change set exceeds browser workspace limits."));
+    }
+    let totalBytes = 0;
+    for (const change of changes) {
+      validateGitPath(change.path);
+      if (!(change.content === null || change.content instanceof Uint8Array)) {
+        return Promise.reject(new BrowserLocalGitError("invalid_path", "The approved change set contains invalid file content."));
+      }
+      if (change.content) totalBytes += change.content.byteLength;
+      if (totalBytes > MAX_WORKSPACE_CHANGE_BYTES) {
+        return Promise.reject(new BrowserLocalGitError("invalid_path", "The approved change content exceeds browser workspace limits."));
+      }
+    }
+    for (const expected of readSet) validateGitPath(expected.path);
+    return this.call({ operation: "apply-changes", changes: [...changes], readSet: [...readSet] });
   }
 
   listFiles(): Promise<WorkspaceFile[]> { return this.call({ operation: "list-files" }); }
