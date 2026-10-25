@@ -70,9 +70,11 @@ export default defineConfig({
     },
     {
       name: "webkit",
-      testMatch: pluginRuntimeSuite
-        ? "**/plugin-runtime.acceptance.spec.ts"
-        : ["**/ui-v1.acceptance.spec.ts", "**/browser-git-sync.acceptance.spec.ts"],
+      testMatch: selectedTestFile
+        ? `**/${selectedTestFile}`
+        : pluginRuntimeSuite
+          ? "**/plugin-runtime.acceptance.spec.ts"
+          : ["**/ui-v1.acceptance.spec.ts", "**/browser-git-sync.acceptance.spec.ts"],
       use: {
         browserName: "webkit",
         launchOptions: process.env.SCRIPTORIUM_E2E_WEBKIT
