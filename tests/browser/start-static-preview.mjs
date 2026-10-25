@@ -18,7 +18,7 @@ const buildCode = await new Promise(resolve => build.once("exit", code => resolv
 if (buildCode !== 0) process.exit(Number(buildCode));
 
 const serverEnvironment = { ...buildEnvironment };
-delete serverEnvironment.VITE_PROPRIUM_GITHUB_AUTH_RELAY;
+delete serverEnvironment.VITE_PROPRIUM_GATEWAY_URL;
 delete serverEnvironment.VITE_PROPRIUM_PLUGIN_REGISTRY_URL;
 delete serverEnvironment.VITE_PROPRIUM_PLUGIN_REGISTRY_KEY;
 delete serverEnvironment.VITE_PROPRIUM_PLUGIN_ARTIFACT_ORIGINS;

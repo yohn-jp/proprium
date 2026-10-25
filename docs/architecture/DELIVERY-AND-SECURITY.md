@@ -9,6 +9,7 @@
 - Independent plugin builds produce immutable versioned artifact sets. A registry publishes identities, compatibility and verified digests; a static object store such as Cloudflare R2 can hold large WASM and optional resources.
 - Host deploys, Gateway binaries and plugin artifacts have separate release lifecycles.
 - Proper cache headers and digest-based asset paths permit browser/CDN reuse. Configure correct MIME for WASM, CORS for cross-origin fetch, CSP and any WebAssembly/Worker isolation headers supported by deployed browser targets.
+- The Host permits HTTPS and loopback HTTP connections in CSP so an owner can choose a self-hosted Gateway after the static build. Selecting a Gateway is a trust decision: it receives OAuth relay traffic and explicitly exposed live tool results. Plugin network access remains governed by the capability broker; a CSP connection allowance grants no plugin capability.
 - A downloaded WASM file's origin does not by itself make the code trusted. Integrity validation precedes execution, and Host-granted capabilities determine what it may do.
 
 A static delivery model removes home-server bandwidth and compute from ordinary Host traffic, not all network or provider costs. Initial Host/assets downloads, GitHub synchronization, cache misses, Gateway traffic and optional external services still use network. CDN, Tunnel and GitHub services have usage limits and costs; no unlimited capacity is promised.
