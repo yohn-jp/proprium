@@ -67,6 +67,8 @@ func NewServer(config Config) (*Server, error) {
 	s.mux.HandleFunc("/oauth/device/code", s.handleOAuth)
 	s.mux.HandleFunc("/oauth/token", s.handleOAuth)
 	s.mux.HandleFunc("/git/", s.handleGit)
+	registerLiveRoutes(s)
+	registerMCPRoute(s)
 	return s, nil
 }
 
