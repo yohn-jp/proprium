@@ -4,6 +4,8 @@
   "version": "0.1.0",
   "type": "module",
   "scripts": {
+    "typecheck:proprium": "tsc --noEmit -p tsconfig.proprium.json",
+    "test:proprium": "node --import tsx --test 'src/browser/proprium/**/*.test.ts'",
     "build": "tsc --noEmit -p tsconfig.json && vite build && SCRIPTORIUM_UI=desktop vite build && SCRIPTORIUM_UI=mobile vite build",
     "typecheck": "tsc -p tsconfig.json --noEmit",
     "test": "node --import tsx --test 'src/**/*.test.ts'"

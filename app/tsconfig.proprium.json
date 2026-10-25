@@ -1,0 +1,9 @@
+{
+  "extends": "./tsconfig.json",
+  "compilerOptions": {
+    "noEmit": true,
+    "types": ["node", "vite/client"]
+  },
+  "include": ["src/browser/proprium/**/*.ts", "src/browser/proprium/**/*.tsx"],
+  "exclude": ["src/browser/proprium/**/*.test.ts", "src/browser/proprium/**/*-test.ts"]
+}
