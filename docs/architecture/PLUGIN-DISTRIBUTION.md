@@ -12,7 +12,7 @@
 
 The implementation stores registry proofs and verified artifacts in IndexedDB, separate from Git workspaces. Activation rechecks the current signed registry state and recursively verifies every pinned dependency artifact before creating a Worker. Worker creation remains explicit; a guest runs only after the Host enables it and invokes it with a bounded snapshot. Uninstalling a version still used by an installed dependent is rejected.
 
-The independent `proprium.compute-sum` example is built by `node scripts/build-plugin-registry.mjs` and checked by `node scripts/verify-plugin-registry.mjs`. Build inputs are the registry/publisher Ed25519 PEM signing keys and the public artifact directory URL. The producer writes manifest and WASM files under SHA-256-qualified paths. The verifier requires the registry public key separately; it never trusts a key shipped inside the registry document.
+The independent `proprium.compute-sum` example is built by `node scripts/build-plugin-registry.mjs` and checked by `node scripts/verify-plugin-registry.mjs`. Build inputs include an explicit `PROPRIUM_PLUGIN_VERSION`, registry/publisher Ed25519 PEM signing keys, the separately pinned registry public key and public artifact directory URL. An optional `PROPRIUM_PLUGIN_PREVIOUS_REGISTRY_DIR` supplies the prior signed registry and its referenced artifacts. The producer verifies that snapshot under the pinned root, preserves every prior version, and rejects reuse of an existing plugin ID/version. It writes manifest and WASM files under SHA-256-qualified paths and refuses to overwrite a different file at an immutable path. The verifier requires the registry public key separately; it never trusts a key shipped inside the registry document.
 
 ## Installation and upgrade
 
