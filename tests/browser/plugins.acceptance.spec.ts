@@ -9,6 +9,11 @@ interface ServedFile { body: Buffer; contentType: string; }
 
 declare global {
   interface Window {
+    propriumReadRace?: {
+      holdNext: boolean;
+      started: boolean;
+      release?: () => void;
+    };
     propriumHostTest?: {
       openWorkspace(identity: import("../../app/src/browser/proprium/git/protocol.js").WorkspaceIdentity, files?: Record<string, string>): Promise<void>;
     };
@@ -79,10 +84,15 @@ function signedFixture(origin: string): { files: Map<string, ServedFile>; regist
   return { files, registryPublicKey: publicKeyBytes(registrySigner.publicKey) };
 }
 
-function signedHostPanelFixture(origin: string): Map<string, ServedFile> {
+function signedHostPanelFixture(
+  origin: string,
+  options: { pluginId?: string; artifact?: Buffer; capabilities?: string[] } = {},
+): Map<string, ServedFile> {
   const registryUrl = `${origin}/plugin-fixture/registry.json`;
   const artifactBase = `${origin}/plugin-fixture/artifacts/`;
-  const pluginId = "fixture.compute-sum";
+  const pluginId = options.pluginId ?? "fixture.compute-sum";
+  const artifactBytes = options.artifact ?? sumComponent;
+  const capabilities = options.capabilities ?? [];
   const publisher = generateKeyPairSync("ed25519");
   const registryKey = process.env.PROPRIUM_E2E_PLUGIN_REGISTRY_PRIVATE_KEY;
   if (!registryKey) throw new Error("The Playwright config did not create a test-only pinned registry key.");
@@ -91,7 +101,7 @@ function signedHostPanelFixture(origin: string): Map<string, ServedFile> {
   const entries = [];
 
   for (const version of ["1.0.0", "1.0.1"]) {
-    const artifactSha = sha256(sumComponent);
+    const artifactSha = sha256(artifactBytes);
     const assetPath = `${pluginId}/${version}/${artifactSha}/plugin.component.wasm`;
     const manifestBytes = Buffer.from(JSON.stringify({
       schema: "proprium.plugin/v1",
@@ -99,8 +109,8 @@ function signedHostPanelFixture(origin: string): Map<string, ServedFile> {
       version,
       abi: "proprium.component/v1",
       entrypoint: assetPath,
-      capabilities: [],
-      artifacts: [{ path: assetPath, bytes: sumComponent.byteLength, sha256: artifactSha, mediaType: "application/wasm" }],
+      capabilities,
+      artifacts: [{ path: assetPath, bytes: artifactBytes.byteLength, sha256: artifactSha, mediaType: "application/wasm" }],
     }), "utf8");
     const manifestPath = `${pluginId}/${version}/manifest/${sha256(manifestBytes)}.json`;
     const manifestSignature = ed25519Sign(null, manifestBytes, publisher.privateKey);
@@ -114,7 +124,7 @@ function signedHostPanelFixture(origin: string): Map<string, ServedFile> {
       dependencies: [],
     });
     files.set(new URL(manifestPath, artifactBase).pathname, { body: manifestBytes, contentType: "application/json" });
-    files.set(new URL(assetPath, artifactBase).pathname, { body: Buffer.from(sumComponent), contentType: "application/wasm" });
+    files.set(new URL(assetPath, artifactBase).pathname, { body: Buffer.from(artifactBytes), contentType: "application/wasm" });
   }
 
   const registryBytes = Buffer.from(JSON.stringify({
@@ -277,4 +287,110 @@ test("Host Plugin panel previews, installs, runs, stops, updates and rolls back 
   await pluginV2.getByRole("button", { name: "Rollback" }).click();
   await expect(panelNotice).toContainText("fixture.compute-sum was rolled back to its retained verified version");
   await expect(pluginV1).toContainText("pinned 1.0.0");
+});
+
+test("Host keeps newer editor text when a reviewed plugin proposal refresh finishes late", async ({ page }) => {
+  await page.goto("/");
+  const origin = new URL(page.url()).origin;
+  const pluginId = "fixture.proposal";
+  const fixtureFiles = signedHostPanelFixture(origin, {
+    pluginId,
+    artifact: component,
+    capabilities: ["workspace.snapshot.read", "workspace.change.propose", "workspace.ui.contribute"],
+  });
+  await page.route(`${origin}/plugin-fixture/**`, async route => {
+    const file = fixtureFiles.get(new URL(route.request().url()).pathname);
+    if (!file) return route.fulfill({ status: 404 });
+    await route.fulfill({ status: 200, contentType: file.contentType, body: file.body });
+  });
+
+  const identity = {
+    origin: "https://github.com", repositoryId: 923456790, owner: "proprium-test", repository: "plugin-refresh-race",
+    branch: "main", localWorkspaceId: `plugin-refresh-race-${crypto.randomUUID()}`,
+  };
+  await page.waitForFunction(() => typeof window.propriumHostTest?.openWorkspace === "function");
+  await page.evaluate(async workspace => window.propriumHostTest!.openWorkspace(workspace, { "README.md": "before\n" }), identity);
+  const mobileFiles = page.getByRole("button", { name: /^Files(?:\s|$)/u });
+  if (await mobileFiles.isVisible()) await mobileFiles.click();
+  const files = page.getByRole("list", { name: "Repository files" });
+  await files.getByRole("button", { name: "README.md" }).click();
+  const editor = page.getByRole("textbox", { name: "File contents" });
+  await expect(editor).toHaveValue("before\n");
+
+  const panel = page.locator("details.plugin-manager-panel");
+  if (await mobileFiles.isVisible() && !(await panel.isVisible())) await mobileFiles.click();
+  await panel.locator("summary").click();
+  await page.getByLabel("Install from trusted registry").fill(pluginId);
+  await page.getByLabel("Version (optional: latest stable)").fill("1.0.0");
+  await page.getByRole("button", { name: "Verify and preview" }).click();
+  await expect(page.getByRole("region", { name: "Plugin installation preview" })).toContainText(`${pluginId}@1.0.0`);
+  await page.getByRole("button", { name: "Download and install disabled" }).click();
+  const plugin = panel.getByRole("listitem").filter({ hasText: pluginId }).filter({ hasText: "v1.0.0" });
+  await plugin.getByRole("checkbox", { name: "workspace.snapshot.read" }).check();
+  await plugin.getByRole("checkbox", { name: "workspace.change.propose" }).check();
+  await plugin.getByRole("checkbox", { name: "workspace.ui.contribute" }).check();
+  await plugin.getByRole("button", { name: "Enable" }).click();
+
+  // The Host's snapshot ID is intentionally random. Adapt only the test fixture's
+  // request to the exact immutable snapshot supplied to the real Component.
+  await page.evaluate(async () => {
+    const moduleUrl = new URL("/src/browser/proprium/plugins/index.ts", location.origin).href;
+    const { BrowserPluginManager } = await import(/* @vite-ignore */ moduleUrl);
+    type Invocation = {
+      pluginId: string;
+      request: string;
+      snapshot: { id: string; revision: string; files: readonly { path: string; revision: string }[] };
+    };
+    const original = BrowserPluginManager.prototype.invoke;
+    BrowserPluginManager.prototype.invoke = function (this: InstanceType<typeof BrowserPluginManager>, options: Invocation) {
+      if (options.pluginId !== "fixture.proposal") return Reflect.apply(original, this, [options]);
+      const request = JSON.parse(options.request) as { path: string; content: string };
+      const file = options.snapshot.files.find(candidate => candidate.path === request.path);
+      if (!file) throw new Error("The proposal fixture path is not present in the Host snapshot.");
+      const fixtureRequest = JSON.stringify({
+        ...request,
+        expectedRevision: file.revision,
+        snapshotId: options.snapshot.id,
+        snapshotRevision: options.snapshot.revision,
+      });
+      return Reflect.apply(original, this, [{ ...options, request: fixtureRequest }]);
+    };
+  });
+  await page.getByLabel("Plugin request").fill(JSON.stringify({ path: "README.md", content: "proposal from plugin\n" }));
+  await plugin.getByRole("button", { name: "Run" }).click();
+  await expect(panel.getByRole("status")).toContainText("Plugin returned 1 change proposal(s) for Host review.");
+  await expect(plugin.getByRole("button", { name: "Review and apply to local worktree" })).toBeVisible();
+
+  await page.evaluate(async () => {
+    const moduleUrl = new URL("/src/browser/proprium/git/index.ts", location.origin).href;
+    const { BrowserLocalGit } = await import(/* @vite-ignore */ moduleUrl);
+    const prototype = BrowserLocalGit.prototype;
+    const original = prototype.read;
+    window.propriumReadRace = { holdNext: true, started: false };
+    prototype.read = async function (this: InstanceType<typeof BrowserLocalGit>, path: string) {
+      const result = await Reflect.apply(original, this, [path]);
+      const race = window.propriumReadRace;
+      if (path === "README.md" && race?.holdNext) {
+        race.holdNext = false;
+        race.started = true;
+        await new Promise<void>(resolve => { race.release = resolve; });
+      }
+      return result;
+    };
+  });
+  await plugin.getByRole("button", { name: "Review and apply to local worktree" }).click();
+  await expect.poll(() => page.evaluate(() => window.propriumReadRace?.started ?? false)).toBe(true);
+  await editor.fill("newer local text while plugin refresh is pending\n");
+  await expect(editor).toHaveValue("newer local text while plugin refresh is pending\n");
+  await page.evaluate(() => {
+    const race = window.propriumReadRace;
+    if (!race?.started || !race.release) throw new Error("The plugin refresh read was not held.");
+    race.release();
+    race.release = undefined;
+  });
+
+  await expect(editor).toHaveValue("newer local text while plugin refresh is pending\n");
+  await expect(panel.getByRole("status")).toContainText("Applied 1 proposed file change(s) to the local worktree.");
+  await expect(page.locator(".save-state")).toHaveText("Unsaved editor text");
+  await expect(editor).toBeEnabled();
 });
