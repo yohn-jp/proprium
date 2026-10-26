@@ -51,6 +51,7 @@ export function GitHubRepositoryPicker({
     let current = true;
     setBranches([]);
     setError("");
+    onBranchChange("");
     if (!session || !selectedRepository) {
       setLoading(false);
       return () => { current = false; };

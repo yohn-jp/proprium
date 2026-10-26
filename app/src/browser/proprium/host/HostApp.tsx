@@ -812,7 +812,7 @@ export function HostApp(): ReactElement {
           {account ? <>
             <p className="signed-in">GitHubに接続中: <strong>{account.login}</strong><button type="button" className="text-button" onClick={signOut}>GitHubからログアウト</button></p>
             <GitHubRepositoryPicker session={session} repositories={repositories} selectedRepositoryId={selectedRepository} selectedBranch={selectedBranch}
-              onRepositoryChange={repository => { setSelectedRepository(repository?.id ?? null); setSelectedBranch(repository?.defaultBranch ?? ""); }}
+              onRepositoryChange={repository => { setSelectedRepository(repository?.id ?? null); setSelectedBranch(""); }}
               onBranchChange={setSelectedBranch} onReconnect={() => void connectGitHub()} disabled={busy} idPrefix="workspace" />
             <button className="primary-button full-width" type="button" disabled={busy || !selectedRepositoryEntry || !selectedRepositoryEntry.permissions.pull || !selectedBranch.trim()} onClick={() => void openRemoteRepository()}>{busy ? "読込中…" : "作品を開く"}</button>
           </> : <>
