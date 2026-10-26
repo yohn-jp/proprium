@@ -23,10 +23,17 @@
 .message-error { color: var(--accent); }
 .restored-editor { min-width: 0; }
 .host-file-action-group { display: inline-flex; align-items: center; gap: .5rem; }
-.restored-host .st-studio-shell .editor-display-controls { display: flex; align-items: center; gap: .5rem; }
-.restored-host .st-studio-shell .editor-display-controls .writing-toolbar { flex: 1 1 auto; min-width: 0; }
-.restored-host .st-studio-shell .editor-display-controls .typography-settings { position: relative; flex: 0 0 auto; z-index: 5; }
-.restored-host .st-studio-shell .editor-display-controls .typography-toolbar { position: absolute; top: 100%; right: 0; width: min(38rem, calc(100vw - 5rem)); max-height: 45vh; overflow: auto; box-sizing: border-box; box-shadow: 0 .5rem 1.5rem rgb(0 0 0 / 15%); }
+.restored-host .st-studio-shell .editor-display-controls { display: flex; align-items: flex-start; flex-wrap: wrap; gap: .5rem; }
+.restored-host .st-studio-shell .editor-display-controls > .writing-toolbar { flex: 1 1 auto; min-width: 0; }
+.restored-host .st-studio-shell .editor-display-controls > .typography-settings { position: static; z-index: auto; flex: 1 1 100%; min-width: 0; }
+.restored-host .st-studio-shell .editor-reading-controls { display: flex; min-width: 0; align-items: center; flex-wrap: wrap; gap: .4rem; }
+.restored-host .st-studio-shell .editor-display-options { position: static; flex: 0 0 auto; min-width: 0; }
+.restored-host .st-studio-shell .editor-display-options > summary { display: flex; min-height: 2.75rem; align-items: center; padding: .3rem .6rem; color: var(--muted); cursor: pointer; }
+.restored-host .st-studio-shell .editor-display-options[open] { flex: 1 1 100%; }
+.restored-host .st-studio-shell .editor-display-options[open] > .writing-toolbar { display: flex; min-width: 0; flex-wrap: wrap; gap: .4rem; margin: .5rem 0; }
+.restored-host .st-studio-shell .editor-display-options .typography-settings { position: static; z-index: auto; min-width: 0; margin-block: .4rem; }
+.restored-host .st-studio-shell .typography-settings > summary { display: flex; min-height: 2.75rem; align-items: center; padding: .3rem .6rem; color: var(--muted); cursor: pointer; }
+.restored-host .st-studio-shell .typography-settings[open] > .typography-toolbar { position: static; inset: auto; display: flex; width: 100%; max-height: none; flex-wrap: wrap; gap: .4rem .65rem; box-sizing: border-box; margin: .4rem 0; overflow: visible; box-shadow: none; }
 /* Focus covers the complete browser viewport; the editor keeps its own exit control. */
 .restored-host .st-studio-shell .editor.is-zen {
   position: fixed;
