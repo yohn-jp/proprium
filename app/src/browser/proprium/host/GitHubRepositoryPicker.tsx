@@ -66,7 +66,7 @@ export function GitHubRepositoryPicker({
       if (!current) return;
       setBranches(available);
       setLoading(false);
-      if (!available.includes(selectedBranch)) onBranchChange(available.includes(defaultBranch) ? defaultBranch : "");
+      onBranchChange(available.includes(selectedBranch) ? selectedBranch : available.includes(defaultBranch) ? defaultBranch : "");
     }).catch((loadError: unknown) => {
       if (!current) return;
       setError(branchErrorMessage(loadError));
