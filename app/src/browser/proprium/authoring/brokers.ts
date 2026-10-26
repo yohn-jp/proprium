@@ -360,6 +360,25 @@ export class ArtifactBroker {
       await this.store.putArtifact({ ...record, proposal_id: proposalId });
     });
   }
+  /** Host-only metadata lookup for a scoped artifact result; it never exposes bytes to the guest. */
+  hostMetadata(pluginId: string, artifactId: string, scope: Scope, snapshot: Snapshot): Promise<ArtifactMetadata> {
+    return this.serial(async () => {
+      const record = await this.requireOwned(pluginId, artifactId);
+      if (record.state !== "sealed" || !record.sha256) throw new BrokerError("file_not_found", "Sealed artifact is unavailable");
+      if (!validScopeSnapshot(scope, snapshot) || canonicalJson(record.scope) !== canonicalJson(scope) ||
+          canonicalJson(record.snapshot) !== canonicalJson(snapshot)) {
+        throw new BrokerError("capability_denied", "Artifact is outside the requested scope or snapshot");
+      }
+      // Host result admission must verify persisted bytes even when this broker
+      // sealed them earlier; IndexedDB contents may have changed since then.
+      await this.verifySealed(record, true);
+      return {
+        artifact_id: record.artifact_id, media_type: record.media_type, filename: record.filename,
+        scope: structuredClone(record.scope), snapshot: structuredClone(record.snapshot),
+        total_bytes: record.received_bytes, sha256: record.sha256,
+      };
+    });
+  }
   async readSealedChunk(pluginId: string, artifactId: string, offset: number, length: number): Promise<{ bytes: Uint8Array; total_bytes: number; sha256: string; next_offset: number | null }> {
     const record = await this.requireOwned(pluginId, artifactId);
     if (record.state !== "sealed" || !record.sha256) throw new BrokerError("file_not_found", "Sealed artifact is unavailable");
@@ -385,8 +404,9 @@ export class ArtifactBroker {
     if (!item || item.plugin_id !== plugin) throw new BrokerError("file_not_found", "Artifact is unavailable in this plugin scope");
     return item;
   }
-  private async verifySealed(record: ArtifactRecord): Promise<void> {
-    if (this.verified.has(record.artifact_id)) return;
+  private async verifySealed(record: ArtifactRecord, force = false): Promise<void> {
+    if (force) this.verified.delete(record.artifact_id);
+    if (!force && this.verified.has(record.artifact_id)) return;
     if (!record.sha256) throw new BrokerError("storage_unknown", "Sealed artifact digest is missing");
     const chunks = await this.store.listChunks(record.artifact_id);
     if (chunks.length !== record.next_sequence || chunks.some((chunk, index) => chunk.sequence !== index)) throw new BrokerError("storage_unknown", "Sealed artifact chunk journal is incomplete");

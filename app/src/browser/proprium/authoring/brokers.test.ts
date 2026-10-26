@@ -65,6 +65,29 @@ test("artifact chunks are ordered, duplicate-safe, digest-sealed, scoped and ret
   assert.equal((await broker.readSealedChunk("proprium.publishing", created.artifact_id, 0, joined.length)).bytes.length, joined.length);
 });
 
+test("Host artifact metadata checks owner, exact scope/snapshot, sealed state and persisted bytes", async () => {
+  const store = new MemoryBrokerStore(); const broker = new ArtifactBroker(store);
+  const created = await broker.create("proprium.publishing", { media_type: "text/plain", filename: "receipt.txt", scope, snapshot });
+  const bytes = new TextEncoder().encode("verified receipt");
+  const digest = createHash("sha256").update(bytes).digest("hex");
+  await broker.append("proprium.publishing", created.artifact_id, 0, [...bytes]);
+  const metadata = await broker.seal("proprium.publishing", created.artifact_id, digest, bytes.length);
+  assert.deepEqual(await broker.hostMetadata("proprium.publishing", created.artifact_id, scope, snapshot), metadata);
+  await assert.rejects(() => broker.hostMetadata("proprium.semantic", created.artifact_id, scope, snapshot),
+    (error: unknown) => error instanceof BrokerError && error.code === "file_not_found");
+  await assert.rejects(() => broker.hostMetadata("proprium.publishing", created.artifact_id, { ...scope, branch: "other" }, snapshot),
+    (error: unknown) => error instanceof BrokerError && error.code === "capability_denied");
+  await assert.rejects(() => broker.hostMetadata("proprium.publishing", created.artifact_id, scope, { ...snapshot, worktree_generation: "g2" }),
+    (error: unknown) => error instanceof BrokerError && error.code === "capability_denied");
+
+  const sealedRecord = await store.getArtifact(created.artifact_id);
+  assert.ok(sealedRecord);
+  const changed = Uint8Array.from(bytes); changed[0] ^= 1;
+  await store.putArtifact(sealedRecord, { key: `${created.artifact_id}:00000000`, artifact_id: created.artifact_id, sequence: 0, sha256: digest, bytes: changed });
+  await assert.rejects(() => broker.hostMetadata("proprium.publishing", created.artifact_id, scope, snapshot),
+    (error: unknown) => error instanceof BrokerError && error.code === "storage_unknown");
+});
+
 test("artifact seal mismatch removes the incomplete output", async () => {
   const store = new MemoryBrokerStore(); const broker = new ArtifactBroker(store);
   const created = await broker.create("proprium.publishing", { media_type: "text/plain", filename: "bad.txt", scope, snapshot });
