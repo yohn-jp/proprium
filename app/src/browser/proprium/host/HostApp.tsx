@@ -15,6 +15,7 @@ import { applyThemeMode, loadThemeMode, persistThemeMode } from "../../../theme.
 import type { WorkspacePanel } from "../../../application/contracts.js";
 import { StorageRecoveryDialog } from "./StorageRecoveryDialog.js";
 import { RestoredEditor } from "./RestoredEditor.js";
+import { rememberRecentDocument, resolveRecentDocument } from "./recent-document.js";
 import { WorkspaceDraftRecovery } from "./WorkspaceDraftRecovery.js";
 import { discoverWorkspaceDrafts, draftBaseMatches } from "./workspace-drafts.js";
 import type { JournalEntry } from "../../../storage/journal.js";
@@ -167,6 +168,7 @@ export function HostApp(): ReactElement {
   const workspaceAuthTarget = useRef<WorkspaceAuthTarget | null>(null);
   const registerEditorFlush = useCallback((flush: (() => Promise<string | null>) | null) => { editorFlush.current = flush; }, []);
   useEffect(() => applyThemeMode(theme), [theme]);
+  useEffect(() => { if (workspace && currentFile) rememberRecentDocument(workspace.identity, currentFile.path); }, [workspace, currentFile?.path]);
   useEffect(() => {
     const dialog = workspaceAuthDialog.current;
     if (!dialog) return;
@@ -216,6 +218,10 @@ export function HostApp(): ReactElement {
       const nextSync = attachedSession && isGitHubWorkspaceIdentity(entry.identity) ? nextGit.connectGitHubSession(attachedSession) : null;
       await nextGit.init();
       const nextState = await loadWorkspaceState(nextGit);
+      const resumePath = resolveRecentDocument(entry.identity, nextState.files.map(file => file.path));
+      const resumeRead = resumePath ? await nextGit.read(resumePath) : null;
+      const resumeText = resumeRead?.data ? asText(resumeRead.data) : "";
+      const resumed: OpenFile | null = resumePath && resumeRead ? { path: resumePath, data: resumeRead.data, revision: resumeRead.revision, text: resumeText, binary: resumeRead.data !== null && resumeText === null, dirty: false } : null;
       const liveFile = currentFileRef.current;
       if (liveFile?.dirty && (!discardConfirmed || liveFile.path !== initialFile?.path || liveFile.text !== initialFile?.text) &&
           !window.confirm("The editor changed while the workspace was loading. Discard the newer text and continue?")) {
@@ -231,7 +237,8 @@ export function HostApp(): ReactElement {
       setSyncClient(nextSync);
       setWorkspace(entry);
       setWorkspaceGeneration(generation);
-      setCurrentFile(null);
+      setCurrentFile(resumed);
+      if (resumed) setRequestedPanel(value => ({ id: "editor", sequence: value.sequence + 1 }));
       setStatus(nextState.status);
       setFiles(nextState.files);
       setHistory(nextState.history);
