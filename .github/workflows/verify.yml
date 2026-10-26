@@ -37,6 +37,8 @@ jobs:
           cache-dependency-path: gateway/go.mod
       - name: Install locked dependencies
         run: pnpm install --frozen-lockfile
+      - name: Verify signed v1 and authoring plugin registry production
+        run: pnpm test:plugin-registry
       - name: Typecheck the Browser Host and adapters
         run: pnpm typecheck:browser
       - name: Test browser Git and plugin security units
