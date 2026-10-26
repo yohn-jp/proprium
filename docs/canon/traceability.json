@@ -1,0 +1,2122 @@
+{
+  "schema_version": 1,
+  "plugins": [
+    {
+      "id": "proprium.narrative",
+      "canon": "docs/canon/plugins/NARRATIVE.md",
+      "prefix": "NAR",
+      "requires": []
+    },
+    {
+      "id": "proprium.knowledge",
+      "canon": "docs/canon/plugins/KNOWLEDGE.md",
+      "prefix": "KNO",
+      "requires": [
+        "proprium.narrative"
+      ]
+    },
+    {
+      "id": "proprium.research",
+      "canon": "docs/canon/plugins/RESEARCH.md",
+      "prefix": "RES",
+      "requires": []
+    },
+    {
+      "id": "proprium.paired-writing",
+      "canon": "docs/canon/plugins/PAIRED-WRITING.md",
+      "prefix": "PW",
+      "requires": [
+        "proprium.narrative"
+      ],
+      "acceptance_pattern": "PW-[0-9]+"
+    },
+    {
+      "id": "proprium.diagnostics",
+      "canon": "docs/canon/plugins/DIAGNOSTICS.md",
+      "prefix": "DIA",
+      "requires": [
+        "proprium.narrative"
+      ]
+    },
+    {
+      "id": "proprium.speaker",
+      "canon": "docs/canon/plugins/SPEAKER.md",
+      "prefix": "SPK",
+      "requires": [
+        "proprium.narrative",
+        "proprium.knowledge"
+      ]
+    },
+    {
+      "id": "proprium.semantic",
+      "canon": "docs/canon/plugins/SEMANTIC.md",
+      "prefix": "SEM",
+      "requires": [
+        "proprium.research"
+      ]
+    },
+    {
+      "id": "proprium.publishing",
+      "canon": "docs/canon/plugins/PUBLISHING.md",
+      "prefix": "PUB",
+      "requires": [
+        "proprium.narrative"
+      ],
+      "acceptance_pattern": "PUB-AC[0-9]+"
+    }
+  ],
+  "sources": [
+    {
+      "repo": "scriptorium",
+      "revision": "95a66c2c985a66bc2d535392dcc450d8c9df18d5",
+      "path": "modules/story/src/actions.ts"
+    },
+    {
+      "repo": "scriptorium",
+      "revision": "95a66c2c985a66bc2d535392dcc450d8c9df18d5",
+      "path": "modules/search/src/actions.ts"
+    },
+    {
+      "repo": "scriptorium",
+      "revision": "95a66c2c985a66bc2d535392dcc450d8c9df18d5",
+      "path": "modules/nlp/src/index.ts"
+    },
+    {
+      "repo": "scriptorium",
+      "revision": "95a66c2c985a66bc2d535392dcc450d8c9df18d5",
+      "path": "modules/assistant/src/actions.ts"
+    },
+    {
+      "repo": "scriptorium",
+      "revision": "95a66c2c985a66bc2d535392dcc450d8c9df18d5",
+      "path": "modules/diagnostics/src/index.ts"
+    },
+    {
+      "repo": "scriptorium",
+      "revision": "95a66c2c985a66bc2d535392dcc450d8c9df18d5",
+      "path": "modules/speaker/src/index.ts"
+    },
+    {
+      "repo": "scriptorium",
+      "revision": "95a66c2c985a66bc2d535392dcc450d8c9df18d5",
+      "path": "modules/semantic/src/actions.ts"
+    },
+    {
+      "repo": "scriptorium",
+      "revision": "95a66c2c985a66bc2d535392dcc450d8c9df18d5",
+      "path": "modules/publishing/src/actions.ts"
+    }
+  ],
+  "source_actions": [
+    {
+      "id": "story.changes.propose",
+      "source": "modules/story/src/actions.ts",
+      "owners": [
+        "proprium.paired-writing"
+      ],
+      "targets": [
+        {
+          "plugin_id": "proprium.paired-writing",
+          "feature_id": "PW-21"
+        }
+      ]
+    },
+    {
+      "id": "story.snapshot.materialize",
+      "source": "modules/story/src/actions.ts",
+      "owners": [
+        "proprium.knowledge"
+      ],
+      "targets": [
+        {
+          "plugin_id": "proprium.knowledge",
+          "feature_id": "KNO-01"
+        }
+      ]
+    },
+    {
+      "id": "story.entities.list",
+      "source": "modules/story/src/actions.ts",
+      "owners": [
+        "proprium.narrative",
+        "proprium.knowledge"
+      ],
+      "partition": "Narrative: hierarchy types, structural fields/path/breadcrumbs; Knowledge: Bible/semantic records and scene facts. One file revision authority, complete shared read preconditions.",
+      "targets": [
+        {
+          "plugin_id": "proprium.narrative",
+          "feature_id": "NAR-02"
+        },
+        {
+          "plugin_id": "proprium.knowledge",
+          "feature_id": "KNO-01"
+        }
+      ]
+    },
+    {
+      "id": "story.entities.collection-revision",
+      "source": "modules/story/src/actions.ts",
+      "owners": [
+        "proprium.narrative",
+        "proprium.knowledge"
+      ],
+      "partition": "Narrative: hierarchy types, structural fields/path/breadcrumbs; Knowledge: Bible/semantic records and scene facts. One file revision authority, complete shared read preconditions.",
+      "targets": [
+        {
+          "plugin_id": "proprium.narrative",
+          "feature_id": "NAR-02"
+        },
+        {
+          "plugin_id": "proprium.knowledge",
+          "feature_id": "KNO-01"
+        }
+      ]
+    },
+    {
+      "id": "story.entities.get",
+      "source": "modules/story/src/actions.ts",
+      "owners": [
+        "proprium.narrative",
+        "proprium.knowledge"
+      ],
+      "partition": "Narrative: hierarchy types, structural fields/path/breadcrumbs; Knowledge: Bible/semantic records and scene facts. One file revision authority, complete shared read preconditions.",
+      "targets": [
+        {
+          "plugin_id": "proprium.narrative",
+          "feature_id": "NAR-02"
+        },
+        {
+          "plugin_id": "proprium.knowledge",
+          "feature_id": "KNO-01"
+        }
+      ]
+    },
+    {
+      "id": "story.entities.create",
+      "source": "modules/story/src/actions.ts",
+      "owners": [
+        "proprium.narrative",
+        "proprium.knowledge"
+      ],
+      "partition": "Narrative: hierarchy types, structural fields/path/breadcrumbs; Knowledge: Bible/semantic records and scene facts. One file revision authority, complete shared read preconditions.",
+      "targets": [
+        {
+          "plugin_id": "proprium.narrative",
+          "feature_id": "NAR-04"
+        },
+        {
+          "plugin_id": "proprium.knowledge",
+          "feature_id": "KNO-02"
+        }
+      ]
+    },
+    {
+      "id": "story.entities.update",
+      "source": "modules/story/src/actions.ts",
+      "owners": [
+        "proprium.narrative",
+        "proprium.knowledge"
+      ],
+      "partition": "Narrative: hierarchy types, structural fields/path/breadcrumbs; Knowledge: Bible/semantic records and scene facts. One file revision authority, complete shared read preconditions.",
+      "targets": [
+        {
+          "plugin_id": "proprium.narrative",
+          "feature_id": "NAR-06"
+        },
+        {
+          "plugin_id": "proprium.knowledge",
+          "feature_id": "KNO-02"
+        }
+      ]
+    },
+    {
+      "id": "story.scene.metadata.update",
+      "source": "modules/story/src/actions.ts",
+      "owners": [
+        "proprium.narrative",
+        "proprium.knowledge"
+      ],
+      "partition": "Narrative: hierarchy types, structural fields/path/breadcrumbs; Knowledge: Bible/semantic records and scene facts. One file revision authority, complete shared read preconditions.",
+      "targets": [
+        {
+          "plugin_id": "proprium.narrative",
+          "feature_id": "NAR-06"
+        },
+        {
+          "plugin_id": "proprium.knowledge",
+          "feature_id": "KNO-03"
+        }
+      ]
+    },
+    {
+      "id": "story.entities.reorder",
+      "source": "modules/story/src/actions.ts",
+      "owners": [
+        "proprium.narrative"
+      ],
+      "targets": [
+        {
+          "plugin_id": "proprium.narrative",
+          "feature_id": "NAR-05"
+        }
+      ]
+    },
+    {
+      "id": "story.entities.backlinks",
+      "source": "modules/story/src/actions.ts",
+      "owners": [
+        "proprium.knowledge"
+      ],
+      "targets": [
+        {
+          "plugin_id": "proprium.knowledge",
+          "feature_id": "KNO-06"
+        }
+      ]
+    },
+    {
+      "id": "story.entities.appearances",
+      "source": "modules/story/src/actions.ts",
+      "owners": [
+        "proprium.knowledge"
+      ],
+      "targets": [
+        {
+          "plugin_id": "proprium.knowledge",
+          "feature_id": "KNO-06"
+        }
+      ]
+    },
+    {
+      "id": "story.entities.voice-patterns",
+      "source": "modules/story/src/actions.ts",
+      "owners": [
+        "proprium.knowledge"
+      ],
+      "targets": [
+        {
+          "plugin_id": "proprium.knowledge",
+          "feature_id": "KNO-06"
+        }
+      ]
+    },
+    {
+      "id": "story.entities.freshness",
+      "source": "modules/story/src/actions.ts",
+      "owners": [
+        "proprium.knowledge"
+      ],
+      "targets": [
+        {
+          "plugin_id": "proprium.knowledge",
+          "feature_id": "KNO-06"
+        }
+      ]
+    },
+    {
+      "id": "story.entities.suggested-tags",
+      "source": "modules/story/src/actions.ts",
+      "owners": [
+        "proprium.knowledge"
+      ],
+      "targets": [
+        {
+          "plugin_id": "proprium.knowledge",
+          "feature_id": "KNO-07"
+        }
+      ]
+    },
+    {
+      "id": "story.tags.list",
+      "source": "modules/story/src/actions.ts",
+      "owners": [
+        "proprium.knowledge"
+      ],
+      "targets": [
+        {
+          "plugin_id": "proprium.knowledge",
+          "feature_id": "KNO-07"
+        }
+      ]
+    },
+    {
+      "id": "story.scene.context",
+      "source": "modules/story/src/actions.ts",
+      "owners": [
+        "proprium.narrative",
+        "proprium.knowledge"
+      ],
+      "partition": "Narrative: hierarchy types, structural fields/path/breadcrumbs; Knowledge: Bible/semantic records and scene facts. One file revision authority, complete shared read preconditions.",
+      "targets": [
+        {
+          "plugin_id": "proprium.narrative",
+          "feature_id": "NAR-06"
+        },
+        {
+          "plugin_id": "proprium.knowledge",
+          "feature_id": "KNO-08"
+        }
+      ]
+    },
+    {
+      "id": "story.volumes.tree",
+      "source": "modules/story/src/actions.ts",
+      "owners": [
+        "proprium.narrative"
+      ],
+      "targets": [
+        {
+          "plugin_id": "proprium.narrative",
+          "feature_id": "NAR-02"
+        }
+      ]
+    },
+    {
+      "id": "story.threads.overview",
+      "source": "modules/story/src/actions.ts",
+      "owners": [
+        "proprium.knowledge"
+      ],
+      "targets": [
+        {
+          "plugin_id": "proprium.knowledge",
+          "feature_id": "KNO-10"
+        }
+      ]
+    },
+    {
+      "id": "story.threads.status",
+      "source": "modules/story/src/actions.ts",
+      "owners": [
+        "proprium.knowledge"
+      ],
+      "targets": [
+        {
+          "plugin_id": "proprium.knowledge",
+          "feature_id": "KNO-10"
+        }
+      ]
+    },
+    {
+      "id": "story.threads.lifecycle",
+      "source": "modules/story/src/actions.ts",
+      "owners": [
+        "proprium.knowledge"
+      ],
+      "targets": [
+        {
+          "plugin_id": "proprium.knowledge",
+          "feature_id": "KNO-11"
+        }
+      ]
+    },
+    {
+      "id": "story.graph.query",
+      "source": "modules/story/src/actions.ts",
+      "owners": [
+        "proprium.knowledge"
+      ],
+      "targets": [
+        {
+          "plugin_id": "proprium.knowledge",
+          "feature_id": "KNO-13"
+        }
+      ]
+    },
+    {
+      "id": "story.cooccurrence",
+      "source": "modules/story/src/actions.ts",
+      "owners": [
+        "proprium.knowledge"
+      ],
+      "targets": [
+        {
+          "plugin_id": "proprium.knowledge",
+          "feature_id": "KNO-13"
+        }
+      ]
+    },
+    {
+      "id": "story.map.query",
+      "source": "modules/story/src/actions.ts",
+      "owners": [
+        "proprium.knowledge"
+      ],
+      "targets": [
+        {
+          "plugin_id": "proprium.knowledge",
+          "feature_id": "KNO-14"
+        }
+      ]
+    },
+    {
+      "id": "story.timeline.query",
+      "source": "modules/story/src/actions.ts",
+      "owners": [
+        "proprium.knowledge"
+      ],
+      "targets": [
+        {
+          "plugin_id": "proprium.knowledge",
+          "feature_id": "KNO-15"
+        }
+      ]
+    },
+    {
+      "id": "story.world-state.at-scene",
+      "source": "modules/story/src/actions.ts",
+      "owners": [
+        "proprium.knowledge"
+      ],
+      "targets": [
+        {
+          "plugin_id": "proprium.knowledge",
+          "feature_id": "KNO-16"
+        }
+      ]
+    },
+    {
+      "id": "story.world-state.history",
+      "source": "modules/story/src/actions.ts",
+      "owners": [
+        "proprium.knowledge"
+      ],
+      "targets": [
+        {
+          "plugin_id": "proprium.knowledge",
+          "feature_id": "KNO-16"
+        }
+      ]
+    },
+    {
+      "id": "story.world-state.workbench",
+      "source": "modules/story/src/actions.ts",
+      "owners": [
+        "proprium.knowledge"
+      ],
+      "targets": [
+        {
+          "plugin_id": "proprium.knowledge",
+          "feature_id": "KNO-18"
+        }
+      ]
+    },
+    {
+      "id": "story.state-proposals.list",
+      "source": "modules/story/src/actions.ts",
+      "owners": [
+        "proprium.knowledge"
+      ],
+      "targets": [
+        {
+          "plugin_id": "proprium.knowledge",
+          "feature_id": "KNO-18"
+        }
+      ]
+    },
+    {
+      "id": "story.state-proposals.create",
+      "source": "modules/story/src/actions.ts",
+      "owners": [
+        "proprium.knowledge"
+      ],
+      "targets": [
+        {
+          "plugin_id": "proprium.knowledge",
+          "feature_id": "KNO-18"
+        }
+      ]
+    },
+    {
+      "id": "story.state-proposals.update",
+      "source": "modules/story/src/actions.ts",
+      "owners": [
+        "proprium.knowledge"
+      ],
+      "targets": [
+        {
+          "plugin_id": "proprium.knowledge",
+          "feature_id": "KNO-18"
+        }
+      ]
+    },
+    {
+      "id": "story.state-proposals.approve",
+      "source": "modules/story/src/actions.ts",
+      "owners": [
+        "proprium.knowledge"
+      ],
+      "targets": [
+        {
+          "plugin_id": "proprium.knowledge",
+          "feature_id": "KNO-18"
+        }
+      ]
+    },
+    {
+      "id": "story.state-proposals.reject",
+      "source": "modules/story/src/actions.ts",
+      "owners": [
+        "proprium.knowledge"
+      ],
+      "targets": [
+        {
+          "plugin_id": "proprium.knowledge",
+          "feature_id": "KNO-18"
+        }
+      ]
+    },
+    {
+      "id": "story.state-proposals.stale",
+      "source": "modules/story/src/actions.ts",
+      "owners": [
+        "proprium.knowledge"
+      ],
+      "targets": [
+        {
+          "plugin_id": "proprium.knowledge",
+          "feature_id": "KNO-18"
+        }
+      ]
+    },
+    {
+      "id": "story.zukan-suggestions.list",
+      "source": "modules/story/src/actions.ts",
+      "owners": [
+        "proprium.knowledge"
+      ],
+      "targets": [
+        {
+          "plugin_id": "proprium.knowledge",
+          "feature_id": "KNO-05"
+        }
+      ]
+    },
+    {
+      "id": "story.zukan-suggestions.create",
+      "source": "modules/story/src/actions.ts",
+      "owners": [
+        "proprium.knowledge"
+      ],
+      "targets": [
+        {
+          "plugin_id": "proprium.knowledge",
+          "feature_id": "KNO-05"
+        }
+      ]
+    },
+    {
+      "id": "story.zukan-suggestions.approve",
+      "source": "modules/story/src/actions.ts",
+      "owners": [
+        "proprium.knowledge"
+      ],
+      "targets": [
+        {
+          "plugin_id": "proprium.knowledge",
+          "feature_id": "KNO-05"
+        }
+      ]
+    },
+    {
+      "id": "story.zukan-suggestions.reject",
+      "source": "modules/story/src/actions.ts",
+      "owners": [
+        "proprium.knowledge"
+      ],
+      "targets": [
+        {
+          "plugin_id": "proprium.knowledge",
+          "feature_id": "KNO-05"
+        }
+      ]
+    },
+    {
+      "id": "story.reader-model.build",
+      "source": "modules/story/src/actions.ts",
+      "owners": [
+        "proprium.knowledge"
+      ],
+      "targets": [
+        {
+          "plugin_id": "proprium.knowledge",
+          "feature_id": "KNO-17"
+        }
+      ]
+    },
+    {
+      "id": "story.series.list",
+      "source": "modules/story/src/actions.ts",
+      "owners": [
+        "proprium.knowledge"
+      ],
+      "targets": [
+        {
+          "plugin_id": "proprium.knowledge",
+          "feature_id": "KNO-19"
+        }
+      ]
+    },
+    {
+      "id": "story.series.get",
+      "source": "modules/story/src/actions.ts",
+      "owners": [
+        "proprium.knowledge"
+      ],
+      "targets": [
+        {
+          "plugin_id": "proprium.knowledge",
+          "feature_id": "KNO-19"
+        }
+      ]
+    },
+    {
+      "id": "story.series.create",
+      "source": "modules/story/src/actions.ts",
+      "owners": [
+        "proprium.knowledge"
+      ],
+      "targets": [
+        {
+          "plugin_id": "proprium.knowledge",
+          "feature_id": "KNO-19"
+        }
+      ]
+    },
+    {
+      "id": "story.series.update",
+      "source": "modules/story/src/actions.ts",
+      "owners": [
+        "proprium.knowledge"
+      ],
+      "targets": [
+        {
+          "plugin_id": "proprium.knowledge",
+          "feature_id": "KNO-19"
+        }
+      ]
+    },
+    {
+      "id": "story.series.delete",
+      "source": "modules/story/src/actions.ts",
+      "owners": [
+        "proprium.knowledge"
+      ],
+      "targets": [
+        {
+          "plugin_id": "proprium.knowledge",
+          "feature_id": "KNO-19"
+        }
+      ]
+    },
+    {
+      "id": "story.series.binding.get",
+      "source": "modules/story/src/actions.ts",
+      "owners": [
+        "proprium.knowledge"
+      ],
+      "targets": [
+        {
+          "plugin_id": "proprium.knowledge",
+          "feature_id": "KNO-19"
+        }
+      ]
+    },
+    {
+      "id": "story.series.binding.update",
+      "source": "modules/story/src/actions.ts",
+      "owners": [
+        "proprium.knowledge"
+      ],
+      "targets": [
+        {
+          "plugin_id": "proprium.knowledge",
+          "feature_id": "KNO-19"
+        }
+      ]
+    },
+    {
+      "id": "story.series.binding.delete",
+      "source": "modules/story/src/actions.ts",
+      "owners": [
+        "proprium.knowledge"
+      ],
+      "targets": [
+        {
+          "plugin_id": "proprium.knowledge",
+          "feature_id": "KNO-19"
+        }
+      ]
+    },
+    {
+      "id": "story.series.overlay",
+      "source": "modules/story/src/actions.ts",
+      "owners": [
+        "proprium.knowledge"
+      ],
+      "targets": [
+        {
+          "plugin_id": "proprium.knowledge",
+          "feature_id": "KNO-19"
+        }
+      ]
+    },
+    {
+      "id": "search.query",
+      "source": "modules/search/src/actions.ts",
+      "owners": [
+        "proprium.research"
+      ],
+      "targets": [
+        {
+          "plugin_id": "proprium.research",
+          "feature_id": "RES-001"
+        }
+      ]
+    },
+    {
+      "id": "search.terms.list",
+      "source": "modules/search/src/actions.ts",
+      "owners": [
+        "proprium.research"
+      ],
+      "targets": [
+        {
+          "plugin_id": "proprium.research",
+          "feature_id": "RES-003"
+        }
+      ]
+    },
+    {
+      "id": "search.terms.resolve",
+      "source": "modules/search/src/actions.ts",
+      "owners": [
+        "proprium.research"
+      ],
+      "targets": [
+        {
+          "plugin_id": "proprium.research",
+          "feature_id": "RES-004"
+        }
+      ]
+    },
+    {
+      "id": "search.terms.propose",
+      "source": "modules/search/src/actions.ts",
+      "owners": [
+        "proprium.research"
+      ],
+      "targets": [
+        {
+          "plugin_id": "proprium.research",
+          "feature_id": "RES-003"
+        }
+      ]
+    },
+    {
+      "id": "search.terms.remove",
+      "source": "modules/search/src/actions.ts",
+      "owners": [
+        "proprium.research"
+      ],
+      "targets": [
+        {
+          "plugin_id": "proprium.research",
+          "feature_id": "RES-003"
+        }
+      ]
+    },
+    {
+      "id": "nlp.analyze",
+      "source": "modules/nlp/src/index.ts",
+      "owners": [
+        "proprium.research"
+      ],
+      "targets": [
+        {
+          "plugin_id": "proprium.research",
+          "feature_id": "RES-005"
+        }
+      ]
+    },
+    {
+      "id": "nlp.countTokens",
+      "source": "modules/nlp/src/index.ts",
+      "owners": [
+        "proprium.research"
+      ],
+      "targets": [
+        {
+          "plugin_id": "proprium.research",
+          "feature_id": "RES-011"
+        }
+      ]
+    },
+    {
+      "id": "nlp.discoverCandidates",
+      "source": "modules/nlp/src/index.ts",
+      "owners": [
+        "proprium.research"
+      ],
+      "targets": [
+        {
+          "plugin_id": "proprium.research",
+          "feature_id": "RES-006"
+        }
+      ]
+    },
+    {
+      "id": "nlp.termVariants",
+      "source": "modules/nlp/src/index.ts",
+      "owners": [
+        "proprium.research"
+      ],
+      "targets": [
+        {
+          "plugin_id": "proprium.research",
+          "feature_id": "RES-007"
+        }
+      ]
+    },
+    {
+      "id": "nlp.dictionary",
+      "source": "modules/nlp/src/index.ts",
+      "owners": [
+        "proprium.research"
+      ],
+      "targets": [
+        {
+          "plugin_id": "proprium.research",
+          "feature_id": "RES-008"
+        }
+      ]
+    },
+    {
+      "id": "nlp.saveSynonymGroup",
+      "source": "modules/nlp/src/index.ts",
+      "owners": [
+        "proprium.research"
+      ],
+      "targets": [
+        {
+          "plugin_id": "proprium.research",
+          "feature_id": "RES-008"
+        }
+      ]
+    },
+    {
+      "id": "nlp.ignoreCandidates",
+      "source": "modules/nlp/src/index.ts",
+      "owners": [
+        "proprium.research"
+      ],
+      "targets": [
+        {
+          "plugin_id": "proprium.research",
+          "feature_id": "RES-009"
+        }
+      ]
+    },
+    {
+      "id": "nlp.features",
+      "source": "modules/nlp/src/index.ts",
+      "owners": [
+        "proprium.research"
+      ],
+      "targets": [
+        {
+          "plugin_id": "proprium.research",
+          "feature_id": "RES-012"
+        }
+      ]
+    },
+    {
+      "id": "nlp.updateExternalConsent",
+      "source": "modules/nlp/src/index.ts",
+      "owners": [
+        "proprium.research"
+      ],
+      "targets": [
+        {
+          "plugin_id": "proprium.research",
+          "feature_id": "RES-012"
+        }
+      ]
+    },
+    {
+      "id": "assistant.health",
+      "source": "modules/assistant/src/actions.ts",
+      "owners": [
+        "proprium.paired-writing"
+      ],
+      "targets": [
+        {
+          "plugin_id": "proprium.paired-writing",
+          "feature_id": "PW-01"
+        }
+      ]
+    },
+    {
+      "id": "assistant.queue.status",
+      "source": "modules/assistant/src/actions.ts",
+      "owners": [
+        "proprium.paired-writing"
+      ],
+      "targets": [
+        {
+          "plugin_id": "proprium.paired-writing",
+          "feature_id": "PW-01"
+        }
+      ]
+    },
+    {
+      "id": "assistant.settings.read",
+      "source": "modules/assistant/src/actions.ts",
+      "owners": [
+        "proprium.paired-writing"
+      ],
+      "targets": [
+        {
+          "plugin_id": "proprium.paired-writing",
+          "feature_id": "PW-01"
+        }
+      ]
+    },
+    {
+      "id": "assistant.settings.propose",
+      "source": "modules/assistant/src/actions.ts",
+      "owners": [
+        "proprium.paired-writing"
+      ],
+      "targets": [
+        {
+          "plugin_id": "proprium.paired-writing",
+          "feature_id": "PW-01"
+        }
+      ]
+    },
+    {
+      "id": "assistant.usage.read",
+      "source": "modules/assistant/src/actions.ts",
+      "owners": [
+        "proprium.paired-writing"
+      ],
+      "targets": [
+        {
+          "plugin_id": "proprium.paired-writing",
+          "feature_id": "PW-01"
+        }
+      ]
+    },
+    {
+      "id": "assistant.rewrite",
+      "source": "modules/assistant/src/actions.ts",
+      "owners": [
+        "proprium.paired-writing"
+      ],
+      "targets": [
+        {
+          "plugin_id": "proprium.paired-writing",
+          "feature_id": "PW-02"
+        }
+      ]
+    },
+    {
+      "id": "assistant.rewrite.propose",
+      "source": "modules/assistant/src/actions.ts",
+      "owners": [
+        "proprium.paired-writing"
+      ],
+      "targets": [
+        {
+          "plugin_id": "proprium.paired-writing",
+          "feature_id": "PW-02"
+        }
+      ]
+    },
+    {
+      "id": "assistant.summary.scene",
+      "source": "modules/assistant/src/actions.ts",
+      "owners": [
+        "proprium.paired-writing"
+      ],
+      "targets": [
+        {
+          "plugin_id": "proprium.paired-writing",
+          "feature_id": "PW-05"
+        }
+      ]
+    },
+    {
+      "id": "assistant.summary.chapter",
+      "source": "modules/assistant/src/actions.ts",
+      "owners": [
+        "proprium.paired-writing"
+      ],
+      "targets": [
+        {
+          "plugin_id": "proprium.paired-writing",
+          "feature_id": "PW-05"
+        }
+      ]
+    },
+    {
+      "id": "assistant.qa",
+      "source": "modules/assistant/src/actions.ts",
+      "owners": [
+        "proprium.paired-writing"
+      ],
+      "targets": [
+        {
+          "plugin_id": "proprium.paired-writing",
+          "feature_id": "PW-04"
+        }
+      ]
+    },
+    {
+      "id": "assistant.continuation",
+      "source": "modules/assistant/src/actions.ts",
+      "owners": [
+        "proprium.paired-writing"
+      ],
+      "targets": [
+        {
+          "plugin_id": "proprium.paired-writing",
+          "feature_id": "PW-03"
+        }
+      ]
+    },
+    {
+      "id": "assistant.aspect.review",
+      "source": "modules/assistant/src/actions.ts",
+      "owners": [
+        "proprium.diagnostics"
+      ],
+      "targets": [
+        {
+          "plugin_id": "proprium.diagnostics",
+          "feature_id": "DIA-14"
+        }
+      ]
+    },
+    {
+      "id": "assistant.dialogue.topics",
+      "source": "modules/assistant/src/actions.ts",
+      "owners": [
+        "proprium.paired-writing"
+      ],
+      "targets": [
+        {
+          "plugin_id": "proprium.paired-writing",
+          "feature_id": "PW-06"
+        }
+      ]
+    },
+    {
+      "id": "assistant.dialogue.turns",
+      "source": "modules/assistant/src/actions.ts",
+      "owners": [
+        "proprium.paired-writing"
+      ],
+      "targets": [
+        {
+          "plugin_id": "proprium.paired-writing",
+          "feature_id": "PW-06"
+        }
+      ]
+    },
+    {
+      "id": "assistant.reader.reaction",
+      "source": "modules/assistant/src/actions.ts",
+      "owners": [
+        "proprium.paired-writing"
+      ],
+      "targets": [
+        {
+          "plugin_id": "proprium.paired-writing",
+          "feature_id": "PW-05"
+        }
+      ]
+    },
+    {
+      "id": "assistant.zukan.suggestions",
+      "source": "modules/assistant/src/actions.ts",
+      "owners": [
+        "proprium.paired-writing"
+      ],
+      "targets": [
+        {
+          "plugin_id": "proprium.paired-writing",
+          "feature_id": "PW-11"
+        }
+      ]
+    },
+    {
+      "id": "assistant.synonyms.suggestions",
+      "source": "modules/assistant/src/actions.ts",
+      "owners": [
+        "proprium.paired-writing"
+      ],
+      "targets": [
+        {
+          "plugin_id": "proprium.paired-writing",
+          "feature_id": "PW-08"
+        }
+      ]
+    },
+    {
+      "id": "assistant.contradictions.assist",
+      "source": "modules/assistant/src/actions.ts",
+      "owners": [
+        "proprium.paired-writing"
+      ],
+      "targets": [
+        {
+          "plugin_id": "proprium.paired-writing",
+          "feature_id": "PW-09"
+        }
+      ]
+    },
+    {
+      "id": "assistant.stateEvents.draft",
+      "source": "modules/assistant/src/actions.ts",
+      "owners": [
+        "proprium.paired-writing"
+      ],
+      "targets": [
+        {
+          "plugin_id": "proprium.paired-writing",
+          "feature_id": "PW-11"
+        }
+      ]
+    },
+    {
+      "id": "assistant.speaker.attribute",
+      "source": "modules/assistant/src/actions.ts",
+      "owners": [
+        "proprium.paired-writing"
+      ],
+      "targets": [
+        {
+          "plugin_id": "proprium.paired-writing",
+          "feature_id": "PW-10"
+        }
+      ]
+    },
+    {
+      "id": "assistant.summary.scene.preview",
+      "source": "modules/assistant/src/actions.ts",
+      "owners": [
+        "proprium.paired-writing"
+      ],
+      "targets": [
+        {
+          "plugin_id": "proprium.paired-writing",
+          "feature_id": "PW-05"
+        }
+      ]
+    },
+    {
+      "id": "assistant.summary.chapter.preview",
+      "source": "modules/assistant/src/actions.ts",
+      "owners": [
+        "proprium.paired-writing"
+      ],
+      "targets": [
+        {
+          "plugin_id": "proprium.paired-writing",
+          "feature_id": "PW-05"
+        }
+      ]
+    },
+    {
+      "id": "assistant.qa.preview",
+      "source": "modules/assistant/src/actions.ts",
+      "owners": [
+        "proprium.paired-writing"
+      ],
+      "targets": [
+        {
+          "plugin_id": "proprium.paired-writing",
+          "feature_id": "PW-04"
+        }
+      ]
+    },
+    {
+      "id": "assistant.continuation.preview",
+      "source": "modules/assistant/src/actions.ts",
+      "owners": [
+        "proprium.paired-writing"
+      ],
+      "targets": [
+        {
+          "plugin_id": "proprium.paired-writing",
+          "feature_id": "PW-03"
+        }
+      ]
+    },
+    {
+      "id": "assistant.aspect.review.preview",
+      "source": "modules/assistant/src/actions.ts",
+      "owners": [
+        "proprium.diagnostics"
+      ],
+      "targets": [
+        {
+          "plugin_id": "proprium.diagnostics",
+          "feature_id": "DIA-14"
+        }
+      ]
+    },
+    {
+      "id": "assistant.dialogue.topics.preview",
+      "source": "modules/assistant/src/actions.ts",
+      "owners": [
+        "proprium.paired-writing"
+      ],
+      "targets": [
+        {
+          "plugin_id": "proprium.paired-writing",
+          "feature_id": "PW-06"
+        }
+      ]
+    },
+    {
+      "id": "assistant.dialogue.turn.preview",
+      "source": "modules/assistant/src/actions.ts",
+      "owners": [
+        "proprium.paired-writing"
+      ],
+      "targets": [
+        {
+          "plugin_id": "proprium.paired-writing",
+          "feature_id": "PW-06"
+        }
+      ]
+    },
+    {
+      "id": "assistant.dialogue.turns.preview",
+      "source": "modules/assistant/src/actions.ts",
+      "owners": [
+        "proprium.paired-writing"
+      ],
+      "targets": [
+        {
+          "plugin_id": "proprium.paired-writing",
+          "feature_id": "PW-06"
+        }
+      ]
+    },
+    {
+      "id": "assistant.reader.reaction.preview",
+      "source": "modules/assistant/src/actions.ts",
+      "owners": [
+        "proprium.paired-writing"
+      ],
+      "targets": [
+        {
+          "plugin_id": "proprium.paired-writing",
+          "feature_id": "PW-05"
+        }
+      ]
+    },
+    {
+      "id": "assistant.synonyms.preview",
+      "source": "modules/assistant/src/actions.ts",
+      "owners": [
+        "proprium.paired-writing"
+      ],
+      "targets": [
+        {
+          "plugin_id": "proprium.paired-writing",
+          "feature_id": "PW-08"
+        }
+      ]
+    },
+    {
+      "id": "assistant.zukan.sandbox.preview",
+      "source": "modules/assistant/src/actions.ts",
+      "owners": [
+        "proprium.paired-writing"
+      ],
+      "targets": [
+        {
+          "plugin_id": "proprium.paired-writing",
+          "feature_id": "PW-11"
+        }
+      ]
+    },
+    {
+      "id": "diagnostics.checkConsistency",
+      "source": "modules/diagnostics/src/index.ts",
+      "owners": [
+        "proprium.diagnostics"
+      ],
+      "targets": [
+        {
+          "plugin_id": "proprium.diagnostics",
+          "feature_id": "DIA-02"
+        }
+      ]
+    },
+    {
+      "id": "diagnostics.checkContinuity",
+      "source": "modules/diagnostics/src/index.ts",
+      "owners": [
+        "proprium.diagnostics"
+      ],
+      "targets": [
+        {
+          "plugin_id": "proprium.diagnostics",
+          "feature_id": "DIA-03"
+        }
+      ]
+    },
+    {
+      "id": "diagnostics.voiceConsistency",
+      "source": "modules/diagnostics/src/index.ts",
+      "owners": [
+        "proprium.speaker"
+      ],
+      "targets": [
+        {
+          "plugin_id": "proprium.speaker",
+          "feature_id": "SPK-08"
+        }
+      ]
+    },
+    {
+      "id": "diagnostics.analyze",
+      "source": "modules/diagnostics/src/index.ts",
+      "owners": [
+        "proprium.diagnostics"
+      ],
+      "targets": [
+        {
+          "plugin_id": "proprium.diagnostics",
+          "feature_id": "DIA-06"
+        }
+      ]
+    },
+    {
+      "id": "diagnostics.scene",
+      "source": "modules/diagnostics/src/index.ts",
+      "owners": [
+        "proprium.diagnostics"
+      ],
+      "targets": [
+        {
+          "plugin_id": "proprium.diagnostics",
+          "feature_id": "DIA-01"
+        }
+      ]
+    },
+    {
+      "id": "diagnostics.checkPlotSemantics",
+      "source": "modules/diagnostics/src/index.ts",
+      "owners": [
+        "proprium.diagnostics"
+      ],
+      "targets": [
+        {
+          "plugin_id": "proprium.diagnostics",
+          "feature_id": "DIA-07"
+        }
+      ]
+    },
+    {
+      "id": "diagnostics.lint",
+      "source": "modules/diagnostics/src/index.ts",
+      "owners": [
+        "proprium.diagnostics"
+      ],
+      "targets": [
+        {
+          "plugin_id": "proprium.diagnostics",
+          "feature_id": "DIA-04"
+        }
+      ]
+    },
+    {
+      "id": "diagnostics.proposeLintFix",
+      "source": "modules/diagnostics/src/index.ts",
+      "owners": [
+        "proprium.diagnostics"
+      ],
+      "targets": [
+        {
+          "plugin_id": "proprium.diagnostics",
+          "feature_id": "DIA-05"
+        }
+      ]
+    },
+    {
+      "id": "diagnostics.formatManuscript",
+      "source": "modules/diagnostics/src/index.ts",
+      "owners": [
+        "proprium.diagnostics"
+      ],
+      "targets": [
+        {
+          "plugin_id": "proprium.diagnostics",
+          "feature_id": "DIA-05"
+        }
+      ]
+    },
+    {
+      "id": "diagnostics.voiceProfiles",
+      "source": "modules/diagnostics/src/index.ts",
+      "owners": [
+        "proprium.speaker"
+      ],
+      "targets": [
+        {
+          "plugin_id": "proprium.speaker",
+          "feature_id": "SPK-07"
+        }
+      ]
+    },
+    {
+      "id": "diagnostics.voiceDeviations",
+      "source": "modules/diagnostics/src/index.ts",
+      "owners": [
+        "proprium.speaker"
+      ],
+      "targets": [
+        {
+          "plugin_id": "proprium.speaker",
+          "feature_id": "SPK-08"
+        }
+      ]
+    },
+    {
+      "id": "diagnostics.stylometricDeviations",
+      "source": "modules/diagnostics/src/index.ts",
+      "owners": [
+        "proprium.speaker"
+      ],
+      "targets": [
+        {
+          "plugin_id": "proprium.speaker",
+          "feature_id": "SPK-08"
+        }
+      ]
+    },
+    {
+      "id": "speaker.scenes.list",
+      "source": "modules/speaker/src/index.ts",
+      "owners": [
+        "proprium.speaker"
+      ],
+      "targets": [
+        {
+          "plugin_id": "proprium.speaker",
+          "feature_id": "SPK-01"
+        }
+      ]
+    },
+    {
+      "id": "speaker.dialogue.list",
+      "source": "modules/speaker/src/index.ts",
+      "owners": [
+        "proprium.speaker"
+      ],
+      "targets": [
+        {
+          "plugin_id": "proprium.speaker",
+          "feature_id": "SPK-06"
+        }
+      ]
+    },
+    {
+      "id": "speaker.voice.profiles",
+      "source": "modules/speaker/src/index.ts",
+      "owners": [
+        "proprium.speaker"
+      ],
+      "targets": [
+        {
+          "plugin_id": "proprium.speaker",
+          "feature_id": "SPK-07"
+        }
+      ]
+    },
+    {
+      "id": "speaker.attribute",
+      "source": "modules/speaker/src/index.ts",
+      "owners": [
+        "proprium.speaker"
+      ],
+      "targets": [
+        {
+          "plugin_id": "proprium.speaker",
+          "feature_id": "SPK-02"
+        }
+      ]
+    },
+    {
+      "id": "speaker.voice.check",
+      "source": "modules/speaker/src/index.ts",
+      "owners": [
+        "proprium.speaker"
+      ],
+      "targets": [
+        {
+          "plugin_id": "proprium.speaker",
+          "feature_id": "SPK-08"
+        }
+      ]
+    },
+    {
+      "id": "speaker.review.queue",
+      "source": "modules/speaker/src/index.ts",
+      "owners": [
+        "proprium.speaker"
+      ],
+      "targets": [
+        {
+          "plugin_id": "proprium.speaker",
+          "feature_id": "SPK-05"
+        }
+      ]
+    },
+    {
+      "id": "speaker.override",
+      "source": "modules/speaker/src/index.ts",
+      "owners": [
+        "proprium.speaker"
+      ],
+      "targets": [
+        {
+          "plugin_id": "proprium.speaker",
+          "feature_id": "SPK-05"
+        }
+      ]
+    },
+    {
+      "id": "speaker.count.update",
+      "source": "modules/speaker/src/index.ts",
+      "owners": [
+        "proprium.speaker"
+      ],
+      "targets": [
+        {
+          "plugin_id": "proprium.speaker",
+          "feature_id": "SPK-04"
+        }
+      ]
+    },
+    {
+      "id": "speaker.evaluation.latest",
+      "source": "modules/speaker/src/index.ts",
+      "owners": [
+        "proprium.speaker"
+      ],
+      "targets": [
+        {
+          "plugin_id": "proprium.speaker",
+          "feature_id": "SPK-09"
+        }
+      ]
+    },
+    {
+      "id": "speaker.ruleGates",
+      "source": "modules/speaker/src/index.ts",
+      "owners": [
+        "proprium.speaker"
+      ],
+      "targets": [
+        {
+          "plugin_id": "proprium.speaker",
+          "feature_id": "SPK-09"
+        }
+      ]
+    },
+    {
+      "id": "speaker.evaluation.run",
+      "source": "modules/speaker/src/index.ts",
+      "owners": [
+        "proprium.speaker"
+      ],
+      "targets": [
+        {
+          "plugin_id": "proprium.speaker",
+          "feature_id": "SPK-09"
+        }
+      ]
+    },
+    {
+      "id": "speaker.retraining.run",
+      "source": "modules/speaker/src/index.ts",
+      "owners": [
+        "proprium.speaker"
+      ],
+      "targets": [
+        {
+          "plugin_id": "proprium.speaker",
+          "feature_id": "SPK-10"
+        }
+      ]
+    },
+    {
+      "id": "semantic.index.rebuild",
+      "source": "modules/semantic/src/actions.ts",
+      "owners": [
+        "proprium.semantic"
+      ],
+      "targets": [
+        {
+          "plugin_id": "proprium.semantic",
+          "feature_id": "SEM-01"
+        }
+      ]
+    },
+    {
+      "id": "semantic.index.status",
+      "source": "modules/semantic/src/actions.ts",
+      "owners": [
+        "proprium.semantic"
+      ],
+      "targets": [
+        {
+          "plugin_id": "proprium.semantic",
+          "feature_id": "SEM-01"
+        }
+      ]
+    },
+    {
+      "id": "semantic.search",
+      "source": "modules/semantic/src/actions.ts",
+      "owners": [
+        "proprium.semantic"
+      ],
+      "targets": [
+        {
+          "plugin_id": "proprium.semantic",
+          "feature_id": "SEM-02"
+        }
+      ]
+    },
+    {
+      "id": "semantic.expressions.search",
+      "source": "modules/semantic/src/actions.ts",
+      "owners": [
+        "proprium.semantic"
+      ],
+      "targets": [
+        {
+          "plugin_id": "proprium.semantic",
+          "feature_id": "SEM-03"
+        }
+      ]
+    },
+    {
+      "id": "semantic.terms.clusters",
+      "source": "modules/semantic/src/actions.ts",
+      "owners": [
+        "proprium.semantic"
+      ],
+      "targets": [
+        {
+          "plugin_id": "proprium.semantic",
+          "feature_id": "SEM-04"
+        }
+      ]
+    },
+    {
+      "id": "semantic.contradictions.rebuild",
+      "source": "modules/semantic/src/actions.ts",
+      "owners": [
+        "proprium.semantic"
+      ],
+      "targets": [
+        {
+          "plugin_id": "proprium.semantic",
+          "feature_id": "SEM-05"
+        }
+      ]
+    },
+    {
+      "id": "semantic.contradictions.dismiss",
+      "source": "modules/semantic/src/actions.ts",
+      "owners": [
+        "proprium.diagnostics"
+      ],
+      "targets": [
+        {
+          "plugin_id": "proprium.diagnostics",
+          "feature_id": "DIA-11"
+        }
+      ]
+    },
+    {
+      "id": "semantic.settings.read",
+      "source": "modules/semantic/src/actions.ts",
+      "owners": [
+        "proprium.semantic"
+      ],
+      "targets": [
+        {
+          "plugin_id": "proprium.semantic",
+          "feature_id": "SEM-06"
+        }
+      ]
+    },
+    {
+      "id": "semantic.settings.update",
+      "source": "modules/semantic/src/actions.ts",
+      "owners": [
+        "proprium.semantic"
+      ],
+      "targets": [
+        {
+          "plugin_id": "proprium.semantic",
+          "feature_id": "SEM-06"
+        }
+      ]
+    },
+    {
+      "id": "semantic.task.status",
+      "source": "modules/semantic/src/actions.ts",
+      "owners": [
+        "proprium.semantic"
+      ],
+      "targets": [
+        {
+          "plugin_id": "proprium.semantic",
+          "feature_id": "SEM-01"
+        }
+      ]
+    },
+    {
+      "id": "semantic.task.cancel",
+      "source": "modules/semantic/src/actions.ts",
+      "owners": [
+        "proprium.semantic"
+      ],
+      "targets": [
+        {
+          "plugin_id": "proprium.semantic",
+          "feature_id": "SEM-01"
+        }
+      ]
+    },
+    {
+      "id": "publishing.export.plaintext",
+      "source": "modules/publishing/src/actions.ts",
+      "owners": [
+        "proprium.publishing"
+      ],
+      "targets": [
+        {
+          "plugin_id": "proprium.publishing",
+          "feature_id": "PUB-02"
+        }
+      ]
+    },
+    {
+      "id": "publishing.export.epub",
+      "source": "modules/publishing/src/actions.ts",
+      "owners": [
+        "proprium.publishing"
+      ],
+      "targets": [
+        {
+          "plugin_id": "proprium.publishing",
+          "feature_id": "PUB-03"
+        }
+      ]
+    },
+    {
+      "id": "publishing.export.vertical-print",
+      "source": "modules/publishing/src/actions.ts",
+      "owners": [
+        "proprium.publishing"
+      ],
+      "targets": [
+        {
+          "plugin_id": "proprium.publishing",
+          "feature_id": "PUB-04"
+        }
+      ]
+    },
+    {
+      "id": "publishing.project.tree",
+      "source": "modules/publishing/src/actions.ts",
+      "owners": [
+        "proprium.publishing"
+      ],
+      "targets": [
+        {
+          "plugin_id": "proprium.publishing",
+          "feature_id": "PUB-01"
+        }
+      ]
+    },
+    {
+      "id": "publishing.episodes.read",
+      "source": "modules/publishing/src/actions.ts",
+      "owners": [
+        "proprium.publishing"
+      ],
+      "targets": [
+        {
+          "plugin_id": "proprium.publishing",
+          "feature_id": "PUB-06"
+        }
+      ]
+    },
+    {
+      "id": "publishing.episodes.propose",
+      "source": "modules/publishing/src/actions.ts",
+      "owners": [
+        "proprium.publishing"
+      ],
+      "targets": [
+        {
+          "plugin_id": "proprium.publishing",
+          "feature_id": "PUB-06"
+        }
+      ]
+    },
+    {
+      "id": "publishing.shares.list",
+      "source": "modules/publishing/src/actions.ts",
+      "owners": [
+        "proprium.publishing"
+      ],
+      "targets": [
+        {
+          "plugin_id": "proprium.publishing",
+          "feature_id": "PUB-07"
+        }
+      ]
+    },
+    {
+      "id": "publishing.shares.create",
+      "source": "modules/publishing/src/actions.ts",
+      "owners": [
+        "proprium.publishing"
+      ],
+      "targets": [
+        {
+          "plugin_id": "proprium.publishing",
+          "feature_id": "PUB-07"
+        }
+      ]
+    },
+    {
+      "id": "publishing.shares.revoke",
+      "source": "modules/publishing/src/actions.ts",
+      "owners": [
+        "proprium.publishing"
+      ],
+      "targets": [
+        {
+          "plugin_id": "proprium.publishing",
+          "feature_id": "PUB-07"
+        }
+      ]
+    }
+  ],
+  "source_tools": [
+    {
+      "id": "list_projects",
+      "source": "modules/mcp/src/tools.ts",
+      "owner": "Host",
+      "via": "repositories_list"
+    },
+    {
+      "id": "discover_actions",
+      "source": "modules/mcp/src/tools.ts",
+      "owner": "Host",
+      "via": "plugin_call / actions.list"
+    },
+    {
+      "id": "invoke_action",
+      "source": "modules/mcp/src/tools.ts",
+      "owner": "Host",
+      "via": "plugin_call / typed Action Registry"
+    },
+    {
+      "id": "get_entity",
+      "source": "modules/mcp/src/tools.ts",
+      "owner": "proprium.knowledge",
+      "via": "plugin_call"
+    },
+    {
+      "id": "list_entities",
+      "source": "modules/mcp/src/tools.ts",
+      "owner": "proprium.knowledge",
+      "via": "plugin_call"
+    },
+    {
+      "id": "get_scene_context",
+      "source": "modules/mcp/src/tools.ts",
+      "owner": "proprium.paired-writing",
+      "via": "plugin_call"
+    },
+    {
+      "id": "get_writing_context",
+      "source": "modules/mcp/src/tools.ts",
+      "owner": "proprium.paired-writing",
+      "via": "plugin_call"
+    },
+    {
+      "id": "get_context_manifest",
+      "source": "modules/mcp/src/tools.ts",
+      "owner": "proprium.paired-writing",
+      "via": "plugin_call"
+    },
+    {
+      "id": "get_volume_tree",
+      "source": "modules/mcp/src/tools.ts",
+      "owner": "proprium.narrative",
+      "via": "plugin_call"
+    },
+    {
+      "id": "search",
+      "source": "modules/mcp/src/tools.ts",
+      "owner": "proprium.research",
+      "via": "plugin_call"
+    },
+    {
+      "id": "analyze_manuscript",
+      "source": "modules/mcp/src/tools.ts",
+      "owner": "proprium.diagnostics",
+      "via": "plugin_call"
+    },
+    {
+      "id": "get_diagnostics",
+      "source": "modules/mcp/src/tools.ts",
+      "owner": "proprium.diagnostics",
+      "via": "plugin_call"
+    },
+    {
+      "id": "get_thread_status",
+      "source": "modules/mcp/src/tools.ts",
+      "owner": "proprium.knowledge",
+      "via": "plugin_call"
+    },
+    {
+      "id": "get_status",
+      "source": "modules/mcp/src/tools.ts",
+      "owner": "Host",
+      "via": "git_status"
+    },
+    {
+      "id": "get_history",
+      "source": "modules/mcp/src/tools.ts",
+      "owner": "Host",
+      "via": "git_log"
+    },
+    {
+      "id": "get_observation",
+      "source": "modules/mcp/src/tools.ts",
+      "owner": "Host",
+      "via": "repository_info + git_status + files_list"
+    },
+    {
+      "id": "submit_change_set",
+      "source": "modules/mcp/src/tools.ts",
+      "owner": "proprium.paired-writing",
+      "via": "plugin_call"
+    },
+    {
+      "id": "list_change_sets",
+      "source": "modules/mcp/src/tools.ts",
+      "owner": "proprium.paired-writing",
+      "via": "plugin_call"
+    },
+    {
+      "id": "get_change_set",
+      "source": "modules/mcp/src/tools.ts",
+      "owner": "proprium.paired-writing",
+      "via": "plugin_call"
+    },
+    {
+      "id": "update_entity",
+      "source": "modules/mcp/src/tools.ts",
+      "owner": "proprium.knowledge",
+      "via": "plugin_call"
+    },
+    {
+      "id": "create_scene",
+      "source": "modules/mcp/src/tools.ts",
+      "owner": "proprium.narrative",
+      "via": "plugin_call"
+    },
+    {
+      "id": "lint_manuscript",
+      "source": "modules/mcp/src/tools.ts",
+      "owner": "proprium.diagnostics",
+      "via": "plugin_call"
+    },
+    {
+      "id": "suggest_rewrite",
+      "source": "modules/mcp/src/tools.ts",
+      "owner": "proprium.paired-writing",
+      "via": "plugin_call"
+    },
+    {
+      "id": "reload",
+      "source": "modules/mcp/src/tools.ts",
+      "owner": "Host",
+      "via": "Host snapshot refresh; no data reset"
+    },
+    {
+      "id": "check_stylometric_deviations",
+      "source": "modules/mcp/src/tools.ts",
+      "owner": "proprium.speaker",
+      "via": "plugin_call"
+    },
+    {
+      "id": "check_plot_semantics",
+      "source": "modules/mcp/src/tools.ts",
+      "owner": "proprium.diagnostics",
+      "via": "plugin_call"
+    },
+    {
+      "id": "check_consistency",
+      "source": "modules/mcp/src/tools.ts",
+      "owner": "proprium.diagnostics",
+      "via": "plugin_call"
+    },
+    {
+      "id": "check_continuity",
+      "source": "modules/mcp/src/tools.ts",
+      "owner": "proprium.diagnostics",
+      "via": "plugin_call"
+    },
+    {
+      "id": "compute_cooccurrence",
+      "source": "modules/mcp/src/tools.ts",
+      "owner": "proprium.knowledge",
+      "via": "plugin_call"
+    },
+    {
+      "id": "check_voice_consistency",
+      "source": "modules/mcp/src/tools.ts",
+      "owner": "proprium.speaker",
+      "via": "plugin_call"
+    },
+    {
+      "id": "check_style_deviations",
+      "source": "modules/mcp/src/tools.ts",
+      "owner": "proprium.speaker",
+      "via": "plugin_call"
+    },
+    {
+      "id": "get_dialogue",
+      "source": "modules/mcp/src/tools.ts",
+      "owner": "proprium.speaker",
+      "via": "plugin_call"
+    },
+    {
+      "id": "format_manuscript",
+      "source": "modules/mcp/src/tools.ts",
+      "owner": "proprium.diagnostics",
+      "via": "plugin_call"
+    }
+  ]
+}
