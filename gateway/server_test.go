@@ -7,6 +7,7 @@ import (
 	"net"
 	"net/http"
 	"net/http/httptest"
+	"strings"
 	"sync"
 	"testing"
 	"time"
@@ -64,6 +65,42 @@ func TestIncomingBodyIsClosedAtRequestDeadline(t *testing.T) {
 	case <-body.closed:
 	default:
 		t.Fatal("request timeout did not close the body reader")
+	}
+}
+
+func TestAuthLandingReturnsToConfiguredHostAndRejectsWrongHost(t *testing.T) {
+	server, err := NewServer(testConfig())
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	request := httptest.NewRequest(http.MethodGet, "https://gateway.example/auth", nil)
+	response := httptest.NewRecorder()
+	server.Handler().ServeHTTP(response, request)
+	if response.Code != http.StatusOK {
+		t.Fatalf("auth landing returned %d, want %d", response.Code, http.StatusOK)
+	}
+	if got := response.Header().Get("Content-Type"); got != "text/html; charset=utf-8" {
+		t.Fatalf("Content-Type = %q", got)
+	}
+	if got := response.Header().Get("Cache-Control"); got != "no-store" {
+		t.Fatalf("Cache-Control = %q", got)
+	}
+	if got := response.Header().Get("Content-Security-Policy"); got == "" {
+		t.Fatal("auth landing omitted Content-Security-Policy")
+	}
+	if got := response.Header().Get("X-Content-Type-Options"); got != "nosniff" {
+		t.Fatalf("X-Content-Type-Options = %q", got)
+	}
+	if body := response.Body.String(); !strings.Contains(body, `href="https://host.example"`) || !strings.Contains(body, "Gatewayの認証が完了しました") {
+		t.Fatalf("auth landing omitted configured Host link or Japanese status: %s", body)
+	}
+
+	request = httptest.NewRequest(http.MethodGet, "https://attacker.example/auth", nil)
+	response = httptest.NewRecorder()
+	server.Handler().ServeHTTP(response, request)
+	if response.Code != http.StatusMisdirectedRequest {
+		t.Fatalf("wrong Host returned %d, want %d", response.Code, http.StatusMisdirectedRequest)
 	}
 }
 
