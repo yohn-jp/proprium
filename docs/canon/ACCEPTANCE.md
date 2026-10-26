@@ -13,7 +13,7 @@
 
 | Gate | Prerequisite | Required demonstrable output |
 | --- | --- | --- |
-| H0 Host recovery extension | Current generic Host/WIT v1 | Paged/revision-scoped list/read, typed action registry, host-owned functional UI contribution and guarded navigation, ChangeSet review/apply broker, deterministic errors |
+| H0 Host recovery extension | Current generic Host/WIT v1 | Paged/revision-scoped list/read, typed action registry, functional Host UI/navigation, ChangeSet review/apply, discovery/installation, artifact sink and deterministic errors |
 | P0 Narrative | H0 + Scriptorium structure/reference code | Signed `proprium.narrative` installs, detects work, renders true Volume/Chapter/Scene tree, resumes/edits/recovers, creates/reorders via guarded proposal |
 | P1 Knowledge | P0 stable identities + H0 UI | Bible, graph, world/reader state, threads and source-jump working |
 | P1 Research | H0 paged snapshot (narrative labels optional) | Model-free lexical search, terms/aliases, safe navigation; can be implemented in parallel with Knowledge |
@@ -21,7 +21,7 @@
 | P1 Diagnostics | H0 + P0, optional Knowledge/Research | Structure/prose/continuity evidence, stale invalidation and lint proposal; baseline in parallel |
 | P2 Speaker | P0 + Knowledge, optional Research/Diagnostics | Attribution/review queue, corrections, voice dashboard, eval reports |
 | P2 Semantic | Research, optional Knowledge | Opt-in model/embedding/rerank/contradiction enhancement with no-model fallback |
-| P2 Publishing | P0 hierarchy and Host artifact download | Actual EPUB/plaintext/vertical-print output, reviewed episode map, honest sharing availability |
+| Early portability / P2 Publishing | P0 hierarchy and Host artifact download | Actual EPUB/plaintext/vertical-print output, reviewed episode map, honest sharing availability |
 | C Complete product | H0 + P0 + P1 + P2 | Independently distributed signed plugins, all author jobs in inventory demonstrable, Core zero-plugin PASS and acceptance matrix below PASS |
 
 Only required **new generic Host capabilities** are shared prerequisites; code from legacy modules should be ported rather than reimplemented without reason. Heavy model or offline-unsupported features should provide explicit unavailable states and never block P0/P1 local writing.
@@ -76,17 +76,39 @@ For every R-ID record `PASS / FAIL / BLOCKED / NOT_CHECKED` and fixture, test co
 - No direct Git mutation by plugin, no auto-approved change, no auto-commit/publish, no unreviewed LLM ingestion/remote egress, no stale result applied after a different scene/draft, no clearing browser storage as a repair technique.
 - No sweeping "today restored" claim without meeting R01–R14. Priority is structured to get an actually usable writing loop first while parallelizing independent ports, not to hide unfinished functions.
 
-## Completion reporting format
+## Completion evidence format
 
-| Plugin | Canon | Signed artifact + registry ref | User-visible live workflow | Desktop/Mobile | Data parity + migration | Status |
-| --- | --- | --- | --- | --- | --- | --- |
-| Narrative | [NARRATIVE](plugins/NARRATIVE.md) | pending until proven | pending | pending | pending | NOT_CHECKED |
-| Knowledge | [KNOWLEDGE](plugins/KNOWLEDGE.md) | pending | pending | pending | pending | NOT_CHECKED |
-| Research | [RESEARCH](plugins/RESEARCH.md) | pending | pending | pending | pending | NOT_CHECKED |
-| Paired Writing | [PAIRED-WRITING](plugins/PAIRED-WRITING.md) | pending | pending | pending | pending | NOT_CHECKED |
-| Diagnostics | [DIAGNOSTICS](plugins/DIAGNOSTICS.md) | pending | pending | pending | pending | NOT_CHECKED |
-| Speaker | [SPEAKER](plugins/SPEAKER.md) | pending | pending | pending | pending | NOT_CHECKED |
-| Semantic | [SEMANTIC](plugins/SEMANTIC.md) | pending | pending | pending | pending | NOT_CHECKED |
-| Publishing | [PUBLISHING](plugins/PUBLISHING.md) | pending | pending | pending | pending | NOT_CHECKED |
+An implementation report supplies one record per feature ID: owning canon/acceptance IDs, source revision, synthetic fixture, signed artifact and registry digests, test command, browser/device class, actual input/output/receipt and `PASS|FAIL|BLOCKED|NOT_CHECKED`. Every claimed complete plugin must have immutable proof for every applicable feature, desktop/mobile author flow and migration/no-loss condition. Reports live in CI artifacts; this canon contains no changing deployment-status table. [Inventory](RECOVERY-INVENTORY.md) retains the original coverage obligation even if topology later evolves.
 
-This table is a template, not actual implementation telemetry. Every completed plugin must replace 'pending' with a concrete immutable build/test/source reference. [Inventory](RECOVERY-INVENTORY.md) retains the original coverage obligation even if plugin topology later evolves.
+## Canon acceptance versus implementation acceptance
+
+**Canon certification** verifies a complete decision contract: every recovered source action/UI/data/helper has one owner and feature row, every row links a local executable scenario specification, schemas and errors are concrete, all links/source paths resolve, required dependency graph is acyclic, and no target is described as implemented. `node scripts/verify-authoring-canon.mjs --sources /home/sophia/src` checks the structural portion. The eight plugin ledgers refine the inventory; their detailed local acceptance IDs are mandatory in addition to R01–R14. Source tests listed there are legacy evidence, not Proprium browser certification. Canon completion does not mark the implementation matrix PASS.
+
+**Implementation certification** executes the local feature scenarios and R01–R14 against signed installed artifacts and the adopted v2 schema. For each feature row, test its visible success result plus the applicable failure dimensions below. Record waived dimensions as `not_applicable` with the canon rule explaining why; no silent omission. Runtime reports stay in CI artifacts, not dated updates to this canon.
+
+| Dimension | Required procedure and visible pass result |
+| --- | --- |
+| Pinned read / stale | Pause before result/apply, edit one read-set file or switch branch; result becomes stale, no newer text is replaced, refresh produces new snapshot. |
+| Competing writer / conflict | Prepare two proposals for the same revision; apply first, second fails revision check with inspectable diff and no partial unreported write. |
+| Unsaved draft / IME | Compose Japanese text, open panel, invoke read/proposal/export, navigate/return; composition and undo survive; draft inclusion is explicit; apply cannot overwrite dirty buffer. |
+| Offline / missing bytes | Disable network after caching, repeat local task; it works on local bytes. Missing artifact/file/provider has a distinct unavailable error and retry path without hidden Gateway requirement. |
+| Corrupt/missing source | Remove referenced manuscript, duplicate entity ID, malformed UTF-8/YAML, unknown fields; visible path-specific diagnostics, unknown bytes preserved and no implicit repair. |
+| Repeat / lost receipt | Resubmit same idempotency key with same/different payload; same returns original receipt, different is rejected. Drop response during apply and recover receipt before retry, with no duplicate log append or scene. |
+| Disable / trap / timeout | Disable producer during work, inject trap and expired deadline; Worker/assets release, late results ignored, proposal/draft/author files survive and plain editor remains usable. |
+| Mobile / accessibility | Mobile WebKit touch+keyboard, portrait/landscape and virtual keyboard; sheet choices and non-drag alternatives work; close/back restores same document/caret/selection/scroll. Physical device claims need their own run. |
+| Recovery / storage quota | Fail staging/journal/cache/artifact writes and reload mid-unit; show actual receipt or storage_unknown, block unsafe mutation and retain original bytes. Derived cache eviction rebuilds without rewriting source. |
+| Scope / privacy | Same IDs on two repositories/branches, cross-work denial, external payload preview, secret redaction; never leak content, bearer or credential into another result/transcript/cache. |
+
+### H0 implementation scenarios
+
+- **H0-READ:** list 300+ scenes over >256 files and >2 MiB, read 130 KiB+ UTF-8 with split multibyte chunks, validate exact hashes/CRLF and cursor scope; memory/page bounds hold without whole-repo import.
+- **H0-ACTION:** same schema-valid UI/MCP call returns equivalent domain value at the same scope/snapshot; unknown fields, caller spoofing, nested recursion and missing grants are rejected before guest side effects.
+- **H0-UI:** a signed artifact contributes an operable outline, form, evidence jump and review link in recovered Desktop/Mobile shells. Keyboard/touch invoke actual typed actions; empty/error/stale states remain distinguishable.
+- **H0-WRITER:** compile a mixed manuscript/entity/scene/state/thread fixture in source order through read-only owner compilers and ephemeral staging, verify original-base read union and same-path collapse, then prove no worktree write occurs before review; reviewed dependency-closed units apply through one writer; failure injected after every staged operation/reload produces recoverable receipts. No auto-commit/push, stale/dirty apply rejected, reject changes no bytes.
+- **H0-INSTALL:** discover each official plugin from signed index, preview capabilities/transitive pins/sizes, install disabled, enable-idle without Worker/model; first demand activates; offline admitted cache and missing bytes are distinguished; invalid signature/version/cycle fails closed.
+- **H0-ARTIFACT:** stream/seal/download text/EPUB above normal RPC cap, verify hash and selected snapshot, overflow/cancel removes incomplete bytes; safe print has no HTML execution and returns to draft.
+- **H0-CONSENT:** load Git consent/model metadata and verify zero grants; deny optional provider and cross-work access, accept only explicit Host-selected scope/request; secrets never enter guest/MCP result; ambiguous paid request never automatically retries.
+
+### First usable slice and full recovery
+
+P0 is usable only when H0 and Narrative local scenarios plus R03–R06 pass with signed discovery/install, actual chapter/scene creation/reorder and recovery; a build alone is insufficient. P1 then certifies the long-work loop R07–R09 with optional providers absent and available. Basic text/EPUB export is scheduled immediately after Narrative as data portability, independent of Reader/sharing service. Full recovery still requires all eight product ledgers, P2 scenarios and R01–R14; independent high-memory Semantic unavailability on unsupported devices must match its explicit supported-platform contract, never block local writing.

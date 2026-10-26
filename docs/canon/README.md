@@ -30,8 +30,8 @@ No recovered capability is complete just because a module exists in `modules/`, 
 
 **Source references are pinned for reproducibility of this design review, not runtime dependencies:**
 
-- Proprium `main@3f82b5e7b555a609cf5594aa0a55f45cd101278a`
-- Scriptorium `main@1a05a0f10b33acca3fcfc544a5a6a2592f1c3865`
-- Arcadia Loom `main@edc033c2c9466274a334299dadfa426661d957d9`
+- Proprium `source@8caf1008b58f947c517675c421d4b6c00938cd0a`
+- Scriptorium `source@95a66c2c985a66bc2d535392dcc450d8c9df18d5`
+- Arcadia Loom `source@edc033c2c9466274a334299dadfa426661d957d9`
 
 The architecture has no calendar-based expiry; actual test/run evidence and source revision stay in build artifacts or PRs, not retroactively marked PASS here.

@@ -30,3 +30,8 @@ A plugin cannot call commit, publish, approval or direct file write. It submits 
 - A plain UI plugin must be representable without shipping publisher JavaScript. Custom canvas/editor integration requires separately approved isolation and is deferred with Atlas.
 
 Do not add bespoke runtime abstractions where Component Model tooling and browser Web Worker primitives already satisfy the contract. Exact WIT world/function signatures and tested tooling versions must be committed along with the first executable ABI implementation, not independently fabricated in prose.
+
+
+## Authoring v2 profile
+
+The [fixed H0 logical schema](../canon/HOST-PLUGIN-CONTRACT.md#h0-authoring-profile-v2-fixed-logical-schema) specifies the incompatible `proprium:plugin@2.0.0` recovery profile: paged immutable bytes, typed read/propose actions, caller policy, Host UI/navigation, recoverable proposal units and Host-owned artifacts. This is a specification, not a second implemented WIT world. Implement and generate one v2 binding source before admitting these artifacts; do not reinterpret v1 `invoke(string)` or title-only UI as that profile. Public v2 `snapshot_stale`/`cancelled` normalize legacy `stale_precondition`/`canceled`; source files' unknown keys remain preserved even while action input schemas reject extra fields.

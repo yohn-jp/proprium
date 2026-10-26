@@ -76,7 +76,7 @@ A scene YAML references its body using `manuscript`. Do not derive the authorita
 ## Single mutation boundary
 
 - Plugin code **cannot mutate** Git, local storage, the DOM or remote refs. Its persistent effects are versioned `ChangeSet` proposals containing goal, ordered operation IDs, affected paths/entities, exact snapshot/revision/preconditions, complete read/write sets, evidence/quote/source location, risk/confidence, and a deterministic preview.
-- UI, MCP and plugin actions call **one** typed action implementation. The Host single writer checks branch/workspace scope, revision and stable idempotency key before applying a *reviewed subset*; operation success and resulting revisions must be returned for each approved operation. A multi-file unit is all-or-nothing in the local writer or reports truthful partial state with a recoverable receipt; never label partial application atomic.
+- UI, MCP and plugin actions call **one** typed action implementation. The Host single writer checks branch/workspace scope, revision and stable idempotency key before applying a *reviewed subset of dependency-closed units*; operation success and resulting revisions must be returned for each approved operation. A multi-file unit is all-or-nothing in the local writer or reports truthful partial state with a recoverable receipt; never label partial application atomic.
 - No external assistant, background job, plugin or retry can approve its own proposal, rewrite an uncommitted editor draft, automatically checkpoint, auto-publish or silently replay an uncertain operation. The author can reject without changing Git.
 - UI active editing and MCP proposals use the same authoring constraints. A changed base -> `stale_precondition`, explicit rebase/review; content is never merged by generic string concatenation. Use browser journal/operation IDs to guard asynchronous responses after scene switch, focus change or disconnect.
 
@@ -102,18 +102,20 @@ A no-provider, no-Semantic, no-Gateway path must still open, write, inspect, che
 ## Execution and dependencies
 
 ~~~text
-HOST prerequisites: paged repository reads + typed actions + real UI contribution renderer
-                 └─> NARRATIVE [P0, unblock author writing]
-                        ├─> KNOWLEDGE [P1] ──> SPEAKER [P2]
-                        ├─> RESEARCH [P1] ──> SEMANTIC [P2, optional]
-                        ├─> PAIRED WRITING [P1; can start once narrative IDs/actions fixed]
-                        ├─> DIAGNOSTICS [P1; light checks without NLP/semantic]
-                        └─> PUBLISHING [P2; export can start from narrative tree]
-          optional advanced edges:
-           KNOWLEDGE + RESEARCH → DIAGNOSTICS continuity
-           KNOWLEDGE + DIAGNOSTICS + RESEARCH → SPEAKER
-           RESEARCH + KNOWLEDGE → SEMANTIC richer retrieval
-           PAIRED WRITING consumes output from any available plugin, not their mandatory packages
+Hard dependency DAG (A -> B means B requires A):
+H0 -> Narrative
+H0 -> Research                         (generic-file mode)
+Narrative -> Knowledge, Paired Writing, Diagnostics, Publishing
+Knowledge -> Speaker                   (Speaker also requires Narrative)
+Research -> Semantic
+
+Optional Host-orchestrated enrichments (not activation dependencies):
+Narrative labels -> Research
+Knowledge/Research/Speaker/Semantic results -> Diagnostics
+Research tokenization/Diagnostics style values -> Speaker
+Knowledge/Research/Diagnostics/Speaker/Semantic values -> Paired Writing
+Semantic results -> Research search UI / Knowledge term candidates
+Knowledge values -> Semantic richer hypotheses
 ~~~
 
 P0/P1/P2 are **dependency and author-value priorities**, not fixed dates or permission to omit P2. Shared Host interfaces and a narrow certified first authoring slice come first; other plugin algorithms, documentation and fixtures can be ported in parallel as soon as their contracts are defined. See [Acceptance & Execution](ACCEPTANCE.md) for a parallel single-integration-branch plan and no-false-green gates.
@@ -126,4 +128,30 @@ P0/P1/P2 are **dependency and author-value priorities**, not fixed dates or perm
 - Owner-authorized extraction from Arcadia must respect source provenance: port application logic and owned UI intent, never private manuscripts, credentials, model weights or third-party assets without redistribution rights.
 - No force push, global Git rewrite, hidden bulk YAML formatting or compatibility alias that keeps a second writer alive.
 
-**Source anchors:** [Scriptorium Modules](https://github.com/yohn-jp/scriptorium/blob/1a05a0f10b33acca3fcfc544a5a6a2592f1c3865/docs/architecture/MODULES.md), [Scriptorium UX Contract](https://github.com/yohn-jp/scriptorium/blob/1a05a0f10b33acca3fcfc544a5a6a2592f1c3865/docs/design/UX-CONTRACT.md), [Arcadia PRODUCT](https://github.com/yohn-jp/arcadia-loom/blob/edc033c2c9466274a334299dadfa426661d957d9/PRODUCT.md), [MCP-first Narrative IDE](https://github.com/yohn-jp/arcadia-loom/blob/edc033c2c9466274a334299dadfa426661d957d9/docs/design/mcp-first-paired-writing-target-architecture.md).
+**Source anchors:** [Scriptorium Modules](https://github.com/yohn-jp/scriptorium/blob/95a66c2c985a66bc2d535392dcc450d8c9df18d5/docs/architecture/MODULES.md), [Scriptorium UX Contract](https://github.com/yohn-jp/scriptorium/blob/95a66c2c985a66bc2d535392dcc450d8c9df18d5/docs/design/UX-CONTRACT.md), [Arcadia PRODUCT](https://github.com/yohn-jp/arcadia-loom/blob/edc033c2c9466274a334299dadfa426661d957d9/PRODUCT.md), [MCP-first Narrative IDE](https://github.com/yohn-jp/arcadia-loom/blob/edc033c2c9466274a334299dadfa426661d957d9/docs/design/mcp-first-paired-writing-target-architecture.md).
+
+
+## Partition and single-owner audit
+
+The eight product boundaries are retained. The historical Story package is split by canonical responsibility: Narrative owns hierarchy/manuscript routing, Knowledge owns authored entities and semantic scene metadata; neither creates a second scene identity. Search+light NLP are merged into Research because aliases, source spans and lexical navigation complete one author task. Heavy Semantic and Speaker remain independently disableable due to distinct model, calibration and memory lifecycles. Publishing keeps local portability separate from service sharing within one independently packaged product; no ninth tiny export plugin is required.
+
+| Shared-looking feature | One canonical owner | Consumer rule |
+| --- | --- | --- |
+| Generic file/editor/draft/save/recovery/checkpoint/publish | Host | Narrative supplies IDs and navigation intent; no plugin save authority |
+| Hierarchy/create/reorder/manuscript linkage | Narrative | Knowledge cannot alter hierarchy fields through entity metadata patches |
+| Bible, voicePatterns, appears/mentions, saved dialogue sketches | Knowledge | Speaker consumes authored voice intent; Paired generates sketch suggestions |
+| Lexical ranking, aliases, term registration, NLP term candidates | Research | Semantic contributes optional scores/clusters, never duplicate lexical index authority |
+| Deterministic continuity and contradiction decisions/dismissals | Diagnostics | Semantic contributes uncertain embedding candidates; merge by source/rule identity once |
+| Dialogue attribution/confirmed override/evaluation | Speaker | Diagnostics consumes values; no mutual required package imports |
+| Assistant first-read, rewrite/continuation, provider settings, context/ChangeSet ingress | Paired Writing | Diagnostics displays external commentary separately from deterministic findings |
+| Export assembly, episode mapping, conditional reader sharing | Publishing | Host owns artifacts/download/print and explicit Git publication |
+
+A conceptual consumer arrow is not permission for recursive action dispatch. Host orchestration resolves required providers in topological order, passes immutable values to optional consumers, and detects recursion. Research -> Semantic required dependency cannot become Semantic -> Research -> Semantic invocation. Every required provider missing/disabled is a visible feature-specific error; optional missing providers produce an explicit coverage warning and preserve the baseline task.
+
+### Author data precedence
+
+Existing YAML/Markdown and module metadata remain canonical at their existing path. New plugin metadata paths are used for genuinely new data or an explicitly approved migration with a verified no-loss round trip; never select a new path merely because the plugin has been renamed. Duplicate old/new records with different values produce a migration conflict, not last-writer-wins. Scene YAML `speakerOverrides` is current attribution authority; correction JSONL is immutable audit/evaluation evidence. Authored Knowledge `voicePatterns` is intent; Speaker/Diagnostics measurements remain derived observations. Git-stored consent/model preference is never an execution grant. Diagnostic dismissals are authoritative human decisions even when the originating candidate was Semantic.
+
+### Delivery priorities
+
+H0 includes discovery/installation and functional UI as well as the v2 logical schema in the Host contract. P0 then completes recognized-work -> correct manuscript -> continue writing -> local save/recovery -> reviewed chapter/scene creation/reorder. P1 makes long-form work practically usable: Knowledge references/state, model-free Research, optional external collaboration and provenance-bound Diagnostics. P0 completion alone never means complete product restoration. Basic UTF-8/EPUB export is an **early portability slice after H0+Narrative**, implementable in parallel with P1; advanced print/sharing remains P2. Speaker/Semantic remain independent P2 compute, never prerequisites to write, search or export. Model absence and Gateway absence must not break any local baseline.
