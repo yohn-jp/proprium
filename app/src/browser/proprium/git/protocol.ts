@@ -143,6 +143,11 @@ export interface CommitDiff {
   changes: CommitFileChange[];
 }
 
+export interface RemoteConfirmedFiles {
+  remote_commit: string | null;
+  files: Array<{ path: string; revision: string | null; remote_confirmed: boolean }>;
+}
+
 /** Exact worktree bytes and changed path set that the author reviewed. */
 export interface CommitReviewSnapshot {
   head: string | null;
@@ -173,7 +178,7 @@ export type LocalGitRequest =
   | { id: string; workspace: WorkspaceIdentity; operation: "read"; path: string }
   | { id: string; workspace: WorkspaceIdentity; operation: "write"; path: string; data: Uint8Array; expected: FileRevision }
   | { id: string; workspace: WorkspaceIdentity; operation: "delete"; path: string; expected: FileRevision }
-  | { id: string; workspace: WorkspaceIdentity; operation: "apply-changes"; changes: WorkspaceChange[]; readSet: FileRevisionExpectation[] }
+  | { id: string; workspace: WorkspaceIdentity; operation: "apply-changes"; changes: WorkspaceChange[]; readSet: FileRevisionExpectation[]; expectedAuthoringSnapshotId?: string; recovery?: boolean }
   | { id: string; workspace: WorkspaceIdentity; operation: "list-files" }
   | { id: string; workspace: WorkspaceIdentity; operation: "authoring-snapshot-pin" }
   | { id: string; workspace: WorkspaceIdentity; operation: "authoring-snapshot-assert"; snapshotId: string }
@@ -186,6 +191,7 @@ export type LocalGitRequest =
   | { id: string; workspace: WorkspaceIdentity; operation: "review-diff" }
   | { id: string; workspace: WorkspaceIdentity; operation: "commit-reviewed"; snapshot: CommitReviewSnapshot; message: string; author: CommitAuthor }
   | { id: string; workspace: WorkspaceIdentity; operation: "commit-diff"; oid: string }
+  | { id: string; workspace: WorkspaceIdentity; operation: "remote-confirmed-files"; paths: string[] }
   | { id: string; workspace: WorkspaceIdentity; operation: "add"; paths: string[]; expectedHead: string | null }
   | { id: string; workspace: WorkspaceIdentity; operation: "commit"; expectedHead: string | null; message: string; author: CommitAuthor }
   | { id: string; workspace: WorkspaceIdentity; operation: "log"; depth: number }

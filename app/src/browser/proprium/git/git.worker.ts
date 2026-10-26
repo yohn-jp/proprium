@@ -5,7 +5,7 @@ import * as git from "isomorphic-git";
 import webHttp from "isomorphic-git/http/web";
 import type { HttpClient } from "isomorphic-git";
 import type { CommitObject, TreeObject } from "isomorphic-git";
-import type { AuthoringSnapshotFile, AuthoringSnapshotMetadata, AuthoringSnapshotPage, AuthoringSnapshotRange, GitHubWorkspaceIdentity, LocalGitErrorCode, LocalGitRequest, LocalGitResponse, StatusEntry, WorkspaceIdentity } from "./protocol.js";
+import type { AuthoringSnapshotFile, AuthoringSnapshotMetadata, AuthoringSnapshotPage, AuthoringSnapshotRange, GitHubWorkspaceIdentity, LocalGitErrorCode, LocalGitRequest, LocalGitResponse, RemoteConfirmedFiles, StatusEntry, WorkspaceIdentity } from "./protocol.js";
 import {
   MAX_WORKSPACE_CHANGE_BYTES,
   MAX_WORKSPACE_CHANGE_COUNT,
@@ -552,7 +552,13 @@ async function workspacePaths(workspace: WorkspaceIdentity): Promise<{ dir: stri
   return { dir: `${dataRoot}/repositories/${id}`, binding: `${dataRoot}/bindings/${id}.json`, lock: `proprium-workspace-${id}` };
 }
 
-interface WorkspaceBinding { identity: WorkspaceIdentity; lastConfirmedHead: string | null; }
+interface WorkspaceBinding {
+  identity: WorkspaceIdentity;
+  lastConfirmedHead: string | null;
+  /** Set only after this exact remote branch head was observed and its Git objects were verified locally. */
+  lastConfirmedRemoteHead?: string | null;
+  remoteHeadObserved?: boolean;
+}
 
 async function checkBinding(workspace: WorkspaceIdentity, binding: string, dir: string): Promise<WorkspaceBinding | null> {
   if (!(await exists(binding))) return null;
@@ -575,6 +581,14 @@ async function checkBinding(workspace: WorkspaceIdentity, binding: string, dir: 
   }
   if (previous!.lastConfirmedHead !== null && !/^[a-f0-9]{40}$/u.test(previous!.lastConfirmedHead ?? "")) {
     failure("storage_unknown", "The saved local Git head receipt is malformed.");
+  }
+  if (previous!.lastConfirmedRemoteHead !== undefined && previous!.lastConfirmedRemoteHead !== null && !/^[a-f0-9]{40}$/u.test(previous!.lastConfirmedRemoteHead)) {
+    failure("storage_unknown", "The saved remote Git head receipt is malformed.");
+  }
+  if (previous!.remoteHeadObserved !== undefined && typeof previous!.remoteHeadObserved !== "boolean" ||
+      previous!.remoteHeadObserved === true && previous!.lastConfirmedRemoteHead === undefined ||
+      previous!.remoteHeadObserved === false && previous!.lastConfirmedRemoteHead !== undefined && previous!.lastConfirmedRemoteHead !== null) {
+    failure("storage_unknown", "The saved remote observation receipt is malformed.");
   }
   knownHeads.set(dir, previous!.lastConfirmedHead);
   return previous!;
@@ -677,7 +691,10 @@ async function captureAuthoringFiles(dir: string): Promise<PinnedFileMetadata[]>
 async function authoringGeneration(dir: string, branch: string, lock: string): Promise<{ local_commit: string | null; worktree_generation: string; mutation_generation: number; files: PinnedFileMetadata[] }> {
   const [head, files] = await Promise.all([currentHead(dir), captureAuthoringFiles(dir)]);
   const mutation_generation = authoringMutationGenerations.get(lock) ?? 0;
-  const fingerprint = JSON.stringify([branch, head, mutation_generation, files.map(({ path, byte_length, mtime_ms, ctime_ms, inode }) => [path, byte_length, mtime_ms, ctime_ms, inode])]);
+  // The public generation must survive Worker/page reload so a retained receipt
+  // can be reviewed again. The in-memory mutation counter is still checked by
+  // the live snapshot token below to catch changes with unchanged stat values.
+  const fingerprint = JSON.stringify([branch, head, files.map(({ path, byte_length, mtime_ms, ctime_ms, inode }) => [path, byte_length, mtime_ms, ctime_ms, inode])]);
   return { local_commit: head, worktree_generation: await digest(fingerprint), mutation_generation, files };
 }
 
@@ -766,12 +783,43 @@ async function digestBytes(bytes: Uint8Array): Promise<string> {
 }
 
 async function persistConfirmedHead(workspace: WorkspaceIdentity, binding: string, dir: string, head: string): Promise<void> {
-  const value: WorkspaceBinding = { identity: workspace, lastConfirmedHead: head };
+  const previous = (await checkBinding(workspace, binding, dir)) ?? failure("storage_unknown", "The local commit exists without a verified workspace identity receipt.");
+  const value: WorkspaceBinding = {
+    identity: workspace,
+    lastConfirmedHead: head,
+    ...(previous.lastConfirmedRemoteHead !== undefined ? { lastConfirmedRemoteHead: previous.lastConfirmedRemoteHead } : {}),
+    ...(previous.remoteHeadObserved !== undefined ? { remoteHeadObserved: previous.remoteHeadObserved } : {}),
+  };
   try {
     await fs.writeFile(binding, JSON.stringify(value), "utf8");
     await flush();
   } catch { failure("storage_unknown", "The local commit ref exists but its workspace receipt could not be persisted."); }
   knownHeads.set(dir, head);
+}
+
+async function persistConfirmedRemoteHead(workspace: GitHubWorkspaceIdentity, binding: string, dir: string, head: string | null): Promise<void> {
+  const previous = (await checkBinding(workspace, binding, dir)) ?? failure("storage_unknown", "The confirmed remote head has no verified workspace identity receipt.");
+  try {
+    const trackingRef = `refs/remotes/origin/${workspace.branch}`;
+    if (head) {
+      await git.readCommit({ fs, dir, oid: head });
+      await git.writeRef({ fs, dir, ref: trackingRef, value: head, force: true });
+    } else if (await git.resolveRef({ fs, dir, ref: trackingRef }).then(() => true, () => false)) {
+      await git.deleteRef({ fs, dir, ref: trackingRef });
+    }
+    await flush();
+    const value: WorkspaceBinding = {
+      identity: workspace,
+      lastConfirmedHead: previous.lastConfirmedHead,
+      lastConfirmedRemoteHead: head,
+      remoteHeadObserved: true,
+    };
+    await fs.writeFile(binding, JSON.stringify(value), "utf8");
+    await flush();
+  } catch (error) {
+    if (error && typeof error === "object" && "propriumCode" in error) throw error;
+    failure("storage_unknown", "The observed remote branch head could not be persisted with its local Git objects.");
+  }
 }
 
 async function assertRevision(dir: string, expected: string | null): Promise<void> {
@@ -897,6 +945,27 @@ async function readCommitFile(dir: string, path: string, entry: CommitTreeFile |
   return { oid: entry.oid, data: blob };
 }
 
+async function readCommitPath(dir: string, commitOid: string, path: string): Promise<Uint8Array | null> {
+  const segments = path.split("/");
+  const { commit } = await git.readCommit({ fs, dir, oid: commitOid });
+  let treeOid = commit.tree;
+  for (let index = 0; index < segments.length; index += 1) {
+    const { tree } = await git.readTree({ fs, dir, oid: treeOid });
+    const entry = tree.find(item => item.path === segments[index]);
+    if (!entry) return null;
+    const isLeaf = index === segments.length - 1;
+    if (isLeaf) {
+      if (entry.type !== "blob") return null;
+      const { blob } = await git.readBlob({ fs, dir, oid: entry.oid });
+      if (blob.byteLength > MAX_WORKSPACE_READ_BYTES) failure("capacity", `Remote provenance file ${path} exceeds the Host read limit.`);
+      return blob;
+    }
+    if (entry.type !== "tree") return null;
+    treeOid = entry.oid;
+  }
+  return null;
+}
+
 async function commitDiff(dir: string, oid: string): Promise<unknown> {
   if (!/^[a-f0-9]{40}$/u.test(oid)) failure("git_error", "Commit history requires a full 40-character commit ID.");
   const { commit } = await git.readCommit({ fs, dir, oid });
@@ -948,7 +1017,7 @@ async function operation(request: LocalGitRequest): Promise<unknown> {
         if (isGitHubWorkspaceIdentity(request.workspace)) {
           await git.addRemote({ fs, dir: paths.dir, remote: "origin", url: `https://github.com/${request.workspace.owner}/${request.workspace.repository}.git` });
         }
-        await fs.writeFile(paths.binding, JSON.stringify({ identity: request.workspace, lastConfirmedHead: null } satisfies WorkspaceBinding), "utf8");
+        await fs.writeFile(paths.binding, JSON.stringify({ identity: request.workspace, lastConfirmedHead: null, lastConfirmedRemoteHead: null, remoteHeadObserved: false } satisfies WorkspaceBinding), "utf8");
         await flush();
         knownHeads.set(paths.dir, null);
       } catch { failure("storage_unknown", "Local repository initialization did not reach a confirmed storage state."); }
@@ -962,6 +1031,53 @@ async function operation(request: LocalGitRequest): Promise<unknown> {
     requireGitHubIdentity(request.workspace);
     await verifyRemoteRepository(request.workspace, request.token, false);
     return { repositoryId: request.workspace.repositoryId, branch: request.workspace.branch, head: await readRemoteHead(request.workspace, request.token) };
+  }
+  if (request.operation === "remote-confirmed-files") {
+    requireGitHubIdentity(request.workspace);
+    if (!Array.isArray(request.paths) || request.paths.length > 100 || request.paths.some(path => typeof path !== "string")) {
+      failure("invalid_input", "Remote provenance accepts at most 100 file paths.");
+    }
+    const unique = new Set<string>();
+    for (const path of request.paths) {
+      validateGitPath(path);
+      if (unique.has(path)) failure("invalid_input", "Remote provenance file paths must be unique.");
+      unique.add(path);
+    }
+    const remoteHead = bound!.remoteHeadObserved === true ? bound!.lastConfirmedRemoteHead ?? null : null;
+    if (!remoteHead) {
+      return { remote_commit: null, files: request.paths.map(path => ({ path, revision: null, remote_confirmed: false })) } satisfies RemoteConfirmedFiles;
+    }
+    const trackingRef = `refs/remotes/origin/${request.workspace.branch}`;
+    const trackedHead = await git.resolveRef({ fs, dir: paths.dir, ref: trackingRef }).catch(() => null);
+    if (trackedHead !== remoteHead) failure("storage_unknown", "The persisted remote confirmation does not match its verified Git tracking ref.");
+    const remoteCommit = await git.readCommit({ fs, dir: paths.dir, oid: remoteHead });
+    if (remoteCommit.oid !== remoteHead) failure("storage_unknown", "The confirmed remote commit object could not be verified.");
+
+    let totalBytes = 0;
+    const files: RemoteConfirmedFiles["files"] = [];
+    for (const path of request.paths) {
+      const remoteBytes = await readCommitPath(paths.dir, remoteHead, path);
+      if (!remoteBytes) {
+        files.push({ path, revision: null, remote_confirmed: false });
+        continue;
+      }
+      totalBytes += remoteBytes.byteLength;
+      if (totalBytes > MAX_WORKSPACE_READ_BYTES) failure("capacity", "Remote provenance file contents exceed the Host read limit.");
+      const revision = await digestBytes(remoteBytes);
+      let remoteConfirmed = false;
+      await assertNoSymlinkParents(paths.dir, path, true);
+      const localPath = `${paths.dir}/${path}`;
+      if (await exists(localPath)) {
+        const stats = await fs.lstat(localPath);
+        if (stats.isFile()) {
+          if (stats.size > MAX_WORKSPACE_READ_BYTES) failure("capacity", `Local provenance file ${path} exceeds the Host read limit.`);
+          const localBytes = new Uint8Array(await fs.readFile(localPath));
+          remoteConfirmed = await digestBytes(localBytes) === revision;
+        }
+      }
+      files.push({ path, revision, remote_confirmed: remoteConfirmed });
+    }
+    return { remote_commit: remoteHead, files } satisfies RemoteConfirmedFiles;
   }
   if (request.operation === "remote-fetch" || request.operation === "remote-pull") {
     requireGitHubIdentity(request.workspace);
@@ -986,12 +1102,7 @@ async function operation(request: LocalGitRequest): Promise<unknown> {
         failure("remote_unknown", "The GitHub branch changed during Smart HTTP fetch; fetched objects remain unreferenced locally.");
       }
     }
-    const trackingRef = `refs/remotes/origin/${request.workspace.branch}`;
-    try {
-      if (remoteHead) await git.writeRef({ fs, dir: paths.dir, ref: trackingRef, value: remoteHead, force: true });
-      else if (await git.resolveRef({ fs, dir: paths.dir, ref: trackingRef }).then(() => true, () => false)) await git.deleteRef({ fs, dir: paths.dir, ref: trackingRef });
-      await flush();
-    } catch { failure("storage_unknown", "Fetched Git objects could not be confirmed in browser storage."); }
+    await persistConfirmedRemoteHead(request.workspace, paths.binding, paths.dir, remoteHead);
     if (request.operation === "remote-fetch") {
       return { repositoryId: request.workspace.repositoryId, branch: request.workspace.branch, head: remoteHead, localHead, importedCommits };
     }
@@ -1034,6 +1145,7 @@ async function operation(request: LocalGitRequest): Promise<unknown> {
       return { state: "conflict", expectedRemoteHead: request.expectedRemoteHead, remoteHead: observedRemoteHead };
     }
     if (observedRemoteHead === request.expectedHead) {
+      await persistConfirmedRemoteHead(request.workspace, paths.binding, paths.dir, observedRemoteHead);
       return { state: "published", head: request.expectedHead, remoteHead: observedRemoteHead };
     }
     try {
@@ -1054,7 +1166,11 @@ async function operation(request: LocalGitRequest): Promise<unknown> {
         rejected = !pushed.ok;
       } catch (failureValue) { pushFailure = failureValue; }
       const result = await reconcilePublish(request.workspace, request.token, request.expectedRemoteHead, request.expectedHead);
-      if (result.state === "published" || result.state === "conflict") return result;
+      if (result.state === "published") {
+        await persistConfirmedRemoteHead(request.workspace, paths.binding, paths.dir, result.remoteHead);
+        return result;
+      }
+      if (result.state === "conflict") return result;
       if (pushFailure && typeof pushFailure === "object" && "propriumCode" in pushFailure) {
         if (["authentication_expired", "permission_denied"].includes(String(pushFailure.propriumCode))) throw pushFailure;
       }
@@ -1078,7 +1194,10 @@ async function operation(request: LocalGitRequest): Promise<unknown> {
     const reconciled = await reconcilePublish(request.workspace, request.token, request.expectedRemoteHead, request.expectedHead);
     if (reconciled.state === "published" || reconciled.state === "conflict" || reconciled.state === "remote-unknown") {
       if (reconciled.state === "conflict") return reconciled;
-      if (reconciled.state === "published") return reconciled;
+      if (reconciled.state === "published") {
+        await persistConfirmedRemoteHead(request.workspace, paths.binding, paths.dir, reconciled.remoteHead);
+        return reconciled;
+      }
     }
     if (updateFailure) {
       const statusCode = updateFailure instanceof GitHubApiError ? updateFailure.status : 0;
@@ -1151,6 +1270,13 @@ async function operation(request: LocalGitRequest): Promise<unknown> {
     return;
   }
   if (request.operation === "apply-changes") {
+    // Authoring apply passes a token freshly pinned against the proposal's
+    // expected worktree generation. This assertion runs inside the existing
+    // sole Browser Git writer lock, before validation/staging exposes any bytes.
+    if (request.expectedAuthoringSnapshotId !== undefined) {
+      const snapshot = requirePinnedAuthoringSnapshot(request.expectedAuthoringSnapshotId, paths, request.workspace);
+      await assertPinnedAuthoringSnapshot(snapshot);
+    }
     if (!Array.isArray(request.changes) || request.changes.length > MAX_WORKSPACE_CHANGE_COUNT ||
         !Array.isArray(request.readSet) || request.readSet.length > MAX_WORKSPACE_READ_SET_COUNT) {
       failure("invalid_path", "The approved change set exceeds browser workspace limits.");

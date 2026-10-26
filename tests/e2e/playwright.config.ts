@@ -6,6 +6,7 @@ const selectedTestFile = process.env.PROPRIUM_E2E_TEST_FILE ?? process.env.SCRIP
 const browserAcceptanceFiles = [
   "browser-git.acceptance.spec.ts",
   "authoring-snapshot.acceptance.spec.ts",
+  "authoring-writer-git-guard.acceptance.spec.ts",
   "browser-git-sync.acceptance.spec.ts",
   "plugin-runtime.acceptance.spec.ts",
 ];
