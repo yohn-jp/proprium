@@ -1,15 +1,20 @@
 import type { ActionResult, ChangeSet, Scope, Snapshot } from "../../app/src/browser/proprium/authoring/types.js";
 import type { ArtifactMetadata, CacheKey } from "../../app/src/browser/proprium/authoring/types.js";
+import type { AssetReadRequest, AssetReadResult } from "../../app/src/browser/proprium/authoring/assets.js";
 import type { GuestHost, HostCall } from "./guest.js";
 export type { ArtifactMetadata, CacheKey };
+export type { AssetReadRequest, AssetReadResult };
 
 /** Canonical JSON payloads for the versioned Host capability broker. */
 export interface FileEntry { path: string; revision: string; byte_length: number; media_type: string }
 export interface FilePage { entries: FileEntry[]; next_cursor: string | null }
 export interface FileChunk { revision: string; total_bytes: number; offset: number; bytes: number[]; next_offset: number | null }
+export const ASSET_READ_DEFAULT_BYTES = 64 * 1024;
+export const ASSET_READ_MAX_BYTES = 256 * 1024;
 export const HOST_OPERATIONS = {
   list: "workspace.file.list",
   read: "workspace.file.read",
+  assetRead: "workspace.asset.read",
   invoke: "workspace.plugin.invoke",
   propose: "workspace.change.propose",
   stage: "workspace.change.stage",
@@ -18,6 +23,27 @@ export const HOST_OPERATIONS = {
   cacheEvict: "workspace.derived.cache.evict",
   preferencesRead: "plugin.preferences.read",
 } as const;
+
+/** Read only an already admitted and explicitly consented immutable asset range. */
+export function* readAsset(host: GuestHost, request: AssetReadRequest): Generator<HostCall, AssetReadResult, unknown> {
+  const offset = request.offset ?? 0;
+  const length = request.length ?? ASSET_READ_DEFAULT_BYTES;
+  if (!request.group_id || !request.file_path || !Number.isSafeInteger(offset) || offset < 0 ||
+      !Number.isSafeInteger(length) || length < 1 || length > ASSET_READ_MAX_BYTES) {
+    throw Object.assign(new Error("Asset range request is invalid"), { code: "invalid_input" });
+  }
+  const response = yield* host.request<AssetReadResult>(HOST_OPERATIONS.assetRead, { ...request, offset, length });
+  if (response.group_id !== request.group_id || response.file_path !== request.file_path || response.offset !== offset ||
+      !Number.isSafeInteger(response.total_bytes) || response.total_bytes < 0 ||
+      !/^[a-f0-9]{64}$/u.test(response.sha256) || !Array.isArray(response.bytes) ||
+      response.bytes.length > length || response.bytes.some(byte => !Number.isInteger(byte) || byte < 0 || byte > 255) ||
+      offset + response.bytes.length > response.total_bytes ||
+      (response.next_offset !== null && (response.next_offset !== offset + response.bytes.length || response.next_offset <= offset)) ||
+      (response.next_offset === null && offset + response.bytes.length !== response.total_bytes)) {
+    throw Object.assign(new Error("Host returned an inconsistent immutable asset range"), { code: "provider_unavailable" });
+  }
+  return response;
+}
 
 export interface VersionedFile { bytes: Uint8Array; revision: string }
 
