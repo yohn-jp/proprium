@@ -13,6 +13,7 @@ test("evidence ledger covers every current canon feature and source contribution
   assert.equal(checked.status, 0, checked.stderr || checked.stdout);
   const ledger = JSON.parse(await readFile(ledgerPath, "utf8"));
   assert.equal(ledger.matrix.length, 14);
+  assert.ok(ledger.matrix.every(item => item.canon_title && item.required_proof));
   assert.equal(ledger.plugins.reduce((total, plugin) => total + plugin.features.length, 0), 114);
   assert.equal(ledger.recovered_source.source_actions.length, 136);
   assert.equal(ledger.recovered_source.ui_contributions.length, 42);
@@ -25,6 +26,20 @@ test("evidence ledger covers every current canon feature and source contribution
     assert.ok(feature.source_anchors.every(anchor => /^[a-f0-9]{40}$/u.test(anchor.source_revision)));
   }
   assert.ok(ledger.matrix.every(item => item.status === "NOT_CHECKED"));
+  assert.ok(ledger.plugins.flatMap(plugin => plugin.acceptance_cases).every(item =>
+    item.canon_reference?.startsWith("#") && item.canon_requirement?.length > 40));
+  const pairedProviderGate = ledger.plugins.find(plugin => plugin.plugin_id === "proprium.paired-writing")
+    .acceptance_cases.find(item => item.id === "accept-pw-01");
+  assert.equal(pairedProviderGate.canon_reference, "#pw-01-provider-free-and-optional-provider");
+  assert.match(pairedProviderGate.canon_requirement, /cold Host opens Context/u);
+  const narrativeResumeGate = ledger.plugins.find(plugin => plugin.plugin_id === "proprium.narrative")
+    .acceptance_cases.find(item => item.id === "accept-nar-a12");
+  assert.equal(narrativeResumeGate.canon_title, "Portable resume markers");
+  assert.equal(narrativeResumeGate.canon_reference, "#accept-nar-a12");
+  const largeSearchGate = ledger.plugins.find(plugin => plugin.plugin_id === "proprium.research")
+    .acceptance_cases.find(item => item.id === "accept-res-a001");
+  assert.match(largeSearchGate.canon_requirement, /300\+ Markdown\/text\/YAML fixtures/u);
+  assert.match(largeSearchGate.canon_requirement, /pagination has no gaps\/duplicates/u);
 });
 test("evidence validator rejects invented or missing source-parity rows", async () => {
   const directory = await mkdtemp(resolve(tmpdir(), "proprium-authoring-evidence-"));

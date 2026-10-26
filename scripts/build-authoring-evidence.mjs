@@ -29,7 +29,74 @@ function parseFeatureRows(document) {
     if (!match) throw new Error(`Cannot derive a canonical feature ID from ${line}`);
     const feature = match[1];
     const anchors = acceptanceReferences(cells.at(-2) ?? "");
-    rows.set(feature, { acceptance: anchors, source_disposition: (cells[3] ?? "").trim() });
+    rows.set(feature, { author_visible_result: (cells[2] ?? "").trim(), acceptance: anchors,
+      source_disposition: (cells[3] ?? "").trim() });
+  }
+  return rows;
+}
+function caseCode(id) {
+  const match = /^accept-(nar|kno|res|pw|dia|spk|sem|pub)-([a-z]*)(\d+)$/u.exec(id);
+  if (!match) throw new Error(`Cannot derive a canonical acceptance ID from ${id}`);
+  const prefixes = { nar: "NAR-A", kno: "KNO-A", res: "RES-A", pw: "PW-", dia: "DIA-A", spk: "SPK-A", sem: "SEM-A", pub: "PUB-AC" };
+  return `${prefixes[match[1]]}${match[3].padStart(match[1] === "res" ? 3 : match[1] === "pw" || match[1] === "pub" ? 2 : 1, "0")}`;
+}
+function parseAcceptanceCases(document, acceptanceIds) {
+  const section = /^#{2,3}\s+(?:\d+\.\s+)?(?:Feature\s+)?Acceptance\b[^\r\n]*$/imu.exec(document);
+  if (!section) throw new Error("Plugin Canon is missing its Acceptance section");
+  const sectionOffset = section.index + section[0].length;
+  const sectionText = document.slice(sectionOffset);
+  const lines = sectionText.split("\n");
+  const cases = new Map();
+  for (const id of acceptanceIds) {
+    const code = caseCode(id);
+    const codePattern = new RegExp(`(?<![A-Z0-9])${code}(?![A-Z0-9])`, "u");
+    const directAnchorOffset = sectionText.indexOf(`<a id="${id}"></a>`);
+    const directAnchorLine = directAnchorOffset < 0 ? -1 : sectionText.slice(0, directAnchorOffset).split("\n").length - 1;
+    const lineIndex = directAnchorLine >= 0
+      ? lines.findIndex((line, index) => index >= directAnchorLine && codePattern.test(line))
+      : lines.findIndex(line => codePattern.test(line));
+    if (lineIndex < 0) throw new Error(`${id} has no canonical acceptance case ${code}`);
+    const line = lines[lineIndex].trim();
+    let title = null;
+    let requirement = "";
+    if (line.startsWith("|")) {
+      const cells = line.split("|").slice(1, -1).map(cell => cell.trim());
+      const titleCell = cells[0] ?? "";
+      title = /—\s*([^|]+)$/u.exec(titleCell)?.[1].trim() ?? null;
+      requirement = cells.slice(1).join(" | ").trim();
+    } else {
+      const headingTitle = new RegExp(`(?:###\\s*(?:<a id="[^"]+"><\\/a>)?|\\*\\*)${code}\\s+—\\s*([^*\\r\\n]+?)(?:\\*\\*)?(?:\\s*:.*)?$`, "u").exec(line);
+      title = headingTitle?.[1].trim() ?? null;
+      const nextCase = lines.findIndex((candidate, index) => index > lineIndex &&
+        (/^###\s+/u.test(candidate) || /<a id="accept-[a-z0-9-]+"><\/a>/u.test(candidate)));
+      const end = nextCase < 0 ? lines.length : nextCase;
+      requirement = lines.slice(lineIndex + 1, end).join("\n").trim();
+      if (line.includes(`**${code}`)) requirement = line.replace(/^.*?\*\*[^*]+\*\*:?\s*/u, "").trim();
+    }
+    requirement = requirement.replace(/\s+/gu, " ").trim();
+    if (!requirement) throw new Error(`${id} has no canonical acceptance requirement`);
+
+    const lineOffset = lines.slice(0, lineIndex).reduce((length, value) => length + value.length + 1, 0);
+    const anchorsInLine = [...lines[lineIndex].matchAll(/<a id="([^"]+)"><\/a>/gu)].map(anchor => anchor[1]);
+    const directAnchor = anchorsInLine.find(anchor => anchor.startsWith("accept-"));
+    let reference = sectionText.includes(`<a id="${id}"></a>`) ? id : directAnchor;
+    if (!reference) {
+      const preceding = [...sectionText.slice(0, lineOffset).matchAll(/<a id="([^"]+)"><\/a>/gu)];
+      reference = preceding.at(-1)?.[1] ?? id;
+    }
+    cases.set(id, { canon_title: title, canon_reference: `#${reference}`, canon_requirement: requirement });
+  }
+  return cases;
+}
+function parseRMatrix(document) {
+  const rows = new Map();
+  let matrixStarted = false;
+  for (const line of document.split("\n")) {
+    if (line.includes("Executable end-to-end job") && line.includes("Required proof")) { matrixStarted = true; continue; }
+    if (!matrixStarted) continue;
+    const match = /^\|\s*(R\d{2})\s*\|([^|]+)\|([^|]+)\|/u.exec(line);
+    if (match) rows.set(match[1], { canon_title: match[2].trim(), required_proof: match[3].trim() });
+    else if (rows.size) break;
   }
   return rows;
 }
@@ -73,6 +140,7 @@ function sourceFileRecord(source) {
     source_revisions: [source.revision], ...statusRecord() };
 }
 async function requirements() {
+  const acceptanceDocument = await readFile(resolve(root, "docs/canon/ACCEPTANCE.md"), "utf8");
   const traceability = JSON.parse(await readFile(traceabilityPath, "utf8"));
   const sourceByPath = new Map(traceability.sources.map(source => [source.path, source]));
   if (sourceByPath.size !== traceability.sources.length) throw new Error("Traceability repeats a source path with ambiguous immutable revisions");
@@ -100,6 +168,10 @@ async function requirements() {
   }
   const sourceFiles = [...allSourcePaths.values()].sort((left, right) => `${left.repo}:${left.path}`.localeCompare(`${right.repo}:${right.path}`));
   const inventoryDocument = await readFile(resolve(root, "docs/canon/RECOVERY-INVENTORY.md"), "utf8");
+  const acceptanceMatrix = parseRMatrix(acceptanceDocument);
+  if (rIds.some(id => !acceptanceMatrix.has(id)) || acceptanceMatrix.size !== rIds.length) {
+    throw new Error("docs/canon/ACCEPTANCE.md does not contain exactly the R01–R14 matrix");
+  }
   const inventoryStart = inventoryDocument.indexOf("## Complete feature index");
   const inventoryEnd = inventoryDocument.indexOf("## Exact Scriptorium Action crosswalk", inventoryStart);
   if (inventoryStart < 0 || inventoryEnd < 0) throw new Error("Recovery inventory feature section cannot be found");
@@ -115,6 +187,7 @@ async function requirements() {
     const document = await readFile(resolve(root, path), "utf8");
     const features = parseFeatureRows(document);
     const canonSourceRevisions = parseSourceRevisions(document);
+    const acceptanceCasesById = parseAcceptanceCases(document, parseAcceptanceIds(document));
     for (const [featureId, feature] of features) {
       const expected = inventoryAcceptance.get(featureId) ?? [];
       if (JSON.stringify([...feature.acceptance].sort()) !== JSON.stringify(expected)) {
@@ -128,7 +201,8 @@ async function requirements() {
         contribution.owner === pluginId && contribution.feature_id === id).map(contribution => contribution.id);
       const anchors = immutableAnchors(sourceActions, sourceUi, traceability, pinSource);
       return { feature_id: id, source_anchor_state: anchors.length ? "TRACEABILITY_MAPPED" : "UNMAPPED",
-        source_disposition: row.source_disposition, canon_source_revisions: canonSourceRevisions, acceptance_anchors: row.acceptance,
+        author_visible_result: row.author_visible_result, source_disposition: row.source_disposition,
+        canon_source_revisions: canonSourceRevisions, acceptance_anchors: row.acceptance,
         source_actions: sourceActions, source_ui_contributions: sourceUi, source_anchors: anchors,
         source_revisions: uniqueRevisions(anchors), ...statusRecord() };
     });
@@ -137,7 +211,9 @@ async function requirements() {
       const anchors = [...new Map(linkedFeatures.flatMap(feature => feature.source_anchors)
         .map(anchor => [`${anchor.kind}:${anchor.id}`, anchor])).values()]
         .sort((left, right) => `${left.kind}:${left.id}`.localeCompare(`${right.kind}:${right.id}`));
-      return { id, feature_ids: linkedFeatures.map(feature => feature.feature_id).sort(),
+      const canonicalCase = acceptanceCasesById.get(id);
+      if (!canonicalCase) throw new Error(`${pluginId}: no canonical acceptance case ${id}`);
+      return { id, ...canonicalCase, feature_ids: linkedFeatures.map(feature => feature.feature_id).sort(),
         canon_source_revisions: canonSourceRevisions, source_anchors: anchors,
         source_revisions: uniqueRevisions(anchors), ...statusRecord() };
     });
@@ -162,7 +238,7 @@ async function requirements() {
   return { schema: "proprium.authoring.evidence/v1", release_sha: null, registry_digest: null,
     generated_from: { acceptance: "docs/canon/ACCEPTANCE.md", inventory: "docs/canon/RECOVERY-INVENTORY.md",
       traceability: "docs/canon/traceability.json", plugins: records.map(item => item.canon) },
-    matrix: rIds.map(id => ({ id, ...statusRecord() })),
+    matrix: rIds.map(id => ({ id, ...acceptanceMatrix.get(id), ...statusRecord() })),
     plugins: records, recovered_source: { action_count: sourceActions.length, ui_count: sourceUi.length, tool_count: sourceTools.length,
       source_file_count: sourceFiles.length, source_files: sourceFiles.map(sourceFileRecord),
       source_actions: sourceActions, ui_contributions: sourceUi, source_tools: sourceTools,
@@ -195,6 +271,12 @@ function audit(actual, required, errors) {
   if (actual.schema !== required.schema) errors.push("wrong evidence schema");
   const r = new Map((actual.matrix ?? []).map(item => [item.id, item]));
   if (r.size !== required.matrix.length || required.matrix.some(item => !r.has(item.id))) errors.push("R01–R14 matrix differs from canonical acceptance IDs");
+  for (const expected of required.matrix) {
+    const item = r.get(expected.id);
+    if (item && (item.canon_title !== expected.canon_title || item.required_proof !== expected.required_proof)) {
+      errors.push(`${expected.id}: executable job or required proof differs from ACCEPTANCE.md`);
+    }
+  }
   for (const item of actual.matrix ?? []) validateOne(item, item.id, errors, { requireArtifact: ["R02", "R13"].includes(item.id) });
   const actualPlugins = new Map((actual.plugins ?? []).map(item => [item.plugin_id, item]));
   if (actualPlugins.size !== required.plugins.length) errors.push("eight-plugin ledger is incomplete or duplicated");
@@ -216,6 +298,7 @@ function audit(actual, required, errors) {
         errors.push(`${plugin.plugin_id}/${feature.feature_id}: acceptance links differ from canon`);
       }
       if (record.source_disposition !== feature.source_disposition ||
+          record.author_visible_result !== feature.author_visible_result ||
           record.source_anchor_state !== (feature.source_anchors.length ? "TRACEABILITY_MAPPED" : "UNMAPPED") ||
           !sameJson(record.canon_source_revisions ?? [], plugin.canon_source_revisions) ||
           !sameJson(record.source_actions ?? [], feature.source_actions) ||
@@ -250,7 +333,10 @@ function audit(actual, required, errors) {
       if (!row) errors.push(`${plugin.plugin_id}: acceptance ${id} evidence row missing`);
       else {
         const expected = plugin.acceptance_cases.find(item => item.id === id);
-        if (!expected || !sameJson(row.feature_ids, expected.feature_ids) || !sameJson(row.source_anchors, expected.source_anchors) ||
+        if (!expected || row.canon_title !== expected.canon_title || row.canon_reference !== expected.canon_reference ||
+            row.canon_requirement !== expected.canon_requirement ||
+            !sameJson(row.feature_ids, expected.feature_ids) ||
+            !sameJson(row.source_anchors, expected.source_anchors) ||
             !sameJson(row.source_revisions, expected.source_revisions) || !sameJson(row.canon_source_revisions, expected.canon_source_revisions)) {
           errors.push(`${plugin.plugin_id}/${id}: feature and immutable source mapping differs from Canon`);
         }

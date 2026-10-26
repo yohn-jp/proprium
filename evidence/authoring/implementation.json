@@ -20,6 +20,8 @@
   "matrix": [
     {
       "id": "R01",
+      "canon_title": "Core-only generic Git edit/commit/publish",
+      "required_proof": "Works with zero plugins, no Node server/Gateway needed for local edit; no story schema assumption",
       "status": "NOT_CHECKED",
       "fixture": null,
       "command": null,
@@ -34,6 +36,8 @@
     },
     {
       "id": "R02",
+      "canon_title": "Official signed plugin registry",
+      "required_proof": "Build every plugin independently from compute-sum, attest hash/signature and dependencies, preview/install/enable/reload/update/disable/rollback; no Host rebuild",
       "status": "NOT_CHECKED",
       "fixture": null,
       "command": null,
@@ -48,6 +52,8 @@
     },
     {
       "id": "R03",
+      "canon_title": "Writer open/resume",
+      "required_proof": "Select work, Volume/Chapter/Scene, open correct manuscript, resume last recoverable scene, no other repo's draft",
       "status": "NOT_CHECKED",
       "fixture": null,
       "command": null,
@@ -62,6 +68,8 @@
     },
     {
       "id": "R04",
+      "canon_title": "Japanese manuscript continuity",
+      "required_proof": "Desktop + Mobile: IME, undo, caret, selection, scroll, reading position, ruby/vertical typography survive panel switching",
       "status": "NOT_CHECKED",
       "fixture": null,
       "command": null,
@@ -76,6 +84,8 @@
     },
     {
       "id": "R05",
+      "canon_title": "Draft/Git storage fidelity",
+      "required_proof": "Draft, local commit, remote published, conflict and unknown publication remain distinct, failure/restart/recovery protect text",
       "status": "NOT_CHECKED",
       "fixture": null,
       "command": null,
@@ -90,6 +100,8 @@
     },
     {
       "id": "R06",
+      "canon_title": "Semantic structure edits",
+      "required_proof": "Create/edit/reorder chapter/scene and semantic metadata through reviewed multi-file preconditions, preserve unrelated YAML/frontmatter",
       "status": "NOT_CHECKED",
       "fixture": null,
       "command": null,
@@ -104,6 +116,8 @@
     },
     {
       "id": "R07",
+      "canon_title": "Story Knowledge",
+      "required_proof": "Bible/notes/character/relationships/threads/map/timeline/reader state linked and rendered, author-approved updates",
       "status": "NOT_CHECKED",
       "fixture": null,
       "command": null,
@@ -118,6 +132,8 @@
     },
     {
       "id": "R08",
+      "canon_title": "Search/NLP/Diagnostics",
+      "required_proof": "Model-free search, terms/alias ambiguity, findings with evidence, source jump, stale invalidation, lint changes as proposals",
       "status": "NOT_CHECKED",
       "fixture": null,
       "command": null,
@@ -132,6 +148,8 @@
     },
     {
       "id": "R09",
+      "canon_title": "MCP-first paired writing",
+      "required_proof": "Explicit repository ID -> context/manifest -> typed proposal -> diff/evidence -> selective author approval -> apply -> same editing location, no external self-approval",
       "status": "NOT_CHECKED",
       "fixture": null,
       "command": null,
@@ -146,6 +164,8 @@
     },
     {
       "id": "R10",
+      "canon_title": "Speaker and heavy semantics",
+      "required_proof": "Human corrections and eval, optional embeddings and contradictions; no-model fallback, no cross-repo leakage",
       "status": "NOT_CHECKED",
       "fixture": null,
       "command": null,
@@ -160,6 +180,8 @@
     },
     {
       "id": "R11",
+      "canon_title": "Publishing",
+      "required_proof": "Export actual UTF-8/EPUB/vertical print data, episode metadata, honest service-conditional sharing; no implicit publish",
       "status": "NOT_CHECKED",
       "fixture": null,
       "command": null,
@@ -174,6 +196,8 @@
     },
     {
       "id": "R12",
+      "canon_title": "Isolation/security",
+      "required_proof": "Signature/ABI/capability/path validation, no arbitrary JS/DOM/credentials, cancellation, worker failure and stale results do not change Git",
       "status": "NOT_CHECKED",
       "fixture": null,
       "command": null,
@@ -188,6 +212,8 @@
     },
     {
       "id": "R13",
+      "canon_title": "Integration distribution",
+      "required_proof": "Desktop Chromium, Mobile WebKit, real Host install/enable/author UI/reload; all relevant Go/Host/plugin/registry workflows green at SAME release SHA",
       "status": "NOT_CHECKED",
       "fixture": null,
       "command": null,
@@ -202,6 +228,8 @@
     },
     {
       "id": "R14",
+      "canon_title": "Provenance/migration",
+      "required_proof": "Scriptorium parity and Loom backfill explicitly recorded per inventory row, no deleted author metadata or private fixture leaks",
       "status": "NOT_CHECKED",
       "fixture": null,
       "command": null,
@@ -241,6 +269,9 @@
       "acceptance_cases": [
         {
           "id": "accept-nar-a01",
+          "canon_title": "Work recognition and generic workspace",
+          "canon_reference": "#accept-nar-a01",
+          "canon_requirement": "On a synthetic repository with two volumes, chapters and scenes, `work.detect` returns the scope-derived `work_id` and the paged outline reproduces the YAML IDs, titles, parent links, order and explicit manuscript paths. On a repository without these paths, Narrative returns `unrecognized`, the generic Files list remains usable and no fake empty work is shown. An empty repository can start by proposing its first volume. A repository with one malformed child returns that path diagnostic while valid siblings remain accessible; known paths with no usable volume return `malformed`.",
           "feature_ids": [
             "NAR-01"
           ],
@@ -264,6 +295,9 @@
         },
         {
           "id": "accept-nar-a02",
+          "canon_title": "Scene selection opens the linked file",
+          "canon_reference": "#accept-nar-a02",
+          "canon_requirement": "Select a scene whose `manuscript` points to a path different from the ID-derived convention. The Host opens that exact file in the existing editor and displays volume/chapter/scene location and both file revisions. The plugin does not return a full-repository snapshot or body. A duplicate scene ID reports every conflicting path using `ambiguous_identity`; no row silently wins. A nonexistent scene ID returns `scene_not_found`; an existing scene with a missing body returns `file_not_found` and a Narrative diagnostic.",
           "feature_ids": [
             "NAR-02"
           ],
@@ -325,6 +359,9 @@
         },
         {
           "id": "accept-nar-a03",
+          "canon_title": "Continue and recovery scope",
+          "canon_reference": "#accept-nar-a03",
+          "canon_requirement": "With a local resume record for author A/repository A, Continue opens its current scene and restores sentence/cursor/scroll only after journal reconciliation. Author B, another repository, branch or missing local workspace cannot receive that record. A deleted scene, changed manuscript path, missing body, corrupt position or stale revision yields an explicit stale/unavailable view and a manual tree choice; it never redirects the Draft to another scene. A pending unsaved Draft remains recoverable while the author inspects or cancels that choice. With no resume record, the UI offers the outline instead of inventing a “last scene.”",
           "feature_ids": [
             "NAR-03"
           ],
@@ -348,6 +385,9 @@
         },
         {
           "id": "accept-nar-a04",
+          "canon_title": "Create volume, chapter and scene",
+          "canon_reference": "#accept-nar-a04",
+          "canon_requirement": "From a generic empty repository, create a volume, then a chapter, then a scene. Review shows exact new paths and all affected files. Applying the scene proposal creates both the YAML record and the empty Markdown at its canonical path with `status: planned`. Insert at position two shifts every later sibling using current revisions; append leaves earlier orders untouched. Reject changes no file. Existing ID/path collision, invalid/missing parent, duplicate ID or stale tree rejects the proposal without partial output. Retrying an identical request returns the same proposal; reusing its idempotency key with changed title returns `idempotency_conflict`.",
           "feature_ids": [
             "NAR-04"
           ],
@@ -381,6 +421,9 @@
         },
         {
           "id": "accept-nar-a05",
+          "canon_title": "Reorder with explicit approval",
+          "canon_reference": "#accept-nar-a05",
+          "canon_requirement": "Reorder chapters within one volume and scenes within one chapter from keyboard controls and touch/pointer controls. The review names the exact siblings and changed order values. Approving at the expected tree revision changes only their `order` nodes and returns per-file revisions; rejection leaves source untouched. A stale revision, missing sibling, duplicate ID or partial sibling list is rejected. Attempt a raw cross-parent scene update or volume-order update and receive `invalid_input` with no proposal; no cross-parent drop, directory move or delete occurs.",
           "feature_ids": [
             "NAR-05"
           ],
@@ -414,6 +457,9 @@
         },
         {
           "id": "accept-nar-a06",
+          "canon_title": "Structural metadata and Knowledge boundary",
+          "canon_reference": "#accept-nar-a06",
+          "canon_requirement": "Read breadcrumbs and edit a scene title using its expected metadata revision; unknown YAML keys, comments, formatting and unrelated fields survive. Relink that scene to another existing Markdown path: review shows old/new links, neither body is moved/deleted/rewritten, and the editor opens the new path only after Host navigation guard. Attempt to change `pov`, `appears`, `mentions`, `location`, `goal`, or `conflict` through Narrative and receive `invalid_input`; those fields route to Knowledge. `readingMarks` is the explicit annotation exception but can be changed only through the dedicated reading-mark actions, not `structure.update`. Attempt `volume` or `chapter` changes through `scene.update` and receive `invalid_input`; no unsafe path, parent or order change is proposed. A stale title or link proposal is rejected with `snapshot_stale` and leaves the active manuscript and current Draft unchanged.",
           "feature_ids": [
             "NAR-06"
           ],
@@ -461,6 +507,9 @@
         },
         {
           "id": "accept-nar-a07",
+          "canon_title": "Editor, draft and Host authority",
+          "canon_reference": "#accept-nar-a07",
+          "canon_requirement": "On desktop Chromium and mobile WebKit, enter Japanese text with an active IME composition, selection, undo history and nonzero scroll. Open/close outline and context panels and use the existing ruby, vertical-reading and typography controls; the editor instance, composition, caret, selection, undo, scroll and explicit Desktop/Mobile shell remain intact. Attempt scene navigation while Draft journal storage is pending or fails: the Host waits or blocks with a visible reason and keeps the current input. A successful Draft is not labeled committed or published. Checkpoint and GitHub publication remain explicit Host actions; Narrative cannot invoke them.",
           "feature_ids": [
             "NAR-07"
           ],
@@ -484,6 +533,9 @@
         },
         {
           "id": "accept-nar-a08",
+          "canon_title": "Mobile quick write, reading and capture",
+          "canon_reference": "#accept-nar-a08",
+          "canon_requirement": "On Mobile, quick append shows up to the last three paragraphs read-only, accepts Japanese IME, writes into the same editor document and Host Draft journal, and returns to the full CodeMirror editor without a competing manuscript copy. Reading “next scene” follows volume/chapter/tree order and stops at the last scene; stale order invokes Host revalidation. Text scratch survives navigation and reload through the Host recovery journal, is distinguishable from manuscript content, and can be attached to the correct current scene only after the Host confirms the binding. Camera inputs enforce at most 8 attachments and 8 MiB each, with a visible `capacity` error before journal mutation if the browser quota is insufficient; unsupported/unauthorized voice recognition is absent and does not affect text/camera capture.",
           "feature_ids": [
             "NAR-08"
           ],
@@ -507,6 +559,9 @@
         },
         {
           "id": "accept-nar-a09",
+          "canon_title": "Failure, disable and scale",
+          "canon_reference": "#accept-nar-a09",
+          "canon_requirement": "Exercise malformed YAML, duplicate IDs, missing/unsafe manuscript links, missing parent, stale tree cursor, stale file revision, concurrent sibling reorder, repeated request, cancellation, Worker trap/timeout, offline local reads, unavailable remote fetch, browser storage error, plugin disable/uninstall and missing optional providers. Each result is typed and visible; source bytes, pending Host proposals and Draft journal entries remain intact. Re-enable can rebuild its derived tree. Run a synthetic work with hundreds of scenes and more than 256 files using paged reads; opening one scene does not eagerly read all manuscripts or wait for models. Confirm the installed artifact works in the normal Host UI on Desktop and Mobile and generic Files/editor still works with the plugin disabled.",
           "feature_ids": [
             "NAR-09"
           ],
@@ -530,6 +585,9 @@
         },
         {
           "id": "accept-nar-a10",
+          "canon_title": "Pure mixed-domain compiler",
+          "canon_reference": "#accept-nar-a10",
+          "canon_requirement": "Pass the exact pinned NarrativeChangeSet v1 fixtures through `changes.compile` and verify strict key/type/bound validation, original-base `read_set` including absent paths, stable source-operation mapping and generic output units. Compile `entity.create` for a volume/chapter, `scene.create` carrying Knowledge fields plus matching `scene.insert`, structural title/manuscript-link/order edits, and a scene update containing Narrative `readingMarks` and Knowledge semantic fields. A mark addition must reference manuscript evidence at the exact original file revision; the compiler verifies the UTF-16 slice and reports that body revision in its read set. The split compilers receive one source operation ID; Paired Writing produces one inseparable final unit after Host staging and shows the intermediate semantic intents with the final byte diff. A missing required prior stage returns `dependency_unavailable`; an expired or wrong-scope stage returns `snapshot_stale`; invalid source operation, unresolved forward reference, stale source revision, path overlap without a valid dependency, cancellation or Worker trap fails visibly with no proposal/worktree mutation. The resulting proposal is submitted once by Paired Writing, reviewed by the Host, and is idempotent across an unknown response.",
           "feature_ids": [
             "NAR-10"
           ],
@@ -553,6 +611,9 @@
         },
         {
           "id": "accept-nar-a11",
+          "canon_title": "Reading-mark recovery and revision safety",
+          "canon_reference": "#accept-nar-a11",
+          "canon_requirement": "On Desktop and Mobile reader surfaces, display valid marks from a selected scene's `readingMarks` YAML field at exact zero-based UTF-16 offsets. Verify offsets after Japanese text and a surrogate-pair character; highlight and jump only when the current body slice equals the stored snippet. Add a mark to a selected sentence, enter an optional comment up to 200 UTF-16 code units, and remove a mark both by selecting the marked sentence and from its list. The Host review shows the exact scene YAML diff; approval updates only `readingMarks`, while rejection leaves metadata and manuscript bytes unchanged. The operation does not alter editor text, selection, undo history or a pending Draft. Before adding, require the exact current saved-manuscript and scene-metadata revisions and verify `snippet === body.slice(offset, offset + length)`. Change either revision after the user selects the sentence and the proposal returns `snapshot_stale`; change the snippet/range or use a duplicate ID/span and receive `invalid_input`/`conflict`. With a dirty Draft, the mark can remain a transient selection but persistent controls say “Save locally first”; after explicit local save, a fresh mark request succeeds against the new body hash and metadata revision without remote synchronization. An existing mark whose excerpt no longer matches its body offset is visible as stale, cannot jump or auto-reanchor, and can be removed by ID after revision revalidation. Load a legacy scene with valid marks plus an invalid row, an unknown field on a valid row, YAML comments and unusual quoting. `reading-marks.list` shows valid marks and path/index diagnostics for malformed entries. Add/remove another valid mark and review the proposal: every invalid row, unknown key, comment and unrelated byte remains intact. If the syntax-aware editor cannot preserve them, reject without mutation. Disable Narrative and confirm marks stay in the Git metadata while ordinary writing and navigation continue. ## Portable resume markers | Feature | Source disposition and user-visible result | Acceptance | | --- | --- | --- | | NAR-12 <a id=\"feature-nar-12\"></a> | `RECOVERY` of the per-device recent-scene/cursor intent in Scriptorium `app/src/resume/continueCandidates.ts:mergeContinueCandidates` and its tests; `DESIGN_TARGET` for an explicitly reviewed Git marker replacing server-held cursor state. After an author publishes a marker, another device that synchronizes that Git snapshot can offer the same scene/position. P0 local resume never waits for it. | [NAR-A12](#accept-nar-a12) | The old server's recent-device cursor store is not restored. Its user-visible continuation intent is preserved through optional author-approved Git state at `meta/proprium/plugins/proprium.narrative/resume.v1.yaml`, with `{schemaVersion:1,positions:[{deviceId,repositoryId,branch,sceneId,manuscriptPath,manuscriptRevision,sentenceIndex,scrollTop,updatedAt}]}`. `deviceId` is a Host-generated opaque per-browser UUID, not an author identity or credential; `repositoryId` must be the bound positive numeric GitHub identity. `sentenceIndex` is null or a positive one-based integer under the same Host sentence mapping as local resume, `scrollTop` is finite/nonnegative, and `updatedAt` is Host-issued ISO-8601 UTC. One current entry per device/repository/branch is permitted; preserve all other entries and unknown YAML/entry fields. Conflicting duplicates are explicit `ambiguous_identity`, never silently overwritten. The record contains no manuscript/draft text or browser journal. Local-only unbound workspaces retain local resume and cannot claim portable publication. `proprium.narrative.resume.marks.list` is `read`, input `{cursor?:string,limit?:1..100}` (default 50), output `{items:[{device_id,scene_id,title,manuscript_path,manuscript_revision,sentence_index,scroll_top,updated_at,availability:ready|stale|missing,publication:local_only|remote_confirmed}],next_cursor,source_revision}`. It reads only the selected snapshot and Host-confirmed publication provenance; absent file is an empty list with null revision, malformed file is `unsupported_format`. An entry is `ready` only if repository/branch, scene ID, explicit path and body revision match; a changed body is stale and never repositions the current draft. The Host merges these with its local resume view, preferring its own recoverable local position for the same scene; other devices remain individually labeled. The existing `scene.continue` contract validates a selected marker converted to `ResumePosition` with null draft generation. No read navigates automatically. `proprium.narrative.resume.mark.propose` is `propose`, descriptor `callers:[ui]`, `requires_user_gesture:true`, input `{scene_id,expected_manuscript_revision,expected_marker_revision:string|null,sentence_index:integer|null,scroll_top:number}`. Host verifies that the position is the current displayed saved document and supplies device ID/time; arbitrary caller cursor/identity substitution is denied. Dirty draft returns `dirty_draft` with a Save locally first path, retaining cursor and form. Output is the common `{proposal_id,preview}` for one YAML metadata unit, with exact manuscript/scene/marker read revisions and absent-path precondition when new. It updates only that device's entry. Standard idempotency/cancel/stale/no-loss rules apply. Local apply/checkpoint does not mean another device can see it; explicit Host publication and subsequent synchronization are required. No automatic cursor commit, push, cross-device draft recovery or server is introduced. This portability extension follows P0 and can be implemented alongside P1; it does not block local continue-writing.",
           "feature_ids": [
             "NAR-11"
           ],
@@ -576,6 +637,9 @@
         },
         {
           "id": "accept-nar-a12",
+          "canon_title": "Portable resume markers",
+          "canon_reference": "#accept-nar-a12",
+          "canon_requirement": "Use two browser profiles bound to one synthetic repository/branch. Publish a marker from a saved scene through proposal → Host review → local apply → explicit checkpoint/publish; before remote confirmation label it local-only. Synchronize the confirmed Git snapshot on the second profile: the correct device-labeled scene and sentence become an optional Continue candidate. Another repository, branch or device's unsaved text cannot be rebound. Modify the manuscript after marking: the old position is stale and cannot move the caret; local recoverable draft wins over a remote candidate for the same scene. Offline/missing marker leaves local resume usable. Repeated proposal returns one receipt, stale marker/body revisions fail, rejection writes nothing, unknown YAML entries survive, and Mobile selection/return keeps IME/undo/draft intact. No server cursor store, hidden publication or cross-device journal promise is permitted. ## Latest Scriptorium lifecycle recovery addendum [Source delta](../SCRIPTORIUM-LATEST-DELTA.md) DELTA-01/02/03/06 is binding for NAR-03, NAR-07, NAR-08 and NAR-12: stale browser/scene reads must be fenced by document generation; interrupted scene activation must resume safely after page restoration; provider credential failures must not log the author out; restored manuscript bytes, including terminal LF and Japanese UTF-16 positions, must be preserved.",
           "feature_ids": [
             "NAR-12"
           ],
@@ -602,6 +666,7 @@
         {
           "feature_id": "NAR-01",
           "source_anchor_state": "UNMAPPED",
+          "author_visible_result": "Recognize the existing work hierarchy and keep non-work repositories in generic Files mode.",
           "source_disposition": "`RECOVERY` for hierarchy reads/tree; `DESIGN_TARGET` for a dedicated recognition status and partial diagnostics.",
           "canon_source_revisions": [
             "95a66c2c985a66bc2d535392dcc450d8c9df18d5",
@@ -629,6 +694,7 @@
         {
           "feature_id": "NAR-02",
           "source_anchor_state": "TRACEABILITY_MAPPED",
+          "author_visible_result": "Browse ordered volumes, chapters and scenes; select a scene and reach the exact linked manuscript.",
           "source_disposition": "`RECOVERY`; Scriptorium Story Navigator and Host outline both exist. Proprium destination is a Host-rendered contribution.",
           "canon_source_revisions": [
             "95a66c2c985a66bc2d535392dcc450d8c9df18d5",
@@ -701,6 +767,7 @@
         {
           "feature_id": "NAR-03",
           "source_anchor_state": "UNMAPPED",
+          "author_visible_result": "Continue from the current browser's last recoverable scene and cursor without opening another repository's draft.",
           "source_disposition": "`RECOVERY` for local resume and journal coordination; remote/server recent-activity candidates are not portable into the static Host.",
           "canon_source_revisions": [
             "95a66c2c985a66bc2d535392dcc450d8c9df18d5",
@@ -728,6 +795,7 @@
         {
           "feature_id": "NAR-04",
           "source_anchor_state": "TRACEABILITY_MAPPED",
+          "author_visible_result": "Create the first volume, chapters, and scenes; a scene creation proposes its metadata and empty linked manuscript together.",
           "source_disposition": "`RECOVERY` for volume/chapter/scene create, including scene plus Markdown file in one proposal. Default volume append order is a `DESIGN_TARGET`; the legacy action has no default for volume order.",
           "canon_source_revisions": [
             "95a66c2c985a66bc2d535392dcc450d8c9df18d5",
@@ -767,6 +835,7 @@
         {
           "feature_id": "NAR-05",
           "source_anchor_state": "TRACEABILITY_MAPPED",
+          "author_visible_result": "Reorder chapters within one volume and scenes within one chapter by accessible controls.",
           "source_disposition": "`RECOVERY` for dedicated same-parent reorder. The source generic update can alter order/parent fields but does not provide a complete volume reorder or safe cross-parent move operation; those stay deferred `DESIGN_TARGET`s.",
           "canon_source_revisions": [
             "95a66c2c985a66bc2d535392dcc450d8c9df18d5",
@@ -806,6 +875,7 @@
         {
           "feature_id": "NAR-06",
           "source_anchor_state": "TRACEABILITY_MAPPED",
+          "author_visible_result": "Read scene breadcrumbs, title and explicit manuscript reference; edit structural title or relink to an existing body path while Knowledge owns semantic metadata.",
           "source_disposition": "`RECOVERY` for context and metadata proposal actions; title/link field split is specified here. Source has generic link updates but no dedicated relink control, so the explicit UI picker is a `DESIGN_TARGET`.",
           "canon_source_revisions": [
             "95a66c2c985a66bc2d535392dcc450d8c9df18d5",
@@ -861,6 +931,7 @@
         {
           "feature_id": "NAR-07",
           "source_anchor_state": "UNMAPPED",
+          "author_visible_result": "Keep Japanese editing, Draft recovery, IME, caret, selection, undo and scroll intact while a structure or panel action occurs.",
           "source_disposition": "`RECOVERY` in the Host editor and journal; not a plugin-owned feature.",
           "canon_source_revisions": [
             "95a66c2c985a66bc2d535392dcc450d8c9df18d5",
@@ -888,6 +959,7 @@
         {
           "feature_id": "NAR-08",
           "source_anchor_state": "UNMAPPED",
+          "author_visible_result": "On Mobile, offer quick append, next-scene reading navigation and a local scratch capture route while retaining the full editor.",
           "source_disposition": "`RECOVERY` in Arcadia Loom for quick append, reading next-scene and Home capture; only the Host can own the local draft/journal destination.",
           "canon_source_revisions": [
             "95a66c2c985a66bc2d535392dcc450d8c9df18d5",
@@ -915,6 +987,7 @@
         {
           "feature_id": "NAR-09",
           "source_anchor_state": "UNMAPPED",
+          "author_visible_result": "Recover from malformed, missing, duplicate, stale, disabled, offline and partially available hierarchy data without losing prose.",
           "source_disposition": "`DESIGN_TARGET` as a complete cross-boundary acceptance contract.",
           "canon_source_revisions": [
             "95a66c2c985a66bc2d535392dcc450d8c9df18d5",
@@ -942,6 +1015,7 @@
         {
           "feature_id": "NAR-10",
           "source_anchor_state": "UNMAPPED",
+          "author_visible_result": "Preserve and compile the structural parts of a legacy NarrativeChangeSet through the typed owner compiler for Paired Writing; split mixed scene patches without a second writer or lost fields.",
           "source_disposition": "`RECOVERY` for the source v1 builder/validator; `DESIGN_TARGET` for the Proprium pure compiler, staging lease and field-owner split.",
           "canon_source_revisions": [
             "95a66c2c985a66bc2d535392dcc450d8c9df18d5",
@@ -969,6 +1043,7 @@
         {
           "feature_id": "NAR-11",
           "source_anchor_state": "UNMAPPED",
+          "author_visible_result": "Preserve, display, add and remove sentence reading marks on a scene without writing prose or silently relocating a stale mark.",
           "source_disposition": "`RECOVERY` in Arcadia Loom; absent from Scriptorium. Proprium routes metadata proposals through Narrative and rendering/navigation through the Host.",
           "canon_source_revisions": [
             "95a66c2c985a66bc2d535392dcc450d8c9df18d5",
@@ -996,6 +1071,7 @@
         {
           "feature_id": "NAR-12",
           "source_anchor_state": "UNMAPPED",
+          "author_visible_result": "`RECOVERY` of the per-device recent-scene/cursor intent in Scriptorium `app/src/resume/continueCandidates.ts:mergeContinueCandidates` and its tests; `DESIGN_TARGET` for an explicitly reviewed Git marker replacing server-held cursor state. After an author publishes a marker, another device that synchronizes that Git snapshot can offer the same scene/position. P0 local resume never waits for it.",
           "source_disposition": "[NAR-A12](#accept-nar-a12)",
           "canon_source_revisions": [
             "95a66c2c985a66bc2d535392dcc450d8c9df18d5",
@@ -1054,6 +1130,9 @@
       "acceptance_cases": [
         {
           "id": "accept-kno-a01",
+          "canon_title": "Bible inventory",
+          "canon_reference": "#accept-kno-a01",
+          "canon_requirement": "Open a synthetic work containing every Bible entity type, nested character `profile.yaml`/`voice.yaml`, tags, aliases, notes, arcs and threads. Search/type/tag filters page deterministically; detail shows IDs, file paths and revisions. Missing directories show a truthful empty state; malformed YAML and duplicate IDs show path-specific errors. No source file changes on reads.",
           "feature_ids": [
             "KNO-01"
           ],
@@ -1115,6 +1194,9 @@
         },
         {
           "id": "accept-kno-a02",
+          "canon_title": "Entity and notes edit",
+          "canon_reference": "#accept-kno-a02",
+          "canon_requirement": "Create a location and edit a character's one note block. Host Review shows exact before/after values and revisions. Approve and reload: the new entity appears and selected note changes; arbitrary nested unknown YAML keys, untouched note sections, aliases, voice file and unrelated files remain. Reject leaves Git bytes unchanged. A stale entity/file revision returns conflict and leaves the editor draft intact.",
           "feature_ids": [
             "KNO-01",
             "KNO-02",
@@ -1192,6 +1274,9 @@
         },
         {
           "id": "accept-kno-a03",
+          "canon_title": "Scene references",
+          "canon_reference": "#accept-kno-a03",
+          "canon_requirement": "From a selected scene, search/select two characters, set POV/location and add a relation. The proposal lists the exact scene YAML path and referenced entity read revisions. A missing/duplicate target is shown as a broken link; stale scene revision is not applied. “Open scene” returns to the same manuscript, caret, selection, IME and reading position.",
           "feature_ids": [
             "KNO-03",
             "KNO-06",
@@ -1263,6 +1348,9 @@
         },
         {
           "id": "accept-kno-a04",
+          "canon_title": "Thread lifecycle",
+          "canon_reference": "#accept-kno-a04",
+          "canon_requirement": "With explicit plant/advance/payoff links, verify point-in-time status at before/at/after scenes and jumps to the cited scenes. A keyword-only mention is labeled candidate evidence, not confirmed plot. After five unmentioned scenes show the warning; after final-volume reach with no resolution show a separate warning; declared abandoned threads do not show unresolved warnings. Unknown state remains unset.",
           "feature_ids": [
             "KNO-10",
             "KNO-11"
@@ -1318,6 +1406,9 @@
         },
         {
           "id": "accept-kno-a05",
+          "canon_title": "Graph and map",
+          "canon_reference": "#accept-kno-a05",
+          "canon_requirement": "View a graph with mixed entity types, duplicate relation entries, missing endpoints and a 300-node synthetic graph. Filters and focused hops give the same source snapshot; broken references remain visible even when no graph edge can render. Map contains locations only, deduplicates reciprocal travel links and shows nonnegative travel days. Keyboard/table and Mobile list controls can select a node and open its source.",
           "feature_ids": [
             "KNO-13",
             "KNO-14"
@@ -1366,6 +1457,9 @@
         },
         {
           "id": "accept-kno-a06",
+          "canon_title": "Timeline and objective state",
+          "canon_reference": "#accept-kno-a06",
+          "canon_requirement": "At two different ordered scenes verify the timeline preserves Japanese relative-date surfaces and distinguishes confirmed/estimated/unknown. World-state location, item ownership (acquire/transfer/drop/use), acquaintance and manual confirmed event folds differ at the correct scene boundary. Proposed/rejected/stale events never appear in objective state. Reordering or changed source events invalidates the old result.",
           "feature_ids": [
             "KNO-15",
             "KNO-16",
@@ -1471,6 +1565,9 @@
         },
         {
           "id": "accept-kno-a07",
+          "canon_title": "Reader and belief layers",
+          "canon_reference": "#accept-kno-a07",
+          "canon_requirement": "Show first name/alias disclosure evidence, explicit confirmed character-knowledge events, knowledge gaps and thread forget-risk with scene citations. Unknown disclosure and conflicting evidence remain unknown/conflicted. Until a real persisted belief store exists, the UI says “character belief records unavailable” rather than presenting an empty result as proof of no beliefs.",
           "feature_ids": [
             "KNO-17"
           ],
@@ -1504,6 +1601,9 @@
         },
         {
           "id": "accept-kno-a08",
+          "canon_title": "Source-backed suggestions",
+          "canon_reference": "#accept-kno-a08",
+          "canon_requirement": "Create a notes suggestion with an exact manuscript quote/revision, exact target block and request-envelope `idempotency_key`. Exact retry returns the same proposal; same key with changed text returns `idempotency_conflict`. Changed source quote/range or target notes revision is `snapshot_stale`. Host applies the accepted unit: text and status change together; rejection changes no entity notes; another pending suggestion on the changed block becomes stale. Reload preserves history and provenance.",
           "feature_ids": [
             "KNO-04",
             "KNO-05"
@@ -1566,6 +1666,9 @@
         },
         {
           "id": "accept-kno-a09",
+          "canon_title": "State-event review",
+          "canon_reference": "#accept-kno-a09",
+          "canon_requirement": "Create, edit, confirm and reject events for location/acquaintance/ownership/knowledge. Candidate is excluded from objective folds. Confirm proposal includes event append, source evidence, scene revision and JSONL status/history update in one reviewed unit. Conflict/duplicate proposals cannot confirm. Manuscript drift marks proposals stale without overwriting them. Retry after a lost response returns the original Host proposal receipt.",
           "feature_ids": [
             "KNO-18",
             "KNO-22"
@@ -1649,6 +1752,9 @@
         },
         {
           "id": "accept-kno-a10",
+          "canon_title": "Optional tokenizer",
+          "canon_reference": "#accept-kno-a10",
+          "canon_requirement": "With Research tokenizer enabled, suggested tags show evidence, score and tokenizer identity and remain unselected until author edits the entity. With tokenizer missing, disabled or failing, show `missing_capability` and retain hand-edited tag UI; no model, Worker or network request starts just to open Knowledge.",
           "feature_ids": [
             "KNO-07"
           ],
@@ -1689,6 +1795,9 @@
         },
         {
           "id": "accept-kno-a11",
+          "canon_title": "Series overlay and legacy mapping",
+          "canon_reference": "#accept-kno-a11",
+          "canon_requirement": "Bind one work to a separately selected Bible repository by verified GitHub repository ID, or explicitly select an available local-only binding in Host preferences. Verify Bible-only entities appear, equal-ID work entity shadows while both provenance records remain visible, and links deduplicate by identity. Missing repo, stale Bible snapshot, duplicate IDs and unresolved legacy `projectId` require refresh/author selection; no repo-name guess, automatic fetch or inactive-repository write occurs. Local-only binding survives this device reload in Host preferences but is not exported as Git authority; another device requests explicit selection. Unknown series fields survive an approved edit in the active repository.",
           "feature_ids": [
             "KNO-19"
           ],
@@ -1785,6 +1894,9 @@
         },
         {
           "id": "accept-kno-a12",
+          "canon_title": "Desktop and Mobile return",
+          "canon_reference": "#accept-kno-a12",
+          "canon_requirement": "On desktop, open Bible/context/thread/lens panels while typing Japanese. On mobile, use searchable full-height sheet and non-canvas details. Switch and close each view: same editor instance, composition, undo, caret, selected range and scroll return. Touch/keyboard controls can complete every filter, select, review and jump action.",
           "feature_ids": [
             "KNO-03",
             "KNO-06",
@@ -1887,6 +1999,9 @@
         },
         {
           "id": "accept-kno-a13",
+          "canon_title": "Optional Semantic provider",
+          "canon_reference": "#accept-kno-a13",
+          "canon_requirement": "With Semantic absent or disabled, keyword/link lifecycle and all required Knowledge screens remain usable. If enabled, embedding mention is a cited candidate and never auto-adds a thread link. Cancel or worker fault drops the candidate job only; no stale result enters a newer snapshot.",
           "feature_ids": [
             "KNO-05",
             "KNO-07",
@@ -1964,6 +2079,9 @@
         },
         {
           "id": "accept-kno-a14",
+          "canon_title": "Missing linked repository/offline",
+          "canon_reference": "#accept-kno-a14",
+          "canon_requirement": "Disconnect or evict a selected Bible repo. Current-work Bible/entity read/edit still works on its local snapshot. Overlay and linked citations show unavailable with exact repo identity; no fake empty overlay or remote request. A local-only binding cleared from Host preferences requires explicit reselection and is never reconstructed from a Git path/name. Reopening the locally available Bible restores overlay for its current pinned snapshot.",
           "feature_ids": [
             "KNO-19"
           ],
@@ -2060,6 +2178,9 @@
         },
         {
           "id": "accept-kno-a15",
+          "canon_title": "Lens design target",
+          "canon_reference": "#accept-kno-a15",
+          "canon_requirement": "After graph/map/timeline gates independently pass, move one shared scene cursor through a synthetic multi-scene work. Location, event, appearances, thread state and reader disclosure all update from the same pinned snapshot; unresolved/unknown fields remain labeled. This case certifies the DESIGN_TARGET only and does not reclassify a historical feature as recovered.",
           "feature_ids": [
             "KNO-20"
           ],
@@ -2083,6 +2204,9 @@
         },
         {
           "id": "accept-kno-a16",
+          "canon_title": "Plugin lifecycle and failure",
+          "canon_reference": "#accept-kno-a16",
+          "canon_requirement": "Test absent, disabled, installed-idle, active, updated and invalid-signature states. Absent/disabled/idle Knowledge starts no worker or provider. ABI/signature/capability failure yields visible unavailable status. Guest trap, timeout, cancellation or corrupt cache leaves editor, Git files, draft, host proposal and zero-plugin editing usable.",
           "feature_ids": [
             "KNO-21"
           ],
@@ -2106,6 +2230,9 @@
         },
         {
           "id": "accept-kno-a17",
+          "canon_title": "Dialogue-sketch asset lifecycle",
+          "canon_reference": "#accept-kno-a17",
+          "canon_requirement": "In a synthetic Bible, list an existing sketch; create one with a title; edit situation, participants, line text, speaker and line order; save through Host Review and reload the exact YAML path. Unknown top-level/line fields and unrelated files survive byte/field comparison. A stale collection/entity revision or broken speaker produces an explicit error and retains the complete unsaved form; rejection changes no source bytes. A Japanese IME edit, keyboard-only controls and mobile line cards can complete the same flow and return to the original manuscript/editor instance without losing caret, selection, scroll or draft. With all optional providers absent, every manual field remains available.",
           "feature_ids": [
             "KNO-23"
           ],
@@ -2129,6 +2256,9 @@
         },
         {
           "id": "accept-kno-a18",
+          "canon_title": "Optional dialogue-sketch provider",
+          "canon_reference": "#accept-kno-a18",
+          "canon_requirement": "With the Host provider unavailable/disabled, manual sketch CRUD and suggestion review remain usable and no request is made. When enabled, an explicit user invocation shows the exact selected sketch/character/line context and destination before consent; preview is inspectable. A suggestion is returned as an untrusted draft tied to the source snapshot, never saved automatically; cancel, timeout, denial or provider failure preserves authored text. Zukan extraction creates only source-revision-bound pending suggestions; accepting a fact requires a separate Knowledge proposal and Host review. A changed sketch invalidates late output, and a lost provider response is not retried automatically.",
           "feature_ids": [
             "KNO-24"
           ],
@@ -2152,6 +2282,9 @@
         },
         {
           "id": "accept-kno-a19",
+          "canon_title": "Knowledge ChangeSet compiler and Paired mixed-owner integration",
+          "canon_reference": "#accept-kno-a19",
+          "canon_requirement": "Invoke `proprium.knowledge.changes.compile` with each supported Knowledge-owned NarrativeChangeSet v1 operation kind against a synthetic pinned work. Output `read_set` contains exact source hashes/null create preconditions, `units` contain only generic guarded file operations, and `operation_map` names every source op. `entity.update` then `scene.update` to the same file reads the prior operation through Host staging and produces one final path operation while preserving the original base revision; a Knowledge create followed by a relation/state op can resolve the staged entity. Host joins the compiler output with Narrative structural compilation in source order, unions initial read sets and same-path writes into a dependency-closed review unit, then registers exactly one Paired ChangeSet. Before review there are zero worktree bytes changed and zero independent Knowledge proposal receipts. Stale base/reference/evidence, unsupported ownership (including `scene.insert` and structural `scene.update`) and broken prior staging fail with typed diagnostics; an exact retry never duplicates a source operation, and Knowledge disable leaves the change available as an explicit unavailable compiler result without mutation.",
           "feature_ids": [
             "KNO-22",
             "KNO-25"
@@ -2179,6 +2312,7 @@
         {
           "feature_id": "KNO-01",
           "source_anchor_state": "TRACEABILITY_MAPPED",
+          "author_visible_result": "`modules/story/src/snapshot.ts:readStorySnapshot`, `actions.ts:story.snapshot.materialize`, `story.entities.list, story.entities.get, story.entities.collection-revision`; `actions.test.ts` “entity reads expose source revision and preserve nested notes and character voice”, “snapshot materialization reads each pinned Story snapshot without proposing writes”",
           "source_disposition": "`features/zukan/bible/BibleView.tsx`, `BibleListPane.tsx`, `BibleDetailPane.tsx`, `useBibleEntities.ts`",
           "canon_source_revisions": [
             "95a66c2c985a66bc2d535392dcc450d8c9df18d5",
@@ -2252,6 +2386,7 @@
         {
           "feature_id": "KNO-02",
           "source_anchor_state": "TRACEABILITY_MAPPED",
+          "author_visible_result": "`actions.ts:story.entities.create, story.entities.update`, `prepareEntityUpdate`, `pathForEntity`, `validateReferences`; `actions.test.ts` “entity updates validate source revisions and return a reviewable Core proposal”",
           "source_disposition": "`features/zukan/CharacterDetailModal.tsx`, `EntityForm`, `BibleDetailPane.tsx`",
           "canon_source_revisions": [
             "95a66c2c985a66bc2d535392dcc450d8c9df18d5",
@@ -2299,6 +2434,7 @@
         {
           "feature_id": "KNO-03",
           "source_anchor_state": "TRACEABILITY_MAPPED",
+          "author_visible_result": "`snapshot.ts:extractLinks`, `actions.ts:story.scene.metadata.update`, `story.scene.context`; `actions.test.ts` “entity relationship proposals pin referenced entity revisions and participate in thread lifecycle reads”, “entity reads expose source revision and preserve nested notes and character voice”",
           "source_disposition": "`features/editor/SceneCharacterList.tsx`, `AppearsPickerModal.tsx` supports search/multi-select/save for `scene.appears`; `features/zukan/CharacterDetailModal.tsx` backlinks",
           "canon_source_revisions": [
             "95a66c2c985a66bc2d535392dcc450d8c9df18d5",
@@ -2339,6 +2475,7 @@
         {
           "feature_id": "KNO-04",
           "source_anchor_state": "UNMAPPED",
+          "author_visible_result": "`notes.ts:normalizeNotes`, `appendProposedTextToNotes`, `collectNotesPlainTexts`; actions tests “entity reads expose source revision and preserve nested notes and character voice”, “manual note edits stale matching pending Zukan rows in the same Story proposal”",
           "source_disposition": "`features/zukan/bible/NotesDisplay.tsx`, `BibleDetailPane.tsx`, `CharacterDetailModal.tsx`",
           "canon_source_revisions": [
             "95a66c2c985a66bc2d535392dcc450d8c9df18d5",
@@ -2367,6 +2504,7 @@
         {
           "feature_id": "KNO-05",
           "source_anchor_state": "TRACEABILITY_MAPPED",
+          "author_visible_result": "`actions.ts:story.zukan-suggestions.list, story.zukan-suggestions.create, story.zukan-suggestions.approve, story.zukan-suggestions.reject`; `actions.test.ts` “Zukan suggestions list by status and approve/reject as snapshot-bound proposals”, “Zukan creation validates manuscript provenance and proposes a stable pending JSONL row”, “Zukan creation rejects stale manuscript quotes and validates sandbox source ranges”, “Zukan retries across an unrelated snapshot return the stored status without rebasing, while a new operation ID gets a new proposal identity”; `modules/story/tests/zukan-core.acceptance.mjs` test “Zukan suggestion creation runs through Story, Core review, checkpoint, publish, and reclone”",
           "source_disposition": "`features/zukan/bible/CandidatePanel.tsx` (candidate discover, create entity, ignore, optional semantic clustering), `suggestionApi.ts`; no evidence to copy any private prompt/model output",
           "canon_source_revisions": [
             "95a66c2c985a66bc2d535392dcc450d8c9df18d5",
@@ -2440,6 +2578,7 @@
         {
           "feature_id": "KNO-06",
           "source_anchor_state": "TRACEABILITY_MAPPED",
+          "author_visible_result": "`domain/graph.ts:getBacklinks/getEntityAppearances`, `actions.ts:story.entities.backlinks, story.entities.appearances, story.entities.voice-patterns, story.entities.freshness`; `actions.test.ts` “entity reads expose source revision and preserve nested notes and character voice” and `graph.test.ts` “backlinks retain source relation order and omit missing source entities” / “appearances aggregate relation kinds by scene and sort by scene order”",
           "source_disposition": "`features/zukan/CharacterDetailModal.tsx` tabs for scenes/refs and graph jump; `features/zukan/CharactersView.tsx`",
           "canon_source_revisions": [
             "95a66c2c985a66bc2d535392dcc450d8c9df18d5",
@@ -2504,6 +2643,7 @@
         {
           "feature_id": "KNO-07",
           "source_anchor_state": "TRACEABILITY_MAPPED",
+          "author_visible_result": "`actions.ts:story.tags.list`, `story.entities.suggested-tags`, `suggestedTagData`, `withTokenizer`; action test “suggested tags do not allocate NLP at module load and report optional capability absence”",
           "source_disposition": "`BibleDetailPane.tsx`/`BibleListPane.tsx` tag filters and edit affordances",
           "canon_source_revisions": [
             "95a66c2c985a66bc2d535392dcc450d8c9df18d5",
@@ -2552,6 +2692,7 @@
         {
           "feature_id": "KNO-08",
           "source_anchor_state": "TRACEABILITY_MAPPED",
+          "author_visible_result": "`domain/graph.ts:buildSceneContext`, `actions.ts:story.scene.context`, `browser.tsx:StoryNavigator/StoryInspector`; `graph.test.ts` “scene context resolves POV, raw location, relation collections and manuscript path”",
           "source_disposition": "`features/zukan/CharacterDetailModal.tsx`, scene character list, Bible backlink navigation",
           "canon_source_revisions": [
             "95a66c2c985a66bc2d535392dcc450d8c9df18d5",
@@ -2592,6 +2733,7 @@
         {
           "feature_id": "KNO-09",
           "source_anchor_state": "UNMAPPED",
+          "author_visible_result": "`domain/graph.ts:getVolumeTree`, `actions.ts:story.volumes.tree, story.entities.reorder`; graph tests “volume tree and scene-location chronology use volume/chapter/scene order”, action test “scene creation inserts by position in one proposal and includes every changed file precondition”",
           "source_disposition": "`features/outline` and scene editor; Knowledge UI can link to them",
           "canon_source_revisions": [
             "95a66c2c985a66bc2d535392dcc450d8c9df18d5",
@@ -2619,6 +2761,7 @@
         {
           "feature_id": "KNO-10",
           "source_anchor_state": "TRACEABILITY_MAPPED",
+          "author_visible_result": "`domain/graph.ts:getThreadsOverview`, `domain/threadStatus.ts:getThreadStatus`, `actions.ts:story.threads.overview, story.threads.status`; graph test “thread overview combines both planted relation directions and deduplicates by scene”; lifecycle tests “point-in-time status keeps source labels and omits threads not planted yet”",
           "source_disposition": "`features/zukan/ThreadsView.tsx`, `ThreadLifecycleBadge.tsx` supports unresolved count, status, plant/payoff links and scene jumps",
           "canon_source_revisions": [
             "95a66c2c985a66bc2d535392dcc450d8c9df18d5",
@@ -2666,6 +2809,7 @@
         {
           "feature_id": "KNO-11",
           "source_anchor_state": "TRACEABILITY_MAPPED",
+          "author_visible_result": "`domain/threadLifecycle.ts:findThreadMentionsByKeyword/buildThreadLifecycle/detectThreadLifecycleWarnings/analyzeThreadLifecycles`; action `story.threads.lifecycle`; `threadLifecycle.test.ts` tests “thread lifecycle selects plant/payoff order and treats advances and mentions as recalls” and “lifecycle warnings honor abandonment, staleness and final-volume resolution guidance”",
           "source_disposition": "`features/zukan/ThreadsView.tsx` fetches and displays lifecycle per thread with partial-failure state",
           "canon_source_revisions": [
             "95a66c2c985a66bc2d535392dcc450d8c9df18d5",
@@ -2714,6 +2858,7 @@
         {
           "feature_id": "KNO-12",
           "source_anchor_state": "UNMAPPED",
+          "author_visible_result": "`domain/threadLifecycle.ts:findThreadMentionsByEmbedding`; test “embedding mentions are added only for scenes without a keyword hit”. `story.threads.lifecycle` does not call this function.",
           "source_disposition": "Loom optional semantic candidate controls in `CandidatePanel.tsx`; no evidence that an embedding match is a confirmed link",
           "canon_source_revisions": [
             "95a66c2c985a66bc2d535392dcc450d8c9df18d5",
@@ -2741,6 +2886,7 @@
         {
           "feature_id": "KNO-13",
           "source_anchor_state": "TRACEABILITY_MAPPED",
+          "author_visible_result": "`story.graph.query`, `story.cooccurrence`; `domain/graph.ts:getGraphData`, `domain/cooccurrence.ts:buildStoryCooccurrence`; `graph.test.ts` “graph defaults omit scene nodes and location map adds deduplicated reciprocal travel edges”; `cooccurrence.test.ts` tests “co-occurrence uses canonical scene.appears relations, deduplicates, and calculates source Jaccard/PMI” and “scope recalculates the denominator and relation gaps against scoped appearances”; `actions.test.ts` tests “graph query accepts the browser string-array filter and rejects scalar filters” and “co-occurrence action returns source Jaccard/PMI and accepts scene scope”",
           "source_disposition": "`features/zukan/GraphView.tsx` type filters, selected entity, cooccurrence and gaps, mobile landscape summary",
           "canon_source_revisions": [
             "95a66c2c985a66bc2d535392dcc450d8c9df18d5",
@@ -2789,6 +2935,7 @@
         {
           "feature_id": "KNO-14",
           "source_anchor_state": "TRACEABILITY_MAPPED",
+          "author_visible_result": "`story.map.query`; `domain/locationMap.ts:buildLocationMap`; `graph.test.ts` “graph defaults omit scene nodes and location map adds deduplicated reciprocal travel edges”",
           "source_disposition": "`features/continuity/MapView.tsx` selects locations, connected edges, entity appearances and navigation; `LandscapeSummaryList.tsx` is a mobile reading alternative",
           "canon_source_revisions": [
             "95a66c2c985a66bc2d535392dcc450d8c9df18d5",
@@ -2829,6 +2976,7 @@
         {
           "feature_id": "KNO-15",
           "source_anchor_state": "TRACEABILITY_MAPPED",
+          "author_visible_result": "`domain/timeline.ts:extractTimeExpressions/estimateSceneTimeline/buildSceneTimelineEntries`; `timeline.test.ts` tests “Japanese number and time extraction retain source surfaces and offsets”, “timeline stays unknown without relative time and marks reversals from explicit deltas”, and “timeline entries carry caller snapshot, scene context and confidence labels”; action `story.timeline.query`",
           "source_disposition": "`features/continuity/TimelineView.tsx` filters by chapter/character, groups by location lane and jumps to a scene",
           "canon_source_revisions": [
             "95a66c2c985a66bc2d535392dcc450d8c9df18d5",
@@ -2869,6 +3017,7 @@
         {
           "feature_id": "KNO-16",
           "source_anchor_state": "TRACEABILITY_MAPPED",
+          "author_visible_result": "`domain/worldState.ts:extractRuleStateEvents/getWorldStateAtScene/getEntityStateHistory`; `worldState.test.ts` tests “world-state projection folds location, acquaintance, item ownership and confirmed raw events” and “state-event ordering and draft status prevent unconfirmed changes from becoming objective”; action `story.world-state.at-scene, story.world-state.history`",
           "source_disposition": "`features/editor/WorldStatePanel.tsx`; `packages/core-shared/src/worldState/{types,extractRuleEvents,fold,query}.ts`",
           "canon_source_revisions": [
             "95a66c2c985a66bc2d535392dcc450d8c9df18d5",
@@ -2916,6 +3065,7 @@
         {
           "feature_id": "KNO-17",
           "source_anchor_state": "TRACEABILITY_MAPPED",
+          "author_visible_result": "`domain/readerKnowledge.ts:extractReaderDisclosures/diffReaderAndCharacterKnowledge/computeThreadForgetRisks`; `worldState.test.ts` tests “reader disclosure uses first story-order mention, longest registered name, and summary changes”, “reader/character knowledge diff reports explanation gaps and dramatic irony”, and “thread forget risk is source-scored from between-scene disclosures”; action `story.reader-model.build`",
           "source_disposition": "`packages/schema/src/worldState.ts` defines a belief response; `packages/api/src/routes/worldState.ts` explicitly returns `characterBeliefs: []`, asserted by `packages/api/src/routes/worldState.test.ts`. Reader-disclosure events are computed and shown.",
           "canon_source_revisions": [
             "95a66c2c985a66bc2d535392dcc450d8c9df18d5",
@@ -2955,6 +3105,7 @@
         {
           "feature_id": "KNO-18",
           "source_anchor_state": "TRACEABILITY_MAPPED",
+          "author_visible_result": "`story.world-state.workbench`; `actions.ts:story.state-proposals.list, story.state-proposals.create, story.state-proposals.update, story.state-proposals.approve, story.state-proposals.reject, story.state-proposals.stale`, `createStateEvent`, `validateEventReferences`; tests “state-proposal lifecycle uses the source manuscript FNV hash”, “state.append-event rejects stale or mismatched source proposals”",
           "source_disposition": "`packages/core/src/worldState/proposalService.ts`, `proposals.ts`, `WorldStatePanel.tsx`; API test “state workbench API: scene時点の状態、開示、提案を一括で返す”",
           "canon_source_revisions": [
             "95a66c2c985a66bc2d535392dcc450d8c9df18d5",
@@ -3052,6 +3203,7 @@
         {
           "feature_id": "KNO-19",
           "source_anchor_state": "TRACEABILITY_MAPPED",
+          "author_visible_result": "`domain/seriesOverlay.ts:mergeSeriesOverlay`; `seriesOverlay.test.ts` tests “series overlay gives work entities precedence and deduplicates relation identity” and “series overlay with an empty bible preserves the work view”; actions `story.series.list, story.series.get, story.series.create, story.series.update, story.series.delete, story.series.binding.get, story.series.binding.update, story.series.binding.delete, story.series.overlay`; `actions.test.ts` test “series bindings use stable repository identity and preserve unknown settings”; `migration/producer.test.ts` tests “maps legacy series project IDs to stable repository IDs and preserves source and unknown fields” and “retains unresolved series IDs with an explicit author-review marker”",
           "source_disposition": "Loom product design and Bible/workspace source model; no feature requiring Loom server or private DB is imported",
           "canon_source_revisions": [
             "95a66c2c985a66bc2d535392dcc450d8c9df18d5",
@@ -3165,6 +3317,7 @@
         {
           "feature_id": "KNO-20",
           "source_anchor_state": "UNMAPPED",
+          "author_visible_result": "No Scriptorium action or shipped unified slider",
           "source_disposition": "Only proposed in `docs/plans/2026-07-29-narrative-ide-ux-plan.md`, section 4.4; plan says graph/map/timeline share a scene cursor",
           "canon_source_revisions": [
             "95a66c2c985a66bc2d535392dcc450d8c9df18d5",
@@ -3192,6 +3345,7 @@
         {
           "feature_id": "KNO-21",
           "source_anchor_state": "UNMAPPED",
+          "author_visible_result": "`browser.tsx:StoryNavigator`, `StoryInspector`, `ContinuityPanel`, `WorldStatePanel`, `ZukanReviewPanel`, `SeriesSettingsPanel`; `index.ts` registers trusted browser contributions. Scriptorium has no Proprium WIT contribution.",
           "source_disposition": "Bible, Character, Threads, Graph, Map, Timeline, WorldState and Appears components listed above",
           "canon_source_revisions": [
             "95a66c2c985a66bc2d535392dcc450d8c9df18d5",
@@ -3220,6 +3374,7 @@
         {
           "feature_id": "KNO-22",
           "source_anchor_state": "UNMAPPED",
+          "author_visible_result": "`narrativeChangeSet.ts:identifyNarrativeChangeSet/buildNarrativeChangeProposal`, `actions.ts:story.changes.propose`; `actions.test.ts` tests “NarrativeChangeSet preserves all nine source operation kinds in one identity-bound Core proposal”, “NarrativeChangeSet retries return the stored proposal and reject changed source meaning”, and “NarrativeChangeSet refuses to reconstruct an incomplete recovered Core proposal”",
           "source_disposition": "Loom `docs/plans/2026-07-29-narrative-ide-ux-plan.md` sections 4.2/5 proposes general ChangeSet and partial review",
           "canon_source_revisions": [
             "95a66c2c985a66bc2d535392dcc450d8c9df18d5",
@@ -3248,6 +3403,7 @@
         {
           "feature_id": "KNO-23",
           "source_anchor_state": "UNMAPPED",
+          "author_visible_result": "`modules/story/src/snapshot.ts:ENTITY_DIRS`, `actions.ts:story.entities.list, story.entities.create, story.entities.update`, `pathForEntity`, `domain/types.ts:StoryEntityType`; `actions.test.ts` “Zukan creation rejects stale manuscript quotes and validates sandbox source ranges” uses `bible/dialogue_sketches/ds-uma.yaml` and asserts the source file revision is read. Scriptorium browser only exposes generic entity filtering; no standalone editor/action was found.",
           "source_disposition": "`app/src/features/ai/DialogueSketchView.tsx:loadSketches/handleCreate/handleOpen`, `DialogueSketchEditor.tsx:handleSave`, `DialogueSketchDetails.tsx`, `DialogueSketchLines.tsx`, `dialogueSketchViewUtils.tsx:linesFromRaw/participantsFromRaw/situationFromRaw`, `dialogueSketchApi.ts:listDialogueSketchCharacters`; `app/src/features/zukan/api.ts:createEntity/updateEntity` sends collection/entity `If-Match` revisions and an idempotency key. No dedicated view/editor interaction test was found at the pinned Loom commit.",
           "canon_source_revisions": [
             "95a66c2c985a66bc2d535392dcc450d8c9df18d5",
@@ -3275,6 +3431,7 @@
         {
           "feature_id": "KNO-24",
           "source_anchor_state": "UNMAPPED",
+          "author_visible_result": "Scriptorium has no line/topic generator. `actions.ts:story.zukan-suggestions.create` accepts `source:\"sandbox\"`, validates `sourceSessionId` and `sourceTurnRange`, checks participant/evidence quotes, and reads the exact sketch revision; `actions.test.ts` “Zukan creation rejects stale manuscript quotes and validates sandbox source ranges”.",
           "source_disposition": "`app/src/features/ai/DialogueSketchEditor.tsx:handleSuggest/handleSuggestTopics/handleBulkGenerate/handleAnalyzeZukan` and prompt-preview handlers; `dialogueSketchApi.ts`; `packages/schema/src/dialogueSketch.ts` request/response schemas; `packages/api/src/routes/dialogueSketch.ts` calls `generateDialogueSketchLine`, `generateDialogueSketchLines`, `generateDialogueSketchTopics` and `generateSandboxZukanSuggestions`; `packages/core/src/nlp/dialogueSketch/{turn.ts,suggestTopics.ts}` implements the helpers. `packages/api/src/routes/dialogueSketch.test.ts` proves provider-none returns 503; no UI behavior test was found.",
           "canon_source_revisions": [
             "95a66c2c985a66bc2d535392dcc450d8c9df18d5",
@@ -3302,6 +3459,7 @@
         {
           "feature_id": "KNO-25",
           "source_anchor_state": "UNMAPPED",
+          "author_visible_result": "`narrativeChangeSet.ts:validateChangeSet/validateOperation/validateEvent/buildNarrativeChangeProposal`, `actions.ts:story.changes.propose`; `actions.test.ts` “NarrativeChangeSet preserves all nine source operation kinds in one identity-bound Core proposal”, “NarrativeChangeSet retries return the stored proposal and reject changed source meaning”, and “NarrativeChangeSet refuses to reconstruct an incomplete recovered Core proposal”. Source builder compiles operations in original order against an in-memory virtual file/entity view and guards referenced YAML revisions; Scriptorium then registers with Core itself.",
           "source_disposition": "No Loom behavior was needed: the complete semantics and tests exist in the pinned Scriptorium source.",
           "canon_source_revisions": [
             "95a66c2c985a66bc2d535392dcc450d8c9df18d5",
@@ -3354,6 +3512,9 @@
       "acceptance_cases": [
         {
           "id": "accept-res-a001",
+          "canon_title": null,
+          "canon_reference": "#accept-res-a001",
+          "canon_requirement": "In an offline local repository with no plugins beyond Research, create 300+ Markdown/text/YAML fixtures under supported roots plus excluded hidden/binary/out-of-scope files. Search lexical, exact phrase/title and prefix, scope, next page; repeat after file change/delete. | Expected hits appear in deterministic order with correct revisions/ranges/snippets; hidden and out-of-scope paths are absent; pagination has no gaps/duplicates; current coverage is shown; explicit index rebuild status/progress is observable; deletion/revision invalidates only affected derived data; editor remains writable throughout.",
           "feature_ids": [
             "RES-001"
           ],
@@ -3394,6 +3555,9 @@
         },
         {
           "id": "accept-res-a002",
+          "canon_title": null,
+          "canon_reference": "#accept-res-a002",
+          "canon_requirement": "From a Japanese document, save a known caret/selection/scroll and IME-capable editor state; open a hit, then return. Change/delete the target before opening in a second run. | First run lands at exact current phrase/sentence and restores origin state; second run detects stale/missing revision and asks to rerun, never highlighting the wrong text. IME composition and undo stack remain intact.",
           "feature_ids": [
             "RES-002"
           ],
@@ -3417,6 +3581,9 @@
         },
         {
           "id": "accept-res-a003",
+          "canon_title": null,
+          "canon_reference": "#accept-res-a003",
+          "canon_requirement": "Load a schema-1 registry with aliases, unrelated metadata, unknown top-level and entry fields, missing target, then create/update/remove terms through review. Run two competing proposals from the same registry revision. | Review preview names exact paths/values; only approved changes apply; stale proposal cannot overwrite the first; unrelated/unknown data survives exactly; invalid/missing registry blocks writes; target/missing and ambiguous states are visible.",
           "feature_ids": [
             "RES-003"
           ],
@@ -3471,6 +3638,9 @@
         },
         {
           "id": "accept-res-a004",
+          "canon_title": null,
+          "canon_reference": "#accept-res-a004",
+          "canon_requirement": "Resolve names in strings containing Japanese, ruby markup, half/full-width variants, combining marks and emoji before a term. Include overlapping names, two terms sharing an alias, and missing target. | Returned ranges select the original UTF-16 text exactly; longest unique overlap wins; collision is exposed without a navigation link; unavailable target is not decorated; resolving never changes file bytes or editor undo history.",
           "feature_ids": [
             "RES-004"
           ],
@@ -3511,6 +3681,9 @@
         },
         {
           "id": "accept-res-a005",
+          "canon_title": null,
+          "canon_reference": "#accept-res-a005",
+          "canon_requirement": "Run analysis on text with Japanese punctuation, nested brackets, ruby, mixed Latin and a surrogate-pair character, then repeat with tokenizer asset missing, denied and cancelled. | Sentence/token ranges map to the exact source revision and include engine identity; missing/denied/cancelled state is explicit and does not block lexical search or typing; no unrequested asset/network request occurs.",
           "feature_ids": [
             "RES-005"
           ],
@@ -3551,6 +3724,9 @@
         },
         {
           "id": "accept-res-a006",
+          "canon_title": null,
+          "canon_reference": "#accept-res-a006",
+          "canon_requirement": "With Knowledge installed, analyze a revision-pinned entity corpus with known names, repeated nouns and evidence paths; then disable Knowledge and retry; use candidate review to ignore and request entity creation. | Candidate counts/source IDs/readings and evidence are reproducible for that snapshot; create hand-off opens Knowledge review and cannot directly write an entity; absent Knowledge degrades just candidate action; stale corpus is rejected.",
           "feature_ids": [
             "RES-006"
           ],
@@ -3591,6 +3767,9 @@
         },
         {
           "id": "accept-res-a007",
+          "canon_title": null,
+          "canon_reference": "#accept-res-a007",
+          "canon_requirement": "Provide stable known terms and near-spelling candidates with counts, expand a query, run variant generation twice, then optionally compare Semantic clusters. | Expanded terms keep the literal first and add only deterministic known spelling variants; same lexical inputs yield same candidate/canonical/count; Semantic-only suggestions carry provider/model provenance and separate label; neither result edits canonical term or prose without review.",
           "feature_ids": [
             "RES-007"
           ],
@@ -3624,6 +3803,9 @@
         },
         {
           "id": "accept-res-a008",
+          "canon_title": null,
+          "canon_reference": "#accept-res-a008",
+          "canon_requirement": "Read a synonym dictionary containing unknown root and group keys, append a two-word positive-context group, merge by stable group identity, cancel, and retry from stale revision. | Read/preview preserves ordering, comments and unknown keys; applied proposal changes only intended group; cancel leaves source unchanged; stale merge is rejected; no local/external generator is required.",
           "feature_ids": [
             "RES-008"
           ],
@@ -3671,6 +3853,9 @@
         },
         {
           "id": "accept-res-a009",
+          "canon_title": null,
+          "canon_reference": "#accept-res-a009",
+          "canon_requirement": "Search into a multi-sentence Japanese passage with quote/bracket punctuation; exercise both offset and sentence-index result landing after body load. | Host selects the matching visible sentence from the pinned revision and returns to the original location; a revision mismatch causes re-resolution or a stale prompt, never an offset into another document version.",
           "feature_ids": [
             "RES-009"
           ],
@@ -3704,6 +3889,9 @@
         },
         {
           "id": "accept-res-a010",
+          "canon_title": null,
+          "canon_reference": "#accept-res-a010",
+          "canon_requirement": "Submit bounded token-count batches offline with an approved local tokenizer, then with the explicitly selected approximation; try oversized item/batch and unapproved URL-like ID. | Each result reports exact model/digest or approximation method/reason; over-limit and unapproved inputs fail before worker creation; no network call occurs.",
           "feature_ids": [
             "RES-010"
           ],
@@ -3727,6 +3915,9 @@
         },
         {
           "id": "accept-res-a011",
+          "canon_title": null,
+          "canon_reference": "#accept-res-a011",
+          "canon_requirement": "Add and remove an ignored candidate through proposal review, reload and re-run discovery; reject a proposal and retry after unrelated YAML extension fields and comments are added. | Applied ignore hides only that term; unignore restores it; reject changes no file; unknown fields and unrelated candidates survive.",
           "feature_ids": [
             "RES-011"
           ],
@@ -3760,6 +3951,9 @@
         },
         {
           "id": "accept-res-a012",
+          "canon_title": null,
+          "canon_reference": "#accept-res-a012",
+          "canon_requirement": "Load legacy feature settings with known/unknown external flags. Open Host Plugin Manager grant review from an explicit user gesture, then cancel or grant one mapped feature; disable it later. | Source settings remain byte-identical; no automatic external request occurs; cancel leaves grants denied; explicit Host grant is local, plugin-scoped and revocable; unsupported IDs stay denied and visible.",
           "feature_ids": [
             "RES-012"
           ],
@@ -3807,6 +4001,9 @@
         },
         {
           "id": "accept-res-a013",
+          "canon_title": null,
+          "canon_reference": "#accept-res-a013",
+          "canon_requirement": "Switch repository, branch, overlay and active text revision during concurrent index/analysis; cancel one of two identical searches; disable/re-enable Research; evict/corrupt cache; interrupt the network during optional artifact/model transfer; suspend mobile tab. | No old result is displayed as current or repopulated after disable; one caller's cancel does not cancel another; corrupt cache rebuilds only from current snapshot; interrupted transfer leaves no active partial artifact and cached verified bytes still work offline; missing cache/Worker status is truthful; editor and local draft remain intact.",
           "feature_ids": [
             "RES-013"
           ],
@@ -3833,6 +4030,7 @@
         {
           "feature_id": "RES-001",
           "source_anchor_state": "TRACEABILITY_MAPPED",
+          "author_visible_result": "Search Markdown/text and supported YAML/JSON workspace documents by full text, exact phrase/title and prefix; scope by repository-relative path; deterministic ranking and bounded pagination.",
           "source_disposition": "RECOVERY + DESIGN_TARGET pagination and phrase semantics",
           "canon_source_revisions": [
             "95a66c2c985a66bc2d535392dcc450d8c9df18d5",
@@ -3881,6 +4079,7 @@
         {
           "feature_id": "RES-002",
           "source_anchor_state": "UNMAPPED",
+          "author_visible_result": "Open a hit at its current path and exact visible match/sentence where supported; return to the originating file, selection, caret and scroll.",
           "source_disposition": "RECOVERY in Loom; DESIGN_TARGET Host integration",
           "canon_source_revisions": [
             "95a66c2c985a66bc2d535392dcc450d8c9df18d5",
@@ -3908,6 +4107,7 @@
         {
           "feature_id": "RES-003",
           "source_anchor_state": "TRACEABILITY_MAPPED",
+          "author_visible_result": "Read and edit canonical names, aliases and target paths; expose missing target and ambiguous alias; add/update/remove only as reviewed proposals.",
           "source_disposition": "RECOVERY; unknown-field retention is DESIGN_TARGET gap closure",
           "canon_source_revisions": [
             "95a66c2c985a66bc2d535392dcc450d8c9df18d5",
@@ -3972,6 +4172,7 @@
         {
           "feature_id": "RES-004",
           "source_anchor_state": "TRACEABILITY_MAPPED",
+          "author_visible_result": "Render term references as non-editing editor decorations with UTF-16 source ranges. Longest unique match wins; shared aliases remain ambiguous and never navigate automatically.",
           "source_disposition": "RECOVERY",
           "canon_source_revisions": [
             "95a66c2c985a66bc2d535392dcc450d8c9df18d5",
@@ -4020,6 +4221,7 @@
         {
           "feature_id": "RES-005",
           "source_anchor_state": "TRACEABILITY_MAPPED",
+          "author_visible_result": "Analyze bounded text into sentences, token spans, surface/base/reading/POS and engine provenance when the optional local tokenizer is available.",
           "source_disposition": "RECOVERY; browser/WASM lifecycle is DESIGN_TARGET",
           "canon_source_revisions": [
             "95a66c2c985a66bc2d535392dcc450d8c9df18d5",
@@ -4068,6 +4270,7 @@
         {
           "feature_id": "RES-006",
           "source_anchor_state": "TRACEABILITY_MAPPED",
+          "author_visible_result": "Discover compound-noun candidates from a selected, revision-pinned entity/text corpus; show reading, occurrences and evidence; let the author ignore a candidate or hand it to Knowledge for entity review.",
           "source_disposition": "RECOVERY; revision-bound evidence and provider hand-off are DESIGN_TARGET",
           "canon_source_revisions": [
             "95a66c2c985a66bc2d535392dcc450d8c9df18d5",
@@ -4116,6 +4319,7 @@
         {
           "feature_id": "RES-007",
           "source_anchor_state": "TRACEABILITY_MAPPED",
+          "author_visible_result": "Suggest likely spelling variants using deterministic string similarity and corpus counts; suggestions stay hypotheses until the author registers an alias or ignores them.",
           "source_disposition": "RECOVERY",
           "canon_source_revisions": [
             "95a66c2c985a66bc2d535392dcc450d8c9df18d5",
@@ -4155,6 +4359,7 @@
         {
           "feature_id": "RES-008",
           "source_anchor_state": "TRACEABILITY_MAPPED",
+          "author_visible_result": "Read a term's synonym group and propose adding/merging a user-authored group with optional positive/negative context.",
           "source_disposition": "RECOVERY; merge by revision-bound stable identity is DESIGN_TARGET",
           "canon_source_revisions": [
             "95a66c2c985a66bc2d535392dcc450d8c9df18d5",
@@ -4211,6 +4416,7 @@
         {
           "feature_id": "RES-009",
           "source_anchor_state": "TRACEABILITY_MAPPED",
+          "author_visible_result": "Analyze manuscript sentences/tokens with stable source offsets for search landing and downstream features; split Japanese sentences without losing punctuation/bracket boundaries.",
           "source_disposition": "RECOVERY",
           "canon_source_revisions": [
             "95a66c2c985a66bc2d535392dcc450d8c9df18d5",
@@ -4250,6 +4456,7 @@
         {
           "feature_id": "RES-010",
           "source_anchor_state": "UNMAPPED",
+          "author_visible_result": "Count tokens for an explicitly supplied bounded batch, returning exact model identity or labeled approximation; callers can use it without a user-facing Research panel.",
           "source_disposition": "RECOVERY; optional in Proprium",
           "canon_source_revisions": [
             "95a66c2c985a66bc2d535392dcc450d8c9df18d5",
@@ -4277,6 +4484,7 @@
         {
           "feature_id": "RES-011",
           "source_anchor_state": "TRACEABILITY_MAPPED",
+          "author_visible_result": "Persist author exclusions for unwanted term candidates and preserve them across reload; allow explicit unignore in the target UI.",
           "source_disposition": "RECOVERY ignore; DESIGN_TARGET unignore",
           "canon_source_revisions": [
             "95a66c2c985a66bc2d535392dcc450d8c9df18d5",
@@ -4316,6 +4524,7 @@
         {
           "feature_id": "RES-012",
           "source_anchor_state": "TRACEABILITY_MAPPED",
+          "author_visible_result": "Show NLP feature/locality settings and preserve old external-send choices without turning Git content into a Host plugin grant.",
           "source_disposition": "RECOVERY data; explicit Host migration is DESIGN_TARGET",
           "canon_source_revisions": [
             "95a66c2c985a66bc2d535392dcc450d8c9df18d5",
@@ -4372,6 +4581,7 @@
         {
           "feature_id": "RES-013",
           "source_anchor_state": "UNMAPPED",
+          "author_visible_result": "Cache index and NLP results by exact workspace snapshot/config; invalidate on revision, branch, overlay, deletion, provider or plugin lifecycle change. Report progress/cancel/failure without affecting typing.",
           "source_disposition": "RECOVERY cache; explicit status/rebuild actions and persistent Host cache/lifecycle are DESIGN_TARGET",
           "canon_source_revisions": [
             "95a66c2c985a66bc2d535392dcc450d8c9df18d5",
@@ -4423,6 +4633,9 @@
       "acceptance_cases": [
         {
           "id": "accept-pw-01",
+          "canon_title": "Provider-free and optional provider",
+          "canon_reference": "#pw-01-provider-free-and-optional-provider",
+          "canon_requirement": "With all providers unset, cold Host opens Context, runs local rewrite fallback/context, reads status, inspects proposals and can use external MCP path. Activation allocates no Worker/network/model/credential lookup. Enabled provider shows alias/model/exact disclosure per request. Cancellation/error is truthful, unknown completion is not retried. Malicious manifest cannot read/return Host secrets. Host-local preference changes happen only in Host controls; `paired.workspace-settings.propose` saves explicit nonsecret Git defaults through review/apply and never grants consent. The legacy `assistant.settings.propose` ID is not a guest preference mutation; its UI adapter uses this explicit workspace-authorship flow and non-UI mutation callers receive `capability_denied`. An absent broker returns `provider_unavailable` without blocking local work. <a id=\"pw-02-rewrite-and-selection\"></a>",
           "feature_ids": [
             "PW-01",
             "PW-17"
@@ -4492,6 +4705,9 @@
         },
         {
           "id": "accept-pw-02",
+          "canon_title": "Rewrite and selection",
+          "canon_reference": "#pw-02-rewrite-and-selection",
+          "canon_requirement": "Select exact UTF-16 range in Japanese scene. See three strategies/rationales/citations; split/tell-show appear when conditions match. Choosing one displays exact diff and submits only range proposal. Duplicate ambiguous text, stale range/revision, changed draft, same replacement, invalid offset, provider timeout or cancel never edits. Provider absent/failure still returns local candidates. Host apply changes selected range only and returns to same scene/anchor. <a id=\"pw-03-continuation\"></a>",
           "feature_ids": [
             "PW-02",
             "PW-12",
@@ -4541,6 +4757,9 @@
         },
         {
           "id": "accept-pw-03",
+          "canon_title": "Continuation",
+          "canon_reference": "#pw-03-continuation",
+          "canon_requirement": "For scene with over 8 sentences, preview exactly context used; default latest eight. Check k=0, budget boundary, optional current summary, five ranked retrieval hits, missing/approximate counter labels. Shared draft requires exact scene/path/base snapshot/base scene revision and is marked unsaved. Wrong repository/branch/scene or stale base fails. Preview needs no model. <a id=\"pw-04-qa-and-manifest\"></a>",
           "feature_ids": [
             "PW-03",
             "PW-12"
@@ -4589,6 +4808,9 @@
         },
         {
           "id": "accept-pw-04",
+          "canon_title": "QA and Manifest",
+          "canon_reference": "#pw-04-qa-and-manifest",
+          "canon_requirement": "Ask multi-turn question about two scenes/Bible entity. Search is bounded/scoped; quote matches current path/revision. No evidence gives uncertainty/empty citations. Manifest lists included/omitted part, source, revision, counts, truncation and consent. Draft is absent by default; client selection is explicit and distinct. Never claim to know hidden model prompt. <a id=\"pw-05-summary-and-first-read\"></a>",
           "feature_ids": [
             "PW-04",
             "PW-12"
@@ -4637,6 +4859,9 @@
         },
         {
           "id": "accept-pw-05",
+          "canon_title": "Summary and first read",
+          "canon_reference": "#pw-05-summary-and-first-read",
+          "canon_requirement": "Scene summary has ordered lines, known characters, revisions, hash and provenance. Repeat matching input is cached; manuscript change makes stale. Chapter with up to 30 scenes proposes child+parent; empty or over-30 fails typed. First read uses only accepted current ordered summaries through target chapter and cites revisions. Nothing mutates before approval. <a id=\"pw-06-dialogue-sketch-workflow\"></a>",
           "feature_ids": [
             "PW-05"
           ],
@@ -4719,6 +4944,9 @@
         },
         {
           "id": "accept-pw-06",
+          "canon_title": "Dialogue Sketch",
+          "canon_reference": "#pw-06-dialogue-sketch-workflow",
+          "canon_requirement": "Create/list/reopen/edit/save standalone sketch with title/situation/participants/ordered speaker lines; unknown keys survive. Invalid participant or stale base cannot overwrite. Topics return 3–5 title/situation pairs, use manual relations/links, exclude auto links. Turns return one selected speaker or exactly 1–30 lines by selected participants; stale sketch, invalid speaker, empty/malformed output fails. Without Speaker, YAML voice notes still work. Optional Knowledge analysis is pending review, never auto-updates Bible. <a id=\"pw-07-delegated-features\"></a>",
           "feature_ids": [
             "PW-06",
             "PW-12",
@@ -4789,6 +5017,9 @@
         },
         {
           "id": "accept-pw-07",
+          "canon_title": "Delegated features",
+          "canon_reference": "#pw-07-delegated-features",
+          "canon_requirement": "Independently disable Knowledge/Research/Diagnostics/Speaker/Semantic. Action registry reports each feature's owner and unavailability reason; Paired core/context/edit actions continue. Diagnostics is the sole deterministic aspect-review owner. Paired retains optional-provider synonym, Zukan and state-event generation; term adoption, entity corrections, event proposals and sketch CRUD use Research/Knowledge owner proposals only. With Knowledge absent, saved-sketch/Zukan/state reads and adoption return `dependency_unavailable`; manual dialogue inputs still work. With Research absent, synonym candidates can be generated but cannot be adopted into Research records. With Semantic absent, candidate-ID contradiction review returns `dependency_unavailable`; free-text contradiction and Zukan grounding use bounded lexical fallback and mark reduced coverage. With Speaker absent, voice notes remain available and no attribution is fabricated. Disabling the provider cancels its own jobs; editor and pending Host proposals survive. UI/MCP invoke the same typed owner action contracts. <a id=\"pw-08-desktop-mobile-and-ime\"></a>",
           "feature_ids": [
             "PW-07",
             "PW-08",
@@ -4884,6 +5115,9 @@
         },
         {
           "id": "accept-pw-08",
+          "canon_title": "Desktop/mobile/IME",
+          "canon_reference": "#pw-08-desktop-mobile-and-ime",
+          "canon_requirement": "Desktop switch Context/Inspect/Changes during Japanese IME; preserve text/selection/undo/scroll, review full diff in Host, return focus to same editor. Mobile Safari/Chromium: open sheet, use touch/keyboard, rotate, show/hide virtual keyboard, close/reopen review and return to same scene/anchor. Suspension/reload reveals actual journal state and never reports remote save. Invalid old anchor goes to nearby recovery location, never guessed caret. <a id=\"pw-09-runtime-privacy-and-failures\"></a>",
           "feature_ids": [
             "PW-13",
             "PW-18",
@@ -4909,6 +5143,9 @@
         },
         {
           "id": "accept-pw-09",
+          "canon_title": "Runtime/privacy/failures",
+          "canon_reference": "#pw-09-runtime-privacy-and-failures",
+          "canon_requirement": "Reject bad ABI/signature/digest, incompatible dependency, undeclared capability or malformed UI. Disabled allocates no Worker; idle unloaded; demand starts bounded worker; cancel releases it. Test quota/timeout, malformed/oversized RPC, trap, missing cache, offline, corrupt cache and unsupported device. Host editor remains available/files unchanged. No egress absent per-request consent. No network/secret/DOM/Git/filesystem imports. Offline requires verified cached bytes. <a id=\"pw-10-mcp-retry-and-staleness\"></a>",
           "feature_ids": [
             "PW-14"
           ],
@@ -4932,6 +5169,9 @@
         },
         {
           "id": "accept-pw-10",
+          "canon_title": "MCP retry/staleness",
+          "canon_reference": "#pw-10-mcp-retry-and-staleness",
+          "canon_requirement": "Connected MCP reads saved context/Manifest, submits two ops with evidence and retrieves status/diff. Cross-repo ID, legacy project mapping mismatch, unsupported op, unsafe path, stale base, missing quote, duplicate op, same key/different fingerprint or oversize produce typed errors. Exact retry returns receipt. Editor change after proposal yields stale and retains draft. Approve one operation, leave other untouched. After disconnect query status before retry; unknown not success. MCP cannot approve/apply/commit/publish. Approved apply returns exact revisions/receipts and returns editor to scene. <a id=\"pw-11-recovery-and-completeness\"></a>",
           "feature_ids": [
             "PW-15",
             "PW-16",
@@ -4968,6 +5208,9 @@
         },
         {
           "id": "accept-pw-11",
+          "canon_title": "Recovery/completeness",
+          "canon_reference": "#pw-11-recovery-and-completeness",
+          "canon_requirement": "For archived settings/usage with unknown fields, missing/matching/conflicting target, preserve bytes; restore exact source only by explicit recovery approval; surface conflict without selecting version. Usage DTO bounded/hides unknown fields; JSONL unchanged. Old `.arcadia` path is not a writable canonical target. Every ledger row maps to action/UI/data owner and acceptance. Host-local nonsecret preferences change only from Host controls on a user gesture; legacy `assistant.settings.propose` never mutates Host-local preferences and non-UI callers cannot invoke it. Its explicit UI equivalent is `paired.workspace-settings.propose`, a separate reviewed generic ChangeSet that preserves unknown JSON fields and grants no egress. Gaps remain RECOVERY_PENDING, not deleted or claimed complete. <a id=\"pw-21-mixed-changeset-compilation\"></a>",
           "feature_ids": [
             "PW-01",
             "PW-17"
@@ -5037,6 +5280,9 @@
         },
         {
           "id": "accept-pw-21",
+          "canon_title": "Mixed ChangeSet compilation",
+          "canon_reference": "#pw-21-mixed-changeset-compilation",
+          "canon_requirement": "Submit source v1 sets exercising each of the nine accepted operation kinds, an identity-bound `projectId`, exact evidence, and a set that creates then references a staged entity. Narrative and Knowledge compilers run in source order against Host staging; the output has one complete original-base `read_set`, all source operation IDs map to generic file operations, and a same-path cross-owner edit becomes one dependency-closed review unit with the final byte diff. No worktree, editor draft, owner proposal or Git byte changes before Host review/apply. A mixed semantic/structural `scene.update` receives validation from both owners and remains inseparable. A missing compiler returns `dependency_unavailable` without dropping the source payload or creating a partial proposal; an unsupported kind, `thread.link-scene:advanced`, forward reference, duplicate ID/target, ungrounded quote, unsafe path, conflicting write or cyclic dependency returns a typed error tied to its source op. A stale original revision or dirty manuscript at review blocks apply and retains the proposal/draft. Same idempotency key+source fingerprint returns the same Host proposal; changed source bytes return `idempotency_conflict`. Disable Paired after submission and verify the Host proposal/evidence remains reviewable; owner plugin disable never creates a second partial ChangeSet. Certification uses a signed plugin artifact in Chromium/WebKit including mobile classes, real Host editor/navigation and persisted/reloaded public-domain/generated workspace. Legacy Scriptorium/Loom checks prove source behavior only; they do not certify Proprium Browser Git, mobile, WASM, Gateway or static delivery. See [Host/Plugin Contract](../HOST-PLUGIN-CONTRACT.md), [Architecture](../ARCHITECTURE.md), [Acceptance](../ACCEPTANCE.md), [Plugin ABI](../../architecture/WASM-PLUGIN-ABI.md), [Plugin Platform](../../architecture/PLUGIN-PLATFORM.md), [Git/storage](../../architecture/GIT-AND-STORAGE.md), and [Workspace UX](../../architecture/WORKSPACE-UX.md).",
           "feature_ids": [
             "PW-21"
           ],
@@ -5073,6 +5319,7 @@
         {
           "feature_id": "PW-01",
           "source_anchor_state": "TRACEABILITY_MAPPED",
+          "author_visible_result": "`assistant.health`, `assistant.queue.status`, `assistant.settings.read`, `assistant.settings.propose`, `assistant.usage.read`; lazy health/queue, non-secret presets, reviewed workspace settings, usage view",
           "source_disposition": "`paired.provider.status`, `paired.workspace-settings.read/propose`, Host-local preference controls, `paired.history.usage.read`; preserve old files",
           "canon_source_revisions": [
             "95a66c2c985a66bc2d535392dcc450d8c9df18d5",
@@ -5154,6 +5401,7 @@
         {
           "feature_id": "PW-02",
           "source_anchor_state": "TRACEABILITY_MAPPED",
+          "author_visible_result": "assistant.rewrite/rewrite.propose; three strategies, local fallback, split/tell-show, exact selection and proposal",
           "source_disposition": "paired.rewrite.suggest/propose, Selection Lens",
           "canon_source_revisions": [
             "95a66c2c985a66bc2d535392dcc450d8c9df18d5",
@@ -5210,6 +5458,7 @@
         {
           "feature_id": "PW-03",
           "source_anchor_state": "TRACEABILITY_MAPPED",
+          "author_visible_result": "assistant.continuation/preview; trailing context, budget, retrieval, draft base validation, exact preview",
           "source_disposition": "paired.continuation.suggest; saved default, explicit draft marker",
           "canon_source_revisions": [
             "95a66c2c985a66bc2d535392dcc450d8c9df18d5",
@@ -5266,6 +5515,7 @@
         {
           "feature_id": "PW-04",
           "source_anchor_state": "TRACEABILITY_MAPPED",
+          "author_visible_result": "assistant.qa/preview; bounded chat/read tools, exact cited-source check, stream",
           "source_disposition": "paired.qa.answer and local preview",
           "canon_source_revisions": [
             "95a66c2c985a66bc2d535392dcc450d8c9df18d5",
@@ -5322,6 +5572,7 @@
         {
           "feature_id": "PW-05",
           "source_anchor_state": "TRACEABILITY_MAPPED",
+          "author_visible_result": "scene/chapter summary/previews, hash cache, child+parent proposal; reaction uses accepted ordered summaries",
           "source_disposition": "paired summary actions and first-read action over current accepted summaries",
           "canon_source_revisions": [
             "95a66c2c985a66bc2d535392dcc450d8c9df18d5",
@@ -5418,6 +5669,7 @@
         {
           "feature_id": "PW-06",
           "source_anchor_state": "TRACEABILITY_MAPPED",
+          "author_visible_result": "topic/turn actions and previews; profile/examples/relation context and bounded turns",
           "source_disposition": "paired dialogue topic/turn actions; saved CRUD is Knowledge-owned",
           "canon_source_revisions": [
             "95a66c2c985a66bc2d535392dcc450d8c9df18d5",
@@ -5498,6 +5750,7 @@
         {
           "feature_id": "PW-07",
           "source_anchor_state": "TRACEABILITY_MAPPED",
+          "author_visible_result": "`assistant.aspect.review`, `assistant.aspect.review.preview`; deterministic tempo/POV/explanation observations",
           "source_disposition": "Diagnostics `proprium.diagnostics.chapter.aspects.review.v1` / `proprium.diagnostics.chapter.aspects.preview.v1`; Paired keeps legacy adapters only, no duplicate analysis. See [DIA-A16](DIAGNOSTICS.md#dia-a16-chapter-aspect-review).",
           "canon_source_revisions": [
             "95a66c2c985a66bc2d535392dcc450d8c9df18d5",
@@ -5537,6 +5790,7 @@
         {
           "feature_id": "PW-08",
           "source_anchor_state": "TRACEABILITY_MAPPED",
+          "author_visible_result": "`assistant.synonyms.suggestions`, `assistant.synonyms.preview`; word+sentence, 3–5 candidates, exact prompt preview",
           "source_disposition": "Paired `paired.synonyms.suggest/preview` provides optional generation; Research owns terminology/search and canonical candidate adoption",
           "canon_source_revisions": [
             "95a66c2c985a66bc2d535392dcc450d8c9df18d5",
@@ -5584,6 +5838,7 @@
         {
           "feature_id": "PW-09",
           "source_anchor_state": "TRACEABILITY_MAPPED",
+          "author_visible_result": "contradictions.assist revalidates Semantic candidate/current quote, returns verdict/reason, no write",
           "source_disposition": "Paired owns verdict; Diagnostics presentation; Semantic public rebuild/dismiss only",
           "canon_source_revisions": [
             "95a66c2c985a66bc2d535392dcc450d8c9df18d5",
@@ -5623,6 +5878,7 @@
         {
           "feature_id": "PW-10",
           "source_anchor_state": "TRACEABILITY_MAPPED",
+          "author_visible_result": "speaker.attribute validates live draft target/base",
           "source_disposition": "Speaker owns attribution/correction/UI; Paired passes explicit context only",
           "canon_source_revisions": [
             "95a66c2c985a66bc2d535392dcc450d8c9df18d5",
@@ -5662,6 +5918,7 @@
         {
           "feature_id": "PW-11",
           "source_anchor_state": "TRACEABILITY_MAPPED",
+          "author_visible_result": "`assistant.zukan.suggestions`, `assistant.zukan.sandbox.preview`, `assistant.stateEvents.draft`; grounded entity/event/Dialogue Sketch quotes, typed candidate output",
           "source_disposition": "Paired `paired.zukan.suggest/preview` and `paired.state-events.suggest` remain read-only; Knowledge owns canonical suggestion/event proposal and review",
           "canon_source_revisions": [
             "95a66c2c985a66bc2d535392dcc450d8c9df18d5",
@@ -5726,6 +5983,7 @@
         {
           "feature_id": "PW-12",
           "source_anchor_state": "UNMAPPED",
+          "author_visible_result": "All 11 registered preview actions: scene/chapter, QA, continuation, aspect, dialogue topics/single/bulk turns, reader reaction, synonyms, sandbox Zukan",
           "source_disposition": "Provider-independent preview at each owning plugin; Paired preview IDs include `paired.synonyms.preview` and `paired.zukan.preview`",
           "canon_source_revisions": [
             "95a66c2c985a66bc2d535392dcc450d8c9df18d5",
@@ -5757,6 +6015,7 @@
         {
           "feature_id": "PW-13",
           "source_anchor_state": "UNMAPPED",
+          "author_visible_result": "Nine legacy IDs: `assistant.settings`, `assistant.rewrite`, `assistant.summaries`, `assistant.qa`, `assistant.continuation`, `assistant.aspect-review`, `assistant.dialogue`, `assistant.reader-reaction`, `assistant.proposals`",
           "source_disposition": "Host Context/Inspect/Changes, optional Ask; all nine operations remain discoverable without nine mandatory top-level tabs",
           "canon_source_revisions": [
             "95a66c2c985a66bc2d535392dcc450d8c9df18d5",
@@ -5784,6 +6043,7 @@
         {
           "feature_id": "PW-14",
           "source_anchor_state": "UNMAPPED",
+          "author_visible_result": "`assistant.rewrite.stream` and `assistant.qa.stream` SSE delta/final/error/canceled",
           "source_disposition": "Retire old Node routes. Host action transport streams/cancels, separate from Gateway MCP",
           "canon_source_revisions": [
             "95a66c2c985a66bc2d535392dcc450d8c9df18d5",
@@ -5811,6 +6071,7 @@
         {
           "feature_id": "PW-15",
           "source_anchor_state": "UNMAPPED",
+          "author_visible_result": "`get_scene_context`, `get_writing_context`, `get_context_manifest`, `submit_change_set`, `list_change_sets`, `get_change_set`, `suggest_rewrite`",
           "source_disposition": "Same Host snapshot/actions/ChangeSet through UI and fixed Gateway `plugin_call`; `list_change_sets` reads the Host receipt list and `get_change_set` maps to `paired.changeset.inspect(include_source:true)` plus chunk reads when `source_ref` is returned. Propose only; no server-owned Project authority. Generic `invoke_action` is listed with shared MCP tools below.",
           "canon_source_revisions": [
             "95a66c2c985a66bc2d535392dcc450d8c9df18d5",
@@ -5838,6 +6099,7 @@
         {
           "feature_id": "PW-16",
           "source_anchor_state": "UNMAPPED",
+          "author_visible_result": "`list_projects`, `discover_actions`, `invoke_action`, `get_entity`, `list_entities`, `get_volume_tree`, `search`, `analyze_manuscript`, `get_diagnostics`, `get_thread_status`, `get_status`, `get_history`, `get_observation`, `update_entity`, `create_scene`, `lint_manuscript`, `reload`, `check_stylometric_deviations`, `check_plot_semantics`, `check_consistency`, `check_continuity`, `compute_cooccurrence`, `check_voice_consistency`, `check_style_deviations`, `get_dialogue`, `format_manuscript`",
           "source_disposition": "Accounted in Narrative, Knowledge, Research, Diagnostics, Speaker, Semantic and Host/Git. Discovery and reads use active Host scope; write-shaped helpers map to typed proposals. `get_history`/`get_observation` stay Git synchronization/history reads; proposal transitions/audit use the separate Host `workspace.change.observations` ledger. No direct-write/approve/apply/commit/publish MCP tool remains.",
           "canon_source_revisions": [
             "95a66c2c985a66bc2d535392dcc450d8c9df18d5",
@@ -5866,6 +6128,7 @@
         {
           "feature_id": "PW-17",
           "source_anchor_state": "UNMAPPED",
+          "author_visible_result": "assistant/migration.ts exact non-secret settings and usage restore, enable gated, conflicts withheld",
           "source_disposition": "Existing generic recovery inventory; preserve bytes/conflicts, no automatic rewrite or activation",
           "canon_source_revisions": [
             "95a66c2c985a66bc2d535392dcc450d8c9df18d5",
@@ -5894,6 +6157,7 @@
         {
           "feature_id": "PW-18",
           "source_anchor_state": "UNMAPPED",
+          "author_visible_result": "Loom SelectionLens, InlineDiffCandidate, RewriteSuggestModal, inlineChangeSet; exact UTF-16/revision/evidence, stale reject, Escape dismiss/Tab accept focused current",
           "source_disposition": "RECOVERY backfill missing from Scriptorium standalone panel; Host owns selection/focus/edit",
           "canon_source_revisions": [
             "95a66c2c985a66bc2d535392dcc450d8c9df18d5",
@@ -5922,6 +6186,7 @@
         {
           "feature_id": "PW-19",
           "source_anchor_state": "UNMAPPED",
+          "author_visible_result": "Loom DialogueSketchView/Editor create/list/edit/save, ordered participant lines, preview/optional analysis; no dedicated Scriptorium assistant panel",
           "source_disposition": "RECOVERY backfill in Knowledge canonical bible/dialogue_sketches/*.yaml; Paired generates candidates only",
           "canon_source_revisions": [
             "95a66c2c985a66bc2d535392dcc450d8c9df18d5",
@@ -5949,6 +6214,7 @@
         {
           "feature_id": "PW-20",
           "source_anchor_state": "UNMAPPED",
+          "author_visible_result": "Loom target doc specifies Manifest, Context/Inspect/Changes, stale/partial/retry and mobile return",
           "source_disposition": "DESIGN_TARGET; binding behavior is this spec, not a claim all waves shipped",
           "canon_source_revisions": [
             "95a66c2c985a66bc2d535392dcc450d8c9df18d5",
@@ -5977,6 +6243,7 @@
         {
           "feature_id": "PW-21",
           "source_anchor_state": "TRACEABILITY_MAPPED",
+          "author_visible_result": "`story.changes.propose`; v1 operation IDs/evidence, identity mapping, validation, source fingerprint/retry and generic proposal build",
           "source_disposition": "`paired.changeset.validate/propose`; owner read-only compilers, Host ephemeral staging, one generic Host ChangeSet with dependency-closed units",
           "canon_source_revisions": [
             "95a66c2c985a66bc2d535392dcc450d8c9df18d5",
@@ -6045,6 +6312,9 @@
       "acceptance_cases": [
         {
           "id": "accept-dia-a1",
+          "canon_title": "scene report",
+          "canon_reference": "#accept-dia-a1",
+          "canon_requirement": "On a synthetic Japanese scene, run analysis against saved revision R and the active Draft generation D. The panel shows character/sentence counts, lint and rhythm findings, prose balance, configured tone/goal status and provider availability. Returned identity names R or D exactly. Change one character in the editor; old offsets immediately become stale and a new run points to the updated text hash.",
           "feature_ids": [
             "DIA-01"
           ],
@@ -6085,6 +6355,9 @@
         },
         {
           "id": "accept-dia-a10",
+          "canon_title": "finding interaction/feedback",
+          "canon_reference": "#accept-dia-a10",
+          "canon_requirement": "Desktop margin marker and panel filters select a finding; mark-intentional and false-positive are distinct explicit decisions. Host shows a reviewable feedback file proposal; after approval/reload, only the exact matching finding is annotated. A new source/config fingerprint reappears. Resolved animation never changes finding truth or severity.",
           "feature_ids": [
             "DIA-09",
             "DIA-12"
@@ -6109,6 +6382,9 @@
         },
         {
           "id": "accept-dia-a11",
+          "canon_title": "revision/cache/cancel",
+          "canon_reference": "#accept-dia-a11",
+          "canon_requirement": "Same scene across different repository, branch, overlay, corpus/config, Speaker revision, analyzer version or provider digest never reuses a prior result. Cancel a multi-page check and terminate a Worker; writing remains usable, result is incomplete/not cached and leases are released. Offline cache loss recomputes from local Git files.",
           "feature_ids": [
             "DIA-09",
             "DIA-12"
@@ -6133,6 +6409,9 @@
         },
         {
           "id": "accept-dia-a12",
+          "canon_title": "first-read",
+          "canon_reference": "#accept-dia-a12",
+          "canon_requirement": "Only an explicit user-run request with consented Paired Writing provider receives manuscript context. Result identifies the exact chapter and model/provider, labels questions/expectations/confusion as an interpretation, and cites bounded source context. Network/model unavailable returns a recoverable error while ordinary diagnostics remains available; no report is silently persisted.",
           "feature_ids": [
             "DIA-10"
           ],
@@ -6156,6 +6435,9 @@
         },
         {
           "id": "accept-dia-a13",
+          "canon_title": "contradiction candidates",
+          "canon_reference": "#accept-dia-a13",
+          "canon_requirement": "Deterministic item-owner/location conflicts appear once in the Diagnostics continuity report; unknown state does not produce a conflict. A Semantic two-source embedding candidate displays both quoted source revisions, paths/scenes and rationale; optional Paired Writing verdicts `compatible`, `insufficient` and `contradiction` remain distinguishable. False-positive/intentional/deferred dismissal is a Diagnostics proposal bound to both source revisions and analyzer/model identity. Stale source makes it reappear for review; no candidate is applied as a canonical fact.",
           "feature_ids": [
             "DIA-11"
           ],
@@ -6189,6 +6471,9 @@
         },
         {
           "id": "accept-dia-a14",
+          "canon_title": "Mobile and writing continuity",
+          "canon_reference": "#accept-dia-a14",
+          "canon_requirement": "On supported mobile browser classes, run lint/report from the sheet, navigate to a finding and return with scene, draft text, cursor, selection, scroll position, undo and IME composition intact. Test touch, keyboard, offline and sheet dismissal on real browser automation/device coverage. A responsive screenshot alone is not a pass.",
           "feature_ids": [
             "DIA-01"
           ],
@@ -6229,6 +6514,9 @@
         },
         {
           "id": "accept-dia-a15",
+          "canon_title": "admission and failure isolation",
+          "canon_reference": "#accept-dia-a15",
+          "canon_requirement": "Install only a signed, digest-verified, ABI-compatible official artifact with declared read/propose/cache capabilities. Missing/disabled Diagnostics creates no worker or scan. Bad signature, digest, ABI, denied capability, malformed oversized RPC, timeout, trap and disable each show typed status; generic editor, Draft, local Git and publication remain available and all leases are released.",
           "feature_ids": [
             "DIA-01"
           ],
@@ -6269,6 +6557,9 @@
         },
         {
           "id": "accept-dia-a16",
+          "canon_title": "Chapter aspect review",
+          "canon_reference": "#accept-dia-a16",
+          "canon_requirement": "Run a synthetic ordered chapter with unequal scene sizes, multiple declared POVs, mixed person markers and repeated explanation markers. Show the expected three independently selectable aspect categories and exact source citations; boundary fixtures around 200/280/120 characters, 0.55/0.12/1.2 thresholds match the pinned implementation. Preview omits scene bodies and makes zero provider requests. Missing Knowledge leaves prose observations with declared-POV unavailable; missing scene body is explicit partial/error, never no-findings success. Paired's legacy adapters invoke this one action. Run with no model/Gateway, a changed draft during computation, cancel, chapter switch and mobile panel close/return: no stale result, file write or editor-state loss. ## Legacy Scriptorium browser UI registration parity The following exact historical registration IDs are required to map to **functioning Host-rendered controls**, not merely shown as labels. The target feature and its linked Acceptance own the user-visible interaction, cancellation and actual action result. Legacy slots do not mandate an additional top-level tab. | Source UI ID | Target feature | | --- | --- | | `diagnostics.consistency` | [DIA-02](#feature-dia-02) | | `diagnostics.continuity` | [DIA-03](#feature-dia-03) | | `diagnostics.analysis` | [DIA-06](#feature-dia-06) | | `diagnostics.voice` | [DIA-08](#feature-dia-08) | All registrations are checked against the pinned Scriptorium source by `scripts/verify-authoring-canon.mjs --sources`. A missing action, disabled control without explanation or inert panel is not feature parity.",
           "feature_ids": [
             "DIA-14"
           ],
@@ -6309,6 +6600,9 @@
         },
         {
           "id": "accept-dia-a2",
+          "canon_title": "lexical measurements",
+          "canon_reference": "#accept-dia-a2",
+          "canon_requirement": "A Japanese fixture with repeated sentence endings, nouns, phrases, dialogue and narration yields the expected frequency/rhythm/sentiment/prose metrics, each with stable sentence/span evidence. Open every result in the editor. No result changes Markdown or leaves a decoration after revision change.",
           "feature_ids": [
             "DIA-01",
             "DIA-06"
@@ -6364,6 +6658,9 @@
         },
         {
           "id": "accept-dia-a3",
+          "canon_title": "project consistency",
+          "canon_reference": "#accept-dia-a3",
+          "canon_requirement": "Across a paged fixture with duplicate IDs, absent `id`, missing explicit scene manuscript, broken relation, open thread without plant and planted thread without payoff, return a complete, correctly scoped report with both source paths/revisions. A valid generic repository is not rewritten or labeled invalid as a narrative project.",
           "feature_ids": [
             "DIA-02"
           ],
@@ -6404,6 +6701,9 @@
         },
         {
           "id": "accept-dia-a4",
+          "canon_title": "continuity",
+          "canon_reference": "#accept-dia-a4",
+          "canon_requirement": "A fixture records item transfer, location/travel edges, scene order and date phrases. Return correct item-owner, teleport, timeline and route-duration warning with both scenes; with absent time/location/edge, emit unknown/unavailable evidence rather than a contradiction. A changed Knowledge file invalidates the prior result despite unchanged manuscript bytes.",
           "feature_ids": [
             "DIA-03"
           ],
@@ -6444,6 +6744,9 @@
         },
         {
           "id": "accept-dia-a5",
+          "canon_title": "lint",
+          "canon_reference": "#accept-dia-a5",
+          "canon_requirement": "Exercise all six rule kinds using the same configured rule set. Offsets select the exact body UTF-16 range, including Japanese text and surrogate pairs. Missing config uses built-in defaults; malformed YAML names the source field without overwriting it. A text-only lint result is visibly a preview.",
           "feature_ids": [
             "DIA-04"
           ],
@@ -6484,6 +6787,9 @@
         },
         {
           "id": "accept-dia-a6",
+          "canon_title": "proposed changes",
+          "canon_reference": "#accept-dia-a6",
+          "canon_requirement": "Formatting preserves byte-identical frontmatter and untouched source fields and previews indentation, ellipsis and dialogue spacing changes. Reject leaves saved file and active Draft unchanged. Approve with current revisions applies only the reviewed change. Stale base or duplicate/changed idempotency payload cannot create a second/unreviewed write; retry returns original proposal status. No-op creates no proposal.",
           "feature_ids": [
             "DIA-05"
           ],
@@ -6524,6 +6830,9 @@
         },
         {
           "id": "accept-dia-a7",
+          "canon_title": "terminology/sentiment",
+          "canon_reference": "#accept-dia-a7",
+          "canon_requirement": "Show sentiment arc and frequent/unknown terms from Japanese text, with accessible point-to-sentence navigation and source phrase. A Research registration action opens Research's proposal UI; Diagnostics never writes its synonym dictionary. Missing Research labels term analysis unavailable while baseline editing and lint remain active.",
           "feature_ids": [
             "DIA-06"
           ],
@@ -6564,6 +6873,9 @@
         },
         {
           "id": "accept-dia-a8",
+          "canon_title": "tone/goal",
+          "canon_reference": "#accept-dia-a8",
+          "canon_requirement": "Declared intended tone plus lexicon yields the measured vector and reason; a scene without intended tone reports `not_applicable`. A lexical plot-goal mismatch is labeled a weak signal and has no invented entity contradiction. Altering lexicon/goal revision invalidates the cache.",
           "feature_ids": [
             "DIA-07"
           ],
@@ -6597,6 +6909,9 @@
         },
         {
           "id": "accept-dia-a9",
+          "canon_title": "voice evidence",
+          "canon_reference": "#accept-dia-a9",
+          "canon_requirement": "With Speaker enabled, display registered, learned and statistical evidence as separate categories and navigate to the exact utterance; confirm/correct actions route to Speaker. With Speaker disabled or failed, the base scene report completes with voice provider unavailable and no voice assertion. No correction record is created by Diagnostics.",
           "feature_ids": [
             "DIA-01",
             "DIA-08",
@@ -6649,6 +6964,7 @@
         {
           "feature_id": "DIA-01",
           "source_anchor_state": "TRACEABILITY_MAPPED",
+          "author_visible_result": "RECOVERY — Compose one scene report from text analysis, lint, prose balance, plot warnings, vocabulary suggestions, and Speaker evidence; return a text hash and per-stage timing.",
           "source_disposition": "Diagnostics aggregates `proprium.diagnostics.scene.run.v1`; attribution/profile internals remain Speaker-owned.",
           "canon_source_revisions": [
             "95a66c2c985a66bc2d535392dcc450d8c9df18d5",
@@ -6701,6 +7017,7 @@
         {
           "feature_id": "DIA-02",
           "source_anchor_state": "TRACEABILITY_MAPPED",
+          "author_visible_result": "RECOVERY — Check authored YAML/Markdown graph for missing/duplicate IDs, missing manuscript path/target, broken relations and thread plant/payoff gaps; scope the result to a scene, chapter, volume or work.",
           "source_disposition": "`proprium.diagnostics.project.consistency.run.v1` (read).",
           "canon_source_revisions": [
             "95a66c2c985a66bc2d535392dcc450d8c9df18d5",
@@ -6749,6 +7066,7 @@
         {
           "feature_id": "DIA-03",
           "source_anchor_state": "TRACEABILITY_MAPPED",
+          "author_visible_result": "RECOVERY — Inspect scene-to-scene continuity using explicit locations, shared characters, declared travel edges/durations, timeline text and recorded scene effects. Return the exact prior/current scenes and reason.",
           "source_disposition": "`proprium.diagnostics.project.continuity.run.v1` (read).",
           "canon_source_revisions": [
             "95a66c2c985a66bc2d535392dcc450d8c9df18d5",
@@ -6797,6 +7115,7 @@
         {
           "feature_id": "DIA-04",
           "source_anchor_state": "TRACEABILITY_MAPPED",
+          "author_visible_result": "RECOVERY — Run configured formatting rules on selected text and show rule IDs, UTF-16 offsets, lengths and excerpts.",
           "source_disposition": "`proprium.diagnostics.lint.run.v1` (read).",
           "canon_source_revisions": [
             "95a66c2c985a66bc2d535392dcc450d8c9df18d5",
@@ -6845,6 +7164,7 @@
         {
           "feature_id": "DIA-05",
           "source_anchor_state": "TRACEABILITY_MAPPED",
+          "author_visible_result": "RECOVERY — Apply deterministic formatting rules and offer a whole-file or bounded replacement for explicit review; preserve Markdown frontmatter.",
           "source_disposition": "`proprium.diagnostics.lint.propose.v1` and `proprium.diagnostics.manuscript.format.propose.v1` (propose).",
           "canon_source_revisions": [
             "95a66c2c985a66bc2d535392dcc450d8c9df18d5",
@@ -6892,6 +7212,7 @@
         {
           "feature_id": "DIA-06",
           "source_anchor_state": "TRACEABILITY_MAPPED",
+          "author_visible_result": "RECOVERY — Report character/sentence counts, sentence-ending streaks, sentiment arc, frequent nouns/phrases, candidate unknown terms, spelling variants and contextual habitual phrases.",
           "source_disposition": "`proprium.diagnostics.text.analyze.v1` (read); term registration/aliases remain Research or Knowledge proposals.",
           "canon_source_revisions": [
             "95a66c2c985a66bc2d535392dcc450d8c9df18d5",
@@ -6941,6 +7262,7 @@
         {
           "feature_id": "DIA-07",
           "source_anchor_state": "TRACEABILITY_MAPPED",
+          "author_visible_result": "RECOVERY — Compare actual text against a scene's declared intended tone and plot goal/conflict; return lexicon/vector evidence as a weak warning.",
           "source_disposition": "Included in `text.analyze.v1`; `proprium.diagnostics.scene.plot-goal.check.v1` (read) is the focused form.",
           "canon_source_revisions": [
             "95a66c2c985a66bc2d535392dcc450d8c9df18d5",
@@ -6980,6 +7302,7 @@
         {
           "feature_id": "DIA-08",
           "source_anchor_state": "TRACEABILITY_MAPPED",
+          "author_visible_result": "RECOVERY — Measure dialogue/narration, adjective/adverb/verb proportions, declared voice pattern mismatches, learned style fingerprints and statistical deviations.",
           "source_disposition": "`proprium.diagnostics.scene.run.v1` consumes Speaker's optional read capability; no duplicate Speaker profile/correction API is published by Diagnostics.",
           "canon_source_revisions": [
             "95a66c2c985a66bc2d535392dcc450d8c9df18d5",
@@ -7019,6 +7342,7 @@
         {
           "feature_id": "DIA-09",
           "source_anchor_state": "UNMAPPED",
+          "author_visible_result": "RECOVERY — Merge analyzer output to stable finding identities, kind/severity filters, sentence ordering, stale/loading state and resolved-item feedback.",
           "source_disposition": "`scene.run.v1`, `project.consistency.run.v1`, `project.continuity.run.v1`, `feedback.propose.v1`.",
           "canon_source_revisions": [
             "95a66c2c985a66bc2d535392dcc450d8c9df18d5",
@@ -7047,6 +7371,7 @@
         {
           "feature_id": "DIA-10",
           "source_anchor_state": "UNMAPPED",
+          "author_visible_result": "RECOVERY — Preserve a cross-plugin chapter-level first-read feature that offers questions, expectations and confusion as an interpretive report.",
           "source_disposition": "The recovered first-read feature is assigned to `proprium.paired-writing`, which owns the model action and chapter context. Diagnostics has no reader-reaction action or dependency; the result remains in Paired Writing's chapter report.",
           "canon_source_revisions": [
             "95a66c2c985a66bc2d535392dcc450d8c9df18d5",
@@ -7074,6 +7399,7 @@
         {
           "feature_id": "DIA-11",
           "source_anchor_state": "TRACEABILITY_MAPPED",
+          "author_visible_result": "RECOVERY — Build evidence-paired contradiction candidates, let an author request optional interpretation, distinguish compatible/insufficient/contradiction and review dismissal against its source scope.",
           "source_disposition": "Diagnostics owns deterministic declared-state findings and persisted human decisions; Semantic supplies optional embedding candidates; Paired Writing supplies the explicit model verdict. The same finding is normalized once by Diagnostics.",
           "canon_source_revisions": [
             "95a66c2c985a66bc2d535392dcc450d8c9df18d5",
@@ -7113,6 +7439,7 @@
         {
           "feature_id": "DIA-12",
           "source_anchor_state": "UNMAPPED",
+          "author_visible_result": "RECOVERY — Surface margin signals and jump from one to the affected finding without losing the writing location; mark a signal intentional.",
           "source_disposition": "Host-rendered inline marker plus `feedback.propose.v1`; Host handles focus and editor state.",
           "canon_source_revisions": [
             "95a66c2c985a66bc2d535392dcc450d8c9df18d5",
@@ -7141,6 +7468,7 @@
         {
           "feature_id": "DIA-13",
           "source_anchor_state": "UNMAPPED",
+          "author_visible_result": "RECOVERY — Make speaker hypotheses reviewable with reasons, evidence and confidence, and let the author open the canonical speaker list/line.",
           "source_disposition": "Attribution/review state and its writes belong to `proprium.speaker`; Diagnostics only consumes the read model in `scene.run.v1`.",
           "canon_source_revisions": [
             "95a66c2c985a66bc2d535392dcc450d8c9df18d5",
@@ -7168,6 +7496,7 @@
         {
           "feature_id": "DIA-14",
           "source_anchor_state": "TRACEABILITY_MAPPED",
+          "author_visible_result": "`RECOVERY`: Scriptorium `modules/assistant/src/aspect-review.ts:runDeterministicAspectReview`, `normalizeAspectIds`; `actions.ts:runAspectReview`, `previewAspectPrompt`; `actions.test.ts` “aspect review runs the deterministic local source implementation without consent or model access” and preview matrix. This deterministic Assistant feature is relocated here to keep one analysis implementation.",
           "source_disposition": "`proprium.diagnostics.chapter.aspects.review.v1` / `proprium.diagnostics.chapter.aspects.preview.v1`; [DIA-A16](#accept-dia-a16). Paired retains explicit adapters for `assistant.aspect.review` and `assistant.aspect.review.preview`.",
           "canon_source_revisions": [
             "95a66c2c985a66bc2d535392dcc450d8c9df18d5",
@@ -7239,6 +7568,9 @@
       "acceptance_cases": [
         {
           "id": "accept-spk-a01",
+          "canon_title": null,
+          "canon_reference": "#accept-spk-a01",
+          "canon_requirement": "Open an Arcadia-format fixture and an unrelated generic repository. Scene list follows Narrative order and explicit paths; Speaker never blocks the unrelated repository. Remove/disable Narrative and verify Speaker clearly reports unavailable while editor and Git still work.",
           "feature_ids": [
             "SPK-01"
           ],
@@ -7272,6 +7604,9 @@
         },
         {
           "id": "accept-spk-a02",
+          "canon_title": null,
+          "canon_reference": "#accept-spk-a02",
+          "canon_requirement": "Analyze Japanese synthetic dialogue covering direct narration attribution, attribution verb, POV reply, vocative, alternating turns, quoted nested text and unknown speaker. Every result has exact source text, one-based line, UTF-16 span, reason, confidence and snapshot; only allowed calibrated evidence is high. Manual/unknown remains distinct from automatic. No result for an old scene/draft generation appears as current.",
           "feature_ids": [
             "SPK-02"
           ],
@@ -7312,6 +7647,9 @@
         },
         {
           "id": "accept-spk-a03",
+          "canon_title": null,
+          "canon_reference": "#accept-spk-a03",
+          "canon_requirement": "Analyze a scene with named hard anchors and multiple unnamed clusters. Show stable group IDs and per-line grouping evidence; applying a count change cannot merge two anchored characters or assign an unnamed group to a character. A repeat on the same snapshot returns the same groups.",
           "feature_ids": [
             "SPK-03"
           ],
@@ -7335,6 +7673,9 @@
         },
         {
           "id": "accept-spk-a04",
+          "canon_title": null,
+          "canon_reference": "#accept-spk-a04",
+          "canon_requirement": "Run an unconfigured count estimate and show evidence (`known floor`, vocative census, dialogue count); change count and clear it through Host proposal. Before approval YAML is unchanged; after approval only intended `speakerCount` changes and every other known/unknown scene field survives. Reject and stale revision preserve bytes.",
           "feature_ids": [
             "SPK-04"
           ],
@@ -7368,6 +7709,9 @@
         },
         {
           "id": "accept-spk-a05",
+          "canon_title": null,
+          "canon_reference": "#accept-spk-a05",
+          "canon_requirement": "Review none/low rows, jump to a sentence and confirm a Knowledge character, unknown, or an explicitly selected group subset. Preview enumerates every affected line; direct corrections are never propagated over. Edit the dialogue, insert a preceding sentence, and create duplicate identical dialogue to prove unique-hash reanchor works while absent/ambiguous hashes are marked stale. Review/apply/reload preserves the decision and append-only history; duplicate request with same idempotency key creates one proposal.",
           "feature_ids": [
             "SPK-05"
           ],
@@ -7415,6 +7759,9 @@
         },
         {
           "id": "accept-spk-a06",
+          "canon_title": null,
+          "canon_reference": "#accept-spk-a06",
+          "canon_requirement": "Filter character dialogue by scene and confidence, paginate, navigate to each excerpt, and return with editor selection, scroll, undo and Japanese draft unchanged. Missing character returns `scene_not_found` (missing scene) or `file_not_found` (missing entity record); stale result is not shown as current.",
           "feature_ids": [
             "SPK-06"
           ],
@@ -7455,6 +7802,9 @@
         },
         {
           "id": "accept-spk-a07",
+          "canon_title": null,
+          "canon_reference": "#accept-spk-a07",
+          "canon_requirement": "Build voice fingerprints/matrix from confirmed or high-confidence lines. Show sample counts and distance provenance. A small corpus reports insufficient evidence instead of asserting identity; missing Diagnostics leaves other Speaker functions enabled. Character `voice_profiles` with unknown fields round-trips byte/semantically unchanged.",
           "feature_ids": [
             "SPK-07"
           ],
@@ -7502,6 +7852,9 @@
         },
         {
           "id": "accept-spk-a08",
+          "canon_title": null,
+          "canon_reference": "#accept-spk-a08",
+          "canon_requirement": "Compare declared voice, learned fingerprint and stylometric warnings in a saved scene and unsaved draft. Each warning cites exact span, rule and source revision/draft generation. Change draft during analysis and prove old output cannot replace or decorate the new input. Missing provider reports unavailable only for its warning family.",
           "feature_ids": [
             "SPK-08"
           ],
@@ -7556,6 +7909,9 @@
         },
         {
           "id": "accept-spk-a09",
+          "canon_title": null,
+          "canon_reference": "#accept-spk-a09",
+          "canon_requirement": "Evaluate known gold fixtures and check all six metrics, per-rule fired/correct denominator, scene detail and hash mismatch exclusion. Verify v1 thresholds at 19/20 samples and around 0.30/0.60 boundaries; manual override is not gated. Re-run with cache corruption, other branch, changed model identity and stale snapshot; cache is ignored/rebuilt, source files remain unchanged.",
           "feature_ids": [
             "SPK-09"
           ],
@@ -7610,6 +7966,9 @@
         },
         {
           "id": "accept-spk-a10",
+          "canon_title": null,
+          "canon_reference": "#accept-spk-a10",
+          "canon_requirement": "With no model, evaluate and run deterministic training on a synthetic labeled corpus; verify exact held-out scene isolation, minimum 10 training examples, 5-point adoption gate and 95%-precision threshold rule. Dry-run and below-threshold results never propose. Eligible result yields one model proposal; reject, stale and apply/reload outcomes are distinct. Adopted model has exact schema/revision and malformed model falls back to deterministic rules.",
           "feature_ids": [
             "SPK-10"
           ],
@@ -7643,6 +8002,9 @@
         },
         {
           "id": "accept-spk-a11",
+          "canon_title": null,
+          "canon_reference": "#accept-spk-a11",
+          "canon_requirement": "Restore legacy corrections and model using explicit migration. Identical target reports unchanged; conflicting target remains untouched and is reviewable; disabled Speaker makes no proposal. Preserve unknown YAML keys, unknown correction JSON fields, malformed lines, and all original legacy bytes.",
           "feature_ids": [
             "SPK-11"
           ],
@@ -7666,6 +8028,9 @@
         },
         {
           "id": "accept-spk-a12",
+          "canon_title": null,
+          "canon_reference": "#accept-spk-a12",
+          "canon_requirement": "On real Chromium desktop and mobile WebKit (plus declared supported Android browser), complete analyze → queue → jump → correction proposal → review → return. Type Japanese with IME during and after background analysis; selection, caret, composition, undo, scroll and unsaved draft remain intact. Navigate away/back, suspend/resume, disable/enable, disconnect network and cancel a job; no stale result, hidden write, stuck worker or editor loss. Controls are keyboard/screen-reader/touch accessible, mobile does not require drag, and reports reflow without clipped actions.",
           "feature_ids": [
             "SPK-12"
           ],
@@ -7692,6 +8057,7 @@
         {
           "feature_id": "SPK-01",
           "source_anchor_state": "TRACEABILITY_MAPPED",
+          "author_visible_result": "Scriptorium `modules/speaker/src/index.ts`: `speaker.scenes.list`, `loadScene`, `resolveCandidates`; `modules/story/src/actions.ts`: `story.scene.context`; tests `modules/speaker/src/production.test.ts` and Story `modules/story/src/actions.test.ts`.",
           "source_disposition": "Use Narrative's scene IDs, explicit manuscript path and declared `appears` character IDs; see [actions](#typed-action-contract) and [SPK-A01](#accept-spk-a01).",
           "canon_source_revisions": [
             "95a66c2c985a66bc2d535392dcc450d8c9df18d5",
@@ -7731,6 +8097,7 @@
         {
           "feature_id": "SPK-02",
           "source_anchor_state": "TRACEABILITY_MAPPED",
+          "author_visible_result": "`modules/speaker/src/algorithms/{textAnalysis,speakerAttribution,mentionIndex,textHash}.ts`; `speakerAttribution.ts`: `attributeSpeakers`, `confidenceForAutomaticReason`; `modules/speaker/src/algorithms/pipeline.ts`: `runSpeakerPipeline`; worker `modules/speaker/src/{worker,engine}.ts`; `production.test.ts`.",
           "source_disposition": "Return source-bound rows, explicit reason and `none/low/high`; only calibrated evidence can be `high`; see [SPK-A02](#accept-spk-a02).",
           "canon_source_revisions": [
             "95a66c2c985a66bc2d535392dcc450d8c9df18d5",
@@ -7779,6 +8146,7 @@
         {
           "feature_id": "SPK-03",
           "source_anchor_state": "UNMAPPED",
+          "author_visible_result": "`modules/speaker/src/algorithms/{speakerClustering.ts,speakerCount.ts,clusterAssignmentTrail.ts,speakerGroupLabeling.ts,speakerSoftLabels.ts,speaker/}`; exports include `partitionDialoguesIntoN`, `labelGroupsByVoiceprint`, `assertSpeakerClusterInvariants`; production tests assert attributions and trails.",
           "source_disposition": "Preserve named-entity anchors and stable cluster membership in one result; an unnamed group is not a character; see [SPK-A03](#accept-spk-a03).",
           "canon_source_revisions": [
             "95a66c2c985a66bc2d535392dcc450d8c9df18d5",
@@ -7806,6 +8174,7 @@
         {
           "feature_id": "SPK-04",
           "source_anchor_state": "TRACEABILITY_MAPPED",
+          "author_visible_result": "`speakerCount.ts`: `estimateSpeakerCount`, `countVocativeMutualExclusionCensus`, `detectSceneBreakHints`; compatibility `speakerCountEstimate.ts`: `resolveSpeakerCount`; action `speaker.count.update`; Loom `app/src/features/editor/SpeakerCountConfirmPanel.tsx`.",
           "source_disposition": "Show estimate/evidence separately from author value; author change is a proposal to scene `speakerCount`; see [SPK-A04](#accept-spk-a04).",
           "canon_source_revisions": [
             "95a66c2c985a66bc2d535392dcc450d8c9df18d5",
@@ -7845,6 +8214,7 @@
         {
           "feature_id": "SPK-05",
           "source_anchor_state": "TRACEABILITY_MAPPED",
+          "author_visible_result": "`speakerOverrides.ts`: `applySpeakerOverridesDetailed`, `alignOverrideClusters`; `speakerCorrectionLog.ts`: `parseSpeakerCorrections`; actions `speaker.override`, `speaker.review.queue`; `production.test.ts`; `migration.test.ts`. Loom `SpeakerConfirmationQueue.tsx` and `SpeakerPickerPopover.tsx` show the sentence jump, confidence and propagation count.",
           "source_disposition": "The direct correction is authoritative only after Host approval; propagation is an explicit preview and never silently overwrites a direct correction. Stale text is not rebound ambiguously; see [data contract](#data-contract), [actions](#typed-action-contract), and [SPK-A05](#accept-spk-a05).",
           "canon_source_revisions": [
             "95a66c2c985a66bc2d535392dcc450d8c9df18d5",
@@ -7901,6 +8271,7 @@
         {
           "feature_id": "SPK-06",
           "source_anchor_state": "TRACEABILITY_MAPPED",
+          "author_visible_result": "Action `speaker.dialogue.list`, helper `speakerDialogueList` in `modules/speaker/src/index.ts`; browser `mountCharacterDialogue`; `production.test.ts`; Loom `app/src/features/zukan/CharacterDialogueList.tsx`.",
           "source_disposition": "Filter by character, optional scene and confidence; cite each excerpt and navigate to the exact source sentence; see [SPK-A06](#accept-spk-a06).",
           "canon_source_revisions": [
             "95a66c2c985a66bc2d535392dcc450d8c9df18d5",
@@ -7949,6 +8320,7 @@
         {
           "feature_id": "SPK-07",
           "source_anchor_state": "TRACEABILITY_MAPPED",
+          "author_visible_result": "Action `speaker.voice.profiles`, `analyzeVoiceProfiles`; `modules/speaker/src/algorithms/{styleFingerprint.ts,voice/profileLoader.ts,voice/types.ts}`; Diagnostics `diagnostics.voiceProfiles`; `production.test.ts`; browser `mountVoiceProfiles`; Loom `CharacterVoiceDashboard.tsx`, `CharacterVoiceDashboardDetails.tsx`, `VoiceSeparationMatrix.tsx` and `VoiceSeparationMatrix.colorContrast.test.ts`.",
           "source_disposition": "Show sample counts and provenance; similarity is descriptive evidence, never identity. Honor character YAML `voice_profiles`; see [SPK-A07](#accept-spk-a07).",
           "canon_source_revisions": [
             "95a66c2c985a66bc2d535392dcc450d8c9df18d5",
@@ -8005,6 +8377,7 @@
         {
           "feature_id": "SPK-08",
           "source_anchor_state": "TRACEABILITY_MAPPED",
+          "author_visible_result": "Action `speaker.voice.check`, `speakerVoiceCheck`, `displayVoiceWarning`, `displayStylometricWarning`; Diagnostics `declaredVoice.ts`, `diagnostics.voiceConsistency`, `diagnostics.voiceDeviations`, `diagnostics.stylometricDeviations`; `production.test.ts`; Loom `VoiceCheckPanel.tsx`.",
           "source_disposition": "Merge and label warning provenance; bind to exact draft generation or file revision; never rewrite prose; see [SPK-A08](#accept-spk-a08).",
           "canon_source_revisions": [
             "95a66c2c985a66bc2d535392dcc450d8c9df18d5",
@@ -8068,6 +8441,7 @@
         {
           "feature_id": "SPK-09",
           "source_anchor_state": "TRACEABILITY_MAPPED",
+          "author_visible_result": "`speakerEval.ts`: `matchGoldToPredictions`, `buildSpeakerEvalReport`, `aggregateByReason`, `clusteringPairwiseF1`; `speakerRuleStats.ts`: `computeSpeakerRuleGates`, `applyGatesToAttributions`; actions `speaker.evaluation.run/latest`, `speaker.ruleGates`; worker `evaluate`; `production.test.ts`; Loom `SpeakerEvalView.tsx`, `SpeakerEvalReport.tsx`, `SpeakerEvalGates.tsx`, `speakerEvalUtils.ts`, `SpeakerEvalView.test.ts`.",
           "source_disposition": "Display denominators, hash mismatches and exact gate policy; gates affect future automatic rules only and cannot demote a manual confirmation; see [SPK-A09](#accept-spk-a09).",
           "canon_source_revisions": [
             "95a66c2c985a66bc2d535392dcc450d8c9df18d5",
@@ -8132,6 +8506,7 @@
         {
           "feature_id": "SPK-10",
           "source_anchor_state": "TRACEABILITY_MAPPED",
+          "author_visible_result": "`speakerReranker.ts`: schemas, features, training, calibration, scoring; worker `trainWithScoredHoldout`; actions `speaker.retraining.run`, `speaker.evaluation.run`; `production.test.ts` proves proposal then reloaded behavior. Loom evaluation UI supplies result/report presentation.",
           "source_disposition": "Run locally and only on demand; use deterministic held-out scenes, disclose metrics, propose model bytes to Host, and keep prior model unless the author approves; see [SPK-A10](#accept-spk-a10).",
           "canon_source_revisions": [
             "95a66c2c985a66bc2d535392dcc450d8c9df18d5",
@@ -8171,6 +8546,7 @@
         {
           "feature_id": "SPK-11",
           "source_anchor_state": "UNMAPPED",
+          "author_visible_result": "`modules/speaker/src/migration.ts`: `createSpeakerMigrationProducer`; `migration.test.ts` covers byte-for-byte, absent-only restoration and conflict/disabled behavior.",
           "source_disposition": "Read legacy state without rewriting it; migration is an explicit Host-reviewed operation and retains conflicting or unknown bytes; see [data contract](#data-contract) and [SPK-A11](#accept-spk-a11).",
           "canon_source_revisions": [
             "95a66c2c985a66bc2d535392dcc450d8c9df18d5",
@@ -8198,6 +8574,7 @@
         {
           "feature_id": "SPK-12",
           "source_anchor_state": "UNMAPPED",
+          "author_visible_result": "Scriptorium browser contribution is trusted TypeScript and has five contributions, but does not prove the Proprium WASM/WIT contract or real mobile usability. Loom provides concrete editor-modal and character-panel interactions listed above.",
           "source_disposition": "Implement via Host-rendered declarations, shared Action Registry, Host Navigation and ChangeSet review. Keep composition/IME/editor mounted; see [UI contract](#ui-and-author-workflow), [runtime](#execution-and-distribution), and [SPK-A12](#accept-spk-a12).",
           "canon_source_revisions": [
             "95a66c2c985a66bc2d535392dcc450d8c9df18d5",
@@ -8246,6 +8623,9 @@
       "acceptance_cases": [
         {
           "id": "accept-sem-a1",
+          "canon_title": "Index lifecycle and data isolation",
+          "canon_reference": "#accept-sem-a1",
+          "canon_requirement": "With a synthetic work containing 120 passages across story and manuscript files, status initially reports missing without loading the model. The author explicitly starts indexing; progress reaches 120 and final status is ready for the selected snapshot. A second build reuses unchanged vectors and replaces only the edited passage. A changed branch/worktree generation returns no old hit as current; a stale/missing/corrupt cache rebuilds from Git source. Cancel mid-batch, Worker termination, tab reload, storage quota failure, offline missing model, plugin disable and re-enable each preserve the previous complete generation and source files; tasks stop and leases release. Repository A's cache never appears in repository B.",
           "feature_ids": [
             "SEM-01"
           ],
@@ -8309,6 +8689,9 @@
         },
         {
           "id": "accept-sem-a2",
+          "canon_title": "Search and reranking",
+          "canon_reference": "#accept-sem-a2",
+          "canon_requirement": "From Research, run a Japanese lexical query while Semantic is absent/disabled/offline; lexical result appears immediately with no model request. Enable hybrid mode and query a known fixture; Research combines lexical and vector ranks by RRF with component scores, cites exact current revision and opens the exact sentence. An outdated response after editing or switching branch is marked stale and cannot navigate. Request reranking only after explicit opt-in; a valid local run returns finite model-tagged scores, while unavailable artifact/device/cancellation returns original order plus a visible warning and preserves editing. Repeat the same query/snapshot/model produces same ordering and does not leak across repositories.",
           "feature_ids": [
             "SEM-02"
           ],
@@ -8351,6 +8734,9 @@
         },
         {
           "id": "accept-sem-a3",
+          "canon_title": "Expression results",
+          "canon_reference": "#accept-sem-a3",
+          "canon_requirement": "Given pinned sentences containing descriptions, nouns-only lines and empty lines, expression search ranks sentences containing verbs, adjectives or adverbs ahead of the remaining retrieved sentences, using the Research tokenizer; it does not discard the remainder. User can open each exact source span and return to the original Japanese text selection on desktop and mobile. Missing tokenizer or model shows unavailable state; ordinary search is unchanged.",
           "feature_ids": [
             "SEM-03"
           ],
@@ -8393,6 +8779,9 @@
         },
         {
           "id": "accept-sem-a4",
+          "canon_title": "Term clusters and author authority",
+          "canon_reference": "#accept-sem-a4",
+          "canon_requirement": "Given same-reading and edit-distance pairs plus unrelated Japanese terms, deterministic clustering yields the expected canonical term ordered by occurrence/source count; embedding-only `海岸`/`浜辺` pair is marked `semanticOnly`. With model disabled, only deterministic clusters remain. A cluster never writes `bible`, `meta/synonyms.yaml` or prose; selecting a proposed alias opens Research's revision-bound Host review. If source candidate revision changed, Host rejects stale proposal and keeps all source bytes/unknown YAML keys intact. No LLM is required.",
           "feature_ids": [
             "SEM-04",
             "SEM-09"
@@ -8429,6 +8818,9 @@
         },
         {
           "id": "accept-sem-a5",
+          "canon_title": "Evidence and contradiction review",
+          "canon_reference": "#accept-sem-a5",
+          "canon_requirement": "Given two prose sentences mentioning the same declared character with a cosine score inside `[0.29,0.84)`, Diagnostics shows two exact quotes, source paths, sentence indices, snapshot, score/model provenance and uncertainty; each jump opens that sentence without losing the active draft. Deterministic ownership/teleport warnings appear once from Diagnostics, not a second copy from Semantic. Same-passage and unmentioned passages do not create embedding pairs. Missing/stale index still displays rule warnings and an explicit build path. A stale candidate cannot be dismissed; dismissal is a single Diagnostics-owned proposal and conflicting changes preserve both source and author decision for review. On mobile, dismiss/open/return controls work without drag or keyboard focus loss.",
           "feature_ids": [
             "SEM-05",
             "SEM-08",
@@ -8473,6 +8865,9 @@
         },
         {
           "id": "accept-sem-a6",
+          "canon_title": "Preference and privacy",
+          "canon_reference": "#accept-sem-a6",
+          "canon_requirement": "On a fresh browser profile, model and reranker are unloaded and `reranker.enabled` is `false`. A user gesture through the Host preference form changes the browser-local preference; reject/close keeps the old value, reload preserves the accepted value in that user partition, and no Git file is written. Calling legacy `semantic.settings.update` from MCP/plugin is denied; a UI call only opens the Host form with a pending value. Preference change alone does not download or activate a model. Disconnect network after artifact caching and reranking continues locally. Instrumented network shows no project-text egress and no fetch until author requests an admitted artifact; a missing/invalid digest fails before guest execution.",
           "feature_ids": [
             "SEM-06"
           ],
@@ -8515,6 +8910,9 @@
         },
         {
           "id": "accept-sem-a7",
+          "canon_title": "Legacy recovery and complete author loop",
+          "canon_reference": "#accept-sem-a7",
+          "canon_requirement": "For a fixture holding Scriptorium `settings.json`, `contradiction-dismissals.jsonl` and unknown JSONL fields under preserved legacy paths, opening the repository makes no edits. Host displays the old reranker value and says adopting it will apply profile-wide; choosing adopt stores the boolean only in the local plugin preference, while choosing dismiss or encountering invalid JSON leaves the value unapplied and source bytes unchanged. Diagnostics' explicit migration preview identifies each dismissal and destination owner; it carries resolvable rows to `feedback.yaml` as `legacy_dismissed` decisions or displays a collision with both revisions, and Host leaves unknown bytes unchanged. Disabling/uninstalling Semantic evicts only derived vectors and local model lease, never clears these author records. Run search → evidence jump → return to draft → cancel model task → reload; prose, IME/editor selection and local draft recovery remain intact. Plugin absent, disabled, invalid signature, ABI mismatch, guest trap, cache eviction, offline restart and mobile memory pressure all retain generic file editing and lexical Search. ## Completion and limits Semantic is complete only when all `SEM-01..SEM-09` ledger rows have their linked acceptance gates passing, Research/Diagnostics render the real user-facing paths, the independently signed plugin installs and upgrades without a Host rebuild, and provenance/licensing for exact model artifacts is verified. Legacy Scriptorium package tests establish algorithm/source behavior only. No present Proprium browser, signed-artifact, mobile-device or model-cache result is implied here. All source-bearing Semantic query/contradiction results include `evidence:SourceSpan[]` in addition to their display fields. Sentence splitting and trimmed/concatenated entity fields retain an original-file offset map; original path/hash/UTF-16 spans and exact unnormalized quotes are mandatory before Host navigation. Scene-level aggregate hits retain at least one contributing cited sentence. Evidence B in a contradiction has the same fields as evidence A, never an inferred uncited counterpart. Contradiction pages default to 50 and cap at 100, deterministic score then candidate-ID ordering; cursor binds snapshot/model/config and a changed identity returns `snapshot_stale`. Large reports use bounded pages/sealed artifacts under H0 limits. Signed `models[]` metadata in settings is `{id,revision,digest,byte_length,role:embedding|reranker,dimensions?,license,status}` and never executable URLs or credentials. ## Legacy Scriptorium browser UI registration parity The following exact historical registration IDs are required to map to **functioning Host-rendered controls**, not merely shown as labels. The target feature and its linked Acceptance own the user-visible interaction, cancellation and actual action result. Legacy slots do not mandate an additional top-level tab. | Source UI ID | Target feature | | --- | --- | | `semantic.expressions` | [SEM-03](#feature-sem-03) | | `semantic.contradictions` | [SEM-05](#feature-sem-05) | | `semantic.index` | [SEM-01](#feature-sem-01) | All registrations are checked against the pinned Scriptorium source by `scripts/verify-authoring-canon.mjs --sources`. A missing action, disabled control without explanation or inert panel is not feature parity.",
           "feature_ids": [
             "SEM-07"
           ],
@@ -8543,6 +8941,7 @@
         {
           "feature_id": "SEM-01",
           "source_anchor_state": "TRACEABILITY_MAPPED",
+          "author_visible_result": "Build, inspect and cancel the snapshot index (`semantic.index.rebuild`, `.status`, `semantic.task.status`, `.cancel`)",
           "source_disposition": "Semantic provider; Research shows current model, snapshot, indexed passage count and progress; author can start, cancel and retry indexing",
           "canon_source_revisions": [
             "761b726dd34fb83930e26aab4e9ac3899aa1fa78",
@@ -8617,6 +9016,7 @@
         {
           "feature_id": "SEM-02",
           "source_anchor_state": "TRACEABILITY_MAPPED",
+          "author_visible_result": "Find semantically related scenes/sentences and optionally rerank (`semantic.search`)",
           "source_disposition": "Retrieval provider used from Research's existing search surface; cited result opens the same path/span",
           "canon_source_revisions": [
             "761b726dd34fb83930e26aab4e9ac3899aa1fa78",
@@ -8667,6 +9067,7 @@
         {
           "feature_id": "SEM-03",
           "source_anchor_state": "TRACEABILITY_MAPPED",
+          "author_visible_result": "Find expressive sentences (`semantic.expressions.search`)",
           "source_disposition": "Research search mode places sentences containing verbs, adjectives or adverbs before other retrieved sentences; it retains and labels the remaining results, all navigable to source",
           "canon_source_revisions": [
             "761b726dd34fb83930e26aab4e9ac3899aa1fa78",
@@ -8717,6 +9118,7 @@
         {
           "feature_id": "SEM-04",
           "source_anchor_state": "TRACEABILITY_MAPPED",
+          "author_visible_result": "Group likely related terms (`semantic.terms.clusters`)",
           "source_disposition": "Research presents candidate groups and evidence; author explicitly selects alias/dictionary changes through Research's proposal workflow",
           "canon_source_revisions": [
             "761b726dd34fb83930e26aab4e9ac3899aa1fa78",
@@ -8758,6 +9160,7 @@
         {
           "feature_id": "SEM-05",
           "source_anchor_state": "TRACEABILITY_MAPPED",
+          "author_visible_result": "Produce evidence-backed prose contradiction hypotheses (`semantic.contradictions.rebuild`)",
           "source_disposition": "Diagnostics combines these hypotheses with its own deterministic continuity findings and displays both cited passages, score and uncertainty",
           "canon_source_revisions": [
             "761b726dd34fb83930e26aab4e9ac3899aa1fa78",
@@ -8808,6 +9211,7 @@
         {
           "feature_id": "SEM-06",
           "source_anchor_state": "TRACEABILITY_MAPPED",
+          "author_visible_result": "Read/update optional reranker preference (`semantic.settings.read`, `.update`)",
           "source_disposition": "Host-owned per-user plugin preferences disclose model locality and reranking state; explicit settings toggle controls whether reranker work is requested",
           "canon_source_revisions": [
             "761b726dd34fb83930e26aab4e9ac3899aa1fa78",
@@ -8857,6 +9261,7 @@
         {
           "feature_id": "SEM-07",
           "source_anchor_state": "UNMAPPED",
+          "author_visible_result": "Recover author-reviewed contradiction dismissals",
           "source_disposition": "Diagnostics owns dismissal records and proposals for all of its findings; Semantic returns stable candidate IDs and never persists a second dismissal list",
           "canon_source_revisions": [
             "761b726dd34fb83930e26aab4e9ac3899aa1fa78",
@@ -8886,6 +9291,7 @@
         {
           "feature_id": "SEM-08",
           "source_anchor_state": "UNMAPPED",
+          "author_visible_result": "Preserve the Loom contradiction evidence review affordance",
           "source_disposition": "Diagnostics Host panel shows two source quotes, severity/uncertainty, jump-to-scene actions and dismiss/review status; model verdict is not required",
           "canon_source_revisions": [
             "761b726dd34fb83930e26aab4e9ac3899aa1fa78",
@@ -8915,6 +9321,7 @@
         {
           "feature_id": "SEM-09",
           "source_anchor_state": "UNMAPPED",
+          "author_visible_result": "Loom synonym-group registration and sentiment-continuity surfaces",
           "source_disposition": "Synonym authoring is Research's canonical terminology proposal; sentiment arcs and continuity hotspots are Diagnostics' deterministic analysis. Semantic provides neither writer-owned records nor a competing UI",
           "canon_source_revisions": [
             "761b726dd34fb83930e26aab4e9ac3899aa1fa78",
@@ -8970,6 +9377,9 @@
       "acceptance_cases": [
         {
           "id": "accept-pub-ac01",
+          "canon_title": null,
+          "canon_reference": "#accept-pub-ac01",
+          "canon_requirement": "Open a valid multi-volume synthetic repository with explicit manuscript links and nontrivial `order`. Tree labels and order match Narrative; an explicit non-derived manuscript path is followed. Changing repository/snapshot invalidates the old result. Desktop and Mobile tree selection remains in the same editor with caret/IME/scroll intact.",
           "feature_ids": [
             "PUB-01"
           ],
@@ -9003,6 +9413,9 @@
         },
         {
           "id": "accept-pub-ac02",
+          "canon_title": null,
+          "canon_reference": "#accept-pub-ac02",
+          "canon_requirement": "Select whole work, one volume, then one chapter. Each operation reads only the requested pinned pages and includes exactly the scenes in that scope, in deterministic order. Unknown scene IDs, duplicate IDs, bad YAML/frontmatter, traversal paths and missing linked body show path-specific errors; no successful output silently omits a scene.",
           "feature_ids": [
             "PUB-01"
           ],
@@ -9036,6 +9449,9 @@
         },
         {
           "id": "accept-pub-ac03",
+          "canon_title": null,
+          "canon_reference": "#accept-pub-ac03",
+          "canon_requirement": "Export TXT in raw, stripped, Kakuyomu and Narou modes from a Japanese fixture containing ruby, bouten, `&`, `<`, CRLF, frontmatter and Unicode title. Each output has exact specified transformations, stable sanitized filename, UTF-8 bytes, correct order, no frontmatter/private files, and matches the selected snapshot. A second run with the same snapshot/options has identical bytes.",
           "feature_ids": [
             "PUB-02"
           ],
@@ -9076,6 +9492,9 @@
         },
         {
           "id": "accept-pub-ac04",
+          "canon_title": null,
+          "canon_reference": "#accept-pub-ac04",
+          "canon_requirement": "Export EPUB for all/volume/chapter with Japanese/mixed-width content, multiple chapters, ruby, bouten and XML metacharacters. Open ZIP, verify EPUB3 `mimetype` is first/stored, container/OPF/nav/spine are valid, manifest references exist, Unicode and ruby survive, IDs are valid, and no other repository file is bundled. Open it with a browser EPUB reader.",
           "feature_ids": [
             "PUB-03"
           ],
@@ -9116,6 +9535,9 @@
         },
         {
           "id": "accept-pub-ac05",
+          "canon_title": null,
+          "canon_reference": "#accept-pub-ac05",
+          "canon_requirement": "Add a valid supported cover, unsupported extension, missing cover, path traversal and optional appendix. Valid image bytes/MIME are preserved; unsupported/missing cover warns and continues; traversal blocks; appendix contains only ID-bearing character/lore/location entries and skips id-less voice helpers. Knowledge absent/unavailable leaves the basic EPUB action working.",
           "feature_ids": [
             "PUB-03"
           ],
@@ -9156,6 +9578,9 @@
         },
         {
           "id": "accept-pub-ac06",
+          "canon_title": null,
+          "canon_reference": "#accept-pub-ac06",
+          "canon_requirement": "Preview and print the same real Japanese fixture under `bunko`, `web-novel`, and `genko`; ruby, punctuation and selected scene order remain readable in vertical mode. Browser print opens only after user gesture and cancellation leaves the source untouched. Test a missing browser print feature as a clear unavailable state.",
           "feature_ids": [
             "PUB-04"
           ],
@@ -9196,6 +9621,9 @@
         },
         {
           "id": "accept-pub-ac07",
+          "canon_title": null,
+          "canon_reference": "#accept-pub-ac07",
+          "canon_requirement": "Open preflight for TXT, EPUB and print. The five recovered Loom checks appear in order; unchecked items show a non-blocking count/warning and explicit “continue anyway”; all checked removes warning; cancel causes no action; reopening resets checks. No checklist state is committed.",
           "feature_ids": [
             "PUB-05"
           ],
@@ -9219,6 +9647,9 @@
         },
         {
           "id": "accept-pub-ac08",
+          "canon_title": null,
+          "canon_reference": "#accept-pub-ac08",
+          "canon_requirement": "Read/create/edit/reorder/clear/remove episode entries. A proposal contains only the episode-map write, the exact base read revision, and a complete review diff. Approval preserves unknown root/item keys, scene IDs, publication dates and unrelated metadata; explicit null clears only the requested date/scene annotations. Reject does not write; stale revision blocks apply; retry with the same operation ID returns one receipt; reload reads the approved bytes.",
           "feature_ids": [
             "PUB-06"
           ],
@@ -9266,6 +9697,9 @@
         },
         {
           "id": "accept-pub-ac09",
+          "canon_title": null,
+          "canon_reference": "#accept-pub-ac09",
+          "canon_requirement": "With no configured provider, local list reports `provider_configured:false` and create cannot produce a bearer, proposal, URL or network call; revoke still produces a local review proposal without secret or network access. The owner list does no provider request; only explicit share creation checks `capabilities` and requests consented egress. With a separately configured test service, owner gesture creates a one-time owner-only secret and hash-only metadata proposal; MCP call is denied. Before approval/remote publish the link returns unavailable. After exact commit confirmation it exposes only selected scope; foreign scene, expired token and revoked token return non-disclosing unavailable.",
           "feature_ids": [
             "PUB-07"
           ],
@@ -9320,6 +9754,9 @@
         },
         {
           "id": "accept-pub-ac10",
+          "canon_title": null,
+          "canon_reference": "#accept-pub-ac10",
+          "canon_requirement": "Revoke a live link and verify it remains active on the old remote snapshot, then becomes unavailable after the revocation commit is confirmed. Reader sends no-store/noindex/no-referrer headers, supports next scene and reading controls, and contains no editing or Git action. Service restart/offline degrades only sharing and does not affect authoring.",
           "feature_ids": [
             "PUB-07"
           ],
@@ -9374,6 +9811,9 @@
         },
         {
           "id": "accept-pub-ac11",
+          "canon_title": null,
+          "canon_reference": "#accept-pub-ac11",
+          "canon_requirement": "Inspect legacy `meta/scriptorium/modules/publishing/{episodes.yaml,share-grants.jsonl}`, retained recovery files, `meta/publish-episodes.yaml`, and both legacy token-map source paths. Test valid exact maps/grants from active and retained sources, malformed YAML/JSONL, absent active target, matching and divergent import targets, foreign `projectId`, ambiguous repo/branch, disabled plugin and repeated inspection. A recovery import is one reviewable ChangeSet with source revision and active-target precondition; source bytes are never deleted/rewritten. Invalid or foreign grants do not activate; no raw bearer/account secret enters Git; every unresolved item has a Host recovery path.",
           "feature_ids": [
             "PUB-08"
           ],
@@ -9397,6 +9837,9 @@
         },
         {
           "id": "accept-pub-ac12",
+          "canon_title": null,
+          "canon_reference": "#accept-pub-ac12",
+          "canon_requirement": "Generate a synthetic work larger than 300 scenes and 256 files, including several large scene bodies. Artifact delivery remains bounded/chunked; cancel mid-export deletes only the temporary artifact. Inject quota/ENOSPC, bad digest, missing page, snapshot switch, Worker trap, timeout, network disconnect and tab suspension. Each reports the exact failure and preserves source/Draft/checkpoint; no “downloaded” status appears without a finished Host artifact.",
           "feature_ids": [
             "PUB-08"
           ],
@@ -9420,6 +9863,9 @@
         },
         {
           "id": "accept-pub-ac13",
+          "canon_title": null,
+          "canon_reference": "#accept-pub-ac13",
+          "canon_requirement": "Install verified signed plugin from static distribution, use cached TXT/EPUB offline with zero Gateway/model/network calls, disable/update/rollback it, reload Host and return from Mobile export sheet to the same manuscript state. Uninstalled/disabled plugin is not executed, and all Git editing remains available.",
           "feature_ids": [
             "PUB-08"
           ],
@@ -9446,6 +9892,7 @@
         {
           "feature_id": "PUB-01",
           "source_anchor_state": "TRACEABILITY_MAPPED",
+          "author_visible_result": "Read project title and the ordered volume/chapter/scene tree; expose `all`, one volume, or one chapter to export panels. Proprium reads bounded pages from Narrative and keeps the selected `SnapshotRef`.",
           "source_disposition": "Scriptorium `modules/publishing/src/project.ts`: `readPublishingProject`, `collectPublishingScenes`, `manuscriptPath`, `compareOrdered`; `modules/publishing/src/actions.ts`: `publishing.project.tree`; `modules/publishing/src/browser.tsx`: `usePublishingContext`, `ScopeFields`, `useScopeIds`; fixture `modules/publishing/src/publishing.test.ts` (`fixtureFiles`, `actionContext`). Loom `app/src/features/settings/ExportScopeSelector.tsx` supplies the same work/volume/chapter selector.",
           "canon_source_revisions": [
             "95a66c2c985a66bc2d535392dcc450d8c9df18d5",
@@ -9486,6 +9933,7 @@
         {
           "feature_id": "PUB-02",
           "source_anchor_state": "TRACEABILITY_MAPPED",
+          "author_visible_result": "Download raw manuscript markup, strip supported ruby/bouten markup, or convert to Kakuyomu/Narou notation for a selected scope.",
           "source_disposition": "Scriptorium `modules/publishing/src/plaintext.ts`: `buildPlaintextExport`, `stripManuscriptMarkup`, `toKakuyomuDialect`, `toNarouDialect`; `modules/publishing/src/actions.ts`: `publishing.export.plaintext`; `modules/publishing/src/browser.tsx`: `ExportPanels`; `modules/publishing/src/publishing.test.ts`: “source plaintext conversion and vertical print keep Japanese text and scene order”. Loom `app/src/features/settings/ExportPlaintextPanel.tsx` confirms this is the first export control and adds preflight.",
           "canon_source_revisions": [
             "95a66c2c985a66bc2d535392dcc450d8c9df18d5",
@@ -9534,6 +9982,7 @@
         {
           "feature_id": "PUB-03",
           "source_anchor_state": "TRACEABILITY_MAPPED",
+          "author_visible_result": "Build a ZIP EPUB3 with navigation, ordered scene XHTML, title page, supported ruby/bouten conversion, optional project-relative cover and optional character/lore/location appendix. Downloaded bytes are not workspace writes.",
           "source_disposition": "Scriptorium `modules/publishing/src/epub.ts`: `buildEpubExport`, `loadCoverImage`, `manuscriptBodyToXhtml`, `manuscriptMarkupToHtml`, `sanitizeProjectRelativePath`, `sanitizeNCName`; `modules/publishing/src/bible.ts`: `readEpubBibleEntries`; `modules/publishing/src/actions.ts`: `publishing.export.epub`; `modules/publishing/src/publishing.test.ts`: “real EPUB ZIP contains EPUB3 manifest, Japanese XHTML, appendix, and binary cover bytes” and “EPUB bible reader keeps source flat character entities and typed lore/location YAML”. Loom `app/src/features/settings/ExportEpubPanel.tsx` adds preflight and explicit cover/appendix controls.",
           "canon_source_revisions": [
             "95a66c2c985a66bc2d535392dcc450d8c9df18d5",
@@ -9583,6 +10032,7 @@
         {
           "feature_id": "PUB-04",
           "source_anchor_state": "TRACEABILITY_MAPPED",
+          "author_visible_result": "Compose the selected scene text in canonical order, preview vertical writing, and invoke the browser print dialog for the user to save PDF. A print dialog or PDF destination is browser-controlled; the plugin does not claim a generated PDF path.",
           "source_disposition": "Scriptorium `modules/publishing/src/verticalPrint.ts`: `collectScenesForVerticalPrint`, `composeVerticalPrintText`; `modules/publishing/src/browser.tsx`: vertical-print contribution and `makePreview`; `publishing.test.ts`: “source plaintext conversion and vertical print keep Japanese text and scene order”. Loom `app/src/features/settings/ExportVerticalPrintPanel.tsx` restores `bunko`, `web-novel`, `genko` typography presets, actual print styling and preflight; preset values are in `app/src/editorTypography.ts` (`TYPOGRAPHY_PRESETS`). No dedicated print-panel/vertical-export component test exists in these paths.",
           "canon_source_revisions": [
             "95a66c2c985a66bc2d535392dcc450d8c9df18d5",
@@ -9631,6 +10081,7 @@
         {
           "feature_id": "PUB-05",
           "source_anchor_state": "UNMAPPED",
+          "author_visible_result": "Before export/print, show the fixed review checklist (proofread, names/ruby, selected scope, platform rules, episode number/title). Unchecked items warn but never block or alter bytes.",
           "source_disposition": "Loom `app/src/features/settings/exportPreflightChecklist.ts`: `EXPORT_PREFLIGHT_ITEMS`, `uncheckedPreflightItems`, `isPreflightComplete`, `preflightWarningMessage`; `app/src/features/settings/ExportPreflightDialog.tsx`; `app/src/features/settings/exportPreflightChecklist.test.ts`. This five-item checklist is a Loom `RECOVERY` addition absent from Scriptorium's publishing UI/tests.",
           "canon_source_revisions": [
             "95a66c2c985a66bc2d535392dcc450d8c9df18d5",
@@ -9658,6 +10109,7 @@
         {
           "feature_id": "PUB-06",
           "source_anchor_state": "TRACEABILITY_MAPPED",
+          "author_visible_result": "Read and edit publication episode number/title, volume-or-chapter scope, optional scene annotations and publication date; submit a guarded metadata proposal. Scene annotations are descriptive and do not narrow the export action's chosen scope.",
           "source_disposition": "Scriptorium `modules/publishing/src/episodes.ts`: `readEpisodeMap`, `mergeEpisodeMap`, `EPISODES_PATH`; `modules/publishing/src/actions.ts`: `publishing.episodes.read`, `publishing.episodes.propose`; `modules/publishing/src/browser.tsx`: `EpisodeMapPanel`; `modules/publishing/src/publishing.test.ts`: “episode edits propose metadata operations and preserve unknown YAML and publication dates” and `modules/publishing/tests/browser-clear.acceptance.mjs` for clearing date/last scene through the real proposal action. Loom `app/src/features/settings/PublishEpisodeMapPanel.tsx` restores ordering/edit UI, scene annotations and visible export-scope relationship.",
           "canon_source_revisions": [
             "95a66c2c985a66bc2d535392dcc450d8c9df18d5",
@@ -9714,6 +10166,7 @@
         {
           "feature_id": "PUB-07",
           "source_anchor_state": "TRACEABILITY_MAPPED",
+          "author_visible_result": "Preserve owner-managed scoped grants and an isolated read-only reader only when an independently configured publisher service exists. Local grant edits are proposals; availability follows remote-confirmed source revision and revocation.",
           "source_disposition": "Scriptorium `modules/publishing/src/grants.ts`: `readShareGrants`, `createShareGrant`, `safeShareGrant`, `grantIsActive`; `modules/publishing/src/actions.ts`: `publishing.shares.list/create/revoke`; `modules/publishing/src/http.ts`: `readPublicShare`, `createPublishingHttpContributions`; `modules/publishing/src/browser.tsx`: `ShareLinksPanel`, `ShareReaderView`, `mountPublic`; `modules/publishing/src/publishing.test.ts`: “a share activates only on the remote published snapshot and revocation is checked on every public read”. Loom `app/src/features/settings/ShareLinksPanel.tsx`, `app/src/features/share/ShareReaderPage.tsx`, `app/src/features/settings/shareScopeHelpers.ts` and `app/src/features/settings/shareScopeHelpers.test.ts` recover scope preview, expiry explanation and reader typography. The Scriptorium HTTP handler is legacy server behavior, not a Proprium Gateway feature. No dedicated ShareReaderPage browser test exists in the inspected Loom paths.",
           "canon_source_revisions": [
             "95a66c2c985a66bc2d535392dcc450d8c9df18d5",
@@ -9779,6 +10232,7 @@
         {
           "feature_id": "PUB-08",
           "source_anchor_state": "UNMAPPED",
+          "author_visible_result": "Retain imported episode maps and hashed grant descriptors by exact source/revision; activate or migrate only through explicit Host review. Malformed, ambiguous or foreign-project data remains untouched and is reported.",
           "source_disposition": "Scriptorium `modules/publishing/src/migration.ts`: `inspectEpisodeMap`, `inspectShareStore`, `inspectRetainedEpisodes`, `inspectRetainedGrants`, `createPublishingMigrationProducer`; `modules/publishing/src/publishing.test.ts`: migration validation, reactivation round-trip and disabled-module preservation tests. Loom export and share UI does not authorize importing its runtime, service, account data or credentials.",
           "canon_source_revisions": [
             "95a66c2c985a66bc2d535392dcc450d8c9df18d5",
