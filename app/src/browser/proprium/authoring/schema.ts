@@ -46,7 +46,8 @@ const column = closed({ key: text(), label: text() });
 const fieldProperties = {
   id: text(), label: text(), required: { type: "boolean" },
   initial_value: true,
-  options: array(closed({ value: text(), label: text() })), placeholder: text(4096, 0),
+  options: { oneOf: [array(closed({ value: text(), label: text() }), 1000), closed({ data_key: text() })] },
+  option_value_key: text(), option_label_key: text(), placeholder: text(4096, 0),
   min_length: { type: "integer", minimum: 0, maximum: 1048576 },
   max_length: { type: "integer", minimum: 0, maximum: 1048576 }, validation_message: text(4096),
 };
@@ -76,6 +77,7 @@ export const surfaceSchema = {
     widget("detail", { value: template, fields: array(column, 64) }, ["value"]),
     widget("form", { fields: array(field, 64), submit: binding, cancel_action: binding,
       confirmation: closed({ title: text(), message: text(4096), continue_label: text(), cancel_label: text() }, ["title", "message"]),
+      submit_when: dataKey, unavailable_message: text(4096),
     }, ["fields", "submit"]),
     widget("tabs", { tabs: array(closed({ id: text(), title: text(), body: { $ref: "#/$defs/widget" } }), 32) }, ["tabs"]),
     widget("status", { state: template, messages: { type: "object", additionalProperties: text(4096) } }, ["state"]),
