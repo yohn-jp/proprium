@@ -1,4 +1,4 @@
-import { showPanel, expectEditorText, chooseFile } from "./restored-ui.helpers.js";
+import { showPanel, expectEditorText, chooseFile, reviewChangedFiles } from "./restored-ui.helpers.js";
 import { expect, test } from "@playwright/test";
 import type { WorkspaceIdentity } from "../../app/src/browser/proprium/git/protocol.js";
 
@@ -46,16 +46,17 @@ test("Host edits and commits a generic repository offline, then reopens the save
 
   await context.setOffline(true);
   await page.getByLabel("原稿 Markdown").fill("Edited on this browser with no network.\n");
-  await page.getByRole("button", { name: "Save draft" }).click();
-  await expect(page.getByText("Draft on this device", { exact: true })).toBeVisible();
+  await page.getByRole("button", { name: "端末に保存" }).click();
+  await expect(page.getByText("端末の下書き", { exact: true })).toBeVisible();
 
   await showPanel(page, "inspector");
   await page.getByLabel("Commit message").fill("Save offline workspace edit");
   await page.getByLabel("Git author name").fill("Proprium Browser Test");
   await page.getByLabel("Git author email").fill("browser-test@example.invalid");
-  await page.getByRole("button", { name: "Commit locally" }).click();
+  await reviewChangedFiles(page);
+  await page.getByRole("button", { name: "ローカルGitにコミット" }).click();
 
-  await expect(page.getByText(/^Committed locally · [a-f0-9]{8}$/u)).toBeVisible();
+  await expect(page.getByText(/^端末のGitに記録済み · [a-f0-9]{8}$/u)).toBeVisible();
   await showPanel(page, "history");
   const historyEntry = page.getByRole("listitem").filter({ hasText: "Save offline workspace edit" });
   await showPanel(page, "history");
@@ -89,8 +90,8 @@ test("local start creates and reopens a generic browser-only workspace without c
   });
 
   await expect(page.getByRole("heading", { name: "Start or open a workspace" })).toBeVisible();
-  await page.getByLabel("Workspace name", { exact: true }).fill("A local draft");
-  await page.getByRole("button", { name: "Create local workspace", exact: true }).click();
+  await page.getByLabel("作品名", { exact: true }).fill("A local draft");
+  await page.getByRole("button", { name: "ローカル作品を作成", exact: true }).click();
   await showPanel(page, "outline");
   await expect(page.getByLabel("Local workspace only", { exact: true })).toBeVisible();
   await expect(page.locator(".topbar").getByRole("button", { name: "GitHubに接続", exact: true })).toHaveCount(0);
@@ -99,10 +100,10 @@ test("local start creates and reopens a generic browser-only workspace without c
   await page.getByRole("button", { name: "Create new file", exact: true }).click();
   const editor = page.getByRole("textbox", { name: "原稿 Markdown" });
   await editor.fill("A generic local workspace.\n");
-  await page.getByRole("button", { name: "Save draft", exact: true }).click();
+  await page.getByRole("button", { name: "端末に保存", exact: true }).click();
   await expect(page.locator(".host-message[role='status']")).toContainText("saved to this browser's local Git worktree");
 
-  await page.getByRole("button", { name: "Workspaces", exact: true }).click();
+  await page.getByRole("button", { name: "作品一覧", exact: true }).click();
   await page.getByRole("button", { name: /A local draft/u }).click();
   await showRepositoryFiles(page);
   await chooseFile(page, "notes.md");
@@ -141,19 +142,20 @@ test("Host preserves editor text typed while a deleted file is pending, then sav
   });
 
   page.once("dialog", dialog => dialog.accept());
-  await page.getByRole("button", { name: "Delete file" }).click();
+  await page.getByText("文書の操作", { exact: true }).click();
+  await page.getByRole("button", { name: "文書を削除", exact: true }).click();
   await expect.poll(() => page.evaluate(() => window.propriumDeleteTestStarted === true)).toBe(true);
 
   const newerText = "Typed while the local delete was completing.\n";
   await editor.fill(newerText);
   await page.evaluate(() => window.propriumReleaseDeleteTest?.());
   await expectEditorText(page, newerText);
-  await expect(page.locator(".save-state")).toHaveText("Unsaved editor text");
+  await expect(page.locator(".save-state")).toHaveText("編集中・端末のファイル未保存");
   await expect(page.locator(".host-message[role='status']")).toContainText(
     "README.md is deleted in the local worktree. Newer editor text is preserved as an unsaved draft; save it to recreate the file.",
   );
 
-  await page.getByRole("button", { name: "Save draft" }).click();
+  await page.getByRole("button", { name: "端末に保存" }).click();
   await expect(page.locator(".host-message[role='status']")).toContainText("README.md saved to this browser's local Git worktree");
   await showRepositoryFiles(page);
   await expect(files.getByRole("button", { name: "README.md" })).toBeVisible();
