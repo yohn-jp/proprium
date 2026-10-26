@@ -91,4 +91,3 @@ export interface AuthoringSurfaceProps {
   readonly onClose?: () => void;
   readonly className?: string;
 }
-
