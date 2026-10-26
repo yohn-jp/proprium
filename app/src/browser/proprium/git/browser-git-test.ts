@@ -18,6 +18,7 @@ declare global {
       openWriterSession(localWorkspaceId: string, databaseName?: string): {
         git: BrowserLocalGit;
         writer: ChangeWriter;
+        writer_workspace: BrowserGitWriterWorkspace;
         scope: WriterScope;
       };
       holdLock(localWorkspaceId: string): Promise<boolean>;
@@ -73,16 +74,17 @@ window.browserGitTest = {
       branch: workspace.branch,
       generation: "browser-git-test-generation",
     };
+    const writer_workspace = new BrowserGitWriterWorkspace(git, workspace, {
+      selected_scope: () => scope,
+      is_editor_dirty: () => false,
+      with_editor_write_guard: async (_scope, operation) => operation(),
+    });
     const writer = new ChangeWriter({
       journal: new IndexedDbWriterJournalStore(databaseName),
-      workspace: new BrowserGitWriterWorkspace(git, workspace, {
-        selected_scope: () => scope,
-        is_editor_dirty: () => false,
-        with_editor_write_guard: async (_scope, operation) => operation(),
-      }),
+      workspace: writer_workspace,
       new_proposal_id: () => crypto.randomUUID(),
     });
-    return { git, writer, scope };
+    return { git, writer, writer_workspace, scope };
   },
   async holdLock(localWorkspaceId) {
     const input = new TextEncoder().encode(localWorkspaceId);

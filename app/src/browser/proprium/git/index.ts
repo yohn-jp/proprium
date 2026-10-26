@@ -164,7 +164,7 @@ export class BrowserLocalGit {
     await this.call({ operation: "delete", path, expected });
   }
 
-  applyChanges(changes: readonly WorkspaceChange[], readSet: readonly FileRevisionExpectation[] = [], expectedAuthoringSnapshotId?: string, recovery = false): Promise<AppliedWorkspaceChange[]> {
+  applyChanges(changes: readonly WorkspaceChange[], readSet: readonly FileRevisionExpectation[] = [], expectedAuthoringSnapshotId?: string, recovery = false, authoringWriter = false): Promise<AppliedWorkspaceChange[]> {
     if (!Array.isArray(changes) || changes.length > MAX_WORKSPACE_CHANGE_COUNT ||
         !Array.isArray(readSet) || readSet.length > MAX_WORKSPACE_READ_SET_COUNT) {
       return Promise.reject(new BrowserLocalGitError("invalid_path", "The approved change set exceeds browser workspace limits."));
@@ -183,7 +183,7 @@ export class BrowserLocalGit {
     for (const expected of readSet) validateGitPath(expected.path);
     if (expectedAuthoringSnapshotId !== undefined) validateSnapshotId(expectedAuthoringSnapshotId);
     if (recovery && !expectedAuthoringSnapshotId) return Promise.reject(new BrowserLocalGitError("invalid_input", "Recovery writes require an authoring snapshot assertion."));
-    return this.call({ operation: "apply-changes", changes: [...changes], readSet: [...readSet], expectedAuthoringSnapshotId, recovery }, recovery);
+    return this.call({ operation: "apply-changes", changes: [...changes], readSet: [...readSet], expectedAuthoringSnapshotId, recovery }, recovery || authoringWriter);
   }
 
   /** Fail closed across BrowserLocalGit instances while H0 storage recovery is unresolved. */

@@ -123,7 +123,7 @@ export class BrowserGitWriterWorkspace implements WriterWorkspacePort {
       const actual = await this.pinSnapshot(scope);
       try {
         compareSnapshot(actual.snapshot, expected);
-        return await this.git.applyChanges(changes, read_set, actual.snapshot.id, recovery);
+        return await this.git.applyChanges(changes, read_set, actual.snapshot.id, recovery, true);
       } catch (error) { throw mapGitError(error); }
       finally { await this.releaseSnapshot(actual.snapshot.id); }
     }, recovery);

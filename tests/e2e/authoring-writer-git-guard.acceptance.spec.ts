@@ -6,7 +6,7 @@ declare global {
   interface Window {
     browserGitTest: {
       open(localWorkspaceId: string): BrowserLocalGit;
-      openWriterSession(localWorkspaceId: string, databaseName?: string): { git: BrowserLocalGit; writer: ChangeWriter; scope: WriterScope };
+      openWriterSession(localWorkspaceId: string, databaseName?: string): { git: BrowserLocalGit; writer: ChangeWriter; writer_workspace: import("../../app/src/browser/proprium/authoring/writer-browser.js").BrowserGitWriterWorkspace; scope: WriterScope };
     };
   }
 }
@@ -104,4 +104,120 @@ test("Host proposal receipt survives page reload and applies through Browser Git
   expect(receipt.before).toBe("proposed");
   expect(receipt.after).toBe("applied");
   expect(receipt.stored).toContain("term-1");
+});
+
+test("partial multi-file unit is restored from its persisted WAL after reload before retry", async ({ page }) => {
+  const workspaceId = `writer-partial-${crypto.randomUUID()}`;
+  const databaseName = `writer-partial-receipt-${crypto.randomUUID()}`;
+  await page.goto("/browser-git-test.html");
+  await expect(page.locator("#ready")).toHaveText("ready");
+
+  const interrupted = await page.evaluate(async ({ workspaceId, databaseName }) => {
+    const { git, writer, writer_workspace, scope } = window.browserGitTest.openWriterSession(workspaceId, databaseName);
+    await git.init();
+    const beforeOne = new TextEncoder().encode("before one\r\n");
+    const beforeTwo = new TextEncoder().encode("before two\r\n");
+    const afterOne = new TextEncoder().encode("after one\r\n");
+    const afterTwo = new TextEncoder().encode("after two\r\n");
+    const hash = async (data: Uint8Array) => {
+      const digest = new Uint8Array(await crypto.subtle.digest("SHA-256", data));
+      return Array.from(digest, byte => byte.toString(16).padStart(2, "0")).join("");
+    };
+    const source = new TextEncoder().encode('{"operation":"multi-file"}');
+    await git.write("meta/one.json", beforeOne, { oid: null });
+    await git.write("meta/two.json", beforeTwo, { oid: null });
+    const pinned = await git.pinAuthoringSnapshot();
+    const change = await writer.propose({
+      id: "guest-multi-file-change",
+      idempotency_key: "partial-multi-file-recovery",
+      scope,
+      snapshot: { id: pinned.snapshot_id, local_commit: pinned.local_commit, worktree_generation: pinned.worktree_generation, draft_generation: null },
+      title: "Update two files",
+      reason: "Exercise a real interrupted Browser Git unit",
+      read_set: [
+        { path: "meta/one.json", revision: await hash(beforeOne) },
+        { path: "meta/two.json", revision: await hash(beforeTwo) },
+      ],
+      units: [{
+        id: "multi-file",
+        label: "Update both files",
+        depends_on: [],
+        operations: [
+          { id: "one", kind: "replace", path: "meta/one.json", expected_revision: await hash(beforeOne), content: afterOne },
+          { id: "two", kind: "replace", path: "meta/two.json", expected_revision: await hash(beforeTwo), content: afterTwo },
+        ],
+      }],
+      evidence: [],
+      source_payload: { operation: "multi-file" },
+      source_payload_digest: await hash(new TextEncoder().encode('{"operation":"multi-file"}')),
+    }, {
+      caller: "ui",
+      producer_plugin_id: "proprium.research",
+      action_id: "proprium.research.terms.propose",
+      scope,
+      idempotency_key: "partial-multi-file-recovery",
+      source_payload: source,
+      request_digest: await hash(source),
+    }, [
+      { path: "meta/one.json", revision: await hash(beforeOne) },
+      { path: "meta/two.json", revision: await hash(beforeTwo) },
+    ]);
+
+    const actualApply = writer_workspace.apply_changes.bind(writer_workspace);
+    let injected = false;
+    writer_workspace.apply_changes = async (targetScope, changes, readSet, expectedSnapshot, recovery) => {
+      if (!injected && !recovery) {
+        injected = true;
+        await actualApply(targetScope, [changes[0]!], readSet, expectedSnapshot, false);
+        throw Object.assign(new Error("Injected lost Browser Git response after the first persisted file."), { code: "storage_unknown" });
+      }
+      return actualApply(targetScope, changes, readSet, expectedSnapshot, recovery);
+    };
+    let applyCode = "none";
+    try { await writer.apply(scope, change.proposal_id, ["multi-file"], "ui", true); }
+    catch (error) { applyCode = (error as { code?: string }).code ?? "unknown"; }
+    let blockedWriteCode = "none";
+    try { await git.write("meta/other.json", new TextEncoder().encode("blocked"), { oid: null }); }
+    catch (error) { blockedWriteCode = (error as { code?: string }).code ?? "unknown"; }
+    git.close();
+    return { proposalId: change.proposal_id, applyCode, blockedWriteCode, injected };
+  }, { workspaceId, databaseName });
+
+  expect(interrupted.injected).toBe(true);
+  expect(interrupted.applyCode).toBe("storage_unknown");
+  expect(interrupted.blockedWriteCode).toBe("storage_unknown");
+
+  await page.reload();
+  await expect(page.locator("#ready")).toHaveText("ready");
+  const recovered = await page.evaluate(async ({ workspaceId, databaseName, proposalId }) => {
+    const { git, writer, scope } = window.browserGitTest.openWriterSession(workspaceId, databaseName);
+    await git.verifyStorage();
+    const beforeRecoveryOne = new TextDecoder().decode((await git.read("meta/one.json")).data!);
+    const beforeRecoveryTwo = new TextDecoder().decode((await git.read("meta/two.json")).data!);
+    let blockedWriteCode = "none";
+    try { await git.write("meta/other.json", new TextEncoder().encode("blocked"), { oid: null }); }
+    catch (error) { blockedWriteCode = (error as { code?: string }).code ?? "unknown"; }
+    const recoveryReceipt = await writer.recover(scope);
+    const afterRecoveryOne = new TextDecoder().decode((await git.read("meta/one.json")).data!);
+    const afterRecoveryTwo = new TextDecoder().decode((await git.read("meta/two.json")).data!);
+    const afterRetry = await writer.apply(scope, proposalId, ["multi-file"], "ui", true);
+    const finalOne = new TextDecoder().decode((await git.read("meta/one.json")).data!);
+    const finalTwo = new TextDecoder().decode((await git.read("meta/two.json")).data!);
+    let unblockedWriteCode = "none";
+    try { await git.write("meta/other.json", new TextEncoder().encode("allowed"), { oid: null }); }
+    catch (error) { unblockedWriteCode = (error as { code?: string }).code ?? "unknown"; }
+    git.close();
+    return { beforeRecoveryOne, beforeRecoveryTwo, blockedWriteCode, recoveryStatus: recoveryReceipt?.status, afterRecoveryOne, afterRecoveryTwo, finalStatus: afterRetry.status, finalOne, finalTwo, unblockedWriteCode };
+  }, { workspaceId, databaseName, proposalId: interrupted.proposalId });
+
+  expect(recovered.beforeRecoveryOne).toBe("after one\r\n");
+  expect(recovered.beforeRecoveryTwo).toBe("before two\r\n");
+  expect(recovered.blockedWriteCode).toBe("storage_unknown");
+  expect(recovered.recoveryStatus).toBe("proposed");
+  expect(recovered.afterRecoveryOne).toBe("before one\r\n");
+  expect(recovered.afterRecoveryTwo).toBe("before two\r\n");
+  expect(recovered.finalStatus).toBe("applied");
+  expect(recovered.finalOne).toBe("after one\r\n");
+  expect(recovered.finalTwo).toBe("after two\r\n");
+  expect(recovered.unblockedWriteCode).toBe("none");
 });

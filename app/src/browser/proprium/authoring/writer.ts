@@ -23,7 +23,7 @@ export interface WriterUnit extends Omit<ChangeUnit, "operations" | "depends_on"
 
 export interface WriterEvidence extends SourceSpan {}
 
-export interface ChangeSet extends Omit<WireChangeSet, "scope" | "snapshot" | "read_set" | "units" | "evidence"> {
+export interface ChangeSet extends Omit<WireChangeSet, "scope" | "snapshot" | "read_set" | "units" | "evidence" | "domain_evidence"> {
   readonly scope: WriterScope;
   readonly snapshot: WriterSnapshot;
   readonly read_set: readonly WriterReadRevision[];
@@ -32,7 +32,7 @@ export interface ChangeSet extends Omit<WireChangeSet, "scope" | "snapshot" | "r
   /** Exact domain input and provenance supplied by a producer, retained in its receipt. */
   readonly source_payload?: unknown;
   readonly source_payload_digest?: string;
-  readonly domain_evidence?: unknown;
+  readonly domain_evidence?: unknown[];
 }
 
 export interface WriterCaller {
@@ -161,7 +161,8 @@ export interface WriterWorkspacePort {
 export interface WriterDependencies {
   readonly journal: WriterJournalStore;
   readonly workspace: WriterWorkspacePort;
-  readonly resolve_artifact?: (scope: WriterScope, snapshot: WriterSnapshot, artifact_id: string) => Promise<Uint8Array>;
+  /** Host resolves exact sealed bytes after checking artifact owner and scope. */
+  readonly resolve_artifact?: (scope: WriterScope, snapshot: WriterSnapshot, artifact_id: string, producer_plugin_id: string) => Promise<Uint8Array>;
   readonly new_proposal_id: () => string;
   readonly now?: () => string;
 }
@@ -194,7 +195,7 @@ export interface ProposalInspection {
   readonly read_set: readonly WriterReadRevision[];
   readonly units: readonly (Omit<WriterUnit, "operations"> & { readonly operations: readonly ProposalInspectionOperation[] })[];
   readonly evidence: readonly WriterEvidence[];
-  readonly domain_evidence?: unknown;
+  readonly domain_evidence?: unknown[];
   readonly source_payload_available: boolean;
   readonly source_payload_digest: string;
   readonly source_payload?: Uint8Array;
@@ -210,7 +211,7 @@ export interface ProposalPreview {
   readonly read_set: readonly WriterReadRevision[];
   readonly units: readonly (Omit<WriterUnit, "operations"> & { readonly operations: readonly ProposalInspectionOperation[] })[];
   readonly evidence: readonly WriterEvidence[];
-  readonly domain_evidence?: unknown;
+  readonly domain_evidence?: unknown[];
   readonly source_payload_digest: string;
 }
 
@@ -337,7 +338,7 @@ function validateChangeSet(set: ChangeSet, caller: WriterCaller, observedReads: 
   if (!text(set.id, 256) || !text(set.idempotency_key, 256) || set.idempotency_key !== caller.idempotency_key ||
       !text(set.title, MAX_TITLE) || !text(set.reason, MAX_REASON) || !Array.isArray(set.read_set) || set.read_set.length > MAX_READ_SET ||
       !Array.isArray(set.units) || set.units.length === 0 || set.units.length > MAX_OPERATIONS || !Array.isArray(set.evidence) || set.evidence.length > MAX_EVIDENCE ||
-      hasSourcePayload !== hasSourcePayloadDigest || hasSourcePayload && !isCanonicalJson(set.source_payload) || Object.hasOwn(set, "domain_evidence") && !isCanonicalJson(set.domain_evidence) ||
+      hasSourcePayload !== hasSourcePayloadDigest || hasSourcePayload && !isCanonicalJson(set.source_payload) || Object.hasOwn(set, "domain_evidence") && (!Array.isArray(set.domain_evidence) || !isCanonicalJson(set.domain_evidence)) ||
       hasSourcePayloadDigest && !validRevision(set.source_payload_digest)) {
     fail("invalid_input", "ChangeSet envelope is incomplete or exceeds Host limits.");
   }
@@ -551,7 +552,7 @@ export class ChangeWriter {
       await this.dependencies.workspace.assert_snapshot(set.scope, set.snapshot);
       await this.dependencies.workspace.assert_read_set(set.scope, set.snapshot, set.read_set);
       // Host takes ownership of sealed bytes before the proposal receipt is returned.
-      const resolved = await this.resolveContents(set);
+      const resolved = await this.resolveContents(set, caller.producer_plugin_id);
       await this.validateEvidence(set);
       const sourcePayload = set.source_payload === undefined ? Uint8Array.from(caller.source_payload) : new TextEncoder().encode(canonicalJson(set.source_payload));
       if (sourcePayload.byteLength > MAX_SOURCE_PAYLOAD_BYTES) fail("invalid_input", "Retained source payload exceeds the Host limit.");
@@ -645,6 +646,7 @@ export class ChangeWriter {
       for (const receipt of persisted.record.units) if (receipt.status === "applied") for (const revision of receipt.resulting_revisions) completedPaths.set(revision.path, revision.revision);
 
       let anyFailure = false;
+      let writerBlockActive = false;
       for (const unit of selected) {
         try { await this.dependencies.workspace.assert_current(scope, persisted.record.latest_snapshot); }
         catch (error) {
@@ -722,6 +724,8 @@ export class ChangeWriter {
           throw error;
         }
         if (anyFailure) break;
+        await this.dependencies.workspace.block_writes(scope, "An approved proposal unit is entering its write-ahead transaction.");
+        writerBlockActive = true;
         persisted = await this.beginUnit(scope, proposalId, unit.id, operations, [...new Set([...persisted.record.approved_unit_ids, ...closure])]);
         try {
           const results = await this.dependencies.workspace.apply_changes(scope, changes, adjustedReadSet, persisted.record.latest_snapshot);
@@ -752,6 +756,7 @@ export class ChangeWriter {
           break;
         }
       }
+      if (writerBlockActive) await this.releaseWriterBlock(scope);
       if (anyFailure) return (await this.getProposal(scope, proposalId)).record;
       return (await this.getProposal(scope, proposalId)).record;
     });
@@ -912,7 +917,7 @@ export class ChangeWriter {
     return Object.freeze({ offset, total_bytes: bytes.byteLength, bytes: bytes.slice(offset, end), next_offset: end < bytes.byteLength ? end : null, sha256: await sha256Bytes(bytes) });
   }
 
-  private async resolveContents(set: ChangeSet): Promise<ChangeSet> {
+  private async resolveContents(set: ChangeSet, producerPluginId: string): Promise<ChangeSet> {
     let count = 0;
     const units: WriterUnit[] = [];
     for (const unit of set.units) {
@@ -921,7 +926,7 @@ export class ChangeWriter {
         let content = cloneBytes(operation.content);
         if (operation.content_artifact !== undefined) {
           if (!this.dependencies.resolve_artifact) fail("dependency_unavailable", "Host artifact read capability is unavailable.");
-          content = Uint8Array.from(await this.dependencies.resolve_artifact(set.scope, set.snapshot, operation.content_artifact));
+          content = Uint8Array.from(await this.dependencies.resolve_artifact(set.scope, set.snapshot, operation.content_artifact, producerPluginId));
         }
         if (content) count += content.byteLength;
         if (count > MAX_CONTENT_BYTES) fail("invalid_input", "Sealed ChangeSet content exceeds the Host byte limit.");
@@ -1009,6 +1014,19 @@ export class ChangeWriter {
     } catch (error) {
       if (errorCode(error) === "storage_unknown") await this.dependencies.workspace.block_writes(scope, "A pinned source read has uncertain storage state.");
       throw error;
+    }
+  }
+
+  private async releaseWriterBlock(scope: WriterScope): Promise<void> {
+    const state = defaultState(await this.dependencies.journal.read(scope));
+    if (state.write_ahead) return;
+    try {
+      await this.dependencies.workspace.verify_storage(scope);
+      await this.dependencies.workspace.unblock_writes(scope);
+    } catch (error) {
+      try { await this.dependencies.workspace.block_writes(scope, "Browser Git verification did not clear the proposal write-ahead state."); }
+      catch { /* The original storage failure remains the relevant error. */ }
+      throw new ChangeWriterError("storage_unknown", errorMessage(error));
     }
   }
 
