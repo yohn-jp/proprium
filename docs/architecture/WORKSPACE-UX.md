@@ -6,6 +6,18 @@ The [Authoring Plugin Canon](../canon/README.md) defines the mandatory *future* 
 
 `HostApp` owns repository selection, Browser Git, GitHub OAuth, plugins and Live MCP. `RestoredEditor` binds the original editor to generic file paths and a local IndexedDB recovery journal. Layout and appearance storage keys are retained. Switching panels retains editor input, undo and reading state, plus the single plugin/MCP instance; closing a tool panel does not revoke clients or restart plugins. Checkpoint opens local Git review; Save draft writes the local worktree, and GitHub publication remains explicit.
 
+## Connected generic Host operations
+
+The current Host connects local start and reopen from the picker. Creating a named workspace creates a browser-only local Git workspace and does not require a Gateway, login or remote repository. A new workspace starts with no files; the generic file browser can create the first document. Recent local workspaces reopen from this browser's storage. These operations do not recognize novel-work structure or create a Writer plugin experience.
+
+The generic file browser supports file creation, selection, deletion, path rename/move, individual file import, ZIP import, active-document export and ZIP export. Imports apply to the local worktree; replacing existing paths requires confirmation. An import is limited to 256 files and 64 MiB expanded content, with a 68 MiB ZIP limit. Active-document export uses the current editor contents, including unsaved text. ZIP export includes saved worktree files only, up to 256 files and 64 MiB; it excludes unsaved editor text, Git history and browser preferences. None of these actions commits or publishes changes.
+
+The local Git review shows text diffs and identifies binary files by byte size without decoding them. Every changed path must be reviewed before the local commit control becomes available. One commit records all changed paths together; there is no per-file staging control. The history panel lists up to 40 local commits, shows each selected commit's file diffs, and can restore only that commit's changed files to the local worktree after confirmation and revision checks. Restore does not create a commit or publish to GitHub. File/directory path collisions, symlinks and executable-mode changes cannot be restored through this panel.
+
+Settings content is connected in both shells: Desktop opens it in a modal dialog; Mobile has a dedicated `settings` view in Workspace navigation, including a Desktop-mode switch. It covers the three appearance modes, Git author name/email, GitHub connection status, Gateway URL and its Access link. The shared shell header also carries the theme and GitHub connect/sign-out controls where applicable, so settings is not a single consolidated page. Git author details are commit metadata, not login credentials.
+
+These generic file and Git features do not implement the [Authoring Plugin Canon](../canon/README.md). In particular, work/volume/chapter/scene recognition, a novel hierarchy and `続きを書く` remain requirements for the future Narrative plugin; a generic Files tree and text editor do not satisfy them. See the [Narrative specification](../canon/plugins/NARRATIVE.md).
+
 When Browser Git reports `storage_unknown`, a native dialog outside the shell/status shelf exposes **保存データの整合性を確認**. It invokes the existing worker verification and only clears the uncertainty marker on success. The dialog names the workspace, shows verification failures, and can be reopened with **Git保存状態を確認** after dismissal. Failure preserves the marker and stored bytes; no reset/delete action is substituted for verification.
 
 ## Shared intent, distinct device interactions

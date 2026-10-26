@@ -82,9 +82,9 @@ UI構成変更は表示の所有権を変えるだけである。panelを非表�
 
 ### ローカル開始とremote binding
 
-台帳のH02は既存local-first契約を満たすための未整備導線である。現行`WorkspaceIdentity`のGitHub repository情報を必須とする形を、そのまま架空のrepository IDで埋めない。ローカルWorkspace identityと検証済みremote bindingを区別する必要がある。具体的なschema変更は後続実装で既存Git adapterと整合させる。
+H02はHostのpickerから接続済みである。利用者が名前を入力すると、Hostは`provider: "local"`、`branch: "main"`、一意な`localWorkspaceId`を持つlocal identityを作り、BrowserLocalGitを開く。新規Workspaceは空で、文書作成は別のファイル操作である。local identityはGitHubのrepository IDを偽装せず、WorkspaceのGitデータと履歴はこのブラウザーに保存される。
 
-remoteを結び付ける際はH03でrepository ID、branch、本人権限と既存local内容を確認する。bindingなしではlocal commitは可能、remote fetch/publishは理由付きで不可。新規GitHub repository作成、branch CRUD、強制上書きは本設計で追加しない。
+remoteを結び付ける際はH03でrepository ID、branch、本人権限と既存local内容を確認する。bindingなしではlocal commitは可能、remote fetch/publishは利用できない。local Workspaceの作成はremote bindingを行わない。新規GitHub repository作成、branch CRUD、強制上書きは本設計で追加しない。
 
 ## 4. 遷移の共通プロトコル
 
@@ -155,9 +155,9 @@ Desktopはkeyboardと同時閲覧、Mobileは単一タスク、thumb操作、IME
 | --- | --- | --- |
 | FT01–02 | Gateway/loginなしの初回local開始、再訪、cold offlineとの差、evicted保存領域の説明 | F01 |
 | FT03–04 | codeの判読とcopy/link、popup不可、pending/slow_down、拒否/期限/中止、別account、repo0件、permission/branchエラー | F02–03 |
-| FT05–06 | text/binary、新規path、delete、dirty離脱の3選択、IME中/遅延読込、journalとworktree保存失敗で入力を保持 | F04, F16 |
+| FT05–06 | local start/reopen、text/binary、新規path・移動・削除、file/ZIP取込と書出しの上限・上書き確認・dirty guard、現在の文書と保存済みZIPの内容差、dirty離脱の3選択、IME中/遅延読込、journalとworktree保存失敗で入力を保持 | F01, F04, F16 |
 | FT07–09 | 読書/preview/縦横/集中/印刷/組版、scratch画像拒否・中止・回復・local checkpoint。本文と無関係な削除をしない | F05–06 |
-| FT10–12 | diff/author/commit、履歴、fetch不変、pull/local-ahead/conflict、publish exact SHA、失われた応答の再照合、無断再送なし | F07–08 |
+| FT10–12 | 全変更pathのdiff確認gateと一括local commit、author、履歴一覧/diff、revision guard付き変更file restoreと未対応path/mode、fetch不変、pull/local-ahead/conflict、publish exact SHA、失われた応答の再照合、無断再送なし | F07–08 |
 | FT13–15 | signed preview同意前に大容量転送しない、disabled install、権限拒否、run/stop、stale result、update失敗・rollback・uninstall、proposal拒否/競合 | F09–10 |
 | FT16–17 | Live自動登録と再接続、固定8ツールの切断時表示、repository_id選択・未知ID拒否、active Host切替・切断時fail-closed、deadline、提案の明示承認、Owner Key/Client Token UI不在 | F11–12 |
 | FT18–20 | panel移動/float/closeでeditor/plugin/MCPを重複・終了しない、layout保存失敗、mode切替、全theme、Mobile5view/back/sheet/keyboard | F13–15 |
