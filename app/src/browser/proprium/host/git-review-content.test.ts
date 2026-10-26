@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { allChangedPathsReviewed, decodeGitText } from "./git-review-content.js";
+import { allChangedPathsReviewed, decodeGitText, historyHasUnsupportedModes } from "./git-review-content.js";
 
 test("Git review decodes complete UTF-8 text and preserves line endings", () => {
   const bytes = new TextEncoder().encode("題名\r\n本文\n");
@@ -18,4 +18,12 @@ test("local commit review is gated until every changed path is marked reviewed",
   assert.equal(allChangedPathsReviewed([], new Set()), false);
   assert.equal(allChangedPathsReviewed(paths, new Set([paths[0]!])), false);
   assert.equal(allChangedPathsReviewed(paths, new Set(paths)), true);
+});
+
+test("byte-only history restore rejects executable additions, edits and symlinks", () => {
+  assert.equal(historyHasUnsupportedModes([{ parentMode: null, commitMode: "100755" }]), true);
+  assert.equal(historyHasUnsupportedModes([{ parentMode: "100755", commitMode: "100755" }]), true);
+  assert.equal(historyHasUnsupportedModes([{ parentMode: "100755", commitMode: "100644" }]), true);
+  assert.equal(historyHasUnsupportedModes([{ parentMode: null, commitMode: "120000" }]), true);
+  assert.equal(historyHasUnsupportedModes([{ parentMode: null, commitMode: "100644" }, { parentMode: "100644", commitMode: null }]), false);
 });

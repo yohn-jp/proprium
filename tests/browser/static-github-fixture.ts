@@ -24,11 +24,11 @@ function gitObjectSha(type: string, content: Uint8Array): string {
   return createHash("sha1").update(`${type} ${content.byteLength}\0`).update(content).digest("hex");
 }
 
-function commitFixture(content: string): FixtureCommit {
+function commitFixture(content: string, mode: "100644" | "100755"): FixtureCommit {
   const bytes = new TextEncoder().encode(content);
   const blobSha = gitObjectSha("blob", bytes);
   const tree = Buffer.concat([
-    Buffer.from("100644 README.md\0", "utf8"),
+    Buffer.from(`${mode} README.md\0`, "utf8"),
     Buffer.from(blobSha, "hex"),
   ]);
   const treeSha = gitObjectSha("tree", tree);
@@ -67,10 +67,10 @@ function corsHeaders(origin: string): Record<string, string> {
 }
 
 /** Emulates only the GitHub OAuth and read APIs needed to select a branch and open one real Git commit. */
-export async function installStaticGitHubFixture(page: Page, hostOrigin: string): Promise<{ head: string; content: string; apiRequests(): number; apiPaths(): string[] }> {
+export async function installStaticGitHubFixture(page: Page, hostOrigin: string, mode: "100644" | "100755" = "100644"): Promise<{ head: string; content: string; apiRequests(): number; apiPaths(): string[] }> {
   const context = page.context();
   const fixtureContent = "A synthetic GitHub commit imported through the static Host.\n";
-  const fixture = commitFixture(fixtureContent);
+  const fixture = commitFixture(fixtureContent, mode);
   const fakeToken = "proprium-static-fixture-only-token";
   let apiRequestCount = 0;
   const apiPaths: string[] = [];
@@ -122,7 +122,7 @@ export async function installStaticGitHubFixture(page: Page, hostOrigin: string)
     if (requestUrl.pathname === `${repoPath}/git/trees/${fixture.treeSha}`) return json({
       sha: fixture.treeSha,
       truncated: false,
-      tree: [{ path: "README.md", mode: "100644", type: "blob", sha: fixture.blobSha }],
+      tree: [{ path: "README.md", mode, type: "blob", sha: fixture.blobSha }],
     });
     if (requestUrl.pathname === `${repoPath}/git/blobs/${fixture.blobSha}`) return json({
       sha: fixture.blobSha,

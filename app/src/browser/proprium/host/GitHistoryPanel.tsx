@@ -2,7 +2,7 @@ import { useEffect, useState, type ReactElement } from "react";
 import type { BrowserLocalGit } from "../git/index.js";
 import type { CommitSummary, CommitDiff, CommitFileChange } from "../git/protocol.js";
 import { TextDiff } from "./TextDiff.js";
-import { decodeGitText, localizeGitReviewError } from "./git-review-content.js";
+import { decodeGitText, historyHasUnsupportedModes, localizeGitReviewError } from "./git-review-content.js";
 import "./git-review.css";
 
 export interface GitHistoryPanelProps {
@@ -57,13 +57,11 @@ export function GitHistoryPanel({ git, history, busy, canRestore, onRefresh, onR
   const selectedCommit = history.find((commit) => commit.oid === selectedOid) ?? null;
   const historyPaths = (details?.changes.map((change) => change.path) ?? []).sort();
   const pathCollision = historyPaths.some((path, index) => historyPaths[index + 1]?.startsWith(`${path}/`));
-  const unsupportedMode = Boolean(details?.changes.some((change) =>
-    change.parentMode === "120000" || change.commitMode === "120000" ||
-    change.parentMode !== null && change.commitMode !== null && change.parentMode !== change.commitMode));
+  const unsupportedMode = historyHasUnsupportedModes(details?.changes ?? []);
   const restoreUnsupported = pathCollision || unsupportedMode;
 
   async function restoreCommitFiles(): Promise<void> {
-    if (!selectedCommit || !details || !canRestore || busy || restoring || !details.changes.length) return;
+    if (!selectedCommit || !details || !canRestore || busy || restoring || restoreUnsupported || !details.changes.length) return;
     const count = details.changes.length;
     const target = `コミット ${selectedCommit.oid.slice(0, 10)}`;
     if (!window.confirm(`「${describeCommit(selectedCommit)}」で変更された${count}件のファイルを、ローカル作業ツリーで${target}の内容に戻しますか？対象ファイルの現在の内容は置き換えるか削除します。他のファイルは変更しません。コミットやGitHubへの公開は行いません。`)) return;
@@ -122,7 +120,7 @@ export function GitHistoryPanel({ git, history, busy, canRestore, onRefresh, onR
           <p className="git-history-restore-note">対象ファイルの現在のリビジョンを確認してから復元します。ローカル作業ツリーだけを更新し、他のファイルはそのまま残します。</p>
           {!canRestore && <p className="git-review-gate" role="status">履歴を復元する前に、編集中の文章を保存してください。</p>}
           {pathCollision && <p className="git-review-gate" role="status">このコミットではファイルとディレクトリの構成が変わっています。ブラウザー内のGitではこの変更をまとめて適用できないため、確認のみ可能です。</p>}
-          {unsupportedMode && <p className="git-review-gate" role="status">このコミットには、現在のブラウザー内のGitで復元できないシンボリックリンクまたは実行権限の変更があります。ファイル内容の確認はできます。</p>}
+          {unsupportedMode && <p className="git-review-gate" role="status">このコミットには、現在のブラウザー内のGitで復元できないシンボリックリンクまたは実行可能ファイルが含まれています。ファイル内容の確認はできます。</p>}
           {notice && <p className="git-history-notice" role="status">{notice}</p>}
           {!details.changes.length && <p>最初の親コミットから変更されたファイルはありません。</p>}
           <div className="git-history-files">

@@ -1,3 +1,5 @@
+import type { CommitFileChange } from "../git/protocol.js";
+
 /** Decode Git bytes only when they are UTF-8 text; binary bytes are never coerced. */
 export function decodeGitText(data: Uint8Array): string | null {
   try {
@@ -26,4 +28,9 @@ export function localizeGitReviewError(error: unknown, fallback: string): string
     case "invalid_path": return "このファイルパスは現在のローカルGit操作では扱えません。";
     default: return fallback;
   }
+}
+
+/** Byte-only worktree writes cannot reproduce executable bits or symlinks. */
+export function historyHasUnsupportedModes(changes: readonly Pick<CommitFileChange, "parentMode" | "commitMode">[]): boolean {
+  return changes.some(change => [change.parentMode, change.commitMode].some(mode => mode !== null && mode !== "100644"));
 }
