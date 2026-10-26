@@ -2,11 +2,12 @@ import { defineConfig } from "@playwright/test";
 import { createPrivateKey, createPublicKey, generateKeyPairSync } from "node:crypto";
 
 const configuredPort = process.env.PROPRIUM_E2E_PORT ?? "4173";
+const gatewayPort = process.env.PROPRIUM_E2E_GATEWAY_PORT ?? "4174";
 process.env.PROPRIUM_E2E_PORT = configuredPort;
 const baseURL = process.env.PROPRIUM_E2E_BASE_URL ?? `http://127.0.0.1:${configuredPort}/`;
 const externalServer = Boolean(process.env.PROPRIUM_E2E_BASE_URL);
 process.env.VITE_PROPRIUM_E2E = "true";
-process.env.VITE_PROPRIUM_GATEWAY_URL ??= "http://127.0.0.1:4174";
+process.env.VITE_PROPRIUM_GATEWAY_URL ??= `http://127.0.0.1:${gatewayPort}`;
 const hasLiveGitHubToken = Boolean(process.env.PROPRIUM_E2E_GITHUB_TOKEN || process.env.SCRIPTORIUM_GITHUB_LIVE_TEST_TOKEN);
 const pluginFixturePrivateKey = process.env.PROPRIUM_E2E_PLUGIN_REGISTRY_PRIVATE_KEY
   ? createPrivateKey(process.env.PROPRIUM_E2E_PLUGIN_REGISTRY_PRIVATE_KEY)
@@ -76,7 +77,7 @@ export default defineConfig({
       {
         command: "node tests/browser/start-gateway.mjs",
         cwd: process.cwd(),
-        url: "http://127.0.0.1:4174/healthz",
+        url: `http://127.0.0.1:${gatewayPort}/healthz`,
         reuseExistingServer: false,
         timeout: 120_000,
       },

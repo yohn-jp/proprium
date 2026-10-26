@@ -66,7 +66,7 @@ function corsHeaders(origin: string): Record<string, string> {
   };
 }
 
-/** Emulates only the GitHub OAuth and read APIs needed to open one real Git commit. */
+/** Emulates only the GitHub OAuth and read APIs needed to select a branch and open one real Git commit. */
 export async function installStaticGitHubFixture(page: Page, hostOrigin: string): Promise<{ head: string; content: string; apiRequests(): number; apiPaths(): string[] }> {
   const context = page.context();
   const fixtureContent = "A synthetic GitHub commit imported through the static Host.\n";
@@ -112,6 +112,7 @@ export async function installStaticGitHubFixture(page: Page, hostOrigin: string)
       owner: { login: staticFixtureIdentity.owner },
       permissions: { pull: true, push: true },
     });
+    if (requestUrl.pathname === `${repoPath}/branches`) return json([{ name: staticFixtureIdentity.branch }]);
     if (requestUrl.pathname === `${repoPath}/git/ref/heads/${staticFixtureIdentity.branch}`) return json({
       ref: `refs/heads/${staticFixtureIdentity.branch}`,
       object: { type: "commit", sha: fixture.sha },
