@@ -16,11 +16,12 @@ interface Props {
   busy: boolean;
   canImport: boolean;
   onBusyChange(value: boolean): void;
+  onImportBusyChange(value: boolean): void;
   onImported(paths: string[]): Promise<void>;
   beforeApply(): Promise<boolean>;
 }
 
-export function WorkspaceTransferPanel({ git, files, busy, canImport, onBusyChange, onImported, beforeApply }: Props) {
+export function WorkspaceTransferPanel({ git, files, busy, canImport, onBusyChange, onImportBusyChange, onImported, beforeApply }: Props) {
   const input = useRef<HTMLInputElement>(null);
   const [notice, setNotice] = useState("");
   const [working, setWorking] = useState(false);
@@ -29,7 +30,7 @@ export function WorkspaceTransferPanel({ git, files, busy, canImport, onBusyChan
     const selected = Array.from(event.currentTarget.files ?? []);
     event.currentTarget.value = "";
     if (!selected.length || busy || !canImport) return;
-    setWorking(true); onBusyChange(true); setNotice("");
+    setWorking(true); onImportBusyChange(true); setNotice("");
     try {
       if (selected.length > MAX_WORKSPACE_CHANGE_COUNT || selected.reduce((sum, file) => sum + file.size, 0) > MAX_WORKSPACE_ARCHIVE_BYTES) throw new Error("一度の取込は256ファイル・ZIPを含め68 MiB以内（展開後64 MiB以内）にしてください。");
       const imported: TransferFile[] = [];
@@ -47,7 +48,7 @@ export function WorkspaceTransferPanel({ git, files, busy, canImport, onBusyChan
       await onImported(imported.map(file => file.path));
       setNotice(`${imported.length}件をこの端末のファイルへ取り込みました。Gitコミット・GitHub公開は行っていません。`);
     } catch (error) { setNotice(error instanceof Error ? error.message : "ファイルを取り込めませんでした。"); }
-    finally { setWorking(false); onBusyChange(false); }
+    finally { setWorking(false); onImportBusyChange(false); }
   }
 
   async function exportFiles() {
