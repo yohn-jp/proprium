@@ -53,15 +53,17 @@ const scalarField = closed({ ...fieldProperties,
   type: { enum: ["string", "integer", "boolean", "enum", "multi-reference", "ordered-list"] },
 }, ["id", "label", "type"]);
 const field = { oneOf: [scalarField, closed({ ...fieldProperties, type: { const: "record-list" },
-  fields: array(scalarField, 64), initial_value: template,
+  fields: array(scalarField, 64), initial_value: template, key_field: text(128),
   min_items: { type: "integer", minimum: 0, maximum: 10000 },
   max_items: { type: "integer", minimum: 0, maximum: 10000 },
 }, ["id", "label", "type", "fields"])] };
-const baseWidget = { id: text(), title: text(), description: text(4096), load_action: binding };
+const baseWidget = { id: text(), title: text(), description: text(4096), load_action: binding,
+  load_actions: array(closed({ key: text(128), action_id: text(), input_template: jsonObject }), 8) };
 const widget = (type: string | string[], properties: Record<string, unknown>, required: string[]) =>
   closed({ ...baseWidget, type: typeof type === "string" ? { const: type } : { enum: type }, ...properties },
     ["id", "type", ...required]);
-const paging = { next_action: binding, previous_action: binding };
+const dataKey = closed({ data_key: text(256) });
+const paging = { next_action: binding, previous_action: binding, next_action_when: dataKey, previous_action_when: dataKey };
 export const surfaceSchema = {
   $id: "urn:proprium:authoring:surface:v2",
   ...closed({ id: text(), kind: { enum: ["panel", "command"] }, title: text(), context: jsonObject,
