@@ -13,7 +13,7 @@ import { editorCompositionExtension, isViewComposing } from "./cm/compositionGua
 import { ellipsisNormalizeExtension } from "./cm/ellipsisNormalize";
 import { refreshTermAdornments, termAdornmentsExtension } from "./cm/termAdornments";
 import { planWritingSymbol, type WritingSymbolId } from "./writingSymbols";
-import { type ResolveEditorTerms } from "./terms";
+import { isValidEditorRange, type ResolveEditorTerms } from "./terms";
 import { createUiSentencePositionIndexCache, type UiSentencePositionIndexCache } from "../resume/continueCandidates";
 import "./terminology.css";
 
@@ -21,6 +21,7 @@ export interface ManuscriptInputHandle {
   focus(): void;
   flushComposition(): Promise<string>;
   insert(symbol: WritingSymbolId): void;
+  selectRange(start: number, end: number): boolean;
   restorePosition(position: { cursorSentenceIndex: number | null; scrollTop: number }): void;
   getScrollTop(): number;
 }
@@ -120,6 +121,17 @@ export const ManuscriptInput = forwardRef<ManuscriptInputHandle, ManuscriptInput
         userEvent: "input.type",
       });
       view.focus();
+    },
+    selectRange(start, end) {
+      const view = viewRef.current;
+      if (!view || !isValidEditorRange(view.state.doc.toString(), start, end)) return false;
+      view.dispatch({
+        selection: { anchor: start, head: end },
+        effects: EditorView.scrollIntoView(end, { y: "center" }),
+        annotations: Transaction.addToHistory.of(false),
+      });
+      view.focus();
+      return true;
     },
     restorePosition(position) {
       const view = viewRef.current;

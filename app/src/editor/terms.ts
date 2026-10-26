@@ -107,6 +107,12 @@ export function validateEditorTermSpans(text: string, spans: readonly EditorTerm
   return result;
 }
 
+/** Host navigation selections use the same UTF-16 offsets as CodeMirror and source spans. */
+export function isValidEditorRange(text: string, start: number, end: number): boolean {
+  return Number.isSafeInteger(start) && Number.isSafeInteger(end) && start >= 0 && end >= start && end <= text.length
+    && isUtf16Boundary(text, start) && isUtf16Boundary(text, end);
+}
+
 function isUtf16Boundary(text: string, offset: number): boolean {
   if (offset <= 0 || offset >= text.length) return true;
   const previous = text.charCodeAt(offset - 1);

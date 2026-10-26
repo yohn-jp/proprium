@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState, type ReactElement, type ReactNode } from "react";
 import { SceneEditor, type ScratchDraftBinding, type ScratchDraftPayload } from "../../../editor/SceneEditor.js";
+import type { ResolveEditorTerms } from "../../../editor/terms.js";
 import { BrowserJournal, documentKey, repositoryKey, type JournalEntry } from "../../../storage/journal.js";
 import type { RepositoryIdentity, SnapshotId } from "@scriptorium/contracts";
 import type { BrowserLocalGit } from "../git/index.js";
@@ -29,6 +30,10 @@ interface Props {
   git: BrowserLocalGit;
   onScratchApplied(): Promise<void>;
   onCompositionChange?(composing: boolean): void;
+  resolveTerms?: ResolveEditorTerms;
+  onTermNavigate?(targetPath: string, termId: string, event: Event): void;
+  hostNavigationSelection?: { readonly requestId: string; readonly start: number; readonly end: number };
+  onHostNavigationSelectionApplied?(requestId: string): void;
 }
 
 /** The recovered Scriptorium editor, with Browser Host-owned storage and Git ports. */
@@ -156,6 +161,8 @@ export function RestoredEditor(props: Props): ReactElement {
       onCursorPositionChange={() => undefined} onReadingPageChange={() => undefined} resumeRequest={null} onResumeRequestApplied={() => undefined}
       durability={published ? "saved" : checkpointBusy ? "checkpointing" : props.localCommitted && !file.dirty ? "checkpointed" : "draft"} draftStored={!file.dirty || storedText === file.text} journalError={journalError}
       conflict={null} canResolveDraft={false} onRebase={() => undefined} onRestoreRemote={() => undefined}
+      resolveTerms={props.resolveTerms} onTermNavigate={props.onTermNavigate}
+      hostNavigationSelection={props.hostNavigationSelection} onHostNavigationSelectionApplied={props.onHostNavigationSelectionApplied}
       canCheckpoint={!busy} checkpointBusy={checkpointBusy} onCheckpoint={props.onCommit} canPublish={props.canPublish && !busy} publishBusy={publishBusy} onPublish={props.onPublish} hostFileActions={props.hostFileActions}
       onHistory={props.onHistory} historyOpen={false} historyExternal={true} onRestoreHistoryBody={props.onChange}
       scratchEntries={entries.filter(entry => entry.documentPath.startsWith("meta/scratch/"))} onDraftScratch={draftScratch} onCheckpointScratch={checkpointScratch}

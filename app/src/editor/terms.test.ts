@@ -3,7 +3,7 @@ import test from "node:test";
 import { createElement } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 import { RubyText } from "./ruby";
-import { findTermSpanAtSelection, selectPendingTermLines, selectVisibleTermSlices, validateEditorTermSpans, type EditorTermSpan } from "./terms";
+import { findTermSpanAtSelection, isValidEditorRange, selectPendingTermLines, selectVisibleTermSlices, validateEditorTermSpans, type EditorTermSpan } from "./terms";
 
 test("visible reader lines are resolved once per visit and can be queued again after leaving", () => {
   const visible = [10, 20, 30];
@@ -56,6 +56,15 @@ test("resolver spans use UTF-16 positions and malformed or overlapping results a
   ];
   assert.deepEqual(validateEditorTermSpans(text, spans), [spans[0]]);
   assert.equal(text, "🙂猫");
+});
+
+test("Host navigation ranges are bounded UTF-16 selections", () => {
+  const text = "🙂猫";
+  assert.equal(isValidEditorRange(text, 0, 2), true);
+  assert.equal(isValidEditorRange(text, 2, 3), true);
+  assert.equal(isValidEditorRange(text, 1, 2), false);
+  assert.equal(isValidEditorRange(text, 0, 4), false);
+  assert.equal(isValidEditorRange(text, 2.5, 3), false);
 });
 
 test("reading terms render as accessible links over Ruby text without changing the source", () => {

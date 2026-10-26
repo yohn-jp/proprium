@@ -171,6 +171,8 @@ export function SceneEditor({
   onRestoreHistoryBody,
   resolveTerms,
   onTermNavigate,
+  hostNavigationSelection,
+  onHostNavigationSelectionApplied,
   onCompositionChange,
   scratchEntries,
   onDraftScratch,
@@ -222,6 +224,8 @@ export function SceneEditor({
   onRestoreHistoryBody: (body: string) => void;
   resolveTerms?: ResolveEditorTerms;
   onTermNavigate?: (targetPath: string, termId: string, event: Event) => void;
+  hostNavigationSelection?: { readonly requestId: string; readonly start: number; readonly end: number };
+  onHostNavigationSelectionApplied?: (requestId: string) => void;
   onCompositionChange?: (composing: boolean) => void;
   scratchEntries: JournalEntry[];
   onDraftScratch: (draft: ScratchDraftPayload, binding: ScratchDraftBinding) => Promise<JournalEntry | null>;
@@ -272,6 +276,16 @@ export function SceneEditor({
     pendingEditorStatusRef.current?.markPendingText(next, textRevision);
     onTextChange(next);
   }, [onTextChange, textRevision]);
+
+  useEffect(() => {
+    if (!hostNavigationSelection) return;
+    const frame = requestAnimationFrame(() => {
+      if (editorRef.current?.selectRange(hostNavigationSelection.start, hostNavigationSelection.end)) {
+        onHostNavigationSelectionApplied?.(hostNavigationSelection.requestId);
+      }
+    });
+    return () => cancelAnimationFrame(frame);
+  }, [hostNavigationSelection, onHostNavigationSelectionApplied, path, textRevision]);
 
   useEffect(() => {
     saveReadingPage(authorScope, repositoryKey, scene.id, readingPage);
