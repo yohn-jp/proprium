@@ -43,13 +43,16 @@ interface MobileLocationSnapshot {
   scope?: string;
 }
 
-const WORKSPACE_PANEL_FOR_VIEW: Readonly<Record<MobileView, string>> = {
+const WORKSPACE_PANEL_FOR_VIEW: Readonly<Record<Exclude<MobileView, "settings">, string>> = {
   library: "outline",
   writing: "editor",
   inspection: "inspector",
   tools: "review",
-  settings: "inspector",
 };
+
+function workspacePanelForView(view: MobileView): string | undefined {
+  return view === "settings" ? undefined : WORKSPACE_PANEL_FOR_VIEW[view];
+}
 
 const VIEWS: ReadonlyArray<{ id: MobileView; label: string; title: string; mark: string }> = [
   { id: "library", label: "作品", title: "作品ライブラリ", mark: "▤" },
@@ -103,7 +106,7 @@ function errorMessage(error: unknown): string {
  * Ionic page navigation for the shared application controller.
  * The mobile entry supplies the Ionic React Router context around the controller.
  */
-export function MobileShell({ header, documentTitle, documentContext, desktopDurability, library, editor, tools, status, renderStatus, onSwitchMode, workspaceScope, panels, beforeLayoutChange, requestedPanel }: ApplicationShellProps) {
+export function MobileShell({ header, documentTitle, documentContext, desktopDurability, library, editor, tools, settings, status, renderStatus, onSwitchMode, workspaceScope, panels, beforeLayoutChange, requestedPanel }: ApplicationShellProps) {
   const location = useLocation();
   const navigateRoute = useNavigate();
   const activeView = readViewFromSearch(location.search);
@@ -291,6 +294,7 @@ export function MobileShell({ header, documentTitle, documentContext, desktopDur
     const hasWorkspace = Boolean(workspaceScope && panels?.length);
     const sameRoute = view === activeView;
     if (sameRoute && !hasWorkspace) return;
+    if (sameRoute && view === "settings") return;
     setReferenceSheet(null);
     if (hasWorkspace) {
       const targetRoute = sameRoute ? "" : withViewInCurrentUrl(view);
@@ -300,7 +304,12 @@ export function MobileShell({ header, documentTitle, documentContext, desktopDur
           [MOBILE_PREVIOUS_VIEW_STATE]: activeView,
         },
       });
-      queueWorkspacePanel(WORKSPACE_PANEL_FOR_VIEW[view], commitRoute, targetRoute || undefined);
+      const panelId = workspacePanelForView(view);
+      if (panelId) {
+        queueWorkspacePanel(panelId, commitRoute, targetRoute || undefined);
+      } else if (await preparePanelChange()) {
+        commitRoute?.();
+      }
       return;
     }
     if (!(await preparePanelChange())) return;
@@ -321,7 +330,12 @@ export function MobileShell({ header, documentTitle, documentContext, desktopDur
     const previous = historyState(location.state)[MOBILE_PREVIOUS_VIEW_STATE];
     if (isMobileView(previous)) {
       if (workspaceScope && panels?.length) {
-        queueWorkspacePanel(WORKSPACE_PANEL_FOR_VIEW[previous], () => navigateRoute(-1), withViewInCurrentUrl(previous));
+        const panelId = workspacePanelForView(previous);
+        if (panelId) {
+          queueWorkspacePanel(panelId, () => navigateRoute(-1), withViewInCurrentUrl(previous));
+        } else if (await preparePanelChange()) {
+          navigateRoute(-1);
+        }
         return;
       }
       if (!(await preparePanelChange())) return;
@@ -396,6 +410,19 @@ export function MobileShell({ header, documentTitle, documentContext, desktopDur
     ? renderStatus?.(switchError) ?? status
     : status;
   const hasStatusContent = statusContent !== null && statusContent !== undefined && statusContent !== false;
+  const settingsContent = (
+    <section className="mobile-shell-settings-card" aria-labelledby="mobile-display-settings-title">
+      <h2 id="mobile-display-settings-title">表示とアカウント</h2>
+      {settings ?? <p>この画面に表示できる設定項目はまだありません。外観とアカウントの操作は画面上部から行えます。</p>}
+      <IonButton className="mobile-shell-primary-action" expand="block" onClick={() => void navigate("writing")}>
+        執筆画面へ戻る
+      </IonButton>
+      <IonButton className="mobile-shell-primary-action" expand="block" disabled={switching} onClick={() => void switchToDesktop()}>
+        {switching ? "切り替えています…" : "Desktop版へ切り替え"}
+      </IonButton>
+      {switchError ? <p className="mobile-shell-switch-error" role="alert">{switchError}</p> : null}
+    </section>
+  );
   return (
     <IonApp className={"mobile-shell" + (writingKeyboardVisible ? " mobile-shell-keyboard-open" : "")}>
       <IonPage className="mobile-shell-page">
@@ -414,31 +441,25 @@ export function MobileShell({ header, documentTitle, documentContext, desktopDur
 
         <IonContent ref={contentRef} className="mobile-shell-content" fullscreen={false}>
           {workspaceScope && panels?.length ? (
-            <div className="mobile-shell-workspace-view" data-active-view={activeView} aria-label="モバイル用執筆画面">
-              {activeView === "settings" ? (
-                <section className="mobile-shell-settings-card" aria-labelledby="mobile-display-settings-title">
-                  <h2 id="mobile-display-settings-title">表示と入力</h2>
-                  <p>外観やアカウントの操作は画面上部にあります。執筆画面では原稿を開いたまま各機能へ移動できます。</p>
-                  <IonButton className="mobile-shell-primary-action" expand="block" disabled={switching} onClick={() => void switchToDesktop()}>
-                    {switching ? "切り替えています…" : "Desktop版へ切り替え"}
-                  </IonButton>
-                  {switchError ? <p className="mobile-shell-switch-error" role="alert">{switchError}</p> : null}
-                </section>
-              ) : null}
-              <Workspace
-                scope={workspaceScope}
-                mode="mobile"
-                panels={panels}
-                beforeLayoutChange={beforeLayoutChange}
-                requestedPanel={workspacePanelRequest}
-                selectedPanelId={WORKSPACE_PANEL_FOR_VIEW[activeView]}
-                routeTransitionSequence={routeTransitionSequence}
-                isPanelRequestCurrent={isPanelRequestCurrent}
-                onPanelRequestResult={onPanelRequestResult}
-                routeSelectionKey={routeSelectionKey}
-                isRouteSelectionCurrent={isRouteSelectionCurrent}
-                onRouteSelectionResult={onRouteSelectionResult}
-              />
+            <div className="mobile-shell-workspace-view" data-active-view={activeView}
+              aria-label={activeView === "settings" ? "設定" : "モバイル用執筆画面"}>
+              <div className="mobile-shell-workspace-panel" hidden={activeView === "settings"}>
+                <Workspace
+                  scope={workspaceScope}
+                  mode="mobile"
+                  panels={panels}
+                  beforeLayoutChange={beforeLayoutChange}
+                  requestedPanel={workspacePanelRequest}
+                  selectedPanelId={workspacePanelForView(activeView)}
+                  routeTransitionSequence={routeTransitionSequence}
+                  isPanelRequestCurrent={isPanelRequestCurrent}
+                  onPanelRequestResult={onPanelRequestResult}
+                  routeSelectionKey={routeSelectionKey}
+                  isRouteSelectionCurrent={isRouteSelectionCurrent}
+                  onRouteSelectionResult={onRouteSelectionResult}
+                />
+              </div>
+              {activeView === "settings" ? settingsContent : null}
             </div>
           ) : <div className="mobile-shell-view-stack" data-active-view={activeView}>
             <section className="mobile-shell-view" aria-labelledby="mobile-library-title" hidden={activeView !== "library"}>
@@ -472,14 +493,7 @@ export function MobileShell({ header, documentTitle, documentContext, desktopDur
 
             <section className="mobile-shell-view" aria-labelledby="mobile-settings-title" hidden={activeView !== "settings"}>
               <h1 id="mobile-settings-title" className="mobile-shell-page-title">設定</h1>
-              <section className="mobile-shell-settings-card" aria-labelledby="mobile-display-settings-title">
-                <h2 id="mobile-display-settings-title">表示と入力</h2>
-                <p>外観やアカウントの操作は画面上部にあります。執筆画面では原稿を開いたまま各機能へ移動できます。</p>
-                <IonButton className="mobile-shell-primary-action" expand="block" disabled={switching} onClick={() => void switchToDesktop()}>
-                  {switching ? "切り替えています…" : "Desktop版へ切り替え"}
-                </IonButton>
-                {switchError ? <p className="mobile-shell-switch-error" role="alert">{switchError}</p> : null}
-              </section>
+              {settingsContent}
             </section>
           </div>}
         </IonContent>
