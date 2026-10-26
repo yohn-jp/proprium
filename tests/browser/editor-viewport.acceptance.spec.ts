@@ -35,9 +35,11 @@ test("editor controls leave usable manuscript space on a laptop and mobile viewp
   await expect(page.locator(".cm-content .cm-line").first()).toHaveText("原稿の本文 1。");
   await expect(page.getByRole("button", { name: "Save draft", exact: true })).toBeDisabled();
   if (!mobile) {
+    const arrangement = page.locator(".st-workspace-configuration");
+    await arrangement.locator(":scope > summary").click();
     const move = page.locator(".st-workspace-move-menu");
     await move.locator(":scope > summary").click();
-    await expect(page.getByRole("button", { name: "Move panel", exact: true })).toBeInViewport({ ratio: 1 });
+    await expect(page.getByRole("button", { name: "パネルを移動", exact: true })).toBeInViewport({ ratio: 1 });
     expect(await page.evaluate(() => document.documentElement.scrollWidth > innerWidth)).toBe(false);
     await move.locator(":scope > summary").click();
   }

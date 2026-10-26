@@ -53,7 +53,46 @@
   background: var(--studio-tint-strong);
   border-color: var(--studio-border);
 }
-.st-studio-shell .st-workspace-configuration > summary { display: none; }
+.st-studio-shell .st-workspace-configuration > summary {
+  display: flex; min-height: 2.75rem; align-items: center; gap: 0.55rem;
+  padding: 0.45rem 0.85rem; border-bottom: 1px solid var(--studio-border);
+  color: var(--studio-muted); background: var(--studio-tint); cursor: pointer;
+  font-size: 0.82rem; font-weight: 650; list-style: none;
+}
+.st-studio-shell .st-workspace-configuration > summary::-webkit-details-marker { display: none; }
+.st-studio-shell .st-workspace-configuration > summary::before { content: "+"; width: 1rem; color: var(--studio-primary); font-size: 1.1rem; text-align: center; }
+.st-studio-shell .st-workspace-configuration[open] > summary::before { content: "−"; }
+.st-studio-shell .st-workspace-toolbar {
+  min-height: 0; flex-wrap: wrap; gap: 0.5rem; padding: 0.65rem 0.85rem;
+  border-bottom: 1px solid var(--studio-border); background: var(--studio-tint);
+}
+.st-studio-shell .st-workspace-toolbar::before { content: none; }
+.st-studio-shell .st-workspace-layout-feedback {
+  flex: 1 1 18rem; max-width: none; overflow: visible; overflow-wrap: anywhere;
+  white-space: normal; color: var(--studio-muted); font-size: 0.78rem; line-height: 1.4;
+}
+.st-studio-shell .st-workspace-panel-menu > summary { white-space: nowrap; }
+.st-studio-shell .st-workspace-panel-menu-list { min-width: min(30rem, calc(100vw - 2rem)); }
+.st-studio-shell .st-workspace-panel-menu-item {
+  display: grid; grid-template-columns: minmax(0, 1fr) repeat(2, minmax(0, auto));
+  align-items: center; gap: 0.35rem;
+}
+.st-studio-shell .st-workspace-panel-menu-item > button {
+  min-height: 2.5rem; padding: 0.35rem 0.5rem; font-size: 0.76rem;
+  line-height: 1.25; white-space: normal; overflow-wrap: anywhere;
+}
+.st-studio-shell .st-workspace-move-menu > summary {
+  min-height: 2.5rem; padding: 0.45rem 0.7rem; border: 1px solid var(--studio-border);
+  border-radius: 0.4rem; color: var(--studio-ink); background: var(--studio-sheet);
+  cursor: pointer; font-size: 0.8rem; white-space: nowrap;
+}
+.st-studio-shell .st-workspace-move-controls { gap: 0.55rem; padding: 0.75rem; }
+.st-studio-shell .st-workspace-move-controls label {
+  display: flex; flex: 1 1 12rem; min-width: 10rem; flex-direction: column;
+  align-items: stretch; gap: 0.25rem; color: var(--studio-muted); font-size: 0.78rem;
+}
+.st-studio-shell .st-workspace-move-controls select { width: 100%; max-width: none; min-height: 2.5rem; }
+.st-studio-shell .st-workspace-move-controls button { min-height: 2.5rem; }
 .st-workspace-configuration { flex: 0 0 auto; }
 .st-workspace-configuration > summary { padding: 0.4rem 0.7rem; cursor: pointer; color: var(--muted); font-size: 0.8rem; }
 /* The shelf always occupies the same space. Only an explicit disclosure or an
