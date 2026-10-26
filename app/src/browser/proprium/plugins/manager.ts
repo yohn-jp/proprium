@@ -50,6 +50,16 @@ export interface PluginInstallPreview {
   }[];
 }
 
+/** Metadata from a Host-pinned, signature-verified registry index. */
+export interface RegistryCatalogEntry {
+  readonly registryUrl: string;
+  readonly registryId: string;
+  readonly registryVersion: string;
+  readonly id: string;
+  readonly version: string;
+  readonly dependencies: readonly PluginDependency[];
+}
+
 export interface EnablePluginOptions {
   readonly pluginId: string;
   readonly version: string;
@@ -183,6 +193,29 @@ export class BrowserPluginManager {
 
   previewUpdate(options: InstallFromRegistryOptions & { readonly version: string }): Promise<PluginInstallPreview> {
     return this.serialize(() => this.prepareInstall(options, "update"));
+  }
+
+  /** Lists only metadata in configured, pinned registries; it never downloads plugin manifests or artifacts. */
+  registryCatalog(): Promise<readonly RegistryCatalogEntry[]> {
+    return this.serialize(async () => {
+      this.assertOpen();
+      const entries: RegistryCatalogEntry[] = [];
+      for (const trust of this.trusts.values()) {
+        const registry = await this.fetchRegistry(trust);
+        await this.enforceRegistryRevocations(registry);
+        for (const item of registry.document.plugins) {
+          entries.push(Object.freeze({
+            registryUrl: registry.url,
+            registryId: registry.document.id,
+            registryVersion: registry.document.version,
+            id: item.id,
+            version: item.version,
+            dependencies: Object.freeze(item.dependencies.map(dependency => Object.freeze({ ...dependency }))),
+          }));
+        }
+      }
+      return Object.freeze(entries.sort((left, right) => left.id.localeCompare(right.id) || compareVersions(right.version, left.version) || left.registryUrl.localeCompare(right.registryUrl)));
+    });
   }
 
   /** Confirms and consumes a previously reviewed, one-use install plan. */
