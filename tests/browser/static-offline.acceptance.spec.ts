@@ -152,12 +152,12 @@ test("static Host imports a GitHub REST commit, reloads offline, and edits with 
   await panel.locator("summary").click();
   await page.getByRole("button", { name: "信頼済みカタログを表示" }).click();
   await page.getByRole("button", { name: `${staticPluginId} ${staticPluginVersion} の署名済みプレビューを確認`, exact: true }).click();
-  const preview = page.getByRole("region", { name: "Plugin installation preview" });
+  const preview = page.getByRole("region", { name: "インストールプレビュー" });
   await expect(preview).toContainText(`${staticPluginId}@${staticPluginVersion}`);
-  await expect(preview).toContainText("Capabilities: none");
+  await expect(preview).toContainText("要求する権限: なし");
   await page.getByRole("button", { name: "ダウンロードして無効状態でインストール" }).click();
   const panelNotice = panel.getByRole("status");
-  await expect(panelNotice).toContainText("Plugin artifact bytes passed signature and digest verification");
+  await expect(panelNotice).toContainText("署名とダイジェストを検証し、無効状態でインストールしました");
   const plugin = panel.getByRole("listitem").filter({ hasText: staticPluginId }).filter({ hasText: `v${staticPluginVersion}` });
   await plugin.getByRole("button", { name: "Enable" }).click();
   await expect(panelNotice).toContainText(`${staticPluginId}@${staticPluginVersion} is enabled`);
