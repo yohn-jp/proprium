@@ -17,3 +17,9 @@ or persistence authority.
 Loom's React components are not copied into the component. Their workflows are
 represented by the Host-validated surfaces in `plugin.json`; the Host renders
 those declarations inside the existing workspace UI.
+
+`src/migration.ts` inventories the two canonical legacy Speaker files and
+compiles absent-only, byte-preserving restore operations into a normal reviewed
+ChangeSet. SPK-11 has no stable migration action in the typed action table, so
+the helper is not bound to a plugin action or exposed in a surface until the
+Host provides an explicit migration route.

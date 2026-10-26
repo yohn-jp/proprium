@@ -16,3 +16,5 @@ export {
 } from "./algorithms/speakerRuleStats.js";
 export type { Entity } from "./algorithms/types.js";
 export type { Token, Tokenizer } from "./nlp/types.js";
+export { inspectSpeakerRecovery, prepareSpeakerRecovery, SPEAKER_RECOVERY_FILES } from "./migration.js";
+export type { SpeakerRecoveryDisposition, SpeakerRecoveryFileState, SpeakerRecoveryInventoryEntry, SpeakerRecoveryPlan, PrepareSpeakerRecoveryInput } from "./migration.js";

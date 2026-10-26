@@ -887,7 +887,8 @@ function* countUpdate(input: Record<string, unknown>, context: ActionRequest, ho
     [{ id: `speaker-count-${digest.slice(0, 20)}`, kind: "replace", path: loaded.scene.filePath, expected_revision: loaded.scene.revision, content: byteArray(updated) }], []);
   const proposal = yield* propose(host, changeset);
   return { ...proposalReference(proposal), preview: { scene_id: sceneId, speaker_count: count,
-    estimated_speaker_count: pipeline.result.estimatedN, count_evidence: pipeline.result.evidence }, expected_revisions: changeset.read_set,
+    estimated_speaker_count: pipeline.result.estimatedN,
+    count_evidence: { known_floor: pipeline.result.evidence.knownFloor, vocative_census: pipeline.result.evidence.vocativeCensus } }, expected_revisions: changeset.read_set,
     provenance: pipelineProvenance(loaded, pipeline) };
 }
 

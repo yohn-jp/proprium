@@ -1,4 +1,5 @@
 import assert from "node:assert/strict";
+import { readFileSync } from "node:fs";
 import test from "node:test";
 import { parse } from "yaml";
 import type { ActionRequest, ActionResult, ChangeSet, Snapshot } from "../../../app/src/browser/proprium/authoring/types.js";
@@ -13,15 +14,65 @@ const hanakoPath = "plot/characters/hanako.yaml";
 const manuscript = "太郎は壁を見た。「行くよ。」\n花子はうなずいた。「そうね。」";
 const lines = splitIntoSentenceOffsets(manuscript).map((span) => manuscript.slice(span.start, span.end));
 const files = new Map<string, { bytes: Uint8Array; revision: string }>();
+interface FixtureScene {
+  id: string;
+  title: string;
+  scenePath: string;
+  manuscriptPath: string;
+  text: string;
+  sceneRevision: string;
+  manuscriptRevision: string;
+  metadata: string;
+}
+const hostSchemaModulePath: string = "../../../app/src/browser/proprium/authoring/schema.js";
+const hostSchema = await import(hostSchemaModulePath) as {
+  assertDescriptor(value: unknown): void;
+  assertValue(schema: never, value: unknown, phase?: string): void;
+};
+const speakerManifest = JSON.parse(readFileSync(new URL("../plugin.json", import.meta.url), "utf8")) as {
+  actions: Array<{ action_id: string; input_schema: unknown; output_schema: unknown; [key: string]: unknown }>;
+};
+const descriptors = new Map(speakerManifest.actions.map((descriptor) => [descriptor.action_id, descriptor]));
+
+function assertOutput(actionId: string, value: unknown): void {
+  const descriptor = descriptors.get(actionId);
+  assert.ok(descriptor, `missing Speaker descriptor for ${actionId}`);
+  hostSchema.assertValue(descriptor.output_schema as never, value, `Speaker ${actionId} output`);
+}
+
+function assertInput(actionId: string, value: unknown): void {
+  const descriptor = descriptors.get(actionId);
+  assert.ok(descriptor, `missing Speaker descriptor for ${actionId}`);
+  hostSchema.assertValue(descriptor.input_schema as never, value, `Speaker ${actionId} input`);
+}
 
 function bytes(value: string): Uint8Array { return new TextEncoder().encode(value); }
 function revision(name: string): string { return `revision:${name}`; }
 
-function fixture() {
+function fixture(options: { training?: boolean } = {}) {
   files.clear();
-  const metadata = `id: ${sceneId}\nname: First meeting\nspeakerCount: 2\ncustomUnknown: preserve-me\nappears: [char-taro, char-hanako]\nspeakerOverrides:\n  - dialogueText: ${JSON.stringify(lines[1])}\n    speakerEntityId: char-taro\n`;
-  files.set(scenePath, { bytes: bytes(metadata), revision: revision("scene") });
-  files.set(manuscriptPath, { bytes: bytes(manuscript), revision: revision("manuscript") });
+  let sceneConfigs: FixtureScene[];
+  if (options.training) {
+    const trainingText = Array.from({ length: 12 }, (_, index) => `太郎は言った。「セリフ${index}。」`).join("\n");
+    const trainingLines = splitIntoSentenceOffsets(trainingText).map((span, index) => ({
+      sentenceIndex: index + 1, text: trainingText.slice(span.start, span.end),
+    })).filter((row) => row.text.startsWith("「"));
+    sceneConfigs = ["scene-training-a", "scene-training-b"].map((id) => {
+      const path = `plot/volumes/v1/chapters/c1/scenes/${id}.yaml`;
+      const textPath = `plot/volumes/v1/chapters/c1/scenes/${id}.md`;
+      const metadata = `id: ${id}\nname: ${id}\nspeakerCount: 2\nappears: [char-taro, char-hanako]\nspeakerOverrides:\n${trainingLines.map(({ sentenceIndex, text }) => `  - sentenceIndex: ${sentenceIndex}\n    textHash: ${hashDialogueText(text)}\n    dialogueText: ${JSON.stringify(text)}\n    speakerEntityId: char-taro`).join("\n")}\n`;
+      return { id, title: id, scenePath: path, manuscriptPath: textPath, text: trainingText,
+        sceneRevision: revision(`${id}-scene`), manuscriptRevision: revision(`${id}-manuscript`), metadata };
+    });
+  } else {
+    const metadata = `id: ${sceneId}\nname: First meeting\nspeakerCount: 2\ncustomUnknown: preserve-me\nappears: [char-taro, char-hanako]\nspeakerOverrides:\n  - dialogueText: ${JSON.stringify(lines[1])}\n    speakerEntityId: char-taro\n`;
+    sceneConfigs = [{ id: sceneId, title: "First meeting", scenePath, manuscriptPath, text: manuscript,
+      sceneRevision: revision("scene"), manuscriptRevision: revision("manuscript"), metadata }];
+  }
+  for (const scene of sceneConfigs) {
+    files.set(scene.scenePath, { bytes: bytes(scene.metadata), revision: scene.sceneRevision });
+    files.set(scene.manuscriptPath, { bytes: bytes(scene.text), revision: scene.manuscriptRevision });
+  }
   files.set(taroPath, { bytes: bytes("id: char-taro\ntype: character\n"), revision: revision("taro") });
   files.set(hanakoPath, { bytes: bytes("id: char-hanako\ntype: character\n"), revision: revision("hanako") });
   files.set("meta/proprium/plugins/proprium.speaker/corrections.jsonl", {
@@ -36,9 +87,9 @@ function fixture() {
   function tree(parentId: string | null) {
     const volume = { id: "v1", kind: "volume" as const, title: "Volume 1", parent_id: null, metadata_path: "plot/volumes/v1/volume.yaml", metadata_revision: revision("volume") };
     const chapter = { id: "c1", kind: "chapter" as const, title: "Chapter 1", parent_id: "v1", metadata_path: "plot/volumes/v1/chapters/c1/chapter.yaml", metadata_revision: revision("chapter") };
-    const scene = { id: sceneId, kind: "scene" as const, title: "First meeting", parent_id: "c1", metadata_path: scenePath,
-      metadata_revision: revision("scene"), manuscript_path: manuscriptPath, order: 1 };
-    const items = parentId === null ? [volume] : parentId === "v1" ? [chapter] : parentId === "c1" ? [scene] : [];
+    const scenes = sceneConfigs.map((scene, order) => ({ id: scene.id, kind: "scene" as const, title: scene.title, parent_id: "c1",
+      metadata_path: scene.scenePath, metadata_revision: scene.sceneRevision, manuscript_path: scene.manuscriptPath, order: order + 1 }));
+    const items = parentId === null ? [volume] : parentId === "v1" ? [chapter] : parentId === "c1" ? scenes : [];
     return { parent_id: parentId, tree_revision: "tree-1", items, next_cursor: null, diagnostics: [] };
   }
 
@@ -49,12 +100,14 @@ function fixture() {
     }
     const value = (() => {
       if (pluginId === "proprium.narrative" && actionId === "proprium.narrative.hierarchy.tree") return tree(input.parent_id as string | null);
-      if (pluginId === "proprium.narrative" && actionId === "proprium.narrative.scene.context") return {
-        scene_id: sceneId, title: "First meeting", volume: { id: "v1", title: "Volume 1" }, chapter: { id: "c1", title: "Chapter 1" },
-        manuscript_path: manuscriptPath, metadata_revision: revision("scene"), manuscript_revision: revision("manuscript"), diagnostics: [],
-      };
+      if (pluginId === "proprium.narrative" && actionId === "proprium.narrative.scene.context") {
+        const selected = sceneConfigs.find((scene) => scene.id === input.scene_id);
+        if (!selected) throw Object.assign(new Error("missing scene"), { code: "scene_not_found" });
+        return { scene_id: selected.id, title: selected.title, volume: { id: "v1", title: "Volume 1" }, chapter: { id: "c1", title: "Chapter 1" },
+          manuscript_path: selected.manuscriptPath, metadata_revision: selected.sceneRevision, manuscript_revision: selected.manuscriptRevision, diagnostics: [] };
+      }
       if (pluginId === "proprium.knowledge" && actionId === "knowledge.scene.context") return {
-        sceneId, appears: ["char-taro", "char-hanako"], povId: "char-taro",
+        sceneId: input.sceneId, appears: ["char-taro", "char-hanako"], povId: "char-taro",
         entityCards: [
           { id: "char-taro", type: "character", name: "太郎", aliases: [], raw: {}, filePath: taroPath, fileRevision: revision("taro") },
           { id: "char-hanako", type: "character", name: "花子", aliases: [], raw: { voice_profiles: [{ id: "calm", firstPerson: ["私"], unknown: "preserve" }] }, filePath: hanakoPath, fileRevision: revision("hanako") },
@@ -117,6 +170,7 @@ function fixture() {
 }
 
 async function invoke(actionId: string, input: Record<string, unknown>, options: { idempotencyKey?: string; setup?: ReturnType<typeof fixture> } = {}) {
+  assertInput(actionId, input);
   const state = options.setup ?? fixture();
   guest.initialize({ pluginId: "proprium.speaker", version: "0.1.0", workspaceId: state.scope.workspace_id });
   const request: ActionRequest = {
@@ -141,12 +195,66 @@ async function invoke(actionId: string, input: Record<string, unknown>, options:
       }
       const result = message as unknown as ActionResult;
       if (!result.ok) throw Object.assign(new Error(result.error.message), { code: result.error.code });
+      assertOutput(actionId, result.value);
       return { value: result.value as Record<string, unknown>, state };
     }
   } finally {
     guest.dispose();
   }
 }
+
+test("all Speaker action descriptors pass the adopted bounded-schema validator", () => {
+  assert.equal(speakerManifest.actions.length, 12);
+  for (const descriptor of speakerManifest.actions) hostSchema.assertDescriptor(descriptor as never);
+});
+
+test("scene, queue, preview, count, dialogue, profile, and gate actions return schema-valid values", async () => {
+  const { value: inventory } = await invoke("speaker.scenes.list", {});
+  assert.equal((inventory.scenes as Array<Record<string, unknown>>)[0]?.scene_id, sceneId);
+
+  const { value: attribution } = await invoke("speaker.attribute", { scene_id: sceneId });
+  const first = (attribution.attributions as Array<Record<string, unknown>>)[0]!;
+  const { value: queue } = await invoke("speaker.review.queue", { limit: 50 });
+  assert.ok(Array.isArray(queue.rows));
+
+  const { value: preview } = await invoke("speaker.override", {
+    mode: "preview-group", scene_id: sceneId, sentence_index: first.sentence_index,
+    dialogue_text: first.text, text_hash: first.text_hash, speaker_entity_id: null,
+  });
+  assert.ok(Array.isArray(preview.affected_lines));
+
+  const countKey = "count-schema-key";
+  const { value: countProposal } = await invoke("speaker.count.update", {
+    scene_id: sceneId, speaker_count: 3, idempotency_key: countKey,
+  }, { idempotencyKey: countKey });
+  assert.equal((countProposal.preview as Record<string, unknown>).speaker_count, 3);
+
+  const { value: dialogue } = await invoke("speaker.dialogue.list", { character_id: "char-taro", limit: 20 });
+  assert.ok(Array.isArray(dialogue.lines));
+  const { value: profiles } = await invoke("speaker.voice.profiles", {});
+  assert.ok(Array.isArray(profiles.fingerprints));
+  const { value: gates, state: gateState } = await invoke("speaker.ruleGates", {});
+  assert.equal(gates.exists, false);
+  gateState.cache.set("speaker.ruleGates", { version: 1,
+    gates: { "attribution-verb": { action: "demote", measuredPrecision: 0.5, sampleSize: 20 } },
+    provenance: { snapshot: gateState.snapshot, reason: "schema-fixture" } });
+  const { value: populatedGates } = await invoke("speaker.ruleGates", {}, { setup: gateState });
+  assert.equal((populatedGates.gates as Record<string, { action: string }>)?.["attribution-verb"]?.action, "demote");
+});
+
+test("retraining emits a bounded held-out model candidate without proposing during dry run", async () => {
+  const setup = fixture({ training: true });
+  const { value: corpus } = await invoke("speaker.attribute", { scene_id: "scene-training-a" }, { setup });
+  assert.equal((corpus.attributions as unknown[]).length, 12);
+  const key = "training-schema-key";
+  const { value, state } = await invoke("speaker.retraining.run", {
+    dry_run: true, idempotency_key: key,
+  }, { idempotencyKey: key, setup });
+  assert.ok((value.train_example_count as number) >= 10);
+  assert.equal(value.adoption_proposal, null);
+  assert.equal(state.proposals.length, 0);
+  assert.deepEqual(value.holdout_scene_ids, ["scene-training-a"]);
+});
 
 test("guest attribution uses explicit Narrative and Knowledge contracts and returns exact UTF-16 evidence", async () => {
   const { value, state } = await invoke("speaker.attribute", { scene_id: sceneId });
