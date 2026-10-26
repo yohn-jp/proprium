@@ -211,6 +211,7 @@ export function HostApp(): ReactElement {
 
   const refresh = useCallback(async (targetGit: BrowserLocalGit, targetWorkspace: RecentWorkspace): Promise<void> => {
     const next = await loadWorkspaceState(targetGit);
+    if (gitRef.current !== targetGit || workspaceRef.current?.identity.localWorkspaceId !== targetWorkspace.identity.localWorkspaceId) return;
     setStatus(next.status);
     setFiles(next.files);
     setHistory(next.history);
@@ -500,6 +501,7 @@ export function HostApp(): ReactElement {
     setMessage(null);
     try {
       const read = await git.read(path);
+      if (gitRef.current !== git || workspaceRef.current?.identity.localWorkspaceId !== workspace.identity.localWorkspaceId) return;
       const liveFile = currentFileRef.current;
       if (liveFile?.dirty && (!discardConfirmed || liveFile.path !== initialFile?.path || liveFile.text !== initialFile?.text) &&
           !window.confirm("The editor changed while the file was loading. Discard the newer text and continue?")) return;
@@ -522,6 +524,7 @@ export function HostApp(): ReactElement {
     setBusy(true);
     try {
       const read = await git.read(path);
+      if (gitRef.current !== git || workspaceRef.current?.identity.localWorkspaceId !== workspace.identity.localWorkspaceId) return;
       const liveFile = currentFileRef.current;
       if (liveFile?.dirty && (!discardConfirmed || liveFile.path !== initialFile?.path || liveFile.text !== initialFile?.text) &&
           !window.confirm("The editor changed while the new file was loading. Discard the newer text and continue?")) return;
@@ -562,6 +565,7 @@ export function HostApp(): ReactElement {
       if (savingFile.text === null) return;
       const data = new TextEncoder().encode(savingFile.text);
       const revision = await git.write(savingFile.path, data, savingFile.revision);
+      if (gitRef.current !== git || workspaceRef.current?.identity.localWorkspaceId !== workspace?.identity.localWorkspaceId) return;
       const latest = currentFileRef.current;
       if (latest?.path === savingFile.path && latest.dirty && latest.text !== savingFile.text) {
         setCurrentFile({ ...latest, data, revision, dirty: true });
