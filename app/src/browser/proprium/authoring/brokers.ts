@@ -231,6 +231,10 @@ export class DerivedCacheBroker {
     this.validateKey(pluginId, key);
     const storageKey = cacheKey(key); const record = await this.store.getCache(storageKey);
     if (!record) return { found: false };
+    if (record.plugin_id !== pluginId || record.key !== storageKey || record.bytes !== jsonSize(record.value)) {
+      await this.store.evictCache(pluginId, storageKey);
+      return { found: false };
+    }
     await this.store.touchCache(storageKey, this.now());
     return { found: true, value: structuredClone(record.value) };
   }
@@ -272,7 +276,8 @@ export class PluginPreferencesBroker {
   async read(pluginId: string, userPartition: string, key: string, schemaVersion: number): Promise<{ found: boolean; value?: unknown }> {
     validateIdentifier(pluginId, "plugin"); validateIdentifier(userPartition, "user partition"); validateIdentifier(key, "preference key");
     const record = await this.store.getPreference(preferenceKey(pluginId, userPartition, key));
-    if (!record || record.schema_version !== schemaVersion) return { found: false };
+    if (!record || record.plugin_id !== pluginId || record.user_partition !== userPartition || record.preference_key !== key ||
+        record.schema_version !== schemaVersion || !this.validate(pluginId, key, schemaVersion, record.value)) return { found: false };
     return { found: true, value: structuredClone(record.value) };
   }
   async write(pluginId: string, userPartition: string, key: string, schemaVersion: number, value: unknown, gesture: object): Promise<{ stored: true }> {
@@ -291,6 +296,7 @@ export class PluginPreferencesBroker {
 
 export class ArtifactBroker {
   private queue: Promise<unknown> = Promise.resolve();
+  private readonly verified = new Set<string>();
   constructor(private readonly store: BrokerStore, private readonly now = () => Date.now(), private readonly id = randomArtifactId) {}
   create(pluginId: string, input: { media_type: string; filename: string; scope: Scope; snapshot: Snapshot }): Promise<{ artifact_id: string; max_bytes: number; max_chunk_bytes: number }> {
     return this.serial(async () => {
@@ -333,6 +339,7 @@ export class ArtifactBroker {
       const actual = await sha256(bytes);
       if (actual !== expectedSha256) { await this.store.deleteArtifact(artifactId); throw new BrokerError("invalid_input", "Artifact digest does not match its staged bytes"); }
       await this.store.putArtifact({ ...record, state: "sealed", sha256: actual });
+      this.verified.add(artifactId);
       return { artifact_id: artifactId, media_type: record.media_type, filename: record.filename, scope: record.scope, snapshot: record.snapshot, total_bytes: totalBytes, sha256: actual };
     });
   }
@@ -349,12 +356,14 @@ export class ArtifactBroker {
     return this.serial(async () => {
       const record = await this.requireOwned(pluginId, artifactId);
       if (record.state !== "sealed" || !proposalId) throw new BrokerError("invalid_input", "Only sealed artifacts can be retained by a proposal");
+      await this.verifySealed(record);
       await this.store.putArtifact({ ...record, proposal_id: proposalId });
     });
   }
   async readSealedChunk(pluginId: string, artifactId: string, offset: number, length: number): Promise<{ bytes: Uint8Array; total_bytes: number; sha256: string; next_offset: number | null }> {
     const record = await this.requireOwned(pluginId, artifactId);
     if (record.state !== "sealed" || !record.sha256) throw new BrokerError("file_not_found", "Sealed artifact is unavailable");
+    await this.verifySealed(record);
     if (!Number.isSafeInteger(offset) || offset < 0 || !Number.isSafeInteger(length) || length < 0 || length > CHUNK_LIMIT || offset > record.received_bytes) throw new BrokerError("invalid_input", "Artifact byte range is invalid");
     const parts = await this.store.listChunks(artifactId); const result = new Uint8Array(Math.min(length, record.received_bytes - offset));
     let cursor = offset; let written = 0;
@@ -375,6 +384,25 @@ export class ArtifactBroker {
     const item = await this.store.getArtifact(id);
     if (!item || item.plugin_id !== plugin) throw new BrokerError("file_not_found", "Artifact is unavailable in this plugin scope");
     return item;
+  }
+  private async verifySealed(record: ArtifactRecord): Promise<void> {
+    if (this.verified.has(record.artifact_id)) return;
+    if (!record.sha256) throw new BrokerError("storage_unknown", "Sealed artifact digest is missing");
+    const chunks = await this.store.listChunks(record.artifact_id);
+    if (chunks.length !== record.next_sequence || chunks.some((chunk, index) => chunk.sequence !== index)) throw new BrokerError("storage_unknown", "Sealed artifact chunk journal is incomplete");
+    let bytes: Uint8Array;
+    try {
+      bytes = new Uint8Array(record.received_bytes); let position = 0;
+      for (const chunk of chunks) {
+        if (await sha256(chunk.bytes) !== chunk.sha256 || position + chunk.bytes.byteLength > bytes.byteLength) throw new BrokerError("storage_unknown", "Sealed artifact chunk digest is invalid");
+        bytes.set(chunk.bytes, position); position += chunk.bytes.byteLength;
+      }
+      if (position !== record.received_bytes || await sha256(bytes) !== record.sha256) throw new BrokerError("storage_unknown", "Sealed artifact bytes do not match their receipt digest");
+    } catch (error) {
+      if (error instanceof BrokerError) throw error;
+      throw new BrokerError("storage_unknown", "Sealed artifact could not be verified");
+    }
+    this.verified.add(record.artifact_id);
   }
   private serial<T>(work: () => Promise<T>): Promise<T> {
     const next = this.queue.then(work, work); this.queue = next.then(() => undefined, () => undefined); return next;

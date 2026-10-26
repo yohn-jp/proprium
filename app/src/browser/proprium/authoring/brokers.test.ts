@@ -75,3 +75,19 @@ test("artifact seal mismatch removes the incomplete output", async () => {
   await assert.rejects(() => broker.readSealedChunk("proprium.publishing", created.artifact_id, 0, 1),
     (error: unknown) => error instanceof BrokerError && error.code === "file_not_found");
 });
+
+test("sealed artifact corruption after reload is detected before it can enter a receipt", async () => {
+  const store = new MemoryBrokerStore(); const broker = new ArtifactBroker(store);
+  const created = await broker.create("proprium.publishing", { media_type: "text/plain", filename: "novel.txt", scope, snapshot });
+  const bytes = new TextEncoder().encode("original bytes");
+  const digest = createHash("sha256").update(bytes).digest("hex");
+  await broker.append("proprium.publishing", created.artifact_id, 0, [...bytes]);
+  await broker.seal("proprium.publishing", created.artifact_id, digest, bytes.length);
+  const metadata = await store.getArtifact(created.artifact_id);
+  assert.ok(metadata);
+  const changed = Uint8Array.from(bytes); changed[0] ^= 1;
+  await store.putArtifact(metadata, { key: `${created.artifact_id}:00000000`, artifact_id: created.artifact_id, sequence: 0, sha256: digest, bytes: changed });
+  const afterReload = new ArtifactBroker(store);
+  await assert.rejects(() => afterReload.retainForProposal("proprium.publishing", created.artifact_id, "proposal-2"),
+    (error: unknown) => error instanceof BrokerError && error.code === "storage_unknown");
+});
