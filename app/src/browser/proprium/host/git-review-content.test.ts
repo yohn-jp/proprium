@@ -5,6 +5,7 @@ import { allChangedPathsReviewed, decodeGitText } from "./git-review-content.js"
 test("Git review decodes complete UTF-8 text and preserves line endings", () => {
   const bytes = new TextEncoder().encode("題名\r\n本文\n");
   assert.equal(decodeGitText(bytes), "題名\r\n本文\n");
+  assert.equal(decodeGitText(new Uint8Array([0xef, 0xbb, 0xbf, 0x61])), "\ufeffa");
 });
 
 test("Git review marks invalid UTF-8 and NUL-bearing content as binary", () => {

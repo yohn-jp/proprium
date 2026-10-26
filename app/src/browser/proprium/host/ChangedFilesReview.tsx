@@ -60,12 +60,12 @@ export function ChangedFilesReview({ git, head, refreshKey, busy, canCommit, onR
   </section>;
 
   if (error) return <section className="git-review" aria-labelledby="changed-files-heading">
-    <div className="git-review-heading"><div><p className="eyebrow">LOCAL GIT</p><h3 id="changed-files-heading">Changed files</h3></div></div>
+    <div className="git-review-heading"><div><p className="eyebrow">LOCAL GIT</p><h3 id="changed-files-heading">Changed files</h3></div><button type="button" disabled={busy} onClick={() => setManualRefresh((value) => value + 1)}>Refresh diff</button></div>
     <p className="git-review-error" role="alert">Could not load the changed-file review: {error}</p>
   </section>;
 
   if (!changes?.length) return <section className="git-review" aria-labelledby="changed-files-heading">
-    <div className="git-review-heading"><div><p className="eyebrow">LOCAL GIT</p><h3 id="changed-files-heading">Changed files</h3></div></div>
+    <div className="git-review-heading"><div><p className="eyebrow">LOCAL GIT</p><h3 id="changed-files-heading">Changed files</h3></div><button type="button" disabled={busy} onClick={() => setManualRefresh((value) => value + 1)}>Refresh diff</button></div>
     <p className="git-review-empty">There are no worktree changes to review.</p>
   </section>;
 
@@ -97,7 +97,7 @@ export function ChangedFilesReview({ git, head, refreshKey, busy, canCommit, onR
           <span>{reviewed.has(selected.path) ? "Reviewed" : "Not reviewed"}</span>
         </header>
         {isBinary
-          ? <p className="git-review-binary" role="status">Binary content · {beforeBytes.byteLength} bytes before, {afterBytes.byteLength} bytes after. Text decoding is unavailable, so the original bytes are shown as binary and are not converted.</p>
+          ? <p className="git-review-binary" role="status">Binary content · {beforeBytes.byteLength} bytes before, {afterBytes.byteLength} bytes after. This file is not rendered as text; no decoding or conversion was applied.</p>
           : <TextDiff before={before!} after={after!} beforeLabel="Local commit" afterLabel="Worktree" />}
         <button type="button" className="git-review-mark" disabled={busy} onClick={() => markReviewed(selected.path)}>
           {reviewed.has(selected.path) ? "Reviewed" : "Mark this file reviewed"}
