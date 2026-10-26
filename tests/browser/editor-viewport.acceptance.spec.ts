@@ -12,8 +12,14 @@ test("editor controls leave usable manuscript space on a laptop and mobile viewp
     branch: "main", localWorkspaceId: `editor-viewport-${crypto.randomUUID()}`,
   }, { "chapter.md": text }), text);
   await chooseFile(page, "chapter.md");
-  await expect(page.getByRole("button", { name: "Save draft", exact: true })).toHaveCount(1);
-  await expect(page.getByRole("button", { name: "Delete file", exact: true })).toHaveCount(1);
+  await expect(page.getByRole("button", { name: "端末に保存", exact: true })).toHaveCount(1);
+  const documentMenu = page.locator(".host-document-menu");
+  const documentMenuSummary = documentMenu.locator(":scope > summary");
+  await expect(documentMenuSummary).toHaveText("文書の操作");
+  await documentMenuSummary.click();
+  await expect(page.getByRole("button", { name: "この文書を書き出す", exact: true })).toBeVisible();
+  await expect(page.getByRole("button", { name: "文書を削除", exact: true })).toBeVisible();
+  await documentMenuSummary.click();
   const geometry = await page.locator(".cm-editor").evaluate(element => {
     const rect = element.getBoundingClientRect();
     let top = Math.max(0, rect.top), bottom = Math.min(innerHeight, rect.bottom);
@@ -60,7 +66,7 @@ test("editor controls leave usable manuscript space on a laptop and mobile viewp
     await page.getByRole("button", { name: "集中を終了", exact: true }).click();
   }
   await expect(page.locator(".cm-content .cm-line").first()).toHaveText("原稿の本文 1。");
-  await expect(page.getByRole("button", { name: "Save draft", exact: true })).toBeDisabled();
+  await expect(page.getByRole("button", { name: "端末に保存", exact: true })).toBeDisabled();
   if (!mobile) {
     const arrangement = page.locator(".st-workspace-configuration");
     await arrangement.locator(":scope > summary").click();

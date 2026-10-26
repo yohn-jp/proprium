@@ -115,12 +115,12 @@ test("selection, supporting copy and disabled editor controls remain readable in
     }, workspace);
     await chooseFile(page, "chapter.md");
     await expectReadable(page.locator(".durability-badge.is-current"), `${testInfo.project.name} ${theme} current durability status`);
-    const saveDraft = page.getByRole("button", { name: "Save draft", exact: true });
+    const saveDraft = page.getByRole("button", { name: "端末に保存", exact: true });
     await expect(saveDraft).toBeDisabled();
-    await expectReadable(saveDraft, `${testInfo.project.name} ${theme} disabled Save draft`);
-    const workspaces = page.getByRole("button", { name: "Workspaces", exact: true });
+    await expectReadable(saveDraft, `${testInfo.project.name} ${theme} disabled 端末に保存`);
+    const workspaces = page.getByRole("button", { name: "作品一覧", exact: true });
     await workspaces.hover();
-    await expectReadable(workspaces, `${testInfo.project.name} ${theme} hovered Workspaces`);
+    await expectReadable(workspaces, `${testInfo.project.name} ${theme} hovered 作品一覧`);
     await page.mouse.move(0, 0);
     if (!isMobile) {
       await expectReadable(page.locator(".st-studio-footer > span").first(), `${testInfo.project.name} ${theme} footer text`);
