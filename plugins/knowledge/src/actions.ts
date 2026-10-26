@@ -8,10 +8,11 @@ import {
   getThreadsOverview, getVolumeTree, getWorldStateAtScene, listRuleStateEvents,
 } from "./domain/index.js";
 import type { GuestHost, HostCall, Handler } from "../../shared/guest.js";
-import { invokeAction } from "../../shared/operations.js";
-import type { ActionRequest } from "../../../app/src/browser/proprium/authoring/types.js";
+import { HOST_OPERATIONS, invokeAction } from "../../shared/operations.js";
+import type { ActionRequest, Scope, Snapshot } from "../../../app/src/browser/proprium/authoring/types.js";
 import { attachSceneManuscripts, createSnapshotReader, readKnowledgeSnapshot, readOptionalPath, type LoadedKnowledgeSnapshot, type StoryFile } from "./snapshot.js";
 import { sha256Hex } from "./sha256.js";
+import { seriesBindingPreferenceKey } from "./seriesBindingFingerprint.js";
 import type { StoryEntity, StoryEntityType } from "./domain/types.js";
 import { buildMentionDictionary, findMentions } from "./domain/mentionIndex.js";
 import { appendProposedTextToNotes, collectNotesPlainTexts, normalizeNotes } from "./notes.js";
@@ -1337,13 +1338,19 @@ function legacyWorkBinding(rows: readonly Record<string, unknown>[], repositoryI
   return matches[0];
 }
 
-function unresolvedLegacyBindings(rows: readonly Record<string, unknown>[]) {
-  return rows.filter((row) => row.repositoryId === undefined || row.repositoryId === null)
+function unresolvedLegacyBindings(rows: readonly Record<string, unknown>[], series: readonly Record<string, unknown>[] = []) {
+  const unresolved = rows.filter((row) => row.repositoryId === undefined || row.repositoryId === null || typeof row.projectId === "string")
     .map((row) => ({ legacyProjectId: row.projectId ?? null, seriesId: row.seriesId ?? null }));
+  for (const row of series) {
+    if (typeof row.bibleProjectId === "string") unresolved.push({ legacyProjectId: row.bibleProjectId, seriesId: row.id ?? null });
+    if (typeof row.projectId === "string") unresolved.push({ legacyProjectId: row.projectId, seriesId: row.id ?? null });
+  }
+  return unresolved;
 }
 
 function* readSeriesBinding(context: ActionRequest, host: GuestHost): Generator<HostCall, {
   binding: Record<string, unknown> | null;
+  bibleRepositoryId?: number;
   bindingRevision: string | null;
   requiresAuthorReview: boolean;
   unresolvedLegacyBindings?: Array<{ legacyProjectId: unknown; seriesId: unknown }>;
@@ -1356,16 +1363,20 @@ function* readSeriesBinding(context: ActionRequest, host: GuestHost): Generator<
       kind: "metadata_reconciliation_required",
     });
     const match = legacyWorkBinding(settings.bindings, context.scope.repository_id);
-    const unresolved = unresolvedLegacyBindings(settings.bindings);
+    const unresolved = unresolvedLegacyBindings(settings.bindings, settings.series);
     if (!match) return { binding: null, bindingRevision: settings.file.revision, requiresAuthorReview: unresolved.length > 0, ...(unresolved.length ? { unresolvedLegacyBindings: unresolved } : {}) };
     const row = settings.series.find((item) => item.id === match.seriesId);
     if (!row) throw error("file_not_found", `Legacy series ${String(match.seriesId)} is missing`, { kind: "series_not_found", seriesId: match.seriesId });
     const id = row.bibleRepositoryId;
     const valid = positiveRepositoryId(id);
-    const requiresAuthorReview = !valid || typeof row.bibleProjectId === "string" || typeof match.projectId === "string";
+    const unresolvedForMatch = [
+      ...(typeof row.bibleProjectId === "string" ? [{ legacyProjectId: row.bibleProjectId, seriesId: row.id }] : []),
+      ...(typeof match.projectId === "string" ? [{ legacyProjectId: match.projectId, seriesId: row.id }] : []),
+    ];
+    const requiresAuthorReview = !valid || unresolvedForMatch.length > 0;
     return {
-      binding: { ...match, ...(valid ? { bibleRepositoryId: id } : {}) }, bindingRevision: settings.file.revision, requiresAuthorReview,
-      ...(typeof row.bibleProjectId === "string" ? { unresolvedLegacyBindings: [{ legacyProjectId: row.bibleProjectId, seriesId: row.id }] } : {}),
+      binding: { ...match }, ...(valid ? { bibleRepositoryId: id } : {}), bindingRevision: settings.file.revision, requiresAuthorReview,
+      ...(unresolvedForMatch.length ? { unresolvedLegacyBindings: unresolvedForMatch } : {}),
     };
   }
   if (!bindingFile) return {
@@ -1376,17 +1387,21 @@ function* readSeriesBinding(context: ActionRequest, host: GuestHost): Generator<
   const id = binding.bibleRepositoryId;
   const valid = id === undefined || positiveRepositoryId(id);
   if (!valid) throw error("unsupported_format", "Series binding bibleRepositoryId must be a positive GitHub numeric ID", { path: SERIES_BINDING_PATH });
-  const legacyId = binding.bibleProjectId;
-  return { binding, bindingRevision: bindingFile.revision, requiresAuthorReview: typeof legacyId === "string" };
+  const unresolved = [binding.bibleProjectId, binding.projectId]
+    .filter((legacyId): legacyId is string => typeof legacyId === "string")
+    .map((legacyProjectId) => ({ legacyProjectId, seriesId: binding.seriesId }));
+  return {
+    binding, ...(positiveRepositoryId(id) ? { bibleRepositoryId: id } : {}), bindingRevision: bindingFile.revision,
+    requiresAuthorReview: unresolved.length > 0, ...(unresolved.length ? { unresolvedLegacyBindings: unresolved } : {}),
+  };
 }
 
 function* seriesBindingGet(_input: Record<string, unknown>, context: ActionRequest, host: GuestHost) {
   assertKeys(_input, []);
   const result = yield* readSeriesBinding(context, host);
-  const bibleRepositoryId = result.binding?.bibleRepositoryId;
   return {
     binding: result.binding,
-    ...(positiveRepositoryId(bibleRepositoryId) ? { bibleRepositoryId } : {}),
+    ...(positiveRepositoryId(result.bibleRepositoryId) ? { bibleRepositoryId: result.bibleRepositoryId } : {}),
     registryRevision: result.bindingRevision,
     workSnapshot: context.snapshot,
     requiresAuthorReview: result.requiresAuthorReview,
@@ -1408,7 +1423,7 @@ function* seriesBindingPropose(input: Record<string, unknown>, context: ActionRe
     if (input.expectedWorkRevision !== settings.file.revision) throw error("snapshot_stale", "Legacy work series registry changed after selection", { path: settings.file.path, expectedWorkRevision: input.expectedWorkRevision, actualWorkRevision: settings.file.revision });
     const series = settings.series.find((row) => row.id === seriesId);
     if (!series) throw error("file_not_found", `Series ${seriesId} was not found in the active legacy registry`, { kind: "series_not_found", seriesId });
-    if ((typeof series.bibleProjectId === "string" && !positiveRepositoryId(series.bibleRepositoryId)) || typeof series.projectId === "string") {
+    if (typeof series.bibleProjectId === "string" || typeof series.projectId === "string") {
       throw error("author_review_required", "Legacy project identity must be resolved to a verified GitHub repository ID before binding", {
         seriesId, legacyProjectId: series.bibleProjectId ?? series.projectId,
       });
@@ -1428,8 +1443,7 @@ function* seriesBindingPropose(input: Record<string, unknown>, context: ActionRe
       reads: [{ path: settings.file.path, revision: settings.file.revision, content: settings.file.content }],
       writes: [{ path: settings.file.path, expected_revision: settings.file.revision, content: seriesFileContent(nextRaw, settings.file.path) }],
     });
-    const binding = { seriesId, ...(positiveRepositoryId(series.bibleRepositoryId) ? { bibleRepositoryId: series.bibleRepositoryId } : {}) };
-    return { binding, proposalId: submitted.proposalId, preview: submitted.preview };
+    return { binding: bindingRow, proposalId: submitted.proposalId, preview: submitted.preview };
   }
 
   const reader = createSnapshotReader(context, host);
@@ -1442,11 +1456,11 @@ function* seriesBindingPropose(input: Record<string, unknown>, context: ActionRe
       (!positiveRepositoryId(registrySeries.bibleRepositoryId) || input.bibleRepositoryId !== registrySeries.bibleRepositoryId)) {
     throw error("conflict", "Requested Bible repository does not match the active series registry", { seriesId, requestedRepositoryId: input.bibleRepositoryId, registryRepositoryId: registrySeries.bibleRepositoryId ?? null });
   }
-  if (typeof registrySeries.bibleProjectId === "string" && !positiveRepositoryId(registrySeries.bibleRepositoryId)) {
-    throw error("author_review_required", "Legacy Bible project identity must be resolved to a verified GitHub repository ID before binding", { seriesId, legacyBibleProjectId: registrySeries.bibleProjectId });
+  if (typeof registrySeries.bibleProjectId === "string" || typeof registrySeries.projectId === "string") {
+    throw error("author_review_required", "Legacy Bible project identity must be resolved to a verified GitHub repository ID before binding", { seriesId, legacyBibleProjectId: registrySeries.bibleProjectId ?? registrySeries.projectId });
   }
   const oldBinding = oldFile ? parseYamlRecord(oldFile, "series_binding") : {};
-  if (typeof oldBinding.bibleProjectId === "string") throw error("author_review_required", "Legacy Bible project identity must be resolved through the Host registered-source selector before binding", { seriesId, legacyBibleProjectId: oldBinding.bibleProjectId });
+  if (typeof oldBinding.bibleProjectId === "string" || typeof oldBinding.projectId === "string") throw error("author_review_required", "Legacy Bible project identity must be resolved through the Host registered-source selector before binding", { seriesId, legacyBibleProjectId: oldBinding.bibleProjectId ?? oldBinding.projectId });
   const bibleRepositoryId = positiveRepositoryId(input.bibleRepositoryId) ? input.bibleRepositoryId
     : positiveRepositoryId(oldBinding.bibleRepositoryId) ? oldBinding.bibleRepositoryId
       : registrySeries && positiveRepositoryId(registrySeries.bibleRepositoryId) ? registrySeries.bibleRepositoryId : undefined;
@@ -1458,6 +1472,168 @@ function* seriesBindingPropose(input: Record<string, unknown>, context: ActionRe
     reads, writes: [{ path: SERIES_BINDING_PATH, expected_revision: actualRevision, content: YAML.stringify(binding) }],
   });
   return { binding, proposalId: submitted.proposalId, preview: submitted.preview };
+}
+
+interface RegisteredSeriesSource {
+  workspace_id: string;
+  repository_id: number | null;
+  branch: string;
+  snapshot_id: string;
+}
+
+function registeredSeriesSource(value: unknown): RegisteredSeriesSource {
+  if (!isRecord(value) || typeof value.workspace_id !== "string" || !value.workspace_id ||
+      !(value.repository_id === null || positiveRepositoryId(value.repository_id)) ||
+      typeof value.branch !== "string" || !value.branch || typeof value.snapshot_id !== "string" || !value.snapshot_id) {
+    throw error("unsupported_format", "Host series source preference is malformed", { kind: "invalid_series_source_preference" });
+  }
+  const unknown = Object.keys(value).find((key) => !["workspace_id", "repository_id", "branch", "snapshot_id"].includes(key));
+  if (unknown) throw error("unsupported_format", "Host series source preference contains unsupported fields", { kind: "invalid_series_source_preference", field: unknown });
+  return value as unknown as RegisteredSeriesSource;
+}
+
+function validForeignLease(value: unknown, selected: RegisteredSeriesSource): value is { scope: Scope; snapshot: Snapshot } {
+  if (!isRecord(value) || !isRecord(value.scope) || !isRecord(value.snapshot)) return false;
+  const scope = value.scope;
+  const snapshot = value.snapshot;
+  return scope.workspace_id === selected.workspace_id && scope.repository_id === selected.repository_id &&
+    scope.branch === selected.branch && typeof scope.generation === "string" && !!scope.generation &&
+    snapshot.id === selected.snapshot_id && typeof snapshot.worktree_generation === "string" && !!snapshot.worktree_generation &&
+    (snapshot.local_commit === null || typeof snapshot.local_commit === "string") &&
+    (snapshot.draft_generation === null || typeof snapshot.draft_generation === "string");
+}
+
+interface OverlaySourceRecord {
+  source: "work" | "bible";
+  entity: StoryEntity;
+  scope: Scope;
+  snapshot: Snapshot;
+  path: string;
+  revision: string;
+}
+
+function overlayEntityRecord(source: "work" | "bible", entity: StoryEntity, request: ActionRequest, story: LoadedKnowledgeSnapshot): OverlaySourceRecord {
+  const revision = story.revisions.get(entity.filePath);
+  if (!revision) throw error("file_not_found", `Overlay entity source revision is missing: ${entity.filePath}`, { source, path: entity.filePath, snapshot: request.snapshot });
+  return { source, entity, scope: request.scope, snapshot: request.snapshot, path: entity.filePath, revision };
+}
+
+function overlayLinkKey(link: { from: string; to: string; kind: string }): string {
+  return `${link.from}\0${link.to}\0${link.kind}`;
+}
+
+function* seriesOverlay(_input: Record<string, unknown>, context: ActionRequest, host: GuestHost) {
+  assertKeys(_input, []);
+  const selectedWorkBinding = yield* readSeriesBinding(context, host);
+  const binding = selectedWorkBinding.binding;
+  if (!binding || typeof binding.seriesId !== "string") throw error("author_review_required", "This work has no source-backed series binding", { kind: "series_binding_missing" });
+  if (selectedWorkBinding.requiresAuthorReview) throw error("author_review_required", "The series source contains an unresolved legacy project identity", {
+    kind: "unresolved_series_identity", seriesId: binding.seriesId,
+    ...(selectedWorkBinding.unresolvedLegacyBindings ? { unresolvedLegacyBindings: selectedWorkBinding.unresolvedLegacyBindings } : {}),
+  });
+
+  let preferenceKey: string;
+  try { preferenceKey = seriesBindingPreferenceKey(binding); }
+  catch (cause) { throw error("unsupported_format", `Cannot fingerprint this series binding: ${cause instanceof Error ? cause.message : String(cause)}`, { kind: "invalid_binding_record" }); }
+  const preference = yield* host.request<unknown>(HOST_OPERATIONS.preferencesRead, { key: preferenceKey, schema_version: 1 });
+  if (!isRecord(preference) || preference.found !== true) throw error("repository_not_active", "No Host-registered Bible source is selected for this series binding", {
+    kind: "series_source_not_selected", seriesId: binding.seriesId, preferenceKey,
+  });
+  const selected = registeredSeriesSource(preference.value);
+  const bibleRepositoryId = selectedWorkBinding.bibleRepositoryId;
+  if (positiveRepositoryId(bibleRepositoryId) ? selected.repository_id !== bibleRepositoryId : selected.repository_id !== null) {
+    throw error("conflict", "Selected Host source does not match the Git-backed series binding", {
+      kind: "series_source_identity_mismatch", seriesId: binding.seriesId,
+      expectedRepositoryId: bibleRepositoryId ?? null, selectedRepositoryId: selected.repository_id,
+    });
+  }
+  const lease = yield* host.request<unknown>("workspace.repository.snapshot.read", selected as unknown as Record<string, unknown>);
+  if (!validForeignLease(lease, selected)) throw error("snapshot_stale", "Host did not return the exact registered series source snapshot", {
+    kind: "foreign_snapshot_mismatch", workspace_id: selected.workspace_id, repository_id: selected.repository_id,
+    branch: selected.branch, snapshot_id: selected.snapshot_id,
+  });
+  const sourceRequest: ActionRequest = { ...context, scope: lease.scope, snapshot: lease.snapshot };
+  const sourceSettings = yield* readSeriesSettings(sourceRequest, host);
+  const sourceSeries = sourceSettings.series.find((series) => series.id === binding.seriesId);
+  if (!sourceSeries) throw error("file_not_found", `Selected Bible repository does not contain series ${binding.seriesId}`, {
+    kind: "series_not_found", seriesId: binding.seriesId, path: sourceSettings.file?.path ?? SERIES_PATH,
+    scope: sourceRequest.scope, snapshot: sourceRequest.snapshot,
+  });
+  if (positiveRepositoryId(bibleRepositoryId) && positiveRepositoryId(sourceSeries.bibleRepositoryId) && sourceSeries.bibleRepositoryId !== bibleRepositoryId) {
+    throw error("conflict", "Selected Bible registry identifies a different repository", {
+      kind: "series_repository_mismatch", seriesId: binding.seriesId, bindingRepositoryId: bibleRepositoryId,
+      registryRepositoryId: sourceSeries.bibleRepositoryId, path: sourceSettings.file?.path,
+    });
+  }
+
+  const workStory = yield* storyFor(context, host);
+  const bibleStory = yield* readKnowledgeSnapshot(createSnapshotReader(sourceRequest, host));
+  const merged = mergeSeriesOverlay({
+    snapshot: context.snapshot, workEntities: workStory.entities, workLinks: workStory.links,
+    bibleEntities: bibleStory.entities, bibleLinks: bibleStory.links,
+  });
+  const workRecords = new Map<string, OverlaySourceRecord>();
+  for (const [id, entity] of workStory.entities) workRecords.set(id, overlayEntityRecord("work", entity, context, workStory));
+  const bibleRecords = new Map<string, OverlaySourceRecord>();
+  for (const [id, entity] of bibleStory.entities) bibleRecords.set(id, overlayEntityRecord("bible", entity, sourceRequest, bibleStory));
+
+  const entities = [...merged.data.entities].map(([id, display]) => {
+    const sourceRecords = [bibleRecords.get(id), workRecords.get(id)].filter((record): record is OverlaySourceRecord => !!record);
+    return { id, preferredSource: workRecords.has(id) ? "work" as const : "bible" as const, display, sourceRecords };
+  });
+  const linkRecords = new Map<string, Array<Record<string, unknown>>>();
+  for (const [source, story, request] of [["bible", bibleStory, sourceRequest], ["work", workStory, context]] as const) {
+    for (const link of story.links) {
+      const entity = story.entities.get(link.from);
+      if (!entity) continue;
+      const revision = story.revisions.get(entity.filePath);
+      const records = linkRecords.get(overlayLinkKey(link)) ?? [];
+      records.push({ source, link, scope: request.scope, snapshot: request.snapshot, path: entity.filePath, ...(revision ? { revision } : {}) });
+      linkRecords.set(overlayLinkKey(link), records);
+    }
+  }
+  const links = merged.data.links.map((link) => ({ ...link, sourceRecords: linkRecords.get(overlayLinkKey(link)) ?? [] }));
+
+  const brokenReferences: Array<Record<string, unknown>> = [];
+  for (const [source, story, request] of [["bible", bibleStory, sourceRequest], ["work", workStory, context]] as const) {
+    for (const link of story.links) {
+      if (merged.data.entities.has(link.to)) continue;
+      const from = story.entities.get(link.from);
+      brokenReferences.push({
+        source, link, entityId: link.from, targetId: link.to, scope: request.scope, snapshot: request.snapshot,
+        ...(from ? { path: from.filePath, revision: story.revisions.get(from.filePath) } : {}),
+        message: `Unresolved ${link.kind} reference ${link.to}`,
+      });
+    }
+  }
+
+  const conflicts: Array<Record<string, unknown>> = [];
+  for (const [source, story, request] of [["bible", bibleStory, sourceRequest], ["work", workStory, context]] as const) {
+    for (const [entityId, paths] of story.duplicateIds) conflicts.push({ kind: "duplicate_id", source, entityId, paths, scope: request.scope, snapshot: request.snapshot });
+    for (const diagnostic of story.diagnostics) {
+      if (diagnostic.code === "broken_reference" || diagnostic.code === "duplicate_id") continue;
+      conflicts.push({ kind: "source_diagnostic", source, ...diagnostic, scope: request.scope, snapshot: request.snapshot });
+    }
+  }
+  for (const [entityId, workRecord] of workRecords) {
+    const bibleRecord = bibleRecords.get(entityId);
+    if (bibleRecord && bibleRecord.entity.type !== workRecord.entity.type) conflicts.push({
+      kind: "entity_type_mismatch", entityId, workType: workRecord.entity.type, bibleType: bibleRecord.entity.type,
+      workPath: workRecord.path, biblePath: bibleRecord.path,
+    });
+  }
+  const value = {
+    entities, links, workSnapshot: context.snapshot, bibleSnapshot: sourceRequest.snapshot,
+    binding: { ...binding, ...(positiveRepositoryId(bibleRepositoryId) ? { bibleRepositoryId } : {}) },
+    brokenReferences, conflicts,
+  };
+  let serialized: string;
+  try { serialized = JSON.stringify(value); }
+  catch (cause) { throw error("unsupported_format", `Series overlay contains non-JSON source data: ${cause instanceof Error ? cause.message : String(cause)}`, { kind: "non_json_overlay_source" }); }
+  if (new TextEncoder().encode(serialized).byteLength > 1_048_576) throw error("capacity", "Series overlay result exceeds the bounded action result size", {
+    kind: "overlay_result_too_large", entityCount: entities.length, linkCount: links.length,
+  });
+  return value;
 }
 
 const BIBLE_ENTITY_TYPES: readonly StoryEntityType[] = ["character", "location", "item", "faction", "event", "lore", "thread", "arc", "dialogue_sketch"];
@@ -1740,6 +1916,7 @@ export const knowledgeHandlers: Record<string, Handler> = {
   "knowledge.series.propose": seriesPropose,
   "knowledge.series.binding.get": seriesBindingGet,
   "knowledge.series.binding.propose": seriesBindingPropose,
+  "knowledge.series.overlay": seriesOverlay,
   "knowledge.reader-model.build": readerModelBuild,
 };
 

@@ -3,6 +3,7 @@ import { createHash } from "node:crypto";
 import test from "node:test";
 import { guest } from "../guest.js";
 import type { ActionRequest, Snapshot } from "../../../app/src/browser/proprium/authoring/types.js";
+import { seriesBindingPreferenceKey } from "./seriesBindingFingerprint.js";
 
 const encode = new TextEncoder();
 const inputFiles: Record<string, string> = {
@@ -15,21 +16,33 @@ const inputFiles: Record<string, string> = {
 
 class HostFixture {
   readonly snapshot: Snapshot = { id: "snapshot-guest-test", local_commit: null, worktree_generation: "generation-1", draft_generation: null };
+  readonly linkedSnapshot: Snapshot = { id: "snapshot-bible-test", local_commit: "b".repeat(40), worktree_generation: "bible-generation-2", draft_generation: null };
+  readonly linkedScope = { workspace_id: "bible-workspace", repository_id: null, branch: "main", generation: "bible-generation-2" };
+  leaseSnapshot = this.linkedSnapshot;
+  leaseScope = this.linkedScope;
   readonly files: Map<string, { content: string; bytes: Uint8Array<ArrayBufferLike>; revision: string }> = new Map(Object.entries(inputFiles).map(([path, content]) => {
     const bytes = encode.encode(content);
     return [path, { content, bytes, revision: createHash("sha256").update(bytes).digest("hex") }];
   }));
+  readonly linkedFiles = new Map<string, { content: string; bytes: Uint8Array<ArrayBufferLike>; revision: string }>();
   readonly operations: string[] = [];
+  readonly fileSnapshots: string[] = [];
   readonly proposals: Array<Record<string, unknown>> = [];
   readonly stagedFiles = new Map<string, { content: string; bytes: Uint8Array<ArrayBufferLike>; revision: string }>();
+  preferenceKey: string | undefined;
+  preferenceValue: unknown;
   staleReads = false;
 
   respond(operation: string, payload: Record<string, unknown>): unknown {
     this.operations.push(operation);
     if (operation === "workspace.file.list") {
-      assert.deepEqual(payload.snapshot, this.snapshot);
+      const selectedSnapshot = payload.snapshot as Snapshot;
+      this.fileSnapshots.push(selectedSnapshot.id);
+      const sourceFiles = selectedSnapshot?.id === this.snapshot.id ? this.files
+        : selectedSnapshot?.id === this.linkedSnapshot.id ? this.linkedFiles : undefined;
+      if (!sourceFiles) throw Object.assign(new Error("Unknown registered snapshot"), { code: "repository_not_active" });
       const prefix = String(payload.prefix);
-      const selected = new Map(this.files);
+      const selected = new Map(sourceFiles);
       if (payload.staging_snapshot === "stage-1") for (const [path, file] of this.stagedFiles) selected.set(path, file);
       const all = [...selected.entries()].filter(([path]) => path === prefix || path.startsWith(`${prefix.replace(/\/$/u, "")}/`))
         .map(([path, file]) => ({ path, revision: file.revision, byte_length: file.bytes.length, media_type: path.endsWith(".yaml") ? "application/yaml" : "text/plain" }))
@@ -40,14 +53,27 @@ class HostFixture {
       return { entries, next_cursor: end < all.length ? String(end) : null };
     }
     if (operation === "workspace.file.read") {
-      assert.deepEqual(payload.snapshot, this.snapshot);
+      const selectedSnapshot = payload.snapshot as Snapshot;
+      this.fileSnapshots.push(selectedSnapshot.id);
+      const sourceFiles = selectedSnapshot?.id === this.snapshot.id ? this.files
+        : selectedSnapshot?.id === this.linkedSnapshot.id ? this.linkedFiles : undefined;
+      if (!sourceFiles) throw Object.assign(new Error("Unknown registered snapshot"), { code: "repository_not_active" });
       const path = String(payload.path);
-      const file = (payload.staging_snapshot === "stage-1" ? this.stagedFiles.get(path) : undefined) ?? this.files.get(path);
+      const file = (payload.staging_snapshot === "stage-1" ? this.stagedFiles.get(path) : undefined) ?? sourceFiles.get(path);
       if (!file) throw Object.assign(new Error(`Missing ${path}`), { code: "file_not_found" });
       const offset = Number(payload.offset);
       const end = Math.min(file.bytes.length, offset + Math.min(Number(payload.length), 1024));
       const bytes = Array.from(file.bytes.slice(offset, end));
       return { revision: this.staleReads ? "f".repeat(64) : file.revision, total_bytes: file.bytes.length, offset, bytes, next_offset: end < file.bytes.length ? end : null };
+    }
+    if (operation === "plugin.preferences.read") {
+      assert.equal(payload.schema_version, 1);
+      if (this.preferenceKey !== undefined) assert.equal(payload.key, this.preferenceKey);
+      return this.preferenceValue === undefined ? { found: false } : { found: true, value: this.preferenceValue };
+    }
+    if (operation === "workspace.repository.snapshot.read") {
+      assert.deepEqual(payload, this.preferenceValue);
+      return { scope: this.leaseScope, snapshot: this.leaseSnapshot };
     }
     if (operation === "workspace.change.propose") {
       const changeset = payload.changeset as Record<string, unknown>;
@@ -314,6 +340,105 @@ test("series binding proposal requires review for unresolved legacy project iden
   assert.equal(result.ok, false);
   assert.equal((result.error as Record<string, unknown>).code, "author_review_required");
   assert.deepEqual(host.proposals, []);
+  guest.dispose();
+});
+
+test("series overlay reads the exact Host-selected local-only lease and preserves source provenance", () => {
+  guest.initialize({ pluginId: "proprium.knowledge", version: "0.1.0", workspaceId: "workspace-1" });
+  const host = new HostFixture();
+  const binding = { seriesId: "north", futureBindingField: { keep: true } };
+  const bindingPath = "meta/proprium/plugins/proprium.knowledge/v1/series-binding.yaml";
+  const bindingContent = "seriesId: north\nfutureBindingField:\n  keep: true\n";
+  const workSeries = "version: 1\nseries:\n  - id: north\n    name: North\n";
+  const bibleSeries = "version: 1\nseries:\n  - id: north\n    name: North Bible\n";
+  const put = (files: Map<string, { content: string; bytes: Uint8Array<ArrayBufferLike>; revision: string }>, path: string, content: string) => {
+    const bytes = encode.encode(content);
+    files.set(path, { content, bytes, revision: createHash("sha256").update(bytes).digest("hex") });
+  };
+  put(host.files, bindingPath, bindingContent);
+  put(host.files, "meta/proprium/plugins/proprium.knowledge/v1/series.yaml", workSeries);
+  put(host.files, "bible/characters/char-a.yaml", "id: char-a\ntype: character\nname: Work A\nrelations:\n  - target: char-b\n    kind: related\n    note: work\n");
+  put(host.linkedFiles, "meta/proprium/plugins/proprium.knowledge/v1/series.yaml", bibleSeries);
+  put(host.linkedFiles, "bible/characters/char-a.yaml", "id: char-a\ntype: character\nname: Bible A\nrelations:\n  - target: char-b\n    kind: related\n    note: bible\n");
+  put(host.linkedFiles, "bible/characters/char-b.yaml", "id: char-b\ntype: character\nname: Bible B\nrelations:\n  - target: char-missing\n    kind: related\n");
+  put(host.linkedFiles, "bible/locations/duplicate-a.yaml", "id: loc-duplicate\ntype: location\nname: Duplicate A\n");
+  put(host.linkedFiles, "bible/locations/duplicate-b.yaml", "id: loc-duplicate\ntype: location\nname: Duplicate B\n");
+  host.preferenceKey = seriesBindingPreferenceKey(binding);
+  host.preferenceValue = { workspace_id: "bible-workspace", repository_id: null, branch: "main", snapshot_id: host.linkedSnapshot.id };
+
+  const result = request(host, {}, "knowledge.series.overlay");
+  assert.equal(result.ok, true, JSON.stringify(result.error));
+  const value = result.value as Record<string, unknown>;
+  assert.deepEqual(value.workSnapshot, host.snapshot);
+  assert.deepEqual(value.bibleSnapshot, host.linkedSnapshot);
+  assert.deepEqual(value.binding, binding);
+  const entities = value.entities as Array<Record<string, unknown>>;
+  const charA = entities.find((item) => item.id === "char-a")!;
+  assert.equal((charA.display as Record<string, unknown>).name, "Work A");
+  assert.equal(charA.preferredSource, "work");
+  assert.deepEqual((charA.sourceRecords as Array<Record<string, unknown>>).map((record) => record.source), ["bible", "work"]);
+  assert.ok(entities.some((item) => item.id === "char-b"));
+  const links = value.links as Array<Record<string, unknown>>;
+  const shared = links.find((link) => link.from === "char-a" && link.to === "char-b")!;
+  assert.equal((shared.sourceRecords as Array<Record<string, unknown>>).length, 2);
+  const broken = value.brokenReferences as Array<Record<string, unknown>>;
+  assert.equal(broken.length, 1);
+  assert.equal(broken[0]?.targetId, "char-missing");
+  const conflicts = value.conflicts as Array<Record<string, unknown>>;
+  assert.ok(conflicts.some((item) => item.kind === "duplicate_id" && item.source === "bible" && item.entityId === "loc-duplicate"));
+  assert.ok(host.operations.includes("workspace.repository.snapshot.read"));
+  guest.dispose();
+});
+
+test("series overlay returns a typed unavailable error instead of a fake empty view when unselected", () => {
+  guest.initialize({ pluginId: "proprium.knowledge", version: "0.1.0", workspaceId: "workspace-1" });
+  const host = new HostFixture();
+  const bindingContent = "seriesId: north\n";
+  const bytes = encode.encode(bindingContent);
+  host.files.set("meta/proprium/plugins/proprium.knowledge/v1/series-binding.yaml", {
+    content: bindingContent, bytes, revision: createHash("sha256").update(bytes).digest("hex"),
+  });
+  const result = request(host, {}, "knowledge.series.overlay");
+  assert.equal(result.ok, false);
+  assert.equal((result.error as Record<string, unknown>).code, "repository_not_active");
+  assert.equal(host.operations.includes("workspace.repository.snapshot.read"), false);
+  guest.dispose();
+});
+
+test("series overlay refuses a stale Host lease before reading foreign repository files", () => {
+  guest.initialize({ pluginId: "proprium.knowledge", version: "0.1.0", workspaceId: "workspace-1" });
+  const host = new HostFixture();
+  const binding = { seriesId: "north" };
+  const content = "seriesId: north\n";
+  const bytes = encode.encode(content);
+  host.files.set("meta/proprium/plugins/proprium.knowledge/v1/series-binding.yaml", {
+    content, bytes, revision: createHash("sha256").update(bytes).digest("hex"),
+  });
+  host.preferenceKey = seriesBindingPreferenceKey(binding);
+  host.preferenceValue = { workspace_id: "bible-workspace", repository_id: null, branch: "main", snapshot_id: "snapshot-bible-stale" };
+  const result = request(host, {}, "knowledge.series.overlay");
+  assert.equal(result.ok, false);
+  assert.equal((result.error as Record<string, unknown>).code, "snapshot_stale");
+  assert.ok(host.operations.includes("workspace.repository.snapshot.read"));
+  assert.equal(host.fileSnapshots.includes("snapshot-bible-stale"), false);
+  guest.dispose();
+});
+
+test("series overlay will not use a Host source whose stable repository ID differs from the Git binding", () => {
+  guest.initialize({ pluginId: "proprium.knowledge", version: "0.1.0", workspaceId: "workspace-1" });
+  const host = new HostFixture();
+  const binding = { seriesId: "north", bibleRepositoryId: 42 };
+  const content = "seriesId: north\nbibleRepositoryId: 42\n";
+  const bytes = encode.encode(content);
+  host.files.set("meta/proprium/plugins/proprium.knowledge/v1/series-binding.yaml", {
+    content, bytes, revision: createHash("sha256").update(bytes).digest("hex"),
+  });
+  host.preferenceKey = seriesBindingPreferenceKey(binding);
+  host.preferenceValue = { workspace_id: "wrong-bible", repository_id: 99, branch: "main", snapshot_id: host.linkedSnapshot.id };
+  const result = request(host, {}, "knowledge.series.overlay");
+  assert.equal(result.ok, false);
+  assert.equal((result.error as Record<string, unknown>).code, "conflict");
+  assert.equal(host.operations.includes("workspace.repository.snapshot.read"), false);
   guest.dispose();
 });
 

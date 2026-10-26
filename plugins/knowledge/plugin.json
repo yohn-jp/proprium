@@ -4,10 +4,12 @@
   "version": "0.1.0",
   "abi": "proprium.component/v2",
   "capabilities": [
+    "plugin.preferences.read",
     "workspace.change.propose",
     "workspace.change.timestamp",
     "workspace.file.read",
-    "workspace.plugin.invoke"
+    "workspace.plugin.invoke",
+    "workspace.repository.snapshot.read"
   ],
   "actions": [
     {
@@ -1861,6 +1863,43 @@
     },
     {
       "plugin_id": "proprium.knowledge",
+      "action_id": "knowledge.series.overlay",
+      "schema_version": 1,
+      "effect": "read",
+      "input_schema": {
+        "type": "object",
+        "properties": {},
+        "required": [],
+        "additionalProperties": false
+      },
+      "output_schema": {
+        "type": "object",
+        "properties": {
+          "entities": true,
+          "links": true,
+          "workSnapshot": true,
+          "bibleSnapshot": true,
+          "binding": true,
+          "brokenReferences": true,
+          "conflicts": true
+        },
+        "required": [],
+        "additionalProperties": false
+      },
+      "required_capabilities": [
+        "workspace.file.read",
+        "workspace.repository.snapshot.read",
+        "plugin.preferences.read"
+      ],
+      "callers": [
+        "ui",
+        "mcp",
+        "plugin"
+      ],
+      "requires_user_gesture": false
+    },
+    {
+      "plugin_id": "proprium.knowledge",
       "action_id": "knowledge.reader-model.build",
       "schema_version": 1,
       "effect": "read",
@@ -3552,6 +3591,91 @@
                   }
                 }
               }
+            }
+          },
+          {
+            "id": "series-overlay-entities",
+            "title": "Overlay entities",
+            "body": {
+              "id": "series-overlay-entity-list",
+              "type": "list",
+              "title": "Work and Bible records",
+              "description": "Refresh reads the selected Host-registered Bible snapshot. Work records take display precedence; source records retain provenance.",
+              "load_action": {
+                "action_id": "knowledge.series.overlay",
+                "input_template": {}
+              },
+              "items": {
+                "data_key": "last_action_result.entities"
+              },
+              "primary": "id",
+              "secondary": "preferredSource"
+            }
+          },
+          {
+            "id": "series-overlay-links",
+            "title": "Overlay links",
+            "body": {
+              "id": "series-overlay-link-table",
+              "type": "table",
+              "title": "Unioned links",
+              "load_action": {
+                "action_id": "knowledge.series.overlay",
+                "input_template": {}
+              },
+              "rows": {
+                "data_key": "last_action_result.links"
+              },
+              "columns": [
+                {
+                  "key": "from",
+                  "label": "From"
+                },
+                {
+                  "key": "to",
+                  "label": "To"
+                },
+                {
+                  "key": "kind",
+                  "label": "Relation"
+                }
+              ]
+            }
+          },
+          {
+            "id": "series-overlay-diagnostics",
+            "title": "Overlay diagnostics",
+            "body": {
+              "id": "series-overlay-conflict-list",
+              "type": "list",
+              "title": "Broken references and conflicts",
+              "load_action": {
+                "action_id": "knowledge.series.overlay",
+                "input_template": {}
+              },
+              "items": {
+                "data_key": "last_action_result.conflicts"
+              },
+              "primary": "kind",
+              "secondary": "entityId"
+            }
+          },
+          {
+            "id": "series-overlay-broken-references",
+            "title": "Broken references",
+            "body": {
+              "id": "series-overlay-broken-reference-list",
+              "type": "list",
+              "title": "Unresolved overlay endpoints",
+              "load_action": {
+                "action_id": "knowledge.series.overlay",
+                "input_template": {}
+              },
+              "items": {
+                "data_key": "last_action_result.brokenReferences"
+              },
+              "primary": "targetId",
+              "secondary": "source"
             }
           }
         ]
