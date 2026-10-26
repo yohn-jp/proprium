@@ -13,6 +13,8 @@ export interface GitHistoryPanelProps {
   canRestore: boolean;
   onRefresh(): void;
   onRestored(): void | Promise<void>;
+  onRestoreBusyChange?(busy: boolean): void;
+  beforeRestore?(): Promise<boolean>;
 }
 
 function changeKind(change: CommitFileChange): string {
@@ -25,7 +27,7 @@ function describeCommit(commit: CommitSummary): string {
   return commit.message.split("\n")[0]?.trim() || "(no commit message)";
 }
 
-export function GitHistoryPanel({ git, history, busy, canRestore, onRefresh, onRestored }: GitHistoryPanelProps): ReactElement {
+export function GitHistoryPanel({ git, history, busy, canRestore, onRefresh, onRestored, onRestoreBusyChange, beforeRestore }: GitHistoryPanelProps): ReactElement {
   const [selectedOid, setSelectedOid] = useState<string | null>(history[0]?.oid ?? null);
   const [details, setDetails] = useState<CommitDiff | null>(null);
   const [loading, setLoading] = useState(false);
@@ -66,10 +68,11 @@ export function GitHistoryPanel({ git, history, busy, canRestore, onRefresh, onR
     const target = `commit ${selectedCommit.oid.slice(0, 10)}`;
     if (!window.confirm(`Restore the ${count} file${count === 1 ? "" : "s"} changed by “${describeCommit(selectedCommit)}” to ${target} in the local worktree? Current contents of those paths will be replaced or removed. Other files are left untouched. This does not create a commit or publish anything.`)) return;
 
-    setRestoring(true);
+    setRestoring(true); onRestoreBusyChange?.(true);
     setError(null);
     setNotice(null);
     try {
+      if (beforeRestore && !(await beforeRestore())) throw new Error("編集中の本文または作品が変わりました。端末に保存してから復元してください。");
       const changes = await Promise.all(details.changes.map(async (change) => {
         const current = await git.read(change.path);
         return {
@@ -86,7 +89,7 @@ export function GitHistoryPanel({ git, history, busy, canRestore, onRefresh, onR
     } catch (cause) {
       setError(cause instanceof Error ? cause.message : "The historical files could not be restored.");
     } finally {
-      setRestoring(false);
+      setRestoring(false); onRestoreBusyChange?.(false);
     }
   }
 

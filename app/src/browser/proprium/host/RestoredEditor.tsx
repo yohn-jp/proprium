@@ -13,6 +13,7 @@ interface Props {
   published: boolean;
   localCommitted: boolean;
   busy: boolean;
+  readOnly?: boolean;
   checkpointBusy?: boolean;
   publishBusy?: boolean;
   authorScope: string;
@@ -147,7 +148,7 @@ export function RestoredEditor(props: Props): ReactElement {
   };
   return <>
     {recovered.length > 0 && <section className="recovery-list" aria-label="回復できる下書き"><h2>回復できる下書き</h2>{recovered.map(entry => <div key={entry.key}><p>{new Date(entry.updatedAt).toLocaleString()} · {entry.text.length}字</p><button type="button" onClick={() => void restoreDraft(entry)}>この下書きをエディターで開く</button></div>)}</section>}
-    <SceneEditor projectId={workspace.localWorkspaceId} authorScope={authorScope} repositoryKey={repositoryKey(repo)} snapshot={snapshot} historySnapshot={snapshot}
+    <SceneEditor readOnly={props.readOnly} projectId={workspace.localWorkspaceId} authorScope={authorScope} repositoryKey={repositoryKey(repo)} snapshot={snapshot} historySnapshot={snapshot}
       scene={{ id: file.path, title: file.path.split("/").at(-1) ?? file.path, text: file.text ?? "", revision: file.revision.oid ?? "" }} path={file.path} breadcrumb={workspaceBreadcrumb(workspace)}
       text={file.text ?? ""} textRevision={fileVersion.current.value} flushPendingReactPublish={() => undefined}
       onTextChange={props.onChange} onRetryDraft={() => { void persistText(file.text ?? "").catch(error => setJournalError(String(error))); }}

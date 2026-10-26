@@ -37,6 +37,7 @@ interface Props {
   onSelect(path: string): void;
   onCreate(path: string): Promise<void>;
   onMoved(from: string, to: string): Promise<void>;
+  beforeApply(): Promise<boolean>;
 }
 
 export function WorkspaceFileBrowser(props: Props) {
@@ -59,6 +60,7 @@ export function WorkspaceFileBrowser(props: Props) {
       const [source, destination] = await Promise.all([props.git.read(from), props.git.read(to)]);
       if (!source.data) throw new Error("元のファイルを読み込めません。一覧を更新してください。");
       if (destination.data !== null) throw new Error("その保存先には既にファイルがあります。別の名前を選んでください。");
+      if (!(await props.beforeApply())) throw new Error("編集中の本文または作品が変わりました。端末に保存してから再試行してください。");
       await props.git.applyChanges([{ path: from, content: null, expectedRevision: source.revision }, { path: to, content: source.data, expectedRevision: destination.revision }]);
       await props.onMoved(from, to);
       setNewPath(""); setNotice("名前・保存先を変更しました。GitHubにはまだ公開されていません。");

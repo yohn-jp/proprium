@@ -146,6 +146,8 @@ export function HostApp(): ReactElement {
   const settingsDialog = useRef<HTMLDialogElement | null>(null);
   useEffect(() => { if (desktopSettingsOpen && settingsDialog.current && !settingsDialog.current.open) settingsDialog.current.showModal(); }, [desktopSettingsOpen]);
   const [busy, setBusy] = useState(false);
+  const [fileMutationBusy, setFileMutationBusy] = useState(false);
+  const setFileOperationBusy = useCallback((value: boolean) => { setFileMutationBusy(value); setBusy(value); }, []);
   const [checkpointBusy, setCheckpointBusy] = useState(false);
   const [publishBusy, setPublishBusy] = useState(false);
   const [mcpProposalCount, setMcpProposalCount] = useState(0);
@@ -537,6 +539,15 @@ export function HostApp(): ReactElement {
     finally { setBusy(false); }
   }
 
+  async function beforeFileMutation(): Promise<boolean> {
+    const targetGit = git;
+    try {
+      const flushed = await editorFlush.current?.();
+      const current = currentFileRef.current;
+      return gitRef.current === targetGit && !current?.dirty && (flushed == null || !current || flushed === current.text);
+    } catch { return false; }
+  }
+
   async function openRecoveredDraft(entry: JournalEntry): Promise<void> {
     const targetGit = gitRef.current, targetWorkspace = workspaceRef.current;
     const targetGeneration = workspaceGenerationRef.current;
@@ -834,11 +845,11 @@ export function HostApp(): ReactElement {
     </section>;
   const library = workspace ? <div className="host-controls"><WorkspaceFileBrowser
             git={git!} files={files} selectedPath={currentFile?.path ?? null} pendingPath={currentFile?.data === null ? currentFile.path : undefined}
-            changedPaths={changedPaths} busy={busy} canModify={!currentFile?.dirty} onBusyChange={setBusy}
+            changedPaths={changedPaths} busy={busy} canModify={!currentFile?.dirty} onBusyChange={setFileOperationBusy} beforeApply={beforeFileMutation}
             onSelect={path => { if (path === currentFile?.path) revealPanel("editor"); else void loadFile(path); }} onCreate={createFile}
             onMoved={async (from, to) => { const targetGit = git!, targetWorkspace = workspace; await refresh(targetGit, targetWorkspace); if (gitRef.current === targetGit && currentFileRef.current?.path === from) await loadFile(to); }}
             recovery={<WorkspaceDraftRecovery workspace={workspace.identity} authorScope={preferences.email || "local"} worktreePaths={files.map(file => file.path)} onOpenDraft={openRecoveredDraft} />}
-            transfer={<WorkspaceTransferPanel git={git!} files={files} busy={busy} canImport={!currentFile?.dirty} onBusyChange={setBusy} onImported={async paths => { const targetGit = git!, targetWorkspace = workspace; await refresh(targetGit, targetWorkspace); if (gitRef.current === targetGit && paths[0]) await loadFile(paths[0]); }} />}
+            transfer={<WorkspaceTransferPanel git={git!} files={files} busy={busy} canImport={!currentFile?.dirty} onBusyChange={setFileOperationBusy} beforeApply={beforeFileMutation} onImported={async paths => { const targetGit = git!, targetWorkspace = workspace; await refresh(targetGit, targetWorkspace); if (gitRef.current === targetGit && paths[0]) await loadFile(paths[0]); }} />}
           />
           <section className="sidebar-section sync-sidebar-section">
             <div className="section-title-row"><h2>{isGitHubWorkspaceIdentity(workspace.identity) ? "GitHub" : "Remote sync"}</h2><span className={`connection-indicator ${syncClient ? "connected" : "local-only"}`} aria-label={syncClient ? "Connected to GitHub" : "Local workspace only"}>{syncClient ? "GitHub接続済み" : "このブラウザーのみ"}</span></div>
@@ -883,7 +894,7 @@ export function HostApp(): ReactElement {
 </div>;
   const historyPanel = <div className="host-controls">{git && <GitHistoryPanel key={workspaceGeneration} git={git} history={history} busy={busy} canRestore={!currentFile?.dirty}
     onRefresh={() => { void git.log(40).then(setHistory).catch(error => setMessage({ tone: "error", text: errorMessage(error) })); }}
-    onRestored={refreshAfterPlugin} />}</div>;
+    onRestored={refreshAfterPlugin} onRestoreBusyChange={setFileOperationBusy} beforeRestore={beforeFileMutation} />}</div>;
   const hostFileActions = <div className="host-file-action-group" role="group" aria-label="Current file actions">
     <button type="button" disabled={busy || !currentFile?.dirty || currentFile?.binary} onClick={() => void saveDraft()}>端末に保存</button>
     <details className="host-document-menu"><summary>文書の操作</summary><div>
@@ -896,7 +907,7 @@ export function HostApp(): ReactElement {
       <strong aria-label="Current file">{currentFile.path}</strong>
       <p>Binary file · {currentFile.data?.byteLength ?? 0} bytes</p>
       {hostFileActions}
-    </> : <RestoredEditor key={`${workspace.identity.localWorkspaceId}:${currentFile.path}`} workspace={workspace.identity} file={currentFile} head={status.head} published={syncState === "published"} localCommitted={!!status.head && status.entries.length === 0} busy={busy} checkpointBusy={checkpointBusy} publishBusy={publishBusy} authorScope={preferences.email || "local"} author={preferences} git={git} hostFileActions={hostFileActions}
+    </> : <RestoredEditor key={`${workspace.identity.localWorkspaceId}:${currentFile.path}`} workspace={workspace.identity} file={currentFile} readOnly={fileMutationBusy} head={status.head} published={syncState === "published"} localCommitted={!!status.head && status.entries.length === 0} busy={busy} checkpointBusy={checkpointBusy} publishBusy={publishBusy} authorScope={preferences.email || "local"} author={preferences} git={git} hostFileActions={hostFileActions}
       onChange={text => { setCurrentFile(previous => previous ? { ...previous, text, dirty: true } : previous); setSyncState("editing"); }}
       onSave={() => void saveDraft()} onCommit={() => revealPanel("inspector")} onPublish={() => void publishRemote()} canPublish={!!syncClient && status.localState === "local-committed" && !currentFile.dirty}
       onHistory={() => revealPanel("history")} onRegisterFlush={registerEditorFlush} onScratchApplied={refreshAfterPlugin} />}

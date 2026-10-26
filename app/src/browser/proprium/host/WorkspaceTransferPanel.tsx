@@ -17,9 +17,10 @@ interface Props {
   canImport: boolean;
   onBusyChange(value: boolean): void;
   onImported(paths: string[]): Promise<void>;
+  beforeApply(): Promise<boolean>;
 }
 
-export function WorkspaceTransferPanel({ git, files, busy, canImport, onBusyChange, onImported }: Props) {
+export function WorkspaceTransferPanel({ git, files, busy, canImport, onBusyChange, onImported, beforeApply }: Props) {
   const input = useRef<HTMLInputElement>(null);
   const [notice, setNotice] = useState("");
   const [working, setWorking] = useState(false);
@@ -41,6 +42,7 @@ export function WorkspaceTransferPanel({ git, files, busy, canImport, onBusyChan
       const changes = await Promise.all(imported.map(async file => ({ path: file.path, content: file.data, expectedRevision: (await git.read(file.path)).revision })));
       const replaced = changes.filter(file => file.expectedRevision.oid !== null);
       if (replaced.length && !window.confirm(`次の${replaced.length}件を置き換えます。取り込む内容を確認しましたか？\n${replaced.map(file => file.path).join("\n")}`)) return;
+      if (!(await beforeApply())) throw new Error("編集中の本文または作品が変わりました。端末に保存してから再試行してください。");
       await git.applyChanges(changes);
       await onImported(imported.map(file => file.path));
       setNotice(`${imported.length}件をこの端末のファイルへ取り込みました。Gitコミット・GitHub公開は行っていません。`);
