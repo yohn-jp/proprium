@@ -12,6 +12,7 @@ export type Snapshot = {
   local_commit: string | null;
   worktree_generation: string;
   draft_generation: string | null;
+  remote_commit?: string | null;
 };
 
 export type ActionRequest = {

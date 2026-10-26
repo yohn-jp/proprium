@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
-import { readFileSync } from "node:fs";
+import { existsSync, readFileSync } from "node:fs";
 import test from "node:test";
+import { fileURLToPath, pathToFileURL } from "node:url";
 import { guest } from "../guest.js";
 import type { ActionRequest, ChangeSet, FileEntry, ReadChunk, Snapshot } from "./contracts.js";
 import { invokeNarrative, narrativeIdForTitle, NARRATIVE_ACTIONS } from "./actions.js";
@@ -11,21 +12,44 @@ import { appendYamlSequenceValue, parseYamlRecord, removeYamlSequenceIndex, upda
 const scope = { workspace_id: "workspace-a", repository_id: 42, branch: "main", generation: "generation-a" };
 const snapshot: Snapshot = { id: "snapshot-a", local_commit: null, worktree_generation: "tree-a", draft_generation: null };
 const encoder = new TextEncoder();
+type AdoptedAuthoringSchema = {
+  assertDescriptor(value: unknown): void;
+  assertSurface(value: unknown): void;
+  assertValue(schema: boolean | { readonly [key: string]: unknown }, value: unknown, phase?: string): void;
+};
+const adoptedSchemaPath = process.env.PROPRIUM_AUTHORING_SCHEMA ??
+  fileURLToPath(new URL("../../../app/src/browser/proprium/authoring/schema.ts", import.meta.url));
+const adoptedSchema = existsSync(adoptedSchemaPath)
+  ? await import(pathToFileURL(adoptedSchemaPath).href) as AdoptedAuthoringSchema
+  : undefined;
+const manifest = JSON.parse(readFileSync(new URL("../plugin.json", import.meta.url), "utf8")) as {
+  id: string;
+  capabilities: string[];
+  actions: Array<{
+    plugin_id: string;
+    action_id: string;
+    schema_version: number;
+    effect: string;
+    required_capabilities: string[];
+    input_schema: Record<string, unknown>;
+    output_schema: Record<string, unknown>;
+  }>;
+  ui: unknown[];
+};
+
+function assertDeclaredOutput(actionId: string, value: unknown): void {
+  const action = manifest.actions.find((item) => item.action_id === actionId);
+  assert.ok(action, `manifest declares ${actionId}`);
+  adoptedSchema?.assertValue(action.output_schema, value, `${actionId} output`);
+}
+
+function assertDeclaredInput(actionId: string, value: unknown): void {
+  const action = manifest.actions.find((item) => item.action_id === actionId);
+  assert.ok(action, `manifest declares ${actionId}`);
+  adoptedSchema?.assertValue(action.input_schema, value, `${actionId} input`);
+}
 
 test("manifest action inventory and closed output schemas match the guest contract", () => {
-  const manifest = JSON.parse(readFileSync(new URL("../plugin.json", import.meta.url), "utf8")) as {
-    id: string;
-    capabilities: string[];
-    actions: Array<{
-      plugin_id: string;
-      action_id: string;
-      schema_version: number;
-      effect: string;
-      required_capabilities: string[];
-      input_schema: Record<string, unknown>;
-      output_schema: Record<string, unknown>;
-    }>;
-  };
   assert.equal(manifest.id, "proprium.narrative");
   assert.deepEqual(manifest.actions.map(({ action_id }) => action_id), [...NARRATIVE_ACTIONS]);
   for (const action of manifest.actions) {
@@ -53,6 +77,99 @@ test("manifest action inventory and closed output schemas match the guest contra
   assert.deepEqual(Object.keys((preview.units.items as Record<string, any>).properties), ["id", "label", "depends_on", "operation_paths"]);
   const marks = byId.get("proprium.narrative.reading-marks.list")!.output_schema.properties as Record<string, any>;
   assert.deepEqual(Object.keys((marks.marks.items as Record<string, any>).properties), ["id", "offset", "length", "snippet", "comment", "createdAt", "position_status"]);
+});
+
+test("adopted Host validator accepts every Narrative descriptor and canonical surface", { skip: !adoptedSchema }, () => {
+  for (const action of manifest.actions) adoptedSchema!.assertDescriptor(action);
+  for (const surface of manifest.ui) adoptedSchema!.assertSurface(surface);
+});
+
+test("real values from all 14 Narrative actions match their declared output schemas", { skip: !adoptedSchema }, () => {
+  const host = new MemoryHost();
+  addWork(host, 2);
+  const detectId = "proprium.narrative.work.detect";
+  const detected = run(host, request(detectId, {}));
+  assertDeclaredOutput(detectId, detected);
+  const treeId = "proprium.narrative.hierarchy.tree";
+  const tree = run(host, request(treeId, { limit: 128 })) as { tree_revision: string };
+  assertDeclaredOutput(treeId, tree);
+  const openId = "proprium.narrative.scene.open";
+  const openRequest = request(openId, { scene_id: "scene-1" });
+  openRequest.snapshot.remote_commit = "a".repeat(40);
+  assertDeclaredOutput(openId, run(host, openRequest));
+  const contextId = "proprium.narrative.scene.context";
+  assertDeclaredOutput(contextId, run(host, request(contextId, { scene_id: "scene-1" })));
+  const continueId = "proprium.narrative.scene.continue";
+  const metadataPath = "plot/volumes/folder-not-id/chapters/directory-not-id/scenes/file-scene-1.yaml";
+  const metadataRevision = host.files.get(metadataPath)!.revision;
+  const manuscriptRevision = host.files.get("manuscript/custom/scene-1.md")!.revision;
+  assertDeclaredOutput(continueId, run(host, request(continueId, { resume_position: {
+    scene_id: "scene-1", manuscript_path: "manuscript/custom/scene-1.md", metadata_revision: metadataRevision,
+    manuscript_revision: manuscriptRevision, draft_generation: null, sentence_index: 1, scroll_top: 0,
+  } })));
+  const createId = "proprium.narrative.structure.create";
+  assertDeclaredOutput(createId, run(host, request(createId, {
+    kind: "volume", title: "Another volume", id: "another-volume", expected_tree_revision: tree.tree_revision,
+  }, "schema-create")));
+  const updateId = "proprium.narrative.structure.update";
+  assertDeclaredOutput(updateId, run(host, request(updateId, {
+    kind: "scene", id: "scene-1", patch: { title: "Renamed scene" }, expected_metadata_revision: metadataRevision,
+  }, "schema-update")));
+  const reorderId = "proprium.narrative.structure.reorder";
+  assertDeclaredOutput(reorderId, run(host, request(reorderId, {
+    kind: "scene", parent_id: "work-chapter", ordered_ids: ["scene-2", "scene-1"], expected_tree_revision: tree.tree_revision,
+  }, "schema-reorder")));
+  const listMarksId = "proprium.narrative.reading-marks.list";
+  assertDeclaredOutput(listMarksId, run(host, request(listMarksId, { scene_id: "scene-1" })));
+  const createMarkId = "proprium.narrative.reading-marks.create";
+  assertDeclaredOutput(createMarkId, run(host, request(createMarkId, {
+    scene_id: "scene-1", mark: { id: "mark-new", offset: 0, length: 4, snippet: "Body", createdAt: "2026-10-26T02:00:00Z" },
+    expected_metadata_revision: metadataRevision, expected_manuscript_revision: manuscriptRevision,
+  }, "schema-mark-create")));
+  host.add(metadataPath, [
+    "id: scene-1", "type: scene", "title: Scene 1", "volume: work-volume", "chapter: work-chapter", "order: 1",
+    "manuscript: manuscript/custom/scene-1.md", "readingMarks:", "  - id: mark-existing", "    offset: 0", "    length: 4",
+    "    snippet: Body", "    createdAt: '2026-10-26T01:00:00Z'", "",
+  ].join("\n"));
+  const currentMetadataRevision = host.files.get(metadataPath)!.revision;
+  const deleteMarkId = "proprium.narrative.reading-marks.delete";
+  assertDeclaredOutput(deleteMarkId, run(host, request(deleteMarkId, {
+    scene_id: "scene-1", mark_id: "mark-existing", expected_metadata_revision: currentMetadataRevision,
+    expected_manuscript_revision: manuscriptRevision,
+  }, "schema-mark-delete")));
+  const compileId = "proprium.narrative.changes.compile";
+  const raw = sourceRaw(host, metadataPath);
+  const compilerInput = {
+    operations: [sourceOperation("schema-title", "scene.update", { kind: "revision", value: narrativeEntityRevision(raw) },
+      { sceneId: "scene-1" }, { changes: { title: "Compiler title" } })],
+    evidence: [],
+  };
+  assertDeclaredInput(compileId, compilerInput);
+  assertDeclaredOutput(compileId, run(host, request(compileId, compilerInput)));
+  const resumeListId = "proprium.narrative.resume.marks.list";
+  assertDeclaredOutput(resumeListId, run(host, request(resumeListId, {})));
+  const resumeProposeId = "proprium.narrative.resume.mark.propose";
+  assertDeclaredOutput(resumeProposeId, run(host, request(resumeProposeId, {
+    scene_id: "scene-1", expected_manuscript_revision: manuscriptRevision, expected_marker_revision: null,
+    sentence_index: 1, scroll_top: 0,
+  }, "schema-resume")));
+});
+
+test("compiler schema preserves the pinned bounded dynamic JSON shape and rejects unsafe keys/depth", { skip: !adoptedSchema }, () => {
+  const action = manifest.actions.find((item) => item.action_id === "proprium.narrative.changes.compile")!;
+  const nested = (levels: number): unknown => {
+    let value: unknown = "leaf";
+    for (let index = 0; index < levels; index++) value = { nested: value };
+    return value;
+  };
+  const createInput = (values: Record<string, unknown>) => ({
+    operations: [sourceOperation("opaque-create", "entity.create", { kind: "absent" },
+      { entityId: "foreign-id", entityType: "character" }, { values })], evidence: [],
+  });
+  adoptedSchema!.assertValue(action.input_schema, createInput({ arbitraryOwnerField: { values: ["kept", 1, true, null] }, nested: nested(15) }));
+  assert.throws(() => adoptedSchema!.assertValue(action.input_schema, createInput({ nested: nested(16) })));
+  assert.throws(() => adoptedSchema!.assertValue(action.input_schema, createInput(JSON.parse('{"__proto__":"blocked"}'))));
+  assert.throws(() => adoptedSchema!.assertValue(action.input_schema, createInput({ ["x".repeat(257)]: "blocked" })));
 });
 
 class MemoryHost {
