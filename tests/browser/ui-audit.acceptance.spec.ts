@@ -41,3 +41,30 @@ test("a local manuscript can be saved, renamed, reviewed, committed and inspecte
   await expect(change).toBeVisible();
   await expect(change.locator(".text-diff-line[data-kind='added']").first()).toContainText("第一章の原稿");
 });
+
+test("saved workspace files round-trip through an explicitly exported ZIP", async ({ page }) => {
+  await page.goto("/");
+  await page.getByLabel("作品名", { exact: true }).fill("取込と書出し");
+  await page.getByRole("button", { name: "ローカル作品を作成", exact: true }).click();
+  await showPanel(page, "outline");
+  await page.locator(".workspace-transfer-panel > summary").click();
+  await page.getByLabel("取り込むファイル・ZIP", { exact: true }).setInputFiles({
+    name: "原稿.md", mimeType: "text/markdown", buffer: Buffer.from("持ち出して、もう一度開く原稿。\n"),
+  });
+  await expect(page.getByRole("list", { name: "Repository files" }).getByRole("button", { name: "原稿.md", exact: true })).toBeVisible();
+  const downloadEvent = page.waitForEvent("download");
+  await page.getByRole("button", { name: "保存済みファイルをZIPに書き出す", exact: true }).click();
+  const archive = await downloadEvent;
+  expect(archive.suggestedFilename()).toBe("workspace-files.zip");
+  const archivePath = await archive.path();
+  expect(archivePath).toBeTruthy();
+  await page.getByRole("button", { name: "作品一覧", exact: true }).click();
+  await page.getByLabel("作品名", { exact: true }).fill("ZIPから再開");
+  await page.getByRole("button", { name: "ローカル作品を作成", exact: true }).click();
+  await showPanel(page, "outline");
+  await page.locator(".workspace-transfer-panel > summary").click();
+  await page.getByLabel("取り込むファイル・ZIP", { exact: true }).setInputFiles(archivePath!);
+  await expect(page.getByRole("list", { name: "Repository files" }).getByRole("button", { name: "原稿.md", exact: true })).toBeVisible();
+  await showPanel(page, "editor");
+  await expect(page.getByRole("textbox", { name: "原稿 Markdown" })).toHaveText("持ち出して、もう一度開く原稿。\n");
+});
