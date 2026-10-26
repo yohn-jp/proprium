@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import { test } from "node:test";
 import { createElement } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
-import { AuthoringSurface, resolveAuthoringTemplate } from "./AuthoringSurface.js";
+import { AuthoringSurface, formValuesToJson, resolveAuthoringTemplate } from "./AuthoringSurface.js";
 import type { AuthoringSurfaceDeclaration } from "./types.js";
 
 const outlineSurface: AuthoringSurfaceDeclaration = {
@@ -56,6 +56,14 @@ test("action templates substitute declared data keys and reject missing or inval
   assert.deepEqual(resolveAuthoringTemplate({ data_key: "item.scene_id" }, { item: { scene_id: "s-1" } }), "s-1");
   assert.throws(() => resolveAuthoringTemplate({ data_key: "item.__proto__" }, { item: {} }), /invalid data key/u);
   assert.throws(() => resolveAuthoringTemplate({ data_key: "item.id" }, { item: {} }), /missing declared data key/u);
+});
+
+test("integer form values become safe JSON numbers and invalid values fail before dispatch", () => {
+  const fields = [{ id: "limit", label: "件数", type: "integer" as const }];
+  assert.deepEqual(formValuesToJson(fields, { limit: "12" }), { limit: 12 });
+  assert.deepEqual(formValuesToJson(fields, { limit: "" }), {});
+  assert.throws(() => formValuesToJson(fields, { limit: "1.2" }), /整数/u);
+  assert.throws(() => formValuesToJson(fields, { limit: "9007199254740992" }), /範囲外/u);
 });
 
 test("forms render Host-owned fields and inaccessible UI markup is not accepted as content", () => {

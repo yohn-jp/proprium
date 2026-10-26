@@ -134,7 +134,11 @@ function FormWidget({ node, data, invoke, busy }: {
     });
     if (validation) return;
     setError("");
-    invoke(node.submit, { ...asRecord(data), form: values as unknown as AuthoringJson });
+    try {
+      invoke(node.submit, { ...asRecord(data), form: formValuesToJson(node.fields, values) });
+    } catch (cause) {
+      setError(cause instanceof Error ? cause.message : "入力内容を確認してください。");
+    }
   };
   const labelId = `authoring-form-${node.id}`;
   return <form className="authoring-form" aria-labelledby={labelId} onSubmit={submit}>
@@ -150,6 +154,24 @@ function FormWidget({ node, data, invoke, busy }: {
     {error && <p className="authoring-error" role="alert">{error}</p>}
     <div className="authoring-form-actions"><button type="submit" disabled={busy || !validBinding(node.submit)}>送信</button>{node.cancel_action && <button type="button" disabled={busy} onClick={() => invoke(node.cancel_action!)}>キャンセル</button>}</div>
   </form>;
+}
+
+export function formValuesToJson(fields: readonly AuthoringField[], values: Readonly<Record<string, string | boolean | string[]>>): AuthoringJson {
+  const output: Record<string, AuthoringJson> = {};
+  for (const field of fields) {
+    const value = values[field.id];
+    if (value === undefined) continue;
+    if (field.type === "integer") {
+      if (value === "") continue;
+      if (typeof value !== "string" || !/^-?(?:0|[1-9][0-9]*)$/u.test(value)) throw new Error(`${field.label}は整数で入力してください。`);
+      const integer = Number(value);
+      if (!Number.isSafeInteger(integer)) throw new Error(`${field.label}の値が範囲外です。`);
+      output[field.id] = integer;
+    } else {
+      output[field.id] = Array.isArray(value) ? [...value] : value;
+    }
+  }
+  return output;
 }
 
 function asRecord(value: unknown): Record<string, AuthoringJson> {
