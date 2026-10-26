@@ -1,5 +1,5 @@
 import type { ActionDescriptor, ActionError, ActionRequest, ActionResult, Caller, JsonSchema, Scope, Snapshot } from "./types.js";
-import { assertActionRequest, assertDescriptor, assertResult, assertValue } from "./schema.js";
+import { assertActionRequest, assertDescriptor, assertResult, assertValue, scopeSchema, snapshotSchema } from "./schema.js";
 import { capabilityForHostOperation } from "./capabilities.js";
 
 export type ActionAvailability = "ready" | "disabled" | "dependency_unavailable" | "capability_denied" | "incompatible";
@@ -37,6 +37,7 @@ export interface HostOperationContext extends InvocationContext { invocation_id:
 export interface StageLeaseInvocation { scope: Scope; invocation_id: string; caller_chain: readonly string[] }
 export interface HostCapabilityPorts {
   identityRead?(payload: Record<string, unknown>, context: HostOperationContext): Promise<unknown>;
+  repositorySnapshotRead?(payload: Record<string, unknown>, context: HostOperationContext): Promise<unknown>;
   fileList?(payload: Record<string, unknown>, context: HostOperationContext): Promise<unknown>;
   fileRead?(payload: Record<string, unknown>, context: HostOperationContext): Promise<unknown>;
   validateStage?(snapshot_id: string, context: HostOperationContext): Promise<void>;
@@ -81,6 +82,7 @@ export interface ActionCall { plugin_id: string; action_id: string; input: Recor
 export interface ActionListRequest { plugin_id: string; cursor?: string; limit?: number }
 export interface ActionListItem { descriptor: ActionDescriptor; availability: ActionAvailability; reason?: string }
 export interface ActionListResult { items: readonly ActionListItem[]; next_cursor: string | null }
+interface ForeignSnapshotLease { scope: Scope; snapshot: Snapshot; plugin_id: string; action_id: string }
 
 const MAX_JOBS = 4;
 const MAX_CURSOR_TOKENS = 4096;
@@ -132,6 +134,7 @@ function requireContext(value: InvocationContext): void {
 export class AuthoringActionDispatcher {
   private readonly active = new Set<string>();
   private readonly jobs = new Map<string, number>();
+  private readonly foreignLeases = new Map<string, Map<string, ForeignSnapshotLease>>();
   private readonly cursors = new Map<string, { plugin_id: string; offset: number; digest: string; epoch: number; caller: Caller; caller_plugin_id?: string }>();
   private readonly random: () => string;
   private readonly now: () => number;
@@ -254,10 +257,8 @@ export class AuthoringActionDispatcher {
         validate_schema: (schema, value, phase) => this.schemas.assertValue(schema, value, phase),
         is_snapshot_current: () => this.options.authority.isSnapshotCurrent(current),
         signal: context.signal,
-        resolve_host_call: hostCall => {
-          if (hostCall.operation === "workspace.change.propose") submitted = true;
-          return this.hostCall(hostCall, request, descriptor, source, current, stack);
-        } });
+        resolve_host_call: hostCall => this.hostCall(hostCall, request, descriptor, source, current, stack,
+          () => { submitted = true; }) });
       await this.options.authority.assertCurrent(current);
       this.schemas.assertResult(result);
       if (result.request_id !== request.request_id || !sameJson(result.scope, request.scope) || !sameJson(result.snapshot, request.snapshot)) {
@@ -290,16 +291,17 @@ export class AuthoringActionDispatcher {
             caller_chain: current.call_stack });
         } catch { /* Lease cleanup is best-effort after the action has stopped. */ }
       }
+      if (ancestors.length === 0) this.foreignLeases.delete(current.invocation_id);
     }
   }
 
   private async hostCall(call: RuntimeHostCall, request: ActionRequest, descriptor: ActionDescriptor,
-    source: VerifiedActionSet, context: InvocationContext, stack: readonly string[]): Promise<unknown> {
+    source: VerifiedActionSet, context: InvocationContext, stack: readonly string[], markProposalSubmitted: () => void): Promise<unknown> {
     if (!isRecord(call) || !TOKEN.test(call.call_id) || typeof call.operation !== "string" || !isRecord(call.payload)) {
       throw new ActionDispatchError("invalid_input", "Guest Host continuation is malformed");
     }
     const capability = capabilityForHostOperation(call.operation);
-    if (!descriptor.required_capabilities.includes(capability) || !this.grants(source, context).has(capability)) {
+    if (!this.grants(source, context).has(capability)) {
       throw new ActionDispatchError("capability_denied", "Host operation is undeclared or ungranted", false, { operation: call.operation });
     }
     if (context.signal.aborted) throw new ActionDispatchError("cancelled", "Action cancelled", true);
@@ -310,16 +312,18 @@ export class AuthoringActionDispatcher {
     this.validateHostPayload(call.operation, call.payload);
     if (call.operation === "workspace.plugin.invoke") return this.invokeDependency(call.payload, source, context, stack);
     if (call.operation === "actions.list") return this.listDependency(call.payload, source);
-    this.assertBoundPayload(call.operation, call.payload, request);
+    const foreignLease = call.operation === "workspace.file.list" || call.operation === "workspace.file.read"
+      ? this.findForeignLease(context.invocation_id ?? context.request_id, call.payload.snapshot, source.plugin_id, descriptor.action_id) : undefined;
+    this.assertBoundPayload(call.operation, call.payload, request, foreignLease);
     await this.options.authority.assertCurrent(context);
     const hostContext: HostOperationContext = { ...context, invocation_id: context.invocation_id ?? context.request_id,
       plugin_id: source.plugin_id, descriptor, request };
-    const payload = this.bindIdentity(call.operation, call.payload, request, context);
+    const payload = this.bindIdentity(call.operation, call.payload, request, context, foreignLease);
     if (call.operation === "workspace.change.stage" && source.plugin_id !== "proprium.paired-writing") {
       throw new ActionDispatchError("capability_denied", "Only Paired Writing can create compiler staging leases");
     }
     if (call.operation === "workspace.file.list" || call.operation === "workspace.file.read") {
-      const stagingToken = this.stagingReadToken(call.payload, request);
+      const stagingToken = foreignLease ? undefined : this.stagingReadToken(call.payload, request);
       if (stagingToken !== undefined && (!context.staging_snapshot || stagingToken !== context.staging_snapshot || !this.options.capabilities.validateStage)) {
         throw new ActionDispatchError("snapshot_stale", "Staging read lease is unissued or unavailable", true);
       }
@@ -327,12 +331,13 @@ export class AuthoringActionDispatcher {
     }
     switch (call.operation) {
       case "workspace.identity.read": return this.port("identityRead", payload, hostContext);
+      case "workspace.repository.snapshot.read": return this.repositorySnapshotRead(payload, hostContext);
       case "workspace.file.list": return this.port("fileList", payload, hostContext);
       case "workspace.file.read": return this.port("fileRead", payload, hostContext);
       case "workspace.navigation": return this.port("navigate", payload, hostContext);
       case "workspace.change.propose":
         if (descriptor.effect !== "propose") throw new ActionDispatchError("capability_denied", "Read actions cannot submit changes");
-        return this.port("propose", payload, hostContext);
+        return this.port("propose", payload, hostContext, markProposalSubmitted);
       case "workspace.change.stage": return this.port("stage", payload, hostContext);
       case "workspace.change.timestamp":
         if (!request.idempotency_key) throw new ActionDispatchError("invalid_input", "Stable timestamp requires an idempotency key");
@@ -401,9 +406,10 @@ export class AuthoringActionDispatcher {
       (!item.caller_plugins || item.caller_plugins.includes(source.plugin_id))).slice(0, limit as number).map(item => this.metadata(target, item)));
     return { items, next_cursor: null };
   }
-  private assertBoundPayload(operation: string, payload: Record<string, unknown>, request: ActionRequest): void {
+  private assertBoundPayload(operation: string, payload: Record<string, unknown>, request: ActionRequest,
+    foreignLease?: ForeignSnapshotLease): void {
     if (operation === "workspace.file.list" || operation === "workspace.file.read") {
-      this.stagingReadToken(payload, request);
+      if (!foreignLease || !sameJson(payload.snapshot, foreignLease.snapshot)) this.stagingReadToken(payload, request);
     }
     if (operation === "workspace.change.propose") {
       const changeset = payload.changeset;
@@ -428,10 +434,55 @@ export class AuthoringActionDispatcher {
     }
     return snapshot.id;
   }
+  private findForeignLease(invocationId: string, snapshot: unknown, plugin_id: string, action_id: string): ForeignSnapshotLease | undefined {
+    if (!isRecord(snapshot) || typeof snapshot.id !== "string") return undefined;
+    const lease = this.foreignLeases.get(invocationId)?.get(snapshot.id);
+    if (!lease) return undefined;
+    if (lease.plugin_id !== plugin_id || lease.action_id !== action_id) {
+      throw new ActionDispatchError("capability_denied", "Foreign snapshot lease belongs to another action");
+    }
+    if (!sameJson(snapshot, lease.snapshot)) throw new ActionDispatchError("snapshot_stale", "Foreign snapshot differs from its Host-issued lease");
+    return lease;
+  }
+  private async repositorySnapshotRead(payload: Record<string, unknown>, context: HostOperationContext): Promise<unknown> {
+    const value = await this.port("repositorySnapshotRead", payload, context);
+    if (!isRecord(value)) throw new ActionDispatchError("repository_unavailable", "Host returned an invalid foreign snapshot lease", true);
+    try {
+      exactKeys(value, ["scope", "snapshot"], "Foreign snapshot lease");
+      this.schemas.assertValue(scopeSchema, value.scope, "foreign scope");
+      this.schemas.assertValue(snapshotSchema, value.snapshot, "foreign snapshot");
+    } catch {
+      throw new ActionDispatchError("repository_unavailable", "Host returned an invalid foreign snapshot lease", true);
+    }
+    const scope = value.scope as Scope;
+    const snapshot = value.snapshot as Snapshot;
+    if (scope.workspace_id !== payload.workspace_id || scope.repository_id !== payload.repository_id || scope.branch !== payload.branch) {
+      throw new ActionDispatchError("capability_denied", "Host lease does not match the selected foreign workspace");
+    }
+    if (snapshot.id !== payload.snapshot_id) {
+      throw new ActionDispatchError("snapshot_stale", "Host lease does not match the selected foreign snapshot", true);
+    }
+    if (snapshot.id === context.request.snapshot.id && !sameJson(scope, context.request.scope)) {
+      throw new ActionDispatchError("ambiguous_identity", "Foreign snapshot identity collides with the current workspace");
+    }
+    if (context.staging_snapshot === snapshot.id) {
+      throw new ActionDispatchError("ambiguous_identity", "Foreign snapshot identity collides with the active staging lease");
+    }
+    const leases = this.foreignLeases.get(context.invocation_id) ?? new Map<string, ForeignSnapshotLease>();
+    const existing = leases.get(snapshot.id);
+    const lease = { scope, snapshot, plugin_id: context.plugin_id, action_id: context.descriptor.action_id };
+    if (existing && !sameJson(existing, lease)) {
+      throw new ActionDispatchError("ambiguous_identity", "Foreign snapshot ID is already bound to another selected workspace");
+    }
+    leases.set(snapshot.id, lease);
+    this.foreignLeases.set(context.invocation_id, leases);
+    return { scope, snapshot };
+  }
   private validateHostPayload(operation: string, payload: Record<string, unknown>): void {
     const shapes: Readonly<Record<string, readonly string[]>> = {
       "workspace.identity.read": ["paths"], "workspace.file.list": ["snapshot", "prefix", "cursor", "limit"],
       "workspace.file.read": ["snapshot", "path", "offset", "length"], "workspace.navigation": ["target", "expected_context", "intent"],
+      "workspace.repository.snapshot.read": ["workspace_id", "repository_id", "branch", "snapshot_id"],
       "workspace.change.propose": ["changeset"], "workspace.change.stage": ["base_snapshot", "previous_stage", "units"],
       "workspace.change.timestamp": [], "workspace.asset.read": ["group_id", "file_path", "offset", "length"],
       "workspace.derived.cache.get": ["key"], "workspace.derived.cache.put": ["key", "value"],
@@ -455,6 +506,15 @@ export class AuthoringActionDispatcher {
           payload.paths.some(value => typeof value !== "string" || !this.safePath(value)))) {
       throw new ActionDispatchError("invalid_input", "Identity provenance paths are invalid");
     }
+    if (operation === "workspace.repository.snapshot.read") {
+      str("workspace_id", 256); str("branch", 1024); str("snapshot_id", 256); num("repository_id", 1, Number.MAX_SAFE_INTEGER);
+      if (typeof payload.workspace_id !== "string" || payload.workspace_id.length === 0 ||
+          typeof payload.repository_id !== "number" || !Number.isSafeInteger(payload.repository_id) || payload.repository_id < 1 ||
+          typeof payload.branch !== "string" || payload.branch.length === 0 ||
+          typeof payload.snapshot_id !== "string" || payload.snapshot_id.length === 0) {
+        throw new ActionDispatchError("invalid_input", "Selected foreign snapshot binding is incomplete");
+      }
+    }
     if (operation === "workspace.file.list") { if (!isRecord(payload.snapshot)) throw new ActionDispatchError("invalid_input", "Host snapshot required"); str("prefix"); str("cursor", 512); num("limit", 1, 256); }
     if (operation === "workspace.file.read") { if (!isRecord(payload.snapshot) || typeof payload.path !== "string" || !this.safePath(payload.path)) throw new ActionDispatchError("invalid_path", "File read path or snapshot invalid"); num("offset", 0, Number.MAX_SAFE_INTEGER); num("length", 1, 256 * 1024); }
     if (operation === "workspace.change.propose" && !isRecord(payload.changeset)) throw new ActionDispatchError("invalid_input", "ChangeSet required");
@@ -475,19 +535,24 @@ export class AuthoringActionDispatcher {
     if (operation === "actions.list" && (typeof payload.plugin_id !== "string" || !PLUGIN_ID.test(payload.plugin_id))) throw new ActionDispatchError("invalid_input", "Metadata plugin ID is malformed");
   }
   private bindIdentity(operation: string, payload: Record<string, unknown>, request: ActionRequest,
-    context: InvocationContext): Record<string, unknown> {
+    context: InvocationContext, foreignLease?: ForeignSnapshotLease): Record<string, unknown> {
     const bound = { ...payload };
-    if (operation === "workspace.identity.read" || operation.startsWith("workspace.file.") || operation.startsWith("workspace.change.")) bound.scope = request.scope;
+    if (operation === "workspace.identity.read" || operation.startsWith("workspace.change.")) bound.scope = request.scope;
     if (operation === "workspace.identity.read") bound.snapshot = request.snapshot;
-    if (operation === "workspace.file.list" || operation === "workspace.file.read") bound.snapshot = payload.snapshot;
+    if (operation === "workspace.file.list" || operation === "workspace.file.read") {
+      bound.scope = foreignLease?.scope ?? request.scope;
+      bound.snapshot = payload.snapshot;
+    }
     if (operation.startsWith("artifact.")) { bound.scope = request.scope; bound.snapshot = request.snapshot; }
     if (operation.startsWith("workspace.derived.cache.")) { if (isRecord(payload.key)) bound.key = { ...payload.key, plugin_id: request.plugin_id, snapshot: request.snapshot }; else bound.plugin_id = request.plugin_id; }
     if (operation.startsWith("plugin.preferences.")) { bound.plugin_id = request.plugin_id; bound.user_partition = context.actor_id; }
     return bound;
   }
-  private port<K extends keyof HostCapabilityPorts>(key: K, payload: Record<string, unknown>, context: HostOperationContext): Promise<unknown> {
+  private port<K extends keyof HostCapabilityPorts>(key: K, payload: Record<string, unknown>, context: HostOperationContext,
+    beforeCall?: () => void): Promise<unknown> {
     const handler = this.options.capabilities[key] as ((payload: Record<string, unknown>, context: HostOperationContext) => Promise<unknown>) | undefined;
     if (!handler) throw new ActionDispatchError("missing_capability", "Host capability is unavailable", true, { capability: String(key) });
+    beforeCall?.();
     return handler(payload, context);
   }
   private grants(source: VerifiedActionSet, context: InvocationContext): Set<string> {

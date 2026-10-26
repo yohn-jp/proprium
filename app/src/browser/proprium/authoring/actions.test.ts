@@ -151,6 +151,112 @@ test("receipt reads use their exact read capability, independently of proposal p
   assert.equal(readCalls, 1);
 });
 
+test("optional Host operations use runtime grants without becoming required action capabilities", async () => {
+  const assetCapability = "workspace.asset.read";
+  const readAction = descriptor({ action_id: "proprium.research.optional", required_capabilities: [cap] });
+  const assetRuntime: ActionRuntime = { invoke: async options => {
+    const value = await options.resolve_host_call({ call_id: "optional-asset:1", operation: assetCapability,
+      payload: { group_id: "semantic-model", file_path: "manifest.json", offset: 0, length: 32 } });
+    return { request_id: options.request.request_id, scope: options.request.scope, snapshot: options.request.snapshot,
+      ok: true, value: { hits: value ? 1 : 0 }, warnings: [] };
+  } };
+  const pureRuntime: ActionRuntime = { invoke: async options => {
+    const value = await options.resolve_host_call({ call_id: "pure-read:1", operation: "workspace.file.list",
+      payload: { snapshot: options.request.snapshot, prefix: "manuscript/" } });
+    return { request_id: options.request.request_id, scope: options.request.scope, snapshot: options.request.snapshot,
+      ok: true, value: { hits: (value as { entries: unknown[] }).entries.length }, warnings: [] };
+  } };
+  const pure = createHarness({
+    installed: async () => installed({ descriptors: [readAction], grants: [cap], host_capabilities: [cap] }),
+    runtime: pureRuntime,
+  });
+  const pureResult = await pure.dispatcher.invoke({ plugin_id, action_id: readAction.action_id, input: { query: "x" } }, principal());
+  assert.equal(pureResult.ok, true);
+
+  const denied = createHarness({
+    installed: async () => installed({ descriptors: [readAction], grants: [cap], host_capabilities: [cap] }),
+    runtime: assetRuntime,
+  });
+  const deniedResult = await denied.dispatcher.invoke({ plugin_id, action_id: readAction.action_id, input: { query: "x" } }, principal("ui", "request-no-asset"));
+  assert.equal(deniedResult.ok, false);
+  if (!deniedResult.ok) assert.equal(deniedResult.error.code, "capability_denied");
+
+  const allowed = createHarness({
+    installed: async () => installed({ descriptors: [readAction], grants: [cap, assetCapability], host_capabilities: [cap, assetCapability] }),
+    runtime: assetRuntime, capabilities: { assetRead: async () => ({ bytes: [] }) },
+  });
+  const allowedResult = await allowed.dispatcher.invoke({ plugin_id, action_id: readAction.action_id, input: { query: "x" } }, principal("ui", "request-with-asset"));
+  assert.equal(allowedResult.ok, true);
+
+  let proposalCalls = 0;
+  const proposalFromRead = createHarness({
+    installed: async () => installed({ descriptors: [readAction], grants: [cap, "workspace.change.propose"],
+      host_capabilities: [cap, "workspace.change.propose"] }),
+    runtime: { invoke: async options => {
+      await options.resolve_host_call({ call_id: "read-proposal:1", operation: "workspace.change.propose",
+        payload: { changeset: { scope: options.request.scope, snapshot: options.request.snapshot } } });
+      return { request_id: options.request.request_id, scope: options.request.scope, snapshot: options.request.snapshot,
+        ok: true, value: { hits: 1 }, warnings: [] };
+    } },
+    capabilities: { propose: async () => { proposalCalls++; return {}; } },
+  });
+  const proposalResult = await proposalFromRead.dispatcher.invoke({ plugin_id, action_id: readAction.action_id, input: { query: "x" } }, principal("ui", "request-read-proposal"));
+  assert.equal(proposalResult.ok, false);
+  if (!proposalResult.ok) assert.equal(proposalResult.error.code, "capability_denied");
+  assert.equal(proposalCalls, 0);
+});
+
+test("foreign file reads require and preserve the Host-selected scoped snapshot lease", async () => {
+  const foreignScope: Scope = { workspace_id: "selected-bible", repository_id: 99, branch: "main", generation: "foreign-g1" };
+  const foreignSnapshot: Snapshot = { id: "foreign-snapshot-1", local_commit: "fc1", worktree_generation: "foreign-g1", draft_generation: null };
+  const operation = "workspace.repository.snapshot.read";
+  const readAction = descriptor({ action_id: "proprium.research.foreign", required_capabilities: [cap] });
+  const runtime: ActionRuntime = { invoke: async options => {
+    const lease = await options.resolve_host_call({ call_id: "foreign-lease:1", operation,
+      payload: { workspace_id: foreignScope.workspace_id, repository_id: foreignScope.repository_id!,
+        branch: foreignScope.branch, snapshot_id: foreignSnapshot.id } }) as { scope: Scope; snapshot: Snapshot };
+    assert.deepEqual(lease, { scope: foreignScope, snapshot: foreignSnapshot });
+    const page = await options.resolve_host_call({ call_id: "foreign-list:1", operation: "workspace.file.list",
+      payload: { snapshot: lease.snapshot, prefix: "bible/" } });
+    return { request_id: options.request.request_id, scope: options.request.scope, snapshot: options.request.snapshot,
+      ok: true, value: { hits: (page as { entries: unknown[] }).entries.length }, warnings: [] };
+  } };
+  let reads = 0;
+  const h = createHarness({
+    installed: async () => installed({ descriptors: [readAction], grants: [cap, operation], host_capabilities: [cap, operation] }),
+    runtime,
+    capabilities: {
+      repositorySnapshotRead: async payload => {
+        assert.deepEqual(payload, { workspace_id: foreignScope.workspace_id, repository_id: foreignScope.repository_id,
+          branch: foreignScope.branch, snapshot_id: foreignSnapshot.id });
+        return { scope: foreignScope, snapshot: foreignSnapshot };
+      },
+      fileList: async payload => {
+        reads++; assert.deepEqual(payload.scope, foreignScope); assert.deepEqual(payload.snapshot, foreignSnapshot);
+        return { entries: [{ path: "bible/entities.yaml" }], next_cursor: null };
+      },
+    },
+  });
+  const result = await h.dispatcher.invoke({ plugin_id, action_id: readAction.action_id, input: { query: "x" } }, principal());
+  assert.equal(result.ok, true);
+  assert.equal(reads, 1);
+
+  const arbitrary = createHarness({
+    installed: async () => installed({ descriptors: [readAction], grants: [cap], host_capabilities: [cap] }),
+    runtime: { invoke: async options => {
+      await options.resolve_host_call({ call_id: "unleased:1", operation: "workspace.file.list",
+        payload: { snapshot: foreignSnapshot, prefix: "bible/" } });
+      return { request_id: options.request.request_id, scope: options.request.scope, snapshot: options.request.snapshot,
+        ok: true, value: { hits: 0 }, warnings: [] };
+    } },
+    capabilities: { fileList: async () => { reads++; return { entries: [] }; } },
+  });
+  const rejected = await arbitrary.dispatcher.invoke({ plugin_id, action_id: readAction.action_id, input: { query: "x" } }, principal("ui", "request-unleased"));
+  assert.equal(rejected.ok, false);
+  if (!rejected.ok) assert.equal(rejected.error.code, "snapshot_stale");
+  assert.equal(reads, 1);
+});
+
 test("staged file reads require the Host-issued token and retain the original snapshot fields", async () => {
   const pairedPlugin = "proprium.paired-writing";
   const compileAction = descriptor({ plugin_id: pairedPlugin, action_id: "proprium.paired-writing.compile" });
