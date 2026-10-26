@@ -141,8 +141,8 @@ test("static Host imports a GitHub REST commit, reloads offline, and edits with 
     await chooseFile(page, "README.md");
     await expectEditorText(page, fixture.content);
     await showPanel(page, "history");
-    await expect(page.getByText("Static browser acceptance fixture", { exact: true })).toBeVisible();
-    await expect(page.locator("code").filter({ hasText: fixture.head.slice(0, 10) })).toBeVisible();
+    await expect(page.getByRole("heading", { name: "Static browser acceptance fixture", exact: true })).toBeVisible();
+    await expect(page.locator(".git-history-list code").filter({ hasText: fixture.head.slice(0, 10) })).toBeVisible();
   }
 
   await revealFilesSidebar();

@@ -41,7 +41,7 @@ test("GitHub authorization shows its code before navigation and reconnects recen
   await page.getByRole("button", { name: new RegExp(`${staticFixtureIdentity.owner}/${staticFixtureIdentity.repository}`, "u") }).click();
   await showPanel(page, "outline");
   await expect(page.getByLabel("Connected to GitHub", { exact: true })).toBeVisible();
-  await expect(page.getByRole("button", { name: "Fetch", exact: true })).toBeEnabled();
+  await expect(page.getByRole("button", { name: "更新を確認", exact: true })).toBeEnabled();
 });
 
 test("repository-list failure does not leave a false connected account", async ({ page }) => {
