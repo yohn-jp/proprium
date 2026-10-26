@@ -108,6 +108,7 @@ export async function installStaticGitHubFixture(page: Page, hostOrigin: string)
     const repoPath = `/repos/${staticFixtureIdentity.owner}/${staticFixtureIdentity.repository}`;
     if (requestUrl.pathname === repoPath) return json({
       id: staticFixtureIdentity.repositoryId,
+      name: staticFixtureIdentity.repository,
       full_name: `${staticFixtureIdentity.owner}/${staticFixtureIdentity.repository}`,
       owner: { login: staticFixtureIdentity.owner },
       permissions: { pull: true, push: true },
