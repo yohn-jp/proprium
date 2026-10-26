@@ -362,7 +362,7 @@ export function SceneEditor({
       <div className="editor-display-controls">
       <nav className="editor-reading-controls" aria-label="読書表示">
         <button type="button" className="quiet-button" onClick={() => { flushPendingReactPublish(); setReading((current) => !current); }} aria-pressed={reading}>{reading ? "編集に戻る" : "読書モード"}</button>
-        <button type="button" className="quiet-button" onClick={() => setVertical((current) => !current)} aria-pressed={vertical}>{vertical ? "横書き" : "縦書き"}</button>
+        <button type="button" className="quiet-button" onClick={() => setVertical((current) => !current)} aria-pressed={vertical}>{vertical ? "読書・プレビューを横書きに" : "読書・プレビューを縦書きに"}</button>
       </nav>
       <details className="editor-display-options">
       <summary>プレビュー・集中・印刷</summary>

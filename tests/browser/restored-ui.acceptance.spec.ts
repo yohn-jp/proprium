@@ -12,7 +12,7 @@ test("recovered shells retain CodeMirror, typography, reading, theme and unsaved
   await page.getByText("プレビュー・集中・印刷", { exact: true }).click();
   await page.getByRole("button", { name: "プレビュー", exact: true }).click();
   await expect(page.getByRole("document", { name: "ルビ付き読み取り専用プレビュー" }).locator("ruby")).toHaveCount(1);
-  await page.getByRole("button", { name: "縦書き", exact: true }).click();
+  await page.getByRole("button", { name: "読書・プレビューを縦書きに", exact: true }).click();
   await page.getByRole("button", { name: "読書モード", exact: true }).click();
   await expect(page.getByRole("document", { name: "縦書き読書モード" })).toBeVisible();
   await page.getByRole("button", { name: "編集に戻る", exact: true }).click();
