@@ -9,7 +9,7 @@
     "test": "node --import tsx --test src/domain/*.test.ts src/*.test.ts"
   },
   "dependencies": {
-    "yaml": "^2.8.1"
+    "yaml": "2.9.1"
   },
   "devDependencies": {
     "@types/node": "^24.0.0",

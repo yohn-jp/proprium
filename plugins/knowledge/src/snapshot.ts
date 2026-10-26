@@ -27,8 +27,8 @@ export interface FileChunk {
 /** Host v2 pinned file capabilities, adapted without retaining a repository-wide byte snapshot. */
 export interface SnapshotReader {
   readonly snapshot: Snapshot;
-  list(input: { snapshot: Snapshot; prefix: string; cursor?: string; limit: number }): Generator<HostCall, PagedFileList, unknown>;
-  read(input: { snapshot: Snapshot; path: string; offset: number; length: number }): Generator<HostCall, FileChunk, unknown>;
+  list(input: { snapshot: Snapshot; prefix: string; cursor?: string; limit: number; staging_snapshot?: string }): Generator<HostCall, PagedFileList, unknown>;
+  read(input: { snapshot: Snapshot; path: string; offset: number; length: number; staging_snapshot?: string }): Generator<HostCall, FileChunk, unknown>;
 }
 
 export interface StoryFile {
@@ -253,6 +253,7 @@ export function* readKnowledgeSnapshot(reader: SnapshotReader): Generator<HostCa
 
   const candidates: StoryEntity[] = [];
   for (const file of files.values()) {
+    if (/^bible\/characters\/[^/]+\/voice\.ya?ml$/u.test(file.path)) continue;
     try {
       const entity = parseStoryEntity(file);
       if (entity) candidates.push(entity);
@@ -307,6 +308,13 @@ export function* readSceneManuscript(reader: SnapshotReader, path: string): Gene
   return yield* readAllBytes(reader, selected);
 }
 
+/** Reads a known source path through its pinned list revision, including JSONL metadata files. */
+export function* readOptionalPath(reader: SnapshotReader, path: string): Generator<HostCall, StoryFile | null, unknown> {
+  if (!validProjectPath(path)) throw Object.assign(new Error(`Invalid workspace path: ${path}`), { code: "invalid_path", details: { path } });
+  const selected = (yield* listPrefix(reader, path)).find((item) => item.path === path);
+  return selected ? yield* readAllBytes(reader, selected) : null;
+}
+
 /** Loads only the manuscripts explicitly linked from the selected scene records. */
 export function* attachSceneManuscripts(
   reader: SnapshotReader,
@@ -350,7 +358,7 @@ export function* attachSceneManuscripts(
 }
 
 /** Bind file operations to the exact Host-issued scope and snapshot on the action envelope. */
-export function createSnapshotReader(context: ActionRequest, host: GuestHost): SnapshotReader {
+export function createSnapshotReader(context: ActionRequest, host: GuestHost, stagingSnapshot?: string): SnapshotReader {
   const snapshot = context.snapshot;
   return {
     snapshot,
@@ -358,6 +366,7 @@ export function createSnapshotReader(context: ActionRequest, host: GuestHost): S
       if (input.snapshot.id !== snapshot.id) throw new Error("snapshot_stale");
       const page = yield* host.request<FilePage>(HOST_OPERATIONS.list, {
         snapshot, prefix: input.prefix, ...(input.cursor ? { cursor: input.cursor } : {}), limit: input.limit,
+        ...(stagingSnapshot ? { staging_snapshot: stagingSnapshot } : {}),
       });
       return { entries: page.entries, next_cursor: page.next_cursor };
     },
@@ -365,6 +374,7 @@ export function createSnapshotReader(context: ActionRequest, host: GuestHost): S
       if (input.snapshot.id !== snapshot.id) throw new Error("snapshot_stale");
       const response = yield* host.request<HostFileChunk>(HOST_OPERATIONS.read, {
         snapshot, path: input.path, offset: input.offset, length: input.length,
+        ...(stagingSnapshot ? { staging_snapshot: stagingSnapshot } : {}),
       });
       if (!Array.isArray(response.bytes) || response.bytes.some((value) => !Number.isInteger(value) || value < 0 || value > 255)) {
         throw new Error("invalid_input: Host returned malformed file bytes");
