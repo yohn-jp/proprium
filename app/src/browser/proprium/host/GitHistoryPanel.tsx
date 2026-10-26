@@ -95,12 +95,12 @@ export function GitHistoryPanel({ git, history, busy, canRestore, onRefresh, onR
   return <section className="git-history-review" aria-labelledby="git-history-heading">
     <header className="git-history-heading">
       <div><p className="eyebrow">LOCAL GIT</p><h2 id="git-history-heading">History</h2><p>Local commits on this device. They are not necessarily published to GitHub.</p></div>
-      <button type="button" className="text-button" disabled={busy || loading} onClick={onRefresh}>Refresh</button>
+      <button type="button" className="text-button" disabled={busy || loading || restoring} onClick={onRefresh}>Refresh</button>
     </header>
     <div className="git-history-layout">
       <nav className="git-history-list" aria-label="Local commits">
         {history.length ? <ol>{history.map((commit) => <li key={commit.oid}>
-          <button type="button" className={`git-history-commit ${selectedOid === commit.oid ? "is-selected" : ""}`} aria-current={selectedOid === commit.oid ? "true" : undefined} onClick={() => setSelectedOid(commit.oid)}>
+          <button type="button" className={`git-history-commit ${selectedOid === commit.oid ? "is-selected" : ""}`} aria-current={selectedOid === commit.oid ? "true" : undefined} disabled={busy || restoring} onClick={() => setSelectedOid(commit.oid)}>
             <strong>{describeCommit(commit)}</strong><code>{commit.oid.slice(0, 10)}</code><small>{commit.author.name} · {new Date(commit.timestamp * 1000).toLocaleString()}</small>
           </button>
         </li>)}</ol> : <p className="git-review-empty">No commits in this local workspace.</p>}
