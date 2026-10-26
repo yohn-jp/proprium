@@ -19,7 +19,7 @@ test("a local manuscript can be saved, renamed, reviewed, committed and inspecte
 
   await showPanel(page, "outline");
   const files = page.getByRole("list", { name: "Repository files" });
-  await files.getByRole("button", { name: "序章.md", exact: true }).click();
+  await expect(files.getByRole("button", { name: "序章.md", exact: true })).toBeVisible();
   await page.locator(".file-rename-panel > summary").click();
   await page.getByLabel("新しい名前・保存先", { exact: true }).fill("chapters/序章.md");
   await page.getByRole("button", { name: "変更する", exact: true }).click();
@@ -52,6 +52,8 @@ test("saved workspace files round-trip through an explicitly exported ZIP", asyn
   await page.getByLabel("取り込むファイル・ZIP", { exact: true }).setInputFiles({
     name: "原稿.md", mimeType: "text/markdown", buffer: Buffer.from("持ち出して、もう一度開く原稿。\n"),
   });
+  await expect(page.locator(".workspace-transfer-panel")).toContainText("1件をこの端末のファイルへ取り込みました");
+  await showPanel(page, "outline");
   await expect(page.getByRole("list", { name: "Repository files" }).getByRole("button", { name: "原稿.md", exact: true })).toBeVisible();
   const downloadEvent = page.waitForEvent("download");
   await page.getByRole("button", { name: "保存済みファイルをZIPに書き出す", exact: true }).click();
@@ -65,6 +67,8 @@ test("saved workspace files round-trip through an explicitly exported ZIP", asyn
   await showPanel(page, "outline");
   await page.locator(".workspace-transfer-panel > summary").click();
   await page.getByLabel("取り込むファイル・ZIP", { exact: true }).setInputFiles({ name: archive.suggestedFilename(), mimeType: "application/zip", buffer: await readFile(archivePath!) });
+  await expect(page.locator(".workspace-transfer-panel")).toContainText("1件をこの端末のファイルへ取り込みました");
+  await showPanel(page, "outline");
   await expect(page.getByRole("list", { name: "Repository files" }).getByRole("button", { name: "原稿.md", exact: true })).toBeVisible();
   await showPanel(page, "editor");
   await expect(page.getByRole("textbox", { name: "原稿 Markdown" })).toHaveText("持ち出して、もう一度開く原稿。\n");
