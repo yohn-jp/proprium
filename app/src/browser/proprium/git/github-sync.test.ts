@@ -208,3 +208,84 @@ test("sign-out prevents a pending device flow from restoring its token", async (
   assert.equal(session.account(), null);
   await assert.rejects(session.repositories(), (error: unknown) => error instanceof GitHubSyncError && error.code === "authentication_required");
 });
+
+test("account sessions list paginated branches only after confirming the immutable repository identity", async () => {
+  const calls: Array<{ url: string; init?: RequestInit }> = [];
+  let repositoryChecks = 0;
+  const firstPage = Array.from({ length: 100 }, (_, index) => ({ name: `feature-${String(index).padStart(3, "0")}` }));
+  const fetcher: typeof fetch = async (input, init) => {
+    const url = String(input);
+    calls.push({ url, init });
+    if (url.endsWith("/oauth/device/code")) return response(pendingDevice);
+    if (url.endsWith("/oauth/token")) return response({ access_token: "gho_branch_picker", token_type: "bearer" });
+    if (url.endsWith("/user")) return response({ id: 44, login: "writer" });
+    if (url === "https://api.github.com/repos/writer/notes") {
+      repositoryChecks += 1;
+      return response({ id: 12345, full_name: "writer/notes", name: "notes", owner: { login: "writer" }, permissions: { pull: true } });
+    }
+    if (url.endsWith("/branches?per_page=100&page=1")) return response(firstPage);
+    if (url.endsWith("/branches?per_page=100&page=2")) return response([{ name: "main" }]);
+    throw new Error(`unexpected request: ${url}`);
+  };
+  const session = createGitHubAccountSession("https://oauth.example.test", fetcher);
+  await session.beginAuthorization();
+  await session.completeAuthorization();
+  const selected = {
+    id: 12345,
+    fullName: "writer/notes",
+    owner: "writer",
+    name: "notes",
+    defaultBranch: "main",
+    private: true,
+    permissions: { pull: true, push: true },
+  };
+  const branches = await session.listBranches(selected);
+  assert.equal(branches.length, 101);
+  assert.deepEqual(branches.slice(-2), ["feature-099", "main"]);
+  assert.equal(repositoryChecks, 2, "the immutable repository identity is checked before and after branch pagination");
+  const branchCalls = calls.filter(call => call.url.includes("/branches?"));
+  assert.equal(branchCalls.length, 2);
+  assert.ok(branchCalls.every(call => call.init?.credentials === "omit" && call.init?.redirect === "error"));
+  assert.ok(branchCalls.every(call => new Headers(call.init?.headers).get("Authorization") === "Bearer gho_branch_picker"));
+  session.signOut();
+  await assert.rejects(session.listBranches(selected), (error: unknown) => error instanceof GitHubSyncError && error.code === "authentication_required");
+});
+
+test("branch listing rejects stale repository IDs, lost read permission, and malformed names", async () => {
+  let repositoryId = 999;
+  let canPull = true;
+  let malformed = false;
+  const session = createGitHubAccountSession("https://oauth.example.test", async (input) => {
+    const url = String(input);
+    if (url.endsWith("/oauth/device/code")) return response(pendingDevice);
+    if (url.endsWith("/oauth/token")) return response({ access_token: "gho_branch_picker", token_type: "bearer" });
+    if (url.endsWith("/user")) return response({ id: 44, login: "writer" });
+    if (url === "https://api.github.com/repos/writer/notes") return response({
+      id: repositoryId,
+      full_name: "writer/notes",
+      name: "notes",
+      owner: { login: "writer" },
+      permissions: { pull: canPull },
+    });
+    if (url.includes("/branches?")) return response([{ name: malformed ? "../other" : "main" }]);
+    throw new Error(`unexpected request: ${url}`);
+  });
+  await session.beginAuthorization();
+  await session.completeAuthorization();
+  const selected = {
+    id: 12345,
+    fullName: "writer/notes",
+    owner: "writer",
+    name: "notes",
+    defaultBranch: "main",
+    private: true,
+    permissions: { pull: true, push: true },
+  };
+  await assert.rejects(session.listBranches(selected), (error: unknown) => error instanceof GitHubSyncError && error.code === "repository_mismatch");
+  repositoryId = 12345;
+  canPull = false;
+  await assert.rejects(session.listBranches(selected), (error: unknown) => error instanceof GitHubSyncError && error.code === "permission_denied");
+  canPull = true;
+  malformed = true;
+  await assert.rejects(session.listBranches(selected), (error: unknown) => error instanceof GitHubSyncError && error.code === "git_error");
+});
