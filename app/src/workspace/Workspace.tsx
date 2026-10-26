@@ -475,7 +475,7 @@ export function Workspace({ scope, mode, panels, beforeLayoutChange, requestedPa
   }, [committingPanelRequest, scope, mode, mobilePanelId, visibleIds, onPanelRequestResult]);
 
   const changePreset = (preset: Exclude<WorkspacePreset, "custom">): void => {
-    void changeLayout(() => createWorkspacePreset(preset, panelIds), `${presetTitle(preset)} preset applied. Save layout to keep it.`)
+    void changeLayout(() => createWorkspacePreset(preset, panelIds), `${presetTitle(preset)}レイアウトを適用しました。パネルの並びだけが変わります。保存すると次回も使えます。`)
       .then((allowed) => { if (allowed) { setFloating([]); setMaximizedPanelId(null); } });
   };
 
@@ -634,11 +634,12 @@ export function Workspace({ scope, mode, panels, beforeLayoutChange, requestedPa
       <details className="st-workspace-configuration">
       <summary>パネルとレイアウト</summary>
       <div className="st-workspace-toolbar" role="toolbar" aria-label="パネルとレイアウトの操作">
-        <div className="st-workspace-presets" aria-label="レイアウトのプリセット">
-          <button type="button" aria-pressed={layout.preset === "writing"} onClick={() => changePreset("writing")} disabled={changing}>Writing</button>
-          <button type="button" aria-pressed={layout.preset === "research"} onClick={() => changePreset("research")} disabled={changing}>Research</button>
-          <button type="button" aria-pressed={layout.preset === "review"} onClick={() => changePreset("review")} disabled={changing}>Review</button>
+        <div className="st-workspace-presets" aria-label="パネル配置のプリセット">
+          <button type="button" aria-pressed={layout.preset === "writing"} onClick={() => changePreset("writing")} disabled={changing}>執筆用レイアウト</button>
+          <button type="button" aria-pressed={layout.preset === "research"} onClick={() => changePreset("research")} disabled={changing}>調査用レイアウト</button>
+          <button type="button" aria-pressed={layout.preset === "review"} onClick={() => changePreset("review")} disabled={changing}>レビュー用レイアウト</button>
         </div>
+        <p className="st-workspace-preset-help">名前は配置例です。機能や内容は変わらず、パネルの並びだけを変更します。</p>
         <details className="st-workspace-panel-menu">
           <summary>表示パネル</summary>
           <div className="st-workspace-panel-menu-list">

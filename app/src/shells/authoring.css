@@ -67,6 +67,11 @@
   border-bottom: 1px solid var(--studio-border); background: var(--studio-tint);
 }
 .st-studio-shell .st-workspace-toolbar::before { content: none; }
+.st-studio-shell .st-workspace-presets button { white-space: nowrap; }
+.st-studio-shell .st-workspace-preset-help {
+  flex: 1 1 16rem; max-width: 34rem; margin: 0; color: var(--studio-muted);
+  font-size: 0.76rem; line-height: 1.45;
+}
 .st-studio-shell .st-workspace-layout-feedback {
   flex: 1 1 18rem; max-width: none; overflow: visible; overflow-wrap: anywhere;
   white-space: normal; color: var(--studio-muted); font-size: 0.78rem; line-height: 1.4;
