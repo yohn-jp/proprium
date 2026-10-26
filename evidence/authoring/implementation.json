@@ -1,0 +1,6957 @@
+{
+  "schema": "proprium.authoring.evidence/v1",
+  "release_sha": null,
+  "registry_digest": null,
+  "generated_from": {
+    "acceptance": "docs/canon/ACCEPTANCE.md",
+    "inventory": "docs/canon/RECOVERY-INVENTORY.md",
+    "traceability": "docs/canon/traceability.json",
+    "plugins": [
+      "docs/canon/plugins/NARRATIVE.md",
+      "docs/canon/plugins/KNOWLEDGE.md",
+      "docs/canon/plugins/RESEARCH.md",
+      "docs/canon/plugins/PAIRED-WRITING.md",
+      "docs/canon/plugins/DIAGNOSTICS.md",
+      "docs/canon/plugins/SPEAKER.md",
+      "docs/canon/plugins/SEMANTIC.md",
+      "docs/canon/plugins/PUBLISHING.md"
+    ]
+  },
+  "matrix": [
+    {
+      "id": "R01",
+      "status": "NOT_CHECKED",
+      "fixture": null,
+      "command": null,
+      "git_sha": null,
+      "browser_platform": null,
+      "input": null,
+      "output": null,
+      "receipt": null,
+      "artifact": null,
+      "evidence_ref": null,
+      "blocker": null
+    },
+    {
+      "id": "R02",
+      "status": "NOT_CHECKED",
+      "fixture": null,
+      "command": null,
+      "git_sha": null,
+      "browser_platform": null,
+      "input": null,
+      "output": null,
+      "receipt": null,
+      "artifact": null,
+      "evidence_ref": null,
+      "blocker": null
+    },
+    {
+      "id": "R03",
+      "status": "NOT_CHECKED",
+      "fixture": null,
+      "command": null,
+      "git_sha": null,
+      "browser_platform": null,
+      "input": null,
+      "output": null,
+      "receipt": null,
+      "artifact": null,
+      "evidence_ref": null,
+      "blocker": null
+    },
+    {
+      "id": "R04",
+      "status": "NOT_CHECKED",
+      "fixture": null,
+      "command": null,
+      "git_sha": null,
+      "browser_platform": null,
+      "input": null,
+      "output": null,
+      "receipt": null,
+      "artifact": null,
+      "evidence_ref": null,
+      "blocker": null
+    },
+    {
+      "id": "R05",
+      "status": "NOT_CHECKED",
+      "fixture": null,
+      "command": null,
+      "git_sha": null,
+      "browser_platform": null,
+      "input": null,
+      "output": null,
+      "receipt": null,
+      "artifact": null,
+      "evidence_ref": null,
+      "blocker": null
+    },
+    {
+      "id": "R06",
+      "status": "NOT_CHECKED",
+      "fixture": null,
+      "command": null,
+      "git_sha": null,
+      "browser_platform": null,
+      "input": null,
+      "output": null,
+      "receipt": null,
+      "artifact": null,
+      "evidence_ref": null,
+      "blocker": null
+    },
+    {
+      "id": "R07",
+      "status": "NOT_CHECKED",
+      "fixture": null,
+      "command": null,
+      "git_sha": null,
+      "browser_platform": null,
+      "input": null,
+      "output": null,
+      "receipt": null,
+      "artifact": null,
+      "evidence_ref": null,
+      "blocker": null
+    },
+    {
+      "id": "R08",
+      "status": "NOT_CHECKED",
+      "fixture": null,
+      "command": null,
+      "git_sha": null,
+      "browser_platform": null,
+      "input": null,
+      "output": null,
+      "receipt": null,
+      "artifact": null,
+      "evidence_ref": null,
+      "blocker": null
+    },
+    {
+      "id": "R09",
+      "status": "NOT_CHECKED",
+      "fixture": null,
+      "command": null,
+      "git_sha": null,
+      "browser_platform": null,
+      "input": null,
+      "output": null,
+      "receipt": null,
+      "artifact": null,
+      "evidence_ref": null,
+      "blocker": null
+    },
+    {
+      "id": "R10",
+      "status": "NOT_CHECKED",
+      "fixture": null,
+      "command": null,
+      "git_sha": null,
+      "browser_platform": null,
+      "input": null,
+      "output": null,
+      "receipt": null,
+      "artifact": null,
+      "evidence_ref": null,
+      "blocker": null
+    },
+    {
+      "id": "R11",
+      "status": "NOT_CHECKED",
+      "fixture": null,
+      "command": null,
+      "git_sha": null,
+      "browser_platform": null,
+      "input": null,
+      "output": null,
+      "receipt": null,
+      "artifact": null,
+      "evidence_ref": null,
+      "blocker": null
+    },
+    {
+      "id": "R12",
+      "status": "NOT_CHECKED",
+      "fixture": null,
+      "command": null,
+      "git_sha": null,
+      "browser_platform": null,
+      "input": null,
+      "output": null,
+      "receipt": null,
+      "artifact": null,
+      "evidence_ref": null,
+      "blocker": null
+    },
+    {
+      "id": "R13",
+      "status": "NOT_CHECKED",
+      "fixture": null,
+      "command": null,
+      "git_sha": null,
+      "browser_platform": null,
+      "input": null,
+      "output": null,
+      "receipt": null,
+      "artifact": null,
+      "evidence_ref": null,
+      "blocker": null
+    },
+    {
+      "id": "R14",
+      "status": "NOT_CHECKED",
+      "fixture": null,
+      "command": null,
+      "git_sha": null,
+      "browser_platform": null,
+      "input": null,
+      "output": null,
+      "receipt": null,
+      "artifact": null,
+      "evidence_ref": null,
+      "blocker": null
+    }
+  ],
+  "plugins": [
+    {
+      "plugin_id": "proprium.narrative",
+      "canon": "docs/canon/plugins/NARRATIVE.md",
+      "feature_count": 12,
+      "acceptance_anchors": [
+        "accept-nar-a01",
+        "accept-nar-a02",
+        "accept-nar-a03",
+        "accept-nar-a04",
+        "accept-nar-a05",
+        "accept-nar-a06",
+        "accept-nar-a07",
+        "accept-nar-a08",
+        "accept-nar-a09",
+        "accept-nar-a10",
+        "accept-nar-a11",
+        "accept-nar-a12"
+      ],
+      "source_revisions": [],
+      "features": [
+        {
+          "feature_id": "NAR-01",
+          "acceptance_anchors": [
+            "accept-nar-a01"
+          ],
+          "source_actions": [],
+          "source_ui_contributions": [],
+          "source_revisions": [],
+          "status": "NOT_CHECKED",
+          "fixture": null,
+          "command": null,
+          "git_sha": null,
+          "browser_platform": null,
+          "input": null,
+          "output": null,
+          "receipt": null,
+          "artifact": null,
+          "evidence_ref": null,
+          "blocker": null
+        },
+        {
+          "feature_id": "NAR-02",
+          "acceptance_anchors": [
+            "accept-nar-a02"
+          ],
+          "source_actions": [
+            "story.entities.list",
+            "story.entities.collection-revision",
+            "story.entities.get",
+            "story.volumes.tree"
+          ],
+          "source_ui_contributions": [
+            "story.navigator"
+          ],
+          "source_revisions": [],
+          "status": "NOT_CHECKED",
+          "fixture": null,
+          "command": null,
+          "git_sha": null,
+          "browser_platform": null,
+          "input": null,
+          "output": null,
+          "receipt": null,
+          "artifact": null,
+          "evidence_ref": null,
+          "blocker": null
+        },
+        {
+          "feature_id": "NAR-03",
+          "acceptance_anchors": [
+            "accept-nar-a03"
+          ],
+          "source_actions": [],
+          "source_ui_contributions": [],
+          "source_revisions": [],
+          "status": "NOT_CHECKED",
+          "fixture": null,
+          "command": null,
+          "git_sha": null,
+          "browser_platform": null,
+          "input": null,
+          "output": null,
+          "receipt": null,
+          "artifact": null,
+          "evidence_ref": null,
+          "blocker": null
+        },
+        {
+          "feature_id": "NAR-04",
+          "acceptance_anchors": [
+            "accept-nar-a04"
+          ],
+          "source_actions": [
+            "story.entities.create"
+          ],
+          "source_ui_contributions": [],
+          "source_revisions": [],
+          "status": "NOT_CHECKED",
+          "fixture": null,
+          "command": null,
+          "git_sha": null,
+          "browser_platform": null,
+          "input": null,
+          "output": null,
+          "receipt": null,
+          "artifact": null,
+          "evidence_ref": null,
+          "blocker": null
+        },
+        {
+          "feature_id": "NAR-05",
+          "acceptance_anchors": [
+            "accept-nar-a05"
+          ],
+          "source_actions": [
+            "story.entities.reorder"
+          ],
+          "source_ui_contributions": [],
+          "source_revisions": [],
+          "status": "NOT_CHECKED",
+          "fixture": null,
+          "command": null,
+          "git_sha": null,
+          "browser_platform": null,
+          "input": null,
+          "output": null,
+          "receipt": null,
+          "artifact": null,
+          "evidence_ref": null,
+          "blocker": null
+        },
+        {
+          "feature_id": "NAR-06",
+          "acceptance_anchors": [
+            "accept-nar-a06"
+          ],
+          "source_actions": [
+            "story.entities.update",
+            "story.scene.metadata.update",
+            "story.scene.context"
+          ],
+          "source_ui_contributions": [],
+          "source_revisions": [],
+          "status": "NOT_CHECKED",
+          "fixture": null,
+          "command": null,
+          "git_sha": null,
+          "browser_platform": null,
+          "input": null,
+          "output": null,
+          "receipt": null,
+          "artifact": null,
+          "evidence_ref": null,
+          "blocker": null
+        },
+        {
+          "feature_id": "NAR-07",
+          "acceptance_anchors": [
+            "accept-nar-a07"
+          ],
+          "source_actions": [],
+          "source_ui_contributions": [],
+          "source_revisions": [],
+          "status": "NOT_CHECKED",
+          "fixture": null,
+          "command": null,
+          "git_sha": null,
+          "browser_platform": null,
+          "input": null,
+          "output": null,
+          "receipt": null,
+          "artifact": null,
+          "evidence_ref": null,
+          "blocker": null
+        },
+        {
+          "feature_id": "NAR-08",
+          "acceptance_anchors": [
+            "accept-nar-a08"
+          ],
+          "source_actions": [],
+          "source_ui_contributions": [],
+          "source_revisions": [],
+          "status": "NOT_CHECKED",
+          "fixture": null,
+          "command": null,
+          "git_sha": null,
+          "browser_platform": null,
+          "input": null,
+          "output": null,
+          "receipt": null,
+          "artifact": null,
+          "evidence_ref": null,
+          "blocker": null
+        },
+        {
+          "feature_id": "NAR-09",
+          "acceptance_anchors": [
+            "accept-nar-a09"
+          ],
+          "source_actions": [],
+          "source_ui_contributions": [],
+          "source_revisions": [],
+          "status": "NOT_CHECKED",
+          "fixture": null,
+          "command": null,
+          "git_sha": null,
+          "browser_platform": null,
+          "input": null,
+          "output": null,
+          "receipt": null,
+          "artifact": null,
+          "evidence_ref": null,
+          "blocker": null
+        },
+        {
+          "feature_id": "NAR-10",
+          "acceptance_anchors": [
+            "accept-nar-a10"
+          ],
+          "source_actions": [],
+          "source_ui_contributions": [],
+          "source_revisions": [],
+          "status": "NOT_CHECKED",
+          "fixture": null,
+          "command": null,
+          "git_sha": null,
+          "browser_platform": null,
+          "input": null,
+          "output": null,
+          "receipt": null,
+          "artifact": null,
+          "evidence_ref": null,
+          "blocker": null
+        },
+        {
+          "feature_id": "NAR-11",
+          "acceptance_anchors": [
+            "accept-nar-a11"
+          ],
+          "source_actions": [],
+          "source_ui_contributions": [],
+          "source_revisions": [],
+          "status": "NOT_CHECKED",
+          "fixture": null,
+          "command": null,
+          "git_sha": null,
+          "browser_platform": null,
+          "input": null,
+          "output": null,
+          "receipt": null,
+          "artifact": null,
+          "evidence_ref": null,
+          "blocker": null
+        },
+        {
+          "feature_id": "NAR-12",
+          "acceptance_anchors": [
+            "accept-nar-a12"
+          ],
+          "source_actions": [],
+          "source_ui_contributions": [],
+          "source_revisions": [],
+          "status": "NOT_CHECKED",
+          "fixture": null,
+          "command": null,
+          "git_sha": null,
+          "browser_platform": null,
+          "input": null,
+          "output": null,
+          "receipt": null,
+          "artifact": null,
+          "evidence_ref": null,
+          "blocker": null
+        }
+      ]
+    },
+    {
+      "plugin_id": "proprium.knowledge",
+      "canon": "docs/canon/plugins/KNOWLEDGE.md",
+      "feature_count": 25,
+      "acceptance_anchors": [
+        "accept-kno-a01",
+        "accept-kno-a02",
+        "accept-kno-a03",
+        "accept-kno-a04",
+        "accept-kno-a05",
+        "accept-kno-a06",
+        "accept-kno-a07",
+        "accept-kno-a08",
+        "accept-kno-a09",
+        "accept-kno-a10",
+        "accept-kno-a11",
+        "accept-kno-a12",
+        "accept-kno-a13",
+        "accept-kno-a14",
+        "accept-kno-a15",
+        "accept-kno-a16",
+        "accept-kno-a17",
+        "accept-kno-a18",
+        "accept-kno-a19"
+      ],
+      "source_revisions": [],
+      "features": [
+        {
+          "feature_id": "KNO-01",
+          "acceptance_anchors": [
+            "accept-kno-a01",
+            "accept-kno-a02"
+          ],
+          "source_actions": [
+            "story.snapshot.materialize",
+            "story.entities.list",
+            "story.entities.collection-revision",
+            "story.entities.get"
+          ],
+          "source_ui_contributions": [
+            "story.inspector"
+          ],
+          "source_revisions": [],
+          "status": "NOT_CHECKED",
+          "fixture": null,
+          "command": null,
+          "git_sha": null,
+          "browser_platform": null,
+          "input": null,
+          "output": null,
+          "receipt": null,
+          "artifact": null,
+          "evidence_ref": null,
+          "blocker": null
+        },
+        {
+          "feature_id": "KNO-02",
+          "acceptance_anchors": [
+            "accept-kno-a02"
+          ],
+          "source_actions": [
+            "story.entities.create",
+            "story.entities.update"
+          ],
+          "source_ui_contributions": [],
+          "source_revisions": [],
+          "status": "NOT_CHECKED",
+          "fixture": null,
+          "command": null,
+          "git_sha": null,
+          "browser_platform": null,
+          "input": null,
+          "output": null,
+          "receipt": null,
+          "artifact": null,
+          "evidence_ref": null,
+          "blocker": null
+        },
+        {
+          "feature_id": "KNO-03",
+          "acceptance_anchors": [
+            "accept-kno-a03",
+            "accept-kno-a12"
+          ],
+          "source_actions": [
+            "story.scene.metadata.update"
+          ],
+          "source_ui_contributions": [],
+          "source_revisions": [],
+          "status": "NOT_CHECKED",
+          "fixture": null,
+          "command": null,
+          "git_sha": null,
+          "browser_platform": null,
+          "input": null,
+          "output": null,
+          "receipt": null,
+          "artifact": null,
+          "evidence_ref": null,
+          "blocker": null
+        },
+        {
+          "feature_id": "KNO-04",
+          "acceptance_anchors": [
+            "accept-kno-a02",
+            "accept-kno-a08"
+          ],
+          "source_actions": [],
+          "source_ui_contributions": [],
+          "source_revisions": [],
+          "status": "NOT_CHECKED",
+          "fixture": null,
+          "command": null,
+          "git_sha": null,
+          "browser_platform": null,
+          "input": null,
+          "output": null,
+          "receipt": null,
+          "artifact": null,
+          "evidence_ref": null,
+          "blocker": null
+        },
+        {
+          "feature_id": "KNO-05",
+          "acceptance_anchors": [
+            "accept-kno-a08",
+            "accept-kno-a13"
+          ],
+          "source_actions": [
+            "story.zukan-suggestions.list",
+            "story.zukan-suggestions.create",
+            "story.zukan-suggestions.approve",
+            "story.zukan-suggestions.reject"
+          ],
+          "source_ui_contributions": [
+            "story.zukan-review"
+          ],
+          "source_revisions": [],
+          "status": "NOT_CHECKED",
+          "fixture": null,
+          "command": null,
+          "git_sha": null,
+          "browser_platform": null,
+          "input": null,
+          "output": null,
+          "receipt": null,
+          "artifact": null,
+          "evidence_ref": null,
+          "blocker": null
+        },
+        {
+          "feature_id": "KNO-06",
+          "acceptance_anchors": [
+            "accept-kno-a03",
+            "accept-kno-a12"
+          ],
+          "source_actions": [
+            "story.entities.backlinks",
+            "story.entities.appearances",
+            "story.entities.voice-patterns",
+            "story.entities.freshness"
+          ],
+          "source_ui_contributions": [],
+          "source_revisions": [],
+          "status": "NOT_CHECKED",
+          "fixture": null,
+          "command": null,
+          "git_sha": null,
+          "browser_platform": null,
+          "input": null,
+          "output": null,
+          "receipt": null,
+          "artifact": null,
+          "evidence_ref": null,
+          "blocker": null
+        },
+        {
+          "feature_id": "KNO-07",
+          "acceptance_anchors": [
+            "accept-kno-a10",
+            "accept-kno-a13"
+          ],
+          "source_actions": [
+            "story.entities.suggested-tags",
+            "story.tags.list"
+          ],
+          "source_ui_contributions": [],
+          "source_revisions": [],
+          "status": "NOT_CHECKED",
+          "fixture": null,
+          "command": null,
+          "git_sha": null,
+          "browser_platform": null,
+          "input": null,
+          "output": null,
+          "receipt": null,
+          "artifact": null,
+          "evidence_ref": null,
+          "blocker": null
+        },
+        {
+          "feature_id": "KNO-08",
+          "acceptance_anchors": [
+            "accept-kno-a03",
+            "accept-kno-a12"
+          ],
+          "source_actions": [
+            "story.scene.context"
+          ],
+          "source_ui_contributions": [],
+          "source_revisions": [],
+          "status": "NOT_CHECKED",
+          "fixture": null,
+          "command": null,
+          "git_sha": null,
+          "browser_platform": null,
+          "input": null,
+          "output": null,
+          "receipt": null,
+          "artifact": null,
+          "evidence_ref": null,
+          "blocker": null
+        },
+        {
+          "feature_id": "KNO-09",
+          "acceptance_anchors": [
+            "accept-kno-a03"
+          ],
+          "source_actions": [],
+          "source_ui_contributions": [],
+          "source_revisions": [],
+          "status": "NOT_CHECKED",
+          "fixture": null,
+          "command": null,
+          "git_sha": null,
+          "browser_platform": null,
+          "input": null,
+          "output": null,
+          "receipt": null,
+          "artifact": null,
+          "evidence_ref": null,
+          "blocker": null
+        },
+        {
+          "feature_id": "KNO-10",
+          "acceptance_anchors": [
+            "accept-kno-a04"
+          ],
+          "source_actions": [
+            "story.threads.overview",
+            "story.threads.status"
+          ],
+          "source_ui_contributions": [],
+          "source_revisions": [],
+          "status": "NOT_CHECKED",
+          "fixture": null,
+          "command": null,
+          "git_sha": null,
+          "browser_platform": null,
+          "input": null,
+          "output": null,
+          "receipt": null,
+          "artifact": null,
+          "evidence_ref": null,
+          "blocker": null
+        },
+        {
+          "feature_id": "KNO-11",
+          "acceptance_anchors": [
+            "accept-kno-a04"
+          ],
+          "source_actions": [
+            "story.threads.lifecycle"
+          ],
+          "source_ui_contributions": [
+            "story.continuity"
+          ],
+          "source_revisions": [],
+          "status": "NOT_CHECKED",
+          "fixture": null,
+          "command": null,
+          "git_sha": null,
+          "browser_platform": null,
+          "input": null,
+          "output": null,
+          "receipt": null,
+          "artifact": null,
+          "evidence_ref": null,
+          "blocker": null
+        },
+        {
+          "feature_id": "KNO-12",
+          "acceptance_anchors": [
+            "accept-kno-a13"
+          ],
+          "source_actions": [],
+          "source_ui_contributions": [],
+          "source_revisions": [],
+          "status": "NOT_CHECKED",
+          "fixture": null,
+          "command": null,
+          "git_sha": null,
+          "browser_platform": null,
+          "input": null,
+          "output": null,
+          "receipt": null,
+          "artifact": null,
+          "evidence_ref": null,
+          "blocker": null
+        },
+        {
+          "feature_id": "KNO-13",
+          "acceptance_anchors": [
+            "accept-kno-a05",
+            "accept-kno-a12"
+          ],
+          "source_actions": [
+            "story.graph.query",
+            "story.cooccurrence"
+          ],
+          "source_ui_contributions": [],
+          "source_revisions": [],
+          "status": "NOT_CHECKED",
+          "fixture": null,
+          "command": null,
+          "git_sha": null,
+          "browser_platform": null,
+          "input": null,
+          "output": null,
+          "receipt": null,
+          "artifact": null,
+          "evidence_ref": null,
+          "blocker": null
+        },
+        {
+          "feature_id": "KNO-14",
+          "acceptance_anchors": [
+            "accept-kno-a05",
+            "accept-kno-a12"
+          ],
+          "source_actions": [
+            "story.map.query"
+          ],
+          "source_ui_contributions": [],
+          "source_revisions": [],
+          "status": "NOT_CHECKED",
+          "fixture": null,
+          "command": null,
+          "git_sha": null,
+          "browser_platform": null,
+          "input": null,
+          "output": null,
+          "receipt": null,
+          "artifact": null,
+          "evidence_ref": null,
+          "blocker": null
+        },
+        {
+          "feature_id": "KNO-15",
+          "acceptance_anchors": [
+            "accept-kno-a06",
+            "accept-kno-a12"
+          ],
+          "source_actions": [
+            "story.timeline.query"
+          ],
+          "source_ui_contributions": [],
+          "source_revisions": [],
+          "status": "NOT_CHECKED",
+          "fixture": null,
+          "command": null,
+          "git_sha": null,
+          "browser_platform": null,
+          "input": null,
+          "output": null,
+          "receipt": null,
+          "artifact": null,
+          "evidence_ref": null,
+          "blocker": null
+        },
+        {
+          "feature_id": "KNO-16",
+          "acceptance_anchors": [
+            "accept-kno-a06"
+          ],
+          "source_actions": [
+            "story.world-state.at-scene",
+            "story.world-state.history"
+          ],
+          "source_ui_contributions": [],
+          "source_revisions": [],
+          "status": "NOT_CHECKED",
+          "fixture": null,
+          "command": null,
+          "git_sha": null,
+          "browser_platform": null,
+          "input": null,
+          "output": null,
+          "receipt": null,
+          "artifact": null,
+          "evidence_ref": null,
+          "blocker": null
+        },
+        {
+          "feature_id": "KNO-17",
+          "acceptance_anchors": [
+            "accept-kno-a07"
+          ],
+          "source_actions": [
+            "story.reader-model.build"
+          ],
+          "source_ui_contributions": [],
+          "source_revisions": [],
+          "status": "NOT_CHECKED",
+          "fixture": null,
+          "command": null,
+          "git_sha": null,
+          "browser_platform": null,
+          "input": null,
+          "output": null,
+          "receipt": null,
+          "artifact": null,
+          "evidence_ref": null,
+          "blocker": null
+        },
+        {
+          "feature_id": "KNO-18",
+          "acceptance_anchors": [
+            "accept-kno-a06",
+            "accept-kno-a09"
+          ],
+          "source_actions": [
+            "story.world-state.workbench",
+            "story.state-proposals.list",
+            "story.state-proposals.create",
+            "story.state-proposals.update",
+            "story.state-proposals.approve",
+            "story.state-proposals.reject",
+            "story.state-proposals.stale"
+          ],
+          "source_ui_contributions": [
+            "story.world-state"
+          ],
+          "source_revisions": [],
+          "status": "NOT_CHECKED",
+          "fixture": null,
+          "command": null,
+          "git_sha": null,
+          "browser_platform": null,
+          "input": null,
+          "output": null,
+          "receipt": null,
+          "artifact": null,
+          "evidence_ref": null,
+          "blocker": null
+        },
+        {
+          "feature_id": "KNO-19",
+          "acceptance_anchors": [
+            "accept-kno-a11",
+            "accept-kno-a14"
+          ],
+          "source_actions": [
+            "story.series.list",
+            "story.series.get",
+            "story.series.create",
+            "story.series.update",
+            "story.series.delete",
+            "story.series.binding.get",
+            "story.series.binding.update",
+            "story.series.binding.delete",
+            "story.series.overlay"
+          ],
+          "source_ui_contributions": [
+            "story.series"
+          ],
+          "source_revisions": [],
+          "status": "NOT_CHECKED",
+          "fixture": null,
+          "command": null,
+          "git_sha": null,
+          "browser_platform": null,
+          "input": null,
+          "output": null,
+          "receipt": null,
+          "artifact": null,
+          "evidence_ref": null,
+          "blocker": null
+        },
+        {
+          "feature_id": "KNO-20",
+          "acceptance_anchors": [
+            "accept-kno-a15"
+          ],
+          "source_actions": [],
+          "source_ui_contributions": [],
+          "source_revisions": [],
+          "status": "NOT_CHECKED",
+          "fixture": null,
+          "command": null,
+          "git_sha": null,
+          "browser_platform": null,
+          "input": null,
+          "output": null,
+          "receipt": null,
+          "artifact": null,
+          "evidence_ref": null,
+          "blocker": null
+        },
+        {
+          "feature_id": "KNO-21",
+          "acceptance_anchors": [
+            "accept-kno-a12",
+            "accept-kno-a16"
+          ],
+          "source_actions": [],
+          "source_ui_contributions": [],
+          "source_revisions": [],
+          "status": "NOT_CHECKED",
+          "fixture": null,
+          "command": null,
+          "git_sha": null,
+          "browser_platform": null,
+          "input": null,
+          "output": null,
+          "receipt": null,
+          "artifact": null,
+          "evidence_ref": null,
+          "blocker": null
+        },
+        {
+          "feature_id": "KNO-22",
+          "acceptance_anchors": [
+            "accept-kno-a09",
+            "accept-kno-a19"
+          ],
+          "source_actions": [],
+          "source_ui_contributions": [],
+          "source_revisions": [],
+          "status": "NOT_CHECKED",
+          "fixture": null,
+          "command": null,
+          "git_sha": null,
+          "browser_platform": null,
+          "input": null,
+          "output": null,
+          "receipt": null,
+          "artifact": null,
+          "evidence_ref": null,
+          "blocker": null
+        },
+        {
+          "feature_id": "KNO-23",
+          "acceptance_anchors": [
+            "accept-kno-a17"
+          ],
+          "source_actions": [],
+          "source_ui_contributions": [],
+          "source_revisions": [],
+          "status": "NOT_CHECKED",
+          "fixture": null,
+          "command": null,
+          "git_sha": null,
+          "browser_platform": null,
+          "input": null,
+          "output": null,
+          "receipt": null,
+          "artifact": null,
+          "evidence_ref": null,
+          "blocker": null
+        },
+        {
+          "feature_id": "KNO-24",
+          "acceptance_anchors": [
+            "accept-kno-a18"
+          ],
+          "source_actions": [],
+          "source_ui_contributions": [],
+          "source_revisions": [],
+          "status": "NOT_CHECKED",
+          "fixture": null,
+          "command": null,
+          "git_sha": null,
+          "browser_platform": null,
+          "input": null,
+          "output": null,
+          "receipt": null,
+          "artifact": null,
+          "evidence_ref": null,
+          "blocker": null
+        },
+        {
+          "feature_id": "KNO-25",
+          "acceptance_anchors": [
+            "accept-kno-a19"
+          ],
+          "source_actions": [],
+          "source_ui_contributions": [],
+          "source_revisions": [],
+          "status": "NOT_CHECKED",
+          "fixture": null,
+          "command": null,
+          "git_sha": null,
+          "browser_platform": null,
+          "input": null,
+          "output": null,
+          "receipt": null,
+          "artifact": null,
+          "evidence_ref": null,
+          "blocker": null
+        }
+      ]
+    },
+    {
+      "plugin_id": "proprium.research",
+      "canon": "docs/canon/plugins/RESEARCH.md",
+      "feature_count": 13,
+      "acceptance_anchors": [
+        "accept-res-a001",
+        "accept-res-a002",
+        "accept-res-a003",
+        "accept-res-a004",
+        "accept-res-a005",
+        "accept-res-a006",
+        "accept-res-a007",
+        "accept-res-a008",
+        "accept-res-a009",
+        "accept-res-a010",
+        "accept-res-a011",
+        "accept-res-a012",
+        "accept-res-a013"
+      ],
+      "source_revisions": [
+        "95a66c2c985a66bc2d535392dcc450d8c9df18d5",
+        "edc033c2c9466274a334299dadfa426661d957d9"
+      ],
+      "features": [
+        {
+          "feature_id": "RES-001",
+          "acceptance_anchors": [
+            "accept-res-a001"
+          ],
+          "source_actions": [
+            "search.query"
+          ],
+          "source_ui_contributions": [
+            "search.panel"
+          ],
+          "source_revisions": [
+            "95a66c2c985a66bc2d535392dcc450d8c9df18d5",
+            "edc033c2c9466274a334299dadfa426661d957d9"
+          ],
+          "status": "NOT_CHECKED",
+          "fixture": null,
+          "command": null,
+          "git_sha": null,
+          "browser_platform": null,
+          "input": null,
+          "output": null,
+          "receipt": null,
+          "artifact": null,
+          "evidence_ref": null,
+          "blocker": null
+        },
+        {
+          "feature_id": "RES-002",
+          "acceptance_anchors": [
+            "accept-res-a002"
+          ],
+          "source_actions": [],
+          "source_ui_contributions": [],
+          "source_revisions": [
+            "95a66c2c985a66bc2d535392dcc450d8c9df18d5",
+            "edc033c2c9466274a334299dadfa426661d957d9"
+          ],
+          "status": "NOT_CHECKED",
+          "fixture": null,
+          "command": null,
+          "git_sha": null,
+          "browser_platform": null,
+          "input": null,
+          "output": null,
+          "receipt": null,
+          "artifact": null,
+          "evidence_ref": null,
+          "blocker": null
+        },
+        {
+          "feature_id": "RES-003",
+          "acceptance_anchors": [
+            "accept-res-a003"
+          ],
+          "source_actions": [
+            "search.terms.list",
+            "search.terms.propose",
+            "search.terms.remove"
+          ],
+          "source_ui_contributions": [
+            "search.terms"
+          ],
+          "source_revisions": [
+            "95a66c2c985a66bc2d535392dcc450d8c9df18d5",
+            "edc033c2c9466274a334299dadfa426661d957d9"
+          ],
+          "status": "NOT_CHECKED",
+          "fixture": null,
+          "command": null,
+          "git_sha": null,
+          "browser_platform": null,
+          "input": null,
+          "output": null,
+          "receipt": null,
+          "artifact": null,
+          "evidence_ref": null,
+          "blocker": null
+        },
+        {
+          "feature_id": "RES-004",
+          "acceptance_anchors": [
+            "accept-res-a004"
+          ],
+          "source_actions": [
+            "search.terms.resolve"
+          ],
+          "source_ui_contributions": [
+            "search.terms.adornment"
+          ],
+          "source_revisions": [
+            "95a66c2c985a66bc2d535392dcc450d8c9df18d5",
+            "edc033c2c9466274a334299dadfa426661d957d9"
+          ],
+          "status": "NOT_CHECKED",
+          "fixture": null,
+          "command": null,
+          "git_sha": null,
+          "browser_platform": null,
+          "input": null,
+          "output": null,
+          "receipt": null,
+          "artifact": null,
+          "evidence_ref": null,
+          "blocker": null
+        },
+        {
+          "feature_id": "RES-005",
+          "acceptance_anchors": [
+            "accept-res-a005"
+          ],
+          "source_actions": [
+            "nlp.analyze"
+          ],
+          "source_ui_contributions": [
+            "nlp.analyzer"
+          ],
+          "source_revisions": [
+            "95a66c2c985a66bc2d535392dcc450d8c9df18d5",
+            "edc033c2c9466274a334299dadfa426661d957d9"
+          ],
+          "status": "NOT_CHECKED",
+          "fixture": null,
+          "command": null,
+          "git_sha": null,
+          "browser_platform": null,
+          "input": null,
+          "output": null,
+          "receipt": null,
+          "artifact": null,
+          "evidence_ref": null,
+          "blocker": null
+        },
+        {
+          "feature_id": "RES-006",
+          "acceptance_anchors": [
+            "accept-res-a006"
+          ],
+          "source_actions": [
+            "nlp.discoverCandidates"
+          ],
+          "source_ui_contributions": [
+            "nlp.candidates"
+          ],
+          "source_revisions": [
+            "95a66c2c985a66bc2d535392dcc450d8c9df18d5",
+            "edc033c2c9466274a334299dadfa426661d957d9"
+          ],
+          "status": "NOT_CHECKED",
+          "fixture": null,
+          "command": null,
+          "git_sha": null,
+          "browser_platform": null,
+          "input": null,
+          "output": null,
+          "receipt": null,
+          "artifact": null,
+          "evidence_ref": null,
+          "blocker": null
+        },
+        {
+          "feature_id": "RES-007",
+          "acceptance_anchors": [
+            "accept-res-a007"
+          ],
+          "source_actions": [
+            "nlp.termVariants"
+          ],
+          "source_ui_contributions": [],
+          "source_revisions": [
+            "95a66c2c985a66bc2d535392dcc450d8c9df18d5",
+            "edc033c2c9466274a334299dadfa426661d957d9"
+          ],
+          "status": "NOT_CHECKED",
+          "fixture": null,
+          "command": null,
+          "git_sha": null,
+          "browser_platform": null,
+          "input": null,
+          "output": null,
+          "receipt": null,
+          "artifact": null,
+          "evidence_ref": null,
+          "blocker": null
+        },
+        {
+          "feature_id": "RES-008",
+          "acceptance_anchors": [
+            "accept-res-a008"
+          ],
+          "source_actions": [
+            "nlp.dictionary",
+            "nlp.saveSynonymGroup"
+          ],
+          "source_ui_contributions": [
+            "nlp.dictionary"
+          ],
+          "source_revisions": [
+            "95a66c2c985a66bc2d535392dcc450d8c9df18d5",
+            "edc033c2c9466274a334299dadfa426661d957d9"
+          ],
+          "status": "NOT_CHECKED",
+          "fixture": null,
+          "command": null,
+          "git_sha": null,
+          "browser_platform": null,
+          "input": null,
+          "output": null,
+          "receipt": null,
+          "artifact": null,
+          "evidence_ref": null,
+          "blocker": null
+        },
+        {
+          "feature_id": "RES-009",
+          "acceptance_anchors": [
+            "accept-res-a009"
+          ],
+          "source_actions": [
+            "nlp.ignoreCandidates"
+          ],
+          "source_ui_contributions": [],
+          "source_revisions": [
+            "95a66c2c985a66bc2d535392dcc450d8c9df18d5",
+            "edc033c2c9466274a334299dadfa426661d957d9"
+          ],
+          "status": "NOT_CHECKED",
+          "fixture": null,
+          "command": null,
+          "git_sha": null,
+          "browser_platform": null,
+          "input": null,
+          "output": null,
+          "receipt": null,
+          "artifact": null,
+          "evidence_ref": null,
+          "blocker": null
+        },
+        {
+          "feature_id": "RES-010",
+          "acceptance_anchors": [
+            "accept-res-a010"
+          ],
+          "source_actions": [],
+          "source_ui_contributions": [],
+          "source_revisions": [
+            "95a66c2c985a66bc2d535392dcc450d8c9df18d5",
+            "edc033c2c9466274a334299dadfa426661d957d9"
+          ],
+          "status": "NOT_CHECKED",
+          "fixture": null,
+          "command": null,
+          "git_sha": null,
+          "browser_platform": null,
+          "input": null,
+          "output": null,
+          "receipt": null,
+          "artifact": null,
+          "evidence_ref": null,
+          "blocker": null
+        },
+        {
+          "feature_id": "RES-011",
+          "acceptance_anchors": [
+            "accept-res-a011"
+          ],
+          "source_actions": [
+            "nlp.countTokens"
+          ],
+          "source_ui_contributions": [],
+          "source_revisions": [
+            "95a66c2c985a66bc2d535392dcc450d8c9df18d5",
+            "edc033c2c9466274a334299dadfa426661d957d9"
+          ],
+          "status": "NOT_CHECKED",
+          "fixture": null,
+          "command": null,
+          "git_sha": null,
+          "browser_platform": null,
+          "input": null,
+          "output": null,
+          "receipt": null,
+          "artifact": null,
+          "evidence_ref": null,
+          "blocker": null
+        },
+        {
+          "feature_id": "RES-012",
+          "acceptance_anchors": [
+            "accept-res-a012"
+          ],
+          "source_actions": [
+            "nlp.features",
+            "nlp.updateExternalConsent"
+          ],
+          "source_ui_contributions": [
+            "nlp.privacy"
+          ],
+          "source_revisions": [
+            "95a66c2c985a66bc2d535392dcc450d8c9df18d5",
+            "edc033c2c9466274a334299dadfa426661d957d9"
+          ],
+          "status": "NOT_CHECKED",
+          "fixture": null,
+          "command": null,
+          "git_sha": null,
+          "browser_platform": null,
+          "input": null,
+          "output": null,
+          "receipt": null,
+          "artifact": null,
+          "evidence_ref": null,
+          "blocker": null
+        },
+        {
+          "feature_id": "RES-013",
+          "acceptance_anchors": [
+            "accept-res-a013"
+          ],
+          "source_actions": [],
+          "source_ui_contributions": [],
+          "source_revisions": [
+            "95a66c2c985a66bc2d535392dcc450d8c9df18d5",
+            "edc033c2c9466274a334299dadfa426661d957d9"
+          ],
+          "status": "NOT_CHECKED",
+          "fixture": null,
+          "command": null,
+          "git_sha": null,
+          "browser_platform": null,
+          "input": null,
+          "output": null,
+          "receipt": null,
+          "artifact": null,
+          "evidence_ref": null,
+          "blocker": null
+        }
+      ]
+    },
+    {
+      "plugin_id": "proprium.paired-writing",
+      "canon": "docs/canon/plugins/PAIRED-WRITING.md",
+      "feature_count": 21,
+      "acceptance_anchors": [
+        "accept-pw-01",
+        "accept-pw-02",
+        "accept-pw-03",
+        "accept-pw-04",
+        "accept-pw-05",
+        "accept-pw-06",
+        "accept-pw-07",
+        "accept-pw-08",
+        "accept-pw-09",
+        "accept-pw-10",
+        "accept-pw-11",
+        "accept-pw-21"
+      ],
+      "source_revisions": [],
+      "features": [
+        {
+          "feature_id": "PW-01",
+          "acceptance_anchors": [
+            "accept-pw-01",
+            "accept-pw-11"
+          ],
+          "source_actions": [
+            "assistant.health",
+            "assistant.queue.status",
+            "assistant.settings.read",
+            "assistant.settings.propose",
+            "assistant.usage.read"
+          ],
+          "source_ui_contributions": [
+            "assistant.settings"
+          ],
+          "source_revisions": [],
+          "status": "NOT_CHECKED",
+          "fixture": null,
+          "command": null,
+          "git_sha": null,
+          "browser_platform": null,
+          "input": null,
+          "output": null,
+          "receipt": null,
+          "artifact": null,
+          "evidence_ref": null,
+          "blocker": null
+        },
+        {
+          "feature_id": "PW-02",
+          "acceptance_anchors": [
+            "accept-pw-02"
+          ],
+          "source_actions": [
+            "assistant.rewrite",
+            "assistant.rewrite.propose"
+          ],
+          "source_ui_contributions": [
+            "assistant.rewrite"
+          ],
+          "source_revisions": [],
+          "status": "NOT_CHECKED",
+          "fixture": null,
+          "command": null,
+          "git_sha": null,
+          "browser_platform": null,
+          "input": null,
+          "output": null,
+          "receipt": null,
+          "artifact": null,
+          "evidence_ref": null,
+          "blocker": null
+        },
+        {
+          "feature_id": "PW-03",
+          "acceptance_anchors": [
+            "accept-pw-03"
+          ],
+          "source_actions": [
+            "assistant.continuation",
+            "assistant.continuation.preview"
+          ],
+          "source_ui_contributions": [
+            "assistant.continuation"
+          ],
+          "source_revisions": [],
+          "status": "NOT_CHECKED",
+          "fixture": null,
+          "command": null,
+          "git_sha": null,
+          "browser_platform": null,
+          "input": null,
+          "output": null,
+          "receipt": null,
+          "artifact": null,
+          "evidence_ref": null,
+          "blocker": null
+        },
+        {
+          "feature_id": "PW-04",
+          "acceptance_anchors": [
+            "accept-pw-04"
+          ],
+          "source_actions": [
+            "assistant.qa",
+            "assistant.qa.preview"
+          ],
+          "source_ui_contributions": [
+            "assistant.qa"
+          ],
+          "source_revisions": [],
+          "status": "NOT_CHECKED",
+          "fixture": null,
+          "command": null,
+          "git_sha": null,
+          "browser_platform": null,
+          "input": null,
+          "output": null,
+          "receipt": null,
+          "artifact": null,
+          "evidence_ref": null,
+          "blocker": null
+        },
+        {
+          "feature_id": "PW-05",
+          "acceptance_anchors": [
+            "accept-pw-05"
+          ],
+          "source_actions": [
+            "assistant.summary.scene",
+            "assistant.summary.chapter",
+            "assistant.reader.reaction",
+            "assistant.summary.scene.preview",
+            "assistant.summary.chapter.preview",
+            "assistant.reader.reaction.preview"
+          ],
+          "source_ui_contributions": [
+            "assistant.summaries",
+            "assistant.reader-reaction"
+          ],
+          "source_revisions": [],
+          "status": "NOT_CHECKED",
+          "fixture": null,
+          "command": null,
+          "git_sha": null,
+          "browser_platform": null,
+          "input": null,
+          "output": null,
+          "receipt": null,
+          "artifact": null,
+          "evidence_ref": null,
+          "blocker": null
+        },
+        {
+          "feature_id": "PW-06",
+          "acceptance_anchors": [
+            "accept-pw-06"
+          ],
+          "source_actions": [
+            "assistant.dialogue.topics",
+            "assistant.dialogue.turns",
+            "assistant.dialogue.topics.preview",
+            "assistant.dialogue.turn.preview",
+            "assistant.dialogue.turns.preview"
+          ],
+          "source_ui_contributions": [
+            "assistant.dialogue"
+          ],
+          "source_revisions": [],
+          "status": "NOT_CHECKED",
+          "fixture": null,
+          "command": null,
+          "git_sha": null,
+          "browser_platform": null,
+          "input": null,
+          "output": null,
+          "receipt": null,
+          "artifact": null,
+          "evidence_ref": null,
+          "blocker": null
+        },
+        {
+          "feature_id": "PW-07",
+          "acceptance_anchors": [
+            "accept-pw-07"
+          ],
+          "source_actions": [],
+          "source_ui_contributions": [
+            "assistant.aspect-review"
+          ],
+          "source_revisions": [],
+          "status": "NOT_CHECKED",
+          "fixture": null,
+          "command": null,
+          "git_sha": null,
+          "browser_platform": null,
+          "input": null,
+          "output": null,
+          "receipt": null,
+          "artifact": null,
+          "evidence_ref": null,
+          "blocker": null
+        },
+        {
+          "feature_id": "PW-08",
+          "acceptance_anchors": [
+            "accept-pw-07"
+          ],
+          "source_actions": [
+            "assistant.synonyms.suggestions",
+            "assistant.synonyms.preview"
+          ],
+          "source_ui_contributions": [],
+          "source_revisions": [],
+          "status": "NOT_CHECKED",
+          "fixture": null,
+          "command": null,
+          "git_sha": null,
+          "browser_platform": null,
+          "input": null,
+          "output": null,
+          "receipt": null,
+          "artifact": null,
+          "evidence_ref": null,
+          "blocker": null
+        },
+        {
+          "feature_id": "PW-09",
+          "acceptance_anchors": [
+            "accept-pw-07"
+          ],
+          "source_actions": [
+            "assistant.contradictions.assist"
+          ],
+          "source_ui_contributions": [],
+          "source_revisions": [],
+          "status": "NOT_CHECKED",
+          "fixture": null,
+          "command": null,
+          "git_sha": null,
+          "browser_platform": null,
+          "input": null,
+          "output": null,
+          "receipt": null,
+          "artifact": null,
+          "evidence_ref": null,
+          "blocker": null
+        },
+        {
+          "feature_id": "PW-10",
+          "acceptance_anchors": [
+            "accept-pw-07"
+          ],
+          "source_actions": [
+            "assistant.speaker.attribute"
+          ],
+          "source_ui_contributions": [],
+          "source_revisions": [],
+          "status": "NOT_CHECKED",
+          "fixture": null,
+          "command": null,
+          "git_sha": null,
+          "browser_platform": null,
+          "input": null,
+          "output": null,
+          "receipt": null,
+          "artifact": null,
+          "evidence_ref": null,
+          "blocker": null
+        },
+        {
+          "feature_id": "PW-11",
+          "acceptance_anchors": [
+            "accept-pw-07"
+          ],
+          "source_actions": [
+            "assistant.zukan.suggestions",
+            "assistant.stateEvents.draft",
+            "assistant.zukan.sandbox.preview"
+          ],
+          "source_ui_contributions": [
+            "assistant.proposals"
+          ],
+          "source_revisions": [],
+          "status": "NOT_CHECKED",
+          "fixture": null,
+          "command": null,
+          "git_sha": null,
+          "browser_platform": null,
+          "input": null,
+          "output": null,
+          "receipt": null,
+          "artifact": null,
+          "evidence_ref": null,
+          "blocker": null
+        },
+        {
+          "feature_id": "PW-12",
+          "acceptance_anchors": [
+            "accept-pw-02",
+            "accept-pw-03",
+            "accept-pw-04",
+            "accept-pw-06",
+            "accept-pw-07"
+          ],
+          "source_actions": [],
+          "source_ui_contributions": [],
+          "source_revisions": [],
+          "status": "NOT_CHECKED",
+          "fixture": null,
+          "command": null,
+          "git_sha": null,
+          "browser_platform": null,
+          "input": null,
+          "output": null,
+          "receipt": null,
+          "artifact": null,
+          "evidence_ref": null,
+          "blocker": null
+        },
+        {
+          "feature_id": "PW-13",
+          "acceptance_anchors": [
+            "accept-pw-08"
+          ],
+          "source_actions": [],
+          "source_ui_contributions": [],
+          "source_revisions": [],
+          "status": "NOT_CHECKED",
+          "fixture": null,
+          "command": null,
+          "git_sha": null,
+          "browser_platform": null,
+          "input": null,
+          "output": null,
+          "receipt": null,
+          "artifact": null,
+          "evidence_ref": null,
+          "blocker": null
+        },
+        {
+          "feature_id": "PW-14",
+          "acceptance_anchors": [
+            "accept-pw-09"
+          ],
+          "source_actions": [],
+          "source_ui_contributions": [],
+          "source_revisions": [],
+          "status": "NOT_CHECKED",
+          "fixture": null,
+          "command": null,
+          "git_sha": null,
+          "browser_platform": null,
+          "input": null,
+          "output": null,
+          "receipt": null,
+          "artifact": null,
+          "evidence_ref": null,
+          "blocker": null
+        },
+        {
+          "feature_id": "PW-15",
+          "acceptance_anchors": [
+            "accept-pw-10"
+          ],
+          "source_actions": [],
+          "source_ui_contributions": [],
+          "source_revisions": [],
+          "status": "NOT_CHECKED",
+          "fixture": null,
+          "command": null,
+          "git_sha": null,
+          "browser_platform": null,
+          "input": null,
+          "output": null,
+          "receipt": null,
+          "artifact": null,
+          "evidence_ref": null,
+          "blocker": null
+        },
+        {
+          "feature_id": "PW-16",
+          "acceptance_anchors": [
+            "accept-pw-07",
+            "accept-pw-10"
+          ],
+          "source_actions": [],
+          "source_ui_contributions": [],
+          "source_revisions": [],
+          "status": "NOT_CHECKED",
+          "fixture": null,
+          "command": null,
+          "git_sha": null,
+          "browser_platform": null,
+          "input": null,
+          "output": null,
+          "receipt": null,
+          "artifact": null,
+          "evidence_ref": null,
+          "blocker": null
+        },
+        {
+          "feature_id": "PW-17",
+          "acceptance_anchors": [
+            "accept-pw-01",
+            "accept-pw-11"
+          ],
+          "source_actions": [],
+          "source_ui_contributions": [],
+          "source_revisions": [],
+          "status": "NOT_CHECKED",
+          "fixture": null,
+          "command": null,
+          "git_sha": null,
+          "browser_platform": null,
+          "input": null,
+          "output": null,
+          "receipt": null,
+          "artifact": null,
+          "evidence_ref": null,
+          "blocker": null
+        },
+        {
+          "feature_id": "PW-18",
+          "acceptance_anchors": [
+            "accept-pw-02",
+            "accept-pw-08"
+          ],
+          "source_actions": [],
+          "source_ui_contributions": [],
+          "source_revisions": [],
+          "status": "NOT_CHECKED",
+          "fixture": null,
+          "command": null,
+          "git_sha": null,
+          "browser_platform": null,
+          "input": null,
+          "output": null,
+          "receipt": null,
+          "artifact": null,
+          "evidence_ref": null,
+          "blocker": null
+        },
+        {
+          "feature_id": "PW-19",
+          "acceptance_anchors": [
+            "accept-pw-06"
+          ],
+          "source_actions": [],
+          "source_ui_contributions": [],
+          "source_revisions": [],
+          "status": "NOT_CHECKED",
+          "fixture": null,
+          "command": null,
+          "git_sha": null,
+          "browser_platform": null,
+          "input": null,
+          "output": null,
+          "receipt": null,
+          "artifact": null,
+          "evidence_ref": null,
+          "blocker": null
+        },
+        {
+          "feature_id": "PW-20",
+          "acceptance_anchors": [
+            "accept-pw-08",
+            "accept-pw-10"
+          ],
+          "source_actions": [],
+          "source_ui_contributions": [],
+          "source_revisions": [],
+          "status": "NOT_CHECKED",
+          "fixture": null,
+          "command": null,
+          "git_sha": null,
+          "browser_platform": null,
+          "input": null,
+          "output": null,
+          "receipt": null,
+          "artifact": null,
+          "evidence_ref": null,
+          "blocker": null
+        },
+        {
+          "feature_id": "PW-21",
+          "acceptance_anchors": [
+            "accept-pw-10",
+            "accept-pw-21"
+          ],
+          "source_actions": [
+            "story.changes.propose"
+          ],
+          "source_ui_contributions": [],
+          "source_revisions": [],
+          "status": "NOT_CHECKED",
+          "fixture": null,
+          "command": null,
+          "git_sha": null,
+          "browser_platform": null,
+          "input": null,
+          "output": null,
+          "receipt": null,
+          "artifact": null,
+          "evidence_ref": null,
+          "blocker": null
+        }
+      ]
+    },
+    {
+      "plugin_id": "proprium.diagnostics",
+      "canon": "docs/canon/plugins/DIAGNOSTICS.md",
+      "feature_count": 14,
+      "acceptance_anchors": [
+        "accept-dia-a1",
+        "accept-dia-a10",
+        "accept-dia-a11",
+        "accept-dia-a12",
+        "accept-dia-a13",
+        "accept-dia-a14",
+        "accept-dia-a15",
+        "accept-dia-a16",
+        "accept-dia-a2",
+        "accept-dia-a3",
+        "accept-dia-a4",
+        "accept-dia-a5",
+        "accept-dia-a6",
+        "accept-dia-a7",
+        "accept-dia-a8",
+        "accept-dia-a9"
+      ],
+      "source_revisions": [
+        "95a66c2c985a66bc2d535392dcc450d8c9df18d5",
+        "edc033c2c9466274a334299dadfa426661d957d9"
+      ],
+      "features": [
+        {
+          "feature_id": "DIA-01",
+          "acceptance_anchors": [
+            "accept-dia-a1",
+            "accept-dia-a14",
+            "accept-dia-a15",
+            "accept-dia-a2",
+            "accept-dia-a9"
+          ],
+          "source_actions": [
+            "diagnostics.scene"
+          ],
+          "source_ui_contributions": [
+            "diagnostics.scene"
+          ],
+          "source_revisions": [
+            "95a66c2c985a66bc2d535392dcc450d8c9df18d5",
+            "edc033c2c9466274a334299dadfa426661d957d9"
+          ],
+          "status": "NOT_CHECKED",
+          "fixture": null,
+          "command": null,
+          "git_sha": null,
+          "browser_platform": null,
+          "input": null,
+          "output": null,
+          "receipt": null,
+          "artifact": null,
+          "evidence_ref": null,
+          "blocker": null
+        },
+        {
+          "feature_id": "DIA-02",
+          "acceptance_anchors": [
+            "accept-dia-a3"
+          ],
+          "source_actions": [
+            "diagnostics.checkConsistency"
+          ],
+          "source_ui_contributions": [
+            "diagnostics.consistency"
+          ],
+          "source_revisions": [
+            "95a66c2c985a66bc2d535392dcc450d8c9df18d5",
+            "edc033c2c9466274a334299dadfa426661d957d9"
+          ],
+          "status": "NOT_CHECKED",
+          "fixture": null,
+          "command": null,
+          "git_sha": null,
+          "browser_platform": null,
+          "input": null,
+          "output": null,
+          "receipt": null,
+          "artifact": null,
+          "evidence_ref": null,
+          "blocker": null
+        },
+        {
+          "feature_id": "DIA-03",
+          "acceptance_anchors": [
+            "accept-dia-a4"
+          ],
+          "source_actions": [
+            "diagnostics.checkContinuity"
+          ],
+          "source_ui_contributions": [
+            "diagnostics.continuity"
+          ],
+          "source_revisions": [
+            "95a66c2c985a66bc2d535392dcc450d8c9df18d5",
+            "edc033c2c9466274a334299dadfa426661d957d9"
+          ],
+          "status": "NOT_CHECKED",
+          "fixture": null,
+          "command": null,
+          "git_sha": null,
+          "browser_platform": null,
+          "input": null,
+          "output": null,
+          "receipt": null,
+          "artifact": null,
+          "evidence_ref": null,
+          "blocker": null
+        },
+        {
+          "feature_id": "DIA-04",
+          "acceptance_anchors": [
+            "accept-dia-a5"
+          ],
+          "source_actions": [
+            "diagnostics.lint"
+          ],
+          "source_ui_contributions": [
+            "diagnostics.lint"
+          ],
+          "source_revisions": [
+            "95a66c2c985a66bc2d535392dcc450d8c9df18d5",
+            "edc033c2c9466274a334299dadfa426661d957d9"
+          ],
+          "status": "NOT_CHECKED",
+          "fixture": null,
+          "command": null,
+          "git_sha": null,
+          "browser_platform": null,
+          "input": null,
+          "output": null,
+          "receipt": null,
+          "artifact": null,
+          "evidence_ref": null,
+          "blocker": null
+        },
+        {
+          "feature_id": "DIA-05",
+          "acceptance_anchors": [
+            "accept-dia-a6"
+          ],
+          "source_actions": [
+            "diagnostics.proposeLintFix",
+            "diagnostics.formatManuscript"
+          ],
+          "source_ui_contributions": [],
+          "source_revisions": [
+            "95a66c2c985a66bc2d535392dcc450d8c9df18d5",
+            "edc033c2c9466274a334299dadfa426661d957d9"
+          ],
+          "status": "NOT_CHECKED",
+          "fixture": null,
+          "command": null,
+          "git_sha": null,
+          "browser_platform": null,
+          "input": null,
+          "output": null,
+          "receipt": null,
+          "artifact": null,
+          "evidence_ref": null,
+          "blocker": null
+        },
+        {
+          "feature_id": "DIA-06",
+          "acceptance_anchors": [
+            "accept-dia-a2",
+            "accept-dia-a7"
+          ],
+          "source_actions": [
+            "diagnostics.analyze"
+          ],
+          "source_ui_contributions": [
+            "diagnostics.analysis"
+          ],
+          "source_revisions": [
+            "95a66c2c985a66bc2d535392dcc450d8c9df18d5",
+            "edc033c2c9466274a334299dadfa426661d957d9"
+          ],
+          "status": "NOT_CHECKED",
+          "fixture": null,
+          "command": null,
+          "git_sha": null,
+          "browser_platform": null,
+          "input": null,
+          "output": null,
+          "receipt": null,
+          "artifact": null,
+          "evidence_ref": null,
+          "blocker": null
+        },
+        {
+          "feature_id": "DIA-07",
+          "acceptance_anchors": [
+            "accept-dia-a8"
+          ],
+          "source_actions": [
+            "diagnostics.checkPlotSemantics"
+          ],
+          "source_ui_contributions": [],
+          "source_revisions": [
+            "95a66c2c985a66bc2d535392dcc450d8c9df18d5",
+            "edc033c2c9466274a334299dadfa426661d957d9"
+          ],
+          "status": "NOT_CHECKED",
+          "fixture": null,
+          "command": null,
+          "git_sha": null,
+          "browser_platform": null,
+          "input": null,
+          "output": null,
+          "receipt": null,
+          "artifact": null,
+          "evidence_ref": null,
+          "blocker": null
+        },
+        {
+          "feature_id": "DIA-08",
+          "acceptance_anchors": [
+            "accept-dia-a9"
+          ],
+          "source_actions": [],
+          "source_ui_contributions": [
+            "diagnostics.voice"
+          ],
+          "source_revisions": [
+            "95a66c2c985a66bc2d535392dcc450d8c9df18d5",
+            "edc033c2c9466274a334299dadfa426661d957d9"
+          ],
+          "status": "NOT_CHECKED",
+          "fixture": null,
+          "command": null,
+          "git_sha": null,
+          "browser_platform": null,
+          "input": null,
+          "output": null,
+          "receipt": null,
+          "artifact": null,
+          "evidence_ref": null,
+          "blocker": null
+        },
+        {
+          "feature_id": "DIA-09",
+          "acceptance_anchors": [
+            "accept-dia-a10",
+            "accept-dia-a11"
+          ],
+          "source_actions": [],
+          "source_ui_contributions": [],
+          "source_revisions": [
+            "95a66c2c985a66bc2d535392dcc450d8c9df18d5",
+            "edc033c2c9466274a334299dadfa426661d957d9"
+          ],
+          "status": "NOT_CHECKED",
+          "fixture": null,
+          "command": null,
+          "git_sha": null,
+          "browser_platform": null,
+          "input": null,
+          "output": null,
+          "receipt": null,
+          "artifact": null,
+          "evidence_ref": null,
+          "blocker": null
+        },
+        {
+          "feature_id": "DIA-10",
+          "acceptance_anchors": [
+            "accept-dia-a12"
+          ],
+          "source_actions": [],
+          "source_ui_contributions": [],
+          "source_revisions": [
+            "95a66c2c985a66bc2d535392dcc450d8c9df18d5",
+            "edc033c2c9466274a334299dadfa426661d957d9"
+          ],
+          "status": "NOT_CHECKED",
+          "fixture": null,
+          "command": null,
+          "git_sha": null,
+          "browser_platform": null,
+          "input": null,
+          "output": null,
+          "receipt": null,
+          "artifact": null,
+          "evidence_ref": null,
+          "blocker": null
+        },
+        {
+          "feature_id": "DIA-11",
+          "acceptance_anchors": [
+            "accept-dia-a13"
+          ],
+          "source_actions": [
+            "semantic.contradictions.dismiss"
+          ],
+          "source_ui_contributions": [],
+          "source_revisions": [
+            "95a66c2c985a66bc2d535392dcc450d8c9df18d5",
+            "edc033c2c9466274a334299dadfa426661d957d9"
+          ],
+          "status": "NOT_CHECKED",
+          "fixture": null,
+          "command": null,
+          "git_sha": null,
+          "browser_platform": null,
+          "input": null,
+          "output": null,
+          "receipt": null,
+          "artifact": null,
+          "evidence_ref": null,
+          "blocker": null
+        },
+        {
+          "feature_id": "DIA-12",
+          "acceptance_anchors": [
+            "accept-dia-a10",
+            "accept-dia-a11"
+          ],
+          "source_actions": [],
+          "source_ui_contributions": [],
+          "source_revisions": [
+            "95a66c2c985a66bc2d535392dcc450d8c9df18d5",
+            "edc033c2c9466274a334299dadfa426661d957d9"
+          ],
+          "status": "NOT_CHECKED",
+          "fixture": null,
+          "command": null,
+          "git_sha": null,
+          "browser_platform": null,
+          "input": null,
+          "output": null,
+          "receipt": null,
+          "artifact": null,
+          "evidence_ref": null,
+          "blocker": null
+        },
+        {
+          "feature_id": "DIA-13",
+          "acceptance_anchors": [
+            "accept-dia-a9"
+          ],
+          "source_actions": [],
+          "source_ui_contributions": [],
+          "source_revisions": [
+            "95a66c2c985a66bc2d535392dcc450d8c9df18d5",
+            "edc033c2c9466274a334299dadfa426661d957d9"
+          ],
+          "status": "NOT_CHECKED",
+          "fixture": null,
+          "command": null,
+          "git_sha": null,
+          "browser_platform": null,
+          "input": null,
+          "output": null,
+          "receipt": null,
+          "artifact": null,
+          "evidence_ref": null,
+          "blocker": null
+        },
+        {
+          "feature_id": "DIA-14",
+          "acceptance_anchors": [
+            "accept-dia-a16"
+          ],
+          "source_actions": [
+            "assistant.aspect.review",
+            "assistant.aspect.review.preview"
+          ],
+          "source_ui_contributions": [],
+          "source_revisions": [
+            "95a66c2c985a66bc2d535392dcc450d8c9df18d5",
+            "edc033c2c9466274a334299dadfa426661d957d9"
+          ],
+          "status": "NOT_CHECKED",
+          "fixture": null,
+          "command": null,
+          "git_sha": null,
+          "browser_platform": null,
+          "input": null,
+          "output": null,
+          "receipt": null,
+          "artifact": null,
+          "evidence_ref": null,
+          "blocker": null
+        }
+      ]
+    },
+    {
+      "plugin_id": "proprium.speaker",
+      "canon": "docs/canon/plugins/SPEAKER.md",
+      "feature_count": 12,
+      "acceptance_anchors": [
+        "accept-spk-a01",
+        "accept-spk-a02",
+        "accept-spk-a03",
+        "accept-spk-a04",
+        "accept-spk-a05",
+        "accept-spk-a06",
+        "accept-spk-a07",
+        "accept-spk-a08",
+        "accept-spk-a09",
+        "accept-spk-a10",
+        "accept-spk-a11",
+        "accept-spk-a12"
+      ],
+      "source_revisions": [
+        "95a66c2c985a66bc2d535392dcc450d8c9df18d5",
+        "edc033c2c9466274a334299dadfa426661d957d9"
+      ],
+      "features": [
+        {
+          "feature_id": "SPK-01",
+          "acceptance_anchors": [
+            "accept-spk-a01"
+          ],
+          "source_actions": [
+            "speaker.scenes.list"
+          ],
+          "source_ui_contributions": [],
+          "source_revisions": [
+            "95a66c2c985a66bc2d535392dcc450d8c9df18d5",
+            "edc033c2c9466274a334299dadfa426661d957d9"
+          ],
+          "status": "NOT_CHECKED",
+          "fixture": null,
+          "command": null,
+          "git_sha": null,
+          "browser_platform": null,
+          "input": null,
+          "output": null,
+          "receipt": null,
+          "artifact": null,
+          "evidence_ref": null,
+          "blocker": null
+        },
+        {
+          "feature_id": "SPK-02",
+          "acceptance_anchors": [
+            "accept-spk-a02"
+          ],
+          "source_actions": [
+            "speaker.attribute"
+          ],
+          "source_ui_contributions": [
+            "speaker.attribution"
+          ],
+          "source_revisions": [
+            "95a66c2c985a66bc2d535392dcc450d8c9df18d5",
+            "edc033c2c9466274a334299dadfa426661d957d9"
+          ],
+          "status": "NOT_CHECKED",
+          "fixture": null,
+          "command": null,
+          "git_sha": null,
+          "browser_platform": null,
+          "input": null,
+          "output": null,
+          "receipt": null,
+          "artifact": null,
+          "evidence_ref": null,
+          "blocker": null
+        },
+        {
+          "feature_id": "SPK-03",
+          "acceptance_anchors": [
+            "accept-spk-a03"
+          ],
+          "source_actions": [],
+          "source_ui_contributions": [],
+          "source_revisions": [
+            "95a66c2c985a66bc2d535392dcc450d8c9df18d5",
+            "edc033c2c9466274a334299dadfa426661d957d9"
+          ],
+          "status": "NOT_CHECKED",
+          "fixture": null,
+          "command": null,
+          "git_sha": null,
+          "browser_platform": null,
+          "input": null,
+          "output": null,
+          "receipt": null,
+          "artifact": null,
+          "evidence_ref": null,
+          "blocker": null
+        },
+        {
+          "feature_id": "SPK-04",
+          "acceptance_anchors": [
+            "accept-spk-a04"
+          ],
+          "source_actions": [
+            "speaker.count.update"
+          ],
+          "source_ui_contributions": [],
+          "source_revisions": [
+            "95a66c2c985a66bc2d535392dcc450d8c9df18d5",
+            "edc033c2c9466274a334299dadfa426661d957d9"
+          ],
+          "status": "NOT_CHECKED",
+          "fixture": null,
+          "command": null,
+          "git_sha": null,
+          "browser_platform": null,
+          "input": null,
+          "output": null,
+          "receipt": null,
+          "artifact": null,
+          "evidence_ref": null,
+          "blocker": null
+        },
+        {
+          "feature_id": "SPK-05",
+          "acceptance_anchors": [
+            "accept-spk-a05"
+          ],
+          "source_actions": [
+            "speaker.review.queue",
+            "speaker.override"
+          ],
+          "source_ui_contributions": [
+            "speaker.review"
+          ],
+          "source_revisions": [
+            "95a66c2c985a66bc2d535392dcc450d8c9df18d5",
+            "edc033c2c9466274a334299dadfa426661d957d9"
+          ],
+          "status": "NOT_CHECKED",
+          "fixture": null,
+          "command": null,
+          "git_sha": null,
+          "browser_platform": null,
+          "input": null,
+          "output": null,
+          "receipt": null,
+          "artifact": null,
+          "evidence_ref": null,
+          "blocker": null
+        },
+        {
+          "feature_id": "SPK-06",
+          "acceptance_anchors": [
+            "accept-spk-a06"
+          ],
+          "source_actions": [
+            "speaker.dialogue.list"
+          ],
+          "source_ui_contributions": [
+            "speaker.dialogue"
+          ],
+          "source_revisions": [
+            "95a66c2c985a66bc2d535392dcc450d8c9df18d5",
+            "edc033c2c9466274a334299dadfa426661d957d9"
+          ],
+          "status": "NOT_CHECKED",
+          "fixture": null,
+          "command": null,
+          "git_sha": null,
+          "browser_platform": null,
+          "input": null,
+          "output": null,
+          "receipt": null,
+          "artifact": null,
+          "evidence_ref": null,
+          "blocker": null
+        },
+        {
+          "feature_id": "SPK-07",
+          "acceptance_anchors": [
+            "accept-spk-a07"
+          ],
+          "source_actions": [
+            "diagnostics.voiceProfiles",
+            "speaker.voice.profiles"
+          ],
+          "source_ui_contributions": [
+            "speaker.voice.profiles"
+          ],
+          "source_revisions": [
+            "95a66c2c985a66bc2d535392dcc450d8c9df18d5",
+            "edc033c2c9466274a334299dadfa426661d957d9"
+          ],
+          "status": "NOT_CHECKED",
+          "fixture": null,
+          "command": null,
+          "git_sha": null,
+          "browser_platform": null,
+          "input": null,
+          "output": null,
+          "receipt": null,
+          "artifact": null,
+          "evidence_ref": null,
+          "blocker": null
+        },
+        {
+          "feature_id": "SPK-08",
+          "acceptance_anchors": [
+            "accept-spk-a08"
+          ],
+          "source_actions": [
+            "diagnostics.voiceConsistency",
+            "diagnostics.voiceDeviations",
+            "diagnostics.stylometricDeviations",
+            "speaker.voice.check"
+          ],
+          "source_ui_contributions": [],
+          "source_revisions": [
+            "95a66c2c985a66bc2d535392dcc450d8c9df18d5",
+            "edc033c2c9466274a334299dadfa426661d957d9"
+          ],
+          "status": "NOT_CHECKED",
+          "fixture": null,
+          "command": null,
+          "git_sha": null,
+          "browser_platform": null,
+          "input": null,
+          "output": null,
+          "receipt": null,
+          "artifact": null,
+          "evidence_ref": null,
+          "blocker": null
+        },
+        {
+          "feature_id": "SPK-09",
+          "acceptance_anchors": [
+            "accept-spk-a09"
+          ],
+          "source_actions": [
+            "speaker.evaluation.latest",
+            "speaker.ruleGates",
+            "speaker.evaluation.run"
+          ],
+          "source_ui_contributions": [
+            "speaker.evaluation"
+          ],
+          "source_revisions": [
+            "95a66c2c985a66bc2d535392dcc450d8c9df18d5",
+            "edc033c2c9466274a334299dadfa426661d957d9"
+          ],
+          "status": "NOT_CHECKED",
+          "fixture": null,
+          "command": null,
+          "git_sha": null,
+          "browser_platform": null,
+          "input": null,
+          "output": null,
+          "receipt": null,
+          "artifact": null,
+          "evidence_ref": null,
+          "blocker": null
+        },
+        {
+          "feature_id": "SPK-10",
+          "acceptance_anchors": [
+            "accept-spk-a10"
+          ],
+          "source_actions": [
+            "speaker.retraining.run"
+          ],
+          "source_ui_contributions": [],
+          "source_revisions": [
+            "95a66c2c985a66bc2d535392dcc450d8c9df18d5",
+            "edc033c2c9466274a334299dadfa426661d957d9"
+          ],
+          "status": "NOT_CHECKED",
+          "fixture": null,
+          "command": null,
+          "git_sha": null,
+          "browser_platform": null,
+          "input": null,
+          "output": null,
+          "receipt": null,
+          "artifact": null,
+          "evidence_ref": null,
+          "blocker": null
+        },
+        {
+          "feature_id": "SPK-11",
+          "acceptance_anchors": [
+            "accept-spk-a11"
+          ],
+          "source_actions": [],
+          "source_ui_contributions": [],
+          "source_revisions": [
+            "95a66c2c985a66bc2d535392dcc450d8c9df18d5",
+            "edc033c2c9466274a334299dadfa426661d957d9"
+          ],
+          "status": "NOT_CHECKED",
+          "fixture": null,
+          "command": null,
+          "git_sha": null,
+          "browser_platform": null,
+          "input": null,
+          "output": null,
+          "receipt": null,
+          "artifact": null,
+          "evidence_ref": null,
+          "blocker": null
+        },
+        {
+          "feature_id": "SPK-12",
+          "acceptance_anchors": [
+            "accept-spk-a12"
+          ],
+          "source_actions": [],
+          "source_ui_contributions": [],
+          "source_revisions": [
+            "95a66c2c985a66bc2d535392dcc450d8c9df18d5",
+            "edc033c2c9466274a334299dadfa426661d957d9"
+          ],
+          "status": "NOT_CHECKED",
+          "fixture": null,
+          "command": null,
+          "git_sha": null,
+          "browser_platform": null,
+          "input": null,
+          "output": null,
+          "receipt": null,
+          "artifact": null,
+          "evidence_ref": null,
+          "blocker": null
+        }
+      ]
+    },
+    {
+      "plugin_id": "proprium.semantic",
+      "canon": "docs/canon/plugins/SEMANTIC.md",
+      "feature_count": 9,
+      "acceptance_anchors": [
+        "accept-sem-a1",
+        "accept-sem-a2",
+        "accept-sem-a3",
+        "accept-sem-a4",
+        "accept-sem-a5",
+        "accept-sem-a6",
+        "accept-sem-a7"
+      ],
+      "source_revisions": [],
+      "features": [
+        {
+          "feature_id": "SEM-01",
+          "acceptance_anchors": [
+            "accept-sem-a1"
+          ],
+          "source_actions": [
+            "semantic.index.rebuild",
+            "semantic.index.status",
+            "semantic.task.status",
+            "semantic.task.cancel"
+          ],
+          "source_ui_contributions": [
+            "semantic.index"
+          ],
+          "source_revisions": [],
+          "status": "NOT_CHECKED",
+          "fixture": null,
+          "command": null,
+          "git_sha": null,
+          "browser_platform": null,
+          "input": null,
+          "output": null,
+          "receipt": null,
+          "artifact": null,
+          "evidence_ref": null,
+          "blocker": null
+        },
+        {
+          "feature_id": "SEM-02",
+          "acceptance_anchors": [
+            "accept-sem-a2"
+          ],
+          "source_actions": [
+            "semantic.search"
+          ],
+          "source_ui_contributions": [
+            "semantic.search"
+          ],
+          "source_revisions": [],
+          "status": "NOT_CHECKED",
+          "fixture": null,
+          "command": null,
+          "git_sha": null,
+          "browser_platform": null,
+          "input": null,
+          "output": null,
+          "receipt": null,
+          "artifact": null,
+          "evidence_ref": null,
+          "blocker": null
+        },
+        {
+          "feature_id": "SEM-03",
+          "acceptance_anchors": [
+            "accept-sem-a3"
+          ],
+          "source_actions": [
+            "semantic.expressions.search"
+          ],
+          "source_ui_contributions": [
+            "semantic.expressions"
+          ],
+          "source_revisions": [],
+          "status": "NOT_CHECKED",
+          "fixture": null,
+          "command": null,
+          "git_sha": null,
+          "browser_platform": null,
+          "input": null,
+          "output": null,
+          "receipt": null,
+          "artifact": null,
+          "evidence_ref": null,
+          "blocker": null
+        },
+        {
+          "feature_id": "SEM-04",
+          "acceptance_anchors": [
+            "accept-sem-a4"
+          ],
+          "source_actions": [
+            "semantic.terms.clusters"
+          ],
+          "source_ui_contributions": [],
+          "source_revisions": [],
+          "status": "NOT_CHECKED",
+          "fixture": null,
+          "command": null,
+          "git_sha": null,
+          "browser_platform": null,
+          "input": null,
+          "output": null,
+          "receipt": null,
+          "artifact": null,
+          "evidence_ref": null,
+          "blocker": null
+        },
+        {
+          "feature_id": "SEM-05",
+          "acceptance_anchors": [
+            "accept-sem-a5"
+          ],
+          "source_actions": [
+            "semantic.contradictions.rebuild"
+          ],
+          "source_ui_contributions": [
+            "semantic.contradictions"
+          ],
+          "source_revisions": [],
+          "status": "NOT_CHECKED",
+          "fixture": null,
+          "command": null,
+          "git_sha": null,
+          "browser_platform": null,
+          "input": null,
+          "output": null,
+          "receipt": null,
+          "artifact": null,
+          "evidence_ref": null,
+          "blocker": null
+        },
+        {
+          "feature_id": "SEM-06",
+          "acceptance_anchors": [
+            "accept-sem-a6"
+          ],
+          "source_actions": [
+            "semantic.settings.read",
+            "semantic.settings.update"
+          ],
+          "source_ui_contributions": [],
+          "source_revisions": [],
+          "status": "NOT_CHECKED",
+          "fixture": null,
+          "command": null,
+          "git_sha": null,
+          "browser_platform": null,
+          "input": null,
+          "output": null,
+          "receipt": null,
+          "artifact": null,
+          "evidence_ref": null,
+          "blocker": null
+        },
+        {
+          "feature_id": "SEM-07",
+          "acceptance_anchors": [
+            "accept-sem-a7"
+          ],
+          "source_actions": [],
+          "source_ui_contributions": [],
+          "source_revisions": [],
+          "status": "NOT_CHECKED",
+          "fixture": null,
+          "command": null,
+          "git_sha": null,
+          "browser_platform": null,
+          "input": null,
+          "output": null,
+          "receipt": null,
+          "artifact": null,
+          "evidence_ref": null,
+          "blocker": null
+        },
+        {
+          "feature_id": "SEM-08",
+          "acceptance_anchors": [
+            "accept-sem-a5"
+          ],
+          "source_actions": [],
+          "source_ui_contributions": [],
+          "source_revisions": [],
+          "status": "NOT_CHECKED",
+          "fixture": null,
+          "command": null,
+          "git_sha": null,
+          "browser_platform": null,
+          "input": null,
+          "output": null,
+          "receipt": null,
+          "artifact": null,
+          "evidence_ref": null,
+          "blocker": null
+        },
+        {
+          "feature_id": "SEM-09",
+          "acceptance_anchors": [
+            "accept-sem-a4",
+            "accept-sem-a5"
+          ],
+          "source_actions": [],
+          "source_ui_contributions": [],
+          "source_revisions": [],
+          "status": "NOT_CHECKED",
+          "fixture": null,
+          "command": null,
+          "git_sha": null,
+          "browser_platform": null,
+          "input": null,
+          "output": null,
+          "receipt": null,
+          "artifact": null,
+          "evidence_ref": null,
+          "blocker": null
+        }
+      ]
+    },
+    {
+      "plugin_id": "proprium.publishing",
+      "canon": "docs/canon/plugins/PUBLISHING.md",
+      "feature_count": 8,
+      "acceptance_anchors": [
+        "accept-pub-ac01",
+        "accept-pub-ac02",
+        "accept-pub-ac03",
+        "accept-pub-ac04",
+        "accept-pub-ac05",
+        "accept-pub-ac06",
+        "accept-pub-ac07",
+        "accept-pub-ac08",
+        "accept-pub-ac09",
+        "accept-pub-ac10",
+        "accept-pub-ac11",
+        "accept-pub-ac12",
+        "accept-pub-ac13"
+      ],
+      "source_revisions": [
+        "95a66c2c985a66bc2d535392dcc450d8c9df18d5",
+        "edc033c2c9466274a334299dadfa426661d957d9"
+      ],
+      "features": [
+        {
+          "feature_id": "PUB-01",
+          "acceptance_anchors": [
+            "accept-pub-ac01",
+            "accept-pub-ac02"
+          ],
+          "source_actions": [
+            "publishing.project.tree"
+          ],
+          "source_ui_contributions": [],
+          "source_revisions": [
+            "95a66c2c985a66bc2d535392dcc450d8c9df18d5",
+            "edc033c2c9466274a334299dadfa426661d957d9"
+          ],
+          "status": "NOT_CHECKED",
+          "fixture": null,
+          "command": null,
+          "git_sha": null,
+          "browser_platform": null,
+          "input": null,
+          "output": null,
+          "receipt": null,
+          "artifact": null,
+          "evidence_ref": null,
+          "blocker": null
+        },
+        {
+          "feature_id": "PUB-02",
+          "acceptance_anchors": [
+            "accept-pub-ac03"
+          ],
+          "source_actions": [
+            "publishing.export.plaintext"
+          ],
+          "source_ui_contributions": [
+            "publishing.export.plaintext"
+          ],
+          "source_revisions": [
+            "95a66c2c985a66bc2d535392dcc450d8c9df18d5",
+            "edc033c2c9466274a334299dadfa426661d957d9"
+          ],
+          "status": "NOT_CHECKED",
+          "fixture": null,
+          "command": null,
+          "git_sha": null,
+          "browser_platform": null,
+          "input": null,
+          "output": null,
+          "receipt": null,
+          "artifact": null,
+          "evidence_ref": null,
+          "blocker": null
+        },
+        {
+          "feature_id": "PUB-03",
+          "acceptance_anchors": [
+            "accept-pub-ac04",
+            "accept-pub-ac05"
+          ],
+          "source_actions": [
+            "publishing.export.epub"
+          ],
+          "source_ui_contributions": [
+            "publishing.export.epub"
+          ],
+          "source_revisions": [
+            "95a66c2c985a66bc2d535392dcc450d8c9df18d5",
+            "edc033c2c9466274a334299dadfa426661d957d9"
+          ],
+          "status": "NOT_CHECKED",
+          "fixture": null,
+          "command": null,
+          "git_sha": null,
+          "browser_platform": null,
+          "input": null,
+          "output": null,
+          "receipt": null,
+          "artifact": null,
+          "evidence_ref": null,
+          "blocker": null
+        },
+        {
+          "feature_id": "PUB-04",
+          "acceptance_anchors": [
+            "accept-pub-ac06"
+          ],
+          "source_actions": [
+            "publishing.export.vertical-print"
+          ],
+          "source_ui_contributions": [
+            "publishing.export.vertical-print"
+          ],
+          "source_revisions": [
+            "95a66c2c985a66bc2d535392dcc450d8c9df18d5",
+            "edc033c2c9466274a334299dadfa426661d957d9"
+          ],
+          "status": "NOT_CHECKED",
+          "fixture": null,
+          "command": null,
+          "git_sha": null,
+          "browser_platform": null,
+          "input": null,
+          "output": null,
+          "receipt": null,
+          "artifact": null,
+          "evidence_ref": null,
+          "blocker": null
+        },
+        {
+          "feature_id": "PUB-05",
+          "acceptance_anchors": [
+            "accept-pub-ac07"
+          ],
+          "source_actions": [],
+          "source_ui_contributions": [],
+          "source_revisions": [
+            "95a66c2c985a66bc2d535392dcc450d8c9df18d5",
+            "edc033c2c9466274a334299dadfa426661d957d9"
+          ],
+          "status": "NOT_CHECKED",
+          "fixture": null,
+          "command": null,
+          "git_sha": null,
+          "browser_platform": null,
+          "input": null,
+          "output": null,
+          "receipt": null,
+          "artifact": null,
+          "evidence_ref": null,
+          "blocker": null
+        },
+        {
+          "feature_id": "PUB-06",
+          "acceptance_anchors": [
+            "accept-pub-ac08"
+          ],
+          "source_actions": [
+            "publishing.episodes.read",
+            "publishing.episodes.propose"
+          ],
+          "source_ui_contributions": [
+            "publishing.episode-map"
+          ],
+          "source_revisions": [
+            "95a66c2c985a66bc2d535392dcc450d8c9df18d5",
+            "edc033c2c9466274a334299dadfa426661d957d9"
+          ],
+          "status": "NOT_CHECKED",
+          "fixture": null,
+          "command": null,
+          "git_sha": null,
+          "browser_platform": null,
+          "input": null,
+          "output": null,
+          "receipt": null,
+          "artifact": null,
+          "evidence_ref": null,
+          "blocker": null
+        },
+        {
+          "feature_id": "PUB-07",
+          "acceptance_anchors": [
+            "accept-pub-ac09",
+            "accept-pub-ac10"
+          ],
+          "source_actions": [
+            "publishing.shares.list",
+            "publishing.shares.create",
+            "publishing.shares.revoke"
+          ],
+          "source_ui_contributions": [
+            "publishing.share-links"
+          ],
+          "source_revisions": [
+            "95a66c2c985a66bc2d535392dcc450d8c9df18d5",
+            "edc033c2c9466274a334299dadfa426661d957d9"
+          ],
+          "status": "NOT_CHECKED",
+          "fixture": null,
+          "command": null,
+          "git_sha": null,
+          "browser_platform": null,
+          "input": null,
+          "output": null,
+          "receipt": null,
+          "artifact": null,
+          "evidence_ref": null,
+          "blocker": null
+        },
+        {
+          "feature_id": "PUB-08",
+          "acceptance_anchors": [
+            "accept-pub-ac11",
+            "accept-pub-ac12",
+            "accept-pub-ac13"
+          ],
+          "source_actions": [],
+          "source_ui_contributions": [],
+          "source_revisions": [
+            "95a66c2c985a66bc2d535392dcc450d8c9df18d5",
+            "edc033c2c9466274a334299dadfa426661d957d9"
+          ],
+          "status": "NOT_CHECKED",
+          "fixture": null,
+          "command": null,
+          "git_sha": null,
+          "browser_platform": null,
+          "input": null,
+          "output": null,
+          "receipt": null,
+          "artifact": null,
+          "evidence_ref": null,
+          "blocker": null
+        }
+      ]
+    }
+  ],
+  "recovered_source": {
+    "action_count": 136,
+    "ui_count": 42,
+    "tool_count": 33,
+    "source_actions": [
+      {
+        "source_id": "story.changes.propose",
+        "source_path": "modules/story/src/actions.ts",
+        "feature_ids": [
+          "PW-21"
+        ],
+        "status": "NOT_CHECKED",
+        "fixture": null,
+        "command": null,
+        "git_sha": null,
+        "browser_platform": null,
+        "input": null,
+        "output": null,
+        "receipt": null,
+        "artifact": null,
+        "evidence_ref": null,
+        "blocker": null
+      },
+      {
+        "source_id": "story.snapshot.materialize",
+        "source_path": "modules/story/src/actions.ts",
+        "feature_ids": [
+          "KNO-01"
+        ],
+        "status": "NOT_CHECKED",
+        "fixture": null,
+        "command": null,
+        "git_sha": null,
+        "browser_platform": null,
+        "input": null,
+        "output": null,
+        "receipt": null,
+        "artifact": null,
+        "evidence_ref": null,
+        "blocker": null
+      },
+      {
+        "source_id": "story.entities.list",
+        "source_path": "modules/story/src/actions.ts",
+        "feature_ids": [
+          "NAR-02",
+          "KNO-01"
+        ],
+        "status": "NOT_CHECKED",
+        "fixture": null,
+        "command": null,
+        "git_sha": null,
+        "browser_platform": null,
+        "input": null,
+        "output": null,
+        "receipt": null,
+        "artifact": null,
+        "evidence_ref": null,
+        "blocker": null
+      },
+      {
+        "source_id": "story.entities.collection-revision",
+        "source_path": "modules/story/src/actions.ts",
+        "feature_ids": [
+          "NAR-02",
+          "KNO-01"
+        ],
+        "status": "NOT_CHECKED",
+        "fixture": null,
+        "command": null,
+        "git_sha": null,
+        "browser_platform": null,
+        "input": null,
+        "output": null,
+        "receipt": null,
+        "artifact": null,
+        "evidence_ref": null,
+        "blocker": null
+      },
+      {
+        "source_id": "story.entities.get",
+        "source_path": "modules/story/src/actions.ts",
+        "feature_ids": [
+          "NAR-02",
+          "KNO-01"
+        ],
+        "status": "NOT_CHECKED",
+        "fixture": null,
+        "command": null,
+        "git_sha": null,
+        "browser_platform": null,
+        "input": null,
+        "output": null,
+        "receipt": null,
+        "artifact": null,
+        "evidence_ref": null,
+        "blocker": null
+      },
+      {
+        "source_id": "story.entities.create",
+        "source_path": "modules/story/src/actions.ts",
+        "feature_ids": [
+          "NAR-04",
+          "KNO-02"
+        ],
+        "status": "NOT_CHECKED",
+        "fixture": null,
+        "command": null,
+        "git_sha": null,
+        "browser_platform": null,
+        "input": null,
+        "output": null,
+        "receipt": null,
+        "artifact": null,
+        "evidence_ref": null,
+        "blocker": null
+      },
+      {
+        "source_id": "story.entities.update",
+        "source_path": "modules/story/src/actions.ts",
+        "feature_ids": [
+          "NAR-06",
+          "KNO-02"
+        ],
+        "status": "NOT_CHECKED",
+        "fixture": null,
+        "command": null,
+        "git_sha": null,
+        "browser_platform": null,
+        "input": null,
+        "output": null,
+        "receipt": null,
+        "artifact": null,
+        "evidence_ref": null,
+        "blocker": null
+      },
+      {
+        "source_id": "story.scene.metadata.update",
+        "source_path": "modules/story/src/actions.ts",
+        "feature_ids": [
+          "NAR-06",
+          "KNO-03"
+        ],
+        "status": "NOT_CHECKED",
+        "fixture": null,
+        "command": null,
+        "git_sha": null,
+        "browser_platform": null,
+        "input": null,
+        "output": null,
+        "receipt": null,
+        "artifact": null,
+        "evidence_ref": null,
+        "blocker": null
+      },
+      {
+        "source_id": "story.entities.reorder",
+        "source_path": "modules/story/src/actions.ts",
+        "feature_ids": [
+          "NAR-05"
+        ],
+        "status": "NOT_CHECKED",
+        "fixture": null,
+        "command": null,
+        "git_sha": null,
+        "browser_platform": null,
+        "input": null,
+        "output": null,
+        "receipt": null,
+        "artifact": null,
+        "evidence_ref": null,
+        "blocker": null
+      },
+      {
+        "source_id": "story.entities.backlinks",
+        "source_path": "modules/story/src/actions.ts",
+        "feature_ids": [
+          "KNO-06"
+        ],
+        "status": "NOT_CHECKED",
+        "fixture": null,
+        "command": null,
+        "git_sha": null,
+        "browser_platform": null,
+        "input": null,
+        "output": null,
+        "receipt": null,
+        "artifact": null,
+        "evidence_ref": null,
+        "blocker": null
+      },
+      {
+        "source_id": "story.entities.appearances",
+        "source_path": "modules/story/src/actions.ts",
+        "feature_ids": [
+          "KNO-06"
+        ],
+        "status": "NOT_CHECKED",
+        "fixture": null,
+        "command": null,
+        "git_sha": null,
+        "browser_platform": null,
+        "input": null,
+        "output": null,
+        "receipt": null,
+        "artifact": null,
+        "evidence_ref": null,
+        "blocker": null
+      },
+      {
+        "source_id": "story.entities.voice-patterns",
+        "source_path": "modules/story/src/actions.ts",
+        "feature_ids": [
+          "KNO-06"
+        ],
+        "status": "NOT_CHECKED",
+        "fixture": null,
+        "command": null,
+        "git_sha": null,
+        "browser_platform": null,
+        "input": null,
+        "output": null,
+        "receipt": null,
+        "artifact": null,
+        "evidence_ref": null,
+        "blocker": null
+      },
+      {
+        "source_id": "story.entities.freshness",
+        "source_path": "modules/story/src/actions.ts",
+        "feature_ids": [
+          "KNO-06"
+        ],
+        "status": "NOT_CHECKED",
+        "fixture": null,
+        "command": null,
+        "git_sha": null,
+        "browser_platform": null,
+        "input": null,
+        "output": null,
+        "receipt": null,
+        "artifact": null,
+        "evidence_ref": null,
+        "blocker": null
+      },
+      {
+        "source_id": "story.entities.suggested-tags",
+        "source_path": "modules/story/src/actions.ts",
+        "feature_ids": [
+          "KNO-07"
+        ],
+        "status": "NOT_CHECKED",
+        "fixture": null,
+        "command": null,
+        "git_sha": null,
+        "browser_platform": null,
+        "input": null,
+        "output": null,
+        "receipt": null,
+        "artifact": null,
+        "evidence_ref": null,
+        "blocker": null
+      },
+      {
+        "source_id": "story.tags.list",
+        "source_path": "modules/story/src/actions.ts",
+        "feature_ids": [
+          "KNO-07"
+        ],
+        "status": "NOT_CHECKED",
+        "fixture": null,
+        "command": null,
+        "git_sha": null,
+        "browser_platform": null,
+        "input": null,
+        "output": null,
+        "receipt": null,
+        "artifact": null,
+        "evidence_ref": null,
+        "blocker": null
+      },
+      {
+        "source_id": "story.scene.context",
+        "source_path": "modules/story/src/actions.ts",
+        "feature_ids": [
+          "NAR-06",
+          "KNO-08"
+        ],
+        "status": "NOT_CHECKED",
+        "fixture": null,
+        "command": null,
+        "git_sha": null,
+        "browser_platform": null,
+        "input": null,
+        "output": null,
+        "receipt": null,
+        "artifact": null,
+        "evidence_ref": null,
+        "blocker": null
+      },
+      {
+        "source_id": "story.volumes.tree",
+        "source_path": "modules/story/src/actions.ts",
+        "feature_ids": [
+          "NAR-02"
+        ],
+        "status": "NOT_CHECKED",
+        "fixture": null,
+        "command": null,
+        "git_sha": null,
+        "browser_platform": null,
+        "input": null,
+        "output": null,
+        "receipt": null,
+        "artifact": null,
+        "evidence_ref": null,
+        "blocker": null
+      },
+      {
+        "source_id": "story.threads.overview",
+        "source_path": "modules/story/src/actions.ts",
+        "feature_ids": [
+          "KNO-10"
+        ],
+        "status": "NOT_CHECKED",
+        "fixture": null,
+        "command": null,
+        "git_sha": null,
+        "browser_platform": null,
+        "input": null,
+        "output": null,
+        "receipt": null,
+        "artifact": null,
+        "evidence_ref": null,
+        "blocker": null
+      },
+      {
+        "source_id": "story.threads.status",
+        "source_path": "modules/story/src/actions.ts",
+        "feature_ids": [
+          "KNO-10"
+        ],
+        "status": "NOT_CHECKED",
+        "fixture": null,
+        "command": null,
+        "git_sha": null,
+        "browser_platform": null,
+        "input": null,
+        "output": null,
+        "receipt": null,
+        "artifact": null,
+        "evidence_ref": null,
+        "blocker": null
+      },
+      {
+        "source_id": "story.threads.lifecycle",
+        "source_path": "modules/story/src/actions.ts",
+        "feature_ids": [
+          "KNO-11"
+        ],
+        "status": "NOT_CHECKED",
+        "fixture": null,
+        "command": null,
+        "git_sha": null,
+        "browser_platform": null,
+        "input": null,
+        "output": null,
+        "receipt": null,
+        "artifact": null,
+        "evidence_ref": null,
+        "blocker": null
+      },
+      {
+        "source_id": "story.graph.query",
+        "source_path": "modules/story/src/actions.ts",
+        "feature_ids": [
+          "KNO-13"
+        ],
+        "status": "NOT_CHECKED",
+        "fixture": null,
+        "command": null,
+        "git_sha": null,
+        "browser_platform": null,
+        "input": null,
+        "output": null,
+        "receipt": null,
+        "artifact": null,
+        "evidence_ref": null,
+        "blocker": null
+      },
+      {
+        "source_id": "story.cooccurrence",
+        "source_path": "modules/story/src/actions.ts",
+        "feature_ids": [
+          "KNO-13"
+        ],
+        "status": "NOT_CHECKED",
+        "fixture": null,
+        "command": null,
+        "git_sha": null,
+        "browser_platform": null,
+        "input": null,
+        "output": null,
+        "receipt": null,
+        "artifact": null,
+        "evidence_ref": null,
+        "blocker": null
+      },
+      {
+        "source_id": "story.map.query",
+        "source_path": "modules/story/src/actions.ts",
+        "feature_ids": [
+          "KNO-14"
+        ],
+        "status": "NOT_CHECKED",
+        "fixture": null,
+        "command": null,
+        "git_sha": null,
+        "browser_platform": null,
+        "input": null,
+        "output": null,
+        "receipt": null,
+        "artifact": null,
+        "evidence_ref": null,
+        "blocker": null
+      },
+      {
+        "source_id": "story.timeline.query",
+        "source_path": "modules/story/src/actions.ts",
+        "feature_ids": [
+          "KNO-15"
+        ],
+        "status": "NOT_CHECKED",
+        "fixture": null,
+        "command": null,
+        "git_sha": null,
+        "browser_platform": null,
+        "input": null,
+        "output": null,
+        "receipt": null,
+        "artifact": null,
+        "evidence_ref": null,
+        "blocker": null
+      },
+      {
+        "source_id": "story.world-state.at-scene",
+        "source_path": "modules/story/src/actions.ts",
+        "feature_ids": [
+          "KNO-16"
+        ],
+        "status": "NOT_CHECKED",
+        "fixture": null,
+        "command": null,
+        "git_sha": null,
+        "browser_platform": null,
+        "input": null,
+        "output": null,
+        "receipt": null,
+        "artifact": null,
+        "evidence_ref": null,
+        "blocker": null
+      },
+      {
+        "source_id": "story.world-state.history",
+        "source_path": "modules/story/src/actions.ts",
+        "feature_ids": [
+          "KNO-16"
+        ],
+        "status": "NOT_CHECKED",
+        "fixture": null,
+        "command": null,
+        "git_sha": null,
+        "browser_platform": null,
+        "input": null,
+        "output": null,
+        "receipt": null,
+        "artifact": null,
+        "evidence_ref": null,
+        "blocker": null
+      },
+      {
+        "source_id": "story.world-state.workbench",
+        "source_path": "modules/story/src/actions.ts",
+        "feature_ids": [
+          "KNO-18"
+        ],
+        "status": "NOT_CHECKED",
+        "fixture": null,
+        "command": null,
+        "git_sha": null,
+        "browser_platform": null,
+        "input": null,
+        "output": null,
+        "receipt": null,
+        "artifact": null,
+        "evidence_ref": null,
+        "blocker": null
+      },
+      {
+        "source_id": "story.state-proposals.list",
+        "source_path": "modules/story/src/actions.ts",
+        "feature_ids": [
+          "KNO-18"
+        ],
+        "status": "NOT_CHECKED",
+        "fixture": null,
+        "command": null,
+        "git_sha": null,
+        "browser_platform": null,
+        "input": null,
+        "output": null,
+        "receipt": null,
+        "artifact": null,
+        "evidence_ref": null,
+        "blocker": null
+      },
+      {
+        "source_id": "story.state-proposals.create",
+        "source_path": "modules/story/src/actions.ts",
+        "feature_ids": [
+          "KNO-18"
+        ],
+        "status": "NOT_CHECKED",
+        "fixture": null,
+        "command": null,
+        "git_sha": null,
+        "browser_platform": null,
+        "input": null,
+        "output": null,
+        "receipt": null,
+        "artifact": null,
+        "evidence_ref": null,
+        "blocker": null
+      },
+      {
+        "source_id": "story.state-proposals.update",
+        "source_path": "modules/story/src/actions.ts",
+        "feature_ids": [
+          "KNO-18"
+        ],
+        "status": "NOT_CHECKED",
+        "fixture": null,
+        "command": null,
+        "git_sha": null,
+        "browser_platform": null,
+        "input": null,
+        "output": null,
+        "receipt": null,
+        "artifact": null,
+        "evidence_ref": null,
+        "blocker": null
+      },
+      {
+        "source_id": "story.state-proposals.approve",
+        "source_path": "modules/story/src/actions.ts",
+        "feature_ids": [
+          "KNO-18"
+        ],
+        "status": "NOT_CHECKED",
+        "fixture": null,
+        "command": null,
+        "git_sha": null,
+        "browser_platform": null,
+        "input": null,
+        "output": null,
+        "receipt": null,
+        "artifact": null,
+        "evidence_ref": null,
+        "blocker": null
+      },
+      {
+        "source_id": "story.state-proposals.reject",
+        "source_path": "modules/story/src/actions.ts",
+        "feature_ids": [
+          "KNO-18"
+        ],
+        "status": "NOT_CHECKED",
+        "fixture": null,
+        "command": null,
+        "git_sha": null,
+        "browser_platform": null,
+        "input": null,
+        "output": null,
+        "receipt": null,
+        "artifact": null,
+        "evidence_ref": null,
+        "blocker": null
+      },
+      {
+        "source_id": "story.state-proposals.stale",
+        "source_path": "modules/story/src/actions.ts",
+        "feature_ids": [
+          "KNO-18"
+        ],
+        "status": "NOT_CHECKED",
+        "fixture": null,
+        "command": null,
+        "git_sha": null,
+        "browser_platform": null,
+        "input": null,
+        "output": null,
+        "receipt": null,
+        "artifact": null,
+        "evidence_ref": null,
+        "blocker": null
+      },
+      {
+        "source_id": "story.zukan-suggestions.list",
+        "source_path": "modules/story/src/actions.ts",
+        "feature_ids": [
+          "KNO-05"
+        ],
+        "status": "NOT_CHECKED",
+        "fixture": null,
+        "command": null,
+        "git_sha": null,
+        "browser_platform": null,
+        "input": null,
+        "output": null,
+        "receipt": null,
+        "artifact": null,
+        "evidence_ref": null,
+        "blocker": null
+      },
+      {
+        "source_id": "story.zukan-suggestions.create",
+        "source_path": "modules/story/src/actions.ts",
+        "feature_ids": [
+          "KNO-05"
+        ],
+        "status": "NOT_CHECKED",
+        "fixture": null,
+        "command": null,
+        "git_sha": null,
+        "browser_platform": null,
+        "input": null,
+        "output": null,
+        "receipt": null,
+        "artifact": null,
+        "evidence_ref": null,
+        "blocker": null
+      },
+      {
+        "source_id": "story.zukan-suggestions.approve",
+        "source_path": "modules/story/src/actions.ts",
+        "feature_ids": [
+          "KNO-05"
+        ],
+        "status": "NOT_CHECKED",
+        "fixture": null,
+        "command": null,
+        "git_sha": null,
+        "browser_platform": null,
+        "input": null,
+        "output": null,
+        "receipt": null,
+        "artifact": null,
+        "evidence_ref": null,
+        "blocker": null
+      },
+      {
+        "source_id": "story.zukan-suggestions.reject",
+        "source_path": "modules/story/src/actions.ts",
+        "feature_ids": [
+          "KNO-05"
+        ],
+        "status": "NOT_CHECKED",
+        "fixture": null,
+        "command": null,
+        "git_sha": null,
+        "browser_platform": null,
+        "input": null,
+        "output": null,
+        "receipt": null,
+        "artifact": null,
+        "evidence_ref": null,
+        "blocker": null
+      },
+      {
+        "source_id": "story.reader-model.build",
+        "source_path": "modules/story/src/actions.ts",
+        "feature_ids": [
+          "KNO-17"
+        ],
+        "status": "NOT_CHECKED",
+        "fixture": null,
+        "command": null,
+        "git_sha": null,
+        "browser_platform": null,
+        "input": null,
+        "output": null,
+        "receipt": null,
+        "artifact": null,
+        "evidence_ref": null,
+        "blocker": null
+      },
+      {
+        "source_id": "story.series.list",
+        "source_path": "modules/story/src/actions.ts",
+        "feature_ids": [
+          "KNO-19"
+        ],
+        "status": "NOT_CHECKED",
+        "fixture": null,
+        "command": null,
+        "git_sha": null,
+        "browser_platform": null,
+        "input": null,
+        "output": null,
+        "receipt": null,
+        "artifact": null,
+        "evidence_ref": null,
+        "blocker": null
+      },
+      {
+        "source_id": "story.series.get",
+        "source_path": "modules/story/src/actions.ts",
+        "feature_ids": [
+          "KNO-19"
+        ],
+        "status": "NOT_CHECKED",
+        "fixture": null,
+        "command": null,
+        "git_sha": null,
+        "browser_platform": null,
+        "input": null,
+        "output": null,
+        "receipt": null,
+        "artifact": null,
+        "evidence_ref": null,
+        "blocker": null
+      },
+      {
+        "source_id": "story.series.create",
+        "source_path": "modules/story/src/actions.ts",
+        "feature_ids": [
+          "KNO-19"
+        ],
+        "status": "NOT_CHECKED",
+        "fixture": null,
+        "command": null,
+        "git_sha": null,
+        "browser_platform": null,
+        "input": null,
+        "output": null,
+        "receipt": null,
+        "artifact": null,
+        "evidence_ref": null,
+        "blocker": null
+      },
+      {
+        "source_id": "story.series.update",
+        "source_path": "modules/story/src/actions.ts",
+        "feature_ids": [
+          "KNO-19"
+        ],
+        "status": "NOT_CHECKED",
+        "fixture": null,
+        "command": null,
+        "git_sha": null,
+        "browser_platform": null,
+        "input": null,
+        "output": null,
+        "receipt": null,
+        "artifact": null,
+        "evidence_ref": null,
+        "blocker": null
+      },
+      {
+        "source_id": "story.series.delete",
+        "source_path": "modules/story/src/actions.ts",
+        "feature_ids": [
+          "KNO-19"
+        ],
+        "status": "NOT_CHECKED",
+        "fixture": null,
+        "command": null,
+        "git_sha": null,
+        "browser_platform": null,
+        "input": null,
+        "output": null,
+        "receipt": null,
+        "artifact": null,
+        "evidence_ref": null,
+        "blocker": null
+      },
+      {
+        "source_id": "story.series.binding.get",
+        "source_path": "modules/story/src/actions.ts",
+        "feature_ids": [
+          "KNO-19"
+        ],
+        "status": "NOT_CHECKED",
+        "fixture": null,
+        "command": null,
+        "git_sha": null,
+        "browser_platform": null,
+        "input": null,
+        "output": null,
+        "receipt": null,
+        "artifact": null,
+        "evidence_ref": null,
+        "blocker": null
+      },
+      {
+        "source_id": "story.series.binding.update",
+        "source_path": "modules/story/src/actions.ts",
+        "feature_ids": [
+          "KNO-19"
+        ],
+        "status": "NOT_CHECKED",
+        "fixture": null,
+        "command": null,
+        "git_sha": null,
+        "browser_platform": null,
+        "input": null,
+        "output": null,
+        "receipt": null,
+        "artifact": null,
+        "evidence_ref": null,
+        "blocker": null
+      },
+      {
+        "source_id": "story.series.binding.delete",
+        "source_path": "modules/story/src/actions.ts",
+        "feature_ids": [
+          "KNO-19"
+        ],
+        "status": "NOT_CHECKED",
+        "fixture": null,
+        "command": null,
+        "git_sha": null,
+        "browser_platform": null,
+        "input": null,
+        "output": null,
+        "receipt": null,
+        "artifact": null,
+        "evidence_ref": null,
+        "blocker": null
+      },
+      {
+        "source_id": "story.series.overlay",
+        "source_path": "modules/story/src/actions.ts",
+        "feature_ids": [
+          "KNO-19"
+        ],
+        "status": "NOT_CHECKED",
+        "fixture": null,
+        "command": null,
+        "git_sha": null,
+        "browser_platform": null,
+        "input": null,
+        "output": null,
+        "receipt": null,
+        "artifact": null,
+        "evidence_ref": null,
+        "blocker": null
+      },
+      {
+        "source_id": "search.query",
+        "source_path": "modules/search/src/actions.ts",
+        "feature_ids": [
+          "RES-001"
+        ],
+        "status": "NOT_CHECKED",
+        "fixture": null,
+        "command": null,
+        "git_sha": null,
+        "browser_platform": null,
+        "input": null,
+        "output": null,
+        "receipt": null,
+        "artifact": null,
+        "evidence_ref": null,
+        "blocker": null
+      },
+      {
+        "source_id": "search.terms.list",
+        "source_path": "modules/search/src/actions.ts",
+        "feature_ids": [
+          "RES-003"
+        ],
+        "status": "NOT_CHECKED",
+        "fixture": null,
+        "command": null,
+        "git_sha": null,
+        "browser_platform": null,
+        "input": null,
+        "output": null,
+        "receipt": null,
+        "artifact": null,
+        "evidence_ref": null,
+        "blocker": null
+      },
+      {
+        "source_id": "search.terms.resolve",
+        "source_path": "modules/search/src/actions.ts",
+        "feature_ids": [
+          "RES-004"
+        ],
+        "status": "NOT_CHECKED",
+        "fixture": null,
+        "command": null,
+        "git_sha": null,
+        "browser_platform": null,
+        "input": null,
+        "output": null,
+        "receipt": null,
+        "artifact": null,
+        "evidence_ref": null,
+        "blocker": null
+      },
+      {
+        "source_id": "search.terms.propose",
+        "source_path": "modules/search/src/actions.ts",
+        "feature_ids": [
+          "RES-003"
+        ],
+        "status": "NOT_CHECKED",
+        "fixture": null,
+        "command": null,
+        "git_sha": null,
+        "browser_platform": null,
+        "input": null,
+        "output": null,
+        "receipt": null,
+        "artifact": null,
+        "evidence_ref": null,
+        "blocker": null
+      },
+      {
+        "source_id": "search.terms.remove",
+        "source_path": "modules/search/src/actions.ts",
+        "feature_ids": [
+          "RES-003"
+        ],
+        "status": "NOT_CHECKED",
+        "fixture": null,
+        "command": null,
+        "git_sha": null,
+        "browser_platform": null,
+        "input": null,
+        "output": null,
+        "receipt": null,
+        "artifact": null,
+        "evidence_ref": null,
+        "blocker": null
+      },
+      {
+        "source_id": "nlp.analyze",
+        "source_path": "modules/nlp/src/index.ts",
+        "feature_ids": [
+          "RES-005"
+        ],
+        "status": "NOT_CHECKED",
+        "fixture": null,
+        "command": null,
+        "git_sha": null,
+        "browser_platform": null,
+        "input": null,
+        "output": null,
+        "receipt": null,
+        "artifact": null,
+        "evidence_ref": null,
+        "blocker": null
+      },
+      {
+        "source_id": "nlp.countTokens",
+        "source_path": "modules/nlp/src/index.ts",
+        "feature_ids": [
+          "RES-011"
+        ],
+        "status": "NOT_CHECKED",
+        "fixture": null,
+        "command": null,
+        "git_sha": null,
+        "browser_platform": null,
+        "input": null,
+        "output": null,
+        "receipt": null,
+        "artifact": null,
+        "evidence_ref": null,
+        "blocker": null
+      },
+      {
+        "source_id": "nlp.discoverCandidates",
+        "source_path": "modules/nlp/src/index.ts",
+        "feature_ids": [
+          "RES-006"
+        ],
+        "status": "NOT_CHECKED",
+        "fixture": null,
+        "command": null,
+        "git_sha": null,
+        "browser_platform": null,
+        "input": null,
+        "output": null,
+        "receipt": null,
+        "artifact": null,
+        "evidence_ref": null,
+        "blocker": null
+      },
+      {
+        "source_id": "nlp.termVariants",
+        "source_path": "modules/nlp/src/index.ts",
+        "feature_ids": [
+          "RES-007"
+        ],
+        "status": "NOT_CHECKED",
+        "fixture": null,
+        "command": null,
+        "git_sha": null,
+        "browser_platform": null,
+        "input": null,
+        "output": null,
+        "receipt": null,
+        "artifact": null,
+        "evidence_ref": null,
+        "blocker": null
+      },
+      {
+        "source_id": "nlp.dictionary",
+        "source_path": "modules/nlp/src/index.ts",
+        "feature_ids": [
+          "RES-008"
+        ],
+        "status": "NOT_CHECKED",
+        "fixture": null,
+        "command": null,
+        "git_sha": null,
+        "browser_platform": null,
+        "input": null,
+        "output": null,
+        "receipt": null,
+        "artifact": null,
+        "evidence_ref": null,
+        "blocker": null
+      },
+      {
+        "source_id": "nlp.saveSynonymGroup",
+        "source_path": "modules/nlp/src/index.ts",
+        "feature_ids": [
+          "RES-008"
+        ],
+        "status": "NOT_CHECKED",
+        "fixture": null,
+        "command": null,
+        "git_sha": null,
+        "browser_platform": null,
+        "input": null,
+        "output": null,
+        "receipt": null,
+        "artifact": null,
+        "evidence_ref": null,
+        "blocker": null
+      },
+      {
+        "source_id": "nlp.ignoreCandidates",
+        "source_path": "modules/nlp/src/index.ts",
+        "feature_ids": [
+          "RES-009"
+        ],
+        "status": "NOT_CHECKED",
+        "fixture": null,
+        "command": null,
+        "git_sha": null,
+        "browser_platform": null,
+        "input": null,
+        "output": null,
+        "receipt": null,
+        "artifact": null,
+        "evidence_ref": null,
+        "blocker": null
+      },
+      {
+        "source_id": "nlp.features",
+        "source_path": "modules/nlp/src/index.ts",
+        "feature_ids": [
+          "RES-012"
+        ],
+        "status": "NOT_CHECKED",
+        "fixture": null,
+        "command": null,
+        "git_sha": null,
+        "browser_platform": null,
+        "input": null,
+        "output": null,
+        "receipt": null,
+        "artifact": null,
+        "evidence_ref": null,
+        "blocker": null
+      },
+      {
+        "source_id": "nlp.updateExternalConsent",
+        "source_path": "modules/nlp/src/index.ts",
+        "feature_ids": [
+          "RES-012"
+        ],
+        "status": "NOT_CHECKED",
+        "fixture": null,
+        "command": null,
+        "git_sha": null,
+        "browser_platform": null,
+        "input": null,
+        "output": null,
+        "receipt": null,
+        "artifact": null,
+        "evidence_ref": null,
+        "blocker": null
+      },
+      {
+        "source_id": "assistant.health",
+        "source_path": "modules/assistant/src/actions.ts",
+        "feature_ids": [
+          "PW-01"
+        ],
+        "status": "NOT_CHECKED",
+        "fixture": null,
+        "command": null,
+        "git_sha": null,
+        "browser_platform": null,
+        "input": null,
+        "output": null,
+        "receipt": null,
+        "artifact": null,
+        "evidence_ref": null,
+        "blocker": null
+      },
+      {
+        "source_id": "assistant.queue.status",
+        "source_path": "modules/assistant/src/actions.ts",
+        "feature_ids": [
+          "PW-01"
+        ],
+        "status": "NOT_CHECKED",
+        "fixture": null,
+        "command": null,
+        "git_sha": null,
+        "browser_platform": null,
+        "input": null,
+        "output": null,
+        "receipt": null,
+        "artifact": null,
+        "evidence_ref": null,
+        "blocker": null
+      },
+      {
+        "source_id": "assistant.settings.read",
+        "source_path": "modules/assistant/src/actions.ts",
+        "feature_ids": [
+          "PW-01"
+        ],
+        "status": "NOT_CHECKED",
+        "fixture": null,
+        "command": null,
+        "git_sha": null,
+        "browser_platform": null,
+        "input": null,
+        "output": null,
+        "receipt": null,
+        "artifact": null,
+        "evidence_ref": null,
+        "blocker": null
+      },
+      {
+        "source_id": "assistant.settings.propose",
+        "source_path": "modules/assistant/src/actions.ts",
+        "feature_ids": [
+          "PW-01"
+        ],
+        "status": "NOT_CHECKED",
+        "fixture": null,
+        "command": null,
+        "git_sha": null,
+        "browser_platform": null,
+        "input": null,
+        "output": null,
+        "receipt": null,
+        "artifact": null,
+        "evidence_ref": null,
+        "blocker": null
+      },
+      {
+        "source_id": "assistant.usage.read",
+        "source_path": "modules/assistant/src/actions.ts",
+        "feature_ids": [
+          "PW-01"
+        ],
+        "status": "NOT_CHECKED",
+        "fixture": null,
+        "command": null,
+        "git_sha": null,
+        "browser_platform": null,
+        "input": null,
+        "output": null,
+        "receipt": null,
+        "artifact": null,
+        "evidence_ref": null,
+        "blocker": null
+      },
+      {
+        "source_id": "assistant.rewrite",
+        "source_path": "modules/assistant/src/actions.ts",
+        "feature_ids": [
+          "PW-02"
+        ],
+        "status": "NOT_CHECKED",
+        "fixture": null,
+        "command": null,
+        "git_sha": null,
+        "browser_platform": null,
+        "input": null,
+        "output": null,
+        "receipt": null,
+        "artifact": null,
+        "evidence_ref": null,
+        "blocker": null
+      },
+      {
+        "source_id": "assistant.rewrite.propose",
+        "source_path": "modules/assistant/src/actions.ts",
+        "feature_ids": [
+          "PW-02"
+        ],
+        "status": "NOT_CHECKED",
+        "fixture": null,
+        "command": null,
+        "git_sha": null,
+        "browser_platform": null,
+        "input": null,
+        "output": null,
+        "receipt": null,
+        "artifact": null,
+        "evidence_ref": null,
+        "blocker": null
+      },
+      {
+        "source_id": "assistant.summary.scene",
+        "source_path": "modules/assistant/src/actions.ts",
+        "feature_ids": [
+          "PW-05"
+        ],
+        "status": "NOT_CHECKED",
+        "fixture": null,
+        "command": null,
+        "git_sha": null,
+        "browser_platform": null,
+        "input": null,
+        "output": null,
+        "receipt": null,
+        "artifact": null,
+        "evidence_ref": null,
+        "blocker": null
+      },
+      {
+        "source_id": "assistant.summary.chapter",
+        "source_path": "modules/assistant/src/actions.ts",
+        "feature_ids": [
+          "PW-05"
+        ],
+        "status": "NOT_CHECKED",
+        "fixture": null,
+        "command": null,
+        "git_sha": null,
+        "browser_platform": null,
+        "input": null,
+        "output": null,
+        "receipt": null,
+        "artifact": null,
+        "evidence_ref": null,
+        "blocker": null
+      },
+      {
+        "source_id": "assistant.qa",
+        "source_path": "modules/assistant/src/actions.ts",
+        "feature_ids": [
+          "PW-04"
+        ],
+        "status": "NOT_CHECKED",
+        "fixture": null,
+        "command": null,
+        "git_sha": null,
+        "browser_platform": null,
+        "input": null,
+        "output": null,
+        "receipt": null,
+        "artifact": null,
+        "evidence_ref": null,
+        "blocker": null
+      },
+      {
+        "source_id": "assistant.continuation",
+        "source_path": "modules/assistant/src/actions.ts",
+        "feature_ids": [
+          "PW-03"
+        ],
+        "status": "NOT_CHECKED",
+        "fixture": null,
+        "command": null,
+        "git_sha": null,
+        "browser_platform": null,
+        "input": null,
+        "output": null,
+        "receipt": null,
+        "artifact": null,
+        "evidence_ref": null,
+        "blocker": null
+      },
+      {
+        "source_id": "assistant.aspect.review",
+        "source_path": "modules/assistant/src/actions.ts",
+        "feature_ids": [
+          "DIA-14"
+        ],
+        "status": "NOT_CHECKED",
+        "fixture": null,
+        "command": null,
+        "git_sha": null,
+        "browser_platform": null,
+        "input": null,
+        "output": null,
+        "receipt": null,
+        "artifact": null,
+        "evidence_ref": null,
+        "blocker": null
+      },
+      {
+        "source_id": "assistant.dialogue.topics",
+        "source_path": "modules/assistant/src/actions.ts",
+        "feature_ids": [
+          "PW-06"
+        ],
+        "status": "NOT_CHECKED",
+        "fixture": null,
+        "command": null,
+        "git_sha": null,
+        "browser_platform": null,
+        "input": null,
+        "output": null,
+        "receipt": null,
+        "artifact": null,
+        "evidence_ref": null,
+        "blocker": null
+      },
+      {
+        "source_id": "assistant.dialogue.turns",
+        "source_path": "modules/assistant/src/actions.ts",
+        "feature_ids": [
+          "PW-06"
+        ],
+        "status": "NOT_CHECKED",
+        "fixture": null,
+        "command": null,
+        "git_sha": null,
+        "browser_platform": null,
+        "input": null,
+        "output": null,
+        "receipt": null,
+        "artifact": null,
+        "evidence_ref": null,
+        "blocker": null
+      },
+      {
+        "source_id": "assistant.reader.reaction",
+        "source_path": "modules/assistant/src/actions.ts",
+        "feature_ids": [
+          "PW-05"
+        ],
+        "status": "NOT_CHECKED",
+        "fixture": null,
+        "command": null,
+        "git_sha": null,
+        "browser_platform": null,
+        "input": null,
+        "output": null,
+        "receipt": null,
+        "artifact": null,
+        "evidence_ref": null,
+        "blocker": null
+      },
+      {
+        "source_id": "assistant.zukan.suggestions",
+        "source_path": "modules/assistant/src/actions.ts",
+        "feature_ids": [
+          "PW-11"
+        ],
+        "status": "NOT_CHECKED",
+        "fixture": null,
+        "command": null,
+        "git_sha": null,
+        "browser_platform": null,
+        "input": null,
+        "output": null,
+        "receipt": null,
+        "artifact": null,
+        "evidence_ref": null,
+        "blocker": null
+      },
+      {
+        "source_id": "assistant.synonyms.suggestions",
+        "source_path": "modules/assistant/src/actions.ts",
+        "feature_ids": [
+          "PW-08"
+        ],
+        "status": "NOT_CHECKED",
+        "fixture": null,
+        "command": null,
+        "git_sha": null,
+        "browser_platform": null,
+        "input": null,
+        "output": null,
+        "receipt": null,
+        "artifact": null,
+        "evidence_ref": null,
+        "blocker": null
+      },
+      {
+        "source_id": "assistant.contradictions.assist",
+        "source_path": "modules/assistant/src/actions.ts",
+        "feature_ids": [
+          "PW-09"
+        ],
+        "status": "NOT_CHECKED",
+        "fixture": null,
+        "command": null,
+        "git_sha": null,
+        "browser_platform": null,
+        "input": null,
+        "output": null,
+        "receipt": null,
+        "artifact": null,
+        "evidence_ref": null,
+        "blocker": null
+      },
+      {
+        "source_id": "assistant.stateEvents.draft",
+        "source_path": "modules/assistant/src/actions.ts",
+        "feature_ids": [
+          "PW-11"
+        ],
+        "status": "NOT_CHECKED",
+        "fixture": null,
+        "command": null,
+        "git_sha": null,
+        "browser_platform": null,
+        "input": null,
+        "output": null,
+        "receipt": null,
+        "artifact": null,
+        "evidence_ref": null,
+        "blocker": null
+      },
+      {
+        "source_id": "assistant.speaker.attribute",
+        "source_path": "modules/assistant/src/actions.ts",
+        "feature_ids": [
+          "PW-10"
+        ],
+        "status": "NOT_CHECKED",
+        "fixture": null,
+        "command": null,
+        "git_sha": null,
+        "browser_platform": null,
+        "input": null,
+        "output": null,
+        "receipt": null,
+        "artifact": null,
+        "evidence_ref": null,
+        "blocker": null
+      },
+      {
+        "source_id": "assistant.summary.scene.preview",
+        "source_path": "modules/assistant/src/actions.ts",
+        "feature_ids": [
+          "PW-05"
+        ],
+        "status": "NOT_CHECKED",
+        "fixture": null,
+        "command": null,
+        "git_sha": null,
+        "browser_platform": null,
+        "input": null,
+        "output": null,
+        "receipt": null,
+        "artifact": null,
+        "evidence_ref": null,
+        "blocker": null
+      },
+      {
+        "source_id": "assistant.summary.chapter.preview",
+        "source_path": "modules/assistant/src/actions.ts",
+        "feature_ids": [
+          "PW-05"
+        ],
+        "status": "NOT_CHECKED",
+        "fixture": null,
+        "command": null,
+        "git_sha": null,
+        "browser_platform": null,
+        "input": null,
+        "output": null,
+        "receipt": null,
+        "artifact": null,
+        "evidence_ref": null,
+        "blocker": null
+      },
+      {
+        "source_id": "assistant.qa.preview",
+        "source_path": "modules/assistant/src/actions.ts",
+        "feature_ids": [
+          "PW-04"
+        ],
+        "status": "NOT_CHECKED",
+        "fixture": null,
+        "command": null,
+        "git_sha": null,
+        "browser_platform": null,
+        "input": null,
+        "output": null,
+        "receipt": null,
+        "artifact": null,
+        "evidence_ref": null,
+        "blocker": null
+      },
+      {
+        "source_id": "assistant.continuation.preview",
+        "source_path": "modules/assistant/src/actions.ts",
+        "feature_ids": [
+          "PW-03"
+        ],
+        "status": "NOT_CHECKED",
+        "fixture": null,
+        "command": null,
+        "git_sha": null,
+        "browser_platform": null,
+        "input": null,
+        "output": null,
+        "receipt": null,
+        "artifact": null,
+        "evidence_ref": null,
+        "blocker": null
+      },
+      {
+        "source_id": "assistant.aspect.review.preview",
+        "source_path": "modules/assistant/src/actions.ts",
+        "feature_ids": [
+          "DIA-14"
+        ],
+        "status": "NOT_CHECKED",
+        "fixture": null,
+        "command": null,
+        "git_sha": null,
+        "browser_platform": null,
+        "input": null,
+        "output": null,
+        "receipt": null,
+        "artifact": null,
+        "evidence_ref": null,
+        "blocker": null
+      },
+      {
+        "source_id": "assistant.dialogue.topics.preview",
+        "source_path": "modules/assistant/src/actions.ts",
+        "feature_ids": [
+          "PW-06"
+        ],
+        "status": "NOT_CHECKED",
+        "fixture": null,
+        "command": null,
+        "git_sha": null,
+        "browser_platform": null,
+        "input": null,
+        "output": null,
+        "receipt": null,
+        "artifact": null,
+        "evidence_ref": null,
+        "blocker": null
+      },
+      {
+        "source_id": "assistant.dialogue.turn.preview",
+        "source_path": "modules/assistant/src/actions.ts",
+        "feature_ids": [
+          "PW-06"
+        ],
+        "status": "NOT_CHECKED",
+        "fixture": null,
+        "command": null,
+        "git_sha": null,
+        "browser_platform": null,
+        "input": null,
+        "output": null,
+        "receipt": null,
+        "artifact": null,
+        "evidence_ref": null,
+        "blocker": null
+      },
+      {
+        "source_id": "assistant.dialogue.turns.preview",
+        "source_path": "modules/assistant/src/actions.ts",
+        "feature_ids": [
+          "PW-06"
+        ],
+        "status": "NOT_CHECKED",
+        "fixture": null,
+        "command": null,
+        "git_sha": null,
+        "browser_platform": null,
+        "input": null,
+        "output": null,
+        "receipt": null,
+        "artifact": null,
+        "evidence_ref": null,
+        "blocker": null
+      },
+      {
+        "source_id": "assistant.reader.reaction.preview",
+        "source_path": "modules/assistant/src/actions.ts",
+        "feature_ids": [
+          "PW-05"
+        ],
+        "status": "NOT_CHECKED",
+        "fixture": null,
+        "command": null,
+        "git_sha": null,
+        "browser_platform": null,
+        "input": null,
+        "output": null,
+        "receipt": null,
+        "artifact": null,
+        "evidence_ref": null,
+        "blocker": null
+      },
+      {
+        "source_id": "assistant.synonyms.preview",
+        "source_path": "modules/assistant/src/actions.ts",
+        "feature_ids": [
+          "PW-08"
+        ],
+        "status": "NOT_CHECKED",
+        "fixture": null,
+        "command": null,
+        "git_sha": null,
+        "browser_platform": null,
+        "input": null,
+        "output": null,
+        "receipt": null,
+        "artifact": null,
+        "evidence_ref": null,
+        "blocker": null
+      },
+      {
+        "source_id": "assistant.zukan.sandbox.preview",
+        "source_path": "modules/assistant/src/actions.ts",
+        "feature_ids": [
+          "PW-11"
+        ],
+        "status": "NOT_CHECKED",
+        "fixture": null,
+        "command": null,
+        "git_sha": null,
+        "browser_platform": null,
+        "input": null,
+        "output": null,
+        "receipt": null,
+        "artifact": null,
+        "evidence_ref": null,
+        "blocker": null
+      },
+      {
+        "source_id": "diagnostics.checkConsistency",
+        "source_path": "modules/diagnostics/src/index.ts",
+        "feature_ids": [
+          "DIA-02"
+        ],
+        "status": "NOT_CHECKED",
+        "fixture": null,
+        "command": null,
+        "git_sha": null,
+        "browser_platform": null,
+        "input": null,
+        "output": null,
+        "receipt": null,
+        "artifact": null,
+        "evidence_ref": null,
+        "blocker": null
+      },
+      {
+        "source_id": "diagnostics.checkContinuity",
+        "source_path": "modules/diagnostics/src/index.ts",
+        "feature_ids": [
+          "DIA-03"
+        ],
+        "status": "NOT_CHECKED",
+        "fixture": null,
+        "command": null,
+        "git_sha": null,
+        "browser_platform": null,
+        "input": null,
+        "output": null,
+        "receipt": null,
+        "artifact": null,
+        "evidence_ref": null,
+        "blocker": null
+      },
+      {
+        "source_id": "diagnostics.voiceConsistency",
+        "source_path": "modules/diagnostics/src/index.ts",
+        "feature_ids": [
+          "SPK-08"
+        ],
+        "status": "NOT_CHECKED",
+        "fixture": null,
+        "command": null,
+        "git_sha": null,
+        "browser_platform": null,
+        "input": null,
+        "output": null,
+        "receipt": null,
+        "artifact": null,
+        "evidence_ref": null,
+        "blocker": null
+      },
+      {
+        "source_id": "diagnostics.analyze",
+        "source_path": "modules/diagnostics/src/index.ts",
+        "feature_ids": [
+          "DIA-06"
+        ],
+        "status": "NOT_CHECKED",
+        "fixture": null,
+        "command": null,
+        "git_sha": null,
+        "browser_platform": null,
+        "input": null,
+        "output": null,
+        "receipt": null,
+        "artifact": null,
+        "evidence_ref": null,
+        "blocker": null
+      },
+      {
+        "source_id": "diagnostics.scene",
+        "source_path": "modules/diagnostics/src/index.ts",
+        "feature_ids": [
+          "DIA-01"
+        ],
+        "status": "NOT_CHECKED",
+        "fixture": null,
+        "command": null,
+        "git_sha": null,
+        "browser_platform": null,
+        "input": null,
+        "output": null,
+        "receipt": null,
+        "artifact": null,
+        "evidence_ref": null,
+        "blocker": null
+      },
+      {
+        "source_id": "diagnostics.checkPlotSemantics",
+        "source_path": "modules/diagnostics/src/index.ts",
+        "feature_ids": [
+          "DIA-07"
+        ],
+        "status": "NOT_CHECKED",
+        "fixture": null,
+        "command": null,
+        "git_sha": null,
+        "browser_platform": null,
+        "input": null,
+        "output": null,
+        "receipt": null,
+        "artifact": null,
+        "evidence_ref": null,
+        "blocker": null
+      },
+      {
+        "source_id": "diagnostics.lint",
+        "source_path": "modules/diagnostics/src/index.ts",
+        "feature_ids": [
+          "DIA-04"
+        ],
+        "status": "NOT_CHECKED",
+        "fixture": null,
+        "command": null,
+        "git_sha": null,
+        "browser_platform": null,
+        "input": null,
+        "output": null,
+        "receipt": null,
+        "artifact": null,
+        "evidence_ref": null,
+        "blocker": null
+      },
+      {
+        "source_id": "diagnostics.proposeLintFix",
+        "source_path": "modules/diagnostics/src/index.ts",
+        "feature_ids": [
+          "DIA-05"
+        ],
+        "status": "NOT_CHECKED",
+        "fixture": null,
+        "command": null,
+        "git_sha": null,
+        "browser_platform": null,
+        "input": null,
+        "output": null,
+        "receipt": null,
+        "artifact": null,
+        "evidence_ref": null,
+        "blocker": null
+      },
+      {
+        "source_id": "diagnostics.formatManuscript",
+        "source_path": "modules/diagnostics/src/index.ts",
+        "feature_ids": [
+          "DIA-05"
+        ],
+        "status": "NOT_CHECKED",
+        "fixture": null,
+        "command": null,
+        "git_sha": null,
+        "browser_platform": null,
+        "input": null,
+        "output": null,
+        "receipt": null,
+        "artifact": null,
+        "evidence_ref": null,
+        "blocker": null
+      },
+      {
+        "source_id": "diagnostics.voiceProfiles",
+        "source_path": "modules/diagnostics/src/index.ts",
+        "feature_ids": [
+          "SPK-07"
+        ],
+        "status": "NOT_CHECKED",
+        "fixture": null,
+        "command": null,
+        "git_sha": null,
+        "browser_platform": null,
+        "input": null,
+        "output": null,
+        "receipt": null,
+        "artifact": null,
+        "evidence_ref": null,
+        "blocker": null
+      },
+      {
+        "source_id": "diagnostics.voiceDeviations",
+        "source_path": "modules/diagnostics/src/index.ts",
+        "feature_ids": [
+          "SPK-08"
+        ],
+        "status": "NOT_CHECKED",
+        "fixture": null,
+        "command": null,
+        "git_sha": null,
+        "browser_platform": null,
+        "input": null,
+        "output": null,
+        "receipt": null,
+        "artifact": null,
+        "evidence_ref": null,
+        "blocker": null
+      },
+      {
+        "source_id": "diagnostics.stylometricDeviations",
+        "source_path": "modules/diagnostics/src/index.ts",
+        "feature_ids": [
+          "SPK-08"
+        ],
+        "status": "NOT_CHECKED",
+        "fixture": null,
+        "command": null,
+        "git_sha": null,
+        "browser_platform": null,
+        "input": null,
+        "output": null,
+        "receipt": null,
+        "artifact": null,
+        "evidence_ref": null,
+        "blocker": null
+      },
+      {
+        "source_id": "speaker.scenes.list",
+        "source_path": "modules/speaker/src/index.ts",
+        "feature_ids": [
+          "SPK-01"
+        ],
+        "status": "NOT_CHECKED",
+        "fixture": null,
+        "command": null,
+        "git_sha": null,
+        "browser_platform": null,
+        "input": null,
+        "output": null,
+        "receipt": null,
+        "artifact": null,
+        "evidence_ref": null,
+        "blocker": null
+      },
+      {
+        "source_id": "speaker.dialogue.list",
+        "source_path": "modules/speaker/src/index.ts",
+        "feature_ids": [
+          "SPK-06"
+        ],
+        "status": "NOT_CHECKED",
+        "fixture": null,
+        "command": null,
+        "git_sha": null,
+        "browser_platform": null,
+        "input": null,
+        "output": null,
+        "receipt": null,
+        "artifact": null,
+        "evidence_ref": null,
+        "blocker": null
+      },
+      {
+        "source_id": "speaker.voice.profiles",
+        "source_path": "modules/speaker/src/index.ts",
+        "feature_ids": [
+          "SPK-07"
+        ],
+        "status": "NOT_CHECKED",
+        "fixture": null,
+        "command": null,
+        "git_sha": null,
+        "browser_platform": null,
+        "input": null,
+        "output": null,
+        "receipt": null,
+        "artifact": null,
+        "evidence_ref": null,
+        "blocker": null
+      },
+      {
+        "source_id": "speaker.attribute",
+        "source_path": "modules/speaker/src/index.ts",
+        "feature_ids": [
+          "SPK-02"
+        ],
+        "status": "NOT_CHECKED",
+        "fixture": null,
+        "command": null,
+        "git_sha": null,
+        "browser_platform": null,
+        "input": null,
+        "output": null,
+        "receipt": null,
+        "artifact": null,
+        "evidence_ref": null,
+        "blocker": null
+      },
+      {
+        "source_id": "speaker.voice.check",
+        "source_path": "modules/speaker/src/index.ts",
+        "feature_ids": [
+          "SPK-08"
+        ],
+        "status": "NOT_CHECKED",
+        "fixture": null,
+        "command": null,
+        "git_sha": null,
+        "browser_platform": null,
+        "input": null,
+        "output": null,
+        "receipt": null,
+        "artifact": null,
+        "evidence_ref": null,
+        "blocker": null
+      },
+      {
+        "source_id": "speaker.review.queue",
+        "source_path": "modules/speaker/src/index.ts",
+        "feature_ids": [
+          "SPK-05"
+        ],
+        "status": "NOT_CHECKED",
+        "fixture": null,
+        "command": null,
+        "git_sha": null,
+        "browser_platform": null,
+        "input": null,
+        "output": null,
+        "receipt": null,
+        "artifact": null,
+        "evidence_ref": null,
+        "blocker": null
+      },
+      {
+        "source_id": "speaker.override",
+        "source_path": "modules/speaker/src/index.ts",
+        "feature_ids": [
+          "SPK-05"
+        ],
+        "status": "NOT_CHECKED",
+        "fixture": null,
+        "command": null,
+        "git_sha": null,
+        "browser_platform": null,
+        "input": null,
+        "output": null,
+        "receipt": null,
+        "artifact": null,
+        "evidence_ref": null,
+        "blocker": null
+      },
+      {
+        "source_id": "speaker.count.update",
+        "source_path": "modules/speaker/src/index.ts",
+        "feature_ids": [
+          "SPK-04"
+        ],
+        "status": "NOT_CHECKED",
+        "fixture": null,
+        "command": null,
+        "git_sha": null,
+        "browser_platform": null,
+        "input": null,
+        "output": null,
+        "receipt": null,
+        "artifact": null,
+        "evidence_ref": null,
+        "blocker": null
+      },
+      {
+        "source_id": "speaker.evaluation.latest",
+        "source_path": "modules/speaker/src/index.ts",
+        "feature_ids": [
+          "SPK-09"
+        ],
+        "status": "NOT_CHECKED",
+        "fixture": null,
+        "command": null,
+        "git_sha": null,
+        "browser_platform": null,
+        "input": null,
+        "output": null,
+        "receipt": null,
+        "artifact": null,
+        "evidence_ref": null,
+        "blocker": null
+      },
+      {
+        "source_id": "speaker.ruleGates",
+        "source_path": "modules/speaker/src/index.ts",
+        "feature_ids": [
+          "SPK-09"
+        ],
+        "status": "NOT_CHECKED",
+        "fixture": null,
+        "command": null,
+        "git_sha": null,
+        "browser_platform": null,
+        "input": null,
+        "output": null,
+        "receipt": null,
+        "artifact": null,
+        "evidence_ref": null,
+        "blocker": null
+      },
+      {
+        "source_id": "speaker.evaluation.run",
+        "source_path": "modules/speaker/src/index.ts",
+        "feature_ids": [
+          "SPK-09"
+        ],
+        "status": "NOT_CHECKED",
+        "fixture": null,
+        "command": null,
+        "git_sha": null,
+        "browser_platform": null,
+        "input": null,
+        "output": null,
+        "receipt": null,
+        "artifact": null,
+        "evidence_ref": null,
+        "blocker": null
+      },
+      {
+        "source_id": "speaker.retraining.run",
+        "source_path": "modules/speaker/src/index.ts",
+        "feature_ids": [
+          "SPK-10"
+        ],
+        "status": "NOT_CHECKED",
+        "fixture": null,
+        "command": null,
+        "git_sha": null,
+        "browser_platform": null,
+        "input": null,
+        "output": null,
+        "receipt": null,
+        "artifact": null,
+        "evidence_ref": null,
+        "blocker": null
+      },
+      {
+        "source_id": "semantic.index.rebuild",
+        "source_path": "modules/semantic/src/actions.ts",
+        "feature_ids": [
+          "SEM-01"
+        ],
+        "status": "NOT_CHECKED",
+        "fixture": null,
+        "command": null,
+        "git_sha": null,
+        "browser_platform": null,
+        "input": null,
+        "output": null,
+        "receipt": null,
+        "artifact": null,
+        "evidence_ref": null,
+        "blocker": null
+      },
+      {
+        "source_id": "semantic.index.status",
+        "source_path": "modules/semantic/src/actions.ts",
+        "feature_ids": [
+          "SEM-01"
+        ],
+        "status": "NOT_CHECKED",
+        "fixture": null,
+        "command": null,
+        "git_sha": null,
+        "browser_platform": null,
+        "input": null,
+        "output": null,
+        "receipt": null,
+        "artifact": null,
+        "evidence_ref": null,
+        "blocker": null
+      },
+      {
+        "source_id": "semantic.search",
+        "source_path": "modules/semantic/src/actions.ts",
+        "feature_ids": [
+          "SEM-02"
+        ],
+        "status": "NOT_CHECKED",
+        "fixture": null,
+        "command": null,
+        "git_sha": null,
+        "browser_platform": null,
+        "input": null,
+        "output": null,
+        "receipt": null,
+        "artifact": null,
+        "evidence_ref": null,
+        "blocker": null
+      },
+      {
+        "source_id": "semantic.expressions.search",
+        "source_path": "modules/semantic/src/actions.ts",
+        "feature_ids": [
+          "SEM-03"
+        ],
+        "status": "NOT_CHECKED",
+        "fixture": null,
+        "command": null,
+        "git_sha": null,
+        "browser_platform": null,
+        "input": null,
+        "output": null,
+        "receipt": null,
+        "artifact": null,
+        "evidence_ref": null,
+        "blocker": null
+      },
+      {
+        "source_id": "semantic.terms.clusters",
+        "source_path": "modules/semantic/src/actions.ts",
+        "feature_ids": [
+          "SEM-04"
+        ],
+        "status": "NOT_CHECKED",
+        "fixture": null,
+        "command": null,
+        "git_sha": null,
+        "browser_platform": null,
+        "input": null,
+        "output": null,
+        "receipt": null,
+        "artifact": null,
+        "evidence_ref": null,
+        "blocker": null
+      },
+      {
+        "source_id": "semantic.contradictions.rebuild",
+        "source_path": "modules/semantic/src/actions.ts",
+        "feature_ids": [
+          "SEM-05"
+        ],
+        "status": "NOT_CHECKED",
+        "fixture": null,
+        "command": null,
+        "git_sha": null,
+        "browser_platform": null,
+        "input": null,
+        "output": null,
+        "receipt": null,
+        "artifact": null,
+        "evidence_ref": null,
+        "blocker": null
+      },
+      {
+        "source_id": "semantic.contradictions.dismiss",
+        "source_path": "modules/semantic/src/actions.ts",
+        "feature_ids": [
+          "DIA-11"
+        ],
+        "status": "NOT_CHECKED",
+        "fixture": null,
+        "command": null,
+        "git_sha": null,
+        "browser_platform": null,
+        "input": null,
+        "output": null,
+        "receipt": null,
+        "artifact": null,
+        "evidence_ref": null,
+        "blocker": null
+      },
+      {
+        "source_id": "semantic.settings.read",
+        "source_path": "modules/semantic/src/actions.ts",
+        "feature_ids": [
+          "SEM-06"
+        ],
+        "status": "NOT_CHECKED",
+        "fixture": null,
+        "command": null,
+        "git_sha": null,
+        "browser_platform": null,
+        "input": null,
+        "output": null,
+        "receipt": null,
+        "artifact": null,
+        "evidence_ref": null,
+        "blocker": null
+      },
+      {
+        "source_id": "semantic.settings.update",
+        "source_path": "modules/semantic/src/actions.ts",
+        "feature_ids": [
+          "SEM-06"
+        ],
+        "status": "NOT_CHECKED",
+        "fixture": null,
+        "command": null,
+        "git_sha": null,
+        "browser_platform": null,
+        "input": null,
+        "output": null,
+        "receipt": null,
+        "artifact": null,
+        "evidence_ref": null,
+        "blocker": null
+      },
+      {
+        "source_id": "semantic.task.status",
+        "source_path": "modules/semantic/src/actions.ts",
+        "feature_ids": [
+          "SEM-01"
+        ],
+        "status": "NOT_CHECKED",
+        "fixture": null,
+        "command": null,
+        "git_sha": null,
+        "browser_platform": null,
+        "input": null,
+        "output": null,
+        "receipt": null,
+        "artifact": null,
+        "evidence_ref": null,
+        "blocker": null
+      },
+      {
+        "source_id": "semantic.task.cancel",
+        "source_path": "modules/semantic/src/actions.ts",
+        "feature_ids": [
+          "SEM-01"
+        ],
+        "status": "NOT_CHECKED",
+        "fixture": null,
+        "command": null,
+        "git_sha": null,
+        "browser_platform": null,
+        "input": null,
+        "output": null,
+        "receipt": null,
+        "artifact": null,
+        "evidence_ref": null,
+        "blocker": null
+      },
+      {
+        "source_id": "publishing.export.plaintext",
+        "source_path": "modules/publishing/src/actions.ts",
+        "feature_ids": [
+          "PUB-02"
+        ],
+        "status": "NOT_CHECKED",
+        "fixture": null,
+        "command": null,
+        "git_sha": null,
+        "browser_platform": null,
+        "input": null,
+        "output": null,
+        "receipt": null,
+        "artifact": null,
+        "evidence_ref": null,
+        "blocker": null
+      },
+      {
+        "source_id": "publishing.export.epub",
+        "source_path": "modules/publishing/src/actions.ts",
+        "feature_ids": [
+          "PUB-03"
+        ],
+        "status": "NOT_CHECKED",
+        "fixture": null,
+        "command": null,
+        "git_sha": null,
+        "browser_platform": null,
+        "input": null,
+        "output": null,
+        "receipt": null,
+        "artifact": null,
+        "evidence_ref": null,
+        "blocker": null
+      },
+      {
+        "source_id": "publishing.export.vertical-print",
+        "source_path": "modules/publishing/src/actions.ts",
+        "feature_ids": [
+          "PUB-04"
+        ],
+        "status": "NOT_CHECKED",
+        "fixture": null,
+        "command": null,
+        "git_sha": null,
+        "browser_platform": null,
+        "input": null,
+        "output": null,
+        "receipt": null,
+        "artifact": null,
+        "evidence_ref": null,
+        "blocker": null
+      },
+      {
+        "source_id": "publishing.project.tree",
+        "source_path": "modules/publishing/src/actions.ts",
+        "feature_ids": [
+          "PUB-01"
+        ],
+        "status": "NOT_CHECKED",
+        "fixture": null,
+        "command": null,
+        "git_sha": null,
+        "browser_platform": null,
+        "input": null,
+        "output": null,
+        "receipt": null,
+        "artifact": null,
+        "evidence_ref": null,
+        "blocker": null
+      },
+      {
+        "source_id": "publishing.episodes.read",
+        "source_path": "modules/publishing/src/actions.ts",
+        "feature_ids": [
+          "PUB-06"
+        ],
+        "status": "NOT_CHECKED",
+        "fixture": null,
+        "command": null,
+        "git_sha": null,
+        "browser_platform": null,
+        "input": null,
+        "output": null,
+        "receipt": null,
+        "artifact": null,
+        "evidence_ref": null,
+        "blocker": null
+      },
+      {
+        "source_id": "publishing.episodes.propose",
+        "source_path": "modules/publishing/src/actions.ts",
+        "feature_ids": [
+          "PUB-06"
+        ],
+        "status": "NOT_CHECKED",
+        "fixture": null,
+        "command": null,
+        "git_sha": null,
+        "browser_platform": null,
+        "input": null,
+        "output": null,
+        "receipt": null,
+        "artifact": null,
+        "evidence_ref": null,
+        "blocker": null
+      },
+      {
+        "source_id": "publishing.shares.list",
+        "source_path": "modules/publishing/src/actions.ts",
+        "feature_ids": [
+          "PUB-07"
+        ],
+        "status": "NOT_CHECKED",
+        "fixture": null,
+        "command": null,
+        "git_sha": null,
+        "browser_platform": null,
+        "input": null,
+        "output": null,
+        "receipt": null,
+        "artifact": null,
+        "evidence_ref": null,
+        "blocker": null
+      },
+      {
+        "source_id": "publishing.shares.create",
+        "source_path": "modules/publishing/src/actions.ts",
+        "feature_ids": [
+          "PUB-07"
+        ],
+        "status": "NOT_CHECKED",
+        "fixture": null,
+        "command": null,
+        "git_sha": null,
+        "browser_platform": null,
+        "input": null,
+        "output": null,
+        "receipt": null,
+        "artifact": null,
+        "evidence_ref": null,
+        "blocker": null
+      },
+      {
+        "source_id": "publishing.shares.revoke",
+        "source_path": "modules/publishing/src/actions.ts",
+        "feature_ids": [
+          "PUB-07"
+        ],
+        "status": "NOT_CHECKED",
+        "fixture": null,
+        "command": null,
+        "git_sha": null,
+        "browser_platform": null,
+        "input": null,
+        "output": null,
+        "receipt": null,
+        "artifact": null,
+        "evidence_ref": null,
+        "blocker": null
+      }
+    ],
+    "ui_contributions": [
+      {
+        "source_id": "story.navigator",
+        "source_path": "modules/story/src/index.ts",
+        "feature_ids": [
+          "NAR-02"
+        ],
+        "status": "NOT_CHECKED",
+        "fixture": null,
+        "command": null,
+        "git_sha": null,
+        "browser_platform": null,
+        "input": null,
+        "output": null,
+        "receipt": null,
+        "artifact": null,
+        "evidence_ref": null,
+        "blocker": null
+      },
+      {
+        "source_id": "story.inspector",
+        "source_path": "modules/story/src/index.ts",
+        "feature_ids": [
+          "KNO-01"
+        ],
+        "status": "NOT_CHECKED",
+        "fixture": null,
+        "command": null,
+        "git_sha": null,
+        "browser_platform": null,
+        "input": null,
+        "output": null,
+        "receipt": null,
+        "artifact": null,
+        "evidence_ref": null,
+        "blocker": null
+      },
+      {
+        "source_id": "story.continuity",
+        "source_path": "modules/story/src/index.ts",
+        "feature_ids": [
+          "KNO-11"
+        ],
+        "status": "NOT_CHECKED",
+        "fixture": null,
+        "command": null,
+        "git_sha": null,
+        "browser_platform": null,
+        "input": null,
+        "output": null,
+        "receipt": null,
+        "artifact": null,
+        "evidence_ref": null,
+        "blocker": null
+      },
+      {
+        "source_id": "story.world-state",
+        "source_path": "modules/story/src/index.ts",
+        "feature_ids": [
+          "KNO-18"
+        ],
+        "status": "NOT_CHECKED",
+        "fixture": null,
+        "command": null,
+        "git_sha": null,
+        "browser_platform": null,
+        "input": null,
+        "output": null,
+        "receipt": null,
+        "artifact": null,
+        "evidence_ref": null,
+        "blocker": null
+      },
+      {
+        "source_id": "story.zukan-review",
+        "source_path": "modules/story/src/index.ts",
+        "feature_ids": [
+          "KNO-05"
+        ],
+        "status": "NOT_CHECKED",
+        "fixture": null,
+        "command": null,
+        "git_sha": null,
+        "browser_platform": null,
+        "input": null,
+        "output": null,
+        "receipt": null,
+        "artifact": null,
+        "evidence_ref": null,
+        "blocker": null
+      },
+      {
+        "source_id": "story.series",
+        "source_path": "modules/story/src/index.ts",
+        "feature_ids": [
+          "KNO-19"
+        ],
+        "status": "NOT_CHECKED",
+        "fixture": null,
+        "command": null,
+        "git_sha": null,
+        "browser_platform": null,
+        "input": null,
+        "output": null,
+        "receipt": null,
+        "artifact": null,
+        "evidence_ref": null,
+        "blocker": null
+      },
+      {
+        "source_id": "search.panel",
+        "source_path": "modules/search/src/actions.ts",
+        "feature_ids": [
+          "RES-001"
+        ],
+        "status": "NOT_CHECKED",
+        "fixture": null,
+        "command": null,
+        "git_sha": null,
+        "browser_platform": null,
+        "input": null,
+        "output": null,
+        "receipt": null,
+        "artifact": null,
+        "evidence_ref": null,
+        "blocker": null
+      },
+      {
+        "source_id": "search.terms",
+        "source_path": "modules/search/src/actions.ts",
+        "feature_ids": [
+          "RES-003"
+        ],
+        "status": "NOT_CHECKED",
+        "fixture": null,
+        "command": null,
+        "git_sha": null,
+        "browser_platform": null,
+        "input": null,
+        "output": null,
+        "receipt": null,
+        "artifact": null,
+        "evidence_ref": null,
+        "blocker": null
+      },
+      {
+        "source_id": "search.terms.adornment",
+        "source_path": "modules/search/src/actions.ts",
+        "feature_ids": [
+          "RES-004"
+        ],
+        "status": "NOT_CHECKED",
+        "fixture": null,
+        "command": null,
+        "git_sha": null,
+        "browser_platform": null,
+        "input": null,
+        "output": null,
+        "receipt": null,
+        "artifact": null,
+        "evidence_ref": null,
+        "blocker": null
+      },
+      {
+        "source_id": "nlp.analyzer",
+        "source_path": "modules/nlp/src/index.ts",
+        "feature_ids": [
+          "RES-005"
+        ],
+        "status": "NOT_CHECKED",
+        "fixture": null,
+        "command": null,
+        "git_sha": null,
+        "browser_platform": null,
+        "input": null,
+        "output": null,
+        "receipt": null,
+        "artifact": null,
+        "evidence_ref": null,
+        "blocker": null
+      },
+      {
+        "source_id": "nlp.candidates",
+        "source_path": "modules/nlp/src/index.ts",
+        "feature_ids": [
+          "RES-006"
+        ],
+        "status": "NOT_CHECKED",
+        "fixture": null,
+        "command": null,
+        "git_sha": null,
+        "browser_platform": null,
+        "input": null,
+        "output": null,
+        "receipt": null,
+        "artifact": null,
+        "evidence_ref": null,
+        "blocker": null
+      },
+      {
+        "source_id": "nlp.dictionary",
+        "source_path": "modules/nlp/src/index.ts",
+        "feature_ids": [
+          "RES-008"
+        ],
+        "status": "NOT_CHECKED",
+        "fixture": null,
+        "command": null,
+        "git_sha": null,
+        "browser_platform": null,
+        "input": null,
+        "output": null,
+        "receipt": null,
+        "artifact": null,
+        "evidence_ref": null,
+        "blocker": null
+      },
+      {
+        "source_id": "nlp.privacy",
+        "source_path": "modules/nlp/src/index.ts",
+        "feature_ids": [
+          "RES-012"
+        ],
+        "status": "NOT_CHECKED",
+        "fixture": null,
+        "command": null,
+        "git_sha": null,
+        "browser_platform": null,
+        "input": null,
+        "output": null,
+        "receipt": null,
+        "artifact": null,
+        "evidence_ref": null,
+        "blocker": null
+      },
+      {
+        "source_id": "semantic.search",
+        "source_path": "modules/semantic/src/index.ts",
+        "feature_ids": [
+          "SEM-02"
+        ],
+        "status": "NOT_CHECKED",
+        "fixture": null,
+        "command": null,
+        "git_sha": null,
+        "browser_platform": null,
+        "input": null,
+        "output": null,
+        "receipt": null,
+        "artifact": null,
+        "evidence_ref": null,
+        "blocker": null
+      },
+      {
+        "source_id": "semantic.expressions",
+        "source_path": "modules/semantic/src/index.ts",
+        "feature_ids": [
+          "SEM-03"
+        ],
+        "status": "NOT_CHECKED",
+        "fixture": null,
+        "command": null,
+        "git_sha": null,
+        "browser_platform": null,
+        "input": null,
+        "output": null,
+        "receipt": null,
+        "artifact": null,
+        "evidence_ref": null,
+        "blocker": null
+      },
+      {
+        "source_id": "semantic.contradictions",
+        "source_path": "modules/semantic/src/index.ts",
+        "feature_ids": [
+          "SEM-05"
+        ],
+        "status": "NOT_CHECKED",
+        "fixture": null,
+        "command": null,
+        "git_sha": null,
+        "browser_platform": null,
+        "input": null,
+        "output": null,
+        "receipt": null,
+        "artifact": null,
+        "evidence_ref": null,
+        "blocker": null
+      },
+      {
+        "source_id": "semantic.index",
+        "source_path": "modules/semantic/src/index.ts",
+        "feature_ids": [
+          "SEM-01"
+        ],
+        "status": "NOT_CHECKED",
+        "fixture": null,
+        "command": null,
+        "git_sha": null,
+        "browser_platform": null,
+        "input": null,
+        "output": null,
+        "receipt": null,
+        "artifact": null,
+        "evidence_ref": null,
+        "blocker": null
+      },
+      {
+        "source_id": "diagnostics.consistency",
+        "source_path": "modules/diagnostics/src/index.ts",
+        "feature_ids": [
+          "DIA-02"
+        ],
+        "status": "NOT_CHECKED",
+        "fixture": null,
+        "command": null,
+        "git_sha": null,
+        "browser_platform": null,
+        "input": null,
+        "output": null,
+        "receipt": null,
+        "artifact": null,
+        "evidence_ref": null,
+        "blocker": null
+      },
+      {
+        "source_id": "diagnostics.continuity",
+        "source_path": "modules/diagnostics/src/index.ts",
+        "feature_ids": [
+          "DIA-03"
+        ],
+        "status": "NOT_CHECKED",
+        "fixture": null,
+        "command": null,
+        "git_sha": null,
+        "browser_platform": null,
+        "input": null,
+        "output": null,
+        "receipt": null,
+        "artifact": null,
+        "evidence_ref": null,
+        "blocker": null
+      },
+      {
+        "source_id": "diagnostics.analysis",
+        "source_path": "modules/diagnostics/src/index.ts",
+        "feature_ids": [
+          "DIA-06"
+        ],
+        "status": "NOT_CHECKED",
+        "fixture": null,
+        "command": null,
+        "git_sha": null,
+        "browser_platform": null,
+        "input": null,
+        "output": null,
+        "receipt": null,
+        "artifact": null,
+        "evidence_ref": null,
+        "blocker": null
+      },
+      {
+        "source_id": "diagnostics.scene",
+        "source_path": "modules/diagnostics/src/index.ts",
+        "feature_ids": [
+          "DIA-01"
+        ],
+        "status": "NOT_CHECKED",
+        "fixture": null,
+        "command": null,
+        "git_sha": null,
+        "browser_platform": null,
+        "input": null,
+        "output": null,
+        "receipt": null,
+        "artifact": null,
+        "evidence_ref": null,
+        "blocker": null
+      },
+      {
+        "source_id": "diagnostics.lint",
+        "source_path": "modules/diagnostics/src/index.ts",
+        "feature_ids": [
+          "DIA-04"
+        ],
+        "status": "NOT_CHECKED",
+        "fixture": null,
+        "command": null,
+        "git_sha": null,
+        "browser_platform": null,
+        "input": null,
+        "output": null,
+        "receipt": null,
+        "artifact": null,
+        "evidence_ref": null,
+        "blocker": null
+      },
+      {
+        "source_id": "diagnostics.voice",
+        "source_path": "modules/diagnostics/src/index.ts",
+        "feature_ids": [
+          "DIA-08"
+        ],
+        "status": "NOT_CHECKED",
+        "fixture": null,
+        "command": null,
+        "git_sha": null,
+        "browser_platform": null,
+        "input": null,
+        "output": null,
+        "receipt": null,
+        "artifact": null,
+        "evidence_ref": null,
+        "blocker": null
+      },
+      {
+        "source_id": "speaker.attribution",
+        "source_path": "modules/speaker/src/index.ts",
+        "feature_ids": [
+          "SPK-02"
+        ],
+        "status": "NOT_CHECKED",
+        "fixture": null,
+        "command": null,
+        "git_sha": null,
+        "browser_platform": null,
+        "input": null,
+        "output": null,
+        "receipt": null,
+        "artifact": null,
+        "evidence_ref": null,
+        "blocker": null
+      },
+      {
+        "source_id": "speaker.review",
+        "source_path": "modules/speaker/src/index.ts",
+        "feature_ids": [
+          "SPK-05"
+        ],
+        "status": "NOT_CHECKED",
+        "fixture": null,
+        "command": null,
+        "git_sha": null,
+        "browser_platform": null,
+        "input": null,
+        "output": null,
+        "receipt": null,
+        "artifact": null,
+        "evidence_ref": null,
+        "blocker": null
+      },
+      {
+        "source_id": "speaker.dialogue",
+        "source_path": "modules/speaker/src/index.ts",
+        "feature_ids": [
+          "SPK-06"
+        ],
+        "status": "NOT_CHECKED",
+        "fixture": null,
+        "command": null,
+        "git_sha": null,
+        "browser_platform": null,
+        "input": null,
+        "output": null,
+        "receipt": null,
+        "artifact": null,
+        "evidence_ref": null,
+        "blocker": null
+      },
+      {
+        "source_id": "speaker.voice.profiles",
+        "source_path": "modules/speaker/src/index.ts",
+        "feature_ids": [
+          "SPK-07"
+        ],
+        "status": "NOT_CHECKED",
+        "fixture": null,
+        "command": null,
+        "git_sha": null,
+        "browser_platform": null,
+        "input": null,
+        "output": null,
+        "receipt": null,
+        "artifact": null,
+        "evidence_ref": null,
+        "blocker": null
+      },
+      {
+        "source_id": "speaker.evaluation",
+        "source_path": "modules/speaker/src/index.ts",
+        "feature_ids": [
+          "SPK-09"
+        ],
+        "status": "NOT_CHECKED",
+        "fixture": null,
+        "command": null,
+        "git_sha": null,
+        "browser_platform": null,
+        "input": null,
+        "output": null,
+        "receipt": null,
+        "artifact": null,
+        "evidence_ref": null,
+        "blocker": null
+      },
+      {
+        "source_id": "assistant.settings",
+        "source_path": "modules/assistant/src/index.ts",
+        "feature_ids": [
+          "PW-01"
+        ],
+        "status": "NOT_CHECKED",
+        "fixture": null,
+        "command": null,
+        "git_sha": null,
+        "browser_platform": null,
+        "input": null,
+        "output": null,
+        "receipt": null,
+        "artifact": null,
+        "evidence_ref": null,
+        "blocker": null
+      },
+      {
+        "source_id": "assistant.rewrite",
+        "source_path": "modules/assistant/src/index.ts",
+        "feature_ids": [
+          "PW-02"
+        ],
+        "status": "NOT_CHECKED",
+        "fixture": null,
+        "command": null,
+        "git_sha": null,
+        "browser_platform": null,
+        "input": null,
+        "output": null,
+        "receipt": null,
+        "artifact": null,
+        "evidence_ref": null,
+        "blocker": null
+      },
+      {
+        "source_id": "assistant.summaries",
+        "source_path": "modules/assistant/src/index.ts",
+        "feature_ids": [
+          "PW-05"
+        ],
+        "status": "NOT_CHECKED",
+        "fixture": null,
+        "command": null,
+        "git_sha": null,
+        "browser_platform": null,
+        "input": null,
+        "output": null,
+        "receipt": null,
+        "artifact": null,
+        "evidence_ref": null,
+        "blocker": null
+      },
+      {
+        "source_id": "assistant.qa",
+        "source_path": "modules/assistant/src/index.ts",
+        "feature_ids": [
+          "PW-04"
+        ],
+        "status": "NOT_CHECKED",
+        "fixture": null,
+        "command": null,
+        "git_sha": null,
+        "browser_platform": null,
+        "input": null,
+        "output": null,
+        "receipt": null,
+        "artifact": null,
+        "evidence_ref": null,
+        "blocker": null
+      },
+      {
+        "source_id": "assistant.continuation",
+        "source_path": "modules/assistant/src/index.ts",
+        "feature_ids": [
+          "PW-03"
+        ],
+        "status": "NOT_CHECKED",
+        "fixture": null,
+        "command": null,
+        "git_sha": null,
+        "browser_platform": null,
+        "input": null,
+        "output": null,
+        "receipt": null,
+        "artifact": null,
+        "evidence_ref": null,
+        "blocker": null
+      },
+      {
+        "source_id": "assistant.aspect-review",
+        "source_path": "modules/assistant/src/index.ts",
+        "feature_ids": [
+          "PW-07"
+        ],
+        "status": "NOT_CHECKED",
+        "fixture": null,
+        "command": null,
+        "git_sha": null,
+        "browser_platform": null,
+        "input": null,
+        "output": null,
+        "receipt": null,
+        "artifact": null,
+        "evidence_ref": null,
+        "blocker": null
+      },
+      {
+        "source_id": "assistant.dialogue",
+        "source_path": "modules/assistant/src/index.ts",
+        "feature_ids": [
+          "PW-06"
+        ],
+        "status": "NOT_CHECKED",
+        "fixture": null,
+        "command": null,
+        "git_sha": null,
+        "browser_platform": null,
+        "input": null,
+        "output": null,
+        "receipt": null,
+        "artifact": null,
+        "evidence_ref": null,
+        "blocker": null
+      },
+      {
+        "source_id": "assistant.reader-reaction",
+        "source_path": "modules/assistant/src/index.ts",
+        "feature_ids": [
+          "PW-05"
+        ],
+        "status": "NOT_CHECKED",
+        "fixture": null,
+        "command": null,
+        "git_sha": null,
+        "browser_platform": null,
+        "input": null,
+        "output": null,
+        "receipt": null,
+        "artifact": null,
+        "evidence_ref": null,
+        "blocker": null
+      },
+      {
+        "source_id": "assistant.proposals",
+        "source_path": "modules/assistant/src/index.ts",
+        "feature_ids": [
+          "PW-11"
+        ],
+        "status": "NOT_CHECKED",
+        "fixture": null,
+        "command": null,
+        "git_sha": null,
+        "browser_platform": null,
+        "input": null,
+        "output": null,
+        "receipt": null,
+        "artifact": null,
+        "evidence_ref": null,
+        "blocker": null
+      },
+      {
+        "source_id": "publishing.export.plaintext",
+        "source_path": "modules/publishing/src/index.ts",
+        "feature_ids": [
+          "PUB-02"
+        ],
+        "status": "NOT_CHECKED",
+        "fixture": null,
+        "command": null,
+        "git_sha": null,
+        "browser_platform": null,
+        "input": null,
+        "output": null,
+        "receipt": null,
+        "artifact": null,
+        "evidence_ref": null,
+        "blocker": null
+      },
+      {
+        "source_id": "publishing.export.epub",
+        "source_path": "modules/publishing/src/index.ts",
+        "feature_ids": [
+          "PUB-03"
+        ],
+        "status": "NOT_CHECKED",
+        "fixture": null,
+        "command": null,
+        "git_sha": null,
+        "browser_platform": null,
+        "input": null,
+        "output": null,
+        "receipt": null,
+        "artifact": null,
+        "evidence_ref": null,
+        "blocker": null
+      },
+      {
+        "source_id": "publishing.export.vertical-print",
+        "source_path": "modules/publishing/src/index.ts",
+        "feature_ids": [
+          "PUB-04"
+        ],
+        "status": "NOT_CHECKED",
+        "fixture": null,
+        "command": null,
+        "git_sha": null,
+        "browser_platform": null,
+        "input": null,
+        "output": null,
+        "receipt": null,
+        "artifact": null,
+        "evidence_ref": null,
+        "blocker": null
+      },
+      {
+        "source_id": "publishing.episode-map",
+        "source_path": "modules/publishing/src/index.ts",
+        "feature_ids": [
+          "PUB-06"
+        ],
+        "status": "NOT_CHECKED",
+        "fixture": null,
+        "command": null,
+        "git_sha": null,
+        "browser_platform": null,
+        "input": null,
+        "output": null,
+        "receipt": null,
+        "artifact": null,
+        "evidence_ref": null,
+        "blocker": null
+      },
+      {
+        "source_id": "publishing.share-links",
+        "source_path": "modules/publishing/src/index.ts",
+        "feature_ids": [
+          "PUB-07"
+        ],
+        "status": "NOT_CHECKED",
+        "fixture": null,
+        "command": null,
+        "git_sha": null,
+        "browser_platform": null,
+        "input": null,
+        "output": null,
+        "receipt": null,
+        "artifact": null,
+        "evidence_ref": null,
+        "blocker": null
+      }
+    ],
+    "source_tools": [
+      {
+        "source_id": "list_projects",
+        "source_path": "modules/mcp/src/tools.ts",
+        "owner": "Host",
+        "via": "repositories_list",
+        "status": "NOT_CHECKED",
+        "fixture": null,
+        "command": null,
+        "git_sha": null,
+        "browser_platform": null,
+        "input": null,
+        "output": null,
+        "receipt": null,
+        "artifact": null,
+        "evidence_ref": null,
+        "blocker": null
+      },
+      {
+        "source_id": "discover_actions",
+        "source_path": "modules/mcp/src/tools.ts",
+        "owner": "Host",
+        "via": "plugin_call / actions.list",
+        "status": "NOT_CHECKED",
+        "fixture": null,
+        "command": null,
+        "git_sha": null,
+        "browser_platform": null,
+        "input": null,
+        "output": null,
+        "receipt": null,
+        "artifact": null,
+        "evidence_ref": null,
+        "blocker": null
+      },
+      {
+        "source_id": "invoke_action",
+        "source_path": "modules/mcp/src/tools.ts",
+        "owner": "Host",
+        "via": "plugin_call / typed Action Registry",
+        "status": "NOT_CHECKED",
+        "fixture": null,
+        "command": null,
+        "git_sha": null,
+        "browser_platform": null,
+        "input": null,
+        "output": null,
+        "receipt": null,
+        "artifact": null,
+        "evidence_ref": null,
+        "blocker": null
+      },
+      {
+        "source_id": "get_entity",
+        "source_path": "modules/mcp/src/tools.ts",
+        "owner": "proprium.knowledge",
+        "via": "plugin_call",
+        "status": "NOT_CHECKED",
+        "fixture": null,
+        "command": null,
+        "git_sha": null,
+        "browser_platform": null,
+        "input": null,
+        "output": null,
+        "receipt": null,
+        "artifact": null,
+        "evidence_ref": null,
+        "blocker": null
+      },
+      {
+        "source_id": "list_entities",
+        "source_path": "modules/mcp/src/tools.ts",
+        "owner": "proprium.knowledge",
+        "via": "plugin_call",
+        "status": "NOT_CHECKED",
+        "fixture": null,
+        "command": null,
+        "git_sha": null,
+        "browser_platform": null,
+        "input": null,
+        "output": null,
+        "receipt": null,
+        "artifact": null,
+        "evidence_ref": null,
+        "blocker": null
+      },
+      {
+        "source_id": "get_scene_context",
+        "source_path": "modules/mcp/src/tools.ts",
+        "owner": "proprium.paired-writing",
+        "via": "plugin_call",
+        "status": "NOT_CHECKED",
+        "fixture": null,
+        "command": null,
+        "git_sha": null,
+        "browser_platform": null,
+        "input": null,
+        "output": null,
+        "receipt": null,
+        "artifact": null,
+        "evidence_ref": null,
+        "blocker": null
+      },
+      {
+        "source_id": "get_writing_context",
+        "source_path": "modules/mcp/src/tools.ts",
+        "owner": "proprium.paired-writing",
+        "via": "plugin_call",
+        "status": "NOT_CHECKED",
+        "fixture": null,
+        "command": null,
+        "git_sha": null,
+        "browser_platform": null,
+        "input": null,
+        "output": null,
+        "receipt": null,
+        "artifact": null,
+        "evidence_ref": null,
+        "blocker": null
+      },
+      {
+        "source_id": "get_context_manifest",
+        "source_path": "modules/mcp/src/tools.ts",
+        "owner": "proprium.paired-writing",
+        "via": "plugin_call",
+        "status": "NOT_CHECKED",
+        "fixture": null,
+        "command": null,
+        "git_sha": null,
+        "browser_platform": null,
+        "input": null,
+        "output": null,
+        "receipt": null,
+        "artifact": null,
+        "evidence_ref": null,
+        "blocker": null
+      },
+      {
+        "source_id": "get_volume_tree",
+        "source_path": "modules/mcp/src/tools.ts",
+        "owner": "proprium.narrative",
+        "via": "plugin_call",
+        "status": "NOT_CHECKED",
+        "fixture": null,
+        "command": null,
+        "git_sha": null,
+        "browser_platform": null,
+        "input": null,
+        "output": null,
+        "receipt": null,
+        "artifact": null,
+        "evidence_ref": null,
+        "blocker": null
+      },
+      {
+        "source_id": "search",
+        "source_path": "modules/mcp/src/tools.ts",
+        "owner": "proprium.research",
+        "via": "plugin_call",
+        "status": "NOT_CHECKED",
+        "fixture": null,
+        "command": null,
+        "git_sha": null,
+        "browser_platform": null,
+        "input": null,
+        "output": null,
+        "receipt": null,
+        "artifact": null,
+        "evidence_ref": null,
+        "blocker": null
+      },
+      {
+        "source_id": "analyze_manuscript",
+        "source_path": "modules/mcp/src/tools.ts",
+        "owner": "proprium.diagnostics",
+        "via": "plugin_call",
+        "status": "NOT_CHECKED",
+        "fixture": null,
+        "command": null,
+        "git_sha": null,
+        "browser_platform": null,
+        "input": null,
+        "output": null,
+        "receipt": null,
+        "artifact": null,
+        "evidence_ref": null,
+        "blocker": null
+      },
+      {
+        "source_id": "get_diagnostics",
+        "source_path": "modules/mcp/src/tools.ts",
+        "owner": "proprium.diagnostics",
+        "via": "plugin_call",
+        "status": "NOT_CHECKED",
+        "fixture": null,
+        "command": null,
+        "git_sha": null,
+        "browser_platform": null,
+        "input": null,
+        "output": null,
+        "receipt": null,
+        "artifact": null,
+        "evidence_ref": null,
+        "blocker": null
+      },
+      {
+        "source_id": "get_thread_status",
+        "source_path": "modules/mcp/src/tools.ts",
+        "owner": "proprium.knowledge",
+        "via": "plugin_call",
+        "status": "NOT_CHECKED",
+        "fixture": null,
+        "command": null,
+        "git_sha": null,
+        "browser_platform": null,
+        "input": null,
+        "output": null,
+        "receipt": null,
+        "artifact": null,
+        "evidence_ref": null,
+        "blocker": null
+      },
+      {
+        "source_id": "get_status",
+        "source_path": "modules/mcp/src/tools.ts",
+        "owner": "Host",
+        "via": "git_status",
+        "status": "NOT_CHECKED",
+        "fixture": null,
+        "command": null,
+        "git_sha": null,
+        "browser_platform": null,
+        "input": null,
+        "output": null,
+        "receipt": null,
+        "artifact": null,
+        "evidence_ref": null,
+        "blocker": null
+      },
+      {
+        "source_id": "get_history",
+        "source_path": "modules/mcp/src/tools.ts",
+        "owner": "Host",
+        "via": "git_log",
+        "status": "NOT_CHECKED",
+        "fixture": null,
+        "command": null,
+        "git_sha": null,
+        "browser_platform": null,
+        "input": null,
+        "output": null,
+        "receipt": null,
+        "artifact": null,
+        "evidence_ref": null,
+        "blocker": null
+      },
+      {
+        "source_id": "get_observation",
+        "source_path": "modules/mcp/src/tools.ts",
+        "owner": "Host",
+        "via": "repository_info + git_status + files_list",
+        "status": "NOT_CHECKED",
+        "fixture": null,
+        "command": null,
+        "git_sha": null,
+        "browser_platform": null,
+        "input": null,
+        "output": null,
+        "receipt": null,
+        "artifact": null,
+        "evidence_ref": null,
+        "blocker": null
+      },
+      {
+        "source_id": "submit_change_set",
+        "source_path": "modules/mcp/src/tools.ts",
+        "owner": "proprium.paired-writing",
+        "via": "plugin_call",
+        "status": "NOT_CHECKED",
+        "fixture": null,
+        "command": null,
+        "git_sha": null,
+        "browser_platform": null,
+        "input": null,
+        "output": null,
+        "receipt": null,
+        "artifact": null,
+        "evidence_ref": null,
+        "blocker": null
+      },
+      {
+        "source_id": "list_change_sets",
+        "source_path": "modules/mcp/src/tools.ts",
+        "owner": "proprium.paired-writing",
+        "via": "plugin_call",
+        "status": "NOT_CHECKED",
+        "fixture": null,
+        "command": null,
+        "git_sha": null,
+        "browser_platform": null,
+        "input": null,
+        "output": null,
+        "receipt": null,
+        "artifact": null,
+        "evidence_ref": null,
+        "blocker": null
+      },
+      {
+        "source_id": "get_change_set",
+        "source_path": "modules/mcp/src/tools.ts",
+        "owner": "proprium.paired-writing",
+        "via": "plugin_call",
+        "status": "NOT_CHECKED",
+        "fixture": null,
+        "command": null,
+        "git_sha": null,
+        "browser_platform": null,
+        "input": null,
+        "output": null,
+        "receipt": null,
+        "artifact": null,
+        "evidence_ref": null,
+        "blocker": null
+      },
+      {
+        "source_id": "update_entity",
+        "source_path": "modules/mcp/src/tools.ts",
+        "owner": "proprium.knowledge",
+        "via": "plugin_call",
+        "status": "NOT_CHECKED",
+        "fixture": null,
+        "command": null,
+        "git_sha": null,
+        "browser_platform": null,
+        "input": null,
+        "output": null,
+        "receipt": null,
+        "artifact": null,
+        "evidence_ref": null,
+        "blocker": null
+      },
+      {
+        "source_id": "create_scene",
+        "source_path": "modules/mcp/src/tools.ts",
+        "owner": "proprium.narrative",
+        "via": "plugin_call",
+        "status": "NOT_CHECKED",
+        "fixture": null,
+        "command": null,
+        "git_sha": null,
+        "browser_platform": null,
+        "input": null,
+        "output": null,
+        "receipt": null,
+        "artifact": null,
+        "evidence_ref": null,
+        "blocker": null
+      },
+      {
+        "source_id": "lint_manuscript",
+        "source_path": "modules/mcp/src/tools.ts",
+        "owner": "proprium.diagnostics",
+        "via": "plugin_call",
+        "status": "NOT_CHECKED",
+        "fixture": null,
+        "command": null,
+        "git_sha": null,
+        "browser_platform": null,
+        "input": null,
+        "output": null,
+        "receipt": null,
+        "artifact": null,
+        "evidence_ref": null,
+        "blocker": null
+      },
+      {
+        "source_id": "suggest_rewrite",
+        "source_path": "modules/mcp/src/tools.ts",
+        "owner": "proprium.paired-writing",
+        "via": "plugin_call",
+        "status": "NOT_CHECKED",
+        "fixture": null,
+        "command": null,
+        "git_sha": null,
+        "browser_platform": null,
+        "input": null,
+        "output": null,
+        "receipt": null,
+        "artifact": null,
+        "evidence_ref": null,
+        "blocker": null
+      },
+      {
+        "source_id": "reload",
+        "source_path": "modules/mcp/src/tools.ts",
+        "owner": "Host",
+        "via": "Host snapshot refresh; no data reset",
+        "status": "NOT_CHECKED",
+        "fixture": null,
+        "command": null,
+        "git_sha": null,
+        "browser_platform": null,
+        "input": null,
+        "output": null,
+        "receipt": null,
+        "artifact": null,
+        "evidence_ref": null,
+        "blocker": null
+      },
+      {
+        "source_id": "check_stylometric_deviations",
+        "source_path": "modules/mcp/src/tools.ts",
+        "owner": "proprium.speaker",
+        "via": "plugin_call",
+        "status": "NOT_CHECKED",
+        "fixture": null,
+        "command": null,
+        "git_sha": null,
+        "browser_platform": null,
+        "input": null,
+        "output": null,
+        "receipt": null,
+        "artifact": null,
+        "evidence_ref": null,
+        "blocker": null
+      },
+      {
+        "source_id": "check_plot_semantics",
+        "source_path": "modules/mcp/src/tools.ts",
+        "owner": "proprium.diagnostics",
+        "via": "plugin_call",
+        "status": "NOT_CHECKED",
+        "fixture": null,
+        "command": null,
+        "git_sha": null,
+        "browser_platform": null,
+        "input": null,
+        "output": null,
+        "receipt": null,
+        "artifact": null,
+        "evidence_ref": null,
+        "blocker": null
+      },
+      {
+        "source_id": "check_consistency",
+        "source_path": "modules/mcp/src/tools.ts",
+        "owner": "proprium.diagnostics",
+        "via": "plugin_call",
+        "status": "NOT_CHECKED",
+        "fixture": null,
+        "command": null,
+        "git_sha": null,
+        "browser_platform": null,
+        "input": null,
+        "output": null,
+        "receipt": null,
+        "artifact": null,
+        "evidence_ref": null,
+        "blocker": null
+      },
+      {
+        "source_id": "check_continuity",
+        "source_path": "modules/mcp/src/tools.ts",
+        "owner": "proprium.diagnostics",
+        "via": "plugin_call",
+        "status": "NOT_CHECKED",
+        "fixture": null,
+        "command": null,
+        "git_sha": null,
+        "browser_platform": null,
+        "input": null,
+        "output": null,
+        "receipt": null,
+        "artifact": null,
+        "evidence_ref": null,
+        "blocker": null
+      },
+      {
+        "source_id": "compute_cooccurrence",
+        "source_path": "modules/mcp/src/tools.ts",
+        "owner": "proprium.knowledge",
+        "via": "plugin_call",
+        "status": "NOT_CHECKED",
+        "fixture": null,
+        "command": null,
+        "git_sha": null,
+        "browser_platform": null,
+        "input": null,
+        "output": null,
+        "receipt": null,
+        "artifact": null,
+        "evidence_ref": null,
+        "blocker": null
+      },
+      {
+        "source_id": "check_voice_consistency",
+        "source_path": "modules/mcp/src/tools.ts",
+        "owner": "proprium.speaker",
+        "via": "plugin_call",
+        "status": "NOT_CHECKED",
+        "fixture": null,
+        "command": null,
+        "git_sha": null,
+        "browser_platform": null,
+        "input": null,
+        "output": null,
+        "receipt": null,
+        "artifact": null,
+        "evidence_ref": null,
+        "blocker": null
+      },
+      {
+        "source_id": "check_style_deviations",
+        "source_path": "modules/mcp/src/tools.ts",
+        "owner": "proprium.speaker",
+        "via": "plugin_call",
+        "status": "NOT_CHECKED",
+        "fixture": null,
+        "command": null,
+        "git_sha": null,
+        "browser_platform": null,
+        "input": null,
+        "output": null,
+        "receipt": null,
+        "artifact": null,
+        "evidence_ref": null,
+        "blocker": null
+      },
+      {
+        "source_id": "get_dialogue",
+        "source_path": "modules/mcp/src/tools.ts",
+        "owner": "proprium.speaker",
+        "via": "plugin_call",
+        "status": "NOT_CHECKED",
+        "fixture": null,
+        "command": null,
+        "git_sha": null,
+        "browser_platform": null,
+        "input": null,
+        "output": null,
+        "receipt": null,
+        "artifact": null,
+        "evidence_ref": null,
+        "blocker": null
+      },
+      {
+        "source_id": "format_manuscript",
+        "source_path": "modules/mcp/src/tools.ts",
+        "owner": "proprium.diagnostics",
+        "via": "plugin_call",
+        "status": "NOT_CHECKED",
+        "fixture": null,
+        "command": null,
+        "git_sha": null,
+        "browser_platform": null,
+        "input": null,
+        "output": null,
+        "receipt": null,
+        "artifact": null,
+        "evidence_ref": null,
+        "blocker": null
+      }
+    ],
+    "source_revisions": [
+      "1a05a0f10b33acca3fcfc544a5a6a2592f1c3865"
+    ]
+  }
+}
