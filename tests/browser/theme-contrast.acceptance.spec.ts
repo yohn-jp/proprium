@@ -97,7 +97,7 @@ test("selection, supporting copy and disabled editor controls remain readable in
     }
     await expectReadable(selected, `${testInfo.project.name} ${theme} selected navigation`);
 
-    const supportingCopy = page.locator(".recent-card .field-help").filter({ hasText: "Available offline after" });
+    const supportingCopy = page.locator(".recent-card .field-help").filter({ hasText: "一度開いた作品" });
     await expectReadable(supportingCopy, `${testInfo.project.name} ${theme} supporting copy`);
     await page.screenshot({ path: testInfo.outputPath(`${theme}-picker.png`), fullPage: true });
 

@@ -39,5 +39,5 @@ test("a local manuscript can be saved, renamed, reviewed, committed and inspecte
   await commit.click();
   const change = page.getByRole("article", { name: /chapters\/序章\.md 追加/u });
   await expect(change).toBeVisible();
-  await expect(change.locator(".text-diff-line[data-kind='added']")).toContainText("第一章の原稿");
+  await expect(change.locator(".text-diff-line[data-kind='added']").first()).toContainText("第一章の原稿");
 });

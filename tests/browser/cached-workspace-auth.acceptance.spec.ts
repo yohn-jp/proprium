@@ -65,9 +65,9 @@ test("cached Workspace signs in in place, preserves dirty text, and fills Home r
   await expect(dialog).toBeHidden();
   await expect(page.locator(".host-message[role='status']")).toContainText(`Connected this Workspace to GitHub as ${staticFixtureLogin}`);
   await expect(page.getByLabel("Connected to GitHub", { exact: true })).toBeVisible();
-  await expect(page.getByRole("button", { name: "Fetch", exact: true })).toBeEnabled();
+  await expect(page.getByRole("button", { name: "更新を確認", exact: true })).toBeEnabled();
   await expectEditorText(page, dirtyEditorText);
-  await expect(page.locator(".save-state")).toHaveText("Unsaved editor text");
+  await expect(page.locator(".save-state")).toHaveText("編集中・端末のファイル未保存");
 
   const apiPaths = fixture.apiPaths().map(path => path.replaceAll(identity.localWorkspaceId, ""));
   expect(apiPaths.some(path => path.endsWith(`/repos/${identity.owner}/${identity.repository}`))).toBe(true);
@@ -95,7 +95,7 @@ test("cancel and repository verification failure leave the cached editor and Wor
   await dialog.getByRole("button", { name: "キャンセル", exact: true }).click();
   await expect(dialog).toBeHidden();
   await expect(page.getByLabel("Connected to GitHub", { exact: true })).toHaveCount(0);
-  await expect(page.getByRole("button", { name: "Fetch", exact: true })).toHaveCount(0);
+  await expect(page.getByRole("button", { name: "更新を確認", exact: true })).toHaveCount(0);
   await expectEditorText(page, dirtyEditorText);
 
   pending = false;
@@ -118,10 +118,10 @@ test("cancel and repository verification failure leave the cached editor and Wor
   dialog = await startWorkspaceSignIn(page, origin);
   await expect(dialog.getByRole("alert")).toContainText("repository_mismatch");
   await expect(page.getByLabel("Connected to GitHub", { exact: true })).toHaveCount(0);
-  await expect(page.getByRole("button", { name: "Fetch", exact: true })).toHaveCount(0);
+  await expect(page.getByRole("button", { name: "更新を確認", exact: true })).toHaveCount(0);
   await dialog.getByRole("button", { name: "キャンセル", exact: true }).click();
   await expectEditorText(page, dirtyEditorText);
-  await expect(page.locator(".save-state")).toHaveText("Unsaved editor text");
+  await expect(page.locator(".save-state")).toHaveText("編集中・端末のファイル未保存");
 });
 
 test("cancel before the Device code arrives does not revive an old authorization screen", async ({ page }) => {
@@ -162,7 +162,7 @@ test("repository list failure does not attach sync or show an empty signed-in pi
   const dialog = await startWorkspaceSignIn(page, origin);
   await expect(dialog.getByRole("alert")).toContainText("GitHub could not list repositories for this account");
   await expect(page.getByLabel("Connected to GitHub", { exact: true })).toHaveCount(0);
-  await expect(page.getByRole("button", { name: "Fetch", exact: true })).toHaveCount(0);
+  await expect(page.getByRole("button", { name: "更新を確認", exact: true })).toHaveCount(0);
   await dialog.getByRole("button", { name: "キャンセル", exact: true }).click();
   await expectEditorText(page, dirtyEditorText);
 
