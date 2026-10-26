@@ -1,0 +1,24 @@
+package proprium:plugin@2.0.0;
+
+/// Request payloads and responses are validated against the adopted v2 JSON
+/// schema by the trusted Host. Caller identity/grants remain out of band.
+interface host {
+  request: func(operation: string, payload: string) -> result<string, string>;
+}
+
+interface guest {
+  record plugin-context {
+    plugin-id: string,
+    version: string,
+    workspace-id: string,
+  }
+
+  initialize: func(context: plugin-context) -> result<_, string>;
+  invoke: func(request: string) -> result<string, string>;
+  dispose: func();
+}
+
+world plugin {
+  import host;
+  export guest;
+}
