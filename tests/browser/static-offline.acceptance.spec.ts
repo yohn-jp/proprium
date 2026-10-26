@@ -203,7 +203,7 @@ test("static Host imports a GitHub REST commit, reloads offline, and edits with 
   await page.getByRole("button", { name: "端末に保存" }).click();
   await expect(operationNotice).toContainText("saved to this browser's local Git worktree");
   await showPanel(page, "inspector");
-  await page.getByLabel("Commit message").fill("Verify offline editing from the static Host");
+  await page.getByLabel("変更の説明").fill("Verify offline editing from the static Host");
   await page.getByLabel("Git author name").fill("Proprium Static Acceptance");
   await page.getByLabel("Git author email").fill("static-acceptance@example.invalid");
   await reviewChangedFiles(page);

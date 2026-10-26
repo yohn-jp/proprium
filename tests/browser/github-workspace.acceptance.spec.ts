@@ -40,7 +40,7 @@ test("Host signs in, opens a real GitHub branch, commits locally and publishes t
   await expect(operationNotice).toContainText("saved to this browser's local Git worktree");
 
   await showPanel(page, "inspector");
-  await page.getByLabel("Commit message").fill("Verify Proprium browser Host publication");
+  await page.getByLabel("変更の説明").fill("Verify Proprium browser Host publication");
   await page.getByLabel("Git author name").fill("Proprium Browser Acceptance");
   await page.getByLabel("Git author email").fill("browser-acceptance@example.invalid");
   await reviewChangedFiles(page);

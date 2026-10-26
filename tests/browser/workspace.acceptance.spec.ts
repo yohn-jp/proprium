@@ -50,7 +50,7 @@ test("Host edits and commits a generic repository offline, then reopens the save
   await expect(page.getByText("端末の下書き", { exact: true })).toBeVisible();
 
   await showPanel(page, "inspector");
-  await page.getByLabel("Commit message").fill("Save offline workspace edit");
+  await page.getByLabel("変更の説明").fill("Save offline workspace edit");
   await page.getByLabel("Git author name").fill("Proprium Browser Test");
   await page.getByLabel("Git author email").fill("browser-test@example.invalid");
   await reviewChangedFiles(page);
