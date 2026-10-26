@@ -70,6 +70,7 @@ export interface GitHubAccountSession {
   signOut(): void;
   account(): GitHubAccount | null;
   repositories(): Promise<GitHubRepository[]>;
+  listBranches(repository: GitHubRepository): Promise<string[]>;
   connect(operation: GitHubRemoteOperation): GitHubSyncClient;
 }
 
@@ -251,6 +252,88 @@ export function createGitHubAccountSession(
     }
   };
 
+  const listBranches = async (selected: GitHubRepository): Promise<string[]> => {
+    const credential = requireToken();
+    const generation = authGeneration;
+    if (!Number.isSafeInteger(selected?.id) || selected.id <= 0 ||
+        typeof selected.owner !== "string" || !/^[A-Za-z0-9-]+$/u.test(selected.owner) ||
+        typeof selected.name !== "string" || !/^[A-Za-z0-9._-]+$/u.test(selected.name) ||
+        typeof selected.fullName !== "string" || selected.fullName.toLowerCase() !== `${selected.owner}/${selected.name}`.toLowerCase()) {
+      throw new GitHubSyncError("repository_mismatch", "Select a repository from the authenticated GitHub account before loading branches.");
+    }
+    if (selected.permissions?.pull !== true) {
+      throw new GitHubSyncError("permission_denied", "GitHub has not granted read access to this repository.");
+    }
+    const headers = {
+      Accept: "application/vnd.github+json",
+      Authorization: `Bearer ${credential}`,
+      "X-GitHub-Api-Version": "2022-11-28",
+    };
+    const assertSessionCurrent = (): void => {
+      if (generation !== authGeneration || token !== credential) {
+        throw new GitHubSyncError("authentication_required", "GitHub sign-in changed while loading branches. Sign in again.");
+      }
+    };
+    try {
+      const selectedRepositoryPayload = object(await jsonRequest(fetcher,
+        `https://api.github.com/repos/${encodeURIComponent(selected.owner)}/${encodeURIComponent(selected.name)}`,
+        { headers }));
+      assertSessionCurrent();
+      const assertRepositoryIdentity = (payload: Record<string, unknown>): void => {
+        const owner = payload.owner && typeof payload.owner === "object" && !Array.isArray(payload.owner)
+          ? (payload.owner as Record<string, unknown>).login : undefined;
+        const permissions = payload.permissions && typeof payload.permissions === "object" && !Array.isArray(payload.permissions)
+          ? payload.permissions as Record<string, unknown> : {};
+        if (payload.id !== selected.id || typeof owner !== "string" ||
+            `${owner}/${String(payload.name ?? "")}`.toLowerCase() !== selected.fullName.toLowerCase()) {
+          throw new GitHubSyncError("repository_mismatch", "This repository changed identity. Refresh the repository list before loading branches.");
+        }
+        if (permissions.pull !== true) {
+          throw new GitHubSyncError("permission_denied", "GitHub no longer grants read access to this repository.");
+        }
+      };
+      assertRepositoryIdentity(selectedRepositoryPayload);
+
+      const branches: string[] = [];
+      const seen = new Set<string>();
+      let complete = false;
+      for (let page = 1; page <= 100; page += 1) {
+        const payload = await jsonRequest(fetcher,
+          `https://api.github.com/repos/${encodeURIComponent(selected.owner)}/${encodeURIComponent(selected.name)}/branches?per_page=100&page=${page}`,
+          { headers });
+        assertSessionCurrent();
+        if (!Array.isArray(payload) || payload.length > 100) {
+          throw new GitHubSyncError("git_error", "GitHub returned an invalid branch list.");
+        }
+        for (const raw of payload) {
+          const branch = object(raw).name;
+          if (typeof branch !== "string" || branch.length > 255 || !/^[A-Za-z0-9._/-]+$/u.test(branch) ||
+              branch.startsWith("/") || branch.endsWith("/") || branch.includes("..") || branch.includes("//") ||
+              branch.includes("@{") || branch.split("/").some(part => part.startsWith(".") || part.endsWith(".") || part.toLowerCase().endsWith(".lock")) ||
+              seen.has(branch)) {
+            throw new GitHubSyncError("git_error", "GitHub returned malformed or duplicate branch metadata.");
+          }
+          seen.add(branch);
+          branches.push(branch);
+        }
+        if (payload.length < 100) { complete = true; break; }
+      }
+      if (!complete) throw new GitHubSyncError("git_error", "This repository has more branches than the browser picker can safely load at once.");
+      const confirmedRepositoryPayload = object(await jsonRequest(fetcher,
+        `https://api.github.com/repos/${encodeURIComponent(selected.owner)}/${encodeURIComponent(selected.name)}`,
+        { headers }));
+      assertSessionCurrent();
+      assertRepositoryIdentity(confirmedRepositoryPayload);
+      return branches;
+    } catch (error) {
+      if (error instanceof GitHubSyncError && error.code === "authentication_expired") {
+        token = null;
+        account = null;
+      }
+      throw error;
+    }
+  };
+
   const accountClient: Omit<GitHubAccountSession, "connect"> = {
     async beginAuthorization(): Promise<GitHubDevicePrompt> {
       const generation = ++authGeneration;
@@ -340,6 +423,7 @@ export function createGitHubAccountSession(
     signOut(): void { authGeneration += 1; token = null; account = null; authorization = null; },
     account(): GitHubAccount | null { return account ? { ...account } : null; },
     repositories,
+    listBranches,
   };
 
   const connect = (operation: GitHubRemoteOperation): GitHubSyncClient => {

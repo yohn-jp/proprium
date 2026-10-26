@@ -62,13 +62,13 @@ const EditorDurabilityBadges = memo(function EditorDurabilityBadges({
   const currentDurability = pendingEditorText ? "draft" : durability;
   return <span className="durability-row" aria-label="保存状態">
     <span className="durability-badge is-current" data-state={currentDurability}>{
-      currentDurability === "draft" ? journalError ? "Draft · 保存要確認" : pendingEditorText || !draftStored ? "Draft · 記録中" : "Draft · このブラウザーに保護済み"
-        : currentDurability === "checkpointing" ? "Checkpoint · 結果確認中"
-        : currentDurability === "checkpointed" ? "Checkpoint · GitHub未保存"
-        : currentDurability === "publication_unknown" ? "GitHub保存 · 結果未確認"
-        : "Saved to GitHub"
+      currentDurability === "draft" ? journalError ? "自動回復記録 · 保存要確認" : pendingEditorText || !draftStored ? "自動回復記録 · 記録中" : "自動回復記録 · 保存済み"
+        : currentDurability === "checkpointing" ? "ローカルGit · コミット確認中"
+        : currentDurability === "checkpointed" ? "ローカルGitコミット済み · GitHub未公開"
+        : currentDurability === "publication_unknown" ? "GitHub公開 · 結果未確認"
+        : "GitHub公開済み · revision確認済み"
     }</span>
-    {pendingCount > 0 && <span className="pending-count">未公開 {pendingCount} 件</span>}
+    {pendingCount > 0 && <span className="pending-count">ローカルworktree未保存 {pendingCount} 件</span>}
   </span>;
 });
 
@@ -85,14 +85,14 @@ const EditorDurabilityMessage = memo(function EditorDurabilityMessage({
   const currentDurability = pendingEditorText ? "draft" : durability;
   const currentDraftStored = pendingEditorText ? false : draftStored;
   const statusText = currentDurability === "draft"
-    ? currentDraftStored ? "下書きはこのブラウザーに保護されています。" : "この下書きのブラウザー保存を確認できていません。"
+    ? currentDraftStored ? "入力本文の自動回復記録はこのブラウザーに保存されています。ローカルGit worktreeへの保存とは別です。" : "入力本文を自動回復記録へ保存できたか確認できていません。ローカルGit worktreeにも未保存です。"
     : currentDurability === "checkpointing"
-      ? "チェックポイントの結果を確認しています。再試行では同じ操作 ID を使います。"
+      ? "この端末のローカルGitコミット結果を確認しています。"
       : currentDurability === "checkpointed"
-        ? "ローカルチェックポイントです。GitHub へ保存するまでブラウザーの記録を保持します。"
+        ? "この端末のローカルGitにコミット済みです。GitHubへ公開するまでは他の端末から見えません。"
         : currentDurability === "publication_unknown"
-          ? "GitHub への保存結果は未確認です。同じバッチで状態を再確認できます。"
-          : "確認済みの GitHub 版を表示しています。";
+          ? "GitHubへの公開結果は未確認です。ブランチのrevisionを再確認してください。"
+          : "GitHubの対象ブランチで公開revisionを確認済みです。";
 
   return <>
     <p className="durability-message" role="status" aria-live="polite">{statusText}</p>
@@ -321,10 +321,10 @@ export function SceneEditor({
         </div>
         <div className="editor-actions" aria-label="保存と表示">
           <button type="button" onClick={onCheckpoint} disabled={!canCheckpoint || checkpointBusy}>
-            {checkpointBusy || durability === "checkpointing" ? "確認中…" : "Checkpoint"}
+            {checkpointBusy || durability === "checkpointing" ? "確認中…" : "ローカル変更を確認"}
           </button>
           <button type="button" className="quiet-button" onClick={onPublish} disabled={!canPublish || publishBusy}>
-            {publishBusy ? "GitHub に保存中…" : "Save to GitHub"}
+            {publishBusy ? "GitHubへ公開中…" : "GitHubへ公開"}
           </button>
           <button type="button" className="quiet-button" onClick={onHistory} aria-expanded={historyOpen}>
             履歴
@@ -338,7 +338,7 @@ export function SceneEditor({
         <div className="editor-protection-detail">
           <EditorDurabilityMessage durability={durability} draftStored={draftStored} journalError={journalError} />
           {journalError && <button type="button" onClick={onRetryDraft}>ブラウザーへの記録を再試行</button>}
-          <p>Draftは同じブラウザー・作者・origin内の回復用です。Checkpointはこのブラウザーのlocal Git、GitHubへの保存は確認したrevisionだけが対象です。</p>
+          <p>入力本文の自動回復記録は、同じブラウザー・作者・originで再開するための記録です。ローカルworktreeへの保存、ローカルGitコミット、GitHubへの公開はそれぞれ別の操作です。</p>
           <p>原稿 <code>{path}</code></p>
           <p>読込revision <code>{snapshot.overlayCommit ?? snapshot.remoteCommit}</code></p>
         </div>
@@ -360,15 +360,19 @@ export function SceneEditor({
       )}
 
       <div className="editor-display-controls">
-      <nav className="writing-toolbar" aria-label="執筆と閲覧">
+      <nav className="editor-reading-controls" aria-label="読書表示">
         <button type="button" className="quiet-button" onClick={() => { flushPendingReactPublish(); setReading((current) => !current); }} aria-pressed={reading}>{reading ? "編集に戻る" : "読書モード"}</button>
-        <button type="button" className="quiet-button" onClick={() => setVertical((current) => !current)} aria-pressed={vertical}>{vertical ? "横書き" : "縦書き"}</button>
+        <button type="button" className="quiet-button" onClick={() => setVertical((current) => !current)} aria-pressed={vertical}>{vertical ? "読書・プレビューを横書きに" : "読書・プレビューを縦書きに"}</button>
+      </nav>
+      <details className="editor-display-options">
+      <summary>プレビュー・集中・印刷</summary>
+      <nav className="writing-toolbar" aria-label="編集画面の表示設定">
         <button type="button" className="quiet-button" onClick={() => setPreview((current) => !current)} aria-pressed={preview}>プレビュー</button>
         <button type="button" className="quiet-button" onClick={() => setZen((current) => !current)} aria-pressed={zen}>{zen ? "集中を終了" : "集中"}</button>
         <button type="button" className="quiet-button" onClick={printManuscript}>印刷</button>
       </nav>
       <details className="typography-settings">
-      <summary>文字と組版</summary>
+      <summary>文字・組版を調整</summary>
       <nav className="typography-toolbar" aria-label="原稿の表示設定">
         <div className="toolbar-group" aria-label="文字サイズ">
           <button type="button" className="quiet-button compact-button" onClick={() => setTypography((value) => ({ ...value, fontSize: Math.max(14, value.fontSize - 2) }))} aria-label="文字を小さく" disabled={typography.fontSize <= 14}>A−</button>
@@ -399,6 +403,7 @@ export function SceneEditor({
         </div>
         {zen && <button type="button" className="quiet-button" onClick={() => setTypewriterDim((current) => !current)} aria-pressed={typewriterDim}>現在行以外を減光</button>}
       </nav>
+      </details>
       </details>
       </div>
 
@@ -505,6 +510,34 @@ function attachmentDrafts(entry: JournalEntry): ScratchAttachmentDraft[] {
       const mimeType = extension === "png" ? "image/png" : extension === "webp" ? "image/webp" : extension === "gif" ? "image/gif" : "image/jpeg";
       return { filename, mimeType, dataBase64: write.content as string, path: write.path };
     });
+}
+
+function scratchEntryPreview(entry: JournalEntry): string {
+  const excerpt = entry.text.trim().replace(/\s+/gu, " ");
+  if (excerpt) return excerpt.length > 88 ? `${excerpt.slice(0, 88)}…` : excerpt;
+  const imageCount = entry.operation.writes.filter((write) =>
+    write.path !== entry.documentPath && write.content !== null && write.encoding === "base64",
+  ).length;
+  return imageCount > 0 ? `画像のみのメモ（${imageCount}枚）` : "本文がありません";
+}
+
+function scratchEntryStateLabel(entry: JournalEntry): string {
+  return {
+    draft: "自動回復記録・未コミット",
+    checkpointing: "ローカルGitのコミット確認中",
+    checkpointed: "ローカルGitにコミット済み",
+    publication_unknown: "GitHub公開の結果未確認",
+    conflict: "競合あり",
+  }[entry.state];
+}
+
+function scratchEntryTimestamp(updatedAt: number): { dateTime?: string; label: string } {
+  const date = new Date(updatedAt);
+  if (!Number.isFinite(date.getTime())) return { label: "日時不明" };
+  return {
+    dateTime: date.toISOString(),
+    label: date.toLocaleString("ja-JP", { dateStyle: "medium", timeStyle: "short" }),
+  };
 }
 
 function scratchCreatedAt(entry: JournalEntry): string | undefined {
@@ -745,7 +778,7 @@ function ScratchPanel({
 
   return (
     <details className="scratch-panel">
-      <summary>スクラッチ <span>{draft.text.trim().length} 字 {hasActiveDraft ? stored ? "· Draft を保護済み" : "· Draft を保存中" : ""}</span></summary>
+      <summary>スクラッチ <span>{draft.text.trim().length} 字 {hasActiveDraft ? stored ? "· 自動回復記録を保存済み" : "· 自動回復記録を保存中" : ""}</span></summary>
       <label htmlFor="scratch">本文に含まれないメモ</label>
       <textarea
         id="scratch"
@@ -766,17 +799,31 @@ function ScratchPanel({
       {draft.attachments.length > 0 && <p className="muted-list-item">画像 {draft.attachments.length} 件</p>}
       {error && <p className="status" data-kind="error" role="alert">{error}</p>}
       <button type="button" onClick={() => void checkpoint()} disabled={disabled || !hasActiveDraft || !stored || checkingId !== "" || resumingKey !== ""}>
-        {checkingId === draft.id ? "確認中…" : resumedId === draft.id ? "このスクラッチをチェックポイント" : "スクラッチをチェックポイント"}
+        {checkingId === draft.id ? "コミット中…" : resumedId === draft.id ? "このスクラッチをローカルGitにコミット" : "スクラッチをローカルGitにコミット"}
       </button>
       {pending.length > 0 && (
         <ul className="scratch-recovery-list" aria-label="回復できるスクラッチ">
-          {pending.map((entry) => (
-            <li key={`${entry.operation.id}:${entry.operation.generation}`}>
-              <span>{entry.text.slice(0, 72) || "画像メモ"} · {entry.state === "draft" ? "Draft" : entry.state === "checkpointing" ? "確認中" : entry.state === "conflict" ? "競合" : "Checkpoint"}</span>
-              {entry.state === "draft" && <button type="button" onClick={() => void resume(entry)} disabled={disabled || resumingKey !== ""}>{resumingKey === `${entry.operation.id}:${entry.operation.generation}` ? "保護を確認中…" : "続ける"}</button>}
-              {entry.state === "draft" && <button type="button" onClick={() => void checkpoint(entry)} disabled={disabled || checkingId !== "" || resumingKey !== ""}>Checkpoint</button>}
-            </li>
-          ))}
+          {pending.map((entry) => {
+            const timestamp = scratchEntryTimestamp(entry.updatedAt);
+            const hasTargetDocument = entry.sceneId !== entry.documentPath;
+            return <li className="scratch-recovery-item" key={`${entry.operation.id}:${entry.operation.generation}`}>
+              <div className="scratch-recovery-meta">
+                <p className="scratch-recovery-excerpt">{scratchEntryPreview(entry)}</p>
+                <dl className="scratch-recovery-details">
+                  <div><dt>状態</dt><dd>{scratchEntryStateLabel(entry)}</dd></div>
+                  <div><dt>記録時刻</dt><dd><time dateTime={timestamp.dateTime}>{timestamp.label}</time></dd></div>
+                  <div><dt>対象文書</dt><dd>{hasTargetDocument ? <code>{entry.sceneId}</code> : "記録なし"}</dd></div>
+                  <div><dt>記録パス</dt><dd><code>{entry.documentPath}</code></dd></div>
+                  <div><dt>更新世代</dt><dd>{entry.operation.generation}</dd></div>
+                  <div><dt>記録ID</dt><dd><code title={entry.operation.id}>{entry.operation.id.slice(0, 8)}</code></dd></div>
+                </dl>
+              </div>
+              {entry.state === "draft" && <div className="scratch-recovery-actions">
+                <button type="button" onClick={() => void resume(entry)} disabled={disabled || resumingKey !== ""}>{resumingKey === `${entry.operation.id}:${entry.operation.generation}` ? "保護を確認中…" : "続ける"}</button>
+                <button type="button" onClick={() => void checkpoint(entry)} disabled={disabled || checkingId !== "" || resumingKey !== ""}>ローカルGitにコミット</button>
+              </div>}
+            </li>;
+          })}
         </ul>
       )}
     </details>

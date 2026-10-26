@@ -1,5 +1,5 @@
 import { showPanel, expectEditorText, chooseFile } from "./restored-ui.helpers.js";
-import { expect, test } from "@playwright/test";
+import { expect, test, type Page } from "@playwright/test";
 import { createHash, createPrivateKey, generateKeyPairSync, sign as ed25519Sign, type KeyObject } from "node:crypto";
 import { execFileSync } from "node:child_process";
 import { mkdtempSync, readFileSync, rmSync } from "node:fs";
@@ -140,6 +140,14 @@ function signedHostPanelFixture(
   files.set(new URL(registryUrl).pathname, { body: registryBytes, contentType: "application/json" });
   files.set(`${new URL(registryUrl).pathname}.sig`, { body: registrySignature, contentType: "application/octet-stream" });
   return files;
+}
+
+async function previewCatalogPlugin(page: Page, pluginId: string, version: string): Promise<void> {
+  await page.getByRole("button", { name: "信頼済みカタログを表示" }).click();
+  await expect(page.locator(".registry-plugin-list")).toContainText(pluginId);
+  await expect(page.locator(".registry-plugin-card h4 code").first()).toHaveText(pluginId);
+  await expect(page.locator(".registry-plugin-card").getByText(version, { exact: true })).toBeVisible();
+  await page.getByRole("button", { name: `${pluginId} ${version} の署名済みプレビューを確認` }).click();
 }
 
 const gatewayOrigin = process.env.VITE_PROPRIUM_GATEWAY_URL ?? "http://127.0.0.1:4174";
@@ -287,8 +295,11 @@ test("Host Plugin panel previews, installs, runs, stops, updates and rolls back 
   await page.goto("/");
   const origin = new URL(page.url()).origin;
   const fixtureFiles = signedHostPanelFixture(origin);
+  const artifactDownloads: string[] = [];
   await page.route(`${origin}/plugin-fixture/**`, async route => {
-    const file = fixtureFiles.get(new URL(route.request().url()).pathname);
+    const pathname = new URL(route.request().url()).pathname;
+    if (pathname.endsWith(".wasm")) artifactDownloads.push(pathname);
+    const file = fixtureFiles.get(pathname);
     if (!file) return route.fulfill({ status: 404 });
     await route.fulfill({ status: 200, contentType: file.contentType, body: file.body });
   });
@@ -304,19 +315,20 @@ test("Host Plugin panel previews, installs, runs, stops, updates and rolls back 
   const panelNotice = panel.getByRole("status");
   await showPanel(page, "review");
   await panel.locator("summary").click();
-  await page.getByLabel("Install from trusted registry").fill("fixture.compute-sum");
-  await page.getByLabel("Version (optional: latest stable)").fill("1.0.0");
-  await page.getByRole("button", { name: "Verify and preview" }).click();
-  const preview = page.getByRole("region", { name: "Plugin installation preview" });
+  await previewCatalogPlugin(page, "fixture.compute-sum", "1.0.0");
+  expect(artifactDownloads).toEqual([]);
+  const preview = page.getByRole("region", { name: "インストールプレビュー" });
   await expect(preview).toContainText("fixture.compute-sum@1.0.0");
-  await expect(preview).toContainText("Capabilities: none");
-  await page.getByRole("button", { name: "Download and install disabled" }).click();
-  await expect(panelNotice).toContainText("Plugin artifact bytes passed signature and digest verification");
+  await expect(preview).toContainText("要求する権限: なし");
+  expect(artifactDownloads).toEqual([]);
+  await page.getByRole("button", { name: "ダウンロードして無効状態でインストール" }).click();
+  await expect.poll(() => artifactDownloads).toHaveLength(1);
+  await expect(panelNotice).toContainText("署名とダイジェストを検証し、無効状態でインストールしました");
 
   const pluginV1 = page.getByRole("listitem").filter({ hasText: "fixture.compute-sum" }).filter({ hasText: "v1.0.0" });
   await pluginV1.getByRole("button", { name: "Enable" }).click();
   await expect(panelNotice).toContainText("fixture.compute-sum@1.0.0 is enabled");
-  await page.getByLabel("Plugin request").fill(JSON.stringify({ left: 20, right: 22 }));
+  await pluginV1.getByLabel(/プラグイン入力（テキスト）/u).fill(JSON.stringify({ left: 20, right: 22 }));
   await pluginV1.getByRole("button", { name: "Run" }).click();
   await expect(page.getByLabel("fixture.compute-sum output")).toHaveText('{"result":42}');
   await pluginV1.getByRole("button", { name: "Stop" }).click();
@@ -324,10 +336,10 @@ test("Host Plugin panel previews, installs, runs, stops, updates and rolls back 
 
   await page.once("dialog", dialog => dialog.accept("1.0.1"));
   await pluginV1.getByRole("button", { name: "Update version" }).click();
-  await expect(preview).toContainText("Update preview");
-  await expect(preview).toContainText("fixture.compute-sum@1.0.1");
-  await page.getByRole("button", { name: "Download and pin update" }).click();
-  await expect(panelNotice).toContainText("Installed version 1.0.1 is pinned");
+  const updatePreview = page.getByRole("region", { name: "更新プレビュー" });
+  await expect(updatePreview).toContainText("fixture.compute-sum@1.0.1");
+  await page.getByRole("button", { name: "ダウンロードして更新版を固定" }).click();
+  await expect(panelNotice).toContainText("バージョン 1.0.1 を確認して固定しました");
 
   const pluginV2 = page.getByRole("listitem").filter({ hasText: "fixture.compute-sum" }).filter({ hasText: "v1.0.1" });
   await expect(pluginV2).toContainText("pinned 1.0.1");
@@ -362,13 +374,11 @@ test("Host runs a signed no-capability Component without workspace reads in UI o
 
   const panel = page.locator("details.plugin-manager-panel");
   await panel.locator("summary").click();
-  await page.getByLabel("Install from trusted registry").fill(pluginId);
-  await page.getByLabel("Version (optional: latest stable)").fill(version);
-  await page.getByRole("button", { name: "Verify and preview" }).click();
-  const preview = page.getByRole("region", { name: "Plugin installation preview" });
+  await previewCatalogPlugin(page, pluginId, version);
+  const preview = page.getByRole("region", { name: "インストールプレビュー" });
   await expect(preview).toContainText(`${pluginId}@${version}`);
-  await expect(preview).toContainText("Capabilities: none");
-  await page.getByRole("button", { name: "Download and install disabled" }).click();
+  await expect(preview).toContainText("要求する権限: なし");
+  await page.getByRole("button", { name: "ダウンロードして無効状態でインストール" }).click();
   const plugin = panel.getByRole("listitem").filter({ hasText: pluginId }).filter({ hasText: `v${version}` });
   await plugin.getByRole("button", { name: "Enable" }).click();
   await expect(panel.getByRole("status")).toContainText(`${pluginId}@${version} is enabled`);
@@ -391,7 +401,7 @@ test("Host runs a signed no-capability Component without workspace reads in UI o
   });
 
   const request = JSON.stringify({ left: 20, right: 22 });
-  await page.getByLabel("Plugin request", { exact: true }).fill(request);
+  await plugin.getByLabel(/プラグイン入力（テキスト）/u).fill(request);
   await plugin.getByRole("button", { name: "Run" }).click();
   await expect(page.getByLabel(`${pluginId} output`)).toHaveText('{"result":42}');
   await expect.poll(() => page.evaluate(() => window.propriumPluginGitCalls)).toEqual({ listFiles: 0, read: 0 });
@@ -439,11 +449,9 @@ test("Host keeps newer editor text when a reviewed plugin proposal refresh finis
   const panel = page.locator("details.plugin-manager-panel");
   await showPanel(page, "review");
   await panel.locator("summary").click();
-  await page.getByLabel("Install from trusted registry").fill(pluginId);
-  await page.getByLabel("Version (optional: latest stable)").fill("1.0.0");
-  await page.getByRole("button", { name: "Verify and preview" }).click();
-  await expect(page.getByRole("region", { name: "Plugin installation preview" })).toContainText(`${pluginId}@1.0.0`);
-  await page.getByRole("button", { name: "Download and install disabled" }).click();
+  await previewCatalogPlugin(page, pluginId, "1.0.0");
+  await expect(page.getByRole("region", { name: "インストールプレビュー" })).toContainText(`${pluginId}@1.0.0`);
+  await page.getByRole("button", { name: "ダウンロードして無効状態でインストール" }).click();
   const plugin = panel.getByRole("listitem").filter({ hasText: pluginId }).filter({ hasText: "v1.0.0" });
   await plugin.getByRole("checkbox", { name: "workspace.snapshot.read" }).check();
   await plugin.getByRole("checkbox", { name: "workspace.change.propose" }).check();
@@ -475,7 +483,7 @@ test("Host keeps newer editor text when a reviewed plugin proposal refresh finis
       return Reflect.apply(original, this, [{ ...options, request: fixtureRequest }]);
     };
   });
-  await page.getByLabel("Plugin request").fill(JSON.stringify({ path: "README.md", content: "proposal from plugin\n" }));
+  await plugin.getByLabel(/プラグイン入力（テキスト）/u).fill(JSON.stringify({ path: "README.md", content: "proposal from plugin\n" }));
   await plugin.getByRole("button", { name: "Run" }).click();
   await expect(panel.getByRole("status")).toContainText("Plugin returned 1 change proposal(s) for Host review.");
   await expect(plugin.getByRole("button", { name: "Review and apply to local worktree" })).toBeVisible();
@@ -512,7 +520,7 @@ test("Host keeps newer editor text when a reviewed plugin proposal refresh finis
   await expectEditorText(page, "newer local text while plugin refresh is pending\n");
   await showPanel(page, "review");
   await expect(panel.getByRole("status")).toContainText("Applied 1 proposed file change(s) to the local worktree.");
-  await expect(page.locator(".save-state")).toHaveText("Unsaved editor text");
+  await expect(page.locator(".save-state")).toHaveText("編集中・端末のファイル未保存");
   await showPanel(page, "editor");
   await expect(editor).toBeEnabled();
 });

@@ -1,0 +1,19 @@
+.text-diff { min-width: 0; margin-block: .75rem; font-size: .875rem; }
+.text-diff-legend { display: flex; flex-wrap: wrap; gap: .35rem .8rem; margin-block-end: .35rem; color: var(--muted, #555); font-size: .8rem; }
+.text-diff-legend [data-kind="removed"] { color: var(--error, #9b2c2c); }
+.text-diff-legend [data-kind="added"] { color: var(--success, #176b3a); }
+.text-diff-lines { max-height: 24rem; margin: 0; padding: .35rem 0; overflow: auto; border: 1px solid var(--line, #bbb); border-radius: .3rem; background: var(--paper, #fff); list-style: none; font: .8rem/1.5 ui-monospace, SFMono-Regular, Consolas, monospace; }
+.text-diff-line { display: grid; grid-template-columns: 2.8rem 2.8rem minmax(0, 1fr); min-width: max-content; }
+.text-diff-line[data-kind="removed"] { background: color-mix(in srgb, var(--error, #9b2c2c) 11%, transparent); }
+.text-diff-line[data-kind="added"] { background: color-mix(in srgb, var(--success, #176b3a) 11%, transparent); }
+.text-diff-line-number { padding-inline: .35rem; text-align: end; color: var(--muted, #666); border-inline-end: 1px solid var(--line, #ddd); user-select: none; }
+.text-diff-line code { min-width: 0; padding-inline: .45rem; color: var(--ink, #171717); white-space: pre; }
+.text-diff-columns { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: .5rem; }
+.text-diff-columns section { min-width: 0; }
+.text-diff-columns h5 { margin: .25rem 0; }
+.text-diff-columns pre { box-sizing: border-box; max-height: 24rem; margin: 0; padding: .5rem; overflow: auto; border: 1px solid var(--line, #bbb); border-radius: .3rem; background: var(--paper, #fff); color: var(--ink, #171717); white-space: pre-wrap; overflow-wrap: anywhere; font: .8rem/1.5 ui-monospace, SFMono-Regular, Consolas, monospace; }
+.text-diff-large-note, .text-diff-ending-note { grid-column: 1 / -1; margin: .35rem 0 0; color: var(--muted, #555); font-size: .8rem; }
+@media (max-width: 36rem) {
+  .text-diff-columns { grid-template-columns: minmax(0, 1fr); }
+  .text-diff-lines { max-height: 19rem; }
+}

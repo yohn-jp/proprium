@@ -1,0 +1,21 @@
+.host-file-browser { display: grid; gap: .8rem; min-width: 0; }
+.host-file-browser .section-title-row h2 { margin: 0; font-size: 1.05rem; }
+.host-file-browser form { margin: 0; }
+.document-create-form > div, .file-browser-actions { display: flex; gap: .4rem; flex-wrap: wrap; }
+.document-create-form > div input { flex: 1 1 10rem; min-width: 0; width: auto; }
+.file-browser-checkbox { display: flex !important; align-items: center; gap: .4rem; font-size: .85rem; }
+.file-browser-checkbox input { width: auto; }
+.file-tree { margin: 0; }
+.file-tree ul { list-style: none; margin: .25rem 0 .25rem .6rem; padding: 0 0 0 .5rem; border-inline-start: 1px solid var(--line); }
+.file-tree summary { cursor: pointer; padding: .4rem; overflow-wrap: anywhere; }
+.file-tree .file-row { align-items: center; justify-content: space-between; min-width: 0; margin-block: .2rem; padding: .65rem; }
+.file-tree .file-row small { flex: 0 0 auto; color: var(--muted); font-size: .75rem; }
+.workspace-transfer-panel, .file-rename-panel { border-top: 1px solid var(--line); padding-top: .65rem; }
+.workspace-transfer-panel p, .file-rename-panel p { margin-block: .6rem; font-size: .85rem; overflow-wrap: anywhere; }
+.workspace-transfer-panel summary, .file-rename-panel summary { cursor: pointer; min-height: 2rem; }
+.file-browser-actions button, .file-rename-panel button { margin-block: .3rem; }
+.host-document-menu { position: relative; }
+.host-document-menu summary { cursor: pointer; padding: .6rem; border: 1px solid var(--line); border-radius: .4rem; }
+.host-document-menu[open] { z-index: 9; }
+.host-document-menu > div { display: grid; gap: .4rem; position: absolute; right: 0; top: calc(100% + .2rem); min-width: 12rem; padding: .7rem; background: var(--paper); border: 1px solid var(--line); border-radius: .4rem; box-shadow: 0 .4rem 1.4rem #0002; }
+.host-document-menu .destructive-action { color: var(--error-text); }

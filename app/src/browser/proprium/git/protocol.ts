@@ -3,13 +3,29 @@ export const MAX_WORKSPACE_READ_SET_COUNT = 1024;
 export const MAX_WORKSPACE_CHANGE_BYTES = 64 * 1024 * 1024;
 export const MAX_WORKSPACE_READ_BYTES = 64 * 1024 * 1024;
 
-export interface WorkspaceIdentity {
+export interface GitHubWorkspaceIdentity {
+  /** Omitted only by identities stored before the provider discriminator was added. */
+  provider?: "github";
   origin: string;
   repositoryId: number;
   owner: string;
   repository: string;
   branch: string;
   localWorkspaceId: string;
+}
+
+/** A browser-only repository has no remote repository ID or GitHub owner. */
+export interface LocalWorkspaceIdentity {
+  provider: "local";
+  name: string;
+  branch: string;
+  localWorkspaceId: string;
+}
+
+export type WorkspaceIdentity = GitHubWorkspaceIdentity | LocalWorkspaceIdentity;
+
+export function isGitHubWorkspaceIdentity(value: WorkspaceIdentity): value is GitHubWorkspaceIdentity {
+  return !!value && value.provider !== "local";
 }
 
 export type LocalGitErrorCode =
@@ -81,6 +97,34 @@ export interface DiffChange extends StatusEntry {
   worktreeFile: FileVersion | null;
 }
 
+/** A commit's content compared with its first parent; null represents an absent path. */
+export interface CommitFileChange {
+  path: string;
+  kind: "added" | "deleted" | "modified";
+  parentMode: string | null;
+  commitMode: string | null;
+  parentFile: FileVersion | null;
+  commitFile: FileVersion | null;
+}
+
+export interface CommitDiff {
+  oid: string;
+  parentOid: string | null;
+  parents: string[];
+  changes: CommitFileChange[];
+}
+
+/** Exact worktree bytes and changed path set that the author reviewed. */
+export interface CommitReviewSnapshot {
+  head: string | null;
+  files: Array<{ path: string; oid: string | null }>;
+}
+
+export interface CommitReview {
+  head: string | null;
+  changes: DiffChange[];
+}
+
 export interface CommitAuthor {
   name: string;
   email: string;
@@ -104,6 +148,9 @@ export type LocalGitRequest =
   | { id: string; workspace: WorkspaceIdentity; operation: "list-files" }
   | { id: string; workspace: WorkspaceIdentity; operation: "status" }
   | { id: string; workspace: WorkspaceIdentity; operation: "diff" }
+  | { id: string; workspace: WorkspaceIdentity; operation: "review-diff" }
+  | { id: string; workspace: WorkspaceIdentity; operation: "commit-reviewed"; snapshot: CommitReviewSnapshot; message: string; author: CommitAuthor }
+  | { id: string; workspace: WorkspaceIdentity; operation: "commit-diff"; oid: string }
   | { id: string; workspace: WorkspaceIdentity; operation: "add"; paths: string[]; expectedHead: string | null }
   | { id: string; workspace: WorkspaceIdentity; operation: "commit"; expectedHead: string | null; message: string; author: CommitAuthor }
   | { id: string; workspace: WorkspaceIdentity; operation: "log"; depth: number }
@@ -122,7 +169,26 @@ export interface LocalGitResponse {
 }
 
 export function validateWorkspaceIdentity(value: WorkspaceIdentity): void {
-  if (!value || typeof value !== "object" || !Number.isSafeInteger(value.repositoryId) || value.repositoryId <= 0) {
+  if (!value || typeof value !== "object") throw Object.assign(new TypeError("invalid_identity: workspace identity must be an object"), { code: "invalid_identity" });
+  if (value.provider === "local") {
+    if ("origin" in value || "repositoryId" in value || "owner" in value || "repository" in value) {
+      throw Object.assign(new TypeError("invalid_identity: local workspaces cannot claim GitHub repository identity"), { code: "invalid_identity" });
+    }
+    if (typeof value.name !== "string" || !value.name.trim() || value.name.length > 120 || /[\u0000-\u001f\u007f]/u.test(value.name)) {
+      throw Object.assign(new TypeError("invalid_identity: local workspace name must contain 1-120 printable characters"), { code: "invalid_identity" });
+    }
+    if (!/^[A-Za-z0-9._/-]+$/u.test(value.branch) || value.branch.startsWith("/") || value.branch.endsWith("/") || value.branch.includes("..") || value.branch.includes("//")) {
+      throw Object.assign(new TypeError("invalid_identity: branch is invalid"), { code: "invalid_identity" });
+    }
+    if (!/^[A-Za-z0-9._-]{8,128}$/u.test(value.localWorkspaceId)) {
+      throw Object.assign(new TypeError("invalid_identity: localWorkspaceId must be an opaque 8-128 character identifier"), { code: "invalid_identity" });
+    }
+    return;
+  }
+  if (value.provider !== undefined && value.provider !== "github") {
+    throw Object.assign(new TypeError("invalid_identity: workspace provider is unsupported"), { code: "invalid_identity" });
+  }
+  if (!Number.isSafeInteger(value.repositoryId) || value.repositoryId <= 0) {
     throw Object.assign(new TypeError("invalid_identity: repositoryId must be a positive immutable GitHub repository ID"), { code: "invalid_identity" });
   }
   let origin: URL;

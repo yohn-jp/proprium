@@ -97,7 +97,7 @@ test("selection, supporting copy and disabled editor controls remain readable in
     }
     await expectReadable(selected, `${testInfo.project.name} ${theme} selected navigation`);
 
-    const supportingCopy = page.locator(".recent-card .field-help").filter({ hasText: "Available offline after" });
+    const supportingCopy = page.locator(".recent-card .field-help").filter({ hasText: "このブラウザーに保存されます。" });
     await expectReadable(supportingCopy, `${testInfo.project.name} ${theme} supporting copy`);
     await page.screenshot({ path: testInfo.outputPath(`${theme}-picker.png`), fullPage: true });
 
@@ -114,18 +114,23 @@ test("selection, supporting copy and disabled editor controls remain readable in
       await window.propriumHostTest!.openWorkspace(identity, { "chapter.md": "コントラスト確認用の原稿\n" });
     }, workspace);
     await chooseFile(page, "chapter.md");
-    const saveDraft = page.getByRole("button", { name: "Save draft", exact: true });
+    await expectReadable(page.locator(".durability-badge.is-current"), `${testInfo.project.name} ${theme} current durability status`);
+    const saveDraft = page.getByRole("button", { name: "端末に保存", exact: true });
     await expect(saveDraft).toBeDisabled();
-    await expectReadable(saveDraft, `${testInfo.project.name} ${theme} disabled Save draft`);
-    const workspaces = page.getByRole("button", { name: "Workspaces", exact: true });
+    await expectReadable(saveDraft, `${testInfo.project.name} ${theme} disabled 端末に保存`);
+    const workspaces = page.getByRole("button", { name: "作品一覧", exact: true });
     await workspaces.hover();
-    await expectReadable(workspaces, `${testInfo.project.name} ${theme} hovered Workspaces`);
+    await expectReadable(workspaces, `${testInfo.project.name} ${theme} hovered 作品一覧`);
     await page.mouse.move(0, 0);
     if (!isMobile) {
       await expectReadable(page.locator(".st-studio-footer > span").first(), `${testInfo.project.name} ${theme} footer text`);
-      await expectReadable(page.locator(".st-workspace-toolbar"), `${testInfo.project.name} ${theme} VIEW label`, "::before");
+      const layoutDisclosure = page.locator(".st-workspace-configuration");
+      const layoutSummary = layoutDisclosure.locator(":scope > summary");
+      await expectReadable(layoutSummary, `${testInfo.project.name} ${theme} layout disclosure`);
+      await layoutSummary.click();
+      await expectReadable(page.locator(".st-workspace-toolbar"), `${testInfo.project.name} ${theme} layout controls`);
       await expectReadable(page.locator(".st-workspace-presets button:not([aria-pressed='true'])").first(), `${testInfo.project.name} ${theme} inactive workspace preset`);
-      const publish = page.getByRole("button", { name: "Save to GitHub", exact: true });
+      const publish = page.getByRole("button", { name: "GitHubへ公開", exact: true });
       await expect(publish).toBeDisabled();
       await expectReadable(publish, `${testInfo.project.name} ${theme} disabled Publish`);
     }

@@ -220,6 +220,9 @@ importers:
       buffer:
         specifier: 6.0.3
         version: 6.0.3
+      fflate:
+        specifier: 0.8.3
+        version: 0.8.3
       isomorphic-git:
         specifier: 1.44.4
         version: 1.44.4

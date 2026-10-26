@@ -6,6 +6,7 @@ import (
 	"errors"
 	"flag"
 	"fmt"
+	"html/template"
 	"io"
 	"log"
 	"net"
@@ -25,6 +26,23 @@ const maxMCPRequestTimeout = 65 * time.Second
 
 var version = "dev"
 var commit = "unknown"
+
+var authLandingTemplate = template.Must(template.New("auth-landing").Parse(`<!doctype html>
+<html lang="ja">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Gateway認証</title>
+</head>
+<body>
+  <main>
+    <h1>Gatewayの認証が完了しました</h1>
+    <p>Cloudflare AccessでこのGatewayへのアクセスが許可されました。Propriumに戻り、接続操作を続けてください。</p>
+    <p><a href="{{.HostOrigin}}">Propriumに戻る</a></p>
+  </main>
+</body>
+</html>
+`))
 
 // Server is an in-memory HTTP gateway. It has no persistence layer.
 type Server struct {
@@ -67,6 +85,16 @@ func NewServer(config Config) (*Server, error) {
 		w.Header().Set("Content-Type", "text/plain; charset=utf-8")
 		w.WriteHeader(http.StatusOK)
 		_, _ = io.WriteString(w, "ok\n")
+	})
+	s.mux.HandleFunc("GET /auth", func(w http.ResponseWriter, _ *http.Request) {
+		w.Header().Set("Cache-Control", "no-store")
+		w.Header().Set("Content-Type", "text/html; charset=utf-8")
+		w.Header().Set("Content-Security-Policy", "default-src 'none'; base-uri 'none'; form-action 'none'; frame-ancestors 'none'")
+		w.Header().Set("Referrer-Policy", "no-referrer")
+		w.Header().Set("X-Content-Type-Options", "nosniff")
+		if err := authLandingTemplate.Execute(w, struct{ HostOrigin string }{HostOrigin: s.config.HostOrigin}); err != nil {
+			return
+		}
 	})
 	s.mux.HandleFunc("/oauth/device/code", s.handleOAuth)
 	s.mux.HandleFunc("/oauth/token", s.handleOAuth)

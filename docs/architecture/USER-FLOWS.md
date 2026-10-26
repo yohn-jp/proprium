@@ -11,20 +11,22 @@ flowchart TD
   Root["main.tsx / BrowserRouter / HostApp"] --> Mode{"HostAppのUI mode"}
   Mode --> Desktop["DesktopShell"]
   Mode --> Mobile["MobileShell / view query"]
+  Desktop --> HeaderSettings["トップバー: 設定modal"]
   Desktop --> Empty{"Workspace選択済みか"}
   Empty -->|未選択| Picker["左: library内にrecents"]
+  Empty -->|未選択| LocalStart["主領域: local Workspace作成"]
   Empty -->|未選択| Connect["右: Gateway設定・OAuth code・待機/中止・repository picker"]
   Empty -->|選択済み| Panels["Workspace: editor / outline / inspector / history / review"]
-  Mobile --> Views["library / writing / inspection / tools / settings"]
+  Mobile -->|Workspace選択時| Views["library / writing / inspection / tools / settings"]
   Views --> Mapping["outline / editor / inspector / review / inspector"]
-  Views -->|settings| SettingsCard["表示と入力・Desktop切替card"]
+  Views -->|settings| SettingsCard["専用view: 外観・Git author・接続設定・Desktop切替"]
   Mapping --> Panels
   Panels --> Editor["RestoredEditor / SceneEditor / journal"]
   Panels --> Tools["PluginPanel + LiveMcpPanel / retained portal"]
   Root --> Recovery["StorageRecoveryDialog / shell外"]
 ```
 
-`view=settings`はDesktopの設定routeではない。上図は表示の正常性ではなく接続関係である。以下ではこの構成を捨てずに、初回local開始・認証の期限／再試行／復帰先を含めて導線を揃える。
+Desktopの設定contentはトップバーから開くmodal、MobileはWorkspace navigation内の`view=settings`専用viewである。上図は表示の正常性ではなく接続関係である。local startもpickerから利用できる。認証の期限／再試行／復帰先を揃える部分などは引き続き目標契約である。
 
 ## F01 — 起動・ローカル開始・再訪
 
@@ -44,7 +46,7 @@ flowchart TD
   W01 -->|Workspace一覧へ / dirtyならF04| H01
 ```
 
-初回ローカル作成は未整備の契約。remote identityを捏造してE2E入口を流用しない。cached shell/local dataがないcold offlineと、既存Workspaceのoffline再開を分ける。GitHubからの再取得で未公開localデータが戻るとは説明しない。
+H02の作成とlocal再開はpickerから接続済みである。作成されるのはbrowser storageに保存する空のgeneric local Git Workspaceで、文書は別に作成する。これはnovel structureを認識したりWriter pluginを実装したりするものではない。remote identityを捏造せず、cached shell/local dataがないcold offlineと、既存Workspaceのoffline再開を分ける。GitHubからの再取得で未公開localデータが戻るとは説明しない。
 
 ## F02 — Gateway選択とGitHub Device OAuth
 
@@ -96,6 +98,11 @@ flowchart TD
   W01["W01 Workspace"] --> W02["W02 files / 新規path"]
   W02 -->|textを開く・新規path検証| E01["E01 editor"]
   W02 -->|binary| E05["E05 情報のみ / 編集不可"]
+  W02 -->|path変更・rename/move| W02
+  W02 -->|file・ZIP取込 / overwrite確認| Import["local worktreeへ適用"]
+  Import --> W02
+  W02 -->|保存済みfilesをZIP書出し| Archive["ファイルのみ / 履歴なし"]
+  E01 -->|現在の文書を書出し| Document["現在のeditor本文"]
   E05 -->|戻る| W02
   E01 -->|入力・undo・IME| Dirty["editor dirty / journalは別途記録"]
   Dirty -->|Save draft / expected revision一致| E01
@@ -111,7 +118,7 @@ flowchart TD
   E01 -->|local変更を確認| G01["G01 F07"]
 ```
 
-現行の破棄確認を、保存成功前に遷移しないguardとして整理する。非同期処理中にさらに入力されたtextも保持する。削除はlocal worktreeのみで、共有反映にはcommitとpublishが必要。レイアウト変更・モード変更は本文の破棄ではなくjournal flushで扱う（F13/F14）。
+local startとgeneric file browserの作成・削除・path変更・import/exportは接続済みである。個別文書の書出しは現在のeditor本文を使い、ZIP書出しは保存済みworktreeのみを含み、Git履歴・未保存textを含まない。取込は最大256 files、展開後64 MiB、ZIP 68 MiBまでで、既存pathの置換前に確認する。これらはlocal worktree操作で、共有反映にはcommitとpublishが必要。非同期処理中にさらに入力されたtextも保持する。レイアウト変更・mode変更は本文の破棄ではなくjournal flushで扱う（F13/F14）。
 
 ## F05 — 読書・preview・組版・印刷
 
@@ -176,7 +183,7 @@ flowchart TD
   Clean --> E01
 ```
 
-G01のdiffは既存のbasic diff契約を満たすための不足面であり、現行一覧だけを差分確認と扱わない。履歴復元・rebase・mergeの未接続ボタンを置かない。Checkpointはlocal commitと同義にし、独立した保存機構を増やさない。
+G01ではlocal HEADとの差分を確認できる。text diffを表示し、binaryはbyte sizeのみを示す。commitを有効にするにはすべての変更pathを確認し、実行時には全変更pathをまとめてstageしてlocal commitする。G02には直近40件の履歴、選択commitのdiff、対象commitで変更されたfileだけをlocal worktreeへ戻す操作が接続されている。restoreは確認とrevision guardを通し、commit/publishしない。path衝突・symlink・実行mode変更を含むcommitはrestoreできない。rebase/mergeや履歴改変は提供しない。Checkpointはlocal commitと同義にし、独立した保存機構を増やさない。
 
 ## F08 — Fetch・Pull・Publish・conflict・remote-unknown
 
@@ -342,7 +349,7 @@ flowchart TD
   S01 -->|戻る| W01
 ```
 
-Proprium MCP認証TokenやOwner Keyは発行も保存もしない。GitHub OAuth Tokenは既存どおりブラウザー内で保持し、MCP認証には使わない。Gateway接続先変更時は新Originへの接続を再確立する。
+現在、設定contentはDesktopではトップバーから開くmodal、MobileではWorkspace navigation内の専用settings viewに表示され、Desktop切替も含む。外観、Git author、GitHub接続状態、Gateway URLとAccess linkを扱う。shell headerにもthemeとGitHub connect/sign-out操作があるため、全設定をまとめたDesktop settings pageではない。Proprium MCP認証TokenやOwner Keyは発行も保存もしない。GitHub OAuth Tokenは既存どおりブラウザー内で保持し、MCP認証には使わない。Gateway接続先変更時は新Originへの接続を再確立する。
 
 ## F16 — 不確実な保存・journal回復・機能別error
 

@@ -1,4 +1,4 @@
-import { showPanel, expectEditorText, chooseFile, configureGateway } from "./restored-ui.helpers.js";
+import { showPanel, expectEditorText, chooseFile, reviewChangedFiles, configureGateway } from "./restored-ui.helpers.js";
 import { expect, test } from "@playwright/test";
 import { execFileSync } from "node:child_process";
 import { mkdtempSync, readFileSync, rmSync } from "node:fs";
@@ -115,20 +115,20 @@ test("static Host imports a GitHub REST commit, reloads offline, and edits with 
   expect(origin).toBe(configuredOrigin);
   if (useLiveGitHub) {
     await configureGateway(page, liveGatewayUrl);
-    await page.getByRole("button", { name: "Connect GitHub" }).click();
+    await page.getByRole("button", { name: "GitHubに接続" }).click();
     await expect(operationNotice).toContainText(/Connected to GitHub as /u);
     if (liveGitHubLogin) await expect(operationNotice).toContainText(liveGitHubLogin);
     await page.getByLabel("Repository").selectOption(String(liveGitHubRepositoryId));
-    await page.getByLabel("Branch").fill(liveGitHubBranch);
-    await page.getByRole("button", { name: "Open workspace" }).click();
+    await page.getByLabel("ブランチ").selectOption(liveGitHubBranch);
+    await page.getByRole("button", { name: "作品を開く" }).click();
     await expect(operationNotice).toContainText(`Opened ${workspaceTitle}`);
   } else {
     await configureGateway(page, configuredOrigin);
-    await page.getByRole("button", { name: "Connect GitHub" }).click();
+    await page.getByRole("button", { name: "GitHubに接続" }).click();
     await expect(operationNotice).toContainText(`Connected to GitHub as ${staticFixtureLogin}`);
     await page.getByLabel("Repository").selectOption(String(staticFixtureIdentity.repositoryId));
-    await page.getByLabel("Branch").fill(staticFixtureIdentity.branch);
-    await page.getByRole("button", { name: "Open workspace" }).click();
+    await page.getByLabel("ブランチ").selectOption(staticFixtureIdentity.branch);
+    await page.getByRole("button", { name: "作品を開く" }).click();
     await expect(operationNotice).toContainText(`Opened ${staticFixtureTitle} at GitHub commit ${fixture!.head}.`);
   }
   const files = page.getByRole("list", { name: "Repository files" });
@@ -141,8 +141,8 @@ test("static Host imports a GitHub REST commit, reloads offline, and edits with 
     await chooseFile(page, "README.md");
     await expectEditorText(page, fixture.content);
     await showPanel(page, "history");
-    await expect(page.getByText("Static browser acceptance fixture", { exact: true })).toBeVisible();
-    await expect(page.locator("code").filter({ hasText: fixture.head.slice(0, 10) })).toBeVisible();
+    await expect(page.getByRole("heading", { name: "Static browser acceptance fixture", exact: true })).toBeVisible();
+    await expect(page.locator(".git-history-list code").filter({ hasText: fixture.head.slice(0, 10) })).toBeVisible();
   }
 
   await revealFilesSidebar();
@@ -150,19 +150,18 @@ test("static Host imports a GitHub REST commit, reloads offline, and edits with 
   await showPanel(page, "review");
   await expect(panel).toBeVisible();
   await panel.locator("summary").click();
-  await page.getByLabel("Install from trusted registry").fill(staticPluginId);
-  await page.getByLabel("Version (optional: latest stable)").fill(staticPluginVersion);
-  await page.getByRole("button", { name: "Verify and preview" }).click();
-  const preview = page.getByRole("region", { name: "Plugin installation preview" });
+  await page.getByRole("button", { name: "信頼済みカタログを表示" }).click();
+  await page.getByRole("button", { name: `${staticPluginId} ${staticPluginVersion} の署名済みプレビューを確認`, exact: true }).click();
+  const preview = page.getByRole("region", { name: "インストールプレビュー" });
   await expect(preview).toContainText(`${staticPluginId}@${staticPluginVersion}`);
-  await expect(preview).toContainText("Capabilities: none");
-  await page.getByRole("button", { name: "Download and install disabled" }).click();
+  await expect(preview).toContainText("要求する権限: なし");
+  await page.getByRole("button", { name: "ダウンロードして無効状態でインストール" }).click();
   const panelNotice = panel.getByRole("status");
-  await expect(panelNotice).toContainText("Plugin artifact bytes passed signature and digest verification");
+  await expect(panelNotice).toContainText("署名とダイジェストを検証し、無効状態でインストールしました");
   const plugin = panel.getByRole("listitem").filter({ hasText: staticPluginId }).filter({ hasText: `v${staticPluginVersion}` });
   await plugin.getByRole("button", { name: "Enable" }).click();
   await expect(panelNotice).toContainText(`${staticPluginId}@${staticPluginVersion} is enabled`);
-  await page.getByLabel("Plugin request").fill(JSON.stringify({ left: 20, right: 22 }));
+  await page.getByLabel("プラグイン入力（テキスト）", { exact: false }).fill(JSON.stringify({ left: 20, right: 22 }));
   await plugin.getByRole("button", { name: "Run" }).click();
   await expect(page.getByLabel(`${staticPluginId} output`)).toHaveText('{"result":42}');
   await plugin.getByRole("button", { name: "Stop" }).click();
@@ -186,13 +185,13 @@ test("static Host imports a GitHub REST commit, reloads offline, and edits with 
 
   await context.setOffline(true);
   await page.reload();
-  await expect(page.getByRole("heading", { name: "Open a GitHub workspace" })).toBeVisible();
+  await expect(page.getByRole("heading", { name: "作品を作る・開く" })).toBeVisible();
   await expect.poll(() => page.evaluate(() => navigator.serviceWorker.controller !== null)).toBe(true);
   const recentWorkspace = page.getByRole("button")
     .filter({ hasText: workspaceTitle });
   await expect(recentWorkspace).toBeVisible();
   await recentWorkspace.click();
-  await expect(operationNotice).toContainText("Workspace opened on this device.");
+  await expect(operationNotice).toContainText("この端末の作品を開きました。");
 
   await revealFilesSidebar();
   const offlineFile = `.proprium-static-${crypto.randomUUID()}.txt`;
@@ -201,16 +200,17 @@ test("static Host imports a GitHub REST commit, reloads offline, and edits with 
   const editor = page.getByRole("textbox", { name: "原稿 Markdown" });
   await expect(editor).toBeVisible();
   await editor.fill("Edited and committed from the cached static Host while offline.\n");
-  await page.getByRole("button", { name: "Save draft" }).click();
+  await page.getByRole("button", { name: "端末に保存" }).click();
   await expect(operationNotice).toContainText("saved to this browser's local Git worktree");
   await showPanel(page, "inspector");
-  await page.getByLabel("Commit message").fill("Verify offline editing from the static Host");
+  await page.getByLabel("変更の説明").fill("Verify offline editing from the static Host");
   await page.getByLabel("Git author name").fill("Proprium Static Acceptance");
   await page.getByLabel("Git author email").fill("static-acceptance@example.invalid");
-  await page.getByRole("button", { name: "Commit locally" }).click();
+  await reviewChangedFiles(page);
+  await page.getByRole("button", { name: "ローカルGitにコミット" }).click();
   const localCommit = operationNotice.filter({ hasText: "Committed locally as" });
   await expect(localCommit).toContainText("This commit is still only on this device.");
-  await expect(page.getByText(/^Committed locally · [a-f0-9]{8}$/u)).toBeVisible();
+  await expect(page.getByText(/^端末のGitに記録済み · [a-f0-9]{8}$/u)).toBeVisible();
 
   const reopenedPluginPanel = page.locator("details.plugin-manager-panel");
   await revealFilesSidebar();
@@ -219,7 +219,7 @@ test("static Host imports a GitHub REST commit, reloads offline, and edits with 
   const reopenedPlugin = reopenedPluginPanel.getByRole("listitem").filter({ hasText: staticPluginId }).filter({ hasText: `v${staticPluginVersion}` });
   await expect(reopenedPlugin).toContainText(`v${staticPluginVersion} · installed, disabled`);
   await reopenedPlugin.getByRole("button", { name: "Enable" }).click();
-  await page.getByLabel("Plugin request").fill(JSON.stringify({ left: 19, right: 23 }));
+  await page.getByLabel("プラグイン入力（テキスト）", { exact: false }).fill(JSON.stringify({ left: 19, right: 23 }));
   await reopenedPlugin.getByRole("button", { name: "Run" }).click();
   await expect(page.getByLabel(`${staticPluginId} output`)).toHaveText('{"result":42}');
   await reopenedPlugin.getByRole("button", { name: "Stop" }).click();

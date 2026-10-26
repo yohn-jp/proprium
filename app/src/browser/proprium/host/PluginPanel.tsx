@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useRef, useState, type ReactElement } from "react";
 import { BrowserPluginManager } from "../plugins/index.js";
 import { decodeRegistryBytes } from "../plugins/registry.js";
-import type { InstalledPlugin, PluginInstallPreview } from "../plugins/manager.js";
+import type { InstalledPlugin, PluginInstallPreview, RegistryCatalogEntry } from "../plugins/manager.js";
 import type { PluginCapability, PluginTranscript, RuntimeSnapshot } from "../plugin-runtime/protocol.js";
 import type { BrowserLocalGit } from "../git/index.js";
 
@@ -85,12 +85,13 @@ export function PluginPanel({ workspaceId, git, revisionKey, canApplyChanges, ho
     registries: config ? [{ url: config.url, publicKey: config.publicKey, artifactOrigins: config.artifactOrigins }] : [],
   }), [config]);
   const [plugins, setPlugins] = useState<InstalledPlugin[]>([]);
+  const [registryCatalog, setRegistryCatalog] = useState<readonly RegistryCatalogEntry[]>([]);
+  const [catalogLoaded, setCatalogLoaded] = useState(false);
+  const [catalogLoading, setCatalogLoading] = useState(false);
   const [installPlan, setInstallPlan] = useState<PluginInstallPreview | null>(null);
   const [planIntent, setPlanIntent] = useState<InstallIntent | null>(null);
-  const [registryPluginId, setRegistryPluginId] = useState("");
-  const [version, setVersion] = useState("");
   const [grants, setGrants] = useState<Record<string, PluginCapability[]>>({});
-  const [request, setRequest] = useState("Analyze this workspace and suggest a useful next step.");
+  const [requests, setRequests] = useState<Record<string, string>>({});
   const [transcripts, setTranscripts] = useState<Record<string, PluginTranscript>>({});
   const [pendingSnapshot, setPendingSnapshot] = useState<Record<string, SnapshotState>>({});
   const [ownBusy, setOwnBusy] = useState(false);
@@ -139,6 +140,7 @@ export function PluginPanel({ workspaceId, git, revisionKey, canApplyChanges, ho
           setTranscripts({});
           setPendingSnapshot({});
           setGrants({});
+          setRequests({});
           currentSnapshots.current.clear();
         }
         const installed = await manager.installed();
@@ -151,15 +153,28 @@ export function PluginPanel({ workspaceId, git, revisionKey, canApplyChanges, ho
   }, [manager, workspaceId]);
   useEffect(() => () => { void manager.dispose(); }, [manager]);
 
-  async function previewInstall(): Promise<void> {
-    if (!config || !registryPluginId.trim()) return;
+  async function loadRegistryCatalog(): Promise<void> {
+    if (!config) return;
+    setRegistryCatalog([]);
+    setCatalogLoaded(false);
+    setCatalogLoading(true);
     setOwnBusy(true); onBusyChange(true); setNotice("");
     try {
-      const preview = await manager.previewInstall({ registryUrl: config.url, pluginId: registryPluginId.trim(), ...(version.trim() ? { version: version.trim() } : {}) });
+      setRegistryCatalog(await manager.registryCatalog());
+      setCatalogLoaded(true);
+      setNotice("署名検証済みのレジストリ情報を表示しています。プレビューを確認するまでプラグイン本体はダウンロードされません。");
+    } catch (error) { setNotice(error instanceof Error ? error.message : "信頼済みプラグインカタログを検証できませんでした。"); }
+    finally { setCatalogLoading(false); setOwnBusy(false); onBusyChange(false); }
+  }
+
+  async function previewInstall(entry: RegistryCatalogEntry): Promise<void> {
+    setOwnBusy(true); onBusyChange(true); setNotice("");
+    try {
+      const preview = await manager.previewInstall({ registryUrl: entry.registryUrl, pluginId: entry.id, version: entry.version });
       setInstallPlan(preview);
       setPlanIntent("install");
-      setNotice("Review the signed package, requested capabilities, dependencies and download size before transfer.");
-    } catch (error) { setNotice(error instanceof Error ? error.message : "Plugin preview failed."); }
+      setNotice("署名済みの配布物、要求権限、依存関係、転送サイズを確認してください。まだダウンロードは始まりません。");
+    } catch (error) { setNotice(error instanceof Error ? error.message : "プラグインのプレビューに失敗しました。"); }
     finally { setOwnBusy(false); onBusyChange(false); }
   }
 
@@ -169,17 +184,16 @@ export function PluginPanel({ workspaceId, git, revisionKey, canApplyChanges, ho
     try {
       if (planIntent === "install") {
         await manager.installFromRegistry(installPlan);
-        setNotice("Plugin artifact bytes passed signature and digest verification and are installed disabled.");
-        setVersion("");
+        setNotice("署名とダイジェストを検証し、無効状態でインストールしました。実行には権限の確認と明示的な有効化が必要です。");
       } else {
         await manager.update(installPlan);
-        setNotice(`Installed version ${installPlan.version} is pinned; enable it to start the updated version.`);
+        setNotice(`バージョン ${installPlan.version} を確認して固定しました。更新版を使うには有効化してください。`);
       }
       setInstallPlan(null); setPlanIntent(null);
       await refreshPlugins();
     } catch (error) {
       setInstallPlan(null); setPlanIntent(null);
-      setNotice(error instanceof Error ? error.message : "Plugin installation failed; no unverified bytes were activated.");
+      setNotice(error instanceof Error ? error.message : "インストールに失敗しました。未検証のプラグインは実行されていません。");
     } finally { setOwnBusy(false); onBusyChange(false); }
   }
 
@@ -197,8 +211,8 @@ export function PluginPanel({ workspaceId, git, revisionKey, canApplyChanges, ho
     finally { setOwnBusy(false); onBusyChange(false); }
   }
 
-  async function invoke(plugin: InstalledPlugin): Promise<void> {
-    if (currentRevisionKey.current !== revisionKey) { setNotice("The workspace changed. Reload the plugin snapshot and try again."); return; }
+  async function invoke(plugin: InstalledPlugin, request: string): Promise<void> {
+    if (currentRevisionKey.current !== revisionKey) { setNotice("ワークスペースが変更されました。プラグインのスナップショットを更新して再実行してください。"); return; }
     setOwnBusy(true); onBusyChange(true); setNotice("");
     try {
       const snapshot = await snapshotForPlugin(plugin, git, workspaceId);
@@ -302,36 +316,57 @@ export function PluginPanel({ workspaceId, git, revisionKey, canApplyChanges, ho
   return <details className="plugin-manager-panel">
     <summary>Plugins <span className="count-badge">{plugins.length}</span></summary>
     <div className="plugin-panel-content">
-      <p className="plugin-panel-copy">WASM plugins run in a terminable Worker. They receive only a bounded snapshot and Host-granted capabilities.</p>
-      {!config ? <p className="plugin-panel-warning">No trusted plugin registry is configured for this Host build.</p> : <form className="plugin-install-form" onSubmit={event => { event.preventDefault(); void previewInstall(); }}>
-        <label htmlFor="plugin-id">Install from trusted registry</label><input id="plugin-id" value={registryPluginId} onChange={event => setRegistryPluginId(event.target.value)} placeholder="publisher.plugin" />
-        <label htmlFor="plugin-version">Version <span>(optional: latest stable)</span></label><input id="plugin-version" value={version} onChange={event => setVersion(event.target.value)} placeholder="1.2.3" />
-        <button type="submit" disabled={busy || !registryPluginId.trim()}>Verify and preview</button>
-      </form>}
-      {installPlan && <section className="plugin-install-preview" aria-label="Plugin installation preview">
-        <div className="plugin-preview-heading"><strong>{planIntent === "update" ? "Update preview" : "Install preview"}</strong><button type="button" onClick={cancelPlan} disabled={busy}>Cancel</button></div>
-        <p>{installPlan.pluginId}@{installPlan.version} · {formatBytes(installPlan.downloadBytes)} · {new Date(installPlan.expiresAt).toLocaleTimeString()}</p>
-        {installPlan.packages.map(item => <article key={`${item.id}@${item.version}`}><strong>{item.id}@{item.version}</strong><span>{formatBytes(item.downloadBytes)}</span><small>Capabilities: {item.capabilities.join(", ") || "none"}</small>{item.dependencies.length > 0 && <small>Dependencies: {item.dependencies.map(dependency => `${dependency.id}@${dependency.version}`).join(", ")}</small>}</article>)}
-        <button type="button" className="plugin-confirm-install" disabled={busy} onClick={() => void confirmInstallPlan()}>{planIntent === "update" ? "Download and pin update" : "Download and install disabled"}</button>
+      <p className="plugin-panel-copy">プラグインは署名を検証してから利用できます。インストールしても無効状態のままで、権限を確認して有効化した後に実行できます。</p>
+      <p className="plugin-panel-copy"><code>proprium.compute-sum</code> は配布と実行の確認用サンプルです。計算機能のみで、小説執筆プラグインではありません。</p>
+      {!config ? <p className="plugin-panel-warning" role="status">このHostビルドには信頼済みプラグインレジストリが設定されていません。</p> : <section className="plugin-registry-catalog" aria-labelledby="plugin-registry-heading">
+        <h3 id="plugin-registry-heading">プラグインカタログ</h3>
+        <p id="plugin-registry-help">Hostに固定された公開鍵でレジストリ署名を検証します。一覧には署名対象のID、バージョン、依存関係を表示します。このv1のカタログに機能説明は含まれないため、IDだけで機能を推測せず、提供元の説明も確認してください。</p>
+        <p>一覧の表示だけではプラグイン本体を取得しません。まず検証済みの詳細プレビューを開き、権限と転送量を確認してからダウンロードします。</p>
+        <button type="button" onClick={() => void loadRegistryCatalog()} disabled={busy} aria-describedby="plugin-registry-help">{catalogLoaded ? "カタログを再読み込み" : "信頼済みカタログを表示"}</button>
+        {catalogLoading && <p role="status">レジストリ署名を検証しています…</p>}
+        {catalogLoaded && !registryCatalog.length && <p className="plugin-empty">信頼済みレジストリに利用可能なプラグインはありません。</p>}
+        {registryCatalog.length > 0 && <ul className="registry-plugin-list">{registryCatalog.map(entry => <li key={`${entry.registryUrl}:${entry.id}@${entry.version}`}>
+          <article className="registry-plugin-card">
+            <h4><code>{entry.id}</code></h4>
+            <p>バージョン <code>{entry.version}</code> · レジストリ <code>{entry.registryId}@{entry.registryVersion}</code></p>
+            {entry.dependencies.length > 0 && <p>依存関係: {entry.dependencies.map(dependency => `${dependency.id} ${dependency.range}`).join("、")}</p>}
+            <button type="button" onClick={() => void previewInstall(entry)} disabled={busy} aria-label={`${entry.id} ${entry.version} の署名済みプレビューを確認`}>署名を確認してプレビュー</button>
+          </article>
+        </li>)}</ul>}
       </section>}
-      {notice && <p className="plugin-notice" role="status">{notice}</p>}
-      {!plugins.length ? <p className="plugin-empty">No verified plugins installed.</p> : <ul className="installed-plugins">{plugins.map(plugin => <li key={`${plugin.id}@${plugin.version}`}>
-        <div className="plugin-card-head"><div><strong>{plugin.id}</strong><small>v{plugin.version} · {plugin.state === "active" ? "active" : plugin.state === "enabled-idle" ? "enabled, idle" : plugin.state === "revoked" ? "publisher revoked" : "installed, disabled"}</small></div><code>{plugin.activeVersion ? `pinned ${plugin.activeVersion}` : "not pinned"}</code></div>
-        <fieldset disabled={busy || plugin.state !== "installed"}>
-          <legend>Requested capabilities</legend>
-          {plugin.capabilities.map(value => {
-            const grantKey = `${workspaceId}:${plugin.id}@${plugin.version}`;
-            const selected = grants[grantKey] ?? [];
-            return <label key={value} className="capability-choice"><input type="checkbox" checked={selected.includes(value as PluginCapability)} onChange={event => setGrants(current => ({ ...current, [grantKey]: event.target.checked ? [...selected, value as PluginCapability] : selected.filter(item => item !== value) }))} /> <span>{value}</span></label>;
-          })}
-        </fieldset>
-        <div className="plugin-actions">{plugin.state === "active" ? <><button type="button" onClick={() => void invoke(plugin)} disabled={busy}>Run</button><button type="button" onClick={() => void disable(plugin)} disabled={busy}>Stop</button></> : plugin.state === "enabled-idle" ? <><button type="button" onClick={() => void invoke(plugin)} disabled={busy}>Run</button><button type="button" onClick={() => void disable(plugin)} disabled={busy}>Disable</button></> : <button type="button" onClick={() => void enable(plugin)} disabled={busy || plugin.state === "revoked"}>{plugin.state === "revoked" ? "Revoked" : "Enable"}</button>}<button type="button" onClick={() => void update(plugin)} disabled={busy}>Update version</button>{plugin.activeVersion && <button type="button" onClick={() => void rollback(plugin)} disabled={busy}>Rollback</button>}<button type="button" className="plugin-remove" onClick={() => void uninstall(plugin)} disabled={busy}>Uninstall</button></div>
-        {plugin.dependencies.length > 0 && <p className="plugin-metadata">Dependencies: {plugin.dependencies.map(item => `${item.id}@${item.version}`).join(", ")}</p>}
-        {plugin.contributions.length > 0 && <section className="plugin-contributions" aria-label="Host-rendered plugin contributions"><strong>Plugin surfaces</strong>{plugin.contributions.map(item => <article key={`${item.kind}:${item.id}`}><small>{item.kind}</small><span>{item.title}</span></article>)}</section>}
-        {transcripts[plugin.id]?.value && <pre className="plugin-output" aria-label={`${plugin.id} output`}>{transcripts[plugin.id]!.value}</pre>}
-        {transcripts[plugin.id]?.proposals.length ? <div className="plugin-proposals"><strong>Proposed changes</strong>{transcripts[plugin.id]!.proposals.flatMap((proposal, index) => proposal.changes.map(change => <article key={`${plugin.id}:${index}:${change.path}`}><span>{change.path}</span><pre>{change.content.slice(0, 1200)}{change.content.length > 1200 ? "…" : ""}</pre></article>))}<button type="button" onClick={() => void applyProposals(plugin)} disabled={busy || !canApplyChanges}>Review and apply to local worktree</button></div> : null}
-      </li>)}</ul>}
-      {plugins.some(plugin => plugin.state === "active" || plugin.state === "enabled-idle") && <label className="plugin-request">Plugin request<textarea aria-label="Plugin request" value={request} onChange={event => setRequest(event.target.value)} maxLength={256 * 1024} /></label>}
+      {installPlan && <section className="plugin-install-preview" aria-labelledby="plugin-preview-heading">
+        <div className="plugin-preview-heading"><h3 id="plugin-preview-heading">{planIntent === "update" ? "更新プレビュー" : "インストールプレビュー"}</h3><button type="button" onClick={cancelPlan} disabled={busy}>閉じる</button></div>
+        <dl><dt>プラグイン</dt><dd><code>{installPlan.pluginId}@{installPlan.version}</code></dd><dt>ダウンロード合計</dt><dd>{formatBytes(installPlan.downloadBytes)}</dd><dt>プレビュー有効期限</dt><dd><time dateTime={new Date(installPlan.expiresAt).toISOString()}>{new Date(installPlan.expiresAt).toLocaleTimeString()}</time></dd></dl>
+        <ul>{installPlan.packages.map(item => <li key={`${item.id}@${item.version}`}><article><strong>{item.id}@{item.version}</strong><span>{formatBytes(item.downloadBytes)}</span><small>要求する権限: {item.capabilities.join(", ") || "なし"}</small>{item.dependencies.length > 0 && <small>依存関係: {item.dependencies.map(dependency => `${dependency.id}@${dependency.version}`).join(", ")}</small>}</article></li>)}</ul>
+        <button type="button" className="plugin-confirm-install" disabled={busy} onClick={() => void confirmInstallPlan()}>{planIntent === "update" ? "ダウンロードして更新版を固定" : "ダウンロードして無効状態でインストール"}</button>
+      </section>}
+      {notice && <p className="plugin-notice" role="status" aria-live="polite">{notice}</p>}
+      {!plugins.length ? <div className="plugin-empty-state"><p className="plugin-empty">検証済みのインストール済みプラグインはありません。</p><p>プラグインがなくても、ワークスペースの編集とGit操作は利用できます。</p></div> : <ul className="installed-plugins">{plugins.map(plugin => {
+        const pluginKey = `${plugin.id}@${plugin.version}`;
+        const inputId = `plugin-input-${plugin.id}-${plugin.version}`;
+        const inputHelpId = `${inputId}-help`;
+        const isComputeSumSample = plugin.id === "proprium.compute-sum";
+        const request = requests[pluginKey] ?? (isComputeSumSample ? '{"left":20,"right":22}' : "");
+        const canRun = plugin.state === "active" || plugin.state === "enabled-idle";
+        return <li key={pluginKey}>
+          <div className="plugin-card-head"><div><strong>{plugin.id}</strong><small>v{plugin.version} · {plugin.state === "active" ? "active" : plugin.state === "enabled-idle" ? "enabled, idle" : plugin.state === "revoked" ? "publisher revoked" : "installed, disabled"}</small></div><code>{plugin.activeVersion ? `pinned ${plugin.activeVersion}` : "not pinned"}</code></div>
+          <fieldset disabled={busy || plugin.state !== "installed"}>
+            <legend>Requested capabilities</legend>
+            {plugin.capabilities.length === 0 && <p>要求する権限はありません。</p>}
+            {plugin.capabilities.map(value => {
+              const grantKey = `${workspaceId}:${plugin.id}@${plugin.version}`;
+              const selected = grants[grantKey] ?? [];
+              return <label key={value} className="capability-choice"><input type="checkbox" checked={selected.includes(value as PluginCapability)} onChange={event => setGrants(current => ({ ...current, [grantKey]: event.target.checked ? [...selected, value as PluginCapability] : selected.filter(item => item !== value) }))} /> <span>{value}</span></label>;
+            })}
+          </fieldset>
+          <div className="plugin-actions">{plugin.state === "active" ? <><button type="button" onClick={() => void invoke(plugin, request)} disabled={busy}>Run</button><button type="button" onClick={() => void disable(plugin)} disabled={busy}>Stop</button></> : plugin.state === "enabled-idle" ? <><button type="button" onClick={() => void invoke(plugin, request)} disabled={busy}>Run</button><button type="button" onClick={() => void disable(plugin)} disabled={busy}>Disable</button></> : <button type="button" onClick={() => void enable(plugin)} disabled={busy || plugin.state === "revoked"}>{plugin.state === "revoked" ? "Revoked" : "Enable"}</button>}<button type="button" onClick={() => void update(plugin)} disabled={busy}>Update version</button>{plugin.activeVersion && <button type="button" onClick={() => void rollback(plugin)} disabled={busy}>Rollback</button>}<button type="button" className="plugin-remove" onClick={() => void uninstall(plugin)} disabled={busy}>Uninstall</button></div>
+          {canRun && <label className="plugin-request" htmlFor={inputId}><span>プラグイン入力（テキスト）</span><small id={inputHelpId}>Hostは内容を1本の文字列として渡します。現在のABIは入力スキーマを定義せず、この画面も形式を検証しません。各プラグインの説明に従って入力してください。</small>{isComputeSumSample && <small id={`${inputId}-sample`}>計算サンプルは left と right の2つの有限な数値だけを含むJSONを受け取ります。例: <code>{'{"left":20,"right":22}'}</code></small>}<textarea id={inputId} aria-describedby={`${inputHelpId}${isComputeSumSample ? ` ${inputId}-sample` : ""}`} value={request} onChange={event => setRequests(current => ({ ...current, [pluginKey]: event.target.value }))} maxLength={256 * 1024} placeholder={isComputeSumSample ? '{"left":20,"right":22}' : "プラグインの指定形式を入力"} /></label>}
+          {plugin.dependencies.length > 0 && <p className="plugin-metadata">Dependencies: {plugin.dependencies.map(item => `${item.id}@${item.version}`).join(", ")}</p>}
+          {plugin.contributions.length > 0 && <section className="plugin-contributions" aria-label="Host-rendered plugin contributions"><strong>Plugin surfaces</strong>{plugin.contributions.map(item => <article key={`${item.kind}:${item.id}`}><small>{item.kind}</small><span>{item.title}</span></article>)}</section>}
+          {transcripts[plugin.id]?.value && <pre className="plugin-output" aria-label={`${plugin.id} output`}>{transcripts[plugin.id]!.value}</pre>}
+          {transcripts[plugin.id]?.proposals.length ? <div className="plugin-proposals"><strong>Proposed changes</strong>{transcripts[plugin.id]!.proposals.flatMap((proposal, index) => proposal.changes.map(change => <article key={`${plugin.id}:${index}:${change.path}`}><span>{change.path}</span><pre>{change.content.slice(0, 1200)}{change.content.length > 1200 ? "…" : ""}</pre></article>))}<button type="button" onClick={() => void applyProposals(plugin)} disabled={busy || !canApplyChanges}>Review and apply to local worktree</button></div> : null}
+        </li>;
+      })}</ul>}
     </div>
   </details>;
 }

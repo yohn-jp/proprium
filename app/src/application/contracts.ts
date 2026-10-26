@@ -36,6 +36,8 @@ export interface ApplicationShellProps {
   workspaceScope?: string;
   /** Host-approved core and activated module panels available in this workspace. */
   panels?: readonly WorkspacePanel[];
+  /** Dedicated settings surface for shells; settings is not a Workspace content panel. */
+  settings?: ReactNode;
   /** Flush and validate the active editor before a panel switch can unmount it. */
   beforeLayoutChange?: () => Promise<boolean>;
   /** Ask the workspace to reveal and focus a panel, for example History. */

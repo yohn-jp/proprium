@@ -10,7 +10,7 @@
 
 Browser Hostの入口から到達するUIを対象にする。`main.tsx`は`BrowserRouter`内に一つの`HostApp`をmountする。`/desktop`・`/mobile`は初期モードの選択に使われ、画面別の独立したアプリケーションではない。Mobileの`view=library|writing|inspection|tools|settings`も、認証・保存状態を表すものではない。
 
-DesktopはWorkspace未選択時、左の「作品ライブラリ」にrecentsを置き、右の主領域にGateway設定・認証・repository選択のpickerを出す。Workspace選択後は`editor / outline / inspector / history / review`の5パネルを構成する。Mobileは同じ機能を独立したナビゲーションで提示し、`settings`には表示設定カードと`inspector`の対応がある。Desktopに`?view=settings`が残っていても、それだけで独立した設定画面が開いたとは判定しない。
+DesktopはWorkspace未選択時、左の「作品ライブラリ」にrecentsを置き、右の主領域にローカル開始・Gateway設定・認証・repository選択のpickerを出す。Workspace選択後は`editor / outline / inspector / history / review`の5パネルを構成する。MobileはWorkspaceを開いた後、同じ機能を独立したナビゲーションで提示し、`settings`は専用viewである。設定内容はDesktopではトップバーから開くmodal、Mobileではこのviewに表示される。Desktopに`?view=settings`が残っていても、それだけで独立した設定routeがあるとは判定しない。
 
 実装上の入口は[Host entry][entry]、機能接続は[HostApp][host]、配置は[DesktopShell][desktop]・[MobileShell][mobile]・[Workspace][layout]を参照する。虫眼鏡風のレールアイコンも実際の遷移先は`inspector`であり、全文検索の実装証拠にはしない。
 
@@ -32,16 +32,16 @@ DesktopはWorkspace未選択時、左の「作品ライブラリ」にrecentsを
 | 機能ID | 機能とソース上の到達点 | 制約／不足 | 遷移図 |
 | --- | --- | --- | --- |
 | FT01 | 起動・Desktop/Mobile選択・オフラインshell：[entry]、[host] | cold offlineとキャッシュ済み再訪を区別する | F00, F01, F14 |
-| FT02 | 最近のWorkspace・ローカル再開：[host]の`selectRecent` | 初回ローカル作成ボタンはない。E2E用`openWorkspace`を利用者導線と数えない | F01, F03 |
+| FT02 | ローカルWorkspace作成・最近のWorkspace再開：[host]の`createLocalWorkspace`・`selectRecent` | 新規Workspaceは空のgeneric local Git workspace。文書作成は別操作で、novel構造は認識しない | F01, F03 |
 | FT03 | Gateway URL設定・GitHub接続：[host]の`connectGitHub` | picker内にcode・承認link・待機／repository取得状態・キャンセルあり。期限表示・再試行・呼出元復帰の一貫したtask導線は不足 | F02, F15 |
 | FT04 | GitHubリポジトリ・branch選択／open：[host] | branchは入力欄。remote repo作成・branch管理UIではない | F03 |
-| FT05 | ファイル一覧・新規path・読込・削除：[host] | rename/import/export UIは確認できない。binaryはbyte数表示で編集不可 | F04 |
+| FT05 | generic file一覧・新規path・読込・削除・path変更：[host]、[files]。ファイル／ZIP取込・書出し：[transfer]。現行文書書出し：[host] | 取込は最大256ファイル・展開後64 MiB、ZIPは68 MiBまで。ZIP書出しは保存済みworktreeのみ・256ファイル・64 MiBまでで、履歴・未保存editor本文を含まない。現行文書書出しはeditor本文を含む。binaryはbyte数表示で編集不可 | F04 |
 | FT06 | CodeMirror入力・Save draft・local journal：[editor]、[scene] | journal記録、worktree保存、Git commitは別操作 | F04, F16 |
 | FT07 | 読書・縦横・preview・集中・印刷：[scene] | 同一文書の表示モード。Git操作を伴わない | F05 |
 | FT08 | 組版・文字サイズ・行間・字送り・幅・字体・日本語入力補助：[scene] | 表示設定は本文変更や公開ではない | F05, F15 |
 | FT09 | スクラッチ・画像／camera picker・回復・Checkpoint：[scene]、[editor] | 本文ではなく`meta/scratch/`。Checkpointはlocal commitまで | F06 |
-| FT10 | Git author・変更件数・Commit locally：[host]の`inspector` | 現行commitは変更pathをまとめてstage。ファイル単位diff確認は不足 | F07 |
-| FT11 | 履歴一覧・Refresh：[host]の`historyPanel` | 一覧は`log(40)`。詳細diff／履歴復元UIが動くとは主張しない | F07 |
+| FT10 | Git author・変更件数・local diff review・Commit locally：[host]の`inspector`、[commit-review] | text diffを表示し、binaryはbyte数だけを示す。全変更pathを個別に確認してから一括commitする。per-file stageはない | F07 |
+| FT11 | 履歴一覧・Refresh・選択commitのdiff・変更fileのlocal restore：[host]の`historyPanel`、[history-panel] | `log(40)`を表示。restoreは対象commitで変わったfileだけをrevision確認後にlocal worktreeへ反映し、commit/publishはしない。file/directory衝突・symlink・実行mode変更はrestore不可 | F07 |
 | FT12 | Fetch・Pull・Publish：[host]、[sync] | exact SHA確認、local-ahead、conflict、offline、remote-unknownを区別 | F08 |
 | FT13 | プラグイン検証・install/update preview・明示download：[plugins] | trusted registryはHost build設定。任意URLや未知publisherの実行入口ではない | F09 |
 | FT14 | capability選択・Enable・Run・Stop/Disable・Rollback・Uninstall：[plugins] | 権限とWorkspace revisionに束縛。contribution一覧は任意UI実装済みの証明ではない | F09 |
@@ -50,7 +50,7 @@ DesktopはWorkspace未選択時、左の「作品ライブラリ」にrecentsを
 | FT17 | client認可・token一回表示・一覧・失効・実行履歴：[live] | Gateway再起動／session切断後に旧tokenを復活させない | F12 |
 | FT18 | Writing/Research/Review・tab/split・float/dock・maximize・Save layout：[layout] | 配置を閉じることと実行終了を区別。保存失敗／invalid layoutを表示 | F13 |
 | FT19 | Mobile 5 view・戻る・参照sheet・keyboard／focus保持：[mobile] | Desktopの縮小版にしない。履歴遷移もflushと世代検証の対象 | F14 |
-| FT20 | ライト／ダーク／紙、UI mode、Git author、接続設定：[theme]、[host] | 設定が複数箇所に分散。統合入口は契約として整理する | F15 |
+| FT20 | ライト／ダーク／紙、UI mode切替、Git author、GitHub接続状態・Gateway URL：[theme]、[host]、[mobile] | 設定contentは接続済み。Desktopはトップバーからmodalを開き、MobileはWorkspace navigation内の専用settings viewを使う。MobileにはDesktop切替もある。shell headerにもthemeとGitHub認証操作があり、統合されたDesktop設定pageではない | F15 |
 | FT21 | unsaved離脱・journal回復・`storage_unknown`検証：[host]、[editor]、[recovery] | native dialogはstatus shelfの外。reset/deleteを検証の代替にしない | F04, F16 |
 | FT22 | Gateway release取得・設定・Tunnel・user service・更新：[operations]、[release] | Linux CLIがlatest解決とsystemd user serviceを管理する。Windows/macOSのCLI管理は未対応 | F17 |
 
@@ -61,21 +61,21 @@ IDは機能面の識別子であり、新しいHTTP path/APIの定義ではな�
 | 画面ID | 面・主な操作 | 現行との関係／所有者 | 主な戻り先 |
 | --- | --- | --- | --- |
 | H00 | shell起動・利用可能性表示 | 既存entry。Host | H01／X04 |
-| H01 | Home／Workspace一覧・切替 | picker/recentsは既存。初回local開始・統一入口は目標。Host | W01 |
-| H02 | ローカルWorkspace作成 | 既存local-first契約の未整備導線。remote認証不要 | H01／W01 |
+| H01 | Home／Workspace一覧・切替 | picker/recentsと初回local開始は接続済み。Desktopの主領域／Mobile libraryでlocal/GitHub開始を提示。Host | W01 |
+| H02 | ローカルWorkspace作成 | 接続済み。named generic local Workspaceをbrowser storageに作る。新規Workspaceは空で、remote認証不要。novel構造やWriter機能を作らない | H01／W01 |
 | A01 | Gateway選択・信頼確認・GitHub接続開始 | 接続先設定detailsは既存。信頼確認と呼出元復帰は目標。Host | 呼出元H01/S01/G03 |
 | A02 | device code・承認待機・期限・中止・再試行 | code・待機／一覧取得・中止は既存。期限／再試行の整理は目標。Host | A01／H03 |
 | A03 | GitHub本人認証・承認／拒否 | 外部GitHub画面。Hostがパスワードを受け取らない | A02 |
 | H03 | repository／branch／permission選択 | 既存picker。Host | H01／W01 |
 | W01 | 開いているWorkspaceの構成 | 既存shell＋5 panels。Host | H01（離脱guard） |
-| W02 | file一覧・新規path・選択 | 既存outline/library。Host | E01／E05 |
+| W02 | generic file一覧・新規path・選択・path rename/move・import/export | 既存outline/libraryとcurrent-document actions。個別文書・ZIP取込と保存済みfiles ZIP出力を含む。意味付きnovel hierarchyではない | E01／E05 |
 | E01 | text編集・Save draft・保護状態 | 既存RestoredEditor/CodeMirror | W02／G01 |
 | E02 | 読書・preview・縦横・集中 | 既存editorの表示状態 | E01 |
 | E03 | 文字と組版・入力補助 | 既存editor controls | 呼出元E01/E02 |
 | E04 | スクラッチ・画像添付・回復一覧 | 既存editor details | E01／G02 |
 | E05 | binary情報 | 既存byte数表示。text編集・無断変換不可 | W02 |
-| G01 | local変更確認・author・commit | inspectorは既存。diff確認を満たす目標面 | E01／G02 |
-| G02 | local履歴・commit結果 | historyは既存。未接続のrestore操作は出さない | W01／G03 |
+| G01 | local変更diff確認・author・commit | inspectorに接続済み。すべての変更fileを確認すると全変更pathをまとめてlocal commitできる。fileごとのstageはない | E01／G02 |
+| G02 | local履歴・commit結果・選択commitのdiff/restore | historyに接続済み。直近40件を表示し、commitの変更fileをlocal worktreeに復元する。publishや履歴改変ではない。path衝突・symlink・mode差分は復元不可 | W01／G03 |
 | G03 | Fetch／Pull／Publish・進捗・結果 | sidebar操作を整理する面 | W01／G04／G05 |
 | G04 | conflict確認・双方のrevision・安全な解決先 | 現行はメッセージ中心。専用review面は不足 | G02／G03／W01 |
 | G05 | remote-unknown・remote再照合 | 現行statusを操作可能にする目標 | G03／G04 |
@@ -86,7 +86,7 @@ IDは機能面の識別子であり、新しいHTTP path/APIの定義ではな�
 | M01 | MCP接続状態とURL、提案承認 | 接続はWorkspace表示時に自動開始。全8ツール常時列挙 | W01／M02 |
 | M02 | 接続中Workspace・実行中／履歴・停止／切断 | 既存LiveMcpPanel | M01／Q01 |
 | M03 | client認可・token一回表示・一覧・失効 | 既存LiveMcpPanel。tokenは設定URLに含めない | M02 |
-| S01 | 外観・account・Gateway・Git authorへの設定入口 | 既存分散設定をまとめる目標。Mobile設定面は既存 | 呼出元 |
+| S01 | 外観・Git author・Gateway・GitHub接続状態の設定 | 設定contentは接続済み。Desktopはmodal、Mobileは専用viewとDesktop切替。shell headerにもtheme/GitHub操作がある | 呼出元 |
 | S02 | panel/preset/配置・Save layout・復旧 | 既存Workspace controls | W01 |
 | X01 | unsaved離脱確認 | 現行confirm。保存／破棄／留まるを区別する目標 | 呼出元／選択先 |
 | X02 | local Git整合性検証dialog | 既存StorageRecoveryDialog | 元Workspace／H01 |
@@ -101,7 +101,7 @@ IDは機能面の識別子であり、新しいHTTP path/APIの定義ではな�
 
 ## 5. 追加済みと誤認してはいけないもの
 
-ローカル新規作成の利用者入口、変更diff、認証の期限・再試行・復帰先を統一するtask導線、統合設定、conflict解決面、latest installerは、この台帳が存在するだけでは実装済みにならない。`SceneEditor`内に汎用conflict/restore用propsがあっても、`RestoredEditor`が`conflict=null`・解決不可・external historyとして接続する部分を、利用可能な製品機能に数えない。
+ローカル開始、generic file操作、変更diff reviewとlocal history/restoreはHostへ接続されている。一方、認証の期限・再試行・復帰先を統一するtask導線、専用conflict解決面、統合されたDesktop設定page、branch managementやper-file stagingは、現行UIが提供する機能として扱わない。Gateway CLIを越えた統合installer/更新画面も、この台帳だけでは実装済みとしない。generic file/commit/history機能はAuthoring Plugin CanonのWriter要件を代替しない。Narrative pluginによるwork/volume/chapter/scene認識、階層ナビゲーション、`続きを書く`は未実装の回収要件である。`SceneEditor`内に汎用conflict/restore用propsがあっても、`RestoredEditor`が`conflict=null`・解決不可・external historyとして接続する部分を、利用可能な製品機能に数えない。
 
 `modules/*`の検索、用語、グラフ、モデル、管理機能や旧Node/Hosted/OCI画面は、[Compatibility](COMPATIBILITY.md)に従いBrowser Hostの画面集合に含めない。Atlas、常時稼働MCP、共同編集backend、一般ユーザー管理、管理者Web consoleを本設計で追加しない。任意pluginの将来画面を架空の固定画面として列挙せず、P01/P03/Q01のHost-owned contribution境界で扱う。
 
@@ -116,6 +116,10 @@ IDは機能面の識別子であり、新しいHTTP path/APIの定義ではな�
 [live]: ../../app/src/browser/proprium/host/LiveMcpPanel.tsx
 [sync]: ../../app/src/browser/proprium/git/github-sync.ts
 [theme]: ../../app/src/components/ThemeControl.tsx
+[files]: ../../app/src/browser/proprium/host/WorkspaceFileBrowser.tsx
+[transfer]: ../../app/src/browser/proprium/host/WorkspaceTransferPanel.tsx
+[commit-review]: ../../app/src/browser/proprium/host/ChangedFilesReview.tsx
+[history-panel]: ../../app/src/browser/proprium/host/GitHistoryPanel.tsx
 [recovery]: ../../app/src/browser/proprium/host/StorageRecoveryDialog.tsx
 [operations]: ../deployment/GATEWAY.md
 [release]: ../../.github/workflows/release-proprium-gateway.yml

@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { BrowserPluginManager, MemoryPluginStore, PluginManagerError } from "./index.js";
+import { BrowserPluginManager, MemoryPluginStore, PluginManagerError, PluginRegistryError } from "./index.js";
 import { encodeBase64, satisfiesVersion } from "./registry.js";
 
 const registryUrl = "https://registry.example.test/registry.json";
@@ -19,6 +19,7 @@ async function fixture() {
   const registryPublicKey = new Uint8Array(await crypto.subtle.exportKey("raw", registryKeys.publicKey));
   const publisherKey = new Uint8Array(await crypto.subtle.exportKey("raw", publisherKeys.publicKey));
   const content = new Map<string, Uint8Array>();
+  const requests: string[] = [];
   const plugins: Array<Record<string, unknown>> = [];
   let registryPatch = 0;
 
@@ -64,6 +65,7 @@ async function fixture() {
     content.set(`${registryUrl}.sig`, signature);
   }
   const fetcher: typeof fetch = async (input) => {
+    requests.push(String(input));
     const bytes = content.get(String(input));
     return bytes ? new Response(Uint8Array.from(bytes), { status: 200 }) : new Response("missing", { status: 404 });
   };
@@ -72,8 +74,38 @@ async function fixture() {
     registries: [{ url: registryUrl, publicKey: registryPublicKey, artifactOrigins: approvedOrigins }],
     fetcher, store,
   });
-  return { manager, store, fetcher, registryPublicKey, publishRegistry, content };
+  return { manager, store, fetcher, registryPublicKey, registryPrivateKey: registryKeys.privateKey, publishRegistry, content, requests };
 }
+
+test("registry catalog discovers signed IDs and versions without installing or fetching plugin artifacts", async () => {
+  const { manager, store, requests } = await fixture();
+  const catalog = await manager.registryCatalog();
+  assert.deepEqual(catalog.map(item => `${item.id}@${item.version}`), [
+    "example.calc@1.1.0", "example.calc@1.0.0", "example.loop-a@1.0.0", "example.loop-b@1.0.0",
+    "example.math@1.2.0", "example.math@1.0.0", "example.other@1.0.0",
+  ]);
+  assert.equal(catalog[0]!.registryId, "example.public");
+  assert.equal(catalog[0]!.registryVersion, "1.0.0");
+  assert.deepEqual(catalog[0]!.dependencies, [{ id: "example.math", range: "^1.0.0" }]);
+  assert.deepEqual(requests, [registryUrl, `${registryUrl}.sig`]);
+  assert.deepEqual(await store.listPlugins(), []);
+});
+
+test("registry catalog rejects invalid signatures and unapproved artifact origins", async () => {
+  const invalidSignature = await fixture();
+  invalidSignature.content.set(`${registryUrl}.sig`, new Uint8Array(64));
+  await assert.rejects(invalidSignature.manager.registryCatalog(), (error: unknown) =>
+    error instanceof PluginRegistryError && error.code === "invalid_signature");
+
+  const unapprovedOrigin = await fixture();
+  const registryBytes = JSON.parse(new TextDecoder().decode(unapprovedOrigin.content.get(registryUrl)!)) as Record<string, unknown>;
+  registryBytes.artifactBase = "https://unapproved.example.test/plugins/";
+  const bytes = new TextEncoder().encode(JSON.stringify(registryBytes));
+  const signature = new Uint8Array(await crypto.subtle.sign({ name: "Ed25519" }, unapprovedOrigin.registryPrivateKey, bytes));
+  unapprovedOrigin.content.set(registryUrl, bytes);
+  unapprovedOrigin.content.set(`${registryUrl}.sig`, signature);
+  await assert.rejects(unapprovedOrigin.manager.registryCatalog(), /Host has not approved artifact origin/i);
+});
 
 test("plugin distribution pins signed versions and resolves dependencies", async () => {
   const { manager } = await fixture();

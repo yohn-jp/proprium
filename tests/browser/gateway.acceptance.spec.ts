@@ -1,5 +1,5 @@
-import { showPanel, expectEditorText, chooseFile } from "./restored-ui.helpers.js";
-import { expect, test } from "@playwright/test";
+import { reviewChangedFiles, showPanel, expectEditorText, chooseFile } from "./restored-ui.helpers.js";
+import { expect, test, type Page } from "@playwright/test";
 import { createHash, createPrivateKey, generateKeyPairSync, sign as ed25519Sign, type KeyObject } from "node:crypto";
 import { execFileSync } from "node:child_process";
 import { mkdtempSync, readFileSync, rmSync } from "node:fs";
@@ -77,6 +77,14 @@ function signedHostPanelFixture(origin: string): Map<string, ServedFile> {
   files.set(new URL(manifestPath, artifactBase).pathname, { body: manifestBytes, contentType: "application/json" });
   files.set(new URL(assetPath, artifactBase).pathname, { body: artifactBytes, contentType: "application/wasm" });
   return files;
+}
+
+async function previewCatalogPlugin(page: Page, pluginId: string, version: string): Promise<void> {
+  await page.getByRole("button", { name: "信頼済みカタログを表示" }).click();
+  await expect(page.locator(".registry-plugin-list")).toContainText(pluginId);
+  await expect(page.locator(".registry-plugin-card h4 code").first()).toHaveText(pluginId);
+  await expect(page.locator(".registry-plugin-card").getByText(version, { exact: true })).toBeVisible();
+  await page.getByRole("button", { name: `${pluginId} ${version} の署名済みプレビューを確認` }).click();
 }
 
 test.beforeAll(() => {
@@ -208,6 +216,8 @@ test("exposes the fixed MCP tools without any client token and executes against 
   await expect(page.locator(".live-mcp-panel")).not.toContainText("Gateway owner key");
   await expect(page.locator(".live-mcp-panel")).not.toContainText("Client capabilities");
   await expect(page.locator(".live-mcp-panel")).not.toContainText("Tools published for this workspace");
+  await expect(page.locator(".live-mcp-endpoint code")).toHaveText(`${gatewayOrigin}/mcp`);
+  await expect(page.locator(".live-mcp-current-target")).toContainText("proprium-test/gateway-live-workspace");
 
   // The Browser Host, not the Gateway, resolves immutable GitHub repository IDs.
   const repositories = textResult(await mcpCall("repos", "repositories_list", {}));
@@ -233,10 +243,9 @@ test("exposes the fixed MCP tools without any client token and executes against 
   });
   const pluginPanel = page.locator("details.plugin-manager-panel");
   await pluginPanel.locator("summary").click();
-  await page.getByLabel("Install from trusted registry").fill("fixture.compute-sum");
-  await page.getByLabel("Version (optional: latest stable)").fill("1.0.0");
-  await page.getByRole("button", { name: "Verify and preview" }).click();
-  await page.getByRole("button", { name: "Download and install disabled" }).click();
+  await previewCatalogPlugin(page, "fixture.compute-sum", "1.0.0");
+  await page.getByRole("region", { name: "インストールプレビュー" }).waitFor();
+  await page.getByRole("button", { name: "ダウンロードして無効状態でインストール" }).click();
   const plugin = page.getByRole("listitem").filter({ hasText: "fixture.compute-sum" }).filter({ hasText: "v1.0.0" });
   await expect(plugin).toBeVisible();
   await plugin.getByRole("button", { name: "Enable" }).click();
@@ -252,11 +261,42 @@ test("exposes the fixed MCP tools without any client token and executes against 
     changes: [{ path: "README.md", content: "Approved in Browser Host.\n", expectedRevision: file.revision }],
   });
   expect(textResult(proposed)).toMatchObject({ status: "awaiting_host_review", repository_id: sampleRepositoryId });
-  await expect(page.getByText("Review a change from MCP", { exact: true })).toBeVisible();
+  const proposal = page.locator(".live-mcp-proposal").filter({ hasText: "Review a change from MCP" });
+  await expect(proposal).toBeVisible();
+  await expect(proposal).toContainText("変更対象");
+  await expect(proposal).toContainText("Gateway browser integration fixture.");
+  await expect(proposal).toContainText("Approved in Browser Host.");
+  const approve = proposal.getByRole("button", { name: "変更を承認して適用" });
+  await expect(approve).toBeDisabled();
+  await proposal.getByRole("checkbox", { name: "変更前と変更後を確認しました" }).check();
+  await expect(approve).toBeEnabled();
   await expectEditorText(page, "Gateway browser integration fixture.\n");
   await showPanel(page, "review");
-  await page.getByRole("button", { name: "Review and approve" }).click();
+  await approve.click();
   await expectEditorText(page, "Approved in Browser Host.\n");
+
+  const beforeStaleProposal = textResult(await mcpCall("read-before-stale", "file_read", { ...sampleRepository, path: "README.md" }));
+  await mcpCall("propose-stale", "proposal_submit", {
+    ...sampleRepository, title: "Reject a stale MCP proposal",
+    changes: [{ path: "README.md", content: "This must not overwrite newer text.\n", expectedRevision: beforeStaleProposal.revision }],
+  });
+  await showPanel(page, "review");
+  const staleProposal = page.locator(".live-mcp-proposal").filter({ hasText: "Reject a stale MCP proposal" });
+  await expect(staleProposal).toBeVisible();
+  await staleProposal.getByRole("checkbox", { name: "変更前と変更後を確認しました" }).check();
+  await showPanel(page, "editor");
+  await page.getByLabel("原稿 Markdown").fill("A newer local edit stays intact.\n");
+  await page.getByRole("button", { name: "端末に保存" }).click();
+  await showPanel(page, "review");
+  const staleApprove = staleProposal.getByRole("button", { name: "変更を承認して適用" });
+  await expect(staleApprove).toBeEnabled();
+  await staleApprove.click();
+  await expect(page.locator(".live-mcp-panel").getByRole("alert")).toContainText("changed since the proposal");
+  await expectEditorText(page, "A newer local edit stays intact.\n");
+  await showPanel(page, "review");
+  await expect(staleProposal.getByRole("checkbox", { name: "変更前と変更後を確認しました" })).not.toBeChecked();
+  await staleProposal.getByRole("button", { name: "却下" }).click();
+  await expect(staleProposal).toHaveCount(0);
 
   const fetches = await page.evaluate(() => window.__propriumGatewayFetches ?? []);
   expect(fetches.length).toBeGreaterThan(0);
@@ -268,17 +308,19 @@ test("exposes the fixed MCP tools without any client token and executes against 
     expect([...accessCookiePaths]).toContain("POST /live/sessions");
   }
 
+  await showPanel(page, "editor");
   await context.setOffline(true);
   const editor = page.getByLabel("原稿 Markdown");
   await editor.fill("Local work continues while the Gateway is disconnected.\n");
-  await page.getByRole("button", { name: "Save draft" }).click();
-  await expect(page.getByText("Draft on this device", { exact: true })).toBeVisible();
+  await page.getByRole("button", { name: "端末に保存" }).click();
+  await expect(page.getByText("端末の下書き", { exact: true })).toBeVisible();
   await showPanel(page, "inspector");
-  await page.getByLabel("Commit message").fill("Commit while disconnected from Gateway");
+  await page.getByLabel("変更の説明").fill("Commit while disconnected from Gateway");
   await page.getByLabel("Git author name").fill("Proprium Gateway E2E");
   await page.getByLabel("Git author email").fill("gateway-e2e@example.invalid");
-  await page.getByRole("button", { name: "Commit locally" }).click();
-  await expect(page.getByText(/^Committed locally · [a-f0-9]{8}$/u)).toBeVisible();
+  await reviewChangedFiles(page);
+  await page.getByRole("button", { name: "ローカルGitにコミット" }).click();
+  await expect(page.getByText(/^端末のGitに記録済み · [a-f0-9]{8}$/u)).toBeVisible();
   await context.setOffline(false);
 });
 

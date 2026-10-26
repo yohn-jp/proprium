@@ -6,7 +6,7 @@ test("workspace picker text stays readable in every appearance mode", async ({ p
   await page.goto("/");
   for (const theme of ["light", "dark", "paper"]) {
     await page.getByLabel("外観", { exact: true }).selectOption(theme);
-    for (const target of [page.getByRole("heading", { name: "Open a GitHub workspace" }), page.locator(".welcome-copy > p").last()]) {
+    for (const target of [page.getByRole("heading", { name: "作品を作る・開く" }), page.locator(".welcome-copy > p").last()]) {
       const contrast = await target.evaluate(element => {
         const rgb = (value: string) => (value.match(/[\d.]+/gu) ?? []).slice(0, 3).map(Number);
         const luminance = (values: number[]) => values.map(value => { const x = value / 255; return x <= .04045 ? x / 12.92 : ((x + .055) / 1.055) ** 2.4; }).reduce((sum, value, index) => sum + value * [.2126, .7152, .0722][index]!, 0);
@@ -27,19 +27,21 @@ test("GitHub authorization shows its code before navigation and reconnects recen
   const origin = new URL(page.url()).origin;
   await installStaticGitHubFixture(page, origin);
   await configureGateway(page, origin);
-  await page.getByRole("button", { name: "Connect GitHub", exact: true }).click();
-  await expect(page.getByRole("region", { name: "GitHub device authorization" })).toContainText("STAT-IC01");
+  await page.getByRole("button", { name: "GitHubに接続", exact: true }).click();
+  await expect(page.getByRole("region", { name: "GitHub デバイス認証" })).toContainText("STAT-IC01");
   expect(context.pages()).toHaveLength(1);
   await expect(page.locator(".host-message[role='status']")).toContainText("Connected to GitHub as");
   await page.getByLabel("Repository", { exact: true }).selectOption(String(staticFixtureIdentity.repositoryId));
-  await page.getByLabel("Branch", { exact: true }).fill(staticFixtureIdentity.branch);
-  await page.getByRole("button", { name: "Open workspace", exact: true }).click();
+  const branchPicker = page.getByLabel("ブランチ", { exact: true });
+  await expect(branchPicker.locator(`option[value="${staticFixtureIdentity.branch}"]`)).toHaveCount(1);
+  await branchPicker.selectOption(staticFixtureIdentity.branch);
+  await page.getByRole("button", { name: "作品を開く", exact: true }).click();
   await chooseFile(page, "README.md");
-  await page.getByRole("button", { name: "Workspaces", exact: true }).click();
+  await page.getByRole("button", { name: "作品一覧", exact: true }).click();
   await page.getByRole("button", { name: new RegExp(`${staticFixtureIdentity.owner}/${staticFixtureIdentity.repository}`, "u") }).click();
   await showPanel(page, "outline");
   await expect(page.getByLabel("Connected to GitHub", { exact: true })).toBeVisible();
-  await expect(page.getByRole("button", { name: "Fetch", exact: true })).toBeEnabled();
+  await expect(page.getByRole("button", { name: "更新を確認", exact: true })).toBeEnabled();
 });
 
 test("repository-list failure does not leave a false connected account", async ({ page }) => {
@@ -48,9 +50,9 @@ test("repository-list failure does not leave a false connected account", async (
   await installStaticGitHubFixture(page, origin);
   await page.context().route("https://api.github.com/user/repos?**", route => route.fulfill({ status: 503, contentType: "application/json", headers: { "Access-Control-Allow-Origin": origin }, body: JSON.stringify({ message: "Fixture repository list unavailable" }) }));
   await configureGateway(page, origin);
-  await page.getByRole("button", { name: "Connect GitHub", exact: true }).click();
+  await page.getByRole("button", { name: "GitHubに接続", exact: true }).click();
   await expect(page.locator(".host-message[role='alert']")).toContainText("GitHub could not list repositories for this account");
-  await expect(page.getByRole("button", { name: "Connect GitHub", exact: true })).toBeEnabled();
+  await expect(page.getByRole("button", { name: "GitHubに接続", exact: true })).toBeEnabled();
   await expect(page.getByLabel("Repository", { exact: true })).toHaveCount(0);
 });
 test("canceling Device authorization does not interfere with a later sign-in", async ({ page }) => {
@@ -62,11 +64,11 @@ test("canceling Device authorization does not interfere with a later sign-in", a
     ? route.fulfill({ status: 200, contentType: "application/json", json: { error: "authorization_pending" } })
     : route.fallback());
   await configureGateway(page, origin);
-  await page.getByRole("button", { name: "Connect GitHub", exact: true }).click();
-  await page.getByRole("button", { name: "Cancel GitHub sign-in", exact: true }).click();
-  await expect(page.getByRole("button", { name: "Connect GitHub", exact: true })).toBeEnabled();
+  await page.getByRole("button", { name: "GitHubに接続", exact: true }).click();
+  await page.getByRole("button", { name: "GitHub接続をキャンセル", exact: true }).click();
+  await expect(page.getByRole("button", { name: "GitHubに接続", exact: true })).toBeEnabled();
   pending = false;
-  await page.getByRole("button", { name: "Connect GitHub", exact: true }).click();
+  await page.getByRole("button", { name: "GitHubに接続", exact: true }).click();
   await expect(page.locator(".host-message[role='status']")).toContainText("Connected to GitHub as");
   await expect(page.getByLabel("Repository", { exact: true })).toBeVisible();
 });

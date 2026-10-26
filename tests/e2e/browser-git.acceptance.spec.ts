@@ -110,6 +110,87 @@ globalThis.Date = FrozenDate;
   expect(restored.branches).toEqual({ current: "main", branches: ["main", "review"] });
 });
 
+test("history diffs compare against the first parent and restore only guarded worktree paths", async ({ page }) => {
+  const id = workspaceId();
+  await page.goto("/browser-git-test.html");
+  await expect(page.locator("#ready")).toHaveText("ready");
+  const result = await page.evaluate(async (workspaceId) => {
+    const git = window.browserGitTest.open(workspaceId);
+    const initialized = await git.init();
+    const first = await git.write("notes.md", new TextEncoder().encode("first version\n"), { oid: null });
+    const removed = await git.write("remove.txt", new TextEncoder().encode("present in first commit\n"), { oid: null });
+    const binary = await git.write("image.bin", new Uint8Array([0, 255, 1]), { oid: null });
+    await git.add(["notes.md", "remove.txt", "image.bin"], initialized.head);
+    const firstCommit = await git.commit("first", { name: "History Test", email: "history@example.test" }, initialized.head);
+    const firstDiff = await git.commitDiff(firstCommit.oid);
+
+    const noteBeforeSecond = await git.read("notes.md");
+    const binaryBeforeSecond = await git.read("image.bin");
+    await git.write("notes.md", new TextEncoder().encode("second version\n"), noteBeforeSecond.revision);
+    await git.write("image.bin", new Uint8Array([0, 255, 2, 3]), binaryBeforeSecond.revision);
+    await git.delete("remove.txt", removed);
+    await git.write("new.txt", new TextEncoder().encode("added in second\n"), { oid: null });
+    await git.add(["notes.md", "image.bin", "remove.txt", "new.txt"], firstCommit.head);
+    const secondCommit = await git.commit("second", { name: "History Test", email: "history@example.test" }, firstCommit.head);
+    const secondDiff = await git.commitDiff(secondCommit.oid);
+
+    const noteBeforeThird = await git.read("notes.md");
+    const deletedPath = await git.read("remove.txt");
+    const newBeforeThird = await git.read("new.txt");
+    await git.write("notes.md", new TextEncoder().encode("third version\n"), noteBeforeThird.revision);
+    await git.write("remove.txt", new TextEncoder().encode("reborn after second commit\n"), deletedPath.revision);
+    await git.write("new.txt", new TextEncoder().encode("changed after second commit\n"), newBeforeThird.revision);
+    await git.add(["notes.md", "remove.txt", "new.txt"], secondCommit.head);
+    const thirdCommit = await git.commit("third", { name: "History Test", email: "history@example.test" }, secondCommit.head);
+
+    const selected = await git.commitDiff(secondCommit.oid);
+    const changes = await Promise.all(selected.changes.map(async (change) => ({
+      path: change.path,
+      content: change.commitFile?.data ?? null,
+      expectedRevision: (await git.read(change.path)).revision,
+    })));
+    await git.applyChanges(changes);
+    const restored = {
+      note: (await git.read("notes.md")).data,
+      removed: (await git.read("remove.txt")).data,
+      added: (await git.read("new.txt")).data,
+    };
+
+    const stale = await git.read("notes.md");
+    await git.write("notes.md", new TextEncoder().encode("concurrent edit\n"), stale.revision);
+    let staleRestore = "none";
+    try {
+      await git.applyChanges([{ path: "notes.md", content: new TextEncoder().encode("second version\n"), expectedRevision: stale.revision }]);
+    } catch (error) { staleRestore = (error as { code?: string }).code ?? "unknown"; }
+    const afterConflict = await git.read("notes.md");
+    const finalStatus = await git.status();
+    git.close();
+    return {
+      first: { parentOid: firstDiff.parentOid, paths: firstDiff.changes.map((change) => [change.path, change.kind]) },
+      second: { parentOid: secondDiff.parentOid, paths: secondDiff.changes.map((change) => [change.path, change.kind]) },
+      expectedParents: [firstCommit.oid, secondCommit.oid],
+      currentHead: thirdCommit.oid,
+      restored: Object.fromEntries(Object.entries(restored).map(([key, value]) => [key, value ? new TextDecoder().decode(value) : null])),
+      restoredBinary: Array.from(selected.changes.find((change) => change.path === "image.bin")?.commitFile?.data ?? []),
+      staleRestore,
+      afterConflict: afterConflict.data ? new TextDecoder().decode(afterConflict.data) : null,
+      head: finalStatus.head,
+      status: finalStatus.entries.map((entry) => entry.path),
+    };
+  }, id);
+
+  expect(result.first.parentOid).toBeNull();
+  expect(result.first.paths).toEqual([["image.bin", "added"], ["notes.md", "added"], ["remove.txt", "added"]]);
+  expect(result.second.parentOid).toBe(result.expectedParents[0]);
+  expect(result.second.paths).toEqual([["image.bin", "modified"], ["new.txt", "added"], ["notes.md", "modified"], ["remove.txt", "deleted"]]);
+  expect(result.restored).toEqual({ note: "second version\n", removed: null, added: "added in second\n" });
+  expect(result.restoredBinary).toEqual([0, 255, 2, 3]);
+  expect(result.staleRestore).toBe("revision_conflict");
+  expect(result.afterConflict).toBe("concurrent edit\n");
+  expect(result.head).toBe(result.currentHead);
+  expect(result.status).toEqual(["new.txt", "notes.md", "remove.txt"]);
+});
+
 test("file revisions, repository bindings, unsafe paths, and browser writer locks fail closed", async ({ page }) => {
   const id = workspaceId();
   await page.goto("/browser-git-test.html");
@@ -215,3 +296,67 @@ test("approved batch changes validate every read and write revision before apply
   expect(result.firstAfterApply).toBe("would change\n");
   expect(result.secondAfterApply).toBeNull();
 });
+
+for (const mutation of ["edit", "add", "delete", "head"] as const) {
+  test(`reviewed commit rejects another tab's ${mutation} before staging`, async ({ page, context }) => {
+    await page.goto("/browser-git-test.html");
+    await expect(page.locator("#ready")).toHaveText("ready");
+    const id = workspaceId();
+    const snapshot = await page.evaluate(async id => {
+      const git = window.browserGitTest.open(id);
+      const author = { name: "Review Test", email: "review@example.test" };
+      await git.init();
+      await git.write("notes.md", new TextEncoder().encode("original\n"), { oid: null });
+      await git.add(["notes.md"], null);
+      const base = await git.commit("base", author, null);
+      await git.write("notes.md", new TextEncoder().encode("reviewed\n"), (await git.read("notes.md")).revision);
+      const review = await git.reviewDiff();
+      git.close();
+      return { head: base.head, files: review.changes.map(change => ({ path: change.path, oid: change.worktreeFile?.oid ?? null })) };
+    }, id);
+    const other = await context.newPage();
+    await other.goto("/browser-git-test.html");
+    await expect(other.locator("#ready")).toHaveText("ready");
+    const before = await other.evaluate(async ({ id, mutation }) => {
+      const git = window.browserGitTest.open(id);
+      await git.init();
+      if (mutation === "add") await git.write("unreviewed.md", new TextEncoder().encode("unreviewed new file\n"), { oid: null });
+      else if (mutation === "delete") await git.delete("notes.md", (await git.read("notes.md")).revision);
+      else if (mutation === "head") {
+        const status = await git.status();
+        await git.add(["notes.md"], status.head);
+        await git.commit("other tab commit", { name: "Other", email: "other@example.test" }, status.head);
+      } else await git.write("notes.md", new TextEncoder().encode("unreviewed edit\n"), (await git.read("notes.md")).revision);
+      const status = await git.status();
+      git.close();
+      return status;
+    }, { id, mutation });
+    const result = await page.evaluate(async ({ id, snapshot }) => {
+      const git = window.browserGitTest.open(id);
+      let code = "none";
+      try { await git.commitReviewed("must not commit", { name: "Review", email: "review@example.test" }, snapshot); }
+      catch (error) { code = (error as { code: string }).code; }
+      const status = await git.status();
+      const history = await git.log();
+      let confirmed: string | null = null;
+      const fresh = await git.reviewDiff();
+      if (fresh.changes.length) {
+        const committed = await git.commitReviewed("reviewed again", { name: "Review", email: "review@example.test" }, {
+          head: fresh.head, files: fresh.changes.map(change => ({ path: change.path, oid: change.worktreeFile?.oid ?? null })),
+        });
+        confirmed = committed.head;
+      }
+      const after = await git.status();
+      git.close();
+      return { code, status, history: history.map(commit => commit.message.trim()), confirmed, after };
+    }, { id, snapshot });
+    expect(result.code).toBe("revision_conflict");
+    expect(result.status).toEqual(before); // Neither index nor HEAD changed on rejection.
+    expect(result.history).not.toContain("must not commit");
+    if (mutation !== "head") {
+      expect(result.confirmed).toMatch(/^[a-f0-9]{40}$/u);
+      expect(result.after.entries).toEqual([]);
+    }
+    await other.close();
+  });
+}

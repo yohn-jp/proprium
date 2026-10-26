@@ -142,6 +142,15 @@
 .mobile-shell-slot .conflict-actions { flex-wrap: wrap; }
 
 .mobile-shell-review-hint { margin: 0.75rem 0; color: var(--muted); font-size: 0.9rem; line-height: 1.55; }
+.mobile-shell-empty-state {
+  padding: 1rem;
+  border: 1px solid var(--line);
+  border-radius: 0.6rem;
+  color: var(--ink);
+  background: var(--paper);
+}
+.mobile-shell-empty-state h2 { margin: 0; font-size: 1rem; line-height: 1.45; }
+.mobile-shell-empty-state p { margin: 0.5rem 0 0.85rem; color: var(--muted); font-size: 0.9rem; line-height: 1.6; }
 .mobile-shell-primary-action { display: block; width: 100%; min-height: 2.9rem; margin: 0.5rem 0; }
 .mobile-shell .mobile-shell-primary-action::part(native) { min-height: 2.9rem; border-radius: 0.45rem; font-weight: 650; }
 .mobile-shell-settings-card { padding: 0.85rem; border: 1px solid var(--line); border-radius: 0.6rem; color: var(--ink); background: var(--paper); }
@@ -152,6 +161,9 @@
 .mobile-shell .mobile-shell-status {
   position: fixed;
   z-index: 30;
+  /* Keep the status shelf from swallowing touches on the footer menu. Only
+     the actual status disclosure should receive pointer events. */
+  pointer-events: none;
   right: max(0.75rem, env(safe-area-inset-right, 0px));
   bottom: calc(4rem + env(safe-area-inset-bottom, 0px));
   width: min(25rem, calc(100vw - 3rem));
@@ -164,6 +176,7 @@
   background: var(--paper);
   box-shadow: 0 0.75rem 2rem rgb(0 0 0 / 16%);
 }
+.mobile-shell .mobile-shell-status > * { pointer-events: auto; }
 .mobile-shell .mobile-shell-status .application-status {
   display: grid;
   gap: 0.3rem;
@@ -208,6 +221,47 @@
 }
 
 .mobile-shell-navigation ion-button[aria-current="page"] { font-weight: 700; }
+.mobile-shell-navigation-menu {
+  position: relative;
+  z-index: 40;
+  min-width: 0;
+  padding: 0.25rem 0.65rem;
+  background: var(--mobile-paper);
+}
+.mobile-shell-navigation-menu > summary {
+  display: flex;
+  min-height: 2.75rem;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.75rem;
+  padding: 0.3rem 0.8rem;
+  border: 1px solid var(--mobile-line);
+  border-radius: 0.55rem;
+  color: var(--mobile-ink);
+  background: var(--mobile-stage);
+  cursor: pointer;
+  list-style: none;
+}
+.mobile-shell-navigation-menu > summary::-webkit-details-marker { display: none; }
+.mobile-shell-navigation-menu > summary::after { content: "⌄"; color: var(--mobile-muted); }
+.mobile-shell-navigation-menu[open] > summary::after { content: "⌃"; }
+.mobile-shell-navigation-current { margin-left: auto; color: var(--mobile-muted); font-size: 0.8rem; }
+.mobile-shell-navigation-menu .mobile-shell-navigation {
+  position: absolute;
+  right: 0.65rem;
+  bottom: calc(100% + 0.4rem);
+  width: min(24rem, calc(100vw - 1.3rem));
+  min-height: 0;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 0.3rem;
+  padding: 0.45rem;
+  border: 1px solid var(--mobile-line);
+  border-radius: 0.65rem;
+  background: var(--mobile-paper);
+  box-shadow: 0 0.7rem 1.7rem rgb(0 0 0 / 18%);
+}
+.mobile-shell-navigation-menu .mobile-shell-navigation ion-button { min-height: 2.75rem; }
+.mobile-shell-navigation-menu .mobile-shell-navigation ion-button:last-child { grid-column: 1 / -1; }
 .mobile-shell ion-button:focus-visible { outline: 3px solid var(--focus-ring); outline-offset: 2px; }
 .mobile-shell ion-button::part(native):focus-visible { outline: 3px solid var(--focus-ring); outline-offset: 2px; }
 .mobile-shell :is(button, a, input, select, textarea, summary, [tabindex]):focus-visible { outline: 3px solid var(--focus-ring); outline-offset: 2px; }
@@ -294,6 +348,7 @@
 .mobile-shell .mobile-shell-content {--background:var(--mobile-stage);--padding-bottom:0}
 .mobile-shell-content::part(scroll) {scrollbar-gutter:auto}
 .mobile-shell .mobile-shell-workspace-view {height:100%;min-height:0;background:var(--mobile-stage)}
+.mobile-shell .mobile-shell-workspace-panel {height:100%;min-height:0}
 .mobile-shell .st-workspace {height:100%;background:transparent}
 .mobile-shell .st-workspace-toolbar {
   padding:5px 12px;background:var(--mobile-paper);
@@ -416,7 +471,7 @@
 
 /* Writing reference sheet: native Ionic drag/snapping, no gesture handling on manuscript text. */
 .mobile-shell-writing-accessories {
-  display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr);
+  display:grid;grid-template-columns:minmax(0,1fr);
   gap:8px;padding:8px max(12px,env(safe-area-inset-right,0px)) 7px max(12px,env(safe-area-inset-left,0px));
   border-bottom:1px solid var(--mobile-line);background:var(--mobile-paper);
 }
@@ -454,6 +509,101 @@
 }
 .mobile-shell.mobile-shell-keyboard-open .mobile-shell-content::part(scroll) {
   scroll-padding-bottom:16px;
+}
+
+/* Keep the manuscript on screen when the mobile browser has little vertical room.
+   Editor display controls remain available immediately after the writing surface. */
+@media (max-height: 560px) {
+  .mobile-shell:has(.mobile-shell-workspace-view[data-active-view="writing"]) .mobile-shell-identity-bar {
+    min-height: 48px;
+    gap: 8px;
+    padding-block: 3px;
+  }
+  .mobile-shell:has(.mobile-shell-workspace-view[data-active-view="writing"]) .mobile-shell-wordmark,
+  .mobile-shell:has(.mobile-shell-workspace-view[data-active-view="writing"]) .mobile-shell-context,
+  .mobile-shell:has(.mobile-shell-workspace-view[data-active-view="writing"]) .mobile-shell-page-mark,
+  .mobile-shell:has(.mobile-shell-workspace-view[data-active-view="writing"]) .mobile-shell-shared-header,
+  .mobile-shell:has(.mobile-shell-workspace-view[data-active-view="writing"]) .mobile-shell-writing-accessories {
+    display: none;
+  }
+  .mobile-shell:has(.mobile-shell-workspace-view[data-active-view="writing"]) .mobile-shell-footer {
+    box-shadow: none;
+  }
+  .mobile-shell:has(.mobile-shell-workspace-view[data-active-view="writing"]) .mobile-shell-navigation {
+    min-height: 42px;
+    padding-block: 1px;
+  }
+  .mobile-shell:has(.mobile-shell-workspace-view[data-active-view="writing"]) .mobile-shell-navigation ion-button {
+    min-height: 38px;
+  }
+  .mobile-shell:has(.mobile-shell-workspace-view[data-active-view="writing"]) .mobile-shell-nav-mark {
+    display: none;
+  }
+  .mobile-shell:has(.mobile-shell-workspace-view[data-active-view="writing"]) .mobile-shell-status {
+    bottom: calc(2.8rem + env(safe-area-inset-bottom, 0px));
+    max-height: 2.15rem;
+    padding: 0.3rem 0.5rem;
+    font-size: 0.72rem;
+  }
+  .mobile-shell .st-workspace-configuration > summary {
+    min-height: 29px;
+    font-size: 0.72rem;
+  }
+  .mobile-shell .st-workspace-mobile-tabs {
+    min-height: 31px;
+    gap: 2px;
+    padding: 1px 6px;
+  }
+  .mobile-shell .st-workspace-mobile-tabs button {
+    min-height: 29px;
+    padding: 2px 7px;
+    font-size: 0.68rem;
+  }
+  .mobile-shell .st-workspace-mobile-pane { min-height: 0; }
+  .mobile-shell .st-workspace-panel-body .editor {
+    display: flex;
+    flex-direction: column;
+    gap: 0;
+    padding: 0.2rem 0.5rem;
+  }
+  .mobile-shell .st-workspace-panel-body .editor-header {
+    flex: 0 0 auto;
+    min-height: 0;
+    padding: 0;
+    margin: 0;
+    border: 0;
+  }
+  .mobile-shell .st-workspace-panel-body .editor-header .scene-heading { display: none; }
+  .mobile-shell .st-workspace-panel-body .editor-actions {
+    display: grid;
+    width: 100%;
+    grid-template-columns: repeat(5, minmax(0, 1fr));
+    gap: 3px;
+  }
+  .mobile-shell .st-workspace-panel-body .editor-actions button {
+    min-width: 0;
+    min-height: 36px;
+    padding: 2px 3px;
+    font-size: 0.63rem;
+    line-height: 1.15;
+    overflow-wrap: anywhere;
+  }
+  .mobile-shell .st-workspace-panel-body .editor-protection { margin: 2px 0; }
+  .mobile-shell .st-workspace-panel-body .editor-columns,
+  .mobile-shell .st-workspace-panel-body .reading-view { order: 1; }
+  .mobile-shell .st-workspace-panel-body .editor-display-controls { order: 2; }
+  .mobile-shell .st-workspace-panel-body .editor-columns {
+    gap: 0;
+    margin: 0;
+  }
+  .mobile-shell .st-workspace-panel-body .manuscript-column {
+    min-height: 0;
+    padding: 0.25rem 0.5rem;
+  }
+  .mobile-shell .st-workspace-panel-body .cm-content {
+    min-height: 30vh;
+    padding: 0.5rem 0.2rem;
+  }
 }
 
 /* IonModal may be attached outside IonApp: own theme variables must be complete. */

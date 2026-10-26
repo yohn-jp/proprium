@@ -1,0 +1,18 @@
+.live-mcp-proposal { min-width: 0; margin-block: 1rem; padding: .8rem; border: 1px solid var(--line, #bbb); border-radius: .45rem; background: var(--paper, #fff); }
+.live-mcp-proposal h3 { margin-block: 0 .5rem; overflow-wrap: anywhere; }
+.live-mcp-proposal-target { display: flex; flex-wrap: wrap; gap: .25rem .5rem; overflow-wrap: anywhere; }
+.live-mcp-proposal-target > span { color: var(--muted, #555); }
+.live-mcp-proposal-review { min-width: 0; margin-block: .6rem; }
+.live-mcp-proposal-review > summary { min-height: 2.75rem; display: flex; align-items: center; cursor: pointer; font-weight: 700; }
+.live-mcp-proposal-file { min-width: 0; margin-block: .5rem 1rem; }
+.live-mcp-proposal-file h4 { margin-block: .4rem; overflow-wrap: anywhere; font: 600 .9rem/1.4 ui-monospace, SFMono-Regular, Consolas, monospace; }
+.live-mcp-review-acknowledgement { display: flex; align-items: center; gap: .5rem; min-height: 2.75rem; margin-block: .65rem .25rem; }
+.live-mcp-review-acknowledgement input { width: 1.15rem; height: 1.15rem; flex: 0 0 auto; }
+.live-mcp-proposal-actions { display: flex; flex-wrap: wrap; gap: .5rem; margin-block-start: .4rem; }
+.live-mcp-proposal-actions button { min-height: 2.75rem; }
+.live-mcp-proposal-actions button:disabled { opacity: .6; }
+.live-mcp-proposal-local-note { margin-block: .5rem 0; color: var(--muted, #555); font-size: .8rem; }
+@media (max-width: 36rem) {
+  .live-mcp-proposal { padding: .6rem; }
+  .live-mcp-proposal-actions { flex-direction: column; }
+}

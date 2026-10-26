@@ -1,3 +1,4 @@
+import { expect } from "@playwright/test";
 import { configureGateway } from "./restored-ui.helpers.js";
 import type { Page } from "@playwright/test";
 import { installMockGitHubOAuth } from "../helpers/github-relay-fixture.js";
@@ -23,7 +24,7 @@ export async function connectAndOpenGitHubBranch(page: Page, hostOrigin: string,
   }
   await routeFixtureRelay(page, hostOrigin, relayUrl);
   await configureGateway(page, relayUrl);
-  await page.getByRole("button", { name: "Connect GitHub" }).click();
+  await page.getByRole("button", { name: "GitHubに接続", exact: true }).click();
   const operationNotice = page.locator(".host-message[role='status']");
   await operationNotice.getByText(/Connected to GitHub as/u).waitFor();
   const accountText = await operationNotice.innerText();
@@ -32,8 +33,10 @@ export async function connectAndOpenGitHubBranch(page: Page, hostOrigin: string,
     if (!normalized.includes(liveGitHubLogin.toLowerCase())) throw new Error("Host connected account did not match the configured GitHub test login.");
   }
   await page.getByLabel("Repository").selectOption(String(liveGitHubRepositoryId));
-  await page.getByLabel("Branch").fill(liveGitHubBranch);
-  await page.getByRole("button", { name: "Open workspace" }).click();
+  const branchPicker = page.getByLabel("ブランチ", { exact: true });
+  await expect(branchPicker.locator(`option[value="${liveGitHubBranch}"]`)).toHaveCount(1);
+  await branchPicker.selectOption(liveGitHubBranch);
+  await page.getByRole("button", { name: "作品を開く", exact: true }).click();
   await page.locator(".host-message[role='status']").filter({
     hasText: `Opened ${liveGitHubOwner}/${liveGitHubRepository} · ${liveGitHubBranch}`,
   }).waitFor();

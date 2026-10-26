@@ -1,4 +1,4 @@
-import { showPanel, expectEditorText, chooseFile } from "./restored-ui.helpers.js";
+import { showPanel, expectEditorText, chooseFile, reviewChangedFiles } from "./restored-ui.helpers.js";
 import { expect, test } from "@playwright/test";
 import {
   connectAndOpenGitHubBranch,
@@ -36,14 +36,15 @@ test("Host signs in, opens a real GitHub branch, commits locally and publishes t
   await page.getByLabel("New file path").fill(`.proprium-e2e-${crypto.randomUUID()}.txt`);
   await page.getByRole("button", { name: "Create new file" }).click();
   await page.getByRole("textbox", { name: "原稿 Markdown" }).fill("Published from the Proprium browser Host.\n");
-  await page.getByRole("button", { name: "Save draft" }).click();
+  await page.getByRole("button", { name: "端末に保存" }).click();
   await expect(operationNotice).toContainText("saved to this browser's local Git worktree");
 
   await showPanel(page, "inspector");
-  await page.getByLabel("Commit message").fill("Verify Proprium browser Host publication");
+  await page.getByLabel("変更の説明").fill("Verify Proprium browser Host publication");
   await page.getByLabel("Git author name").fill("Proprium Browser Acceptance");
   await page.getByLabel("Git author email").fill("browser-acceptance@example.invalid");
-  await page.getByRole("button", { name: "Commit locally" }).click();
+  await reviewChangedFiles(page);
+  await page.getByRole("button", { name: "ローカルGitにコミット" }).click();
   const localCommit = operationNotice.filter({ hasText: "Committed locally as" });
   await expect(localCommit).toContainText("This commit is still only on this device.");
   const commitMessage = await localCommit.innerText();
@@ -51,16 +52,16 @@ test("Host signs in, opens a real GitHub branch, commits locally and publishes t
   expect(publishedCandidate).toMatch(/^[a-f0-9]{40}$/u);
 
   await showRepositoryFiles(page);
-  await page.getByRole("button", { name: "Fetch" }).click();
+  await page.getByRole("button", { name: "更新を確認" }).click();
   await expect(operationNotice).toContainText(/Fetched \d+ commit\(s\)/u);
   await showRepositoryFiles(page);
-  await page.getByRole("button", { name: "Pull" }).click();
+  await page.getByRole("button", { name: "変更を取得" }).click();
   const pullStatus = operationNotice;
   await expect(pullStatus).toContainText(`Local commits through ${publishedCandidate} are waiting to be published.`);
   await expect(pullStatus).toContainText(/GitHub is at (?:[a-f0-9]{40}|no published commit); local history and editor contents were preserved\./u);
 
   await showRepositoryFiles(page);
-  await page.getByRole("button", { name: "Publish" }).click();
+  await page.getByRole("button", { name: "GitHubへ公開" }).click();
   const published = operationNotice.filter({ hasText: "Published commit" });
   await expect(published).toContainText("confirmed the remote branch SHA");
   const publishedMessage = await published.innerText();
