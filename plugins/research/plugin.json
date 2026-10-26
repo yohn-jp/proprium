@@ -1,0 +1,2979 @@
+{
+  "schema": "proprium.plugin/v2",
+  "id": "proprium.research",
+  "version": "1.0.0",
+  "abi": "proprium.component/v2",
+  "capabilities": [
+    "workspace.file.read",
+    "workspace.derived.cache",
+    "workspace.change.propose",
+    "workspace.ui.contribute",
+    "artifact.create",
+    "artifact.append",
+    "artifact.seal",
+    "artifact.discard"
+  ],
+  "actions": [
+    {
+      "plugin_id": "proprium.research",
+      "action_id": "research.query",
+      "schema_version": 1,
+      "effect": "read",
+      "input_schema": {
+        "type": "object",
+        "properties": {
+          "query": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 512
+          },
+          "mode": {
+            "enum": [
+              "lexical",
+              "exact",
+              "prefix"
+            ]
+          },
+          "scope": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 1024
+          },
+          "cursor": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 4096
+          },
+          "limit": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 100
+          },
+          "includeTerms": {
+            "type": "boolean"
+          },
+          "morphologyHints": {
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "query"
+        ],
+        "additionalProperties": false
+      },
+      "output_schema": {
+        "type": "object",
+        "properties": {
+          "hits": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "kind": {
+                  "enum": [
+                    "document",
+                    "term"
+                  ]
+                },
+                "path": {
+                  "type": "string",
+                  "minLength": 1,
+                  "maxLength": 1024
+                },
+                "title": {
+                  "type": "string",
+                  "minLength": 0,
+                  "maxLength": 1024
+                },
+                "fileRevision": {
+                  "type": "string",
+                  "pattern": "^[a-f0-9]{64}$",
+                  "maxLength": 4096
+                },
+                "snippet": {
+                  "type": "string",
+                  "minLength": 0,
+                  "maxLength": 1024
+                },
+                "matchRanges": {
+                  "type": "array",
+                  "items": {
+                    "type": "object",
+                    "properties": {
+                      "start": {
+                        "type": "integer",
+                        "minimum": 0,
+                        "maximum": 9007199254740991
+                      },
+                      "end": {
+                        "type": "integer",
+                        "minimum": 0,
+                        "maximum": 9007199254740991
+                      }
+                    },
+                    "required": [
+                      "start",
+                      "end"
+                    ],
+                    "additionalProperties": false
+                  },
+                  "minItems": 0,
+                  "maxItems": 10
+                },
+                "score": {
+                  "type": "integer",
+                  "minimum": 0,
+                  "maximum": 100000
+                },
+                "scoreFactors": {
+                  "type": "array",
+                  "items": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 64
+                  },
+                  "minItems": 0,
+                  "maxItems": 16
+                },
+                "termId": {
+                  "type": "string",
+                  "minLength": 1,
+                  "maxLength": 96
+                },
+                "navigationSpan": {
+                  "anyOf": [
+                    {
+                      "type": "object",
+                      "properties": {
+                        "path": {
+                          "type": "string",
+                          "minLength": 1,
+                          "maxLength": 1024
+                        },
+                        "revision": {
+                          "type": "string",
+                          "pattern": "^[a-f0-9]{64}$",
+                          "maxLength": 4096
+                        },
+                        "start": {
+                          "type": "integer",
+                          "minimum": 0,
+                          "maximum": 9007199254740991
+                        },
+                        "end": {
+                          "type": "integer",
+                          "minimum": 0,
+                          "maximum": 9007199254740991
+                        }
+                      },
+                      "required": [
+                        "path",
+                        "revision",
+                        "start",
+                        "end"
+                      ],
+                      "additionalProperties": false
+                    },
+                    {
+                      "type": "null"
+                    }
+                  ]
+                }
+              },
+              "required": [
+                "kind",
+                "path",
+                "title",
+                "fileRevision",
+                "snippet",
+                "matchRanges",
+                "score",
+                "scoreFactors",
+                "navigationSpan"
+              ],
+              "additionalProperties": false
+            },
+            "minItems": 0,
+            "maxItems": 100
+          },
+          "nextCursor": {
+            "anyOf": [
+              {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 4096
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "indexSnapshot": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 512
+          },
+          "coverage": {
+            "type": "object",
+            "properties": {
+              "documents": {
+                "type": "integer",
+                "minimum": 0,
+                "maximum": 9007199254740991
+              },
+              "bytes": {
+                "type": "integer",
+                "minimum": 0,
+                "maximum": 9007199254740991
+              }
+            },
+            "required": [
+              "documents",
+              "bytes"
+            ],
+            "additionalProperties": false
+          },
+          "query": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 512
+          },
+          "mode": {
+            "enum": [
+              "lexical",
+              "exact",
+              "prefix"
+            ]
+          }
+        },
+        "required": [
+          "hits",
+          "nextCursor",
+          "indexSnapshot",
+          "coverage",
+          "warnings",
+          "query",
+          "mode"
+        ],
+        "additionalProperties": false
+      },
+      "required_capabilities": [
+        "workspace.file.read",
+        "workspace.derived.cache"
+      ],
+      "callers": [
+        "ui",
+        "mcp",
+        "plugin"
+      ],
+      "requires_user_gesture": false
+    },
+    {
+      "plugin_id": "proprium.research",
+      "action_id": "research.index.status",
+      "schema_version": 1,
+      "effect": "read",
+      "input_schema": {
+        "type": "object",
+        "properties": {
+          "scope": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 1024
+          }
+        },
+        "required": [],
+        "additionalProperties": false
+      },
+      "output_schema": {
+        "type": "object",
+        "properties": {
+          "state": {
+            "enum": [
+              "missing",
+              "indexing",
+              "current",
+              "stale",
+              "unavailable"
+            ]
+          },
+          "indexSnapshot": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 512
+          },
+          "coverage": {
+            "type": "object",
+            "properties": {
+              "documents": {
+                "type": "integer",
+                "minimum": 0,
+                "maximum": 9007199254740991
+              },
+              "bytes": {
+                "type": "integer",
+                "minimum": 0,
+                "maximum": 9007199254740991
+              }
+            },
+            "required": [
+              "documents",
+              "bytes"
+            ],
+            "additionalProperties": false
+          },
+          "progress": {
+            "type": "object",
+            "properties": {
+              "completed": {
+                "type": "integer",
+                "minimum": 0,
+                "maximum": 9007199254740991
+              },
+              "total": {
+                "type": "integer",
+                "minimum": 0,
+                "maximum": 9007199254740991
+              }
+            },
+            "required": [
+              "completed"
+            ],
+            "additionalProperties": false
+          },
+          "lastError": {
+            "type": "object",
+            "properties": {
+              "code": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 128
+              },
+              "message": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 4096
+              }
+            },
+            "required": [
+              "code",
+              "message"
+            ],
+            "additionalProperties": false
+          }
+        },
+        "required": [
+          "state",
+          "coverage"
+        ],
+        "additionalProperties": false
+      },
+      "required_capabilities": [
+        "workspace.derived.cache"
+      ],
+      "callers": [
+        "ui",
+        "mcp",
+        "plugin"
+      ],
+      "requires_user_gesture": false
+    },
+    {
+      "plugin_id": "proprium.research",
+      "action_id": "research.index.rebuild",
+      "schema_version": 1,
+      "effect": "read",
+      "input_schema": {
+        "type": "object",
+        "properties": {
+          "scope": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 1024
+          },
+          "force": {
+            "type": "boolean"
+          }
+        },
+        "required": [],
+        "additionalProperties": false
+      },
+      "output_schema": {
+        "type": "object",
+        "properties": {
+          "jobId": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 256
+          },
+          "state": {
+            "enum": [
+              "indexing",
+              "current"
+            ]
+          },
+          "indexSnapshot": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 512
+          },
+          "progress": {
+            "type": "object",
+            "properties": {
+              "completed": {
+                "type": "integer",
+                "minimum": 0,
+                "maximum": 9007199254740991
+              },
+              "total": {
+                "type": "integer",
+                "minimum": 0,
+                "maximum": 9007199254740991
+              }
+            },
+            "required": [
+              "completed"
+            ],
+            "additionalProperties": false
+          }
+        },
+        "required": [
+          "jobId",
+          "state",
+          "indexSnapshot",
+          "progress"
+        ],
+        "additionalProperties": false
+      },
+      "required_capabilities": [
+        "workspace.file.read",
+        "workspace.derived.cache"
+      ],
+      "callers": [
+        "ui",
+        "mcp",
+        "plugin"
+      ],
+      "requires_user_gesture": false
+    },
+    {
+      "plugin_id": "proprium.research",
+      "action_id": "research.terms.list",
+      "schema_version": 1,
+      "effect": "read",
+      "input_schema": {
+        "type": "object",
+        "properties": {
+          "prefix": {
+            "type": "string",
+            "minLength": 0,
+            "maxLength": 256
+          },
+          "cursor": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 4096
+          },
+          "limit": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 100
+          }
+        },
+        "required": [],
+        "additionalProperties": false
+      },
+      "output_schema": {
+        "type": "object",
+        "properties": {
+          "items": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "id": {
+                  "type": "string",
+                  "minLength": 1,
+                  "maxLength": 96
+                },
+                "canonical": {
+                  "type": "string",
+                  "minLength": 1,
+                  "maxLength": 256
+                },
+                "aliases": {
+                  "type": "array",
+                  "items": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 256
+                  },
+                  "minItems": 0,
+                  "maxItems": 32
+                },
+                "targetPath": {
+                  "type": "string",
+                  "minLength": 1,
+                  "maxLength": 1024
+                },
+                "targetAvailable": {
+                  "type": "boolean"
+                },
+                "ambiguityCount": {
+                  "type": "integer",
+                  "minimum": 0,
+                  "maximum": 9007199254740991
+                },
+                "extensions": true
+              },
+              "required": [
+                "id",
+                "canonical",
+                "aliases",
+                "targetPath",
+                "targetAvailable",
+                "ambiguityCount"
+              ],
+              "additionalProperties": false
+            },
+            "minItems": 0,
+            "maxItems": 100
+          },
+          "registryRevision": {
+            "anyOf": [
+              {
+                "type": "string",
+                "pattern": "^[a-f0-9]{64}$",
+                "maxLength": 4096
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "nextCursor": {
+            "anyOf": [
+              {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 4096
+              },
+              {
+                "type": "null"
+              }
+            ]
+          }
+        },
+        "required": [
+          "items",
+          "registryRevision",
+          "nextCursor"
+        ],
+        "additionalProperties": false
+      },
+      "required_capabilities": [
+        "workspace.file.read"
+      ],
+      "callers": [
+        "ui",
+        "mcp",
+        "plugin"
+      ],
+      "requires_user_gesture": false
+    },
+    {
+      "plugin_id": "proprium.research",
+      "action_id": "research.terms.get",
+      "schema_version": 1,
+      "effect": "read",
+      "input_schema": {
+        "type": "object",
+        "properties": {
+          "termId": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 96
+          }
+        },
+        "required": [
+          "termId"
+        ],
+        "additionalProperties": false
+      },
+      "output_schema": {
+        "type": "object",
+        "properties": {
+          "term": {
+            "type": "object",
+            "properties": {
+              "id": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 96
+              },
+              "canonical": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 256
+              },
+              "aliases": {
+                "type": "array",
+                "items": {
+                  "type": "string",
+                  "minLength": 1,
+                  "maxLength": 256
+                },
+                "minItems": 0,
+                "maxItems": 32
+              },
+              "targetPath": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 1024
+              },
+              "extensions": true
+            },
+            "required": [
+              "id",
+              "canonical",
+              "aliases",
+              "targetPath"
+            ],
+            "additionalProperties": false
+          },
+          "targetAvailable": {
+            "type": "boolean"
+          },
+          "targetRevision": {
+            "type": "string",
+            "pattern": "^[a-f0-9]{64}$",
+            "maxLength": 4096
+          },
+          "otherAliasesForTarget": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "id": {
+                  "type": "string",
+                  "minLength": 1,
+                  "maxLength": 96
+                },
+                "canonical": {
+                  "type": "string",
+                  "minLength": 1,
+                  "maxLength": 256
+                },
+                "aliases": {
+                  "type": "array",
+                  "items": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 256
+                  },
+                  "minItems": 0,
+                  "maxItems": 32
+                }
+              },
+              "required": [
+                "id",
+                "canonical",
+                "aliases"
+              ],
+              "additionalProperties": false
+            },
+            "minItems": 0,
+            "maxItems": 5000
+          },
+          "registryRevision": {
+            "anyOf": [
+              {
+                "type": "string",
+                "pattern": "^[a-f0-9]{64}$",
+                "maxLength": 4096
+              },
+              {
+                "type": "null"
+              }
+            ]
+          }
+        },
+        "required": [
+          "term",
+          "targetAvailable",
+          "otherAliasesForTarget",
+          "registryRevision"
+        ],
+        "additionalProperties": false
+      },
+      "required_capabilities": [
+        "workspace.file.read"
+      ],
+      "callers": [
+        "ui",
+        "mcp",
+        "plugin"
+      ],
+      "requires_user_gesture": false
+    },
+    {
+      "plugin_id": "proprium.research",
+      "action_id": "research.terms.expand",
+      "schema_version": 1,
+      "effect": "read",
+      "input_schema": {
+        "type": "object",
+        "properties": {
+          "query": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 512
+          },
+          "knownTerms": {
+            "type": "array",
+            "items": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 256
+            },
+            "minItems": 0,
+            "maxItems": 2000
+          }
+        },
+        "required": [
+          "query"
+        ],
+        "additionalProperties": false
+      },
+      "output_schema": {
+        "type": "object",
+        "properties": {
+          "terms": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "value": {
+                  "type": "string",
+                  "minLength": 1,
+                  "maxLength": 512
+                },
+                "reason": {
+                  "enum": [
+                    "literal",
+                    "known-spelling"
+                  ]
+                }
+              },
+              "required": [
+                "value",
+                "reason"
+              ],
+              "additionalProperties": false
+            },
+            "minItems": 1,
+            "maxItems": 2001
+          }
+        },
+        "required": [
+          "terms"
+        ],
+        "additionalProperties": false
+      },
+      "required_capabilities": [],
+      "callers": [
+        "ui",
+        "mcp",
+        "plugin"
+      ],
+      "requires_user_gesture": false
+    },
+    {
+      "plugin_id": "proprium.research",
+      "action_id": "research.terms.resolve",
+      "schema_version": 1,
+      "effect": "read",
+      "input_schema": {
+        "type": "object",
+        "properties": {
+          "path": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 1024
+          },
+          "textRevision": {
+            "type": "string",
+            "pattern": "^[a-f0-9]{64}$",
+            "maxLength": 4096
+          },
+          "text": {
+            "type": "string",
+            "minLength": 0,
+            "maxLength": 24000
+          }
+        },
+        "required": [
+          "path",
+          "textRevision",
+          "text"
+        ],
+        "additionalProperties": false
+      },
+      "output_schema": {
+        "type": "object",
+        "properties": {
+          "spans": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "start": {
+                  "type": "integer",
+                  "minimum": 0,
+                  "maximum": 9007199254740991
+                },
+                "end": {
+                  "type": "integer",
+                  "minimum": 0,
+                  "maximum": 9007199254740991
+                },
+                "termId": {
+                  "type": "string",
+                  "minLength": 1,
+                  "maxLength": 96
+                },
+                "targetPath": {
+                  "type": "string",
+                  "minLength": 1,
+                  "maxLength": 1024
+                }
+              },
+              "required": [
+                "start",
+                "end",
+                "termId",
+                "targetPath"
+              ],
+              "additionalProperties": false
+            },
+            "minItems": 0,
+            "maxItems": 5000
+          },
+          "ambiguities": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "start": {
+                  "type": "integer",
+                  "minimum": 0,
+                  "maximum": 9007199254740991
+                },
+                "end": {
+                  "type": "integer",
+                  "minimum": 0,
+                  "maximum": 9007199254740991
+                },
+                "alias": {
+                  "type": "string",
+                  "minLength": 1,
+                  "maxLength": 256
+                },
+                "termIds": {
+                  "type": "array",
+                  "items": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 96
+                  },
+                  "minItems": 2,
+                  "maxItems": 5000
+                }
+              },
+              "required": [
+                "start",
+                "end",
+                "alias",
+                "termIds"
+              ],
+              "additionalProperties": false
+            },
+            "minItems": 0,
+            "maxItems": 5000
+          },
+          "registryRevision": {
+            "anyOf": [
+              {
+                "type": "string",
+                "pattern": "^[a-f0-9]{64}$",
+                "maxLength": 4096
+              },
+              {
+                "type": "null"
+              }
+            ]
+          }
+        },
+        "required": [
+          "spans",
+          "ambiguities",
+          "registryRevision"
+        ],
+        "additionalProperties": false
+      },
+      "required_capabilities": [
+        "workspace.file.read"
+      ],
+      "callers": [
+        "ui",
+        "mcp",
+        "plugin"
+      ],
+      "requires_user_gesture": false
+    },
+    {
+      "plugin_id": "proprium.research",
+      "action_id": "research.terms.propose",
+      "schema_version": 1,
+      "effect": "propose",
+      "input_schema": {
+        "type": "object",
+        "properties": {
+          "termId": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 96
+          },
+          "canonical": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 256
+          },
+          "aliases": {
+            "type": "array",
+            "items": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 256
+            },
+            "minItems": 0,
+            "maxItems": 32
+          },
+          "targetPath": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 1024
+          },
+          "expectedRegistryRevision": {
+            "anyOf": [
+              {
+                "type": "string",
+                "pattern": "^[a-f0-9]{64}$",
+                "maxLength": 4096
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "expectedTargetRevision": {
+            "type": "string",
+            "pattern": "^[a-f0-9]{64}$",
+            "maxLength": 4096
+          }
+        },
+        "required": [
+          "canonical",
+          "targetPath",
+          "expectedRegistryRevision",
+          "expectedTargetRevision"
+        ],
+        "additionalProperties": false
+      },
+      "output_schema": {
+        "type": "object",
+        "properties": {
+          "changeSetId": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 256
+          },
+          "operationIds": {
+            "type": "array",
+            "items": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 256
+            },
+            "minItems": 1,
+            "maxItems": 128
+          },
+          "preview": {
+            "type": "object",
+            "properties": {
+              "before": {},
+              "after": {},
+              "affectedPaths": {
+                "type": "array",
+                "items": {
+                  "type": "string",
+                  "minLength": 1,
+                  "maxLength": 1024
+                },
+                "minItems": 1,
+                "maxItems": 16
+              },
+              "evidence": {
+                "type": "array",
+                "items": true,
+                "minItems": 0,
+                "maxItems": 128
+              }
+            },
+            "required": [
+              "before",
+              "after",
+              "affectedPaths",
+              "evidence"
+            ],
+            "additionalProperties": false
+          },
+          "term": {
+            "type": "object",
+            "properties": {
+              "id": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 96
+              },
+              "canonical": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 256
+              },
+              "aliases": {
+                "type": "array",
+                "items": {
+                  "type": "string",
+                  "minLength": 1,
+                  "maxLength": 256
+                },
+                "minItems": 0,
+                "maxItems": 32
+              },
+              "targetPath": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 1024
+              },
+              "extensions": true
+            },
+            "required": [
+              "id",
+              "canonical",
+              "aliases",
+              "targetPath"
+            ],
+            "additionalProperties": false
+          }
+        },
+        "required": [
+          "changeSetId",
+          "operationIds",
+          "preview",
+          "term"
+        ],
+        "additionalProperties": false
+      },
+      "required_capabilities": [
+        "workspace.file.read",
+        "workspace.change.propose",
+        "artifact.create",
+        "artifact.append",
+          "artifact.seal",
+          "artifact.discard"
+      ],
+      "callers": [
+        "ui",
+        "mcp",
+        "plugin"
+      ],
+      "requires_user_gesture": false
+    },
+    {
+      "plugin_id": "proprium.research",
+      "action_id": "research.terms.remove.propose",
+      "schema_version": 1,
+      "effect": "propose",
+      "input_schema": {
+        "type": "object",
+        "properties": {
+          "termId": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 96
+          },
+          "expectedRegistryRevision": {
+            "anyOf": [
+              {
+                "type": "string",
+                "pattern": "^[a-f0-9]{64}$",
+                "maxLength": 4096
+              },
+              {
+                "type": "null"
+              }
+            ]
+          }
+        },
+        "required": [
+          "termId",
+          "expectedRegistryRevision"
+        ],
+        "additionalProperties": false
+      },
+      "output_schema": {
+        "type": "object",
+        "properties": {
+          "changeSetId": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 256
+          },
+          "operationIds": {
+            "type": "array",
+            "items": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 256
+            },
+            "minItems": 1,
+            "maxItems": 128
+          },
+          "preview": {
+            "type": "object",
+            "properties": {
+              "before": {},
+              "after": {},
+              "affectedPaths": {
+                "type": "array",
+                "items": {
+                  "type": "string",
+                  "minLength": 1,
+                  "maxLength": 1024
+                },
+                "minItems": 1,
+                "maxItems": 16
+              },
+              "evidence": {
+                "type": "array",
+                "items": true,
+                "minItems": 0,
+                "maxItems": 128
+              }
+            },
+            "required": [
+              "before",
+              "after",
+              "affectedPaths",
+              "evidence"
+            ],
+            "additionalProperties": false
+          },
+          "removedTerm": {
+            "type": "object",
+            "properties": {
+              "id": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 96
+              },
+              "canonical": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 256
+              },
+              "aliases": {
+                "type": "array",
+                "items": {
+                  "type": "string",
+                  "minLength": 1,
+                  "maxLength": 256
+                },
+                "minItems": 0,
+                "maxItems": 32
+              },
+              "targetPath": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 1024
+              },
+              "extensions": true
+            },
+            "required": [
+              "id",
+              "canonical",
+              "aliases",
+              "targetPath"
+            ],
+            "additionalProperties": false
+          }
+        },
+        "required": [
+          "changeSetId",
+          "operationIds",
+          "preview",
+          "removedTerm"
+        ],
+        "additionalProperties": false
+      },
+      "required_capabilities": [
+        "workspace.file.read",
+        "workspace.change.propose",
+        "artifact.create",
+        "artifact.append",
+          "artifact.seal",
+          "artifact.discard"
+      ],
+      "callers": [
+        "ui",
+        "mcp",
+        "plugin"
+      ],
+      "requires_user_gesture": false
+    },
+    {
+      "plugin_id": "proprium.research",
+      "action_id": "research.nlp.analyze",
+      "schema_version": 1,
+      "effect": "read",
+      "input_schema": {
+        "type": "object",
+        "properties": {
+          "text": {
+            "type": "string",
+            "minLength": 0,
+            "maxLength": 1000000
+          },
+          "source": {
+            "oneOf": [
+              {
+                "type": "object",
+                "properties": {
+                  "kind": {
+                    "const": "saved-file"
+                  },
+                  "path": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 1024
+                  },
+                  "textRevision": {
+                    "type": "string",
+                    "pattern": "^[a-f0-9]{64}$",
+                    "maxLength": 4096
+                  }
+                },
+                "required": [
+                  "kind",
+                  "path",
+                  "textRevision"
+                ],
+                "additionalProperties": false
+              },
+              {
+                "type": "object",
+                "properties": {
+                  "kind": {
+                    "const": "draft"
+                  },
+                  "draftGeneration": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 256
+                  }
+                },
+                "required": [
+                  "kind",
+                  "draftGeneration"
+                ],
+                "additionalProperties": false
+              },
+              {
+                "type": "object",
+                "properties": {
+                  "kind": {
+                    "const": "literal"
+                  }
+                },
+                "required": [
+                  "kind"
+                ],
+                "additionalProperties": false
+              }
+            ]
+          }
+        },
+        "required": [
+          "text",
+          "source"
+        ],
+        "additionalProperties": false
+      },
+      "output_schema": {
+        "type": "object",
+        "properties": {
+          "source": true,
+          "sentences": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "start": {
+                  "type": "integer",
+                  "minimum": 0,
+                  "maximum": 9007199254740991
+                },
+                "end": {
+                  "type": "integer",
+                  "minimum": 0,
+                  "maximum": 9007199254740991
+                }
+              },
+              "required": [
+                "start",
+                "end"
+              ],
+              "additionalProperties": false
+            },
+            "minItems": 0,
+            "maxItems": 100000
+          },
+          "tokens": {
+            "type": "array",
+            "items": true,
+            "minItems": 0,
+            "maxItems": 100000
+          },
+          "engine": {
+            "type": "object",
+            "properties": {
+              "id": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 256
+              },
+              "version": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 128
+              },
+              "digest": {
+                "type": "string",
+                "pattern": "^[a-f0-9]{64}$",
+                "maxLength": 4096
+              }
+            },
+            "required": [
+              "id",
+              "version",
+              "digest"
+            ],
+            "additionalProperties": false
+          }
+        },
+        "required": [
+          "source",
+          "sentences",
+          "tokens",
+          "engine"
+        ],
+        "additionalProperties": false
+      },
+      "required_capabilities": [
+        "workspace.file.read"
+      ],
+      "callers": [
+        "ui",
+        "mcp",
+        "plugin"
+      ],
+      "requires_user_gesture": false
+    },
+    {
+      "plugin_id": "proprium.research",
+      "action_id": "research.nlp.countTokens",
+      "schema_version": 1,
+      "effect": "read",
+      "input_schema": {
+        "type": "object",
+        "properties": {
+          "texts": {
+            "type": "array",
+            "items": {
+              "type": "string",
+              "minLength": 0,
+              "maxLength": 65536
+            },
+            "minItems": 1,
+            "maxItems": 128
+          },
+          "modelId": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 256
+          }
+        },
+        "required": [
+          "texts"
+        ],
+        "additionalProperties": false
+      },
+      "output_schema": {
+        "type": "object",
+        "properties": {
+          "counts": {
+            "type": "array",
+            "items": {
+              "type": "integer",
+              "minimum": 0,
+              "maximum": 9007199254740991
+            },
+            "minItems": 1,
+            "maxItems": 128
+          },
+          "identity": {
+            "type": "object",
+            "properties": {
+              "modelId": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 256
+              },
+              "version": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 128
+              },
+              "digest": {
+                "type": "string",
+                "pattern": "^[a-f0-9]{64}$",
+                "maxLength": 4096
+              },
+              "method": {
+                "enum": [
+                  "model",
+                  "approx"
+                ]
+              }
+            },
+            "required": [
+              "modelId",
+              "version",
+              "digest",
+              "method"
+            ],
+            "additionalProperties": false
+          },
+          "fallbackReason": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 128
+          }
+        },
+        "required": [
+          "counts",
+          "identity",
+          "fallbackReason"
+        ],
+        "additionalProperties": false
+      },
+      "required_capabilities": [],
+      "callers": [
+        "ui",
+        "mcp",
+        "plugin"
+      ],
+      "requires_user_gesture": false
+    },
+    {
+      "plugin_id": "proprium.research",
+      "action_id": "research.terms.candidates",
+      "schema_version": 1,
+      "effect": "read",
+      "input_schema": {
+        "type": "object",
+        "properties": {
+          "corpus": {
+            "type": "object",
+            "properties": {
+              "kind": {
+                "enum": [
+                  "text",
+                  "knowledge-entities"
+                ]
+              },
+              "items": {
+                "type": "array",
+                "items": {
+                  "type": "object",
+                  "properties": {
+                    "id": {
+                      "type": "string",
+                      "minLength": 1,
+                      "maxLength": 256
+                    },
+                    "path": {
+                      "type": "string",
+                      "minLength": 1,
+                      "maxLength": 1024
+                    },
+                    "revision": {
+                      "type": "string",
+                      "pattern": "^[a-f0-9]{64}$",
+                      "maxLength": 4096
+                    },
+                    "texts": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "id": {
+                            "type": "string",
+                            "minLength": 1,
+                            "maxLength": 256
+                          },
+                          "text": {
+                            "type": "string",
+                            "minLength": 0,
+                            "maxLength": 1000000
+                          }
+                        },
+                        "required": [
+                          "id",
+                          "text"
+                        ],
+                        "additionalProperties": false
+                      },
+                      "minItems": 1,
+                      "maxItems": 10000
+                    }
+                  },
+                  "required": [
+                    "id",
+                    "revision",
+                    "texts"
+                  ],
+                  "additionalProperties": false
+                },
+                "minItems": 1,
+                "maxItems": 128
+              }
+            },
+            "required": [
+              "kind",
+              "items"
+            ],
+            "additionalProperties": false
+          },
+          "knownTerms": {
+            "type": "array",
+            "items": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 256
+            },
+            "minItems": 0,
+            "maxItems": 2000
+          },
+          "includeReadings": {
+            "type": "boolean"
+          },
+          "cursor": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 4096
+          },
+          "limit": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 200
+          }
+        },
+        "required": [
+          "corpus"
+        ],
+        "additionalProperties": false
+      },
+      "output_schema": {
+        "type": "object",
+        "properties": {
+          "candidates": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "term": {
+                  "type": "string",
+                  "minLength": 1,
+                  "maxLength": 256
+                },
+                "reading": {
+                  "type": "string",
+                  "minLength": 1,
+                  "maxLength": 256
+                },
+                "sourceIds": {
+                  "type": "array",
+                  "items": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 256
+                  },
+                  "minItems": 1,
+                  "maxItems": 128
+                },
+                "occurrenceCount": {
+                  "type": "integer",
+                  "minimum": 1,
+                  "maximum": 9007199254740991
+                },
+                "evidence": {
+                  "type": "array",
+                  "items": true,
+                  "minItems": 1,
+                  "maxItems": 5
+                }
+              },
+              "required": [
+                "term",
+                "reading",
+                "sourceIds",
+                "occurrenceCount",
+                "evidence"
+              ],
+              "additionalProperties": false
+            },
+            "minItems": 0,
+            "maxItems": 200
+          },
+          "sourceCount": {
+            "type": "integer",
+            "minimum": 0,
+            "maximum": 9007199254740991
+          },
+          "nextCursor": {
+            "anyOf": [
+              {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 4096
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "tokenizerIdentity": true
+        },
+        "required": [
+          "candidates",
+          "sourceCount",
+          "nextCursor",
+          "tokenizerIdentity"
+        ],
+        "additionalProperties": false
+      },
+      "required_capabilities": [
+        "workspace.file.read"
+      ],
+      "callers": [
+        "ui",
+        "mcp",
+        "plugin"
+      ],
+      "requires_user_gesture": false
+    },
+    {
+      "plugin_id": "proprium.research",
+      "action_id": "research.terms.variants",
+      "schema_version": 1,
+      "effect": "read",
+      "input_schema": {
+        "type": "object",
+        "properties": {
+          "candidates": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "term": {
+                  "type": "string",
+                  "minLength": 1,
+                  "maxLength": 256
+                },
+                "count": {
+                  "type": "integer",
+                  "minimum": 0,
+                  "maximum": 1000000000
+                }
+              },
+              "required": [
+                "term",
+                "count"
+              ],
+              "additionalProperties": false
+            },
+            "minItems": 1,
+            "maxItems": 200
+          },
+          "knownTerms": {
+            "type": "array",
+            "items": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 256
+            },
+            "minItems": 0,
+            "maxItems": 2000
+          }
+        },
+        "required": [
+          "candidates",
+          "knownTerms"
+        ],
+        "additionalProperties": false
+      },
+      "output_schema": {
+        "type": "object",
+        "properties": {
+          "suggestions": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "candidate": {
+                  "type": "string",
+                  "minLength": 1,
+                  "maxLength": 256
+                },
+                "canonical": {
+                  "type": "string",
+                  "minLength": 1,
+                  "maxLength": 256
+                },
+                "count": {
+                  "type": "integer",
+                  "minimum": 0,
+                  "maximum": 1000000000
+                },
+                "reason": {
+                  "enum": [
+                    "known-spelling",
+                    "candidate-cluster"
+                  ]
+                }
+              },
+              "required": [
+                "candidate",
+                "canonical",
+                "count",
+                "reason"
+              ],
+              "additionalProperties": false
+            },
+            "minItems": 0,
+            "maxItems": 200
+          }
+        },
+        "required": [
+          "suggestions"
+        ],
+        "additionalProperties": false
+      },
+      "required_capabilities": [],
+      "callers": [
+        "ui",
+        "mcp",
+        "plugin"
+      ],
+      "requires_user_gesture": false
+    },
+    {
+      "plugin_id": "proprium.research",
+      "action_id": "research.synonyms.get",
+      "schema_version": 1,
+      "effect": "read",
+      "input_schema": {
+        "type": "object",
+        "properties": {
+          "term": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 256
+          }
+        },
+        "required": [
+          "term"
+        ],
+        "additionalProperties": false
+      },
+      "output_schema": {
+        "type": "object",
+        "properties": {
+          "group": {
+            "anyOf": [
+              {
+                "type": "object",
+                "properties": {
+                  "words": {
+                    "type": "array",
+                    "items": {
+                      "type": "string",
+                      "minLength": 1,
+                      "maxLength": 256
+                    },
+                    "minItems": 2,
+                    "maxItems": 100
+                  },
+                  "context": {
+                    "enum": [
+                      "positive",
+                      "negative"
+                    ]
+                  },
+                  "extensions": true
+                },
+                "required": [
+                  "words"
+                ],
+                "additionalProperties": false
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "groupRef": {
+            "type": "object",
+            "properties": {
+              "fileRevision": {
+                "type": "string",
+                "pattern": "^[a-f0-9]{64}$",
+                "maxLength": 4096
+              },
+              "ordinal": {
+                "type": "integer",
+                "minimum": 0,
+                "maximum": 9007199254740991
+              },
+              "words": {
+                "type": "array",
+                "items": {
+                  "type": "string",
+                  "minLength": 1,
+                  "maxLength": 256
+                },
+                "minItems": 2,
+                "maxItems": 100
+              },
+              "context": {
+                "enum": [
+                  "positive",
+                  "negative"
+                ]
+              },
+              "extensions": true
+            },
+            "required": [
+              "fileRevision",
+              "ordinal",
+              "words"
+            ],
+            "additionalProperties": false
+          },
+          "alternatives": {
+            "type": "array",
+            "items": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 256
+            },
+            "minItems": 0,
+            "maxItems": 100
+          },
+          "fileRevision": {
+            "anyOf": [
+              {
+                "type": "string",
+                "pattern": "^[a-f0-9]{64}$",
+                "maxLength": 4096
+              },
+              {
+                "type": "null"
+              }
+            ]
+          }
+        },
+        "required": [
+          "group",
+          "groupRef",
+          "alternatives",
+          "fileRevision"
+        ],
+        "additionalProperties": false
+      },
+      "required_capabilities": [
+        "workspace.file.read"
+      ],
+      "callers": [
+        "ui",
+        "mcp",
+        "plugin"
+      ],
+      "requires_user_gesture": false
+    },
+    {
+      "plugin_id": "proprium.research",
+      "action_id": "research.synonyms.propose",
+      "schema_version": 1,
+      "effect": "propose",
+      "input_schema": {
+        "type": "object",
+        "properties": {
+          "words": {
+            "type": "array",
+            "items": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 256
+            },
+            "minItems": 2,
+            "maxItems": 100
+          },
+          "context": {
+            "enum": [
+              "positive",
+              "negative"
+            ]
+          },
+          "mergeGroupRef": {
+            "type": "object",
+            "properties": {
+              "fileRevision": {
+                "type": "string",
+                "pattern": "^[a-f0-9]{64}$",
+                "maxLength": 4096
+              },
+              "ordinal": {
+                "type": "integer",
+                "minimum": 0,
+                "maximum": 9007199254740991
+              },
+              "words": {
+                "type": "array",
+                "items": {
+                  "type": "string",
+                  "minLength": 1,
+                  "maxLength": 256
+                },
+                "minItems": 2,
+                "maxItems": 100
+              },
+              "context": {
+                "enum": [
+                  "positive",
+                  "negative"
+                ]
+              },
+              "extensions": true
+            },
+            "required": [
+              "fileRevision",
+              "ordinal",
+              "words"
+            ],
+            "additionalProperties": false
+          },
+          "expectedFileRevision": {
+            "anyOf": [
+              {
+                "type": "string",
+                "pattern": "^[a-f0-9]{64}$",
+                "maxLength": 4096
+              },
+              {
+                "type": "null"
+              }
+            ]
+          }
+        },
+        "required": [
+          "words",
+          "context",
+          "mergeGroupRef",
+          "expectedFileRevision"
+        ],
+        "additionalProperties": false
+      },
+      "output_schema": {
+        "type": "object",
+        "properties": {
+          "changeSetId": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 256
+          },
+          "operationIds": {
+            "type": "array",
+            "items": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 256
+            },
+            "minItems": 1,
+            "maxItems": 128
+          },
+          "preview": {
+            "type": "object",
+            "properties": {
+              "before": {},
+              "after": {},
+              "affectedPaths": {
+                "type": "array",
+                "items": {
+                  "type": "string",
+                  "minLength": 1,
+                  "maxLength": 1024
+                },
+                "minItems": 1,
+                "maxItems": 16
+              },
+              "evidence": {
+                "type": "array",
+                "items": true,
+                "minItems": 0,
+                "maxItems": 128
+              }
+            },
+            "required": [
+              "before",
+              "after",
+              "affectedPaths",
+              "evidence"
+            ],
+            "additionalProperties": false
+          },
+          "groupsBefore": {
+            "type": "array",
+            "items": true,
+            "minItems": 0,
+            "maxItems": 10000
+          },
+          "groupsAfter": {
+            "type": "array",
+            "items": true,
+            "minItems": 0,
+            "maxItems": 10000
+          }
+        },
+        "required": [
+          "changeSetId",
+          "operationIds",
+          "preview",
+          "groupsBefore",
+          "groupsAfter"
+        ],
+        "additionalProperties": false
+      },
+      "required_capabilities": [
+        "workspace.file.read",
+        "workspace.change.propose",
+        "artifact.create",
+        "artifact.append",
+          "artifact.seal",
+          "artifact.discard"
+      ],
+      "callers": [
+        "ui",
+        "mcp",
+        "plugin"
+      ],
+      "requires_user_gesture": false
+    },
+    {
+      "plugin_id": "proprium.research",
+      "action_id": "research.candidates.ignore.propose",
+      "schema_version": 1,
+      "effect": "propose",
+      "input_schema": {
+        "type": "object",
+        "properties": {
+          "terms": {
+            "type": "array",
+            "items": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 256
+            },
+            "minItems": 1,
+            "maxItems": 128
+          },
+          "ignore": {
+            "type": "boolean"
+          },
+          "expectedFileRevision": {
+            "anyOf": [
+              {
+                "type": "string",
+                "pattern": "^[a-f0-9]{64}$",
+                "maxLength": 4096
+              },
+              {
+                "type": "null"
+              }
+            ]
+          }
+        },
+        "required": [
+          "terms",
+          "ignore",
+          "expectedFileRevision"
+        ],
+        "additionalProperties": false
+      },
+      "output_schema": {
+        "type": "object",
+        "properties": {
+          "changeSetId": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 256
+          },
+          "operationIds": {
+            "type": "array",
+            "items": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 256
+            },
+            "minItems": 1,
+            "maxItems": 128
+          },
+          "preview": {
+            "type": "object",
+            "properties": {
+              "before": {},
+              "after": {},
+              "affectedPaths": {
+                "type": "array",
+                "items": {
+                  "type": "string",
+                  "minLength": 1,
+                  "maxLength": 1024
+                },
+                "minItems": 1,
+                "maxItems": 16
+              },
+              "evidence": {
+                "type": "array",
+                "items": true,
+                "minItems": 0,
+                "maxItems": 128
+              }
+            },
+            "required": [
+              "before",
+              "after",
+              "affectedPaths",
+              "evidence"
+            ],
+            "additionalProperties": false
+          },
+          "added": {
+            "type": "array",
+            "items": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 256
+            },
+            "minItems": 0,
+            "maxItems": 128
+          },
+          "removed": {
+            "type": "array",
+            "items": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 256
+            },
+            "minItems": 0,
+            "maxItems": 128
+          }
+        },
+        "required": [
+          "changeSetId",
+          "operationIds",
+          "preview",
+          "added",
+          "removed"
+        ],
+        "additionalProperties": false
+      },
+      "required_capabilities": [
+        "workspace.file.read",
+        "workspace.change.propose",
+        "artifact.create",
+        "artifact.append",
+          "artifact.seal",
+          "artifact.discard"
+      ],
+      "callers": [
+        "ui",
+        "mcp",
+        "plugin"
+      ],
+      "requires_user_gesture": false
+    },
+    {
+      "plugin_id": "proprium.research",
+      "action_id": "research.legacy-consent.read",
+      "schema_version": 1,
+      "effect": "read",
+      "input_schema": {
+        "type": "object",
+        "properties": {},
+        "required": [],
+        "additionalProperties": false
+      },
+      "output_schema": {
+        "type": "object",
+        "properties": {
+          "features": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "id": {
+                  "type": "string",
+                  "minLength": 1,
+                  "maxLength": 256
+                },
+                "label": {
+                  "type": "string",
+                  "minLength": 1,
+                  "maxLength": 256
+                },
+                "locality": {
+                  "enum": [
+                    "local",
+                    "external"
+                  ]
+                },
+                "legacyEnabled": {
+                  "type": "boolean"
+                },
+                "requiresHostGrant": {
+                  "type": "boolean"
+                }
+              },
+              "required": [
+                "id",
+                "label",
+                "locality",
+                "legacyEnabled",
+                "requiresHostGrant"
+              ],
+              "additionalProperties": false
+            },
+            "minItems": 0,
+            "maxItems": 256
+          },
+          "legacySettings": true,
+          "sourceRevision": {
+            "anyOf": [
+              {
+                "type": "string",
+                "pattern": "^[a-f0-9]{64}$",
+                "maxLength": 4096
+              },
+              {
+                "type": "null"
+              }
+            ]
+          }
+        },
+        "required": [
+          "features",
+          "legacySettings",
+          "sourceRevision"
+        ],
+        "additionalProperties": false
+      },
+      "required_capabilities": [
+        "workspace.file.read"
+      ],
+      "callers": [
+        "ui",
+        "mcp",
+        "plugin"
+      ],
+      "requires_user_gesture": false
+    }
+  ],
+  "ui": [
+    {
+      "id": "search.panel",
+      "kind": "panel",
+      "title": "検索",
+      "context": {
+        "label": "ワークスペース内の本文と用語を検索します。"
+      },
+      "body": {
+        "id": "research-search-tabs",
+        "type": "tabs",
+        "title": "Research",
+        "tabs": [
+          {
+            "id": "search-query",
+            "title": "検索条件",
+            "body": {
+              "id": "research-query-form",
+              "type": "form",
+              "title": "検索",
+              "fields": [
+                {
+                  "id": "query",
+                  "label": "検索語",
+                  "type": "string",
+                  "required": true,
+                  "max_length": 512,
+                  "placeholder": "語句やフレーズ"
+                },
+                {
+                  "id": "mode",
+                  "label": "検索方法",
+                  "type": "enum",
+                  "required": true,
+                  "options": [
+                    {
+                      "value": "lexical",
+                      "label": "全文"
+                    },
+                    {
+                      "value": "exact",
+                      "label": "完全一致"
+                    },
+                    {
+                      "value": "prefix",
+                      "label": "前方一致"
+                    }
+                  ]
+                }
+              ],
+              "submit": {
+                "action_id": "research.query",
+                "input_template": {
+                  "query": {
+                    "data_key": "form.query"
+                  },
+                  "mode": {
+                    "data_key": "form.mode"
+                  },
+                  "limit": 50
+                }
+              }
+            }
+          },
+          {
+            "id": "search-results",
+            "title": "結果",
+            "body": {
+              "id": "research-results-list",
+              "type": "list",
+              "title": "検索結果",
+              "items": {
+                "data_key": "last_action_result.hits"
+              },
+              "primary": "title",
+              "secondary": "path",
+              "item_navigation": {
+                "intent": "open",
+                "target": {
+                  "path": {
+                    "data_key": "item.path"
+                  },
+                  "span": {
+                    "data_key": "item.navigationSpan"
+                  }
+                }
+              },
+              "next_action": {
+                "action_id": "research.query",
+                "input_template": {
+                  "query": {
+                    "data_key": "last_action_result.query"
+                  },
+                  "mode": {
+                    "data_key": "last_action_result.mode"
+                  },
+                  "cursor": {
+                    "data_key": "last_action_result.nextCursor"
+                  },
+                  "limit": 50
+                }
+              },
+              "next_action_when": {
+                "data_key": "last_action_result.nextCursor"
+              }
+            }
+          }
+        ]
+      }
+    },
+    {
+      "id": "search.terms",
+      "kind": "panel",
+      "title": "用語",
+      "context": {
+        "label": "用語を確認し、変更をレビュー用に提案します。"
+      },
+      "body": {
+        "id": "research-terms-tabs",
+        "type": "tabs",
+        "title": "用語",
+        "load_action": {
+          "action_id": "research.terms.list",
+          "input_template": {
+            "limit": 100
+          }
+        },
+        "tabs": [
+          {
+            "id": "terms-list",
+            "title": "登録語",
+            "body": {
+              "id": "research-term-list",
+              "type": "list",
+              "title": "登録語",
+              "items": {
+                "data_key": "last_action_result.items"
+              },
+              "primary": "canonical",
+              "secondary": "ambiguityCount",
+              "item_action": {
+                "action_id": "research.terms.get",
+                "input_template": {
+                  "termId": {
+                    "data_key": "item.id"
+                  }
+                }
+              },
+              "item_navigation": {
+                "intent": "open",
+                "target": {
+                  "path": {
+                    "data_key": "item.targetPath"
+                  }
+                }
+              },
+              "next_action": {
+                "action_id": "research.terms.list",
+                "input_template": {
+                  "cursor": {
+                    "data_key": "last_action_result.nextCursor"
+                  },
+                  "limit": 100
+                }
+              },
+              "next_action_when": {
+                "data_key": "last_action_result.nextCursor"
+              }
+            }
+          },
+          {
+            "id": "terms-read",
+            "title": "詳細",
+            "body": {
+              "id": "research-term-read-form",
+              "type": "form",
+              "title": "用語の詳細",
+              "fields": [
+                {
+              "id": "term_id",
+                  "label": "用語 ID",
+                  "type": "string",
+                  "required": true,
+                  "max_length": 96
+                }
+              ],
+              "submit": {
+                "action_id": "research.terms.get",
+                "input_template": {
+                "termId": {
+                  "data_key": "form.term_id"
+                  }
+                }
+              }
+            }
+          },
+          {
+            "id": "terms-detail",
+            "title": "選択内容",
+            "body": {
+              "id": "research-term-detail",
+              "type": "detail",
+              "title": "選択中の用語",
+              "value": {
+                "data_key": "last_action_result"
+              },
+              "fields": [
+                {
+                  "key": "term.id",
+                  "label": "ID"
+                },
+                {
+                  "key": "term.canonical",
+                  "label": "代表表記"
+                },
+                {
+                  "key": "term.aliases",
+                  "label": "別表記"
+                },
+                {
+                  "key": "term.targetPath",
+                  "label": "対象"
+                },
+                {
+                  "key": "targetRevision",
+                  "label": "対象 revision"
+                },
+            {
+              "key": "targetAvailable",
+              "label": "対象あり"
+            },
+            {
+              "key": "otherAliasesForTarget",
+              "label": "同じ対象の別用語"
+            },
+                {
+                  "key": "registryRevision",
+                  "label": "登録簿 revision"
+                }
+              ]
+            }
+          },
+          {
+            "id": "terms-add",
+            "title": "新規登録",
+            "body": {
+              "id": "research-term-add-form",
+              "type": "form",
+              "title": "登録を提案",
+              "fields": [
+                {
+                  "id": "canonical",
+                  "label": "代表表記",
+                  "type": "string",
+                  "required": true,
+                  "max_length": 256
+                },
+                {
+                  "id": "aliases",
+                  "label": "別表記（1行に1件）",
+                  "type": "ordered-list",
+                  "required": true,
+                  "max_length": 8192
+                },
+                {
+              "id": "target_path",
+                  "label": "対象 path",
+                  "type": "string",
+                  "required": true,
+                  "max_length": 1024
+                },
+                {
+              "id": "expected_target_revision",
+                  "label": "対象 revision",
+                  "type": "string",
+                  "required": true,
+                  "max_length": 64
+                }
+              ],
+              "submit": {
+                "action_id": "research.terms.propose",
+                "input_template": {
+                  "canonical": {
+                    "data_key": "form.canonical"
+                  },
+                  "aliases": {
+                    "data_key": "form.aliases"
+                  },
+                "targetPath": {
+                  "data_key": "form.target_path"
+                  },
+                  "expectedRegistryRevision": {
+                    "data_key": "last_action_result.registryRevision"
+                  },
+                "expectedTargetRevision": {
+                  "data_key": "form.expected_target_revision"
+                  }
+                }
+              }
+            }
+          },
+          {
+            "id": "terms-update",
+            "title": "選択語を更新",
+            "body": {
+              "id": "research-term-update-form",
+              "type": "form",
+              "title": "選択した用語を更新",
+              "fields": [
+                {
+                  "id": "canonical",
+                  "label": "代表表記",
+                  "type": "string",
+                  "required": true,
+                  "max_length": 256
+                },
+                {
+                  "id": "aliases",
+                  "label": "別表記（1行に1件）",
+                  "type": "ordered-list",
+                  "required": true,
+                  "max_length": 8192
+                }
+              ],
+              "submit": {
+                "action_id": "research.terms.propose",
+                "input_template": {
+                  "termId": {
+                    "data_key": "last_action_result.term.id"
+                  },
+                  "canonical": {
+                    "data_key": "form.canonical"
+                  },
+                  "aliases": {
+                    "data_key": "form.aliases"
+                  },
+                  "targetPath": {
+                    "data_key": "last_action_result.term.targetPath"
+                  },
+                  "expectedRegistryRevision": {
+                    "data_key": "last_action_result.registryRevision"
+                  },
+                  "expectedTargetRevision": {
+                    "data_key": "last_action_result.targetRevision"
+                  }
+                }
+              }
+            }
+          },
+          {
+            "id": "terms-remove",
+            "title": "選択語を削除",
+            "body": {
+              "id": "research-term-remove-form",
+              "type": "form",
+              "title": "削除を提案",
+              "fields": [],
+              "submit": {
+                "action_id": "research.terms.remove.propose",
+                "input_template": {
+                  "termId": {
+                    "data_key": "last_action_result.term.id"
+                  },
+                  "expectedRegistryRevision": {
+                    "data_key": "last_action_result.registryRevision"
+                  }
+                }
+              }
+            }
+          }
+        ]
+      }
+    },
+    {
+      "id": "nlp.dictionary",
+      "kind": "panel",
+      "title": "同義語",
+      "context": {
+        "label": "同義語グループを確認し、YAML コメントと未知フィールドを保って編集案を作ります。"
+      },
+      "body": {
+        "id": "research-dictionary-tabs",
+        "type": "tabs",
+        "title": "同義語",
+        "tabs": [
+          {
+            "id": "synonym-read",
+            "title": "検索",
+            "body": {
+              "id": "research-synonym-read-form",
+              "type": "form",
+              "title": "グループを検索",
+              "fields": [
+                {
+                  "id": "term",
+                  "label": "語句",
+                  "type": "string",
+                  "required": true,
+                  "max_length": 256
+                }
+              ],
+              "submit": {
+                "action_id": "research.synonyms.get",
+                "input_template": {
+                  "term": {
+                    "data_key": "form.term"
+                  }
+                }
+              }
+            }
+          },
+          {
+            "id": "synonym-detail",
+            "title": "結果",
+            "body": {
+              "id": "research-synonym-detail",
+              "type": "detail",
+              "title": "同義語グループ",
+              "value": {
+                "data_key": "last_action_result"
+              },
+              "fields": [
+                {
+                  "key": "group.words",
+                  "label": "語句"
+                },
+                {
+                  "key": "group.context",
+                  "label": "文脈"
+                },
+                {
+                  "key": "fileRevision",
+                  "label": "ファイル revision"
+                },
+                {
+                  "key": "alternatives",
+                  "label": "関連語"
+                }
+              ]
+            }
+          },
+          {
+            "id": "synonym-add",
+            "title": "追加",
+            "body": {
+              "id": "research-synonym-add-form",
+              "type": "form",
+              "title": "新規グループを提案",
+              "fields": [
+                {
+                  "id": "words",
+                  "label": "語句（1行に1件）",
+                  "type": "ordered-list",
+                  "required": true,
+                  "max_length": 8192
+                },
+                {
+                  "id": "context",
+                  "label": "文脈",
+                  "type": "enum",
+                  "required": true,
+                  "options": [
+                    {
+                      "value": "positive",
+                      "label": "肯定"
+                    },
+                    {
+                      "value": "negative",
+                      "label": "否定"
+                    }
+                  ]
+                }
+              ],
+              "submit": {
+                "action_id": "research.synonyms.propose",
+                "input_template": {
+                  "words": {
+                    "data_key": "form.words"
+                  },
+                  "context": {
+                    "data_key": "form.context"
+                  },
+                  "expectedFileRevision": {
+                    "data_key": "last_action_result.fileRevision"
+                  }
+                }
+              }
+            }
+          },
+          {
+            "id": "synonym-merge",
+            "title": "選択グループを更新",
+            "body": {
+              "id": "research-synonym-merge-form",
+              "type": "form",
+              "title": "読み込んだグループに追加を提案",
+              "fields": [
+                {
+                  "id": "words",
+                  "label": "追加する語句（1行に1件）",
+                  "type": "ordered-list",
+                  "required": true,
+                  "max_length": 8192
+                },
+                {
+                  "id": "context",
+                  "label": "文脈",
+                  "type": "enum",
+                  "required": true,
+                  "options": [
+                    {
+                      "value": "positive",
+                      "label": "肯定"
+                    },
+                    {
+                      "value": "negative",
+                      "label": "否定"
+                    }
+                  ]
+                }
+              ],
+              "submit": {
+                "action_id": "research.synonyms.propose",
+                "input_template": {
+                  "words": {
+                    "data_key": "form.words"
+                  },
+                  "context": {
+                    "data_key": "form.context"
+                  },
+                  "mergeGroupRef": {
+                    "data_key": "last_action_result.groupRef"
+                  },
+                  "expectedFileRevision": {
+                    "data_key": "last_action_result.fileRevision"
+                  }
+                }
+              }
+            }
+          }
+        ]
+      }
+    },
+    {
+      "id": "nlp.privacy",
+      "kind": "panel",
+      "title": "旧 NLP 設定",
+      "context": {
+        "label": "旧設定の表示専用です。ここから Host の権限は付与されません。"
+      },
+      "body": {
+        "id": "research-privacy-tabs",
+        "type": "tabs",
+        "title": "旧 NLP 設定",
+        "load_action": {
+          "action_id": "research.legacy-consent.read",
+          "input_template": {}
+        },
+        "tabs": [
+          {
+            "id": "privacy-features",
+            "title": "機能",
+            "body": {
+              "id": "research-privacy-features-table",
+              "type": "table",
+              "title": "過去の機能設定",
+              "rows": {
+                "data_key": "last_action_result.features"
+              },
+              "columns": [
+                {
+                  "key": "id",
+                  "label": "ID"
+                },
+                {
+                  "key": "label",
+                  "label": "機能"
+                },
+                {
+                  "key": "locality",
+                  "label": "保存先"
+                },
+                {
+                  "key": "legacyEnabled",
+                  "label": "旧設定"
+                },
+                {
+                  "key": "requiresHostGrant",
+                  "label": "Host 許可が必要"
+                }
+              ]
+            }
+          },
+          {
+            "id": "privacy-source",
+            "title": "元データ",
+            "body": {
+              "id": "research-privacy-source-detail",
+              "type": "detail",
+              "title": "保持する旧設定",
+              "value": {
+                "data_key": "last_action_result"
+              },
+              "fields": [
+                {
+                  "key": "sourceRevision",
+                  "label": "設定 revision"
+                },
+                {
+                  "key": "legacySettings.externalEnabled",
+                  "label": "旧 externalEnabled"
+                }
+              ]
+            }
+          }
+        ]
+      }
+    },
+    {
+      "id": "nlp.analyzer",
+      "kind": "panel",
+      "title": "文章分析",
+      "context": {
+        "label": "文章分析には、利用者が明示的に有効化した署名済み日本語トークナイザーが必要です。"
+      },
+      "body": {
+        "id": "research-analyzer-unavailable",
+        "type": "status",
+        "title": "ローカル解析器",
+        "state": "unavailable",
+        "messages": {
+          "unavailable": "この Research 配布物には形態素解析器が含まれていません。解析データを取得したり、外部へ送信したりしません。"
+        }
+      }
+    },
+    {
+      "id": "nlp.candidates",
+      "kind": "panel",
+      "title": "用語候補",
+      "context": {
+        "label": "候補はローカル解析器が利用できる場合に限り、根拠を確認して提案できます。"
+      },
+      "body": {
+        "id": "research-candidates-unavailable",
+        "type": "status",
+        "title": "候補抽出",
+        "state": "unavailable",
+        "messages": {
+          "unavailable": "署名済み日本語形態素解析器が未有効のため、候補を抽出できません。検索と登録語の編集は引き続き利用できます。"
+        }
+      }
+    }
+  ],
+  "asset_groups": [],
+  "dependencies": []
+}
