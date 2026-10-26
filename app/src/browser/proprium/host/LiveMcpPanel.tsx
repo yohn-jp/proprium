@@ -25,6 +25,8 @@ interface Props {
   repositories: Array<{ identity: WorkspaceIdentity; title: string }>;
   git: BrowserLocalGit;
   canApply: boolean;
+  onApplyBusyChange(busy: boolean): void;
+  beforeApply(): Promise<boolean>;
   onPendingProposalsChange?(count: number): void;
   onWorkspaceChanged(): Promise<void>;
   onExecutePlugin(args: Record<string, unknown>, signal: AbortSignal): Promise<unknown>;
@@ -82,6 +84,8 @@ export function LiveMcpPanel({
   repositories,
   git,
   canApply,
+  onApplyBusyChange,
+  beforeApply,
   onPendingProposalsChange,
   onWorkspaceChanged,
   onExecutePlugin,
@@ -92,11 +96,13 @@ export function LiveMcpPanel({
   const [endpoint, setEndpoint] = useState("");
   const [activeRequests, setActiveRequests] = useState<Array<{ id: string; tool: LiveMcpTool }>>([]);
   const [reviewedProposalIds, setReviewedProposalIds] = useState<Set<string>>(() => new Set());
+  const [applyingProposalId, setApplyingProposalId] = useState<string | null>(null);
   const abortRef = useRef<AbortController | null>(null);
   const pendingRef = useRef(new Map<string, AbortController>());
   const liveSessionRef = useRef("");
   const connectAttemptRef = useRef("");
   const mountedRef = useRef(true);
+  const applyingProposalRef = useRef(false);
   const onPendingProposalsChangeRef = useRef(onPendingProposalsChange);
 
   useEffect(() => {
@@ -370,6 +376,7 @@ export function LiveMcpPanel({
   }
 
   async function approveProposal(proposal: LiveWorkspaceProposal): Promise<void> {
+    if (applyingProposalRef.current) return;
     if (!reviewedProposalIds.has(proposal.id)) {
       setError("変更前と変更後を確認してから承認してください。");
       return;
@@ -377,6 +384,9 @@ export function LiveMcpPanel({
     const active = proposal.target.localWorkspaceId === identity.localWorkspaceId;
     if (active && !canApply) { setError("Save the editor draft before reviewing the proposed changes."); return; }
     const targetGit = active ? git : new BrowserLocalGit(proposal.target);
+    applyingProposalRef.current = true;
+    setApplyingProposalId(proposal.id);
+    onApplyBusyChange(true);
     try {
       if (!active) await targetGit.init();
       const changes: WorkspaceChange[] = [];
@@ -387,6 +397,13 @@ export function LiveMcpPanel({
         const expectedRevision = { oid: change.expectedRevision };
         readSet.push({ path: change.path, revision: expectedRevision });
         changes.push({ path: change.path, content: new TextEncoder().encode(change.content), expectedRevision });
+      }
+      // The read-only UI state is immediate at the Host level, but a pending
+      // editor composition can still be delivered during the async file reads.
+      // Flush and recheck the active editor immediately before the revision
+      // guarded write so a newly dirty draft cannot be stranded at an old base.
+      if (active && !(await beforeApply())) {
+        throw new Error("編集中の本文を端末に保存してから、MCP提案を適用してください。");
       }
       await targetGit.applyChanges(changes, readSet);
       setProposals(current => current.filter(item => item.id !== proposal.id));
@@ -399,6 +416,9 @@ export function LiveMcpPanel({
       setError(message);
     } finally {
       if (!active) targetGit.close();
+      applyingProposalRef.current = false;
+      setApplyingProposalId(null);
+      onApplyBusyChange(false);
     }
   }
 
@@ -440,8 +460,8 @@ export function LiveMcpPanel({
             </label>
           </details>
           <div className="live-mcp-proposal-actions">
-            <button type="button" disabled={!reviewed || (proposal.target.localWorkspaceId === identity.localWorkspaceId && !canApply)} onClick={() => void approveProposal(proposal)}>変更を承認して適用</button>
-            <button type="button" onClick={() => rejectProposal(proposal.id)}>却下</button>
+            <button type="button" disabled={!reviewed || applyingProposalId !== null || (proposal.target.localWorkspaceId === identity.localWorkspaceId && !canApply)} onClick={() => void approveProposal(proposal)}>{applyingProposalId === proposal.id ? "適用中…" : "変更を承認して適用"}</button>
+            <button type="button" disabled={applyingProposalId !== null} onClick={() => rejectProposal(proposal.id)}>却下</button>
           </div>
           <p className="live-mcp-proposal-local-note">承認した変更はこのブラウザー内に適用されます。コミットとGitHubへの公開は別操作です。</p>
         </article>;

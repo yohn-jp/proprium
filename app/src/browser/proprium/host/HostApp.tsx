@@ -877,6 +877,8 @@ export function HostApp(): ReactElement {
             identity={workspace.identity}
             git={git}
             canApply={!currentFile?.dirty}
+            onApplyBusyChange={setFileOperationBusy}
+            beforeApply={beforeFileMutation}
             onWorkspaceChanged={refreshAfterPlugin}
             onExecutePlugin={executeLivePlugin}
             onPendingProposalsChange={setMcpProposalCount}
