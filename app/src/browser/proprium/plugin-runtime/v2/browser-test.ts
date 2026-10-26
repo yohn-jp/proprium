@@ -14,12 +14,14 @@ interface FixtureChunk { revision: string; total_bytes: number; offset: number; 
 
 const fixturePluginId = "proprium.diagnostics";
 const fixtureActionId = "proprium.diagnostics.pages.read";
+type BrowserTestScenario = "success" | "snapshot-stale" | "tampered-component" | "invalid-registry-signature" |
+  "optional-asset-granted" | "optional-asset-ungranted-by-user" | "optional-asset-ungranted-by-host";
 
 declare global {
   interface Window {
     __pluginRuntimeV2PinnedRegistryKey?: string;
     pluginRuntimeV2Test: {
-      execute(scenario: "success" | "snapshot-stale" | "tampered-component" | "invalid-registry-signature"): Promise<unknown>;
+      execute(scenario: BrowserTestScenario): Promise<unknown>;
     };
   }
 }
@@ -48,7 +50,7 @@ async function admitFixture(fixture: BrowserFixture): Promise<{ manifest: Plugin
   return { manifest };
 }
 
-async function execute(scenario: "success" | "snapshot-stale" | "tampered-component" | "invalid-registry-signature"): Promise<unknown> {
+async function execute(scenario: BrowserTestScenario): Promise<unknown> {
   const response = await fetch("/plugin-runtime-v2-fixture.json");
   if (!response.ok) throw new Error("v2 signed registry fixture is unavailable");
   const fixture = await response.json() as BrowserFixture;
@@ -78,15 +80,17 @@ async function execute(scenario: "success" | "snapshot-stale" | "tampered-compon
     action_id: fixtureActionId,
     scope,
     snapshot,
-    input: { prefix: "fixture/" },
+    input: { prefix: "fixture/", ...(scenario.startsWith("optional-asset") ? { useAsset: true } : {}) },
     deadline_ms: 15_000,
   };
   let current = true;
   const hostCalls: string[] = [];
   await runtime.start({
     context: { pluginId, version: admitted.manifest.version, workspaceId },
-    user_grants: ["workspace.file.read"],
-    host_allowed: ["workspace.file.read"],
+    user_grants: ["workspace.file.read", ...(scenario === "optional-asset-ungranted-by-user" ? [] :
+      scenario.startsWith("optional-asset") ? ["workspace.asset.read"] : [])],
+    host_allowed: ["workspace.file.read", ...(scenario === "optional-asset-ungranted-by-host" ? [] :
+      scenario.startsWith("optional-asset") ? ["workspace.asset.read"] : [])],
   });
   try {
     const result = await runtime.invoke({
@@ -111,6 +115,9 @@ async function execute(scenario: "success" | "snapshot-stale" | "tampered-compon
         if (call.operation === "workspace.file.read") {
           const content = new TextEncoder().encode("雨が降った。\r\n");
           return { revision: "a".repeat(64), total_bytes: content.byteLength, offset: 0, bytes: [...content], next_offset: null } satisfies FixtureChunk;
+        }
+        if (call.operation === "workspace.asset.read") {
+          return { group_id: "fixture-dictionary", file_path: "dictionary.bin", offset: 0, bytes: [65], next_offset: null };
         }
         throw Object.assign(new Error(`unexpected Host operation ${call.operation}`), { code: "capability_denied" });
       },

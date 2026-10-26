@@ -10,12 +10,14 @@ interface FixtureBundle {
   pinnedRegistryKey: string;
 }
 interface BrowserFixture extends Omit<FixtureBundle, "pinnedRegistryKey"> {}
+type BrowserTestScenario = "success" | "snapshot-stale" | "tampered-component" | "invalid-registry-signature" |
+  "optional-asset-granted" | "optional-asset-ungranted-by-user" | "optional-asset-ungranted-by-host";
 
 declare global {
   interface Window {
     __pluginRuntimeV2PinnedRegistryKey?: string;
     pluginRuntimeV2Test: {
-      execute(scenario: "success" | "snapshot-stale" | "tampered-component" | "invalid-registry-signature"): Promise<unknown>;
+      execute(scenario: BrowserTestScenario): Promise<unknown>;
     };
   }
 }
@@ -58,6 +60,31 @@ test("synthetic signed v2 WASM resumes paged Host calls in the same scoped Worke
     hostCalls: ["workspace.file.list", "workspace.file.list", "workspace.file.read"],
     state: "active",
   });
+});
+
+test("optional asset calls use the manifest and user/Host grant intersection", async ({ page }) => {
+  await openFixture(page);
+  const outcomes = await page.evaluate(async () => ({
+    granted: await window.pluginRuntimeV2Test.execute("optional-asset-granted"),
+    userDenied: await window.pluginRuntimeV2Test.execute("optional-asset-ungranted-by-user"),
+    hostDenied: await window.pluginRuntimeV2Test.execute("optional-asset-ungranted-by-host"),
+  })) as {
+    granted: { result: { ok: boolean }; hostCalls: string[]; state: string };
+    userDenied: { result: { ok: boolean; error: { code: string } }; hostCalls: string[]; state: string };
+    hostDenied: { result: { ok: boolean; error: { code: string } }; hostCalls: string[]; state: string };
+  };
+  expect(outcomes.granted).toMatchObject({
+    result: { ok: true },
+    hostCalls: ["workspace.file.list", "workspace.file.list", "workspace.file.read", "workspace.asset.read"],
+    state: "active",
+  });
+  for (const denied of [outcomes.userDenied, outcomes.hostDenied]) {
+    expect(denied).toMatchObject({
+      result: { ok: false, error: { code: "capability_denied" } },
+      hostCalls: ["workspace.file.list", "workspace.file.list", "workspace.file.read"],
+      state: "active",
+    });
+  }
 });
 
 test("stale snapshot stops a continuation before the next Host read", async ({ page }) => {

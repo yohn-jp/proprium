@@ -405,8 +405,8 @@ export class BrowserAuthoringPluginRuntime {
     try {
       assertDeadline(pending.deadlineAt);
       const capability = capabilityForHostOperation(call.operation);
-      if (!pending.descriptor.required_capabilities.includes(capability) || !this.grants.has(capability)) {
-        throw new V2PluginRuntimeError("capability_denied", `Action did not declare or receive ${capability}`);
+      if (!this.manifest.capabilities.includes(capability) || !this.grants.has(capability)) {
+        throw new V2PluginRuntimeError("capability_denied", `Plugin did not declare or receive ${capability}`);
       }
       if (!this.snapshotIsCurrent(pending.options, pending.action)) {
         throw new V2PluginRuntimeError("snapshot_stale", "Workspace changed before a Host call");

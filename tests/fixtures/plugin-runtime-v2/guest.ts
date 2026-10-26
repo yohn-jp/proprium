@@ -19,6 +19,11 @@ export const guest = createGuest("proprium.runtime-proof", {
     const bytes = yield* host.request<FileChunk>("workspace.file.read", {
       snapshot: context.snapshot, path: firstPath, offset: 0, length: 65536,
     });
+    if (input.useAsset === true) {
+      yield* host.request("workspace.asset.read", {
+        group_id: "fixture-dictionary", file_path: "dictionary.bin", offset: 0, length: 65536,
+      });
+    }
     const content = new TextDecoder("utf-8", { fatal: true }).decode(Uint8Array.from(bytes.bytes));
     return { paths: [...first.entries, ...second.entries].map(entry => entry.path), content, revision: bytes.revision };
   },

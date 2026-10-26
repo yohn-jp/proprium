@@ -34,13 +34,16 @@ export default async function setup(): Promise<() => void> {
       const isContinuationGuest = id === pluginId;
       const declaredAction = isContinuationGuest ? actionId : `${id}.runtime.probe`;
       const inputSchema = isContinuationGuest
-        ? { type: "object", additionalProperties: false, required: ["prefix"], properties: { prefix: { type: "string", maxLength: 256 } } }
+        ? { type: "object", additionalProperties: false, required: ["prefix"], properties: {
+          prefix: { type: "string", maxLength: 256 }, useAsset: { type: "boolean" },
+        } }
         : { type: "object", additionalProperties: false };
-      const capabilities = isContinuationGuest ? ["workspace.file.read"] : [];
+      const capabilities = isContinuationGuest ? ["workspace.file.read", "workspace.asset.read"] : [];
       const action = {
         plugin_id: id, action_id: declaredAction, schema_version: 1, effect: "read",
         input_schema: inputSchema, output_schema: { type: "object", additionalProperties: false },
-        required_capabilities: capabilities, callers: ["ui"], requires_user_gesture: false,
+        required_capabilities: isContinuationGuest ? ["workspace.file.read"] : [],
+        callers: ["ui"], requires_user_gesture: false,
       };
       writeFileSync(join(pluginDirectory, "plugin.json"), JSON.stringify({
         schema: "proprium.plugin/v2", id, version: "1.0.0", abi: "proprium.component/v2",
