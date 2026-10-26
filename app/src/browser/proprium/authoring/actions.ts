@@ -22,12 +22,14 @@ export interface InvocationAuthority {
   issueChild(parent: InvocationContext, caller_plugin_id: string, target_plugin_id: string, action_id: string,
     staging_snapshot?: string): Promise<InvocationContext>;
   assertCurrent(context: InvocationContext): Promise<void>;
+  isSnapshotCurrent(context: InvocationContext): boolean;
 }
 export interface RuntimeHostCall { call_id: string; operation: string; payload: Record<string, unknown> }
 export interface RuntimeInvokeOptions {
   request: ActionRequest; caller: Caller; user_gesture?: boolean; activation_epoch: number; deadline_at: number;
   granted_capabilities: readonly string[]; validate_schema: (schema: JsonSchema, value: unknown, phase?: string) => void;
-  is_snapshot_current: () => Promise<void>; resolve_host_call: (call: RuntimeHostCall) => Promise<unknown>;
+  is_snapshot_current: () => boolean; resolve_host_call: (call: RuntimeHostCall) => Promise<unknown>;
+  signal?: AbortSignal;
 }
 export interface ActionRuntime { invoke(options: RuntimeInvokeOptions): Promise<ActionResult> }
 export interface HostOperationContext extends InvocationContext { plugin_id: string; descriptor: ActionDescriptor; request: ActionRequest }
@@ -259,11 +261,13 @@ export class AuthoringActionDispatcher {
       const result = await this.options.runtime.invoke({ request, caller: context.caller, user_gesture: context.user_gesture_verified,
         activation_epoch: context.activation_epoch, deadline_at: now + request.deadline_ms, granted_capabilities: [...grants],
         validate_schema: (schema, value, phase) => this.schemas.assertValue(schema, value, phase),
-        is_snapshot_current: () => this.options.authority.assertCurrent(current),
+        is_snapshot_current: () => this.options.authority.isSnapshotCurrent(current),
+        signal: context.signal,
         resolve_host_call: hostCall => {
           if (hostCall.operation === "workspace.change.propose") submitted = true;
           return this.hostCall(hostCall, request, descriptor, source, current, stack);
         } });
+      await this.options.authority.assertCurrent(current);
       this.schemas.assertResult(result);
       if (result.request_id !== request.request_id || !sameJson(result.scope, request.scope) || !sameJson(result.snapshot, request.snapshot)) {
         throw new ActionDispatchError("invalid_input", "Plugin result identity differs from its Host request");

@@ -61,6 +61,7 @@ function createHarness(overrides: Partial<ActionDispatcherOptions> = {}) {
         context(principal("ui", parent.request_id + "-child"), { caller: "plugin", caller_plugin_id,
           user_gesture_verified: false, grants: [cap], host_capabilities: [cap], signal: parent.signal }),
       assertCurrent: async () => {},
+      isSnapshotCurrent: () => true,
     },
     runtime,
     capabilities: {
@@ -206,6 +207,7 @@ test("stale snapshots prevent all Host capability operations", async () => {
       caller: "plugin", caller_plugin_id, grants: [cap], host_capabilities: [cap], signal: parent.signal,
     }),
     assertCurrent: async () => { throw new ActionDispatchError("snapshot_stale", "Stale worktree"); },
+    isSnapshotCurrent: () => false,
   }, capabilities: { fileList: async () => { fileReads++; return { entries: [] }; } } });
   const result = await h.dispatcher.invoke({ plugin_id, action_id, input: { query: "x" } }, principal());
   assert.equal(result.ok, false);
