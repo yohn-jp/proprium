@@ -1,0 +1,2000 @@
+{
+  "schema": "proprium.plugin/v2",
+  "id": "proprium.speaker",
+  "version": "0.1.0",
+  "abi": "proprium.component/v2",
+  "capabilities": [
+    "workspace.file.read",
+    "workspace.plugin.invoke",
+    "workspace.change.propose",
+    "workspace.change.timestamp",
+    "workspace.derived.cache"
+  ],
+  "dependencies": [
+    {
+      "id": "proprium.narrative",
+      "range": "^0.1.0"
+    },
+    {
+      "id": "proprium.knowledge",
+      "range": "^0.1.0"
+    }
+  ],
+  "asset_groups": [],
+  "actions": [
+    {
+      "plugin_id": "proprium.speaker",
+      "action_id": "speaker.scenes.list",
+      "schema_version": 1,
+      "effect": "read",
+      "input_schema": {
+        "type": "object",
+        "additionalProperties": false
+      },
+      "output_schema": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "scenes",
+          "snapshot",
+          "source_revisions"
+        ],
+        "properties": {
+          "scenes": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "additionalProperties": false,
+              "required": [
+                "scene_id",
+                "name",
+                "scene_path",
+                "volume_id",
+                "chapter_id"
+              ],
+              "properties": {
+                "scene_id": {
+                  "type": "string"
+                },
+                "name": {
+                  "type": "string"
+                },
+                "scene_path": {
+                  "type": "string"
+                },
+                "volume_id": {
+                  "type": "string"
+                },
+                "chapter_id": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "snapshot": {
+            "type": "object"
+          },
+          "source_revisions": {
+            "type": "array",
+            "items": {
+              "type": "object"
+            }
+          }
+        }
+      },
+      "required_capabilities": [
+        "workspace.file.read",
+        "workspace.plugin.invoke"
+      ],
+      "callers": [
+        "ui",
+        "mcp",
+        "plugin"
+      ],
+      "requires_user_gesture": false
+    },
+    {
+      "plugin_id": "proprium.speaker",
+      "action_id": "speaker.attribute",
+      "schema_version": 1,
+      "effect": "read",
+      "input_schema": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "scene_id"
+        ],
+        "properties": {
+          "scene_id": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 256
+          },
+          "text": {
+            "type": "string",
+            "maxLength": 1000000
+          },
+          "draft_generation": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 256
+          }
+        },
+        "allOf": [
+          {
+            "if": {
+              "required": [
+                "text"
+              ]
+            },
+            "then": {
+              "required": [
+                "draft_generation"
+              ]
+            }
+          }
+        ]
+      },
+      "output_schema": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "scene_id",
+          "attributions",
+          "estimated_speaker_count",
+          "count_is_manual",
+          "count_evidence",
+          "cluster_trails",
+          "candidates",
+          "provenance"
+        ],
+        "properties": {
+          "scene_id": {
+            "type": "string"
+          },
+          "attributions": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "additionalProperties": false,
+              "required": [
+                "sentence_index",
+                "start_utf16",
+                "end_utf16",
+                "text",
+                "text_hash",
+                "source_span",
+                "reason",
+                "confidence",
+                "evidence"
+              ],
+              "properties": {
+                "sentence_index": {
+                  "type": "integer",
+                  "minimum": 1
+                },
+                "start_utf16": {
+                  "type": "integer",
+                  "minimum": 0
+                },
+                "end_utf16": {
+                  "type": "integer",
+                  "minimum": 0
+                },
+                "text": {
+                  "type": "string"
+                },
+                "text_hash": {
+                  "type": "string"
+                },
+                "source_span": {
+                  "type": "object",
+                  "additionalProperties": false,
+                  "required": [
+                    "path",
+                    "revision",
+                    "start",
+                    "end",
+                    "quote"
+                  ],
+                  "properties": {
+                    "path": {
+                      "type": "string"
+                    },
+                    "revision": {
+                      "type": "string"
+                    },
+                    "start": {
+                      "type": "integer",
+                      "minimum": 0
+                    },
+                    "end": {
+                      "type": "integer",
+                      "minimum": 0
+                    },
+                    "quote": {
+                      "type": "string"
+                    }
+                  }
+                },
+                "speaker_entity_id": {
+                  "type": "string"
+                },
+                "speaker_group_id": {
+                  "type": "string"
+                },
+                "reason": {
+                  "type": "string"
+                },
+                "confidence": {
+                  "enum": [
+                    "none",
+                    "low",
+                    "high"
+                  ]
+                },
+                "evidence": {
+                  "type": "array",
+                  "items": {
+                    "type": "object"
+                  }
+                }
+              }
+            }
+          },
+          "estimated_speaker_count": {
+            "type": "integer"
+          },
+          "count_is_manual": {
+            "type": "boolean"
+          },
+          "count_evidence": {
+            "type": "object"
+          },
+          "cluster_trails": {
+            "type": "array"
+          },
+          "candidates": {
+            "type": "array"
+          },
+          "provenance": {
+            "type": "object"
+          }
+        }
+      },
+      "required_capabilities": [
+        "workspace.file.read",
+        "workspace.plugin.invoke",
+        "workspace.derived.cache"
+      ],
+      "callers": [
+        "ui",
+        "mcp",
+        "plugin"
+      ],
+      "requires_user_gesture": false
+    },
+    {
+      "plugin_id": "proprium.speaker",
+      "action_id": "speaker.review.queue",
+      "schema_version": 1,
+      "effect": "read",
+      "input_schema": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "cursor": {
+            "type": "string",
+            "maxLength": 4096
+          },
+          "limit": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 200
+          }
+        }
+      },
+      "output_schema": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "rows",
+          "next_cursor",
+          "provenance"
+        ],
+        "properties": {
+          "rows": {
+            "type": "array",
+            "items": {
+              "type": "object"
+            }
+          },
+          "next_cursor": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "provenance": {
+            "type": "object"
+          }
+        }
+      },
+      "required_capabilities": [
+        "workspace.file.read",
+        "workspace.plugin.invoke",
+        "workspace.derived.cache"
+      ],
+      "callers": [
+        "ui",
+        "mcp",
+        "plugin"
+      ],
+      "requires_user_gesture": false
+    },
+    {
+      "plugin_id": "proprium.speaker",
+      "action_id": "speaker.override",
+      "schema_version": 1,
+      "effect": "propose",
+      "input_schema": {
+        "oneOf": [
+          {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+              "mode",
+              "scene_id",
+              "sentence_index",
+              "dialogue_text",
+              "text_hash",
+              "speaker_entity_id"
+            ],
+            "properties": {
+              "mode": {
+                "const": "preview-group"
+              },
+              "scene_id": {
+                "type": "string",
+                "minLength": 1
+              },
+              "sentence_index": {
+                "type": "integer",
+                "minimum": 1
+              },
+              "dialogue_text": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 500000
+              },
+              "text_hash": {
+                "type": "string",
+                "pattern": "^[a-f0-9]{8}$"
+              },
+              "speaker_entity_id": {
+                "type": [
+                  "string",
+                  "null"
+                ]
+              }
+            }
+          },
+          {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+              "mode",
+              "scene_id",
+              "items",
+              "idempotency_key"
+            ],
+            "properties": {
+              "mode": {
+                "const": "propose"
+              },
+              "scene_id": {
+                "type": "string",
+                "minLength": 1
+              },
+              "items": {
+                "type": "array",
+                "minItems": 1,
+                "maxItems": 200,
+                "items": {
+                  "type": "object",
+                  "additionalProperties": false,
+                  "required": [
+                    "sentence_index",
+                    "dialogue_text",
+                    "text_hash",
+                    "predicted_speaker_entity_id",
+                    "predicted_reason",
+                    "speaker_group_id",
+                    "speaker_entity_id",
+                    "label"
+                  ],
+                  "properties": {
+                    "sentence_index": {
+                      "type": "integer",
+                      "minimum": 1
+                    },
+                    "dialogue_text": {
+                      "type": "string",
+                      "minLength": 1,
+                      "maxLength": 500000
+                    },
+                    "text_hash": {
+                      "type": "string",
+                      "pattern": "^[a-f0-9]{8}$"
+                    },
+                    "predicted_speaker_entity_id": {
+                      "type": [
+                        "string",
+                        "null"
+                      ]
+                    },
+                    "predicted_reason": {
+                      "type": "string",
+                      "maxLength": 80
+                    },
+                    "speaker_group_id": {
+                      "type": [
+                        "string",
+                        "null"
+                      ]
+                    },
+                    "speaker_entity_id": {
+                      "type": [
+                        "string",
+                        "null"
+                      ]
+                    },
+                    "label": {
+                      "enum": [
+                        "direct",
+                        "propagated"
+                      ]
+                    }
+                  }
+                }
+              },
+              "idempotency_key": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 128,
+                "pattern": "^[A-Za-z0-9._:-]+$"
+              }
+            }
+          }
+        ]
+      },
+      "output_schema": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "proposal_id": {
+            "type": "string"
+          },
+          "status": {
+            "type": "string"
+          },
+          "affected_lines": {
+            "type": "array"
+          },
+          "expected_revisions": {
+            "type": "array"
+          },
+          "preview": {
+            "type": "object"
+          },
+          "provenance": {
+            "type": "object"
+          }
+        },
+        "anyOf": [
+          {
+            "required": [
+              "affected_lines",
+              "expected_revisions",
+              "provenance"
+            ]
+          },
+          {
+            "required": [
+              "proposal_id",
+              "affected_lines",
+              "expected_revisions",
+              "preview",
+              "provenance"
+            ]
+          }
+        ]
+      },
+      "required_capabilities": [
+        "workspace.file.read",
+        "workspace.plugin.invoke",
+        "workspace.change.propose",
+        "workspace.change.timestamp",
+        "workspace.derived.cache"
+      ],
+      "callers": [
+        "ui",
+        "mcp",
+        "plugin"
+      ],
+      "requires_user_gesture": false
+    },
+    {
+      "plugin_id": "proprium.speaker",
+      "action_id": "speaker.count.update",
+      "schema_version": 1,
+      "effect": "propose",
+      "input_schema": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "scene_id",
+          "speaker_count",
+          "idempotency_key"
+        ],
+        "properties": {
+          "scene_id": {
+            "type": "string",
+            "minLength": 1
+          },
+          "speaker_count": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "minimum": 1,
+            "maximum": 1000
+          },
+          "idempotency_key": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 128,
+            "pattern": "^[A-Za-z0-9._:-]+$"
+          }
+        }
+      },
+      "output_schema": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "proposal_id",
+          "preview",
+          "expected_revisions",
+          "provenance"
+        ],
+        "properties": {
+          "proposal_id": {
+            "type": "string"
+          },
+          "status": {
+            "type": "string"
+          },
+          "preview": {
+            "type": "object"
+          },
+          "expected_revisions": {
+            "type": "array"
+          },
+          "provenance": {
+            "type": "object"
+          }
+        }
+      },
+      "required_capabilities": [
+        "workspace.file.read",
+        "workspace.plugin.invoke",
+        "workspace.change.propose",
+        "workspace.derived.cache"
+      ],
+      "callers": [
+        "ui",
+        "mcp",
+        "plugin"
+      ],
+      "requires_user_gesture": false
+    },
+    {
+      "plugin_id": "proprium.speaker",
+      "action_id": "speaker.dialogue.list",
+      "schema_version": 1,
+      "effect": "read",
+      "input_schema": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "character_id"
+        ],
+        "properties": {
+          "character_id": {
+            "type": "string",
+            "minLength": 1
+          },
+          "scene_id": {
+            "type": "string",
+            "minLength": 1
+          },
+          "limit": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 2000
+          },
+          "min_confidence": {
+            "enum": [
+              "low",
+              "high"
+            ]
+          },
+          "cursor": {
+            "type": "string",
+            "maxLength": 4096
+          }
+        }
+      },
+      "output_schema": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "character_id",
+          "count",
+          "lines",
+          "next_cursor",
+          "provenance"
+        ],
+        "properties": {
+          "character_id": {
+            "type": "string"
+          },
+          "count": {
+            "type": "integer"
+          },
+          "lines": {
+            "type": "array",
+            "items": {
+              "type": "object"
+            }
+          },
+          "next_cursor": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "provenance": {
+            "type": "object"
+          }
+        }
+      },
+      "required_capabilities": [
+        "workspace.file.read",
+        "workspace.plugin.invoke",
+        "workspace.derived.cache"
+      ],
+      "callers": [
+        "ui",
+        "mcp",
+        "plugin"
+      ],
+      "requires_user_gesture": false
+    },
+    {
+      "plugin_id": "proprium.speaker",
+      "action_id": "speaker.voice.profiles",
+      "schema_version": 1,
+      "effect": "read",
+      "input_schema": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "character_id": {
+            "type": "string",
+            "minLength": 1
+          }
+        }
+      },
+      "output_schema": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "fingerprints",
+          "declared_profiles",
+          "character_sample_counts",
+          "separation_matrix",
+          "stylometric_profiles",
+          "provenance"
+        ],
+        "properties": {
+          "fingerprints": {
+            "type": "array",
+            "items": {
+              "type": "object"
+            }
+          },
+          "declared_profiles": {
+            "type": "array",
+            "items": {
+              "type": "object"
+            }
+          },
+          "character_sample_counts": {
+            "type": "array",
+            "items": {
+              "type": "object"
+            }
+          },
+          "separation_matrix": {
+            "type": "array",
+            "items": {
+              "type": "object"
+            }
+          },
+          "stylometric_profiles": {
+            "type": "array",
+            "items": {
+              "type": "object"
+            }
+          },
+          "provenance": {
+            "type": "object"
+          }
+        }
+      },
+      "required_capabilities": [
+        "workspace.file.read",
+        "workspace.plugin.invoke",
+        "workspace.derived.cache"
+      ],
+      "callers": [
+        "ui",
+        "mcp",
+        "plugin"
+      ],
+      "requires_user_gesture": false
+    },
+    {
+      "plugin_id": "proprium.speaker",
+      "action_id": "speaker.voice.check",
+      "schema_version": 1,
+      "effect": "read",
+      "input_schema": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "scene_id"
+        ],
+        "properties": {
+          "scene_id": {
+            "type": "string",
+            "minLength": 1
+          },
+          "text": {
+            "type": "string",
+            "maxLength": 1000000
+          },
+          "draft_generation": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 256
+          }
+        },
+        "allOf": [
+          {
+            "if": {
+              "required": [
+                "text"
+              ]
+            },
+            "then": {
+              "required": [
+                "draft_generation"
+              ]
+            }
+          }
+        ]
+      },
+      "output_schema": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "scene_id",
+          "attributions",
+          "declared_warnings",
+          "learned_style_warnings",
+          "stylometric_warnings",
+          "issues",
+          "provenance",
+          "availability"
+        ],
+        "properties": {
+          "scene_id": {
+            "type": "string"
+          },
+          "attributions": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "additionalProperties": false,
+              "required": [
+                "sentence_index",
+                "start_utf16",
+                "end_utf16",
+                "text",
+                "text_hash",
+                "source_span",
+                "reason",
+                "confidence",
+                "evidence"
+              ],
+              "properties": {
+                "sentence_index": {
+                  "type": "integer",
+                  "minimum": 1
+                },
+                "start_utf16": {
+                  "type": "integer",
+                  "minimum": 0
+                },
+                "end_utf16": {
+                  "type": "integer",
+                  "minimum": 0
+                },
+                "text": {
+                  "type": "string"
+                },
+                "text_hash": {
+                  "type": "string"
+                },
+                "source_span": {
+                  "type": "object",
+                  "additionalProperties": false,
+                  "required": [
+                    "path",
+                    "revision",
+                    "start",
+                    "end",
+                    "quote"
+                  ],
+                  "properties": {
+                    "path": {
+                      "type": "string"
+                    },
+                    "revision": {
+                      "type": "string"
+                    },
+                    "start": {
+                      "type": "integer",
+                      "minimum": 0
+                    },
+                    "end": {
+                      "type": "integer",
+                      "minimum": 0
+                    },
+                    "quote": {
+                      "type": "string"
+                    }
+                  }
+                },
+                "speaker_entity_id": {
+                  "type": "string"
+                },
+                "speaker_group_id": {
+                  "type": "string"
+                },
+                "reason": {
+                  "type": "string"
+                },
+                "confidence": {
+                  "enum": [
+                    "none",
+                    "low",
+                    "high"
+                  ]
+                },
+                "evidence": {
+                  "type": "array",
+                  "items": {
+                    "type": "object"
+                  }
+                }
+              }
+            }
+          },
+          "declared_warnings": {
+            "type": "array"
+          },
+          "learned_style_warnings": {
+            "type": "array"
+          },
+          "stylometric_warnings": {},
+          "issues": {
+            "type": "array"
+          },
+          "provenance": {
+            "type": "object"
+          },
+          "availability": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+              "declared",
+              "learned_style",
+              "stylometric"
+            ],
+            "properties": {
+              "declared": {
+                "enum": [
+                  "available",
+                  "unavailable"
+                ]
+              },
+              "learned_style": {
+                "enum": [
+                  "available",
+                  "unavailable"
+                ]
+              },
+              "stylometric": {
+                "enum": [
+                  "available",
+                  "unavailable"
+                ]
+              }
+            }
+          }
+        }
+      },
+      "required_capabilities": [
+        "workspace.file.read",
+        "workspace.plugin.invoke",
+        "workspace.derived.cache"
+      ],
+      "callers": [
+        "ui",
+        "mcp",
+        "plugin"
+      ],
+      "requires_user_gesture": false
+    },
+    {
+      "plugin_id": "proprium.speaker",
+      "action_id": "speaker.evaluation.latest",
+      "schema_version": 1,
+      "effect": "read",
+      "input_schema": {
+        "type": "object",
+        "additionalProperties": false
+      },
+      "output_schema": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "exists",
+          "provenance"
+        ],
+        "properties": {
+          "exists": {
+            "type": "boolean"
+          },
+          "report": {
+            "type": "object"
+          },
+          "provenance": {
+            "type": "object"
+          }
+        }
+      },
+      "required_capabilities": [
+        "workspace.file.read",
+        "workspace.derived.cache"
+      ],
+      "callers": [
+        "ui",
+        "mcp",
+        "plugin"
+      ],
+      "requires_user_gesture": false
+    },
+    {
+      "plugin_id": "proprium.speaker",
+      "action_id": "speaker.ruleGates",
+      "schema_version": 1,
+      "effect": "read",
+      "input_schema": {
+        "type": "object",
+        "additionalProperties": false
+      },
+      "output_schema": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "exists",
+          "gates",
+          "provenance"
+        ],
+        "properties": {
+          "exists": {
+            "type": "boolean"
+          },
+          "gates": {
+            "type": "object"
+          },
+          "provenance": {
+            "type": "object"
+          }
+        }
+      },
+      "required_capabilities": [
+        "workspace.file.read",
+        "workspace.derived.cache"
+      ],
+      "callers": [
+        "ui",
+        "mcp",
+        "plugin"
+      ],
+      "requires_user_gesture": false
+    },
+    {
+      "plugin_id": "proprium.speaker",
+      "action_id": "speaker.evaluation.run",
+      "schema_version": 1,
+      "effect": "read",
+      "input_schema": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "update_rule_gates": {
+            "type": "boolean"
+          }
+        }
+      },
+      "output_schema": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "report",
+          "gates",
+          "gates_updated",
+          "cache_stored",
+          "provenance",
+          "cache_identity"
+        ],
+        "properties": {
+          "report": {
+            "type": "object"
+          },
+          "gates": {
+            "type": "object"
+          },
+          "gates_updated": {
+            "type": "boolean"
+          },
+          "cache_stored": {
+            "type": "boolean"
+          },
+          "provenance": {
+            "type": "object"
+          },
+          "cache_identity": {
+            "type": "object"
+          }
+        }
+      },
+      "required_capabilities": [
+        "workspace.file.read",
+        "workspace.plugin.invoke",
+        "workspace.derived.cache"
+      ],
+      "callers": [
+        "ui",
+        "mcp",
+        "plugin"
+      ],
+      "requires_user_gesture": false
+    },
+    {
+      "plugin_id": "proprium.speaker",
+      "action_id": "speaker.retraining.run",
+      "schema_version": 1,
+      "effect": "propose",
+      "input_schema": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "idempotency_key"
+        ],
+        "properties": {
+          "holdout_scene_ids": {
+            "type": "array",
+            "maxItems": 500,
+            "uniqueItems": true,
+            "items": {
+              "type": "string",
+              "minLength": 1
+            }
+          },
+          "dry_run": {
+            "type": "boolean"
+          },
+          "idempotency_key": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 128,
+            "pattern": "^[A-Za-z0-9._:-]+$"
+          }
+        }
+      },
+      "output_schema": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "train_example_count",
+          "holdout_scene_ids",
+          "accuracy_without_model",
+          "accuracy_with_model",
+          "train_accuracy",
+          "delta_percentage_points",
+          "high_probability_threshold",
+          "adopted",
+          "model_candidate",
+          "provenance",
+          "adoption_proposal"
+        ],
+        "properties": {
+          "train_example_count": {
+            "type": "integer"
+          },
+          "holdout_scene_ids": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "accuracy_without_model": {
+            "type": "number"
+          },
+          "accuracy_with_model": {
+            "type": "number"
+          },
+          "train_accuracy": {
+            "type": "number"
+          },
+          "delta_percentage_points": {
+            "type": "number"
+          },
+          "high_probability_threshold": {
+            "type": "number"
+          },
+          "adopted": {
+            "type": "boolean"
+          },
+          "model_candidate": {
+            "type": "object"
+          },
+          "provenance": {
+            "type": "object"
+          },
+          "adoption_proposal": {
+            "type": [
+              "object",
+              "null"
+            ]
+          },
+          "expected_revisions": {
+            "type": "array"
+          }
+        }
+      },
+      "required_capabilities": [
+        "workspace.file.read",
+        "workspace.plugin.invoke",
+        "workspace.change.propose",
+        "workspace.change.timestamp",
+        "workspace.derived.cache"
+      ],
+      "callers": [
+        "ui",
+        "mcp",
+        "plugin"
+      ],
+      "requires_user_gesture": false
+    }
+  ],
+  "ui": [
+    {
+      "id": "speaker.attribution",
+      "kind": "panel",
+      "title": "Dialogue attribution",
+      "context": {},
+      "body": {
+        "id": "speaker-attribution-tabs",
+        "type": "tabs",
+        "tabs": [
+          {
+            "id": "scenes",
+            "title": "Scenes",
+            "body": {
+              "id": "speaker-scenes-list",
+              "type": "list",
+              "title": "Choose a scene",
+              "load_action": {
+                "action_id": "speaker.scenes.list",
+                "input_template": {}
+              },
+              "items": {
+                "data_key": "last_action_result.scenes"
+              },
+              "primary": "name",
+              "secondary": "scene_path",
+              "item_action": {
+                "action_id": "speaker.attribute",
+                "input_template": {
+                  "scene_id": {
+                    "data_key": "item.scene_id"
+                  }
+                }
+              }
+            }
+          },
+          {
+            "id": "results",
+            "title": "Attributions",
+            "body": {
+              "id": "speaker-attribution-results",
+              "type": "list",
+              "title": "Dialogue lines",
+              "items": {
+                "data_key": "last_action_result.attributions"
+              },
+              "primary": "text",
+              "secondary": "reason",
+              "item_navigation": {
+                "intent": "open",
+                "target": {
+                  "path": {
+                    "data_key": "item.source_span.path"
+                  },
+                  "span": {
+                    "path": {
+                      "data_key": "item.source_span.path"
+                    },
+                    "revision": {
+                      "data_key": "item.source_span.revision"
+                    },
+                    "start": {
+                      "data_key": "item.source_span.start"
+                    },
+                    "end": {
+                      "data_key": "item.source_span.end"
+                    },
+                    "quote": {
+                      "data_key": "item.source_span.quote"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          {
+            "id": "review",
+            "title": "Review",
+            "body": {
+              "id": "speaker-review-list",
+              "type": "list",
+              "title": "Uncertain dialogue",
+              "load_action": {
+                "action_id": "speaker.review.queue",
+                "input_template": {
+                  "limit": 50
+                }
+              },
+              "items": {
+                "data_key": "last_action_result.rows"
+              },
+              "primary": "attribution.text",
+              "secondary": "attribution.confidence",
+              "item_action": {
+                "action_id": "speaker.override",
+                "input_template": {
+                  "mode": "preview-group",
+                  "scene_id": {
+                    "data_key": "item.scene_id"
+                  },
+                  "sentence_index": {
+                    "data_key": "item.attribution.sentence_index"
+                  },
+                  "dialogue_text": {
+                    "data_key": "item.attribution.text"
+                  },
+                  "text_hash": {
+                    "data_key": "item.attribution.text_hash"
+                  },
+                  "speaker_entity_id": null
+                }
+              },
+              "item_navigation": {
+                "intent": "open",
+                "target": {
+                  "path": {
+                    "data_key": "item.attribution.source_span.path"
+                  },
+                  "span": {
+                    "path": {
+                      "data_key": "item.attribution.source_span.path"
+                    },
+                    "revision": {
+                      "data_key": "item.attribution.source_span.revision"
+                    },
+                    "start": {
+                      "data_key": "item.attribution.source_span.start"
+                    },
+                    "end": {
+                      "data_key": "item.attribution.source_span.end"
+                    },
+                    "quote": {
+                      "data_key": "item.attribution.source_span.quote"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          {
+            "id": "count",
+            "title": "Speaker count",
+            "body": {
+              "id": "speaker-count-form",
+              "type": "form",
+              "fields": [
+                {
+                  "id": "scene_id",
+                  "label": "Scene ID",
+                  "type": "string",
+                  "min_length": 1,
+                  "max_length": 256
+                },
+                {
+                  "id": "speaker_count",
+                  "label": "Speaker count",
+                  "type": "integer",
+                  "required": true
+                },
+                {
+                  "id": "idempotency_key",
+                  "label": "Review key",
+                  "type": "string",
+                  "min_length": 1,
+                  "max_length": 128
+                }
+              ],
+              "submit": {
+                "action_id": "speaker.count.update",
+                "input_template": {
+                  "scene_id": {
+                    "data_key": "form.scene_id"
+                  },
+                  "speaker_count": {
+                    "data_key": "form.speaker_count"
+                  },
+                  "idempotency_key": {
+                    "data_key": "form.idempotency_key"
+                  }
+                }
+              }
+            }
+          },
+          {
+            "id": "clear-count",
+            "title": "Clear count",
+            "body": {
+              "id": "speaker-count-clear-form",
+              "type": "form",
+              "fields": [
+                {
+                  "id": "scene_id",
+                  "label": "Scene ID",
+                  "type": "string",
+                  "min_length": 1,
+                  "max_length": 256
+                },
+                {
+                  "id": "idempotency_key",
+                  "label": "Review key",
+                  "type": "string",
+                  "min_length": 1,
+                  "max_length": 128
+                }
+              ],
+              "submit": {
+                "action_id": "speaker.count.update",
+                "input_template": {
+                  "scene_id": {
+                    "data_key": "form.scene_id"
+                  },
+                  "speaker_count": null,
+                  "idempotency_key": {
+                    "data_key": "form.idempotency_key"
+                  }
+                }
+              }
+            }
+          }
+        ]
+      }
+    },
+    {
+      "id": "speaker.review",
+      "kind": "panel",
+      "title": "Confirm speaker",
+      "context": {},
+      "body": {
+        "id": "speaker-confirm-form",
+        "type": "form",
+        "title": "Propose a speaker correction",
+        "fields": [
+          {
+            "id": "scene_id",
+            "label": "Scene ID",
+            "type": "string",
+            "min_length": 1,
+            "max_length": 256
+          },
+          {
+            "id": "sentence_index",
+            "label": "Sentence index",
+            "type": "integer",
+            "required": true
+          },
+          {
+            "id": "dialogue_text",
+            "label": "Dialogue text",
+            "type": "string",
+            "min_length": 1,
+            "max_length": 100000
+          },
+          {
+            "id": "text_hash",
+            "label": "Dialogue hash",
+            "type": "string",
+            "min_length": 8,
+            "max_length": 8
+          },
+          {
+            "id": "predicted_speaker_entity_id",
+            "label": "Predicted character ID",
+            "type": "string",
+            "min_length": 1,
+            "max_length": 256
+          },
+          {
+            "id": "predicted_reason",
+            "label": "Prediction reason",
+            "type": "string",
+            "min_length": 1,
+            "max_length": 80
+          },
+          {
+            "id": "speaker_group_id",
+            "label": "Speaker group ID",
+            "type": "string",
+            "min_length": 1,
+            "max_length": 256
+          },
+          {
+            "id": "speaker_entity_id",
+            "label": "Knowledge character ID (blank for unknown)",
+            "type": "string",
+            "min_length": 0,
+            "max_length": 256
+          },
+          {
+            "id": "idempotency_key",
+            "label": "Review key",
+            "type": "string",
+            "min_length": 1,
+            "max_length": 128
+          }
+        ],
+        "submit": {
+          "action_id": "speaker.override",
+          "input_template": {
+            "mode": "propose",
+            "scene_id": {
+              "data_key": "form.scene_id"
+            },
+            "items": [
+              {
+                "sentence_index": {
+                  "data_key": "form.sentence_index"
+                },
+                "dialogue_text": {
+                  "data_key": "form.dialogue_text"
+                },
+                "text_hash": {
+                  "data_key": "form.text_hash"
+                },
+                "predicted_speaker_entity_id": {
+                  "data_key": "form.predicted_speaker_entity_id"
+                },
+                "predicted_reason": {
+                  "data_key": "form.predicted_reason"
+                },
+                "speaker_group_id": {
+                  "data_key": "form.speaker_group_id"
+                },
+                "speaker_entity_id": {
+                  "data_key": "form.speaker_entity_id"
+                },
+                "label": "direct"
+              }
+            ],
+            "idempotency_key": {
+              "data_key": "form.idempotency_key"
+            }
+          }
+        }
+      }
+    },
+    {
+      "id": "speaker.dialogue",
+      "kind": "panel",
+      "title": "Character dialogue",
+      "context": {},
+      "body": {
+        "id": "speaker-dialogue-tabs",
+        "type": "tabs",
+        "tabs": [
+          {
+            "id": "search",
+            "title": "Search",
+            "body": {
+              "id": "speaker-dialogue-form",
+              "type": "form",
+              "fields": [
+                {
+                  "id": "character_id",
+                  "label": "Knowledge character ID",
+                  "type": "string",
+                  "min_length": 1,
+                  "max_length": 256
+                },
+                {
+                  "id": "scene_id",
+                  "label": "Optional scene ID",
+                  "type": "string",
+                  "min_length": 1,
+                  "max_length": 256
+                },
+                {
+                  "id": "min_confidence",
+                  "label": "Minimum confidence",
+                  "type": "enum",
+                  "options": [
+                    {
+                      "value": "low",
+                      "label": "Low or high"
+                    },
+                    {
+                      "value": "high",
+                      "label": "High only"
+                    }
+                  ]
+                }
+              ],
+              "submit": {
+                "action_id": "speaker.dialogue.list",
+                "input_template": {
+                  "character_id": {
+                    "data_key": "form.character_id"
+                  },
+                  "scene_id": {
+                    "data_key": "form.scene_id"
+                  },
+                  "min_confidence": {
+                    "data_key": "form.min_confidence"
+                  },
+                  "limit": 20
+                }
+              }
+            }
+          },
+          {
+            "id": "results",
+            "title": "Excerpts",
+            "body": {
+              "id": "speaker-dialogue-results",
+              "type": "list",
+              "items": {
+                "data_key": "last_action_result.lines"
+              },
+              "primary": "text",
+              "secondary": "confidence",
+              "item_navigation": {
+                "intent": "open",
+                "target": {
+                  "path": {
+                    "data_key": "item.source_span.path"
+                  },
+                  "span": {
+                    "path": {
+                      "data_key": "item.source_span.path"
+                    },
+                    "revision": {
+                      "data_key": "item.source_span.revision"
+                    },
+                    "start": {
+                      "data_key": "item.source_span.start"
+                    },
+                    "end": {
+                      "data_key": "item.source_span.end"
+                    },
+                    "quote": {
+                      "data_key": "item.source_span.quote"
+                    }
+                  }
+                }
+              }
+            }
+          }
+        ]
+      }
+    },
+    {
+      "id": "speaker.voice.profiles",
+      "kind": "panel",
+      "title": "Character voice",
+      "context": {},
+      "body": {
+        "id": "speaker-voice-tabs",
+        "type": "tabs",
+        "tabs": [
+          {
+            "id": "profiles",
+            "title": "Profiles",
+            "body": {
+              "id": "speaker-voice-profile-table",
+              "type": "table",
+              "title": "Voice fingerprints",
+              "load_action": {
+                "action_id": "speaker.voice.profiles",
+                "input_template": {}
+              },
+              "rows": {
+                "data_key": "last_action_result.fingerprints"
+              },
+              "columns": [
+                {
+                  "key": "entity_id",
+                  "label": "Character"
+                },
+                {
+                  "key": "sample_count",
+                  "label": "Samples"
+                },
+                {
+                  "key": "first_person_distribution",
+                  "label": "First person"
+                },
+                {
+                  "key": "ending_distribution",
+                  "label": "Endings"
+                }
+              ]
+            }
+          },
+          {
+            "id": "check",
+            "title": "Check scene",
+            "body": {
+              "id": "speaker-voice-check-tabs",
+              "type": "tabs",
+              "tabs": [
+                {
+                  "id": "saved",
+                  "title": "Saved scene",
+                  "body": {
+                    "id": "speaker-voice-saved-form",
+                    "type": "form",
+                    "title": "Check the saved scene",
+                    "fields": [
+                      {
+                        "id": "scene_id",
+                        "label": "Scene ID",
+                        "type": "string",
+                        "required": true,
+                        "min_length": 1,
+                        "max_length": 256
+                      }
+                    ],
+                    "submit": {
+                      "action_id": "speaker.voice.check",
+                      "input_template": {
+                        "scene_id": {
+                          "data_key": "form.scene_id"
+                        }
+                      }
+                    }
+                  }
+                },
+                {
+                  "id": "draft",
+                  "title": "Current draft",
+                  "body": {
+                    "id": "speaker-voice-draft-form",
+                    "type": "form",
+                    "title": "Check the current draft",
+                    "fields": [
+                      {
+                        "id": "scene_id",
+                        "label": "Scene ID",
+                        "type": "string",
+                        "required": true,
+                        "min_length": 1,
+                        "max_length": 256
+                      },
+                      {
+                        "id": "text",
+                        "label": "Current draft text",
+                        "type": "string",
+                        "required": true,
+                        "min_length": 0,
+                        "max_length": 100000
+                      },
+                      {
+                        "id": "draft_generation",
+                        "label": "Current draft generation",
+                        "type": "string",
+                        "required": true,
+                        "min_length": 1,
+                        "max_length": 256
+                      }
+                    ],
+                    "submit": {
+                      "action_id": "speaker.voice.check",
+                      "input_template": {
+                        "scene_id": {
+                          "data_key": "form.scene_id"
+                        },
+                        "text": {
+                          "data_key": "form.text"
+                        },
+                        "draft_generation": {
+                          "data_key": "form.draft_generation"
+                        }
+                      }
+                    }
+                  }
+                },
+                {
+                  "id": "warnings",
+                  "title": "Warnings",
+                  "body": {
+                    "id": "speaker-voice-warnings",
+                    "type": "list",
+                    "title": "Voice warnings",
+                    "items": {
+                      "data_key": "last_action_result.issues"
+                    },
+                    "primary": "text",
+                    "secondary": "rule",
+                    "item_navigation": {
+                      "intent": "open",
+                      "target": {
+                        "path": {
+                          "data_key": "item.source_span.path"
+                        },
+                        "span": {
+                          "path": {
+                            "data_key": "item.source_span.path"
+                          },
+                          "revision": {
+                            "data_key": "item.source_span.revision"
+                          },
+                          "start": {
+                            "data_key": "item.source_span.start"
+                          },
+                          "end": {
+                            "data_key": "item.source_span.end"
+                          },
+                          "quote": {
+                            "data_key": "item.source_span.quote"
+                          }
+                        }
+                      }
+                    }
+                  }
+                }
+              ]
+            }
+          }
+        ]
+      }
+    },
+    {
+      "id": "speaker.evaluation",
+      "kind": "panel",
+      "title": "Speaker evaluation",
+      "context": {},
+      "body": {
+        "id": "speaker-evaluation-tabs",
+        "type": "tabs",
+        "tabs": [
+          {
+            "id": "report",
+            "title": "Report",
+            "body": {
+              "id": "speaker-evaluation-run-form",
+              "type": "form",
+              "title": "Evaluate current snapshot",
+              "fields": [],
+              "submit": {
+                "action_id": "speaker.evaluation.run",
+                "input_template": {
+                  "update_rule_gates": false
+                }
+              }
+            }
+          },
+          {
+            "id": "update-gates",
+            "title": "Update gates",
+            "body": {
+              "id": "speaker-evaluation-gates-form",
+              "type": "form",
+              "title": "Evaluate and update future rule gates",
+              "fields": [],
+              "submit": {
+                "action_id": "speaker.evaluation.run",
+                "input_template": {
+                  "update_rule_gates": true
+                }
+              }
+            }
+          },
+          {
+            "id": "metrics",
+            "title": "Metrics",
+            "body": {
+              "id": "speaker-evaluation-metrics",
+              "type": "table",
+              "title": "Per-scene results",
+              "load_action": {
+                "action_id": "speaker.evaluation.latest",
+                "input_template": {}
+              },
+              "rows": {
+                "data_key": "last_action_result.report.scenes"
+              },
+              "columns": [
+                {
+                  "key": "scene_id",
+                  "label": "Scene"
+                },
+                {
+                  "key": "text_hash_matched_count",
+                  "label": "Matched"
+                },
+                {
+                  "key": "text_hash_mismatch_count",
+                  "label": "Stale labels"
+                }
+              ]
+            }
+          },
+          {
+            "id": "training",
+            "title": "Retrain",
+            "body": {
+              "id": "speaker-training-tabs",
+              "type": "tabs",
+              "tabs": [
+                {
+                  "id": "train",
+                  "title": "Retrain",
+                  "body": {
+                    "id": "speaker-retraining-form",
+                    "type": "form",
+                    "title": "Train and propose eligible model",
+                    "fields": [
+                      {
+                        "id": "idempotency_key",
+                        "label": "Training key",
+                        "type": "string",
+                        "required": true,
+                        "min_length": 1,
+                        "max_length": 128
+                      }
+                    ],
+                    "submit": {
+                      "action_id": "speaker.retraining.run",
+                      "input_template": {
+                        "dry_run": false,
+                        "idempotency_key": {
+                          "data_key": "form.idempotency_key"
+                        }
+                      }
+                    }
+                  }
+                },
+                {
+                  "id": "dry-run",
+                  "title": "Dry run",
+                  "body": {
+                    "id": "speaker-retraining-dry-run-form",
+                    "type": "form",
+                    "title": "Train without proposal",
+                    "fields": [
+                      {
+                        "id": "idempotency_key",
+                        "label": "Training key",
+                        "type": "string",
+                        "required": true,
+                        "min_length": 1,
+                        "max_length": 128
+                      }
+                    ],
+                    "submit": {
+                      "action_id": "speaker.retraining.run",
+                      "input_template": {
+                        "dry_run": true,
+                        "idempotency_key": {
+                          "data_key": "form.idempotency_key"
+                        }
+                      }
+                    }
+                  }
+                }
+              ]
+            }
+          },
+          {
+            "id": "gates",
+            "title": "Rule gates",
+            "body": {
+              "id": "speaker-rule-gate-tabs",
+              "type": "tabs",
+              "tabs": [
+                {
+                  "id": "current",
+                  "title": "Current gates",
+                  "body": {
+                    "id": "speaker-rule-gates-detail",
+                    "type": "detail",
+                    "title": "Current rule gates",
+                    "load_action": {
+                      "action_id": "speaker.ruleGates",
+                      "input_template": {}
+                    },
+                    "value": {
+                      "data_key": "last_action_result.gates"
+                    }
+                  }
+                },
+                {
+                  "id": "update",
+                  "title": "Update gates",
+                  "body": {
+                    "id": "speaker-rule-gate-update-form",
+                    "type": "form",
+                    "title": "Recompute rule gates",
+                    "fields": [],
+                    "submit": {
+                      "action_id": "speaker.evaluation.run",
+                      "input_template": {
+                        "update_rule_gates": true
+                      }
+                    }
+                  }
+                }
+              ]
+            }
+          }
+        ]
+      }
+    }
+  ]
+}
