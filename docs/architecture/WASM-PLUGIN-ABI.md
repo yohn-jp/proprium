@@ -2,6 +2,8 @@
 
 **Status: normative implementation boundary.** The selected baseline is **WebAssembly Component Model + WIT** for plugin compute; browser delivery uses a tested component-to-core-WASM/JS-binding toolchain such as jco. The plugin host remains TypeScript. Actual engine support and generated bindings must be verified in desktop and mobile browsers.
 
+The currently implemented `proprium:plugin@1.0.0` WIT world and `PluginPanel` are **compute-demo-scale**: bulk snapshot list/read, change proposals and title-only panel/command contributions. A fully functional authoring plugin requires the versioned paged readers, typed actions, Host-rendered interactive UI and guarded navigation/ChangeSet review specified in [the recovery Host/Plugin Canon](../canon/HOST-PLUGIN-CONTRACT.md). Never silently alter an existing WIT major version or claim those extensions already exist.
+
 ## Contract authority
 
 - Maintain one versioned source of truth for the public component interface: WIT packages/worlds, with generated bindings and separately validated manifest/distribution metadata. Do not independently hand-maintain contradictory TypeScript/WIT business contracts.

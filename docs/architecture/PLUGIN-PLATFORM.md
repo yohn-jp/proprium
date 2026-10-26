@@ -1,6 +1,6 @@
 # Proprium — WASM-first plugin platform
 
-**Status: normative target contract, not a working Plugin SDK.** Existing Scriptorium built-in modules and its container-time profile resolver are legacy implementation assets, not implementations of this contract. Atlas integration is deferred.
+**Status: normative target contract with a working signed plugin-admission/runtime subset, NOT a complete authoring Plugin SDK.** Existing Scriptorium built-in modules and its container-time profile resolver are legacy sources, not activated Proprium plugins. Official writing plugins and required generic Host/WIT/UI extensions are fixed in the [Authoring Plugin Canon](../canon/README.md). Atlas remains separately deferred.
 
 ## Decision
 
@@ -68,7 +68,7 @@ Host owns the single writer, approval/commit/push UI, file scopes and recovery s
 
 Standard plugin surfaces use a **declarative contribution protocol** and Host-rendered components. Host supplies common forms, tables, result lists, inspector panels, navigation and other bounded primitives; plugins provide schemas, data and actions through their capabilities. The plugin cannot inject global styles, arbitrary React components or DOM references into the Host.
 
-This is not intended to reimplement sophisticated drawing engines in a declarative schema. Custom full-fidelity Canvas/Editor UIs require a distinct, separately reviewed browser isolation mode (typically cross-origin sandbox iframe + validated MessageChannel) before such plugins can be integrated. **Atlas and Story Knowledge are deferred**; no special-case Atlas dependency, mock SDK or premature canvas-UI privilege is added to the core protocol.
+This is not intended to reimplement sophisticated drawing engines in a declarative schema. Custom full-fidelity Canvas/Editor UIs require a distinct, separately reviewed browser isolation mode (typically cross-origin sandbox iframe + validated MessageChannel) before such plugins can be integrated. **Atlas is deferred, but Story Knowledge is an official recovery requirement** under [Knowledge Canon](../canon/plugins/KNOWLEDGE.md). Graph/map/timeline are host-owned generic presentations of plugin-provided data, not raw plugin DOM/canvas access. The [Host/Plugin Contract](../canon/HOST-PLUGIN-CONTRACT.md) specifies actual v1 gaps: current WIT contributions carry only kind/id/title and the Host's eager snapshot has strict 256-file/2-MiB limits. These are NOT sufficient for restored authoring.
 
 ## Resource control and failure
 
@@ -82,4 +82,4 @@ This is not intended to reimplement sophisticated drawing engines in a declarati
 
 Independent artifact publication and browser installation without Host rebuild; digest/publisher/ABI rejection; capability denial and no token/file bypass; zero-plugin cold start; opt-in lazy activation; disable/cancel/recovery; malformed/oversized RPC; Worker hang/trap/large allocation; offline cached reuse and missing artifact; browser version update/rollback; real Chromium/WebKit/mobile checks. Claims beyond measured configurations are not accepted.
 
-See [architecture](OVERVIEW.md), [delivery/security](DELIVERY-AND-SECURITY.md), and [workspace/Git mutation rules](GIT-AND-STORAGE.md).
+See the [official product specifications](../canon/plugins/README.md), [recovery ledger](../canon/RECOVERY-INVENTORY.md), [acceptance gates](../canon/ACCEPTANCE.md), [architecture](OVERVIEW.md), [delivery/security](DELIVERY-AND-SECURITY.md), and [workspace/Git mutation rules](GIT-AND-STORAGE.md).

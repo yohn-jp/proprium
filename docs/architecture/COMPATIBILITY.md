@@ -1,6 +1,6 @@
 # Inherited code and the Proprium runtime boundary
 
-**Status: implementation boundary.** Proprium uses a browser-native Host, Browser Git and a WASM Component Model plugin runtime. Scriptorium source is not a second supported product runtime.
+**Status: implementation boundary.** Proprium uses a browser-native Host, Browser Git and a WASM Component Model plugin runtime. Scriptorium source is not a second supported product runtime. It is, however, the **primary behavioral recovery source** under the [official Authoring Plugin Canon](../canon/README.md), with missing or reduced functions audited against the original Arcadia Loom; retained source is not evidence of activation.
 
 | Inherited area | Proprium status |
 | --- | --- |
@@ -12,7 +12,7 @@
 | `packages/core` and `packages/module-runtime` | Inherited Scriptorium packages retained as source for provenance and reusable algorithms. They are not imported by or required to run the browser Host. Their Node-backed execution is not Proprium product support. |
 | `packages/contracts` | Shared value types and validation used by the recovered UI/recovery journal. It does not provide a server or impose a manuscript hierarchy on repository files. |
 | `packages/migration` | Inherited import tooling; migration data is not silently treated as Proprium Core state. |
-| `modules/*` | Inherited optional Scriptorium modules. Their presence does not mean they are installed Proprium plugins or part of the default Host. New external plugin execution uses the versioned WASM/WIT platform. |
+| `modules/*` | Inherited optional Scriptorium modules. Their presence does not mean they are installed Proprium plugins or part of the default Host. Their **observable writing features must be recovered as official signed plugins** under [the per-plugin canons](../canon/plugins/README.md) and [inventory](../canon/RECOVERY-INVENTORY.md). New external plugin execution uses the versioned WASM/WIT platform. |
 | Docker, BuildKit, OCI, Hosted and profile build paths | Retired from the repository's product build and release path. Static Host delivery and independently published plugin artifacts have separate build lifecycles. |
 
 The Core work repository format is **generic Git files**, not the Arcadia-specific plot, scene or manuscript hierarchy. Optional migration tooling may inspect Scriptorium exports, but it cannot make those formats mandatory or silently rewrite user files.

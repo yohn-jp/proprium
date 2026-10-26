@@ -4,6 +4,7 @@ These documents define Proprium's architecture and implementation boundaries. Th
 
 | Contract | Responsibility |
 | --- | --- |
+| [Official Authoring Plugin Canon](canon/README.md) | Normative eight-plugin recovery architecture, per-plugin specifications, legacy parity/source ledger, Host contracts, implementation priority and acceptance |
 | [Overview](architecture/OVERVIEW.md) | Product boundary, component ownership, local-first invariants |
 | [Optional Gateway and Live MCP](architecture/OPTIONAL-GATEWAY-AND-MCP.md) | Browser-alone baseline; optional Go GitHub relay and Live Workspace MCP; binary/Tunnel/security/availability contracts |
 | [Git and storage](architecture/GIT-AND-STORAGE.md) | GitHub as remote authority, local Git, durability states, sync/conflict handling |
@@ -25,6 +26,6 @@ These documents define Proprium's architecture and implementation boundaries. Th
 
 For UI work, read the [screen catalogue](architecture/SCREEN-CATALOG.md), [transition diagrams](architecture/USER-FLOWS.md), and [UI architecture](architecture/UI-ARCHITECTURE.md) together with Workspace UX. They distinguish connected source surfaces from target interactions; neither a diagram nor a retained component proves that an end-to-end feature is implemented.
 
-Legacy Scriptorium-specific Hosted/OCI/release, authoring, module, performance and historical UX documents are not Proprium product authority. They remain available in the original [Scriptorium repository](https://github.com/yohn-jp/scriptorium) and its Git history; immutable evidence already committed in this repository has not been modified.
+Legacy Scriptorium-specific Hosted/OCI/release, authoring, module, performance and historical UX documents are not directly executable Proprium product authority. Their original functionality is primary *recovery source evidence* for the [Authoring Plugin Canon](canon/README.md), with Arcadia Loom used to recover features absent or reduced in Scriptorium; historical Node/Hosted assumptions remain non-authoritative. They remain available in the original [Scriptorium repository](https://github.com/yohn-jp/scriptorium) and its Git history; immutable evidence already committed in this repository has not been modified.
 
 For repository workflow see [CONTRIBUTING](../CONTRIBUTING.md). Execution evidence belongs in PRs and checks, not architecture documentation.

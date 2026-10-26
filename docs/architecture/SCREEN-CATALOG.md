@@ -2,6 +2,8 @@
 
 **Status: source-grounded inventory and normative navigation vocabulary.** 「画面」はページだけでなく、パネル、ダイアログ、シート、外部認証画面、運用端末の操作面を含む。ソース上の接続を記録するもので、本番表示・実機動作の認定ではない。対象ソースのcommitと検証結果はPRに記録し、この文書には時点報告を置かない。
 
+旧Scriptorium/Arcadiaの小説執筆機能は、現行Host上で到達できないものも含めて[公式Authoring Plugin Canon](../canon/README.md)、[機能回収台帳](../canon/RECOVERY-INVENTORY.md)と[プラグイン別仕様](../canon/plugins/README.md)に正本化する。この台帳は現行Hostの到達経路を表し、小説機能の廃止許可ではない。現行の`Files`一覧を完成した作品階層と誤認しない。
+
 [全遷移図](USER-FLOWS.md)が利用者の操作契約、[UIアーキテクチャ](UI-ARCHITECTURE.md)が状態・責務の契約である。[Workspace UX](WORKSPACE-UX.md)の編集継続性とDesktop/Mobile分離を維持する。
 
 ## 1. 棚卸しの境界

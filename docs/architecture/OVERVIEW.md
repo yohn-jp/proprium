@@ -4,7 +4,7 @@
 
 ## Product boundary
 
-Proprium is a general-purpose, user-owned, composable workspace running in desktop and mobile browsers. It reads and edits files from Git-backed repositories, provides local Git operations, and executes optional analysis/transformation capabilities via independently distributed WASM-first plugins. No manuscript hierarchy or Arcadia-specific schema is required by Core.
+Proprium is a general-purpose, user-owned, composable workspace running in desktop and mobile browsers. It reads and edits files from Git-backed repositories, provides local Git operations, and executes optional analysis/transformation capabilities via independently distributed WASM-first plugins. No manuscript hierarchy or Arcadia-specific schema is required by Core. The [official Authoring Plugin Canon](../canon/README.md) nevertheless makes the full source-preserving Novel Writer, Story Knowledge, Research, Paired Writing, Diagnostics, Speaker, Semantic and Publishing capabilities a required recovery *target*, without making them Core schema or claiming they already ship.
 
 **GitHub is the authoritative remote** for shared/published work. The browser's worktree, local Git object database, and draft cache are disposable local copies. Local work is not remotely durable until the remote push is confirmed. The Host works offline on already available local data; offline operation does not imply offline GitHub synchronization.
 
@@ -65,9 +65,9 @@ The Host owns document identity, revision, approved change application and Git s
 
 ## Optional Gateway
 
-The Go Gateway is an optional single binary for GitHub OAuth Device Flow, repository-scoped Git Smart HTTP fallback, and explicitly enabled Live Workspace MCP. GitHub REST calls continue directly from the Browser Host. When Live MCP is enabled, the current browser workspace opens an outbound SSE connection; the Gateway relays authorized MCP tool calls over that connection. Workspace reads, Git operations, plugin execution, proposals and approval stay in the Browser Host. Closing the browser disconnects the live workspace and makes it unavailable to MCP clients.
+The Go Gateway is an optional single binary for GitHub OAuth Device Flow, repository-scoped Git Smart HTTP fallback, and live Browser Host MCP. GitHub REST calls continue directly from the Browser Host. A connected Browser Host maintains an outbound SSE connection, and the Gateway routes MCP calls to the current active browser; official plugin actions are resolved by that Host's plugin registry. Workspace reads, Git operations, plugin execution, proposals and approval stay in the Browser Host. Closing the browser disconnects the live workspace and makes it unavailable to MCP clients.
 
-The Gateway retains only active in-memory connections and requests. It does not store user identities, GitHub repositories, workspaces, workspace files, search indexes or Git objects. Owner and client grants expire on Gateway restart. See [MCP Gateway](MCP-GATEWAY.md) and [Gateway deployment](../deployment/GATEWAY.md).
+The Gateway retains only active in-memory connections and requests. It does not store user identities, GitHub repositories, workspaces, workspace files, search indexes or Git objects. The in-memory active Host registrations and pending MCP requests disappear on Gateway restart; Proprium issues no separate MCP Client Token or Owner Key. See [MCP Gateway](MCP-GATEWAY.md) and [Gateway deployment](../deployment/GATEWAY.md).
 
 ## Accepted out of scope
 
