@@ -1,0 +1,13 @@
+{
+  "name": "@proprium/plugin-publishing",
+  "private": true,
+  "version": "0.1.0",
+  "type": "module",
+  "scripts": {
+    "typecheck": "tsc --noEmit --target ES2023 --module NodeNext --moduleResolution NodeNext --strict --skipLibCheck --types node guest.ts domain.ts artifacts.ts domain.test.ts artifacts.test.ts guest.test.ts",
+    "test": "tsx --test domain.test.ts artifacts.test.ts guest.test.ts"
+  },
+  "dependencies": {
+    "yaml": "^2.9.1"
+  }
+}

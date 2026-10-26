@@ -1,0 +1,14 @@
+package proprium:plugin@2.0.0;
+
+interface inference {
+  begin-asset: func(group-id: string, file-path: string, total-bytes: u32, sha256: string) -> result<_, string>;
+  append-asset: func(group-id: string, file-path: string, offset: u32, bytes: list<u8>) -> result<_, string>;
+  finish-asset: func(group-id: string, file-path: string) -> result<_, string>;
+  load-embedding: func() -> result<_, string>;
+  embed-passages: func(texts: list<string>) -> result<list<list<f32>>, string>;
+  release: func();
+}
+
+world semantic-inference {
+  export inference;
+}

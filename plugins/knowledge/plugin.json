@@ -1,0 +1,3568 @@
+{
+  "schema": "proprium.plugin/v2",
+  "id": "proprium.knowledge",
+  "version": "0.1.0",
+  "abi": "proprium.component/v2",
+  "capabilities": [
+    "workspace.change.propose",
+    "workspace.change.timestamp",
+    "workspace.file.read",
+    "workspace.plugin.invoke"
+  ],
+  "actions": [
+    {
+      "plugin_id": "proprium.knowledge",
+      "action_id": "knowledge.snapshot.status",
+      "schema_version": 1,
+      "effect": "read",
+      "input_schema": {
+        "type": "object",
+        "properties": {},
+        "required": [],
+        "additionalProperties": false
+      },
+      "output_schema": {
+        "type": "object",
+        "properties": {
+          "snapshot": true,
+          "entityCount": true,
+          "linkCount": true,
+          "diagnostics": true
+        },
+        "required": [],
+        "additionalProperties": false
+      },
+      "required_capabilities": [
+        "workspace.file.read"
+      ],
+      "callers": [
+        "ui",
+        "mcp",
+        "plugin"
+      ],
+      "requires_user_gesture": false
+    },
+    {
+      "plugin_id": "proprium.knowledge",
+      "action_id": "knowledge.entities.list",
+      "schema_version": 1,
+      "effect": "read",
+      "input_schema": {
+        "type": "object",
+        "properties": {
+          "type": {
+            "type": "string",
+            "enum": [
+              "character",
+              "location",
+              "item",
+              "faction",
+              "event",
+              "thread",
+              "scene",
+              "chapter",
+              "volume",
+              "arc",
+              "lore",
+              "manuscript",
+              "dialogue_sketch"
+            ],
+            "maxLength": 256
+          },
+          "tag": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 256
+          },
+          "cursor": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 2048
+          },
+          "limit": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 200
+          }
+        },
+        "required": [],
+        "additionalProperties": false
+      },
+      "output_schema": {
+        "type": "object",
+        "properties": {
+          "items": true,
+          "nextCursor": true,
+          "collectionRevision": true
+        },
+        "required": [],
+        "additionalProperties": false
+      },
+      "required_capabilities": [
+        "workspace.file.read"
+      ],
+      "callers": [
+        "ui",
+        "mcp",
+        "plugin"
+      ],
+      "requires_user_gesture": false
+    },
+    {
+      "plugin_id": "proprium.knowledge",
+      "action_id": "knowledge.entities.collection-revision",
+      "schema_version": 1,
+      "effect": "read",
+      "input_schema": {
+        "type": "object",
+        "properties": {},
+        "required": [],
+        "additionalProperties": false
+      },
+      "output_schema": {
+        "type": "object",
+        "properties": {
+          "collectionRevision": true
+        },
+        "required": [],
+        "additionalProperties": false
+      },
+      "required_capabilities": [
+        "workspace.file.read"
+      ],
+      "callers": [
+        "ui",
+        "mcp",
+        "plugin"
+      ],
+      "requires_user_gesture": false
+    },
+    {
+      "plugin_id": "proprium.knowledge",
+      "action_id": "knowledge.entities.get",
+      "schema_version": 1,
+      "effect": "read",
+      "input_schema": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 256
+          }
+        },
+        "required": [
+          "id"
+        ],
+        "additionalProperties": false
+      },
+      "output_schema": {
+        "type": "object",
+        "properties": {
+          "entity": true,
+          "sourceFiles": true
+        },
+        "required": [],
+        "additionalProperties": false
+      },
+      "required_capabilities": [
+        "workspace.file.read"
+      ],
+      "callers": [
+        "ui",
+        "mcp",
+        "plugin"
+      ],
+      "requires_user_gesture": false
+    },
+    {
+      "plugin_id": "proprium.knowledge",
+      "action_id": "knowledge.entities.create",
+      "schema_version": 1,
+      "effect": "propose",
+      "input_schema": {
+        "type": "object",
+        "properties": {
+          "type": {
+            "type": "string",
+            "enum": [
+              "character",
+              "location",
+              "item",
+              "faction",
+              "event",
+              "lore",
+              "thread",
+              "arc",
+              "dialogue_sketch"
+            ],
+            "maxLength": 256
+          },
+          "values": true,
+          "expectedCollectionRevision": {
+            "type": "string",
+            "pattern": "^[a-f0-9]{64}$",
+            "maxLength": 64
+          }
+        },
+        "required": [
+          "type",
+          "values",
+          "expectedCollectionRevision"
+        ],
+        "additionalProperties": false
+      },
+      "output_schema": {
+        "type": "object",
+        "properties": {
+          "entityId": true,
+          "path": true,
+          "proposalId": true,
+          "preview": true
+        },
+        "required": [],
+        "additionalProperties": false
+      },
+      "required_capabilities": [
+        "workspace.file.read",
+        "workspace.change.propose"
+      ],
+      "callers": [
+        "ui",
+        "mcp",
+        "plugin"
+      ],
+      "requires_user_gesture": false
+    },
+    {
+      "plugin_id": "proprium.knowledge",
+      "action_id": "knowledge.entities.update",
+      "schema_version": 1,
+      "effect": "propose",
+      "input_schema": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 256
+          },
+          "patch": true,
+          "expectedEntityRevision": {
+            "type": "string",
+            "pattern": "^[a-f0-9]{64}$",
+            "maxLength": 64
+          }
+        },
+        "required": [
+          "id",
+          "patch",
+          "expectedEntityRevision"
+        ],
+        "additionalProperties": false
+      },
+      "output_schema": {
+        "type": "object",
+        "properties": {
+          "entityId": true,
+          "proposalId": true,
+          "preview": true
+        },
+        "required": [],
+        "additionalProperties": false
+      },
+      "required_capabilities": [
+        "workspace.file.read",
+        "workspace.change.propose"
+      ],
+      "callers": [
+        "ui",
+        "mcp",
+        "plugin"
+      ],
+      "requires_user_gesture": false
+    },
+    {
+      "plugin_id": "proprium.knowledge",
+      "action_id": "knowledge.entities.backlinks",
+      "schema_version": 1,
+      "effect": "read",
+      "input_schema": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 256
+          },
+          "cursor": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 2048
+          },
+          "limit": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 200
+          }
+        },
+        "required": [
+          "id"
+        ],
+        "additionalProperties": false
+      },
+      "output_schema": {
+        "type": "object",
+        "properties": {
+          "items": true,
+          "nextCursor": true
+        },
+        "required": [],
+        "additionalProperties": false
+      },
+      "required_capabilities": [
+        "workspace.file.read"
+      ],
+      "callers": [
+        "ui",
+        "mcp",
+        "plugin"
+      ],
+      "requires_user_gesture": false
+    },
+    {
+      "plugin_id": "proprium.knowledge",
+      "action_id": "knowledge.entities.appearances",
+      "schema_version": 1,
+      "effect": "read",
+      "input_schema": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 256
+          },
+          "cursor": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 2048
+          },
+          "limit": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 200
+          }
+        },
+        "required": [
+          "id"
+        ],
+        "additionalProperties": false
+      },
+      "output_schema": {
+        "type": "object",
+        "properties": {
+          "items": true,
+          "nextCursor": true
+        },
+        "required": [],
+        "additionalProperties": false
+      },
+      "required_capabilities": [
+        "workspace.file.read"
+      ],
+      "callers": [
+        "ui",
+        "mcp",
+        "plugin"
+      ],
+      "requires_user_gesture": false
+    },
+    {
+      "plugin_id": "proprium.knowledge",
+      "action_id": "knowledge.entities.declared-voice",
+      "schema_version": 1,
+      "effect": "read",
+      "input_schema": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 256
+          }
+        },
+        "required": [
+          "id"
+        ],
+        "additionalProperties": false
+      },
+      "output_schema": {
+        "type": "object",
+        "properties": {
+          "firstPerson": true,
+          "sentenceEndings": true,
+          "tone": true,
+          "sourceFiles": true
+        },
+        "required": [],
+        "additionalProperties": false
+      },
+      "required_capabilities": [
+        "workspace.file.read"
+      ],
+      "callers": [
+        "ui",
+        "mcp",
+        "plugin"
+      ],
+      "requires_user_gesture": false
+    },
+    {
+      "plugin_id": "proprium.knowledge",
+      "action_id": "knowledge.entities.freshness",
+      "schema_version": 1,
+      "effect": "read",
+      "input_schema": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 256
+          }
+        },
+        "required": [
+          "id"
+        ],
+        "additionalProperties": false
+      },
+      "output_schema": {
+        "type": "object",
+        "properties": {
+          "newMentionCount": true,
+          "newMentionSceneIds": true,
+          "baselineRevision": true
+        },
+        "required": [],
+        "additionalProperties": false
+      },
+      "required_capabilities": [
+        "workspace.file.read"
+      ],
+      "callers": [
+        "ui",
+        "mcp",
+        "plugin"
+      ],
+      "requires_user_gesture": false
+    },
+    {
+      "plugin_id": "proprium.knowledge",
+      "action_id": "knowledge.tags.list",
+      "schema_version": 1,
+      "effect": "read",
+      "input_schema": {
+        "type": "object",
+        "properties": {},
+        "required": [],
+        "additionalProperties": false
+      },
+      "output_schema": {
+        "type": "object",
+        "properties": {
+          "tags": true,
+          "sourceRevision": true
+        },
+        "required": [],
+        "additionalProperties": false
+      },
+      "required_capabilities": [
+        "workspace.file.read"
+      ],
+      "callers": [
+        "ui",
+        "mcp",
+        "plugin"
+      ],
+      "requires_user_gesture": false
+    },
+    {
+      "plugin_id": "proprium.knowledge",
+      "action_id": "knowledge.tags.suggested",
+      "schema_version": 1,
+      "effect": "read",
+      "input_schema": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 256
+          }
+        },
+        "required": [
+          "id"
+        ],
+        "additionalProperties": false
+      },
+      "output_schema": {
+        "type": "object",
+        "properties": {
+          "items": true,
+          "snapshot": true,
+          "tokenizerIdentity": true
+        },
+        "required": [],
+        "additionalProperties": false
+      },
+      "required_capabilities": [
+        "workspace.file.read",
+        "workspace.plugin.invoke"
+      ],
+      "callers": [
+        "ui",
+        "mcp",
+        "plugin"
+      ],
+      "requires_user_gesture": false
+    },
+    {
+      "plugin_id": "proprium.knowledge",
+      "action_id": "knowledge.scene.references.get",
+      "schema_version": 1,
+      "effect": "read",
+      "input_schema": {
+        "type": "object",
+        "properties": {
+          "sceneId": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 256
+          }
+        },
+        "required": [
+          "sceneId"
+        ],
+        "additionalProperties": false
+      },
+      "output_schema": {
+        "type": "object",
+        "properties": {
+          "sceneId": true,
+          "pov": true,
+          "location": true,
+          "appears": true,
+          "mentions": true,
+          "relations": true,
+          "unresolvedReferences": true,
+          "sourceFiles": true
+        },
+        "required": [],
+        "additionalProperties": false
+      },
+      "required_capabilities": [
+        "workspace.file.read"
+      ],
+      "callers": [
+        "ui",
+        "mcp",
+        "plugin"
+      ],
+      "requires_user_gesture": false
+    },
+    {
+      "plugin_id": "proprium.knowledge",
+      "action_id": "knowledge.scene.references.propose",
+      "schema_version": 1,
+      "effect": "propose",
+      "input_schema": {
+        "type": "object",
+        "properties": {
+          "sceneId": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 256
+          },
+          "patch": true,
+          "expectedSceneRevision": {
+            "type": "string",
+            "pattern": "^[a-f0-9]{64}$",
+            "maxLength": 64
+          }
+        },
+        "required": [
+          "sceneId",
+          "patch",
+          "expectedSceneRevision"
+        ],
+        "additionalProperties": false
+      },
+      "output_schema": {
+        "type": "object",
+        "properties": {
+          "sceneId": true,
+          "proposalId": true,
+          "changedFields": true,
+          "preview": true
+        },
+        "required": [],
+        "additionalProperties": false
+      },
+      "required_capabilities": [
+        "workspace.file.read",
+        "workspace.change.propose"
+      ],
+      "callers": [
+        "ui",
+        "mcp",
+        "plugin"
+      ],
+      "requires_user_gesture": false
+    },
+    {
+      "plugin_id": "proprium.knowledge",
+      "action_id": "proprium.knowledge.changes.compile",
+      "schema_version": 1,
+      "effect": "read",
+      "input_schema": {
+        "type": "object",
+        "properties": {
+          "operations": {
+            "type": "array",
+            "items": true,
+            "maxItems": 64,
+            "minItems": 1
+          },
+          "evidence": {
+            "type": "array",
+            "items": true,
+            "maxItems": 256,
+            "minItems": 0
+          },
+          "staging_snapshot": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 2048
+          }
+        },
+        "required": [
+          "operations",
+          "evidence"
+        ],
+        "additionalProperties": false
+      },
+      "output_schema": {
+        "type": "object",
+        "properties": {
+          "read_set": true,
+          "units": true,
+          "operation_map": true,
+          "diagnostics": true
+        },
+        "required": [],
+        "additionalProperties": false
+      },
+      "required_capabilities": [
+        "workspace.file.read"
+      ],
+      "callers": [
+        "plugin"
+      ],
+      "requires_user_gesture": false,
+      "caller_plugins": [
+        "proprium.paired-writing"
+      ]
+    },
+    {
+      "plugin_id": "proprium.knowledge",
+      "action_id": "knowledge.scene.context",
+      "schema_version": 1,
+      "effect": "read",
+      "input_schema": {
+        "type": "object",
+        "properties": {
+          "sceneId": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 256
+          }
+        },
+        "required": [
+          "sceneId"
+        ],
+        "additionalProperties": false
+      },
+      "output_schema": {
+        "type": "object",
+        "properties": {
+          "sceneId": true,
+          "povId": true,
+          "locationId": true,
+          "appears": true,
+          "mentions": true,
+          "plantedThreads": true,
+          "advancedThreads": true,
+          "entityCards": true,
+          "sourceFiles": true
+        },
+        "required": [],
+        "additionalProperties": false
+      },
+      "required_capabilities": [
+        "workspace.file.read"
+      ],
+      "callers": [
+        "ui",
+        "mcp",
+        "plugin"
+      ],
+      "requires_user_gesture": false
+    },
+    {
+      "plugin_id": "proprium.knowledge",
+      "action_id": "knowledge.threads.overview",
+      "schema_version": 1,
+      "effect": "read",
+      "input_schema": {
+        "type": "object",
+        "properties": {
+          "cursor": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 2048
+          },
+          "limit": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 200
+          }
+        },
+        "required": [],
+        "additionalProperties": false
+      },
+      "output_schema": {
+        "type": "object",
+        "properties": {
+          "items": true,
+          "nextCursor": true
+        },
+        "required": [],
+        "additionalProperties": false
+      },
+      "required_capabilities": [
+        "workspace.file.read"
+      ],
+      "callers": [
+        "ui",
+        "mcp",
+        "plugin"
+      ],
+      "requires_user_gesture": false
+    },
+    {
+      "plugin_id": "proprium.knowledge",
+      "action_id": "knowledge.threads.status",
+      "schema_version": 1,
+      "effect": "read",
+      "input_schema": {
+        "type": "object",
+        "properties": {
+          "threadId": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 256
+          },
+          "atSceneId": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 256
+          }
+        },
+        "required": [],
+        "additionalProperties": false
+      },
+      "output_schema": {
+        "type": "object",
+        "properties": {
+          "items": true,
+          "snapshot": true
+        },
+        "required": [],
+        "additionalProperties": false
+      },
+      "required_capabilities": [
+        "workspace.file.read"
+      ],
+      "callers": [
+        "ui",
+        "mcp",
+        "plugin"
+      ],
+      "requires_user_gesture": false
+    },
+    {
+      "plugin_id": "proprium.knowledge",
+      "action_id": "knowledge.threads.lifecycle",
+      "schema_version": 1,
+      "effect": "read",
+      "input_schema": {
+        "type": "object",
+        "properties": {
+          "threadId": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 256
+          },
+          "staleSceneThreshold": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 100000
+          }
+        },
+        "required": [],
+        "additionalProperties": false
+      },
+      "output_schema": {
+        "type": "object",
+        "properties": {
+          "snapshots": true,
+          "warnings": true
+        },
+        "required": [],
+        "additionalProperties": false
+      },
+      "required_capabilities": [
+        "workspace.file.read"
+      ],
+      "callers": [
+        "ui",
+        "mcp",
+        "plugin"
+      ],
+      "requires_user_gesture": false
+    },
+    {
+      "plugin_id": "proprium.knowledge",
+      "action_id": "knowledge.graph.query",
+      "schema_version": 1,
+      "effect": "read",
+      "input_schema": {
+        "type": "object",
+        "properties": {
+          "types": {
+            "type": "array",
+            "items": {
+              "type": "string",
+              "enum": [
+                "character",
+                "location",
+                "item",
+                "faction",
+                "event",
+                "thread",
+                "scene",
+                "chapter",
+                "volume",
+                "arc",
+                "lore",
+                "manuscript",
+                "dialogue_sketch"
+              ],
+              "maxLength": 256
+            },
+            "maxItems": 32,
+            "minItems": 0
+          },
+          "maxNodes": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 2000
+          },
+          "focusId": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 256
+          },
+          "hops": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 3
+          }
+        },
+        "required": [],
+        "additionalProperties": false
+      },
+      "output_schema": {
+        "type": "object",
+        "properties": {
+          "nodes": true,
+          "edges": true,
+          "brokenReferences": true,
+          "snapshot": true
+        },
+        "required": [],
+        "additionalProperties": false
+      },
+      "required_capabilities": [
+        "workspace.file.read"
+      ],
+      "callers": [
+        "ui",
+        "mcp",
+        "plugin"
+      ],
+      "requires_user_gesture": false
+    },
+    {
+      "plugin_id": "proprium.knowledge",
+      "action_id": "knowledge.graph.cooccurrence",
+      "schema_version": 1,
+      "effect": "read",
+      "input_schema": {
+        "type": "object",
+        "properties": {
+          "sceneIds": {
+            "type": "array",
+            "items": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 256
+            },
+            "maxItems": 10000,
+            "minItems": 0
+          }
+        },
+        "required": [],
+        "additionalProperties": false
+      },
+      "output_schema": {
+        "type": "object",
+        "properties": {
+          "edges": true,
+          "gaps": true,
+          "snapshot": true
+        },
+        "required": [],
+        "additionalProperties": false
+      },
+      "required_capabilities": [
+        "workspace.file.read"
+      ],
+      "callers": [
+        "ui",
+        "mcp",
+        "plugin"
+      ],
+      "requires_user_gesture": false
+    },
+    {
+      "plugin_id": "proprium.knowledge",
+      "action_id": "knowledge.map.query",
+      "schema_version": 1,
+      "effect": "read",
+      "input_schema": {
+        "type": "object",
+        "properties": {},
+        "required": [],
+        "additionalProperties": false
+      },
+      "output_schema": {
+        "type": "object",
+        "properties": {
+          "nodes": true,
+          "edges": true,
+          "brokenReferences": true,
+          "snapshot": true
+        },
+        "required": [],
+        "additionalProperties": false
+      },
+      "required_capabilities": [
+        "workspace.file.read"
+      ],
+      "callers": [
+        "ui",
+        "mcp",
+        "plugin"
+      ],
+      "requires_user_gesture": false
+    },
+    {
+      "plugin_id": "proprium.knowledge",
+      "action_id": "knowledge.timeline.query",
+      "schema_version": 1,
+      "effect": "read",
+      "input_schema": {
+        "type": "object",
+        "properties": {
+          "sceneId": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 256
+          },
+          "chapterId": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 256
+          },
+          "characterId": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 256
+          }
+        },
+        "required": [],
+        "additionalProperties": false
+      },
+      "output_schema": {
+        "type": "object",
+        "properties": {
+          "items": true,
+          "snapshot": true,
+          "sourceFiles": true
+        },
+        "required": [],
+        "additionalProperties": false
+      },
+      "required_capabilities": [
+        "workspace.file.read"
+      ],
+      "callers": [
+        "ui",
+        "mcp",
+        "plugin"
+      ],
+      "requires_user_gesture": false
+    },
+    {
+      "plugin_id": "proprium.knowledge",
+      "action_id": "knowledge.world-state.at-scene",
+      "schema_version": 1,
+      "effect": "read",
+      "input_schema": {
+        "type": "object",
+        "properties": {
+          "sceneId": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 256
+          }
+        },
+        "required": [
+          "sceneId"
+        ],
+        "additionalProperties": false
+      },
+      "output_schema": {
+        "type": "object",
+        "properties": {
+          "sceneId": true,
+          "order": true,
+          "locations": true,
+          "itemOwners": true,
+          "acquaintances": true,
+          "confirmedEvents": true,
+          "readerDisclosures": true,
+          "characterBeliefs": true,
+          "sourceFiles": true
+        },
+        "required": [],
+        "additionalProperties": false
+      },
+      "required_capabilities": [
+        "workspace.file.read"
+      ],
+      "callers": [
+        "ui",
+        "mcp",
+        "plugin"
+      ],
+      "requires_user_gesture": false
+    },
+    {
+      "plugin_id": "proprium.knowledge",
+      "action_id": "knowledge.world-state.history",
+      "schema_version": 1,
+      "effect": "read",
+      "input_schema": {
+        "type": "object",
+        "properties": {
+          "entityId": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 256
+          },
+          "cursor": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 2048
+          },
+          "limit": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 200
+          }
+        },
+        "required": [
+          "entityId"
+        ],
+        "additionalProperties": false
+      },
+      "output_schema": {
+        "type": "object",
+        "properties": {
+          "entityId": true,
+          "entries": true,
+          "nextCursor": true,
+          "snapshot": true
+        },
+        "required": [],
+        "additionalProperties": false
+      },
+      "required_capabilities": [
+        "workspace.file.read"
+      ],
+      "callers": [
+        "ui",
+        "mcp",
+        "plugin"
+      ],
+      "requires_user_gesture": false
+    },
+    {
+      "plugin_id": "proprium.knowledge",
+      "action_id": "knowledge.world-state.workbench",
+      "schema_version": 1,
+      "effect": "read",
+      "input_schema": {
+        "type": "object",
+        "properties": {
+          "sceneId": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 256
+          },
+          "proposalStatus": {
+            "type": "string",
+            "enum": [
+              "proposed",
+              "stale",
+              "approved",
+              "rejected"
+            ],
+            "maxLength": 256
+          }
+        },
+        "required": [],
+        "additionalProperties": false
+      },
+      "output_schema": {
+        "type": "object",
+        "properties": {
+          "scenes": true,
+          "confirmedEvents": true,
+          "pendingProposals": true,
+          "diagnostics": true,
+          "proposalRevision": true,
+          "snapshot": true
+        },
+        "required": [],
+        "additionalProperties": false
+      },
+      "required_capabilities": [
+        "workspace.file.read"
+      ],
+      "callers": [
+        "ui",
+        "mcp",
+        "plugin"
+      ],
+      "requires_user_gesture": false
+    },
+    {
+      "plugin_id": "proprium.knowledge",
+      "action_id": "knowledge.state-proposals.list",
+      "schema_version": 1,
+      "effect": "read",
+      "input_schema": {
+        "type": "object",
+        "properties": {
+          "sceneId": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 256
+          },
+          "status": {
+            "type": "string",
+            "enum": [
+              "proposed",
+              "stale",
+              "approved",
+              "rejected"
+            ],
+            "maxLength": 256
+          },
+          "cursor": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 2048
+          },
+          "limit": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 200
+          }
+        },
+        "required": [],
+        "additionalProperties": false
+      },
+      "output_schema": {
+        "type": "object",
+        "properties": {
+          "items": true,
+          "nextCursor": true,
+          "proposalFileRevision": true
+        },
+        "required": [],
+        "additionalProperties": false
+      },
+      "required_capabilities": [
+        "workspace.file.read"
+      ],
+      "callers": [
+        "ui",
+        "mcp",
+        "plugin"
+      ],
+      "requires_user_gesture": false
+    },
+    {
+      "plugin_id": "proprium.knowledge",
+      "action_id": "knowledge.state-proposals.create",
+      "schema_version": 1,
+      "effect": "propose",
+      "input_schema": {
+        "type": "object",
+        "properties": {
+          "sceneId": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 256
+          },
+          "event": true,
+          "expectedSceneRevision": {
+            "type": "string",
+            "pattern": "^[a-f0-9]{64}$",
+            "maxLength": 64
+          },
+          "manuscriptHash": {
+            "type": "string",
+            "pattern": "^[a-f0-9]{64}$",
+            "maxLength": 64
+          }
+        },
+        "required": [
+          "sceneId",
+          "event",
+          "expectedSceneRevision",
+          "manuscriptHash"
+        ],
+        "additionalProperties": false
+      },
+      "output_schema": {
+        "type": "object",
+        "properties": {
+          "stateProposalId": true,
+          "proposalId": true,
+          "preview": true
+        },
+        "required": [],
+        "additionalProperties": false
+      },
+      "required_capabilities": [
+        "workspace.file.read",
+        "workspace.change.propose",
+        "workspace.change.timestamp"
+      ],
+      "callers": [
+        "ui",
+        "mcp",
+        "plugin"
+      ],
+      "requires_user_gesture": false
+    },
+    {
+      "plugin_id": "proprium.knowledge",
+      "action_id": "knowledge.state-proposals.update",
+      "schema_version": 1,
+      "effect": "propose",
+      "input_schema": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 256
+          },
+          "event": true,
+          "expectedProposalRevision": {
+            "type": "string",
+            "pattern": "^[a-f0-9]{64}$",
+            "maxLength": 64
+          },
+          "expectedSceneRevision": {
+            "type": "string",
+            "pattern": "^[a-f0-9]{64}$",
+            "maxLength": 64
+          },
+          "manuscriptHash": {
+            "type": "string",
+            "pattern": "^[a-f0-9]{64}$",
+            "maxLength": 64
+          }
+        },
+        "required": [
+          "id",
+          "event",
+          "expectedProposalRevision",
+          "expectedSceneRevision",
+          "manuscriptHash"
+        ],
+        "additionalProperties": false
+      },
+      "output_schema": {
+        "type": "object",
+        "properties": {
+          "stateProposalId": true,
+          "proposalId": true,
+          "preview": true
+        },
+        "required": [],
+        "additionalProperties": false
+      },
+      "required_capabilities": [
+        "workspace.file.read",
+        "workspace.change.propose",
+        "workspace.change.timestamp"
+      ],
+      "callers": [
+        "ui",
+        "mcp",
+        "plugin"
+      ],
+      "requires_user_gesture": false
+    },
+    {
+      "plugin_id": "proprium.knowledge",
+      "action_id": "knowledge.state-proposals.decide",
+      "schema_version": 1,
+      "effect": "propose",
+      "input_schema": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 256
+          },
+          "decision": {
+            "type": "string",
+            "enum": [
+              "confirm",
+              "reject"
+            ],
+            "maxLength": 256
+          },
+          "expectedProposalRevision": {
+            "type": "string",
+            "pattern": "^[a-f0-9]{64}$",
+            "maxLength": 64
+          },
+          "expectedSceneRevision": {
+            "type": "string",
+            "pattern": "^[a-f0-9]{64}$",
+            "maxLength": 64
+          }
+        },
+        "required": [
+          "id",
+          "decision",
+          "expectedProposalRevision",
+          "expectedSceneRevision"
+        ],
+        "additionalProperties": false
+      },
+      "output_schema": {
+        "type": "object",
+        "properties": {
+          "stateProposalId": true,
+          "decision": true,
+          "proposalId": true,
+          "preview": true
+        },
+        "required": [],
+        "additionalProperties": false
+      },
+      "required_capabilities": [
+        "workspace.file.read",
+        "workspace.change.propose",
+        "workspace.change.timestamp"
+      ],
+      "callers": [
+        "ui",
+        "mcp",
+        "plugin"
+      ],
+      "requires_user_gesture": false
+    },
+    {
+      "plugin_id": "proprium.knowledge",
+      "action_id": "knowledge.suggestions.list",
+      "schema_version": 1,
+      "effect": "read",
+      "input_schema": {
+        "type": "object",
+        "properties": {
+          "entityId": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 256
+          },
+          "status": {
+            "type": "string",
+            "enum": [
+              "pending",
+              "approved",
+              "rejected",
+              "stale",
+              "all"
+            ],
+            "maxLength": 256
+          },
+          "cursor": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 2048
+          },
+          "limit": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 200
+          }
+        },
+        "required": [],
+        "additionalProperties": false
+      },
+      "output_schema": {
+        "type": "object",
+        "properties": {
+          "items": true,
+          "pendingCount": true,
+          "nextCursor": true,
+          "proposalFileRevision": true
+        },
+        "required": [],
+        "additionalProperties": false
+      },
+      "required_capabilities": [
+        "workspace.file.read"
+      ],
+      "callers": [
+        "ui",
+        "mcp",
+        "plugin"
+      ],
+      "requires_user_gesture": false
+    },
+    {
+      "plugin_id": "proprium.knowledge",
+      "action_id": "knowledge.suggestions.create",
+      "schema_version": 1,
+      "effect": "propose",
+      "input_schema": {
+        "type": "object",
+        "properties": {
+          "entityId": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 256
+          },
+          "blockPath": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 1024
+          },
+          "proposedText": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 20000
+          },
+          "evidence": {
+            "type": "array",
+            "items": true,
+            "maxItems": 64,
+            "minItems": 1
+          },
+          "source": {
+            "type": "string",
+            "enum": [
+              "manuscript",
+              "dialogue-sketch"
+            ],
+            "maxLength": 256
+          },
+          "sourceId": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 256
+          },
+          "sourceRange": true,
+          "sourceRevision": {
+            "type": "string",
+            "pattern": "^[a-f0-9]{64}$",
+            "maxLength": 64
+          },
+          "kind": {
+            "type": "string",
+            "enum": [
+              "fact",
+              "dynamic",
+              "habit"
+            ],
+            "maxLength": 256
+          },
+          "confidence": {
+            "type": "string",
+            "enum": [
+              "high",
+              "low",
+              "none"
+            ],
+            "maxLength": 256
+          },
+          "expectedEntityRevision": {
+            "type": "string",
+            "pattern": "^[a-f0-9]{64}$",
+            "maxLength": 64
+          }
+        },
+        "required": [
+          "entityId",
+          "proposedText",
+          "evidence",
+          "source",
+          "sourceRevision",
+          "expectedEntityRevision"
+        ],
+        "additionalProperties": false
+      },
+      "output_schema": {
+        "type": "object",
+        "properties": {
+          "suggestionId": true,
+          "proposalId": true,
+          "proposalStatus": true,
+          "preview": true
+        },
+        "required": [],
+        "additionalProperties": false
+      },
+      "required_capabilities": [
+        "workspace.file.read",
+        "workspace.change.propose",
+        "workspace.change.timestamp"
+      ],
+      "callers": [
+        "ui",
+        "mcp",
+        "plugin"
+      ],
+      "requires_user_gesture": false
+    },
+    {
+      "plugin_id": "proprium.knowledge",
+      "action_id": "knowledge.suggestions.decide",
+      "schema_version": 1,
+      "effect": "propose",
+      "input_schema": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 256
+          },
+          "decision": {
+            "type": "string",
+            "enum": [
+              "accept",
+              "reject"
+            ],
+            "maxLength": 256
+          },
+          "expectedSuggestionRevision": {
+            "type": "string",
+            "pattern": "^[a-f0-9]{64}$",
+            "maxLength": 64
+          },
+          "expectedEntityRevision": {
+            "type": "string",
+            "pattern": "^[a-f0-9]{64}$",
+            "maxLength": 64
+          }
+        },
+        "required": [
+          "id",
+          "decision",
+          "expectedSuggestionRevision",
+          "expectedEntityRevision"
+        ],
+        "additionalProperties": false
+      },
+      "output_schema": {
+        "type": "object",
+        "properties": {
+          "suggestionId": true,
+          "decision": true,
+          "proposalId": true,
+          "preview": true
+        },
+        "required": [],
+        "additionalProperties": false
+      },
+      "required_capabilities": [
+        "workspace.file.read",
+        "workspace.change.propose",
+        "workspace.change.timestamp"
+      ],
+      "callers": [
+        "ui",
+        "mcp",
+        "plugin"
+      ],
+      "requires_user_gesture": false
+    },
+    {
+      "plugin_id": "proprium.knowledge",
+      "action_id": "knowledge.series.list",
+      "schema_version": 1,
+      "effect": "read",
+      "input_schema": {
+        "type": "object",
+        "properties": {},
+        "required": [],
+        "additionalProperties": false
+      },
+      "output_schema": {
+        "type": "object",
+        "properties": {
+          "series": true,
+          "registryRevision": true,
+          "snapshot": true
+        },
+        "required": [],
+        "additionalProperties": false
+      },
+      "required_capabilities": [
+        "workspace.file.read"
+      ],
+      "callers": [
+        "ui",
+        "mcp",
+        "plugin"
+      ],
+      "requires_user_gesture": false
+    },
+    {
+      "plugin_id": "proprium.knowledge",
+      "action_id": "knowledge.series.get",
+      "schema_version": 1,
+      "effect": "read",
+      "input_schema": {
+        "type": "object",
+        "properties": {
+          "seriesId": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 256
+          }
+        },
+        "required": [
+          "seriesId"
+        ],
+        "additionalProperties": false
+      },
+      "output_schema": {
+        "type": "object",
+        "properties": {
+          "series": true,
+          "registryRevision": true,
+          "snapshot": true
+        },
+        "required": [],
+        "additionalProperties": false
+      },
+      "required_capabilities": [
+        "workspace.file.read"
+      ],
+      "callers": [
+        "ui",
+        "mcp",
+        "plugin"
+      ],
+      "requires_user_gesture": false
+    },
+    {
+      "plugin_id": "proprium.knowledge",
+      "action_id": "knowledge.series.propose",
+      "schema_version": 1,
+      "effect": "propose",
+      "input_schema": {
+        "type": "object",
+        "properties": {
+          "seriesId": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 256
+          },
+          "patch": true,
+          "expectedRegistryRevision": {
+            "anyOf": [
+              {
+                "type": "string",
+                "pattern": "^[a-f0-9]{64}$",
+                "maxLength": 64
+              },
+              {
+                "type": "null"
+              }
+            ]
+          }
+        },
+        "required": [
+          "patch",
+          "expectedRegistryRevision"
+        ],
+        "additionalProperties": false
+      },
+      "output_schema": {
+        "type": "object",
+        "properties": {
+          "seriesId": true,
+          "proposalId": true,
+          "preview": true
+        },
+        "required": [],
+        "additionalProperties": false
+      },
+      "required_capabilities": [
+        "workspace.file.read",
+        "workspace.change.propose",
+        "workspace.change.timestamp"
+      ],
+      "callers": [
+        "ui",
+        "mcp",
+        "plugin"
+      ],
+      "requires_user_gesture": false
+    },
+    {
+      "plugin_id": "proprium.knowledge",
+      "action_id": "knowledge.series.binding.get",
+      "schema_version": 1,
+      "effect": "read",
+      "input_schema": {
+        "type": "object",
+        "properties": {},
+        "required": [],
+        "additionalProperties": false
+      },
+      "output_schema": {
+        "type": "object",
+        "properties": {
+          "binding": true,
+          "bibleRepositoryId": true,
+          "registryRevision": true,
+          "workSnapshot": true,
+          "requiresAuthorReview": true
+        },
+        "required": [],
+        "additionalProperties": false
+      },
+      "required_capabilities": [
+        "workspace.file.read"
+      ],
+      "callers": [
+        "ui",
+        "mcp",
+        "plugin"
+      ],
+      "requires_user_gesture": false
+    },
+    {
+      "plugin_id": "proprium.knowledge",
+      "action_id": "knowledge.series.binding.propose",
+      "schema_version": 1,
+      "effect": "propose",
+      "input_schema": {
+        "type": "object",
+        "properties": {
+          "seriesId": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 256
+          },
+          "bibleRepositoryId": {
+            "type": "integer",
+            "minimum": 1
+          },
+          "expectedWorkRevision": {
+            "anyOf": [
+              {
+                "type": "string",
+                "pattern": "^[a-f0-9]{64}$",
+                "maxLength": 64
+              },
+              {
+                "type": "null"
+              }
+            ]
+          }
+        },
+        "required": [
+          "seriesId",
+          "expectedWorkRevision"
+        ],
+        "additionalProperties": false
+      },
+      "output_schema": {
+        "type": "object",
+        "properties": {
+          "binding": true,
+          "proposalId": true,
+          "preview": true
+        },
+        "required": [],
+        "additionalProperties": false
+      },
+      "required_capabilities": [
+        "workspace.file.read",
+        "workspace.change.propose",
+        "workspace.change.timestamp"
+      ],
+      "callers": [
+        "ui",
+        "mcp",
+        "plugin"
+      ],
+      "requires_user_gesture": false
+    },
+    {
+      "plugin_id": "proprium.knowledge",
+      "action_id": "knowledge.reader-model.build",
+      "schema_version": 1,
+      "effect": "read",
+      "input_schema": {
+        "type": "object",
+        "properties": {
+          "chapterId": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 256
+          }
+        },
+        "required": [
+          "chapterId"
+        ],
+        "additionalProperties": false
+      },
+      "output_schema": {
+        "type": "object",
+        "properties": {
+          "chapterId": true,
+          "disclosures": true,
+          "knowledgeGaps": true,
+          "forgetRisks": true,
+          "firstReadReaction": true,
+          "snapshot": true
+        },
+        "required": [],
+        "additionalProperties": false
+      },
+      "required_capabilities": [
+        "workspace.file.read"
+      ],
+      "callers": [
+        "ui",
+        "mcp",
+        "plugin"
+      ],
+      "requires_user_gesture": false
+    }
+  ],
+  "ui": [
+    {
+      "id": "knowledge.bible",
+      "kind": "panel",
+      "title": "Bible",
+      "context": {
+        "label": "Browse character and place records in the selected repository."
+      },
+      "body": {
+        "id": "knowledge-bible-tabs",
+        "type": "tabs",
+        "tabs": [
+          {
+            "id": "bible-character",
+            "title": "character",
+            "body": {
+              "id": "bible-list-character",
+              "type": "list",
+              "title": "character records",
+              "load_action": {
+                "action_id": "knowledge.entities.list",
+                "input_template": {
+                  "type": "character",
+                  "limit": 100
+                }
+              },
+              "items": {
+                "data_key": "last_action_result.items"
+              },
+              "primary": "id",
+              "secondary": "name",
+              "item_action": {
+                "action_id": "knowledge.entities.get",
+                "input_template": {
+                  "id": {
+                    "data_key": "item.id"
+                  }
+                }
+              },
+              "item_navigation": {
+                "intent": "open",
+                "target": {
+                  "path": {
+                    "data_key": "item.filePath"
+                  }
+                }
+              },
+              "next_action": {
+                "action_id": "knowledge.entities.list",
+                "input_template": {
+                  "type": "character",
+                  "limit": 100,
+                  "cursor": {
+                    "data_key": "last_action_result.nextCursor"
+                  }
+                }
+              },
+              "next_action_when": {
+                "data_key": "last_action_result.nextCursor"
+              }
+            }
+          },
+          {
+            "id": "bible-location",
+            "title": "location",
+            "body": {
+              "id": "bible-list-location",
+              "type": "list",
+              "title": "location records",
+              "load_action": {
+                "action_id": "knowledge.entities.list",
+                "input_template": {
+                  "type": "location",
+                  "limit": 100
+                }
+              },
+              "items": {
+                "data_key": "last_action_result.items"
+              },
+              "primary": "id",
+              "secondary": "name",
+              "item_action": {
+                "action_id": "knowledge.entities.get",
+                "input_template": {
+                  "id": {
+                    "data_key": "item.id"
+                  }
+                }
+              },
+              "item_navigation": {
+                "intent": "open",
+                "target": {
+                  "path": {
+                    "data_key": "item.filePath"
+                  }
+                }
+              },
+              "next_action": {
+                "action_id": "knowledge.entities.list",
+                "input_template": {
+                  "type": "location",
+                  "limit": 100,
+                  "cursor": {
+                    "data_key": "last_action_result.nextCursor"
+                  }
+                }
+              },
+              "next_action_when": {
+                "data_key": "last_action_result.nextCursor"
+              }
+            }
+          },
+          {
+            "id": "bible-item",
+            "title": "item",
+            "body": {
+              "id": "bible-list-item",
+              "type": "list",
+              "title": "item records",
+              "load_action": {
+                "action_id": "knowledge.entities.list",
+                "input_template": {
+                  "type": "item",
+                  "limit": 100
+                }
+              },
+              "items": {
+                "data_key": "last_action_result.items"
+              },
+              "primary": "id",
+              "secondary": "name",
+              "item_action": {
+                "action_id": "knowledge.entities.get",
+                "input_template": {
+                  "id": {
+                    "data_key": "item.id"
+                  }
+                }
+              },
+              "item_navigation": {
+                "intent": "open",
+                "target": {
+                  "path": {
+                    "data_key": "item.filePath"
+                  }
+                }
+              },
+              "next_action": {
+                "action_id": "knowledge.entities.list",
+                "input_template": {
+                  "type": "item",
+                  "limit": 100,
+                  "cursor": {
+                    "data_key": "last_action_result.nextCursor"
+                  }
+                }
+              },
+              "next_action_when": {
+                "data_key": "last_action_result.nextCursor"
+              }
+            }
+          },
+          {
+            "id": "bible-faction",
+            "title": "faction",
+            "body": {
+              "id": "bible-list-faction",
+              "type": "list",
+              "title": "faction records",
+              "load_action": {
+                "action_id": "knowledge.entities.list",
+                "input_template": {
+                  "type": "faction",
+                  "limit": 100
+                }
+              },
+              "items": {
+                "data_key": "last_action_result.items"
+              },
+              "primary": "id",
+              "secondary": "name",
+              "item_action": {
+                "action_id": "knowledge.entities.get",
+                "input_template": {
+                  "id": {
+                    "data_key": "item.id"
+                  }
+                }
+              },
+              "item_navigation": {
+                "intent": "open",
+                "target": {
+                  "path": {
+                    "data_key": "item.filePath"
+                  }
+                }
+              },
+              "next_action": {
+                "action_id": "knowledge.entities.list",
+                "input_template": {
+                  "type": "faction",
+                  "limit": 100,
+                  "cursor": {
+                    "data_key": "last_action_result.nextCursor"
+                  }
+                }
+              },
+              "next_action_when": {
+                "data_key": "last_action_result.nextCursor"
+              }
+            }
+          }
+        ]
+      }
+    },
+    {
+      "id": "knowledge.bible-plot",
+      "kind": "panel",
+      "title": "Threads, events and lore",
+      "context": {
+        "label": "Browse authored timeline events, lore, threads and arcs."
+      },
+      "body": {
+        "id": "knowledge-bible-plot-tabs",
+        "type": "tabs",
+        "tabs": [
+          {
+            "id": "bible-event",
+            "title": "event",
+            "body": {
+              "id": "bible-list-event",
+              "type": "list",
+              "title": "event records",
+              "load_action": {
+                "action_id": "knowledge.entities.list",
+                "input_template": {
+                  "type": "event",
+                  "limit": 100
+                }
+              },
+              "items": {
+                "data_key": "last_action_result.items"
+              },
+              "primary": "id",
+              "secondary": "name",
+              "item_action": {
+                "action_id": "knowledge.entities.get",
+                "input_template": {
+                  "id": {
+                    "data_key": "item.id"
+                  }
+                }
+              },
+              "item_navigation": {
+                "intent": "open",
+                "target": {
+                  "path": {
+                    "data_key": "item.filePath"
+                  }
+                }
+              },
+              "next_action": {
+                "action_id": "knowledge.entities.list",
+                "input_template": {
+                  "type": "event",
+                  "limit": 100,
+                  "cursor": {
+                    "data_key": "last_action_result.nextCursor"
+                  }
+                }
+              },
+              "next_action_when": {
+                "data_key": "last_action_result.nextCursor"
+              }
+            }
+          },
+          {
+            "id": "bible-lore",
+            "title": "lore",
+            "body": {
+              "id": "bible-list-lore",
+              "type": "list",
+              "title": "lore records",
+              "load_action": {
+                "action_id": "knowledge.entities.list",
+                "input_template": {
+                  "type": "lore",
+                  "limit": 100
+                }
+              },
+              "items": {
+                "data_key": "last_action_result.items"
+              },
+              "primary": "id",
+              "secondary": "name",
+              "item_action": {
+                "action_id": "knowledge.entities.get",
+                "input_template": {
+                  "id": {
+                    "data_key": "item.id"
+                  }
+                }
+              },
+              "item_navigation": {
+                "intent": "open",
+                "target": {
+                  "path": {
+                    "data_key": "item.filePath"
+                  }
+                }
+              },
+              "next_action": {
+                "action_id": "knowledge.entities.list",
+                "input_template": {
+                  "type": "lore",
+                  "limit": 100,
+                  "cursor": {
+                    "data_key": "last_action_result.nextCursor"
+                  }
+                }
+              },
+              "next_action_when": {
+                "data_key": "last_action_result.nextCursor"
+              }
+            }
+          },
+          {
+            "id": "bible-thread",
+            "title": "thread",
+            "body": {
+              "id": "bible-list-thread",
+              "type": "list",
+              "title": "thread records",
+              "load_action": {
+                "action_id": "knowledge.entities.list",
+                "input_template": {
+                  "type": "thread",
+                  "limit": 100
+                }
+              },
+              "items": {
+                "data_key": "last_action_result.items"
+              },
+              "primary": "id",
+              "secondary": "name",
+              "item_action": {
+                "action_id": "knowledge.entities.get",
+                "input_template": {
+                  "id": {
+                    "data_key": "item.id"
+                  }
+                }
+              },
+              "item_navigation": {
+                "intent": "open",
+                "target": {
+                  "path": {
+                    "data_key": "item.filePath"
+                  }
+                }
+              },
+              "next_action": {
+                "action_id": "knowledge.entities.list",
+                "input_template": {
+                  "type": "thread",
+                  "limit": 100,
+                  "cursor": {
+                    "data_key": "last_action_result.nextCursor"
+                  }
+                }
+              },
+              "next_action_when": {
+                "data_key": "last_action_result.nextCursor"
+              }
+            }
+          },
+          {
+            "id": "bible-arc",
+            "title": "arc",
+            "body": {
+              "id": "bible-list-arc",
+              "type": "list",
+              "title": "arc records",
+              "load_action": {
+                "action_id": "knowledge.entities.list",
+                "input_template": {
+                  "type": "arc",
+                  "limit": 100
+                }
+              },
+              "items": {
+                "data_key": "last_action_result.items"
+              },
+              "primary": "id",
+              "secondary": "name",
+              "item_action": {
+                "action_id": "knowledge.entities.get",
+                "input_template": {
+                  "id": {
+                    "data_key": "item.id"
+                  }
+                }
+              },
+              "item_navigation": {
+                "intent": "open",
+                "target": {
+                  "path": {
+                    "data_key": "item.filePath"
+                  }
+                }
+              },
+              "next_action": {
+                "action_id": "knowledge.entities.list",
+                "input_template": {
+                  "type": "arc",
+                  "limit": 100,
+                  "cursor": {
+                    "data_key": "last_action_result.nextCursor"
+                  }
+                }
+              },
+              "next_action_when": {
+                "data_key": "last_action_result.nextCursor"
+              }
+            }
+          }
+        ]
+      }
+    },
+    {
+      "id": "knowledge.dialogue-sketches",
+      "kind": "panel",
+      "title": "Dialogue sketches",
+      "context": {
+        "label": "Browse standalone dialogue-sketch assets and open their YAML source."
+      },
+      "body": {
+        "id": "knowledge-dialogue-sketches-tabs",
+        "type": "tabs",
+        "tabs": [
+          {
+            "id": "bible-dialogue_sketch",
+            "title": "dialogue_sketch",
+            "body": {
+              "id": "bible-list-dialogue_sketch",
+              "type": "list",
+              "title": "dialogue_sketch records",
+              "load_action": {
+                "action_id": "knowledge.entities.list",
+                "input_template": {
+                  "type": "dialogue_sketch",
+                  "limit": 100
+                }
+              },
+              "items": {
+                "data_key": "last_action_result.items"
+              },
+              "primary": "id",
+              "secondary": "name",
+              "item_action": {
+                "action_id": "knowledge.entities.get",
+                "input_template": {
+                  "id": {
+                    "data_key": "item.id"
+                  }
+                }
+              },
+              "item_navigation": {
+                "intent": "open",
+                "target": {
+                  "path": {
+                    "data_key": "item.filePath"
+                  }
+                }
+              },
+              "next_action": {
+                "action_id": "knowledge.entities.list",
+                "input_template": {
+                  "type": "dialogue_sketch",
+                  "limit": 100,
+                  "cursor": {
+                    "data_key": "last_action_result.nextCursor"
+                  }
+                }
+              },
+              "next_action_when": {
+                "data_key": "last_action_result.nextCursor"
+              }
+            }
+          }
+        ]
+      }
+    },
+    {
+      "id": "knowledge.entity-create",
+      "kind": "panel",
+      "title": "Create Bible record",
+      "context": {
+        "label": "Create an entity from the current collection revision and submit it to Host Review."
+      },
+      "body": {
+        "id": "bible-create-form",
+        "type": "form",
+        "title": "Propose a Bible record",
+        "description": "The collection revision is read from the selected snapshot before this proposal is submitted.",
+        "load_actions": [
+          {
+            "key": "collection",
+            "action_id": "knowledge.entities.collection-revision",
+            "input_template": {}
+          }
+        ],
+        "fields": [
+          {
+            "id": "type",
+            "label": "Type",
+            "type": "enum",
+            "required": true,
+            "options": [
+              {
+                "value": "character",
+                "label": "character"
+              },
+              {
+                "value": "location",
+                "label": "location"
+              },
+              {
+                "value": "item",
+                "label": "item"
+              },
+              {
+                "value": "faction",
+                "label": "faction"
+              },
+              {
+                "value": "event",
+                "label": "event"
+              },
+              {
+                "value": "lore",
+                "label": "lore"
+              },
+              {
+                "value": "thread",
+                "label": "thread"
+              },
+              {
+                "value": "arc",
+                "label": "arc"
+              },
+              {
+                "value": "dialogue_sketch",
+                "label": "dialogue_sketch"
+              }
+            ]
+          },
+          {
+            "id": "name",
+            "label": "Name or title",
+            "type": "string",
+            "required": true,
+            "max_length": 256
+          },
+          {
+            "id": "aliases",
+            "label": "Aliases",
+            "type": "ordered-list",
+            "max_length": 8192
+          },
+          {
+            "id": "tags",
+            "label": "Tags",
+            "type": "ordered-list",
+            "max_length": 8192
+          }
+        ],
+        "submit": {
+          "action_id": "knowledge.entities.create",
+          "input_template": {
+            "type": {
+              "data_key": "form.type"
+            },
+            "values": {
+              "name": {
+                "data_key": "form.name"
+              },
+              "aliases": {
+                "data_key": "form.aliases"
+              },
+              "tags": {
+                "data_key": "form.tags"
+              }
+            },
+            "expectedCollectionRevision": {
+              "data_key": "load.collection.collectionRevision"
+            }
+          }
+        }
+      }
+    },
+    {
+      "id": "knowledge.entity-detail",
+      "kind": "panel",
+      "title": "Selected Bible record",
+      "context": {
+        "label": "Select a row in a Bible panel to inspect its raw authored fields and source revision."
+      },
+      "body": {
+        "id": "bible-selected-detail",
+        "type": "detail",
+        "title": "Selected Bible entity",
+        "value": {
+          "data_key": "last_action_result.entity"
+        },
+        "fields": [
+          {
+            "key": "id",
+            "label": "ID"
+          },
+          {
+            "key": "type",
+            "label": "Type"
+          },
+          {
+            "key": "name",
+            "label": "Name"
+          },
+          {
+            "key": "aliases",
+            "label": "Aliases"
+          },
+          {
+            "key": "tags",
+            "label": "Tags"
+          },
+          {
+            "key": "status",
+            "label": "Status"
+          },
+          {
+            "key": "filePath",
+            "label": "Source path"
+          },
+          {
+            "key": "entityRevision",
+            "label": "Revision"
+          }
+        ]
+      }
+    },
+    {
+      "id": "knowledge.entity-edit",
+      "kind": "panel",
+      "title": "Edit Bible record",
+      "context": {
+        "label": "Select a record in Bible, then propose only the fields you change. Existing fields stay intact."
+      },
+      "body": {
+        "id": "knowledge-entity-edit-form",
+        "type": "form",
+        "title": "Propose field changes",
+        "fields": [
+          {
+            "id": "name",
+            "label": "Name",
+            "type": "string",
+            "max_length": 256,
+            "initial_value": {
+              "data_key": "last_action_result.entity.name"
+            }
+          },
+          {
+            "id": "aliases",
+            "label": "Aliases",
+            "type": "ordered-list",
+            "max_length": 8192,
+            "initial_value": {
+              "data_key": "last_action_result.entity.raw.aliases"
+            }
+          },
+          {
+            "id": "tags",
+            "label": "Tags",
+            "type": "ordered-list",
+            "max_length": 8192,
+            "initial_value": {
+              "data_key": "last_action_result.entity.raw.tags"
+            }
+          },
+          {
+            "id": "notes_lead",
+            "label": "Structured lead notes",
+            "type": "record-list",
+            "fields": [
+              {
+                "id": "type",
+                "label": "Block type",
+                "type": "string",
+                "max_length": 64
+              },
+              {
+                "id": "text",
+                "label": "Paragraph text",
+                "type": "string",
+                "max_length": 20000
+              }
+            ],
+            "initial_value": {
+              "data_key": "last_action_result.entity.raw.notes.lead"
+            },
+            "max_items": 128
+          }
+        ],
+        "submit": {
+          "action_id": "knowledge.entities.update",
+          "input_template": {
+            "id": {
+              "data_key": "last_action_result.entity.id"
+            },
+            "patch": {
+              "name": {
+                "data_key": "form.name"
+              },
+              "aliases": {
+                "data_key": "form.aliases"
+              },
+              "tags": {
+                "data_key": "form.tags"
+              },
+              "notes": {
+                "lead": {
+                  "data_key": "form.notes_lead"
+                },
+                "sections": {
+                  "data_key": "last_action_result.entity.raw.notes.sections"
+                }
+              }
+            },
+            "expectedEntityRevision": {
+              "data_key": "last_action_result.entity.entityRevision"
+            }
+          }
+        }
+      }
+    },
+    {
+      "id": "knowledge.scene-context",
+      "kind": "panel",
+      "title": "Scene context and references",
+      "context": {
+        "label": "Inspect a selected scene by stable ID, then propose authored Knowledge references."
+      },
+      "body": {
+        "id": "knowledge-scene-tabs",
+        "type": "tabs",
+        "tabs": [
+          {
+            "id": "scene-inspect",
+            "title": "Inspect",
+            "body": {
+              "id": "scene-context-form",
+              "type": "form",
+              "title": "Load current scene references",
+              "fields": [
+                {
+                  "id": "scene_id",
+                  "label": "Scene ID",
+                  "type": "string",
+                  "required": true,
+                  "max_length": 256
+                }
+              ],
+              "submit": {
+                "action_id": "knowledge.scene.references.get",
+                "input_template": {
+                  "sceneId": {
+                    "data_key": "form.scene_id"
+                  }
+                }
+              }
+            }
+          },
+          {
+            "id": "scene-context-view",
+            "title": "References",
+            "body": {
+              "id": "scene-reference-detail",
+              "type": "detail",
+              "title": "Current references",
+              "value": {
+                "data_key": "last_action_result"
+              },
+              "fields": [
+                {
+                  "key": "sceneId",
+                  "label": "Scene"
+                },
+                {
+                  "key": "pov",
+                  "label": "POV"
+                },
+                {
+                  "key": "location",
+                  "label": "Location"
+                },
+                {
+                  "key": "appears",
+                  "label": "Appears"
+                },
+                {
+                  "key": "mentions",
+                  "label": "Mentions"
+                },
+                {
+                  "key": "relations",
+                  "label": "Relations"
+                },
+                {
+                  "key": "unresolvedReferences",
+                  "label": "Broken references"
+                },
+                {
+                  "key": "sourceFiles",
+                  "label": "Source revisions"
+                }
+              ]
+            }
+          },
+          {
+            "id": "scene-propose",
+            "title": "Propose references",
+            "body": {
+              "id": "scene-reference-proposal-form",
+              "type": "form",
+              "title": "Change scene references",
+              "description": "Load references first. Leave unchanged fields blank; the Host keeps those source fields.",
+              "fields": [
+                {
+                  "id": "pov",
+                  "label": "POV entity ID",
+                  "type": "string",
+                  "max_length": 256,
+                  "initial_value": {
+                    "data_key": "last_action_result.pov.id"
+                  }
+                },
+                {
+                  "id": "location",
+                  "label": "Location entity ID",
+                  "type": "string",
+                  "max_length": 256,
+                  "initial_value": {
+                    "data_key": "last_action_result.location.id"
+                  }
+                },
+                {
+                  "id": "appears",
+                  "label": "Appearing entity IDs",
+                  "type": "ordered-list",
+                  "max_length": 8192
+                },
+                {
+                  "id": "mentions",
+                  "label": "Mentioned entity IDs",
+                  "type": "ordered-list",
+                  "max_length": 8192
+                },
+                {
+                  "id": "relations",
+                  "label": "Relations",
+                  "type": "record-list",
+                  "fields": [
+                    {
+                      "id": "target",
+                      "label": "Target ID",
+                      "type": "string",
+                      "max_length": 256
+                    },
+                    {
+                      "id": "kind",
+                      "label": "Kind",
+                      "type": "string",
+                      "max_length": 256
+                    },
+                    {
+                      "id": "note",
+                      "label": "Note",
+                      "type": "string",
+                      "max_length": 10000
+                    }
+                  ],
+                  "initial_value": {
+                    "data_key": "last_action_result.relations"
+                  },
+                  "max_items": 256
+                }
+              ],
+              "submit": {
+                "action_id": "knowledge.scene.references.propose",
+                "input_template": {
+                  "sceneId": {
+                    "data_key": "last_action_result.sceneId"
+                  },
+                  "patch": {
+                    "pov": {
+                      "data_key": "form.pov"
+                    },
+                    "location": {
+                      "data_key": "form.location"
+                    },
+                    "appears": {
+                      "data_key": "form.appears"
+                    },
+                    "mentions": {
+                      "data_key": "form.mentions"
+                    },
+                    "relations": {
+                      "data_key": "form.relations"
+                    }
+                  },
+                  "expectedSceneRevision": {
+                    "data_key": "last_action_result.sourceFiles.0.revision"
+                  }
+                }
+              }
+            }
+          },
+          {
+            "id": "scene-context-read",
+            "title": "Context",
+            "body": {
+              "id": "scene-context-read-form",
+              "type": "form",
+              "title": "Load cited scene context",
+              "fields": [
+                {
+                  "id": "scene_id",
+                  "label": "Scene ID",
+                  "type": "string",
+                  "required": true,
+                  "max_length": 256
+                }
+              ],
+              "submit": {
+                "action_id": "knowledge.scene.context",
+                "input_template": {
+                  "sceneId": {
+                    "data_key": "form.scene_id"
+                  }
+                }
+              }
+            }
+          }
+        ]
+      }
+    },
+    {
+      "id": "knowledge.threads",
+      "kind": "panel",
+      "title": "Threads",
+      "context": {
+        "label": "Inspect declared thread state and source-linked plant, advance, payoff and mention evidence."
+      },
+      "body": {
+        "id": "knowledge-threads-tabs",
+        "type": "tabs",
+        "tabs": [
+          {
+            "id": "thread-overview",
+            "title": "Overview",
+            "body": {
+              "id": "thread-overview-list",
+              "type": "list",
+              "title": "Thread overview",
+              "load_action": {
+                "action_id": "knowledge.threads.overview",
+                "input_template": {
+                  "limit": 100
+                }
+              },
+              "items": {
+                "data_key": "last_action_result.items"
+              },
+              "primary": "thread.name",
+              "secondary": "thread.status",
+              "item_action": {
+                "action_id": "knowledge.threads.status",
+                "input_template": {
+                  "threadId": {
+                    "data_key": "item.thread.id"
+                  }
+                }
+              },
+              "item_navigation": {
+                "intent": "open",
+                "target": {
+                  "path": {
+                    "data_key": "item.thread.filePath"
+                  }
+                }
+              },
+              "next_action": {
+                "action_id": "knowledge.threads.overview",
+                "input_template": {
+                  "limit": 100,
+                  "cursor": {
+                    "data_key": "last_action_result.nextCursor"
+                  }
+                }
+              },
+              "next_action_when": {
+                "data_key": "last_action_result.nextCursor"
+              }
+            }
+          },
+          {
+            "id": "thread-status",
+            "title": "At scene",
+            "body": {
+              "id": "thread-status-form",
+              "type": "form",
+              "title": "Thread status at a scene",
+              "fields": [
+                {
+                  "id": "thread_id",
+                  "label": "Thread ID",
+                  "type": "string",
+                  "max_length": 256
+                },
+                {
+                  "id": "at_scene_id",
+                  "label": "Scene ID",
+                  "type": "string",
+                  "max_length": 256
+                }
+              ],
+              "submit": {
+                "action_id": "knowledge.threads.status",
+                "input_template": {
+                  "threadId": {
+                    "data_key": "form.thread_id"
+                  },
+                  "atSceneId": {
+                    "data_key": "form.at_scene_id"
+                  }
+                }
+              }
+            }
+          },
+          {
+            "id": "thread-lifecycle",
+            "title": "Lifecycle",
+            "body": {
+              "id": "thread-life-form",
+              "type": "form",
+              "title": "Lifecycle warnings",
+              "fields": [
+                {
+                  "id": "thread_id",
+                  "label": "Thread ID (optional)",
+                  "type": "string",
+                  "max_length": 256
+                },
+                {
+                  "id": "stale_scene_threshold",
+                  "label": "Stale after scenes",
+                  "type": "integer",
+                  "initial_value": 5
+                }
+              ],
+              "submit": {
+                "action_id": "knowledge.threads.lifecycle",
+                "input_template": {
+                  "threadId": {
+                    "data_key": "form.thread_id"
+                  },
+                  "staleSceneThreshold": {
+                    "data_key": "form.stale_scene_threshold"
+                  }
+                }
+              }
+            }
+          }
+        ]
+      }
+    },
+    {
+      "id": "knowledge.lenses",
+      "kind": "panel",
+      "title": "Graph, map and timeline",
+      "context": {
+        "label": "All lens views remain tied to the Host-selected snapshot and expose tabular source data."
+      },
+      "body": {
+        "id": "knowledge-lens-tabs",
+        "type": "tabs",
+        "tabs": [
+          {
+            "id": "lens-graph",
+            "title": "Graph",
+            "body": {
+              "id": "knowledge-graph",
+              "type": "graph",
+              "title": "Entity graph",
+              "load_action": {
+                "action_id": "knowledge.graph.query",
+                "input_template": {}
+              },
+              "entities": {
+                "data_key": "last_action_result.nodes"
+              },
+              "edges": {
+                "data_key": "last_action_result.edges"
+              },
+              "columns": [
+                {
+                  "key": "id",
+                  "label": "ID"
+                },
+                {
+                  "key": "type",
+                  "label": "Type"
+                },
+                {
+                  "key": "name",
+                  "label": "Name"
+                }
+              ]
+            }
+          },
+          {
+            "id": "lens-map",
+            "title": "Map",
+            "body": {
+              "id": "knowledge-map",
+              "type": "map",
+              "title": "Location map",
+              "load_action": {
+                "action_id": "knowledge.map.query",
+                "input_template": {}
+              },
+              "entities": {
+                "data_key": "last_action_result.nodes"
+              },
+              "edges": {
+                "data_key": "last_action_result.edges"
+              },
+              "columns": [
+                {
+                  "key": "id",
+                  "label": "ID"
+                },
+                {
+                  "key": "name",
+                  "label": "Location"
+                }
+              ]
+            }
+          },
+          {
+            "id": "lens-timeline",
+            "title": "Timeline",
+            "body": {
+              "id": "knowledge-timeline",
+              "type": "timeline",
+              "title": "Story timeline",
+              "load_action": {
+                "action_id": "knowledge.timeline.query",
+                "input_template": {}
+              },
+              "entities": {
+                "data_key": "last_action_result.items"
+              },
+              "columns": [
+                {
+                  "key": "order",
+                  "label": "Order"
+                },
+                {
+                  "key": "title",
+                  "label": "Scene"
+                },
+                {
+                  "key": "relation",
+                  "label": "Time relation"
+                },
+                {
+                  "key": "confidence",
+                  "label": "Confidence"
+                }
+              ]
+            }
+          }
+        ]
+      }
+    },
+    {
+      "id": "knowledge.world-state",
+      "kind": "panel",
+      "title": "World state and reader model",
+      "context": {
+        "label": "Objective confirmed events, reader disclosures and proposal candidates stay separate."
+      },
+      "body": {
+        "id": "knowledge-state-tabs",
+        "type": "tabs",
+        "tabs": [
+          {
+            "id": "state-at-scene",
+            "title": "State at scene",
+            "body": {
+              "id": "world-state-form",
+              "type": "form",
+              "title": "Load objective state",
+              "fields": [
+                {
+                  "id": "scene_id",
+                  "label": "Scene ID",
+                  "type": "string",
+                  "required": true,
+                  "max_length": 256
+                }
+              ],
+              "submit": {
+                "action_id": "knowledge.world-state.at-scene",
+                "input_template": {
+                  "sceneId": {
+                    "data_key": "form.scene_id"
+                  }
+                }
+              }
+            }
+          },
+          {
+            "id": "state-history",
+            "title": "Entity history",
+            "body": {
+              "id": "world-state-history-form",
+              "type": "form",
+              "title": "Load state history",
+              "fields": [
+                {
+                  "id": "entity_id",
+                  "label": "Entity ID",
+                  "type": "string",
+                  "required": true,
+                  "max_length": 256
+                },
+                {
+                  "id": "limit",
+                  "label": "Rows",
+                  "type": "integer",
+                  "initial_value": 100
+                }
+              ],
+              "submit": {
+                "action_id": "knowledge.world-state.history",
+                "input_template": {
+                  "entityId": {
+                    "data_key": "form.entity_id"
+                  },
+                  "limit": {
+                    "data_key": "form.limit"
+                  }
+                }
+              }
+            }
+          },
+          {
+            "id": "reader-model",
+            "title": "Reader model",
+            "body": {
+              "id": "reader-model-form",
+              "type": "form",
+              "title": "Disclosure and knowledge evidence by chapter",
+              "fields": [
+                {
+                  "id": "chapter_id",
+                  "label": "Chapter ID",
+                  "type": "string",
+                  "required": true,
+                  "max_length": 256
+                }
+              ],
+              "submit": {
+                "action_id": "knowledge.reader-model.build",
+                "input_template": {
+                  "chapterId": {
+                    "data_key": "form.chapter_id"
+                  }
+                }
+              }
+            }
+          },
+          {
+            "id": "state-workbench",
+            "title": "Review candidates",
+            "body": {
+              "id": "state-workbench-form",
+              "type": "form",
+              "title": "Load state proposal workbench",
+              "fields": [
+                {
+                  "id": "scene_id",
+                  "label": "Scene ID (optional)",
+                  "type": "string",
+                  "max_length": 256
+                },
+                {
+                  "id": "proposal_status",
+                  "label": "Proposal status",
+                  "type": "enum",
+                  "options": [
+                    {
+                      "value": "proposed",
+                      "label": "proposed"
+                    },
+                    {
+                      "value": "stale",
+                      "label": "stale"
+                    },
+                    {
+                      "value": "approved",
+                      "label": "approved"
+                    },
+                    {
+                      "value": "rejected",
+                      "label": "rejected"
+                    }
+                  ]
+                }
+              ],
+              "submit": {
+                "action_id": "knowledge.world-state.workbench",
+                "input_template": {
+                  "sceneId": {
+                    "data_key": "form.scene_id"
+                  },
+                  "proposalStatus": {
+                    "data_key": "form.proposal_status"
+                  }
+                }
+              }
+            }
+          }
+        ]
+      }
+    },
+    {
+      "id": "knowledge.review",
+      "kind": "panel",
+      "title": "Knowledge proposals",
+      "context": {
+        "label": "Candidate records are proposals. Host Review remains the only place that approves or applies them."
+      },
+      "body": {
+        "id": "knowledge-proposal-tabs",
+        "type": "tabs",
+        "tabs": [
+          {
+            "id": "state-proposals",
+            "title": "State events",
+            "body": {
+              "id": "state-proposals-list",
+              "type": "list",
+              "title": "State proposal history",
+              "load_action": {
+                "action_id": "knowledge.state-proposals.list",
+                "input_template": {
+                  "limit": 100
+                }
+              },
+              "items": {
+                "data_key": "last_action_result.items"
+              },
+              "primary": "id",
+              "secondary": "status",
+              "item_action": {
+                "action_id": "knowledge.world-state.workbench",
+                "input_template": {
+                  "sceneId": {
+                    "data_key": "item.event.sceneId"
+                  },
+                  "proposalStatus": {
+                    "data_key": "item.status"
+                  }
+                }
+              }
+            }
+          },
+          {
+            "id": "suggestions",
+            "title": "Notes suggestions",
+            "body": {
+              "id": "knowledge-suggestions-list",
+              "type": "list",
+              "title": "Notes suggestion history",
+              "load_action": {
+                "action_id": "knowledge.suggestions.list",
+                "input_template": {
+                  "status": "all",
+                  "limit": 100
+                }
+              },
+              "items": {
+                "data_key": "last_action_result.items"
+              },
+              "primary": "proposedText",
+              "secondary": "status",
+              "item_action": {
+                "action_id": "knowledge.entities.get",
+                "input_template": {
+                  "id": {
+                    "data_key": "item.entityId"
+                  }
+                }
+              }
+            }
+          },
+          {
+            "id": "state-proposal-detail",
+            "title": "Selected proposal",
+            "body": {
+              "id": "state-proposal-detail-view",
+              "type": "detail",
+              "title": "Selected proposal or action receipt",
+              "value": {
+                "data_key": "last_action_result"
+              },
+              "fields": [
+                {
+                  "key": "id",
+                  "label": "ID"
+                },
+                {
+                  "key": "status",
+                  "label": "Status"
+                },
+                {
+                  "key": "event",
+                  "label": "Event"
+                },
+                {
+                  "key": "history",
+                  "label": "History"
+                },
+                {
+                  "key": "proposalId",
+                  "label": "Host review proposal"
+                }
+              ]
+            }
+          }
+        ]
+      }
+    },
+    {
+      "id": "knowledge.series",
+      "kind": "panel",
+      "title": "Series registry",
+      "context": {
+        "label": "Series registry changes are reviewed against the selected repository and active legacy path."
+      },
+      "body": {
+        "id": "knowledge-series-tabs",
+        "type": "tabs",
+        "tabs": [
+          {
+            "id": "series-list",
+            "title": "Series",
+            "body": {
+              "id": "series-list-view",
+              "type": "table",
+              "title": "Series records",
+              "load_action": {
+                "action_id": "knowledge.series.list",
+                "input_template": {}
+              },
+              "rows": {
+                "data_key": "last_action_result.series"
+              },
+              "columns": [
+                {
+                  "key": "id",
+                  "label": "ID"
+                },
+                {
+                  "key": "name",
+                  "label": "Name"
+                },
+                {
+                  "key": "bibleRepositoryId",
+                  "label": "Bible repository"
+                }
+              ]
+            }
+          },
+          {
+            "id": "series-create",
+            "title": "Create",
+            "body": {
+              "id": "series-create-form",
+              "type": "form",
+              "title": "Propose a series registry entry",
+              "description": "Refresh the registry first so the expected revision is current.",
+              "fields": [
+                {
+                  "id": "name",
+                  "label": "Series name",
+                  "type": "string",
+                  "required": true,
+                  "max_length": 256
+                },
+                {
+                  "id": "bible_repository_id",
+                  "label": "Verified Bible repository ID",
+                  "type": "integer",
+                  "required": true
+                }
+              ],
+              "submit": {
+                "action_id": "knowledge.series.propose",
+                "input_template": {
+                  "patch": {
+                    "name": {
+                      "data_key": "form.name"
+                    },
+                    "bibleRepositoryId": {
+                      "data_key": "form.bible_repository_id"
+                    }
+                  },
+                  "expectedRegistryRevision": {
+                    "data_key": "last_action_result.registryRevision"
+                  }
+                }
+              }
+            }
+          },
+          {
+            "id": "series-update",
+            "title": "Update",
+            "body": {
+              "id": "series-update-form",
+              "type": "form",
+              "title": "Propose a series change",
+              "fields": [
+                {
+                  "id": "series_id",
+                  "label": "Series ID",
+                  "type": "string",
+                  "required": true,
+                  "max_length": 256
+                },
+                {
+                  "id": "name",
+                  "label": "New name (optional)",
+                  "type": "string",
+                  "max_length": 256
+                }
+              ],
+              "submit": {
+                "action_id": "knowledge.series.propose",
+                "input_template": {
+                  "seriesId": {
+                    "data_key": "form.series_id"
+                  },
+                  "patch": {
+                    "name": {
+                      "data_key": "form.name"
+                    }
+                  },
+                  "expectedRegistryRevision": {
+                    "data_key": "last_action_result.registryRevision"
+                  }
+                }
+              }
+            }
+          },
+          {
+            "id": "series-binding-read",
+            "title": "Work binding",
+            "body": {
+              "id": "series-binding-view",
+              "type": "detail",
+              "title": "Current work binding",
+              "description": "Refresh the pinned work binding before proposing a change.",
+              "load_action": {
+                "action_id": "knowledge.series.binding.get",
+                "input_template": {}
+              },
+              "value": {
+                "data_key": "last_action_result"
+              },
+              "fields": [
+                {
+                  "key": "binding",
+                  "label": "Git-backed binding"
+                },
+                {
+                  "key": "bibleRepositoryId",
+                  "label": "Verified Bible repository ID"
+                },
+                {
+                  "key": "registryRevision",
+                  "label": "Expected work revision"
+                },
+                {
+                  "key": "requiresAuthorReview",
+                  "label": "Author review required"
+                }
+              ]
+            }
+          },
+          {
+            "id": "series-binding-propose",
+            "title": "Bind work",
+            "body": {
+              "id": "series-binding-form",
+              "type": "form",
+              "title": "Propose a work series binding",
+              "description": "Refresh Work binding first. Leave the repository ID empty for a Host-local source choice.",
+              "fields": [
+                {
+                  "id": "series_id",
+                  "label": "Series ID",
+                  "type": "string",
+                  "required": true,
+                  "max_length": 256
+                },
+                {
+                  "id": "bible_repository_id",
+                  "label": "Verified Bible repository ID (optional)",
+                  "type": "integer"
+                }
+              ],
+              "submit": {
+                "action_id": "knowledge.series.binding.propose",
+                "input_template": {
+                  "seriesId": {
+                    "data_key": "form.series_id"
+                  },
+                  "bibleRepositoryId": {
+                    "data_key": "form.bible_repository_id"
+                  },
+                  "expectedWorkRevision": {
+                    "data_key": "last_action_result.registryRevision"
+                  }
+                }
+              }
+            }
+          }
+        ]
+      }
+    }
+  ],
+  "asset_groups": [],
+  "dependencies": [
+    {
+      "id": "proprium.narrative",
+      "range": "^0.1.0"
+    }
+  ]
+}

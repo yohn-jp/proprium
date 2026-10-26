@@ -28,6 +28,7 @@ interface Props {
   onRegisterFlush(flush: (() => Promise<string | null>) | null): void;
   git: BrowserLocalGit;
   onScratchApplied(): Promise<void>;
+  onCompositionChange?(composing: boolean): void;
 }
 
 /** The recovered Scriptorium editor, with Browser Host-owned storage and Git ports. */
@@ -158,6 +159,7 @@ export function RestoredEditor(props: Props): ReactElement {
       canCheckpoint={!busy} checkpointBusy={checkpointBusy} onCheckpoint={props.onCommit} canPublish={props.canPublish && !busy} publishBusy={publishBusy} onPublish={props.onPublish} hostFileActions={props.hostFileActions}
       onHistory={props.onHistory} historyOpen={false} historyExternal={true} onRestoreHistoryBody={props.onChange}
       scratchEntries={entries.filter(entry => entry.documentPath.startsWith("meta/scratch/"))} onDraftScratch={draftScratch} onCheckpointScratch={checkpointScratch}
-      registerScratchFlush={registerScratchFlush} registerNavigationFlush={registerInputFlush} scratchBusy={busy} pendingCount={file.dirty ? 1 : 0} />
+      registerScratchFlush={registerScratchFlush} registerNavigationFlush={registerInputFlush} scratchBusy={busy} pendingCount={file.dirty ? 1 : 0}
+      onCompositionChange={props.onCompositionChange} />
   </>;
 }

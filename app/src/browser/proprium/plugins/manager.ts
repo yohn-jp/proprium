@@ -1,6 +1,9 @@
-import { PluginArtifactError, verifyPluginArtifact, type PluginManifestV1 } from "../plugin-artifact.js";
+import { PluginArtifactError, verifyPluginArtifact, type AssetGroupRef, type PluginManifest } from "../plugin-artifact.js";
 import { BrowserPluginRuntime } from "../plugin-runtime/runtime.js";
-import type { PluginCapability, PluginTranscript, RuntimeContext, RuntimeSnapshot } from "../plugin-runtime/protocol.js";
+import { CAPABILITIES, type PluginCapability, type PluginTranscript, type RuntimeContext, type RuntimeSnapshot } from "../plugin-runtime/protocol.js";
+import { BrowserAuthoringPluginRuntime, V2PluginRuntimeError, type V2Caller, type V2InvokeOptions } from "../plugin-runtime/v2/index.js";
+import type { ActionDescriptor, ActionRequest, ActionResult, SurfaceDeclaration } from "../authoring/types.js";
+import { assertValue } from "../authoring/schema.js";
 import { admitRegistry, admitRegistryManifest, compareVersions, PluginRegistryError, registryArtifactURL, registryManifestEntry, registrySignatureUrl, satisfiesVersion, type PluginDependency, type PluginRegistryEntry, type PluginRegistryTrust, type SignedRegistrySnapshot } from "./registry.js";
 import { IndexedDbPluginStore, pluginKey, type InstalledPluginRecord, type PluginStore } from "./store.js";
 
@@ -11,9 +14,10 @@ export type { PluginStore, InstalledPluginRecord } from "./store.js";
 
 const MAX_SIGNATURE_BYTES = 64;
 const MAX_ARTIFACT_BYTES = 128 * 1024 * 1024;
+const MAX_ASSET_OBJECT_BYTES = 16 * 1024 * 1024;
 
 export class PluginManagerError extends Error {
-  constructor(readonly code: "not_installed" | "already_active" | "not_active" | "dependency_in_use" | "invalid_plugin" | "network_error" | "storage_error", message: string) {
+  constructor(readonly code: "not_installed" | "already_active" | "not_active" | "dependency_in_use" | "invalid_plugin" | "network_error" | "storage_error" | "capability_denied", message: string) {
     super(message);
     this.name = "PluginManagerError";
   }
@@ -64,8 +68,8 @@ export interface EnablePluginOptions {
   readonly pluginId: string;
   readonly version: string;
   readonly workspaceId: string;
-  readonly grants: readonly PluginCapability[];
-  readonly hostAllowed: readonly PluginCapability[];
+  readonly grants: readonly string[];
+  readonly hostAllowed: readonly string[];
   readonly context?: RuntimeContext;
 }
 
@@ -77,12 +81,53 @@ export interface InvokePluginOptions {
   readonly signal?: AbortSignal;
 }
 
+export interface VerifiedActionSet {
+  readonly plugin_id: string;
+  readonly version: string;
+  readonly manifest_digest: string;
+  readonly enabled: boolean;
+  readonly activation_epoch: number;
+  readonly descriptors: readonly ActionDescriptor[];
+  readonly dependencies: readonly string[];
+  readonly dependency_pins: readonly { readonly plugin_id: string; readonly version: string }[];
+  readonly grants: readonly string[];
+  readonly host_capabilities: readonly string[];
+}
+export interface InvokeManagedActionOptions extends Omit<V2InvokeOptions, "request"> {
+  readonly request: ActionRequest;
+  readonly activation_epoch: number;
+  readonly deadline_at: number;
+  readonly granted_capabilities: readonly string[];
+  readonly signal?: AbortSignal;
+}
+export interface ActionCatalogItem extends ActionDescriptor {
+  readonly availability: "ready" | "disabled" | "dependency_unavailable" | "capability_denied" | "incompatible";
+  readonly reason?: string;
+}
+export interface ActionCatalog { readonly items: readonly ActionCatalogItem[]; readonly next_cursor: string | null }
+export interface ManagedActionRuntime {
+  invoke(options: InvokeManagedActionOptions): Promise<ActionResult>;
+}
+export interface ResolvedAssetGroup {
+  readonly plugin_id: string;
+  readonly version: string;
+  readonly manifest_digest: string;
+  readonly ref: AssetGroupRef;
+  /** Reads one signed asset-manifest/chunk object through this manager's pinned registry fetch policy. */
+  readonly readObject: (path: string, max_bytes: number, signal?: AbortSignal) => Promise<Uint8Array>;
+}
+
 export interface InstalledPlugin {
   readonly id: string;
   readonly version: string;
+  /** Exact registry-admitted manifest digest. Omitted when admission has been revoked or failed. */
+  readonly manifestDigest?: string;
   readonly activeVersion: string | null;
   readonly state: "installed" | "enabled-idle" | "active" | "revoked";
   readonly capabilities: readonly string[];
+  readonly manifest?: PluginManifest;
+  readonly actions: readonly ActionDescriptor[];
+  readonly surfaces: readonly SurfaceDeclaration[];
   readonly dependencies: readonly { readonly id: string; readonly range: string; readonly version: string }[];
   readonly contributions: PluginTranscript["contributions"];
   readonly registryUrl: string;
@@ -97,7 +142,7 @@ interface ResolvedEntry {
 interface PreparedPlugin {
   readonly resolved: ResolvedEntry;
   readonly manifestBytes: Uint8Array;
-  readonly manifest: PluginManifestV1;
+  readonly manifest: PluginManifest;
   readonly downloadBytes: number;
 }
 interface InstallPlanPayload {
@@ -108,16 +153,15 @@ interface InstallPlanPayload {
   readonly prepared: readonly PreparedPlugin[];
   used: boolean;
 }
-interface ActivePlugin {
-  readonly version: string;
-  readonly runtime: BrowserPluginRuntime;
-  transcript?: PluginTranscript;
-}
+type ActivePlugin =
+  | { readonly abi: "v1"; readonly version: string; readonly runtime: BrowserPluginRuntime; transcript?: PluginTranscript }
+  | { readonly abi: "v2"; readonly version: string; readonly runtime: BrowserAuthoringPluginRuntime };
 interface EnabledPlugin {
   readonly version: string;
   readonly workspaceId: string;
-  readonly grants: readonly PluginCapability[];
-  readonly hostAllowed: readonly PluginCapability[];
+  readonly activationEpoch: number;
+  readonly grants: readonly string[];
+  readonly hostAllowed: readonly string[];
   readonly context: RuntimeContext;
 }
 
@@ -159,8 +203,18 @@ function stableVersions(entries: readonly PluginRegistryEntry[], id: string): Pl
 
 function activeStateKey(pluginId: string): string { return `active:${pluginId}`; }
 function previousStateKey(pluginId: string): string { return `previous:${pluginId}`; }
+function activationEpochKey(pluginId: string): string { return `activation-epoch:${pluginId}`; }
+function validEpoch(value: string | undefined): number { const epoch = Number(value ?? "0"); return Number.isSafeInteger(epoch) && epoch >= 0 ? epoch : 0; }
 function registryRootFingerprint(publicKey: Uint8Array): string {
   return Array.from(publicKey, byte => byte.toString(16).padStart(2, "0")).join("");
+}
+function canonicalJson(value: unknown): string {
+  if (Array.isArray(value)) return `[${value.map(canonicalJson).join(",")}]`;
+  if (value !== null && typeof value === "object") {
+    const object = value as Record<string, unknown>;
+    return `{${Object.keys(object).sort().map(key => `${JSON.stringify(key)}:${canonicalJson(object[key])}`).join(",")}}`;
+  }
+  return JSON.stringify(value) ?? "null";
 }
 function latestRegistryStateKey(trust: PluginRegistryTrust): string {
   return `registry-latest:${trust.url}:${registryRootFingerprint(trust.publicKey)}`;
@@ -250,7 +304,7 @@ export class BrowserPluginManager {
         continue;
       }
       const manifestURL = registryArtifactURL(item.entry.manifestPath, registry, trust);
-      const manifestBytes = await this.fetchBytes(manifestURL, 128 * 1024);
+      const manifestBytes = await this.fetchBytes(manifestURL, 512 * 1024);
       const manifest = await admitRegistryManifest(manifestBytes, item.entry);
       const downloadBytes = manifest.artifacts.reduce((total, artifact) => total + artifact.bytes, 0);
       if (!Number.isSafeInteger(downloadBytes) || downloadBytes > 512 * 1024 * 1024) throw new PluginManagerError("invalid_plugin", "Plugin dependency closure exceeds the Host download limit");
@@ -320,7 +374,7 @@ export class BrowserPluginManager {
             pluginKey(record.id, record.version) !== record.key || typeof record.registryUrl !== "string") {
           throw new PluginManagerError("storage_error", "Installed plugin record identity is malformed");
         }
-        let manifest: PluginManifestV1 | undefined;
+        let manifest: PluginManifest | undefined;
         let revoked = false;
         try { ({ manifest, revoked } = await this.verifyStoredPlugin(record.key, false, true)); }
         catch (error) {
@@ -331,13 +385,17 @@ export class BrowserPluginManager {
         const activeVersion = await this.store.getState(activeStateKey(record.id)) ?? null;
         const live = this.active.get(record.id);
         const enabled = this.enabled.get(record.id);
+        const availableManifest = revoked ? undefined : manifest;
         result.push(Object.freeze({
-          id: record.id, version: record.version, activeVersion,
+          id: record.id, version: record.version, ...(availableManifest ? { manifestDigest: record.manifestSha256 } : {}), activeVersion,
           state: revoked ? "revoked" : live?.version === record.version ? "active" : enabled?.version === record.version ? "enabled-idle" : "installed",
-          capabilities: manifest?.capabilities ?? [],
+          capabilities: availableManifest?.capabilities ?? [],
+          ...(availableManifest ? { manifest: availableManifest } : {}),
+          actions: availableManifest?.schema === "proprium.plugin/v2" ? availableManifest.actions : [],
+          surfaces: availableManifest?.schema === "proprium.plugin/v2" ? availableManifest.ui : [],
           dependencies: Object.freeze(Array.isArray(record.resolvedDependencies) ? record.resolvedDependencies.filter(dependency =>
             dependency && typeof dependency.id === "string" && typeof dependency.range === "string" && typeof dependency.version === "string").map(dependency => ({ ...dependency })) : []),
-          contributions: !revoked && live?.version === record.version ? live.transcript?.contributions ?? [] : [],
+          contributions: !revoked && live?.abi === "v1" && live.version === record.version ? live.transcript?.contributions ?? [] : [],
           registryUrl: record.registryUrl,
         }));
       }
@@ -346,6 +404,146 @@ export class BrowserPluginManager {
       if (error instanceof Error) throw error;
       throw new PluginManagerError("storage_error", "Installed plugin metadata could not be verified");
     }
+  }
+
+  /** Verified signed actions and declared availability, without starting a Worker. */
+  async verifiedActionSet(pluginId: string): Promise<VerifiedActionSet | undefined> {
+    this.assertOpen();
+    const enabled = this.enabled.get(pluginId);
+    const version = enabled?.version ?? await this.store.getState(activeStateKey(pluginId));
+    if (!version) return undefined;
+    const record = await this.store.getPlugin(pluginKey(pluginId, version));
+    if (!record) return undefined;
+    const verified = await this.verifyStoredPlugin(record.key, false, true);
+    if (verified.revoked || verified.manifest.schema !== "proprium.plugin/v2") return undefined;
+    return Object.freeze({
+      plugin_id: pluginId, version, manifest_digest: record.manifestSha256,
+      enabled: enabled?.version === version,
+      activation_epoch: validEpoch(await this.store.getState(activationEpochKey(pluginId))),
+      descriptors: verified.manifest.actions,
+      dependencies: Object.freeze(record.resolvedDependencies.map(item => item.id)),
+      dependency_pins: Object.freeze(record.resolvedDependencies.map(item => Object.freeze({ plugin_id: item.id, version: item.version }))),
+      grants: enabled?.grants ?? [], host_capabilities: enabled?.hostAllowed ?? [],
+    });
+  }
+
+  /** Resolves a signed optional asset group without activating guest code or downloading bytes. */
+  async resolveAssetGroup(pluginId: string, groupId: string): Promise<ResolvedAssetGroup | undefined> {
+    this.assertOpen();
+    if (typeof pluginId !== "string" || typeof groupId !== "string" || groupId.length === 0 || groupId.length > 128) {
+      throw new PluginManagerError("invalid_plugin", "Asset group identity is invalid");
+    }
+    const version = this.enabled.get(pluginId)?.version ?? await this.store.getState(activeStateKey(pluginId));
+    if (!version) return undefined;
+    const record = await this.store.getPlugin(pluginKey(pluginId, version));
+    if (!record) return undefined;
+    const { manifest, revoked } = await this.verifyStoredPlugin(record.key, false, true);
+    if (revoked) throw new PluginManagerError("invalid_plugin", `Plugin ${pluginId}@${version} was revoked by the latest signed registry`);
+    if (manifest.schema !== "proprium.plugin/v2") return undefined;
+    const ref = manifest.asset_groups.find(group => group.id === groupId);
+    if (!ref) return undefined;
+    return Object.freeze({
+      plugin_id: pluginId,
+      version,
+      manifest_digest: record.manifestSha256,
+      ref,
+      readObject: async (path: string, maxBytes: number, signal?: AbortSignal): Promise<Uint8Array> => {
+        if (!Number.isSafeInteger(maxBytes) || maxBytes < 1 || maxBytes > MAX_ASSET_OBJECT_BYTES) {
+          throw new PluginManagerError("invalid_plugin", "Asset object byte limit must be from 1 through 16 MiB");
+        }
+        if (signal?.aborted) throw new DOMException("Asset download was canceled", "AbortError");
+        this.assertOpen();
+        const latestRecord = await this.store.getPlugin(record.key);
+        if (!latestRecord) throw new PluginManagerError("not_installed", `Plugin ${pluginId}@${version} is no longer installed`);
+        const latest = await this.verifyStoredPlugin(latestRecord.key, false, true);
+        const latestGroup = latest.manifest.schema === "proprium.plugin/v2"
+          ? latest.manifest.asset_groups.find(item => item.id === groupId)
+          : undefined;
+        if (latest.revoked || !latestGroup || canonicalJson(latestGroup) !== canonicalJson(ref)) {
+          throw new PluginManagerError("invalid_plugin", `Asset group ${groupId} is no longer admitted`);
+        }
+        const trust = this.requireTrust(latestRecord.registryUrl);
+        const url = registryArtifactURL(path, latest.registry, trust);
+        return this.fetchBytes(url, maxBytes, signal);
+      },
+    });
+  }
+
+  /** Registry metadata route. It never activates or invokes guest code. */
+  async actionsList(pluginId: string, caller: V2Caller, cursor?: string, limit = 50): Promise<ActionCatalog> {
+    if (!Number.isSafeInteger(limit) || limit < 1 || limit > 100) throw new PluginManagerError("invalid_plugin", "Action page size must be from 1 through 100");
+    const set = await this.verifiedActionSet(pluginId);
+    if (!set) {
+      const version = await this.store.getState(activeStateKey(pluginId));
+      const installed = version && await this.store.getPlugin(pluginKey(pluginId, version));
+      if (!installed) throw new PluginManagerError("not_installed", `Plugin ${pluginId} is not installed`);
+      throw new PluginManagerError("invalid_plugin", `Plugin ${pluginId}@${version} has no available v2 actions`);
+    }
+    let offset = 0;
+    const cursorPrefix = `${set.manifest_digest}:${caller}:`;
+    if (cursor !== undefined) {
+      if (!cursor.startsWith(cursorPrefix)) throw new PluginManagerError("invalid_plugin", "Action cursor is stale or belongs to another caller");
+      const match = /^(\d+)$/u.exec(cursor.slice(cursorPrefix.length));
+      if (!match) throw new PluginManagerError("invalid_plugin", "Action cursor is invalid");
+      offset = Number(match[1]);
+      if (!Number.isSafeInteger(offset) || offset < 0 || offset > set.descriptors.length) throw new PluginManagerError("invalid_plugin", "Action cursor is out of range");
+    }
+    const page = set.descriptors.slice(offset, offset + limit).map(descriptor => {
+      let availability: ActionCatalogItem["availability"] = "ready";
+      let reason: string | undefined;
+      if (!set.enabled) { availability = "disabled"; reason = "Plugin is installed but not enabled in this workspace"; }
+      else if (!descriptor.callers.includes(caller)) { availability = "capability_denied"; reason = "Action is not declared for this caller"; }
+      else if (descriptor.required_capabilities.some(capability => !set.grants.includes(capability) || !set.host_capabilities.includes(capability))) {
+        availability = "capability_denied"; reason = "Required capability has not been granted";
+      } else if (set.dependency_pins.some(dependency => this.enabled.get(dependency.plugin_id)?.version !== dependency.version)) {
+        availability = "dependency_unavailable"; reason = "A required plugin dependency is not enabled";
+      }
+      return Object.freeze({ ...descriptor, availability, ...(reason ? { reason } : {}) });
+    });
+    const nextOffset = offset + page.length;
+    return { items: Object.freeze(page), next_cursor: nextOffset < set.descriptors.length ? `${cursorPrefix}${nextOffset}` : null };
+  }
+
+  /** Adapter consumed by the shared UI/MCP action dispatcher. */
+  authoringRuntime(pluginId: string): ManagedActionRuntime {
+    return Object.freeze({ invoke: async (options: InvokeManagedActionOptions): Promise<ActionResult> => {
+      const enabled = this.enabled.get(pluginId);
+      if (!enabled || enabled.activationEpoch !== options.activation_epoch || options.request.plugin_id !== pluginId) {
+        throw new PluginManagerError("not_active", "Plugin action belongs to a stale or disabled activation");
+      }
+      if (!Number.isSafeInteger(options.deadline_at) || Date.now() >= options.deadline_at) {
+        throw new V2PluginRuntimeError("timeout", "Plugin action deadline has expired");
+      }
+      const remainingMs = Math.floor(options.deadline_at - Date.now());
+      const deadlineMs = Math.min(options.request.deadline_ms, remainingMs);
+      if (deadlineMs < 1) throw new V2PluginRuntimeError("timeout", "Plugin action deadline has expired");
+      const granted = enabled.grants.filter(capability => enabled.hostAllowed.includes(capability)).sort();
+      if (canonicalJson(granted) !== canonicalJson([...options.granted_capabilities].sort())) {
+        throw new V2PluginRuntimeError("capability_denied", "Action grant set differs from the active Host grant set");
+      }
+      const active = await this.ensureActive(pluginId);
+      if (this.enabled.get(pluginId) !== enabled || enabled.activationEpoch !== options.activation_epoch) {
+        throw new PluginManagerError("not_active", "Plugin action activation changed before invocation");
+      }
+      if (active.abi !== "v2" || active.version !== enabled.version) throw new V2PluginRuntimeError("incompatible_abi", "Plugin does not have an active authoring v2 runtime");
+      const validate = options.validate_schema;
+      if (options.signal?.aborted) throw new DOMException("Plugin action was canceled", "AbortError");
+      const cancel = () => active.runtime.cancel();
+      options.signal?.addEventListener("abort", cancel, { once: true });
+      try {
+        return await active.runtime.invoke({
+          request: { ...options.request, deadline_ms: deadlineMs }, caller: options.caller, user_gesture: options.user_gesture,
+          is_snapshot_current: options.is_snapshot_current,
+          validate_schema: (schema, value) => { assertValue(schema, value); validate(schema, value); },
+          resolve_host_call: options.resolve_host_call,
+        });
+      } catch (error) {
+        if (active.runtime.state !== "active" && this.active.get(pluginId) === active) {
+          this.active.delete(pluginId); await active.runtime.stop().catch(() => undefined);
+        }
+        throw error;
+      } finally { options.signal?.removeEventListener("abort", cancel); }
+    } });
   }
 
   /** Records explicit capability grants. It does not start a Worker until the first invocation. */
@@ -357,17 +555,25 @@ export class BrowserPluginManager {
     this.assertOpen();
     if (this.enabled.has(options.pluginId)) throw new PluginManagerError("already_active", `Plugin ${options.pluginId} is already enabled`);
     const record = await this.requireInstalled(options.pluginId, options.version);
-    await this.verifyStoredPlugin(record.key, false);
+    const { manifest } = await this.verifyStoredPlugin(record.key, false);
     const context = options.context ?? { pluginId: options.pluginId, version: options.version, workspaceId: options.workspaceId };
     if (context.pluginId !== options.pluginId || context.version !== options.version || context.workspaceId !== options.workspaceId) {
       throw new PluginManagerError("invalid_plugin", "Plugin activation context does not match the selected version and workspace");
     }
+    const declaredCapabilities = new Set<string>(manifest.capabilities);
+    if (options.grants.some(capability => !declaredCapabilities.has(capability)) ||
+        options.hostAllowed.some(capability => !declaredCapabilities.has(capability))) {
+      throw new PluginManagerError("capability_denied", "Plugin activation grants must be declared by its signed manifest");
+    }
     const currentVersion = await this.store.getState(activeStateKey(options.pluginId));
     if (currentVersion && currentVersion !== options.version) await this.store.setState(previousStateKey(options.pluginId), currentVersion);
+    const activationEpoch = validEpoch(await this.store.getState(activationEpochKey(options.pluginId))) + 1;
+    await this.store.setState(activationEpochKey(options.pluginId), String(activationEpoch));
     await this.store.setState(activeStateKey(options.pluginId), options.version);
     this.enabled.set(options.pluginId, Object.freeze({
       version: options.version, workspaceId: options.workspaceId,
-      grants: Object.freeze([...options.grants]), hostAllowed: Object.freeze([...options.hostAllowed]), context: Object.freeze({ ...context }),
+      activationEpoch, grants: Object.freeze([...options.grants]),
+      hostAllowed: Object.freeze([...options.hostAllowed]), context: Object.freeze({ ...context }),
     }));
   }
 
@@ -375,6 +581,7 @@ export class BrowserPluginManager {
   async invoke(options: InvokePluginOptions): Promise<PluginTranscript> {
     if (options.signal?.aborted) throw new DOMException("Plugin execution was canceled", "AbortError");
     const active = await this.ensureActive(options.pluginId);
+    if (active.abi !== "v1") throw new PluginManagerError("invalid_plugin", "Legacy run requests cannot invoke an authoring v2 action");
     if (options.signal?.aborted) {
       active.runtime.cancel();
       throw new DOMException("Plugin execution was canceled", "AbortError");
@@ -400,21 +607,40 @@ export class BrowserPluginManager {
     return this.serialize(async () => {
       this.assertOpen();
       const active = this.active.get(pluginId);
-      if (active) return active;
+      if (active?.runtime.state === "active") return active;
+      if (active) {
+        this.active.delete(pluginId);
+        await (active.abi === "v1" ? active.runtime.destroy() : active.runtime.stop()).catch(() => undefined);
+      }
       const enabled = this.enabled.get(pluginId);
       if (!enabled) throw new PluginManagerError("not_active", `Plugin ${pluginId} must be enabled before it can run`);
       const record = await this.requireInstalled(pluginId, enabled.version);
       const { manifest, artifacts } = await this.verifyStoredPlugin(record.key, true);
       const entrypoint = artifacts.get(manifest.entrypoint);
       if (!entrypoint) throw new PluginManagerError("invalid_plugin", "Verified plugin entrypoint is missing");
-      const runtime = await BrowserPluginRuntime.create(manifest, Uint8Array.from(entrypoint));
+      if (manifest.schema === "proprium.plugin/v1") {
+        const runtime = await BrowserPluginRuntime.create(manifest, Uint8Array.from(entrypoint));
+        try {
+          await runtime.start({ context: enabled.context, userGrants: enabled.grants.filter((value): value is PluginCapability => CAPABILITIES.includes(value as PluginCapability)),
+            hostAllowed: enabled.hostAllowed.filter((value): value is PluginCapability => CAPABILITIES.includes(value as PluginCapability)) });
+          const instance: ActivePlugin = { abi: "v1", version: enabled.version, runtime };
+          this.active.set(pluginId, instance);
+          return instance;
+        } catch (error) {
+          await runtime.destroy().catch(() => undefined);
+          throw error;
+        }
+      }
+      const runtime = await BrowserAuthoringPluginRuntime.create(manifest, Uint8Array.from(entrypoint), async (_runtimeManifest, path, bytes) => {
+        await verifyPluginArtifact(manifest, path, bytes);
+      });
       try {
-        await runtime.start({ context: enabled.context, userGrants: enabled.grants, hostAllowed: enabled.hostAllowed });
-        const instance = { version: enabled.version, runtime };
+        await runtime.start({ context: enabled.context, user_grants: enabled.grants, host_allowed: enabled.hostAllowed });
+        const instance: ActivePlugin = { abi: "v2", version: enabled.version, runtime };
         this.active.set(pluginId, instance);
         return instance;
       } catch (error) {
-        await runtime.destroy().catch(() => undefined);
+        await runtime.stop().catch(() => undefined);
         throw error;
       }
     });
@@ -431,7 +657,12 @@ export class BrowserPluginManager {
     if (!active && !enabled) return;
     this.active.delete(pluginId);
     this.enabled.delete(pluginId);
-    if (active) await active.runtime.destroy();
+    const epoch = validEpoch(await this.store.getState(activationEpochKey(pluginId))) + 1;
+    await this.store.setState(activationEpochKey(pluginId), String(epoch));
+    if (active) {
+      if (active.abi === "v1") await active.runtime.destroy();
+      else await active.runtime.stop();
+    }
   }
 
   /** Reverts the active pin to the last verified version retained by the Host. */
@@ -486,7 +717,7 @@ export class BrowserPluginManager {
       const live = [...this.active.values()];
       this.active.clear();
       this.enabled.clear();
-      await Promise.all(live.map(item => item.runtime.destroy()));
+      await Promise.all(live.map(item => item.abi === "v1" ? item.runtime.destroy() : item.runtime.stop()));
     });
   }
 
@@ -540,7 +771,7 @@ export class BrowserPluginManager {
     return Object.freeze({
       key: pluginKey(entry.id, entry.version), id: entry.id, version: entry.version,
       registryUrl: registry.url, registryDigest: registry.digest, registryRootFingerprint: registryRootFingerprint(trust.publicKey),
-      manifestBytes, manifestSha256: entry.manifestSha256,
+      manifestBytes, manifest, manifestSha256: entry.manifestSha256,
       manifestSignature: entry.manifestSignature, publisherKey: entry.publisherKey,
       dependencies: entry.dependencies.map(dependency => ({ ...dependency })),
       resolvedDependencies: item.resolved.dependencies.map(dependency => ({ ...dependency })), artifacts,
@@ -553,7 +784,7 @@ export class BrowserPluginManager {
     withArtifacts = false,
     allowRevoked = false,
     visiting = new Set<string>(),
-  ): Promise<{ manifest: PluginManifestV1; artifacts: Map<string, Uint8Array>; revoked: boolean }> {
+  ): Promise<{ manifest: PluginManifest; artifacts: Map<string, Uint8Array>; revoked: boolean; registry: SignedRegistrySnapshot }> {
     if (visiting.has(key)) throw new PluginManagerError("invalid_plugin", `Installed plugin dependency cycle includes ${key}`);
     visiting.add(key);
     const record = await this.requireInstalledByKey(key);
@@ -604,6 +835,11 @@ export class BrowserPluginManager {
       await this.verifyStoredPlugin(dependencyRecord.key, withArtifacts, false, visiting);
     }
     const manifest = await admitRegistryManifest(record.manifestBytes, entry);
+    // Persist only the freshly admitted parse. Old v1 records are backfilled on
+    // first verified read; the cache itself is never used as admission evidence.
+    if (!record.manifest || canonicalJson(record.manifest) !== canonicalJson(manifest)) {
+      await this.store.putPlugins([{ ...record, manifest }]);
+    }
     const artifactMap = new Map<string, Uint8Array>();
     if (withArtifacts) {
       for (const descriptor of manifest.artifacts) {
@@ -617,7 +853,7 @@ export class BrowserPluginManager {
       }
     }
     visiting.delete(key);
-    return { manifest, artifacts: artifactMap, revoked };
+    return { manifest, artifacts: artifactMap, revoked, registry };
   }
 
   private async fetchRegistry(trust: PluginRegistryTrust): Promise<SignedRegistrySnapshot> {
@@ -648,16 +884,17 @@ export class BrowserPluginManager {
       try { await this.verifyStoredPlugin(record.key, true); }
       catch {
         this.active.delete(pluginId);
-        await active.runtime.destroy();
+        await (active.abi === "v1" ? active.runtime.destroy() : active.runtime.stop());
       }
     }
   }
 
-  private async fetchBytes(url: URL | string, limit: number): Promise<Uint8Array> {
+  private async fetchBytes(url: URL | string, limit: number, signal?: AbortSignal): Promise<Uint8Array> {
     let response: Response;
     try {
-      response = await this.fetcher(String(url), { method: "GET", mode: "cors", credentials: "omit", redirect: "error", cache: "no-store" });
+      response = await this.fetcher(String(url), { method: "GET", mode: "cors", credentials: "omit", redirect: "error", cache: "no-store", ...(signal ? { signal } : {}) });
     } catch (error) {
+      if (signal?.aborted) throw new DOMException("Asset download was canceled", "AbortError");
       throw new PluginManagerError("network_error", error instanceof Error ? error.message : "Plugin distribution request failed");
     }
     return boundedBytes(response, limit);

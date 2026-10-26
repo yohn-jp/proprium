@@ -1,0 +1,52 @@
+import assert from "node:assert/strict";
+import { readFile } from "node:fs/promises";
+import { test } from "node:test";
+import { assertDescriptor } from "../../app/src/browser/proprium/authoring/schema.js";
+import { createResearchHandlers } from "./guest.js";
+
+test("Research official manifest declares every implemented action and only actionable Host surfaces", async () => {
+  const metadata = JSON.parse(await readFile(new URL("./plugin.json", import.meta.url), "utf8")) as {
+    schema: string; id: string; abi: string; capabilities: string[];
+    actions: unknown[]; ui: unknown[]; asset_groups: unknown[]; dependencies: unknown[];
+  };
+  assert.equal(metadata.schema, "proprium.plugin/v2");
+  assert.equal(metadata.id, "proprium.research");
+  assert.equal(metadata.abi, "proprium.component/v2");
+  assert.deepEqual(metadata.asset_groups, []);
+  assert.deepEqual(metadata.dependencies, []);
+
+  const handlers = createResearchHandlers();
+  const actionIds = metadata.actions.map((value) => {
+    assertDescriptor(value);
+    return value.action_id;
+  });
+  assert.equal(new Set(actionIds).size, actionIds.length);
+  assert.deepEqual([...actionIds].sort(), Object.keys(handlers).sort());
+  assert.ok(metadata.ui.length > 0);
+  const surfaceIds = new Set<string>();
+  const bindings: string[] = [];
+  const visit = (value: unknown): void => {
+    if (Array.isArray(value)) { for (const child of value) visit(child); return; }
+    if (!value || typeof value !== "object") return;
+    const row = value as Record<string, unknown>;
+    if (typeof row.action_id === "string") {
+      assert.ok(row.input_template && typeof row.input_template === "object" && !Array.isArray(row.input_template));
+      bindings.push(row.action_id);
+    }
+    for (const child of Object.values(row)) visit(child);
+  };
+  for (const raw of metadata.ui) {
+    assert.ok(raw && typeof raw === "object" && !Array.isArray(raw));
+    const surface = raw as Record<string, unknown>;
+    assert.equal(typeof surface.id, "string");
+    assert.ok(!surfaceIds.has(surface.id as string), `duplicate UI surface ${String(surface.id)}`);
+    surfaceIds.add(surface.id as string);
+    assert.equal(surface.kind, "panel");
+    assert.equal(typeof surface.title, "string");
+    assert.ok(surface.context && typeof surface.context === "object" && !Array.isArray(surface.context));
+    assert.ok(surface.body && typeof surface.body === "object" && !Array.isArray(surface.body));
+    visit(surface.body);
+  }
+  assert.ok(bindings.length > 0);
+  for (const actionId of bindings) assert.ok(actionIds.includes(actionId), `surface binding references undeclared action ${actionId}`);
+});

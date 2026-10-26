@@ -58,10 +58,11 @@ function relativeKey(path) {
   return key;
 }
 function contentType(path) {
+  if (path.includes("/chunks/")) return "application/octet-stream";
   if (path.endsWith(".wasm")) return "application/wasm";
   if (path.endsWith(".json")) return "application/json";
   if (path.endsWith(".sig")) return "application/octet-stream";
-  throw new Error(`Unsupported plugin release media type: ${path}`);
+  return "application/octet-stream";
 }
 function sourceFileForKey(key) {
   const sourceFile = resolve(output, ...key.split("/"));

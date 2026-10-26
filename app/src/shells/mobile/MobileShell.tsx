@@ -23,7 +23,7 @@ import "../editorial.css";
 import "../authoring.css";
 
 export type MobileView = "library" | "writing" | "inspection" | "tools" | "settings";
-type ReferenceSheet = "outline" | "inspector";
+type ReferenceSheet = string;
 
 interface PendingMobilePanelRequest {
   sequence: number;
@@ -52,6 +52,10 @@ const WORKSPACE_PANEL_FOR_VIEW: Readonly<Record<Exclude<MobileView, "settings">,
 
 function workspacePanelForView(view: MobileView): string | undefined {
   return view === "settings" ? undefined : WORKSPACE_PANEL_FOR_VIEW[view];
+}
+
+function referenceTabId(panelId: string): string {
+  return `mobile-reference-tab-${encodeURIComponent(panelId)}`;
 }
 
 const VIEWS: ReadonlyArray<{ id: MobileView; label: string; title: string; mark: string }> = [
@@ -401,6 +405,7 @@ export function MobileShell({ header, documentTitle, documentContext, desktopDur
   }, []);
 
   const referencePanel = referenceSheet ? panels?.find((panel) => panel.id === referenceSheet) : undefined;
+  const referenceChoices = (panels ?? []).filter(panel => panel.id === "outline" || panel.id === "inspector" || panel.id.startsWith("plugin:"));
   const hasWritingContext = activeView === "writing" && Boolean(documentTitle) && Boolean(workspaceScope)
     && Boolean(panels?.some((panel) => panel.id === "outline"))
     && Boolean(panels?.some((panel) => panel.id === "inspector"));
@@ -590,40 +595,37 @@ export function MobileShell({ header, documentTitle, documentContext, desktopDur
           <div className="mobile-shell-reference-top">
             <div>
               <p className="mobile-shell-reference-eyebrow">WRITING CONTEXT</p>
-              <h2 id="mobile-shell-reference-title">原稿の参照</h2>
+              <h2 id="mobile-shell-reference-title">{referencePanel?.title ?? "原稿の参照"}</h2>
             </div>
             <button type="button" className="mobile-shell-reference-close" onClick={closeReferenceSheet}>
               閉じる
             </button>
           </div>
           <div className="mobile-shell-reference-switch" role="tablist" aria-label="参照する情報">
-            {([
-              { id: "outline", label: "構成" },
-              { id: "inspector", label: "保存状態" },
-            ] as const).map((choice) => (
+            {referenceChoices.map((choice, index) => (
               <button type="button" role="tab" key={choice.id}
-                id={"mobile-reference-tab-" + choice.id}
+                id={referenceTabId(choice.id)}
                 aria-selected={referenceSheet === choice.id}
                 aria-controls="mobile-shell-reference-pane"
                 tabIndex={referenceSheet === choice.id ? 0 : -1}
                 onKeyDown={(event) => {
-                  const next = event.key === "ArrowRight" || event.key === "End" ? "inspector"
-                    : event.key === "ArrowLeft" || event.key === "Home" ? "outline" : null;
-                  if (!next) return;
+                  const nextIndex = event.key === "ArrowRight" ? (index + 1) % referenceChoices.length
+                    : event.key === "ArrowLeft" ? (index + referenceChoices.length - 1) % referenceChoices.length
+                      : event.key === "Home" ? 0 : event.key === "End" ? referenceChoices.length - 1 : -1;
+                  if (nextIndex < 0 || !referenceChoices[nextIndex]) return;
                   event.preventDefault();
+                  const next = referenceChoices[nextIndex]!.id;
                   setReferenceSheet(next);
-                  event.currentTarget.parentElement?.querySelector<HTMLButtonElement>(
-                    "#mobile-reference-tab-" + next,
-                  )?.focus();
+                  document.getElementById(referenceTabId(next))?.focus();
                 }}
                 onClick={() => setReferenceSheet(choice.id)}>
-                {choice.label}
+                {choice.id === "outline" ? "構成" : choice.id === "inspector" ? "保存状態" : choice.title}
               </button>
             ))}
           </div>
           <div id="mobile-shell-reference-pane" className="mobile-shell-reference-pane"
             role="tabpanel"
-            aria-labelledby={referenceSheet ? "mobile-reference-tab-" + referenceSheet : undefined}
+            aria-labelledby={referenceSheet ? referenceTabId(referenceSheet) : undefined}
             data-mobile-reference-panel={referenceSheet ?? undefined}>
             {referenceSheet === "inspector" && desktopDurability ? (
               <div className="mobile-shell-reference-durability" role="status" aria-label="原稿の保存状態">

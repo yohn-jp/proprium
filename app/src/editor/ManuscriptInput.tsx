@@ -36,7 +36,8 @@ export interface ManuscriptInputProps {
   labelledBy: string;
   style?: CSSProperties;
   resolveTerms?: ResolveEditorTerms;
-  onTermNavigate?: (targetPath: string, termId: string) => void;
+  onTermNavigate?: (targetPath: string, termId: string, event: Event) => void;
+  onCompositionChange?: (composing: boolean) => void;
   termResolutionKey?: string;
 }
 
@@ -53,6 +54,7 @@ export const ManuscriptInput = forwardRef<ManuscriptInputHandle, ManuscriptInput
   style,
   resolveTerms,
   onTermNavigate,
+  onCompositionChange,
   termResolutionKey,
 }, ref) {
   const containerRef = useRef<HTMLDivElement>(null);
@@ -62,11 +64,19 @@ export const ManuscriptInput = forwardRef<ManuscriptInputHandle, ManuscriptInput
   const externalSyncRef = useRef(false);
   const suppressPositionRef = useRef(false);
   const resolverRef = useRef<ResolveEditorTerms | undefined>(resolveTerms);
-  const navigatorRef = useRef<((targetPath: string, termId: string) => void) | undefined>(onTermNavigate);
+  const navigatorRef = useRef<((targetPath: string, termId: string, event: Event) => void) | undefined>(onTermNavigate);
   resolverRef.current = resolveTerms;
   navigatorRef.current = onTermNavigate;
-  const latestRef = useRef({ onChange, onSelectionLengthChange, onCursorPositionChange });
-  latestRef.current = { onChange, onSelectionLengthChange, onCursorPositionChange };
+  const latestRef = useRef({ onChange, onSelectionLengthChange, onCursorPositionChange, onCompositionChange });
+  latestRef.current = { onChange, onSelectionLengthChange, onCursorPositionChange, onCompositionChange };
+  const reportedComposition = useRef<boolean | null>(null);
+
+  function reportComposition(view: EditorView): void {
+    const composing = isViewComposing(view);
+    if (reportedComposition.current === composing) return;
+    reportedComposition.current = composing;
+    latestRef.current.onCompositionChange?.(composing);
+  }
 
   function sentencePositionIndex(doc: EditorState["doc"], text?: string) {
     const cache = sentencePositionIndexRef.current ??= createUiSentencePositionIndexCache<EditorState["doc"]>();
@@ -157,6 +167,7 @@ export const ManuscriptInput = forwardRef<ManuscriptInputHandle, ManuscriptInput
           enterkeyhint: "enter",
         }),
         EditorView.updateListener.of((update) => {
+          reportComposition(update.view);
           const changedText = update.docChanged ? update.state.doc.toString() : null;
           const changedDocumentIndex = update.docChanged
             ? sentencePositionIndex(update.state.doc, changedText ?? undefined)
@@ -182,9 +193,12 @@ export const ManuscriptInput = forwardRef<ManuscriptInputHandle, ManuscriptInput
     sentencePositionIndex(state.doc, state.doc.toString());
     const view = new EditorView({ state, parent });
     viewRef.current = view;
+    reportComposition(view);
     const onScroll = () => reportPosition(view);
     view.scrollDOM.addEventListener("scroll", onScroll, { passive: true });
     return () => {
+      reportedComposition.current = null;
+      latestRef.current.onCompositionChange?.(false);
       view.scrollDOM.removeEventListener("scroll", onScroll);
       view.destroy();
       viewRef.current = null;

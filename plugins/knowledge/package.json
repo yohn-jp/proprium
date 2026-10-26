@@ -1,0 +1,19 @@
+{
+  "name": "@proprium/plugin-knowledge",
+  "private": true,
+  "version": "0.1.0",
+  "type": "module",
+  "description": "Proprium Story Knowledge domain and pinned snapshot reader.",
+  "scripts": {
+    "typecheck": "tsc --noEmit -p tsconfig.json",
+    "test": "node --import tsx --test src/domain/*.test.ts src/*.test.ts"
+  },
+  "dependencies": {
+    "yaml": "2.9.1"
+  },
+  "devDependencies": {
+    "@types/node": "^24.0.0",
+    "tsx": "^4.20.0",
+    "typescript": "~5.9.3"
+  }
+}

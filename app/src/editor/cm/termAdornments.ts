@@ -1,10 +1,10 @@
 import { StateEffect, type Extension } from "@codemirror/state";
-import { Decoration, EditorView, ViewPlugin, keymap, type ViewUpdate } from "@codemirror/view";
+import { Decoration, EditorView, ViewPlugin, type ViewUpdate } from "@codemirror/view";
 import { isViewComposing } from "./compositionGuard";
 import { findTermSpanAtSelection, selectVisibleTermSlices, validateEditorTermSpans, type EditorTermSpan, type ResolveEditorTerms } from "../terms";
 
 type ResolverRef = { current: ResolveEditorTerms | undefined };
-type NavigatorRef = { current: ((targetPath: string, termId: string) => void) | undefined };
+type NavigatorRef = { current: ((targetPath: string, termId: string, event: Event) => void) | undefined };
 
 const replaceTerms = StateEffect.define<readonly EditorTermSpan[]>();
 export const refreshTermAdornments = StateEffect.define<null>();
@@ -166,18 +166,17 @@ export function termAdornmentsExtension(resolverRef: ResolverRef, navigatorRef: 
 
   return [
     plugin,
-    keymap.of([{
-      key: "Mod-Enter",
-      run(view) {
-        if (isViewComposing(view)) return false;
+    EditorView.domEventHandlers({
+      keydown(event, view) {
+        if ((!event.ctrlKey && !event.metaKey) || event.altKey || event.shiftKey || event.key !== "Enter" || isViewComposing(view)) return false;
         const selection = view.state.selection.main;
         const span = findTermSpanAtSelection(currentSpans.current, { from: selection.from, to: selection.to });
-        if (!span || !navigatorRef.current) return false;
-        navigatorRef.current(span.targetPath, span.termId);
+        const navigate = navigatorRef.current;
+        if (!span || !navigate) return false;
+        event.preventDefault();
+        navigate(span.targetPath, span.termId, event);
         return true;
       },
-    }]),
-    EditorView.domEventHandlers({
       mousedown(event, view) {
         if (event.button !== 0 || (!event.ctrlKey && !event.metaKey) || isViewComposing(view)) return false;
         const mark = termMarkFromTarget(event.target);
@@ -186,7 +185,7 @@ export function termAdornmentsExtension(resolverRef: ResolverRef, navigatorRef: 
         const navigate = navigatorRef.current;
         if (!termId || !targetPath || !navigate) return false;
         event.preventDefault();
-        navigate(targetPath, termId);
+        navigate(targetPath, termId, event);
         return true;
       },
     }),

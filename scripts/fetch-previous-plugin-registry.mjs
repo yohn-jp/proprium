@@ -30,6 +30,7 @@ const publicKey = createPublicKey({
   format: "der", type: "spki",
 });
 const sha256 = bytes => createHash("sha256").update(bytes).digest("hex");
+const SEMVER = /^(0|[1-9]\d*)\.(0|[1-9]\d*)\.(0|[1-9]\d*)(?:-([0-9A-Za-z.-]+))?$/u;
 const MAX_ASSET_BYTES = 128 * 1024 * 1024;
 
 function safePath(path) {
@@ -95,6 +96,82 @@ if (registry.schema !== "proprium.registry/v1" || !Array.isArray(registry.plugin
 if (registry.artifactBase !== artifactBaseText) throw new Error("Previous registry artifactBase differs from the configured R2 origin");
 
 const downloaded = new Map();
+function remember(path, bytes) {
+  const previous = downloaded.get(path);
+  if (previous && !Buffer.from(previous).equals(Buffer.from(bytes))) {
+    throw new Error(`Previous registry repeats immutable path with different bytes: ${path}`);
+  }
+  downloaded.set(path, bytes);
+}
+
+async function downloadAssetGroups(groups, pluginId) {
+  if (!Array.isArray(groups)) throw new Error(`Previous v2 manifest asset groups are invalid for ${pluginId}`);
+  const prefix = `${pluginId.replace(".", "/")}/`;
+  const groupIds = new Set();
+  for (const group of groups) {
+    const groupFields = ["id", "manifest_path", "sha256", "bytes", "role"];
+    if (!group || typeof group !== "object" || Array.isArray(group) || Object.keys(group).length !== groupFields.length ||
+        groupFields.some(field => !Object.hasOwn(group, field)) || typeof group.id !== "string" || !group.id || groupIds.has(group.id) ||
+        !["dictionary", "embedding", "reranker"].includes(group.role) || !Number.isSafeInteger(group.bytes) || group.bytes <= 0 ||
+        !/^[a-f0-9]{64}$/u.test(group.sha256) || typeof group.manifest_path !== "string" ||
+        !group.manifest_path.startsWith(prefix) || !group.manifest_path.includes(`/${group.sha256}/`)) {
+      throw new Error(`Previous v2 manifest has an invalid asset group for ${pluginId}`);
+    }
+    groupIds.add(group.id);
+    const manifestBytes = await fetchObject(group.manifest_path, "application/json", { maxAge: 31_536_000 });
+    if (manifestBytes.byteLength !== group.bytes || sha256(manifestBytes) !== group.sha256) {
+      throw new Error(`Previous asset manifest digest failed: ${group.manifest_path}`);
+    }
+    let manifest;
+    try { manifest = JSON.parse(new TextDecoder("utf-8", { fatal: true }).decode(manifestBytes)); }
+    catch { throw new Error(`Previous asset manifest is not UTF-8 JSON: ${group.manifest_path}`); }
+    const manifestFields = ["schema", "id", "version", "license", "files"];
+    if (!manifest || typeof manifest !== "object" || Array.isArray(manifest) || Object.keys(manifest).length !== manifestFields.length ||
+        manifestFields.some(field => !Object.hasOwn(manifest, field)) || manifest.schema !== "proprium.assets/v1" ||
+        manifest.id !== group.id || typeof manifest.version !== "string" || !SEMVER.test(manifest.version) ||
+        typeof manifest.license !== "string" || !manifest.license || !Array.isArray(manifest.files)) {
+      throw new Error(`Previous asset manifest schema or identity is invalid: ${group.manifest_path}`);
+    }
+    const filePaths = new Set();
+    for (const file of manifest.files) {
+      const fileFields = ["path", "bytes", "sha256", "chunks"];
+      if (!file || typeof file !== "object" || Array.isArray(file) || Object.keys(file).length !== fileFields.length ||
+          fileFields.some(field => !Object.hasOwn(file, field)) || typeof file.path !== "string" || filePaths.has(file.path) ||
+          !Number.isSafeInteger(file.bytes) || file.bytes < 0 || !/^[a-f0-9]{64}$/u.test(file.sha256) || !Array.isArray(file.chunks)) {
+        throw new Error(`Previous asset manifest has an invalid file entry: ${group.manifest_path}`);
+      }
+      safePath(file.path);
+      filePaths.add(file.path);
+      const fileHash = createHash("sha256");
+      let nextOffset = 0;
+      for (const chunk of file.chunks) {
+        const chunkFields = ["path", "offset", "bytes", "sha256"];
+        if (!chunk || typeof chunk !== "object" || Array.isArray(chunk) || Object.keys(chunk).length !== chunkFields.length ||
+            chunkFields.some(field => !Object.hasOwn(chunk, field)) || typeof chunk.path !== "string" ||
+            !chunk.path.startsWith(prefix) || !chunk.path.includes(`/${chunk.sha256}/`) ||
+            chunk.offset !== nextOffset || !Number.isSafeInteger(chunk.bytes) || chunk.bytes <= 0 || chunk.bytes > 16 * 1024 * 1024 ||
+            !/^[a-f0-9]{64}$/u.test(chunk.sha256)) {
+          throw new Error(`Previous asset chunk layout is invalid in ${group.manifest_path}`);
+        }
+        const bytes = await fetchObject(chunk.path, "application/octet-stream", { maxAge: 31_536_000 });
+        if (bytes.byteLength !== chunk.bytes || sha256(bytes) !== chunk.sha256) {
+          throw new Error(`Previous asset chunk digest failed: ${chunk.path}`);
+        }
+        fileHash.update(bytes);
+        nextOffset += chunk.bytes;
+        remember(chunk.path, bytes);
+      }
+      const emptyDigest = createHash("sha256").update(new Uint8Array()).digest("hex");
+      if (nextOffset !== file.bytes || fileHash.digest("hex") !== file.sha256 ||
+          (file.bytes === 0 && file.chunks.length !== 0) || (file.bytes > 0 && file.chunks.length === 0) ||
+          (file.bytes === 0 && file.sha256 !== emptyDigest)) {
+        throw new Error(`Previous asset chunks do not reconstruct ${pluginId}/${file.path}`);
+      }
+    }
+    remember(group.manifest_path, manifestBytes);
+  }
+}
+
 for (const entry of registry.plugins) {
   const manifestBytes = await fetchObject(entry.manifestPath, "application/json", { maxAge: 31_536_000 });
   if (sha256(manifestBytes) !== entry.manifestSha256 || !entry.manifestPath.includes(`/manifest/${entry.manifestSha256}.json`)) {
@@ -112,7 +189,7 @@ for (const entry of registry.plugins) {
   if (manifest.id !== entry.id || manifest.version !== entry.version || !Array.isArray(manifest.artifacts)) {
     throw new Error(`Previous manifest identity mismatch for ${entry.id}@${entry.version}`);
   }
-  downloaded.set(entry.manifestPath, manifestBytes);
+  remember(entry.manifestPath, manifestBytes);
   for (const artifact of manifest.artifacts) {
     if (!Number.isSafeInteger(artifact.bytes) || artifact.bytes < 1 || artifact.bytes > MAX_ASSET_BYTES ||
         !/^[a-f0-9]{64}$/u.test(artifact.sha256) || !artifact.path.includes(`/${artifact.sha256}/`)) {
@@ -124,8 +201,9 @@ for (const entry of registry.plugins) {
     if (!mime) throw new Error(`Unsupported previous artifact MIME type: ${artifact.mediaType}`);
     const bytes = await fetchObject(artifact.path, mime, { maxAge: 31_536_000 });
     if (bytes.byteLength !== artifact.bytes || sha256(bytes) !== artifact.sha256) throw new Error(`Previous artifact digest failed: ${artifact.path}`);
-    downloaded.set(artifact.path, bytes);
+    remember(artifact.path, bytes);
   }
+  if (manifest.schema === "proprium.plugin/v2") await downloadAssetGroups(manifest.asset_groups, entry.id);
 }
 
 for (const [path, bytes] of downloaded) await store(path, bytes);

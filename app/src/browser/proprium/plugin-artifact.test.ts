@@ -65,3 +65,38 @@ test("same-length artifact corruption is rejected", async () => {
   const altered = wasm.slice(); altered[0] = 1;
   await assert.rejects(verifyPluginArtifact(manifest, "dist/plugin.wasm", altered), rejected("digest_mismatch"));
 });
+
+const v2 = (value: Record<string, unknown>) => {
+  value.schema = "proprium.plugin/v2"; value.abi = "proprium.component/v2";
+  const shape = { type: "object", properties: { text: { type: "string", maxLength: 100 } }, required: ["text"], additionalProperties: false };
+  value.actions = [{ plugin_id: value.id, action_id: "search.query", schema_version: 1, effect: "read",
+    input_schema: shape, output_schema: shape, required_capabilities: ["workspace.snapshot.read"],
+    callers: ["ui", "mcp", "plugin"], requires_user_gesture: false }];
+  value.ui = [{ id: "search", kind: "panel", title: "Search", context: {}, body: { id: "query", type: "form",
+    fields: [{ id: "text", type: "string", label: "Query", max_length: 100 }],
+    submit: { action_id: "search.query", input_template: { text: { data_key: "form.text" } } } } }];
+  value.asset_groups = [];
+};
+test("v2 signed declarations are admitted and deeply immutable without guest activation", async () => {
+  const { raw, wasm, policy } = await fixture(v2);
+  const manifest = await admitPluginManifest(raw, policy);
+  assert.equal(manifest.schema, "proprium.plugin/v2");
+  if (manifest.schema !== "proprium.plugin/v2") assert.fail("Expected v2");
+  assert.equal(manifest.actions[0]!.action_id, "search.query");
+  assert.ok(Object.isFrozen(manifest.actions[0]!.input_schema));
+  await verifyPluginArtifact(manifest, "dist/plugin.wasm", wasm);
+  await assert.rejects(verifyPluginArtifact({ ...manifest }, "dist/plugin.wasm", wasm), rejected("untrusted_publisher"));
+});
+test("v2 rejects undeclared bindings, spoofed caller policy and version confusion", async () => {
+  const patches = [
+    (x: Record<string, unknown>) => { x.abi = "proprium.component/v1"; },
+    (x: Record<string, unknown>) => { (x.actions as Record<string, unknown>[])[0]!.callers = ["owner"]; },
+    (x: Record<string, unknown>) => { (x.actions as Record<string, unknown>[])[0]!.required_capabilities = ["credentials.read"]; },
+    (x: Record<string, unknown>) => { (x.ui as { body: { submit: { action_id: string } } }[])[0]!.body.submit.action_id = "unknown"; },
+    (x: Record<string, unknown>) => { x.extra = true; },
+  ];
+  for (const patch of patches) {
+    const { raw, policy } = await fixture(value => { v2(value); patch(value); });
+    await assert.rejects(admitPluginManifest(raw, policy), rejected("invalid_manifest"));
+  }
+});

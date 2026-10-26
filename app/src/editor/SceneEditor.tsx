@@ -171,6 +171,7 @@ export function SceneEditor({
   onRestoreHistoryBody,
   resolveTerms,
   onTermNavigate,
+  onCompositionChange,
   scratchEntries,
   onDraftScratch,
   onCheckpointScratch,
@@ -220,7 +221,8 @@ export function SceneEditor({
   historyContent?: ReactNode;
   onRestoreHistoryBody: (body: string) => void;
   resolveTerms?: ResolveEditorTerms;
-  onTermNavigate?: (targetPath: string, termId: string) => void;
+  onTermNavigate?: (targetPath: string, termId: string, event: Event) => void;
+  onCompositionChange?: (composing: boolean) => void;
   scratchEntries: JournalEntry[];
   onDraftScratch: (draft: ScratchDraftPayload, binding: ScratchDraftBinding) => Promise<JournalEntry | null>;
   onCheckpointScratch: (entry: JournalEntry) => Promise<void>;
@@ -438,6 +440,7 @@ export function SceneEditor({
               onSelectionLengthChange={setSelectionLength}
               resolveTerms={reading ? undefined : resolveTerms}
               onTermNavigate={onTermNavigate}
+              onCompositionChange={onCompositionChange}
               termResolutionKey={`${repositoryKey}:${snapshotIdentity}:${scene.id}:${path}`}
               labelledBy="manuscript-label"
               placeholder="物語の続きを書く"

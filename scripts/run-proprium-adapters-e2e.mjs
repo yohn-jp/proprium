@@ -17,6 +17,7 @@ if (process.env.SCRIPTORIUM_GITHUB_LIVE_TEST_TOKEN) {
 const command = process.platform === "win32" ? "pnpm.cmd" : "pnpm";
 const suites = [
   ["browser-git.acceptance.spec.ts", "4275"],
+  ["authoring-snapshot.acceptance.spec.ts", "4277"],
   ["browser-git-sync.acceptance.spec.ts", "4273"],
   ["plugin-runtime.acceptance.spec.ts", "4275"],
 ];

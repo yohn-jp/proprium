@@ -1,0 +1,1988 @@
+{
+  "schema": "proprium.plugin/v2",
+  "id": "proprium.semantic",
+  "version": "0.1.0",
+  "abi": "proprium.component/v2",
+  "capabilities": [
+    "workspace.file.read",
+    "workspace.derived.cache",
+    "workspace.asset.read",
+    "plugin.preferences.read"
+  ],
+  "actions": [
+    {
+      "plugin_id": "proprium.semantic",
+      "action_id": "proprium.semantic.index.status",
+      "schema_version": 1,
+      "effect": "read",
+      "input_schema": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [],
+        "properties": {}
+      },
+      "output_schema": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "snapshot",
+          "model",
+          "index",
+          "resources",
+          "activeTasks"
+        ],
+        "properties": {
+          "snapshot": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+              "id",
+              "local_commit",
+              "worktree_generation",
+              "draft_generation"
+            ],
+            "properties": {
+              "id": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 256
+              },
+              "local_commit": {
+                "type": [
+                  "string",
+                  "null"
+                ],
+                "maxLength": 128
+              },
+              "worktree_generation": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 256
+              },
+              "draft_generation": {
+                "type": [
+                  "string",
+                  "null"
+                ],
+                "maxLength": 256
+              },
+              "remote_commit": {
+                "type": [
+                  "string",
+                  "null"
+                ],
+                "maxLength": 128
+              }
+            }
+          },
+          "model": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+              "id",
+              "revision",
+              "role",
+              "digest",
+              "byte_length",
+              "license",
+              "status"
+            ],
+            "properties": {
+              "id": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 256
+              },
+              "revision": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 128
+              },
+              "role": {
+                "enum": [
+                  "embedding",
+                  "reranker"
+                ]
+              },
+              "digest": {
+                "type": [
+                  "string",
+                  "null"
+                ],
+                "pattern": "^[a-f0-9]{64}$",
+                "maxLength": 64
+              },
+              "byte_length": {
+                "type": [
+                  "integer",
+                  "null"
+                ],
+                "minimum": 0,
+                "maximum": 4294967295
+              },
+              "dimensions": {
+                "type": "integer",
+                "minimum": 1,
+                "maximum": 4096
+              },
+              "license": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 128
+              },
+              "status": {
+                "enum": [
+                  "unavailable",
+                  "ready"
+                ]
+              }
+            }
+          },
+          "index": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+              "state",
+              "passageCount",
+              "sourceGeneration",
+              "indexedAt"
+            ],
+            "properties": {
+              "state": {
+                "enum": [
+                  "missing",
+                  "building",
+                  "ready",
+                  "stale",
+                  "unavailable"
+                ]
+              },
+              "passageCount": {
+                "type": "integer",
+                "minimum": 0,
+                "maximum": 2147483647
+              },
+              "sourceGeneration": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 256
+              },
+              "indexedAt": {
+                "type": [
+                  "string",
+                  "null"
+                ],
+                "maxLength": 64
+              }
+            }
+          },
+          "resources": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+              "modelLoaded",
+              "rerankerLoaded",
+              "locality",
+              "downloadRequired"
+            ],
+            "properties": {
+              "modelLoaded": {
+                "type": "boolean"
+              },
+              "rerankerLoaded": {
+                "type": "boolean"
+              },
+              "locality": {
+                "enum": [
+                  "local"
+                ]
+              },
+              "downloadRequired": {
+                "type": "boolean"
+              }
+            }
+          },
+          "activeTasks": {
+            "type": "array",
+            "maxItems": 16,
+            "items": {
+              "type": "object",
+              "additionalProperties": false,
+              "required": [
+                "taskId",
+                "phase",
+                "completed",
+                "total"
+              ],
+              "properties": {
+                "taskId": {
+                  "type": "string",
+                  "pattern": "^[A-Za-z0-9_-]{1,128}$",
+                  "maxLength": 128
+                },
+                "phase": {
+                  "enum": [
+                    "source_scan",
+                    "embedding",
+                    "cache_validation",
+                    "cache_publish",
+                    "query_embedding",
+                    "vector_scan",
+                    "reranking",
+                    "term_embedding",
+                    "mention_scan",
+                    "candidate_scoring",
+                    "complete"
+                  ]
+                },
+                "completed": {
+                  "type": "integer",
+                  "minimum": 0,
+                  "maximum": 2147483647
+                },
+                "total": {
+                  "type": "integer",
+                  "minimum": 0,
+                  "maximum": 2147483647
+                }
+              }
+            }
+          }
+        }
+      },
+      "required_capabilities": [
+        "workspace.derived.cache"
+      ],
+      "callers": [
+        "ui",
+        "mcp",
+        "plugin"
+      ],
+      "requires_user_gesture": false
+    },
+    {
+      "plugin_id": "proprium.semantic",
+      "action_id": "proprium.semantic.index.rebuild",
+      "schema_version": 1,
+      "effect": "read",
+      "input_schema": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "taskId"
+        ],
+        "properties": {
+          "taskId": {
+            "type": "string",
+            "pattern": "^[A-Za-z0-9_-]{1,128}$",
+            "maxLength": 128
+          }
+        }
+      },
+      "output_schema": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "snapshot",
+          "taskId",
+          "scanned",
+          "embedded",
+          "reused",
+          "removed",
+          "indexedGeneration"
+        ],
+        "properties": {
+          "snapshot": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+              "id",
+              "local_commit",
+              "worktree_generation",
+              "draft_generation"
+            ],
+            "properties": {
+              "id": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 256
+              },
+              "local_commit": {
+                "type": [
+                  "string",
+                  "null"
+                ],
+                "maxLength": 128
+              },
+              "worktree_generation": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 256
+              },
+              "draft_generation": {
+                "type": [
+                  "string",
+                  "null"
+                ],
+                "maxLength": 256
+              },
+              "remote_commit": {
+                "type": [
+                  "string",
+                  "null"
+                ],
+                "maxLength": 128
+              }
+            }
+          },
+          "taskId": {
+            "type": "string",
+            "pattern": "^[A-Za-z0-9_-]{1,128}$",
+            "maxLength": 128
+          },
+          "scanned": {
+            "type": "integer",
+            "minimum": 0,
+            "maximum": 2147483647
+          },
+          "embedded": {
+            "type": "integer",
+            "minimum": 0,
+            "maximum": 2147483647
+          },
+          "reused": {
+            "type": "integer",
+            "minimum": 0,
+            "maximum": 2147483647
+          },
+          "removed": {
+            "type": "integer",
+            "minimum": 0,
+            "maximum": 2147483647
+          },
+          "indexedGeneration": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 256
+          }
+        }
+      },
+      "required_capabilities": [
+        "workspace.file.read",
+        "workspace.asset.read",
+        "workspace.derived.cache"
+      ],
+      "callers": [
+        "ui"
+      ],
+      "requires_user_gesture": true
+    },
+    {
+      "plugin_id": "proprium.semantic",
+      "action_id": "proprium.semantic.passages.query",
+      "schema_version": 1,
+      "effect": "read",
+      "input_schema": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "query",
+          "granularity",
+          "limit"
+        ],
+        "properties": {
+          "query": {
+            "type": "string",
+            "minLength": 0,
+            "maxLength": 8192
+          },
+          "granularity": {
+            "enum": [
+              "scene",
+              "sentence"
+            ]
+          },
+          "limit": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 100
+          },
+          "excludeSceneIds": {
+            "type": "array",
+            "maxItems": 10000,
+            "items": {
+              "type": "string",
+              "minLength": 0,
+              "maxLength": 256
+            }
+          }
+        }
+      },
+      "output_schema": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "snapshot",
+          "model",
+          "results"
+        ],
+        "properties": {
+          "snapshot": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+              "id",
+              "local_commit",
+              "worktree_generation",
+              "draft_generation"
+            ],
+            "properties": {
+              "id": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 256
+              },
+              "local_commit": {
+                "type": [
+                  "string",
+                  "null"
+                ],
+                "maxLength": 128
+              },
+              "worktree_generation": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 256
+              },
+              "draft_generation": {
+                "type": [
+                  "string",
+                  "null"
+                ],
+                "maxLength": 256
+              },
+              "remote_commit": {
+                "type": [
+                  "string",
+                  "null"
+                ],
+                "maxLength": 128
+              }
+            }
+          },
+          "model": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+              "id",
+              "revision",
+              "role",
+              "digest",
+              "byte_length",
+              "license",
+              "status"
+            ],
+            "properties": {
+              "id": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 256
+              },
+              "revision": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 128
+              },
+              "role": {
+                "enum": [
+                  "embedding",
+                  "reranker"
+                ]
+              },
+              "digest": {
+                "type": [
+                  "string",
+                  "null"
+                ],
+                "pattern": "^[a-f0-9]{64}$",
+                "maxLength": 64
+              },
+              "byte_length": {
+                "type": [
+                  "integer",
+                  "null"
+                ],
+                "minimum": 0,
+                "maximum": 4294967295
+              },
+              "dimensions": {
+                "type": "integer",
+                "minimum": 1,
+                "maximum": 4096
+              },
+              "license": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 128
+              },
+              "status": {
+                "enum": [
+                  "unavailable",
+                  "ready"
+                ]
+              }
+            }
+          },
+          "results": {
+            "type": "array",
+            "maxItems": 100,
+            "items": {
+              "type": "object",
+              "additionalProperties": false,
+              "required": [
+                "entityId",
+                "sourcePath",
+                "sourceRevision",
+                "quote",
+                "cosineScore",
+                "rank",
+                "indexCoverage",
+                "evidence"
+              ],
+              "properties": {
+                "entityId": {
+                  "type": "string",
+                  "minLength": 1,
+                  "maxLength": 256
+                },
+                "sourcePath": {
+                  "type": "string",
+                  "minLength": 1,
+                  "maxLength": 4096
+                },
+                "sourceRevision": {
+                  "type": "string",
+                  "minLength": 1,
+                  "maxLength": 256
+                },
+                "sentenceIndex": {
+                  "type": "integer",
+                  "minimum": 0,
+                  "maximum": 2147483647
+                },
+                "quote": {
+                  "type": "string",
+                  "minLength": 0,
+                  "maxLength": 32768
+                },
+                "cosineScore": {
+                  "type": "number",
+                  "minimum": -1,
+                  "maximum": 1
+                },
+                "rank": {
+                  "type": "integer",
+                  "minimum": 1,
+                  "maximum": 100
+                },
+                "indexCoverage": {
+                  "type": "number",
+                  "minimum": 0,
+                  "maximum": 1
+                },
+                "evidence": {
+                  "type": "array",
+                  "maxItems": 32,
+                  "items": {
+                    "type": "object",
+                    "additionalProperties": false,
+                    "required": [
+                      "path",
+                      "revision",
+                      "start",
+                      "end",
+                      "quote"
+                    ],
+                    "properties": {
+                      "path": {
+                        "type": "string",
+                        "minLength": 1,
+                        "maxLength": 4096
+                      },
+                      "revision": {
+                        "type": "string",
+                        "minLength": 1,
+                        "maxLength": 256
+                      },
+                      "start": {
+                        "type": "integer",
+                        "minimum": 0,
+                        "maximum": 2147483647
+                      },
+                      "end": {
+                        "type": "integer",
+                        "minimum": 0,
+                        "maximum": 2147483647
+                      },
+                      "quote": {
+                        "type": "string",
+                        "minLength": 0,
+                        "maxLength": 32768
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "warning": {
+            "type": "string",
+            "minLength": 0,
+            "maxLength": 1024
+          }
+        }
+      },
+      "required_capabilities": [
+        "workspace.asset.read",
+        "workspace.derived.cache"
+      ],
+      "callers": [
+        "ui",
+        "mcp",
+        "plugin"
+      ],
+      "requires_user_gesture": false
+    },
+    {
+      "plugin_id": "proprium.semantic",
+      "action_id": "proprium.semantic.rerank",
+      "schema_version": 1,
+      "effect": "read",
+      "input_schema": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "query",
+          "candidates",
+          "limit"
+        ],
+        "properties": {
+          "query": {
+            "type": "string",
+            "minLength": 0,
+            "maxLength": 8192
+          },
+          "candidates": {
+            "type": "array",
+            "maxItems": 30,
+            "items": {
+              "type": "object",
+              "additionalProperties": false,
+              "required": [
+                "candidateId",
+                "entityId",
+                "sourcePath",
+                "sourceRevision",
+                "text",
+                "evidence"
+              ],
+              "properties": {
+                "candidateId": {
+                  "type": "string",
+                  "minLength": 1,
+                  "maxLength": 128
+                },
+                "entityId": {
+                  "type": "string",
+                  "minLength": 1,
+                  "maxLength": 256
+                },
+                "sourcePath": {
+                  "type": "string",
+                  "minLength": 1,
+                  "maxLength": 4096
+                },
+                "sourceRevision": {
+                  "type": "string",
+                  "minLength": 1,
+                  "maxLength": 256
+                },
+                "sentenceIndex": {
+                  "type": "integer",
+                  "minimum": 0,
+                  "maximum": 2147483647
+                },
+                "text": {
+                  "type": "string",
+                  "minLength": 0,
+                  "maxLength": 32768
+                },
+                "evidence": {
+                  "type": "array",
+                  "maxItems": 32,
+                  "items": {
+                    "type": "object",
+                    "additionalProperties": false,
+                    "required": [
+                      "path",
+                      "revision",
+                      "start",
+                      "end",
+                      "quote"
+                    ],
+                    "properties": {
+                      "path": {
+                        "type": "string",
+                        "minLength": 1,
+                        "maxLength": 4096
+                      },
+                      "revision": {
+                        "type": "string",
+                        "minLength": 1,
+                        "maxLength": 256
+                      },
+                      "start": {
+                        "type": "integer",
+                        "minimum": 0,
+                        "maximum": 2147483647
+                      },
+                      "end": {
+                        "type": "integer",
+                        "minimum": 0,
+                        "maximum": 2147483647
+                      },
+                      "quote": {
+                        "type": "string",
+                        "minLength": 0,
+                        "maxLength": 32768
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "limit": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 30
+          }
+        }
+      },
+      "output_schema": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "snapshot",
+          "model",
+          "results"
+        ],
+        "properties": {
+          "snapshot": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+              "id",
+              "local_commit",
+              "worktree_generation",
+              "draft_generation"
+            ],
+            "properties": {
+              "id": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 256
+              },
+              "local_commit": {
+                "type": [
+                  "string",
+                  "null"
+                ],
+                "maxLength": 128
+              },
+              "worktree_generation": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 256
+              },
+              "draft_generation": {
+                "type": [
+                  "string",
+                  "null"
+                ],
+                "maxLength": 256
+              },
+              "remote_commit": {
+                "type": [
+                  "string",
+                  "null"
+                ],
+                "maxLength": 128
+              }
+            }
+          },
+          "model": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+              "id",
+              "revision",
+              "role",
+              "digest",
+              "byte_length",
+              "license",
+              "status"
+            ],
+            "properties": {
+              "id": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 256
+              },
+              "revision": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 128
+              },
+              "role": {
+                "enum": [
+                  "embedding",
+                  "reranker"
+                ]
+              },
+              "digest": {
+                "type": [
+                  "string",
+                  "null"
+                ],
+                "pattern": "^[a-f0-9]{64}$",
+                "maxLength": 64
+              },
+              "byte_length": {
+                "type": [
+                  "integer",
+                  "null"
+                ],
+                "minimum": 0,
+                "maximum": 4294967295
+              },
+              "dimensions": {
+                "type": "integer",
+                "minimum": 1,
+                "maximum": 4096
+              },
+              "license": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 128
+              },
+              "status": {
+                "enum": [
+                  "unavailable",
+                  "ready"
+                ]
+              }
+            }
+          },
+          "results": {
+            "type": "array",
+            "maxItems": 30,
+            "items": {
+              "type": "object",
+              "additionalProperties": false,
+              "required": [
+                "candidateId",
+                "score",
+                "rank"
+              ],
+              "properties": {
+                "candidateId": {
+                  "type": "string",
+                  "minLength": 1,
+                  "maxLength": 128
+                },
+                "score": {
+                  "type": "number",
+                  "minimum": 0,
+                  "maximum": 1
+                },
+                "rank": {
+                  "type": "integer",
+                  "minimum": 1,
+                  "maximum": 30
+                }
+              }
+            }
+          },
+          "warning": {
+            "type": "string",
+            "minLength": 0,
+            "maxLength": 1024
+          }
+        }
+      },
+      "required_capabilities": [
+        "workspace.asset.read"
+      ],
+      "callers": [
+        "ui",
+        "mcp",
+        "plugin"
+      ],
+      "requires_user_gesture": false
+    },
+    {
+      "plugin_id": "proprium.semantic",
+      "action_id": "proprium.semantic.terms.cluster",
+      "schema_version": 1,
+      "effect": "read",
+      "input_schema": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "candidates",
+          "useEmbedding"
+        ],
+        "properties": {
+          "candidates": {
+            "type": "array",
+            "maxItems": 2000,
+            "items": {
+              "type": "object",
+              "additionalProperties": false,
+              "required": [
+                "term",
+                "reading",
+                "sourceEntityIds",
+                "occurrenceCount"
+              ],
+              "properties": {
+                "term": {
+                  "type": "string",
+                  "minLength": 1,
+                  "maxLength": 256
+                },
+                "reading": {
+                  "type": [
+                    "string",
+                    "null"
+                  ],
+                  "maxLength": 256
+                },
+                "sourceEntityIds": {
+                  "type": "array",
+                  "maxItems": 256,
+                  "items": {
+                    "type": "string",
+                    "minLength": 0,
+                    "maxLength": 256
+                  }
+                },
+                "occurrenceCount": {
+                  "type": "integer",
+                  "minimum": 0,
+                  "maximum": 2147483647
+                }
+              }
+            }
+          },
+          "useEmbedding": {
+            "type": "boolean"
+          }
+        }
+      },
+      "output_schema": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "snapshot",
+          "results"
+        ],
+        "properties": {
+          "snapshot": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+              "id",
+              "local_commit",
+              "worktree_generation",
+              "draft_generation"
+            ],
+            "properties": {
+              "id": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 256
+              },
+              "local_commit": {
+                "type": [
+                  "string",
+                  "null"
+                ],
+                "maxLength": 128
+              },
+              "worktree_generation": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 256
+              },
+              "draft_generation": {
+                "type": [
+                  "string",
+                  "null"
+                ],
+                "maxLength": 256
+              },
+              "remote_commit": {
+                "type": [
+                  "string",
+                  "null"
+                ],
+                "maxLength": 128
+              }
+            }
+          },
+          "results": {
+            "type": "array",
+            "maxItems": 2000,
+            "items": {
+              "type": "object",
+              "additionalProperties": false,
+              "required": [
+                "canonical",
+                "variants",
+                "semanticOnly"
+              ],
+              "properties": {
+                "canonical": {
+                  "type": "string",
+                  "minLength": 1,
+                  "maxLength": 256
+                },
+                "variants": {
+                  "type": "array",
+                  "maxItems": 2000,
+                  "items": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 256
+                  }
+                },
+                "semanticOnly": {
+                  "type": "boolean"
+                }
+              }
+            }
+          },
+          "model": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+              "id",
+              "revision",
+              "role",
+              "digest",
+              "byte_length",
+              "license",
+              "status"
+            ],
+            "properties": {
+              "id": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 256
+              },
+              "revision": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 128
+              },
+              "role": {
+                "enum": [
+                  "embedding",
+                  "reranker"
+                ]
+              },
+              "digest": {
+                "type": [
+                  "string",
+                  "null"
+                ],
+                "pattern": "^[a-f0-9]{64}$",
+                "maxLength": 64
+              },
+              "byte_length": {
+                "type": [
+                  "integer",
+                  "null"
+                ],
+                "minimum": 0,
+                "maximum": 4294967295
+              },
+              "dimensions": {
+                "type": "integer",
+                "minimum": 1,
+                "maximum": 4096
+              },
+              "license": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 128
+              },
+              "status": {
+                "enum": [
+                  "unavailable",
+                  "ready"
+                ]
+              }
+            }
+          }
+        }
+      },
+      "required_capabilities": [
+        "workspace.asset.read"
+      ],
+      "callers": [
+        "plugin",
+        "ui"
+      ],
+      "requires_user_gesture": false,
+      "caller_plugins": [
+        "proprium.research"
+      ]
+    },
+    {
+      "plugin_id": "proprium.semantic",
+      "action_id": "proprium.semantic.contradictions.candidates",
+      "schema_version": 1,
+      "effect": "read",
+      "input_schema": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [],
+        "properties": {
+          "cursor": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 4096
+          },
+          "limit": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 100
+          }
+        }
+      },
+      "output_schema": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "snapshot",
+          "model",
+          "indexAvailable",
+          "candidates",
+          "nextCursor",
+          "complete"
+        ],
+        "properties": {
+          "snapshot": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+              "id",
+              "local_commit",
+              "worktree_generation",
+              "draft_generation"
+            ],
+            "properties": {
+              "id": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 256
+              },
+              "local_commit": {
+                "type": [
+                  "string",
+                  "null"
+                ],
+                "maxLength": 128
+              },
+              "worktree_generation": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 256
+              },
+              "draft_generation": {
+                "type": [
+                  "string",
+                  "null"
+                ],
+                "maxLength": 256
+              },
+              "remote_commit": {
+                "type": [
+                  "string",
+                  "null"
+                ],
+                "maxLength": 128
+              }
+            }
+          },
+          "model": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+              "id",
+              "revision",
+              "role",
+              "digest",
+              "byte_length",
+              "license",
+              "status"
+            ],
+            "properties": {
+              "id": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 256
+              },
+              "revision": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 128
+              },
+              "role": {
+                "enum": [
+                  "embedding",
+                  "reranker"
+                ]
+              },
+              "digest": {
+                "type": [
+                  "string",
+                  "null"
+                ],
+                "pattern": "^[a-f0-9]{64}$",
+                "maxLength": 64
+              },
+              "byte_length": {
+                "type": [
+                  "integer",
+                  "null"
+                ],
+                "minimum": 0,
+                "maximum": 4294967295
+              },
+              "dimensions": {
+                "type": "integer",
+                "minimum": 1,
+                "maximum": 4096
+              },
+              "license": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 128
+              },
+              "status": {
+                "enum": [
+                  "unavailable",
+                  "ready"
+                ]
+              }
+            }
+          },
+          "indexAvailable": {
+            "type": "boolean"
+          },
+          "candidates": {
+            "type": "array",
+            "maxItems": 100,
+            "items": {
+              "type": "object",
+              "additionalProperties": false,
+              "required": [
+                "id",
+                "kind",
+                "entityId",
+                "score",
+                "suspicion",
+                "evidenceA",
+                "evidenceB"
+              ],
+              "properties": {
+                "id": {
+                  "type": "string",
+                  "minLength": 1,
+                  "maxLength": 1024
+                },
+                "kind": {
+                  "enum": [
+                    "embedding_midband"
+                  ]
+                },
+                "entityId": {
+                  "type": "string",
+                  "minLength": 1,
+                  "maxLength": 256
+                },
+                "score": {
+                  "type": "number",
+                  "minimum": 0.29,
+                  "exclusiveMaximum": 0.84
+                },
+                "suspicion": {
+                  "type": "string",
+                  "minLength": 1,
+                  "maxLength": 2048
+                },
+                "evidenceA": {
+                  "type": "object",
+                  "additionalProperties": false,
+                  "required": [
+                    "sceneId",
+                    "sentenceIndex",
+                    "quote",
+                    "path",
+                    "revision",
+                    "start",
+                    "end"
+                  ],
+                  "properties": {
+                    "sceneId": {
+                      "type": "string",
+                      "minLength": 1,
+                      "maxLength": 256
+                    },
+                    "sentenceIndex": {
+                      "type": "integer",
+                      "minimum": 0,
+                      "maximum": 2147483647
+                    },
+                    "quote": {
+                      "type": "string",
+                      "minLength": 0,
+                      "maxLength": 32768
+                    },
+                    "path": {
+                      "type": "string",
+                      "minLength": 1,
+                      "maxLength": 4096
+                    },
+                    "revision": {
+                      "type": "string",
+                      "minLength": 1,
+                      "maxLength": 256
+                    },
+                    "start": {
+                      "type": "integer",
+                      "minimum": 0,
+                      "maximum": 2147483647
+                    },
+                    "end": {
+                      "type": "integer",
+                      "minimum": 0,
+                      "maximum": 2147483647
+                    }
+                  }
+                },
+                "evidenceB": {
+                  "type": "object",
+                  "additionalProperties": false,
+                  "required": [
+                    "sceneId",
+                    "sentenceIndex",
+                    "quote",
+                    "path",
+                    "revision",
+                    "start",
+                    "end"
+                  ],
+                  "properties": {
+                    "sceneId": {
+                      "type": "string",
+                      "minLength": 1,
+                      "maxLength": 256
+                    },
+                    "sentenceIndex": {
+                      "type": "integer",
+                      "minimum": 0,
+                      "maximum": 2147483647
+                    },
+                    "quote": {
+                      "type": "string",
+                      "minLength": 0,
+                      "maxLength": 32768
+                    },
+                    "path": {
+                      "type": "string",
+                      "minLength": 1,
+                      "maxLength": 4096
+                    },
+                    "revision": {
+                      "type": "string",
+                      "minLength": 1,
+                      "maxLength": 256
+                    },
+                    "start": {
+                      "type": "integer",
+                      "minimum": 0,
+                      "maximum": 2147483647
+                    },
+                    "end": {
+                      "type": "integer",
+                      "minimum": 0,
+                      "maximum": 2147483647
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "nextCursor": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "maxLength": 4096
+          },
+          "complete": {
+            "type": "boolean"
+          }
+        }
+      },
+      "required_capabilities": [
+        "workspace.file.read",
+        "workspace.asset.read",
+        "workspace.derived.cache"
+      ],
+      "callers": [
+        "plugin",
+        "ui"
+      ],
+      "requires_user_gesture": false,
+      "caller_plugins": [
+        "proprium.diagnostics"
+      ]
+    },
+    {
+      "plugin_id": "proprium.semantic",
+      "action_id": "proprium.semantic.settings.read",
+      "schema_version": 1,
+      "effect": "read",
+      "input_schema": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [],
+        "properties": {}
+      },
+      "output_schema": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "snapshot",
+          "preferences",
+          "legacyPreference",
+          "models",
+          "privacy"
+        ],
+        "properties": {
+          "snapshot": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+              "id",
+              "local_commit",
+              "worktree_generation",
+              "draft_generation"
+            ],
+            "properties": {
+              "id": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 256
+              },
+              "local_commit": {
+                "type": [
+                  "string",
+                  "null"
+                ],
+                "maxLength": 128
+              },
+              "worktree_generation": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 256
+              },
+              "draft_generation": {
+                "type": [
+                  "string",
+                  "null"
+                ],
+                "maxLength": 256
+              },
+              "remote_commit": {
+                "type": [
+                  "string",
+                  "null"
+                ],
+                "maxLength": 128
+              }
+            }
+          },
+          "preferences": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+              "rerankerEnabled"
+            ],
+            "properties": {
+              "rerankerEnabled": {
+                "type": "boolean"
+              }
+            }
+          },
+          "legacyPreference": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+              "present",
+              "valid"
+            ],
+            "properties": {
+              "present": {
+                "type": "boolean"
+              },
+              "valid": {
+                "type": "boolean"
+              },
+              "value": {
+                "type": "boolean"
+              },
+              "sourceRevision": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 256
+              }
+            }
+          },
+          "models": {
+            "type": "array",
+            "maxItems": 2,
+            "items": {
+              "type": "object",
+              "additionalProperties": false,
+              "required": [
+                "id",
+                "revision",
+                "role",
+                "digest",
+                "byte_length",
+                "license",
+                "status"
+              ],
+              "properties": {
+                "id": {
+                  "type": "string",
+                  "minLength": 1,
+                  "maxLength": 256
+                },
+                "revision": {
+                  "type": "string",
+                  "minLength": 1,
+                  "maxLength": 128
+                },
+                "role": {
+                  "enum": [
+                    "embedding",
+                    "reranker"
+                  ]
+                },
+                "digest": {
+                  "type": [
+                    "string",
+                    "null"
+                  ],
+                  "pattern": "^[a-f0-9]{64}$",
+                  "maxLength": 64
+                },
+                "byte_length": {
+                  "type": [
+                    "integer",
+                    "null"
+                  ],
+                  "minimum": 0,
+                  "maximum": 4294967295
+                },
+                "dimensions": {
+                  "type": "integer",
+                  "minimum": 1,
+                  "maximum": 4096
+                },
+                "license": {
+                  "type": "string",
+                  "minLength": 1,
+                  "maxLength": 128
+                },
+                "status": {
+                  "enum": [
+                    "unavailable",
+                    "ready"
+                  ]
+                }
+              }
+            }
+          },
+          "privacy": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+              "projectDataTransmission",
+              "locality",
+              "externalProviders"
+            ],
+            "properties": {
+              "projectDataTransmission": {
+                "enum": [
+                  "none"
+                ]
+              },
+              "locality": {
+                "enum": [
+                  "local"
+                ]
+              },
+              "externalProviders": {
+                "type": "boolean"
+              }
+            }
+          }
+        }
+      },
+      "required_capabilities": [
+        "plugin.preferences.read",
+        "workspace.file.read"
+      ],
+      "callers": [
+        "ui",
+        "mcp",
+        "plugin"
+      ],
+      "requires_user_gesture": false
+    },
+    {
+      "plugin_id": "proprium.semantic",
+      "action_id": "proprium.semantic.settings.update",
+      "schema_version": 1,
+      "effect": "read",
+      "input_schema": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "rerankerEnabled"
+        ],
+        "properties": {
+          "rerankerEnabled": {
+            "type": "boolean"
+          }
+        }
+      },
+      "output_schema": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "snapshot",
+          "host_ui"
+        ],
+        "properties": {
+          "snapshot": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+              "id",
+              "local_commit",
+              "worktree_generation",
+              "draft_generation"
+            ],
+            "properties": {
+              "id": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 256
+              },
+              "local_commit": {
+                "type": [
+                  "string",
+                  "null"
+                ],
+                "maxLength": 128
+              },
+              "worktree_generation": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 256
+              },
+              "draft_generation": {
+                "type": [
+                  "string",
+                  "null"
+                ],
+                "maxLength": 256
+              },
+              "remote_commit": {
+                "type": [
+                  "string",
+                  "null"
+                ],
+                "maxLength": 128
+              }
+            }
+          },
+          "host_ui": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+              "route",
+              "pluginId",
+              "key",
+              "pendingValue"
+            ],
+            "properties": {
+              "route": {
+                "enum": [
+                  "plugin_preferences"
+                ]
+              },
+              "pluginId": {
+                "const": "proprium.semantic"
+              },
+              "key": {
+                "const": "reranker.enabled"
+              },
+              "pendingValue": {
+                "type": "boolean"
+              }
+            }
+          }
+        }
+      },
+      "required_capabilities": [],
+      "callers": [
+        "ui"
+      ],
+      "requires_user_gesture": true
+    },
+    {
+      "plugin_id": "proprium.semantic",
+      "action_id": "proprium.semantic.task.status",
+      "schema_version": 1,
+      "effect": "read",
+      "input_schema": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [],
+        "properties": {}
+      },
+      "output_schema": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "snapshot",
+          "activeTasks"
+        ],
+        "properties": {
+          "snapshot": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+              "id",
+              "local_commit",
+              "worktree_generation",
+              "draft_generation"
+            ],
+            "properties": {
+              "id": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 256
+              },
+              "local_commit": {
+                "type": [
+                  "string",
+                  "null"
+                ],
+                "maxLength": 128
+              },
+              "worktree_generation": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 256
+              },
+              "draft_generation": {
+                "type": [
+                  "string",
+                  "null"
+                ],
+                "maxLength": 256
+              },
+              "remote_commit": {
+                "type": [
+                  "string",
+                  "null"
+                ],
+                "maxLength": 128
+              }
+            }
+          },
+          "activeTasks": {
+            "type": "array",
+            "maxItems": 16,
+            "items": {
+              "type": "object",
+              "additionalProperties": false,
+              "required": [
+                "taskId",
+                "phase",
+                "completed",
+                "total"
+              ],
+              "properties": {
+                "taskId": {
+                  "type": "string",
+                  "pattern": "^[A-Za-z0-9_-]{1,128}$",
+                  "maxLength": 128
+                },
+                "phase": {
+                  "enum": [
+                    "source_scan",
+                    "embedding",
+                    "cache_validation",
+                    "cache_publish",
+                    "query_embedding",
+                    "vector_scan",
+                    "reranking",
+                    "term_embedding",
+                    "mention_scan",
+                    "candidate_scoring",
+                    "complete"
+                  ]
+                },
+                "completed": {
+                  "type": "integer",
+                  "minimum": 0,
+                  "maximum": 2147483647
+                },
+                "total": {
+                  "type": "integer",
+                  "minimum": 0,
+                  "maximum": 2147483647
+                }
+              }
+            }
+          }
+        }
+      },
+      "required_capabilities": [],
+      "callers": [
+        "ui",
+        "mcp",
+        "plugin"
+      ],
+      "requires_user_gesture": false
+    },
+    {
+      "plugin_id": "proprium.semantic",
+      "action_id": "proprium.semantic.task.cancel",
+      "schema_version": 1,
+      "effect": "read",
+      "input_schema": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "taskId"
+        ],
+        "properties": {
+          "taskId": {
+            "type": "string",
+            "pattern": "^[A-Za-z0-9_-]{1,128}$",
+            "maxLength": 128
+          }
+        }
+      },
+      "output_schema": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "snapshot",
+          "taskId",
+          "cancelled"
+        ],
+        "properties": {
+          "snapshot": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+              "id",
+              "local_commit",
+              "worktree_generation",
+              "draft_generation"
+            ],
+            "properties": {
+              "id": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 256
+              },
+              "local_commit": {
+                "type": [
+                  "string",
+                  "null"
+                ],
+                "maxLength": 128
+              },
+              "worktree_generation": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 256
+              },
+              "draft_generation": {
+                "type": [
+                  "string",
+                  "null"
+                ],
+                "maxLength": 256
+              },
+              "remote_commit": {
+                "type": [
+                  "string",
+                  "null"
+                ],
+                "maxLength": 128
+              }
+            }
+          },
+          "taskId": {
+            "type": "string",
+            "pattern": "^[A-Za-z0-9_-]{1,128}$",
+            "maxLength": 128
+          },
+          "cancelled": {
+            "type": "boolean"
+          }
+        }
+      },
+      "required_capabilities": [],
+      "callers": [
+        "ui"
+      ],
+      "requires_user_gesture": true
+    }
+  ],
+  "ui": [],
+  "asset_groups": [],
+  "dependencies": [
+    {
+      "id": "proprium.research",
+      "range": "^1.0.0"
+    }
+  ]
+}

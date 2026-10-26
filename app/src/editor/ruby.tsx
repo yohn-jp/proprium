@@ -27,7 +27,7 @@ export function renderRubySegmentNodes(
   line: string,
   lineOffset = 0,
   termSpans: readonly EditorTermSpan[] = [],
-  onTermNavigate?: (targetPath: string, termId: string) => void,
+  onTermNavigate?: (targetPath: string, termId: string, event: Event) => void,
 ): ReactNode[] {
   return parseRubySegments(line).map((segment) => {
     const localStart = Number(segment.key.slice(segment.key.lastIndexOf("-") + 1));
@@ -43,7 +43,7 @@ export function RubyText({ text, className, termSpans = [], onTermNavigate }: {
   text: string;
   className?: string;
   termSpans?: readonly EditorTermSpan[];
-  onTermNavigate?: (targetPath: string, termId: string) => void;
+  onTermNavigate?: (targetPath: string, termId: string, event: Event) => void;
 }) {
   let sourceOffset = 0;
   return (
@@ -63,7 +63,7 @@ function renderTermText(
   value: string,
   sourceOffset: number,
   termSpans: readonly EditorTermSpan[],
-  onTermNavigate?: (targetPath: string, termId: string) => void,
+  onTermNavigate?: (targetPath: string, termId: string, event: Event) => void,
 ): ReactNode[] {
   if (!onTermNavigate || termSpans.length === 0) return [value];
   const sourceEnd = sourceOffset + value.length;
@@ -86,7 +86,7 @@ function renderTermText(
       key={`term-${span.start}-${span.termId}`}
       aria-label={`${label}、用語を開く`}
       data-term-id={span.termId}
-      onClick={() => onTermNavigate(span.targetPath, span.termId)}
+      onClick={event => onTermNavigate(span.targetPath, span.termId, event.nativeEvent)}
     >{label}</button>);
     cursor = end;
   }

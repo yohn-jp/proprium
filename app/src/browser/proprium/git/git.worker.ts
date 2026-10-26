@@ -5,7 +5,7 @@ import * as git from "isomorphic-git";
 import webHttp from "isomorphic-git/http/web";
 import type { HttpClient } from "isomorphic-git";
 import type { CommitObject, TreeObject } from "isomorphic-git";
-import type { GitHubWorkspaceIdentity, LocalGitErrorCode, LocalGitRequest, LocalGitResponse, StatusEntry, WorkspaceIdentity } from "./protocol.js";
+import type { AuthoringSnapshotFile, AuthoringSnapshotMetadata, AuthoringSnapshotPage, AuthoringSnapshotRange, GitHubWorkspaceIdentity, LocalGitErrorCode, LocalGitRequest, LocalGitResponse, RemoteConfirmedFiles, StatusEntry, WorkspaceIdentity } from "./protocol.js";
 import {
   MAX_WORKSPACE_CHANGE_BYTES,
   MAX_WORKSPACE_CHANGE_COUNT,
@@ -24,7 +24,37 @@ const flush = (): Promise<void> => (fs as unknown as { flush(): Promise<void> })
 const dataRoot = "/proprium";
 const uncertainWorkspaces = new Set<string>();
 const knownHeads = new Map<string, string | null>();
+const authoringMutationGenerations = new Map<string, number>();
+const authoringSnapshots = new Map<string, PinnedAuthoringSnapshot>();
+const AUTHORING_SNAPSHOT_TTL_MS = 5 * 60 * 1000;
+const AUTHORING_SNAPSHOT_LIMIT = 8;
+const AUTHORING_CURSOR_LIMIT = 4096;
+const AUTHORING_READ_CHUNK_LIMIT = 256 * 1024;
 const failure = (code: LocalGitErrorCode, message: string): never => { throw Object.assign(new Error(message), { propriumCode: code }); };
+
+interface PinnedFileMetadata {
+  readonly path: string;
+  readonly byte_length: number;
+  readonly mtime_ms: number;
+  readonly ctime_ms: number;
+  readonly inode: number;
+}
+
+interface PinnedAuthoringSnapshot {
+  readonly id: string;
+  readonly workspace_id: string;
+  readonly branch: string;
+  readonly directory: string;
+  readonly lock: string;
+  readonly mutation_generation: number;
+  readonly local_commit: string | null;
+  readonly worktree_generation: string;
+  readonly files: readonly PinnedFileMetadata[];
+  readonly file_map: ReadonlyMap<string, PinnedFileMetadata>;
+  readonly revisions: Map<string, string>;
+  readonly cursors: Map<string, { readonly prefix: string; readonly index: number; readonly expires_at: number }>;
+  readonly expires_at: number;
+}
 
 function requireGitHubIdentity(workspace: WorkspaceIdentity): asserts workspace is GitHubWorkspaceIdentity {
   if (!isGitHubWorkspaceIdentity(workspace)) {
@@ -522,7 +552,13 @@ async function workspacePaths(workspace: WorkspaceIdentity): Promise<{ dir: stri
   return { dir: `${dataRoot}/repositories/${id}`, binding: `${dataRoot}/bindings/${id}.json`, lock: `proprium-workspace-${id}` };
 }
 
-interface WorkspaceBinding { identity: WorkspaceIdentity; lastConfirmedHead: string | null; }
+interface WorkspaceBinding {
+  identity: WorkspaceIdentity;
+  lastConfirmedHead: string | null;
+  /** Set only after this exact remote branch head was observed and its Git objects were verified locally. */
+  lastConfirmedRemoteHead?: string | null;
+  remoteHeadObserved?: boolean;
+}
 
 async function checkBinding(workspace: WorkspaceIdentity, binding: string, dir: string): Promise<WorkspaceBinding | null> {
   if (!(await exists(binding))) return null;
@@ -545,6 +581,14 @@ async function checkBinding(workspace: WorkspaceIdentity, binding: string, dir: 
   }
   if (previous!.lastConfirmedHead !== null && !/^[a-f0-9]{40}$/u.test(previous!.lastConfirmedHead ?? "")) {
     failure("storage_unknown", "The saved local Git head receipt is malformed.");
+  }
+  if (previous!.lastConfirmedRemoteHead !== undefined && previous!.lastConfirmedRemoteHead !== null && !/^[a-f0-9]{40}$/u.test(previous!.lastConfirmedRemoteHead)) {
+    failure("storage_unknown", "The saved remote Git head receipt is malformed.");
+  }
+  if (previous!.remoteHeadObserved !== undefined && typeof previous!.remoteHeadObserved !== "boolean" ||
+      previous!.remoteHeadObserved === true && previous!.lastConfirmedRemoteHead === undefined ||
+      previous!.remoteHeadObserved === false && previous!.lastConfirmedRemoteHead !== undefined && previous!.lastConfirmedRemoteHead !== null) {
+    failure("storage_unknown", "The saved remote observation receipt is malformed.");
   }
   knownHeads.set(dir, previous!.lastConfirmedHead);
   return previous!;
@@ -585,13 +629,197 @@ async function currentHead(dir: string): Promise<string | null> {
   }
 }
 
+function compareUtf8(left: string, right: string): number {
+  const a = new TextEncoder().encode(left);
+  const b = new TextEncoder().encode(right);
+  for (let index = 0; index < Math.min(a.byteLength, b.byteLength); index += 1) {
+    if (a[index] !== b[index]) return a[index]! - b[index]!;
+  }
+  return a.byteLength - b.byteLength;
+}
+
+function isValidUtf8String(value: string): boolean {
+  try { return new TextDecoder("utf-8", { fatal: true }).decode(new TextEncoder().encode(value)) === value; }
+  catch { return false; }
+}
+
+function mediaType(path: string): string {
+  const extension = path.slice(path.lastIndexOf(".") + 1).toLowerCase();
+  if (extension === "md" || extension === "markdown") return "text/markdown";
+  if (extension === "txt" || extension === "toml") return "text/plain";
+  if (extension === "json") return "application/json";
+  if (extension === "yaml" || extension === "yml") return "application/yaml";
+  if (extension === "csv") return "text/csv";
+  if (extension === "xml") return "application/xml";
+  return "application/octet-stream";
+}
+
+async function captureAuthoringFiles(dir: string): Promise<PinnedFileMetadata[]> {
+  const files: PinnedFileMetadata[] = [];
+  const pending = [""];
+  while (pending.length) {
+    const parent = pending.pop()!;
+    let names: string[];
+    try { names = await fs.readdir(parent ? `${dir}/${parent}` : dir); }
+    catch { return failure("storage_unknown", "Browser storage could not enumerate the pinned workspace."); }
+    names.sort(compareUtf8);
+    for (const name of names) {
+      if (!parent && name === ".git") continue;
+      const path = parent ? `${parent}/${name}` : name;
+      validateGitPath(path);
+      if (!isValidUtf8String(path)) failure("invalid_path", "Workspace contains a path that is not valid UTF-8.");
+      const absolute = `${dir}/${path}`;
+      const stats = await fs.lstat(absolute);
+      if (stats.isSymbolicLink()) failure("invalid_path", "Symbolic links are not followed by the Browser Git adapter.");
+      const ignored = await git.isIgnored({ fs, dir, filepath: path });
+      if (ignored) continue;
+      if (stats.isDirectory()) { pending.push(path); continue; }
+      if (!stats.isFile()) continue;
+      const mtime = Number(stats.mtimeMs);
+      const ctime = Number(stats.ctimeMs);
+      const inode = Number(stats.ino);
+      if (!Number.isSafeInteger(stats.size) || stats.size < 0 || !Number.isFinite(mtime) || !Number.isFinite(ctime) || !Number.isFinite(inode)) {
+        failure("storage_unknown", "Browser storage returned invalid file metadata for an authoring snapshot.");
+      }
+      files.push({ path, byte_length: stats.size, mtime_ms: mtime, ctime_ms: ctime, inode });
+    }
+  }
+  files.sort((left, right) => compareUtf8(left.path, right.path));
+  return files;
+}
+
+async function authoringGeneration(dir: string, branch: string, lock: string): Promise<{ local_commit: string | null; worktree_generation: string; mutation_generation: number; files: PinnedFileMetadata[] }> {
+  const [head, files] = await Promise.all([currentHead(dir), captureAuthoringFiles(dir)]);
+  const mutation_generation = authoringMutationGenerations.get(lock) ?? 0;
+  // The public generation must survive Worker/page reload so a retained receipt
+  // can be reviewed again. The in-memory mutation counter is still checked by
+  // the live snapshot token below to catch changes with unchanged stat values.
+  const fingerprint = JSON.stringify([branch, head, files.map(({ path, byte_length, mtime_ms, ctime_ms, inode }) => [path, byte_length, mtime_ms, ctime_ms, inode])]);
+  return { local_commit: head, worktree_generation: await digest(fingerprint), mutation_generation, files };
+}
+
+function pruneAuthoringSnapshots(): void {
+  const current = Date.now();
+  for (const [id, snapshot] of authoringSnapshots) if (snapshot.expires_at <= current) authoringSnapshots.delete(id);
+}
+
+function requirePinnedAuthoringSnapshot(snapshotId: string, paths: { dir: string; lock: string }, workspace: WorkspaceIdentity): PinnedAuthoringSnapshot {
+  if (typeof snapshotId !== "string" || !/^[A-Za-z0-9-]{16,128}$/u.test(snapshotId)) failure("invalid_input", "Authoring snapshot identifier is invalid.");
+  const snapshot = authoringSnapshots.get(snapshotId);
+  if (!snapshot || snapshot.expires_at <= Date.now() || snapshot.directory !== paths.dir || snapshot.workspace_id !== workspace.localWorkspaceId || snapshot.branch !== workspace.branch) {
+    authoringSnapshots.delete(snapshotId);
+    failure("snapshot_stale", "The authoring snapshot is unavailable or belongs to a different workspace.");
+  }
+  return snapshot!;
+}
+
+async function assertPinnedAuthoringSnapshot(snapshot: PinnedAuthoringSnapshot): Promise<void> {
+  if (authoringSnapshots.get(snapshot.id) !== snapshot || snapshot.expires_at <= Date.now()) {
+    authoringSnapshots.delete(snapshot.id);
+    failure("snapshot_stale", "The authoring snapshot expired or was released.");
+  }
+  const current = await authoringGeneration(snapshot.directory, snapshot.branch, snapshot.lock);
+  if (authoringSnapshots.get(snapshot.id) !== snapshot || snapshot.expires_at <= Date.now() || current.mutation_generation !== snapshot.mutation_generation ||
+      current.local_commit !== snapshot.local_commit || current.worktree_generation !== snapshot.worktree_generation) {
+    authoringSnapshots.delete(snapshot.id);
+    failure("snapshot_stale", "The workspace changed after this authoring snapshot was pinned. Refresh it before continuing.");
+  }
+}
+
+async function pinAuthoringSnapshot(workspace: WorkspaceIdentity, paths: { dir: string; lock: string }): Promise<AuthoringSnapshotMetadata> {
+  pruneAuthoringSnapshots();
+  if (authoringSnapshots.size >= AUTHORING_SNAPSHOT_LIMIT) failure("capacity", "Too many authoring snapshots are open in this workspace. Close an unused panel and retry.");
+  const generation = await authoringGeneration(paths.dir, workspace.branch, paths.lock);
+  const id = crypto.randomUUID();
+  const files = Object.freeze(generation.files.map(file => Object.freeze({ ...file })));
+  const snapshot: PinnedAuthoringSnapshot = Object.freeze({
+    id,
+    workspace_id: workspace.localWorkspaceId,
+    branch: workspace.branch,
+    directory: paths.dir,
+    lock: paths.lock,
+    local_commit: generation.local_commit,
+    worktree_generation: generation.worktree_generation,
+    mutation_generation: generation.mutation_generation,
+    files,
+    file_map: new Map(files.map(file => [file.path, file])),
+    revisions: new Map(),
+    cursors: new Map(),
+    expires_at: Date.now() + AUTHORING_SNAPSHOT_TTL_MS,
+  });
+  authoringSnapshots.set(id, snapshot);
+  return { snapshot_id: id, local_commit: snapshot.local_commit, worktree_generation: snapshot.worktree_generation };
+}
+
+async function authoringSnapshotFile(snapshot: PinnedAuthoringSnapshot, file: PinnedFileMetadata): Promise<AuthoringSnapshotFile> {
+  const before = await fs.lstat(`${snapshot.directory}/${file.path}`);
+  if (!before.isFile() || before.size !== file.byte_length || Number(before.mtimeMs) !== file.mtime_ms ||
+      Number(before.ctimeMs) !== file.ctime_ms || Number(before.ino) !== file.inode) {
+    authoringSnapshots.delete(snapshot.id);
+    failure("snapshot_stale", `File ${file.path} changed after the authoring snapshot was pinned.`);
+  }
+  let revision = snapshot.revisions.get(file.path);
+  if (!revision) {
+    const bytes = new Uint8Array(await fs.readFile(`${snapshot.directory}/${file.path}`));
+    if (bytes.byteLength !== file.byte_length) {
+      authoringSnapshots.delete(snapshot.id);
+      failure("snapshot_stale", `File ${file.path} changed after the authoring snapshot was pinned.`);
+    }
+    revision = await digestBytes(bytes);
+    const after = await fs.lstat(`${snapshot.directory}/${file.path}`);
+    if (!after.isFile() || after.size !== file.byte_length || Number(after.mtimeMs) !== file.mtime_ms ||
+        Number(after.ctimeMs) !== file.ctime_ms || Number(after.ino) !== file.inode) {
+      authoringSnapshots.delete(snapshot.id);
+      failure("snapshot_stale", `File ${file.path} changed while its authoring revision was being read.`);
+    }
+    snapshot.revisions.set(file.path, revision);
+  }
+  return { path: file.path, revision, byte_length: file.byte_length, media_type: mediaType(file.path) };
+}
+
+async function digestBytes(bytes: Uint8Array): Promise<string> {
+  const hash = await crypto.subtle.digest("SHA-256", Uint8Array.from(bytes));
+  return Array.from(new Uint8Array(hash), byte => byte.toString(16).padStart(2, "0")).join("");
+}
+
 async function persistConfirmedHead(workspace: WorkspaceIdentity, binding: string, dir: string, head: string): Promise<void> {
-  const value: WorkspaceBinding = { identity: workspace, lastConfirmedHead: head };
+  const previous = (await checkBinding(workspace, binding, dir)) ?? failure("storage_unknown", "The local commit exists without a verified workspace identity receipt.");
+  const value: WorkspaceBinding = {
+    identity: workspace,
+    lastConfirmedHead: head,
+    ...(previous.lastConfirmedRemoteHead !== undefined ? { lastConfirmedRemoteHead: previous.lastConfirmedRemoteHead } : {}),
+    ...(previous.remoteHeadObserved !== undefined ? { remoteHeadObserved: previous.remoteHeadObserved } : {}),
+  };
   try {
     await fs.writeFile(binding, JSON.stringify(value), "utf8");
     await flush();
   } catch { failure("storage_unknown", "The local commit ref exists but its workspace receipt could not be persisted."); }
   knownHeads.set(dir, head);
+}
+
+async function persistConfirmedRemoteHead(workspace: GitHubWorkspaceIdentity, binding: string, dir: string, head: string | null): Promise<void> {
+  const previous = (await checkBinding(workspace, binding, dir)) ?? failure("storage_unknown", "The confirmed remote head has no verified workspace identity receipt.");
+  try {
+    const trackingRef = `refs/remotes/origin/${workspace.branch}`;
+    if (head) {
+      await git.readCommit({ fs, dir, oid: head });
+      await git.writeRef({ fs, dir, ref: trackingRef, value: head, force: true });
+    } else if (await git.resolveRef({ fs, dir, ref: trackingRef }).then(() => true, () => false)) {
+      await git.deleteRef({ fs, dir, ref: trackingRef });
+    }
+    await flush();
+    const value: WorkspaceBinding = {
+      identity: workspace,
+      lastConfirmedHead: previous.lastConfirmedHead,
+      lastConfirmedRemoteHead: head,
+      remoteHeadObserved: true,
+    };
+    await fs.writeFile(binding, JSON.stringify(value), "utf8");
+    await flush();
+  } catch (error) {
+    if (error && typeof error === "object" && "propriumCode" in error) throw error;
+    failure("storage_unknown", "The observed remote branch head could not be persisted with its local Git objects.");
+  }
 }
 
 async function assertRevision(dir: string, expected: string | null): Promise<void> {
@@ -717,6 +945,27 @@ async function readCommitFile(dir: string, path: string, entry: CommitTreeFile |
   return { oid: entry.oid, data: blob };
 }
 
+async function readCommitPath(dir: string, commitOid: string, path: string): Promise<Uint8Array | null> {
+  const segments = path.split("/");
+  const { commit } = await git.readCommit({ fs, dir, oid: commitOid });
+  let treeOid = commit.tree;
+  for (let index = 0; index < segments.length; index += 1) {
+    const { tree } = await git.readTree({ fs, dir, oid: treeOid });
+    const entry = tree.find(item => item.path === segments[index]);
+    if (!entry) return null;
+    const isLeaf = index === segments.length - 1;
+    if (isLeaf) {
+      if (entry.type !== "blob") return null;
+      const { blob } = await git.readBlob({ fs, dir, oid: entry.oid });
+      if (blob.byteLength > MAX_WORKSPACE_READ_BYTES) failure("capacity", `Remote provenance file ${path} exceeds the Host read limit.`);
+      return blob;
+    }
+    if (entry.type !== "tree") return null;
+    treeOid = entry.oid;
+  }
+  return null;
+}
+
 async function commitDiff(dir: string, oid: string): Promise<unknown> {
   if (!/^[a-f0-9]{40}$/u.test(oid)) failure("git_error", "Commit history requires a full 40-character commit ID.");
   const { commit } = await git.readCommit({ fs, dir, oid });
@@ -768,7 +1017,7 @@ async function operation(request: LocalGitRequest): Promise<unknown> {
         if (isGitHubWorkspaceIdentity(request.workspace)) {
           await git.addRemote({ fs, dir: paths.dir, remote: "origin", url: `https://github.com/${request.workspace.owner}/${request.workspace.repository}.git` });
         }
-        await fs.writeFile(paths.binding, JSON.stringify({ identity: request.workspace, lastConfirmedHead: null } satisfies WorkspaceBinding), "utf8");
+        await fs.writeFile(paths.binding, JSON.stringify({ identity: request.workspace, lastConfirmedHead: null, lastConfirmedRemoteHead: null, remoteHeadObserved: false } satisfies WorkspaceBinding), "utf8");
         await flush();
         knownHeads.set(paths.dir, null);
       } catch { failure("storage_unknown", "Local repository initialization did not reach a confirmed storage state."); }
@@ -782,6 +1031,53 @@ async function operation(request: LocalGitRequest): Promise<unknown> {
     requireGitHubIdentity(request.workspace);
     await verifyRemoteRepository(request.workspace, request.token, false);
     return { repositoryId: request.workspace.repositoryId, branch: request.workspace.branch, head: await readRemoteHead(request.workspace, request.token) };
+  }
+  if (request.operation === "remote-confirmed-files") {
+    requireGitHubIdentity(request.workspace);
+    if (!Array.isArray(request.paths) || request.paths.length > 100 || request.paths.some(path => typeof path !== "string")) {
+      failure("invalid_input", "Remote provenance accepts at most 100 file paths.");
+    }
+    const unique = new Set<string>();
+    for (const path of request.paths) {
+      validateGitPath(path);
+      if (unique.has(path)) failure("invalid_input", "Remote provenance file paths must be unique.");
+      unique.add(path);
+    }
+    const remoteHead = bound!.remoteHeadObserved === true ? bound!.lastConfirmedRemoteHead ?? null : null;
+    if (!remoteHead) {
+      return { remote_commit: null, files: request.paths.map(path => ({ path, revision: null, remote_confirmed: false })) } satisfies RemoteConfirmedFiles;
+    }
+    const trackingRef = `refs/remotes/origin/${request.workspace.branch}`;
+    const trackedHead = await git.resolveRef({ fs, dir: paths.dir, ref: trackingRef }).catch(() => null);
+    if (trackedHead !== remoteHead) failure("storage_unknown", "The persisted remote confirmation does not match its verified Git tracking ref.");
+    const remoteCommit = await git.readCommit({ fs, dir: paths.dir, oid: remoteHead });
+    if (remoteCommit.oid !== remoteHead) failure("storage_unknown", "The confirmed remote commit object could not be verified.");
+
+    let totalBytes = 0;
+    const files: RemoteConfirmedFiles["files"] = [];
+    for (const path of request.paths) {
+      const remoteBytes = await readCommitPath(paths.dir, remoteHead, path);
+      if (!remoteBytes) {
+        files.push({ path, revision: null, remote_confirmed: false });
+        continue;
+      }
+      totalBytes += remoteBytes.byteLength;
+      if (totalBytes > MAX_WORKSPACE_READ_BYTES) failure("capacity", "Remote provenance file contents exceed the Host read limit.");
+      const revision = await digestBytes(remoteBytes);
+      let remoteConfirmed = false;
+      await assertNoSymlinkParents(paths.dir, path, true);
+      const localPath = `${paths.dir}/${path}`;
+      if (await exists(localPath)) {
+        const stats = await fs.lstat(localPath);
+        if (stats.isFile()) {
+          if (stats.size > MAX_WORKSPACE_READ_BYTES) failure("capacity", `Local provenance file ${path} exceeds the Host read limit.`);
+          const localBytes = new Uint8Array(await fs.readFile(localPath));
+          remoteConfirmed = await digestBytes(localBytes) === revision;
+        }
+      }
+      files.push({ path, revision, remote_confirmed: remoteConfirmed });
+    }
+    return { remote_commit: remoteHead, files } satisfies RemoteConfirmedFiles;
   }
   if (request.operation === "remote-fetch" || request.operation === "remote-pull") {
     requireGitHubIdentity(request.workspace);
@@ -806,12 +1102,7 @@ async function operation(request: LocalGitRequest): Promise<unknown> {
         failure("remote_unknown", "The GitHub branch changed during Smart HTTP fetch; fetched objects remain unreferenced locally.");
       }
     }
-    const trackingRef = `refs/remotes/origin/${request.workspace.branch}`;
-    try {
-      if (remoteHead) await git.writeRef({ fs, dir: paths.dir, ref: trackingRef, value: remoteHead, force: true });
-      else if (await git.resolveRef({ fs, dir: paths.dir, ref: trackingRef }).then(() => true, () => false)) await git.deleteRef({ fs, dir: paths.dir, ref: trackingRef });
-      await flush();
-    } catch { failure("storage_unknown", "Fetched Git objects could not be confirmed in browser storage."); }
+    await persistConfirmedRemoteHead(request.workspace, paths.binding, paths.dir, remoteHead);
     if (request.operation === "remote-fetch") {
       return { repositoryId: request.workspace.repositoryId, branch: request.workspace.branch, head: remoteHead, localHead, importedCommits };
     }
@@ -854,6 +1145,7 @@ async function operation(request: LocalGitRequest): Promise<unknown> {
       return { state: "conflict", expectedRemoteHead: request.expectedRemoteHead, remoteHead: observedRemoteHead };
     }
     if (observedRemoteHead === request.expectedHead) {
+      await persistConfirmedRemoteHead(request.workspace, paths.binding, paths.dir, observedRemoteHead);
       return { state: "published", head: request.expectedHead, remoteHead: observedRemoteHead };
     }
     try {
@@ -874,7 +1166,11 @@ async function operation(request: LocalGitRequest): Promise<unknown> {
         rejected = !pushed.ok;
       } catch (failureValue) { pushFailure = failureValue; }
       const result = await reconcilePublish(request.workspace, request.token, request.expectedRemoteHead, request.expectedHead);
-      if (result.state === "published" || result.state === "conflict") return result;
+      if (result.state === "published") {
+        await persistConfirmedRemoteHead(request.workspace, paths.binding, paths.dir, result.remoteHead);
+        return result;
+      }
+      if (result.state === "conflict") return result;
       if (pushFailure && typeof pushFailure === "object" && "propriumCode" in pushFailure) {
         if (["authentication_expired", "permission_denied"].includes(String(pushFailure.propriumCode))) throw pushFailure;
       }
@@ -898,7 +1194,10 @@ async function operation(request: LocalGitRequest): Promise<unknown> {
     const reconciled = await reconcilePublish(request.workspace, request.token, request.expectedRemoteHead, request.expectedHead);
     if (reconciled.state === "published" || reconciled.state === "conflict" || reconciled.state === "remote-unknown") {
       if (reconciled.state === "conflict") return reconciled;
-      if (reconciled.state === "published") return reconciled;
+      if (reconciled.state === "published") {
+        await persistConfirmedRemoteHead(request.workspace, paths.binding, paths.dir, reconciled.remoteHead);
+        return reconciled;
+      }
     }
     if (updateFailure) {
       const statusCode = updateFailure instanceof GitHubApiError ? updateFailure.status : 0;
@@ -971,6 +1270,13 @@ async function operation(request: LocalGitRequest): Promise<unknown> {
     return;
   }
   if (request.operation === "apply-changes") {
+    // Authoring apply passes a token freshly pinned against the proposal's
+    // expected worktree generation. This assertion runs inside the existing
+    // sole Browser Git writer lock, before validation/staging exposes any bytes.
+    if (request.expectedAuthoringSnapshotId !== undefined) {
+      const snapshot = requirePinnedAuthoringSnapshot(request.expectedAuthoringSnapshotId, paths, request.workspace);
+      await assertPinnedAuthoringSnapshot(snapshot);
+    }
     if (!Array.isArray(request.changes) || request.changes.length > MAX_WORKSPACE_CHANGE_COUNT ||
         !Array.isArray(request.readSet) || request.readSet.length > MAX_WORKSPACE_READ_SET_COUNT) {
       failure("invalid_path", "The approved change set exceeds browser workspace limits.");
@@ -1066,6 +1372,87 @@ async function operation(request: LocalGitRequest): Promise<unknown> {
       if (error && typeof error === "object" && "propriumCode" in error && error.propriumCode === "storage_unknown") throw error;
       failure("storage_unknown", "Applying the approved change set did not reach a confirmed browser storage state; verify this workspace before continuing.");
     }
+  }
+  if (request.operation === "authoring-snapshot-pin") return pinAuthoringSnapshot(request.workspace, paths);
+  if (request.operation === "authoring-snapshot-assert") {
+    const snapshot = requirePinnedAuthoringSnapshot(request.snapshotId, paths, request.workspace);
+    await assertPinnedAuthoringSnapshot(snapshot);
+    return undefined;
+  }
+  if (request.operation === "authoring-snapshot-list") {
+    const snapshot = requirePinnedAuthoringSnapshot(request.snapshotId, paths, request.workspace);
+    if (typeof request.prefix !== "string" || request.prefix.length > 1024 || request.prefix.startsWith("/") || request.prefix.includes("\\") || request.prefix.includes("\0")) {
+      failure("invalid_input", "Authoring snapshot prefix is invalid.");
+    }
+    if (request.prefix) {
+      const prefix = request.prefix.endsWith("/") ? request.prefix.slice(0, -1) : request.prefix;
+      if (!prefix || prefix.split("/").some(part => !part || part === "." || part === ".." || part === ".git")) {
+        failure("invalid_input", "Authoring snapshot prefix is invalid.");
+      }
+    }
+    if (!Number.isSafeInteger(request.limit) || request.limit < 1 || request.limit > 256) failure("invalid_input", "Authoring snapshot page limit is invalid.");
+    await assertPinnedAuthoringSnapshot(snapshot);
+    const files = snapshot.files.filter(file => file.path.startsWith(request.prefix));
+    let start = 0;
+    if (request.cursor !== null) {
+      for (const [token, cursor] of snapshot.cursors) if (cursor.expires_at <= Date.now()) snapshot.cursors.delete(token);
+      const position = snapshot.cursors.get(request.cursor);
+      if (!position || position.expires_at <= Date.now() || position.prefix !== request.prefix) return failure("invalid_input", "Authoring snapshot cursor is invalid, expired or bound to another prefix.");
+      const cursorPosition = position as { readonly prefix: string; readonly index: number; readonly expires_at: number };
+      start = cursorPosition.index;
+    }
+    const selected = files.slice(start, start + request.limit);
+    const items: AuthoringSnapshotFile[] = [];
+    for (const file of selected) items.push(await authoringSnapshotFile(snapshot, file));
+    await assertPinnedAuthoringSnapshot(snapshot);
+    let next_cursor: string | null = null;
+    const next = start + selected.length;
+    if (next < files.length) {
+      if (snapshot.cursors.size >= AUTHORING_CURSOR_LIMIT) failure("capacity", "The authoring snapshot has too many active list cursors.");
+      next_cursor = crypto.randomUUID();
+      snapshot.cursors.set(next_cursor, { prefix: request.prefix, index: next, expires_at: Date.now() + AUTHORING_SNAPSHOT_TTL_MS });
+    }
+    return { items, next_cursor } satisfies AuthoringSnapshotPage;
+  }
+  if (request.operation === "authoring-snapshot-stat") {
+    const snapshot = requirePinnedAuthoringSnapshot(request.snapshotId, paths, request.workspace);
+    validateGitPath(request.path);
+    await assertPinnedAuthoringSnapshot(snapshot);
+    const file = snapshot.file_map.get(request.path);
+    const result = file ? await authoringSnapshotFile(snapshot, file) : null;
+    await assertPinnedAuthoringSnapshot(snapshot);
+    return result;
+  }
+  if (request.operation === "authoring-snapshot-read-range") {
+    const snapshot = requirePinnedAuthoringSnapshot(request.snapshotId, paths, request.workspace);
+    validateGitPath(request.path);
+    if (!Number.isSafeInteger(request.offset) || request.offset < 0 || !Number.isSafeInteger(request.length) ||
+        request.length < 0 || request.length > AUTHORING_READ_CHUNK_LIMIT) failure("invalid_input", "Authoring snapshot byte range is invalid.");
+    await assertPinnedAuthoringSnapshot(snapshot);
+    const metadata = snapshot.file_map.get(request.path);
+    if (!metadata) return failure("file_not_found", `File ${request.path} is absent from this authoring snapshot.`);
+    const fileMetadata = metadata as PinnedFileMetadata;
+    if (request.offset > fileMetadata.byte_length) failure("invalid_input", "Authoring snapshot byte offset is beyond the end of the file.");
+    const expected = snapshot.revisions.get(request.path) ?? (await authoringSnapshotFile(snapshot, fileMetadata)).revision;
+    const data = new Uint8Array(await fs.readFile(`${snapshot.directory}/${request.path}`));
+    if (data.byteLength !== fileMetadata.byte_length || await digestBytes(data) !== expected) {
+      authoringSnapshots.delete(snapshot.id);
+      failure("snapshot_stale", `Pinned bytes for ${request.path} no longer match the authoring snapshot.`);
+    }
+    const after = await fs.lstat(`${snapshot.directory}/${request.path}`);
+    if (!after.isFile() || after.size !== fileMetadata.byte_length || Number(after.mtimeMs) !== fileMetadata.mtime_ms ||
+        Number(after.ctimeMs) !== fileMetadata.ctime_ms || Number(after.ino) !== fileMetadata.inode) {
+      authoringSnapshots.delete(snapshot.id);
+      failure("snapshot_stale", `File ${request.path} changed while its authoring range was read.`);
+    }
+    await assertPinnedAuthoringSnapshot(snapshot);
+    const end = Math.min(data.byteLength, request.offset + request.length);
+    return { bytes: data.slice(request.offset, end), total_bytes: data.byteLength, offset: request.offset, revision: expected } satisfies AuthoringSnapshotRange;
+  }
+  if (request.operation === "authoring-snapshot-release") {
+    const snapshot = requirePinnedAuthoringSnapshot(request.snapshotId, paths, request.workspace);
+    authoringSnapshots.delete(snapshot.id);
+    return undefined;
   }
   if (request.operation === "list-files") {
     const rows = await git.statusMatrix({ fs, dir: paths.dir });
@@ -1230,7 +1617,11 @@ scope.addEventListener("message", async (event: MessageEvent<LocalGitRequest>) =
       if (uncertainWorkspaces.has(paths.lock) && request.operation !== "verify") {
         failure("storage_unknown", "A previous local Git operation had an uncertain result; reopen and verify this workspace before continuing.");
       }
-      return operation(request);
+      const result = await operation(request);
+      if (["write", "delete", "apply-changes", "commit-reviewed", "remote-pull"].includes(request.operation)) {
+        authoringMutationGenerations.set(paths.lock, (authoringMutationGenerations.get(paths.lock) ?? 0) + 1);
+      }
+      return result;
     });
     scope.postMessage({ id: request.id, workspaceId, result } satisfies LocalGitResponse);
   } catch (error) {

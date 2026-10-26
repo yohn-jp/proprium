@@ -1,0 +1,1987 @@
+{
+  "schema": "proprium.plugin/v2",
+  "id": "proprium.publishing",
+  "version": "0.1.0",
+  "abi": "proprium.component/v2",
+  "capabilities": [
+    "workspace.file.read",
+    "workspace.plugin.invoke",
+    "workspace.change.propose",
+    "workspace.capabilities.query",
+    "workspace.identity.read",
+    "publishing.share-reader.v1",
+    "workspace.change.timestamp",
+    "secret.token.create",
+    "artifact.create",
+    "artifact.append",
+    "artifact.seal",
+    "artifact.discard"
+  ],
+  "actions": [
+    {
+      "plugin_id": "proprium.publishing",
+      "action_id": "proprium.publishing.project.tree",
+      "schema_version": 1,
+      "effect": "read",
+      "input_schema": {
+        "type": "object",
+        "properties": {
+          "parent_id": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "maxLength": 512
+          },
+          "cursor": {
+            "type": "string",
+            "maxLength": 4096
+          },
+          "limit": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 200
+          },
+          "expected_tree_revision": {
+            "type": "string",
+            "maxLength": 512
+          }
+        },
+        "additionalProperties": false
+      },
+      "output_schema": {
+        "type": "object",
+        "properties": {
+          "parent_id": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "maxLength": 512
+          },
+          "items": {
+            "type": "array",
+            "maxItems": 200,
+            "items": {
+              "type": "object",
+              "properties": {
+                "id": {
+                  "type": "string",
+                  "maxLength": 4096
+                },
+                "kind": {
+                  "enum": [
+                    "volume",
+                    "chapter",
+                    "scene"
+                  ]
+                },
+                "title": {
+                  "type": "string",
+                  "maxLength": 4096
+                },
+                "order": {
+                  "type": "integer"
+                },
+                "parent_id": {
+                  "type": [
+                    "string",
+                    "null"
+                  ],
+                  "maxLength": 512
+                },
+                "metadata_path": {
+                  "type": "string",
+                  "maxLength": 4096
+                },
+                "metadata_revision": {
+                  "type": "string",
+                  "maxLength": 4096
+                },
+                "manuscript_path": {
+                  "type": "string",
+                  "maxLength": 4096
+                }
+              },
+              "required": [
+                "id",
+                "kind",
+                "title",
+                "parent_id",
+                "metadata_path",
+                "metadata_revision"
+              ],
+              "additionalProperties": false
+            }
+          },
+          "next_cursor": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "maxLength": 4096
+          },
+          "tree_revision": {
+            "type": "string",
+            "maxLength": 4096
+          },
+          "diagnostics": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "code": {
+                  "type": "string",
+                  "maxLength": 4096
+                },
+                "path": {
+                  "type": "string",
+                  "maxLength": 4096
+                },
+                "message": {
+                  "type": "string",
+                  "maxLength": 4096
+                },
+                "severity": {
+                  "enum": [
+                    "error",
+                    "warning",
+                    "info"
+                  ]
+                }
+              },
+              "required": [
+                "code",
+                "path",
+                "message",
+                "severity"
+              ],
+              "additionalProperties": false
+            },
+            "maxItems": 10000
+          }
+        },
+        "required": [
+          "parent_id",
+          "items",
+          "next_cursor",
+          "tree_revision",
+          "diagnostics"
+        ],
+        "additionalProperties": false
+      },
+      "required_capabilities": [
+        "workspace.plugin.invoke"
+      ],
+      "callers": [
+        "ui",
+        "mcp"
+      ],
+      "requires_user_gesture": false
+    },
+    {
+      "plugin_id": "proprium.publishing",
+      "action_id": "proprium.publishing.export.plaintext",
+      "schema_version": 1,
+      "effect": "read",
+      "input_schema": {
+        "type": "object",
+        "properties": {
+          "scope": {
+            "enum": [
+              "all",
+              "volume",
+              "chapter"
+            ]
+          },
+          "id": {
+            "type": "string",
+            "maxLength": 512
+          },
+          "markup": {
+            "enum": [
+              "raw",
+              "strip",
+              "kakuyomu",
+              "narou"
+            ]
+          }
+        },
+        "required": [
+          "scope",
+          "markup"
+        ],
+        "additionalProperties": false
+      },
+      "output_schema": {
+        "type": "object",
+        "properties": {
+          "artifact_id": {
+            "type": "string",
+            "maxLength": 4096
+          },
+          "filename": {
+            "type": "string",
+            "maxLength": 4096
+          },
+          "media_type": {
+            "const": "text/plain; charset=utf-8"
+          },
+          "total_bytes": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "sha256": {
+            "type": "string",
+            "pattern": "^[a-f0-9]{64}$",
+            "maxLength": 64,
+            "minLength": 64
+          },
+          "scope": {
+            "type": "object",
+            "properties": {
+              "scope": {
+                "enum": [
+                  "all",
+                  "volume",
+                  "chapter"
+                ]
+              },
+              "id": {
+                "type": "string",
+                "maxLength": 4096
+              }
+            },
+            "required": [
+              "scope"
+            ],
+            "additionalProperties": false
+          }
+        },
+        "required": [
+          "artifact_id",
+          "filename",
+          "media_type",
+          "total_bytes",
+          "sha256",
+          "scope"
+        ],
+        "additionalProperties": false
+      },
+      "required_capabilities": [
+        "workspace.plugin.invoke",
+        "workspace.file.read",
+        "artifact.create",
+        "artifact.append",
+        "artifact.seal",
+        "artifact.discard"
+      ],
+      "callers": [
+        "ui",
+        "mcp"
+      ],
+      "requires_user_gesture": false
+    },
+    {
+      "plugin_id": "proprium.publishing",
+      "action_id": "proprium.publishing.export.epub",
+      "schema_version": 1,
+      "effect": "read",
+      "input_schema": {
+        "type": "object",
+        "properties": {
+          "scope": {
+            "enum": [
+              "all",
+              "volume",
+              "chapter"
+            ]
+          },
+          "id": {
+            "type": "string",
+            "maxLength": 512
+          },
+          "title": {
+            "type": "string",
+            "maxLength": 512
+          },
+          "subtitle": {
+            "type": "string",
+            "maxLength": 512
+          },
+          "cover_path": {
+            "type": "string",
+            "maxLength": 4096
+          },
+          "include_bible_appendix": {
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "scope",
+          "include_bible_appendix"
+        ],
+        "additionalProperties": false
+      },
+      "output_schema": {
+        "type": "object",
+        "properties": {
+          "artifact_id": {
+            "type": "string",
+            "maxLength": 4096
+          },
+          "filename": {
+            "type": "string",
+            "maxLength": 4096
+          },
+          "media_type": {
+            "const": "application/epub+zip"
+          },
+          "total_bytes": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "sha256": {
+            "type": "string",
+            "pattern": "^[a-f0-9]{64}$",
+            "maxLength": 64,
+            "minLength": 64
+          },
+          "scope": {
+            "type": "object",
+            "properties": {
+              "scope": {
+                "enum": [
+                  "all",
+                  "volume",
+                  "chapter"
+                ]
+              },
+              "id": {
+                "type": "string",
+                "maxLength": 4096
+              }
+            },
+            "required": [
+              "scope"
+            ],
+            "additionalProperties": false
+          }
+        },
+        "required": [
+          "artifact_id",
+          "filename",
+          "media_type",
+          "total_bytes",
+          "sha256",
+          "scope"
+        ],
+        "additionalProperties": false
+      },
+      "required_capabilities": [
+        "workspace.plugin.invoke",
+        "workspace.file.read",
+        "artifact.create",
+        "artifact.append",
+        "artifact.seal",
+        "artifact.discard"
+      ],
+      "callers": [
+        "ui",
+        "mcp"
+      ],
+      "requires_user_gesture": false
+    },
+    {
+      "plugin_id": "proprium.publishing",
+      "action_id": "proprium.publishing.export.vertical-print",
+      "schema_version": 1,
+      "effect": "read",
+      "input_schema": {
+        "type": "object",
+        "properties": {
+          "scope": {
+            "enum": [
+              "all",
+              "volume",
+              "chapter"
+            ]
+          },
+          "id": {
+            "type": "string",
+            "maxLength": 512
+          }
+        },
+        "required": [
+          "scope"
+        ],
+        "additionalProperties": false
+      },
+      "output_schema": {
+        "type": "object",
+        "properties": {
+          "artifact_id": {
+            "type": "string",
+            "maxLength": 4096
+          },
+          "filename": {
+            "type": "string",
+            "maxLength": 4096
+          },
+          "media_type": {
+            "const": "text/plain; charset=utf-8"
+          },
+          "total_bytes": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "sha256": {
+            "type": "string",
+            "pattern": "^[a-f0-9]{64}$",
+            "maxLength": 64,
+            "minLength": 64
+          },
+          "scope": {
+            "type": "object",
+            "properties": {
+              "scope": {
+                "enum": [
+                  "all",
+                  "volume",
+                  "chapter"
+                ]
+              },
+              "id": {
+                "type": "string",
+                "maxLength": 4096
+              }
+            },
+            "required": [
+              "scope"
+            ],
+            "additionalProperties": false
+          }
+        },
+        "required": [
+          "artifact_id",
+          "filename",
+          "media_type",
+          "total_bytes",
+          "sha256",
+          "scope"
+        ],
+        "additionalProperties": false
+      },
+      "required_capabilities": [
+        "workspace.plugin.invoke",
+        "workspace.file.read",
+        "artifact.create",
+        "artifact.append",
+        "artifact.seal",
+        "artifact.discard"
+      ],
+      "callers": [
+        "ui"
+      ],
+      "requires_user_gesture": false
+    },
+    {
+      "plugin_id": "proprium.publishing",
+      "action_id": "proprium.publishing.episodes.read",
+      "schema_version": 1,
+      "effect": "read",
+      "input_schema": {
+        "type": "object",
+        "properties": {},
+        "additionalProperties": false
+      },
+      "output_schema": {
+        "type": "object",
+        "properties": {
+          "episodes": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "id": {
+                  "type": "string",
+                  "maxLength": 4096
+                },
+                "number": {
+                  "type": "integer",
+                  "minimum": 1
+                },
+                "title": {
+                  "type": "string",
+                  "maxLength": 4096
+                },
+                "scope": {
+                  "enum": [
+                    "volume",
+                    "chapter"
+                  ]
+                },
+                "scope_id": {
+                  "type": "string",
+                  "maxLength": 4096
+                },
+                "published_at": {
+                  "type": "string",
+                  "maxLength": 4096
+                },
+                "scene_ids": {
+                  "type": "array",
+                  "items": {
+                    "type": "string",
+                    "maxLength": 4096
+                  },
+                  "maxItems": 10000
+                }
+              },
+              "required": [
+                "id",
+                "number",
+                "title",
+                "scope",
+                "scope_id"
+              ],
+              "additionalProperties": false
+            },
+            "maxItems": 10000
+          },
+          "source_path": {
+            "const": "meta/scriptorium/modules/publishing/episodes.yaml"
+          },
+          "source_revision": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "maxLength": 64
+          },
+          "recovery_available": {
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "episodes",
+          "source_path",
+          "source_revision",
+          "recovery_available"
+        ],
+        "additionalProperties": false
+      },
+      "required_capabilities": [
+        "workspace.file.read"
+      ],
+      "callers": [
+        "ui",
+        "mcp"
+      ],
+      "requires_user_gesture": false
+    },
+    {
+      "plugin_id": "proprium.publishing",
+      "action_id": "proprium.publishing.episodes.propose",
+      "schema_version": 1,
+      "effect": "propose",
+      "input_schema": {
+        "type": "object",
+        "properties": {
+          "episodes": {
+            "type": "array",
+            "maxItems": 5000,
+            "items": {
+              "type": "object",
+              "properties": {
+                "id": {
+                  "type": "string",
+                  "minLength": 1,
+                  "maxLength": 128
+                },
+                "number": {
+                  "type": "integer",
+                  "minimum": 1
+                },
+                "title": {
+                  "type": "string",
+                  "minLength": 1,
+                  "maxLength": 200
+                },
+                "scope": {
+                  "enum": [
+                    "volume",
+                    "chapter"
+                  ]
+                },
+                "scope_id": {
+                  "type": "string",
+                  "minLength": 1,
+                  "maxLength": 512
+                },
+                "published_at": {
+                  "type": [
+                    "string",
+                    "null"
+                  ],
+                  "pattern": "^(?:|\\d{4}-\\d{2}-\\d{2}(?:T\\d{2}:\\d{2}:\\d{2}(?:\\.\\d+)?(?:Z|[+-]\\d{2}:\\d{2}))?)$",
+                  "maxLength": 64
+                },
+                "scene_ids": {
+                  "type": [
+                    "array",
+                    "null"
+                  ],
+                  "items": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 512
+                  },
+                  "maxItems": 10000
+                }
+              },
+              "required": [
+                "id",
+                "number",
+                "title",
+                "scope",
+                "scope_id"
+              ],
+              "additionalProperties": false
+            }
+          },
+          "expected_metadata_revision": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "maxLength": 64
+          },
+          "expected_tree_revision": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 4096
+          }
+        },
+        "required": [
+          "episodes",
+          "expected_metadata_revision",
+          "expected_tree_revision"
+        ],
+        "additionalProperties": false
+      },
+      "output_schema": {
+        "type": "object",
+        "properties": {
+          "change_set_id": {
+            "type": "string",
+            "maxLength": 4096
+          },
+          "proposal_id": {
+            "type": "string",
+            "maxLength": 4096
+          },
+          "status": {
+            "const": "proposed"
+          },
+          "preview": {
+            "type": "object",
+            "properties": {
+              "episode_count": {
+                "type": "integer",
+                "minimum": 0
+              },
+              "changed_ids": {
+                "type": "array",
+                "items": {
+                  "type": "string",
+                  "maxLength": 4096
+                },
+                "maxItems": 10000
+              },
+              "target_path": {
+                "const": "meta/scriptorium/modules/publishing/episodes.yaml"
+              }
+            },
+            "required": [
+              "episode_count",
+              "changed_ids",
+              "target_path"
+            ],
+            "additionalProperties": false
+          }
+        },
+        "required": [
+          "change_set_id",
+          "proposal_id",
+          "status",
+          "preview"
+        ],
+        "additionalProperties": false
+      },
+      "required_capabilities": [
+        "workspace.file.read",
+        "workspace.plugin.invoke",
+        "workspace.change.propose"
+      ],
+      "callers": [
+        "ui",
+        "mcp"
+      ],
+      "requires_user_gesture": false
+    },
+    {
+      "plugin_id": "proprium.publishing",
+      "action_id": "proprium.publishing.shares.list",
+      "schema_version": 1,
+      "effect": "read",
+      "input_schema": {
+        "type": "object",
+        "properties": {},
+        "additionalProperties": false
+      },
+      "output_schema": {
+        "type": "object",
+        "properties": {
+          "provider_configured": {
+            "type": "boolean"
+          },
+          "shares": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "id": {
+                  "type": "string",
+                  "maxLength": 4096
+                },
+                "scope": {
+                  "type": "object",
+                  "properties": {
+                    "kind": {
+                      "enum": [
+                        "volume",
+                        "chapter",
+                        "scene"
+                      ]
+                    },
+                    "id": {
+                      "type": "string",
+                      "maxLength": 4096
+                    }
+                  },
+                  "required": [
+                    "kind",
+                    "id"
+                  ],
+                  "additionalProperties": false
+                },
+                "label": {
+                  "type": "string",
+                  "maxLength": 4096
+                },
+                "created_at": {
+                  "type": "string",
+                  "maxLength": 4096
+                },
+                "expires_at": {
+                  "type": "string",
+                  "maxLength": 4096
+                },
+                "revoked_at": {
+                  "type": "string",
+                  "maxLength": 4096
+                },
+                "status": {
+                  "enum": [
+                    "pending_publish",
+                    "active",
+                    "expired",
+                    "revocation_pending",
+                    "revoked",
+                    "provider_unavailable"
+                  ]
+                }
+              },
+              "required": [
+                "id",
+                "scope",
+                "label",
+                "created_at",
+                "expires_at",
+                "status"
+              ],
+              "additionalProperties": false
+            },
+            "maxItems": 10000
+          },
+          "source_path": {
+            "const": "meta/scriptorium/modules/publishing/share-grants.jsonl"
+          },
+          "source_revision": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "maxLength": 64
+          },
+          "remote_snapshot": {
+            "type": "object",
+            "properties": {
+              "repository_id": {
+                "type": [
+                  "integer",
+                  "null"
+                ]
+              },
+              "branch": {
+                "type": "string",
+                "maxLength": 4096
+              },
+              "remote_commit": {
+                "type": [
+                  "string",
+                  "null"
+                ],
+                "maxLength": 64
+              }
+            },
+            "required": [
+              "repository_id",
+              "branch",
+              "remote_commit"
+            ],
+            "additionalProperties": false
+          }
+        },
+        "required": [
+          "provider_configured",
+          "shares",
+          "source_path",
+          "source_revision",
+          "remote_snapshot"
+        ],
+        "additionalProperties": false
+      },
+      "required_capabilities": [
+        "workspace.file.read",
+        "workspace.capabilities.query",
+        "workspace.identity.read"
+      ],
+      "callers": [
+        "ui"
+      ],
+      "requires_user_gesture": false
+    },
+    {
+      "plugin_id": "proprium.publishing",
+      "action_id": "proprium.publishing.shares.create",
+      "schema_version": 1,
+      "effect": "propose",
+      "input_schema": {
+        "type": "object",
+        "properties": {
+          "kind": {
+            "enum": [
+              "volume",
+              "chapter",
+              "scene"
+            ]
+          },
+          "id": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 512
+          },
+          "label": {
+            "type": "string",
+            "maxLength": 120
+          },
+          "expires_in_hours": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 87600
+          }
+        },
+        "required": [
+          "kind",
+          "id"
+        ],
+        "additionalProperties": false
+      },
+      "output_schema": {
+        "type": "object",
+        "properties": {
+          "change_set_id": {
+            "type": "string",
+            "maxLength": 4096
+          },
+          "proposal_id": {
+            "type": "string",
+            "maxLength": 4096
+          },
+          "status": {
+            "const": "proposed"
+          },
+          "preview": {
+            "type": "object",
+            "properties": {
+              "grant_id": {
+                "type": "string",
+                "maxLength": 4096
+              },
+              "scope": {
+                "type": "object",
+                "properties": {
+                  "kind": {
+                    "enum": [
+                      "volume",
+                      "chapter",
+                      "scene"
+                    ]
+                  },
+                  "id": {
+                    "type": "string",
+                    "maxLength": 4096
+                  }
+                },
+                "required": [
+                  "kind",
+                  "id"
+                ],
+                "additionalProperties": false
+              },
+              "label": {
+                "type": "string",
+                "maxLength": 4096
+              },
+              "expires_at": {
+                "type": "string",
+                "maxLength": 4096
+              },
+              "activation": {
+                "const": "after_remote_publish"
+              }
+            },
+            "required": [
+              "grant_id",
+              "scope",
+              "label",
+              "expires_at",
+              "activation"
+            ],
+            "additionalProperties": false
+          }
+        },
+        "required": [
+          "change_set_id",
+          "proposal_id",
+          "status",
+          "preview"
+        ],
+        "additionalProperties": false
+      },
+      "required_capabilities": [
+        "publishing.share-reader.v1",
+        "secret.token.create",
+        "workspace.file.read",
+        "workspace.plugin.invoke",
+        "workspace.change.propose",
+        "workspace.change.timestamp"
+      ],
+      "callers": [
+        "ui"
+      ],
+      "requires_user_gesture": true
+    },
+    {
+      "plugin_id": "proprium.publishing",
+      "action_id": "proprium.publishing.shares.revoke",
+      "schema_version": 1,
+      "effect": "propose",
+      "input_schema": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 512
+          },
+          "expected_metadata_revision": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "maxLength": 64
+          }
+        },
+        "required": [
+          "id",
+          "expected_metadata_revision"
+        ],
+        "additionalProperties": false
+      },
+      "output_schema": {
+        "oneOf": [
+          {
+            "type": "object",
+            "properties": {
+              "change_set_id": {
+                "type": "string",
+                "maxLength": 4096
+              },
+              "proposal_id": {
+                "type": "string",
+                "maxLength": 4096
+              },
+              "status": {
+                "const": "proposed"
+              },
+              "preview": {
+                "type": "object",
+                "properties": {
+                  "id": {
+                    "type": "string",
+                    "maxLength": 4096
+                  },
+                  "activation": {
+                    "const": "after_remote_publish"
+                  }
+                },
+                "required": [
+                  "id",
+                  "activation"
+                ],
+                "additionalProperties": false
+              }
+            },
+            "required": [
+              "change_set_id",
+              "proposal_id",
+              "status",
+              "preview"
+            ],
+            "additionalProperties": false
+          },
+          {
+            "type": "object",
+            "properties": {
+              "status": {
+                "const": "already_revoked"
+              },
+              "id": {
+                "type": "string",
+                "maxLength": 4096
+              }
+            },
+            "required": [
+              "status",
+              "id"
+            ],
+            "additionalProperties": false
+          }
+        ]
+      },
+      "required_capabilities": [
+        "workspace.file.read",
+        "workspace.change.propose",
+        "workspace.change.timestamp"
+      ],
+      "callers": [
+        "ui"
+      ],
+      "requires_user_gesture": true
+    }
+  ],
+  "ui":   [
+    {
+      "id": "publishing.scope",
+      "kind": "panel",
+      "title": "作品の範囲",
+      "context": {
+        "section": "publishing"
+      },
+      "body": {
+        "id": "publishing.scope.tree",
+        "type": "outline",
+        "title": "巻・章・場面",
+        "load_action": {
+          "action_id": "proprium.publishing.project.tree",
+          "input_template": {
+            "parent_id": null,
+            "limit": 200
+          }
+        },
+        "items": {
+          "data_key": "last_action_result.items"
+        },
+        "activate": {
+          "action_id": "proprium.publishing.project.tree",
+          "input_template": {
+            "parent_id": {
+              "data_key": "item.id"
+            },
+            "limit": 200,
+            "expected_tree_revision": {
+              "data_key": "last_action_result.tree_revision"
+            }
+          }
+        },
+        "next_action": {
+          "action_id": "proprium.publishing.project.tree",
+          "input_template": {
+            "parent_id": {
+              "data_key": "last_action_result.parent_id"
+            },
+            "cursor": {
+              "data_key": "last_action_result.next_cursor"
+            },
+            "limit": 200,
+            "expected_tree_revision": {
+              "data_key": "last_action_result.tree_revision"
+            }
+          }
+        },
+        "next_action_when": {
+          "data_key": "last_action_result.next_cursor"
+        }
+      }
+    },
+    {
+      "id": "publishing.export.plaintext",
+      "kind": "panel",
+      "title": "書き出し",
+      "context": {
+        "section": "publishing"
+      },
+      "body": {
+        "id": "publishing.export.plaintext.tabs",
+        "type": "tabs",
+        "title": "テキストを書き出す",
+        "load_actions": [
+          {
+            "key": "tree",
+            "action_id": "proprium.publishing.project.tree",
+            "input_template": {
+              "parent_id": null,
+              "limit": 200
+            }
+          }
+        ],
+        "tabs": [
+          {
+            "id": "scope",
+            "title": "対象一覧",
+            "body": {
+              "id": "publishing.export.plaintext.scope.tree",
+              "type": "outline",
+              "title": "巻・章・場面",
+              "items": {
+                "data_key": "last_action_result.items"
+              },
+              "activate": {
+                "action_id": "proprium.publishing.project.tree",
+                "input_template": {
+                  "parent_id": {
+                    "data_key": "item.id"
+                  },
+                  "limit": 200,
+                  "expected_tree_revision": {
+                    "data_key": "last_action_result.tree_revision"
+                  }
+                }
+              },
+              "next_action": {
+                "action_id": "proprium.publishing.project.tree",
+                "input_template": {
+                  "parent_id": {
+                    "data_key": "last_action_result.parent_id"
+                  },
+                  "cursor": {
+                    "data_key": "last_action_result.next_cursor"
+                  },
+                  "limit": 200,
+                  "expected_tree_revision": {
+                    "data_key": "last_action_result.tree_revision"
+                  }
+                }
+              },
+              "next_action_when": {
+                "data_key": "last_action_result.next_cursor"
+              }
+            }
+          },
+          {
+            "id": "export",
+            "title": "書き出し",
+            "body": {
+              "id": "publishing.export.plaintext.form",
+              "type": "form",
+              "title": "テキストを書き出す",
+              "description": "対象、巻または章の ID、変換方法を選びます。空の ID は全文を対象にします。 対象一覧タブで巻または章を選ぶと、ID の選択肢が更新されます。",
+              "fields": [
+                {
+                  "id": "scope",
+                  "label": "対象",
+                  "type": "enum",
+                  "required": true,
+                  "options": [
+                    {
+                      "value": "all",
+                      "label": "全文"
+                    },
+                    {
+                      "value": "volume",
+                      "label": "巻"
+                    },
+                    {
+                      "value": "chapter",
+                      "label": "章"
+                    }
+                  ]
+                },
+                {
+                  "id": "id",
+                  "label": "巻または章 ID",
+                  "type": "enum",
+                  "required": false,
+                  "options": {
+                    "data_key": "last_action_result.items"
+                  },
+                  "option_value_key": "id",
+                  "option_label_key": "title",
+                  "initial_value": ""
+                },
+                {
+                  "id": "markup",
+                  "label": "表記",
+                  "type": "enum",
+                  "required": true,
+                  "options": [
+                    {
+                      "value": "raw",
+                      "label": "原稿記法"
+                    },
+                    {
+                      "value": "strip",
+                      "label": "ルビ・傍点を除く"
+                    },
+                    {
+                      "value": "kakuyomu",
+                      "label": "カクヨム"
+                    },
+                    {
+                      "value": "narou",
+                      "label": "小説家になろう"
+                    }
+                  ]
+                }
+              ],
+              "submit": {
+                "action_id": "proprium.publishing.export.plaintext",
+                "input_template": {
+                  "scope": {
+                    "data_key": "form.scope"
+                  },
+                  "id": {
+                    "data_key": "form.id"
+                  },
+                  "markup": {
+                    "data_key": "form.markup"
+                  }
+                }
+              }
+            }
+          }
+        ]
+      }
+    },
+    {
+      "id": "publishing.export.epub",
+      "kind": "panel",
+      "title": "EPUB 書き出し",
+      "context": {
+        "section": "publishing"
+      },
+      "body": {
+        "id": "publishing.export.epub.tabs",
+        "type": "tabs",
+        "title": "EPUB3 を作成",
+        "load_actions": [
+          {
+            "key": "tree",
+            "action_id": "proprium.publishing.project.tree",
+            "input_template": {
+              "parent_id": null,
+              "limit": 200
+            }
+          }
+        ],
+        "tabs": [
+          {
+            "id": "scope",
+            "title": "対象一覧",
+            "body": {
+              "id": "publishing.export.epub.scope.tree",
+              "type": "outline",
+              "title": "巻・章・場面",
+              "items": {
+                "data_key": "last_action_result.items"
+              },
+              "activate": {
+                "action_id": "proprium.publishing.project.tree",
+                "input_template": {
+                  "parent_id": {
+                    "data_key": "item.id"
+                  },
+                  "limit": 200,
+                  "expected_tree_revision": {
+                    "data_key": "last_action_result.tree_revision"
+                  }
+                }
+              },
+              "next_action": {
+                "action_id": "proprium.publishing.project.tree",
+                "input_template": {
+                  "parent_id": {
+                    "data_key": "last_action_result.parent_id"
+                  },
+                  "cursor": {
+                    "data_key": "last_action_result.next_cursor"
+                  },
+                  "limit": 200,
+                  "expected_tree_revision": {
+                    "data_key": "last_action_result.tree_revision"
+                  }
+                }
+              },
+              "next_action_when": {
+                "data_key": "last_action_result.next_cursor"
+              }
+            }
+          },
+          {
+            "id": "export",
+            "title": "書き出し",
+            "body": {
+              "id": "publishing.export.epub.form",
+              "type": "form",
+              "title": "EPUB3 を作成",
+              "description": "作品の固定スナップショットから EPUB3 を作成します。表紙と人物・用語付録は任意です。 対象一覧タブで巻または章を選ぶと、ID の選択肢が更新されます。",
+              "fields": [
+                {
+                  "id": "scope",
+                  "label": "対象",
+                  "type": "enum",
+                  "required": true,
+                  "options": [
+                    {
+                      "value": "all",
+                      "label": "全文"
+                    },
+                    {
+                      "value": "volume",
+                      "label": "巻"
+                    },
+                    {
+                      "value": "chapter",
+                      "label": "章"
+                    }
+                  ]
+                },
+                {
+                  "id": "id",
+                  "label": "巻または章 ID",
+                  "type": "enum",
+                  "required": false,
+                  "options": {
+                    "data_key": "last_action_result.items"
+                  },
+                  "option_value_key": "id",
+                  "option_label_key": "title",
+                  "initial_value": ""
+                },
+                {
+                  "id": "title",
+                  "label": "書名",
+                  "type": "string",
+                  "required": false,
+                  "max_length": 512
+                },
+                {
+                  "id": "subtitle",
+                  "label": "副題",
+                  "type": "string",
+                  "required": false,
+                  "max_length": 512
+                },
+                {
+                  "id": "cover_path",
+                  "label": "表紙ファイルの相対パス",
+                  "type": "string",
+                  "required": false,
+                  "max_length": 4096
+                },
+                {
+                  "id": "include_bible_appendix",
+                  "label": "人物・用語の付録を含める",
+                  "type": "boolean",
+                  "required": true
+                }
+              ],
+              "submit": {
+                "action_id": "proprium.publishing.export.epub",
+                "input_template": {
+                  "scope": {
+                    "data_key": "form.scope"
+                  },
+                  "id": {
+                    "data_key": "form.id"
+                  },
+                  "title": {
+                    "data_key": "form.title"
+                  },
+                  "subtitle": {
+                    "data_key": "form.subtitle"
+                  },
+                  "cover_path": {
+                    "data_key": "form.cover_path"
+                  },
+                  "include_bible_appendix": {
+                    "data_key": "form.include_bible_appendix"
+                  }
+                }
+              }
+            }
+          }
+        ]
+      }
+    },
+    {
+      "id": "publishing.export.vertical-print",
+      "kind": "panel",
+      "title": "縦書き PDF",
+      "context": {
+        "section": "publishing"
+      },
+      "body": {
+        "id": "publishing.export.vertical-print.tabs",
+        "type": "tabs",
+        "title": "縦書きプレビューを開く",
+        "load_actions": [
+          {
+            "key": "tree",
+            "action_id": "proprium.publishing.project.tree",
+            "input_template": {
+              "parent_id": null,
+              "limit": 200
+            }
+          }
+        ],
+        "tabs": [
+          {
+            "id": "scope",
+            "title": "対象一覧",
+            "body": {
+              "id": "publishing.export.vertical-print.scope.tree",
+              "type": "outline",
+              "title": "巻・章・場面",
+              "items": {
+                "data_key": "last_action_result.items"
+              },
+              "activate": {
+                "action_id": "proprium.publishing.project.tree",
+                "input_template": {
+                  "parent_id": {
+                    "data_key": "item.id"
+                  },
+                  "limit": 200,
+                  "expected_tree_revision": {
+                    "data_key": "last_action_result.tree_revision"
+                  }
+                }
+              },
+              "next_action": {
+                "action_id": "proprium.publishing.project.tree",
+                "input_template": {
+                  "parent_id": {
+                    "data_key": "last_action_result.parent_id"
+                  },
+                  "cursor": {
+                    "data_key": "last_action_result.next_cursor"
+                  },
+                  "limit": 200,
+                  "expected_tree_revision": {
+                    "data_key": "last_action_result.tree_revision"
+                  }
+                }
+              },
+              "next_action_when": {
+                "data_key": "last_action_result.next_cursor"
+              }
+            }
+          },
+          {
+            "id": "export",
+            "title": "書き出し",
+            "body": {
+              "id": "publishing.export.vertical-print.form",
+              "type": "form",
+              "title": "縦書きプレビューを開く",
+              "description": "縦書きは安全な Host プレビューで表示し、印刷・PDF 保存はブラウザーの操作で行います。 対象一覧タブで巻または章を選ぶと、ID の選択肢が更新されます。",
+              "fields": [
+                {
+                  "id": "scope",
+                  "label": "対象",
+                  "type": "enum",
+                  "required": true,
+                  "options": [
+                    {
+                      "value": "all",
+                      "label": "全文"
+                    },
+                    {
+                      "value": "volume",
+                      "label": "巻"
+                    },
+                    {
+                      "value": "chapter",
+                      "label": "章"
+                    }
+                  ]
+                },
+                {
+                  "id": "id",
+                  "label": "巻または章 ID",
+                  "type": "enum",
+                  "required": false,
+                  "options": {
+                    "data_key": "last_action_result.items"
+                  },
+                  "option_value_key": "id",
+                  "option_label_key": "title",
+                  "initial_value": ""
+                }
+              ],
+              "submit": {
+                "action_id": "proprium.publishing.export.vertical-print",
+                "input_template": {
+                  "scope": {
+                    "data_key": "form.scope"
+                  },
+                  "id": {
+                    "data_key": "form.id"
+                  }
+                }
+              }
+            }
+          }
+        ]
+      }
+    },
+    {
+      "id": "publishing.episode-map",
+      "kind": "panel",
+      "title": "公開回マッピング",
+      "context": {
+        "section": "publishing"
+      },
+      "body": {
+        "id": "publishing.episode-map.tabs",
+        "type": "tabs",
+        "title": "公開回マッピング",
+        "load_actions": [
+          {
+            "key": "episodes",
+            "action_id": "proprium.publishing.episodes.read",
+            "input_template": {}
+          },
+          {
+            "key": "tree",
+            "action_id": "proprium.publishing.project.tree",
+            "input_template": {
+              "parent_id": null,
+              "limit": 200
+            }
+          }
+        ],
+        "tabs": [
+          {
+            "id": "scope",
+            "title": "対象一覧",
+            "body": {
+              "id": "publishing.episode-map.scope.tree",
+              "type": "outline",
+              "title": "巻・章・場面",
+              "items": {
+                "data_key": "last_action_result.items"
+              },
+              "activate": {
+                "action_id": "proprium.publishing.project.tree",
+                "input_template": {
+                  "parent_id": {
+                    "data_key": "item.id"
+                  },
+                  "limit": 200,
+                  "expected_tree_revision": {
+                    "data_key": "last_action_result.tree_revision"
+                  }
+                }
+              },
+              "next_action": {
+                "action_id": "proprium.publishing.project.tree",
+                "input_template": {
+                  "parent_id": {
+                    "data_key": "last_action_result.parent_id"
+                  },
+                  "cursor": {
+                    "data_key": "last_action_result.next_cursor"
+                  },
+                  "limit": 200,
+                  "expected_tree_revision": {
+                    "data_key": "last_action_result.tree_revision"
+                  }
+                }
+              },
+              "next_action_when": {
+                "data_key": "last_action_result.next_cursor"
+              }
+            }
+          },
+          {
+            "id": "episodes",
+            "title": "公開回",
+            "body": {
+              "id": "publishing.episode-map.form",
+              "type": "form",
+              "title": "公開回を編集",
+              "description": "内容はレビュー可能な YAML 提案として保存されます。ここで外部サイトへ投稿はしません。 対象一覧タブで巻または章を選ぶと、各回の対象 ID の選択肢が更新されます。",
+              "fields": [
+                {
+                  "id": "episodes",
+                  "label": "公開回",
+                  "type": "record-list",
+                  "key_field": "id",
+                  "min_items": 0,
+                  "max_items": 256,
+                  "initial_value": {
+                    "data_key": "load.episodes.episodes"
+                  },
+                  "fields": [
+                    {
+                      "id": "id",
+                      "label": "ID",
+                      "type": "string",
+                      "required": true,
+                      "max_length": 128
+                    },
+                    {
+                      "id": "number",
+                      "label": "番号",
+                      "type": "integer",
+                      "required": true
+                    },
+                    {
+                      "id": "title",
+                      "label": "題名",
+                      "type": "string",
+                      "required": true,
+                      "max_length": 200
+                    },
+                    {
+                      "id": "scope",
+                      "label": "対象",
+                      "type": "enum",
+                      "required": true,
+                      "options": [
+                        {
+                          "value": "volume",
+                          "label": "巻"
+                        },
+                        {
+                          "value": "chapter",
+                          "label": "章"
+                        }
+                      ]
+                    },
+                    {
+                      "id": "scope_id",
+                      "label": "巻または章 ID",
+                      "type": "enum",
+                      "required": true,
+                      "options": {
+                        "data_key": "last_action_result.items"
+                      },
+                      "option_value_key": "id",
+                      "option_label_key": "title",
+                      "initial_value": ""
+                    },
+                    {
+                      "id": "published_at",
+                      "label": "公開日",
+                      "type": "string",
+                      "required": false,
+                      "max_length": 64
+                    },
+                    {
+                      "id": "scene_ids",
+                      "label": "章内の場面 ID",
+                      "type": "ordered-list",
+                      "required": false,
+                      "max_length": 512
+                    }
+                  ]
+                }
+              ],
+              "submit": {
+                "action_id": "proprium.publishing.episodes.propose",
+                "input_template": {
+                  "episodes": {
+                    "data_key": "form.episodes"
+                  },
+                  "expected_metadata_revision": {
+                    "data_key": "load.episodes.source_revision"
+                  },
+                  "expected_tree_revision": {
+                    "data_key": "load.tree.tree_revision"
+                  }
+                }
+              }
+            }
+          }
+        ]
+      }
+    },
+    {
+      "id": "publishing.share-links",
+      "kind": "panel",
+      "title": "共有リンク",
+      "context": {
+        "section": "publishing"
+      },
+      "body": {
+        "id": "publishing.share-links.tabs",
+        "type": "tabs",
+        "title": "読み取り専用リンク",
+        "tabs": [
+          {
+            "id": "scope",
+            "title": "対象一覧",
+            "body": {
+              "id": "publishing.share-links.scope.tree",
+              "type": "outline",
+              "title": "巻・章・場面",
+              "items": {
+                "data_key": "last_action_result.items"
+              },
+              "activate": {
+                "action_id": "proprium.publishing.project.tree",
+                "input_template": {
+                  "parent_id": {
+                    "data_key": "item.id"
+                  },
+                  "limit": 200,
+                  "expected_tree_revision": {
+                    "data_key": "last_action_result.tree_revision"
+                  }
+                }
+              },
+              "next_action": {
+                "action_id": "proprium.publishing.project.tree",
+                "input_template": {
+                  "parent_id": {
+                    "data_key": "last_action_result.parent_id"
+                  },
+                  "cursor": {
+                    "data_key": "last_action_result.next_cursor"
+                  },
+                  "limit": 200,
+                  "expected_tree_revision": {
+                    "data_key": "last_action_result.tree_revision"
+                  }
+                }
+              },
+              "next_action_when": {
+                "data_key": "last_action_result.next_cursor"
+              }
+            }
+          },
+          {
+            "id": "list",
+            "title": "リンク一覧",
+            "body": {
+              "id": "publishing.share-links.list",
+              "type": "table",
+              "title": "共有リンクの状態",
+              "rows": {
+                "data_key": "load.shares.shares"
+              },
+              "columns": [
+                {
+                  "key": "id",
+                  "label": "リンク ID"
+                },
+                {
+                  "key": "label",
+                  "label": "リンク名"
+                },
+                {
+                  "key": "status",
+                  "label": "状態"
+                }
+              ]
+            }
+          },
+          {
+            "id": "create",
+            "title": "リンクを作成",
+            "body": {
+              "id": "publishing.share-links.create",
+              "type": "form",
+              "title": "スコープ付きリンクを作成",
+              "description": "選んだ範囲の読み取り専用リンクを作成する提案です。Host が共有先と範囲の同意を確認します。提案の承認後にのみリンクを一度表示します。 対象一覧タブで範囲を開き、選んだ範囲と「範囲」の種類を一致させてください。",
+              "confirmation": {
+                "title": "共有リンクを作成",
+                "message": "入力した範囲と共有設定を確認してから続けてください。Host は共有先と範囲について別途同意を求めます。",
+                "continue_label": "共有提案を続ける",
+                "cancel_label": "キャンセル"
+              },
+              "fields": [
+                {
+                  "id": "kind",
+                  "label": "範囲",
+                  "type": "enum",
+                  "required": true,
+                  "options": [
+                    {
+                      "value": "volume",
+                      "label": "巻"
+                    },
+                    {
+                      "value": "chapter",
+                      "label": "章"
+                    },
+                    {
+                      "value": "scene",
+                      "label": "場面"
+                    }
+                  ]
+                },
+                {
+                  "id": "id",
+                  "label": "対象 ID",
+                  "type": "enum",
+                  "required": true,
+                  "options": {
+                    "data_key": "last_action_result.items"
+                  },
+                  "option_value_key": "id",
+                  "option_label_key": "title",
+                  "initial_value": ""
+                },
+                {
+                  "id": "label",
+                  "label": "リンク名",
+                  "type": "string",
+                  "required": false,
+                  "max_length": 120
+                },
+                {
+                  "id": "expires_in_hours",
+                  "label": "有効時間",
+                  "type": "integer",
+                  "required": true,
+                  "placeholder": "24"
+                }
+              ],
+              "submit": {
+                "action_id": "proprium.publishing.shares.create",
+                "input_template": {
+                  "kind": {
+                    "data_key": "form.kind"
+                  },
+                  "id": {
+                    "data_key": "form.id"
+                  },
+                  "label": {
+                    "data_key": "form.label"
+                  },
+                  "expires_in_hours": {
+                    "data_key": "form.expires_in_hours"
+                  }
+                }
+              },
+              "submit_when": {
+                "data_key": "load.shares.provider_configured"
+              },
+              "unavailable_message": "信頼できる共有サービスが設定されていません。ローカルの書き出しと編集は引き続き利用できます。"
+            }
+          },
+          {
+            "id": "revoke",
+            "title": "リンクを失効",
+            "body": {
+              "id": "publishing.share-links.revoke",
+              "type": "form",
+              "title": "共有リンクを失効",
+              "description": "失効もレビュー可能なメタデータ提案です。リモート確認までは公開済みリンクが有効な場合があります。 リンク一覧の更新後、リンク ID を選択します。",
+              "confirmation": {
+                "title": "リンク失効を提案",
+                "message": "このリンクを読み取り不可にする変更を提案します。",
+                "continue_label": "失効を提案",
+                "cancel_label": "キャンセル"
+              },
+              "fields": [
+                {
+                  "id": "id",
+                  "label": "リンク ID",
+                  "type": "enum",
+                  "required": true,
+                  "options": {
+                    "data_key": "load.shares.shares"
+                  },
+                  "option_value_key": "id",
+                  "option_label_key": "id",
+                  "initial_value": ""
+                }
+              ],
+              "submit": {
+                "action_id": "proprium.publishing.shares.revoke",
+                "input_template": {
+                  "id": {
+                    "data_key": "form.id"
+                  },
+                  "expected_metadata_revision": {
+                    "data_key": "load.shares.source_revision"
+                  }
+                }
+              }
+            }
+          }
+        ],
+        "load_actions": [
+          {
+            "key": "shares",
+            "action_id": "proprium.publishing.shares.list",
+            "input_template": {}
+          },
+          {
+            "key": "tree",
+            "action_id": "proprium.publishing.project.tree",
+            "input_template": {
+              "parent_id": null,
+              "limit": 200
+            }
+          }
+        ]
+      }
+    }
+  ],
+  "asset_groups": [],
+  "dependencies": [
+    {
+      "id": "proprium.narrative",
+      "range": "^0.1.0"
+    }
+  ]
+}

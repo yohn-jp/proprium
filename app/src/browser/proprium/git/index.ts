@@ -15,6 +15,11 @@ import type {
   LocalGitResponse,
   StatusEntry,
   WorkspaceFile,
+  AuthoringSnapshotMetadata,
+  AuthoringSnapshotFile,
+  AuthoringSnapshotPage,
+  AuthoringSnapshotRange,
+  RemoteConfirmedFiles,
   DiffChange,
   GitHubWorkspaceIdentity,
   LocalWorkspaceIdentity,
@@ -32,7 +37,7 @@ import { createGitHubAccountSession, GitHubSyncError } from "./github-sync.js";
 import type { GitHubAccount, GitHubAccountSession, GitHubDevicePrompt, GitHubFetchResult, GitHubPullResult, GitHubPublishResult, GitHubRemoteHead, GitHubRepository, GitHubSyncClient, GitHubRemoteOperation } from "./github-sync.js";
 
 export { isGitHubWorkspaceIdentity, validateGitPath, validateWorkspaceIdentity } from "./protocol.js";
-export type { AppliedWorkspaceChange, CommitAuthor, CommitDiff, CommitFileChange, CommitSummary, DiffChange, FileRevision, FileRevisionExpectation, GitHubWorkspaceIdentity, LocalGitError, LocalGitErrorCode, LocalWorkspaceIdentity, StatusEntry, WorkspaceChange, WorkspaceFile, WorkspaceIdentity };
+export type { AppliedWorkspaceChange, AuthoringSnapshotFile, AuthoringSnapshotMetadata, AuthoringSnapshotPage, AuthoringSnapshotRange, CommitAuthor, CommitDiff, CommitFileChange, CommitSummary, DiffChange, FileRevision, FileRevisionExpectation, GitHubWorkspaceIdentity, LocalGitError, LocalGitErrorCode, LocalWorkspaceIdentity, RemoteConfirmedFiles, StatusEntry, WorkspaceChange, WorkspaceFile, WorkspaceIdentity };
 export { GitHubSyncError } from "./github-sync.js";
 export { createGitHubAccountSession } from "./github-sync.js";
 export type { GitHubAccount, GitHubAccountSession, GitHubDevicePrompt, GitHubFetchResult, GitHubPullResult, GitHubPublishResult, GitHubRemoteHead, GitHubRepository, GitHubSyncClient } from "./github-sync.js";
@@ -63,11 +68,13 @@ export class BrowserLocalGit {
   private closed = false;
   private uncertain: boolean;
   private readonly uncertaintyKey: string;
+  private readonly writerBlockKey: string;
   private readonly githubSessions = new Set<GitHubSyncClient>();
 
   constructor(private readonly workspace: WorkspaceIdentity) {
     validateWorkspaceIdentity(workspace);
     this.uncertaintyKey = `proprium.git.storage-unknown.${workspace.localWorkspaceId}`;
+    this.writerBlockKey = `proprium.git.authoring-writes-blocked.${workspace.localWorkspaceId}`;
     this.uncertain = this.readUncertaintyMarker();
     this.worker = this.createWorker();
   }
@@ -110,11 +117,20 @@ export class BrowserLocalGit {
     this.pending.clear();
   };
 
-  private call<T>(command: LocalGitCommand): Promise<T> {
+  private call<T>(command: LocalGitCommand, recoveryWrite = false): Promise<T> {
     if (this.closed) return Promise.reject(new BrowserLocalGitError("git_error", "This Browser Git session has been closed."));
     this.uncertain ||= this.readUncertaintyMarker();
     if (this.uncertain && command.operation !== "verify") {
       return Promise.reject(new BrowserLocalGitError("storage_unknown", "A previous local Git operation has an uncertain result. Verify browser storage before continuing."));
+    }
+    if (isWorkspaceMutation(command.operation) && !recoveryWrite) {
+      try {
+        if (localStorage.getItem(this.writerBlockKey) === "1") {
+          return Promise.reject(new BrowserLocalGitError("storage_unknown", "Workspace writes are blocked until the retained authoring receipt is recovered."));
+        }
+      } catch {
+        return Promise.reject(new BrowserLocalGitError("storage_unknown", "Workspace write status could not be checked safely."));
+      }
     }
     const id = crypto.randomUUID();
     return new Promise<T>((resolve, reject) => {
@@ -148,7 +164,7 @@ export class BrowserLocalGit {
     await this.call({ operation: "delete", path, expected });
   }
 
-  applyChanges(changes: readonly WorkspaceChange[], readSet: readonly FileRevisionExpectation[] = []): Promise<AppliedWorkspaceChange[]> {
+  applyChanges(changes: readonly WorkspaceChange[], readSet: readonly FileRevisionExpectation[] = [], expectedAuthoringSnapshotId?: string, recovery = false, authoringWriter = false): Promise<AppliedWorkspaceChange[]> {
     if (!Array.isArray(changes) || changes.length > MAX_WORKSPACE_CHANGE_COUNT ||
         !Array.isArray(readSet) || readSet.length > MAX_WORKSPACE_READ_SET_COUNT) {
       return Promise.reject(new BrowserLocalGitError("invalid_path", "The approved change set exceeds browser workspace limits."));
@@ -165,10 +181,69 @@ export class BrowserLocalGit {
       }
     }
     for (const expected of readSet) validateGitPath(expected.path);
-    return this.call({ operation: "apply-changes", changes: [...changes], readSet: [...readSet] });
+    if (expectedAuthoringSnapshotId !== undefined) validateSnapshotId(expectedAuthoringSnapshotId);
+    if (recovery && !expectedAuthoringSnapshotId) return Promise.reject(new BrowserLocalGitError("invalid_input", "Recovery writes require an authoring snapshot assertion."));
+    return this.call({ operation: "apply-changes", changes: [...changes], readSet: [...readSet], expectedAuthoringSnapshotId, recovery }, recovery || authoringWriter);
+  }
+
+  /** Fail closed across BrowserLocalGit instances while H0 storage recovery is unresolved. */
+  blockWrites(): void {
+    try { localStorage.setItem(this.writerBlockKey, "1"); }
+    catch {
+      this.markUncertain();
+      throw new BrowserLocalGitError("storage_unknown", "The workspace write block could not be persisted safely.");
+    }
+  }
+
+  /** Called only after the H0 receipt and Browser Git storage have both been verified. */
+  unblockWrites(): void {
+    try {
+      localStorage.removeItem(this.writerBlockKey);
+      if (localStorage.getItem(this.writerBlockKey) === "1") throw new Error("write block remains");
+    } catch { throw new BrowserLocalGitError("storage_unknown", "The workspace write block could not be cleared safely."); }
   }
 
   listFiles(): Promise<WorkspaceFile[]> { return this.call({ operation: "list-files" }); }
+
+  /** Pin the current worktree directory membership and stat metadata in the Git worker. */
+  pinAuthoringSnapshot(): Promise<AuthoringSnapshotMetadata> {
+    return this.call({ operation: "authoring-snapshot-pin" });
+  }
+
+  assertAuthoringSnapshot(snapshotId: string): Promise<void> {
+    validateSnapshotId(snapshotId);
+    return this.call({ operation: "authoring-snapshot-assert", snapshotId });
+  }
+
+  listAuthoringSnapshot(snapshotId: string, prefix = "", cursor: string | null = null, limit = 128): Promise<AuthoringSnapshotPage> {
+    validateSnapshotId(snapshotId);
+    validateSnapshotPrefix(prefix);
+    if (!(cursor === null || (typeof cursor === "string" && cursor.length > 0 && cursor.length <= 128)) ||
+        !Number.isSafeInteger(limit) || limit < 1 || limit > 256) {
+      return Promise.reject(new BrowserLocalGitError("invalid_input", "Snapshot page cursor or limit is invalid."));
+    }
+    return this.call({ operation: "authoring-snapshot-list", snapshotId, prefix, cursor, limit });
+  }
+
+  statAuthoringSnapshot(snapshotId: string, path: string): Promise<AuthoringSnapshotFile | null> {
+    validateSnapshotId(snapshotId);
+    validateGitPath(path);
+    return this.call({ operation: "authoring-snapshot-stat", snapshotId, path });
+  }
+
+  readAuthoringSnapshotRange(snapshotId: string, path: string, offset: number, length: number): Promise<AuthoringSnapshotRange> {
+    validateSnapshotId(snapshotId);
+    validateGitPath(path);
+    if (!Number.isSafeInteger(offset) || offset < 0 || !Number.isSafeInteger(length) || length < 0 || length > 256 * 1024) {
+      return Promise.reject(new BrowserLocalGitError("invalid_input", "Snapshot read range is invalid."));
+    }
+    return this.call({ operation: "authoring-snapshot-read-range", snapshotId, path, offset, length });
+  }
+
+  releaseAuthoringSnapshot(snapshotId: string): Promise<void> {
+    validateSnapshotId(snapshotId);
+    return this.call({ operation: "authoring-snapshot-release", snapshotId });
+  }
 
   status(): Promise<LocalGitStatus> { return this.call({ operation: "status" }); }
 
@@ -187,6 +262,16 @@ export class BrowserLocalGit {
   commitDiff(oid: string): Promise<CommitDiff> {
     if (!/^[a-f0-9]{40}$/u.test(oid)) return Promise.reject(new BrowserLocalGitError("git_error", "Commit history requires a full 40-character commit ID."));
     return this.call({ operation: "commit-diff", oid });
+  }
+
+  /** Read exact bytes from the last persisted, remotely verified commit tree and compare saved files. */
+  readConfirmedRemoteFiles(paths: readonly string[]): Promise<RemoteConfirmedFiles> {
+    if (!Array.isArray(paths) || paths.length > 100) {
+      return Promise.reject(new BrowserLocalGitError("invalid_input", "Remote provenance accepts at most 100 file paths."));
+    }
+    try { for (const path of paths) validateGitPath(path); }
+    catch (error) { return Promise.reject(error); }
+    return this.call({ operation: "remote-confirmed-files", paths: [...paths] });
   }
 
   async verifyStorage(): Promise<{ verified: true; head: string | null; entries: StatusEntry[] }> {
@@ -268,5 +353,26 @@ export class BrowserLocalGit {
     if (this.pending.size) this.markUncertain();
     for (const entry of this.pending.values()) entry.reject(new BrowserLocalGitError("storage_unknown", "The Git worker was closed before the operation was confirmed."));
     this.pending.clear();
+  }
+}
+
+function validateSnapshotId(value: string): void {
+  if (typeof value !== "string" || !/^[A-Za-z0-9-]{16,128}$/u.test(value)) {
+    throw new BrowserLocalGitError("invalid_input", "Snapshot identifier is invalid.");
+  }
+}
+
+function isWorkspaceMutation(operation: string): boolean {
+  return ["init", "write", "delete", "apply-changes", "add", "commit", "commit-reviewed", "create-branch", "remote-fetch", "remote-pull", "remote-publish"].includes(operation);
+}
+
+function validateSnapshotPrefix(prefix: string): void {
+  if (typeof prefix !== "string" || prefix.length > 1024 || prefix.startsWith("/") || prefix.includes("\\") || prefix.includes("\0")) {
+    throw new BrowserLocalGitError("invalid_input", "Snapshot path prefix is invalid.");
+  }
+  if (!prefix) return;
+  const path = prefix.endsWith("/") ? prefix.slice(0, -1) : prefix;
+  if (!path || path.split("/").some(part => !part || part === "." || part === ".." || part === ".git")) {
+    throw new BrowserLocalGitError("invalid_input", "Snapshot path prefix is invalid.");
   }
 }
