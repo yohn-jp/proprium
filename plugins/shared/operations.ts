@@ -1,5 +1,5 @@
 import type { ActionResult, ChangeSet, Scope, Snapshot } from "../../app/src/browser/proprium/authoring/types.js";
-import type { GuestHost } from "./guest.js";
+import type { GuestHost, HostCall } from "./guest.js";
 
 /** Canonical JSON payloads for the versioned Host capability broker. */
 export interface FileEntry { path: string; revision: string; byte_length: number; media_type: string }
@@ -34,7 +34,7 @@ export const HOST_OPERATIONS = {
   preferencesRead: "plugin.preferences.read",
 } as const;
 
-export function* readFile(host: GuestHost, snapshot: Snapshot, path: string): Generator<unknown, Uint8Array, unknown> {
+export function* readFile(host: GuestHost, snapshot: Snapshot, path: string): Generator<HostCall, Uint8Array, unknown> {
   const parts: Uint8Array[] = [];
   let offset = 0;
   let revision: string | undefined;
@@ -63,12 +63,12 @@ export function* readFile(host: GuestHost, snapshot: Snapshot, path: string): Ge
 }
 
 export function* invokeAction<T>(host: GuestHost, plugin_id: string, action_id: string,
-  input: Record<string, unknown>): Generator<unknown, T, unknown> {
+  input: Record<string, unknown>): Generator<HostCall, T, unknown> {
   const response = yield* host.request<ActionResult<T>>(HOST_OPERATIONS.invoke, { plugin_id, action_id, input });
   if (!response.ok) throw response.error;
   return response.value;
 }
 
-export function* propose(host: GuestHost, changeset: ChangeSet): Generator<unknown, unknown, unknown> {
+export function* propose(host: GuestHost, changeset: ChangeSet): Generator<HostCall, unknown, unknown> {
   return yield* host.request(HOST_OPERATIONS.propose, { changeset });
 }
