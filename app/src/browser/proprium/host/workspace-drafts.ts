@@ -1,10 +1,10 @@
 import { documentKey, repositoryKey, type JournalEntry } from "../../../storage/journal.js";
 import type { RepositoryIdentity } from "@scriptorium/contracts";
 import type { WorkspaceIdentity } from "../git/protocol.js";
-import { validateGitPath } from "../git/protocol.js";
+import { isGitHubWorkspaceIdentity, validateGitPath } from "../git/protocol.js";
 
 export function journalRepositoryForWorkspace(workspace: WorkspaceIdentity): RepositoryIdentity {
-  if ("name" in workspace && typeof workspace.name === "string") {
+  if (!isGitHubWorkspaceIdentity(workspace)) {
     return {
       provider: "local",
       repositoryId: workspace.localWorkspaceId,
@@ -23,7 +23,7 @@ export function journalRepositoryForWorkspace(workspace: WorkspaceIdentity): Rep
 }
 
 export function workspaceBreadcrumb(workspace: WorkspaceIdentity): string {
-  if ("name" in workspace && typeof workspace.name === "string") return `${workspace.name} / ${workspace.branch}`;
+  if (!isGitHubWorkspaceIdentity(workspace)) return `${workspace.name} / ${workspace.branch}`;
   return `${workspace.owner}/${workspace.repository} / ${workspace.branch}`;
 }
 
