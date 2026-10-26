@@ -128,7 +128,6 @@ function asText(data: Uint8Array): string | null {
   try { return new TextDecoder("utf-8", { fatal: true }).decode(data); }
   catch { return null; }
 }
-function fileIcon(path: string): string { return path.includes("/") ? "↳" : "▤"; }
 
 export function HostApp(): ReactElement {
   const navigate = useNavigate();
@@ -151,7 +150,7 @@ export function HostApp(): ReactElement {
   const [publishBusy, setPublishBusy] = useState(false);
   const [selectedRepository, setSelectedRepository] = useState<number | null>(null);
   const [selectedBranch, setSelectedBranch] = useState("");
-  const [newWorkspaceName, setNewWorkspaceName] = useState("Untitled workspace");
+  const [newWorkspaceName, setNewWorkspaceName] = useState("無題のワークスペース");
   const [workspace, setWorkspace] = useState<RecentWorkspace | null>(null);
   const [workspaceGeneration, setWorkspaceGeneration] = useState("");
   const [git, setGit] = useState<BrowserLocalGit | null>(null);
@@ -260,8 +259,8 @@ export function HostApp(): ReactElement {
       setRecent(existing => rememberWorkspace(entry, existing));
       previousGit?.close();
       setMessage({ tone: "info", text: isGitHubWorkspaceIdentity(entry.identity)
-        ? "Workspace opened on this device. Local drafts and commits remain in this browser until published to GitHub."
-        : "Local workspace opened. Its files and Git history are stored only in this browser." });
+        ? "この端末の作品を開きました。ファイルや履歴はGitHubへ公開するまで端末内に保存されます。"
+        : "ローカル作品を開きました。文書と履歴はこのブラウザー内に保存されます。" });
     } catch (error) {
       if (error instanceof BrowserLocalGitError && error.code === "storage_unknown") setRecoveryTarget(entry);
       if (gitRef.current !== nextGit) nextGit?.close();
@@ -788,29 +787,29 @@ export function HostApp(): ReactElement {
   const recoveryEntry = recoveryTarget ?? (message?.text.startsWith("storage_unknown:") ? workspace : null);
 
   const recentCard = <section className="picker-card recent-card" aria-labelledby="recent-heading">
-          <div className="card-heading"><div><p className="eyebrow">THIS DEVICE</p><h2 id="recent-heading">Recent workspaces</h2></div><span className="card-icon">◷</span></div>
+          <div className="card-heading"><div><p className="eyebrow">この端末</p><h2 id="recent-heading">最近開いた作品</h2></div><span className="card-icon">◷</span></div>
           <p className="field-help">Saved in this browser. GitHub workspaces can be reopened offline after their files have been loaded here.</p>
-          {recent.length ? <ul className="recent-list">{recent.map(entry => <li key={entry.identity.localWorkspaceId}><button type="button" className="recent-workspace" disabled={busy} onClick={() => void selectRecent(entry)}><span><strong>{entry.title}</strong><small>{entry.identity.branch} · {isGitHubWorkspaceIdentity(entry.identity) ? "GitHub" : "Local only"} · opened {new Date(entry.lastOpened).toLocaleDateString()}</small></span><span aria-hidden="true">→</span></button></li>)}</ul> : <div className="empty-state"><span>◇</span><p>No local workspaces yet</p></div>}
+          {recent.length ? <ul className="recent-list">{recent.map(entry => <li key={entry.identity.localWorkspaceId}><button type="button" className="recent-workspace" disabled={busy} onClick={() => void selectRecent(entry)}><span><strong>{entry.title}</strong><small>{entry.identity.branch} · {isGitHubWorkspaceIdentity(entry.identity) ? "GitHub" : "Local only"} · opened {new Date(entry.lastOpened).toLocaleDateString()}</small></span><span aria-hidden="true">→</span></button></li>)}</ul> : <div className="empty-state"><span>◇</span><p>まだ作品を開いていません</p></div>}
         </section>;
   const picker = <section className="workspace-picker" aria-labelledby="picker-heading">
-      <div className="welcome-copy"><p className="eyebrow">A workspace that stays yours</p><h1 id="picker-heading">Start or open a workspace</h1><p>Create a local workspace and start editing right away, or open a GitHub repository to sync with a remote.</p></div>
+      <div className="welcome-copy"><p className="eyebrow">文書と履歴を手元に</p><h1 id="picker-heading">Start or open a workspace</h1><p>Create a local workspace and start editing right away, or open a GitHub repository to sync with a remote.</p></div>
       <div className="picker-grid">
         <section className="picker-card local-start-card" aria-labelledby="local-start-heading">
-          <div className="card-heading"><div><p className="eyebrow">LOCAL WORKSPACE</p><h2 id="local-start-heading">Start on this device</h2></div><span className="card-icon">✎</span></div>
-          <p className="field-help">Create a generic Git workspace in this browser. No account, Gateway or network connection is needed.</p>
-          <label htmlFor="new-workspace-name">Workspace name</label>
+          <div className="card-heading"><div><p className="eyebrow">ローカルの作品</p><h2 id="local-start-heading">この端末で書き始める</h2></div><span className="card-icon">✎</span></div>
+          <p className="field-help">ログインなしで文書を作成し、この端末で編集できます。</p>
+          <label htmlFor="new-workspace-name">作品名</label>
           <input id="new-workspace-name" value={newWorkspaceName} onChange={event => setNewWorkspaceName(event.target.value)} maxLength={120} autoComplete="off" />
-          <button className="primary-button full-width" type="button" disabled={busy || !newWorkspaceName.trim()} onClick={() => void createLocalWorkspace()}>{busy ? "Creating…" : "Create local workspace"}</button>
-          <p className="field-help">Files and commits stay in this browser. They are not backed up remotely.</p>
+          <button className="primary-button full-width" type="button" disabled={busy || !newWorkspaceName.trim()} onClick={() => void createLocalWorkspace()}>{busy ? "作成中…" : "ローカル作品を作成"}</button>
+          <p className="field-help">端末内のファイルと履歴はブラウザーに保存されます。バックアップには書出しやGitHubへの公開を利用してください。</p>
         </section>
         <section className="picker-card" aria-labelledby="connect-heading">
-          <div className="card-heading"><div><p className="eyebrow">REMOTE WORKSPACE</p><h2 id="connect-heading">GitHub</h2></div><span className="card-icon">↗</span></div>
+          <div className="card-heading"><div><p className="eyebrow">GitHubの作品</p><h2 id="connect-heading">GitHub</h2></div><span className="card-icon">↗</span></div>
           {account ? <>
-            <p className="signed-in">Connected as <strong>{account.login}</strong><button type="button" className="text-button" onClick={signOut}>Sign out</button></p>
+            <p className="signed-in">GitHubに接続中: <strong>{account.login}</strong><button type="button" className="text-button" onClick={signOut}>GitHubからログアウト</button></p>
             <GitHubRepositoryPicker session={session} repositories={repositories} selectedRepositoryId={selectedRepository} selectedBranch={selectedBranch}
               onRepositoryChange={repository => { setSelectedRepository(repository?.id ?? null); setSelectedBranch(repository?.defaultBranch ?? ""); }}
               onBranchChange={setSelectedBranch} onReconnect={() => void connectGitHub()} disabled={busy} idPrefix="workspace" />
-            <button className="primary-button full-width" type="button" disabled={busy || !selectedRepositoryEntry || !selectedRepositoryEntry.permissions.pull || !selectedBranch.trim()} onClick={() => void openRemoteRepository()}>{busy ? "Opening…" : "Open workspace"}</button>
+            <button className="primary-button full-width" type="button" disabled={busy || !selectedRepositoryEntry || !selectedRepositoryEntry.permissions.pull || !selectedBranch.trim()} onClick={() => void openRemoteRepository()}>{busy ? "読込中…" : "作品を開く"}</button>
           </> : <>
             <details className="gateway-settings" open={gatewaySettingsOpen} onToggle={event => setGatewaySettingsOpen(event.currentTarget.open)}><summary>接続先設定</summary>
               <label htmlFor="github-gateway">Proprium Gateway URL</label>
@@ -821,12 +820,12 @@ export function HostApp(): ReactElement {
       <GatewayAccessLink gatewayUrl={gatewayDraft} />
             {devicePrompt && <GitHubDeviceAuthorization prompt={devicePrompt} stage={authStage ?? "waiting"} onCancel={cancelGitHubAuthorization} onRetry={() => void connectGitHub()} retryDisabled={busy} />}
             {message?.tone === "error" && <GitHubAuthorizationError message={message.text} disabled={busy} onRetry={() => void connectGitHub()} />}
-            <button className="primary-button full-width" type="button" disabled={busy} onClick={() => void connectGitHub()}>{busy ? "Connecting…" : "Connect GitHub"}</button>
+            <button className="primary-button full-width" type="button" disabled={busy} onClick={() => void connectGitHub()}>{busy ? "接続中…" : "GitHubに接続"}</button>
           </>}
         </section>
         {mode === "mobile" && recentCard}
       </div>
-      <p className="locality-note"><span>●</span> Local workspaces stay in this browser. GitHub workspaces use this browser's local Git until you explicitly publish.</p>
+      <p className="locality-note"><span>●</span> 端末内の保存とGitHubへの公開は別の操作です。公開は選んだときだけ行います。</p>
     </section>;
   const library = workspace ? <div className="host-controls"><WorkspaceFileBrowser
             git={git!} files={files} selectedPath={currentFile?.path ?? null} pendingPath={currentFile?.data === null ? currentFile.path : undefined}
@@ -838,7 +837,7 @@ export function HostApp(): ReactElement {
           />
           <section className="sidebar-section sync-sidebar-section">
             <div className="section-title-row"><h2>{isGitHubWorkspaceIdentity(workspace.identity) ? "GitHub" : "Remote sync"}</h2><span className={`connection-indicator ${syncClient ? "connected" : "local-only"}`} aria-label={syncClient ? "Connected to GitHub" : "Local workspace only"}>{syncClient ? "GitHub接続済み" : "このブラウザーのみ"}</span></div>
-            {syncClient ? <div className="sync-actions"><button type="button" onClick={() => void fetchRemote()} disabled={busy}>Fetch</button><button type="button" onClick={() => void pullRemote()} disabled={busy}>Pull</button><button type="button" className="publish-button" onClick={() => void publishRemote()} disabled={busy || status.localState !== "local-committed"}>Publish</button></div> : isGitHubWorkspaceIdentity(workspace.identity)
+            {syncClient ? <div className="sync-actions"><button type="button" onClick={() => void fetchRemote()} disabled={busy}>更新を確認</button><button type="button" onClick={() => void pullRemote()} disabled={busy}>変更を取得</button><button type="button" className="publish-button" onClick={() => void publishRemote()} disabled={busy || status.localState !== "local-committed"}>GitHubへ公開</button></div> : isGitHubWorkspaceIdentity(workspace.identity)
               ? <p className="sidebar-empty">ローカル編集はこのまま利用できます。GitHubには画面上部から接続できます。</p>
               : <p className="sidebar-empty">このWorkspaceはこのブラウザー内だけに保存されます。GitHub同期は設定されていません。</p>}
           </section>
@@ -866,21 +865,21 @@ export function HostApp(): ReactElement {
             onExecutePlugin={executeLivePlugin}
           />}
 </div>;
-  const inspector = <div className="host-controls"><button onClick={() => revealPanel("history")}>History</button><section className="commit-panel" aria-labelledby="commit-heading">
-            <div className="dock-heading"><div><p className="eyebrow">LOCAL GIT</p><h2 id="commit-heading">Changes</h2></div><span className="count-badge">{status.entries.length}</span></div>
-            <div className="change-summary" aria-live="polite">{status.entries.length ? `${status.entries.length} changed file${status.entries.length === 1 ? "" : "s"}` : status.head ? `Clean at ${status.head.slice(0, 10)}` : "No local commit yet"}</div>
+  const inspector = <div className="host-controls"><button onClick={() => revealPanel("history")}>履歴</button><section className="commit-panel" aria-labelledby="commit-heading">
+            <div className="dock-heading"><div><p className="eyebrow">LOCAL GIT</p><h2 id="commit-heading">保存する変更</h2></div><span className="count-badge">{status.entries.length}</span></div>
+            <div className="change-summary" aria-live="polite">{status.entries.length ? `${status.entries.length}件のファイルに変更があります` : status.head ? `変更なし · ${status.head.slice(0, 10)}` : "まだGitにコミットしていません"}</div>
             {git && <ChangedFilesReview key={workspaceGeneration} git={git} head={status.head} refreshKey={reviewSnapshotKey} busy={busy} canCommit={!currentFile?.dirty} onReviewReady={receiveCommitReview} />}
-            <label htmlFor="commit-message">Commit message</label><input id="commit-message" value={commitMessage} onChange={event => setCommitMessage(event.target.value)} placeholder="Describe your changes" maxLength={100_000} />
-            <div className="author-fields"><label>Git author name<input aria-label="Git author name" value={preferences.name} onChange={event => updatePreferences({ ...preferences, name: event.target.value })} placeholder="Name" /></label><label>Git author email<input aria-label="Git author email" type="email" value={preferences.email} onChange={event => updatePreferences({ ...preferences, email: event.target.value })} placeholder="name@example.com" /></label></div>
-            <button type="button" className="primary-button commit-button" disabled={busy || !status.entries.length || !!currentFile?.dirty || !commitReviewed} onClick={() => void commitLocal()}>Commit locally</button>
-            <p className="local-commit-note">A local commit stays on this device until you explicitly publish it.</p>
+            <label htmlFor="commit-message">変更の説明</label><input id="commit-message" value={commitMessage} onChange={event => setCommitMessage(event.target.value)} placeholder="今回の変更について" maxLength={100_000} />
+            <div className="author-fields"><label>記録者名<input aria-label="Git author name" value={preferences.name} onChange={event => updatePreferences({ ...preferences, name: event.target.value })} placeholder="記録者名" /></label><label>記録者のメールアドレス<input aria-label="Git author email" type="email" value={preferences.email} onChange={event => updatePreferences({ ...preferences, email: event.target.value })} placeholder="name@example.com" /></label></div>
+            <button type="button" className="primary-button commit-button" disabled={busy || !status.entries.length || !!currentFile?.dirty || !commitReviewed} onClick={() => void commitLocal()}>ローカルGitにコミット</button>
+            <p className="local-commit-note">コミットはこの端末の履歴に記録されます。GitHubには公開されません。</p>
           </section>
 </div>;
   const historyPanel = <div className="host-controls">{git && <GitHistoryPanel key={workspaceGeneration} git={git} history={history} busy={busy} canRestore={!currentFile?.dirty}
     onRefresh={() => { void git.log(40).then(setHistory).catch(error => setMessage({ tone: "error", text: errorMessage(error) })); }}
     onRestored={refreshAfterPlugin} />}</div>;
   const hostFileActions = <div className="host-file-action-group" role="group" aria-label="Current file actions">
-    <button type="button" disabled={busy || !currentFile?.dirty || currentFile?.binary} onClick={() => void saveDraft()}>Save draft</button>
+    <button type="button" disabled={busy || !currentFile?.dirty || currentFile?.binary} onClick={() => void saveDraft()}>端末に保存</button>
     <details className="host-document-menu"><summary>文書の操作</summary><div>
       <button type="button" disabled={busy || !currentFile} onClick={() => { if (currentFile) downloadWorkspaceFile(currentFile.path.split("/").at(-1) || "document.txt", currentFile.text !== null ? new TextEncoder().encode(currentFile.text) : currentFile.data ?? new Uint8Array()); }}>この文書を書き出す</button>
       <button type="button" className="destructive-action" disabled={busy} onClick={() => void deleteFile()}>文書を削除</button>
@@ -895,7 +894,7 @@ export function HostApp(): ReactElement {
       onChange={text => { setCurrentFile(previous => previous ? { ...previous, text, dirty: true } : previous); setSyncState("editing"); }}
       onSave={() => void saveDraft()} onCommit={() => revealPanel("inspector")} onPublish={() => void publishRemote()} canPublish={!!syncClient && status.localState === "local-committed" && !currentFile.dirty}
       onHistory={() => revealPanel("history")} onRegisterFlush={registerEditorFlush} onScratchApplied={refreshAfterPlugin} />}
-  </section> : workspace ? syncState === "syncing" ? <section className="host-controls" role="status"><h2>Workspaceを取得しています</h2><p>GitHubからGit履歴とファイルを読み込んでいます。完了後にファイル一覧を表示します。</p></section> : <p>Choose a file to edit</p> : mode === "desktop" ? picker : <p>作品ライブラリからWorkspaceを開いてください。</p>;
+  </section> : workspace ? syncState === "syncing" ? <section className="host-controls" role="status"><h2>Workspaceを取得しています</h2><p>GitHubからGit履歴とファイルを読み込んでいます。完了後にファイル一覧を表示します。</p></section> : <p>文書を選ぶか、新しい文書を作成してください。</p> : mode === "desktop" ? picker : <p>作品ライブラリからWorkspaceを開いてください。</p>;
   const panels: WorkspacePanel[] = [
     { id: "editor", title: "原稿", render: () => <RetainedPanelSlot node={editorNode} /> },
     { id: "outline", title: "作品と構成", render: () => library },
@@ -924,7 +923,7 @@ export function HostApp(): ReactElement {
   const statusMessage = recoveryEntry ? null : message;
   const statusSurface = workspace || statusMessage ? <details className="application-status" data-attention={statusMessage?.tone === "error" || undefined}>
     <summary>
-      <span className="save-state" role="status">{workspace ? saveStateLabel(syncState, status.head) : "Browser workspace"}</span>
+      <span className="save-state" role="status">{workspace ? saveStateLabel(syncState, status.head) : "端末内の作品"}</span>
       {statusMessage && <span className={`host-message message-${statusMessage.tone}`} role={statusMessage.tone === "error" ? "alert" : "status"}><span className="host-message-text">{statusMessage.text}</span></span>}
       <span className="host-status-disclosure">詳細</span>
     </summary>
@@ -934,7 +933,7 @@ export function HostApp(): ReactElement {
   </details> : null;
   const Shell = mode === "desktop" ? DesktopShell : MobileShell;
   return <main className="proprium-host restored-host" onKeyDown={event => { if ((event.metaKey || event.ctrlKey) && event.key.toLowerCase() === "s") { event.preventDefault(); if (!busy && !recoveryEntry) void saveDraft(); } }}><Suspense fallback={<p>ワークスペースを開いています…</p>}><Shell mode={mode} onNavigateHome={leaveWorkspace}
-    header={<header className="topbar">{mode === "desktop" && <button type="button" className="quiet-button" onClick={() => { void beforeLayoutChange().then(ok => { if (ok) setDesktopSettingsOpen(true); }); }}>設定</button>}{workspace && <button className="quiet-button" onClick={leaveWorkspace}>Workspaces</button>}{workspace && !syncClient && isGitHubWorkspaceIdentity(workspace.identity) && <button type="button" className="quiet-button" aria-haspopup="dialog" aria-controls="workspace-github-auth" disabled={busy} onClick={openWorkspaceGitHubAuth}>GitHubに接続</button>}{account && <span className="host-account-label" aria-label="GitHub account">{account.login}</span>}<ThemeControl mode={theme} onChange={value => { setTheme(value); try { persistThemeMode(value); } catch { setMessage({ tone: "error", text: "外観設定を保存できませんでした。" }); } }} />{workspace && account && <button className="quiet-button" onClick={signOut}>Sign out</button>}</header>}
+    header={<header className="topbar">{mode === "desktop" && <button type="button" className="quiet-button" onClick={() => { void beforeLayoutChange().then(ok => { if (ok) setDesktopSettingsOpen(true); }); }}>設定</button>}{workspace && <button className="quiet-button" onClick={leaveWorkspace}>作品一覧</button>}{workspace && !syncClient && isGitHubWorkspaceIdentity(workspace.identity) && <button type="button" className="quiet-button" aria-haspopup="dialog" aria-controls="workspace-github-auth" disabled={busy} onClick={openWorkspaceGitHubAuth}>GitHubに接続</button>}{account && <span className="host-account-label" aria-label="GitHub account">{account.login}</span>}<ThemeControl mode={theme} onChange={value => { setTheme(value); try { persistThemeMode(value); } catch { setMessage({ tone: "error", text: "外観設定を保存できませんでした。" }); } }} />{workspace && account && <button className="quiet-button" onClick={signOut}>GitHubからログアウト</button>}</header>}
     documentTitle={currentFile?.path ?? workspace?.title ?? "Proprium"} documentContext={workspace?.identity.branch}
     desktopDurability={syncState === "published" ? "saved" : checkpointBusy ? "checkpointing" : status.head && status.entries.length === 0 && !currentFile?.dirty ? "checkpointed" : "draft"}
     settings={settings} library={library} editor={workspace ? <RetainedPanelSlot node={editorNode} /> : editor} tools={<RetainedPanelSlot node={toolsNode} />} status={statusSurface} renderStatus={error => <>{statusSurface}{error && <p role="alert">{error}</p>}</>}
@@ -965,13 +964,13 @@ export function HostApp(): ReactElement {
 }
 
 function saveStateLabel(state: SyncState, head: string | null): string {
-  if (state === "editing") return "Unsaved editor text";
-  if (state === "syncing") return "Syncing with GitHub";
-  if (state === "published") return `Published · ${head?.slice(0, 8) ?? "confirmed"}`;
-  if (state === "conflict") return "Conflict · local work preserved";
-  if (state === "local-ahead") return `Local commits await Publish · ${head?.slice(0, 8) ?? "unpublished"}`;
-  if (state === "remote-unknown") return "Remote state unknown";
-  if (state === "offline") return "Offline · local only";
-  if (state === "local-committed") return `Committed locally · ${head?.slice(0, 8) ?? "unpublished"}`;
-  return "Draft on this device";
+  if (state === "editing") return "編集中・端末のファイル未保存";
+  if (state === "syncing") return "GitHubと同期中";
+  if (state === "published") return `GitHub公開済み · ${head?.slice(0, 8) ?? "confirmed"}`;
+  if (state === "conflict") return "競合・端末内の変更を保持";
+  if (state === "local-ahead") return `GitHub未公開のコミット · ${head?.slice(0, 8) ?? "unpublished"}`;
+  if (state === "remote-unknown") return "GitHubの状態を確認できません";
+  if (state === "offline") return "オフライン・端末内で作業中";
+  if (state === "local-committed") return `端末のGitに記録済み · ${head?.slice(0, 8) ?? "unpublished"}`;
+  return "端末の下書き";
 }

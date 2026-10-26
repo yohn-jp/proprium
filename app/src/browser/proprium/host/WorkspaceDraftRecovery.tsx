@@ -79,8 +79,8 @@ export function WorkspaceDraftRecovery({ workspace, authorScope, worktreePaths, 
 
   return <section className="workspace-draft-recovery" aria-labelledby="workspace-draft-recovery-heading">
     <div className="workspace-draft-recovery-heading">
-      <h2 id="workspace-draft-recovery-heading">Protected drafts</h2>
-      <button type="button" className="quiet-button" disabled={loading} onClick={() => void reload()}>Refresh</button>
+      <h2 id="workspace-draft-recovery-heading">保護された下書き</h2>
+      <button type="button" className="quiet-button" disabled={loading} onClick={() => void reload()}>更新</button>
     </div>
     {loading ? <p role="status">保護された下書きを確認しています…</p> : error ? <p role="alert">{error}</p> : entries.length ? <ul className="workspace-draft-recovery-list" aria-label="保護された下書き">
       {entries.map((entry) => {

@@ -17,10 +17,10 @@ export interface ChangedFilesReviewProps {
 }
 
 function changeKind(change: DiffChange): string {
-  if (change.kind === "added") return "New file";
-  if (change.kind === "deleted") return "Deleted";
-  if (change.kind === "staged") return "Staged";
-  return "Modified";
+  if (change.kind === "added") return "新規";
+  if (change.kind === "deleted") return "削除";
+  if (change.kind === "staged") return "ステージ済み";
+  return "変更";
 }
 
 export function ChangedFilesReview({ git, head, refreshKey, busy, canCommit, onReviewReady }: ChangedFilesReviewProps): ReactElement {
