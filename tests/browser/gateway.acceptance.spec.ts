@@ -1,4 +1,4 @@
-import { showPanel, expectEditorText, chooseFile } from "./restored-ui.helpers.js";
+import { reviewChangedFiles, showPanel, expectEditorText, chooseFile } from "./restored-ui.helpers.js";
 import { expect, test, type Page } from "@playwright/test";
 import { createHash, createPrivateKey, generateKeyPairSync, sign as ed25519Sign, type KeyObject } from "node:crypto";
 import { execFileSync } from "node:child_process";
@@ -286,7 +286,7 @@ test("exposes the fixed MCP tools without any client token and executes against 
   await staleProposal.getByRole("checkbox", { name: "変更前と変更後を確認しました" }).check();
   await showPanel(page, "editor");
   await page.getByLabel("原稿 Markdown").fill("A newer local edit stays intact.\n");
-  await page.getByRole("button", { name: "Save draft" }).click();
+  await page.getByRole("button", { name: "端末に保存" }).click();
   await showPanel(page, "review");
   const staleApprove = staleProposal.getByRole("button", { name: "変更を承認して適用" });
   await expect(staleApprove).toBeEnabled();
@@ -312,13 +312,14 @@ test("exposes the fixed MCP tools without any client token and executes against 
   await context.setOffline(true);
   const editor = page.getByLabel("原稿 Markdown");
   await editor.fill("Local work continues while the Gateway is disconnected.\n");
-  await page.getByRole("button", { name: "Save draft" }).click();
-  await expect(page.getByText("Draft on this device", { exact: true })).toBeVisible();
+  await page.getByRole("button", { name: "端末に保存" }).click();
+  await expect(page.getByText("端末の下書き", { exact: true })).toBeVisible();
   await showPanel(page, "inspector");
-  await page.getByLabel("Commit message").fill("Commit while disconnected from Gateway");
+  await page.getByLabel("変更の説明").fill("Commit while disconnected from Gateway");
   await page.getByLabel("Git author name").fill("Proprium Gateway E2E");
   await page.getByLabel("Git author email").fill("gateway-e2e@example.invalid");
-  await page.getByRole("button", { name: "Commit locally" }).click();
+  await reviewChangedFiles(page);
+  await page.getByRole("button", { name: "ローカルGitにコミット" }).click();
   await expect(page.getByText(/^Committed locally · [a-f0-9]{8}$/u)).toBeVisible();
   await context.setOffline(false);
 });

@@ -520,7 +520,7 @@ test("Host keeps newer editor text when a reviewed plugin proposal refresh finis
   await expectEditorText(page, "newer local text while plugin refresh is pending\n");
   await showPanel(page, "review");
   await expect(panel.getByRole("status")).toContainText("Applied 1 proposed file change(s) to the local worktree.");
-  await expect(page.locator(".save-state")).toHaveText("Unsaved editor text");
+  await expect(page.locator(".save-state")).toHaveText("編集中・端末のファイル未保存");
   await showPanel(page, "editor");
   await expect(editor).toBeEnabled();
 });
