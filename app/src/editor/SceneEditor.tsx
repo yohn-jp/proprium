@@ -512,6 +512,34 @@ function attachmentDrafts(entry: JournalEntry): ScratchAttachmentDraft[] {
     });
 }
 
+function scratchEntryPreview(entry: JournalEntry): string {
+  const excerpt = entry.text.trim().replace(/\s+/gu, " ");
+  if (excerpt) return excerpt.length > 88 ? `${excerpt.slice(0, 88)}…` : excerpt;
+  const imageCount = entry.operation.writes.filter((write) =>
+    write.path !== entry.documentPath && write.content !== null && write.encoding === "base64",
+  ).length;
+  return imageCount > 0 ? `画像のみのメモ（${imageCount}枚）` : "本文がありません";
+}
+
+function scratchEntryStateLabel(entry: JournalEntry): string {
+  return {
+    draft: "自動回復記録・未コミット",
+    checkpointing: "ローカルGitのコミット確認中",
+    checkpointed: "ローカルGitにコミット済み",
+    publication_unknown: "GitHub公開の結果未確認",
+    conflict: "競合あり",
+  }[entry.state];
+}
+
+function scratchEntryTimestamp(updatedAt: number): { dateTime?: string; label: string } {
+  const date = new Date(updatedAt);
+  if (!Number.isFinite(date.getTime())) return { label: "日時不明" };
+  return {
+    dateTime: date.toISOString(),
+    label: date.toLocaleString("ja-JP", { dateStyle: "medium", timeStyle: "short" }),
+  };
+}
+
 function scratchCreatedAt(entry: JournalEntry): string | undefined {
   const content = entry.operation.writes.find((write) => write.path === entry.documentPath)?.content;
   if (typeof content === "string") {
@@ -750,7 +778,7 @@ function ScratchPanel({
 
   return (
     <details className="scratch-panel">
-      <summary>スクラッチ <span>{draft.text.trim().length} 字 {hasActiveDraft ? stored ? "· Draft を保護済み" : "· Draft を保存中" : ""}</span></summary>
+      <summary>スクラッチ <span>{draft.text.trim().length} 字 {hasActiveDraft ? stored ? "· 自動回復記録を保存済み" : "· 自動回復記録を保存中" : ""}</span></summary>
       <label htmlFor="scratch">本文に含まれないメモ</label>
       <textarea
         id="scratch"
@@ -771,17 +799,31 @@ function ScratchPanel({
       {draft.attachments.length > 0 && <p className="muted-list-item">画像 {draft.attachments.length} 件</p>}
       {error && <p className="status" data-kind="error" role="alert">{error}</p>}
       <button type="button" onClick={() => void checkpoint()} disabled={disabled || !hasActiveDraft || !stored || checkingId !== "" || resumingKey !== ""}>
-        {checkingId === draft.id ? "確認中…" : resumedId === draft.id ? "このスクラッチをチェックポイント" : "スクラッチをチェックポイント"}
+        {checkingId === draft.id ? "コミット中…" : resumedId === draft.id ? "このスクラッチをローカルGitにコミット" : "スクラッチをローカルGitにコミット"}
       </button>
       {pending.length > 0 && (
         <ul className="scratch-recovery-list" aria-label="回復できるスクラッチ">
-          {pending.map((entry) => (
-            <li key={`${entry.operation.id}:${entry.operation.generation}`}>
-              <span>{entry.text.slice(0, 72) || "画像メモ"} · {entry.state === "draft" ? "Draft" : entry.state === "checkpointing" ? "確認中" : entry.state === "conflict" ? "競合" : "Checkpoint"}</span>
-              {entry.state === "draft" && <button type="button" onClick={() => void resume(entry)} disabled={disabled || resumingKey !== ""}>{resumingKey === `${entry.operation.id}:${entry.operation.generation}` ? "保護を確認中…" : "続ける"}</button>}
-              {entry.state === "draft" && <button type="button" onClick={() => void checkpoint(entry)} disabled={disabled || checkingId !== "" || resumingKey !== ""}>Checkpoint</button>}
-            </li>
-          ))}
+          {pending.map((entry) => {
+            const timestamp = scratchEntryTimestamp(entry.updatedAt);
+            const hasTargetDocument = entry.sceneId !== entry.documentPath;
+            return <li className="scratch-recovery-item" key={`${entry.operation.id}:${entry.operation.generation}`}>
+              <div className="scratch-recovery-meta">
+                <p className="scratch-recovery-excerpt">{scratchEntryPreview(entry)}</p>
+                <dl className="scratch-recovery-details">
+                  <div><dt>状態</dt><dd>{scratchEntryStateLabel(entry)}</dd></div>
+                  <div><dt>記録時刻</dt><dd><time dateTime={timestamp.dateTime}>{timestamp.label}</time></dd></div>
+                  <div><dt>対象文書</dt><dd>{hasTargetDocument ? <code>{entry.sceneId}</code> : "記録なし"}</dd></div>
+                  <div><dt>記録パス</dt><dd><code>{entry.documentPath}</code></dd></div>
+                  <div><dt>更新世代</dt><dd>{entry.operation.generation}</dd></div>
+                  <div><dt>記録ID</dt><dd><code title={entry.operation.id}>{entry.operation.id.slice(0, 8)}</code></dd></div>
+                </dl>
+              </div>
+              {entry.state === "draft" && <div className="scratch-recovery-actions">
+                <button type="button" onClick={() => void resume(entry)} disabled={disabled || resumingKey !== ""}>{resumingKey === `${entry.operation.id}:${entry.operation.generation}` ? "保護を確認中…" : "続ける"}</button>
+                <button type="button" onClick={() => void checkpoint(entry)} disabled={disabled || checkingId !== "" || resumingKey !== ""}>ローカルGitにコミット</button>
+              </div>}
+            </li>;
+          })}
         </ul>
       )}
     </details>
