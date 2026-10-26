@@ -1106,13 +1106,29 @@ async function operation(request: LocalGitRequest): Promise<unknown> {
     await assertRevision(paths.dir, request.expectedHead);
     const selected = [...new Set(request.paths)];
     if (selected.length === 0) failure("invalid_path", "Choose at least one path to stage.");
+    const matrix = new Map((await git.statusMatrix({ fs, dir: paths.dir })).map(([path, head, , stage]) => [path, { head, stage }]));
+    const actions: Array<{ path: string; operation: "add" | "remove" }> = [];
     for (const path of selected) {
       validateGitPath(path);
       await assertNoSymlinkParents(paths.dir, path, true);
+      if (await exists(`${paths.dir}/${path}`)) {
+        actions.push({ path, operation: "add" });
+      } else {
+        const current = matrix.get(path);
+        if (!current || (current.head === 0 && current.stage === 0)) {
+          failure("invalid_path", `Cannot stage deletion for ${path}; it is not present in the current index or HEAD.`);
+        }
+        actions.push({ path, operation: "remove" });
+      }
     }
     try {
-      for (const path of selected) {
-        await git.add({ fs, dir: paths.dir, filepath: path });
+      for (const action of actions) {
+        if (action.operation === "add") await git.add({ fs, dir: paths.dir, filepath: action.path });
+        else {
+          // isomorphic-git.add reads worktree bytes and fails for a missing path. Removing the
+          // existing index entry stages a tracked deletion while leaving the absent file alone.
+          await git.remove({ fs, dir: paths.dir, filepath: action.path });
+        }
       }
       await flush();
     } catch (error) {
