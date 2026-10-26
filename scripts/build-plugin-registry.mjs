@@ -442,7 +442,6 @@ async function buildAuthoringSuite() {
     for (const group of metadata.asset_groups) {
       if (assetGroupIds.has(group?.id)) throw new Error(`${pluginId}/plugin.json repeats an asset group id`);
       assetGroupIds.add(group?.id);
-      await copyAssetGroup(group, pluginId, path => readPluginAsset(pluginDirectoryReal, path.slice(`proprium/${slug}/`.length)));
     }
     const dependencies = new Set();
     for (const dependency of metadata.dependencies) {
@@ -459,6 +458,8 @@ async function buildAuthoringSuite() {
     const buildDir = await mkdtemp(join(buildBase, `${slug}-`));
     try {
       const componentPath = resolve(buildDir, 'plugin.component.wasm');
+      const assetOutputDirectory = resolve(buildDir, 'assets');
+      await mkdir(assetOutputDirectory);
       if (customBuildStat) {
         const cargoHome = process.env.CARGO_HOME ?? (process.env.HOME ? resolve(process.env.HOME, '.cargo') : undefined);
         const customBuildEnvironment = {
@@ -470,6 +471,7 @@ async function buildAuthoringSuite() {
           CARGO_TARGET_DIR: resolve(buildDir, 'cargo-target'),
           PROPRIUM_PLUGIN_JCO_BIN: jco,
           PROPRIUM_PLUGIN_BUILD_OUTPUT: componentPath,
+          PROPRIUM_PLUGIN_ASSET_OUTPUT_DIR: assetOutputDirectory,
           PROPRIUM_PLUGIN_SOURCE_DIR: pluginDirectoryReal,
           PROPRIUM_PLUGIN_V2_WIT: wit,
           PROPRIUM_PLUGIN_V2_WORLD: worldName,
@@ -488,6 +490,17 @@ async function buildAuthoringSuite() {
       }
       if (component.byteLength > 128 * 1024 * 1024) throw new Error(`${pluginId} WASM component exceeds the Host artifact ceiling`);
       verifyV2ComponentInterface(jco, componentPath, pluginId);
+      for (const group of metadata.asset_groups) {
+        const prefix = `proprium/${slug}/`;
+        await copyAssetGroup(group, pluginId, async path => {
+          const sourcePath = path.slice(prefix.length);
+          if (customBuildStat) {
+            try { return await readPluginAsset(assetOutputDirectory, sourcePath); }
+            catch (error) { if (error?.code !== 'ENOENT') throw error; }
+          }
+          return readPluginAsset(pluginDirectoryReal, sourcePath);
+        });
+      }
       const componentDigest = digest(component);
       const releaseDirectory = `proprium/${slug}/${metadata.version}`;
       const entrypoint = `${releaseDirectory}/${componentDigest}/plugin.component.wasm`;

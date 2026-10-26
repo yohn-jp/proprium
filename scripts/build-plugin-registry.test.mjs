@@ -80,26 +80,13 @@ test('authoring producer independently componentizes and signs all eight v2 prod
       const directory = join(sourceRoot, slug);
       await mkdir(directory, { recursive: true });
       await writeFile(join(directory, 'guest.ts'), guestSource);
-      if (pluginId === 'proprium.semantic') {
-        await writeFile(join(directory, 'build.mjs'), `import { execFileSync } from 'node:child_process';
-import { fileURLToPath } from 'node:url';
-execFileSync(process.env.PROPRIUM_PLUGIN_JCO_BIN, [
-  'componentize', fileURLToPath(new URL('./guest.ts', import.meta.url)),
-  '--wit', process.env.PROPRIUM_PLUGIN_V2_WIT,
-  '--world-name', process.env.PROPRIUM_PLUGIN_V2_WORLD,
-  '--disable', 'all', '--bundle', '-o', process.env.PROPRIUM_PLUGIN_BUILD_OUTPUT,
-], { stdio: 'inherit' });
-console.log('synthetic-semantic-custom-build');
-`);
-      }
       let assetGroups = [];
+      let generatedAssetFiles = [];
       if (pluginId === 'proprium.semantic') {
         const payload = Buffer.from('synthetic deterministic asset fixture');
         const payloadDigest = rawSha256(payload);
         const chunkPath = `proprium/semantic/assets/chunks/${payloadDigest}/fixture.bin`;
-        const sourceChunkPath = join(directory, chunkPath.slice('proprium/semantic/'.length));
-        await mkdir(join(sourceChunkPath, '..'), { recursive: true });
-        await writeFile(sourceChunkPath, payload);
+        generatedAssetFiles.push({ path: chunkPath.slice('proprium/semantic/'.length), bytes: payload });
         const assetManifestBytes = Buffer.from(JSON.stringify({
           schema: 'proprium.assets/v1',
           id: 'semantic-test-asset',
@@ -114,9 +101,7 @@ console.log('synthetic-semantic-custom-build');
         }));
         const assetManifestDigest = rawSha256(assetManifestBytes);
         const manifestPath = `proprium/semantic/assets/manifests/${assetManifestDigest}/manifest.json`;
-        const sourceManifestPath = join(directory, manifestPath.slice('proprium/semantic/'.length));
-        await mkdir(join(sourceManifestPath, '..'), { recursive: true });
-        await writeFile(sourceManifestPath, assetManifestBytes);
+        generatedAssetFiles.push({ path: manifestPath.slice('proprium/semantic/'.length), bytes: assetManifestBytes });
         assetGroups = [{
           id: 'semantic-test-asset',
           manifest_path: manifestPath,
@@ -124,6 +109,23 @@ console.log('synthetic-semantic-custom-build');
           bytes: assetManifestBytes.byteLength,
           role: 'embedding',
         }];
+        const assetPreparation = generatedAssetFiles.map(file => `
+await mkdir(join(process.env.PROPRIUM_PLUGIN_ASSET_OUTPUT_DIR, ${JSON.stringify(file.path.split('/').slice(0, -1).join('/'))}), { recursive: true });
+await writeFile(join(process.env.PROPRIUM_PLUGIN_ASSET_OUTPUT_DIR, ${JSON.stringify(file.path)}), Buffer.from(${JSON.stringify(file.bytes.toString('base64'))}, 'base64'));
+`).join('');
+        await writeFile(join(directory, 'build.mjs'), `import { mkdir, writeFile } from 'node:fs/promises';
+import { execFileSync } from 'node:child_process';
+import { join } from 'node:path';
+import { fileURLToPath } from 'node:url';
+${assetPreparation}
+execFileSync(process.env.PROPRIUM_PLUGIN_JCO_BIN, [
+  'componentize', fileURLToPath(new URL('./guest.ts', import.meta.url)),
+  '--wit', process.env.PROPRIUM_PLUGIN_V2_WIT,
+  '--world-name', process.env.PROPRIUM_PLUGIN_V2_WORLD,
+  '--disable', 'all', '--bundle', '-o', process.env.PROPRIUM_PLUGIN_BUILD_OUTPUT,
+], { stdio: 'inherit' });
+console.log('synthetic-semantic-custom-build');
+`);
       }
       await writeFile(join(directory, 'plugin.json'), JSON.stringify({
         schema: 'proprium.plugin/v2',
