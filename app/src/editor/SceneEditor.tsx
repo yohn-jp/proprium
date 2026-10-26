@@ -372,7 +372,7 @@ export function SceneEditor({
         <button type="button" className="quiet-button" onClick={printManuscript}>印刷</button>
       </nav>
       <details className="typography-settings">
-      <summary>文字と組版</summary>
+      <summary>文字・組版を調整</summary>
       <nav className="typography-toolbar" aria-label="原稿の表示設定">
         <div className="toolbar-group" aria-label="文字サイズ">
           <button type="button" className="quiet-button compact-button" onClick={() => setTypography((value) => ({ ...value, fontSize: Math.max(14, value.fontSize - 2) }))} aria-label="文字を小さく" disabled={typography.fontSize <= 14}>A−</button>
