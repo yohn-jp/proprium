@@ -58,8 +58,11 @@ test("normal Host installs and enables all independently signed authoring Compon
   await page.getByRole("button", { name: "信頼済みカタログを表示", exact: true }).click();
   const catalog = panel.locator(".registry-plugin-list");
   await expect(catalog).toBeVisible();
-  const installInputs: Array<{ plugin_id: string; version: string; manifest_sha256: string; plugin_sha256: string; requested_capabilities: string[] }> = [];
+  const installInputs: Array<{ plugin_id: string; version: string; manifest_sha256: string; plugin_sha256: string;
+    action_ids: string[]; declared_surfaces: Array<{ id: string; title: string; kind: string }>;
+    requested_capabilities: string[] }> = [];
   for (const plugin of release.plugins) {
+    expect(plugin.actionIds.length, `${plugin.id} has signed typed actions`).toBeGreaterThan(0);
     await expect(catalog).toContainText(plugin.id);
     await page.getByRole("button", { name: `${plugin.id} ${plugin.version} の署名済みプレビューを確認`, exact: true }).click();
     const preview = page.getByRole("region", { name: "インストールプレビュー", exact: true });
@@ -75,6 +78,8 @@ test("normal Host installs and enables all independently signed authoring Compon
     await expect(card).toContainText("installed, disabled");
     installInputs.push({ plugin_id: plugin.id, version: plugin.version,
       manifest_sha256: plugin.manifestDigest, plugin_sha256: plugin.pluginDigest,
+      action_ids: [...plugin.actionIds],
+      declared_surfaces: plugin.surfaces.map(surface => ({ ...surface })),
       requested_capabilities: [...plugin.capabilities] });
   }
 
