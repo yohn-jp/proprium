@@ -19,17 +19,23 @@ export const HOST_OPERATIONS = {
   preferencesRead: "plugin.preferences.read",
 } as const;
 
-export function* readFile(host: GuestHost, snapshot: Snapshot, path: string): Generator<HostCall, Uint8Array, unknown> {
+export interface VersionedFile { bytes: Uint8Array; revision: string }
+
+/** Read exact pinned bytes while retaining and checking the Host's source revision. */
+export function* readFileVersioned(host: GuestHost, snapshot: Snapshot, path: string,
+  expectedRevision?: string): Generator<HostCall, VersionedFile, unknown> {
   const parts: Uint8Array[] = [];
   let offset = 0;
   let revision: string | undefined;
   let total: number | undefined;
   do {
     const chunk = yield* host.request<FileChunk>(HOST_OPERATIONS.read, { snapshot, path, offset, length: 65536 });
-    if (chunk.offset !== offset || (revision !== undefined && chunk.revision !== revision) ||
+    if (!chunk || typeof chunk.revision !== "string" || !/^[a-f0-9]{64}$/u.test(chunk.revision) ||
+        (expectedRevision !== undefined && chunk.revision !== expectedRevision) ||
+        chunk.offset !== offset || (revision !== undefined && chunk.revision !== revision) ||
         (total !== undefined && chunk.total_bytes !== total) || !Array.isArray(chunk.bytes) ||
         chunk.bytes.length > 65536 || chunk.bytes.some(byte => !Number.isInteger(byte) || byte < 0 || byte > 255) ||
-        chunk.total_bytes < offset + chunk.bytes.length ||
+        !Number.isSafeInteger(chunk.total_bytes) || chunk.total_bytes < offset + chunk.bytes.length ||
         (chunk.next_offset !== null && (chunk.next_offset !== offset + chunk.bytes.length || chunk.next_offset <= offset))) {
       throw Object.assign(new Error("Inconsistent pinned file chunks"), { code: "snapshot_stale" });
     }
@@ -44,7 +50,13 @@ export function* readFile(host: GuestHost, snapshot: Snapshot, path: string): Ge
   const bytes = new Uint8Array(offset);
   let position = 0;
   for (const part of parts) { bytes.set(part, position); position += part.length; }
-  return bytes;
+  if (!revision) throw Object.assign(new Error("Host returned no file revision"), { code: "snapshot_stale" });
+  return { bytes, revision };
+}
+
+/** Compatibility helper for callers that need only bytes. */
+export function* readFile(host: GuestHost, snapshot: Snapshot, path: string): Generator<HostCall, Uint8Array, unknown> {
+  return (yield* readFileVersioned(host, snapshot, path)).bytes;
 }
 
 export function* invokeAction<T>(host: GuestHost, plugin_id: string, action_id: string,
