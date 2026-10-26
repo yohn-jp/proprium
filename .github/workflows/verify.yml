@@ -18,7 +18,7 @@ jobs:
   verify:
     name: Browser host, Git, plugins and static assets
     runs-on: ubuntu-24.04
-    timeout-minutes: 40
+    timeout-minutes: 120
     steps:
       - uses: actions/checkout@v4
         with:
@@ -35,10 +35,29 @@ jobs:
         with:
           go-version: 1.27.3
           cache-dependency-path: gateway/go.mod
+      - uses: actions-rust-lang/setup-rust-toolchain@v2
+        with:
+          toolchain: 1.99.0
+          target: wasm32-unknown-unknown
+      - name: Install pinned cargo-component
+        run: cargo install cargo-component --version 0.21.1 --locked
+      - name: Install pinned wasm-tools composer
+        run: cargo install wasm-tools --version 1.262.0 --locked
       - name: Install locked dependencies
         run: pnpm install --frozen-lockfile
-      - name: Verify signed v1 and authoring plugin registry production
+      - name: Verify signed v1 and authoring registry fixtures
         run: pnpm test:plugin-registry
+      - name: Build and verify all signed authoring components
+        env:
+          PROPRIUM_AUTHORING_BUILD_EVIDENCE_PATH: ${{ runner.temp }}/authoring-plugin-build-evidence.json
+        run: pnpm test:authoring-plugin-build
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: proprium-authoring-build-evidence-${{ github.sha }}
+          path: ${{ runner.temp }}/authoring-plugin-build-evidence.json
+          if-no-files-found: ignore
+          retention-days: 14
       - name: Typecheck the Browser Host and adapters
         run: pnpm typecheck:browser
       - name: Test browser Git and plugin security units

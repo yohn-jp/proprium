@@ -2,8 +2,9 @@ import { createHash, createPrivateKey, createPublicKey, sign, verify } from 'nod
 import { execFileSync } from 'node:child_process';
 import { constants as fsConstants } from 'node:fs';
 import { copyFile, lstat, mkdir, mkdtemp, readFile, realpath, rename, rm, unlink, writeFile } from 'node:fs/promises';
-import { resolve, dirname, join, relative, sep } from 'node:path';
+import { resolve, dirname, join, relative, sep, delimiter } from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { assertAuthoringDeclarations } from './authoring-manifest-schema.mjs';
 
 const root = resolve(dirname(fileURLToPath(import.meta.url)), '..');
 const buildMode = process.argv[2] ?? 'example';
@@ -21,6 +22,8 @@ const publisherPrivatePem = process.env.PROPRIUM_PLUGIN_PUBLISHER_PRIVATE_KEY;
 const encodedPinnedRegistryKey = process.env.PROPRIUM_PLUGIN_REGISTRY_PUBLIC_KEY;
 const previousRegistryDir = resolve(process.env.PROPRIUM_PLUGIN_PREVIOUS_REGISTRY_DIR || output);
 const VERSION = /^(0|[1-9]\d*)\.(0|[1-9]\d*)\.(0|[1-9]\d*)(?:-([0-9A-Za-z.-]+))?$/u;
+const CAPABILITY = /^[a-z][a-z0-9-]*(?:\.[a-z][a-z0-9-]*)+$/u;
+const ASSET_GROUP_ID = /^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$/u;
 if ((buildMode === 'example' && (!pluginVersion || !VERSION.test(pluginVersion))) ||
     (buildMode === 'authoring' && (!registryVersion || !VERSION.test(registryVersion))) ||
     !artifactBase || !registryPrivatePem || !publisherPrivatePem || !encodedPinnedRegistryKey) {
@@ -59,7 +62,7 @@ if (pinnedRegistryKey.byteLength !== 32 || !pinnedRegistryKey.equals(activeRegis
   throw new Error('Pinned public registry key does not match the registry signing key');
 }
 
-const safeRelativePath = path => typeof path === 'string' && path.length > 0 && !path.startsWith('/') && !path.includes('\\') &&
+const safeRelativePath = path => typeof path === 'string' && path.length > 0 && path.length <= 256 && !path.startsWith('/') && !path.includes('\\') &&
   /^[A-Za-z0-9._/-]+$/u.test(path) && path.split('/').every(segment => segment.length > 0 && segment !== '.' && segment !== '..');
 async function readUnder(directory, path) {
   if (!safeRelativePath(path)) throw new Error(`Unsafe plugin artifact path: ${path}`);
@@ -237,9 +240,10 @@ async function copyAssetGroup(group, pluginId, readAsset) {
   const fields = ['id', 'manifest_path', 'sha256', 'bytes', 'role'];
   const prefix = `${pluginId.replace('.', '/')}/`;
   if (!group || typeof group !== 'object' || Array.isArray(group) || Object.keys(group).length !== fields.length ||
-      fields.some(field => !Object.hasOwn(group, field)) || typeof group.id !== 'string' || !group.id ||
+      fields.some(field => !Object.hasOwn(group, field)) || typeof group.id !== 'string' || !ASSET_GROUP_ID.test(group.id) ||
       !['dictionary', 'embedding', 'reranker'].includes(group.role) || !Number.isSafeInteger(group.bytes) || group.bytes <= 0 ||
-      !/^[a-f0-9]{64}$/u.test(group.sha256) || typeof group.manifest_path !== 'string' ||
+      group.bytes > 512 * 1024 || !/^[a-f0-9]{64}$/u.test(group.sha256) || typeof group.manifest_path !== 'string' ||
+      group.manifest_path.length > 256 ||
       !group.manifest_path.startsWith(prefix) || !group.manifest_path.includes(`/${group.sha256}/`) || !safeRelativePath(group.manifest_path)) {
     throw new Error(`${pluginId} declares an invalid signed asset group reference`);
   }
@@ -253,17 +257,21 @@ async function copyAssetGroup(group, pluginId, readAsset) {
   const manifestFields = ['schema', 'id', 'version', 'license', 'files'];
   if (!manifest || typeof manifest !== 'object' || Array.isArray(manifest) || Object.keys(manifest).length !== manifestFields.length ||
       manifestFields.some(field => !Object.hasOwn(manifest, field)) || manifest.schema !== 'proprium.assets/v1' ||
-      manifest.id !== group.id || typeof manifest.version !== 'string' || !VERSION.test(manifest.version) ||
-      typeof manifest.license !== 'string' || !manifest.license || !Array.isArray(manifest.files)) {
+      manifest.id !== group.id || typeof manifest.version !== 'string' || manifest.version.length > 128 || !VERSION.test(manifest.version) ||
+      typeof manifest.license !== 'string' || !manifest.license.trim() || manifest.license.length > 4096 ||
+      !Array.isArray(manifest.files) || manifest.files.length === 0) {
     throw new Error(`${pluginId} asset manifest schema or identity is invalid: ${group.id}`);
   }
   const filePaths = new Set();
+  let groupPayloadBytes = 0;
   for (const file of manifest.files) {
     if (!file || typeof file !== 'object' || Array.isArray(file) || Object.keys(file).length !== 4 ||
         !['path', 'bytes', 'sha256', 'chunks'].every(field => Object.hasOwn(file, field)) || !safeRelativePath(file.path) ||
         filePaths.has(file.path) || !Number.isSafeInteger(file.bytes) || file.bytes < 0 || !/^[a-f0-9]{64}$/u.test(file.sha256) ||
         !Array.isArray(file.chunks)) throw new Error(`${pluginId} asset manifest has an invalid file entry: ${group.id}`);
     filePaths.add(file.path);
+    groupPayloadBytes += file.bytes;
+    if (!Number.isSafeInteger(groupPayloadBytes)) throw new Error(`${pluginId} asset group byte total exceeds safe accounting: ${group.id}`);
     let nextOffset = 0;
     const wholeFile = createHash('sha256');
     for (const chunk of file.chunks) {
@@ -286,6 +294,7 @@ async function copyAssetGroup(group, pluginId, readAsset) {
       throw new Error(`${pluginId} asset file chunks do not reconstruct the declared bytes: ${file.path}`);
     }
   }
+  if (groupPayloadBytes === 0) throw new Error(`${pluginId} asset group contains no payload bytes: ${group.id}`);
   await persistImmutable(group.manifest_path, manifestBytes);
 }
 
@@ -343,6 +352,24 @@ function validateDependencyGraph(releases) {
   for (const release of edges.keys()) visit(release);
 }
 
+function verifyV2ComponentInterface(jco, componentPath, pluginId) {
+  const wit = execFileSync(jco, ['wit', componentPath], {
+    cwd: root, encoding: 'utf8', stdio: ['ignore', 'pipe', 'inherit'], env: componentizeEnvironment,
+  });
+  const worlds = [...wit.matchAll(/\bworld\s+([A-Za-z0-9_-]+)\s*\{([^}]*)\}/gu)];
+  if (worlds.length !== 1 || worlds[0][1] !== 'root') {
+    throw new Error(`${pluginId} component must expose exactly one root WIT world`);
+  }
+  const body = worlds[0][2];
+  const imports = [...body.matchAll(/\bimport\s+([^;]+);/gu)].map(match => match[1].trim());
+  const exports = [...body.matchAll(/\bexport\s+([^;]+);/gu)].map(match => match[1].trim());
+  const residue = body.replace(/\b(?:import|export)\s+[^;]+;/gu, '').trim();
+  if (imports.length !== 1 || imports[0] !== 'proprium:plugin/host@2.0.0' ||
+      exports.length !== 1 || exports[0] !== 'proprium:plugin/guest@2.0.0' || residue || /\bwasi[:_-]/iu.test(wit)) {
+    throw new Error(`${pluginId} component imports or exports a WIT interface outside the v2 Host/guest contract`);
+  }
+}
+
 async function buildAuthoringSuite() {
   const pluginIds = [
     'proprium.narrative', 'proprium.knowledge', 'proprium.research', 'proprium.paired-writing',
@@ -363,17 +390,26 @@ async function buildAuthoringSuite() {
     const pluginDirectory = resolve(sourceRoot, slug);
     const metadataPath = resolve(pluginDirectory, 'plugin.json');
     const sourcePath = resolve(pluginDirectory, 'guest.ts');
+    const customBuildPath = resolve(pluginDirectory, 'build.mjs');
     const pluginDirectoryStat = await lstat(pluginDirectory);
     const metadataStat = await lstat(metadataPath);
-    const sourceStat = await lstat(sourcePath);
+    let customBuildStat;
+    try { customBuildStat = await lstat(customBuildPath); }
+    catch (error) { if (error?.code !== 'ENOENT') throw error; }
+    let sourceStat;
+    if (!customBuildStat) {
+      try { sourceStat = await lstat(sourcePath); }
+      catch (error) { if (error?.code !== 'ENOENT') throw error; }
+    }
     if (!pluginDirectoryStat.isDirectory() || pluginDirectoryStat.isSymbolicLink() || !metadataStat.isFile() || metadataStat.isSymbolicLink() ||
-        !sourceStat.isFile() || sourceStat.isSymbolicLink()) {
-      throw new Error(`${pluginId} requires regular plugin.json and guest.ts files`);
+        (customBuildStat && (!customBuildStat.isFile() || customBuildStat.isSymbolicLink())) ||
+        (!customBuildStat && (!sourceStat?.isFile() || sourceStat.isSymbolicLink()))) {
+      throw new Error(`${pluginId} requires regular plugin.json and either guest.ts or build.mjs`);
     }
     const pluginDirectoryReal = await realpath(pluginDirectory);
     const metadataReal = await realpath(metadataPath);
-    const sourceReal = await realpath(sourcePath);
-    for (const candidate of [pluginDirectoryReal, metadataReal, sourceReal]) {
+    const buildInputReal = await realpath(customBuildStat ? customBuildPath : sourcePath);
+    for (const candidate of [pluginDirectoryReal, metadataReal, buildInputReal]) {
       const rel = relative(sourceRootReal, candidate);
       if (rel === '..' || rel.startsWith(`..${sep}`) || rel.startsWith(sep)) throw new Error(`${pluginId} source escaped the plugin source directory`);
     }
@@ -393,48 +429,15 @@ async function buildAuthoringSuite() {
     for (const field of ['capabilities', 'actions', 'ui', 'asset_groups', 'dependencies']) {
       if (!Array.isArray(metadata[field])) throw new Error(`${pluginId}/plugin.json ${field} must be an array`);
     }
-    if (metadata.actions.length === 0) throw new Error(`${pluginId}/plugin.json must declare at least one implemented typed action`);
-    if (metadata.capabilities.some(value => typeof value !== 'string' || value.length === 0) || new Set(metadata.capabilities).size !== metadata.capabilities.length) {
-      throw new Error(`${pluginId}/plugin.json capabilities must be unique nonempty strings`);
+    if (metadata.actions.length === 0 || metadata.actions.length > 256 || metadata.ui.length > 128 || metadata.asset_groups.length > 32) {
+      throw new Error(`${pluginId}/plugin.json exceeds an authoring declaration limit or has no implemented actions`);
     }
-    const actions = new Set();
-    for (const action of metadata.actions) {
-      const actionFields = ['plugin_id', 'action_id', 'schema_version', 'effect', 'input_schema', 'output_schema',
-        'required_capabilities', 'callers', 'requires_user_gesture'];
-      const actionAllowed = new Set([...actionFields, 'caller_plugins']);
-      if (!action || typeof action !== 'object' || Array.isArray(action) ||
-          Object.keys(action).some(key => !actionAllowed.has(key)) || actionFields.some(key => !Object.hasOwn(action, key)) ||
-          action.plugin_id !== pluginId || typeof action.action_id !== 'string' || action.action_id.length === 0 ||
-          action.schema_version !== 1 || !['read', 'propose'].includes(action.effect) ||
-          !action.input_schema || typeof action.input_schema !== 'object' || Array.isArray(action.input_schema) ||
-          !action.output_schema || typeof action.output_schema !== 'object' || Array.isArray(action.output_schema) ||
-          !Array.isArray(action.required_capabilities) || action.required_capabilities.some(value => typeof value !== 'string' || !metadata.capabilities.includes(value)) ||
-          new Set(action.required_capabilities).size !== action.required_capabilities.length ||
-          !Array.isArray(action.callers) || action.callers.length === 0 || action.callers.some(value => !['ui', 'mcp', 'plugin'].includes(value)) || new Set(action.callers).size !== action.callers.length ||
-          typeof action.requires_user_gesture !== 'boolean' ||
-          (action.caller_plugins !== undefined && (!Array.isArray(action.caller_plugins) ||
-            action.caller_plugins.some(value => typeof value !== 'string' || !/^[a-z][a-z0-9-]{0,62}\.[a-z][a-z0-9-]{0,62}$/u.test(value)) ||
-            new Set(action.caller_plugins).size !== action.caller_plugins.length)) ||
-          actions.has(action.action_id)) {
-        throw new Error(`${pluginId}/plugin.json contains an invalid or duplicate action descriptor`);
-      }
-      for (const schema of [action.input_schema, action.output_schema]) {
-        if (schema.type !== 'object' || schema.additionalProperties !== false) throw new Error(`${pluginId} action ${action.action_id} schemas must be closed object schemas`);
-      }
-      actions.add(action.action_id);
+    if (metadata.capabilities.some(value => typeof value !== 'string' || value.length > 128 || !CAPABILITY.test(value)) ||
+        new Set(metadata.capabilities).size !== metadata.capabilities.length) {
+      throw new Error(`${pluginId}/plugin.json capabilities must be unique canonical capability IDs`);
     }
-    const surfaceIds = new Set();
-    for (const surface of metadata.ui) {
-      if (!surface || typeof surface !== 'object' || Array.isArray(surface) || Object.keys(surface).length !== 5 ||
-          !['id', 'kind', 'title', 'context', 'body'].every(key => Object.hasOwn(surface, key)) ||
-          typeof surface.id !== 'string' || surface.id.length === 0 || surfaceIds.has(surface.id) ||
-          typeof surface.kind !== 'string' || typeof surface.title !== 'string' ||
-          !surface.context || typeof surface.context !== 'object' || Array.isArray(surface.context) ||
-          !surface.body || typeof surface.body !== 'object' || Array.isArray(surface.body)) {
-        throw new Error(`${pluginId}/plugin.json contains an invalid or duplicate UI surface`);
-      }
-      surfaceIds.add(surface.id);
-    }
+    try { await assertAuthoringDeclarations(pluginId, metadata.capabilities, metadata.actions, metadata.ui); }
+    catch (error) { throw new Error(`${pluginId}/plugin.json declarations fail the adopted Host schema: ${error instanceof Error ? error.message : String(error)}`); }
     const assetGroupIds = new Set();
     for (const group of metadata.asset_groups) {
       if (assetGroupIds.has(group?.id)) throw new Error(`${pluginId}/plugin.json repeats an asset group id`);
@@ -456,13 +459,35 @@ async function buildAuthoringSuite() {
     const buildDir = await mkdtemp(join(buildBase, `${slug}-`));
     try {
       const componentPath = resolve(buildDir, 'plugin.component.wasm');
-      execFileSync(jco, ['componentize', sourceReal, '--wit', wit, '--world-name', worldName, '--disable', 'all', '--bundle', '-o', componentPath], {
-        cwd: pluginDirectoryReal, stdio: 'inherit', env: componentizeEnvironment,
-      });
+      if (customBuildStat) {
+        const cargoHome = process.env.CARGO_HOME ?? (process.env.HOME ? resolve(process.env.HOME, '.cargo') : undefined);
+        const customBuildEnvironment = {
+          ...componentizeEnvironment,
+          PATH: [cargoHome ? resolve(cargoHome, 'bin') : '', process.env.PATH ?? ''].filter(Boolean).join(delimiter),
+          ...(process.env.HOME ? { HOME: process.env.HOME } : {}),
+          ...(process.env.CARGO_HOME ? { CARGO_HOME: process.env.CARGO_HOME } : {}),
+          ...(process.env.RUSTUP_HOME ? { RUSTUP_HOME: process.env.RUSTUP_HOME } : {}),
+          CARGO_TARGET_DIR: resolve(buildDir, 'cargo-target'),
+          PROPRIUM_PLUGIN_JCO_BIN: jco,
+          PROPRIUM_PLUGIN_BUILD_OUTPUT: componentPath,
+          PROPRIUM_PLUGIN_SOURCE_DIR: pluginDirectoryReal,
+          PROPRIUM_PLUGIN_V2_WIT: wit,
+          PROPRIUM_PLUGIN_V2_WORLD: worldName,
+        };
+        execFileSync(process.execPath, [buildInputReal], {
+          cwd: pluginDirectoryReal, stdio: 'inherit', env: customBuildEnvironment,
+        });
+      } else {
+        execFileSync(jco, ['componentize', buildInputReal, '--wit', wit, '--world-name', worldName, '--disable', 'all', '--bundle', '-o', componentPath], {
+          cwd: pluginDirectoryReal, stdio: 'inherit', env: componentizeEnvironment,
+        });
+      }
       const component = new Uint8Array(await readFile(componentPath));
       if (component.byteLength < 8 || component[0] !== 0 || component[1] !== 0x61 || component[2] !== 0x73 || component[3] !== 0x6d) {
         throw new Error(`${pluginId} build did not produce a WebAssembly component`);
       }
+      if (component.byteLength > 128 * 1024 * 1024) throw new Error(`${pluginId} WASM component exceeds the Host artifact ceiling`);
+      verifyV2ComponentInterface(jco, componentPath, pluginId);
       const componentDigest = digest(component);
       const releaseDirectory = `proprium/${slug}/${metadata.version}`;
       const entrypoint = `${releaseDirectory}/${componentDigest}/plugin.component.wasm`;

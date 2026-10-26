@@ -2,10 +2,14 @@ import { createHash, createPublicKey, verify } from 'node:crypto';
 import { lstat, readFile, realpath } from 'node:fs/promises';
 import { relative, resolve, sep } from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { assertAuthoringDeclarations } from './authoring-manifest-schema.mjs';
 
 const root = fileURLToPath(new URL('..', import.meta.url));
 const output = resolve(process.env.PROPRIUM_PLUGIN_OUTPUT_DIR ?? resolve(root, 'dist/plugin-registry'));
 const SEMVER = /^(0|[1-9]\d*)\.(0|[1-9]\d*)\.(0|[1-9]\d*)(?:-([0-9A-Za-z.-]+))?$/u;
+const CAPABILITY = /^[a-z][a-z0-9-]*(?:\.[a-z][a-z0-9-]*)+$/u;
+const ASSET_GROUP_ID = /^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$/u;
+const PLUGIN_ID = /^[a-z][a-z0-9-]{0,62}\.[a-z][a-z0-9-]{0,62}$/u;
 function compareSemver(left, right) {
   const parse = value => {
     const match = SEMVER.exec(value);
@@ -29,6 +33,66 @@ function compareSemver(left, right) {
   }
   return 0;
 }
+function validDependencyRange(value) {
+  if (typeof value !== 'string' || value.length > 64) return false;
+  if (value === '*') return true;
+  const match = /^(\^|~)?((?:0|[1-9]\d*)\.(?:0|[1-9]\d*)\.(?:0|[1-9]\d*))(?:-([0-9A-Za-z.-]+))?$/u.exec(value);
+  return match !== null && SEMVER.test(`${match[2]}${match[4] ? `-${match[4]}` : ''}`);
+}
+function satisfiesVersion(version, range) {
+  if (!SEMVER.test(version) || !validDependencyRange(range)) return false;
+  if (range === '*') return true;
+  const match = /^(\^|~)?(.+)$/u.exec(range);
+  const operator = match[1]; const base = match[2];
+  if (!operator) return version === base;
+  const actual = SEMVER.exec(version); const expected = SEMVER.exec(base);
+  if (!actual || !expected) return false;
+  if (actual[4] !== undefined && (expected[4] === undefined || actual[1] !== expected[1] || actual[2] !== expected[2] || actual[3] !== expected[3])) return false;
+  if (compareSemver(version, base) < 0) return false;
+  if (operator === '~') return actual[1] === expected[1] && actual[2] === expected[2];
+  if (Number(expected[1]) > 0) return actual[1] === expected[1];
+  if (Number(expected[2]) > 0) return actual[1] === '0' && actual[2] === expected[2];
+  return actual[1] === '0' && actual[2] === '0' && actual[3] === expected[3];
+}
+function validateDependencyGraph(releases) {
+  const byId = new Map();
+  for (const release of releases) {
+    const versions = byId.get(release.id) ?? [];
+    versions.push(release);
+    byId.set(release.id, versions);
+  }
+  const edges = new Map();
+  for (const release of releases) {
+    if (!Array.isArray(release.dependencies) || release.dependencies.length > 128) {
+      throw new Error(`Registry dependencies are invalid for ${release.id}@${release.version}`);
+    }
+    const seen = new Set();
+    const targets = [];
+    for (const dependency of release.dependencies) {
+      if (!dependency || typeof dependency !== 'object' || Array.isArray(dependency) || Object.keys(dependency).length !== 2 ||
+          typeof dependency.id !== 'string' || !PLUGIN_ID.test(dependency.id) || !validDependencyRange(dependency.range) ||
+          dependency.id === release.id || seen.has(dependency.id)) {
+        throw new Error(`Registry dependency is invalid for ${release.id}@${release.version}`);
+      }
+      seen.add(dependency.id);
+      const target = [...(byId.get(dependency.id) ?? [])]
+        .filter(candidate => satisfiesVersion(candidate.version, dependency.range))
+        .sort((left, right) => compareSemver(right.version, left.version))[0];
+      if (!target) throw new Error(`No signed ${dependency.id} release satisfies ${dependency.range} required by ${release.id}@${release.version}`);
+      targets.push(target);
+    }
+    edges.set(`${release.id}@${release.version}`, targets.map(target => `${target.id}@${target.version}`));
+  }
+  const visiting = new Set(); const visited = new Set();
+  const visit = release => {
+    if (visited.has(release)) return;
+    if (visiting.has(release)) throw new Error(`Signed plugin dependency cycle includes ${release}`);
+    visiting.add(release);
+    for (const dependency of edges.get(release) ?? []) visit(dependency);
+    visiting.delete(release); visited.add(release);
+  };
+  for (const release of edges.keys()) visit(release);
+}
 const verificationMode = process.argv[2] ?? 'all';
 if (!['all', 'authoring'].includes(verificationMode)) throw new Error('Usage: node scripts/verify-plugin-registry.mjs [all|authoring]');
 const encodedRootKey = process.env.PROPRIUM_PLUGIN_REGISTRY_PUBLIC_KEY;
@@ -42,7 +106,7 @@ const rootPublicKey = createPublicKey({
   format: 'der', type: 'spki',
 });
 const readRelative = async path => {
-  if (typeof path !== 'string' || path.length === 0 || path.startsWith('/') || path.includes('\\') || path.includes('\0') ||
+  if (typeof path !== 'string' || path.length === 0 || path.length > 256 || path.startsWith('/') || path.includes('\\') || path.includes('\0') ||
       !/^[A-Za-z0-9._/-]+$/u.test(path) || path.split('/').some(segment => !segment || segment === '.' || segment === '..')) {
     throw new Error(`Unsafe plugin artifact path: ${path}`);
   }
@@ -59,7 +123,7 @@ const readRelative = async path => {
 };
 const sha256 = bytes => createHash('sha256').update(bytes).digest('hex');
 function safePath(path) {
-  return typeof path === 'string' && path.length > 0 && !path.startsWith('/') && !path.includes('\\') && !path.includes('\0') &&
+  return typeof path === 'string' && path.length > 0 && path.length <= 256 && !path.startsWith('/') && !path.includes('\\') && !path.includes('\0') &&
     /^[A-Za-z0-9._/-]+$/u.test(path) && path.split('/').every(segment => segment && segment !== '.' && segment !== '..');
 }
 async function verifyAssetGroups(groups, pluginId) {
@@ -68,8 +132,8 @@ async function verifyAssetGroups(groups, pluginId) {
     const groupFields = ['id', 'manifest_path', 'sha256', 'bytes', 'role'];
     const prefix = `proprium/${pluginId.slice('proprium.'.length)}/`;
     if (!group || typeof group !== 'object' || Array.isArray(group) || Object.keys(group).length !== groupFields.length ||
-        groupFields.some(field => !Object.hasOwn(group, field)) || typeof group.id !== 'string' || !group.id || ids.has(group.id) ||
-        !['dictionary', 'embedding', 'reranker'].includes(group.role) || !Number.isSafeInteger(group.bytes) || group.bytes <= 0 ||
+        groupFields.some(field => !Object.hasOwn(group, field)) || typeof group.id !== 'string' || !ASSET_GROUP_ID.test(group.id) || ids.has(group.id) ||
+        !['dictionary', 'embedding', 'reranker'].includes(group.role) || !Number.isSafeInteger(group.bytes) || group.bytes <= 0 || group.bytes > 512 * 1024 ||
         !/^[a-f0-9]{64}$/u.test(group.sha256) || !safePath(group.manifest_path) || !group.manifest_path.startsWith(prefix) ||
         !group.manifest_path.includes(`/${group.sha256}/`)) throw new Error(`Invalid signed asset group reference for ${pluginId}`);
     ids.add(group.id);
@@ -79,11 +143,13 @@ async function verifyAssetGroups(groups, pluginId) {
     const assetFields = ['schema', 'id', 'version', 'license', 'files'];
     if (!assetManifest || typeof assetManifest !== 'object' || Array.isArray(assetManifest) || Object.keys(assetManifest).length !== assetFields.length ||
         assetFields.some(field => !Object.hasOwn(assetManifest, field)) || assetManifest.schema !== 'proprium.assets/v1' ||
-        assetManifest.id !== group.id || typeof assetManifest.version !== 'string' || !SEMVER.test(assetManifest.version) ||
-        typeof assetManifest.license !== 'string' || !assetManifest.license || !Array.isArray(assetManifest.files)) {
+        assetManifest.id !== group.id || typeof assetManifest.version !== 'string' || assetManifest.version.length > 128 || !SEMVER.test(assetManifest.version) ||
+        typeof assetManifest.license !== 'string' || !assetManifest.license.trim() || assetManifest.license.length > 4096 ||
+        !Array.isArray(assetManifest.files) || assetManifest.files.length === 0) {
       throw new Error(`Invalid asset manifest schema for ${pluginId}/${group.id}`);
     }
     const paths = new Set();
+    let groupPayloadBytes = 0;
     for (const file of assetManifest.files) {
       if (!file || typeof file !== 'object' || Array.isArray(file) || Object.keys(file).length !== 4 ||
           !['path', 'bytes', 'sha256', 'chunks'].every(field => Object.hasOwn(file, field)) || !safePath(file.path) || paths.has(file.path) ||
@@ -91,6 +157,8 @@ async function verifyAssetGroups(groups, pluginId) {
         throw new Error(`Invalid asset file entry for ${pluginId}/${group.id}`);
       }
       paths.add(file.path);
+      groupPayloadBytes += file.bytes;
+      if (!Number.isSafeInteger(groupPayloadBytes)) throw new Error(`Asset group byte total exceeds safe accounting for ${pluginId}/${group.id}`);
       const hash = createHash('sha256');
       let offset = 0;
       for (const chunk of file.chunks) {
@@ -111,19 +179,40 @@ async function verifyAssetGroups(groups, pluginId) {
         throw new Error(`Asset chunks do not reconstruct ${pluginId}/${file.path}`);
       }
     }
+    if (groupPayloadBytes === 0) throw new Error(`Asset group contains no payload bytes for ${pluginId}/${group.id}`);
   }
 }
 const registryBytes = await readFile(resolve(output, 'registry.json'));
+if (registryBytes.byteLength === 0 || registryBytes.byteLength > 1024 * 1024) throw new Error('Registry document exceeds the Host admission ceiling');
 const registrySignature = await readFile(resolve(output, 'registry.json.sig'));
 if (registrySignature.byteLength !== 64 || !verify(null, registryBytes, rootPublicKey, registrySignature)) {
   throw new Error('Registry signature does not match the separately pinned public key');
 }
-const registry = JSON.parse(registryBytes.toString('utf8'));
-if (registry.schema !== 'proprium.registry/v1' || !Array.isArray(registry.plugins) || typeof registry.version !== 'string' || !SEMVER.test(registry.version)) {
+const registry = JSON.parse(new TextDecoder('utf-8', { fatal: true }).decode(registryBytes));
+if (!registry || typeof registry !== 'object' || Array.isArray(registry) || Object.keys(registry).length !== 5 ||
+    !['schema', 'id', 'version', 'artifactBase', 'plugins'].every(field => Object.hasOwn(registry, field)) ||
+    registry.schema !== 'proprium.registry/v1' || typeof registry.id !== 'string' || !PLUGIN_ID.test(registry.id) ||
+    typeof registry.version !== 'string' || !SEMVER.test(registry.version) || typeof registry.artifactBase !== 'string' ||
+    !Array.isArray(registry.plugins) || registry.plugins.length > 4096) {
   throw new Error('Unsupported registry document');
+}
+let artifactBase;
+try { artifactBase = new URL(registry.artifactBase); } catch { throw new Error('Registry artifactBase is not an absolute URL'); }
+if (artifactBase.href !== registry.artifactBase || !artifactBase.pathname.endsWith('/') || artifactBase.search || artifactBase.hash ||
+    (artifactBase.protocol !== 'https:' && !(artifactBase.protocol === 'http:' && ['localhost', '127.0.0.1', '[::1]'].includes(artifactBase.hostname)))) {
+  throw new Error('Registry artifactBase is not an approved directory URL');
 }
 const seenVersions = new Set();
 for (const entry of registry.plugins) {
+  if (!entry || typeof entry !== 'object' || Array.isArray(entry) || Object.keys(entry).length !== 7 ||
+      !['id', 'version', 'manifestPath', 'manifestSha256', 'manifestSignature', 'publisherKey', 'dependencies'].every(field => Object.hasOwn(entry, field)) ||
+      typeof entry.id !== 'string' || !PLUGIN_ID.test(entry.id) || typeof entry.version !== 'string' || !SEMVER.test(entry.version) ||
+      typeof entry.manifestSha256 !== 'string' || !/^[a-f0-9]{64}$/u.test(entry.manifestSha256) ||
+      typeof entry.manifestSignature !== 'string' || entry.manifestSignature.length > 4096 || !/^[A-Za-z0-9+/]+={0,2}$/u.test(entry.manifestSignature) ||
+      typeof entry.publisherKey !== 'string' || entry.publisherKey.length > 4096 || !/^[A-Za-z0-9+/]+={0,2}$/u.test(entry.publisherKey) ||
+      !Array.isArray(entry.dependencies) || entry.dependencies.length > 128) {
+    throw new Error('Registry plugin entry is malformed');
+  }
   const releaseKey = `${entry.id}@${entry.version}`;
   if (seenVersions.has(releaseKey)) throw new Error(`Registry repeats ${releaseKey}`);
   seenVersions.add(releaseKey);
@@ -138,43 +227,24 @@ for (const entry of registry.plugins) {
   });
   if (!verify(null, manifestBytes, publisherKey, manifestSignature)) throw new Error(`Manifest signature mismatch for ${entry.id}@${entry.version}`);
   const manifest = JSON.parse(new TextDecoder('utf-8', { fatal: true }).decode(manifestBytes));
-  if (manifest.id !== entry.id || manifest.version !== entry.version || !Array.isArray(manifest.artifacts)) {
+  if (manifest.id !== entry.id || manifest.version !== entry.version || !Array.isArray(manifest.artifacts) ||
+      manifest.artifacts.length === 0 || manifest.artifacts.length > 256) {
     throw new Error(`Manifest identity mismatch for ${entry.id}@${entry.version}`);
   }
   if (manifest.schema === 'proprium.plugin/v2') {
     const fields = ['schema', 'id', 'version', 'abi', 'entrypoint', 'capabilities', 'artifacts', 'actions', 'ui', 'asset_groups'];
     if (Object.keys(manifest).length !== fields.length || fields.some(field => !Object.hasOwn(manifest, field)) ||
         manifest.abi !== 'proprium.component/v2' || typeof manifest.entrypoint !== 'string' ||
-        !Array.isArray(manifest.capabilities) || !Array.isArray(manifest.actions) || !Array.isArray(manifest.ui) || !Array.isArray(manifest.asset_groups)) {
+        !Array.isArray(manifest.capabilities) || !Array.isArray(manifest.actions) || !Array.isArray(manifest.ui) || !Array.isArray(manifest.asset_groups) ||
+        manifestBytes.byteLength > 512 * 1024 || manifest.actions.length > 256 || manifest.ui.length > 128 || manifest.asset_groups.length > 32) {
       throw new Error(`V2 manifest schema is invalid for ${releaseKey}`);
     }
-    if (manifest.capabilities.some(value => typeof value !== 'string' || !value) || new Set(manifest.capabilities).size !== manifest.capabilities.length ||
+    if (manifest.capabilities.some(value => typeof value !== 'string' || value.length > 128 || !CAPABILITY.test(value)) || new Set(manifest.capabilities).size !== manifest.capabilities.length ||
         manifest.actions.length === 0) {
       throw new Error(`V2 manifest capabilities are invalid for ${releaseKey}`);
     }
-    const actions = new Set();
-    for (const action of manifest.actions) {
-      const actionKeys = ['plugin_id', 'action_id', 'schema_version', 'effect', 'input_schema', 'output_schema',
-        'required_capabilities', 'callers', 'requires_user_gesture'];
-      if (!action || typeof action !== 'object' || Array.isArray(action) || action.plugin_id !== entry.id ||
-          Object.keys(action).some(key => ![...actionKeys, 'caller_plugins'].includes(key)) || actionKeys.some(key => !Object.hasOwn(action, key)) ||
-          typeof action.action_id !== 'string' || action.action_id.length === 0 || actions.has(action.action_id) ||
-          action.schema_version !== 1 || !['read', 'propose'].includes(action.effect) ||
-          !action.input_schema || typeof action.input_schema !== 'object' || action.input_schema.type !== 'object' || action.input_schema.additionalProperties !== false ||
-          !action.output_schema || typeof action.output_schema !== 'object' || action.output_schema.type !== 'object' || action.output_schema.additionalProperties !== false ||
-          !Array.isArray(action.required_capabilities) || action.required_capabilities.some(value => typeof value !== 'string' || !manifest.capabilities.includes(value)) ||
-          new Set(action.required_capabilities).size !== action.required_capabilities.length ||
-          !Array.isArray(action.callers) || action.callers.length === 0 || action.callers.some(value => !['ui', 'mcp', 'plugin'].includes(value)) ||
-          new Set(action.callers).size !== action.callers.length || typeof action.requires_user_gesture !== 'boolean' ||
-          (action.caller_plugins !== undefined && (!Array.isArray(action.caller_plugins) || action.caller_plugins.some(value =>
-            typeof value !== 'string' || !/^[a-z][a-z0-9-]{0,62}\.[a-z][a-z0-9-]{0,62}$/u.test(value)) || new Set(action.caller_plugins).size !== action.caller_plugins.length))) {
-        throw new Error(`V2 manifest action descriptor is invalid for ${releaseKey}`);
-      }
-      actions.add(action.action_id);
-    }
-    for (const surface of manifest.ui) if (!surface || typeof surface !== 'object' || Array.isArray(surface)) {
-      throw new Error(`V2 manifest UI descriptor is invalid for ${releaseKey}`);
-    }
+    try { await assertAuthoringDeclarations(entry.id, manifest.capabilities, manifest.actions, manifest.ui); }
+    catch (error) { throw new Error(`V2 authoring declarations fail the adopted Host schema for ${releaseKey}: ${error instanceof Error ? error.message : String(error)}`); }
     for (const group of manifest.asset_groups) if (!group || typeof group !== 'object' || Array.isArray(group)) {
       throw new Error(`V2 manifest asset group is invalid for ${releaseKey}`);
     }
@@ -187,13 +257,16 @@ for (const entry of registry.plugins) {
   }
   if (!entry.manifestPath.includes(`/manifest/${entry.manifestSha256}.json`)) throw new Error(`Manifest path is not content-addressed: ${entry.manifestPath}`);
   const artifactPaths = new Set();
+  let totalArtifactBytes = 0;
   for (const artifact of manifest.artifacts) {
     if (!artifact || typeof artifact !== 'object' || Array.isArray(artifact) || Object.keys(artifact).length !== 4 ||
         !['path', 'bytes', 'sha256', 'mediaType'].every(field => Object.hasOwn(artifact, field)) ||
-        !safePath(artifact.path) || artifactPaths.has(artifact.path) || !Number.isSafeInteger(artifact.bytes) || artifact.bytes <= 0 ||
+        !safePath(artifact.path) || artifactPaths.has(artifact.path) || !Number.isSafeInteger(artifact.bytes) || artifact.bytes <= 0 || artifact.bytes > 128 * 1024 * 1024 ||
         !/^[a-f0-9]{64}$/u.test(artifact.sha256) || !['application/wasm', 'application/json', 'application/octet-stream'].includes(artifact.mediaType)) {
       throw new Error(`Manifest artifact descriptor is invalid for ${releaseKey}`);
     }
+    totalArtifactBytes += artifact.bytes;
+    if (totalArtifactBytes > 512 * 1024 * 1024) throw new Error(`Manifest artifact aggregate exceeds the Host cap for ${releaseKey}`);
     artifactPaths.add(artifact.path);
     const bytes = await readRelative(artifact.path);
     if (bytes.byteLength !== artifact.bytes || sha256(bytes) !== artifact.sha256) throw new Error(`Artifact digest mismatch: ${artifact.path}`);
@@ -202,7 +275,11 @@ for (const entry of registry.plugins) {
       throw new Error(`WASM artifact has an invalid binary header: ${artifact.path}`);
     }
   }
+  if (manifest.schema === 'proprium.plugin/v1' && manifestBytes.byteLength > 128 * 1024) {
+    throw new Error(`V1 manifest exceeds its Host admission ceiling for ${releaseKey}`);
+  }
 }
+validateDependencyGraph(registry.plugins);
 if (verificationMode === 'authoring') {
   const officialIds = [
     'proprium.narrative', 'proprium.knowledge', 'proprium.research', 'proprium.paired-writing',

@@ -1,5 +1,5 @@
 import assert from 'node:assert/strict';
-import { createHash, generateKeyPairSync } from 'node:crypto';
+import { createHash, generateKeyPairSync, sign } from 'node:crypto';
 import { mkdir, mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join, resolve } from 'node:path';
@@ -80,6 +80,18 @@ test('authoring producer independently componentizes and signs all eight v2 prod
       const directory = join(sourceRoot, slug);
       await mkdir(directory, { recursive: true });
       await writeFile(join(directory, 'guest.ts'), guestSource);
+      if (pluginId === 'proprium.semantic') {
+        await writeFile(join(directory, 'build.mjs'), `import { execFileSync } from 'node:child_process';
+import { fileURLToPath } from 'node:url';
+execFileSync(process.env.PROPRIUM_PLUGIN_JCO_BIN, [
+  'componentize', fileURLToPath(new URL('./guest.ts', import.meta.url)),
+  '--wit', process.env.PROPRIUM_PLUGIN_V2_WIT,
+  '--world-name', process.env.PROPRIUM_PLUGIN_V2_WORLD,
+  '--disable', 'all', '--bundle', '-o', process.env.PROPRIUM_PLUGIN_BUILD_OUTPUT,
+], { stdio: 'inherit' });
+console.log('synthetic-semantic-custom-build');
+`);
+      }
       let assetGroups = [];
       if (pluginId === 'proprium.semantic') {
         const payload = Buffer.from('synthetic deterministic asset fixture');
@@ -132,7 +144,7 @@ test('authoring producer independently componentizes and signs all eight v2 prod
         }],
         ui: [],
         asset_groups: assetGroups,
-        dependencies: [],
+        dependencies: pluginId === 'proprium.knowledge' ? [{ id: 'proprium.narrative', range: '^1.0.0' }] : [],
       }));
     }
     const env = {
@@ -148,6 +160,7 @@ test('authoring producer independently componentizes and signs all eight v2 prod
     };
     const build = spawnSync(process.execPath, ['scripts/build-plugin-registry.mjs', 'authoring'], { cwd: root, env, encoding: 'utf8' });
     assert.equal(build.status, 0, `${build.stdout}\n${build.stderr}`);
+    assert.match(build.stdout, /synthetic-semantic-custom-build/u);
     for (const pluginId of ids) assert.ok(build.stdout.includes(`Built signed ${pluginId}@1.0.0`), `${pluginId} was not built`);
 
     const verify = spawnSync(process.execPath, ['scripts/verify-plugin-registry.mjs', 'authoring'], { cwd: root, env, encoding: 'utf8' });
@@ -196,6 +209,18 @@ test('authoring producer independently componentizes and signs all eight v2 prod
     assert.equal(previousSemanticManifest.asset_groups.length, 1);
     const preservedAssetManifestPath = join(output, previousSemanticManifest.asset_groups[0].manifest_path);
     assert.equal(rawSha256(await readFile(preservedAssetManifestPath)), previousSemanticManifest.asset_groups[0].sha256);
+
+    const invalidDependencyIndex = Buffer.from(JSON.stringify({
+      ...updatedRegistry,
+      plugins: updatedRegistry.plugins.map(entry => entry.id === 'proprium.knowledge' && entry.version === nextVersion
+        ? { ...entry, dependencies: [{ id: 'proprium.missing', range: '*' }] }
+        : entry),
+    }));
+    await writeFile(join(output, 'registry.json'), invalidDependencyIndex);
+    await writeFile(join(output, 'registry.json.sig'), sign(null, invalidDependencyIndex, registryKeys.privateKey));
+    const invalidDependencyVerify = spawnSync(process.execPath, ['scripts/verify-plugin-registry.mjs', 'authoring'], { cwd: root, env, encoding: 'utf8' });
+    assert.notEqual(invalidDependencyVerify.status, 0);
+    assert.match(`${invalidDependencyVerify.stdout}\n${invalidDependencyVerify.stderr}`, /No signed proprium\.missing release satisfies/u);
   } finally {
     await rm(temporary, { recursive: true, force: true });
   }
@@ -241,6 +266,51 @@ test('authoring producer rejects unsigned manifest extensions before producing a
     const build = spawnSync(process.execPath, ['scripts/build-plugin-registry.mjs', 'authoring'], { cwd: root, env, encoding: 'utf8' });
     assert.notEqual(build.status, 0);
     assert.match(`${build.stdout}\n${build.stderr}`, /missing or unknown fields/u);
+    assert.equal(await readFile(join(output, 'registry.json')).then(() => true, error => error?.code === 'ENOENT'), true);
+  } finally {
+    await rm(temporary, { recursive: true, force: true });
+  }
+});
+
+test('authoring producer applies the canonical Host schema safety bounds to action JSON schemas', async () => {
+  const temporary = await mkdtemp(join(tmpdir(), 'proprium-authoring-schema-registry-test-'));
+  const output = join(temporary, 'registry');
+  const sourceRoot = join(temporary, 'plugins');
+  const directory = join(sourceRoot, 'narrative');
+  const registryKeys = generateKeyPairSync('ed25519');
+  const publisherKeys = generateKeyPairSync('ed25519');
+  await mkdir(directory, { recursive: true });
+  await writeFile(join(directory, 'guest.ts'), `export const guest = {
+  initialize(_context: { pluginId: string; version: string; workspaceId: string }): void {},
+  invoke(request: string): string { return request; },
+  dispose(): void {},
+};\n`);
+  const emptyObject = { type: 'object', properties: {}, additionalProperties: false };
+  await writeFile(join(directory, 'plugin.json'), JSON.stringify({
+    schema: 'proprium.plugin/v2', id: 'proprium.narrative', version: '1.0.0', abi: 'proprium.component/v2',
+    capabilities: [],
+    actions: [{
+      plugin_id: 'proprium.narrative', action_id: 'proprium.narrative.test', schema_version: 1, effect: 'read',
+      input_schema: { type: 'object', properties: { query: { type: 'string' } }, additionalProperties: false },
+      output_schema: emptyObject, required_capabilities: [], callers: ['ui'], requires_user_gesture: false,
+    }],
+    ui: [], asset_groups: [], dependencies: [],
+  }));
+  const env = {
+    ...process.env,
+    PROPRIUM_PLUGIN_OUTPUT_DIR: output,
+    PROPRIUM_PLUGIN_PREVIOUS_REGISTRY_DIR: '',
+    PROPRIUM_AUTHORING_PLUGIN_SOURCE_DIR: sourceRoot,
+    PROPRIUM_PLUGIN_REGISTRY_VERSION: '1.0.0',
+    PROPRIUM_PLUGIN_ARTIFACT_BASE: 'https://plugins.example.test/plugins/',
+    PROPRIUM_PLUGIN_REGISTRY_PRIVATE_KEY: registryKeys.privateKey.export({ format: 'pem', type: 'pkcs8' }).toString(),
+    PROPRIUM_PLUGIN_PUBLISHER_PRIVATE_KEY: publisherKeys.privateKey.export({ format: 'pem', type: 'pkcs8' }).toString(),
+    PROPRIUM_PLUGIN_REGISTRY_PUBLIC_KEY: rawPublicKey(registryKeys),
+  };
+  try {
+    const build = spawnSync(process.execPath, ['scripts/build-plugin-registry.mjs', 'authoring'], { cwd: root, env, encoding: 'utf8' });
+    assert.notEqual(build.status, 0);
+    assert.match(`${build.stdout}\n${build.stderr}`, /Unbounded string schema/u);
     assert.equal(await readFile(join(output, 'registry.json')).then(() => true, error => error?.code === 'ENOENT'), true);
   } finally {
     await rm(temporary, { recursive: true, force: true });

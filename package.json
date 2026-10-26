@@ -18,6 +18,7 @@
     "verify:browser": "pnpm typecheck:browser && pnpm test:browser:unit && pnpm build:browser && pnpm exec wrangler deploy --dry-run --config wrangler.jsonc",
     "build:authoring-plugins": "node scripts/build-plugin-registry.mjs authoring",
     "verify:authoring-plugins": "node scripts/verify-plugin-registry.mjs authoring",
+    "test:authoring-plugin-build": "node scripts/test-authoring-plugin-build.mjs",
     "test:plugin-registry": "node --test scripts/build-plugin-registry.test.mjs",
     "build": "pnpm build:browser",
     "typecheck": "pnpm typecheck:browser",
