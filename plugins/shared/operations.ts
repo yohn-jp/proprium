@@ -1,27 +1,12 @@
 import type { ActionResult, ChangeSet, Scope, Snapshot } from "../../app/src/browser/proprium/authoring/types.js";
+import type { ArtifactMetadata, CacheKey } from "../../app/src/browser/proprium/authoring/types.js";
 import type { GuestHost, HostCall } from "./guest.js";
+export type { ArtifactMetadata, CacheKey };
 
 /** Canonical JSON payloads for the versioned Host capability broker. */
 export interface FileEntry { path: string; revision: string; byte_length: number; media_type: string }
 export interface FilePage { entries: FileEntry[]; next_cursor: string | null }
 export interface FileChunk { revision: string; total_bytes: number; offset: number; bytes: number[]; next_offset: number | null }
-export interface CacheKey {
-  plugin_id: string;
-  snapshot: Snapshot;
-  schema_version: number;
-  config_digest: string;
-  model_digest?: string;
-  key: string;
-}
-export interface ArtifactMetadata {
-  artifact_id: string;
-  media_type: string;
-  filename: string;
-  scope: Scope;
-  snapshot: Snapshot;
-  total_bytes: number;
-  sha256: string;
-}
 export const HOST_OPERATIONS = {
   list: "workspace.file.list",
   read: "workspace.file.read",

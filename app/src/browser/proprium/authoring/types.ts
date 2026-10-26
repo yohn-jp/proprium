@@ -12,6 +12,23 @@ export interface Snapshot {
   draft_generation: string | null;
   remote_commit?: string | null;
 }
+export interface CacheKey {
+  plugin_id: string;
+  snapshot: Snapshot;
+  schema_version: number;
+  config_digest: string;
+  model_digest?: string;
+  key: string;
+}
+export interface ArtifactMetadata {
+  artifact_id: string;
+  media_type: string;
+  filename: string;
+  scope: Scope;
+  snapshot: Snapshot;
+  total_bytes: number;
+  sha256: string;
+}
 export type Caller = "ui" | "mcp" | "plugin";
 export interface ActionRequest {
   schema_version: 1;
