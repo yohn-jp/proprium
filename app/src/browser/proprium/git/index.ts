@@ -12,20 +12,23 @@ import type {
   StatusEntry,
   WorkspaceFile,
   DiffChange,
+  GitHubWorkspaceIdentity,
+  LocalWorkspaceIdentity,
   WorkspaceIdentity,
 } from "./protocol.js";
 import {
   MAX_WORKSPACE_CHANGE_BYTES,
   MAX_WORKSPACE_CHANGE_COUNT,
   MAX_WORKSPACE_READ_SET_COUNT,
+  isGitHubWorkspaceIdentity,
   validateGitPath,
   validateWorkspaceIdentity,
 } from "./protocol.js";
 import { createGitHubAccountSession, GitHubSyncError } from "./github-sync.js";
 import type { GitHubAccount, GitHubAccountSession, GitHubDevicePrompt, GitHubFetchResult, GitHubPullResult, GitHubPublishResult, GitHubRemoteHead, GitHubRepository, GitHubSyncClient, GitHubRemoteOperation } from "./github-sync.js";
 
-export { validateGitPath, validateWorkspaceIdentity } from "./protocol.js";
-export type { AppliedWorkspaceChange, CommitAuthor, CommitSummary, DiffChange, FileRevision, FileRevisionExpectation, LocalGitError, LocalGitErrorCode, StatusEntry, WorkspaceChange, WorkspaceFile, WorkspaceIdentity };
+export { isGitHubWorkspaceIdentity, validateGitPath, validateWorkspaceIdentity } from "./protocol.js";
+export type { AppliedWorkspaceChange, CommitAuthor, CommitSummary, DiffChange, FileRevision, FileRevisionExpectation, GitHubWorkspaceIdentity, LocalGitError, LocalGitErrorCode, LocalWorkspaceIdentity, StatusEntry, WorkspaceChange, WorkspaceFile, WorkspaceIdentity };
 export { GitHubSyncError } from "./github-sync.js";
 export { createGitHubAccountSession } from "./github-sync.js";
 export type { GitHubAccount, GitHubAccountSession, GitHubDevicePrompt, GitHubFetchResult, GitHubPullResult, GitHubPublishResult, GitHubRemoteHead, GitHubRepository, GitHubSyncClient } from "./github-sync.js";
@@ -210,6 +213,9 @@ export class BrowserLocalGit {
 
   /** Bind an existing account session so repository selection does not sign in a second time. */
   connectGitHubSession(session: GitHubAccountSession): GitHubSyncClient {
+    if (!isGitHubWorkspaceIdentity(this.workspace)) {
+      throw new GitHubSyncError("repository_mismatch", "A browser-only workspace has no GitHub repository to synchronize.");
+    }
     const send: GitHubRemoteOperation = async <T>(
       operation: "remote-head" | "remote-fetch" | "remote-pull" | "remote-publish",
       token: string,

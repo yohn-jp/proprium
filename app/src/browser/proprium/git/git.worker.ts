@@ -5,12 +5,13 @@ import * as git from "isomorphic-git";
 import webHttp from "isomorphic-git/http/web";
 import type { HttpClient } from "isomorphic-git";
 import type { CommitObject, TreeObject } from "isomorphic-git";
-import type { LocalGitErrorCode, LocalGitRequest, LocalGitResponse, StatusEntry, WorkspaceIdentity } from "./protocol.js";
+import type { GitHubWorkspaceIdentity, LocalGitErrorCode, LocalGitRequest, LocalGitResponse, StatusEntry, WorkspaceIdentity } from "./protocol.js";
 import {
   MAX_WORKSPACE_CHANGE_BYTES,
   MAX_WORKSPACE_CHANGE_COUNT,
   MAX_WORKSPACE_READ_BYTES,
   MAX_WORKSPACE_READ_SET_COUNT,
+  isGitHubWorkspaceIdentity,
   validateGitPath,
   validateWorkspaceIdentity,
 } from "./protocol.js";
@@ -25,6 +26,12 @@ const uncertainWorkspaces = new Set<string>();
 const knownHeads = new Map<string, string | null>();
 const failure = (code: LocalGitErrorCode, message: string): never => { throw Object.assign(new Error(message), { propriumCode: code }); };
 
+function requireGitHubIdentity(workspace: WorkspaceIdentity): asserts workspace is GitHubWorkspaceIdentity {
+  if (!isGitHubWorkspaceIdentity(workspace)) {
+    failure("repository_mismatch", "This browser-only workspace has no GitHub repository to synchronize.");
+  }
+}
+
 class GitHubApiError extends Error {
   constructor(readonly status: number, message: string) { super(message); }
 }
@@ -37,7 +44,7 @@ function apiMessage(code: number): string {
   return `GitHub returned HTTP ${code} for a Git synchronization request.`;
 }
 
-async function githubApi<T>(workspace: WorkspaceIdentity, token: string, path: string, init: RequestInit = {}, missing: false | "null" = false): Promise<T> {
+async function githubApi<T>(workspace: GitHubWorkspaceIdentity, token: string, path: string, init: RequestInit = {}, missing: false | "null" = false): Promise<T> {
   if (!token || token.length > 4096) failure("authentication_required", "Sign in to GitHub before synchronizing this workspace.");
   let response: Response | null = null;
   try {
@@ -80,7 +87,7 @@ interface GitHubCommit {
   parents: Array<{ sha: string }>;
 }
 
-async function verifyRemoteRepository(workspace: WorkspaceIdentity, token: string, write: boolean): Promise<GitHubRepository> {
+async function verifyRemoteRepository(workspace: GitHubWorkspaceIdentity, token: string, write: boolean): Promise<GitHubRepository> {
   const repository = await githubApi<GitHubRepository | null>(workspace, token, "");
   if (!repository || repository.id !== workspace.repositoryId || typeof repository.owner?.login !== "string" || repository.owner.login.toLowerCase() !== workspace.owner.toLowerCase()
       || repository.full_name?.toLowerCase() !== `${workspace.owner}/${workspace.repository}`.toLowerCase()) {
@@ -94,11 +101,11 @@ async function verifyRemoteRepository(workspace: WorkspaceIdentity, token: strin
   return repository;
 }
 
-function branchRef(workspace: WorkspaceIdentity): string {
+function branchRef(workspace: GitHubWorkspaceIdentity): string {
   return `/git/ref/heads/${workspace.branch.split("/").map(encodeURIComponent).join("/")}`;
 }
 
-async function readRemoteHead(workspace: WorkspaceIdentity, token: string): Promise<string | null> {
+async function readRemoteHead(workspace: GitHubWorkspaceIdentity, token: string): Promise<string | null> {
   const ref = await githubApi<GitHubRef | null>(workspace, token, branchRef(workspace), {}, "null");
   if (!ref) return null;
   if (!/^refs\/heads\/[A-Za-z0-9._/-]+$/u.test(ref.ref) || ref.ref !== `refs/heads/${workspace.branch}`
@@ -132,7 +139,7 @@ function createHydrationState(): HydrationState {
   return { commits: new Map(), trees: new Set(), blobs: new Set(), imported: new Set(), objects: 0 };
 }
 
-async function hydrateTree(workspace: WorkspaceIdentity, token: string, dir: string, oid: string, state: HydrationState): Promise<void> {
+async function hydrateTree(workspace: GitHubWorkspaceIdentity, token: string, dir: string, oid: string, state: HydrationState): Promise<void> {
   if (state.trees.has(oid)) return;
   state.trees.add(oid);
   if (state.objects >= MAX_REST_HYDRATION_OBJECTS) failure("rest_unsupported", "This import needs bulk Git object transfer; retry with the scoped Git transport.");
@@ -198,7 +205,7 @@ function gitDate(person: GitHubPerson): { name: string; email: string; timestamp
   return { name: person.name, email: person.email, timestamp: Math.floor(timestamp / 1000), timezoneOffset: offset };
 }
 
-async function hydrateCommit(workspace: WorkspaceIdentity, token: string, dir: string, oid: string, state: HydrationState, visiting = new Set<string>()): Promise<void> {
+async function hydrateCommit(workspace: GitHubWorkspaceIdentity, token: string, dir: string, oid: string, state: HydrationState, visiting = new Set<string>()): Promise<void> {
   if (state.imported.has(oid) || await localCommitExists(dir, oid)) return;
   if (visiting.has(oid)) failure("git_error", "GitHub returned a cyclic commit graph.");
   if (state.commits.size >= MAX_REMOTE_COMMITS) failure("git_error", "This repository exceeds the Browser Git history import limit.");
@@ -233,7 +240,7 @@ async function hydrateCommit(workspace: WorkspaceIdentity, token: string, dir: s
   visiting.delete(oid);
 }
 
-async function hydrateRemoteHead(workspace: WorkspaceIdentity, token: string, dir: string, head: string | null, state = createHydrationState()): Promise<HydrationState> {
+async function hydrateRemoteHead(workspace: GitHubWorkspaceIdentity, token: string, dir: string, head: string | null, state = createHydrationState()): Promise<HydrationState> {
   if (head) await hydrateCommit(workspace, token, dir, head, state);
   return state;
 }
@@ -242,7 +249,7 @@ function isRestUnsupported(error: unknown): boolean {
   return Boolean(error && typeof error === "object" && "propriumCode" in error && error.propriumCode === "rest_unsupported");
 }
 
-function smartHttpClient(workspace: WorkspaceIdentity, token: string, relayUrl: string): HttpClient {
+function smartHttpClient(workspace: GitHubWorkspaceIdentity, token: string, relayUrl: string): HttpClient {
   let relay: URL;
   try { relay = new URL(relayUrl); }
   catch { return failure("git_error", "A configured GitHub relay origin is required for Git transport."); }
@@ -303,7 +310,7 @@ function smartHttpClient(workspace: WorkspaceIdentity, token: string, relayUrl: 
   };
 }
 
-async function countMissingRemoteCommits(workspace: WorkspaceIdentity, token: string, dir: string, head: string): Promise<number> {
+async function countMissingRemoteCommits(workspace: GitHubWorkspaceIdentity, token: string, dir: string, head: string): Promise<number> {
   const pending = [head];
   const seen = new Set<string>();
   const metadata = new Map<string, GitHubCommit>();
@@ -339,7 +346,7 @@ async function countMissingRemoteCommits(workspace: WorkspaceIdentity, token: st
   return missing;
 }
 
-async function fetchViaSmartHttp(workspace: WorkspaceIdentity, token: string, relayUrl: string, dir: string, expectedHead: string): Promise<void> {
+async function fetchViaSmartHttp(workspace: GitHubWorkspaceIdentity, token: string, relayUrl: string, dir: string, expectedHead: string): Promise<void> {
   const url = `https://github.com/${workspace.owner}/${workspace.repository}.git`;
   let result: Awaited<ReturnType<typeof git.fetch>>;
   try {
@@ -387,7 +394,7 @@ function isoGitDate(person: CommitObject["author"]): string {
 
 interface UploadedTreeEntry { path: string; mode: string; type: "blob" | "tree" | "commit"; sha: string; }
 
-async function uploadTree(workspace: WorkspaceIdentity, token: string, dir: string, oid: string, uploadedTrees: Set<string>, uploadedBlobs: Set<string>, uploadedObjects: number): Promise<number> {
+async function uploadTree(workspace: GitHubWorkspaceIdentity, token: string, dir: string, oid: string, uploadedTrees: Set<string>, uploadedBlobs: Set<string>, uploadedObjects: number): Promise<number> {
   if (uploadedTrees.has(oid)) return uploadedObjects;
   uploadedTrees.add(oid);
   const { tree } = await git.readTree({ fs, dir, oid });
@@ -415,7 +422,7 @@ async function uploadTree(workspace: WorkspaceIdentity, token: string, dir: stri
   return uploadedObjects;
 }
 
-async function uploadCommitGraph(workspace: WorkspaceIdentity, token: string, dir: string, head: string, stopAt: string | null): Promise<void> {
+async function uploadCommitGraph(workspace: GitHubWorkspaceIdentity, token: string, dir: string, head: string, stopAt: string | null): Promise<void> {
   const ordered: string[] = [];
   const seen = new Set<string>();
   const pending = [head];
@@ -450,7 +457,7 @@ async function uploadCommitGraph(workspace: WorkspaceIdentity, token: string, di
   }
 }
 
-async function remoteContains(workspace: WorkspaceIdentity, token: string, head: string, wanted: string): Promise<boolean> {
+async function remoteContains(workspace: GitHubWorkspaceIdentity, token: string, head: string, wanted: string): Promise<boolean> {
   const pending = [head];
   const seen = new Set<string>();
   while (pending.length) {
@@ -466,7 +473,7 @@ async function remoteContains(workspace: WorkspaceIdentity, token: string, head:
   return false;
 }
 
-async function reconcilePublish(workspace: WorkspaceIdentity, token: string, expectedRemoteHead: string | null, targetHead: string): Promise<{ state: "published"; head: string; remoteHead: string } | { state: "conflict"; expectedRemoteHead: string | null; remoteHead: string | null } | { state: "remote-unknown"; expectedRemoteHead: string | null; observedRemoteHead: string | null }> {
+async function reconcilePublish(workspace: GitHubWorkspaceIdentity, token: string, expectedRemoteHead: string | null, targetHead: string): Promise<{ state: "published"; head: string; remoteHead: string } | { state: "conflict"; expectedRemoteHead: string | null; remoteHead: string | null } | { state: "remote-unknown"; expectedRemoteHead: string | null; observedRemoteHead: string | null }> {
   let observed: string | null;
   try { observed = await readRemoteHead(workspace, token); }
   catch (error) {
@@ -520,13 +527,21 @@ interface WorkspaceBinding { identity: WorkspaceIdentity; lastConfirmedHead: str
 async function checkBinding(workspace: WorkspaceIdentity, binding: string, dir: string): Promise<WorkspaceBinding | null> {
   if (!(await exists(binding))) return null;
   let previous: WorkspaceBinding;
-  try { previous = JSON.parse(await fs.readFile(binding, "utf8")) as WorkspaceBinding; }
+  try {
+    previous = JSON.parse(await fs.readFile(binding, "utf8")) as WorkspaceBinding;
+    validateWorkspaceIdentity(previous.identity);
+  }
   catch { failure("storage_unknown", "The stored workspace identity could not be read safely."); }
   const identity = previous!.identity;
-  if (identity.origin !== workspace.origin || identity.repositoryId !== workspace.repositoryId
-    || identity.owner !== workspace.owner || identity.repository !== workspace.repository
-    || identity.branch !== workspace.branch || identity.localWorkspaceId !== workspace.localWorkspaceId) {
-    failure("identity_mismatch", "This local workspace ID is already bound to a different origin, repository, or branch.");
+  const sameIdentity = isGitHubWorkspaceIdentity(identity) && isGitHubWorkspaceIdentity(workspace)
+    ? identity.origin === workspace.origin && identity.repositoryId === workspace.repositoryId
+      && identity.owner === workspace.owner && identity.repository === workspace.repository
+      && identity.branch === workspace.branch && identity.localWorkspaceId === workspace.localWorkspaceId
+    : !isGitHubWorkspaceIdentity(identity) && !isGitHubWorkspaceIdentity(workspace)
+      && identity.name === workspace.name && identity.branch === workspace.branch
+      && identity.localWorkspaceId === workspace.localWorkspaceId;
+  if (!sameIdentity) {
+    failure("identity_mismatch", "This local workspace ID is already bound to a different workspace or branch.");
   }
   if (previous!.lastConfirmedHead !== null && !/^[a-f0-9]{40}$/u.test(previous!.lastConfirmedHead ?? "")) {
     failure("storage_unknown", "The saved local Git head receipt is malformed.");
@@ -684,7 +699,9 @@ async function operation(request: LocalGitRequest): Promise<unknown> {
     if (!bound) {
       try {
         await git.init({ fs, dir: paths.dir, defaultBranch: request.workspace.branch });
-        await git.addRemote({ fs, dir: paths.dir, remote: "origin", url: `https://github.com/${request.workspace.owner}/${request.workspace.repository}.git` });
+        if (isGitHubWorkspaceIdentity(request.workspace)) {
+          await git.addRemote({ fs, dir: paths.dir, remote: "origin", url: `https://github.com/${request.workspace.owner}/${request.workspace.repository}.git` });
+        }
         await fs.writeFile(paths.binding, JSON.stringify({ identity: request.workspace, lastConfirmedHead: null } satisfies WorkspaceBinding), "utf8");
         await flush();
         knownHeads.set(paths.dir, null);
@@ -696,10 +713,12 @@ async function operation(request: LocalGitRequest): Promise<unknown> {
   }
   if (!bound || !(await exists(`${paths.dir}/.git/HEAD`))) failure("not_initialized", "Initialize this local workspace before using Git operations.");
   if (request.operation === "remote-head") {
+    requireGitHubIdentity(request.workspace);
     await verifyRemoteRepository(request.workspace, request.token, false);
     return { repositoryId: request.workspace.repositoryId, branch: request.workspace.branch, head: await readRemoteHead(request.workspace, request.token) };
   }
   if (request.operation === "remote-fetch" || request.operation === "remote-pull") {
+    requireGitHubIdentity(request.workspace);
     await verifyRemoteRepository(request.workspace, request.token, false);
     const remoteHead = await readRemoteHead(request.workspace, request.token);
     const localHead = await currentHead(paths.dir);
@@ -756,6 +775,7 @@ async function operation(request: LocalGitRequest): Promise<unknown> {
     return { state: "fast-forwarded", previousHead, head: remoteHead };
   }
   if (request.operation === "remote-publish") {
+    requireGitHubIdentity(request.workspace);
     await verifyRemoteRepository(request.workspace, request.token, true);
     const localHead = await currentHead(paths.dir);
     const localStatus = await status(paths.dir);
