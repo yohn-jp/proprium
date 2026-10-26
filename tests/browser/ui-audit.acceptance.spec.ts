@@ -1,3 +1,4 @@
+import { readFile } from "node:fs/promises";
 import { expect, test } from "@playwright/test";
 import { reviewChangedFiles, showPanel } from "./restored-ui.helpers.js";
 
@@ -63,7 +64,7 @@ test("saved workspace files round-trip through an explicitly exported ZIP", asyn
   await page.getByRole("button", { name: "ローカル作品を作成", exact: true }).click();
   await showPanel(page, "outline");
   await page.locator(".workspace-transfer-panel > summary").click();
-  await page.getByLabel("取り込むファイル・ZIP", { exact: true }).setInputFiles(archivePath!);
+  await page.getByLabel("取り込むファイル・ZIP", { exact: true }).setInputFiles({ name: archive.suggestedFilename(), mimeType: "application/zip", buffer: await readFile(archivePath!) });
   await expect(page.getByRole("list", { name: "Repository files" }).getByRole("button", { name: "原稿.md", exact: true })).toBeVisible();
   await showPanel(page, "editor");
   await expect(page.getByRole("textbox", { name: "原稿 Markdown" })).toHaveText("持ち出して、もう一度開く原稿。\n");
