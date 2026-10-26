@@ -456,6 +456,101 @@
   scroll-padding-bottom:16px;
 }
 
+/* Keep the manuscript on screen when the mobile browser has little vertical room.
+   Editor display controls remain available immediately after the writing surface. */
+@media (max-height: 560px) {
+  .mobile-shell:has(.mobile-shell-workspace-view[data-active-view="writing"]) .mobile-shell-identity-bar {
+    min-height: 48px;
+    gap: 8px;
+    padding-block: 3px;
+  }
+  .mobile-shell:has(.mobile-shell-workspace-view[data-active-view="writing"]) .mobile-shell-wordmark,
+  .mobile-shell:has(.mobile-shell-workspace-view[data-active-view="writing"]) .mobile-shell-context,
+  .mobile-shell:has(.mobile-shell-workspace-view[data-active-view="writing"]) .mobile-shell-page-mark,
+  .mobile-shell:has(.mobile-shell-workspace-view[data-active-view="writing"]) .mobile-shell-shared-header,
+  .mobile-shell:has(.mobile-shell-workspace-view[data-active-view="writing"]) .mobile-shell-writing-accessories {
+    display: none;
+  }
+  .mobile-shell:has(.mobile-shell-workspace-view[data-active-view="writing"]) .mobile-shell-footer {
+    box-shadow: none;
+  }
+  .mobile-shell:has(.mobile-shell-workspace-view[data-active-view="writing"]) .mobile-shell-navigation {
+    min-height: 42px;
+    padding-block: 1px;
+  }
+  .mobile-shell:has(.mobile-shell-workspace-view[data-active-view="writing"]) .mobile-shell-navigation ion-button {
+    min-height: 38px;
+  }
+  .mobile-shell:has(.mobile-shell-workspace-view[data-active-view="writing"]) .mobile-shell-nav-mark {
+    display: none;
+  }
+  .mobile-shell:has(.mobile-shell-workspace-view[data-active-view="writing"]) .mobile-shell-status {
+    bottom: calc(2.8rem + env(safe-area-inset-bottom, 0px));
+    max-height: 2.15rem;
+    padding: 0.3rem 0.5rem;
+    font-size: 0.72rem;
+  }
+  .mobile-shell .st-workspace-configuration > summary {
+    min-height: 29px;
+    font-size: 0.72rem;
+  }
+  .mobile-shell .st-workspace-mobile-tabs {
+    min-height: 31px;
+    gap: 2px;
+    padding: 1px 6px;
+  }
+  .mobile-shell .st-workspace-mobile-tabs button {
+    min-height: 29px;
+    padding: 2px 7px;
+    font-size: 0.68rem;
+  }
+  .mobile-shell .st-workspace-mobile-pane { min-height: 0; }
+  .mobile-shell .st-workspace-panel-body .editor {
+    display: flex;
+    flex-direction: column;
+    gap: 0;
+    padding: 0.2rem 0.5rem;
+  }
+  .mobile-shell .st-workspace-panel-body .editor-header {
+    flex: 0 0 auto;
+    min-height: 0;
+    padding: 0;
+    margin: 0;
+    border: 0;
+  }
+  .mobile-shell .st-workspace-panel-body .editor-header .scene-heading { display: none; }
+  .mobile-shell .st-workspace-panel-body .editor-actions {
+    display: grid;
+    width: 100%;
+    grid-template-columns: repeat(5, minmax(0, 1fr));
+    gap: 3px;
+  }
+  .mobile-shell .st-workspace-panel-body .editor-actions button {
+    min-width: 0;
+    min-height: 36px;
+    padding: 2px 3px;
+    font-size: 0.63rem;
+    line-height: 1.15;
+    overflow-wrap: anywhere;
+  }
+  .mobile-shell .st-workspace-panel-body .editor-protection { margin: 2px 0; }
+  .mobile-shell .st-workspace-panel-body .editor-columns,
+  .mobile-shell .st-workspace-panel-body .reading-view { order: 1; }
+  .mobile-shell .st-workspace-panel-body .editor-display-controls { order: 2; }
+  .mobile-shell .st-workspace-panel-body .editor-columns {
+    gap: 0;
+    margin: 0;
+  }
+  .mobile-shell .st-workspace-panel-body .manuscript-column {
+    min-height: 0;
+    padding: 0.25rem 0.5rem;
+  }
+  .mobile-shell .st-workspace-panel-body .cm-content {
+    min-height: 30vh;
+    padding: 0.5rem 0.2rem;
+  }
+}
+
 /* IonModal may be attached outside IonApp: own theme variables must be complete. */
 ion-modal.mobile-shell-reference-modal {
   --height:100%;--width:min(100%,760px);
