@@ -12,6 +12,18 @@ export interface Snapshot {
   draft_generation: string | null;
   remote_commit?: string | null;
 }
+export interface WorkspaceIdentityRead {
+  scope: Scope;
+  snapshot: Snapshot;
+  device_id: string;
+  legacy_project_ids: string[];
+  publication?: {
+    remote_commit: string | null;
+    files: { path: string; revision: string | null; remote_confirmed: boolean }[];
+  };
+}
+export interface StableChangeTimestamp { timestamp: string }
+export interface RepositorySnapshotLease { scope: Scope; snapshot: Snapshot }
 export interface CacheKey {
   plugin_id: string;
   snapshot: Snapshot;
@@ -106,7 +118,7 @@ export interface ChangeSet {
   /** Exact versioned domain input retained by the Host receipt authority. */
   source_payload?: unknown;
   source_payload_digest?: string;
-  domain_evidence?: unknown[];
+  domain_evidence?: unknown;
 }
 export interface ActionBinding {
   action_id: string;
