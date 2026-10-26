@@ -183,6 +183,93 @@ test("lost proposal response is recovered from the journal even after its tempor
   assert.equal(new TextDecoder().decode(content.bytes), "sealed bytes");
 });
 
+test("proposal receipt takes exact sealed bytes before the ArtifactBroker marks them receipt-owned", async t => {
+  let brokerModule: {
+    readonly ArtifactBroker: new (store: unknown) => {
+      create(pluginId: string, input: { media_type: string; filename: string; scope: WriterScope; snapshot: WriterSnapshot }): Promise<{ artifact_id: string }>;
+      append(pluginId: string, artifactId: string, sequence: number, bytes: readonly number[]): Promise<unknown>;
+      seal(pluginId: string, artifactId: string, digest: string, totalBytes: number): Promise<{ total_bytes: number; sha256: string }>;
+      hostMetadata(pluginId: string, artifactId: string, scope: WriterScope, snapshot: WriterSnapshot): Promise<{ total_bytes: number; sha256: string }>;
+      readSealedChunk(pluginId: string, artifactId: string, offset: number, length: number): Promise<{ bytes: Uint8Array; total_bytes: number; sha256: string }>;
+      retainForProposal(pluginId: string, artifactId: string, proposalId: string): Promise<void>;
+      releaseTemporary(pluginId: string): Promise<void>;
+      discard(pluginId: string, artifactId: string): Promise<{ discarded: boolean }>;
+    };
+    readonly MemoryBrokerStore: new () => unknown;
+  };
+  try {
+    const moduleName: string = "./brokers.js";
+    brokerModule = await import(moduleName) as typeof brokerModule;
+  } catch { t.skip("The canonical ArtifactBroker is supplied by the Host broker lane."); return; }
+
+  const pluginId = "proprium.research";
+  const broker = new brokerModule.ArtifactBroker(new brokerModule.MemoryBrokerStore());
+  const raw = new Uint8Array(300 * 1024);
+  for (let index = 0; index < raw.byteLength; index += 1) raw[index] = index % 251;
+  const metadata = await broker.create(pluginId, { media_type: "application/json", filename: "terms.json", scope, snapshot });
+  const firstChunk = raw.subarray(0, 256 * 1024);
+  const secondChunk = raw.subarray(firstChunk.byteLength);
+  await broker.append(pluginId, metadata.artifact_id, 0, [...firstChunk]);
+  await broker.append(pluginId, metadata.artifact_id, 1, [...secondChunk]);
+  const digest = await sha(raw);
+  const sealed = await broker.seal(pluginId, metadata.artifact_id, digest, raw.byteLength);
+  assert.equal(sealed.sha256, digest);
+
+  const workspace = new MemoryWriterWorkspace();
+  const journal = new MemoryJournal();
+  const writer = new ChangeWriter({
+    workspace,
+    journal,
+    new_proposal_id: () => "host-broker-proposal",
+    resolve_artifact: async (requestedScope, requestedSnapshot, artifactId, ownerPluginId) => {
+      assert.equal(ownerPluginId, pluginId);
+      const artifact = await broker.hostMetadata(ownerPluginId, artifactId, requestedScope, requestedSnapshot);
+      const bytes = new Uint8Array(artifact.total_bytes);
+      for (let offset = 0; offset < bytes.byteLength;) {
+        const chunk = await broker.readSealedChunk(ownerPluginId, artifactId, offset, Math.min(256 * 1024, bytes.byteLength - offset));
+        assert.equal(chunk.total_bytes, bytes.byteLength);
+        assert.equal(chunk.sha256, artifact.sha256);
+        bytes.set(chunk.bytes, offset);
+        offset += chunk.bytes.byteLength;
+      }
+      assert.equal(await sha(bytes), artifact.sha256);
+      return bytes;
+    },
+  });
+  const set = changeSet({ key: "broker-transfer" });
+  const unit = set.units[0]!;
+  const operation = unit.operations[0]!;
+  const artifactSet: ChangeSet = {
+    ...set,
+    units: [{ ...unit, operations: [{
+      id: operation.id,
+      kind: operation.kind,
+      path: operation.path,
+      expected_revision: operation.expected_revision,
+      content_artifact: metadata.artifact_id,
+    }] }],
+  };
+  const producer = {
+    ...caller("broker-transfer"),
+    producer_plugin_id: pluginId,
+    action_id: "proprium.research.terms.propose",
+  };
+  const admission = await writer.propose(artifactSet, producer, artifactSet.read_set);
+  // This is the Host service's post-admission ownership handoff. The proposal journal already has all exact bytes.
+  await broker.retainForProposal(pluginId, metadata.artifact_id, admission.proposal_id);
+  await broker.releaseTemporary(pluginId);
+  assert.deepEqual(await broker.discard(pluginId, metadata.artifact_id), { discarded: false });
+
+  const persisted = await writer.read_content(scope, admission.proposal_id, "content:unit-1:operation-1", 0, 256 * 1024);
+  const persistedTail = await writer.read_content(scope, admission.proposal_id, "content:unit-1:operation-1", persisted.next_offset!, 256 * 1024);
+  const joined = new Uint8Array(persisted.bytes.byteLength + persistedTail.bytes.byteLength);
+  joined.set(persisted.bytes); joined.set(persistedTail.bytes, persisted.bytes.byteLength);
+  assert.deepEqual(joined, raw);
+  assert.equal(persisted.sha256, digest);
+  assert.equal((await writer.apply(scope, admission.proposal_id, ["unit-1"], "ui", true)).status, "applied");
+  assert.deepEqual((await workspace.read(scope, "chapters/one.md")).bytes, raw);
+});
+
 test("proposal preview and receipt retain the exact source payload and domain evidence", async () => {
   const { writer } = await makeWriter();
   const payload = { z: 1, a: "source" };
