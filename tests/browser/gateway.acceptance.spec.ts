@@ -1,5 +1,5 @@
 import { showPanel, expectEditorText, chooseFile } from "./restored-ui.helpers.js";
-import { expect, test } from "@playwright/test";
+import { expect, test, type Page } from "@playwright/test";
 import { createHash, createPrivateKey, generateKeyPairSync, sign as ed25519Sign, type KeyObject } from "node:crypto";
 import { execFileSync } from "node:child_process";
 import { mkdtempSync, readFileSync, rmSync } from "node:fs";
@@ -77,6 +77,14 @@ function signedHostPanelFixture(origin: string): Map<string, ServedFile> {
   files.set(new URL(manifestPath, artifactBase).pathname, { body: manifestBytes, contentType: "application/json" });
   files.set(new URL(assetPath, artifactBase).pathname, { body: artifactBytes, contentType: "application/wasm" });
   return files;
+}
+
+async function previewCatalogPlugin(page: Page, pluginId: string, version: string): Promise<void> {
+  await page.getByRole("button", { name: "信頼済みカタログを表示" }).click();
+  await expect(page.locator(".registry-plugin-list")).toContainText(pluginId);
+  await expect(page.locator(".registry-plugin-card h4 code").first()).toHaveText(pluginId);
+  await expect(page.locator(".registry-plugin-card").getByText(version, { exact: true })).toBeVisible();
+  await page.getByRole("button", { name: `${pluginId} ${version} の署名済みプレビューを確認` }).click();
 }
 
 test.beforeAll(() => {
@@ -235,10 +243,9 @@ test("exposes the fixed MCP tools without any client token and executes against 
   });
   const pluginPanel = page.locator("details.plugin-manager-panel");
   await pluginPanel.locator("summary").click();
-  await page.getByLabel("Install from trusted registry").fill("fixture.compute-sum");
-  await page.getByLabel("Version (optional: latest stable)").fill("1.0.0");
-  await page.getByRole("button", { name: "Verify and preview" }).click();
-  await page.getByRole("button", { name: "Download and install disabled" }).click();
+  await previewCatalogPlugin(page, "fixture.compute-sum", "1.0.0");
+  await page.getByRole("region", { name: "インストールプレビュー" }).waitFor();
+  await page.getByRole("button", { name: "ダウンロードして無効状態でインストール" }).click();
   const plugin = page.getByRole("listitem").filter({ hasText: "fixture.compute-sum" }).filter({ hasText: "v1.0.0" });
   await expect(plugin).toBeVisible();
   await plugin.getByRole("button", { name: "Enable" }).click();
