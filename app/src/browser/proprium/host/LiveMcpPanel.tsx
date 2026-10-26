@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState, type ReactElement } from "react";
-import { BrowserLocalGit } from "../git/index.js";
+import { BrowserLocalGit, BrowserLocalGitError } from "../git/index.js";
 import type { FileRevisionExpectation, WorkspaceChange, WorkspaceIdentity, GitHubWorkspaceIdentity } from "../git/protocol.js";
 import { isGitHubWorkspaceIdentity, validateGitPath } from "../git/protocol.js";
 import { TextDiff } from "./TextDiff.js";
@@ -412,7 +412,9 @@ export function LiveMcpPanel({
       setError(`Approved “${proposal.title}” for ${proposal.target.owner}/${proposal.target.repository} (${proposal.target.branch}). Changes remain local until explicitly committed and published.`);
     } catch (caught) {
       const message = caught instanceof Error ? caught.message : "Proposal review failed.";
-      if (message.includes("changed since the proposal")) markProposalReviewed(proposal.id, false);
+      if ((caught instanceof BrowserLocalGitError && caught.code === "revision_conflict") || message.includes("changed since the proposal")) {
+        markProposalReviewed(proposal.id, false);
+      }
       setError(message);
     } finally {
       if (!active) targetGit.close();
