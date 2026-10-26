@@ -6,6 +6,9 @@ import { isGitHubWorkspaceIdentity, validateWorkspaceIdentity } from "../git/pro
 import type { CommitSummary, FileRevision, LocalWorkspaceIdentity, StatusEntry, WorkspaceIdentity } from "../git/protocol.js";
 import { createGitHubAccountSession, GitHubSyncError } from "../git/github-sync.js";
 import type { GitHubAccount, GitHubDevicePrompt, GitHubRepository, GitHubAccountSession, GitHubSyncClient } from "../git/github-sync.js";
+import { WorkspaceFileBrowser } from "./WorkspaceFileBrowser.js";
+import { WorkspaceTransferPanel, downloadWorkspaceFile } from "./WorkspaceTransferPanel.js";
+import type { WorkspaceFile } from "../git/index.js";
 import { PluginPanel } from "./PluginPanel.js";
 import { LiveMcpPanel } from "./LiveMcpPanel.js";
 
@@ -145,11 +148,10 @@ export function HostApp(): ReactElement {
   const [workspaceGeneration, setWorkspaceGeneration] = useState("");
   const [git, setGit] = useState<BrowserLocalGit | null>(null);
   const [syncClient, setSyncClient] = useState<GitHubSyncClient | null>(null);
-  const [files, setFiles] = useState<Array<{ path: string; type: "blob" | "tree"; oid: string; bytes: number }>>([]);
+  const [files, setFiles] = useState<WorkspaceFile[]>([]);
   const [status, setStatus] = useState<{ head: string | null; entries: StatusEntry[]; localState: "draft" | "local-committed" }>({ head: null, entries: [], localState: "draft" });
   const [history, setHistory] = useState<CommitSummary[]>([]);
   const [currentFile, setCurrentFile] = useState<OpenFile | null>(null);
-  const [newPath, setNewPath] = useState("");
   const [commitMessage, setCommitMessage] = useState("");
   const [preferences, setPreferences] = useState(readPreferences);
   const [syncState, setSyncState] = useState<SyncState>("local-draft");
@@ -498,12 +500,11 @@ export function HostApp(): ReactElement {
     finally { setBusy(false); }
   }
 
-  async function createFile(): Promise<void> {
+  async function createFile(path: string): Promise<void> {
     if (!git || !workspace) return;
     const initialFile = currentFileRef.current;
     const discardConfirmed = Boolean(initialFile?.dirty && window.confirm("Discard unsaved editor text and create another file?"));
     if (initialFile?.dirty && !discardConfirmed) return;
-    const path = newPath.trim();
     if (!path) { setMessage({ tone: "error", text: "Enter a repository-relative file path." }); return; }
     setBusy(true);
     try {
@@ -515,7 +516,6 @@ export function HostApp(): ReactElement {
       setCurrentFile({ path, data: null, revision: read.revision, text: "", binary: false, dirty: true });
       setSyncState("editing");
       setRequestedPanel(value => ({ id: "editor", sequence: value.sequence + 1 }));
-      setNewPath("");
       requestAnimationFrame(() => document.querySelector<HTMLElement>(".cm-content")?.focus());
     } catch (error) { setMessage({ tone: "error", text: errorMessage(error) }); }
     finally { setBusy(false); }
@@ -820,15 +820,14 @@ export function HostApp(): ReactElement {
       </div>
       <p className="locality-note"><span>●</span> Local workspaces stay in this browser. GitHub workspaces use this browser's local Git until you explicitly publish.</p>
     </section>;
-  const library = workspace ? <div className="host-controls"><section className="sidebar-section">
-            <div className="section-title-row"><h2>Files</h2><span className="count-badge">{files.filter(file => file.type === "blob").length}</span></div>
-            <form className="new-file-form" onSubmit={event => { event.preventDefault(); void createFile(); }}>
-              <label className="sr-only" htmlFor="new-file-path">New file path</label><input id="new-file-path" value={newPath} onChange={event => setNewPath(event.target.value)} placeholder="New file path" maxLength={1024} />
-              <button type="submit" aria-label="Create new file" title="Create new file" disabled={busy}>+</button>
-            </form>
-            {files.length ? <ul className="file-list" aria-label="Repository files">{files.filter(file => file.type === "blob").map(file => <li key={file.path}><button type="button" aria-current={currentFile?.path === file.path ? "page" : undefined} className={`file-row ${currentFile?.path === file.path ? "file-selected" : ""}`} onClick={() => void loadFile(file.path)}><span className="file-icon" aria-hidden="true">{fileIcon(file.path)}</span><span className="file-path">{file.path}</span>{changedPaths.has(file.path) && <span className="change-dot" aria-label="Local change" />}</button></li>)}</ul> : <p className="sidebar-empty">This repository has no files yet.</p>}
-          </section>
-          <WorkspaceDraftRecovery workspace={workspace.identity} authorScope={preferences.email || "local"} worktreePaths={files.map(file => file.path)} onOpenDraft={openRecoveredDraft} />
+  const library = workspace ? <div className="host-controls"><WorkspaceFileBrowser
+            git={git!} files={files} selectedPath={currentFile?.path ?? null} pendingPath={currentFile?.data === null ? currentFile.path : undefined}
+            changedPaths={changedPaths} busy={busy} canModify={!currentFile?.dirty} onBusyChange={setBusy}
+            onSelect={path => { if (path === currentFile?.path) revealPanel("editor"); else void loadFile(path); }} onCreate={createFile}
+            onMoved={async (from, to) => { const targetGit = git!, targetWorkspace = workspace; await refresh(targetGit, targetWorkspace); if (gitRef.current === targetGit && currentFileRef.current?.path === from) await loadFile(to); }}
+            recovery={<WorkspaceDraftRecovery workspace={workspace.identity} authorScope={preferences.email || "local"} worktreePaths={files.map(file => file.path)} onOpenDraft={openRecoveredDraft} />}
+            transfer={<WorkspaceTransferPanel git={git!} files={files} busy={busy} canImport={!currentFile?.dirty} onBusyChange={setBusy} onImported={async paths => { const targetGit = git!, targetWorkspace = workspace; await refresh(targetGit, targetWorkspace); if (gitRef.current === targetGit && paths[0]) await loadFile(paths[0]); }} />}
+          />
           <section className="sidebar-section sync-sidebar-section">
             <div className="section-title-row"><h2>{isGitHubWorkspaceIdentity(workspace.identity) ? "GitHub" : "Remote sync"}</h2><span className={`connection-indicator ${syncClient ? "connected" : "local-only"}`} aria-label={syncClient ? "Connected to GitHub" : "Local workspace only"}>{syncClient ? "GitHub接続済み" : "このブラウザーのみ"}</span></div>
             {syncClient ? <div className="sync-actions"><button type="button" onClick={() => void fetchRemote()} disabled={busy}>Fetch</button><button type="button" onClick={() => void pullRemote()} disabled={busy}>Pull</button><button type="button" className="publish-button" onClick={() => void publishRemote()} disabled={busy || status.localState !== "local-committed"}>Publish</button></div> : isGitHubWorkspaceIdentity(workspace.identity)
