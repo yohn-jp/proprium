@@ -7,10 +7,32 @@ import { validateAuthoringSurfaceDeclaration } from "./validate.js";
 export interface AuthoringSurfaceRegistration {
   readonly pluginId: string;
   readonly pluginVersion: string;
+  readonly manifestDigest?: string;
   readonly surface: AuthoringSurfaceDeclaration;
   readonly status: AuthoringSurfaceStatus;
   readonly data?: AuthoringJson;
   readonly message?: string;
+}
+
+/** Converts service metadata into a validated Host-renderable registration. */
+export function validateAuthoringSurfaceRegistrations(values: readonly unknown[]): AuthoringSurfaceRegistration[] {
+  const registrations: AuthoringSurfaceRegistration[] = [];
+  for (const value of values) {
+    if (!value || typeof value !== "object" || Array.isArray(value)) continue;
+    const raw = value as Record<string, unknown>;
+    if (typeof raw.pluginId !== "string" || typeof raw.pluginVersion !== "string" || !raw.surface || typeof raw.surface !== "object") continue;
+    const availability = raw.availability;
+    if (!(["ready", "disabled", "dependency_unavailable", "capability_denied", "incompatible"] as unknown[]).includes(availability)) continue;
+    try {
+      const surface = validateAuthoringSurfaceDeclaration(raw.surface);
+      const status: AuthoringSurfaceStatus = availability === "ready" ? "ready" : availability === "incompatible" ? "failure" : "unavailable";
+      const reason = typeof raw.reason === "string" ? raw.reason : undefined;
+      registrations.push({ pluginId: raw.pluginId, pluginVersion: raw.pluginVersion, surface, status,
+        ...(reason ? { message: reason } : {}),
+        ...(typeof raw.manifestDigest === "string" ? { manifestDigest: raw.manifestDigest } : {}) });
+    } catch { /* Invalid signed UI is never handed to a renderer. */ }
+  }
+  return registrations;
 }
 
 export type AuthoringActionInvoker = (event: Event, pluginId: string, actionId: string,

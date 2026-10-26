@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import { test } from "node:test";
 import { createElement } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
-import { AuthoringSurface, formValuesToJson, resolveAuthoringNavigation, resolveAuthoringTemplate } from "./AuthoringSurface.js";
+import { AuthoringSurface, formValuesToJson, mergeInitialFormValues, optionsForRecordField, resolveAuthoringNavigation, resolveAuthoringTemplate } from "./AuthoringSurface.js";
 import type { AuthoringSurfaceDeclaration } from "./types.js";
 import { validateAuthoringSurfaceDeclaration } from "./validate.js";
 
@@ -154,6 +154,25 @@ test("record-list forms retain unknown row data, edit declared fields, and prese
     { episode_id: "e-1", title: "一話改訂", order: 1, extra: ["kept"] },
     { episode_id: "e-2", title: "二話改訂", order: 2, future_key: { retained: true } },
   ] });
+});
+
+test("changing dependent select data keeps edited record rows and current choices", () => {
+  const fields = [{ id: "episodes", label: "話", type: "record-list" as const, fields: [{ id: "title", label: "題名", type: "string" as const }] },
+    { id: "scope_id", label: "章", type: "enum" as const, options: { data_key: "last_action_result.items" }, option_value_key: "id", option_label_key: "title" }];
+  const original = [{ episode_id: "e-1", title: "原題", future: "retained" }];
+  const previousInitial = { episodes: original };
+  const current = { episodes: [{ episode_id: "e-1", title: "編集中", future: "retained" }], scope_id: "chapter-1" };
+  const nextInitial = { episodes: original };
+  assert.deepEqual(mergeInitialFormValues(fields, current, previousInitial, nextInitial), current);
+});
+
+test("record-list dynamic options preserve selected values from earlier pages", () => {
+  const field = { id: "scope_id", label: "章", type: "enum" as const,
+    options: { data_key: "last_action_result.items" }, option_value_key: "id", option_label_key: "title" };
+  assert.deepEqual(optionsForRecordField(field, { last_action_result: { items: [{ id: "chapter-2", title: "第二章" }] } }, "chapter-1"), [
+    { value: "chapter-2", label: "第二章" },
+    { value: "chapter-1", label: "chapter-1（現在の値を保持）" },
+  ]);
 });
 
 test("forms render Host-owned fields and inaccessible UI markup is not accepted as content", () => {

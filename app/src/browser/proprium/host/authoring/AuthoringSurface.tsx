@@ -271,6 +271,28 @@ function optionsForField(field: AuthoringScalarField, data: AuthoringJson): read
   });
 }
 
+/**
+ * Record rows may refer to options loaded from different pages. Keep each row's current value
+ * available when the active page changes so a later page cannot invalidate an earlier choice.
+ */
+export function optionsForRecordField(
+  field: AuthoringScalarField,
+  data: AuthoringJson,
+  value: unknown,
+): readonly { readonly value: string; readonly label: string }[] {
+  const options = [...optionsForField(field, data)];
+  const present = new Set(options.map(option => option.value));
+  const selected = field.type === "multi-reference"
+    ? Array.isArray(value) ? value.filter((item): item is string => typeof item === "string") : []
+    : field.type === "enum" && typeof value === "string" ? [value] : [];
+  for (const item of selected.slice(0, 1000)) {
+    if (!item || present.has(item)) continue;
+    present.add(item);
+    options.push({ value: item, label: `${item}（現在の値を保持）` });
+  }
+  return options;
+}
+
 function initialScalarValue(field: AuthoringScalarField, value: unknown): unknown {
   if (field.type === "boolean") return typeof value === "boolean" ? value : undefined;
   if (field.type === "integer") return typeof value === "number" && Number.isSafeInteger(value) ? value : undefined;
@@ -295,6 +317,25 @@ function initialFormValues(fields: readonly AuthoringField[], data: AuthoringJso
     } catch { /* Data may not exist until the declared read action runs. */ }
   }
   return values;
+}
+
+function sameJsonValue(left: unknown, right: unknown): boolean {
+  return JSON.stringify(left) === JSON.stringify(right);
+}
+
+export function mergeInitialFormValues(
+  fields: readonly AuthoringField[],
+  current: Readonly<FormValues>,
+  previous: Readonly<FormValues>,
+  nextInitial: Readonly<FormValues>,
+): FormValues {
+  const next = { ...current };
+  for (const field of fields) {
+    if (!sameJsonValue(current[field.id], previous[field.id])) continue;
+    if (Object.hasOwn(nextInitial, field.id)) next[field.id] = nextInitial[field.id];
+    else delete next[field.id];
+  }
+  return next;
 }
 
 function FormScalarInput({ field, value, disabled, options = [], onChange }: {
@@ -343,7 +384,7 @@ function RecordListField({ field, value, data, disabled, onChange }: {
     <legend>{field.label}{field.required && <span aria-hidden="true"> *</span>}</legend>
     {rows.map((row, index) => <fieldset className="authoring-record-row" key={plainText(field.key_field ? readPath(row, field.key_field) : row.id) || `${field.id}-${index}`}>
       <legend>{field.label} {index + 1}</legend>
-      {field.fields.map(child => <label className="authoring-field" key={child.id}><span>{child.label}{child.required && <span aria-hidden="true"> *</span>}</span><FormScalarInput field={child} value={row[child.id]} options={optionsForField(child, data)} disabled={disabled} onChange={next => changeRow(index, child.id, next)} /></label>)}
+      {field.fields.map(child => <label className="authoring-field" key={child.id}><span>{child.label}{child.required && <span aria-hidden="true"> *</span>}</span><FormScalarInput field={child} value={row[child.id]} options={optionsForRecordField(child, data, row[child.id])} disabled={disabled} onChange={next => changeRow(index, child.id, next)} /></label>)}
       <div className="authoring-record-actions"><button type="button" disabled={index === 0} aria-label={`${field.label} ${index + 1}を上へ`} onClick={() => moveRow(index, -1)}>上へ</button><button type="button" disabled={index === rows.length - 1} aria-label={`${field.label} ${index + 1}を下へ`} onClick={() => moveRow(index, 1)}>下へ</button><button type="button" disabled={rows.length <= minItems} aria-label={`${field.label} ${index + 1}を削除`} onClick={() => removeRow(index)}>削除</button></div>
     </fieldset>)}
     {rows.length < maxItems && <button type="button" onClick={addRow}>項目を追加</button>}
@@ -362,15 +403,7 @@ function FormWidget({ node, data, invoke, busy }: {
   const baselineValues = useRef(initialValues);
   useEffect(() => {
     const previous = baselineValues.current;
-    setValues(current => {
-      const next = { ...current };
-      for (const field of node.fields) {
-        if (JSON.stringify(current[field.id]) !== JSON.stringify(previous[field.id])) continue;
-        if (Object.hasOwn(initialValues, field.id)) next[field.id] = initialValues[field.id];
-        else delete next[field.id];
-      }
-      return next;
-    });
+    setValues(current => mergeInitialFormValues(node.fields, current, previous, initialValues));
     baselineValues.current = initialValues;
   }, [initialValues, node.fields]);
   const [pendingContext, setPendingContext] = useState<AuthoringJson | null>(null);
@@ -396,8 +429,8 @@ function FormWidget({ node, data, invoke, busy }: {
           const childEmpty = childValue === undefined || childValue === "" || (Array.isArray(childValue) && !childValue.length);
           if (child.required && childEmpty) { setError(`${field.label} ${index + 1}: ${child.validation_message || `${child.label}を入力してください。`}`); return true; }
           if (typeof childValue === "string" && ((child.min_length !== undefined && childValue.length < child.min_length) || (child.max_length !== undefined && childValue.length > child.max_length))) { setError(`${field.label} ${index + 1}: ${child.validation_message || `${child.label}の入力を確認してください。`}`); return true; }
-          if (child.type === "enum" && typeof childValue === "string" && childValue && !optionsForField(child, data).some(option => option.value === childValue)) { setError(`${field.label} ${index + 1}: ${child.label}の選択肢を更新してください。`); return true; }
-          if (child.type === "multi-reference" && Array.isArray(childValue) && childValue.some(item => typeof item !== "string" || !optionsForField(child, data).some(option => option.value === item))) { setError(`${field.label} ${index + 1}: ${child.label}の選択肢を更新してください。`); return true; }
+          if (child.type === "enum" && typeof childValue === "string" && childValue && !optionsForRecordField(child, data, childValue).some(option => option.value === childValue)) { setError(`${field.label} ${index + 1}: ${child.label}の選択肢を更新してください。`); return true; }
+          if (child.type === "multi-reference" && Array.isArray(childValue) && childValue.some(item => typeof item !== "string" || !optionsForRecordField(child, data, childValue).some(option => option.value === item))) { setError(`${field.label} ${index + 1}: ${child.label}の選択肢を更新してください。`); return true; }
           return false;
         }));
         if (invalid) return true;

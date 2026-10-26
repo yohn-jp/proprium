@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import { test } from "node:test";
 import { createElement } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
-import { authoringPanelId, createAuthoringWorkspacePanels, type AuthoringSurfaceRegistration } from "./WorkspaceAuthoringPanels.js";
+import { authoringPanelId, createAuthoringWorkspacePanels, validateAuthoringSurfaceRegistrations, type AuthoringSurfaceRegistration } from "./WorkspaceAuthoringPanels.js";
 
 const registration: AuthoringSurfaceRegistration = {
   pluginId: "proprium.narrative",
@@ -41,4 +41,15 @@ test("panel IDs stay within the Workspace layout limit for long signed IDs", () 
   assert.ok(id.startsWith("plugin:proprium."));
   assert.ok(id.length <= 159);
   assert.equal(id, authoringPanelId("proprium." + "p".repeat(120), "surface." + "s".repeat(120)));
+});
+
+test("service registrations preserve disabled reasons and reject invalid signed surfaces", () => {
+  const result = validateAuthoringSurfaceRegistrations([
+    { pluginId: "proprium.narrative", pluginVersion: "2.0.0", manifestDigest: "abc", availability: "disabled", reason: "Enable the plugin.", surface: registration.surface },
+    { pluginId: "proprium.bad", pluginVersion: "2.0.0", availability: "ready", surface: { ...registration.surface, body: { id: "unsafe", type: "list", items: [], primary: "title", html: "<script/>" } } },
+  ]);
+  assert.equal(result.length, 1);
+  assert.equal(result[0]?.status, "unavailable");
+  assert.equal(result[0]?.message, "Enable the plugin.");
+  assert.equal(result[0]?.manifestDigest, "abc");
 });

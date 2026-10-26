@@ -22,6 +22,7 @@ interface PluginPanelProps {
   onBusyChange(value: boolean): void;
   onWorkspaceChanged(): Promise<void>;
   onRegisterLiveInvoker(invoker: ((args: Record<string, unknown>, signal: AbortSignal) => Promise<unknown>) | null): void;
+  onAuthoringSurfacesChanged?(): void;
 }
 interface SnapshotState { value: RuntimeSnapshot; inputRevisionKey: string; }
 
@@ -88,7 +89,7 @@ function snapshotForPlugin(plugin: InstalledPlugin, git: BrowserLocalGit, worksp
   return needsWorkspaceSnapshot(plugin) ? takeSnapshot(git, workspaceId) : Promise.resolve(emptySnapshot(workspaceId));
 }
 
-export function PluginPanel({ manager, workspaceId, git, revisionKey, canApplyChanges, hostBusy, onBusyChange, onWorkspaceChanged, onRegisterLiveInvoker }: PluginPanelProps): ReactElement {
+export function PluginPanel({ manager, workspaceId, git, revisionKey, canApplyChanges, hostBusy, onBusyChange, onWorkspaceChanged, onRegisterLiveInvoker, onAuthoringSurfacesChanged }: PluginPanelProps): ReactElement {
   const config = useMemo(registryConfig, []);
   const [plugins, setPlugins] = useState<InstalledPlugin[]>([]);
   const [registryCatalog, setRegistryCatalog] = useState<readonly RegistryCatalogEntry[]>([]);
@@ -134,7 +135,10 @@ export function PluginPanel({ manager, workspaceId, git, revisionKey, canApplyCh
     return () => onRegisterLiveInvoker(null);
   }, [manager, workspaceId, git, onRegisterLiveInvoker]);
 
-  async function refreshPlugins(): Promise<void> { setPlugins(await manager.installed()); }
+  async function refreshPlugins(): Promise<void> {
+    setPlugins(await manager.installed());
+    onAuthoringSurfacesChanged?.();
+  }
   const lastWorkspaceId = useRef(workspaceId);
   useEffect(() => {
     let cancelled = false;
@@ -150,13 +154,16 @@ export function PluginPanel({ manager, workspaceId, git, revisionKey, canApplyCh
           currentSnapshots.current.clear();
         }
         const installed = await manager.installed();
-        if (!cancelled) setPlugins(installed);
+        if (!cancelled) {
+          setPlugins(installed);
+          onAuthoringSurfacesChanged?.();
+        }
       } catch (error) {
         if (!cancelled) setNotice(error instanceof Error ? error.message : "Installed plugin metadata could not be verified.");
       }
     })();
     return () => { cancelled = true; };
-  }, [manager, workspaceId]);
+  }, [manager, workspaceId, onAuthoringSurfacesChanged]);
   async function loadRegistryCatalog(): Promise<void> {
     if (!config) return;
     setRegistryCatalog([]);
