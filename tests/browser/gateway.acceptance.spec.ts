@@ -320,7 +320,7 @@ test("exposes the fixed MCP tools without any client token and executes against 
   await page.getByLabel("Git author email").fill("gateway-e2e@example.invalid");
   await reviewChangedFiles(page);
   await page.getByRole("button", { name: "ローカルGitにコミット" }).click();
-  await expect(page.getByText(/^Committed locally · [a-f0-9]{8}$/u)).toBeVisible();
+  await expect(page.getByText(/^端末のGitに記録済み · [a-f0-9]{8}$/u)).toBeVisible();
   await context.setOffline(false);
 });
 
