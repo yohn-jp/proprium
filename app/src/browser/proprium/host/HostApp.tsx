@@ -15,6 +15,9 @@ import { applyThemeMode, loadThemeMode, persistThemeMode } from "../../../theme.
 import type { WorkspacePanel } from "../../../application/contracts.js";
 import { StorageRecoveryDialog } from "./StorageRecoveryDialog.js";
 import { RestoredEditor } from "./RestoredEditor.js";
+import { WorkspaceDraftRecovery } from "./WorkspaceDraftRecovery.js";
+import { discoverWorkspaceDrafts, draftBaseMatches } from "./workspace-drafts.js";
+import type { JournalEntry } from "../../../storage/journal.js";
 const MobileShell = lazy(() => import("../../../shells/mobile/MobileShell.js").then(module => ({ default: module.MobileShell })));
 
 function RetainedPanelSlot({ node }: { node: HTMLElement }): ReactElement {
@@ -511,6 +514,26 @@ export function HostApp(): ReactElement {
     finally { setBusy(false); }
   }
 
+  async function openRecoveredDraft(entry: JournalEntry): Promise<void> {
+    const targetGit = gitRef.current, targetWorkspace = workspaceRef.current;
+    const targetGeneration = workspaceGenerationRef.current;
+    if (!targetGit || !targetWorkspace || !(await beforeLayoutChange())) return;
+    const initialFile = currentFileRef.current;
+    if (initialFile?.dirty && !window.confirm("現在の入力は回復用に保護されています。選んだ下書きへ切り替えますか？")) return;
+    setBusy(true); setMessage(null);
+    try {
+      if (!discoverWorkspaceDrafts([entry], targetWorkspace.identity, preferences.email || "local").length) throw new Error("この作品・作者の下書きではありません。");
+      const current = await targetGit.read(entry.documentPath);
+      if (!(await draftBaseMatches(entry, current.data))) throw new Error("元のファイルは下書きの記録後に変更されています。下書きは保持しています。現在の文書を確認してから回復してください。");
+      if (gitRef.current !== targetGit || workspaceGenerationRef.current !== targetGeneration || currentFileRef.current !== initialFile) return;
+      setCurrentFile({ path: entry.documentPath, data: current.data, revision: current.revision, text: entry.text, binary: false, dirty: true });
+      setSyncState("editing");
+      setRequestedPanel(value => ({ id: "editor", sequence: value.sequence + 1 }));
+      setMessage({ tone: "info", text: "保護された下書きを開きました。ファイルへの保存はまだ行っていません。" });
+    } catch (error) { setMessage({ tone: "error", text: errorMessage(error) }); }
+    finally { setBusy(false); }
+  }
+
   async function saveDraft(): Promise<void> {
     if (!git || !currentFile || currentFile.binary || currentFile.text === null) return;
     const savingFile = currentFile;
@@ -798,6 +821,7 @@ export function HostApp(): ReactElement {
             </form>
             {files.length ? <ul className="file-list" aria-label="Repository files">{files.filter(file => file.type === "blob").map(file => <li key={file.path}><button type="button" aria-current={currentFile?.path === file.path ? "page" : undefined} className={`file-row ${currentFile?.path === file.path ? "file-selected" : ""}`} onClick={() => void loadFile(file.path)}><span className="file-icon" aria-hidden="true">{fileIcon(file.path)}</span><span className="file-path">{file.path}</span>{changedPaths.has(file.path) && <span className="change-dot" aria-label="Local change" />}</button></li>)}</ul> : <p className="sidebar-empty">This repository has no files yet.</p>}
           </section>
+          <WorkspaceDraftRecovery workspace={workspace.identity} authorScope={preferences.email || "local"} worktreePaths={files.map(file => file.path)} onOpenDraft={openRecoveredDraft} />
           <section className="sidebar-section sync-sidebar-section">
             <div className="section-title-row"><h2>{isGitHubWorkspaceIdentity(workspace.identity) ? "GitHub" : "Remote sync"}</h2><span className={`connection-indicator ${syncClient ? "connected" : "local-only"}`} aria-label={syncClient ? "Connected to GitHub" : "Local workspace only"}>{syncClient ? "GitHub接続済み" : "このブラウザーのみ"}</span></div>
             {syncClient ? <div className="sync-actions"><button type="button" onClick={() => void fetchRemote()} disabled={busy}>Fetch</button><button type="button" onClick={() => void pullRemote()} disabled={busy}>Pull</button><button type="button" className="publish-button" onClick={() => void publishRemote()} disabled={busy || status.localState !== "local-committed"}>Publish</button></div> : isGitHubWorkspaceIdentity(workspace.identity)
