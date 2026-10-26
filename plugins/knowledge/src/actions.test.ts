@@ -80,7 +80,13 @@ class HostFixture {
       this.proposals.push(changeset);
       return { proposal_id: "proposal-1", status: "proposed", preview: { title: changeset.title, units: changeset.units } };
     }
-    if (operation === "workspace.change.timestamp") return { timestamp: "2026-10-26T00:00:00.000Z" };
+    if (operation === "workspace.change.timestamp") {
+      assert.deepEqual(payload.scope, { workspace_id: "workspace-1", repository_id: 7, branch: "main", generation: "generation-1" });
+      assert.equal(payload.plugin_id, "proprium.knowledge");
+      assert.equal(typeof payload.action_id, "string");
+      assert.equal(typeof payload.idempotency_key, "string");
+      return { timestamp: "2026-10-26T00:00:00.000Z" };
+    }
     throw new Error(`unexpected Host operation: ${operation}`);
   }
 }
@@ -272,6 +278,7 @@ test("series proposals edit the active legacy registry without discarding unknow
   assert.equal(next.futureRootField, "keep");
   const series = (next.series as Array<Record<string, unknown>>)[0]!;
   assert.equal(series.name, "Updated");
+  assert.equal(series.updatedAt, "2026-10-26T00:00:00.000Z");
   assert.deepEqual(series.futureField, { keep: true });
   assert.deepEqual((next.bindings as Array<Record<string, unknown>>)[0], { repositoryId: 9, seriesId: "series-old", futureBindingField: 2 });
   guest.dispose();

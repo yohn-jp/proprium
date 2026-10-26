@@ -629,7 +629,9 @@ function* readJsonl(context: ActionRequest, host: GuestHost, path: string, label
 function* stableTimestamp(context: ActionRequest, host: GuestHost): Generator<HostCall, string, unknown> {
   const key = context.idempotency_key;
   if (!key || !key.trim()) throw error("invalid_input", "Host idempotency_key is required for a proposal");
-  const result = yield* host.request<{ timestamp: string }>("workspace.change.timestamp", {});
+  const result = yield* host.request<{ timestamp: string }>("workspace.change.timestamp", {
+    scope: context.scope, plugin_id: context.plugin_id, action_id: context.action_id, idempotency_key: key,
+  });
   if (!result || typeof result.timestamp !== "string" || Number.isNaN(Date.parse(result.timestamp))) throw error("guest_trap", "Host returned an invalid stable proposal timestamp");
   return result.timestamp;
 }
@@ -1312,6 +1314,7 @@ function* seriesPropose(input: Record<string, unknown>, context: ActionRequest, 
         if (context.scope.repository_id === null || context.scope.repository_id !== patch.bibleRepositoryId) throw error("repository_not_active", "Series registry updates must name the currently selected, verified Bible repository", { selectedRepositoryId: context.scope.repository_id, requestedBibleRepositoryId: patch.bibleRepositoryId });
         next.bibleRepositoryId = context.scope.repository_id;
       }
+      next.updatedAt = yield* stableTimestamp(context, host);
       rows[index] = next;
       resultId = seriesId;
       title = `Update series ${seriesId}`;
@@ -1559,10 +1562,11 @@ function* seriesOverlay(_input: Record<string, unknown>, context: ActionRequest,
     kind: "series_not_found", seriesId: binding.seriesId, path: sourceSettings.file?.path ?? SERIES_PATH,
     scope: sourceRequest.scope, snapshot: sourceRequest.snapshot,
   });
-  if (positiveRepositoryId(bibleRepositoryId) && positiveRepositoryId(sourceSeries.bibleRepositoryId) && sourceSeries.bibleRepositoryId !== bibleRepositoryId) {
+  if (positiveRepositoryId(sourceSeries.bibleRepositoryId) &&
+      (sourceSeries.bibleRepositoryId !== sourceRequest.scope.repository_id || positiveRepositoryId(bibleRepositoryId) && sourceSeries.bibleRepositoryId !== bibleRepositoryId)) {
     throw error("conflict", "Selected Bible registry identifies a different repository", {
-      kind: "series_repository_mismatch", seriesId: binding.seriesId, bindingRepositoryId: bibleRepositoryId,
-      registryRepositoryId: sourceSeries.bibleRepositoryId, path: sourceSettings.file?.path,
+      kind: "series_repository_mismatch", seriesId: binding.seriesId, bindingRepositoryId: bibleRepositoryId ?? null,
+      selectedRepositoryId: sourceRequest.scope.repository_id, registryRepositoryId: sourceSeries.bibleRepositoryId, path: sourceSettings.file?.path,
     });
   }
 
