@@ -17,6 +17,13 @@ test("evidence ledger covers every current canon feature and source contribution
   assert.equal(ledger.recovered_source.source_actions.length, 136);
   assert.equal(ledger.recovered_source.ui_contributions.length, 42);
   assert.equal(ledger.recovered_source.source_tools.length, 33);
+  assert.equal(ledger.recovered_source.source_files.length, ledger.recovered_source.source_file_count);
+  assert.ok(ledger.recovered_source.source_files.every(source => /^[a-f0-9]{40}$/u.test(source.source_revision)));
+  for (const plugin of ledger.plugins) for (const feature of plugin.features) {
+    assert.ok(Array.isArray(feature.source_anchors));
+    assert.deepEqual(feature.source_revisions, [...new Set(feature.source_anchors.map(anchor => anchor.source_revision))].sort());
+    assert.ok(feature.source_anchors.every(anchor => /^[a-f0-9]{40}$/u.test(anchor.source_revision)));
+  }
   assert.ok(ledger.matrix.every(item => item.status === "NOT_CHECKED"));
 });
 test("evidence validator rejects invented or missing source-parity rows", async () => {
@@ -44,6 +51,19 @@ test("evidence validator refuses PASS without signed artifact identity and archi
     await writeFile(path, JSON.stringify(ledger));
     const checked = spawnSync(process.execPath, [command, "--validate", path], { cwd: root, encoding: "utf8" });
     assert.notEqual(checked.status, 0);
-    assert.match(checked.stderr, /actual signed artifact and registry digests/);
+    assert.match(checked.stderr, /actual signed (?:artifact and registry|registry and plugin) digests/);
+  } finally { await rm(directory, { recursive: true, force: true }); }
+});
+
+test("evidence validator rejects altered immutable source anchors", async () => {
+  const directory = await mkdtemp(resolve(tmpdir(), "proprium-authoring-evidence-"));
+  const path = resolve(directory, "ledger.json");
+  try {
+    const ledger = JSON.parse(await readFile(ledgerPath, "utf8"));
+    ledger.plugins[1].features[0].source_anchors[0].source_revision = "c".repeat(40);
+    await writeFile(path, JSON.stringify(ledger));
+    const checked = spawnSync(process.execPath, [command, "--validate", path], { cwd: root, encoding: "utf8" });
+    assert.notEqual(checked.status, 0);
+    assert.match(checked.stderr, /immutable source anchors differ from traceability/);
   } finally { await rm(directory, { recursive: true, force: true }); }
 });
