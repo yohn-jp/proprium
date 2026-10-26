@@ -27,6 +27,8 @@ test("editor controls leave usable manuscript space on a laptop and mobile viewp
   expect(geometry.visibleHeight, JSON.stringify(geometry)).toBeGreaterThanOrEqual(mobile ? 150 : 180);
   await testInfo.attach("editor-geometry", { body: JSON.stringify(geometry), contentType: "application/json" });
   expect(geometry.horizontalOverflow).toBe(false);
+  const displayOptions = page.locator(".editor-display-options");
+  if (await displayOptions.count()) await displayOptions.locator(":scope > summary").click();
   const typography = page.locator(".typography-settings > summary");
   await typography.click();
   await expect(page.getByRole("button", { name: "文字を大きく", exact: true })).toBeVisible();
@@ -36,6 +38,27 @@ test("editor controls leave usable manuscript space on a laptop and mobile viewp
     expect(manuscriptTop).toBeGreaterThanOrEqual(panelBottom);
   }
   await typography.click();
+  if (!mobile) {
+    await page.getByRole("button", { name: "集中", exact: true }).click();
+    const focusGeometry = await page.locator(".editor.is-zen").evaluate(element => {
+      const rect = element.getBoundingClientRect();
+      return {
+        position: getComputedStyle(element).position,
+        zIndex: Number.parseInt(getComputedStyle(element).zIndex, 10),
+        top: rect.top, left: rect.left, width: rect.width, height: rect.height,
+        viewportWidth: innerWidth, viewportHeight: innerHeight,
+      };
+    });
+    expect(focusGeometry.position).toBe("fixed");
+    expect(focusGeometry.top).toBe(0);
+    expect(focusGeometry.left).toBe(0);
+    expect(focusGeometry.width).toBe(focusGeometry.viewportWidth);
+    expect(focusGeometry.height).toBe(focusGeometry.viewportHeight);
+    expect(focusGeometry.zIndex).toBeGreaterThan(30);
+    await testInfo.attach("focus-overlay-geometry", { body: JSON.stringify(focusGeometry), contentType: "application/json" });
+    await page.screenshot({ path: testInfo.outputPath("focus-overlay.png"), fullPage: true });
+    await page.getByRole("button", { name: "集中を終了", exact: true }).click();
+  }
   await expect(page.locator(".cm-content .cm-line").first()).toHaveText("原稿の本文 1。");
   await expect(page.getByRole("button", { name: "Save draft", exact: true })).toBeDisabled();
   if (!mobile) {
