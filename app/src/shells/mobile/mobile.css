@@ -644,10 +644,10 @@ ion-modal.mobile-shell-reference-modal {
   color:var(--mobile-sheet-accent);font-size:12px;font-weight:650;
 }
 .mobile-shell-reference-switch {
-  display:grid;grid-template-columns:1fr 1fr;gap:5px;padding:11px 20px 6px;
+  display:flex;gap:5px;padding:11px 20px 6px;overflow-x:auto;overscroll-behavior-inline:contain;
 }
 .mobile-shell-reference-switch button {
-  min-height:44px;border:1px solid var(--mobile-sheet-border);border-radius:10px;
+  flex:0 0 auto;max-width:min(70vw, 20rem);min-height:44px;border:1px solid var(--mobile-sheet-border);border-radius:10px;
   padding:9px;background:transparent;color:var(--mobile-sheet-muted);font-size:13px;
 }
 .mobile-shell-reference-switch button[aria-selected="true"] {

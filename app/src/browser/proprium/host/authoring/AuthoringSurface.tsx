@@ -178,6 +178,14 @@ function asRecord(value: unknown): Record<string, AuthoringJson> {
   return isRecord(value) ? value as Record<string, AuthoringJson> : {};
 }
 
+function contextLabel(context: Readonly<Record<string, unknown>>): string {
+  for (const key of ["label", "description", "scope", "kind"]) {
+    const value = context[key];
+    if (typeof value === "string" && value.trim()) return value;
+  }
+  return "";
+}
+
 function OutlineWidget({ node, data, invoke, busy }: {
   readonly node: Extract<AuthoringWidget, { type: "outline" }>;
   readonly data: AuthoringJson;
@@ -276,7 +284,8 @@ function TabsWidget({ node, data, invoke, busy }: {
 }
 
 export function AuthoringSurface({ surface, data: initialData = {}, status = "ready", message, onInvoke, onClose, className = "" }: AuthoringSurfaceProps): ReactElement {
-  const [data, setData] = useState<AuthoringJson>(initialData);
+  const [lastActionResult, setLastActionResult] = useState<AuthoringJson | undefined>();
+  const data = useMemo(() => lastActionResult === undefined ? initialData : { ...asRecord(initialData), last_action_result: lastActionResult }, [initialData, lastActionResult]);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
   const invoke = useCallback(async (binding: AuthoringActionBinding, context: AuthoringJson = data): Promise<void> => {
@@ -285,15 +294,17 @@ export function AuthoringSurface({ surface, data: initialData = {}, status = "re
     try {
       const resolved = Object.fromEntries(Object.entries(binding.input_template).map(([key, template]) => [key, resolveAuthoringTemplate(template, context)]));
       if (!isRecord(resolved)) throw new Error("An action input must resolve to a JSON object.");
-      setData(await onInvoke({ actionId: binding.action_id, input: resolved as Record<string, AuthoringJson> }));
+      setLastActionResult(await onInvoke({ actionId: binding.action_id, input: resolved as Record<string, AuthoringJson> }));
     } catch (cause) { setError(cause instanceof Error ? cause.message : "操作を完了できませんでした。"); }
     finally { setBusy(false); }
   }, [busy, data, onInvoke]);
   const initialStatus = status === "loading" || status === "partial" || status === "stale" || status === "unavailable" || status === "failure";
+  const loadAction = surface.body.load_action;
   return <section className={`authoring-surface authoring-surface-${surface.kind} ${className}`.trim()} aria-labelledby={`authoring-surface-${surface.id}`}>
-    <header className="authoring-surface-header"><div><p className="authoring-surface-context">{surface.context}</p><h2 id={`authoring-surface-${surface.id}`}>{surface.title}</h2></div>{onClose && <button type="button" className="authoring-surface-close" onClick={onClose} aria-label={`${surface.title}を閉じる`}>閉じる</button>}</header>
+    <header className="authoring-surface-header"><div>{contextLabel(surface.context) && <p className="authoring-surface-context">{contextLabel(surface.context)}</p>}<h2 id={`authoring-surface-${surface.id}`}>{surface.title}</h2></div>{onClose && <button type="button" className="authoring-surface-close" onClick={onClose} aria-label={`${surface.title}を閉じる`}>閉じる</button>}</header>
     {initialStatus && <p className={`authoring-state authoring-state-${status}`} role="status" aria-live="polite">{message || statusMessage(status)}</p>}
     {error && <p className="authoring-error" role="alert">{error}</p>}
+    {loadAction && <button type="button" className="authoring-load-action" disabled={busy || status === "unavailable" || status === "failure"} onClick={() => void invoke(loadAction)}>{lastActionResult === undefined ? "読み込む" : "更新"}</button>}
     {status !== "unavailable" && status !== "failure" && <div className="authoring-surface-body" aria-busy={busy}>{busy && <p className="authoring-submitting" role="status">処理中…</p>}<WidgetRenderer node={surface.body} data={data} invoke={(binding, context) => void invoke(binding, context)} busy={busy} /></div>}
   </section>;
 }

@@ -9,7 +9,7 @@ const outlineSurface: AuthoringSurfaceDeclaration = {
   id: "narrative-outline",
   kind: "panel",
   title: "作品構成",
-  context: "選択中の作品",
+  context: { label: "選択中の作品" },
   body: {
     id: "outline",
     type: "outline",
@@ -68,7 +68,7 @@ test("integer form values become safe JSON numbers and invalid values fail befor
 
 test("forms render Host-owned fields and inaccessible UI markup is not accepted as content", () => {
   const surface: AuthoringSurfaceDeclaration = {
-    id: "create-scene", kind: "panel", title: "シーンを追加", context: "第1章",
+    id: "create-scene", kind: "panel", title: "シーンを追加", context: { label: "第1章" },
     body: {
       id: "scene-form", type: "form", title: "新しいシーン",
       fields: [{ id: "title", label: "シーン名", type: "string", required: true }],
@@ -81,4 +81,20 @@ test("forms render Host-owned fields and inaccessible UI markup is not accepted 
   assert.match(html, /シーン名/u);
   assert.match(html, /送信/u);
   assert.doesNotMatch(html, /<script/u);
+});
+
+test("declared panel read is an explicit Host action with an accessible refresh control", () => {
+  const surface: AuthoringSurfaceDeclaration = {
+    ...outlineSurface,
+    body: {
+      ...outlineSurface.body,
+      load_action: { action_id: "proprium.narrative.hierarchy.tree", input_template: { limit: 128 } },
+    },
+  };
+  const html = renderToStaticMarkup(createElement(AuthoringSurface, {
+    surface,
+    onInvoke: async () => ({ items: [] }),
+  }));
+  assert.match(html, /class="authoring-load-action"/u);
+  assert.match(html, />読み込む<\/button>/u);
 });

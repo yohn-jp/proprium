@@ -1,3 +1,5 @@
+import type { ActionBinding, SurfaceDeclaration } from "../../authoring/types.js";
+
 /** JSON accepted at the boundary between a signed authoring manifest and the Host UI. */
 export type AuthoringJson = null | boolean | number | string | AuthoringJson[] | { [key: string]: AuthoringJson };
 
@@ -7,29 +9,27 @@ export interface AuthoringDataKey {
 
 export type AuthoringTemplate = AuthoringJson | AuthoringDataKey;
 
-export interface AuthoringActionBinding {
-  readonly action_id: string;
+export type AuthoringActionBinding = Omit<ActionBinding, "input_template"> & {
   readonly input_template: { readonly [key: string]: AuthoringTemplate };
-}
+};
 
 export type AuthoringSurfaceKind = "panel" | "command";
 export type AuthoringWidgetKind =
   | "outline" | "list" | "table" | "detail" | "form" | "tabs" | "status" | "progress"
   | "evidence" | "diff" | "graph" | "map" | "timeline";
 
-export interface AuthoringSurfaceDeclaration {
-  readonly id: string;
+export type AuthoringSurfaceDeclaration = Omit<SurfaceDeclaration, "kind" | "context" | "body"> & {
   readonly kind: AuthoringSurfaceKind;
-  readonly title: string;
-  /** A short, user-visible description of the scope in which the panel is meaningful. */
-  readonly context: string;
+  readonly context: Readonly<Record<string, unknown>>;
   readonly body: AuthoringWidget;
-}
+};
 
 export interface AuthoringWidgetBase {
   readonly id: string;
   readonly title?: string;
   readonly description?: string;
+  /** A read action, started only when this Host panel/widget is opened. */
+  readonly load_action?: AuthoringActionBinding;
 }
 
 export interface AuthoringField {
@@ -91,3 +91,4 @@ export interface AuthoringSurfaceProps {
   readonly onClose?: () => void;
   readonly className?: string;
 }
+
