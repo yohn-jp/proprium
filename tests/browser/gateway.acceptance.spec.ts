@@ -254,11 +254,42 @@ test("exposes the fixed MCP tools without any client token and executes against 
     changes: [{ path: "README.md", content: "Approved in Browser Host.\n", expectedRevision: file.revision }],
   });
   expect(textResult(proposed)).toMatchObject({ status: "awaiting_host_review", repository_id: sampleRepositoryId });
-  await expect(page.getByText("Review a change from MCP", { exact: true })).toBeVisible();
+  const proposal = page.locator(".live-mcp-proposal").filter({ hasText: "Review a change from MCP" });
+  await expect(proposal).toBeVisible();
+  await expect(proposal).toContainText("変更対象");
+  await expect(proposal).toContainText("Gateway browser integration fixture.");
+  await expect(proposal).toContainText("Approved in Browser Host.");
+  const approve = proposal.getByRole("button", { name: "変更を承認して適用" });
+  await expect(approve).toBeDisabled();
+  await proposal.getByRole("checkbox", { name: "変更前と変更後を確認しました" }).check();
+  await expect(approve).toBeEnabled();
   await expectEditorText(page, "Gateway browser integration fixture.\n");
   await showPanel(page, "review");
-  await page.getByRole("button", { name: "Review and approve" }).click();
+  await approve.click();
   await expectEditorText(page, "Approved in Browser Host.\n");
+
+  const beforeStaleProposal = textResult(await mcpCall("read-before-stale", "file_read", { ...sampleRepository, path: "README.md" }));
+  await mcpCall("propose-stale", "proposal_submit", {
+    ...sampleRepository, title: "Reject a stale MCP proposal",
+    changes: [{ path: "README.md", content: "This must not overwrite newer text.\n", expectedRevision: beforeStaleProposal.revision }],
+  });
+  await showPanel(page, "review");
+  const staleProposal = page.locator(".live-mcp-proposal").filter({ hasText: "Reject a stale MCP proposal" });
+  await expect(staleProposal).toBeVisible();
+  await staleProposal.getByRole("checkbox", { name: "変更前と変更後を確認しました" }).check();
+  await showPanel(page, "editor");
+  await page.getByLabel("原稿 Markdown").fill("A newer local edit stays intact.\n");
+  await page.getByRole("button", { name: "Save draft" }).click();
+  await showPanel(page, "review");
+  const staleApprove = staleProposal.getByRole("button", { name: "変更を承認して適用" });
+  await expect(staleApprove).toBeEnabled();
+  await staleApprove.click();
+  await expect(page.locator(".live-mcp-panel").getByRole("alert")).toContainText("changed since the proposal");
+  await expectEditorText(page, "A newer local edit stays intact.\n");
+  await showPanel(page, "review");
+  await expect(staleProposal.getByRole("checkbox", { name: "変更前と変更後を確認しました" })).not.toBeChecked();
+  await staleProposal.getByRole("button", { name: "却下" }).click();
+  await expect(staleProposal).toHaveCount(0);
 
   const fetches = await page.evaluate(() => window.__propriumGatewayFetches ?? []);
   expect(fetches.length).toBeGreaterThan(0);
@@ -270,6 +301,7 @@ test("exposes the fixed MCP tools without any client token and executes against 
     expect([...accessCookiePaths]).toContain("POST /live/sessions");
   }
 
+  await showPanel(page, "editor");
   await context.setOffline(true);
   const editor = page.getByLabel("原稿 Markdown");
   await editor.fill("Local work continues while the Gateway is disconnected.\n");

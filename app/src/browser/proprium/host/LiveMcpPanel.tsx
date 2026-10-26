@@ -2,6 +2,9 @@ import { useEffect, useRef, useState, type ReactElement } from "react";
 import { BrowserLocalGit } from "../git/index.js";
 import type { FileRevisionExpectation, WorkspaceChange, WorkspaceIdentity } from "../git/protocol.js";
 import { validateGitPath } from "../git/protocol.js";
+import { TextDiff } from "./TextDiff.js";
+import { snapshotProposalBefore } from "./proposal-review.js";
+import "./LiveMcpProposals.css";
 
 export const LIVE_MCP_TOOLS = ["repositories_list", "repository_info", "files_list", "file_read", "git_log", "git_status", "plugin_call", "proposal_submit"] as const;
 export type LiveMcpTool = typeof LIVE_MCP_TOOLS[number];
@@ -9,7 +12,7 @@ export interface LiveWorkspaceProposal {
   id: string;
   title: string;
   target: WorkspaceIdentity;
-  changes: Array<{ path: string; content: string; expectedRevision: string | null }>;
+  changes: Array<{ path: string; beforeContent: string | null; content: string; expectedRevision: string | null }>;
 }
 export type LiveToolExecutor = (tool: LiveMcpTool, args: Record<string, unknown>, signal: AbortSignal) => Promise<unknown>;
 
@@ -25,6 +28,7 @@ interface Props {
   onPendingProposalsChange?(count: number): void;
   onWorkspaceChanged(): Promise<void>;
   onExecutePlugin(args: Record<string, unknown>, signal: AbortSignal): Promise<unknown>;
+  onReviewRequested?(proposalId: string): void;
 }
 type State = "disabled" | "connecting" | "connected" | "disconnected" | "error";
 
@@ -81,11 +85,13 @@ export function LiveMcpPanel({
   onPendingProposalsChange,
   onWorkspaceChanged,
   onExecutePlugin,
+  onReviewRequested,
 }: Props): ReactElement {
   const [state, setState] = useState<State>("disabled");
   const [error, setError] = useState("");
   const [endpoint, setEndpoint] = useState("");
   const [activeRequests, setActiveRequests] = useState<Array<{ id: string; tool: LiveMcpTool }>>([]);
+  const [reviewedProposalIds, setReviewedProposalIds] = useState<Set<string>>(() => new Set());
   const abortRef = useRef<AbortController | null>(null);
   const pendingRef = useRef(new Map<string, AbortController>());
   const liveSessionRef = useRef("");
@@ -244,6 +250,7 @@ export function LiveMcpPanel({
       throw new Error("A proposal requires a short title and 1 to 32 file changes.");
     }
     let total = 0;
+    let reviewSnapshotBytes = 0;
     const changes: LiveWorkspaceProposal["changes"] = [];
     const seen = new Set<string>();
     for (const raw of args.changes) {
@@ -257,7 +264,14 @@ export function LiveMcpPanel({
       if (total > 512 * 1024) throw new Error("Proposal content exceeds the 512 KiB Live MCP limit.");
       const current = await targetGit.read(raw.path);
       if (current.revision.oid !== raw.expectedRevision) throw new Error(`The revision for ${raw.path} has changed; refresh the workspace before proposing it.`);
-      changes.push({ path: raw.path, content: raw.content, expectedRevision: raw.expectedRevision });
+      reviewSnapshotBytes += current.data?.byteLength ?? 0;
+      if (reviewSnapshotBytes > 1024 * 1024) throw new Error("The original files are too large to display safely in a Browser Host review.");
+      changes.push({
+        path: raw.path,
+        beforeContent: snapshotProposalBefore(raw.path, current.data),
+        content: raw.content,
+        expectedRevision: raw.expectedRevision,
+      });
     }
     return { id: crypto.randomUUID(), title: args.title.trim(), target, changes } satisfies LiveWorkspaceProposal;
   }
@@ -336,7 +350,30 @@ export function LiveMcpPanel({
     }
   }
 
+  function markProposalReviewed(proposalId: string, reviewed: boolean): void {
+    setReviewedProposalIds(current => {
+      const next = new Set(current);
+      if (reviewed) next.add(proposalId);
+      else next.delete(proposalId);
+      return next;
+    });
+    if (reviewed) onReviewRequested?.(proposalId);
+  }
+
+  function rejectProposal(proposalId: string): void {
+    setProposals(current => current.filter(item => item.id !== proposalId));
+    setReviewedProposalIds(current => {
+      const next = new Set(current);
+      next.delete(proposalId);
+      return next;
+    });
+  }
+
   async function approveProposal(proposal: LiveWorkspaceProposal): Promise<void> {
+    if (!reviewedProposalIds.has(proposal.id)) {
+      setError("変更前と変更後を確認してから承認してください。");
+      return;
+    }
     const active = proposal.target.localWorkspaceId === identity.localWorkspaceId;
     if (active && !canApply) { setError("Save the editor draft before reviewing the proposed changes."); return; }
     const targetGit = active ? git : new BrowserLocalGit(proposal.target);
@@ -353,10 +390,13 @@ export function LiveMcpPanel({
       }
       await targetGit.applyChanges(changes, readSet);
       setProposals(current => current.filter(item => item.id !== proposal.id));
+      markProposalReviewed(proposal.id, false);
       if (active) await onWorkspaceChanged();
       setError(`Approved “${proposal.title}” for ${proposal.target.owner}/${proposal.target.repository} (${proposal.target.branch}). Changes remain local until explicitly committed and published.`);
     } catch (caught) {
-      setError(caught instanceof Error ? caught.message : "Proposal review failed.");
+      const message = caught instanceof Error ? caught.message : "Proposal review failed.";
+      if (message.includes("changed since the proposal")) markProposalReviewed(proposal.id, false);
+      setError(message);
     } finally {
       if (!active) targetGit.close();
     }
@@ -377,7 +417,35 @@ export function LiveMcpPanel({
       {(state === "disconnected" || state === "error") && <button type="button" onClick={() => void connect()}>再接続</button>}
       {error && <p role="alert">{error}</p>}
       {activeRequests.length > 0 && <p role="status">MCP requests: {activeRequests.length}</p>}
-      {proposals.map(proposal => <article key={proposal.id}><h3>{proposal.title}</h3><p>{proposal.target.owner}/{proposal.target.repository} · {proposal.target.branch}</p><ul>{proposal.changes.map(change => <li key={change.path}>{change.path}<details><summary>提案内容を全文確認</summary><pre>{change.content}</pre></details></li>)}</ul><button type="button" disabled={proposal.target.localWorkspaceId === identity.localWorkspaceId && !canApply} onClick={() => void approveProposal(proposal)}>Review and approve</button><button type="button" onClick={() => setProposals(value => value.filter(item => item.id !== proposal.id))}>Reject</button></article>)}
+      {proposals.map(proposal => {
+        const reviewed = reviewedProposalIds.has(proposal.id);
+        const targetLabel = `${proposal.target.owner}/${proposal.target.repository} · ${proposal.target.branch}`;
+        return <article className="live-mcp-proposal" key={proposal.id}>
+          <h3>{proposal.title}</h3>
+          <p className="live-mcp-proposal-target"><span>変更対象</span><strong>{targetLabel}</strong></p>
+          <details className="live-mcp-proposal-review" open>
+            <summary>{proposal.changes.length}件のファイル変更を確認</summary>
+            {proposal.changes.map(change => <div className="live-mcp-proposal-file" key={change.path}>
+              <h4>{change.path}</h4>
+              <TextDiff
+                before={change.beforeContent ?? ""}
+                after={change.content}
+                beforeLabel={change.beforeContent === null ? "変更前（新規ファイル）" : "変更前"}
+                afterLabel="変更後"
+              />
+            </div>)}
+            <label className="live-mcp-review-acknowledgement">
+              <input type="checkbox" checked={reviewed} onChange={event => markProposalReviewed(proposal.id, event.currentTarget.checked)} />
+              変更前と変更後を確認しました
+            </label>
+          </details>
+          <div className="live-mcp-proposal-actions">
+            <button type="button" disabled={!reviewed || (proposal.target.localWorkspaceId === identity.localWorkspaceId && !canApply)} onClick={() => void approveProposal(proposal)}>変更を承認して適用</button>
+            <button type="button" onClick={() => rejectProposal(proposal.id)}>却下</button>
+          </div>
+          <p className="live-mcp-proposal-local-note">承認した変更はこのブラウザー内に適用されます。コミットとGitHubへの公開は別操作です。</p>
+        </article>;
+      })}
     </div>
   </section>;
 }
