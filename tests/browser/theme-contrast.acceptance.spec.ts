@@ -123,7 +123,11 @@ test("selection, supporting copy and disabled editor controls remain readable in
     await page.mouse.move(0, 0);
     if (!isMobile) {
       await expectReadable(page.locator(".st-studio-footer > span").first(), `${testInfo.project.name} ${theme} footer text`);
-      await expectReadable(page.locator(".st-workspace-toolbar"), `${testInfo.project.name} ${theme} VIEW label`, "::before");
+      const layoutDisclosure = page.locator(".st-workspace-configuration");
+      const layoutSummary = layoutDisclosure.locator(":scope > summary");
+      await expectReadable(layoutSummary, `${testInfo.project.name} ${theme} layout disclosure`);
+      await layoutSummary.click();
+      await expectReadable(page.locator(".st-workspace-toolbar"), `${testInfo.project.name} ${theme} layout controls`);
       await expectReadable(page.locator(".st-workspace-presets button:not([aria-pressed='true'])").first(), `${testInfo.project.name} ${theme} inactive workspace preset`);
       const publish = page.getByRole("button", { name: "GitHubへ公開", exact: true });
       await expect(publish).toBeDisabled();
