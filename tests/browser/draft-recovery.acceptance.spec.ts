@@ -22,7 +22,7 @@ test("a protected new-file draft can be found and reopened after the workspace c
   await page.getByLabel("New file path").fill(path);
   await page.getByRole("button", { name: "Create new file" }).click();
   await page.getByRole("textbox", { name: "原稿 Markdown" }).fill(text);
-  await expect(page.getByLabel("原稿の保護範囲を確認")).toContainText("Draft · このブラウザーに保護済み");
+  await expect(page.getByLabel("原稿の保護範囲を確認")).toContainText("自動回復記録 · 保存済み");
 
   page.once("dialog", (dialog) => dialog.accept());
   await page.getByRole("button", { name: "作品一覧", exact: true }).first().click();
@@ -37,5 +37,6 @@ test("a protected new-file draft can be found and reopened after the workspace c
   await recoveredFile.getByRole("button", { name: "下書きを開く" }).click();
 
   await expectEditorText(page, text);
-  await expect(repositoryFiles.getByRole("button", { name: path })).toHaveCount(0);
+  await showPanel(page, "outline");
+  await expect(repositoryFiles.getByRole("button", { name: path })).toContainText("作成中の下書き");
 });
