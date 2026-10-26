@@ -30,7 +30,11 @@ test("editor controls leave usable manuscript space on a laptop and mobile viewp
   const typography = page.locator(".typography-settings > summary");
   await typography.click();
   await expect(page.getByRole("button", { name: "文字を大きく", exact: true })).toBeVisible();
-  if (!mobile) expect(await page.locator(".cm-editor").evaluate(e => e.getBoundingClientRect().top)).toBeCloseTo(geometry.top, 0);
+  if (!mobile) {
+    const panelBottom = await page.locator(".typography-toolbar").evaluate(element => element.getBoundingClientRect().bottom);
+    const manuscriptTop = await page.locator(".cm-editor").evaluate(element => element.getBoundingClientRect().top);
+    expect(manuscriptTop).toBeGreaterThanOrEqual(panelBottom);
+  }
   await typography.click();
   await expect(page.locator(".cm-content .cm-line").first()).toHaveText("原稿の本文 1。");
   await expect(page.getByRole("button", { name: "Save draft", exact: true })).toBeDisabled();
