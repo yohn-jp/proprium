@@ -42,15 +42,20 @@ export function GitHubRepositoryPicker({
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
   const [reload, setReload] = useState(0);
+  const [settledKey, setSettledKey] = useState("");
   const repositoryId = selectedRepository?.id ?? null;
   const owner = selectedRepository?.owner ?? "";
   const name = selectedRepository?.name ?? "";
   const defaultBranch = selectedRepository?.defaultBranch ?? "";
+  const requestKey = JSON.stringify([repositoryId, owner, name, defaultBranch]);
+  const visibleBranches = settledKey === requestKey ? branches : [];
+  const visibleError = settledKey === requestKey ? error : "";
+  const visibleLoading = loading || Boolean(selectedRepository && settledKey !== requestKey);
 
   useEffect(() => {
     let current = true;
     setBranches([]);
-    setError("");
+    setError(""); setSettledKey("");
     onBranchChange("");
     if (!session || !selectedRepository) {
       setLoading(false);
@@ -58,18 +63,18 @@ export function GitHubRepositoryPicker({
     }
     if (!selectedRepository.permissions.pull) {
       setLoading(false);
-      setError("このRepositoryの読み取り権限がありません。");
+      setError("このRepositoryの読み取り権限がありません。"); setSettledKey(requestKey);
       return () => { current = false; };
     }
     setLoading(true);
     void session.listBranches(selectedRepository).then(available => {
       if (!current) return;
-      setBranches(available);
+      setBranches(available); setSettledKey(requestKey);
       setLoading(false);
       onBranchChange(available.includes(selectedBranch) ? selectedBranch : available.includes(defaultBranch) ? defaultBranch : "");
     }).catch((loadError: unknown) => {
       if (!current) return;
-      setError(branchErrorMessage(loadError));
+      setError(branchErrorMessage(loadError)); setSettledKey(requestKey);
       setLoading(false);
     });
     return () => { current = false; };
@@ -90,20 +95,20 @@ export function GitHubRepositoryPicker({
     </select>
     {selectedRepository && <>
       <label htmlFor={branchInput}>ブランチ</label>
-      <select id={branchInput} value={branches.includes(selectedBranch) ? selectedBranch : ""}
-        disabled={disabled || loading || branches.length === 0 || Boolean(error)}
-        onChange={event => { if (branches.includes(event.target.value)) onBranchChange(event.target.value); }}>
-        <option value="">{loading ? "ブランチを読み込み中…" : "ブランチを選択"}</option>
-        {branches.map(branch => <option key={branch} value={branch}>{branch}{branch === defaultBranch ? " · default" : ""}</option>)}
+      <select id={branchInput} value={visibleBranches.includes(selectedBranch) ? selectedBranch : ""}
+        disabled={disabled || visibleLoading || visibleBranches.length === 0 || Boolean(visibleError)}
+        onChange={event => { if (visibleBranches.includes(event.target.value)) onBranchChange(event.target.value); }}>
+        <option value="">{visibleLoading ? "ブランチを読み込み中…" : "ブランチを選択"}</option>
+        {visibleBranches.map(branch => <option key={branch} value={branch}>{branch}{branch === defaultBranch ? " · default" : ""}</option>)}
       </select>
       <p className="repository-branch">Default: <code>{defaultBranch || "未設定"}</code></p>
-      {loading && <p className="field-help" role="status">GitHubからブランチ一覧を読み込んでいます。</p>}
-      {error && <div className="github-branch-error" role="alert"><p>{error}</p>
-        {branchErrorRequiresSignIn(error) && onReconnect
+      {visibleLoading && <p className="field-help" role="status">GitHubからブランチ一覧を読み込んでいます。</p>}
+      {visibleError && <div className="github-branch-error" role="alert"><p>{visibleError}</p>
+        {branchErrorRequiresSignIn(visibleError) && onReconnect
           ? <button type="button" className="quiet-button" disabled={disabled} onClick={onReconnect}>GitHubに再接続</button>
           : session && selectedRepository.permissions.pull && <button type="button" className="quiet-button" disabled={disabled} onClick={() => setReload(value => value + 1)}>再読み込み</button>}
       </div>}
-      {!loading && !error && branches.length === 0 && <p className="field-help" role="status">このRepositoryにはブランチがありません。</p>}
+      {!visibleLoading && !visibleError && visibleBranches.length === 0 && <p className="field-help" role="status">このRepositoryにはブランチがありません。</p>}
     </>}
   </div>;
 }

@@ -62,7 +62,7 @@ export function GitHubDeviceAuthorization({
     <strong aria-label={`認証コード ${prompt.userCode}`}>{prompt.userCode}</strong>
     <div className="device-prompt-actions">
       <button type="button" className="quiet-button" onClick={() => void copyCode()}>コードをコピー</button>
-      <a href={prompt.verificationUri} target="_blank" rel="noopener noreferrer" aria-disabled={expired}>
+      <a href={expired ? undefined : prompt.verificationUri} tabIndex={expired ? -1 : undefined} target="_blank" rel="noopener noreferrer" aria-disabled={expired}>
         GitHubの認証画面を開く
       </a>
     </div>
