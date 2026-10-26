@@ -25,7 +25,7 @@ test("a protected new-file draft can be found and reopened after the workspace c
   await expect(page.getByLabel("原稿の保護範囲を確認")).toContainText("Draft · このブラウザーに保護済み");
 
   page.once("dialog", (dialog) => dialog.accept());
-  await page.getByRole("button", { name: "Workspaces", exact: true }).first().click();
+  await page.getByRole("button", { name: "作品一覧", exact: true }).first().click();
   await page.getByRole("button", { name: /proprium-test\/ui-restoration/u }).click();
   await showPanel(page, "outline");
 
