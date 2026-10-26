@@ -4,6 +4,7 @@ import { BrowserJournal, documentKey, repositoryKey, type JournalEntry } from ".
 import type { RepositoryIdentity, SnapshotId } from "@scriptorium/contracts";
 import type { BrowserLocalGit } from "../git/index.js";
 import type { WorkspaceIdentity } from "../git/protocol.js";
+import { discoverWorkspaceDrafts, draftBaseMatches, journalRepositoryForWorkspace, notifyWorkspaceDraftsChanged, workspaceBreadcrumb } from "./workspace-drafts.js";
 
 interface Props {
   workspace: WorkspaceIdentity;
@@ -31,7 +32,7 @@ interface Props {
 /** The recovered Scriptorium editor, with Browser Host-owned storage and Git ports. */
 export function RestoredEditor(props: Props): ReactElement {
   const { workspace, file, head, published, busy, checkpointBusy = false, publishBusy = false, authorScope, onRegisterFlush } = props;
-  const repo = useMemo<RepositoryIdentity>(() => ({ provider: "github", repositoryId: String(workspace.repositoryId), defaultBranch: workspace.branch, ownerScope: workspace.localWorkspaceId, url: `${workspace.origin}/${workspace.owner}/${workspace.repository}` }), [workspace]);
+  const repo = useMemo<RepositoryIdentity>(() => journalRepositoryForWorkspace(workspace), [workspace]);
   const snapshot = useMemo<SnapshotId>(() => ({ repository: repo, remoteCommit: published ? head ?? "" : "", ...(head ? { overlayCommit: head } : {}) }), [repo, head, published]);
   const journalRef = useRef<BrowserJournal | null>(null);
   const inputFlushRef = useRef<(() => Promise<string | null>) | null>(null);
@@ -77,8 +78,8 @@ export function RestoredEditor(props: Props): ReactElement {
       entry.operation.writes[0]!.revision = revision;
     }
     if (!(await journal.putLatestDraft(entry))) throw new Error("別の操作による新しい下書きがあります。回復記録を確認してください。");
-    if (activeRef.current) { setStoredText(text); setJournalError(""); setEntries(await journal.getRepository(repo, authorScope)); }
-  }, [draftEntry, file.path, repo, authorScope]);
+    if (activeRef.current) { setStoredText(text); setJournalError(""); setEntries(await journal.getRepository(repo, authorScope)); notifyWorkspaceDraftsChanged(workspace, authorScope); }
+  }, [draftEntry, file.path, repo, authorScope, workspace]);
 
   useEffect(() => {
     if (!file.dirty || file.text === null || !journalReady) return;
@@ -102,9 +103,10 @@ export function RestoredEditor(props: Props): ReactElement {
     const path = `meta/scratch/${draft.id}.md`;
     const writes = [{ path, revision: null as string | null, content: draft.text, encoding: "utf8" as "utf8" | "base64" }, ...draft.attachments.map((attachment, index) => ({ path: `meta/scratch/${draft.id}/${index}-${attachment.filename.replace(/[^A-Za-z0-9._-]/gu, "_")}`, revision: null, content: attachment.dataBase64, encoding: "base64" as const }))];
     const entry = draftEntry(path, draft.text, draft.id, writes);
+    entry.sceneId = binding.sceneId;
     const journal = journalRef.current;
     if (!journal || !(await journal.putLatestDraft(entry))) throw new Error("スクラッチを保護できませんでした。入力を保持しています。");
-    setEntries(await journal.getRepository(repo, authorScope)); return entry;
+    setEntries(await journal.getRepository(repo, authorScope)); notifyWorkspaceDraftsChanged(workspace, authorScope); return entry;
   };
   const checkpointScratch = async (entry: JournalEntry): Promise<void> => {
     if (entry.repositoryKey !== repositoryKey(repo) || entry.authorScope !== authorScope) throw new Error("スクラッチの所有Workspaceが一致しません。");
@@ -117,11 +119,36 @@ export function RestoredEditor(props: Props): ReactElement {
     await props.git.commit(`Scratch ${entry.sceneId}`, props.author, staged.head);
     await journalRef.current?.removeEntry(entry); setEntries(await journalRef.current?.getRepository(repo, authorScope) ?? []); await props.onScratchApplied();
   };
-  const recovered = recoveryEntries.filter(entry => entry.documentPath === file.path && entry.state === "draft" && entry.text !== file.text);
+  const recovered = discoverWorkspaceDrafts(recoveryEntries, workspace, authorScope).filter(entry => entry.documentPath === file.path && entry.text !== file.text);
+  const restoreDraft = async (entry: JournalEntry): Promise<void> => {
+    const current = latest.current;
+    if (!discoverWorkspaceDrafts([entry], current.workspace, current.authorScope).length || entry.documentPath !== current.file.path) {
+      setJournalError("この下書きは現在のWorkspaceまたは作者の範囲と一致しません。回復記録は保持しています。");
+      return;
+    }
+    if (current.file.dirty && current.file.text !== entry.text) {
+      setJournalError("現在のエディターに未保存の入力があります。先にその入力を保護してください。回復記録は保持しています。");
+      return;
+    }
+    if (!(await draftBaseMatches(entry, current.file.data))) {
+      setJournalError("下書きの基準ファイルが変更されています。上書きせず、回復記録を保持しています。");
+      return;
+    }
+    const stillCurrent = latest.current;
+    if (stillCurrent.file.path !== entry.documentPath || stillCurrent.file.revision.oid !== current.file.revision.oid ||
+        stillCurrent.file.data !== current.file.data || stillCurrent.file.dirty ||
+        stillCurrent.workspace.localWorkspaceId !== current.workspace.localWorkspaceId ||
+        stillCurrent.workspace.branch !== current.workspace.branch) {
+      setJournalError("エディターまたはWorkspaceが変わっています。上書きせず、回復記録を保持しています。");
+      return;
+    }
+    stillCurrent.onChange(entry.text);
+    setRecoveryEntries(existing => existing.filter(item => item.key !== entry.key));
+  };
   return <>
-    {recovered.length > 0 && <section className="recovery-list" aria-label="回復できる下書き"><h2>回復できる下書き</h2>{recovered.map(entry => <div key={entry.key}><p>{new Date(entry.updatedAt).toLocaleString()} · {entry.text.length}字</p><button type="button" onClick={() => { props.onChange(entry.text); setRecoveryEntries(existing => existing.filter(item => item.key !== entry.key)); }}>この下書きをエディターで開く</button></div>)}</section>}
+    {recovered.length > 0 && <section className="recovery-list" aria-label="回復できる下書き"><h2>回復できる下書き</h2>{recovered.map(entry => <div key={entry.key}><p>{new Date(entry.updatedAt).toLocaleString()} · {entry.text.length}字</p><button type="button" onClick={() => void restoreDraft(entry)}>この下書きをエディターで開く</button></div>)}</section>}
     <SceneEditor projectId={workspace.localWorkspaceId} authorScope={authorScope} repositoryKey={repositoryKey(repo)} snapshot={snapshot} historySnapshot={snapshot}
-      scene={{ id: file.path, title: file.path.split("/").at(-1) ?? file.path, text: file.text ?? "", revision: file.revision.oid ?? "" }} path={file.path} breadcrumb={`${workspace.owner}/${workspace.repository} / ${workspace.branch}`}
+      scene={{ id: file.path, title: file.path.split("/").at(-1) ?? file.path, text: file.text ?? "", revision: file.revision.oid ?? "" }} path={file.path} breadcrumb={workspaceBreadcrumb(workspace)}
       text={file.text ?? ""} textRevision={fileVersion.current.value} flushPendingReactPublish={() => undefined}
       onTextChange={props.onChange} onRetryDraft={() => { void persistText(file.text ?? "").catch(error => setJournalError(String(error))); }}
       onCursorPositionChange={() => undefined} onReadingPageChange={() => undefined} resumeRequest={null} onResumeRequestApplied={() => undefined}
