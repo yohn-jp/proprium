@@ -2,7 +2,7 @@ import { useEffect, useState, type ReactElement } from "react";
 import type { BrowserLocalGit } from "../git/index.js";
 import type { CommitSummary, CommitDiff, CommitFileChange } from "../git/protocol.js";
 import { TextDiff } from "./TextDiff.js";
-import { decodeGitText } from "./git-review-content.js";
+import { decodeGitText, localizeGitReviewError } from "./git-review-content.js";
 import "./git-review.css";
 
 export interface GitHistoryPanelProps {
@@ -18,13 +18,13 @@ export interface GitHistoryPanelProps {
 }
 
 function changeKind(change: CommitFileChange): string {
-  if (change.kind === "added") return "Added";
-  if (change.kind === "deleted") return "Deleted";
-  return "Modified";
+  if (change.kind === "added") return "追加";
+  if (change.kind === "deleted") return "削除";
+  return "変更";
 }
 
 function describeCommit(commit: CommitSummary): string {
-  return commit.message.split("\n")[0]?.trim() || "(no commit message)";
+  return commit.message.split("\n")[0]?.trim() || "（コミットメッセージなし）";
 }
 
 export function GitHistoryPanel({ git, history, busy, canRestore, onRefresh, onRestored, onRestoreBusyChange, beforeRestore }: GitHistoryPanelProps): ReactElement {
@@ -49,7 +49,7 @@ export function GitHistoryPanel({ git, history, busy, canRestore, onRefresh, onR
     void git.commitDiff(selectedOid).then((next) => {
       if (active) setDetails(next);
     }).catch((cause: unknown) => {
-      if (active) setError(cause instanceof Error ? cause.message : "Could not load this commit's file history.");
+      if (active) setError(localizeGitReviewError(cause, "このコミットの変更ファイルを読み込めませんでした。"));
     }).finally(() => { if (active) setLoading(false); });
     return () => { active = false; };
   }, [git, selectedOid]);
@@ -65,8 +65,8 @@ export function GitHistoryPanel({ git, history, busy, canRestore, onRefresh, onR
   async function restoreCommitFiles(): Promise<void> {
     if (!selectedCommit || !details || !canRestore || busy || restoring || !details.changes.length) return;
     const count = details.changes.length;
-    const target = `commit ${selectedCommit.oid.slice(0, 10)}`;
-    if (!window.confirm(`Restore the ${count} file${count === 1 ? "" : "s"} changed by “${describeCommit(selectedCommit)}” to ${target} in the local worktree? Current contents of those paths will be replaced or removed. Other files are left untouched. This does not create a commit or publish anything.`)) return;
+    const target = `コミット ${selectedCommit.oid.slice(0, 10)}`;
+    if (!window.confirm(`「${describeCommit(selectedCommit)}」で変更された${count}件のファイルを、ローカル作業ツリーで${target}の内容に戻しますか？対象ファイルの現在の内容は置き換えるか削除します。他のファイルは変更しません。コミットやGitHubへの公開は行いません。`)) return;
 
     setRestoring(true); onRestoreBusyChange?.(true);
     setError(null);
@@ -83,48 +83,48 @@ export function GitHistoryPanel({ git, history, busy, canRestore, onRefresh, onR
       }));
       // applyChanges rechecks every file revision under the Browser Git workspace lock.
       await git.applyChanges(changes);
-      setNotice(`Restored ${count} file${count === 1 ? "" : "s"} to this commit in the local worktree. No commit or publish was created.`);
+      setNotice(`${count}件のファイルを、このコミットの内容にローカル作業ツリーで戻しました。コミットや公開は行っていません。`);
       try { await onRestored(); }
-      catch { setError("The files were restored, but the Host could not refresh the open workspace view. Reload the workspace view before editing these paths."); }
+      catch { setError("ファイルは復元されましたが、開いているワークスペースを更新できませんでした。対象ファイルを編集する前に、ワークスペースを再読み込みしてください。"); }
     } catch (cause) {
-      setError(cause instanceof Error ? cause.message : "The historical files could not be restored.");
+      setError(localizeGitReviewError(cause, "履歴のファイルを復元できませんでした。現在の状態を確認してから、もう一度お試しください。"));
     } finally {
       setRestoring(false); onRestoreBusyChange?.(false);
     }
   }
 
-  const parentLabel = details?.parentOid ? details.parentOid.slice(0, 10) : "empty tree";
+  const parentLabel = details?.parentOid ? details.parentOid.slice(0, 10) : "空のツリー";
 
   return <section className="git-history-review" aria-labelledby="git-history-heading">
     <header className="git-history-heading">
-      <div><p className="eyebrow">LOCAL GIT</p><h2 id="git-history-heading">History</h2><p>Local commits on this device. They are not necessarily published to GitHub.</p></div>
-      <button type="button" className="text-button" disabled={busy || loading || restoring} onClick={onRefresh}>Refresh</button>
+      <div><p className="eyebrow">ローカルGit</p><h2 id="git-history-heading">履歴</h2><p>この端末にあるコミットの履歴です。GitHubに公開されていない場合があります。</p></div>
+      <button type="button" className="text-button" disabled={busy || loading || restoring} onClick={onRefresh}>履歴を更新</button>
     </header>
     <div className="git-history-layout">
       <nav className="git-history-list" aria-label="Local commits">
         {history.length ? <ol>{history.map((commit) => <li key={commit.oid}>
           <button type="button" className={`git-history-commit ${selectedOid === commit.oid ? "is-selected" : ""}`} aria-current={selectedOid === commit.oid ? "true" : undefined} disabled={busy || restoring} onClick={() => setSelectedOid(commit.oid)}>
-            <strong>{describeCommit(commit)}</strong><code>{commit.oid.slice(0, 10)}</code><small>{commit.author.name} · {new Date(commit.timestamp * 1000).toLocaleString()}</small>
+            <strong>{describeCommit(commit)}</strong><code>{commit.oid.slice(0, 10)}</code><small>{commit.author.name} · {new Date(commit.timestamp * 1000).toLocaleString("ja-JP")}</small>
           </button>
-        </li>)}</ol> : <p className="git-review-empty">No commits in this local workspace.</p>}
+        </li>)}</ol> : <p className="git-review-empty">このワークスペースにローカルコミットはありません。</p>}
       </nav>
       <div className="git-history-detail" aria-live="polite">
-        {!selectedCommit && <p>Select a local commit to inspect its files.</p>}
-        {selectedCommit && loading && <p role="status">Loading files for this commit…</p>}
-        {selectedCommit && error && <p className="git-review-error" role="alert">Could not inspect this commit: {error}</p>}
+        {!selectedCommit && <p>コミットを選択すると、変更されたファイルを確認できます。</p>}
+        {selectedCommit && loading && <p role="status">コミットのファイルを読み込み中…</p>}
+        {selectedCommit && error && <p className="git-review-error" role="alert">このコミットを確認できませんでした。{error}</p>}
         {selectedCommit && details && <>
-          <header className="git-history-commit-heading"><div><span className="git-review-file-label">{details.parentOid ? "Compared with first parent" : "Root commit · compared with empty tree"}</span><h3>{describeCommit(selectedCommit)}</h3><code>{selectedCommit.oid}</code>
-            {selectedCommit.parent.length > 1 && <small>This merge commit is compared with its first parent ({parentLabel}); other parents are not included in this diff.</small>}
+          <header className="git-history-commit-heading"><div><span className="git-review-file-label">{details.parentOid ? "最初の親コミットとの差分" : "最初のコミット · 空のツリーとの差分"}</span><h3>{describeCommit(selectedCommit)}</h3><code>{selectedCommit.oid}</code>
+            {selectedCommit.parent.length > 1 && <small>マージコミットは最初の親コミット（{parentLabel}）との差分を表示しています。他の親コミットの差分は含みません。</small>}
           </div>
           <button type="button" className="git-history-restore" disabled={!canRestore || busy || restoring || restoreUnsupported || !details.changes.length} onClick={() => void restoreCommitFiles()}>
-            {restoring ? "Restoring…" : `Restore ${details.changes.length} changed file${details.changes.length === 1 ? "" : "s"} to worktree`}
+            {restoring ? "復元中…" : `このコミットで変更された${details.changes.length}件を作業ツリーに復元`}
           </button></header>
-          <p className="git-history-restore-note">Restore checks the current revision of every affected path. It updates only the local worktree; your existing work on other paths stays in place.</p>
-          {!canRestore && <p className="git-review-gate" role="status">Save current editor text before restoring history.</p>}
-          {pathCollision && <p className="git-review-gate" role="status">This commit turns a file into a directory or a directory into a file. Browser Git cannot apply those path changes atomically, so review is available but restore is disabled.</p>}
-          {unsupportedMode && <p className="git-review-gate" role="status">This commit changes symlink or executable mode metadata that the Browser Git file editor cannot restore. File contents remain available for review.</p>}
+          <p className="git-history-restore-note">対象ファイルの現在のリビジョンを確認してから復元します。ローカル作業ツリーだけを更新し、他のファイルはそのまま残します。</p>
+          {!canRestore && <p className="git-review-gate" role="status">履歴を復元する前に、編集中の文章を保存してください。</p>}
+          {pathCollision && <p className="git-review-gate" role="status">このコミットではファイルとディレクトリの構成が変わっています。ブラウザー内のGitではこの変更をまとめて適用できないため、確認のみ可能です。</p>}
+          {unsupportedMode && <p className="git-review-gate" role="status">このコミットには、現在のブラウザー内のGitで復元できないシンボリックリンクまたは実行権限の変更があります。ファイル内容の確認はできます。</p>}
           {notice && <p className="git-history-notice" role="status">{notice}</p>}
-          {!details.changes.length && <p>This commit has no file changes compared with its first parent.</p>}
+          {!details.changes.length && <p>最初の親コミットから変更されたファイルはありません。</p>}
           <div className="git-history-files">
             {details.changes.map((change) => <HistoryFile key={change.path} change={change} parentLabel={parentLabel} />)}
           </div>
@@ -143,7 +143,7 @@ function HistoryFile({ change, parentLabel }: { change: CommitFileChange; parent
   return <article className="git-history-file" aria-label={`${change.path} ${changeKind(change)}`}>
     <header><span className="git-review-file-label">{changeKind(change)}</span><h4>{change.path}</h4></header>
     {isBinary
-      ? <p className="git-review-binary" role="status">Binary content · {beforeBytes.byteLength} bytes in {parentLabel}, {afterBytes.byteLength} bytes in commit. This file is not rendered as text; no decoding or conversion was applied.</p>
-      : <TextDiff before={before!} after={after!} beforeLabel={parentLabel} afterLabel="Selected commit" />}
+      ? <p className="git-review-binary" role="status">バイナリファイル · {parentLabel}では{beforeBytes.byteLength.toLocaleString("ja-JP")}バイト、コミット時は{afterBytes.byteLength.toLocaleString("ja-JP")}バイト。テキストとしては表示せず、デコードや変換もしていません。</p>
+      : <TextDiff before={before!} after={after!} beforeLabel={parentLabel} afterLabel="選択中のコミット" />}
   </article>;
 }

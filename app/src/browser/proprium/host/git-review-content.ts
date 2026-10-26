@@ -14,3 +14,16 @@ export function decodeGitText(data: Uint8Array): string | null {
 export function allChangedPathsReviewed(paths: readonly string[], reviewed: ReadonlySet<string>): boolean {
   return paths.length > 0 && paths.every((path) => reviewed.has(path));
 }
+
+/** Keep raw Worker/API English errors out of localized Host review surfaces. */
+export function localizeGitReviewError(error: unknown, fallback: string): string {
+  const code = error && typeof error === "object" && "code" in error && typeof error.code === "string" ? error.code : "";
+  switch (code) {
+    case "revision_conflict": return "確認後に対象ファイルが変更されました。最新の状態を確認してから、もう一度お試しください。";
+    case "workspace_busy": return "別のタブでこのワークスペースを使用中です。処理が終わってから、もう一度お試しください。";
+    case "storage_unknown": return "ブラウザー内のGit保存状態を確認できません。保存状態を確認してから、もう一度お試しください。";
+    case "not_initialized": return "このワークスペースのローカルGitを初期化できません。ワークスペースを開き直してください。";
+    case "invalid_path": return "このファイルパスは現在のローカルGit操作では扱えません。";
+    default: return fallback;
+  }
+}

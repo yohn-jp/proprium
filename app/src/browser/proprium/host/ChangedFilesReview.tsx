@@ -2,7 +2,7 @@ import { useEffect, useState, type ReactElement } from "react";
 import type { BrowserLocalGit } from "../git/index.js";
 import type { DiffChange } from "../git/protocol.js";
 import { TextDiff } from "./TextDiff.js";
-import { allChangedPathsReviewed, decodeGitText } from "./git-review-content.js";
+import { allChangedPathsReviewed, decodeGitText, localizeGitReviewError } from "./git-review-content.js";
 import "./git-review.css";
 
 export interface ChangedFilesReviewProps {
@@ -42,7 +42,7 @@ export function ChangedFilesReview({ git, head, refreshKey, busy, canCommit, onR
       setChanges(next);
       setSelectedPath((current) => next.some((change) => change.path === current) ? current : next[0]?.path ?? null);
     }).catch((cause: unknown) => {
-      if (active) setError(cause instanceof Error ? cause.message : "Could not load the local diff.");
+      if (active) setError(localizeGitReviewError(cause, "ローカルの差分を読み込めませんでした。"));
     }).finally(() => { if (active) setLoading(false); });
     return () => { active = false; };
   }, [git, head, refreshKey, manualRefresh]);
@@ -56,17 +56,17 @@ export function ChangedFilesReview({ git, head, refreshKey, busy, canCommit, onR
   }
 
   if (loading) return <section className="git-review" aria-labelledby="changed-files-heading" aria-busy="true">
-    <div className="git-review-heading"><div><p className="eyebrow">LOCAL GIT</p><h3 id="changed-files-heading">Changed files</h3></div><span role="status">Loading diff…</span></div>
+    <div className="git-review-heading"><div><p className="eyebrow">ローカルGit</p><h3 id="changed-files-heading">変更ファイル</h3></div><span role="status">差分を読み込み中…</span></div>
   </section>;
 
   if (error) return <section className="git-review" aria-labelledby="changed-files-heading">
-    <div className="git-review-heading"><div><p className="eyebrow">LOCAL GIT</p><h3 id="changed-files-heading">Changed files</h3></div><button type="button" disabled={busy} onClick={() => setManualRefresh((value) => value + 1)}>Refresh diff</button></div>
-    <p className="git-review-error" role="alert">Could not load the changed-file review: {error}</p>
+    <div className="git-review-heading"><div><p className="eyebrow">ローカルGit</p><h3 id="changed-files-heading">変更ファイル</h3></div><button type="button" disabled={busy} onClick={() => setManualRefresh((value) => value + 1)}>差分を更新</button></div>
+    <p className="git-review-error" role="alert">変更ファイルの差分を読み込めませんでした。{error}</p>
   </section>;
 
   if (!changes?.length) return <section className="git-review" aria-labelledby="changed-files-heading">
-    <div className="git-review-heading"><div><p className="eyebrow">LOCAL GIT</p><h3 id="changed-files-heading">Changed files</h3></div><button type="button" disabled={busy} onClick={() => setManualRefresh((value) => value + 1)}>Refresh diff</button></div>
-    <p className="git-review-empty">There are no worktree changes to review.</p>
+    <div className="git-review-heading"><div><p className="eyebrow">ローカルGit</p><h3 id="changed-files-heading">変更ファイル</h3></div><button type="button" disabled={busy} onClick={() => setManualRefresh((value) => value + 1)}>差分を更新</button></div>
+    <p className="git-review-empty">確認する変更はありません。</p>
   </section>;
 
   const beforeBytes = selected?.headFile?.data ?? new Uint8Array();
@@ -77,10 +77,10 @@ export function ChangedFilesReview({ git, head, refreshKey, busy, canCommit, onR
 
   return <section className="git-review" aria-labelledby="changed-files-heading">
     <div className="git-review-heading">
-      <div><p className="eyebrow">LOCAL GIT · BEFORE COMMIT</p><h3 id="changed-files-heading">Review changed files</h3></div>
-      <div className="git-review-heading-actions"><span className="git-review-count">{reviewed.size}/{changes.length} reviewed</span><button type="button" disabled={busy || loading} onClick={() => setManualRefresh((value) => value + 1)}>Refresh diff</button></div>
+      <div><p className="eyebrow">ローカルGit · コミット前</p><h3 id="changed-files-heading">変更を確認</h3></div>
+      <div className="git-review-heading-actions"><span className="git-review-count">{reviewed.size}/{changes.length}件確認済み</span><button type="button" disabled={busy || loading} onClick={() => setManualRefresh((value) => value + 1)}>差分を更新</button></div>
     </div>
-    <p className="git-review-base">Compared with local commit <code>{head?.slice(0, 10) ?? "uncommitted workspace"}</code>. Every changed path must be reviewed before the existing local commit action is enabled.</p>
+    <p className="git-review-base">ローカルコミット <code>{head?.slice(0, 10) ?? "未コミット"}</code> との差分です。すべてのファイルの変更を確認すると、コミット操作が有効になります。</p>
     <div className="git-review-layout">
       <nav className="git-review-files" aria-label="Changed files">
         <ul>
@@ -94,17 +94,17 @@ export function ChangedFilesReview({ git, head, refreshKey, busy, canCommit, onR
       </nav>
       {selected && <article className="git-review-detail" aria-label={`Diff for ${selected.path}`}>
         <header className="git-review-file-heading"><div><span className="git-review-file-label">{changeKind(selected)}</span><h4>{selected.path}</h4></div>
-          <span>{reviewed.has(selected.path) ? "Reviewed" : "Not reviewed"}</span>
+          <span>{reviewed.has(selected.path) ? "確認済み" : "未確認"}</span>
         </header>
         {isBinary
-          ? <p className="git-review-binary" role="status">Binary content · {beforeBytes.byteLength} bytes before, {afterBytes.byteLength} bytes after. This file is not rendered as text; no decoding or conversion was applied.</p>
-          : <TextDiff before={before!} after={after!} beforeLabel="Local commit" afterLabel="Worktree" />}
+          ? <p className="git-review-binary" role="status">バイナリファイル · 変更前 {beforeBytes.byteLength.toLocaleString("ja-JP")} バイト、変更後 {afterBytes.byteLength.toLocaleString("ja-JP")} バイト。テキストとしては表示せず、デコードや変換もしていません。</p>
+          : <TextDiff before={before!} after={after!} beforeLabel="コミット時" afterLabel="作業ツリー" />}
         <button type="button" className="git-review-mark" disabled={busy} onClick={() => markReviewed(selected.path)}>
-          {reviewed.has(selected.path) ? "Reviewed" : "Mark this file reviewed"}
+          {reviewed.has(selected.path) ? "確認済み" : "このファイルの変更を確認した"}
         </button>
       </article>}
     </div>
-    {!ready && <p className="git-review-gate" role="status">Review each changed file to enable local commit.</p>}
-    {ready && !canCommit && <p className="git-review-gate" role="status">All file diffs are reviewed. Save the current editor text and wait for other workspace activity to finish before committing.</p>}
+    {!ready && <p className="git-review-gate" role="status">各ファイルの変更を確認すると、ローカルコミットできます。</p>}
+    {ready && !canCommit && <p className="git-review-gate" role="status">すべての変更を確認しました。コミットする前に編集中の文章を保存し、他の処理が終わるまでお待ちください。</p>}
   </section>;
 }
