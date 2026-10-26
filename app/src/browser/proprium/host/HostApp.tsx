@@ -10,6 +10,7 @@ import { WorkspaceFileBrowser } from "./WorkspaceFileBrowser.js";
 import { WorkspaceTransferPanel, downloadWorkspaceFile } from "./WorkspaceTransferPanel.js";
 import type { WorkspaceFile } from "../git/index.js";
 import { GitHubDeviceAuthorization, GitHubAuthorizationError } from "./GitHubDeviceAuthorization.js";
+import { GitHubRepositoryPicker } from "./GitHubRepositoryPicker.js";
 import { GatewayAccessLink } from "./GatewayAccessLink.js";
 import { PluginPanel } from "./PluginPanel.js";
 import { LiveMcpPanel } from "./LiveMcpPanel.js";
@@ -795,16 +796,9 @@ export function HostApp(): ReactElement {
           <div className="card-heading"><div><p className="eyebrow">REMOTE WORKSPACE</p><h2 id="connect-heading">GitHub</h2></div><span className="card-icon">↗</span></div>
           {account ? <>
             <p className="signed-in">Connected as <strong>{account.login}</strong><button type="button" className="text-button" onClick={signOut}>Sign out</button></p>
-            <label htmlFor="repository-picker">Repository</label>
-            <select id="repository-picker" value={selectedRepository ?? ""} onChange={event => {
-              const id = Number(event.target.value) || null;
-              setSelectedRepository(id);
-              setSelectedBranch(repositories.find(item => item.id === id)?.defaultBranch ?? "");
-            }}>
-              <option value="">Choose a repository</option>
-              {repositories.map(repository => <option key={repository.id} value={repository.id}>{repository.fullName}{repository.private ? " · private" : ""}</option>)}
-            </select>
-            {selectedRepositoryEntry && <><label htmlFor="workspace-branch">Branch</label><input id="workspace-branch" value={selectedBranch} onChange={event => setSelectedBranch(event.target.value)} placeholder={selectedRepositoryEntry.defaultBranch} autoComplete="off" /><p className="repository-branch">Default: <code>{selectedRepositoryEntry.defaultBranch}</code></p></>}
+            <GitHubRepositoryPicker session={session} repositories={repositories} selectedRepositoryId={selectedRepository} selectedBranch={selectedBranch}
+              onRepositoryChange={repository => { setSelectedRepository(repository?.id ?? null); setSelectedBranch(repository?.defaultBranch ?? ""); }}
+              onBranchChange={setSelectedBranch} onReconnect={() => void connectGitHub()} disabled={busy} idPrefix="workspace" />
             <button className="primary-button full-width" type="button" disabled={busy || !selectedRepositoryEntry || !selectedRepositoryEntry.permissions.pull || !selectedBranch.trim()} onClick={() => void openRemoteRepository()}>{busy ? "Opening…" : "Open workspace"}</button>
           </> : <>
             <details className="gateway-settings" open={gatewaySettingsOpen} onToggle={event => setGatewaySettingsOpen(event.currentTarget.open)}><summary>接続先設定</summary>
