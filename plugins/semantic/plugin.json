@@ -1,0 +1,65 @@
+{
+  "schema": "proprium.plugin/v2",
+  "id": "proprium.semantic",
+  "version": "0.1.0",
+  "abi": "proprium.component/v2",
+  "capabilities": [],
+  "actions": [
+    {
+      "plugin_id": "proprium.semantic",
+      "action_id": "proprium.semantic.terms.cluster",
+      "schema_version": 1,
+      "effect": "read",
+      "input_schema": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["candidates", "useEmbedding"],
+        "properties": {
+          "candidates": {
+            "type": "array",
+            "maxItems": 2000,
+            "items": {
+              "type": "object",
+              "additionalProperties": false,
+              "required": ["term", "reading", "sourceEntityIds", "occurrenceCount"],
+              "properties": {
+                "term": { "type": "string", "minLength": 1, "maxLength": 256 },
+                "reading": { "type": ["string", "null"], "maxLength": 256 },
+                "sourceEntityIds": { "type": "array", "maxItems": 256, "items": { "type": "string", "maxLength": 256 } },
+                "occurrenceCount": { "type": "integer", "minimum": 0 }
+              }
+            }
+          },
+          "useEmbedding": { "type": "boolean" }
+        }
+      },
+      "output_schema": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["snapshot", "results"],
+        "properties": {
+          "snapshot": { "type": "object" },
+          "results": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "additionalProperties": false,
+              "required": ["canonical", "variants"],
+              "properties": {
+                "canonical": { "type": "string" },
+                "variants": { "type": "array", "items": { "type": "string" } },
+                "semanticOnly": { "type": "boolean" }
+              }
+            }
+          }
+        }
+      },
+      "required_capabilities": [],
+      "callers": ["plugin", "ui"],
+      "requires_user_gesture": false,
+      "caller_plugins": ["proprium.research"]
+    }
+  ],
+  "ui": [],
+  "asset_groups": []
+}
