@@ -1,19 +1,19 @@
-import { useEffect, useState, type ReactElement } from "react";
+import { useEffect, useMemo, useState, type ReactElement } from "react";
 import type { BrowserLocalGit } from "../git/index.js";
-import type { DiffChange } from "../git/protocol.js";
+import type { CommitReviewSnapshot, DiffChange } from "../git/protocol.js";
 import { TextDiff } from "./TextDiff.js";
 import { allChangedPathsReviewed, decodeGitText, localizeGitReviewError } from "./git-review-content.js";
 import "./git-review.css";
 
 export interface ChangedFilesReviewProps {
-  git: Pick<BrowserLocalGit, "diff">;
+  git: Pick<BrowserLocalGit, "reviewDiff">;
   head: string | null;
   /** Change whenever a worktree write or refresh may have changed the diff. */
   refreshKey: string | number;
   busy: boolean;
   canCommit: boolean;
   /** The parent uses this to keep its existing commit action disabled until all paths are reviewed. */
-  onReviewReady(ready: boolean): void;
+  onReviewReady(snapshot: CommitReviewSnapshot | null): void;
 }
 
 function changeKind(change: DiffChange): string {
@@ -25,6 +25,7 @@ function changeKind(change: DiffChange): string {
 
 export function ChangedFilesReview({ git, head, refreshKey, busy, canCommit, onReviewReady }: ChangedFilesReviewProps): ReactElement {
   const [changes, setChanges] = useState<DiffChange[] | null>(null);
+  const [reviewHead, setReviewHead] = useState<string | null>(null);
   const [selectedPath, setSelectedPath] = useState<string | null>(null);
   const [reviewed, setReviewed] = useState<Set<string>>(() => new Set());
   const [error, setError] = useState<string | null>(null);
@@ -37,8 +38,10 @@ export function ChangedFilesReview({ git, head, refreshKey, busy, canCommit, onR
     setChanges(null);
     setReviewed(new Set());
     setError(null);
-    void git.diff().then((next) => {
+    void git.reviewDiff().then((review) => {
+      const next = review.changes;
       if (!active) return;
+      setReviewHead(review.head);
       setChanges(next);
       setSelectedPath((current) => next.some((change) => change.path === current) ? current : next[0]?.path ?? null);
     }).catch((cause: unknown) => {
@@ -49,7 +52,10 @@ export function ChangedFilesReview({ git, head, refreshKey, busy, canCommit, onR
 
   const selected = changes?.find((change) => change.path === selectedPath) ?? changes?.[0] ?? null;
   const ready = allChangedPathsReviewed(changes?.map((change) => change.path) ?? [], reviewed);
-  useEffect(() => { onReviewReady(ready); }, [onReviewReady, ready]);
+  const snapshot = useMemo<CommitReviewSnapshot | null>(() => ready && changes
+    ? { head: reviewHead, files: changes.map(change => ({ path: change.path, oid: change.worktreeFile?.oid ?? null })) }
+    : null, [ready, changes, reviewHead]);
+  useEffect(() => { onReviewReady(snapshot); }, [onReviewReady, snapshot]);
 
   function markReviewed(path: string): void {
     setReviewed((current) => new Set(current).add(path));
@@ -80,7 +86,7 @@ export function ChangedFilesReview({ git, head, refreshKey, busy, canCommit, onR
       <div><p className="eyebrow">ローカルGit · コミット前</p><h3 id="changed-files-heading">変更を確認</h3></div>
       <div className="git-review-heading-actions"><span className="git-review-count">{reviewed.size}/{changes.length}件確認済み</span><button type="button" disabled={busy || loading} onClick={() => setManualRefresh((value) => value + 1)}>差分を更新</button></div>
     </div>
-    <p className="git-review-base">ローカルコミット <code>{head?.slice(0, 10) ?? "未コミット"}</code> との差分です。すべてのファイルの変更を確認すると、コミット操作が有効になります。</p>
+    <p className="git-review-base">ローカルコミット <code>{reviewHead?.slice(0, 10) ?? "未コミット"}</code> との差分です。すべてのファイルの変更を確認すると、コミット操作が有効になります。</p>
     <div className="git-review-layout">
       <nav className="git-review-files" aria-label="Changed files">
         <ul>

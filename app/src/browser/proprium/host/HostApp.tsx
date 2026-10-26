@@ -3,7 +3,7 @@ import { createPortal } from "react-dom";
 import { useNavigate } from "react-router-dom";
 import { BrowserLocalGit, BrowserLocalGitError } from "../git/index.js";
 import { isGitHubWorkspaceIdentity, validateWorkspaceIdentity } from "../git/protocol.js";
-import type { CommitSummary, FileRevision, LocalWorkspaceIdentity, StatusEntry, WorkspaceIdentity } from "../git/protocol.js";
+import type { CommitReviewSnapshot, CommitSummary, FileRevision, LocalWorkspaceIdentity, StatusEntry, WorkspaceIdentity } from "../git/protocol.js";
 import { createGitHubAccountSession, GitHubSyncError } from "../git/github-sync.js";
 import type { GitHubAccount, GitHubDevicePrompt, GitHubRepository, GitHubAccountSession, GitHubSyncClient } from "../git/github-sync.js";
 import { WorkspaceFileBrowser } from "./WorkspaceFileBrowser.js";
@@ -163,7 +163,8 @@ export function HostApp(): ReactElement {
   const [history, setHistory] = useState<CommitSummary[]>([]);
   const [currentFile, setCurrentFile] = useState<OpenFile | null>(null);
   const [commitMessage, setCommitMessage] = useState("");
-  const [reviewedSnapshot, setReviewedSnapshot] = useState({ key: "", ready: false });
+  const [reviewedSnapshot, setReviewedSnapshot] = useState<{ key: string; snapshot: CommitReviewSnapshot | null }>({ key: "", snapshot: null });
+  const [reviewRefresh, setReviewRefresh] = useState(0);
   const [preferences, setPreferences] = useState(readPreferences);
   const [syncState, setSyncState] = useState<SyncState>("local-draft");
   const [message, setMessage] = useState<OperationMessage | null>(null);
@@ -207,9 +208,9 @@ export function HostApp(): ReactElement {
   const activeWorkspaceId = workspace?.identity.localWorkspaceId ?? null;
   const selectedRepositoryEntry = repositories.find(item => item.id === selectedRepository) ?? null;
   const changedPaths = useMemo(() => new Set(status.entries.map(entry => entry.path)), [status.entries]);
-  const reviewSnapshotKey = JSON.stringify([workspaceGeneration, status.head, files.map(file => [file.path, file.oid]), status.entries]);
-  const commitReviewed = reviewedSnapshot.key === reviewSnapshotKey && reviewedSnapshot.ready;
-  const receiveCommitReview = useCallback((ready: boolean) => setReviewedSnapshot({ key: reviewSnapshotKey, ready }), [reviewSnapshotKey]);
+  const reviewSnapshotKey = JSON.stringify([workspaceGeneration, reviewRefresh, status.head, files.map(file => [file.path, file.oid]), status.entries]);
+  const commitReviewed = reviewedSnapshot.key === reviewSnapshotKey && reviewedSnapshot.snapshot !== null;
+  const receiveCommitReview = useCallback((snapshot: CommitReviewSnapshot | null) => setReviewedSnapshot({ key: reviewSnapshotKey, snapshot }), [reviewSnapshotKey]);
 
   const refresh = useCallback(async (targetGit: BrowserLocalGit, targetWorkspace: RecentWorkspace): Promise<void> => {
     const next = await loadWorkspaceState(targetGit);
@@ -627,15 +628,21 @@ export function HostApp(): ReactElement {
     if (!preferences.name.trim() || !preferences.email.includes("@")) { setMessage({ tone: "error", text: "Enter a Git author name and valid email address." }); return; }
     setBusy(true); setCheckpointBusy(true);
     try {
-      const before = await git.status();
-      if (!before.entries.length) { setMessage({ tone: "info", text: "There are no local changes to commit." }); return; }
-      const staged = await git.add(before.entries.map(entry => entry.path), before.head);
-      const committed = await git.commit(commitMessage, preferences, staged.head);
+      const snapshot = reviewedSnapshot.snapshot;
+      if (!snapshot) return;
+      const committed = await git.commitReviewed(commitMessage, preferences, snapshot);
       setCommitMessage("");
       setSyncState("local-committed");
       await refresh(git, workspace);
       setMessage({ tone: "success", text: `Committed locally as ${committed.oid}. This commit is still only on this device.` });
-    } catch (error) { setMessage({ tone: "error", text: errorMessage(error) }); }
+    } catch (error) {
+      if (error instanceof BrowserLocalGitError && error.code === "revision_conflict") {
+        setReviewedSnapshot({ key: "", snapshot: null });
+        setReviewRefresh(value => value + 1);
+        await refresh(git, workspace).catch(() => undefined);
+        setMessage({ tone: "error", text: "レビュー後に作品が変更されました。差分を読み込み直して、すべての変更をもう一度確認してください。" });
+      } else setMessage({ tone: "error", text: errorMessage(error) });
+    }
     finally { setBusy(false); setCheckpointBusy(false); }
   }
 

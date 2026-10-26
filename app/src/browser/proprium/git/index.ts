@@ -1,5 +1,7 @@
 import type {
   CommitAuthor,
+  CommitReview,
+  CommitReviewSnapshot,
   CommitDiff,
   CommitFileChange,
   CommitSummary,
@@ -172,6 +174,14 @@ export class BrowserLocalGit {
 
   diff(): Promise<DiffChange[]> {
     return this.call({ operation: "diff" });
+  }
+
+  reviewDiff(): Promise<CommitReview> {
+    return this.call({ operation: "review-diff" });
+  }
+
+  commitReviewed(message: string, author: CommitAuthor, snapshot: CommitReviewSnapshot): Promise<{ oid: string; head: string; localState: "draft" | "local-committed" }> {
+    return this.call({ operation: "commit-reviewed", message, author, snapshot });
   }
 
   commitDiff(oid: string): Promise<CommitDiff> {

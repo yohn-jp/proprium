@@ -114,6 +114,17 @@ export interface CommitDiff {
   changes: CommitFileChange[];
 }
 
+/** Exact worktree bytes and changed path set that the author reviewed. */
+export interface CommitReviewSnapshot {
+  head: string | null;
+  files: Array<{ path: string; oid: string | null }>;
+}
+
+export interface CommitReview {
+  head: string | null;
+  changes: DiffChange[];
+}
+
 export interface CommitAuthor {
   name: string;
   email: string;
@@ -137,6 +148,8 @@ export type LocalGitRequest =
   | { id: string; workspace: WorkspaceIdentity; operation: "list-files" }
   | { id: string; workspace: WorkspaceIdentity; operation: "status" }
   | { id: string; workspace: WorkspaceIdentity; operation: "diff" }
+  | { id: string; workspace: WorkspaceIdentity; operation: "review-diff" }
+  | { id: string; workspace: WorkspaceIdentity; operation: "commit-reviewed"; snapshot: CommitReviewSnapshot; message: string; author: CommitAuthor }
   | { id: string; workspace: WorkspaceIdentity; operation: "commit-diff"; oid: string }
   | { id: string; workspace: WorkspaceIdentity; operation: "add"; paths: string[]; expectedHead: string | null }
   | { id: string; workspace: WorkspaceIdentity; operation: "commit"; expectedHead: string | null; message: string; author: CommitAuthor }

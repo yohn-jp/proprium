@@ -296,3 +296,67 @@ test("approved batch changes validate every read and write revision before apply
   expect(result.firstAfterApply).toBe("would change\n");
   expect(result.secondAfterApply).toBeNull();
 });
+
+for (const mutation of ["edit", "add", "delete", "head"] as const) {
+  test(`reviewed commit rejects another tab's ${mutation} before staging`, async ({ page, context }) => {
+    await page.goto("/browser-git-test.html");
+    await expect(page.locator("#ready")).toHaveText("ready");
+    const id = workspaceId();
+    const snapshot = await page.evaluate(async id => {
+      const git = window.browserGitTest.open(id);
+      const author = { name: "Review Test", email: "review@example.test" };
+      await git.init();
+      await git.write("notes.md", new TextEncoder().encode("original\n"), { oid: null });
+      await git.add(["notes.md"], null);
+      const base = await git.commit("base", author, null);
+      await git.write("notes.md", new TextEncoder().encode("reviewed\n"), (await git.read("notes.md")).revision);
+      const review = await git.reviewDiff();
+      git.close();
+      return { head: base.head, files: review.changes.map(change => ({ path: change.path, oid: change.worktreeFile?.oid ?? null })) };
+    }, id);
+    const other = await context.newPage();
+    await other.goto("/browser-git-test.html");
+    await expect(other.locator("#ready")).toHaveText("ready");
+    const before = await other.evaluate(async ({ id, mutation }) => {
+      const git = window.browserGitTest.open(id);
+      await git.init();
+      if (mutation === "add") await git.write("unreviewed.md", new TextEncoder().encode("unreviewed new file\n"), { oid: null });
+      else if (mutation === "delete") await git.delete("notes.md", (await git.read("notes.md")).revision);
+      else if (mutation === "head") {
+        const status = await git.status();
+        await git.add(["notes.md"], status.head);
+        await git.commit("other tab commit", { name: "Other", email: "other@example.test" }, status.head);
+      } else await git.write("notes.md", new TextEncoder().encode("unreviewed edit\n"), (await git.read("notes.md")).revision);
+      const status = await git.status();
+      git.close();
+      return status;
+    }, { id, mutation });
+    const result = await page.evaluate(async ({ id, snapshot }) => {
+      const git = window.browserGitTest.open(id);
+      let code = "none";
+      try { await git.commitReviewed("must not commit", { name: "Review", email: "review@example.test" }, snapshot); }
+      catch (error) { code = (error as { code: string }).code; }
+      const status = await git.status();
+      const history = await git.log();
+      let confirmed: string | null = null;
+      const fresh = await git.reviewDiff();
+      if (fresh.changes.length) {
+        const committed = await git.commitReviewed("reviewed again", { name: "Review", email: "review@example.test" }, {
+          head: fresh.head, files: fresh.changes.map(change => ({ path: change.path, oid: change.worktreeFile?.oid ?? null })),
+        });
+        confirmed = committed.head;
+      }
+      const after = await git.status();
+      git.close();
+      return { code, status, history: history.map(commit => commit.message.trim()), confirmed, after };
+    }, { id, snapshot });
+    expect(result.code).toBe("revision_conflict");
+    expect(result.status).toEqual(before); // Neither index nor HEAD changed on rejection.
+    expect(result.history).not.toContain("must not commit");
+    if (mutation !== "head") {
+      expect(result.confirmed).toMatch(/^[a-f0-9]{40}$/u);
+      expect(result.after.entries).toEqual([]);
+    }
+    await other.close();
+  });
+}

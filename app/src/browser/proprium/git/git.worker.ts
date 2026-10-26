@@ -1089,9 +1089,9 @@ async function operation(request: LocalGitRequest): Promise<unknown> {
     const head = await currentHead(paths.dir);
     return { head, entries, localState: entries.length || !head ? "draft" : "local-committed" };
   }
-  if (request.operation === "diff") {
+  if (request.operation === "diff" || request.operation === "review-diff") {
     const entries = await worktreeMatrix(paths.dir, request.workspace.branch);
-    return Promise.all(entries.map(async (entry) => ({
+    const changes = await Promise.all(entries.map(async (entry) => ({
       path: entry.path,
       head: entry.head,
       worktree: entry.worktree,
@@ -1100,6 +1100,31 @@ async function operation(request: LocalGitRequest): Promise<unknown> {
       headFile: entry.headFile ? { oid: (await git.hashBlob({ object: entry.headFile })).oid, data: entry.headFile } : null,
       worktreeFile: entry.worktreeFile ? { oid: (await git.hashBlob({ object: entry.worktreeFile })).oid, data: entry.worktreeFile } : null,
     })));
+    return request.operation === "review-diff" ? { head: await currentHead(paths.dir), changes } : changes;
+  }
+  if (request.operation === "commit-reviewed") {
+    const snapshot = request.snapshot;
+    if (!snapshot || !Array.isArray(snapshot.files) || !snapshot.files.length) failure("git_error", "A reviewed commit requires a complete review snapshot.");
+    if (!request.message.trim() || request.message.length > 100_000 || !request.author.name.trim() || !request.author.email.includes("@")) {
+      failure("git_error", "A commit requires a message and valid author identity.");
+    }
+    await assertRevision(paths.dir, snapshot.head);
+    const reviewed = new Map<string, string | null>();
+    for (const file of snapshot.files) {
+      validateGitPath(file.path);
+      if (reviewed.has(file.path) || file.oid !== null && !/^[a-f0-9]{40}$/u.test(file.oid)) failure("git_error", "The review snapshot contains invalid or duplicate file revisions.");
+      reviewed.set(file.path, file.oid);
+    }
+    const current = await worktreeMatrix(paths.dir, request.workspace.branch);
+    if (current.length !== reviewed.size) failure("revision_conflict", "The changed file set changed after review; review all changes again.");
+    for (const entry of current) {
+      const oid = entry.worktreeFile === null ? null : (await git.hashBlob({ object: entry.worktreeFile })).oid;
+      if (!reviewed.has(entry.path) || reviewed.get(entry.path) !== oid) failure("revision_conflict", "File contents changed after review; review all changes again.");
+    }
+    // The outer exclusive workspace lock spans validation, staging and commit.
+    // Calling the operations directly does not release/reacquire that lock.
+    await operation({ ...request, operation: "add", paths: [...reviewed.keys()], expectedHead: snapshot.head });
+    return operation({ ...request, operation: "commit", expectedHead: snapshot.head });
   }
   if (request.operation === "commit-diff") return commitDiff(paths.dir, request.oid);
   if (request.operation === "add") {
@@ -1198,7 +1223,7 @@ scope.addEventListener("message", async (event: MessageEvent<LocalGitRequest>) =
   const workspaceId = request.workspace?.localWorkspaceId ?? "";
   try {
     if (!scope.navigator.locks) failure("lock_unavailable", "This browser does not provide Web Locks; local Git workspace access is disabled.");
-    const write = ["init", "write", "delete", "apply-changes", "add", "commit", "create-branch", "verify", "remote-fetch", "remote-pull", "remote-publish"].includes(request.operation);
+    const write = ["init", "write", "delete", "apply-changes", "add", "commit", "commit-reviewed", "create-branch", "verify", "remote-fetch", "remote-pull", "remote-publish"].includes(request.operation);
     const paths = await workspacePaths(request.workspace);
     const result = await scope.navigator.locks.request(paths.lock, { mode: write ? "exclusive" : "shared", ifAvailable: true }, async (lock) => {
       if (!lock) failure("workspace_busy", "Another tab is using this local workspace. Retry when its operation finishes.");
