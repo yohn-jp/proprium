@@ -16,7 +16,10 @@ export async function showPanel(page: Page, panel: "outline" | "editor" | "inspe
       await page.locator('summary[aria-label="別の画面へ移動"]').click();
     }
     const labels = { outline: "作品", editor: "書く", inspector: "確認", review: "道具" };
-    await navigation.getByRole("button", { name: labels[panel], exact: true }).click();
+    const target = navigation.getByRole("button", { name: labels[panel], exact: true });
+    // Ionic replaces its native button while re-navigating to the current
+    // route. The requested Workspace panel is already active in that case.
+    if ((await target.getAttribute("aria-current")) !== "page") await target.click();
     return;
   }
   if (panel === "history") {
