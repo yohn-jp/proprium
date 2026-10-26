@@ -9,6 +9,7 @@ import type { GitHubAccount, GitHubDevicePrompt, GitHubRepository, GitHubAccount
 import { WorkspaceFileBrowser } from "./WorkspaceFileBrowser.js";
 import { WorkspaceTransferPanel, downloadWorkspaceFile } from "./WorkspaceTransferPanel.js";
 import type { WorkspaceFile } from "../git/index.js";
+import { GatewayAccessLink } from "./GatewayAccessLink.js";
 import { PluginPanel } from "./PluginPanel.js";
 import { LiveMcpPanel } from "./LiveMcpPanel.js";
 
@@ -811,7 +812,7 @@ export function HostApp(): ReactElement {
               <p className="field-help">通常は変更不要です。セルフホストのGatewayを利用する場合だけ変更してください。</p>
             </details>
             <p className="field-help">Cloudflare Accessで保護されたGatewayを使用する場合は、先にGatewayの認証画面を開いてログインしてください。完了後、この画面に戻ってGitHubへ接続します。</p>
-            <a href={gatewayDraft.trim() ? `${gatewayDraft.trim().replace(/\/$/u, "")}/healthz` : "#"} target="_blank" rel="noopener noreferrer" aria-disabled={!gatewayDraft.trim()} onClick={event => { if (!gatewayDraft.trim()) event.preventDefault(); }}>Authenticate with Cloudflare Access</a>
+      <GatewayAccessLink gatewayUrl={gatewayDraft} />
             {devicePrompt && <section className="device-prompt" aria-label="GitHub device authorization"><h3>GitHubの認証コード</h3><strong>{devicePrompt.userCode}</strong><p>このコードを控えてから認証画面を開き、入力してください。認証後、この画面へ戻ると接続が完了します。</p><a href={devicePrompt.verificationUri} target="_blank" rel="noopener noreferrer">Open GitHub device sign-in</a><p className="field-help" role="status">{authStage === "repositories" ? "認証済み。Repository一覧を取得しています…" : "GitHubでの認証を待っています…"}</p><button type="button" onClick={cancelGitHubAuthorization}>Cancel GitHub sign-in</button></section>}
             <button className="primary-button full-width" type="button" disabled={busy} onClick={() => void connectGitHub()}>{busy ? "Connecting…" : "Connect GitHub"}</button>
           </>}
@@ -920,7 +921,7 @@ export function HostApp(): ReactElement {
       <label htmlFor="workspace-github-gateway">Proprium Gateway URL</label>
       <input id="workspace-github-gateway" type="url" value={gatewayDraft} onChange={event => updateGateway(event.target.value)} placeholder="https://gateway.example.com" autoComplete="url" />
       <p className="field-help">通常は変更不要です。Cloudflare Accessで保護されたGatewayは、先にログインしてください。</p>
-      <a href={gatewayDraft.trim() ? `${gatewayDraft.trim().replace(/\/$/u, "")}/healthz` : "#"} target="_blank" rel="noopener noreferrer" aria-disabled={!gatewayDraft.trim()} onClick={event => { if (!gatewayDraft.trim()) event.preventDefault(); }}>Authenticate with Cloudflare Access</a>
+      <GatewayAccessLink gatewayUrl={gatewayDraft} />
     </details>
     {devicePrompt && <section className="device-prompt" aria-label="GitHub device authorization"><h3>GitHubの認証コード</h3><strong>{devicePrompt.userCode}</strong><p>このコードをGitHubに入力し、この画面へ戻ってください。</p><a href={devicePrompt.verificationUri} target="_blank" rel="noopener noreferrer">GitHubの認証画面を開く</a><p className="field-help" role="status">{authStage === "verifying" ? "認証済み。Repositoryを確認しています…" : "GitHubでの承認を待っています…"}</p></section>}
     {message?.tone === "error" && <p role="alert">{message.text}</p>}
