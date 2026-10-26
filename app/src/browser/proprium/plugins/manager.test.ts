@@ -42,6 +42,31 @@ async function fixture() {
     });
   }
 
+  async function addAuthoringPlugin(id: string, version: string) {
+    const entrypoint = `${id}/${version}/${await digest(rawComponent)}/plugin.wasm`;
+    const manifest = {
+      schema: "proprium.plugin/v2", id, version, abi: "proprium.component/v2", entrypoint,
+      capabilities: ["workspace.file.read"],
+      artifacts: [{ path: entrypoint, bytes: rawComponent.byteLength, sha256: await digest(rawComponent), mediaType: "application/wasm" }],
+      actions: [`${id}.status.read`, `${id}.health.read`].map(action_id => ({
+        plugin_id: id, action_id, schema_version: 1, effect: "read",
+        input_schema: { type: "object", properties: {}, required: [], additionalProperties: false },
+        output_schema: { type: "object", properties: { ready: { type: "boolean" } }, required: ["ready"], additionalProperties: false },
+        required_capabilities: ["workspace.file.read"], callers: ["ui", "mcp"], requires_user_gesture: false,
+      })),
+      ui: [{ id: "writer-home", kind: "panel", title: "Writer", context: {},
+        body: { id: "writer-status", type: "status", title: "Writer status", state: "ready" } }],
+      asset_groups: [],
+    };
+    const manifestBytes = new TextEncoder().encode(JSON.stringify(manifest));
+    const manifestSignature = new Uint8Array(await crypto.subtle.sign({ name: "Ed25519" }, publisherKeys.privateKey, manifestBytes));
+    const manifestSha256 = await digest(manifestBytes);
+    const manifestPath = `${id}/${version}/manifest/${manifestSha256}.json`;
+    content.set(new URL(manifestPath, artifactBase).href, manifestBytes);
+    content.set(new URL(entrypoint, artifactBase).href, rawComponent);
+    plugins.push({ id, version, manifestPath, manifestSha256, manifestSignature: encodeBase64(manifestSignature), publisherKey: encodeBase64(publisherKey), dependencies: [] });
+  }
+
   await addPlugin("example.math", "1.0.0");
   await addPlugin("example.math", "1.2.0");
   await addPlugin("example.calc", "1.0.0", [{ id: "example.math", range: "^1.0.0" }]);
@@ -74,7 +99,7 @@ async function fixture() {
     registries: [{ url: registryUrl, publicKey: registryPublicKey, artifactOrigins: approvedOrigins }],
     fetcher, store,
   });
-  return { manager, store, fetcher, registryPublicKey, registryPrivateKey: registryKeys.privateKey, publishRegistry, content, requests };
+  return { manager, store, fetcher, registryPublicKey, registryPrivateKey: registryKeys.privateKey, publishRegistry, addAuthoringPlugin, content, requests };
 }
 
 test("registry catalog discovers signed IDs and versions without installing or fetching plugin artifacts", async () => {
@@ -89,6 +114,67 @@ test("registry catalog discovers signed IDs and versions without installing or f
   assert.deepEqual(catalog[0]!.dependencies, [{ id: "example.math", range: "^1.0.0" }]);
   assert.deepEqual(requests, [registryUrl, `${registryUrl}.sig`]);
   assert.deepEqual(await store.listPlugins(), []);
+});
+
+test("signed v2 actions and Host UI remain available while disabled, with no Worker activation", async () => {
+  const { manager, store, fetcher, registryPublicKey, addAuthoringPlugin, publishRegistry } = await fixture();
+  await addAuthoringPlugin("example.writer", "2.0.0");
+  await publishRegistry(["1.0.0", "2.0.0"], "1.0.1");
+  const preview = await manager.previewInstall({ registryUrl, pluginId: "example.writer", version: "2.0.0" });
+  const installed = await manager.installFromRegistry(preview);
+  const writer = installed.find(item => item.id === "example.writer")!;
+  assert.equal(writer.manifest?.schema, "proprium.plugin/v2");
+  assert.match(writer.manifestDigest ?? "", /^[0-9a-f]{64}$/u);
+  assert.equal(writer.actions[0]?.action_id, "example.writer.status.read");
+  assert.equal(writer.surfaces[0]?.id, "writer-home");
+  assert.equal(writer.state, "installed");
+  const firstPage = await manager.actionsList("example.writer", "ui", undefined, 1);
+  assert.deepEqual(firstPage.items.map(item => item.availability), ["disabled"]);
+  assert.ok(firstPage.next_cursor);
+  assert.equal((await manager.actionsList("example.writer", "ui", firstPage.next_cursor!, 1)).items[0]?.action_id, "example.writer.health.read");
+  await assert.rejects(manager.actionsList("example.writer", "mcp", firstPage.next_cursor!, 1), /cursor is stale/i);
+
+  const record = await store.getPlugin("example.writer@2.0.0");
+  assert.ok(record?.manifest?.schema === "proprium.plugin/v2");
+  await store.putPlugins([{ ...record, manifest: { ...record.manifest, ui: [] } }]);
+  assert.equal((await manager.installed()).find(item => item.id === "example.writer")?.surfaces[0]?.id, "writer-home");
+  assert.equal((await store.getPlugin("example.writer@2.0.0"))?.manifest?.schema, "proprium.plugin/v2");
+
+  await assert.rejects(manager.enable({ pluginId: "example.writer", version: "2.0.0", workspaceId: "workspace", grants: ["unlisted.capability"], hostAllowed: [] }),
+    (error: unknown) => error instanceof PluginManagerError && error.code === "capability_denied");
+  await manager.enable({ pluginId: "example.writer", version: "2.0.0", workspaceId: "workspace", grants: ["workspace.file.read"], hostAllowed: ["workspace.file.read"] });
+  const actionSet = await manager.verifiedActionSet("example.writer");
+  assert.equal(actionSet?.manifest_digest, writer.manifestDigest);
+  assert.equal(actionSet?.enabled, true);
+  assert.ok((actionSet?.activation_epoch ?? 0) > 0);
+  const managedRuntime = manager.authoringRuntime("example.writer");
+  const actionRequest = { plugin_id: "example.writer", deadline_ms: 1000 } as never;
+  const invokeOptions = {
+    request: actionRequest, caller: "ui" as const, activation_epoch: actionSet!.activation_epoch,
+    deadline_at: Date.now() + 1000, granted_capabilities: [], validate_schema: () => undefined,
+    is_snapshot_current: () => true, resolve_host_call: async () => undefined,
+  };
+  await assert.rejects(managedRuntime.invoke(invokeOptions), /grant set differs/i);
+  await assert.rejects(managedRuntime.invoke({ ...invokeOptions, granted_capabilities: ["workspace.file.read"], deadline_at: Date.now() - 1 }), /deadline/i);
+  assert.deepEqual((await manager.actionsList("example.writer", "ui")).items.map(item => item.availability), ["ready", "ready"]);
+  assert.equal((await manager.installed()).find(item => item.id === "example.writer")?.state, "enabled-idle");
+  const enabledEpoch = actionSet!.activation_epoch;
+  await manager.disable("example.writer");
+  const disabledSet = await manager.verifiedActionSet("example.writer");
+  assert.equal(disabledSet?.enabled, false);
+  assert.ok((disabledSet?.activation_epoch ?? 0) > enabledEpoch);
+  await assert.rejects(managedRuntime.invoke({
+    request: {} as never, caller: "ui", activation_epoch: enabledEpoch, deadline_at: Date.now() + 1000,
+    granted_capabilities: ["workspace.file.read"], validate_schema: () => undefined,
+    is_snapshot_current: () => true, resolve_host_call: async () => undefined,
+  }), (error: unknown) => error instanceof PluginManagerError && error.code === "not_active");
+
+  const reloaded = new BrowserPluginManager({ registries: [{ url: registryUrl, publicKey: registryPublicKey, artifactOrigins: approvedOrigins }], fetcher, store });
+  const afterReload = (await reloaded.installed()).find(item => item.id === "example.writer")!;
+  assert.equal(afterReload.state, "installed");
+  assert.equal(afterReload.actions[0]?.action_id, "example.writer.status.read");
+  assert.equal(afterReload.surfaces[0]?.id, "writer-home");
+  await Promise.all([manager.dispose(), reloaded.dispose()]);
 });
 
 test("registry catalog rejects invalid signatures and unapproved artifact origins", async () => {

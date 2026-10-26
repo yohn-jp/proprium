@@ -1,3 +1,4 @@
+import type { PluginManifest } from "../plugin-artifact.js";
 import type { PluginDependency, SignedRegistrySnapshot } from "./registry.js";
 
 export interface InstalledPluginRecord {
@@ -9,6 +10,8 @@ export interface InstalledPluginRecord {
   /** Root key that admitted this installed package; root rotation invalidates the old admission. */
   readonly registryRootFingerprint: string;
   readonly manifestBytes: Uint8Array;
+  /** Cached parsed form only; every use is re-admitted from manifestBytes and its signed registry proof. */
+  readonly manifest?: PluginManifest;
   readonly manifestSha256: string;
   readonly manifestSignature: string;
   readonly publisherKey: string;
@@ -144,6 +147,7 @@ export class MemoryPluginStore implements PluginStore {
 function cloneRecord(record: InstalledPluginRecord): InstalledPluginRecord {
   return {
     ...record,
+    ...(record.manifest ? { manifest: structuredClone(record.manifest) } : {}),
     manifestBytes: Uint8Array.from(record.manifestBytes),
     dependencies: record.dependencies.map(dependency => ({ ...dependency })),
     resolvedDependencies: record.resolvedDependencies.map(dependency => ({ ...dependency })),
