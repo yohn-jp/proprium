@@ -11,6 +11,7 @@ export type {
   ManagedActionRuntime,
   PluginInstallPreview,
   RegistryCatalogEntry,
+  ResolvedAssetGroup,
   VerifiedActionSet,
 } from "./manager.js";
 export { PluginRegistryError, PLUGIN_REGISTRY_SCHEMA, compareVersions, satisfiesVersion } from "./registry.js";

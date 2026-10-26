@@ -1,4 +1,4 @@
-import { PluginArtifactError, verifyPluginArtifact, type PluginManifest } from "../plugin-artifact.js";
+import { PluginArtifactError, verifyPluginArtifact, type AssetGroupRef, type PluginManifest } from "../plugin-artifact.js";
 import { BrowserPluginRuntime } from "../plugin-runtime/runtime.js";
 import { CAPABILITIES, type PluginCapability, type PluginTranscript, type RuntimeContext, type RuntimeSnapshot } from "../plugin-runtime/protocol.js";
 import { BrowserAuthoringPluginRuntime, V2PluginRuntimeError, type V2Caller, type V2InvokeOptions } from "../plugin-runtime/v2/index.js";
@@ -14,6 +14,7 @@ export type { PluginStore, InstalledPluginRecord } from "./store.js";
 
 const MAX_SIGNATURE_BYTES = 64;
 const MAX_ARTIFACT_BYTES = 128 * 1024 * 1024;
+const MAX_ASSET_OBJECT_BYTES = 16 * 1024 * 1024;
 
 export class PluginManagerError extends Error {
   constructor(readonly code: "not_installed" | "already_active" | "not_active" | "dependency_in_use" | "invalid_plugin" | "network_error" | "storage_error" | "capability_denied", message: string) {
@@ -106,6 +107,14 @@ export interface ActionCatalogItem extends ActionDescriptor {
 export interface ActionCatalog { readonly items: readonly ActionCatalogItem[]; readonly next_cursor: string | null }
 export interface ManagedActionRuntime {
   invoke(options: InvokeManagedActionOptions): Promise<ActionResult>;
+}
+export interface ResolvedAssetGroup {
+  readonly plugin_id: string;
+  readonly version: string;
+  readonly manifest_digest: string;
+  readonly ref: AssetGroupRef;
+  /** Reads one signed asset-manifest/chunk object through this manager's pinned registry fetch policy. */
+  readonly readObject: (path: string, max_bytes: number, signal?: AbortSignal) => Promise<Uint8Array>;
 }
 
 export interface InstalledPlugin {
@@ -415,6 +424,48 @@ export class BrowserPluginManager {
       dependencies: Object.freeze(record.resolvedDependencies.map(item => item.id)),
       dependency_pins: Object.freeze(record.resolvedDependencies.map(item => Object.freeze({ plugin_id: item.id, version: item.version }))),
       grants: enabled?.grants ?? [], host_capabilities: enabled?.hostAllowed ?? [],
+    });
+  }
+
+  /** Resolves a signed optional asset group without activating guest code or downloading bytes. */
+  async resolveAssetGroup(pluginId: string, groupId: string): Promise<ResolvedAssetGroup | undefined> {
+    this.assertOpen();
+    if (typeof pluginId !== "string" || typeof groupId !== "string" || groupId.length === 0 || groupId.length > 128) {
+      throw new PluginManagerError("invalid_plugin", "Asset group identity is invalid");
+    }
+    const version = this.enabled.get(pluginId)?.version ?? await this.store.getState(activeStateKey(pluginId));
+    if (!version) return undefined;
+    const record = await this.store.getPlugin(pluginKey(pluginId, version));
+    if (!record) return undefined;
+    const { manifest, revoked } = await this.verifyStoredPlugin(record.key, false, true);
+    if (revoked) throw new PluginManagerError("invalid_plugin", `Plugin ${pluginId}@${version} was revoked by the latest signed registry`);
+    if (manifest.schema !== "proprium.plugin/v2") return undefined;
+    const ref = manifest.asset_groups.find(group => group.id === groupId);
+    if (!ref) return undefined;
+    return Object.freeze({
+      plugin_id: pluginId,
+      version,
+      manifest_digest: record.manifestSha256,
+      ref,
+      readObject: async (path: string, maxBytes: number, signal?: AbortSignal): Promise<Uint8Array> => {
+        if (!Number.isSafeInteger(maxBytes) || maxBytes < 1 || maxBytes > MAX_ASSET_OBJECT_BYTES) {
+          throw new PluginManagerError("invalid_plugin", "Asset object byte limit must be from 1 through 16 MiB");
+        }
+        if (signal?.aborted) throw new DOMException("Asset download was canceled", "AbortError");
+        this.assertOpen();
+        const latestRecord = await this.store.getPlugin(record.key);
+        if (!latestRecord) throw new PluginManagerError("not_installed", `Plugin ${pluginId}@${version} is no longer installed`);
+        const latest = await this.verifyStoredPlugin(latestRecord.key, false, true);
+        const latestGroup = latest.manifest.schema === "proprium.plugin/v2"
+          ? latest.manifest.asset_groups.find(item => item.id === groupId)
+          : undefined;
+        if (latest.revoked || !latestGroup || canonicalJson(latestGroup) !== canonicalJson(ref)) {
+          throw new PluginManagerError("invalid_plugin", `Asset group ${groupId} is no longer admitted`);
+        }
+        const trust = this.requireTrust(latestRecord.registryUrl);
+        const url = registryArtifactURL(path, latest.registry, trust);
+        return this.fetchBytes(url, maxBytes, signal);
+      },
     });
   }
 
@@ -733,7 +784,7 @@ export class BrowserPluginManager {
     withArtifacts = false,
     allowRevoked = false,
     visiting = new Set<string>(),
-  ): Promise<{ manifest: PluginManifest; artifacts: Map<string, Uint8Array>; revoked: boolean }> {
+  ): Promise<{ manifest: PluginManifest; artifacts: Map<string, Uint8Array>; revoked: boolean; registry: SignedRegistrySnapshot }> {
     if (visiting.has(key)) throw new PluginManagerError("invalid_plugin", `Installed plugin dependency cycle includes ${key}`);
     visiting.add(key);
     const record = await this.requireInstalledByKey(key);
@@ -802,7 +853,7 @@ export class BrowserPluginManager {
       }
     }
     visiting.delete(key);
-    return { manifest, artifacts: artifactMap, revoked };
+    return { manifest, artifacts: artifactMap, revoked, registry };
   }
 
   private async fetchRegistry(trust: PluginRegistryTrust): Promise<SignedRegistrySnapshot> {
@@ -838,11 +889,12 @@ export class BrowserPluginManager {
     }
   }
 
-  private async fetchBytes(url: URL | string, limit: number): Promise<Uint8Array> {
+  private async fetchBytes(url: URL | string, limit: number, signal?: AbortSignal): Promise<Uint8Array> {
     let response: Response;
     try {
-      response = await this.fetcher(String(url), { method: "GET", mode: "cors", credentials: "omit", redirect: "error", cache: "no-store" });
+      response = await this.fetcher(String(url), { method: "GET", mode: "cors", credentials: "omit", redirect: "error", cache: "no-store", ...(signal ? { signal } : {}) });
     } catch (error) {
+      if (signal?.aborted) throw new DOMException("Asset download was canceled", "AbortError");
       throw new PluginManagerError("network_error", error instanceof Error ? error.message : "Plugin distribution request failed");
     }
     return boundedBytes(response, limit);

@@ -42,8 +42,19 @@ async function fixture() {
     });
   }
 
-  async function addAuthoringPlugin(id: string, version: string) {
+  async function addAuthoringPlugin(id: string, version: string, withAssetGroup = false) {
     const entrypoint = `${id}/${version}/${await digest(rawComponent)}/plugin.wasm`;
+    const chunkBytes = Uint8Array.of(0, 1, 2, 3, 4, 5);
+    const chunkSha256 = await digest(chunkBytes);
+    const chunkPath = `${id}/${version}/assets/embedding/${chunkSha256}/vectors.bin`;
+    const assetManifestBytes = new TextEncoder().encode(JSON.stringify({
+      schema: "proprium.assets/v1", id: `${id}.embedding`, version: "1.0.0", license: "CC0-1.0",
+      files: [{ path: "vectors.bin", bytes: chunkBytes.byteLength, sha256: chunkSha256,
+        chunks: [{ path: chunkPath, offset: 0, bytes: chunkBytes.byteLength, sha256: chunkSha256 }] }],
+    }));
+    const assetManifestSha256 = await digest(assetManifestBytes);
+    const assetManifestPath = `${id}/${version}/assets/embedding/manifest/${assetManifestSha256}.json`;
+    const assetGroup = { id: "embedding", manifest_path: assetManifestPath, sha256: assetManifestSha256, bytes: assetManifestBytes.byteLength, role: "embedding" as const };
     const manifest = {
       schema: "proprium.plugin/v2", id, version, abi: "proprium.component/v2", entrypoint,
       capabilities: ["workspace.file.read"],
@@ -56,7 +67,7 @@ async function fixture() {
       })),
       ui: [{ id: "writer-home", kind: "panel", title: "Writer", context: {},
         body: { id: "writer-status", type: "status", title: "Writer status", state: "ready" } }],
-      asset_groups: [],
+      asset_groups: withAssetGroup ? [assetGroup] : [],
     };
     const manifestBytes = new TextEncoder().encode(JSON.stringify(manifest));
     const manifestSignature = new Uint8Array(await crypto.subtle.sign({ name: "Ed25519" }, publisherKeys.privateKey, manifestBytes));
@@ -64,7 +75,12 @@ async function fixture() {
     const manifestPath = `${id}/${version}/manifest/${manifestSha256}.json`;
     content.set(new URL(manifestPath, artifactBase).href, manifestBytes);
     content.set(new URL(entrypoint, artifactBase).href, rawComponent);
+    if (withAssetGroup) {
+      content.set(new URL(assetManifestPath, artifactBase).href, assetManifestBytes);
+      content.set(new URL(chunkPath, artifactBase).href, chunkBytes);
+    }
     plugins.push({ id, version, manifestPath, manifestSha256, manifestSignature: encodeBase64(manifestSignature), publisherKey: encodeBase64(publisherKey), dependencies: [] });
+    return { assetGroup, assetManifestBytes, assetManifestPath, chunkBytes, chunkPath };
   }
 
   await addPlugin("example.math", "1.0.0");
@@ -175,6 +191,63 @@ test("signed v2 actions and Host UI remain available while disabled, with no Wor
   assert.equal(afterReload.actions[0]?.action_id, "example.writer.status.read");
   assert.equal(afterReload.surfaces[0]?.id, "writer-home");
   await Promise.all([manager.dispose(), reloaded.dispose()]);
+});
+
+test("asset group resolution uses freshly admitted metadata and the pinned registry fetch policy", async () => {
+  const { manager, store, addAuthoringPlugin, publishRegistry } = await fixture();
+  const asset = await addAuthoringPlugin("example.assets", "2.0.0", true);
+  await publishRegistry(["1.0.0", "2.0.0"], "1.0.1");
+  const preview = await manager.previewInstall({ registryUrl, pluginId: "example.assets", version: "2.0.0" });
+  await manager.installFromRegistry(preview);
+
+  const installed = await manager.resolveAssetGroup("example.assets", "embedding");
+  assert.ok(installed);
+  assert.equal(installed.plugin_id, "example.assets");
+  assert.equal(installed.version, "2.0.0");
+  assert.deepEqual(installed.ref, asset.assetGroup);
+  assert.deepEqual(await installed.readObject(installed.ref.manifest_path, installed.ref.bytes), asset.assetManifestBytes);
+  assert.deepEqual(await installed.readObject(asset.chunkPath, asset.chunkBytes.byteLength), asset.chunkBytes);
+  await assert.rejects(installed.readObject("https://attacker.example/model.bin", 64), /relative and traversal-free/i);
+  await assert.rejects(installed.readObject("../outside/model.bin", 64), /relative and traversal-free/i);
+  assert.equal(await manager.resolveAssetGroup("example.assets", "missing"), undefined);
+
+  const record = await store.getPlugin("example.assets@2.0.0");
+  assert.ok(record?.manifest?.schema === "proprium.plugin/v2");
+  await store.putPlugins([{ ...record, manifest: { ...record.manifest, asset_groups: [] } }]);
+  assert.deepEqual((await manager.resolveAssetGroup("example.assets", "embedding"))?.ref, asset.assetGroup);
+  await manager.dispose();
+});
+
+test("asset group resolution fails closed when cached manifest bytes or registry artifact base are tampered", async () => {
+  const { manager, store, addAuthoringPlugin, publishRegistry } = await fixture();
+  const asset = await addAuthoringPlugin("example.assets", "2.0.0", true);
+  await publishRegistry(["1.0.0", "2.0.0"], "1.0.1");
+  const preview = await manager.previewInstall({ registryUrl, pluginId: "example.assets", version: "2.0.0" });
+  await manager.installFromRegistry(preview);
+
+  const record = await store.getPlugin("example.assets@2.0.0");
+  assert.ok(record);
+  const heldResolver = await manager.resolveAssetGroup("example.assets", "embedding");
+  assert.ok(heldResolver);
+  await store.putPlugins([{ ...record, manifestBytes: new TextEncoder().encode(JSON.stringify({ ...record.manifest, asset_groups: [] })) }]);
+  await assert.rejects(manager.resolveAssetGroup("example.assets", "embedding"), /manifest|digest|signature/i);
+  await assert.rejects(heldResolver.readObject(asset.assetManifestPath, asset.assetGroup.bytes), /manifest|digest|signature/i);
+
+  const fresh = await fixture();
+  await fresh.addAuthoringPlugin("example.assets", "2.0.0", true);
+  await fresh.publishRegistry(["1.0.0", "2.0.0"], "1.0.1");
+  const freshPreview = await fresh.manager.previewInstall({ registryUrl, pluginId: "example.assets", version: "2.0.0" });
+  await fresh.manager.installFromRegistry(freshPreview);
+  const freshRecord = await fresh.store.getPlugin("example.assets@2.0.0");
+  assert.ok(freshRecord);
+  const proof = await fresh.store.getRegistry(registryUrl, freshRecord.registryDigest);
+  assert.ok(proof);
+  const changedRegistry = JSON.parse(new TextDecoder().decode(proof.bytes)) as Record<string, unknown>;
+  changedRegistry.artifactBase = "https://attacker.example/plugins/";
+  await fresh.store.putRegistry({ ...proof, bytes: new TextEncoder().encode(JSON.stringify(changedRegistry)) });
+  await assert.rejects(fresh.manager.resolveAssetGroup("example.assets", "embedding"), /signature|origin/i);
+
+  await Promise.all([manager.dispose(), fresh.manager.dispose()]);
 });
 
 test("registry catalog rejects invalid signatures and unapproved artifact origins", async () => {
