@@ -11,15 +11,21 @@ export async function showPanel(page: Page, panel: "outline" | "editor" | "inspe
       await expect(page.locator("#git-history-heading")).toBeVisible();
       return;
     }
+    const panelNames = { outline: "作品と構成", editor: "原稿", inspector: "文書と保存状態", review: "レビューとツール" };
+    const panelTab = page.getByRole("tab", { name: panelNames[panel], exact: true });
+    if (await panelTab.isVisible()) {
+      if ((await panelTab.getAttribute("aria-selected")) !== "true") await panelTab.click();
+      await expect(page.getByRole("tabpanel", { name: panelNames[panel], exact: true })).toBeVisible();
+      return;
+    }
     const navigation = page.getByRole("navigation", { name: "モバイル画面" });
     if (!(await navigation.isVisible())) {
       await page.locator('summary[aria-label="別の画面へ移動"]').click();
     }
     const labels = { outline: "作品", editor: "書く", inspector: "確認", review: "道具" };
     const target = navigation.getByRole("button", { name: labels[panel], exact: true });
-    // Ionic replaces its native button while re-navigating to the current
-    // route. The requested Workspace panel is already active in that case.
-    if ((await target.getAttribute("aria-current")) !== "page") await target.click();
+    await target.click();
+    await expect(page.getByRole("tabpanel", { name: panelNames[panel], exact: true })).toBeVisible();
     return;
   }
   if (panel === "history") {
