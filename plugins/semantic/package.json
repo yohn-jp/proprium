@@ -1,9 +1,10 @@
 {
   "name": "@proprium/plugin-semantic-domain",
   "private": true,
+  "version": "0.1.0",
   "type": "module",
   "scripts": {
-    "build": "jco componentize guest.ts --wit ../../app/src/browser/proprium/plugin-runtime/wit-v2 --world-name proprium:plugin/plugin@2.0.0 --disable all --bundle -o dist/proprium.semantic.wasm",
+    "build": "node build.mjs",
     "test": "node --experimental-strip-types --test core.test.ts guest.test.ts"
   }
 }
