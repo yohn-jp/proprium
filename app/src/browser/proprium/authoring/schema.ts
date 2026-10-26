@@ -110,7 +110,7 @@ export function assertSafeSchema(schema: JsonSchema): void {
     if ("$async" in object || "$dynamicRef" in object || "$recursiveRef" in object) invalid("Unsupported schema extension");
     if (typeof object.$ref === "string" && !object.$ref.startsWith("#/")) invalid("Unadmitted schema reference");
     if ((object.type === "object" || object.properties) && object.additionalProperties !== false) invalid("Open object schema");
-    if (object.type === "array" && (!Number.isSafeInteger(object.maxItems) || (object.maxItems as number) > 100000)) invalid("Unbounded array schema");
+    if (object.type === "array" && (!Number.isSafeInteger(object.maxItems) || (object.maxItems as number) > 262144)) invalid("Unbounded array schema");
     if (object.type === "string" && (!Number.isSafeInteger(object.maxLength) || (object.maxLength as number) > 1048576)) invalid("Unbounded string schema");
     for (const child of Object.values(object)) visit(child, depth + 1);
   };

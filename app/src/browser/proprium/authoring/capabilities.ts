@@ -1,5 +1,6 @@
 /** One mapping for admission, runtime continuations and Host dispatch. */
 export function capabilityForHostOperation(operation: string): string {
+  if (operation === "actions.list") return "workspace.plugin.invoke";
   if (operation === "workspace.file.list" || operation === "workspace.file.read") return "workspace.file.read";
   if (["workspace.derived.cache.get", "workspace.derived.cache.put", "workspace.derived.cache.evict"].includes(operation)) {
     return "workspace.derived.cache";

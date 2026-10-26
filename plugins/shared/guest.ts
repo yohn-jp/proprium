@@ -57,7 +57,7 @@ export function createGuest(pluginId: string, handlers: Record<string, Handler>)
   const failure = (error: unknown) => {
     const value = error as Partial<ActionError> | null;
     return result({ ok: false, error: {
-      code: typeof value?.code === "string" ? value.code : "guest_trap",
+      code: typeof value?.code === "string" ? value.code : error instanceof RangeError ? "capacity" : "guest_trap",
       message: error instanceof Error ? error.message : typeof value?.message === "string" ? value.message : "Guest action failed",
       retryable: value?.retryable === true,
       ...(value?.details ? { details: value.details } : {}),
