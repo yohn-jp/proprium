@@ -120,3 +120,71 @@
 .restored-host .application-status > summary .host-message { flex: 1 1 auto; min-width: 0; padding: 0; margin: 0; }
 .host-message-text { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .host-status-disclosure { flex: 0 0 auto; font-size: .75rem; color: var(--muted); }
+
+/* Separate registry identity, size and capability metadata into readable rows. */
+.restored-host .plugin-manager-panel { min-width: 0; }
+.restored-host .plugin-panel-content { display: grid; min-width: 0; gap: 1rem; padding: .75rem; }
+.restored-host .plugin-install-form { display: grid; min-width: 0; gap: .5rem; }
+.restored-host .plugin-install-form label { color: var(--muted); font-size: .85rem; font-weight: 650; }
+.restored-host .plugin-install-form input,
+.restored-host .plugin-panel-content textarea { box-sizing: border-box; width: 100%; min-width: 0; }
+.restored-host .plugin-install-preview {
+  display: grid;
+  min-width: 0;
+  gap: .75rem;
+  padding: .85rem;
+  border: 1px solid var(--line);
+  border-radius: .5rem;
+  background: var(--surface-subtle);
+}
+.restored-host .plugin-preview-heading { display: flex; align-items: center; justify-content: space-between; gap: .75rem; }
+.restored-host .plugin-preview-heading strong,
+.restored-host .plugin-card-head strong { overflow-wrap: anywhere; }
+.restored-host .plugin-install-preview > p { margin: 0; color: var(--muted); line-height: 1.5; overflow-wrap: anywhere; }
+.restored-host .plugin-install-preview > article {
+  display: grid;
+  min-width: 0;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: baseline;
+  gap: .35rem .75rem;
+  padding: .75rem;
+  border: 1px solid var(--line);
+  border-radius: .4rem;
+  background: var(--paper);
+}
+.restored-host .plugin-install-preview > article > strong { min-width: 0; overflow-wrap: anywhere; }
+.restored-host .plugin-install-preview > article > span { white-space: nowrap; color: var(--muted); }
+.restored-host .plugin-install-preview > article > small { grid-column: 1 / -1; display: block; color: var(--muted); line-height: 1.5; overflow-wrap: anywhere; }
+.restored-host .plugin-confirm-install { min-height: 2.75rem; white-space: normal; line-height: 1.35; }
+.restored-host .installed-plugins { display: grid; min-width: 0; gap: .75rem; margin: 0; padding: 0; list-style: none; }
+.restored-host .installed-plugins > li {
+  display: grid;
+  min-width: 0;
+  gap: .75rem;
+  padding: .85rem;
+  border: 1px solid var(--line);
+  border-radius: .5rem;
+  background: var(--paper);
+}
+.restored-host .plugin-card-head { display: flex; min-width: 0; align-items: flex-start; justify-content: space-between; gap: .75rem; }
+.restored-host .plugin-card-head > div { display: grid; min-width: 0; gap: .2rem; }
+.restored-host .plugin-card-head small,
+.restored-host .plugin-card-head code { color: var(--muted); line-height: 1.45; overflow-wrap: anywhere; }
+.restored-host .plugin-card-head code { text-align: end; }
+.restored-host .installed-plugins fieldset { min-width: 0; margin: 0; padding: .7rem .8rem; border: 1px solid var(--line); border-radius: .4rem; }
+.restored-host .installed-plugins legend { padding-inline: .25rem; color: var(--muted); font-size: .8rem; }
+.restored-host .capability-choice { display: flex; min-width: 0; align-items: flex-start; gap: .5rem; margin-block: .35rem; line-height: 1.45; }
+.restored-host .capability-choice input { flex: 0 0 auto; margin-block-start: .2rem; }
+.restored-host .capability-choice span { min-width: 0; overflow-wrap: anywhere; }
+.restored-host .plugin-actions { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(8.5rem, 100%), 1fr)); gap: .45rem; }
+.restored-host .plugin-actions button { min-width: 0; min-height: 2.7rem; padding: .45rem .6rem; white-space: normal; line-height: 1.3; overflow-wrap: anywhere; }
+.restored-host .plugin-actions .plugin-remove { border-color: var(--error-text); color: var(--error-text); }
+.restored-host .plugin-metadata,
+.restored-host .plugin-notice,
+.restored-host .plugin-empty { margin: 0; line-height: 1.55; overflow-wrap: anywhere; }
+.restored-host .plugin-output,
+.restored-host .plugin-proposals pre { max-width: 100%; overflow: auto; white-space: pre-wrap; overflow-wrap: anywhere; }
+@media (max-width: 520px) {
+  .restored-host .plugin-card-head { flex-direction: column; }
+  .restored-host .plugin-card-head code { text-align: start; }
+}
