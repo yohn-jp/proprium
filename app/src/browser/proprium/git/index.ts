@@ -1,5 +1,7 @@
 import type {
   CommitAuthor,
+  CommitDiff,
+  CommitFileChange,
   CommitSummary,
   FileRevision,
   FileRevisionExpectation,
@@ -28,7 +30,7 @@ import { createGitHubAccountSession, GitHubSyncError } from "./github-sync.js";
 import type { GitHubAccount, GitHubAccountSession, GitHubDevicePrompt, GitHubFetchResult, GitHubPullResult, GitHubPublishResult, GitHubRemoteHead, GitHubRepository, GitHubSyncClient, GitHubRemoteOperation } from "./github-sync.js";
 
 export { isGitHubWorkspaceIdentity, validateGitPath, validateWorkspaceIdentity } from "./protocol.js";
-export type { AppliedWorkspaceChange, CommitAuthor, CommitSummary, DiffChange, FileRevision, FileRevisionExpectation, GitHubWorkspaceIdentity, LocalGitError, LocalGitErrorCode, LocalWorkspaceIdentity, StatusEntry, WorkspaceChange, WorkspaceFile, WorkspaceIdentity };
+export type { AppliedWorkspaceChange, CommitAuthor, CommitDiff, CommitFileChange, CommitSummary, DiffChange, FileRevision, FileRevisionExpectation, GitHubWorkspaceIdentity, LocalGitError, LocalGitErrorCode, LocalWorkspaceIdentity, StatusEntry, WorkspaceChange, WorkspaceFile, WorkspaceIdentity };
 export { GitHubSyncError } from "./github-sync.js";
 export { createGitHubAccountSession } from "./github-sync.js";
 export type { GitHubAccount, GitHubAccountSession, GitHubDevicePrompt, GitHubFetchResult, GitHubPullResult, GitHubPublishResult, GitHubRemoteHead, GitHubRepository, GitHubSyncClient } from "./github-sync.js";
@@ -170,6 +172,11 @@ export class BrowserLocalGit {
 
   diff(): Promise<DiffChange[]> {
     return this.call({ operation: "diff" });
+  }
+
+  commitDiff(oid: string): Promise<CommitDiff> {
+    if (!/^[a-f0-9]{40}$/u.test(oid)) return Promise.reject(new BrowserLocalGitError("git_error", "Commit history requires a full 40-character commit ID."));
+    return this.call({ operation: "commit-diff", oid });
   }
 
   async verifyStorage(): Promise<{ verified: true; head: string | null; entries: StatusEntry[] }> {

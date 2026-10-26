@@ -97,6 +97,23 @@ export interface DiffChange extends StatusEntry {
   worktreeFile: FileVersion | null;
 }
 
+/** A commit's content compared with its first parent; null represents an absent path. */
+export interface CommitFileChange {
+  path: string;
+  kind: "added" | "deleted" | "modified";
+  parentMode: string | null;
+  commitMode: string | null;
+  parentFile: FileVersion | null;
+  commitFile: FileVersion | null;
+}
+
+export interface CommitDiff {
+  oid: string;
+  parentOid: string | null;
+  parents: string[];
+  changes: CommitFileChange[];
+}
+
 export interface CommitAuthor {
   name: string;
   email: string;
@@ -120,6 +137,7 @@ export type LocalGitRequest =
   | { id: string; workspace: WorkspaceIdentity; operation: "list-files" }
   | { id: string; workspace: WorkspaceIdentity; operation: "status" }
   | { id: string; workspace: WorkspaceIdentity; operation: "diff" }
+  | { id: string; workspace: WorkspaceIdentity; operation: "commit-diff"; oid: string }
   | { id: string; workspace: WorkspaceIdentity; operation: "add"; paths: string[]; expectedHead: string | null }
   | { id: string; workspace: WorkspaceIdentity; operation: "commit"; expectedHead: string | null; message: string; author: CommitAuthor }
   | { id: string; workspace: WorkspaceIdentity; operation: "log"; depth: number }

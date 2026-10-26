@@ -688,6 +688,72 @@ async function verifyObjects(dir: string): Promise<void> {
   await status(dir);
 }
 
+interface CommitTreeFile { oid: string; mode: string; }
+interface CommitTreeReadBudget { entries: number; }
+const MAX_HISTORY_TREE_ENTRIES = 100_000;
+
+async function commitTreeFiles(dir: string, treeOid: string, prefix = "", output = new Map<string, CommitTreeFile>(), budget: CommitTreeReadBudget = { entries: 0 }): Promise<Map<string, CommitTreeFile>> {
+  const { tree } = await git.readTree({ fs, dir, oid: treeOid });
+  for (const entry of tree) {
+    budget.entries += 1;
+    if (budget.entries > MAX_HISTORY_TREE_ENTRIES) failure("git_error", `History inspection exceeds the ${MAX_HISTORY_TREE_ENTRIES}-entry tree limit.`);
+    const path = prefix ? `${prefix}/${entry.path}` : entry.path;
+    validateGitPath(path);
+    if (entry.type === "tree") {
+      await commitTreeFiles(dir, entry.oid, path, output, budget);
+    } else if (entry.type === "blob") {
+      output.set(path, { oid: entry.oid, mode: entry.mode });
+    } else {
+      failure("git_error", `History inspection cannot restore the submodule at ${path}; its Git object is not a regular file.`);
+    }
+  }
+  return output;
+}
+
+async function readCommitFile(dir: string, path: string, entry: CommitTreeFile | undefined): Promise<{ oid: string; data: Uint8Array } | null> {
+  if (!entry) return null;
+  const { blob } = await git.readBlob({ fs, dir, oid: entry.oid });
+  if (blob.byteLength > MAX_WORKSPACE_READ_BYTES) failure("git_error", `History file ${path} exceeds the ${MAX_WORKSPACE_READ_BYTES}-byte review limit.`);
+  return { oid: entry.oid, data: blob };
+}
+
+async function commitDiff(dir: string, oid: string): Promise<unknown> {
+  if (!/^[a-f0-9]{40}$/u.test(oid)) failure("git_error", "Commit history requires a full 40-character commit ID.");
+  const { commit } = await git.readCommit({ fs, dir, oid });
+  const parentOid = commit.parent[0] ?? null;
+  const [parentTree, commitTree] = await Promise.all([
+    parentOid ? git.readCommit({ fs, dir, oid: parentOid }).then(({ commit: parent }) => commitTreeFiles(dir, parent.tree)) : Promise.resolve(new Map<string, CommitTreeFile>()),
+    commitTreeFiles(dir, commit.tree),
+  ]);
+  const paths = [...new Set([...parentTree.keys(), ...commitTree.keys()])]
+    .filter((path) => parentTree.get(path)?.oid !== commitTree.get(path)?.oid || parentTree.get(path)?.mode !== commitTree.get(path)?.mode)
+    .sort((left, right) => left.localeCompare(right));
+  if (paths.length > MAX_WORKSPACE_CHANGE_COUNT) {
+    failure("git_error", `This commit changes more than ${MAX_WORKSPACE_CHANGE_COUNT} files, the history review limit.`);
+  }
+  let totalBytes = 0;
+  const changes = await Promise.all(paths.map(async (path) => {
+    const parentEntry = parentTree.get(path);
+    const commitEntry = commitTree.get(path);
+    const [parentFile, commitFile] = await Promise.all([
+      readCommitFile(dir, path, parentEntry),
+      readCommitFile(dir, path, commitEntry),
+    ]);
+    totalBytes += (parentFile?.data.byteLength ?? 0) + (commitFile?.data.byteLength ?? 0);
+    if (totalBytes > MAX_WORKSPACE_READ_BYTES) failure("git_error", `This commit's changed file contents exceed the ${MAX_WORKSPACE_READ_BYTES}-byte history review limit.`);
+    const kind = !parentEntry ? "added" : !commitEntry ? "deleted" : "modified";
+    return {
+      path,
+      kind,
+      parentMode: parentEntry?.mode ?? null,
+      commitMode: commitEntry?.mode ?? null,
+      parentFile,
+      commitFile,
+    };
+  }));
+  return { oid, parentOid, parents: commit.parent, changes };
+}
+
 async function operation(request: LocalGitRequest): Promise<unknown> {
   const paths = await workspacePaths(request.workspace);
   const bound = await checkBinding(request.workspace, paths.binding, paths.dir);
@@ -1035,6 +1101,7 @@ async function operation(request: LocalGitRequest): Promise<unknown> {
       worktreeFile: entry.worktreeFile ? { oid: (await git.hashBlob({ object: entry.worktreeFile })).oid, data: entry.worktreeFile } : null,
     })));
   }
+  if (request.operation === "commit-diff") return commitDiff(paths.dir, request.oid);
   if (request.operation === "add") {
     await assertRevision(paths.dir, request.expectedHead);
     const selected = [...new Set(request.paths)];
