@@ -1,0 +1,7 @@
+.live-mcp-panel { min-width: 0; color: var(--ink, inherit); }
+.live-mcp-endpoint { display: grid; grid-template-columns: minmax(0, 1fr) auto; align-items: center; gap: .35rem .6rem; margin-block: .65rem; }
+.live-mcp-endpoint > span { grid-column: 1 / -1; font-size: .8rem; color: var(--muted, #555); }
+.live-mcp-endpoint code { min-width: 0; overflow-wrap: anywhere; color: var(--ink, #171717); }
+.live-mcp-endpoint button { min-height: 2.75rem; }
+.live-mcp-current-target { display: flex; flex-wrap: wrap; align-items: baseline; gap: .25rem .6rem; overflow-wrap: anywhere; font-size: .85rem; }
+.live-mcp-current-target > span:first-child { color: var(--muted, #555); }

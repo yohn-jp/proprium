@@ -350,7 +350,8 @@ export function LiveMcpPanel({ gatewayUrl, workspaceId, identity, repositories, 
     <div className="live-mcp-content">
       <strong>MCP</strong>
       <p role="status">{state === "connected" ? "ブラウザーに接続中" : state === "connecting" ? "接続中…" : "未接続"}</p>
-      {endpoint && <div className="sync-actions"><span>Gateway接続先</span><button type="button" onClick={() => { void navigator.clipboard.writeText(endpoint).catch(() => setError("MCP接続先をコピーできませんでした。")); }}>URLをコピー</button></div>}
+      {endpoint && <div className="live-mcp-endpoint"><span>Gateway MCP接続先</span><code>{endpoint}</code><button type="button" onClick={() => { void navigator.clipboard.writeText(endpoint).catch(() => setError("MCP接続先をコピーできませんでした。")); }}>URLをコピー</button></div>}
+      {state === "connected" && <p className="live-mcp-current-target"><span>接続中のリポジトリ</span><strong>{identity.owner}/{identity.repository}</strong><span>ブランチ: {identity.branch}</span></p>}
       {(state === "disconnected" || state === "error") && <button type="button" onClick={() => void connect()}>再接続</button>}
       {error && <p role="alert">{error}</p>}
       {activeRequests.length > 0 && <p role="status">MCP requests: {activeRequests.length}</p>}

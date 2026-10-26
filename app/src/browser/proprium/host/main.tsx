@@ -7,6 +7,7 @@ import { HostApp } from "./HostApp.js";
 import { BrowserRouter } from "react-router-dom";
 import "../../../../styles.css";
 import "./restored-host.css";
+import "./LiveMcpPanel.css";
 
 const root = document.getElementById("root");
 if (!root) throw new Error("Missing Proprium Host root");

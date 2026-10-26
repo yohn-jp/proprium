@@ -208,6 +208,8 @@ test("exposes the fixed MCP tools without any client token and executes against 
   await expect(page.locator(".live-mcp-panel")).not.toContainText("Gateway owner key");
   await expect(page.locator(".live-mcp-panel")).not.toContainText("Client capabilities");
   await expect(page.locator(".live-mcp-panel")).not.toContainText("Tools published for this workspace");
+  await expect(page.locator(".live-mcp-endpoint code")).toHaveText(`${gatewayOrigin}/mcp`);
+  await expect(page.locator(".live-mcp-current-target")).toContainText("proprium-test/gateway-live-workspace");
 
   // The Browser Host, not the Gateway, resolves immutable GitHub repository IDs.
   const repositories = textResult(await mcpCall("repos", "repositories_list", {}));
