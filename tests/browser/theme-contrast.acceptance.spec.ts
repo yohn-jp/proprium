@@ -114,6 +114,7 @@ test("selection, supporting copy and disabled editor controls remain readable in
       await window.propriumHostTest!.openWorkspace(identity, { "chapter.md": "コントラスト確認用の原稿\n" });
     }, workspace);
     await chooseFile(page, "chapter.md");
+    await expectReadable(page.locator(".durability-badge.is-current"), `${testInfo.project.name} ${theme} current durability status`);
     const saveDraft = page.getByRole("button", { name: "Save draft", exact: true });
     await expect(saveDraft).toBeDisabled();
     await expectReadable(saveDraft, `${testInfo.project.name} ${theme} disabled Save draft`);
