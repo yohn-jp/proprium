@@ -5,6 +5,7 @@
   "abi": "proprium.component/v2",
   "capabilities": [
     "workspace.file.read",
+    "workspace.asset.read",
     "workspace.derived.cache",
     "workspace.change.propose",
     "workspace.ui.contribute",
@@ -1090,8 +1091,8 @@
         "workspace.change.propose",
         "artifact.create",
         "artifact.append",
-          "artifact.seal",
-          "artifact.discard"
+        "artifact.seal",
+        "artifact.discard"
       ],
       "callers": [
         "ui",
@@ -1232,8 +1233,8 @@
         "workspace.change.propose",
         "artifact.create",
         "artifact.append",
-          "artifact.seal",
-          "artifact.discard"
+        "artifact.seal",
+        "artifact.discard"
       ],
       "callers": [
         "ui",
@@ -1391,7 +1392,8 @@
         "additionalProperties": false
       },
       "required_capabilities": [
-        "workspace.file.read"
+        "workspace.file.read",
+        "workspace.asset.read"
       ],
       "callers": [
         "ui",
@@ -1483,8 +1485,7 @@
         },
         "required": [
           "counts",
-          "identity",
-          "fallbackReason"
+          "identity"
         ],
         "additionalProperties": false
       },
@@ -1647,7 +1648,6 @@
               },
               "required": [
                 "term",
-                "reading",
                 "sourceIds",
                 "occurrenceCount",
                 "evidence"
@@ -1685,7 +1685,8 @@
         "additionalProperties": false
       },
       "required_capabilities": [
-        "workspace.file.read"
+        "workspace.file.read",
+        "workspace.asset.read"
       ],
       "callers": [
         "ui",
@@ -2091,8 +2092,8 @@
         "workspace.change.propose",
         "artifact.create",
         "artifact.append",
-          "artifact.seal",
-          "artifact.discard"
+        "artifact.seal",
+        "artifact.discard"
       ],
       "callers": [
         "ui",
@@ -2225,8 +2226,8 @@
         "workspace.change.propose",
         "artifact.create",
         "artifact.append",
-          "artifact.seal",
-          "artifact.discard"
+        "artifact.seal",
+        "artifact.discard"
       ],
       "callers": [
         "ui",
@@ -2500,7 +2501,7 @@
               "title": "用語の詳細",
               "fields": [
                 {
-              "id": "term_id",
+                  "id": "term_id",
                   "label": "用語 ID",
                   "type": "string",
                   "required": true,
@@ -2510,8 +2511,8 @@
               "submit": {
                 "action_id": "research.terms.get",
                 "input_template": {
-                "termId": {
-                  "data_key": "form.term_id"
+                  "termId": {
+                    "data_key": "form.term_id"
                   }
                 }
               }
@@ -2548,14 +2549,14 @@
                   "key": "targetRevision",
                   "label": "対象 revision"
                 },
-            {
-              "key": "targetAvailable",
-              "label": "対象あり"
-            },
-            {
-              "key": "otherAliasesForTarget",
-              "label": "同じ対象の別用語"
-            },
+                {
+                  "key": "targetAvailable",
+                  "label": "対象あり"
+                },
+                {
+                  "key": "otherAliasesForTarget",
+                  "label": "同じ対象の別用語"
+                },
                 {
                   "key": "registryRevision",
                   "label": "登録簿 revision"
@@ -2586,14 +2587,14 @@
                   "max_length": 8192
                 },
                 {
-              "id": "target_path",
+                  "id": "target_path",
                   "label": "対象 path",
                   "type": "string",
                   "required": true,
                   "max_length": 1024
                 },
                 {
-              "id": "expected_target_revision",
+                  "id": "expected_target_revision",
                   "label": "対象 revision",
                   "type": "string",
                   "required": true,
@@ -2609,14 +2610,14 @@
                   "aliases": {
                     "data_key": "form.aliases"
                   },
-                "targetPath": {
-                  "data_key": "form.target_path"
+                  "targetPath": {
+                    "data_key": "form.target_path"
                   },
                   "expectedRegistryRevision": {
                     "data_key": "last_action_result.registryRevision"
                   },
-                "expectedTargetRevision": {
-                  "data_key": "form.expected_target_revision"
+                  "expectedTargetRevision": {
+                    "data_key": "form.expected_target_revision"
                   }
                 }
               }
@@ -2974,6 +2975,14 @@
       }
     }
   ],
-  "asset_groups": [],
+  "asset_groups": [
+    {
+      "id": "proprium.research.ipadic",
+      "manifest_path": "proprium/research/assets/manifests/66601c7e3f8ed946df567a97644135bfec786d79f5b28f2b5adbb54258fe5d07/assets.json",
+      "sha256": "66601c7e3f8ed946df567a97644135bfec786d79f5b28f2b5adbb54258fe5d07",
+      "bytes": 3761,
+      "role": "dictionary"
+    }
+  ],
   "dependencies": []
 }

@@ -2,6 +2,7 @@
 
 export interface SentenceOffset { start: number; end: number }
 export interface ResearchToken { start: number; end: number; surface: string; pos?: string; reading?: string; base?: string }
+export interface LinderaRawToken { surface: string; details: string[]; byteStart: number; byteEnd: number }
 export interface CandidateSource {
   id: string;
   path?: string;
@@ -27,6 +28,71 @@ export function isSafeLocalModelId(value: unknown): value is string {
 }
 
 const encoder = new TextEncoder();
+
+export function isWellFormedUtf16(text: string): boolean {
+  for (let index = 0; index < text.length; index++) {
+    const code = text.charCodeAt(index);
+    if (code >= 0xd800 && code <= 0xdbff) {
+      const next = text.charCodeAt(index + 1);
+      if (!(next >= 0xdc00 && next <= 0xdfff)) return false;
+      index++;
+    } else if (code >= 0xdc00 && code <= 0xdfff) return false;
+  }
+  return true;
+}
+
+export function correctLinderaUnknownPos(surface: string): { pos: string; posDetail: string[] } {
+  if (/^[\u30A0-\u30FFー゛゜]+$/u.test(surface)) return { pos: "名詞", posDetail: ["一般"] };
+  if (/^[A-Za-z]+$/u.test(surface)) return { pos: "名詞", posDetail: ["固有名詞"] };
+  if (/^[0-9０-９]+$/u.test(surface)) return { pos: "名詞", posDetail: ["数"] };
+  return { pos: "名詞", posDetail: ["一般"] };
+}
+
+/** Port of the pinned Lindera adapter's UTF-8-byte to UTF-16-index mapping.
+ * Only requested token boundaries are retained, keeping memory proportional to token count.
+ */
+export function mapLinderaRawTokens(text: string, rawTokens: readonly LinderaRawToken[]): ResearchToken[] {
+  if (!isWellFormedUtf16(text)) throw Object.assign(new TypeError("Analysis text contains an unpaired UTF-16 surrogate"), { code: "invalid_input" });
+  const wanted = new Set<number>();
+  for (const token of rawTokens) {
+    if (!token || typeof token.surface !== "string" || !token.surface || !Array.isArray(token.details) ||
+        token.details.some((field) => typeof field !== "string") || !Number.isSafeInteger(token.byteStart) ||
+        !Number.isSafeInteger(token.byteEnd) || token.byteStart < 0 || token.byteEnd < token.byteStart) {
+      throw Object.assign(new TypeError("Lindera returned an invalid token record"), { code: "incompatible_abi" });
+    }
+    wanted.add(token.byteStart); wanted.add(token.byteEnd);
+  }
+  const byteToUtf16 = new Map<number, number>();
+  if (wanted.has(0)) byteToUtf16.set(0, 0);
+  let byteOffset = 0;
+  for (let utf16Offset = 0; utf16Offset < text.length;) {
+    const point = text.codePointAt(utf16Offset);
+    if (point === undefined) break;
+    const units = point > 0xffff ? 2 : 1;
+    byteOffset += encoder.encode(text.slice(utf16Offset, utf16Offset + units)).byteLength;
+    utf16Offset += units;
+    if (wanted.has(byteOffset)) byteToUtf16.set(byteOffset, utf16Offset);
+  }
+  const output: ResearchToken[] = [];
+  for (const token of rawTokens) {
+    const start = byteToUtf16.get(token.byteStart);
+    const end = byteToUtf16.get(token.byteEnd);
+    if (start === undefined || end === undefined || end < start || text.slice(start, end) !== token.surface) {
+      throw Object.assign(new TypeError("Lindera byte offsets do not match the exact UTF-16 source text"), { code: "incompatible_abi" });
+    }
+    const rawPos = token.details[0];
+    const corrected = rawPos === "UNK" ? correctLinderaUnknownPos(token.surface) : undefined;
+    const pos = corrected?.pos ?? (rawPos && rawPos !== "*" ? rawPos : undefined);
+    const rawBase = token.details[10];
+    const rawReading = token.details[11];
+    output.push({ start, end, surface: token.surface,
+      ...(pos ? { pos } : {}),
+      ...(rawReading && rawReading !== "*" ? { reading: rawReading } : {}),
+      base: !rawBase || rawBase === "*" ? token.surface : rawBase,
+    });
+  }
+  return output;
+}
 
 interface SentenceSegment extends SentenceOffset { text: string }
 

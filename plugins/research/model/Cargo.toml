@@ -1,0 +1,18 @@
+[package]
+name = "proprium-research-morphology"
+version = "0.1.0"
+edition = "2021"
+publish = false
+
+[lib]
+crate-type = ["cdylib"]
+
+[dependencies]
+lindera = { version = "=2.0.1", default-features = false, features = ["compress"] }
+lindera-dictionary = { version = "=2.0.1", default-features = false, features = ["compress"] }
+rkyv = { version = "=0.8.13", features = ["bytecheck"] }
+sha2 = "=0.10.9"
+wit-bindgen-rt = { version = "=0.44.0", features = ["bitflags"] }
+
+[package.metadata.component]
+package = "proprium:research-morphology"

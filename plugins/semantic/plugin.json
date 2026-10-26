@@ -1978,7 +1978,15 @@
     }
   ],
   "ui": [],
-  "asset_groups": [],
+  "asset_groups": [
+    {
+      "id": "proprium.semantic.embedding.e5-small",
+      "manifest_path": "proprium/semantic/assets/manifests/f2b7669761e09dacdff1fa165b43e8654fa30d908e7011be45fb9b5c4d4ff400/manifest.json",
+      "sha256": "f2b7669761e09dacdff1fa165b43e8654fa30d908e7011be45fb9b5c4d4ff400",
+      "bytes": 9683,
+      "role": "embedding"
+    }
+  ],
   "dependencies": [
     {
       "id": "proprium.research",

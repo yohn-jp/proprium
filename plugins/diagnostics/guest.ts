@@ -17,12 +17,66 @@ import { runDeterministicAspectReview, normalizeAspectIds, type AspectId, type A
 import { LINT_CONFIG_PATHS, parseLintRulesConfig } from "./src/config.js";
 import { DEFAULT_PLOT_LEXICON, PLOT_CONFIG_PATHS, analyzePlotGoal, parsePlotLexicon, type PlotToken } from "./src/plot.js";
 import { DEFAULT_TONE_LEXICON, TONE_CONFIG_PATHS, frequentNouns, frequentPhrases, habitualPhraseWarnings, parseToneLexicon, proseBalance, sentimentArc, toneDeviation, type MetricSentence, type ToneLexicon } from "./src/textMetrics.js";
+import YAML, { isMap, isSeq } from "yaml";
 import type { ChangeSet, ReadPrecondition, SourceSpan } from "../../app/src/browser/proprium/authoring/types.js";
 
 const MAX_TEXT_CODE_POINTS = 500_000;
 const MAX_PROPOSAL_BYTES = 64 * 1024 * 1024;
 const INLINE_PROPOSAL_BYTES = 48 * 1024;
 const ARTIFACT_CHUNK_BYTES = 32 * 1024;
+const FEEDBACK_PATH = "meta/proprium/plugins/proprium.diagnostics/feedback.yaml";
+const MAX_FEEDBACK_BYTES = 8 * 1024 * 1024;
+const MAX_FEEDBACK_ENTRIES = 100_000;
+
+interface RememberedFinding {
+  sourceIdentity: Record<string, unknown>;
+  scopeKey: string;
+  snapshotId: string;
+}
+const rememberedFindings = new Map<string, RememberedFinding>();
+
+function canonicalJson(value: unknown): string {
+  if (Array.isArray(value)) return `[${value.map(canonicalJson).join(",")}]`;
+  if (value && typeof value === "object") {
+    return `{${Object.keys(value).sort().map((key) => `${JSON.stringify(key)}:${canonicalJson((value as Record<string, unknown>)[key])}`).join(",")}}`;
+  }
+  return JSON.stringify(value) ?? "null";
+}
+
+function rememberIdentities(value: unknown, context: Parameters<Handler>[1]): void {
+  const scopeKey = canonicalJson(context.scope);
+  const seen = new Set<object>();
+  let visited = 0;
+  const visit = (node: unknown, depth: number) => {
+    if (!node || typeof node !== "object" || depth > 12 || visited++ > 100_000 || seen.has(node)) return;
+    seen.add(node);
+    if (!Array.isArray(node)) {
+      const row = node as Record<string, unknown>;
+      if (row.sourceIdentity && typeof row.sourceIdentity === "object" && !Array.isArray(row.sourceIdentity)) {
+        const identity = row.sourceIdentity as Record<string, unknown>;
+        const fingerprint = typeof row.fingerprint === "string" ? row.fingerprint : identity.findingFingerprint;
+        if (typeof fingerprint === "string" && identity.findingFingerprint === fingerprint && identity.snapshot === context.snapshot.id &&
+            identity.repositoryId === context.scope.repository_id && identity.branch === context.scope.branch && identity.generation === context.scope.generation) {
+          const key = canonicalJson([context.scope.workspace_id, scopeKey, context.snapshot.id, fingerprint]);
+          rememberedFindings.delete(key);
+          rememberedFindings.set(key, { sourceIdentity: JSON.parse(JSON.stringify(identity)) as Record<string, unknown>, scopeKey, snapshotId: context.snapshot.id });
+          while (rememberedFindings.size > 10_000) rememberedFindings.delete(rememberedFindings.keys().next().value as string);
+        }
+      }
+    }
+    if (Array.isArray(node)) for (const child of node) visit(child, depth + 1);
+    else for (const child of Object.values(node as Record<string, unknown>)) visit(child, depth + 1);
+  };
+  visit(value, 0);
+}
+
+function remembering(handler: Handler): Handler {
+  return function* (input, context, host) {
+    const value = yield* invokeLocal(handler, input, context, host);
+    rememberIdentities(value, context);
+    return value;
+  };
+}
 
 class DiagnosticActionError extends Error {
   constructor(readonly code: string, message: string, readonly retryable = false, readonly details?: Record<string, unknown>) { super(message); }
@@ -186,24 +240,24 @@ function metricSentences(result: ReturnType<typeof validateResearchAnalysis>, fu
   return { text: body, tokens, sentences };
 }
 
-function metricFinding(kind: string, message: string, textHash: string, context: Parameters<Handler>[1], source: { documentPath?: string; documentRevision?: string; draftGeneration?: string }, configRevisions: Record<string, string>, evidenceRows: Array<{ start: number; end: number; quote: string }>): Record<string, unknown> {
-  const sources = source.documentPath && source.documentRevision ? evidenceRows.slice(0, 24).map((item) => ({
+function metricFinding(kind: string, message: string, textHash: string, context: Parameters<Handler>[1], source: { documentPath?: string; documentRevision?: string; draftGeneration?: string }, configRevisions: Record<string, string>, evidenceRows: Array<{ start: number; end: number; quote: string }>, providerIdentity: Record<string, unknown> = {}, extraSources: Array<Record<string, unknown>> = []): Record<string, unknown> {
+  const sources = [...(source.documentPath && source.documentRevision ? evidenceRows.slice(0, 24).map((item) => ({
     path: source.documentPath!, fileRevision: source.documentRevision!, textHash, span: { start: item.start, end: item.end }, quote: item.quote,
-  })) : [];
+  })) : []), ...extraSources];
   const fingerprint = sha256(JSON.stringify([
     context.scope.workspace_id, context.scope.repository_id, context.scope.branch, context.scope.generation,
-    context.snapshot.id, kind, message, textHash, configRevisions, sources, source.draftGeneration ?? null,
+    context.snapshot.id, kind, message, textHash, configRevisions, providerIdentity, sources, source.draftGeneration ?? null,
   ]));
   const quote = evidenceRows.map((item) => item.quote).join(" / ").slice(0, 1000);
   const sourceIdentity = {
     actionId: "proprium.diagnostics.text.analyze.v1", repositoryId: context.scope.repository_id, branch: context.scope.branch,
     generation: context.scope.generation, snapshot: context.snapshot.id, findingFingerprint: fingerprint,
     analyzer: { id: "proprium.diagnostics.cpu", version: "1.0.0" }, sources,
-    ...(Object.keys(configRevisions).length ? { configRevisions } : {}), ...(source.draftGeneration ? { draftGeneration: source.draftGeneration } : {}),
+    ...(Object.keys(configRevisions).length ? { configRevisions } : {}), ...(Object.keys(providerIdentity).length ? { providerIdentity } : {}), ...(source.draftGeneration ? { draftGeneration: source.draftGeneration } : {}),
   };
   const evidence = evidenceRows.slice(0, 24).map((item) => ({
     ...(source.documentPath ? { path: source.documentPath } : {}), ...(source.documentRevision ? { revision: source.documentRevision } : {}),
-    text_hash: textHash, start: item.start, end: item.end, quote: item.quote,
+    text_hash: textHash, start: item.start, end: item.end, quote: item.quote.slice(0, 4000),
   }));
   return {
     fingerprint, class: "statistical", kind, severity: "warning", basis: "deterministic", message,
@@ -315,7 +369,7 @@ function* invokeLocal(handler: Handler, input: Record<string, unknown>, context:
 }
 
 function makeChangeSet(input: {
-  context: Parameters<Handler>[1]; actionId: string; idempotencyKey: string; path: string; revision: string;
+  context: Parameters<Handler>[1]; actionId: string; idempotencyKey: string; path: string; revision: string | null;
   before: string; after: string; title: string; reason: string; evidence: SourceSpan[]; content: { content?: number[]; content_artifact?: string };
   read_set?: ReadPrecondition[];
 }): ChangeSet {
@@ -326,7 +380,7 @@ function makeChangeSet(input: {
     scope: input.context.scope, snapshot: input.context.snapshot, title: input.title, reason: input.reason,
     read_set: [...new Map([...(input.read_set ?? []), { path: input.path, revision: input.revision }].map((item) => [item.path, item])).values()],
     units: [{ id: `diag-${identity.slice(0, 32)}-unit`, label: input.title, depends_on: [], operations: [{
-      id: operationId, kind: "replace", path: input.path, expected_revision: input.revision,
+      id: operationId, kind: input.revision === null ? "create" : "replace", path: input.path, expected_revision: input.revision,
       ...(input.content.content ? { content: input.content.content } : {}), ...(input.content.content_artifact ? { content_artifact: input.content.content_artifact } : {}),
     }] }],
     evidence: input.evidence,
@@ -929,7 +983,7 @@ const textAnalyze: Handler = function* (raw, context, host) {
     const phrases = frequentPhrases(metrics.sentences);
     const arc = sentimentArc(metrics.sentences);
     const balance = proseBalance(metrics.text, metrics.tokens, metrics.sentences);
-    const habitual = habitualPhraseWarnings(metrics.sentences, arc);
+    const habitual = habitualPhraseWarnings(metrics.sentences);
     let variants: unknown[] = [];
     if (termsStatus === "ready" && nounResult.unknown.length > 0) {
       try {
@@ -957,15 +1011,22 @@ const textAnalyze: Handler = function* (raw, context, host) {
           .slice(0, 24).map((token) => ({ path: source.documentPath, revision: source.documentRevision, text_hash: analysis.textHash, start: token.start, end: token.end, quote: token.surface }));
         const message = String(warning.message ?? "Tone differs from declared intent");
         const fingerprint = sha256(JSON.stringify([context.scope.workspace_id, context.scope.repository_id, context.scope.branch, context.scope.generation, context.snapshot.id, input.sceneId, source.documentPath ?? null, source.documentRevision ?? null, analysis.textHash, tone.revision, intendedTone, dominant]));
-        toneWarnings = [{ ...warning, fingerprint, evidence: spans }];
-        metricFindings.push(metricFinding("tone-deviation", message, analysis.textHash, context, source, { lint: config.revision, toneLexicon: tone.revision }, spans.map((span) => ({ start: span.start, end: span.end, quote: span.quote }))));
+        const toneVector = warning.toneVector && typeof warning.toneVector === "object" && !Array.isArray(warning.toneVector)
+          ? Object.entries(warning.toneVector as Record<string, unknown>).map(([toneName, weight]) => ({ tone: toneName, weight: typeof weight === "number" ? weight : 0 }))
+          : [];
+        toneWarnings = [{ intendedTone, dominantTone: dominant, toneVector, message, signal: "statistical", fingerprint, evidence: spans }];
+        metricFindings.push(metricFinding("tone-deviation", message, analysis.textHash, context, source,
+          { lint: config.revision, toneLexicon: tone.revision },
+          spans.map((span) => ({ start: span.start, end: span.end, quote: span.quote })),
+          { research: morphology.engine, ...(knowledgeSource ? { knowledge: knowledgeSource } : {}) },
+          knowledgeSource ? [{ path: knowledgeSource.path, fileRevision: knowledgeSource.revision, entityId: input.sceneId, quote: `intended_tone: ${intendedTone}` }] : []));
       }
       toneStatus = "ready";
       providerIdentity.tone = knowledgeSource;
     } else if (knowledgeStatus === "ready") toneStatus = "ready";
 
-    for (const warning of balance.warnings) metricFindings.push(metricFinding(`prose-${warning.metric}`, warning.message, analysis.textHash, context, source, { lint: config.revision }, []));
-    for (const warning of habitual) metricFindings.push(metricFinding(`habitual-${warning.band}`, warning.message, analysis.textHash, context, source, { lint: config.revision }, warning.evidence));
+    for (const warning of balance.warnings) metricFindings.push(metricFinding(`prose-${warning.metric}`, warning.message, analysis.textHash, context, source, { lint: config.revision }, [], { research: morphology.engine }));
+    for (const warning of habitual) metricFindings.push(metricFinding(`habitual-${warning.band}`, warning.message, analysis.textHash, context, source, { lint: config.revision }, warning.evidence, { research: morphology.engine }));
     enriched = {
       ...analysis,
       charCount: metrics.text.length,
@@ -983,7 +1044,12 @@ const textAnalyze: Handler = function* (raw, context, host) {
   } catch (error) {
     if (!optionalProviderError(error)) throw error;
     lexicalStatus = "unavailable";
-    enriched = { ...analysis, providers: { lexical: "unavailable", terms: "unavailable", variants: "unavailable", ...(typeof input.sceneId === "string" ? { knowledge: knowledgeStatus, tone: toneStatus } : {}) } };
+    enriched = {
+      ...analysis,
+      providers: { lexical: "unavailable", terms: "unavailable", variants: "unavailable", ...(typeof input.sceneId === "string" ? { knowledge: knowledgeStatus, tone: toneStatus } : {}) },
+      frequentNouns: [], unknownTermCandidates: [], termVariantSuggestions: [], frequentPhrases: [],
+      sentimentArc: null, toneWarnings: [], habitualPhraseWarnings: [], proseBalance: null,
+    };
   }
 
   const findings = [...baseFindings, ...metricFindings].sort((left, right) => String(left.class ?? "").localeCompare(String(right.class ?? "")) ||
@@ -1029,6 +1095,7 @@ const lintRun: Handler = function* (raw, context, host) {
   const body = text.slice(bodyStart);
   const transformedBody = transformText(body, rules);
   const transformed = text.slice(0, bodyStart) + transformedBody;
+  if (transformed.length > 1_048_576) throw new DiagnosticActionError("capacity", "Lint preview exceeds the Host result text limit", true);
   const findings = findingsForTextAnalysis(text, analysis, {
     workspaceId: context.scope.workspace_id,
     repositoryId: context.scope.repository_id,
@@ -1087,19 +1154,27 @@ const sceneRun: Handler = function* (raw, context, host) {
     catch { throw new DiagnosticActionError("invalid_encoding", `Manuscript is not valid UTF-8: ${path}`); }
     if (sha256(text) !== savedRevision) throw new DiagnosticActionError("snapshot_stale", "Host file revision does not match the exact manuscript bytes", true);
   }
-  const config = yield* configuredLintRules(host, context);
-  const analysis = analyzeText(text, config.rules);
-  const analysisFindings = findingsForTextAnalysis(text, analysis, {
-    workspaceId: context.scope.workspace_id, repositoryId: context.scope.repository_id, branch: context.scope.branch,
-    generation: context.scope.generation, snapshotId: context.snapshot.id, documentPath: path,
-    documentRevision: savedRevision, ...(draftGeneration ? { draftGeneration } : {}),
-    configRevision: config.revision,
-  });
+  let textHash: string;
+  let configRevisions: Record<string, unknown> = {};
   const sections: Record<string, unknown> = {};
   const findings: Array<Record<string, unknown>> = [];
   if (requested.includes("prose")) {
-    sections.prose = { status: "ready", analysis, findings: analysisFindings };
-    findings.push(...analysisFindings as unknown as Array<Record<string, unknown>>);
+    const prose = yield* invokeLocal(textAnalyze, {
+      text, sceneId: input.sceneId, documentPath: path, documentRevision: savedRevision,
+      ...(draftGeneration ? { draftGeneration } : {}),
+    }, context, host) as Generator<import("../shared/guest.js").HostCall, Record<string, unknown>, unknown>;
+    const proseIdentity = prose.identity && typeof prose.identity === "object" ? prose.identity as Record<string, unknown> : {};
+    textHash = typeof prose.textHash === "string" ? prose.textHash : "";
+    configRevisions = proseIdentity.configRevisions && typeof proseIdentity.configRevisions === "object" ? proseIdentity.configRevisions as Record<string, unknown> : {};
+    const proseComplete = proseIdentity.complete === true;
+    const proseFindings = Array.isArray(prose.findings) ? prose.findings as Array<Record<string, unknown>> : [];
+    sections.prose = { status: proseComplete ? "ready" : "partial", analysis: prose, findings: proseFindings };
+    findings.push(...proseFindings);
+  } else {
+    const config = yield* configuredLintRules(host, context);
+    const analysis = analyzeText(text, config.rules);
+    textHash = analysis.textHash;
+    configRevisions = { lint: config.revision };
   }
   if (requested.includes("structural")) {
     const result = yield* invokeLocal(projectConsistency, { scope: { sceneId: input.sceneId }, pageSize: 100 }, context, host);
@@ -1124,7 +1199,7 @@ const sceneRun: Handler = function* (raw, context, host) {
     sections.plotGoal = { status: plotGoalStatus, warnings: report.warnings ?? [], identity: report.identity, providerStatus: report.providerStatus };
     if (Array.isArray(report.warnings)) {
       const reportIdentity = report.identity && typeof report.identity === "object" ? report.identity as Record<string, unknown> : {};
-      const plotTextHash = typeof reportIdentity.textHash === "string" ? reportIdentity.textHash : analysis.textHash;
+      const plotTextHash = typeof reportIdentity.textHash === "string" ? reportIdentity.textHash : textHash;
       const goalTextHash = typeof reportIdentity.goalTextHash === "string" ? reportIdentity.goalTextHash : plotTextHash;
       findings.push(...(report.warnings as Array<Record<string, unknown>>).map((warning) => {
         const evidence = Array.isArray(warning.evidence) ? warning.evidence.map((source) => {
@@ -1191,7 +1266,18 @@ const sceneRun: Handler = function* (raw, context, host) {
   const classCounts: Record<string, number> = {};
   for (const finding of findings) { const key = typeof finding.class === "string" ? finding.class : "other"; classCounts[key] = (classCounts[key] ?? 0) + 1; }
   const providerStatus = {
-    ...(requested.includes("prose") ? { lexical: "unavailable" } : {}),
+    ...(requested.includes("prose") ? (() => {
+      const prose = sections.prose as Record<string, unknown>;
+      const analysis = prose.analysis as Record<string, unknown>;
+      const providers = analysis.providers as Record<string, unknown>;
+      return {
+        lexical: providers.lexical ?? "unavailable",
+        terms: providers.terms ?? "unavailable",
+        variants: providers.variants ?? "unavailable",
+        ...(providers.knowledge !== undefined ? { knowledge: providers.knowledge } : {}),
+        ...(providers.tone !== undefined ? { tone: providers.tone } : {}),
+      };
+    })() : {}),
     ...(requested.includes("plotGoal") ? { plotGoal: plotGoalStatus } : {}),
     ...(requested.includes("declaredVoice") ? { declaredVoice: speakerStatus } : {}),
     ...(requested.includes("speaker") ? { speaker: speakerStatus } : {}),
@@ -1201,7 +1287,7 @@ const sceneRun: Handler = function* (raw, context, host) {
     identity: {
       repositoryId: context.scope.repository_id, branch: context.scope.branch, snapshot: context.snapshot, sceneId: input.sceneId,
       documentPath: path, documentRevision: savedRevision, draftGeneration: draftGeneration ?? context.snapshot.draft_generation,
-      textHash: analysis.textHash, analyzerId: "proprium.diagnostics.cpu", analyzerVersion: "1.0.0", configRevisions: { lint: config.revision },
+      textHash, analyzerId: "proprium.diagnostics.cpu", analyzerVersion: "1.0.0", configRevisions,
     },
     sections, findings,
     summary: { findingCount: findings.length, byClass: classCounts },
@@ -1209,7 +1295,7 @@ const sceneRun: Handler = function* (raw, context, host) {
     complete: requested.every((section) => {
       const report = sections[section] as Record<string, unknown> | undefined;
       if (!report || report.status === "unavailable") return false;
-      if (section === "prose") return false;
+      if (section === "prose") return report.status === "ready";
       return report.complete !== false;
     }),
   };
@@ -1299,15 +1385,165 @@ const manuscriptFormatPropose: Handler = function* (raw, context, host) {
   return { proposalId, diff: diffSummary(sourceScene.manuscriptPath, before, formatted.text, beforeHash, afterHash), frontmatterPreserved: true, changed: true, snapshot: context.snapshot };
 };
 
+function feedbackSource(identity: Record<string, unknown>): Record<string, unknown> {
+  const source: Record<string, unknown> = {
+    repositoryId: identity.repositoryId,
+    branch: identity.branch,
+    generation: identity.generation,
+    snapshot: identity.snapshot,
+    evidence: identity.sources,
+    analyzer: identity.analyzer,
+  };
+  for (const key of ["configRevisions", "providerIdentity", "modelIdentity", "draftGeneration", "sceneId", "scope"] as const) {
+    if (identity[key] !== undefined) source[key] = identity[key];
+  }
+  return source;
+}
+
+function feedbackSourceMatches(existing: unknown, expected: Record<string, unknown>): boolean {
+  if (!existing || typeof existing !== "object" || Array.isArray(existing)) return false;
+  const row = existing as Record<string, unknown>;
+  const keys = ["repositoryId", "branch", "generation", "snapshot", "evidence", "analyzer", "configRevisions", "providerIdentity", "modelIdentity", "draftGeneration", "sceneId", "scope"];
+  const normalized: Record<string, unknown> = {};
+  for (const key of keys) if (row[key] !== undefined) normalized[key] = row[key];
+  return canonicalJson(normalized) === canonicalJson(expected);
+}
+
+function* feedbackPropose(raw: unknown, context: Parameters<Handler>[1], host: Parameters<Handler>[2]) {
+  const input = object(raw, "feedback.propose input");
+  closed(input, ["findingFingerprint", "decision", "sourceIdentity", "annotation", "expectedFeedbackRevision", "idempotencyKey"], "feedback.propose input");
+  if (typeof input.findingFingerprint !== "string" || !/^[a-f0-9]{64}$/u.test(input.findingFingerprint)) throw new DiagnosticActionError("invalid_input", "findingFingerprint must be a SHA-256 fingerprint");
+  if (!(input.decision === "false_positive" || input.decision === "intentional" || input.decision === "deferred")) throw new DiagnosticActionError("invalid_input", "decision must be false_positive, intentional, or deferred");
+  if (input.annotation !== undefined && (typeof input.annotation !== "string" || new TextEncoder().encode(input.annotation).byteLength > 1000)) throw new DiagnosticActionError("invalid_input", "annotation must be at most 1000 UTF-8 bytes");
+  if (input.expectedFeedbackRevision !== undefined && input.expectedFeedbackRevision !== null && (typeof input.expectedFeedbackRevision !== "string" || !/^[a-f0-9]{64}$/u.test(input.expectedFeedbackRevision))) throw new DiagnosticActionError("invalid_input", "expectedFeedbackRevision must be null or a SHA-256 revision");
+  const key = idempotencyKey(input, context);
+  const identity = object(input.sourceIdentity, "sourceIdentity");
+  if (identity.findingFingerprint !== input.findingFingerprint || identity.repositoryId !== context.scope.repository_id || identity.branch !== context.scope.branch ||
+      identity.generation !== context.scope.generation || identity.snapshot !== context.snapshot.id) throw new DiagnosticActionError("snapshot_stale", "Finding identity does not belong to this repository snapshot", true);
+  if (identity.draftGeneration !== undefined && identity.draftGeneration !== context.snapshot.draft_generation) throw new DiagnosticActionError("snapshot_stale", "Finding Draft generation is no longer current", true);
+
+  const memoryKey = canonicalJson([context.scope.workspace_id, canonicalJson(context.scope), context.snapshot.id, input.findingFingerprint]);
+  const remembered = rememberedFindings.get(memoryKey);
+  if (!remembered || remembered.scopeKey !== canonicalJson(context.scope) || remembered.snapshotId !== context.snapshot.id ||
+      canonicalJson(remembered.sourceIdentity) !== canonicalJson(identity)) {
+    throw new DiagnosticActionError("snapshot_stale", "Refresh Diagnostics before deciding on this finding", true);
+  }
+  if (typeof identity.actionId !== "string" || !identity.actionId.startsWith("proprium.diagnostics.") ||
+      !identity.analyzer || typeof identity.analyzer !== "object" || !Array.isArray(identity.sources) || identity.sources.length < 1 || identity.sources.length > 100) {
+    throw new DiagnosticActionError("invalid_input", "Finding source identity is incomplete");
+  }
+
+  const sourceRows: Array<Record<string, unknown>> = [];
+  const readSet: ReadPrecondition[] = [];
+  const spans: SourceSpan[] = [];
+  const seenPaths = new Map<string, string>();
+  for (const [index, rawSource] of identity.sources.entries()) {
+    const source = object(rawSource, `sourceIdentity.sources[${index}]`);
+    closed(source, ["path", "fileRevision", "entityId", "textHash", "span", "quote"], `sourceIdentity.sources[${index}]`);
+    if (typeof source.path !== "string" || source.path.length > 1024 || source.path.startsWith("/") || source.path.includes("\\") || source.path.includes("\0") || source.path.split("/").some((part) => !part || part === "." || part === "..")) throw new DiagnosticActionError("invalid_path", "Finding source contains an unsafe path");
+    const revision = safeRevision(source.fileRevision, "Finding source revision");
+    if (source.entityId !== undefined && (typeof source.entityId !== "string" || source.entityId.length > 256)) throw new DiagnosticActionError("invalid_input", "Finding entity identity is invalid");
+    if (source.textHash !== undefined && (typeof source.textHash !== "string" || !/^[a-f0-9]{64}$/u.test(source.textHash))) throw new DiagnosticActionError("invalid_input", "Finding text hash is invalid");
+    let start = 0, end = 0;
+    if (source.span !== undefined) {
+      const span = object(source.span, `sourceIdentity.sources[${index}].span`);
+      closed(span, ["start", "end"], `sourceIdentity.sources[${index}].span`);
+      if (!Number.isSafeInteger(span.start) || !Number.isSafeInteger(span.end) || (span.start as number) < 0 || (span.end as number) < (span.start as number)) throw new DiagnosticActionError("invalid_input", "Finding source span is invalid");
+      start = span.start as number; end = span.end as number;
+    }
+    if (source.quote !== undefined && (typeof source.quote !== "string" || source.quote.length > 4000)) throw new DiagnosticActionError("invalid_input", "Finding source quote is invalid");
+    const priorRevision = seenPaths.get(source.path);
+    if (priorRevision !== undefined && priorRevision !== revision) throw new DiagnosticActionError("snapshot_stale", "Finding refers to conflicting revisions of one source file", true);
+    seenPaths.set(source.path, revision);
+    if (priorRevision === undefined) {
+      const file = yield* readFileVersioned(host, context.snapshot, source.path, revision);
+      if (file.bytes.byteLength > MAX_PROPOSAL_BYTES) throw new DiagnosticActionError("capacity", "Finding evidence file exceeds the feedback verification limit", true);
+      readSet.push({ path: source.path, revision });
+    }
+    sourceRows.push(source);
+    spans.push({ path: source.path, revision, start, end, quote: typeof source.quote === "string" ? source.quote : "" });
+  }
+
+  let before = "";
+  let feedbackRevision: string | null = null;
+  try {
+    const file = yield* readFileVersioned(host, context.snapshot, FEEDBACK_PATH);
+    if (file.bytes.byteLength > MAX_FEEDBACK_BYTES) throw new DiagnosticActionError("capacity", "Feedback file exceeds the Diagnostics limit", true);
+    try { before = new TextDecoder("utf-8", { fatal: true }).decode(file.bytes); }
+    catch { throw new DiagnosticActionError("invalid_encoding", `Feedback file is not valid UTF-8: ${FEEDBACK_PATH}`); }
+    feedbackRevision = file.revision;
+  } catch (error) {
+    if (!(error && typeof error === "object" && "code" in error && (error as { code: unknown }).code === "file_not_found")) throw error;
+  }
+  if (input.expectedFeedbackRevision !== undefined && input.expectedFeedbackRevision !== feedbackRevision) throw new DiagnosticActionError("snapshot_stale", "Feedback file revision changed before this decision", true);
+
+  const document = YAML.parseDocument(before || "schemaVersion: 1\nentries: []\n", { strict: true, uniqueKeys: true });
+  if (document.errors.length) throw new DiagnosticActionError("unsupported_format", `Invalid feedback YAML: ${document.errors[0].message}`, false, { path: FEEDBACK_PATH });
+  if (!isMap(document.contents)) throw new DiagnosticActionError("unsupported_format", "Feedback YAML root must be a mapping", false, { path: FEEDBACK_PATH });
+  let decoded: unknown;
+  try { decoded = document.toJS({ maxAliasCount: 100 }); }
+  catch (error) { throw new DiagnosticActionError("unsupported_format", `Invalid feedback YAML: ${error instanceof Error ? error.message : "alias error"}`, false, { path: FEEDBACK_PATH }); }
+  const root = object(decoded, "feedback YAML root");
+  if (root.schemaVersion !== 1 || !Array.isArray(root.entries)) throw new DiagnosticActionError("unsupported_format", "Feedback YAML requires schemaVersion: 1 and an entries sequence", false, { path: FEEDBACK_PATH });
+  if (root.entries.length >= MAX_FEEDBACK_ENTRIES) throw new DiagnosticActionError("capacity", "Feedback entry limit has been reached", true);
+  const entriesNode = document.get("entries", true);
+  if (!isSeq(entriesNode)) throw new DiagnosticActionError("unsupported_format", "Feedback entries must be a sequence", false, { path: FEEDBACK_PATH });
+
+  const persistedSource = feedbackSource(identity);
+  const index = root.entries.findIndex((rawEntry) => rawEntry && typeof rawEntry === "object" && !Array.isArray(rawEntry) &&
+    (rawEntry as Record<string, unknown>).findingFingerprint === input.findingFingerprint &&
+    feedbackSourceMatches((rawEntry as Record<string, unknown>).source, persistedSource));
+  const existing = index >= 0 ? root.entries[index] as Record<string, unknown> : undefined;
+  const sameAnnotation = existing?.annotation === input.annotation;
+  if (existing?.decision === input.decision && sameAnnotation) throw new DiagnosticActionError("no_change", "This finding already has the requested decision");
+
+  const stableTime = yield* host.request<{ timestamp: string }>("workspace.change.timestamp", {});
+  if (!stableTime || typeof stableTime.timestamp !== "string" || !/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d{1,9})?Z$/u.test(stableTime.timestamp)) throw new DiagnosticActionError("storage_unknown", "Host returned an invalid stable change timestamp", true);
+  const timestamp = stableTime.timestamp;
+  if (index < 0) {
+    const entry: Record<string, unknown> = {
+      id: `feedback-${sha256(JSON.stringify([context.scope.repository_id, context.scope.branch, input.findingFingerprint, persistedSource])).slice(0, 40)}`,
+      findingFingerprint: input.findingFingerprint,
+      decision: input.decision,
+      source: persistedSource,
+      ...(typeof input.annotation === "string" ? { annotation: input.annotation } : {}),
+      createdAt: timestamp,
+      updatedAt: timestamp,
+    };
+    entriesNode.add(document.createNode(entry));
+  } else {
+    const rowNode = entriesNode.items[index];
+    if (!isMap(rowNode)) throw new DiagnosticActionError("unsupported_format", `Feedback entry ${index} must be a mapping`, false, { path: FEEDBACK_PATH });
+    rowNode.set("decision", input.decision);
+    rowNode.set("updatedAt", timestamp);
+    if (typeof input.annotation === "string") rowNode.set("annotation", input.annotation);
+    else rowNode.delete("annotation");
+    const sourceNode = rowNode.get("source", true);
+    if (isMap(sourceNode)) for (const [field, value] of Object.entries(persistedSource)) sourceNode.set(field, value);
+    else rowNode.set("source", document.createNode(persistedSource));
+  }
+  const after = document.toString({ lineWidth: 0 });
+  if (new TextEncoder().encode(after).byteLength > MAX_FEEDBACK_BYTES) throw new DiagnosticActionError("capacity", "Proposed feedback file exceeds the Diagnostics limit", true);
+  const content = yield* changeContent(host, context, FEEDBACK_PATH, after);
+  const changeset = makeChangeSet({
+    context, actionId: context.action_id, idempotencyKey: key, path: FEEDBACK_PATH, revision: feedbackRevision,
+    before, after, title: "Diagnostics: record finding decision", reason: "Record an author decision for the exact analyzed source identity.",
+    evidence: spans, content, read_set: [...readSet, { path: FEEDBACK_PATH, revision: feedbackRevision }],
+  });
+  const proposalId = yield* submitChangeSet(host, changeset, content.artifact_id);
+  return { proposalId, feedbackPath: FEEDBACK_PATH, findingFingerprint: input.findingFingerprint, decision: input.decision, expectedRevision: feedbackRevision, snapshot: context.snapshot };
+}
+
 export const guest = createGuest("proprium.diagnostics", {
-  "proprium.diagnostics.text.analyze.v1": textAnalyze,
-  "proprium.diagnostics.scene.run.v1": sceneRun,
-  "proprium.diagnostics.lint.run.v1": lintRun,
+  "proprium.diagnostics.text.analyze.v1": remembering(textAnalyze),
+  "proprium.diagnostics.scene.run.v1": remembering(sceneRun),
+  "proprium.diagnostics.lint.run.v1": remembering(lintRun),
   "proprium.diagnostics.lint.propose.v1": lintPropose,
   "proprium.diagnostics.manuscript.format.propose.v1": manuscriptFormatPropose,
-  "proprium.diagnostics.project.consistency.run.v1": projectConsistency,
-  "proprium.diagnostics.project.continuity.run.v1": projectContinuity,
-  "proprium.diagnostics.chapter.aspects.review.v1": chapterAspectsReview,
+  "proprium.diagnostics.project.consistency.run.v1": remembering(projectConsistency),
+  "proprium.diagnostics.project.continuity.run.v1": remembering(projectContinuity),
+  "proprium.diagnostics.chapter.aspects.review.v1": remembering(chapterAspectsReview),
   "proprium.diagnostics.chapter.aspects.preview.v1": chapterAspectsPreview,
-  "proprium.diagnostics.scene.plot-goal.check.v1": plotGoalCheck,
+  "proprium.diagnostics.scene.plot-goal.check.v1": remembering(plotGoalCheck),
+  "proprium.diagnostics.feedback.propose.v1": feedbackPropose,
 });

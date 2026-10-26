@@ -11,7 +11,7 @@ export const E5_MODEL = {
   tokenizer_bytes: 17_082_730,
   tokenizer_sha256: "0b44a9d7b51c3c62626640cda0e2c2f70fdacdc25bbbd68038369d14ebdf4c39",
   dimensions: 384,
-  group_bytes: 487_351_263,
+  group_bytes: 492_423_173,
   license: "MIT",
 } as const;
 

@@ -1,0 +1,22 @@
+package proprium:plugin@2.0.0;
+
+interface morphology {
+  record engine-token {
+    surface: string,
+    details: list<string>,
+    byte-start: u32,
+    byte-end: u32,
+  }
+
+  begin-asset: func(group-id: string, file-path: string, total-bytes: u32, sha256: string) -> result<_, string>;
+  append-asset: func(group-id: string, file-path: string, offset: u32, bytes: list<u8>) -> result<_, string>;
+  finish-asset: func(group-id: string, file-path: string) -> result<_, string>;
+  load-tokenizer: func() -> result<_, string>;
+  tokenize: func(text: string) -> result<list<engine-token>, string>;
+  count-tokens: func(text: string) -> result<u32, string>;
+  release: func();
+}
+
+world research-morphology {
+  export morphology;
+}

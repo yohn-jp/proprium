@@ -36,7 +36,7 @@ function unavailableModel(role: "embedding" | "reranker") {
     role,
     ...(role === "embedding" ? { dimensions: EMBEDDING_MODEL.dimensions } : {}),
     digest: role === "embedding" ? E5_MODEL.model_sha256 : null,
-    byte_length: role === "embedding" ? E5_MODEL.group_bytes : null,
+    byte_length: role === "embedding" ? E5_MODEL.model_bytes : null,
     license: role === "embedding" ? E5_MODEL.license : "Apache-2.0",
     status: role === "embedding" && embeddingLoaded() ? "ready" : "unavailable",
   };

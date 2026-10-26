@@ -82,3 +82,26 @@ test("evidence validator rejects altered immutable source anchors", async () => 
     assert.match(checked.stderr, /immutable source anchors differ from traceability/);
   } finally { await rm(directory, { recursive: true, force: true }); }
 });
+
+test("evidence validator rejects R14 without same-run migration and source parity for every inventory row", async () => {
+  const directory = await mkdtemp(resolve(tmpdir(), "proprium-authoring-evidence-"));
+  const path = resolve(directory, "ledger.json");
+  try {
+    const ledger = JSON.parse(await readFile(ledgerPath, "utf8"));
+    const releaseSha = "d".repeat(40);
+    ledger.release_sha = releaseSha;
+    Object.assign(ledger.matrix.find(item => item.id === "R14"), {
+      status: "PASS", fixture: "synthetic", command: "pnpm run authoring:e2e", git_sha: releaseSha,
+      browser_platform: "Chromium + Mobile WebKit", input: "signed authoring registry",
+      output: "source parity and migration report", receipt: "Host acceptance receipts",
+      source_revisions: [...ledger.recovered_source.source_revisions], evidence_ref: "https://ci.example/run/r14",
+      artifact: { registry_digest: "a".repeat(64), plugin_digests: Object.fromEntries(
+        ledger.plugins.map(plugin => [plugin.plugin_id, "b".repeat(64)])) },
+    });
+    await writeFile(path, JSON.stringify(ledger));
+    const checked = spawnSync(process.execPath, [command, "--validate", path], { cwd: root, encoding: "utf8" });
+    assert.notEqual(checked.status, 0);
+    assert.match(checked.stderr, /R14: source parity source_files\//u);
+    assert.match(checked.stderr, /R14: proprium\.narrative\/NAR-01 has no source-parity proof/u);
+  } finally { await rm(directory, { recursive: true, force: true }); }
+});

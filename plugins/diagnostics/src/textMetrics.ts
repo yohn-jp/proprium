@@ -23,7 +23,7 @@ export const DEFAULT_TONE_LEXICON: ToneLexicon = {
 
 function isNoun(token: PlotToken): boolean { return token.pos === "名詞"; }
 function base(token: PlotToken): string { return token.base ?? token.surface; }
-function eligibleTerm(term: string): boolean { return term.length >= 2 && !/^[\s\p{P}\p{S}0-9]+$/u.test(term); }
+function eligibleTerm(term: string): boolean { return term.length >= 2 && term.length <= 256 && !/^[\s\p{P}\p{S}0-9]+$/u.test(term); }
 function evidenceFor(sentence: MetricSentence, sentenceIndex: number, predicate: (token: PlotToken) => boolean, max = 5): MetricEvidence[] {
   const result: MetricEvidence[] = [];
   for (const token of sentence.tokens) {
@@ -80,6 +80,7 @@ export function frequentPhrases(sentences: readonly MetricSentence[]): FrequentP
       if (tokens.some((token) => token.pos === "記号") || !tokens.some(contentToken) || edgeExcluded(tokens[0]) || edgeExcluded(tokens.at(-1)!)) continue;
       const key = tokens.map(base).join("");
       const surface = tokens.map((token) => token.surface).join("");
+      if (key.length > 512 || surface.length > 512) continue;
       const row = acc.get(key) ?? { count: 0, sentenceIndices: [], surfaces: new Map<string, number>(), evidence: [] };
       row.count++;
       if (row.sentenceIndices.at(-1) !== index + 1) row.sentenceIndices.push(index + 1);
@@ -114,20 +115,28 @@ function sentenceSentiment(tokens: readonly PlotToken[]): number {
 }
 function dialogue(text: string): boolean { return /^[「『]/u.test(text.trim()); }
 
-export function sentimentArc(sentences: readonly MetricSentence[]): { points: Array<{ sentenceIndex: number; start: number; end: number; raw: number; smoothed: number; isDialogue: boolean; text: string }>; mean: number; minIndex: number | null; maxIndex: number | null } {
+export function sentimentArc(sentences: readonly MetricSentence[]): { points: Array<{ sentenceIndex: number; start: number; end: number; raw: number; smoothed: number; isDialogue: boolean; text: string; textTruncated: boolean }>; mean: number; minIndex: number | null; maxIndex: number | null; totalSentences: number; sampled: boolean } {
   const raw = sentences.map((sentence) => sentence.text.trim() ? sentenceSentiment(sentence.tokens) : 0);
-  const points = raw.map((score, index) => {
+  let minIndex: number | null = null, maxIndex: number | null = null;
+  for (let index = 0; index < raw.length; index++) {
+    if (minIndex === null || raw[index] < raw[minIndex - 1]) minIndex = index + 1;
+    if (maxIndex === null || raw[index] > raw[maxIndex - 1]) maxIndex = index + 1;
+  }
+  const maxPoints = 1000;
+  const sampled = raw.length > maxPoints;
+  const indices = sampled
+    ? new Set(Array.from({ length: maxPoints }, (_, index) => Math.floor(index * (raw.length - 1) / (maxPoints - 1))))
+    : new Set(raw.map((_, index) => index));
+  if (minIndex !== null) indices.add(minIndex - 1);
+  if (maxIndex !== null) indices.add(maxIndex - 1);
+  const points = [...indices].sort((left, right) => left - right).map((index) => {
+    const score = raw[index];
     const start = Math.max(0, index - 2), end = Math.min(raw.length - 1, index + 2);
     const smoothed = end >= start ? raw.slice(start, end + 1).reduce((sum, value) => sum + value, 0) / (end - start + 1) : 0;
     const sentence = sentences[index];
-    return { sentenceIndex: index + 1, start: sentence.start, end: sentence.end, raw: score, smoothed, isDialogue: dialogue(sentence.text), text: sentence.text };
+    return { sentenceIndex: index + 1, start: sentence.start, end: sentence.end, raw: score, smoothed, isDialogue: dialogue(sentence.text), text: sentence.text.slice(0, 128), textTruncated: sentence.text.length > 128 };
   });
-  let minIndex: number | null = null, maxIndex: number | null = null;
-  for (const point of points) {
-    if (minIndex === null || point.raw < points[minIndex - 1].raw) minIndex = point.sentenceIndex;
-    if (maxIndex === null || point.raw > points[maxIndex - 1].raw) maxIndex = point.sentenceIndex;
-  }
-  return { points, mean: raw.length ? raw.reduce((sum, value) => sum + value, 0) / raw.length : 0, minIndex, maxIndex };
+  return { points, mean: raw.length ? raw.reduce((sum, value) => sum + value, 0) / raw.length : 0, minIndex, maxIndex, totalSentences: raw.length, sampled };
 }
 
 export interface ProseBalance {
@@ -157,12 +166,12 @@ export function proseBalance(text: string, tokens: readonly PlotToken[], sentenc
   return { charCount, dialogueCharCount: dialogueChars, narrationCharCount: narrationChars, dialogueRatio, narrationRatio, adjectiveRatio, adverbRatio, verbRatio, warnings };
 }
 
-export function habitualPhraseWarnings(sentences: readonly MetricSentence[], arc: ReturnType<typeof sentimentArc>): Array<{ band: "negative" | "positive"; phrase: string; count: number; sentenceIndices: number[]; message: string; evidence: MetricEvidence[] }> {
+export function habitualPhraseWarnings(sentences: readonly MetricSentence[]): Array<{ band: "negative" | "positive"; phrase: string; count: number; sentenceIndices: number[]; message: string; evidence: MetricEvidence[] }> {
   const output: ReturnType<typeof habitualPhraseWarnings> = [];
   for (const band of ["negative", "positive"] as const) {
     const selected: MetricSentence[] = [], original: number[] = [];
     for (let index = 0; index < sentences.length; index++) {
-      const score = arc.points[index]?.raw ?? 0;
+      const score = sentenceSentiment(sentences[index].tokens);
       if (band === "negative" ? score <= -0.5 : score >= 0.5) { selected.push(sentences[index]); original.push(index + 1); }
     }
     for (const phrase of frequentPhrases(selected)) {

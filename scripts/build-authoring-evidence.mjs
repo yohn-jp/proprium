@@ -12,6 +12,7 @@ const plugins = [
   ["proprium.semantic", "SEMANTIC.md"], ["proprium.publishing", "PUBLISHING.md"],
 ];
 const rIds = Array.from({ length: 14 }, (_, index) => `R${String(index + 1).padStart(2, "0")}`);
+const officialPluginIds = plugins.map(([id]) => id);
 const evidenceStatuses = ["PASS", "FAIL", "BLOCKED", "NOT_CHECKED"];
 
 function statusRecord() {
@@ -246,7 +247,9 @@ async function requirements() {
   };
 }
 function nonempty(value) { return typeof value === "string" && value.trim().length > 0; }
-function validateOne(item, label, errors, { allowEmptySourceRevisions = false, requireArtifact = false } = {}) {
+function sha256(value) { return typeof value === "string" && /^[a-f0-9]{64}$/u.test(value); }
+function validateOne(item, label, errors, { allowEmptySourceRevisions = false, requireArtifact = false,
+  requireAllPluginDigests = false } = {}) {
   if (!evidenceStatuses.includes(item.status)) errors.push(`${label}: invalid status`);
   if (item.status === "PASS") {
     for (const key of ["fixture", "command", "git_sha", "browser_platform", "input", "output", "receipt", "evidence_ref"]) {
@@ -258,10 +261,25 @@ function validateOne(item, label, errors, { allowEmptySourceRevisions = false, r
     }
     if (!/^[a-f0-9]{40}$/u.test(item.git_sha ?? "")) errors.push(`${label}: PASS requires an immutable full git SHA`);
     if (!/^https:\/\//u.test(item.evidence_ref ?? "")) errors.push(`${label}: PASS requires an archived CI/evidence URL`);
-    if (item.artifact !== null && (!/^[a-f0-9]{64}$/u.test(item.artifact.registry_digest ?? "") ||
-        !/^[a-f0-9]{64}$/u.test(item.artifact.plugin_digest ?? ""))) errors.push(`${label}: artifact digests must be SHA-256`);
-    if (requireArtifact && (!item.artifact || !/^[a-f0-9]{64}$/u.test(item.artifact.registry_digest ?? "") ||
-        !/^[a-f0-9]{64}$/u.test(item.artifact.plugin_digest ?? ""))) errors.push(`${label}: PASS requires actual signed registry and plugin digests`);
+    if (item.artifact != null) {
+      if (!sha256(item.artifact.registry_digest)) errors.push(`${label}: registry artifact digest must be SHA-256`);
+      if (item.artifact.plugin_digest !== undefined && !sha256(item.artifact.plugin_digest)) {
+        errors.push(`${label}: plugin artifact digest must be SHA-256`);
+      }
+      if (item.artifact.plugin_digests !== undefined) {
+        const digests = item.artifact.plugin_digests;
+        if (!digests || typeof digests !== "object" || Array.isArray(digests) ||
+            Object.entries(digests).some(([id, digest]) => !officialPluginIds.includes(id) || !sha256(digest))) {
+          errors.push(`${label}: per-plugin artifact digests must map official plugin IDs to SHA-256`);
+        }
+      }
+    }
+    if (requireArtifact && (!item.artifact || !sha256(item.artifact.registry_digest) ||
+        (requireAllPluginDigests
+          ? officialPluginIds.some(id => !sha256(item.artifact.plugin_digests?.[id]))
+          : !sha256(item.artifact.plugin_digest)))) {
+      errors.push(`${label}: PASS requires actual signed registry and ${requireAllPluginDigests ? "all eight plugin" : "plugin"} digests`);
+    }
   }
   if (item.status === "BLOCKED" && !nonempty(item.blocker)) errors.push(`${label}: BLOCKED requires a concrete blocker`);
   if (item.status !== "BLOCKED" && item.blocker !== null) errors.push(`${label}: blocker is only valid for BLOCKED`);
@@ -277,7 +295,10 @@ function audit(actual, required, errors) {
       errors.push(`${expected.id}: executable job or required proof differs from ACCEPTANCE.md`);
     }
   }
-  for (const item of actual.matrix ?? []) validateOne(item, item.id, errors, { requireArtifact: ["R02", "R13"].includes(item.id) });
+  for (const item of actual.matrix ?? []) validateOne(item, item.id, errors, {
+    requireArtifact: ["R02", "R13", "R14"].includes(item.id),
+    requireAllPluginDigests: ["R02", "R13", "R14"].includes(item.id),
+  });
   const actualPlugins = new Map((actual.plugins ?? []).map(item => [item.plugin_id, item]));
   if (actualPlugins.size !== required.plugins.length) errors.push("eight-plugin ledger is incomplete or duplicated");
   for (const plugin of required.plugins) {
@@ -312,7 +333,9 @@ function audit(actual, required, errors) {
       });
       if (record.status === "PASS") for (const anchor of feature.acceptance_anchors) {
         const accepted = (ledger.acceptance_cases ?? []).find(item => item.id === anchor);
-        if (!accepted || accepted.status !== "PASS" || accepted.git_sha !== record.git_sha || accepted.evidence_ref !== record.evidence_ref) {
+        if (!accepted || accepted.status !== "PASS" || accepted.git_sha !== record.git_sha || accepted.evidence_ref !== record.evidence_ref ||
+            accepted.artifact?.registry_digest !== record.artifact?.registry_digest ||
+            accepted.artifact?.plugin_digest !== record.artifact?.plugin_digest) {
           errors.push(`${plugin.plugin_id}/${feature.feature_id}: linked acceptance ${anchor} has not passed on the same SHA and archived run`);
         }
       }
@@ -402,6 +425,40 @@ function audit(actual, required, errors) {
         recorded.source_repo !== pinned?.repo || recorded.source_revision !== pinned?.source_revision ||
         !sameJson(recorded.source_revisions ?? [], [pinned?.source_revision])) {
       errors.push(`MCP tool ${source.source_id}: owner or typed Host route differs from traceability.json`);
+    }
+  }
+  const r14 = r.get("R14");
+  if (r14?.status === "PASS") {
+    if (!actual.release_sha || r14.git_sha !== actual.release_sha) {
+      errors.push("R14: source parity release SHA must match the certified Host release SHA");
+    }
+    if (!sameJson([...(r14.source_revisions ?? [])].sort(), required.recovered_source.source_revisions)) {
+      errors.push("R14: source revisions must enumerate the complete immutable recovery inventory");
+    }
+    const checkSameRun = (item, label) => {
+      if (!item || item.status !== "PASS" || item.git_sha !== r14.git_sha || item.evidence_ref !== r14.evidence_ref) {
+        errors.push(`R14: ${label} has no source-parity proof from the same signed-product run`);
+      }
+    };
+    for (const group of ["source_files", "source_actions", "ui_contributions", "source_tools"]) {
+      for (const item of sourceGroups?.[group] ?? []) checkSameRun(item, `${group}/${item.source_id ?? item.source_path}`);
+    }
+    for (const plugin of required.plugins) {
+      const ledger = actualPlugins.get(plugin.plugin_id);
+      for (const feature of ledger?.features ?? []) {
+        checkSameRun(feature, `${plugin.plugin_id}/${feature.feature_id}`);
+        const expectedDigest = r14.artifact?.plugin_digests?.[plugin.plugin_id];
+        if (feature.artifact?.registry_digest !== r14.artifact?.registry_digest || feature.artifact?.plugin_digest !== expectedDigest) {
+          errors.push(`R14: ${plugin.plugin_id}/${feature.feature_id} was not certified against the R14 signed artifacts`);
+        }
+      }
+      for (const item of ledger?.acceptance_cases ?? []) {
+        checkSameRun(item, `${plugin.plugin_id}/${item.id}`);
+        const expectedDigest = r14.artifact?.plugin_digests?.[plugin.plugin_id];
+        if (item.artifact?.registry_digest !== r14.artifact?.registry_digest || item.artifact?.plugin_digest !== expectedDigest) {
+          errors.push(`R14: ${plugin.plugin_id}/${item.id} was not certified against the R14 signed artifacts`);
+        }
+      }
     }
   }
   if (sourceGroups && JSON.stringify([...(sourceGroups.source_revisions ?? [])].sort()) !==

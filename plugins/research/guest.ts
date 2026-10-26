@@ -1,5 +1,5 @@
 import { createGuest, withWarnings } from "../shared/guest.js";
-import { HOST_OPERATIONS, type CacheKey, type FileChunk, type FileEntry, type FilePage } from "../shared/operations.js";
+import { HOST_OPERATIONS, readAsset, type CacheKey, type FileChunk, type FileEntry, type FilePage } from "../shared/operations.js";
 import type { ActionRequest, ChangeSet, FileOperation } from "../../app/src/browser/proprium/authoring/types.js";
 import type { GuestHost, Handler, HostCall } from "../shared/guest.js";
 import {
@@ -17,6 +17,7 @@ import {
   type TermRegistry,
 } from "./core.js";
 import {
+  aggregateCandidateEvidence,
   approximateTokenCount,
   expandKnownSpellingVariants,
   MAX_CANDIDATE_ITEMS,
@@ -24,12 +25,17 @@ import {
   MAX_CANDIDATE_TOTAL_BYTES,
   MAX_NLP_TEXT_UTF16,
   isSafeLocalModelId,
+  isWellFormedUtf16,
+  mapLinderaRawTokens,
   suggestTermVariants,
   validateTokenCountTexts,
   splitIntoSentenceOffsets,
 } from "./nlp.js";
 import { Document, isMap, isSeq, parseDocument } from "yaml";
 import { sha256, sha256Text } from "./sha256.js";
+import { ASSET_READ_CHUNK_BYTES, RESEARCH_DICTIONARY_FILES, RESEARCH_DICTIONARY_GROUP_ID,
+  RESEARCH_DICTIONARY_MANIFEST_SHA256, RESEARCH_TOKENIZER_ID, RESEARCH_TOKENIZER_VERSION } from "./asset-group.js";
+import { getResearchMorphologyBindings, type EngineToken } from "./morphology.js";
 
 const PLUGIN_ID = "proprium.research";
 const INDEX_SCHEMA_VERSION = 1;
@@ -50,6 +56,9 @@ const INLINE_CHANGE_BYTES = 32 * 1024;
 const ARTIFACT_CHUNK_BYTES = 32 * 1024;
 const ARTIFACT_OPERATIONS = { create: "artifact.create", append: "artifact.append", seal: "artifact.seal", discard: "artifact.discard" } as const;
 const MAX_ARTIFACT_BYTES = 128 * 1024 * 1024;
+const MAX_ANALYSIS_TEXT_BYTES = 64 * 1024;
+const MAX_ANALYSIS_TOKENS = 4_096;
+const RESEARCH_DISPOSE = Symbol("research.dispose");
 // SHA-256 of the pinned source module that defines sourceApproxTokenCount and its bounds.
 const TOKEN_COUNTER_DIGEST = "205e2370155900abcc923065a85072f74eb706f1bcec68fbaa93eb15883d4b88";
 
@@ -99,19 +108,86 @@ function utf8PathCompare(a: string, b: string): number {
 function snapshotCacheKey(context: ActionRequest, scope?: string): string {
   return JSON.stringify([context.scope.workspace_id, context.scope.repository_id, context.scope.branch, context.scope.generation, context.snapshot.id, scope ?? null]);
 }
-function encodeCursor(value: Record<string, unknown>): string {
+function encodeCursor(value: Record<string, unknown>, prefix = TERMS_PAGE_PREFIX): string {
   const bytes = new TextEncoder().encode(JSON.stringify(value));
   let binary = "";
   for (const byte of bytes) binary += String.fromCharCode(byte);
-  return TERMS_PAGE_PREFIX + btoa(binary).replace(/\+/gu, "-").replace(/\//gu, "_").replace(/=+$/u, "");
+  return prefix + btoa(binary).replace(/\+/gu, "-").replace(/\//gu, "_").replace(/=+$/u, "");
 }
-function decodeCursor(value: string): Record<string, unknown> {
+function decodeCursor(value: string, prefix = TERMS_PAGE_PREFIX): Record<string, unknown> {
   try {
-    if (!value.startsWith(TERMS_PAGE_PREFIX)) throw new Error();
-    const encoded = value.slice(TERMS_PAGE_PREFIX.length).replace(/-/gu, "+").replace(/_/gu, "/");
+    if (!value.startsWith(prefix)) throw new Error();
+    const encoded = value.slice(prefix.length).replace(/-/gu, "+").replace(/_/gu, "/");
     const parsed: unknown = JSON.parse(new TextDecoder("utf-8", { fatal: true }).decode(Uint8Array.from(atob(encoded), (char) => char.charCodeAt(0))));
     return object(parsed, "cursor");
   } catch { throw fail("invalid_input", "Term cursor is invalid"); }
+}
+
+function getMorphologyFailure(error: unknown): { code?: string; message: string } {
+  if (error && typeof error === "object") {
+    const value = error as { code?: unknown; message?: unknown };
+    if (typeof value.code === "string") return { code: value.code, message: typeof value.message === "string" ? value.message : value.code };
+    if (typeof value.message === "string") {
+      const match = /^(capability_denied|missing_capability|provider_unavailable|model_unavailable|incompatible_abi|cancelled|capacity):\s*(.*)$/u.exec(value.message);
+      return match ? { code: match[1], message: match[2] || match[1] } : { message: value.message };
+    }
+  }
+  return { message: error instanceof Error ? error.message : typeof error === "string" ? error : "Tokenizer operation failed" };
+}
+
+function* ensureResearchTokenizer(host: GuestHost, isReady: () => boolean, setReady: (value: boolean) => void): Generator<HostCall, void, unknown> {
+  if (isReady()) return;
+  const morphology = getResearchMorphologyBindings();
+  try {
+    for (const file of RESEARCH_DICTIONARY_FILES) {
+      let offset = 0;
+      let begun = false;
+      do {
+        const chunk = yield* readAsset(host, {
+          group_id: RESEARCH_DICTIONARY_GROUP_ID, file_path: file.path, offset, length: ASSET_READ_CHUNK_BYTES,
+        });
+        if (chunk.total_bytes !== file.byte_length || chunk.sha256 !== file.sha256) {
+          throw fail("incompatible_abi", "Admitted dictionary bytes differ from the pinned Research tokenizer release");
+        }
+        if (!begun) {
+          morphology.beginAsset(RESEARCH_DICTIONARY_GROUP_ID, file.path, file.byte_length, file.sha256);
+          begun = true;
+        }
+        morphology.appendAsset(RESEARCH_DICTIONARY_GROUP_ID, file.path, offset, chunk.bytes);
+        offset += chunk.bytes.length;
+        if (chunk.next_offset === null) break;
+        if (chunk.next_offset !== offset) throw fail("provider_unavailable", "Host asset range did not advance contiguously");
+      } while (true);
+      if (!begun || offset !== file.byte_length) throw fail("provider_unavailable", "Host returned an incomplete pinned dictionary file");
+      morphology.finishAsset(RESEARCH_DICTIONARY_GROUP_ID, file.path);
+    }
+    morphology.loadTokenizer();
+    setReady(true);
+  } catch (error) {
+    try { morphology.release(); } catch { /* Preserve the original Host/model error. */ }
+    setReady(false);
+    const failure = getMorphologyFailure(error);
+    if (failure.code === "cancelled") throw fail("cancelled", failure.message, true);
+    if (failure.code === "capacity") throw fail("capacity", failure.message);
+    if (failure.code === "invalid_input" || failure.code === "snapshot_stale") throw error;
+    if (failure.code === "capability_denied" || failure.code === "missing_capability" ||
+        failure.code === "provider_unavailable" || failure.code === "model_unavailable") {
+      throw fail("dependency_unavailable", "The optional signed Japanese tokenizer is not available in this workspace", true, { reason: failure.code });
+    }
+    if (failure.code === "incompatible_abi") throw fail("incompatible_abi", failure.message);
+    throw fail("dependency_unavailable", failure.message, true);
+  }
+}
+
+function mappedAnalysisTokens(text: string, raw: readonly EngineToken[], knownSentences?: readonly { start: number; end: number }[]): Array<Record<string, unknown>> {
+  const mapped = mapLinderaRawTokens(text, raw);
+  if (mapped.length > MAX_ANALYSIS_TOKENS) throw fail("capacity", "Analysis produces more tokens than the bounded result can return");
+  const sentences = knownSentences ?? splitIntoSentenceOffsets(text);
+  let sentenceIndex = 0;
+  return mapped.map((token) => {
+    while (sentenceIndex + 1 < sentences.length && token.start >= sentences[sentenceIndex]!.end) sentenceIndex++;
+    return { ...token, sentenceIndex };
+  });
 }
 
 function* listPrefix(host: GuestHost, context: ActionRequest, prefix: string): Generator<HostCall, FileEntry[], unknown> {
@@ -514,6 +590,11 @@ function* loadIndex(host: GuestHost, context: ActionRequest, scope?: string, for
 
 export function createResearchHandlers(): Record<string, Handler> {
   const indexes = new Map<string, ResearchCacheEntry>();
+  let tokenizerReady = false;
+  const dispose = () => {
+    tokenizerReady = false;
+    try { getResearchMorphologyBindings().release(); } catch { /* The component may not have initialized. */ }
+  };
   const indexFor = (context: ActionRequest, scope?: string): ResearchCacheEntry | undefined => indexes.get(snapshotCacheKey(context, scope));
   const rememberIndex = (context: ActionRequest, index: ReturnType<typeof buildResearchIndex>, scope?: string): ResearchCacheEntry => {
     const entry: ResearchCacheEntry = { snapshot: context.snapshot, scope, snapshotId: context.snapshot.id, index };
@@ -688,7 +769,8 @@ export function createResearchHandlers(): Record<string, Handler> {
     },
     "research.nlp.analyze": function* (raw, context, host) {
       const input = object(raw); exactFields(input, ["text", "source"]);
-      if (typeof input.text !== "string" || input.text.length > MAX_NLP_TEXT_UTF16 || new TextEncoder().encode(input.text).length > MAX_NLP_TEXT_UTF16 * 4) throw fail("capacity", "Analysis text exceeds its bounded UTF-16 or UTF-8 size");
+      if (typeof input.text !== "string" || input.text.length > MAX_NLP_TEXT_UTF16 || new TextEncoder().encode(input.text).length > MAX_ANALYSIS_TEXT_BYTES) throw fail("capacity", "Analysis text exceeds its bounded UTF-16 or UTF-8 size");
+      if (!isWellFormedUtf16(input.text)) throw fail("invalid_input", "Analysis text contains an unpaired UTF-16 surrogate");
       const source = object(input.source, "source");
       if (source.kind === "saved-file") {
         exactFields(source, ["kind", "path", "textRevision"]);
@@ -706,17 +788,58 @@ export function createResearchHandlers(): Record<string, Handler> {
       } else {
         throw fail("invalid_input", "Analysis source kind must be saved-file, draft, or literal");
       }
-      // Validate sentence boundaries and source offsets even while morphology is absent.
-      try { splitIntoSentenceOffsets(input.text); }
+      let sentences: Array<{ start: number; end: number }>;
+      try { sentences = splitIntoSentenceOffsets(input.text); }
       catch { throw fail("capacity", "Analysis text exceeds the bounded sentence-splitting limit"); }
-      throw fail("dependency_unavailable", "The optional signed Japanese tokenizer asset is not installed or granted");
+      yield* ensureResearchTokenizer(host, () => tokenizerReady, (value) => { tokenizerReady = value; });
+      let rawTokens: EngineToken[];
+      try {
+        rawTokens = getResearchMorphologyBindings().tokenize(input.text);
+        if (!Array.isArray(rawTokens)) throw fail("incompatible_abi", "Lindera returned a non-array token result");
+      } catch (error) {
+        const failure = getMorphologyFailure(error);
+        if (failure.code === "capacity") throw fail("capacity", failure.message);
+        if (failure.code === "cancelled") throw fail("cancelled", failure.message, true);
+        if (failure.code === "incompatible_abi") throw fail("incompatible_abi", failure.message);
+        throw fail("dependency_unavailable", failure.message, true);
+      }
+      let tokens: Array<Record<string, unknown>>;
+      try { tokens = mappedAnalysisTokens(input.text, rawTokens, sentences); }
+      catch (error) {
+        const failure = getMorphologyFailure(error);
+        if (failure.code === "capacity") throw fail("capacity", failure.message);
+        if (failure.code === "invalid_input") throw fail("invalid_input", failure.message);
+        throw fail("incompatible_abi", failure.message);
+      }
+      const sourceValue = object(input.source, "source");
+      return {
+        source: { ...sourceValue, textDigest: sha256Text(input.text) },
+        sentences, tokens,
+        engine: { id: RESEARCH_TOKENIZER_ID, version: RESEARCH_TOKENIZER_VERSION, digest: RESEARCH_DICTIONARY_MANIFEST_SHA256 },
+      };
     },
-    "research.nlp.countTokens": (raw) => {
+    "research.nlp.countTokens": function* (raw, context, host) {
       const input = object(raw); exactFields(input, ["texts", "modelId"]);
       const texts = validateTokenCountTexts(input.texts);
       if (input.modelId !== undefined && !isSafeLocalModelId(input.modelId)) throw fail("invalid_input", "modelId must identify an approved local tokenizer");
-      if (input.modelId !== undefined) throw fail("dependency_unavailable", "The requested local model tokenizer is unavailable");
-      return { counts: texts.map(approximateTokenCount), identity: { modelId: "approx", version: "source-approx-v1", digest: TOKEN_COUNTER_DIGEST, method: "approx" }, fallbackReason: "tokenizer_unavailable" };
+      if (input.modelId === "approx") return { counts: texts.map(approximateTokenCount), identity: { modelId: "approx", version: "source-approx-v1", digest: TOKEN_COUNTER_DIGEST, method: "approx" }, fallbackReason: "user_selected_approximation" };
+      if (input.modelId !== undefined && input.modelId !== RESEARCH_TOKENIZER_ID) throw fail("dependency_unavailable", "The requested local tokenizer is not included in this Research release");
+      for (const text of texts) if (!isWellFormedUtf16(text)) throw fail("invalid_input", "Token-count text contains an unpaired UTF-16 surrogate");
+      yield* ensureResearchTokenizer(host, () => tokenizerReady, (value) => { tokenizerReady = value; });
+      const morphology = getResearchMorphologyBindings();
+      const counts = texts.map((text) => {
+        try {
+          const value = morphology.countTokens(text);
+          if (!Number.isSafeInteger(value) || value < 0) throw fail("incompatible_abi", "Lindera returned an invalid token count");
+          return value;
+        } catch (error) {
+          const failure = getMorphologyFailure(error);
+          if (failure.code === "capacity") throw fail("capacity", failure.message);
+          if (failure.code === "incompatible_abi") throw fail("incompatible_abi", failure.message);
+          throw fail("dependency_unavailable", failure.message, true);
+        }
+      });
+      return { counts, identity: { modelId: RESEARCH_TOKENIZER_ID, version: RESEARCH_TOKENIZER_VERSION, digest: RESEARCH_DICTIONARY_MANIFEST_SHA256, method: "model" } };
     },
     "research.terms.candidates": function* (raw, context, host) {
       const input = object(raw); exactFields(input, ["corpus", "knownTerms", "includeReadings", "cursor", "limit"]);
@@ -728,6 +851,7 @@ export function createResearchHandlers(): Record<string, Handler> {
       const limit = input.limit ?? 100;
       if (!Number.isSafeInteger(limit) || (limit as number) < 1 || (limit as number) > 200) throw fail("invalid_input", "Candidate limit must be between 1 and 200");
       const sourceIds = new Set<string>();
+      const candidateSources: Array<{ id: string; path?: string; revision: string; texts: Array<{ id: string; text: string }> }> = [];
       let totalBytes = 0;
       const enc = new TextEncoder();
       for (const row of corpus.items) {
@@ -741,17 +865,67 @@ export function createResearchHandlers(): Record<string, Handler> {
           if (entry.revision !== source.revision) throw fail("snapshot_stale", "Candidate source revision changed", true);
         }
         const textIds = new Set<string>();
+        const texts: Array<{ id: string; text: string }> = [];
         for (const rawText of source.texts) {
           const record = object(rawText, "candidate text"); exactFields(record, ["id", "text"]);
-          if (typeof record.id !== "string" || !record.id || record.id.length > 256 || textIds.has(record.id) || typeof record.text !== "string" || record.text.length > MAX_NLP_TEXT_UTF16) throw fail("invalid_input", "Candidate text record is invalid");
+          if (typeof record.id !== "string" || !record.id || record.id.length > 256 || textIds.has(record.id) || typeof record.text !== "string" || record.text.length > MAX_NLP_TEXT_UTF16 || !isWellFormedUtf16(record.text)) throw fail("invalid_input", "Candidate text record is invalid");
           textIds.add(record.id);
           const bytes = enc.encode(record.text).length;
           if (bytes > MAX_CANDIDATE_TEXT_BYTES) throw fail("capacity", "Candidate text exceeds 64 KiB");
           totalBytes += bytes;
           if (totalBytes > MAX_CANDIDATE_TOTAL_BYTES) throw fail("capacity", "Candidate corpus exceeds 1 MiB");
+          texts.push({ id: record.id, text: record.text });
         }
+        candidateSources.push({ id: source.id, ...(typeof source.path === "string" ? { path: source.path } : {}), revision: source.revision, texts });
       }
-      throw fail("dependency_unavailable", "The optional signed Japanese tokenizer asset is not installed or granted");
+      const includeReadings = input.includeReadings !== false;
+      const knownTerms = [...new Set(known as string[])];
+      const requestDigest = sha256Text(JSON.stringify([
+        corpus.kind,
+        candidateSources.map(({ id, path, revision, texts }) => [id, path ?? null, revision, texts.map(({ id: textId, text }) => [textId, text])]),
+        knownTerms.slice().sort(), includeReadings,
+      ]));
+      const scopeDigest = cacheScopeDigest(context);
+      let offset = 0;
+      if (input.cursor !== undefined) {
+        const cursor = decodeCursor(input.cursor, "research-candidates-v1:");
+        if (cursor.snapshot !== context.snapshot.id || cursor.scope !== scopeDigest || cursor.params !== requestDigest) throw fail("snapshot_stale", "Candidate cursor does not match this corpus and workspace snapshot", true);
+        if (!Number.isSafeInteger(cursor.offset) || (cursor.offset as number) < 0) throw fail("invalid_input", "Candidate cursor offset is invalid");
+        offset = cursor.offset as number;
+      }
+      yield* ensureResearchTokenizer(host, () => tokenizerReady, (value) => { tokenizerReady = value; });
+      const morphology = getResearchMorphologyBindings();
+      const sourcesWithTokens: Array<{
+        id: string; path?: string; revision: string;
+        texts: Array<{ id: string; text: string; tokens: ReturnType<typeof mapLinderaRawTokens> }>;
+      }> = [];
+      let totalTokens = 0;
+      for (const source of candidateSources) {
+        const texts = source.texts.map(({ id, text }) => {
+          let engineTokens: EngineToken[];
+          try { engineTokens = morphology.tokenize(text); }
+          catch (error) {
+            const failure = getMorphologyFailure(error);
+            if (failure.code === "capacity") throw fail("capacity", failure.message);
+            if (failure.code === "incompatible_abi") throw fail("incompatible_abi", failure.message);
+            throw fail("dependency_unavailable", failure.message, true);
+          }
+          const tokens = mapLinderaRawTokens(text, engineTokens);
+          totalTokens += tokens.length;
+          if (totalTokens > 100_000) throw fail("capacity", "Candidate corpus exceeds the bounded tokenizer result budget");
+          return { id, text, tokens };
+        });
+        sourcesWithTokens.push({ id: source.id, ...(source.path ? { path: source.path } : {}), revision: source.revision, texts });
+      }
+      const candidates = aggregateCandidateEvidence(sourcesWithTokens, new Set(knownTerms));
+      const page = candidates.slice(offset, offset + (limit as number));
+      const output = page.map(({ reading, ...candidate }) => ({ ...candidate, ...(includeReadings && reading ? { reading } : {}) }));
+      const nextOffset = offset + output.length;
+      return {
+        candidates: output, sourceCount: candidateSources.length,
+        nextCursor: nextOffset < candidates.length ? encodeCursor({ snapshot: context.snapshot.id, scope: scopeDigest, params: requestDigest, offset: nextOffset }, "research-candidates-v1:") : null,
+        tokenizerIdentity: { id: RESEARCH_TOKENIZER_ID, version: RESEARCH_TOKENIZER_VERSION, digest: RESEARCH_DICTIONARY_MANIFEST_SHA256 },
+      };
     },
     "research.terms.variants": (raw) => {
       const input = object(raw); exactFields(input, ["candidates", "knownTerms"]);
@@ -897,8 +1071,18 @@ export function createResearchHandlers(): Record<string, Handler> {
     };
   }
 
+  Object.defineProperty(handlers, RESEARCH_DISPOSE, { value: dispose, enumerable: false });
   return handlers;
 }
 
-export const guest = createGuest(PLUGIN_ID, createResearchHandlers());
+type DisposableResearchHandlers = Record<string, Handler> & { [RESEARCH_DISPOSE]?: () => void };
+const researchHandlers = createResearchHandlers() as DisposableResearchHandlers;
+const researchLifecycle = createGuest(PLUGIN_ID, researchHandlers);
+export const guest = {
+  ...researchLifecycle,
+  dispose(): void {
+    researchHandlers[RESEARCH_DISPOSE]?.();
+    researchLifecycle.dispose();
+  },
+};
 
