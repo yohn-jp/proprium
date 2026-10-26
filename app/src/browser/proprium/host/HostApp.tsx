@@ -880,7 +880,10 @@ export function HostApp(): ReactElement {
     onRestored={refreshAfterPlugin} />}</div>;
   const hostFileActions = <div className="host-file-action-group" role="group" aria-label="Current file actions">
     <button type="button" disabled={busy || !currentFile?.dirty || currentFile?.binary} onClick={() => void saveDraft()}>Save draft</button>
-    <button type="button" disabled={busy} onClick={() => void deleteFile()}>Delete file</button>
+    <details className="host-document-menu"><summary>文書の操作</summary><div>
+      <button type="button" disabled={busy || !currentFile} onClick={() => { if (currentFile) downloadWorkspaceFile(currentFile.path.split("/").at(-1) || "document.txt", currentFile.text !== null ? new TextEncoder().encode(currentFile.text) : currentFile.data ?? new Uint8Array()); }}>この文書を書き出す</button>
+      <button type="button" className="destructive-action" disabled={busy} onClick={() => void deleteFile()}>文書を削除</button>
+    </div></details>
   </div>;
   const editor = workspace && git && currentFile ? <section className="restored-editor">
     {currentFile.binary ? <>
