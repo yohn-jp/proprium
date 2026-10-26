@@ -16,6 +16,7 @@ import { GitHistoryPanel } from "./GitHistoryPanel.js";
 import { ChangedFilesReview } from "./ChangedFilesReview.js";
 import { PluginPanel } from "./PluginPanel.js";
 import { LiveMcpPanel } from "./LiveMcpPanel.js";
+import "./authoring/authoring-surface.css";
 
 import { DesktopShell } from "../../../shells/desktop/DesktopShell.js";
 import { ThemeControl } from "../../../components/ThemeControl.js";

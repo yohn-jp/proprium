@@ -19,7 +19,15 @@ const registration: AuthoringSurfaceRegistration = {
 };
 
 test("verified authoring declarations become stable normal workspace panels", () => {
-  const panels = createAuthoringWorkspacePanels([registration], async () => ({}));
+  const panels = createAuthoringWorkspacePanels([registration], async () => ({
+    action_result: {
+      ok: true, request_id: "req-1", scope: { workspace_id: "w", repository_id: null, branch: "main", generation: "g" },
+      snapshot: { id: "s", local_commit: null, worktree_generation: "g", draft_generation: null }, value: {}, warnings: [],
+    },
+  }), async () => ({
+    ok: true, request_id: "read-1", scope: { workspace_id: "w", repository_id: null, branch: "main", generation: "g" },
+    snapshot: { id: "s", local_commit: null, worktree_generation: "g", draft_generation: null }, value: {}, warnings: [],
+  }));
   assert.equal(panels.length, 1);
   assert.equal(panels[0]?.id, "plugin:proprium.narrative:hierarchy");
   assert.equal(panels[0]?.title, "作品構成");

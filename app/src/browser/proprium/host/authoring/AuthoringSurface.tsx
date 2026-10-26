@@ -1,22 +1,28 @@
-import { useCallback, useMemo, useState, type FormEvent, type KeyboardEvent, type ReactElement } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState, type FormEvent, type KeyboardEvent, type ReactElement } from "react";
 import type {
   AuthoringActionBinding,
   AuthoringColumn,
   AuthoringDataKey,
   AuthoringField,
+  AuthoringHostArtifact,
   AuthoringJson,
+  AuthoringNavigationTarget,
+  AuthoringNavigationTemplate,
   AuthoringOutlineRow,
+  AuthoringPrintPreset,
+  AuthoringScalarField,
   AuthoringSurfaceProps,
   AuthoringTemplate,
   AuthoringWidget,
 } from "./types.js";
 
-const DATA_KEY_PATTERN = /^[A-Za-z_][A-Za-z0-9_]*(?:\.[A-Za-z_][A-Za-z0-9_]*)*$/u;
+const DATA_KEY_PART = /^(?:[A-Za-z_][A-Za-z0-9_]*|0|[1-9][0-9]{0,2})$/u;
 const MAX_TEMPLATE_DEPTH = 12;
 const UNSAFE_DATA_KEYS = new Set(["__proto__", "prototype", "constructor"]);
+const EMPTY_DATA: AuthoringJson = Object.freeze({});
 
 function isValidDataPath(path: string): boolean {
-  return DATA_KEY_PATTERN.test(path) && path.split(".").every(part => !UNSAFE_DATA_KEYS.has(part));
+  return path.length <= 512 && path.split(".").every(part => DATA_KEY_PART.test(part) && !UNSAFE_DATA_KEYS.has(part));
 }
 
 function isRecord(value: unknown): value is Record<string, unknown> {
@@ -31,8 +37,14 @@ function dataAtPath(data: unknown, path: string): unknown {
   if (!isValidDataPath(path)) throw new Error("The UI declaration contains an invalid data key.");
   let value: unknown = data;
   for (const part of path.split(".")) {
-    if (!isRecord(value) || !Object.hasOwn(value, part)) return undefined;
-    value = value[part];
+    if (Array.isArray(value) && /^(?:0|[1-9][0-9]{0,2})$/u.test(part)) {
+      const index = Number(part);
+      if (!Object.hasOwn(value, index)) return undefined;
+      value = value[index];
+    } else {
+      if (!isRecord(value) || !Object.hasOwn(value, part)) return undefined;
+      value = value[part];
+    }
   }
   return value;
 }
@@ -52,6 +64,29 @@ export function resolveAuthoringTemplate(template: AuthoringTemplate, data: unkn
   }
   if (template === null || typeof template === "string" || typeof template === "boolean" || typeof template === "number") return template;
   throw new Error("The UI input template contains a value that is not JSON.");
+}
+
+export function resolveAuthoringNavigation(binding: AuthoringNavigationTemplate, data: unknown): { target: AuthoringNavigationTarget; intent: "open" | "reveal" } {
+  if (binding.intent !== "open" && binding.intent !== "reveal") throw new Error("The UI navigation intent is invalid.");
+  const resolved = Object.fromEntries(Object.entries(binding.target).map(([key, template]) => [key, resolveAuthoringTemplate(template, data)]));
+  if (Object.keys(resolved).some(key => !["path", "panel_id", "span"].includes(key))) throw new Error("The UI navigation target contains an unsupported field.");
+  const path = resolved.path;
+  const panelId = resolved.panel_id;
+  if ((path !== undefined && (typeof path !== "string" || !path.trim() || path.length > 1024)) ||
+      (panelId !== undefined && (typeof panelId !== "string" || !/^[A-Za-z][A-Za-z0-9._:-]{0,159}$/u.test(panelId))) ||
+      (path === undefined && panelId === undefined)) throw new Error("The UI navigation target is invalid.");
+  let span: AuthoringNavigationTarget["span"];
+  const rawSpan = resolved.span;
+  if (rawSpan !== undefined && rawSpan !== null) {
+    if (!isRecord(rawSpan) || Object.keys(rawSpan).some(key => !["path", "revision", "start", "end", "quote"].includes(key)) ||
+        !Number.isSafeInteger(rawSpan.start) || !Number.isSafeInteger(rawSpan.end) ||
+        (rawSpan.start as number) < 0 || (rawSpan.end as number) < (rawSpan.start as number) ||
+        (rawSpan.path !== undefined && typeof rawSpan.path !== "string") ||
+        (rawSpan.revision !== undefined && typeof rawSpan.revision !== "string") ||
+        (rawSpan.quote !== undefined && typeof rawSpan.quote !== "string")) throw new Error("The UI navigation span is invalid.");
+    span = { path: rawSpan.path as string | undefined, revision: rawSpan.revision as string | undefined, start: rawSpan.start as number, end: rawSpan.end as number, quote: rawSpan.quote as string | undefined };
+  }
+  return { target: { path: path as string | undefined, panel_id: panelId as string | undefined, span }, intent: binding.intent };
 }
 
 function cloneJson(value: unknown, depth: number): AuthoringJson {
@@ -77,14 +112,20 @@ function readPath(value: unknown, path: string): unknown {
   if (!isValidDataPath(path)) return undefined;
   let current = value;
   for (const part of path.split(".")) {
-    if (!isRecord(current) || !Object.hasOwn(current, part)) return undefined;
-    current = current[part];
+    if (Array.isArray(current) && /^(?:0|[1-9][0-9]{0,2})$/u.test(part)) {
+      const index = Number(part);
+      if (!Object.hasOwn(current, index)) return undefined;
+      current = current[index];
+    } else {
+      if (!isRecord(current) || !Object.hasOwn(current, part)) return undefined;
+      current = current[part];
+    }
   }
   return current;
 }
 
 function validBinding(binding: AuthoringActionBinding): boolean {
-  return /^[a-z][a-z0-9._-]{0,127}$/u.test(binding.action_id) && isRecord(binding.input_template);
+  return /^[A-Za-z][A-Za-z0-9._-]{0,127}$/u.test(binding.action_id) && isRecord(binding.input_template);
 }
 
 function rowsForOutline(value: unknown): readonly AuthoringOutlineRow[] {
@@ -92,17 +133,112 @@ function rowsForOutline(value: unknown): readonly AuthoringOutlineRow[] {
   return value.filter((row): row is AuthoringOutlineRow => isRecord(row) && typeof row.id === "string" && typeof row.title === "string");
 }
 
-function Pagination({ previous, next, invoke, disabled }: {
+function conditionMatches(condition: AuthoringDataKey | undefined, data: AuthoringJson): boolean {
+  if (!condition) return true;
+  try {
+    const value = dataAtPath(data, condition.data_key);
+    return value !== undefined && value !== null && value !== "" && value !== false;
+  } catch { return false; }
+}
+
+function Pagination({ previous, next, previousWhen, nextWhen, data, invoke, disabled }: {
   readonly previous?: AuthoringActionBinding;
   readonly next?: AuthoringActionBinding;
-  invoke(binding: AuthoringActionBinding): void;
+  readonly previousWhen?: AuthoringDataKey;
+  readonly nextWhen?: AuthoringDataKey;
+  readonly data: AuthoringJson;
+  invoke(binding: AuthoringActionBinding, event: Event): void;
   readonly disabled: boolean;
 }): ReactElement | null {
-  if (!previous && !next) return null;
+  const showPrevious = previous && conditionMatches(previousWhen, data);
+  const showNext = next && conditionMatches(nextWhen, data);
+  if (!showPrevious && !showNext) return null;
   return <nav className="authoring-pagination" aria-label="ページ送り">
-    {previous && <button type="button" disabled={disabled} onClick={() => invoke(previous)}>前へ</button>}
-    {next && <button type="button" disabled={disabled} onClick={() => invoke(next)}>次へ</button>}
+    {showPrevious && <button type="button" disabled={disabled} onClick={event => invoke(previous, event.nativeEvent)}>前へ</button>}
+    {showNext && <button type="button" disabled={disabled} onClick={event => invoke(next, event.nativeEvent)}>次へ</button>}
   </nav>;
+}
+
+const EXPORT_PREFLIGHT_ITEMS = [
+  "原稿を校正した",
+  "人名とルビを確認した",
+  "出力範囲を確認した",
+  "公開先の規則を確認した",
+  "エピソード番号とタイトルを確認した",
+] as const;
+
+type ArtifactIntent = "download" | "print";
+
+function formatArtifactBytes(bytes: number): string {
+  if (!Number.isSafeInteger(bytes) || bytes < 0) return "サイズ未確認";
+  if (bytes < 1024) return `${bytes} B`;
+  if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KiB`;
+  return `${(bytes / (1024 * 1024)).toFixed(1)} MiB`;
+}
+
+function ArtifactResultToolbar({ artifact }: { readonly artifact: AuthoringHostArtifact }): ReactElement {
+  const dialog = useRef<HTMLDialogElement>(null);
+  const [pending, setPending] = useState<ArtifactIntent | null>(null);
+  const [checked, setChecked] = useState<boolean[]>(() => EXPORT_PREFLIGHT_ITEMS.map(() => false));
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState("");
+  const [preview, setPreview] = useState<{ text: string; truncated: boolean } | null>(null);
+  const [preset, setPreset] = useState<AuthoringPrintPreset>("bunko");
+
+  useEffect(() => {
+    const element = dialog.current;
+    if (pending && element && !element.open) element.showModal();
+    else if (!pending && element?.open) element.close();
+  }, [pending]);
+
+  const begin = (intent: ArtifactIntent) => {
+    setError("");
+    setChecked(EXPORT_PREFLIGHT_ITEMS.map(() => false));
+    setPending(intent);
+  };
+  const cancel = () => {
+    setPending(null);
+    setChecked(EXPORT_PREFLIGHT_ITEMS.map(() => false));
+  };
+  const continueEffect = (event: React.MouseEvent<HTMLButtonElement>) => {
+    const intent = pending;
+    if (!intent || busy) return;
+    setPending(null);
+    setBusy(true);
+    setError("");
+    const task = intent === "download" ? artifact.download(event.nativeEvent) : artifact.print(event.nativeEvent, preset);
+    void task.catch(cause => setError(cause instanceof Error ? cause.message : "出力を完了できませんでした。"))
+      .finally(() => setBusy(false));
+  };
+  const loadPreview = async () => {
+    if (busy || !artifact.text_preview_available) return;
+    setBusy(true); setError("");
+    try { setPreview(await artifact.previewText(40_000)); }
+    catch (cause) { setError(cause instanceof Error ? cause.message : "安全なテキストプレビューを読み込めませんでした。"); }
+    finally { setBusy(false); }
+  };
+  const unconfirmed = checked.filter(value => !value).length;
+
+  return <section className="authoring-artifact-result" aria-label="Host が確認した出力">
+    <div className="authoring-artifact-summary"><div><h3>出力の準備ができました</h3><p>{artifact.metadata.filename} · {artifact.metadata.media_type} · {formatArtifactBytes(artifact.metadata.bytes)}</p><small>SHA-256 {artifact.metadata.sha256}</small></div></div>
+    <div className="authoring-artifact-actions">
+      <button type="button" disabled={busy} onClick={() => begin("download")}>ダウンロード</button>
+      {artifact.text_preview_available && <>
+        <button type="button" disabled={busy} onClick={() => void loadPreview()}>{preview ? "プレビューを更新" : "テキストプレビュー"}</button>
+        <label>印刷設定<select value={preset} disabled={busy} onChange={event => setPreset(event.currentTarget.value as AuthoringPrintPreset)}><option value="bunko">文庫</option><option value="web-novel">Web小説</option><option value="genko">原稿用紙</option></select></label>
+        <button type="button" disabled={busy || !preview} onClick={() => begin("print")}>印刷 / PDF</button>
+      </>}
+    </div>
+    {preview && <section className="authoring-artifact-preview" aria-label="出力テキストプレビュー"><h4>テキストプレビュー</h4>{preview.truncated && <p role="status">先頭 40,000 文字を表示しています。印刷は封印済み出力の全体を使います。</p>}<pre>{preview.text}</pre></section>}
+    {busy && <p role="status" aria-live="polite">出力を準備しています…</p>}
+    {error && <p className="authoring-error" role="alert">{error}</p>}
+    <dialog ref={dialog} className="authoring-preflight" aria-labelledby="authoring-preflight-title" onCancel={event => { event.preventDefault(); cancel(); }}>
+      <h2 id="authoring-preflight-title">出力前の確認</h2>
+      <p>未確認の項目が {unconfirmed} 件あります。確認を続けても出力は妨げられません。</p>
+      <ul>{EXPORT_PREFLIGHT_ITEMS.map((label, index) => <li key={label}><label><input type="checkbox" checked={checked[index] ?? false} onChange={event => setChecked(current => current.map((value, currentIndex) => currentIndex === index ? event.currentTarget.checked : value))} />{label}</label></li>)}</ul>
+      <div className="authoring-form-actions"><button type="button" onClick={cancel}>キャンセル</button><button type="button" disabled={busy} onClick={continueEffect}>{unconfirmed ? "未確認の項目を残して続ける" : "確認して続ける"}</button></div>
+    </dialog>
+  </section>;
 }
 
 function Table({ rows, columns, label }: { readonly rows: readonly Record<string, unknown>[]; readonly columns: readonly AuthoringColumn[]; readonly label: string }): ReactElement {
@@ -112,21 +248,121 @@ function Table({ rows, columns, label }: { readonly rows: readonly Record<string
   </tbody></table></div>;
 }
 
+type FormValues = Record<string, unknown>;
+
+function blankValue(field: AuthoringScalarField): string | boolean | string[] {
+  if (field.type === "boolean") return false;
+  if (field.type === "multi-reference" || field.type === "ordered-list") return [];
+  return "";
+}
+
+function initialScalarValue(field: AuthoringScalarField, value: unknown): unknown {
+  if (field.type === "boolean") return typeof value === "boolean" ? value : undefined;
+  if (field.type === "integer") return typeof value === "number" && Number.isSafeInteger(value) ? value : undefined;
+  if (field.type === "multi-reference" || field.type === "ordered-list") {
+    return Array.isArray(value) && value.every(item => typeof item === "string") ? [...value] : undefined;
+  }
+  return typeof value === "string" ? value : undefined;
+}
+
+function initialFormValues(fields: readonly AuthoringField[], data: AuthoringJson): FormValues {
+  const values: FormValues = {};
+  for (const field of fields) {
+    if (field.initial_value === undefined) continue;
+    try {
+      const value = resolveAuthoringTemplate(field.initial_value, data);
+      if (field.type === "record-list") {
+        if (Array.isArray(value)) values[field.id] = value;
+      } else {
+        const initial = initialScalarValue(field, value);
+        if (initial !== undefined) values[field.id] = initial;
+      }
+    } catch { /* Data may not exist until the declared read action runs. */ }
+  }
+  return values;
+}
+
+function FormScalarInput({ field, value, disabled, onChange }: {
+  readonly field: AuthoringScalarField;
+  readonly value: unknown;
+  readonly disabled: boolean;
+  onChange(value: unknown): void;
+}): ReactElement {
+  if (field.type === "boolean") return <input type="checkbox" disabled={disabled} checked={Boolean(value)} onChange={event => onChange(event.currentTarget.checked)} />;
+  if (field.type === "enum") return <select disabled={disabled} required={field.required} value={plainText(value)} onChange={event => onChange(event.currentTarget.value)}><option value="">選択してください</option>{(field.options ?? []).map(option => <option key={option.value} value={option.value}>{option.label}</option>)}</select>;
+  if (field.type === "multi-reference") return <select multiple disabled={disabled} required={field.required} value={Array.isArray(value) ? value.filter((item): item is string => typeof item === "string") : []} onChange={event => onChange(Array.from(event.currentTarget.selectedOptions, option => option.value))}>{(field.options ?? []).map(option => <option key={option.value} value={option.value}>{option.label}</option>)}</select>;
+  if (field.type === "ordered-list") return <textarea rows={4} disabled={disabled} required={field.required} placeholder={field.placeholder} value={Array.isArray(value) ? value.filter((item): item is string => typeof item === "string").join("\n") : ""} onChange={event => onChange(event.currentTarget.value.split("\n"))} />;
+  return <input type={field.type === "integer" ? "number" : "text"} disabled={disabled} required={field.required} minLength={field.min_length} maxLength={field.max_length} placeholder={field.placeholder} value={plainText(value)} onChange={event => onChange(event.currentTarget.value)} />;
+}
+
+function RecordListField({ field, value, disabled, onChange }: {
+  readonly field: Extract<AuthoringField, { type: "record-list" }>;
+  readonly value: unknown;
+  readonly disabled: boolean;
+  onChange(value: AuthoringJson[]): void;
+}): ReactElement {
+  const rows = recordRows(value);
+  const minItems = Math.max(field.required ? 1 : 0, field.min_items ?? 0);
+  const maxItems = Math.min(256, field.max_items ?? 128);
+  const changeRow = (index: number, key: string, nextValue: unknown) => {
+    const next = rows.map(row => ({ ...row }));
+    next[index] = { ...next[index], [key]: nextValue };
+    onChange(next as AuthoringJson[]);
+  };
+  const addRow = () => {
+    if (rows.length >= maxItems) return;
+    const row = Object.fromEntries(field.fields.map(item => [item.id, blankValue(item)]));
+    onChange([...rows.map(item => cloneJson(item, 0) as Record<string, AuthoringJson>), row] as AuthoringJson[]);
+  };
+  const removeRow = (index: number) => onChange(rows.filter((_, current) => current !== index).map(row => cloneJson(row, 0) as Record<string, AuthoringJson>) as AuthoringJson[]);
+  const moveRow = (index: number, offset: number) => {
+    const target = index + offset;
+    if (target < 0 || target >= rows.length) return;
+    const next = rows.map(row => cloneJson(row, 0) as Record<string, AuthoringJson>);
+    [next[index], next[target]] = [next[target]!, next[index]!];
+    onChange(next as AuthoringJson[]);
+  };
+  return <fieldset className="authoring-record-list" disabled={disabled}>
+    <legend>{field.label}{field.required && <span aria-hidden="true"> *</span>}</legend>
+    {rows.map((row, index) => <fieldset className="authoring-record-row" key={plainText(field.key_field ? readPath(row, field.key_field) : row.id) || `${field.id}-${index}`}>
+      <legend>{field.label} {index + 1}</legend>
+      {field.fields.map(child => <label className="authoring-field" key={child.id}><span>{child.label}{child.required && <span aria-hidden="true"> *</span>}</span><FormScalarInput field={child} value={row[child.id]} disabled={disabled} onChange={next => changeRow(index, child.id, next)} /></label>)}
+      <div className="authoring-record-actions"><button type="button" disabled={index === 0} aria-label={`${field.label} ${index + 1}を上へ`} onClick={() => moveRow(index, -1)}>上へ</button><button type="button" disabled={index === rows.length - 1} aria-label={`${field.label} ${index + 1}を下へ`} onClick={() => moveRow(index, 1)}>下へ</button><button type="button" disabled={rows.length <= minItems} aria-label={`${field.label} ${index + 1}を削除`} onClick={() => removeRow(index)}>削除</button></div>
+    </fieldset>)}
+    {rows.length < maxItems && <button type="button" onClick={addRow}>項目を追加</button>}
+    <p className="field-help">順序を保ったまま編集できます。画面にない項目はそのまま保持されます。</p>
+  </fieldset>;
+}
+
 function FormWidget({ node, data, invoke, busy }: {
   readonly node: Extract<AuthoringWidget, { type: "form" }>;
   readonly data: AuthoringJson;
-  invoke(binding: AuthoringActionBinding, context?: AuthoringJson): void;
+  invoke(binding: AuthoringActionBinding, event: Event, context?: AuthoringJson): void;
   readonly busy: boolean;
 }): ReactElement {
-  const [values, setValues] = useState<Record<string, string | boolean | string[]>>({});
+  const initialValues = useMemo(() => initialFormValues(node.fields, data), [node.fields, data]);
+  const [values, setValues] = useState<FormValues>(initialValues);
+  useEffect(() => setValues(initialValues), [initialValues]);
   const [error, setError] = useState("");
-  const update = (field: AuthoringField, value: string | boolean | string[]) => setValues(current => ({ ...current, [field.id]: value }));
+  const update = (field: AuthoringField, value: unknown) => setValues(current => ({ ...current, [field.id]: value }));
   const submit = (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
     const validation = node.fields.find(field => {
       const value = values[field.id];
       const empty = value === undefined || value === "" || (Array.isArray(value) && !value.length);
       if (field.required && empty) { setError(field.validation_message || `${field.label}を入力してください。`); return true; }
+      if (field.type === "record-list") {
+        const rows = recordRows(value);
+        if (rows.length < Math.max(field.required ? 1 : 0, field.min_items ?? 0) || rows.length > Math.min(256, field.max_items ?? 128)) { setError(field.validation_message || `${field.label}の項目数を確認してください。`); return true; }
+        const invalid = rows.some((row, index) => field.fields.some(child => {
+          const childValue = row[child.id];
+          const childEmpty = childValue === undefined || childValue === "" || (Array.isArray(childValue) && !childValue.length);
+          if (child.required && childEmpty) { setError(`${field.label} ${index + 1}: ${child.validation_message || `${child.label}を入力してください。`}`); return true; }
+          if (typeof childValue === "string" && ((child.min_length !== undefined && childValue.length < child.min_length) || (child.max_length !== undefined && childValue.length > child.max_length))) { setError(`${field.label} ${index + 1}: ${child.validation_message || `${child.label}の入力を確認してください。`}`); return true; }
+          return false;
+        }));
+        if (invalid) return true;
+      }
       if (typeof value === "string" && ((field.min_length !== undefined && value.length < field.min_length) || (field.max_length !== undefined && value.length > field.max_length))) {
         setError(field.validation_message || `${field.label}の入力を確認してください。`); return true;
       }
@@ -135,7 +371,7 @@ function FormWidget({ node, data, invoke, busy }: {
     if (validation) return;
     setError("");
     try {
-      invoke(node.submit, { ...asRecord(data), form: formValuesToJson(node.fields, values) });
+      invoke(node.submit, event.nativeEvent, { ...asRecord(data), form: formValuesToJson(node.fields, values) });
     } catch (cause) {
       setError(cause instanceof Error ? cause.message : "入力内容を確認してください。");
     }
@@ -143,32 +379,60 @@ function FormWidget({ node, data, invoke, busy }: {
   const labelId = `authoring-form-${node.id}`;
   return <form className="authoring-form" aria-labelledby={labelId} onSubmit={submit}>
     {node.title && <h3 id={labelId}>{node.title}</h3>}{node.description && <p>{node.description}</p>}
-    {node.fields.map(field => <label className="authoring-field" key={field.id}>
-      <span>{field.label}{field.required && <span aria-hidden="true"> *</span>}</span>
-      {field.type === "boolean" ? <input type="checkbox" checked={Boolean(values[field.id])} onChange={event => update(field, event.currentTarget.checked)} />
-        : field.type === "enum" ? <select required={field.required} value={plainText(values[field.id])} onChange={event => update(field, event.currentTarget.value)}><option value="">選択してください</option>{(field.options ?? []).map(option => <option key={option.value} value={option.value}>{option.label}</option>)}</select>
-          : field.type === "multi-reference" ? <select multiple required={field.required} value={Array.isArray(values[field.id]) ? values[field.id] as string[] : []} onChange={event => update(field, Array.from(event.currentTarget.selectedOptions, option => option.value))}>{(field.options ?? []).map(option => <option key={option.value} value={option.value}>{option.label}</option>)}</select>
-            : field.type === "ordered-list" ? <textarea rows={4} required={field.required} placeholder={field.placeholder} value={Array.isArray(values[field.id]) ? (values[field.id] as string[]).join("\n") : ""} onChange={event => update(field, event.currentTarget.value.split("\n"))} />
-              : <input type={field.type === "integer" ? "number" : "text"} required={field.required} minLength={field.min_length} maxLength={field.max_length} placeholder={field.placeholder} value={plainText(values[field.id])} onChange={event => update(field, field.type === "integer" ? event.currentTarget.value : event.currentTarget.value)} />}
-    </label>)}
+    {node.fields.map(field => field.type === "record-list"
+      ? <RecordListField key={field.id} field={field} value={values[field.id]} disabled={busy} onChange={value => update(field, value)} />
+      : <label className="authoring-field" key={field.id}><span>{field.label}{field.required && <span aria-hidden="true"> *</span>}</span><FormScalarInput field={field} value={values[field.id]} disabled={busy} onChange={value => update(field, value)} /></label>)}
     {error && <p className="authoring-error" role="alert">{error}</p>}
-    <div className="authoring-form-actions"><button type="submit" disabled={busy || !validBinding(node.submit)}>送信</button>{node.cancel_action && <button type="button" disabled={busy} onClick={() => invoke(node.cancel_action!)}>キャンセル</button>}</div>
+    <div className="authoring-form-actions"><button type="submit" disabled={busy || !validBinding(node.submit)}>送信</button>{node.cancel_action && <button type="button" disabled={busy} onClick={event => invoke(node.cancel_action!, event.nativeEvent)}>キャンセル</button>}</div>
   </form>;
 }
 
-export function formValuesToJson(fields: readonly AuthoringField[], values: Readonly<Record<string, string | boolean | string[]>>): AuthoringJson {
+function scalarValueToJson(field: AuthoringScalarField, value: unknown): AuthoringJson | undefined {
+  if (field.type === "integer") {
+    if (value === "" || value === undefined) return undefined;
+    if (typeof value === "number") {
+      if (!Number.isSafeInteger(value)) throw new Error(`${field.label}の値が範囲外です。`);
+      return value;
+    }
+    if (typeof value !== "string" || !/^-?(?:0|[1-9][0-9]*)$/u.test(value)) throw new Error(`${field.label}は整数で入力してください。`);
+    const integer = Number(value);
+    if (!Number.isSafeInteger(integer)) throw new Error(`${field.label}の値が範囲外です。`);
+    return integer;
+  }
+  if (field.type === "boolean") {
+    if (typeof value !== "boolean") throw new Error(`${field.label}の入力を確認してください。`);
+    return value;
+  }
+  if (field.type === "multi-reference" || field.type === "ordered-list") {
+    if (!Array.isArray(value) || !value.every(item => typeof item === "string")) throw new Error(`${field.label}の入力を確認してください。`);
+    return [...value];
+  }
+  if (typeof value !== "string") throw new Error(`${field.label}の入力を確認してください。`);
+  return value;
+}
+
+export function formValuesToJson(fields: readonly AuthoringField[], values: Readonly<Record<string, unknown>>): AuthoringJson {
   const output: Record<string, AuthoringJson> = {};
   for (const field of fields) {
     const value = values[field.id];
     if (value === undefined) continue;
-    if (field.type === "integer") {
-      if (value === "") continue;
-      if (typeof value !== "string" || !/^-?(?:0|[1-9][0-9]*)$/u.test(value)) throw new Error(`${field.label}は整数で入力してください。`);
-      const integer = Number(value);
-      if (!Number.isSafeInteger(integer)) throw new Error(`${field.label}の値が範囲外です。`);
-      output[field.id] = integer;
+    if (field.type === "record-list") {
+      if (!Array.isArray(value)) throw new Error(`${field.label}の入力を確認してください。`);
+      output[field.id] = value.map((entry, index) => {
+        if (!isRecord(entry)) throw new Error(`${field.label} ${index + 1}の入力を確認してください。`);
+        const row = cloneJson(entry, 0);
+        if (!isRecord(row)) throw new Error(`${field.label} ${index + 1}の入力を確認してください。`);
+        for (const child of field.fields) {
+          if (!Object.hasOwn(entry, child.id)) continue;
+          const converted = scalarValueToJson(child, entry[child.id]);
+          if (converted === undefined) delete row[child.id];
+          else row[child.id] = converted;
+        }
+        return row as AuthoringJson;
+      });
     } else {
-      output[field.id] = Array.isArray(value) ? [...value] : value;
+      const converted = scalarValueToJson(field, value);
+      if (converted !== undefined) output[field.id] = converted;
     }
   }
   return output;
@@ -176,6 +440,11 @@ export function formValuesToJson(fields: readonly AuthoringField[], values: Read
 
 function asRecord(value: unknown): Record<string, AuthoringJson> {
   return isRecord(value) ? value as Record<string, AuthoringJson> : {};
+}
+
+function composeSurfaceData(surface: AuthoringSurfaceProps["surface"], data: AuthoringJson): Record<string, AuthoringJson> {
+  const base = asRecord(data);
+  return { ...base, context: { ...asRecord(surface.context), ...asRecord(base.context) } };
 }
 
 function contextLabel(context: Readonly<Record<string, unknown>>): string {
@@ -186,10 +455,11 @@ function contextLabel(context: Readonly<Record<string, unknown>>): string {
   return "";
 }
 
-function OutlineWidget({ node, data, invoke, busy }: {
+function OutlineWidget({ node, data, invoke, navigate, busy }: {
   readonly node: Extract<AuthoringWidget, { type: "outline" }>;
   readonly data: AuthoringJson;
-  invoke(binding: AuthoringActionBinding, context?: AuthoringJson): void;
+  invoke(binding: AuthoringActionBinding, event: Event, context?: AuthoringJson): void;
+  navigate(binding: AuthoringNavigationTemplate, event: Event, context?: AuthoringJson): void;
   readonly busy: boolean;
 }): ReactElement {
   const items = useMemo(() => rowsForOutline(isDataKey(node.items) ? dataAtPath(data, node.items.data_key) : node.items), [data, node.items]);
@@ -209,36 +479,42 @@ function OutlineWidget({ node, data, invoke, busy }: {
     else if (event.key === "Home" || event.key === "End") { event.preventDefault(); const target = event.key === "Home" ? visible[0] : visible.at(-1); if (target) { setActiveId(target.id); requestAnimationFrame(() => document.querySelector<HTMLButtonElement>(`[data-authoring-tree-id="${CSS.escape(target.id)}"]`)?.focus()); } }
     else if (event.key === "ArrowRight" && item.children?.length) { event.preventDefault(); setExpanded(current => new Set(current).add(item.id)); }
     else if (event.key === "ArrowLeft" && expanded.has(item.id)) { event.preventDefault(); setExpanded(current => { const next = new Set(current); next.delete(item.id); return next; }); }
-    else if (event.key === "Enter") { event.preventDefault(); const action = item.action ?? node.activate; if (action) invoke(action, { ...asRecord(data), item: item as unknown as AuthoringJson }); }
+    else if (event.key === "Enter") { event.preventDefault(); activate(item, event.nativeEvent); }
     else if (event.key === " ") { event.preventDefault(); setSelectedId(item.id); }
   };
+  const activate = (item: AuthoringOutlineRow, event: Event) => {
+    const context = { ...asRecord(data), item: item as unknown as AuthoringJson };
+    if (item.navigation) navigate(item.navigation, event, context);
+    else { const action = item.action ?? node.activate; if (action) invoke(action, event, context); }
+  };
   const render = (rows: readonly AuthoringOutlineRow[]): ReactElement => <ul role="group">{rows.map(item => <li role="treeitem" aria-expanded={item.children?.length ? expanded.has(item.id) : undefined} aria-selected={selectedId === item.id} key={item.id}>
-    <button type="button" className="authoring-tree-row" data-authoring-tree-id={item.id} tabIndex={activeId === item.id ? 0 : -1} onFocus={() => setActiveId(item.id)} onKeyDown={event => handleKey(event, item)} onClick={() => { setSelectedId(item.id); const action = item.action ?? node.activate; if (action) invoke(action, { ...asRecord(data), item: item as unknown as AuthoringJson }); }} disabled={busy}>
+    <button type="button" className="authoring-tree-row" data-authoring-tree-id={item.id} tabIndex={activeId === item.id ? 0 : -1} onFocus={() => setActiveId(item.id)} onKeyDown={event => handleKey(event, item)} onClick={event => { setSelectedId(item.id); activate(item, event.nativeEvent); }} disabled={busy}>
       {item.children?.length ? <span aria-hidden="true">{expanded.has(item.id) ? "▾" : "▸"}</span> : <span aria-hidden="true">·</span>}<span>{item.title}</span>{item.path && <small>{item.path}</small>}
     </button>{item.children?.length && expanded.has(item.id) ? render(item.children) : null}
   </li>)}</ul>;
-  return <section className="authoring-widget" aria-labelledby={`authoring-widget-${node.id}`}><h3 id={`authoring-widget-${node.id}`}>{node.title || "作品構成"}</h3>{node.description && <p>{node.description}</p>}{items.length ? <div className="authoring-outline" role="tree" aria-label={node.title || "構成"}>{render(items)}</div> : <p className="authoring-empty">表示できる項目はありません。</p>}<Pagination previous={node.previous_action} next={node.next_action} invoke={binding => invoke(binding)} disabled={busy} /></section>;
+  return <section className="authoring-widget" aria-labelledby={`authoring-widget-${node.id}`}><h3 id={`authoring-widget-${node.id}`}>{node.title || "作品構成"}</h3>{node.description && <p>{node.description}</p>}{items.length ? <div className="authoring-outline" role="tree" aria-label={node.title || "構成"}>{render(items)}</div> : <p className="authoring-empty">表示できる項目はありません。</p>}<Pagination previous={node.previous_action} next={node.next_action} previousWhen={node.previous_action_when} nextWhen={node.next_action_when} data={data} invoke={(binding, event) => invoke(binding, event)} disabled={busy} /></section>;
 }
 
-function WidgetRenderer({ node, data, invoke, busy }: {
+function WidgetRenderer({ node, data, invoke, navigate, busy }: {
   readonly node: AuthoringWidget;
   readonly data: AuthoringJson;
-  invoke(binding: AuthoringActionBinding, context?: AuthoringJson): void;
+  invoke(binding: AuthoringActionBinding, event: Event, context?: AuthoringJson): void;
+  navigate(binding: AuthoringNavigationTemplate, event: Event, context?: AuthoringJson): void;
   readonly busy: boolean;
 }): ReactElement {
-  if (node.type === "outline") return <OutlineWidget node={node} data={data} invoke={invoke} busy={busy} />;
+  if (node.type === "outline") return <OutlineWidget node={node} data={data} invoke={invoke} navigate={navigate} busy={busy} />;
   if (node.type === "form") return <FormWidget node={node} data={data} invoke={invoke} busy={busy} />;
-  if (node.type === "tabs") return <TabsWidget node={node} data={data} invoke={invoke} busy={busy} />;
+  if (node.type === "tabs") return <TabsWidget node={node} data={data} invoke={invoke} navigate={navigate} busy={busy} />;
   if (node.type === "list") {
     const items = recordRows(isDataKey(node.items) ? dataAtPath(data, node.items.data_key) : node.items);
     return <section className="authoring-widget" aria-labelledby={`authoring-widget-${node.id}`}><h3 id={`authoring-widget-${node.id}`}>{node.title}</h3>{node.description && <p>{node.description}</p>}{items.length ? <ul className="authoring-list">{items.map((item, index) => <li key={plainText(item.id) || `${node.id}-${index}`}>
-      {node.item_action && <button type="button" onClick={() => invoke(node.item_action!, { ...asRecord(data), item: item as unknown as AuthoringJson })} disabled={busy}><strong>{plainText(readPath(item, node.primary))}</strong>{node.secondary && <small>{plainText(readPath(item, node.secondary))}</small>}</button>}
-      {!node.item_action && <><strong>{plainText(readPath(item, node.primary))}</strong>{node.secondary && <small>{plainText(readPath(item, node.secondary))}</small>}</>}
-    </li>)}</ul> : <p className="authoring-empty">表示できる項目はありません。</p>}<Pagination previous={node.previous_action} next={node.next_action} invoke={binding => invoke(binding)} disabled={busy} /></section>;
+      {(node.item_action || node.item_navigation) && <button type="button" onClick={event => { const context = { ...asRecord(data), item: item as unknown as AuthoringJson }; if (node.item_navigation) navigate(node.item_navigation, event.nativeEvent, context); else if (node.item_action) invoke(node.item_action, event.nativeEvent, context); }} disabled={busy}><strong>{plainText(readPath(item, node.primary))}</strong>{node.secondary && <small>{plainText(readPath(item, node.secondary))}</small>}</button>}
+      {!node.item_action && !node.item_navigation && <><strong>{plainText(readPath(item, node.primary))}</strong>{node.secondary && <small>{plainText(readPath(item, node.secondary))}</small>}</>}
+    </li>)}</ul> : <p className="authoring-empty">表示できる項目はありません。</p>}<Pagination previous={node.previous_action} next={node.next_action} previousWhen={node.previous_action_when} nextWhen={node.next_action_when} data={data} invoke={(binding, event) => invoke(binding, event)} disabled={busy} /></section>;
   }
   if (node.type === "table") {
     const rows = recordRows(isDataKey(node.rows) ? dataAtPath(data, node.rows.data_key) : node.rows);
-    return <section className="authoring-widget" aria-labelledby={`authoring-widget-${node.id}`}><h3 id={`authoring-widget-${node.id}`}>{node.title}</h3>{node.description && <p>{node.description}</p>}<Table rows={rows} columns={node.columns} label={node.title || "一覧"} /><Pagination previous={node.previous_action} next={node.next_action} invoke={binding => invoke(binding)} disabled={busy} /></section>;
+    return <section className="authoring-widget" aria-labelledby={`authoring-widget-${node.id}`}><h3 id={`authoring-widget-${node.id}`}>{node.title}</h3>{node.description && <p>{node.description}</p>}<Table rows={rows} columns={node.columns} label={node.title || "一覧"} /><Pagination previous={node.previous_action} next={node.next_action} previousWhen={node.previous_action_when} nextWhen={node.next_action_when} data={data} invoke={(binding, event) => invoke(binding, event)} disabled={busy} /></section>;
   }
   if (node.type === "detail") {
     const value = isDataKey(node.value) ? dataAtPath(data, node.value.data_key) : node.value;
@@ -258,7 +534,7 @@ function WidgetRenderer({ node, data, invoke, busy }: {
   }
   if (node.type === "evidence") {
     const items = recordRows(isDataKey(node.items) ? dataAtPath(data, node.items.data_key) : node.items);
-    return <section className="authoring-widget" aria-labelledby={`authoring-widget-${node.id}`}><h3 id={`authoring-widget-${node.id}`}>{node.title || "根拠"}</h3>{items.length ? <ol className="authoring-evidence">{items.map((item, index) => <li key={plainText(item.id) || `${node.id}-${index}`}><blockquote>{plainText(item.quote)}</blockquote><p>{plainText(item.path)}{typeof item.start === "number" ? ` · ${item.start}–${plainText(item.end)}` : ""}</p>{node.open_action && <button type="button" disabled={busy} onClick={() => invoke(node.open_action!, { ...asRecord(data), item: item as unknown as AuthoringJson })}>根拠を開く</button>}</li>)}</ol> : <p className="authoring-empty">根拠はありません。</p>}</section>;
+    return <section className="authoring-widget" aria-labelledby={`authoring-widget-${node.id}`}><h3 id={`authoring-widget-${node.id}`}>{node.title || "根拠"}</h3>{items.length ? <ol className="authoring-evidence">{items.map((item, index) => <li key={plainText(item.id) || `${node.id}-${index}`}><blockquote>{plainText(item.quote)}</blockquote><p>{plainText(item.path)}{typeof item.start === "number" ? ` · ${item.start}–${plainText(item.end)}` : ""}</p>{(node.open_action || node.open_navigation) && <button type="button" disabled={busy} onClick={event => { const context = { ...asRecord(data), item: item as unknown as AuthoringJson }; if (node.open_navigation) navigate(node.open_navigation, event.nativeEvent, context); else if (node.open_action) invoke(node.open_action, event.nativeEvent, context); }}>根拠を開く</button>}</li>)}</ol> : <p className="authoring-empty">根拠はありません。</p>}</section>;
   }
   if (node.type === "diff") {
     const files = recordRows(isDataKey(node.files) ? dataAtPath(data, node.files.data_key) : node.files);
@@ -272,40 +548,109 @@ function WidgetRenderer({ node, data, invoke, busy }: {
   return <section className="authoring-widget" aria-labelledby={`authoring-widget-${node.id}`}><h3 id={`authoring-widget-${node.id}`}>{node.title}</h3><p className="authoring-unavailable">この表示形式には対応していません。</p></section>;
 }
 
-function TabsWidget({ node, data, invoke, busy }: {
+function TabsWidget({ node, data, invoke, navigate, busy }: {
   readonly node: Extract<AuthoringWidget, { type: "tabs" }>;
   readonly data: AuthoringJson;
-  invoke(binding: AuthoringActionBinding, context?: AuthoringJson): void;
+  invoke(binding: AuthoringActionBinding, event: Event, context?: AuthoringJson): void;
+  navigate(binding: AuthoringNavigationTemplate, event: Event, context?: AuthoringJson): void;
   readonly busy: boolean;
 }): ReactElement {
   const [activeId, setActiveId] = useState(node.tabs[0]?.id ?? "");
   const active = node.tabs.find(tab => tab.id === activeId) ?? node.tabs[0];
-  return <section className="authoring-widget" aria-label={node.title || "詳細"}><div className="authoring-tabs" role="tablist" aria-label={node.title || "詳細"}>{node.tabs.map(tab => <button type="button" role="tab" id={`authoring-tab-${tab.id}`} aria-selected={active?.id === tab.id} aria-controls={`authoring-tabpanel-${tab.id}`} tabIndex={active?.id === tab.id ? 0 : -1} key={tab.id} onClick={() => setActiveId(tab.id)}>{tab.title}</button>)}</div>{active && <div role="tabpanel" id={`authoring-tabpanel-${active.id}`} aria-labelledby={`authoring-tab-${active.id}`}><WidgetRenderer node={active.body} data={data} invoke={invoke} busy={busy} /></div>}</section>;
+  return <section className="authoring-widget" aria-label={node.title || "詳細"}><div className="authoring-tabs" role="tablist" aria-label={node.title || "詳細"}>{node.tabs.map(tab => <button type="button" role="tab" id={`authoring-tab-${tab.id}`} aria-selected={active?.id === tab.id} aria-controls={`authoring-tabpanel-${tab.id}`} tabIndex={active?.id === tab.id ? 0 : -1} key={tab.id} onClick={() => setActiveId(tab.id)}>{tab.title}</button>)}</div>{active && <div role="tabpanel" id={`authoring-tabpanel-${active.id}`} aria-labelledby={`authoring-tab-${active.id}`}><WidgetRenderer node={active.body} data={data} invoke={invoke} navigate={navigate} busy={busy} /></div>}</section>;
 }
 
-export function AuthoringSurface({ surface, data: initialData = {}, status = "ready", message, onInvoke, onClose, className = "" }: AuthoringSurfaceProps): ReactElement {
+export function AuthoringSurface({ surface, data: initialData = EMPTY_DATA, status = "ready", message, onInvoke, onRead, onNavigate, onClose, className = "" }: AuthoringSurfaceProps): ReactElement {
   const [lastActionResult, setLastActionResult] = useState<AuthoringJson | undefined>();
-  const data = useMemo(() => lastActionResult === undefined ? initialData : { ...asRecord(initialData), last_action_result: lastActionResult }, [initialData, lastActionResult]);
+  const [loadResults, setLoadResults] = useState<Record<string, AuthoringJson>>({});
+  const [artifact, setArtifact] = useState<AuthoringHostArtifact | undefined>();
+  const data = useMemo(() => {
+    const base = composeSurfaceData(surface, initialData);
+    const load = { ...asRecord(base.load), ...loadResults };
+    return {
+      ...base,
+      ...(Object.keys(loadResults).length ? { load } : {}),
+      ...(lastActionResult === undefined ? {} : { last_action_result: lastActionResult }),
+    };
+  }, [surface, initialData, lastActionResult, loadResults]);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
-  const invoke = useCallback(async (binding: AuthoringActionBinding, context: AuthoringJson = data): Promise<void> => {
+  const readController = useRef<AbortController | null>(null);
+  useEffect(() => () => readController.current?.abort(), []);
+  const runAction = useCallback(async (binding: AuthoringActionBinding, context: AuthoringJson, event: Event) => {
+    const resolved = Object.fromEntries(Object.entries(binding.input_template).map(([key, template]) => [key, resolveAuthoringTemplate(template, context)]));
+    if (!isRecord(resolved)) throw new Error("An action input must resolve to a JSON object.");
+    return onInvoke({ actionId: binding.action_id, input: resolved as Record<string, AuthoringJson>, event });
+  }, [onInvoke]);
+  const invoke = useCallback(async (binding: AuthoringActionBinding, event: Event, context: AuthoringJson = data): Promise<void> => {
     if (!validBinding(binding) || busy) return;
-    setBusy(true); setError("");
+    setBusy(true); setError(""); setArtifact(undefined);
     try {
-      const resolved = Object.fromEntries(Object.entries(binding.input_template).map(([key, template]) => [key, resolveAuthoringTemplate(template, context)]));
-      if (!isRecord(resolved)) throw new Error("An action input must resolve to a JSON object.");
-      setLastActionResult(await onInvoke({ actionId: binding.action_id, input: resolved as Record<string, AuthoringJson> }));
+      const output = await runAction(binding, context, event);
+      if (!output.action_result.ok) throw new Error(`${output.action_result.error.code}: ${output.action_result.error.message}`);
+      setLastActionResult(cloneJson(output.action_result.value, 0));
+      setArtifact(output.artifact);
     } catch (cause) { setError(cause instanceof Error ? cause.message : "操作を完了できませんでした。"); }
     finally { setBusy(false); }
-  }, [busy, data, onInvoke]);
+  }, [busy, data, runAction]);
+  const navigate = useCallback(async (binding: AuthoringNavigationTemplate, event: Event, context: AuthoringJson = data): Promise<void> => {
+    if (!onNavigate) { setError("Host navigation is unavailable."); return; }
+    if (busy) return;
+    setBusy(true); setError(""); setArtifact(undefined);
+    try {
+      const resolved = resolveAuthoringNavigation(binding, context);
+      await onNavigate(event, resolved.target, resolved.intent);
+    } catch (cause) { setError(cause instanceof Error ? cause.message : "移動できませんでした。"); }
+    finally { setBusy(false); }
+  }, [busy, data, onNavigate]);
   const initialStatus = status === "loading" || status === "partial" || status === "stale" || status === "unavailable" || status === "failure";
-  const loadAction = surface.body.load_action;
+  const loadActions = surface.body.load_actions?.length
+    ? surface.body.load_actions
+    : surface.body.load_action ? [{ key: "", ...surface.body.load_action }] : [];
+  const load = useCallback(async () => {
+    if (busy || !loadActions.length) return;
+    readController.current?.abort();
+    const controller = new AbortController();
+    readController.current = controller;
+    setBusy(true); setError("");
+    const nextResults = { ...loadResults };
+    let latest: AuthoringJson | undefined = lastActionResult;
+    try {
+      for (const declaration of loadActions) {
+        const base = composeSurfaceData(surface, initialData);
+        const context: AuthoringJson = {
+          ...base,
+          ...(Object.keys(nextResults).length ? { load: { ...asRecord(base.load), ...nextResults } } : {}),
+          ...(latest === undefined ? {} : { last_action_result: latest }),
+        };
+        const { key, ...binding } = declaration;
+        const resolved = Object.fromEntries(Object.entries(binding.input_template).map(([inputKey, template]) => [inputKey, resolveAuthoringTemplate(template, context)]));
+        if (!isRecord(resolved)) throw new Error("A read input must resolve to a JSON object.");
+        const result = await onRead({ actionId: binding.action_id, input: resolved as Record<string, AuthoringJson>, signal: controller.signal });
+        if (controller.signal.aborted) return;
+        if (!result.ok) throw new Error(`${result.error.code}: ${result.error.message}`);
+        latest = cloneJson(result.value, 0);
+        if (key) nextResults[key] = latest;
+      }
+      if (controller.signal.aborted) return;
+      setLoadResults(nextResults);
+      if (latest !== undefined) setLastActionResult(latest);
+      setArtifact(undefined);
+    } catch (cause) {
+      if (!controller.signal.aborted) setError(cause instanceof Error ? cause.message : "読み込みを完了できませんでした。");
+    } finally {
+      if (readController.current === controller) readController.current = null;
+      if (!controller.signal.aborted) setBusy(false);
+    }
+  }, [busy, initialData, lastActionResult, loadActions, loadResults, onRead, surface]);
+  const hasLoadAction = loadActions.length > 0;
   return <section className={`authoring-surface authoring-surface-${surface.kind} ${className}`.trim()} aria-labelledby={`authoring-surface-${surface.id}`}>
     <header className="authoring-surface-header"><div>{contextLabel(surface.context) && <p className="authoring-surface-context">{contextLabel(surface.context)}</p>}<h2 id={`authoring-surface-${surface.id}`}>{surface.title}</h2></div>{onClose && <button type="button" className="authoring-surface-close" onClick={onClose} aria-label={`${surface.title}を閉じる`}>閉じる</button>}</header>
     {initialStatus && <p className={`authoring-state authoring-state-${status}`} role="status" aria-live="polite">{message || statusMessage(status)}</p>}
     {error && <p className="authoring-error" role="alert">{error}</p>}
-    {loadAction && <button type="button" className="authoring-load-action" disabled={busy || status === "unavailable" || status === "failure"} onClick={() => void invoke(loadAction)}>{lastActionResult === undefined ? "読み込む" : "更新"}</button>}
-    {status !== "unavailable" && status !== "failure" && <div className="authoring-surface-body" aria-busy={busy}>{busy && <p className="authoring-submitting" role="status">処理中…</p>}<WidgetRenderer node={surface.body} data={data} invoke={(binding, context) => void invoke(binding, context)} busy={busy} /></div>}
+    {hasLoadAction && <button type="button" className="authoring-load-action" disabled={busy || status === "unavailable" || status === "failure"} onClick={() => void load()}>{lastActionResult === undefined ? "読み込む" : "更新"}</button>}
+    {status !== "unavailable" && status !== "failure" && <div className="authoring-surface-body" aria-busy={busy}>{busy && <p className="authoring-submitting" role="status">処理中…</p>}<WidgetRenderer node={surface.body} data={data} invoke={(binding, event, context) => void invoke(binding, event, context)} navigate={(binding, event, context) => void navigate(binding, event, context)} busy={busy} /></div>}
+    {artifact && <ArtifactResultToolbar artifact={artifact} />}
   </section>;
 }
 

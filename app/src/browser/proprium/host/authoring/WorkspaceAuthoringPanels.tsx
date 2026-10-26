@@ -1,6 +1,8 @@
 import type { WorkspacePanel } from "../../../../application/contracts.js";
 import { AuthoringSurface } from "./AuthoringSurface.js";
-import type { AuthoringJson, AuthoringSurfaceDeclaration, AuthoringSurfaceStatus } from "./types.js";
+import type { ActionResult } from "../../authoring/types.js";
+import type { AuthoringInvocationOutput, AuthoringJson, AuthoringNavigationTarget, AuthoringSurfaceDeclaration, AuthoringSurfaceStatus, AuthoringNavigationTemplate, AuthoringReadInvocation } from "./types.js";
+import { validateAuthoringSurfaceDeclaration } from "./validate.js";
 
 export interface AuthoringSurfaceRegistration {
   readonly pluginId: string;
@@ -11,8 +13,12 @@ export interface AuthoringSurfaceRegistration {
   readonly message?: string;
 }
 
-export type AuthoringActionInvoker = (pluginId: string, pluginVersion: string, actionId: string,
-  input: Readonly<Record<string, AuthoringJson>>) => Promise<AuthoringJson>;
+export type AuthoringActionInvoker = (event: Event, pluginId: string, actionId: string,
+  input: Readonly<Record<string, AuthoringJson>>) => Promise<AuthoringInvocationOutput>;
+export type AuthoringReadInvoker = (pluginId: string, actionId: string,
+  input: Readonly<Record<string, AuthoringJson>>, signal: AbortSignal) => Promise<ActionResult>;
+export type AuthoringNavigationHandler = (event: Event,
+  target: AuthoringNavigationTarget, intent: AuthoringNavigationTemplate["intent"]) => Promise<void>;
 
 /** Stable IDs preserve Host layout preferences across plugin updates. */
 export function authoringPanelId(pluginId: string, surfaceId: string): string {
@@ -33,26 +39,34 @@ export function authoringPanelId(pluginId: string, surfaceId: string): string {
 export function createAuthoringWorkspacePanels(
   registrations: readonly AuthoringSurfaceRegistration[],
   invoke: AuthoringActionInvoker,
+  read: AuthoringReadInvoker,
   onClose?: (panelId: string) => void,
+  onNavigate?: AuthoringNavigationHandler,
 ): WorkspacePanel[] {
   const ids = new Set<string>();
   const panels: WorkspacePanel[] = [];
   for (const registration of registrations) {
-    const id = authoringPanelId(registration.pluginId, registration.surface.id);
+    if (registration.surface.kind !== "panel") continue;
+    let surface: AuthoringSurfaceDeclaration;
+    try { surface = validateAuthoringSurfaceDeclaration(registration.surface); }
+    catch { continue; }
+    const id = authoringPanelId(registration.pluginId, surface.id);
     if (ids.has(id)) continue;
     ids.add(id);
     panels.push({
       id,
-      title: registration.surface.title,
+      title: surface.title,
       render: () => <AuthoringSurface
-        key={`${registration.pluginId}:${registration.pluginVersion}:${registration.surface.id}`}
+        key={`${registration.pluginId}:${registration.pluginVersion}:${surface.id}`}
         className="authoring-workspace-panel"
-        surface={registration.surface}
+        surface={surface}
         data={registration.data}
         status={registration.status}
         message={registration.message}
         onClose={onClose ? () => onClose(id) : undefined}
-        onInvoke={({ actionId, input }) => invoke(registration.pluginId, registration.pluginVersion, actionId, input)}
+        onInvoke={({ actionId, input, event }) => invoke(event, registration.pluginId, actionId, input)}
+        onRead={({ actionId, input, signal }: AuthoringReadInvocation) => read(registration.pluginId, actionId, input, signal)}
+        onNavigate={onNavigate}
       />,
     });
   }
