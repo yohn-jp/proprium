@@ -114,6 +114,103 @@ test("UI and MCP invoke the same typed action with Host-issued scope and pinned 
   assert.deepEqual(hostCalls[0]?.payload.scope, scope);
 });
 
+test("canonical camel-case action identifiers are admitted and dispatched", async () => {
+  const canonicalId = "speaker.ruleGates";
+  const action = descriptor({ action_id: canonicalId });
+  const h = createHarness({ installed: async () => installed({ descriptors: [action] }) });
+  const result = await h.dispatcher.invoke({ plugin_id, action_id: canonicalId, input: { query: "x" } }, principal());
+  assert.equal(result.ok, true);
+  assert.equal(h.executed.length, 1);
+});
+
+test("receipt reads use their exact read capability, independently of proposal permission", async () => {
+  const operation = "workspace.change.list";
+  const readAction = descriptor({ action_id: "proprium.research.receipts", required_capabilities: [operation] });
+  const runtime: ActionRuntime = { invoke: async options => {
+    const value = await options.resolve_host_call({ call_id: "receipt:1", operation, payload: { limit: 10 } });
+    return { request_id: options.request.request_id, scope: options.request.scope, snapshot: options.request.snapshot,
+      ok: true, value: { hits: (value as { items: unknown[] }).items.length }, warnings: [] };
+  } };
+  let readCalls = 0;
+  const exact = createHarness({
+    installed: async () => installed({ descriptors: [readAction], grants: [operation], host_capabilities: [operation] }), runtime,
+    capabilities: { proposalList: async payload => { readCalls++; assert.deepEqual(payload.scope, scope); return { items: [], next_cursor: null }; } },
+  });
+  const allowed = await exact.dispatcher.invoke({ plugin_id, action_id: readAction.action_id, input: { query: "x" } }, principal());
+  assert.equal(allowed.ok, true);
+  assert.equal(readCalls, 1);
+
+  const proposalOnlyAction = descriptor({ action_id: "proprium.research.receipts", required_capabilities: ["workspace.change.propose"] });
+  const proposalOnly = createHarness({
+    installed: async () => installed({ descriptors: [proposalOnlyAction], grants: ["workspace.change.propose"], host_capabilities: ["workspace.change.propose"] }),
+    runtime, capabilities: { proposalList: async () => { readCalls++; return { items: [], next_cursor: null }; } },
+  });
+  const denied = await proposalOnly.dispatcher.invoke({ plugin_id, action_id: proposalOnlyAction.action_id, input: { query: "x" } }, principal());
+  assert.equal(denied.ok, false);
+  if (!denied.ok) assert.equal(denied.error.code, "capability_denied");
+  assert.equal(readCalls, 1);
+});
+
+test("staged file reads require the Host-issued token and retain the original snapshot fields", async () => {
+  const pairedPlugin = "proprium.paired-writing";
+  const compileAction = descriptor({ plugin_id: pairedPlugin, action_id: "proprium.paired-writing.compile" });
+  const stagedSnapshot = { ...snapshot, id: "issued-stage" };
+  let validateCalls = 0;
+  let fileCalls = 0;
+  let releasedInvocation = "";
+  const h = createHarness({
+    authority: {
+      issue: async p => context(p, { staging_snapshot: "issued-stage" }),
+      issueChild: async (parent, caller_plugin_id) => context(principal("ui", parent.request_id + "child"), {
+        caller: "plugin", caller_plugin_id, staging_snapshot: parent.staging_snapshot,
+        grants: [cap], host_capabilities: [cap], signal: parent.signal,
+      }),
+      assertCurrent: async () => {}, isSnapshotCurrent: () => true,
+    },
+    runtime: { invoke: async options => {
+      const value = await options.resolve_host_call({ call_id: "stage-read:1", operation: "workspace.file.list",
+        payload: { snapshot: stagedSnapshot, prefix: "manuscript/" } });
+      return { request_id: options.request.request_id, scope: options.request.scope, snapshot: options.request.snapshot,
+        ok: true, value: { hits: (value as { entries: unknown[] }).entries.length }, warnings: [] };
+    } },
+    capabilities: {
+      validateStage: async (token, ctx) => { validateCalls++; assert.equal(token, "issued-stage"); assert.ok(ctx.call_stack.length > 0); assert.equal(ctx.invocation_id, "request-1"); },
+      releaseInvocation: async ctx => { releasedInvocation = ctx.invocation_id; assert.deepEqual(ctx.scope, scope); },
+      fileList: async payload => { fileCalls++; assert.deepEqual(payload.snapshot, stagedSnapshot); return { entries: [], next_cursor: null }; },
+    },
+  });
+  h.entries.set(pairedPlugin, installed({ plugin_id: pairedPlugin, descriptors: [compileAction] }));
+  const valid = await h.dispatcher.invoke({ plugin_id: pairedPlugin, action_id: compileAction.action_id, input: { query: "x" } }, principal());
+  assert.equal(valid.ok, true);
+  assert.equal(validateCalls, 1);
+  assert.equal(fileCalls, 1);
+  assert.equal(releasedInvocation, "request-1");
+
+  const forged = createHarness({
+    authority: {
+      issue: async p => context(p, { staging_snapshot: "issued-stage" }),
+      issueChild: async (parent, caller_plugin_id) => context(principal("ui", parent.request_id + "child"), {
+        caller: "plugin", caller_plugin_id, staging_snapshot: parent.staging_snapshot,
+        grants: [cap], host_capabilities: [cap], signal: parent.signal,
+      }),
+      assertCurrent: async () => {}, isSnapshotCurrent: () => true,
+    },
+    runtime: { invoke: async options => {
+      await options.resolve_host_call({ call_id: "stage-read:2", operation: "workspace.file.list",
+        payload: { snapshot: { ...snapshot, id: "forged-stage" }, prefix: "manuscript/" } });
+      return { request_id: options.request.request_id, scope: options.request.scope, snapshot: options.request.snapshot,
+        ok: true, value: { hits: 0 }, warnings: [] };
+    } },
+    capabilities: { validateStage: async () => { validateCalls++; }, fileList: async () => { fileCalls++; return { entries: [] }; } },
+  });
+  forged.entries.set(pairedPlugin, installed({ plugin_id: pairedPlugin, descriptors: [compileAction] }));
+  const rejected = await forged.dispatcher.invoke({ plugin_id: pairedPlugin, action_id: compileAction.action_id, input: { query: "x" } }, principal("ui", "request-forged"));
+  assert.equal(rejected.ok, false);
+  if (!rejected.ok) assert.equal(rejected.error.code, "snapshot_stale");
+  assert.equal(validateCalls, 1);
+  assert.equal(fileCalls, 1);
+});
+
 test("unknown action input fields and missing grants fail before guest execution", async () => {
   const h = createHarness();
   const extra = await h.dispatcher.invoke({ plugin_id, action_id, input: { query: "x", arbitrary: true } }, principal());

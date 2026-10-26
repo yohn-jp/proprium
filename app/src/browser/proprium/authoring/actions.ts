@@ -1,5 +1,6 @@
 import type { ActionDescriptor, ActionError, ActionRequest, ActionResult, Caller, JsonSchema, Scope, Snapshot } from "./types.js";
 import { assertActionRequest, assertDescriptor, assertResult, assertValue } from "./schema.js";
+import { capabilityForHostOperation } from "./capabilities.js";
 
 export type ActionAvailability = "ready" | "disabled" | "dependency_unavailable" | "capability_denied" | "incompatible";
 export interface VerifiedActionSet {
@@ -13,7 +14,7 @@ export interface TrustedActionPrincipal {
 }
 export interface InvocationContext {
   caller: Caller; caller_plugin_id?: string; actor_id: string; scope: Scope; snapshot: Snapshot;
-  staging_snapshot?: string; request_id: string; deadline_at: number; user_gesture_verified: boolean;
+  staging_snapshot?: string; request_id: string; invocation_id?: string; deadline_at: number; user_gesture_verified: boolean;
   activation_epoch: number; grants: readonly string[]; host_capabilities: readonly string[];
   signal: AbortSignal; call_stack: readonly string[];
 }
@@ -32,12 +33,14 @@ export interface RuntimeInvokeOptions {
   signal?: AbortSignal;
 }
 export interface ActionRuntime { invoke(options: RuntimeInvokeOptions): Promise<ActionResult> }
-export interface HostOperationContext extends InvocationContext { plugin_id: string; descriptor: ActionDescriptor; request: ActionRequest }
+export interface HostOperationContext extends InvocationContext { invocation_id: string; plugin_id: string; descriptor: ActionDescriptor; request: ActionRequest }
+export interface StageLeaseInvocation { scope: Scope; invocation_id: string; caller_chain: readonly string[] }
 export interface HostCapabilityPorts {
   identityRead?(payload: Record<string, unknown>, context: HostOperationContext): Promise<unknown>;
   fileList?(payload: Record<string, unknown>, context: HostOperationContext): Promise<unknown>;
   fileRead?(payload: Record<string, unknown>, context: HostOperationContext): Promise<unknown>;
   validateStage?(snapshot_id: string, context: HostOperationContext): Promise<void>;
+  releaseInvocation?(context: StageLeaseInvocation): Promise<void>;
   navigate?(payload: Record<string, unknown>, context: HostOperationContext): Promise<unknown>;
   propose?(payload: Record<string, unknown>, context: HostOperationContext): Promise<unknown>;
   stage?(payload: Record<string, unknown>, context: HostOperationContext): Promise<unknown>;
@@ -82,22 +85,9 @@ export interface ActionListResult { items: readonly ActionListItem[]; next_curso
 const MAX_JOBS = 4;
 const MAX_CURSOR_TOKENS = 4096;
 const MAX_DEADLINE_MS = 120_000;
-const IDENTIFIER = /^[a-z][a-z0-9-]{0,62}\.[a-z][a-z0-9.-]{0,126}$/u;
+const PLUGIN_ID = /^[a-z][a-z0-9-]{0,62}\.[a-z][a-z0-9.-]{0,126}$/u;
+const ACTION_ID = /^[A-Za-z][A-Za-z0-9._-]{0,255}$/u;
 const TOKEN = /^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$/u;
-const OPERATION_CAPABILITY: Readonly<Record<string, string>> = Object.freeze({
-  "workspace.identity.read": "workspace.identity.read", "workspace.file.list": "workspace.file.read",
-  "workspace.file.read": "workspace.file.read", "workspace.navigation": "workspace.navigation",
-  "workspace.change.propose": "workspace.change.propose", "workspace.change.stage": "workspace.change.stage",
-  "workspace.change.timestamp": "workspace.change.timestamp", "workspace.asset.read": "workspace.asset.read",
-  "workspace.derived.cache.get": "workspace.derived.cache", "workspace.derived.cache.put": "workspace.derived.cache",
-  "workspace.derived.cache.evict": "workspace.derived.cache", "plugin.preferences.read": "plugin.preferences",
-  "artifact.create": "artifact.create", "artifact.append": "artifact.append", "artifact.seal": "artifact.seal",
-  "artifact.discard": "artifact.discard", "workspace.change.list": "workspace.change.propose",
-  "workspace.change.status": "workspace.change.propose", "workspace.change.observations": "workspace.change.propose",
-  "workspace.change.inspect": "workspace.change.propose", "workspace.change.content.read": "workspace.change.propose",
-  "workspace.capabilities.query": "workspace.capabilities.query", "workspace.plugin.invoke": "workspace.plugin.invoke",
-  "actions.list": "workspace.plugin.invoke",
-});
 
 export class ActionDispatchError extends Error {
   constructor(readonly code: string, message: string, readonly retryable = false, readonly details?: Record<string, unknown>) {
@@ -132,6 +122,7 @@ function requireContext(value: InvocationContext): void {
   if (!value || !["ui", "mcp", "plugin"].includes(value.caller) || !value.actor_id || !value.scope?.workspace_id ||
       !value.scope.generation || !value.snapshot?.id || !TOKEN.test(value.request_id) || !Number.isSafeInteger(value.deadline_at) ||
       value.deadline_at <= 0 || !Number.isSafeInteger(value.activation_epoch) || value.activation_epoch < 1 ||
+      (value.invocation_id !== undefined && !TOKEN.test(value.invocation_id)) ||
       !(value.signal instanceof AbortSignal) || !Array.isArray(value.grants) || !Array.isArray(value.host_capabilities)) {
     throw new ActionDispatchError("invalid_input", "Host did not issue a valid action context");
   }
@@ -155,7 +146,7 @@ export class AuthoringActionDispatcher {
   /** Metadata reads admitted signed declarations without creating or activating a Worker. */
   async list(request: ActionListRequest, principal: TrustedActionPrincipal): Promise<ActionListResult> {
     this.assertPrincipal(principal);
-    if (!isRecord(request) || !IDENTIFIER.test(request.plugin_id)) throw new ActionDispatchError("invalid_input", "Plugin ID is malformed");
+    if (!isRecord(request) || !PLUGIN_ID.test(request.plugin_id)) throw new ActionDispatchError("invalid_input", "Plugin ID is malformed");
     exactKeys(request, ["plugin_id", "cursor", "limit"], "Action metadata request");
     const limit = request.limit ?? 50;
     if (!Number.isSafeInteger(limit) || limit < 1 || limit > 100) throw new ActionDispatchError("invalid_input", "Action page limit must be from 1 to 100");
@@ -189,7 +180,7 @@ export class AuthoringActionDispatcher {
     const fallback = this.fallback(call, principal);
     try {
       this.assertPrincipal(principal);
-      if (!isRecord(call) || !IDENTIFIER.test(call.plugin_id) || !IDENTIFIER.test(call.action_id) || !isRecord(call.input)) {
+      if (!isRecord(call) || !PLUGIN_ID.test(call.plugin_id) || !ACTION_ID.test(call.action_id) || !isRecord(call.input)) {
         throw new ActionDispatchError("invalid_input", "Action request is malformed");
       }
       exactKeys(call, ["plugin_id", "action_id", "input", "idempotency_key"], "Action request");
@@ -223,7 +214,7 @@ export class AuthoringActionDispatcher {
     requireContext(context);
     const frame = call.plugin_id + ":" + call.action_id;
     if (ancestors.includes(frame)) throw new ActionDispatchError("capability_denied", "Recursive plugin action calls are forbidden");
-    const stack = [...ancestors, frame]; const current = { ...context, call_stack: stack };
+    const stack = [...ancestors, frame]; const current = { ...context, invocation_id: context.invocation_id ?? context.request_id, call_stack: stack };
     if (context.signal.aborted) throw new ActionDispatchError("cancelled", "Action cancelled", true);
     const now = this.now();
     if (now >= context.deadline_at) throw new ActionDispatchError("timeout", "Action deadline expired", true);
@@ -291,7 +282,15 @@ export class AuthoringActionDispatcher {
         message: error instanceof Error ? error.message : "Proposal failed before submission",
         retryable: error instanceof ActionDispatchError && error.retryable });
       throw error;
-    } finally { this.release(call.plugin_id, context.scope.workspace_id); }
+    } finally {
+      this.release(call.plugin_id, context.scope.workspace_id);
+      if (ancestors.length === 0 && this.options.capabilities.releaseInvocation) {
+        try {
+          await this.options.capabilities.releaseInvocation({ scope: current.scope, invocation_id: current.invocation_id,
+            caller_chain: current.call_stack });
+        } catch { /* Lease cleanup is best-effort after the action has stopped. */ }
+      }
+    }
   }
 
   private async hostCall(call: RuntimeHostCall, request: ActionRequest, descriptor: ActionDescriptor,
@@ -299,8 +298,8 @@ export class AuthoringActionDispatcher {
     if (!isRecord(call) || !TOKEN.test(call.call_id) || typeof call.operation !== "string" || !isRecord(call.payload)) {
       throw new ActionDispatchError("invalid_input", "Guest Host continuation is malformed");
     }
-    const capability = OPERATION_CAPABILITY[call.operation];
-    if (!capability || !descriptor.required_capabilities.includes(capability) || !this.grants(source, context).has(capability)) {
+    const capability = capabilityForHostOperation(call.operation);
+    if (!descriptor.required_capabilities.includes(capability) || !this.grants(source, context).has(capability)) {
       throw new ActionDispatchError("capability_denied", "Host operation is undeclared or ungranted", false, { operation: call.operation });
     }
     if (context.signal.aborted) throw new ActionDispatchError("cancelled", "Action cancelled", true);
@@ -313,16 +312,18 @@ export class AuthoringActionDispatcher {
     if (call.operation === "actions.list") return this.listDependency(call.payload, source);
     this.assertBoundPayload(call.operation, call.payload, request);
     await this.options.authority.assertCurrent(context);
-    const hostContext: HostOperationContext = { ...context, plugin_id: source.plugin_id, descriptor, request };
+    const hostContext: HostOperationContext = { ...context, invocation_id: context.invocation_id ?? context.request_id,
+      plugin_id: source.plugin_id, descriptor, request };
     const payload = this.bindIdentity(call.operation, call.payload, request, context);
     if (call.operation === "workspace.change.stage" && source.plugin_id !== "proprium.paired-writing") {
       throw new ActionDispatchError("capability_denied", "Only Paired Writing can create compiler staging leases");
     }
-    if ((call.operation === "workspace.file.list" || call.operation === "workspace.file.read") && typeof call.payload.snapshot === "string") {
-      if (!context.staging_snapshot || call.payload.snapshot !== context.staging_snapshot || !this.options.capabilities.validateStage) {
+    if (call.operation === "workspace.file.list" || call.operation === "workspace.file.read") {
+      const stagingToken = this.stagingReadToken(call.payload, request);
+      if (stagingToken !== undefined && (!context.staging_snapshot || stagingToken !== context.staging_snapshot || !this.options.capabilities.validateStage)) {
         throw new ActionDispatchError("snapshot_stale", "Staging read lease is unissued or unavailable", true);
       }
-      await this.options.capabilities.validateStage(context.staging_snapshot, hostContext);
+      if (stagingToken !== undefined) await this.options.capabilities.validateStage!(stagingToken, hostContext);
     }
     switch (call.operation) {
       case "workspace.identity.read": return this.port("identityRead", payload, hostContext);
@@ -375,7 +376,8 @@ export class AuthoringActionDispatcher {
     const ownerCompile = source.plugin_id === "proprium.paired-writing" && descriptor.action_id.endsWith(".changes.compile") &&
       (target.plugin_id === "proprium.narrative" || target.plugin_id === "proprium.knowledge");
     if (staged && !ownerCompile) throw new ActionDispatchError("capability_denied", "Staging leases are restricted to Paired owner compilers");
-    const child = await this.options.authority.issueChild(context, source.plugin_id, target.plugin_id, descriptor.action_id, staged);
+    const issuedChild = await this.options.authority.issueChild(context, source.plugin_id, target.plugin_id, descriptor.action_id, staged);
+    const child = { ...issuedChild, invocation_id: context.invocation_id ?? context.request_id };
     requireContext(child);
     if (child.caller !== "plugin" || child.caller_plugin_id !== source.plugin_id ||
         child.actor_id !== context.actor_id || !sameJson(child.scope, context.scope) ||
@@ -401,7 +403,7 @@ export class AuthoringActionDispatcher {
   }
   private assertBoundPayload(operation: string, payload: Record<string, unknown>, request: ActionRequest): void {
     if (operation === "workspace.file.list" || operation === "workspace.file.read") {
-      if (!sameJson(payload.snapshot, request.snapshot) && typeof payload.snapshot !== "string") throw new ActionDispatchError("snapshot_stale", "File read snapshot differs from Host request");
+      this.stagingReadToken(payload, request);
     }
     if (operation === "workspace.change.propose") {
       const changeset = payload.changeset;
@@ -410,6 +412,21 @@ export class AuthoringActionDispatcher {
       }
     }
     if (operation === "workspace.change.stage" && !sameJson(payload.base_snapshot, request.snapshot)) throw new ActionDispatchError("snapshot_stale", "Stage lease base differs from Host snapshot");
+  }
+  /** A staged view changes only the opaque snapshot id; every base revision field stays Host-bound. */
+  private stagingReadToken(payload: Record<string, unknown>, request: ActionRequest): string | undefined {
+    const snapshot = payload.snapshot;
+    if (!isRecord(snapshot)) throw new ActionDispatchError("snapshot_stale", "File read snapshot differs from Host request");
+    if (sameJson(snapshot, request.snapshot)) return undefined;
+    if (typeof snapshot.id !== "string" || !TOKEN.test(snapshot.id)) {
+      throw new ActionDispatchError("snapshot_stale", "Staging snapshot token is malformed");
+    }
+    const { id: _stagingId, ...stagedBase } = snapshot;
+    const { id: _originalId, ...originalBase } = request.snapshot;
+    if (!sameJson(stagedBase, originalBase)) {
+      throw new ActionDispatchError("snapshot_stale", "Staging snapshot changes the Host base revision");
+    }
+    return snapshot.id;
   }
   private validateHostPayload(operation: string, payload: Record<string, unknown>): void {
     const shapes: Readonly<Record<string, readonly string[]>> = {
@@ -438,8 +455,8 @@ export class AuthoringActionDispatcher {
           payload.paths.some(value => typeof value !== "string" || !this.safePath(value)))) {
       throw new ActionDispatchError("invalid_input", "Identity provenance paths are invalid");
     }
-    if (operation === "workspace.file.list") { if (!isRecord(payload.snapshot) && typeof payload.snapshot !== "string") throw new ActionDispatchError("invalid_input", "Host snapshot required"); str("prefix"); str("cursor", 512); num("limit", 1, 256); }
-    if (operation === "workspace.file.read") { if ((!isRecord(payload.snapshot) && typeof payload.snapshot !== "string") || typeof payload.path !== "string" || !this.safePath(payload.path)) throw new ActionDispatchError("invalid_path", "File read path or snapshot invalid"); num("offset", 0, Number.MAX_SAFE_INTEGER); num("length", 1, 256 * 1024); }
+    if (operation === "workspace.file.list") { if (!isRecord(payload.snapshot)) throw new ActionDispatchError("invalid_input", "Host snapshot required"); str("prefix"); str("cursor", 512); num("limit", 1, 256); }
+    if (operation === "workspace.file.read") { if (!isRecord(payload.snapshot) || typeof payload.path !== "string" || !this.safePath(payload.path)) throw new ActionDispatchError("invalid_path", "File read path or snapshot invalid"); num("offset", 0, Number.MAX_SAFE_INTEGER); num("length", 1, 256 * 1024); }
     if (operation === "workspace.change.propose" && !isRecord(payload.changeset)) throw new ActionDispatchError("invalid_input", "ChangeSet required");
     if (operation === "workspace.change.stage") { if (!isRecord(payload.base_snapshot)) throw new ActionDispatchError("invalid_input", "Original Host snapshot required"); str("previous_stage", 256); if (!Array.isArray(payload.units)) throw new ActionDispatchError("invalid_input", "Stage units required"); }
     if (operation === "workspace.change.timestamp" && Object.keys(payload).length !== 0) throw new ActionDispatchError("invalid_input", "Timestamp request is empty");
@@ -454,14 +471,15 @@ export class AuthoringActionDispatcher {
     if (operation === "artifact.seal") { str("artifact_id", 256); num("total_bytes", 0, 128 * 1024 * 1024); if (typeof payload.sha256 !== "string" || !/^[a-f0-9]{64}$/u.test(payload.sha256)) throw new ActionDispatchError("invalid_input", "Artifact digest is invalid"); }
     if (operation.startsWith("artifact.") && operation !== "artifact.create" && operation !== "artifact.append" && operation !== "artifact.seal") str("artifact_id", 256);
     if (operation.startsWith("workspace.change.")) { str("proposal_id", 256); str("cursor", 512); str("ref", 512); num("limit", 1, operation === "workspace.change.inspect" ? 50 : 100); num("offset", 0, Number.MAX_SAFE_INTEGER); num("length", 1, 256 * 1024); if (payload.include_source !== undefined && typeof payload.include_source !== "boolean") throw new ActionDispatchError("invalid_input", "include_source must be boolean"); }
-    if (operation === "workspace.plugin.invoke" && (typeof payload.plugin_id !== "string" || !IDENTIFIER.test(payload.plugin_id) || typeof payload.action_id !== "string" || !IDENTIFIER.test(payload.action_id) || !isRecord(payload.input))) throw new ActionDispatchError("invalid_input", "Nested action is malformed");
-    if (operation === "actions.list" && (typeof payload.plugin_id !== "string" || !IDENTIFIER.test(payload.plugin_id))) throw new ActionDispatchError("invalid_input", "Metadata plugin ID is malformed");
+    if (operation === "workspace.plugin.invoke" && (typeof payload.plugin_id !== "string" || !PLUGIN_ID.test(payload.plugin_id) || typeof payload.action_id !== "string" || !ACTION_ID.test(payload.action_id) || !isRecord(payload.input))) throw new ActionDispatchError("invalid_input", "Nested action is malformed");
+    if (operation === "actions.list" && (typeof payload.plugin_id !== "string" || !PLUGIN_ID.test(payload.plugin_id))) throw new ActionDispatchError("invalid_input", "Metadata plugin ID is malformed");
   }
   private bindIdentity(operation: string, payload: Record<string, unknown>, request: ActionRequest,
     context: InvocationContext): Record<string, unknown> {
     const bound = { ...payload };
     if (operation === "workspace.identity.read" || operation.startsWith("workspace.file.") || operation.startsWith("workspace.change.")) bound.scope = request.scope;
-    if (operation === "workspace.identity.read" || operation.startsWith("workspace.file.")) bound.snapshot = request.snapshot;
+    if (operation === "workspace.identity.read") bound.snapshot = request.snapshot;
+    if (operation === "workspace.file.list" || operation === "workspace.file.read") bound.snapshot = payload.snapshot;
     if (operation.startsWith("artifact.")) { bound.scope = request.scope; bound.snapshot = request.snapshot; }
     if (operation.startsWith("workspace.derived.cache.")) { if (isRecord(payload.key)) bound.key = { ...payload.key, plugin_id: request.plugin_id, snapshot: request.snapshot }; else bound.plugin_id = request.plugin_id; }
     if (operation.startsWith("plugin.preferences.")) { bound.plugin_id = request.plugin_id; bound.user_partition = context.actor_id; }
@@ -491,13 +509,13 @@ export class AuthoringActionDispatcher {
     return { descriptor, availability: "ready" };
   }
   private assertInstalled(source: VerifiedActionSet, id: string): void {
-    if (!isRecord(source) || source.plugin_id !== id || !IDENTIFIER.test(id) || !/^[0-9]+\.[0-9]+\.[0-9]+(?:-[0-9A-Za-z.-]+)?$/u.test(source.version) ||
+    if (!isRecord(source) || source.plugin_id !== id || !PLUGIN_ID.test(id) || !/^[0-9]+\.[0-9]+\.[0-9]+(?:-[0-9A-Za-z.-]+)?$/u.test(source.version) ||
         !/^[a-f0-9]{64}$/u.test(source.manifest_digest) || !Number.isSafeInteger(source.activation_epoch) || source.activation_epoch < 1 ||
         !Array.isArray(source.descriptors) || !Array.isArray(source.dependencies) || !Array.isArray(source.grants) || !Array.isArray(source.host_capabilities)) {
       throw new ActionDispatchError("incompatible_abi", "Admitted plugin action metadata is malformed");
     }
     const seen = new Set<string>();
-    for (const item of source.descriptors) { this.schemas.assertDescriptor(item); if (item.plugin_id !== id || seen.has(item.action_id)) throw new ActionDispatchError("incompatible_abi", "Manifest action identity is duplicate or foreign"); seen.add(item.action_id); }
+    for (const item of source.descriptors) { this.schemas.assertDescriptor(item); if (item.plugin_id !== id || !ACTION_ID.test(item.action_id) || seen.has(item.action_id)) throw new ActionDispatchError("incompatible_abi", "Manifest action identity is duplicate or foreign"); seen.add(item.action_id); }
   }
   private safePath(path: string): boolean { return path.length > 0 && path.length <= 1024 && !path.startsWith("/") && !path.includes("\\") && !path.includes("\0") && path.split("/").every(part => part && part !== "." && part !== ".." && part !== ".git"); }
   private assertPrincipal(principal: TrustedActionPrincipal): void { if (!principal || !["ui", "mcp"].includes(principal.caller) || !principal.actor_id || !TOKEN.test(principal.request_id)) throw new ActionDispatchError("capability_denied", "Authenticated Host caller is invalid"); }
