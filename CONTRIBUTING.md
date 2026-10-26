@@ -38,3 +38,6 @@ These checks exercise the browser-native runtime. Tests of preserved inherited l
 Maintain documentation as durable product/architecture contracts: responsibilities, invariants, declared limitations, and acceptance conditions. Keep dates, branch/commit reports, Issues/PR numbers, progress logs, campaign phases, and raw test results in PRs/checks rather than the product documents. If a legacy document is retired, update every maintained documentation link to it. Do not delete immutable provenance/verification evidence or reinterpret the original Scriptorium codebase as already migrated.
 
 See [SECURITY.md](SECURITY.md) for vulnerability reporting.
+
+
+For changes to the Authoring Plugin Canon, run `node scripts/verify-authoring-canon.mjs`. When the read-only Scriptorium and Arcadia Loom sibling checkouts are available, run `node scripts/verify-authoring-canon.mjs --sources /path/to/source-parent` to also verify pinned source paths and action registrations. The checker verifies feature-to-acceptance traceability, links and the required dependency DAG; it does not certify implemented plugins or browser behavior. Review the actual action/data/UX contracts and all applicable acceptance scenarios alongside its result.

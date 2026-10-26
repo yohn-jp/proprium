@@ -112,7 +112,7 @@ Research -> Semantic
 Optional Host-orchestrated enrichments (not activation dependencies):
 Narrative labels -> Research
 Knowledge/Research/Speaker/Semantic results -> Diagnostics
-Research tokenization/Diagnostics style values -> Speaker
+Research tokenization/Diagnostics generic text values -> Speaker
 Knowledge/Research/Diagnostics/Speaker/Semantic values -> Paired Writing
 Semantic results -> Research search UI / Knowledge term candidates
 Knowledge values -> Semantic richer hypotheses
