@@ -13,6 +13,8 @@ export async function showPanel(page: Page, panel: "outline" | "editor" | "inspe
     }
     const panelNames = { outline: "作品と構成", editor: "原稿", inspector: "文書と保存状態", review: "レビューとツール" };
     const panelTab = page.getByRole("tab", { name: panelNames[panel], exact: true });
+    await expect(page.getByRole("region", { name: "Composable workspace", exact: true })).toBeVisible();
+    if (panel !== "review") await expect(panelTab).toBeVisible();
     if (await panelTab.isVisible()) {
       if ((await panelTab.getAttribute("aria-selected")) !== "true") await panelTab.click();
       await expect(page.getByRole("tabpanel", { name: panelNames[panel], exact: true })).toBeVisible();
