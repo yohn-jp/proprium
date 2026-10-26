@@ -5,6 +5,7 @@ export function capabilityForHostOperation(operation: string): string {
   if (["workspace.derived.cache.get", "workspace.derived.cache.put", "workspace.derived.cache.evict"].includes(operation)) {
     return "workspace.derived.cache";
   }
+  if (operation === "actions.list") return "workspace.plugin.invoke";
   if (operation === "plugin.preferences.read") return "plugin.preferences";
   return operation;
 }

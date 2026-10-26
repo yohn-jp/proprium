@@ -1,16 +1,18 @@
 import type { ActionRequest, ActionResult, ActionError } from "../../authoring/types.js";
+import { capabilityForHostOperation } from "../../authoring/capabilities.js";
+export { capabilityForHostOperation };
 
 export const V2_PLUGIN_HOST_IMPORT = "proprium:plugin/host@2.0.0";
 export const V2_PLUGIN_GUEST_EXPORT = "proprium:plugin/guest@2.0.0";
 export const V2_PLUGIN_ABI = "proprium.component/v2";
 
 export const V2_LIMITS = Object.freeze({
-  componentBytes: 16 * 1024 * 1024,
-  generatedBytes: 32 * 1024 * 1024,
+  componentBytes: 128 * 1024 * 1024,
+  generatedBytes: 192 * 1024 * 1024,
   actionBytes: 1024 * 1024,
   hostCallBytes: 1024 * 1024,
   actionResultBytes: 1024 * 1024,
-  hostCalls: 256,
+  hostCalls: 4096,
   workerCount: 4,
   interactiveDeadlineMs: 30_000,
   batchDeadlineMs: 120_000,
@@ -61,7 +63,7 @@ export interface V2WorkerMessage extends V2Envelope {
 }
 
 export type V2RuntimeErrorCode = "untrusted_publisher" | "incompatible_abi" | "capability_denied" |
-  "invalid_input" | "snapshot_stale" | "overloaded" | "timeout" | "cancelled" | "guest_trap" |
+  "invalid_input" | "snapshot_stale" | "overloaded" | "capacity" | "timeout" | "cancelled" | "guest_trap" |
   "unavailable" | "stopped" | "malformed_message";
 
 export class V2PluginRuntimeError extends Error {

@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import type { ActionRequest } from "../../authoring/types.js";
 import {
-  assertActionRequest, decodeGuestStep, encodeHostResponse, validateHostResponse, V2PluginRuntimeError,
+  assertActionRequest, capabilityForHostOperation, decodeGuestStep, encodeHostResponse, validateHostResponse, V2PluginRuntimeError,
 } from "./protocol.js";
 
 const request: ActionRequest = {
@@ -60,5 +60,17 @@ test("final ActionResult cannot change scope, snapshot, or request identity", ()
     (error: unknown) => error instanceof V2PluginRuntimeError && error.code === "malformed_message");
   assert.throws(() => decodeGuestStep(JSON.stringify({ ...result, snapshot: { ...request.snapshot, id: "newer" } }), request, 1),
     (error: unknown) => error instanceof V2PluginRuntimeError && error.code === "malformed_message");
+});
+
+test("Host operation aliases reduce only to their Canon capability group", () => {
+  assert.equal(capabilityForHostOperation("workspace.file.list"), "workspace.file.read");
+  assert.equal(capabilityForHostOperation("workspace.file.read"), "workspace.file.read");
+  assert.equal(capabilityForHostOperation("workspace.derived.cache.get"), "workspace.derived.cache");
+  assert.equal(capabilityForHostOperation("workspace.derived.cache.put"), "workspace.derived.cache");
+  assert.equal(capabilityForHostOperation("actions.list"), "workspace.plugin.invoke");
+  assert.equal(capabilityForHostOperation("plugin.preferences.read"), "plugin.preferences");
+  assert.equal(capabilityForHostOperation("workspace.change.receipt.read"), "workspace.change.receipt.read");
+  assert.equal(capabilityForHostOperation("workspace.plugin.invoke"), "workspace.plugin.invoke");
+  assert.equal(capabilityForHostOperation("artifact.create"), "artifact.create");
 });
 

@@ -49,6 +49,7 @@ async function handle(request: V2WorkerRequest): Promise<void> {
     else if (request.type === "stop") await stop(request);
     else sendError(request, { code: "malformed_message", message: "Unknown plugin operation" });
   } catch (error) {
+    if (request.type === "start" && request.component instanceof Uint8Array) request.component.fill(0);
     sendError(request, runtimeError(error));
     if (request.type !== "stop") resetInvocation();
   }
@@ -98,14 +99,19 @@ async function start(request: Extract<V2WorkerRequest, { type: "start" }>): Prom
   const hostUrl = URL.createObjectURL(new Blob([hostModule], { type: "text/javascript" }));
   try {
     await initializeJco;
-    const generated = generate(request.component, {
-      name: `proprium_plugin_v2_${activationEpoch}`,
-      noTypescript: true,
-      noNodejsCompat: true,
-      base64Cutoff: V2_LIMITS.generatedBytes,
-      importBindings: { tag: "js" },
-      map: [[V2_PLUGIN_HOST_IMPORT, hostUrl]],
-    });
+    let generated: ReturnType<typeof generate>;
+    try {
+      generated = generate(request.component, {
+        name: `proprium_plugin_v2_${activationEpoch}`,
+        noTypescript: true,
+        noNodejsCompat: true,
+        base64Cutoff: V2_LIMITS.generatedBytes,
+        importBindings: { tag: "js" },
+        map: [[V2_PLUGIN_HOST_IMPORT, hostUrl]],
+      });
+    } finally {
+      request.component.fill(0);
+    }
     const imports = [...new Set(generated.imports)];
     const exports = generated.exports.filter(([name]) => name !== "guest");
     if (imports.length !== 1 || imports[0] !== hostUrl || exports.length !== 1 ||
@@ -249,8 +255,11 @@ function sendError(request: V2Envelope, error: { code: WorkerErrorCode; message:
 function runtimeError(error: unknown): { code: WorkerErrorCode; message: string } {
   if (error instanceof V2PluginRuntimeError) return { code: error.code, message: error.message };
   const code = (error as { code?: string } | null)?.code;
-  if (code === "capability_denied" || code === "snapshot_stale" || code === "invalid_input" || code === "timeout") {
+  if (code === "capability_denied" || code === "snapshot_stale" || code === "invalid_input" || code === "capacity" || code === "timeout") {
     return { code, message: error instanceof Error ? error.message : code };
+  }
+  if (error instanceof RangeError) {
+    return { code: "capacity", message: "Plugin exceeded this browser's available memory capacity" };
   }
   return { code: "guest_trap", message: error instanceof Error ? error.message : "Plugin component trapped" };
 }

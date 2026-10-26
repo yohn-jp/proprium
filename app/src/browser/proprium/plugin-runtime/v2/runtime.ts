@@ -1,26 +1,13 @@
 import type { ActionDescriptor, ActionRequest, ActionResult } from "../../authoring/types.js";
+import type { PluginManifestV2 } from "../../plugin-artifact.js";
 import {
-  assertDeadline, assertEnvelope, canonicalJson, encodeHostResponse, isRecord, V2_LIMITS, V2_PLUGIN_ABI,
+  assertDeadline, assertEnvelope, canonicalJson, capabilityForHostOperation, encodeHostResponse, isRecord, V2_LIMITS, V2_PLUGIN_ABI,
   V2PluginRuntimeError, utf8Size, type V2Context, type V2Envelope, type V2Grant, type V2HostCall,
   type V2HostResponse, type V2WorkerMessage, type V2WorkerRequest,
 } from "./protocol.js";
 
-export interface V2ArtifactDescriptor {
-  readonly path: string;
-  readonly bytes: number;
-  readonly sha256: string;
-  readonly mediaType: "application/wasm" | "application/octet-stream" | "application/json";
-}
-export interface V2PluginManifest {
-  readonly schema: "proprium.plugin/v2";
-  readonly id: string;
-  readonly version: string;
-  readonly abi: typeof V2_PLUGIN_ABI;
-  readonly entrypoint: string;
-  readonly capabilities: readonly string[];
-  readonly artifacts: readonly V2ArtifactDescriptor[];
-  readonly actions: readonly ActionDescriptor[];
-}
+export type V2ArtifactDescriptor = PluginManifestV2["artifacts"][number];
+export type V2PluginManifest = PluginManifestV2;
 export type V2Caller = "ui" | "mcp" | "plugin";
 export interface V2HostCallContext {
   readonly plugin_id: string;
@@ -117,7 +104,7 @@ function normalizedError(error: unknown): V2PluginRuntimeError {
   if (error instanceof V2PluginRuntimeError) return error;
   if (error && typeof error === "object" && typeof (error as { code?: unknown }).code === "string") {
     const code = (error as { code: string }).code;
-    if (["capability_denied", "snapshot_stale", "invalid_input", "timeout", "cancelled", "dependency_unavailable", "provider_unavailable"].includes(code)) {
+    if (["capability_denied", "snapshot_stale", "invalid_input", "capacity", "timeout", "cancelled", "dependency_unavailable", "provider_unavailable"].includes(code)) {
       return new V2PluginRuntimeError(code as V2PluginRuntimeError["code"], error instanceof Error ? error.message : code);
     }
   }
@@ -146,7 +133,8 @@ export class BrowserAuthoringPluginRuntime {
   private readonly sessionId = crypto.randomUUID();
   private constructor(readonly manifest: V2PluginManifest, component: Uint8Array, readonly componentDigest: string, token: symbol) {
     if (token !== runtimeAdmissionToken) throw new V2PluginRuntimeError("untrusted_publisher", "Runtime must be created through v2 artifact admission");
-    this.component = Uint8Array.from(component);
+    // `create` already copied the caller-owned bytes before hashing/admission.
+    this.component = component;
     admittedRuntimes.add(this);
   }
 
@@ -202,16 +190,21 @@ export class BrowserAuthoringPluginRuntime {
     activeWorkers++;
     worker.addEventListener("message", this.onMessage);
     worker.addEventListener("error", this.onWorkerError);
-    const request: V2WorkerRequest = {
+    const component = this.component;
+    const request: Extract<V2WorkerRequest, { type: "start" }> = {
       type: "start", id: crypto.randomUUID(), sessionId: this.sessionId, epoch: this.epoch,
       pluginId: this.manifest.id, version: this.manifest.version, digest: this.componentDigest,
       workspaceId: this.workspaceId, deadlineAt: boundedDeadline(options.deadline_ms, 10_000, 30_000),
-      grants: [...this.grants], context: options.context, component: Uint8Array.from(this.component),
+      grants: [...this.grants], context: options.context, component,
     };
+    // Transfer the runtime's private copy into the Worker instead of retaining
+    // it while JCO generates the bounded module wrapper.
+    this.component = undefined;
     try {
       await this.exchange(request, ["ready"]);
       this.stateValue = "active";
     } catch (error) {
+      if (request.component.byteLength > 0) request.component.fill(0);
       this.fail(normalizedError(error));
       throw error;
     }
@@ -411,8 +404,9 @@ export class BrowserAuthoringPluginRuntime {
     const worker = this.worker;
     try {
       assertDeadline(pending.deadlineAt);
-      if (!pending.descriptor.required_capabilities.includes(call.operation) || !this.grants.has(call.operation)) {
-        throw new V2PluginRuntimeError("capability_denied", `Action did not declare or receive ${call.operation}`);
+      const capability = capabilityForHostOperation(call.operation);
+      if (!pending.descriptor.required_capabilities.includes(capability) || !this.grants.has(capability)) {
+        throw new V2PluginRuntimeError("capability_denied", `Action did not declare or receive ${capability}`);
       }
       if (!this.snapshotIsCurrent(pending.options, pending.action)) {
         throw new V2PluginRuntimeError("snapshot_stale", "Workspace changed before a Host call");
