@@ -191,7 +191,7 @@ test("static Host imports a GitHub REST commit, reloads offline, and edits with 
     .filter({ hasText: workspaceTitle });
   await expect(recentWorkspace).toBeVisible();
   await recentWorkspace.click();
-  await expect(operationNotice).toContainText("Workspace opened on this device.");
+  await expect(operationNotice).toContainText("この端末の作品を開きました。");
 
   await revealFilesSidebar();
   const offlineFile = `.proprium-static-${crypto.randomUUID()}.txt`;
