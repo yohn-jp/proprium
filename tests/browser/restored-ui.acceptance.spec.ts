@@ -47,7 +47,7 @@ test("storage_unknown offers non-destructive verification and preserves workspac
   await page.getByRole("button", { name: "作品一覧", exact: true }).first().click();
   await page.evaluate(workspace => localStorage.setItem(`proprium.git.storage-unknown.${workspace.localWorkspaceId}`, "1"), workspace);
   await page.getByRole("button", { name: /proprium-test\/ui-restoration/u }).click();
-  await expect(page.getByText(/storage_unknown:/u)).toBeVisible();
+  await expect(page.getByRole("dialog", { name: "ブラウザー内Gitの整合性確認" }).getByRole("alert")).toBeVisible();
   const recovery = page.getByRole("dialog", { name: "ブラウザー内Gitの整合性確認" });
   await expect(recovery).toBeVisible();
   expect(await recovery.evaluate(element => element.matches(":modal"))).toBe(true);
@@ -80,7 +80,7 @@ test("a protected uncommitted draft can be recovered explicitly without replacin
   await expectEditorText(page, "保存済みの本文\n");
   await page.getByRole("button", { name: "この下書きをエディターで開く" }).click();
   await expectEditorText(page, "回復する未保存の本文\n");
-  await expect(page.locator(".save-state")).toHaveText("Unsaved editor text");
+  await expect(page.locator(".save-state")).toHaveText("編集中・端末のファイル未保存");
 });
 test("verification of an active uncertain workspace keeps unsaved editor text", async ({ page }) => {
   const workspace = identity();
@@ -91,7 +91,7 @@ test("verification of an active uncertain workspace keeps unsaved editor text", 
   await page.getByRole("textbox", { name: "原稿 Markdown" }).fill("入力中の本文を保持\n");
   await page.evaluate(workspace => localStorage.setItem(`proprium.git.storage-unknown.${workspace.localWorkspaceId}`, "1"), workspace);
   await page.getByRole("button", { name: "端末に保存", exact: true }).click();
-  await expect(page.getByText(/storage_unknown:/u)).toBeVisible();
+  await expect(page.getByRole("dialog", { name: "ブラウザー内Gitの整合性確認" }).getByRole("alert")).toBeVisible();
   await page.getByRole("button", { name: "保存データの整合性を確認" }).click();
   await expectEditorText(page, "入力中の本文を保持\n");
   await page.getByRole("button", { name: "端末に保存", exact: true }).click();
