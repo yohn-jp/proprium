@@ -57,7 +57,7 @@ Use no private books, real access credentials or unlicensed model weights. At mi
 | R03 | Writer open/resume | Select work, Volume/Chapter/Scene, open correct manuscript, resume last recoverable scene, no other repo's draft |
 | R04 | Japanese manuscript continuity | Desktop + Mobile: IME, undo, caret, selection, scroll, reading position, ruby/vertical typography survive panel switching |
 | R05 | Draft/Git storage fidelity | Draft, local commit, remote published, conflict and unknown publication remain distinct, failure/restart/recovery protect text |
-| R06 | Semantic structure edits | Create/edit/move/reorder scene and metadata through reviewed multi-file preconditions, preserve unrelated YAML/frontmatter |
+| R06 | Semantic structure edits | Create/edit/reorder chapter/scene and semantic metadata through reviewed multi-file preconditions, preserve unrelated YAML/frontmatter |
 | R07 | Story Knowledge | Bible/notes/character/relationships/threads/map/timeline/reader state linked and rendered, author-approved updates |
 | R08 | Search/NLP/Diagnostics | Model-free search, terms/alias ambiguity, findings with evidence, source jump, stale invalidation, lint changes as proposals |
 | R09 | MCP-first paired writing | Explicit repository ID -> context/manifest -> typed proposal -> diff/evidence -> selective author approval -> apply -> same editing location, no external self-approval |
