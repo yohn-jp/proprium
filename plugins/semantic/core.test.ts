@@ -129,8 +129,8 @@ test("contradiction candidates exclude same passages and scores outside the midb
   assert.deepEqual(embeddingContradictions([{ entityId: "person-1", anchors: [
     anchor("a", 0, vector(1), "a"), anchor("b", 0, vector(0, 1), "b"),
   ] }]), []);
-  const mismatchedEvidence = { ...anchor("a", 0, vector(1), "a"), text: "changed" };
+  const invalidEvidence = { ...anchor("a", 0, vector(1), "a"), evidence: { ...anchor("a", 0, vector(1), "a").evidence, end: 2 } };
   assert.throws(() => embeddingContradictions([{ entityId: "person-1", anchors: [
-    mismatchedEvidence, anchor("b", 0, vector(0.7, Math.sqrt(0.51)), "b"),
-  ] }]), /exact passage/);
+    invalidEvidence, anchor("b", 0, vector(0.7, Math.sqrt(0.51)), "b"),
+  ] }]), /valid exact source span/);
 });

@@ -324,10 +324,10 @@ export function clusterTerms(
 
 function evidenceFrom(anchor: SemanticAnchor): EmbeddingContradiction["evidenceA"] {
   const { evidence } = anchor;
-  if (!evidence.quote || !evidence.path || !evidence.revision ||
+  if (evidence.quote !== anchor.text || !evidence.path || !evidence.revision ||
       !Number.isInteger(evidence.start) || !Number.isInteger(evidence.end) ||
       evidence.start < 0 || evidence.end - evidence.start !== evidence.quote.length) {
-    throw new TypeError("Contradiction evidence must cite the exact passage at valid source offsets");
+    throw new TypeError("Contradiction evidence must contain a valid exact source span");
   }
   return {
     sceneId: anchor.sceneId,

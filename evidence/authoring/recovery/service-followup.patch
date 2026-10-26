@@ -1,0 +1,47 @@
+diff --git a/app/src/browser/proprium/authoring/service.ts b/home/sophia/src/proprium-authoring-service/app/src/browser/proprium/authoring/service.ts
+index 769c884..b391e25 100644
+--- a/app/src/browser/proprium/authoring/service.ts
++++ b/home/sophia/src/proprium-authoring-service/app/src/browser/proprium/authoring/service.ts
+@@ -118,14 +118,32 @@ export interface BrowserAuthoringServiceOptions {
+ }
+ 
+ export interface AuthoringHostArtifact {
+-  readonly metadata: ArtifactMetadata;
++  readonly metadata: { readonly filename: string; readonly media_type: string; readonly bytes: number; readonly sha256: string };
++  readonly text_preview_available: boolean;
+   readChunk(offset: number, length?: number): Promise<{
+     readonly offset: number; readonly total_bytes: number; readonly bytes: Uint8Array;
+     readonly sha256: string; readonly next_offset: number | null;
+   }>;
+-  previewText(maxBytes?: number): Promise<{ readonly text: string; readonly truncated: boolean }>;
++  previewText(maxChars: number): Promise<{ readonly text: string; readonly truncated: boolean }>;
++  download(event: Event): Promise<void>;
++  print(event: Event, preset: AuthoringPrintPreset): Promise<void>;
+   readAll(event: Event, maxBytes?: number): Promise<Blob>;
+ }
++export type AuthoringPrintPreset = "bunko" | "web-novel" | "genko";
++export interface ProposalReviewPackage {
++  readonly review_token: string;
++  readonly inspection: ProposalInspection;
++  readonly required_content_refs: readonly string[];
++}
++interface ProposalReviewLease {
++  readonly scope: Scope;
++  readonly proposal_id: string;
++  readonly requested_unit_ids: readonly string[];
++  readonly receipt_digest: string;
++  readonly refs: ReadonlySet<string>;
++  readonly ranges: Map<string, { total_bytes: number; sha256: string; ranges: Array<{ start: number; end: number }> }>;
++  readonly expires_at: number;
++}
+ 
+ export interface CreateBrowserAuthoringServiceOptions {
+   readonly manager: BrowserPluginManager;
+@@ -213,6 +231,7 @@ export class BrowserAuthoringService {
+   private readonly invocationStageLeases = new Map<string, Set<string>>();
+   private readonly controllers = new Map<string, AbortController>();
+   private readonly abortListeners = new Map<string, { signal: AbortSignal; listener: () => void }>();
++  private readonly proposalReviews = new Map<string, ProposalReviewLease>();
+   private disposed = false;
+ 
+   constructor(private readonly options: BrowserAuthoringServiceOptions) {
