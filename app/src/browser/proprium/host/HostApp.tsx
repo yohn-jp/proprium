@@ -143,6 +143,9 @@ export function HostApp(): ReactElement {
   const [authStage, setAuthStage] = useState<"waiting" | "repositories" | "verifying" | null>(null);
   const [devicePrompt, setDevicePrompt] = useState<GitHubDevicePrompt | null>(null);
   const [workspaceAuthOpen, setWorkspaceAuthOpen] = useState(false);
+  const [desktopSettingsOpen, setDesktopSettingsOpen] = useState(false);
+  const settingsDialog = useRef<HTMLDialogElement | null>(null);
+  useEffect(() => { if (desktopSettingsOpen && settingsDialog.current && !settingsDialog.current.open) settingsDialog.current.showModal(); }, [desktopSettingsOpen]);
   const [busy, setBusy] = useState(false);
   const [checkpointBusy, setCheckpointBusy] = useState(false);
   const [publishBusy, setPublishBusy] = useState(false);
@@ -896,6 +899,24 @@ export function HostApp(): ReactElement {
     { id: "history", title: "履歴", render: () => historyPanel },
     { id: "review", title: "レビューとツール", render: () => <RetainedPanelSlot node={toolsNode} /> },
   ];
+  const settings = <section className="host-settings" aria-label="アプリケーション設定">
+    <h2>表示と接続</h2>
+    <label htmlFor="settings-theme">外観<select id="settings-theme" value={theme} onChange={event => {
+      const value = event.currentTarget.value as typeof theme; setTheme(value);
+      try { persistThemeMode(value); } catch { setMessage({ tone: "error", text: "外観設定を保存できませんでした。" }); }
+    }}><option value="light">ライト</option><option value="dark">ダーク</option><option value="paper">紙</option></select></label>
+    <fieldset disabled={busy}><legend>Gitの履歴に記録する作者</legend>
+      <p>GitHubのログイン情報とは別です。コミットの作者名とメールアドレスとして使います。</p>
+      <label htmlFor="settings-author-name">作者名<input id="settings-author-name" value={preferences.name} onChange={event => updatePreferences({ ...preferences, name: event.target.value })} /></label>
+      <label htmlFor="settings-author-email">作者のメールアドレス<input id="settings-author-email" type="email" value={preferences.email} onChange={event => updatePreferences({ ...preferences, email: event.target.value })} /></label>
+    </fieldset>
+    <details><summary>GitHub・Gateway接続</summary>
+      <p>{account ? `GitHub: ${account.login}` : "GitHubには接続していません。端末内の文書はログインなしで編集できます。"}</p>
+      <label htmlFor="settings-gateway">Gateway URL<input id="settings-gateway" type="url" value={gatewayDraft} onChange={event => updateGateway(event.target.value)} disabled={busy} /></label>
+      <GatewayAccessLink gatewayUrl={gatewayDraft} />
+      <p>GatewayはGitHub接続とMCPに使います。端末内のファイル編集には必要ありません。</p>
+    </details>
+  </section>;
   const statusMessage = recoveryEntry ? null : message;
   const statusSurface = workspace || statusMessage ? <details className="application-status" data-attention={statusMessage?.tone === "error" || undefined}>
     <summary>
@@ -909,13 +930,13 @@ export function HostApp(): ReactElement {
   </details> : null;
   const Shell = mode === "desktop" ? DesktopShell : MobileShell;
   return <main className="proprium-host restored-host" onKeyDown={event => { if ((event.metaKey || event.ctrlKey) && event.key.toLowerCase() === "s") { event.preventDefault(); if (!busy && !recoveryEntry) void saveDraft(); } }}><Suspense fallback={<p>ワークスペースを開いています…</p>}><Shell mode={mode} onNavigateHome={leaveWorkspace}
-    header={<header className="topbar">{workspace && <button className="quiet-button" onClick={leaveWorkspace}>Workspaces</button>}{workspace && !syncClient && isGitHubWorkspaceIdentity(workspace.identity) && <button type="button" className="quiet-button" aria-haspopup="dialog" aria-controls="workspace-github-auth" disabled={busy} onClick={openWorkspaceGitHubAuth}>GitHubに接続</button>}{account && <span className="host-account-label" aria-label="GitHub account">{account.login}</span>}<ThemeControl mode={theme} onChange={value => { setTheme(value); try { persistThemeMode(value); } catch { setMessage({ tone: "error", text: "外観設定を保存できませんでした。" }); } }} />{workspace && account && <button className="quiet-button" onClick={signOut}>Sign out</button>}</header>}
+    header={<header className="topbar">{mode === "desktop" && <button type="button" className="quiet-button" onClick={() => { void beforeLayoutChange().then(ok => { if (ok) setDesktopSettingsOpen(true); }); }}>設定</button>}{workspace && <button className="quiet-button" onClick={leaveWorkspace}>Workspaces</button>}{workspace && !syncClient && isGitHubWorkspaceIdentity(workspace.identity) && <button type="button" className="quiet-button" aria-haspopup="dialog" aria-controls="workspace-github-auth" disabled={busy} onClick={openWorkspaceGitHubAuth}>GitHubに接続</button>}{account && <span className="host-account-label" aria-label="GitHub account">{account.login}</span>}<ThemeControl mode={theme} onChange={value => { setTheme(value); try { persistThemeMode(value); } catch { setMessage({ tone: "error", text: "外観設定を保存できませんでした。" }); } }} />{workspace && account && <button className="quiet-button" onClick={signOut}>Sign out</button>}</header>}
     documentTitle={currentFile?.path ?? workspace?.title ?? "Proprium"} documentContext={workspace?.identity.branch}
     desktopDurability={syncState === "published" ? "saved" : checkpointBusy ? "checkpointing" : status.head && status.entries.length === 0 && !currentFile?.dirty ? "checkpointed" : "draft"}
-    library={library} editor={workspace ? <RetainedPanelSlot node={editorNode} /> : editor} tools={<RetainedPanelSlot node={toolsNode} />} status={statusSurface} renderStatus={error => <>{statusSurface}{error && <p role="alert">{error}</p>}</>}
+    settings={settings} library={library} editor={workspace ? <RetainedPanelSlot node={editorNode} /> : editor} tools={<RetainedPanelSlot node={toolsNode} />} status={statusSurface} renderStatus={error => <>{statusSurface}{error && <p role="alert">{error}</p>}</>}
     onSwitchMode={async () => { if (!(await beforeLayoutChange())) return false; const next = mode === "desktop" ? "mobile" : "desktop"; setMode(next); try { localStorage.setItem("scriptorium:ui-mode", next); } catch { /* The active mode remains usable. */ } return true; }}
     workspaceScope={workspace?.identity.localWorkspaceId} panels={workspace ? panels : undefined} beforeLayoutChange={beforeLayoutChange} requestedPanel={requestedPanel} />
-  </Suspense>{workspaceAuthOpen && <dialog ref={workspaceAuthDialog} id="workspace-github-auth" className="storage-recovery-dialog github-connection-dialog" aria-labelledby="workspace-github-auth-title" aria-describedby="workspace-github-auth-description" onCancel={event => { event.preventDefault(); closeWorkspaceGitHubAuth(); }}>
+  </Suspense>{desktopSettingsOpen && mode === "desktop" && <dialog ref={settingsDialog} className="storage-recovery-dialog" aria-label="設定" onCancel={() => setDesktopSettingsOpen(false)}>{settings}<button type="button" onClick={() => setDesktopSettingsOpen(false)}>設定を閉じる</button></dialog>}{workspaceAuthOpen && <dialog ref={workspaceAuthDialog} id="workspace-github-auth" className="storage-recovery-dialog github-connection-dialog" aria-labelledby="workspace-github-auth-title" aria-describedby="workspace-github-auth-description" onCancel={event => { event.preventDefault(); closeWorkspaceGitHubAuth(); }}>
     <h2 id="workspace-github-auth-title">このWorkspaceをGitHubに接続</h2>
     <p id="workspace-github-auth-description">開いている原稿を保持したまま、Repositoryを確認して接続します。取得・公開は接続後に操作できます。</p>
     <details className="gateway-settings" open={gatewaySettingsOpen} onToggle={event => setGatewaySettingsOpen(event.currentTarget.open)}>
