@@ -55,6 +55,8 @@ test("saved workspace files round-trip through an explicitly exported ZIP", asyn
   await expect(page.locator(".host-message[role='status']")).toContainText("1件をこの端末のファイルへ取り込みました");
   await showPanel(page, "outline");
   await expect(page.getByRole("list", { name: "Repository files" }).getByRole("button", { name: "原稿.md", exact: true })).toBeVisible();
+  const transfer = page.locator(".workspace-transfer-panel");
+  if ((await transfer.getAttribute("open")) === null) await transfer.locator(":scope > summary").click();
   const downloadEvent = page.waitForEvent("download");
   await page.getByRole("button", { name: "保存済みファイルをZIPに書き出す", exact: true }).click();
   const archive = await downloadEvent;
