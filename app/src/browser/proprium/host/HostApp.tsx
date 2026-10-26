@@ -12,6 +12,7 @@ import type { WorkspaceFile } from "../git/index.js";
 import { GitHubDeviceAuthorization, GitHubAuthorizationError } from "./GitHubDeviceAuthorization.js";
 import { GitHubRepositoryPicker } from "./GitHubRepositoryPicker.js";
 import { GatewayAccessLink } from "./GatewayAccessLink.js";
+import { ChangedFilesReview } from "./ChangedFilesReview.js";
 import { PluginPanel } from "./PluginPanel.js";
 import { LiveMcpPanel } from "./LiveMcpPanel.js";
 
@@ -156,6 +157,7 @@ export function HostApp(): ReactElement {
   const [history, setHistory] = useState<CommitSummary[]>([]);
   const [currentFile, setCurrentFile] = useState<OpenFile | null>(null);
   const [commitMessage, setCommitMessage] = useState("");
+  const [reviewedSnapshot, setReviewedSnapshot] = useState({ key: "", ready: false });
   const [preferences, setPreferences] = useState(readPreferences);
   const [syncState, setSyncState] = useState<SyncState>("local-draft");
   const [message, setMessage] = useState<OperationMessage | null>(null);
@@ -199,6 +201,9 @@ export function HostApp(): ReactElement {
   const activeWorkspaceId = workspace?.identity.localWorkspaceId ?? null;
   const selectedRepositoryEntry = repositories.find(item => item.id === selectedRepository) ?? null;
   const changedPaths = useMemo(() => new Set(status.entries.map(entry => entry.path)), [status.entries]);
+  const reviewSnapshotKey = JSON.stringify([workspaceGeneration, status.head, files.map(file => [file.path, file.oid]), status.entries]);
+  const commitReviewed = reviewedSnapshot.key === reviewSnapshotKey && reviewedSnapshot.ready;
+  const receiveCommitReview = useCallback((ready: boolean) => setReviewedSnapshot({ key: reviewSnapshotKey, ready }), [reviewSnapshotKey]);
 
   const refresh = useCallback(async (targetGit: BrowserLocalGit, targetWorkspace: RecentWorkspace): Promise<void> => {
     const next = await loadWorkspaceState(targetGit);
@@ -595,6 +600,7 @@ export function HostApp(): ReactElement {
   }
 
   async function commitLocal(): Promise<void> {
+    if (!commitReviewed) { setMessage({ tone: "error", text: "変更したファイルの内容を確認してからコミットしてください。" }); return; }
     if (!git || !workspace) return;
     if (currentFile?.dirty) { setMessage({ tone: "error", text: "Save the current editor text to the local worktree before committing." }); return; }
     if (!commitMessage.trim()) { setMessage({ tone: "error", text: "Enter a commit message." }); return; }
@@ -858,9 +864,10 @@ export function HostApp(): ReactElement {
   const inspector = <div className="host-controls"><button onClick={() => revealPanel("history")}>History</button><section className="commit-panel" aria-labelledby="commit-heading">
             <div className="dock-heading"><div><p className="eyebrow">LOCAL GIT</p><h2 id="commit-heading">Changes</h2></div><span className="count-badge">{status.entries.length}</span></div>
             <div className="change-summary" aria-live="polite">{status.entries.length ? `${status.entries.length} changed file${status.entries.length === 1 ? "" : "s"}` : status.head ? `Clean at ${status.head.slice(0, 10)}` : "No local commit yet"}</div>
+            {git && <ChangedFilesReview key={workspaceGeneration} git={git} head={status.head} refreshKey={reviewSnapshotKey} busy={busy} canCommit={!currentFile?.dirty} onReviewReady={receiveCommitReview} />}
             <label htmlFor="commit-message">Commit message</label><input id="commit-message" value={commitMessage} onChange={event => setCommitMessage(event.target.value)} placeholder="Describe your changes" maxLength={100_000} />
             <div className="author-fields"><label>Git author name<input aria-label="Git author name" value={preferences.name} onChange={event => updatePreferences({ ...preferences, name: event.target.value })} placeholder="Name" /></label><label>Git author email<input aria-label="Git author email" type="email" value={preferences.email} onChange={event => updatePreferences({ ...preferences, email: event.target.value })} placeholder="name@example.com" /></label></div>
-            <button type="button" className="primary-button commit-button" disabled={busy || !status.entries.length || !!currentFile?.dirty} onClick={() => void commitLocal()}>Commit locally</button>
+            <button type="button" className="primary-button commit-button" disabled={busy || !status.entries.length || !!currentFile?.dirty || !commitReviewed} onClick={() => void commitLocal()}>Commit locally</button>
             <p className="local-commit-note">A local commit stays on this device until you explicitly publish it.</p>
           </section>
 </div>;
