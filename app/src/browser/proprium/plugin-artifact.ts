@@ -1,3 +1,6 @@
+import { assertDescriptor, assertSurface } from "./authoring/schema.js";
+import type { ActionDescriptor, SurfaceDeclaration } from "./authoring/types.js";
+
 /** Host-side admission of signed WASM plugin manifests and immutable assets.
  * Pure browser code: no network requests, runtime installs or guest execution.
  */
@@ -16,6 +19,21 @@ export interface PluginManifestV1 {
   readonly capabilities: readonly string[];
   readonly artifacts: readonly ArtifactDescriptor[];
 }
+export interface AssetGroupRef {
+  readonly id: string;
+  readonly manifest_path: string;
+  readonly sha256: string;
+  readonly bytes: number;
+  readonly role: "dictionary" | "embedding" | "reranker";
+}
+export interface PluginManifestV2 extends Omit<PluginManifestV1, "schema" | "abi"> {
+  readonly schema: "proprium.plugin/v2";
+  readonly abi: "proprium.component/v2";
+  readonly actions: readonly ActionDescriptor[];
+  readonly ui: readonly SurfaceDeclaration[];
+  readonly asset_groups: readonly AssetGroupRef[];
+}
+export type PluginManifest = PluginManifestV1 | PluginManifestV2;
 const verified = new WeakSet<object>();
 const SHA256 = /^[a-f0-9]{64}$/u;
 const IDENTIFIER = /^[a-z][a-z0-9-]{0,62}\.[a-z][a-z0-9-]{0,62}$/u;
@@ -48,13 +66,77 @@ function safeAssetPath(path: unknown): path is string {
   return typeof path === "string" && path.length > 0 && path.length <= 256 && PATH.test(path) &&
     !path.startsWith("/") && path.split("/").every(part => part.length > 0 && part !== "." && part !== "..");
 }
-function parseManifest(raw: Uint8Array): PluginManifestV1 {
+function freezeTree<T>(value: T): T {
+  if (value && typeof value === "object" && !Object.isFrozen(value)) {
+    for (const child of Object.values(value)) freezeTree(child);
+    Object.freeze(value);
+  }
+  return value;
+}
+function parseManifest(raw: Uint8Array): PluginManifest {
   let value: Record<string, unknown>;
   try {
     value = record(JSON.parse(new TextDecoder("utf-8", { fatal: true }).decode(raw)) as unknown);
   } catch {
     return fail("invalid_manifest", "Manifest must contain valid UTF-8 JSON");
   }
+  if (value.schema === "proprium.plugin/v2") {
+    if (!exactKeys(value, ["schema", "id", "version", "abi", "entrypoint", "capabilities", "artifacts", "actions", "ui", "asset_groups"]) ||
+        value.abi !== "proprium.component/v2" || !Array.isArray(value.actions) || value.actions.length > 256 ||
+        !Array.isArray(value.ui) || value.ui.length > 128 || !Array.isArray(value.asset_groups) || value.asset_groups.length > 32) {
+      return fail("invalid_manifest", "Malformed v2 authoring manifest");
+    }
+    const base = parseManifest(new TextEncoder().encode(JSON.stringify({
+      schema: "proprium.plugin/v1", id: value.id, version: value.version, abi: "proprium.component/v1",
+      entrypoint: value.entrypoint, capabilities: value.capabilities, artifacts: value.artifacts,
+    })));
+    const actions = new Set<string>();
+    const surfaces = new Set<string>();
+    try {
+      for (const action of value.actions) {
+        assertDescriptor(action);
+        if (action.plugin_id !== base.id || actions.has(action.action_id) ||
+            action.required_capabilities.some(capability => !base.capabilities.includes(capability))) {
+          return fail("invalid_manifest", "Action identity/capabilities differ from signed manifest");
+        }
+        actions.add(action.action_id);
+      }
+      for (const surface of value.ui) {
+        assertSurface(surface);
+        const id = (surface as SurfaceDeclaration).id;
+        if (surfaces.has(id)) return fail("invalid_manifest", "Duplicate surface ID");
+        surfaces.add(id);
+        const validateBindings = (node: unknown): void => {
+          if (!node || typeof node !== "object") return;
+          if (Array.isArray(node)) { node.forEach(validateBindings); return; }
+          const item = node as Record<string, unknown>;
+          if (typeof item.action_id === "string" && !actions.has(item.action_id)) {
+            fail("invalid_manifest", "UI binds an undeclared action");
+          }
+          Object.values(item).forEach(validateBindings);
+        };
+        validateBindings(surface);
+      }
+    } catch (error) {
+      if (error instanceof PluginArtifactError) throw error;
+      return fail("invalid_manifest", "Authoring action or surface does not match the adopted schema");
+    }
+    const groups: AssetGroupRef[] = [];
+    for (const rawGroup of value.asset_groups) {
+      const group = record(rawGroup);
+      if (!exactKeys(group, ["id", "manifest_path", "sha256", "bytes", "role"]) ||
+          typeof group.id !== "string" || !group.id.length || group.id.length > 128 || groups.some(other => other.id === group.id) ||
+          !safeAssetPath(group.manifest_path) || typeof group.sha256 !== "string" || !SHA256.test(group.sha256) ||
+          !Number.isSafeInteger(group.bytes) || (group.bytes as number) < 1 || (group.bytes as number) > 512 * 1024 ||
+          !["dictionary", "embedding", "reranker"].includes(group.role as string)) {
+        return fail("invalid_manifest", "Invalid signed asset group reference");
+      }
+      groups.push(group as unknown as AssetGroupRef);
+    }
+    return freezeTree({ ...base, schema: "proprium.plugin/v2", abi: "proprium.component/v2",
+      actions: value.actions as ActionDescriptor[], ui: value.ui as SurfaceDeclaration[], asset_groups: groups });
+  }
+  if (raw.length > MAX_MANIFEST_BYTES) return fail("invalid_manifest", "V1 manifest exceeds its byte ceiling");
   if (!exactKeys(value, ["schema", "id", "version", "abi", "entrypoint", "capabilities", "artifacts"]) ||
       value.schema !== "proprium.plugin/v1" || typeof value.id !== "string" || !IDENTIFIER.test(value.id) ||
       typeof value.version !== "string" || !VERSION.test(value.version) || value.abi !== "proprium.component/v1" ||
@@ -108,8 +190,8 @@ export interface ManifestAdmission {
   readonly signature: Uint8Array;
 }
 /** Verify pinned publisher identity, byte digest, signature and schema. */
-export async function admitPluginManifest(raw: Uint8Array, policy: ManifestAdmission): Promise<PluginManifestV1> {
-  if (!(raw instanceof Uint8Array) || raw.byteLength === 0 || raw.byteLength > MAX_MANIFEST_BYTES ||
+export async function admitPluginManifest(raw: Uint8Array, policy: ManifestAdmission): Promise<PluginManifest> {
+  if (!(raw instanceof Uint8Array) || raw.byteLength === 0 || raw.byteLength > 512 * 1024 ||
       typeof policy.expectedSha256 !== "string" || !SHA256.test(policy.expectedSha256)) {
     return fail("invalid_manifest", "Manifest bytes or expected digest are invalid");
   }
@@ -135,7 +217,7 @@ export async function admitPluginManifest(raw: Uint8Array, policy: ManifestAdmis
   return manifest;
 }
 /** Check one downloaded artifact before caching or instantiation. */
-export async function verifyPluginArtifact(manifest: PluginManifestV1, path: string, content: Uint8Array): Promise<void> {
+export async function verifyPluginArtifact(manifest: PluginManifest, path: string, content: Uint8Array): Promise<void> {
   if (!verified.has(manifest)) fail("untrusted_publisher", "Manifest has not completed publisher admission");
   const descriptor = manifest.artifacts.find(item => item.path === path);
   if (!descriptor || !(content instanceof Uint8Array) || content.byteLength !== descriptor.bytes) {

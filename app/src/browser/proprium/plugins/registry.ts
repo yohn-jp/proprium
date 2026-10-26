@@ -1,8 +1,8 @@
-import { PluginArtifactError, admitPluginManifest, type PluginManifestV1 } from "../plugin-artifact.js";
+import { PluginArtifactError, admitPluginManifest, type PluginManifest } from "../plugin-artifact.js";
 
 export const PLUGIN_REGISTRY_SCHEMA = "proprium.registry/v1";
 export const REGISTRY_MAX_BYTES = 1024 * 1024;
-const MANIFEST_MAX_BYTES = 128 * 1024;
+const MANIFEST_MAX_BYTES = 512 * 1024;
 const SHA256 = /^[a-f0-9]{64}$/u;
 const IDENTIFIER = /^[a-z][a-z0-9-]{0,62}\.[a-z][a-z0-9-]{0,62}$/u;
 const SEMVER = /^(0|[1-9]\d*)\.(0|[1-9]\d*)\.(0|[1-9]\d*)(?:-([0-9A-Za-z.-]+))?$/u;
@@ -211,7 +211,7 @@ export function registryManifestEntry(registry: SignedRegistrySnapshot, id: stri
 export async function admitRegistryManifest(
   bytes: Uint8Array,
   entry: PluginRegistryEntry,
-): Promise<PluginManifestV1> {
+): Promise<PluginManifest> {
   if (!(bytes instanceof Uint8Array) || bytes.byteLength > MANIFEST_MAX_BYTES || await sha256(bytes) !== entry.manifestSha256) {
     throw new PluginArtifactError("digest_mismatch", "Plugin manifest differs from its signed registry entry");
   }

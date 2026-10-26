@@ -14,6 +14,12 @@ export interface GuestHost {
 export type Handler = (input: Record<string, unknown>, context: ActionRequest, host: GuestHost) =>
   Generator<HostCall, unknown, unknown> | unknown;
 
+const warnedResult = Symbol("proprium.guest.result");
+/** Marks a successful value with non-blocking warnings without changing its schema. */
+export function withWarnings<T>(value: T, warnings: readonly string[]) {
+  return { [warnedResult]: true as const, value, warnings: [...warnings] };
+}
+
 /**
  * Cooperative component-model adapter. Each call yields to the trusted Host,
  * which performs asynchronous I/O and resumes this same component instance.
@@ -27,6 +33,18 @@ export function createGuest(pluginId: string, handlers: Record<string, Handler>)
   let task: Generator<HostCall, unknown, unknown> | undefined;
   let pending: string | undefined;
   let sequence = 0;
+
+  const success = (value: unknown) => {
+    if (value && typeof value === "object" && warnedResult in value) {
+      const marked = value as ReturnType<typeof withWarnings>;
+      if (!Array.isArray(marked.warnings) || marked.warnings.length > 256 ||
+          marked.warnings.some(warning => typeof warning !== "string" || warning.length > 4096)) {
+        throw Object.assign(new Error("Invalid action warnings"), { code: "invalid_input" });
+      }
+      return result({ ok: true, value: marked.value, warnings: marked.warnings });
+    }
+    return result({ ok: true, value, warnings: [] });
+  };
 
   const result = (body: { ok: true; value: unknown; warnings: string[] } | { ok: false; error: ActionError }) => {
     if (!current) throw new Error("No active action");
@@ -48,7 +66,7 @@ export function createGuest(pluginId: string, handlers: Record<string, Handler>)
   const step = (response?: HostResponse): string => {
     try {
       const state = response?.ok === false ? task!.throw(response.error) : task!.next(response?.value);
-      if (state.done) return result({ ok: true, value: state.value, warnings: [] });
+      if (state.done) return success(state.value);
       const call = state.value;
       if (!call || call.kind !== "host_call" || typeof call.operation !== "string" ||
           !call.payload || typeof call.payload !== "object" || Array.isArray(call.payload)) {
@@ -93,7 +111,7 @@ export function createGuest(pluginId: string, handlers: Record<string, Handler>)
         if (value && typeof value === "object" && "then" in value) {
           throw Object.assign(new Error("Use a generator for asynchronous Host calls"), { code: "incompatible_abi" });
         }
-        return result({ ok: true, value, warnings: [] });
+        return success(value);
       } catch (error) { return failure(error); }
     },
     dispose(): void { task = undefined; current = undefined; pending = undefined; initialized = false; workspaceId = undefined; },

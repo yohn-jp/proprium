@@ -103,6 +103,10 @@ export interface ChangeSet {
   read_set: ReadPrecondition[];
   units: ChangeUnit[];
   evidence: SourceSpan[];
+  /** Exact versioned domain input retained by the Host receipt authority. */
+  source_payload?: unknown;
+  source_payload_digest?: string;
+  domain_evidence?: unknown[];
 }
 export interface ActionBinding {
   action_id: string;
