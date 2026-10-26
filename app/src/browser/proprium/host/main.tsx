@@ -1,5 +1,6 @@
 import { createRoot } from "react-dom/client";
 import { BrowserLocalGit } from "../git/index.js";
+import { isGitHubWorkspaceIdentity } from "../git/protocol.js";
 import type { WorkspaceIdentity } from "../git/protocol.js";
 import "../register-offline-shell.js";
 import { HostApp } from "./HostApp.js";
@@ -33,7 +34,7 @@ if (import.meta.env.VITE_PROPRIUM_E2E === "true") {
           if (existing.data === null) await git.write(path, new TextEncoder().encode(text), existing.revision);
         }
       } finally { git.close(); }
-      const detail = { identity, title: `${identity.owner}/${identity.repository}`, lastOpened: Date.now() };
+      const detail = { identity, title: isGitHubWorkspaceIdentity(identity) ? `${identity.owner}/${identity.repository}` : identity.name, lastOpened: Date.now() };
       for (let attempt = 0; !window.propriumHostOpenLocalWorkspace && attempt < 200; attempt += 1) {
         await new Promise(resolve => window.setTimeout(resolve, 10));
       }

@@ -79,6 +79,37 @@ test("Host edits and commits a generic repository offline, then reopens the save
   await expect(historyEntry).toBeVisible();
 });
 
+test("local start creates and reopens a generic browser-only workspace without calling a remote", async ({ page }) => {
+  await page.goto("/?e2e=1");
+  const hostOrigin = new URL(page.url()).origin;
+  const remoteRequests: string[] = [];
+  page.on("request", request => {
+    const url = new URL(request.url());
+    if (url.origin !== hostOrigin) remoteRequests.push(url.href);
+  });
+
+  await expect(page.getByRole("heading", { name: "Start or open a workspace" })).toBeVisible();
+  await page.getByLabel("Workspace name", { exact: true }).fill("A local draft");
+  await page.getByRole("button", { name: "Create local workspace", exact: true }).click();
+  await showPanel(page, "outline");
+  await expect(page.getByLabel("Local workspace only", { exact: true })).toBeVisible();
+  await expect(page.locator(".topbar").getByRole("button", { name: "GitHubに接続", exact: true })).toHaveCount(0);
+
+  await page.getByLabel("New file path", { exact: true }).fill("notes.md");
+  await page.getByRole("button", { name: "Create new file", exact: true }).click();
+  const editor = page.getByRole("textbox", { name: "原稿 Markdown" });
+  await editor.fill("A generic local workspace.\n");
+  await page.getByRole("button", { name: "Save draft", exact: true }).click();
+  await expect(page.locator(".host-message[role='status']")).toContainText("saved to this browser's local Git worktree");
+
+  await page.getByRole("button", { name: "Workspaces", exact: true }).click();
+  await page.getByRole("button", { name: /A local draft/u }).click();
+  await showRepositoryFiles(page);
+  await chooseFile(page, "notes.md");
+  await expectEditorText(page, "A generic local workspace.\n");
+  expect(remoteRequests).toEqual([]);
+});
+
 test("Host preserves editor text typed while a deleted file is pending, then saves it as a new file", async ({ page }) => {
   const workspace = identity(`delete-race-${crypto.randomUUID()}`);
   await page.goto("/?e2e=1");

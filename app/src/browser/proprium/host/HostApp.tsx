@@ -2,7 +2,8 @@ import { lazy, Suspense, useLayoutEffect, useCallback, useEffect, useMemo, useRe
 import { createPortal } from "react-dom";
 import { useNavigate } from "react-router-dom";
 import { BrowserLocalGit, BrowserLocalGitError } from "../git/index.js";
-import type { CommitSummary, FileRevision, StatusEntry, WorkspaceIdentity } from "../git/protocol.js";
+import { isGitHubWorkspaceIdentity, validateWorkspaceIdentity } from "../git/protocol.js";
+import type { CommitSummary, FileRevision, LocalWorkspaceIdentity, StatusEntry, WorkspaceIdentity } from "../git/protocol.js";
 import { createGitHubAccountSession, GitHubSyncError } from "../git/github-sync.js";
 import type { GitHubAccount, GitHubDevicePrompt, GitHubRepository, GitHubAccountSession, GitHubSyncClient } from "../git/github-sync.js";
 import { PluginPanel } from "./PluginPanel.js";
@@ -57,9 +58,11 @@ function readRecentWorkspaces(): RecentWorkspace[] {
     if (!raw) return [];
     const value: unknown = JSON.parse(raw);
     if (!Array.isArray(value)) return [];
-    return value.filter((item): item is RecentWorkspace => !!item && typeof item === "object" &&
-      typeof item.title === "string" && typeof item.lastOpened === "number" && item.identity &&
-      typeof item.identity.localWorkspaceId === "string");
+    return value.filter((item): item is RecentWorkspace => {
+      if (!item || typeof item !== "object" || typeof item.title !== "string" || typeof item.lastOpened !== "number" || !item.identity) return false;
+      try { validateWorkspaceIdentity(item.identity as WorkspaceIdentity); return true; }
+      catch { return false; }
+    });
   } catch { return []; }
 }
 function persistRecents(value: RecentWorkspace[]): void {
@@ -103,6 +106,7 @@ function localWorkspaceId(repositoryId: number, branch: string): string {
   for (let index = 0; index < key.length; index += 1) digest = Math.imul(digest ^ key.charCodeAt(index), 0x01000193);
   return `gh${(digest >>> 0).toString(16).padStart(8, "0")}${crypto.randomUUID().replaceAll("-", "").slice(0, 24)}`;
 }
+function newLocalWorkspaceId(): string { return `local-${crypto.randomUUID().replaceAll("-", "")}`; }
 function errorMessage(error: unknown): string {
   if (error instanceof BrowserLocalGitError) return `${error.code}: ${error.message}`;
   if (error instanceof Error && "code" in error && typeof error.code === "string") return `${error.code}: ${error.message}`;
@@ -132,6 +136,7 @@ export function HostApp(): ReactElement {
   const [publishBusy, setPublishBusy] = useState(false);
   const [selectedRepository, setSelectedRepository] = useState<number | null>(null);
   const [selectedBranch, setSelectedBranch] = useState("");
+  const [newWorkspaceName, setNewWorkspaceName] = useState("Untitled workspace");
   const [workspace, setWorkspace] = useState<RecentWorkspace | null>(null);
   const [workspaceGeneration, setWorkspaceGeneration] = useState("");
   const [git, setGit] = useState<BrowserLocalGit | null>(null);
@@ -205,7 +210,7 @@ export function HostApp(): ReactElement {
     let nextGit: BrowserLocalGit | null = null;
     try {
       nextGit = new BrowserLocalGit(entry.identity);
-      const nextSync = attachedSession ? nextGit.connectGitHubSession(attachedSession) : null;
+      const nextSync = attachedSession && isGitHubWorkspaceIdentity(entry.identity) ? nextGit.connectGitHubSession(attachedSession) : null;
       await nextGit.init();
       const nextState = await loadWorkspaceState(nextGit);
       const liveFile = currentFileRef.current;
@@ -230,7 +235,9 @@ export function HostApp(): ReactElement {
       setSyncState(nextState.status.entries.length || !nextState.status.head ? "local-draft" : "local-committed");
       setRecent(existing => rememberWorkspace(entry, existing));
       previousGit?.close();
-      setMessage({ tone: "info", text: "Workspace opened on this device. Local drafts and commits remain in this browser until published to GitHub." });
+      setMessage({ tone: "info", text: isGitHubWorkspaceIdentity(entry.identity)
+        ? "Workspace opened on this device. Local drafts and commits remain in this browser until published to GitHub."
+        : "Local workspace opened. Its files and Git history are stored only in this browser." });
     } catch (error) {
       if (error instanceof BrowserLocalGitError && error.code === "storage_unknown") setRecoveryTarget(entry);
       if (gitRef.current !== nextGit) nextGit?.close();
@@ -248,6 +255,7 @@ export function HostApp(): ReactElement {
 
   function workspaceAuthTargetIsCurrent(target: WorkspaceAuthTarget): boolean {
     const active = workspaceRef.current;
+    if (!active || !isGitHubWorkspaceIdentity(active.identity) || !isGitHubWorkspaceIdentity(target.identity)) return false;
     return gitRef.current === target.git && workspaceGenerationRef.current === target.generation && !!active &&
       active.identity.localWorkspaceId === target.identity.localWorkspaceId &&
       active.identity.origin === target.identity.origin &&
@@ -258,7 +266,7 @@ export function HostApp(): ReactElement {
   }
 
   function openWorkspaceGitHubAuth(): void {
-    if (!workspace || !git) return;
+    if (!workspace || !git || !isGitHubWorkspaceIdentity(workspace.identity)) return;
     workspaceAuthTarget.current = { git, identity: { ...workspace.identity }, generation: workspaceGeneration };
     setMessage(null);
     setWorkspaceAuthOpen(true);
@@ -287,6 +295,9 @@ export function HostApp(): ReactElement {
       const signedIn = await accountSession.completeAuthorization(controller.signal);
       if (controller.signal.aborted || authorizationRef.current !== controller) return;
       if (target) {
+        if (!isGitHubWorkspaceIdentity(target.identity)) {
+          throw new GitHubSyncError("repository_mismatch", "A local-only workspace has no GitHub repository to verify.");
+        }
         if (!workspaceAuthTargetIsCurrent(target)) {
           throw new GitHubSyncError("authentication_required", "The active Workspace changed during GitHub sign-in. Local work was left untouched; reopen its GitHub connection.");
         }
@@ -350,6 +361,19 @@ export function HostApp(): ReactElement {
     setWorkspaceAuthOpen(false);
   }
 
+  async function createLocalWorkspace(): Promise<void> {
+    const name = newWorkspaceName.trim();
+    if (!name) { setMessage({ tone: "error", text: "Enter a name for this local workspace." }); return; }
+    const identity: LocalWorkspaceIdentity = {
+      provider: "local",
+      name,
+      branch: "main",
+      localWorkspaceId: newLocalWorkspaceId(),
+    };
+    const entry: RecentWorkspace = { identity, title: name, lastOpened: Date.now() };
+    await openLocalWorkspace(entry);
+  }
+
   async function openRemoteRepository(): Promise<void> {
     if (!session || !selectedRepositoryEntry) return;
     const initialFile = currentFileRef.current;
@@ -364,7 +388,7 @@ export function HostApp(): ReactElement {
       branch,
       localWorkspaceId: localWorkspaceId(selectedRepositoryEntry.id, branch),
     };
-    const entry = recent.find(item => item.identity.repositoryId === identity.repositoryId && item.identity.branch === identity.branch)
+    const entry = recent.find(item => isGitHubWorkspaceIdentity(item.identity) && item.identity.repositoryId === identity.repositoryId && item.identity.branch === identity.branch)
       ?? { identity, title: `${selectedRepositoryEntry.fullName} · ${branch}`, lastOpened: Date.now() };
     setBusy(true);
     setMessage(null);
@@ -419,7 +443,7 @@ export function HostApp(): ReactElement {
   }
 
   async function selectRecent(entry: RecentWorkspace): Promise<void> {
-    await openLocalWorkspace(entry, session ?? undefined);
+    await openLocalWorkspace(entry, isGitHubWorkspaceIdentity(entry.identity) ? session ?? undefined : undefined);
   }
 
   async function refreshAfterPlugin(): Promise<void> {
@@ -503,7 +527,7 @@ export function HostApp(): ReactElement {
       }
       await refresh(git, workspace!);
       if (currentFileRef.current?.dirty) setSyncState("editing");
-      setMessage({ tone: "success", text: `${savingFile.path} saved to this browser's local Git worktree. It is not published to GitHub.` });
+      setMessage({ tone: "success", text: `${savingFile.path} saved to this browser's local Git worktree. It has not been sent to a remote.` });
     } catch (error) { setMessage({ tone: "error", text: errorMessage(error) }); }
     finally { setBusy(false); }
   }
@@ -721,12 +745,20 @@ export function HostApp(): ReactElement {
 
   const recentCard = <section className="picker-card recent-card" aria-labelledby="recent-heading">
           <div className="card-heading"><div><p className="eyebrow">THIS DEVICE</p><h2 id="recent-heading">Recent workspaces</h2></div><span className="card-icon">◷</span></div>
-          <p className="field-help">Available offline after they have been opened in this browser. Local changes remain vulnerable to browser storage loss until GitHub confirms publication.</p>
-          {recent.length ? <ul className="recent-list">{recent.map(entry => <li key={entry.identity.localWorkspaceId}><button type="button" className="recent-workspace" disabled={busy} onClick={() => void selectRecent(entry)}><span><strong>{entry.title}</strong><small>{entry.identity.branch} · opened {new Date(entry.lastOpened).toLocaleDateString()}</small></span><span aria-hidden="true">→</span></button></li>)}</ul> : <div className="empty-state"><span>◇</span><p>No local workspaces yet</p></div>}
+          <p className="field-help">Saved in this browser. GitHub workspaces can be reopened offline after their files have been loaded here.</p>
+          {recent.length ? <ul className="recent-list">{recent.map(entry => <li key={entry.identity.localWorkspaceId}><button type="button" className="recent-workspace" disabled={busy} onClick={() => void selectRecent(entry)}><span><strong>{entry.title}</strong><small>{entry.identity.branch} · {isGitHubWorkspaceIdentity(entry.identity) ? "GitHub" : "Local only"} · opened {new Date(entry.lastOpened).toLocaleDateString()}</small></span><span aria-hidden="true">→</span></button></li>)}</ul> : <div className="empty-state"><span>◇</span><p>No local workspaces yet</p></div>}
         </section>;
   const picker = <section className="workspace-picker" aria-labelledby="picker-heading">
-      <div className="welcome-copy"><p className="eyebrow">A workspace that stays yours</p><h1 id="picker-heading">Open a GitHub workspace</h1><p>Open a repository in this browser, edit files offline, commit locally, and publish when you are ready.</p></div>
+      <div className="welcome-copy"><p className="eyebrow">A workspace that stays yours</p><h1 id="picker-heading">Start or open a workspace</h1><p>Create a local workspace and start editing right away, or open a GitHub repository to sync with a remote.</p></div>
       <div className="picker-grid">
+        <section className="picker-card local-start-card" aria-labelledby="local-start-heading">
+          <div className="card-heading"><div><p className="eyebrow">LOCAL WORKSPACE</p><h2 id="local-start-heading">Start on this device</h2></div><span className="card-icon">✎</span></div>
+          <p className="field-help">Create a generic Git workspace in this browser. No account, Gateway or network connection is needed.</p>
+          <label htmlFor="new-workspace-name">Workspace name</label>
+          <input id="new-workspace-name" value={newWorkspaceName} onChange={event => setNewWorkspaceName(event.target.value)} maxLength={120} autoComplete="off" />
+          <button className="primary-button full-width" type="button" disabled={busy || !newWorkspaceName.trim()} onClick={() => void createLocalWorkspace()}>{busy ? "Creating…" : "Create local workspace"}</button>
+          <p className="field-help">Files and commits stay in this browser. They are not backed up remotely.</p>
+        </section>
         <section className="picker-card" aria-labelledby="connect-heading">
           <div className="card-heading"><div><p className="eyebrow">REMOTE WORKSPACE</p><h2 id="connect-heading">GitHub</h2></div><span className="card-icon">↗</span></div>
           {account ? <>
@@ -756,7 +788,7 @@ export function HostApp(): ReactElement {
         </section>
         {mode === "mobile" && recentCard}
       </div>
-      <p className="locality-note"><span>●</span> Editing and Git run in this browser. GitHub is the shared source of truth; local commits are not published automatically.</p>
+      <p className="locality-note"><span>●</span> Local workspaces stay in this browser. GitHub workspaces use this browser's local Git until you explicitly publish.</p>
     </section>;
   const library = workspace ? <div className="host-controls"><section className="sidebar-section">
             <div className="section-title-row"><h2>Files</h2><span className="count-badge">{files.filter(file => file.type === "blob").length}</span></div>
@@ -767,8 +799,10 @@ export function HostApp(): ReactElement {
             {files.length ? <ul className="file-list" aria-label="Repository files">{files.filter(file => file.type === "blob").map(file => <li key={file.path}><button type="button" aria-current={currentFile?.path === file.path ? "page" : undefined} className={`file-row ${currentFile?.path === file.path ? "file-selected" : ""}`} onClick={() => void loadFile(file.path)}><span className="file-icon" aria-hidden="true">{fileIcon(file.path)}</span><span className="file-path">{file.path}</span>{changedPaths.has(file.path) && <span className="change-dot" aria-label="Local change" />}</button></li>)}</ul> : <p className="sidebar-empty">This repository has no files yet.</p>}
           </section>
           <section className="sidebar-section sync-sidebar-section">
-            <div className="section-title-row"><h2>GitHub</h2><span className={`connection-indicator ${syncClient ? "connected" : "local-only"}`} aria-label={syncClient ? "Connected to GitHub" : "Local workspace only"}>{syncClient ? "GitHub接続済み" : "このブラウザーのみ"}</span></div>
-            {syncClient ? <div className="sync-actions"><button type="button" onClick={() => void fetchRemote()} disabled={busy}>Fetch</button><button type="button" onClick={() => void pullRemote()} disabled={busy}>Pull</button><button type="button" className="publish-button" onClick={() => void publishRemote()} disabled={busy || status.localState !== "local-committed"}>Publish</button></div> : <p className="sidebar-empty">ローカル編集はこのまま利用できます。GitHubには画面上部から接続できます。</p>}
+            <div className="section-title-row"><h2>{isGitHubWorkspaceIdentity(workspace.identity) ? "GitHub" : "Remote sync"}</h2><span className={`connection-indicator ${syncClient ? "connected" : "local-only"}`} aria-label={syncClient ? "Connected to GitHub" : "Local workspace only"}>{syncClient ? "GitHub接続済み" : "このブラウザーのみ"}</span></div>
+            {syncClient ? <div className="sync-actions"><button type="button" onClick={() => void fetchRemote()} disabled={busy}>Fetch</button><button type="button" onClick={() => void pullRemote()} disabled={busy}>Pull</button><button type="button" className="publish-button" onClick={() => void publishRemote()} disabled={busy || status.localState !== "local-committed"}>Publish</button></div> : isGitHubWorkspaceIdentity(workspace.identity)
+              ? <p className="sidebar-empty">ローカル編集はこのまま利用できます。GitHubには画面上部から接続できます。</p>
+              : <p className="sidebar-empty">このWorkspaceはこのブラウザー内だけに保存されます。GitHub同期は設定されていません。</p>}
           </section>
 </div> : mode === "desktop" ? <div className="host-controls">{recentCard}</div> : picker;
   const tools = <div className="host-controls">{git && workspace && <PluginPanel
@@ -781,7 +815,7 @@ export function HostApp(): ReactElement {
             onWorkspaceChanged={refreshAfterPlugin}
             onRegisterLiveInvoker={registerLivePluginInvoker}
           />}
-          {git && workspace && <LiveMcpPanel
+          {git && workspace && isGitHubWorkspaceIdentity(workspace.identity) && <LiveMcpPanel
             key={`${workspaceGeneration}:${gatewayDraft}`}
             repositories={recent}
             gatewayUrl={gatewayDraft}
@@ -842,7 +876,7 @@ export function HostApp(): ReactElement {
   </details> : null;
   const Shell = mode === "desktop" ? DesktopShell : MobileShell;
   return <main className="proprium-host restored-host" onKeyDown={event => { if ((event.metaKey || event.ctrlKey) && event.key.toLowerCase() === "s") { event.preventDefault(); if (!busy && !recoveryEntry) void saveDraft(); } }}><Suspense fallback={<p>ワークスペースを開いています…</p>}><Shell mode={mode} onNavigateHome={leaveWorkspace}
-    header={<header className="topbar">{workspace && <button className="quiet-button" onClick={leaveWorkspace}>Workspaces</button>}{workspace && !syncClient && <button type="button" className="quiet-button" aria-haspopup="dialog" aria-controls="workspace-github-auth" disabled={busy} onClick={openWorkspaceGitHubAuth}>GitHubに接続</button>}{account && <span className="host-account-label" aria-label="GitHub account">{account.login}</span>}<ThemeControl mode={theme} onChange={value => { setTheme(value); try { persistThemeMode(value); } catch { setMessage({ tone: "error", text: "外観設定を保存できませんでした。" }); } }} />{workspace && account && <button className="quiet-button" onClick={signOut}>Sign out</button>}</header>}
+    header={<header className="topbar">{workspace && <button className="quiet-button" onClick={leaveWorkspace}>Workspaces</button>}{workspace && !syncClient && isGitHubWorkspaceIdentity(workspace.identity) && <button type="button" className="quiet-button" aria-haspopup="dialog" aria-controls="workspace-github-auth" disabled={busy} onClick={openWorkspaceGitHubAuth}>GitHubに接続</button>}{account && <span className="host-account-label" aria-label="GitHub account">{account.login}</span>}<ThemeControl mode={theme} onChange={value => { setTheme(value); try { persistThemeMode(value); } catch { setMessage({ tone: "error", text: "外観設定を保存できませんでした。" }); } }} />{workspace && account && <button className="quiet-button" onClick={signOut}>Sign out</button>}</header>}
     documentTitle={currentFile?.path ?? workspace?.title ?? "Proprium"} documentContext={workspace?.identity.branch}
     desktopDurability={syncState === "published" ? "saved" : checkpointBusy ? "checkpointing" : status.head && status.entries.length === 0 && !currentFile?.dirty ? "checkpointed" : "draft"}
     library={library} editor={workspace ? <RetainedPanelSlot node={editorNode} /> : editor} tools={<RetainedPanelSlot node={toolsNode} />} status={statusSurface} renderStatus={error => <>{statusSurface}{error && <p role="alert">{error}</p>}</>}
