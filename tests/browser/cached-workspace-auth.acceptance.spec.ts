@@ -31,7 +31,7 @@ async function openCachedWorkspaceWithDirtyEditor(page: Page): Promise<{
     await window.propriumHostTest!.openWorkspace(identity, { "README.md": text });
   }, { identity, text: localWorkspaceText });
 
-  await page.getByRole("button", { name: "Workspaces", exact: true }).click();
+  await page.getByRole("button", { name: "作品一覧", exact: true }).click();
   await page.getByRole("button", { name: new RegExp(`${identity.owner}/${identity.repository}`, "u") }).click();
   await chooseFile(page, "README.md");
   await expectEditorText(page, localWorkspaceText);
@@ -58,7 +58,7 @@ test("cached Workspace signs in in place, preserves dirty text, and fills Home r
   const { origin, identity, fixture } = await openCachedWorkspaceWithDirtyEditor(page);
   const dialog = await startWorkspaceSignIn(page, origin);
 
-  await expect(dialog.getByRole("region", { name: "GitHub device authorization" })).toContainText("STAT-IC01");
+  await expect(dialog.getByRole("region", { name: "GitHub デバイス認証" })).toContainText("STAT-IC01");
   await expect(dialog.getByRole("status")).toContainText("GitHubでの承認を待っています");
   if (testInfo.project.name === "desktop-chromium") await expect(page.locator(".editor-protection")).not.toContainText("結果確認中");
   await page.screenshot({ path: testInfo.outputPath("cached-workspace-github-auth.png"), fullPage: true });
@@ -75,9 +75,9 @@ test("cached Workspace signs in in place, preserves dirty text, and fills Home r
   expect(apiPaths.some(path => /\/commits(?:\/|$)|\/git\/(?:trees|blobs)\//u.test(path))).toBe(false);
 
   await showPanel(page, "editor");
-  await page.getByRole("button", { name: "Save draft", exact: true }).click();
+  await page.getByRole("button", { name: "端末に保存", exact: true }).click();
   await expectEditorText(page, dirtyEditorText);
-  await page.getByRole("button", { name: "Workspaces", exact: true }).click();
+  await page.getByRole("button", { name: "作品一覧", exact: true }).click();
   const repositoryPicker = page.getByLabel("Repository", { exact: true });
   await expect(repositoryPicker).toBeVisible();
   await expect(repositoryPicker.locator(`option[value="${identity.repositoryId}"]`)).toHaveText(`${identity.owner}/${identity.repository}`);
@@ -91,7 +91,7 @@ test("cancel and repository verification failure leave the cached editor and Wor
     : route.fallback());
 
   let dialog = await startWorkspaceSignIn(page, origin);
-  await expect(dialog.getByRole("region", { name: "GitHub device authorization" })).toContainText("STAT-IC01");
+  await expect(dialog.getByRole("region", { name: "GitHub デバイス認証" })).toContainText("STAT-IC01");
   await dialog.getByRole("button", { name: "キャンセル", exact: true }).click();
   await expect(dialog).toBeHidden();
   await expect(page.getByLabel("Connected to GitHub", { exact: true })).toHaveCount(0);
@@ -140,7 +140,7 @@ test("cancel before the Device code arrives does not revive an old authorization
   await showPanel(page, "outline");
   await page.getByRole("button", { name: "GitHubに接続", exact: true }).click();
   await expect(dialog).toBeVisible();
-  await expect(dialog.getByRole("region", { name: "GitHub device authorization" })).toHaveCount(0);
+  await expect(dialog.getByRole("region", { name: "GitHub デバイス認証" })).toHaveCount(0);
   await expect(dialog.getByRole("button", { name: "GitHubに接続", exact: true })).toBeEnabled();
   await dialog.getByRole("button", { name: "キャンセル", exact: true }).click();
   await expectEditorText(page, dirtyEditorText);
@@ -167,10 +167,10 @@ test("repository list failure does not attach sync or show an empty signed-in pi
   await expectEditorText(page, dirtyEditorText);
 
   await showPanel(page, "editor");
-  await page.getByRole("button", { name: "Save draft", exact: true }).click();
-  await page.getByRole("button", { name: "Workspaces", exact: true }).click();
+  await page.getByRole("button", { name: "端末に保存", exact: true }).click();
+  await page.getByRole("button", { name: "作品一覧", exact: true }).click();
   await expect(page.getByLabel("Repository", { exact: true })).toHaveCount(0);
-  await expect(page.getByRole("button", { name: "Connect GitHub", exact: true })).toBeVisible();
+  await expect(page.getByRole("button", { name: "GitHubに接続", exact: true })).toBeVisible();
   await expect(page.getByLabel("Connected to GitHub", { exact: true })).toHaveCount(0);
 });
 

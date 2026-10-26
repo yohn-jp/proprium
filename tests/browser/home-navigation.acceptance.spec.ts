@@ -8,11 +8,13 @@ test("Desktop home links protect dirty text and preserve GitHub authentication w
   const origin = new URL(page.url()).origin;
   await installStaticGitHubFixture(page, origin);
   await configureGateway(page, origin);
-  await page.getByRole("button", { name: "Connect GitHub", exact: true }).click();
+  await page.getByRole("button", { name: "GitHubに接続", exact: true }).click();
   await expect(page.getByLabel("Repository", { exact: true })).toBeVisible();
   await page.getByLabel("Repository", { exact: true }).selectOption(String(staticFixtureIdentity.repositoryId));
-  await page.getByLabel("Branch", { exact: true }).fill(staticFixtureIdentity.branch);
-  await page.getByRole("button", { name: "Open workspace", exact: true }).click();
+  const branchPicker = page.getByLabel("ブランチ", { exact: true });
+  await expect(branchPicker.locator(`option[value="${staticFixtureIdentity.branch}"]`)).toHaveCount(1);
+  await branchPicker.selectOption(staticFixtureIdentity.branch);
+  await page.getByRole("button", { name: "作品を開く", exact: true }).click();
   await chooseFile(page, "README.md");
   const text = "ホーム操作で失わない未保存の原稿\n";
   await page.getByRole("textbox", { name: "原稿 Markdown" }).fill(text);
@@ -24,12 +26,12 @@ test("Desktop home links protect dirty text and preserve GitHub authentication w
   await expect(page.getByRole("textbox", { name: "原稿 Markdown" })).toHaveText(text);
   await expect(page.getByLabel("GitHub account", { exact: true })).toBeVisible();
 
-  const save = page.getByRole("button", { name: "Save draft", exact: true });
+  const save = page.getByRole("button", { name: "端末に保存", exact: true });
   await save.click();
   await expect(save).toBeDisabled();
   await page.getByRole("link", { name: "Proprium ホーム", exact: true }).click();
   await expect(page.getByLabel("Repository", { exact: true })).toBeVisible();
-  await expect(page.getByText("Connected as", { exact: false })).toBeVisible();
+  await expect(page.getByText("GitHubに接続中", { exact: false })).toBeVisible();
   expect(documentRequests).toBe(0);
   await page.locator(".recent-card button").filter({ hasText: `${staticFixtureIdentity.owner}/${staticFixtureIdentity.repository}` }).click();
   await chooseFile(page, "README.md");
