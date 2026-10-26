@@ -5,10 +5,11 @@ const baseURL = `http://127.0.0.1:${configuredPort}/`;
 const selectedTestFile = process.env.PROPRIUM_E2E_TEST_FILE ?? process.env.SCRIPTORIUM_E2E_TEST_FILE;
 const browserAcceptanceFiles = [
   "browser-git.acceptance.spec.ts",
+  "authoring-snapshot.acceptance.spec.ts",
   "browser-git-sync.acceptance.spec.ts",
   "plugin-runtime.acceptance.spec.ts",
 ];
-const webKitFiles = ["browser-git-sync.acceptance.spec.ts", "plugin-runtime.acceptance.spec.ts"];
+const webKitFiles = ["authoring-snapshot.acceptance.spec.ts", "browser-git-sync.acceptance.spec.ts", "plugin-runtime.acceptance.spec.ts"];
 const hasLiveGitHubToken = Boolean(process.env.PROPRIUM_E2E_GITHUB_TOKEN || process.env.SCRIPTORIUM_GITHUB_LIVE_TEST_TOKEN);
 const selectedPattern = selectedTestFile ? `**/${selectedTestFile}` : undefined;
 

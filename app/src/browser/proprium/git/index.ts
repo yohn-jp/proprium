@@ -15,6 +15,10 @@ import type {
   LocalGitResponse,
   StatusEntry,
   WorkspaceFile,
+  AuthoringSnapshotMetadata,
+  AuthoringSnapshotFile,
+  AuthoringSnapshotPage,
+  AuthoringSnapshotRange,
   DiffChange,
   GitHubWorkspaceIdentity,
   LocalWorkspaceIdentity,
@@ -32,7 +36,7 @@ import { createGitHubAccountSession, GitHubSyncError } from "./github-sync.js";
 import type { GitHubAccount, GitHubAccountSession, GitHubDevicePrompt, GitHubFetchResult, GitHubPullResult, GitHubPublishResult, GitHubRemoteHead, GitHubRepository, GitHubSyncClient, GitHubRemoteOperation } from "./github-sync.js";
 
 export { isGitHubWorkspaceIdentity, validateGitPath, validateWorkspaceIdentity } from "./protocol.js";
-export type { AppliedWorkspaceChange, CommitAuthor, CommitDiff, CommitFileChange, CommitSummary, DiffChange, FileRevision, FileRevisionExpectation, GitHubWorkspaceIdentity, LocalGitError, LocalGitErrorCode, LocalWorkspaceIdentity, StatusEntry, WorkspaceChange, WorkspaceFile, WorkspaceIdentity };
+export type { AppliedWorkspaceChange, AuthoringSnapshotFile, AuthoringSnapshotMetadata, AuthoringSnapshotPage, AuthoringSnapshotRange, CommitAuthor, CommitDiff, CommitFileChange, CommitSummary, DiffChange, FileRevision, FileRevisionExpectation, GitHubWorkspaceIdentity, LocalGitError, LocalGitErrorCode, LocalWorkspaceIdentity, StatusEntry, WorkspaceChange, WorkspaceFile, WorkspaceIdentity };
 export { GitHubSyncError } from "./github-sync.js";
 export { createGitHubAccountSession } from "./github-sync.js";
 export type { GitHubAccount, GitHubAccountSession, GitHubDevicePrompt, GitHubFetchResult, GitHubPullResult, GitHubPublishResult, GitHubRemoteHead, GitHubRepository, GitHubSyncClient } from "./github-sync.js";
@@ -170,6 +174,46 @@ export class BrowserLocalGit {
 
   listFiles(): Promise<WorkspaceFile[]> { return this.call({ operation: "list-files" }); }
 
+  /** Pin the current worktree directory membership and stat metadata in the Git worker. */
+  pinAuthoringSnapshot(): Promise<AuthoringSnapshotMetadata> {
+    return this.call({ operation: "authoring-snapshot-pin" });
+  }
+
+  assertAuthoringSnapshot(snapshotId: string): Promise<void> {
+    validateSnapshotId(snapshotId);
+    return this.call({ operation: "authoring-snapshot-assert", snapshotId });
+  }
+
+  listAuthoringSnapshot(snapshotId: string, prefix = "", cursor: string | null = null, limit = 128): Promise<AuthoringSnapshotPage> {
+    validateSnapshotId(snapshotId);
+    validateSnapshotPrefix(prefix);
+    if (!(cursor === null || (typeof cursor === "string" && cursor.length > 0 && cursor.length <= 128)) ||
+        !Number.isSafeInteger(limit) || limit < 1 || limit > 256) {
+      return Promise.reject(new BrowserLocalGitError("invalid_input", "Snapshot page cursor or limit is invalid."));
+    }
+    return this.call({ operation: "authoring-snapshot-list", snapshotId, prefix, cursor, limit });
+  }
+
+  statAuthoringSnapshot(snapshotId: string, path: string): Promise<AuthoringSnapshotFile | null> {
+    validateSnapshotId(snapshotId);
+    validateGitPath(path);
+    return this.call({ operation: "authoring-snapshot-stat", snapshotId, path });
+  }
+
+  readAuthoringSnapshotRange(snapshotId: string, path: string, offset: number, length: number): Promise<AuthoringSnapshotRange> {
+    validateSnapshotId(snapshotId);
+    validateGitPath(path);
+    if (!Number.isSafeInteger(offset) || offset < 0 || !Number.isSafeInteger(length) || length < 0 || length > 256 * 1024) {
+      return Promise.reject(new BrowserLocalGitError("invalid_input", "Snapshot read range is invalid."));
+    }
+    return this.call({ operation: "authoring-snapshot-read-range", snapshotId, path, offset, length });
+  }
+
+  releaseAuthoringSnapshot(snapshotId: string): Promise<void> {
+    validateSnapshotId(snapshotId);
+    return this.call({ operation: "authoring-snapshot-release", snapshotId });
+  }
+
   status(): Promise<LocalGitStatus> { return this.call({ operation: "status" }); }
 
   diff(): Promise<DiffChange[]> {
@@ -268,5 +312,22 @@ export class BrowserLocalGit {
     if (this.pending.size) this.markUncertain();
     for (const entry of this.pending.values()) entry.reject(new BrowserLocalGitError("storage_unknown", "The Git worker was closed before the operation was confirmed."));
     this.pending.clear();
+  }
+}
+
+function validateSnapshotId(value: string): void {
+  if (typeof value !== "string" || !/^[A-Za-z0-9-]{16,128}$/u.test(value)) {
+    throw new BrowserLocalGitError("invalid_input", "Snapshot identifier is invalid.");
+  }
+}
+
+function validateSnapshotPrefix(prefix: string): void {
+  if (typeof prefix !== "string" || prefix.length > 1024 || prefix.startsWith("/") || prefix.includes("\\") || prefix.includes("\0")) {
+    throw new BrowserLocalGitError("invalid_input", "Snapshot path prefix is invalid.");
+  }
+  if (!prefix) return;
+  const path = prefix.endsWith("/") ? prefix.slice(0, -1) : prefix;
+  if (!path || path.split("/").some(part => !part || part === "." || part === ".." || part === ".git")) {
+    throw new BrowserLocalGitError("invalid_input", "Snapshot path prefix is invalid.");
   }
 }

@@ -1,10 +1,17 @@
 import { BrowserLocalGit } from "./index.js";
 import type { WorkspaceIdentity } from "./protocol.js";
+import { BrowserGitSnapshotPort } from "./authoring-snapshot-port.js";
+import { AuthoringSnapshotReader, type AuthoringScope } from "../authoring/snapshots.js";
 
 declare global {
   interface Window {
     browserGitTest: {
       open(localWorkspaceId: string, changes?: Partial<WorkspaceIdentity>): BrowserLocalGit;
+      openAuthoringSession(localWorkspaceId: string): {
+        git: BrowserLocalGit;
+        reader: AuthoringSnapshotReader;
+        scope: AuthoringScope;
+      };
       holdLock(localWorkspaceId: string): Promise<boolean>;
       releaseLock(): void;
     };
@@ -23,6 +30,24 @@ window.browserGitTest = {
       localWorkspaceId,
       ...changes,
     });
+  },
+  openAuthoringSession(localWorkspaceId) {
+    const workspace: WorkspaceIdentity = {
+      origin: window.location.origin,
+      repositoryId: 923456789,
+      owner: "proprium-test",
+      repository: "browser-git-fixture",
+      branch: "main",
+      localWorkspaceId,
+    };
+    const git = new BrowserLocalGit(workspace);
+    const scope: AuthoringScope = {
+      workspace_id: localWorkspaceId,
+      repository_id: workspace.repositoryId,
+      branch: workspace.branch,
+      generation: "browser-git-test-generation",
+    };
+    return { git, reader: new AuthoringSnapshotReader(new BrowserGitSnapshotPort(git, workspace)), scope };
   },
   async holdLock(localWorkspaceId) {
     const input = new TextEncoder().encode(localWorkspaceId);

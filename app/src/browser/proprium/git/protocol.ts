@@ -45,6 +45,10 @@ export type LocalGitErrorCode =
   | "remote_unknown"
   | "rest_unsupported"
   | "network_unavailable"
+  | "snapshot_stale"
+  | "invalid_input"
+  | "file_not_found"
+  | "capacity"
   | "git_error";
 
 export interface LocalGitError {
@@ -84,6 +88,31 @@ export interface WorkspaceFile {
   type: "blob";
   oid: string;
   bytes: number;
+}
+
+export interface AuthoringSnapshotMetadata {
+  snapshot_id: string;
+  local_commit: string | null;
+  worktree_generation: string;
+}
+
+export interface AuthoringSnapshotFile {
+  path: string;
+  revision: string;
+  byte_length: number;
+  media_type: string;
+}
+
+export interface AuthoringSnapshotPage {
+  items: AuthoringSnapshotFile[];
+  next_cursor: string | null;
+}
+
+export interface AuthoringSnapshotRange {
+  bytes: Uint8Array;
+  total_bytes: number;
+  offset: number;
+  revision: string;
 }
 
 export interface FileVersion {
@@ -146,6 +175,12 @@ export type LocalGitRequest =
   | { id: string; workspace: WorkspaceIdentity; operation: "delete"; path: string; expected: FileRevision }
   | { id: string; workspace: WorkspaceIdentity; operation: "apply-changes"; changes: WorkspaceChange[]; readSet: FileRevisionExpectation[] }
   | { id: string; workspace: WorkspaceIdentity; operation: "list-files" }
+  | { id: string; workspace: WorkspaceIdentity; operation: "authoring-snapshot-pin" }
+  | { id: string; workspace: WorkspaceIdentity; operation: "authoring-snapshot-assert"; snapshotId: string }
+  | { id: string; workspace: WorkspaceIdentity; operation: "authoring-snapshot-list"; snapshotId: string; prefix: string; cursor: string | null; limit: number }
+  | { id: string; workspace: WorkspaceIdentity; operation: "authoring-snapshot-stat"; snapshotId: string; path: string }
+  | { id: string; workspace: WorkspaceIdentity; operation: "authoring-snapshot-read-range"; snapshotId: string; path: string; offset: number; length: number }
+  | { id: string; workspace: WorkspaceIdentity; operation: "authoring-snapshot-release"; snapshotId: string }
   | { id: string; workspace: WorkspaceIdentity; operation: "status" }
   | { id: string; workspace: WorkspaceIdentity; operation: "diff" }
   | { id: string; workspace: WorkspaceIdentity; operation: "review-diff" }

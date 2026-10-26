@@ -1,4 +1,5 @@
 import { validateGitPath } from "../git/protocol.js";
+import type { Scope, Snapshot } from "./types.js";
 
 const DEFAULT_PAGE_SIZE = 128;
 const MAX_PAGE_SIZE = 256;
@@ -9,20 +10,9 @@ const MAX_VERIFIED_FILES = 1024;
 const SHA256 = /^[a-f0-9]{64}$/u;
 
 /** Host-issued identity of the currently selected repository and branch. */
-export interface AuthoringScope {
-  readonly workspace_id: string;
-  readonly repository_id: number | null;
-  readonly branch: string;
-  readonly generation: string;
-}
-
-/** Opaque Host snapshot. draft_generation is present only for an opted-in draft view. */
-export interface AuthoringSnapshot {
-  readonly id: string;
-  readonly local_commit: string | null;
-  readonly worktree_generation: string;
-  readonly draft_generation: string | null;
-}
+export type AuthoringScope = Scope;
+export type AuthoringSnapshot = Snapshot;
+export type { Scope as AuthoringScopeWire, Snapshot as AuthoringSnapshotWire } from "./types.js";
 
 export interface SnapshotLease {
   readonly scope: AuthoringScope;
@@ -66,6 +56,7 @@ export interface SnapshotPort {
   }): Promise<SnapshotPage>;
   stat(lease: SnapshotLease, path: string): Promise<SnapshotFile | null>;
   read_range(lease: SnapshotLease, path: string, offset: number, length: number): Promise<SnapshotRange>;
+  release?(lease: SnapshotLease): Promise<void> | void;
 }
 
 export type AuthoringSnapshotErrorCode =
@@ -75,7 +66,9 @@ export type AuthoringSnapshotErrorCode =
   | "snapshot_stale"
   | "invalid_encoding"
   | "storage_unknown"
-  | "capacity";
+  | "capacity"
+  | "capability_denied"
+  | "repository_not_active";
 
 export class AuthoringSnapshotError extends Error {
   constructor(readonly code: AuthoringSnapshotErrorCode, message: string) {
@@ -207,7 +200,8 @@ export class AuthoringSnapshotReader {
     });
   }
 
-  release(lease: SnapshotLease): void {
+  async release(lease: SnapshotLease): Promise<void> {
+    await this.port.release?.(lease);
     for (const [token, cursor] of this.cursors) {
       if (cursor.snapshot_id === lease.snapshot.id && cursor.scope_key === scopeKey(lease.scope)) this.cursors.delete(token);
     }
