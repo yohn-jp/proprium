@@ -110,6 +110,7 @@ export function MobileShell({ header, documentTitle, documentContext, desktopDur
   const location = useLocation();
   const navigateRoute = useNavigate();
   const activeView = readViewFromSearch(location.search);
+  const hasWorkspace = Boolean(workspaceScope && panels?.length);
   const writingKeyboardVisible = useWritingKeyboardVisibility();
   const [switching, setSwitching] = useState(false);
   const [switchError, setSwitchError] = useState("");
@@ -291,7 +292,6 @@ export function MobileShell({ header, documentTitle, documentContext, desktopDur
   }, [requestedPanel?.id, requestedPanel?.sequence, queueWorkspacePanel]);
 
   const navigate = useCallback(async (view: MobileView) => {
-    const hasWorkspace = Boolean(workspaceScope && panels?.length);
     const sameRoute = view === activeView;
     if (sameRoute && !hasWorkspace) return;
     if (sameRoute && view === "settings") return;
@@ -320,7 +320,7 @@ export function MobileShell({ header, documentTitle, documentContext, desktopDur
       },
     });
     setSwitchError("");
-  }, [activeView, location.state, navigateRoute, panels?.length, preparePanelChange, queueWorkspacePanel, workspaceScope]);
+  }, [activeView, hasWorkspace, location.state, navigateRoute, preparePanelChange, queueWorkspacePanel]);
 
   const goBack = useCallback(async () => {
     if (referenceSheet) {
@@ -329,7 +329,7 @@ export function MobileShell({ header, documentTitle, documentContext, desktopDur
     }
     const previous = historyState(location.state)[MOBILE_PREVIOUS_VIEW_STATE];
     if (isMobileView(previous)) {
-      if (workspaceScope && panels?.length) {
+      if (hasWorkspace) {
         const panelId = workspacePanelForView(previous);
         if (panelId) {
           queueWorkspacePanel(panelId, () => navigateRoute(-1), withViewInCurrentUrl(previous));
@@ -343,7 +343,7 @@ export function MobileShell({ header, documentTitle, documentContext, desktopDur
       return;
     }
     await navigate(activeView === "writing" ? "library" : "writing");
-  }, [activeView, location.state, navigate, navigateRoute, panels?.length, preparePanelChange, queueWorkspacePanel, referenceSheet, workspaceScope]);
+  }, [activeView, hasWorkspace, location.state, navigate, navigateRoute, preparePanelChange, queueWorkspacePanel, referenceSheet]);
 
   const switchToDesktop = useCallback(async () => {
     if (switching) return;
@@ -414,8 +414,8 @@ export function MobileShell({ header, documentTitle, documentContext, desktopDur
     <section className="mobile-shell-settings-card" aria-labelledby="mobile-display-settings-title">
       <h2 id="mobile-display-settings-title">表示とアカウント</h2>
       {settings ?? <p>この画面に表示できる設定項目はまだありません。外観とアカウントの操作は画面上部から行えます。</p>}
-      <IonButton className="mobile-shell-primary-action" expand="block" onClick={() => void navigate("writing")}>
-        執筆画面へ戻る
+      <IonButton className="mobile-shell-primary-action" expand="block" onClick={() => void navigate(hasWorkspace ? "writing" : "library")}>
+        {hasWorkspace ? "執筆画面へ戻る" : "作品を開く"}
       </IonButton>
       <IonButton className="mobile-shell-primary-action" expand="block" disabled={switching} onClick={() => void switchToDesktop()}>
         {switching ? "切り替えています…" : "Desktop版へ切り替え"}
@@ -440,14 +440,14 @@ export function MobileShell({ header, documentTitle, documentContext, desktopDur
         </IonHeader>
 
         <IonContent ref={contentRef} className="mobile-shell-content" fullscreen={false}>
-          {workspaceScope && panels?.length ? (
+          {hasWorkspace ? (
             <div className="mobile-shell-workspace-view" data-active-view={activeView}
               aria-label={activeView === "settings" ? "設定" : "モバイル用執筆画面"}>
               <div className="mobile-shell-workspace-panel" hidden={activeView === "settings"}>
                 <Workspace
-                  scope={workspaceScope}
+                  scope={workspaceScope!}
                   mode="mobile"
-                  panels={panels}
+                  panels={panels!}
                   beforeLayoutChange={beforeLayoutChange}
                   requestedPanel={workspacePanelRequest}
                   selectedPanelId={workspacePanelForView(activeView)}
@@ -470,25 +470,39 @@ export function MobileShell({ header, documentTitle, documentContext, desktopDur
             <section className="mobile-shell-view" aria-labelledby="mobile-writing-title" hidden={activeView !== "writing"}>
               <h1 id="mobile-writing-title" className="mobile-shell-page-title">執筆・読書</h1>
               <div className="mobile-shell-slot mobile-shell-editor">
-                {workspaceScope && panels?.length
-                  ? <Workspace scope={workspaceScope} mode="mobile" panels={panels} beforeLayoutChange={beforeLayoutChange} requestedPanel={requestedPanel} />
-                  : editor}
+                <section className="mobile-shell-empty-state" aria-labelledby="mobile-writing-empty-title">
+                  <h2 id="mobile-writing-empty-title">原稿を開いていません</h2>
+                  <p>作品を開くと、ここで執筆や読書を続けられます。まず作品ライブラリで作品を選んでください。</p>
+                  <IonButton className="mobile-shell-primary-action" expand="block" onClick={() => void navigate("library")}>
+                    作品ライブラリを開く
+                  </IonButton>
+                </section>
               </div>
             </section>
 
             <section className="mobile-shell-view" aria-labelledby="mobile-inspection-title" hidden={activeView !== "inspection"}>
               <h1 id="mobile-inspection-title" className="mobile-shell-page-title">状態と回復</h1>
-              <p className="mobile-shell-review-hint">
-                提案の確認と承認、選択した機能の実行はツール画面から行えます。
-              </p>
-              <IonButton className="mobile-shell-primary-action" expand="block" onClick={() => navigate("tools")}>
-                提案と機能を確認
-              </IonButton>
+              <div className="mobile-shell-empty-state" aria-labelledby="mobile-inspection-empty-title">
+                <h2 id="mobile-inspection-empty-title">確認する作品がありません</h2>
+                <p>作品を開くと、保存状態や回復情報、変更の確認先が表示されます。</p>
+                <IonButton className="mobile-shell-primary-action" expand="block" onClick={() => void navigate("library")}>
+                  作品ライブラリを開く
+                </IonButton>
+              </div>
             </section>
 
             <section className="mobile-shell-view" aria-labelledby="mobile-tools-title" hidden={activeView !== "tools"}>
               <h1 id="mobile-tools-title" className="mobile-shell-page-title">ツールとレビュー</h1>
               {activeView === "tools" ? <div className="mobile-shell-slot mobile-shell-tools">{tools}</div> : null}
+              {!hasWorkspace ? (
+                <section className="mobile-shell-empty-state" aria-labelledby="mobile-tools-empty-title">
+                  <h2 id="mobile-tools-empty-title">道具を使う作品を開いてください</h2>
+                  <p>作品を開くと、その作品で利用できる機能やレビューがここに表示されます。</p>
+                  <IonButton className="mobile-shell-primary-action" expand="block" onClick={() => void navigate("library")}>
+                    作品ライブラリを開く
+                  </IonButton>
+                </section>
+              ) : null}
             </section>
 
             <section className="mobile-shell-view" aria-labelledby="mobile-settings-title" hidden={activeView !== "settings"}>

@@ -142,6 +142,15 @@
 .mobile-shell-slot .conflict-actions { flex-wrap: wrap; }
 
 .mobile-shell-review-hint { margin: 0.75rem 0; color: var(--muted); font-size: 0.9rem; line-height: 1.55; }
+.mobile-shell-empty-state {
+  padding: 1rem;
+  border: 1px solid var(--line);
+  border-radius: 0.6rem;
+  color: var(--ink);
+  background: var(--paper);
+}
+.mobile-shell-empty-state h2 { margin: 0; font-size: 1rem; line-height: 1.45; }
+.mobile-shell-empty-state p { margin: 0.5rem 0 0.85rem; color: var(--muted); font-size: 0.9rem; line-height: 1.6; }
 .mobile-shell-primary-action { display: block; width: 100%; min-height: 2.9rem; margin: 0.5rem 0; }
 .mobile-shell .mobile-shell-primary-action::part(native) { min-height: 2.9rem; border-radius: 0.45rem; font-weight: 650; }
 .mobile-shell-settings-card { padding: 0.85rem; border: 1px solid var(--line); border-radius: 0.6rem; color: var(--ink); background: var(--paper); }
