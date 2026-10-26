@@ -251,7 +251,7 @@ function request(action_id: string, input: Record<string, unknown>, idempotency_
     action_id,
     schema_version: 1,
     scope,
-    snapshot,
+    snapshot: { ...snapshot },
     input,
     deadline_ms: 30_000,
     ...(idempotency_key ? { idempotency_key } : {}),
