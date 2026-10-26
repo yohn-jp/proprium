@@ -91,7 +91,7 @@ export function PluginPanel({ workspaceId, git, revisionKey, canApplyChanges, ho
   const [installPlan, setInstallPlan] = useState<PluginInstallPreview | null>(null);
   const [planIntent, setPlanIntent] = useState<InstallIntent | null>(null);
   const [grants, setGrants] = useState<Record<string, PluginCapability[]>>({});
-  const [request, setRequest] = useState("Analyze this workspace and suggest a useful next step.");
+  const [requests, setRequests] = useState<Record<string, string>>({});
   const [transcripts, setTranscripts] = useState<Record<string, PluginTranscript>>({});
   const [pendingSnapshot, setPendingSnapshot] = useState<Record<string, SnapshotState>>({});
   const [ownBusy, setOwnBusy] = useState(false);
@@ -140,6 +140,7 @@ export function PluginPanel({ workspaceId, git, revisionKey, canApplyChanges, ho
           setTranscripts({});
           setPendingSnapshot({});
           setGrants({});
+          setRequests({});
           currentSnapshots.current.clear();
         }
         const installed = await manager.installed();
@@ -210,8 +211,8 @@ export function PluginPanel({ workspaceId, git, revisionKey, canApplyChanges, ho
     finally { setOwnBusy(false); onBusyChange(false); }
   }
 
-  async function invoke(plugin: InstalledPlugin): Promise<void> {
-    if (currentRevisionKey.current !== revisionKey) { setNotice("The workspace changed. Reload the plugin snapshot and try again."); return; }
+  async function invoke(plugin: InstalledPlugin, request: string): Promise<void> {
+    if (currentRevisionKey.current !== revisionKey) { setNotice("ワークスペースが変更されました。プラグインのスナップショットを更新して再実行してください。"); return; }
     setOwnBusy(true); onBusyChange(true); setNotice("");
     try {
       const snapshot = await snapshotForPlugin(plugin, git, workspaceId);
@@ -341,7 +342,13 @@ export function PluginPanel({ workspaceId, git, revisionKey, canApplyChanges, ho
       </section>}
       {notice && <p className="plugin-notice" role="status" aria-live="polite">{notice}</p>}
       {!plugins.length ? <div className="plugin-empty-state"><p className="plugin-empty">検証済みのインストール済みプラグインはありません。</p><p>プラグインがなくても、ワークスペースの編集とGit操作は利用できます。</p></div> : <ul className="installed-plugins">{plugins.map(plugin => {
-        return <li key={`${plugin.id}@${plugin.version}`}>
+        const pluginKey = `${plugin.id}@${plugin.version}`;
+        const inputId = `plugin-input-${plugin.id}-${plugin.version}`;
+        const inputHelpId = `${inputId}-help`;
+        const isComputeSumSample = plugin.id === "proprium.compute-sum";
+        const request = requests[pluginKey] ?? (isComputeSumSample ? '{"left":20,"right":22}' : "");
+        const canRun = plugin.state === "active" || plugin.state === "enabled-idle";
+        return <li key={pluginKey}>
           <div className="plugin-card-head"><div><strong>{plugin.id}</strong><small>v{plugin.version} · {plugin.state === "active" ? "active" : plugin.state === "enabled-idle" ? "enabled, idle" : plugin.state === "revoked" ? "publisher revoked" : "installed, disabled"}</small></div><code>{plugin.activeVersion ? `pinned ${plugin.activeVersion}` : "not pinned"}</code></div>
           <fieldset disabled={busy || plugin.state !== "installed"}>
             <legend>Requested capabilities</legend>
@@ -352,14 +359,14 @@ export function PluginPanel({ workspaceId, git, revisionKey, canApplyChanges, ho
               return <label key={value} className="capability-choice"><input type="checkbox" checked={selected.includes(value as PluginCapability)} onChange={event => setGrants(current => ({ ...current, [grantKey]: event.target.checked ? [...selected, value as PluginCapability] : selected.filter(item => item !== value) }))} /> <span>{value}</span></label>;
             })}
           </fieldset>
-          <div className="plugin-actions">{plugin.state === "active" ? <><button type="button" onClick={() => void invoke(plugin)} disabled={busy}>Run</button><button type="button" onClick={() => void disable(plugin)} disabled={busy}>Stop</button></> : plugin.state === "enabled-idle" ? <><button type="button" onClick={() => void invoke(plugin)} disabled={busy}>Run</button><button type="button" onClick={() => void disable(plugin)} disabled={busy}>Disable</button></> : <button type="button" onClick={() => void enable(plugin)} disabled={busy || plugin.state === "revoked"}>{plugin.state === "revoked" ? "Revoked" : "Enable"}</button>}<button type="button" onClick={() => void update(plugin)} disabled={busy}>Update version</button>{plugin.activeVersion && <button type="button" onClick={() => void rollback(plugin)} disabled={busy}>Rollback</button>}<button type="button" className="plugin-remove" onClick={() => void uninstall(plugin)} disabled={busy}>Uninstall</button></div>
+          <div className="plugin-actions">{plugin.state === "active" ? <><button type="button" onClick={() => void invoke(plugin, request)} disabled={busy}>Run</button><button type="button" onClick={() => void disable(plugin)} disabled={busy}>Stop</button></> : plugin.state === "enabled-idle" ? <><button type="button" onClick={() => void invoke(plugin, request)} disabled={busy}>Run</button><button type="button" onClick={() => void disable(plugin)} disabled={busy}>Disable</button></> : <button type="button" onClick={() => void enable(plugin)} disabled={busy || plugin.state === "revoked"}>{plugin.state === "revoked" ? "Revoked" : "Enable"}</button>}<button type="button" onClick={() => void update(plugin)} disabled={busy}>Update version</button>{plugin.activeVersion && <button type="button" onClick={() => void rollback(plugin)} disabled={busy}>Rollback</button>}<button type="button" className="plugin-remove" onClick={() => void uninstall(plugin)} disabled={busy}>Uninstall</button></div>
+          {canRun && <label className="plugin-request" htmlFor={inputId}><span>プラグイン入力（テキスト）</span><small id={inputHelpId}>Hostは内容を1本の文字列として渡します。現在のABIは入力スキーマを定義せず、この画面も形式を検証しません。各プラグインの説明に従って入力してください。</small>{isComputeSumSample && <small id={`${inputId}-sample`}>計算サンプルは left と right の2つの有限な数値だけを含むJSONを受け取ります。例: <code>{'{"left":20,"right":22}'}</code></small>}<textarea id={inputId} aria-describedby={`${inputHelpId}${isComputeSumSample ? ` ${inputId}-sample` : ""}`} value={request} onChange={event => setRequests(current => ({ ...current, [pluginKey]: event.target.value }))} maxLength={256 * 1024} placeholder={isComputeSumSample ? '{"left":20,"right":22}' : "プラグインの指定形式を入力"} /></label>}
           {plugin.dependencies.length > 0 && <p className="plugin-metadata">Dependencies: {plugin.dependencies.map(item => `${item.id}@${item.version}`).join(", ")}</p>}
           {plugin.contributions.length > 0 && <section className="plugin-contributions" aria-label="Host-rendered plugin contributions"><strong>Plugin surfaces</strong>{plugin.contributions.map(item => <article key={`${item.kind}:${item.id}`}><small>{item.kind}</small><span>{item.title}</span></article>)}</section>}
           {transcripts[plugin.id]?.value && <pre className="plugin-output" aria-label={`${plugin.id} output`}>{transcripts[plugin.id]!.value}</pre>}
           {transcripts[plugin.id]?.proposals.length ? <div className="plugin-proposals"><strong>Proposed changes</strong>{transcripts[plugin.id]!.proposals.flatMap((proposal, index) => proposal.changes.map(change => <article key={`${plugin.id}:${index}:${change.path}`}><span>{change.path}</span><pre>{change.content.slice(0, 1200)}{change.content.length > 1200 ? "…" : ""}</pre></article>))}<button type="button" onClick={() => void applyProposals(plugin)} disabled={busy || !canApplyChanges}>Review and apply to local worktree</button></div> : null}
         </li>;
       })}</ul>}
-      {plugins.some(plugin => plugin.state === "active" || plugin.state === "enabled-idle") && <label className="plugin-request">Plugin request<textarea aria-label="Plugin request" value={request} onChange={event => setRequest(event.target.value)} maxLength={256 * 1024} /></label>}
     </div>
   </details>;
 }
