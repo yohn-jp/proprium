@@ -148,6 +148,7 @@ export function HostApp(): ReactElement {
   const [busy, setBusy] = useState(false);
   const [checkpointBusy, setCheckpointBusy] = useState(false);
   const [publishBusy, setPublishBusy] = useState(false);
+  const [mcpProposalCount, setMcpProposalCount] = useState(0);
   const [selectedRepository, setSelectedRepository] = useState<number | null>(null);
   const [selectedBranch, setSelectedBranch] = useState("");
   const [newWorkspaceName, setNewWorkspaceName] = useState("無題のワークスペース");
@@ -863,6 +864,7 @@ export function HostApp(): ReactElement {
             canApply={!currentFile?.dirty}
             onWorkspaceChanged={refreshAfterPlugin}
             onExecutePlugin={executeLivePlugin}
+            onPendingProposalsChange={setMcpProposalCount}
           />}
 </div>;
   const inspector = <div className="host-controls"><button onClick={() => revealPanel("history")}>履歴</button><section className="commit-panel" aria-labelledby="commit-heading">
@@ -925,9 +927,11 @@ export function HostApp(): ReactElement {
     <summary>
       <span className="save-state" role="status">{workspace ? saveStateLabel(syncState, status.head) : "端末内の作品"}</span>
       {statusMessage && <span className={`host-message message-${statusMessage.tone}`} role={statusMessage.tone === "error" ? "alert" : "status"}><span className="host-message-text">{statusMessage.text}</span></span>}
+      {mcpProposalCount > 0 && <span className="pending-review-count">MCP提案 {mcpProposalCount}件</span>}
       <span className="host-status-disclosure">詳細</span>
     </summary>
     <div className="application-status-content">
+      {mcpProposalCount > 0 && <button type="button" onClick={() => revealPanel("review")}>MCPの変更提案を確認（{mcpProposalCount}件）</button>}
       {statusMessage ? <><p>{statusMessage.text}</p><button type="button" aria-label="Dismiss message" onClick={() => setMessage(null)}>通知を閉じる</button></> : <p>{workspace ? saveStateLabel(syncState, status.head) : "Workspaceを開いてください。"}</p>}
     </div>
   </details> : null;

@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState, type ReactElement } from "react";
 import { BrowserLocalGit } from "../git/index.js";
-import type { FileRevisionExpectation, WorkspaceChange, WorkspaceIdentity } from "../git/protocol.js";
-import { validateGitPath } from "../git/protocol.js";
+import type { FileRevisionExpectation, WorkspaceChange, WorkspaceIdentity, GitHubWorkspaceIdentity } from "../git/protocol.js";
+import { isGitHubWorkspaceIdentity, validateGitPath } from "../git/protocol.js";
 import { TextDiff } from "./TextDiff.js";
 import { snapshotProposalBefore } from "./proposal-review.js";
 import "./LiveMcpProposals.css";
@@ -11,7 +11,7 @@ export type LiveMcpTool = typeof LIVE_MCP_TOOLS[number];
 export interface LiveWorkspaceProposal {
   id: string;
   title: string;
-  target: WorkspaceIdentity;
+  target: GitHubWorkspaceIdentity;
   changes: Array<{ path: string; beforeContent: string | null; content: string; expectedRevision: string | null }>;
 }
 export type LiveToolExecutor = (tool: LiveMcpTool, args: Record<string, unknown>, signal: AbortSignal) => Promise<unknown>;
@@ -21,7 +21,7 @@ interface Props {
   gatewayUrl: string;
     workspaceId: string;
   generation: string;
-  identity: WorkspaceIdentity;
+  identity: GitHubWorkspaceIdentity;
   repositories: Array<{ identity: WorkspaceIdentity; title: string }>;
   git: BrowserLocalGit;
   canApply: boolean;
@@ -148,8 +148,8 @@ export function LiveMcpPanel({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  function knownRepositories(): Array<{ identity: WorkspaceIdentity; title: string }> {
-    const entries = [{ identity, title: `${identity.owner}/${identity.repository} · ${identity.branch}` }, ...repositories];
+  function knownRepositories(): Array<{ identity: GitHubWorkspaceIdentity; title: string }> {
+    const entries = [{ identity, title: `${identity.owner}/${identity.repository} · ${identity.branch}` }, ...repositories.flatMap(entry => isGitHubWorkspaceIdentity(entry.identity) ? [{ ...entry, identity: entry.identity }] : [])];
     const seen = new Set<string>();
     return entries.filter(entry => {
       const key = `${entry.identity.repositoryId}:${entry.identity.branch}`;
@@ -159,7 +159,7 @@ export function LiveMcpPanel({
     });
   }
 
-  function resolveRepository(args: Record<string, unknown>): WorkspaceIdentity {
+  function resolveRepository(args: Record<string, unknown>): GitHubWorkspaceIdentity {
     const id = args.repository_id;
     if (!Number.isSafeInteger(id) || (id as number) <= 0) throw new Error("repository_id must be a positive GitHub repository ID.");
     if (args.branch !== undefined && (typeof args.branch !== "string" || !args.branch.trim())) throw new Error("branch must be a non-empty string.");
@@ -245,7 +245,7 @@ export function LiveMcpPanel({
     }
   }
 
-  async function submitProposal(args: Record<string, unknown>, targetGit: BrowserLocalGit, target: WorkspaceIdentity): Promise<unknown> {
+  async function submitProposal(args: Record<string, unknown>, targetGit: BrowserLocalGit, target: GitHubWorkspaceIdentity): Promise<unknown> {
     if (typeof args.title !== "string" || !args.title.trim() || args.title.length > 200 || !Array.isArray(args.changes) || !args.changes.length || args.changes.length > 32) {
       throw new Error("A proposal requires a short title and 1 to 32 file changes.");
     }
