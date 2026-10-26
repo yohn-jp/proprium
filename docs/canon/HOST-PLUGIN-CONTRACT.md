@@ -205,3 +205,9 @@ Caller policy defaults for this authoring profile are fixed: public pure-read an
 
 
 A sealed artifact referenced by a proposal changes ownership on successful proposal admission: Host verifies the digest, retains exact bytes in its receipt/recovery store, and journals the proposal reference before returning success. It is no longer a plugin-temporary export. Disable, guest cancellation, workspace switch or asset-cache eviction cannot remove content needed by a pending/applied receipt. Proposal dismissal/Host retention policy may release it only after no recoverable receipt references it. Failed admission returns a typed error and status/idempotency lookup determines whether ownership transferred; never report a reviewable proposal with missing byte content. This exception is required by the general artifact-cleanup rule and makes multi-file proposals recoverable without a running producer.
+
+## Document lifecycle and UI registration evidence
+
+[The latest Scriptorium delta](SCRIPTORIUM-LATEST-DELTA.md) binds H0 to DELTA-01/02/03/05/06: pagehide/pageshow/bfcache boundaries fence old async responses, permit controlled resume of current scene/project navigation, and release optional terminology work. A Git-provider credential rejection does not imply loss of browser authorization; it must not discard verified drafts. Browser tests compare **actual CodeMirror document state**, including terminal LF, rather than inferring source bytes from `.cm-line` rendering.
+
+All original UI registrations are mapped in `traceability.json.source_ui_contributions` and checked against exact pinned Scriptorium registration declarations by `scripts/verify-authoring-canon.mjs --sources`. Registration metadata is insufficient to certify an authoring surface: the owning Host widget must expose functional actions, guarded navigation, accurate revision state, accessibility and Desktop/Mobile failure handling.

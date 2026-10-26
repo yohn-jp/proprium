@@ -350,3 +350,20 @@ Existing module metadata remains canonical at its existing path until an explici
 ## Verification contract
 
 [The trace index](traceability.json) pins registrations, their feature owners and the required dependency graph. `node scripts/verify-authoring-canon.mjs --sources /path/to/source-parent` verifies feature/acceptance links, owner partitions, source registration coverage, pinned source paths and the acyclic DAG. Structural verification does not prove implementation parity: release evidence must execute every linked local case plus [the suite matrix](ACCEPTANCE.md). Source package tests, static builds, labels-only panels and compute-sum are never substituted for that proof.
+
+## Exact legacy UI contribution registration coverage
+
+All **42** registered browser contribution IDs in pinned Scriptorium are assigned in `traceability.json.source_ui_contributions` to an owning official plugin, a feature ID and an actual registered source module/action/slot/title. This list covers both panels and the editor-adornment contribution. The verifier compares original registrations with the mapping in both directions when invoked with `--sources`, and requires the owning Canon to name each original UI ID. A registered legacy UI ID is source evidence only: completion requires an interactive Host equivalent with observable actions, error states, revision/selection behavior and Desktop/Mobile paths. Do not infer availability from its label.
+
+| Original source product | Registered UI contributions |
+| --- | --- |
+| Story (Narrative and Knowledge) | `story.navigator`, `story.inspector`, `story.continuity`, `story.world-state`, `story.zukan-review`, `story.series` |
+| Search | `search.panel`, `search.terms`, `search.terms.adornment` |
+| NLP | `nlp.analyzer`, `nlp.candidates`, `nlp.dictionary`, `nlp.privacy` |
+| Semantic | `semantic.search`, `semantic.expressions`, `semantic.contradictions`, `semantic.index` |
+| Diagnostics | `diagnostics.consistency`, `diagnostics.continuity`, `diagnostics.analysis`, `diagnostics.scene`, `diagnostics.lint`, `diagnostics.voice` |
+| Speaker | `speaker.attribution`, `speaker.review`, `speaker.dialogue`, `speaker.voice.profiles`, `speaker.evaluation` |
+| Assistant | `assistant.settings`, `assistant.rewrite`, `assistant.summaries`, `assistant.qa`, `assistant.continuation`, `assistant.aspect-review`, `assistant.dialogue`, `assistant.reader-reaction`, `assistant.proposals` |
+| Publishing | `publishing.export.plaintext`, `publishing.export.epub`, `publishing.export.vertical-print`, `publishing.episode-map`, `publishing.share-links` |
+
+In particular `search.terms.adornment` must survive as a non-mutating editor adornment, not as a standalone inert panel; the original MCP module has no corresponding UI registrations and stays Host/Gateway-owned. See [latest Scriptorium source delta](SCRIPTORIUM-LATEST-DELTA.md) for recovery and browser lifecycle changes beyond registered UI IDs.

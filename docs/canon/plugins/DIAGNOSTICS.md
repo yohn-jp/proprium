@@ -212,3 +212,16 @@ Both actions are `read`, accept `{chapterId:string,aspects?:Array<"tempo"|"pov-s
 ### DIA-A16 — Chapter aspect review
 
 Run a synthetic ordered chapter with unequal scene sizes, multiple declared POVs, mixed person markers and repeated explanation markers. Show the expected three independently selectable aspect categories and exact source citations; boundary fixtures around 200/280/120 characters, 0.55/0.12/1.2 thresholds match the pinned implementation. Preview omits scene bodies and makes zero provider requests. Missing Knowledge leaves prose observations with declared-POV unavailable; missing scene body is explicit partial/error, never no-findings success. Paired's legacy adapters invoke this one action. Run with no model/Gateway, a changed draft during computation, cancel, chapter switch and mobile panel close/return: no stale result, file write or editor-state loss.
+
+## Legacy Scriptorium browser UI registration parity
+
+The following exact historical registration IDs are required to map to **functioning Host-rendered controls**, not merely shown as labels. The target feature and its linked Acceptance own the user-visible interaction, cancellation and actual action result. Legacy slots do not mandate an additional top-level tab.
+
+| Source UI ID | Target feature |
+| --- | --- |
+| `diagnostics.consistency` | [DIA-02](#feature-dia-02) |
+| `diagnostics.continuity` | [DIA-03](#feature-dia-03) |
+| `diagnostics.analysis` | [DIA-06](#feature-dia-06) |
+| `diagnostics.voice` | [DIA-08](#feature-dia-08) |
+
+All registrations are checked against the pinned Scriptorium source by `scripts/verify-authoring-canon.mjs --sources`. A missing action, disabled control without explanation or inert panel is not feature parity.

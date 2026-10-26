@@ -24,6 +24,8 @@ No archived implementation or historical roadmap overrides today's generic-Core 
 
 Every plugin document MUST name an immutable ID, scope and non-goals, source anchors, actions/read models, UI, data ownership, Host capabilities, dependencies, recovery strategy, errors and an executable acceptance gate. If a feature is missing, record it as a gap; do not erase it, substitute a placeholder or claim it was never in the product.
 
+The [pinned Scriptorium update audit](SCRIPTORIUM-LATEST-DELTA.md) supplements P0 Host/Narrative and Research with browser page-departure, recent-scene recovery, Japanese indexing and authorization-failure invariants. Its source revision and all 42 registered UI contributions are checked through `traceability.json` and the source-aware verifier.
+
 ## Release boundary
 
 No recovered capability is complete just because a module exists in `modules/`, a demo plugin runs, a TypeScript build passes, or a Go Gateway test is green. Completion requires a signed independently built artifact, Host admission, rendered author-oriented UI, typed actions with real data, desktop/mobile interaction, persisted/reloaded workspace, and reviewed mutation semantics. The [inventory](RECOVERY-INVENTORY.md) is the loss-prevention checklist and [acceptance contract](ACCEPTANCE.md) is the certification authority.
@@ -31,7 +33,7 @@ No recovered capability is complete just because a module exists in `modules/`, 
 **Source references are pinned for reproducibility of this design review, not runtime dependencies:**
 
 - Proprium `source@8caf1008b58f947c517675c421d4b6c00938cd0a`
-- Scriptorium `source@95a66c2c985a66bc2d535392dcc450d8c9df18d5`
+- Scriptorium `source@1a05a0f10b33acca3fcfc544a5a6a2592f1c3865`
 - Arcadia Loom `source@edc033c2c9466274a334299dadfa426661d957d9`
 
 The architecture has no calendar-based expiry; actual test/run evidence and source revision stay in build artifacts or PRs, not retroactively marked PASS here.

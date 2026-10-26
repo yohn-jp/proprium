@@ -177,3 +177,14 @@ Each acceptance has a visible result and a falsifiable pass condition. Tests use
 ## Source pin and scope notes
 
 The recovery implementation evidence was inspected in Scriptorium `source@95a66c2c985a66bc2d535392dcc450d8c9df18d5` and Loom `source@edc033c2c9466274a334299dadfa426661d957d9`. Those repositories are provenance only; Proprium artifacts must be independently built, signed, admitted and browser-tested. Scriptorium's `modules/publishing/src/publishing.test.ts` is a legacy Node test suite, and `modules/publishing/tests/browser-clear.acceptance.mjs` covers one browser-rendered episode-map clear flow in its legacy harness; neither certifies Proprium. Loom's `app/src/features/settings/exportPreflightChecklist.test.ts` covers the checklist helper, not physical mobile print behavior. No component/browser tests for export-scope selectors, print presets or `ShareReaderPage` were present in the inspected Loom paths. No deployable provider is claimed. Proprium names the logical reader adapter, status/errors, authorization and redaction rules above so its caller can be implemented without choosing transport semantics; provider deployment, availability and separately authorized remote-read access remain external prerequisites. The Go Gateway's OAuth, Smart HTTP and Live MCP responsibilities do not satisfy this contract.
+
+## Legacy Scriptorium browser UI registration parity
+
+The following exact historical registration IDs are required to map to **functioning Host-rendered controls**, not merely shown as labels. The target feature and its linked Acceptance own the user-visible interaction, cancellation and actual action result. Legacy slots do not mandate an additional top-level tab.
+
+| Source UI ID | Target feature |
+| --- | --- |
+| `publishing.episode-map` | [PUB-06](#feature-pub-06) |
+| `publishing.share-links` | [PUB-07](#feature-pub-07) |
+
+All registrations are checked against the pinned Scriptorium source by `scripts/verify-authoring-canon.mjs --sources`. A missing action, disabled control without explanation or inert panel is not feature parity.

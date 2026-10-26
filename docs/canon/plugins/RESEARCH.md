@@ -191,3 +191,23 @@ Each feature-ledger row above is covered by its matching RES-### scenario below.
 | <a id="res-a013"></a> RES-A013 <a id="accept-res-a013"></a> | Switch repository, branch, overlay and active text revision during concurrent index/analysis; cancel one of two identical searches; disable/re-enable Research; evict/corrupt cache; interrupt the network during optional artifact/model transfer; suspend mobile tab. | No old result is displayed as current or repopulated after disable; one caller's cancel does not cancel another; corrupt cache rebuilds only from current snapshot; interrupted transfer leaves no active partial artifact and cached verified bytes still work offline; missing cache/Worker status is truthful; editor and local draft remain intact. |
 
 In addition to the row-level gates, verify signed discovery/install without Host rebuild, signature/digest/ABI/dependency rejection, explicit asset consent, zero model work at cold start, Worker trap/timeout/cancel isolation, actual keyboard and touch navigation, accessibility names/focus, offline cached operation and no Gateway. A Scriptorium unit test passing only certifies the inherited Node implementation and does not satisfy any Proprium browser acceptance gate.
+
+## Legacy Scriptorium browser UI registration parity
+
+The following identifiers must map to functioning Host-rendered features, not just metadata labels:
+
+| Original registration | Feature |
+| --- | --- |
+| `search.panel` | [RES-001](#feature-res-001) |
+| `search.terms` | [RES-003](#feature-res-003) |
+| `search.terms.adornment` | [RES-004](#feature-res-004) |
+| `nlp.analyzer` | [RES-005](#feature-res-005) |
+| `nlp.candidates` | [RES-006](#feature-res-006) |
+| `nlp.dictionary` | [RES-008](#feature-res-008) |
+| `nlp.privacy` | [RES-012](#feature-res-012) |
+
+The original editor adornment remains non-mutating and tied to its document snapshot.
+
+## Latest Scriptorium research continuity addendum
+
+[Source delta](../SCRIPTORIUM-LATEST-DELTA.md) DELTA-04/05 is binding for RES-004, RES-005, RES-009 and RES-013. Reuse `Intl.Segmenter` across manuscript lines, maintain exact UTF-16 offsets, stop optional term resolution on document departure, and resume only for the current editor snapshot. No stale term-adornment results or background work may interfere with Japanese IME.

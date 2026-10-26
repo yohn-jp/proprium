@@ -174,3 +174,15 @@ Semantic is complete only when all `SEM-01..SEM-09` ledger rows have their linke
 
 
 All source-bearing Semantic query/contradiction results include `evidence:SourceSpan[]` in addition to their display fields. Sentence splitting and trimmed/concatenated entity fields retain an original-file offset map; original path/hash/UTF-16 spans and exact unnormalized quotes are mandatory before Host navigation. Scene-level aggregate hits retain at least one contributing cited sentence. Evidence B in a contradiction has the same fields as evidence A, never an inferred uncited counterpart. Contradiction pages default to 50 and cap at 100, deterministic score then candidate-ID ordering; cursor binds snapshot/model/config and a changed identity returns `snapshot_stale`. Large reports use bounded pages/sealed artifacts under H0 limits. Signed `models[]` metadata in settings is `{id,revision,digest,byte_length,role:embedding|reranker,dimensions?,license,status}` and never executable URLs or credentials.
+
+## Legacy Scriptorium browser UI registration parity
+
+The following exact historical registration IDs are required to map to **functioning Host-rendered controls**, not merely shown as labels. The target feature and its linked Acceptance own the user-visible interaction, cancellation and actual action result. Legacy slots do not mandate an additional top-level tab.
+
+| Source UI ID | Target feature |
+| --- | --- |
+| `semantic.expressions` | [SEM-03](#feature-sem-03) |
+| `semantic.contradictions` | [SEM-05](#feature-sem-05) |
+| `semantic.index` | [SEM-01](#feature-sem-01) |
+
+All registrations are checked against the pinned Scriptorium source by `scripts/verify-authoring-canon.mjs --sources`. A missing action, disabled control without explanation or inert panel is not feature parity.

@@ -68,42 +68,42 @@
   "sources": [
     {
       "repo": "scriptorium",
-      "revision": "95a66c2c985a66bc2d535392dcc450d8c9df18d5",
+      "revision": "1a05a0f10b33acca3fcfc544a5a6a2592f1c3865",
       "path": "modules/story/src/actions.ts"
     },
     {
       "repo": "scriptorium",
-      "revision": "95a66c2c985a66bc2d535392dcc450d8c9df18d5",
+      "revision": "1a05a0f10b33acca3fcfc544a5a6a2592f1c3865",
       "path": "modules/search/src/actions.ts"
     },
     {
       "repo": "scriptorium",
-      "revision": "95a66c2c985a66bc2d535392dcc450d8c9df18d5",
+      "revision": "1a05a0f10b33acca3fcfc544a5a6a2592f1c3865",
       "path": "modules/nlp/src/index.ts"
     },
     {
       "repo": "scriptorium",
-      "revision": "95a66c2c985a66bc2d535392dcc450d8c9df18d5",
+      "revision": "1a05a0f10b33acca3fcfc544a5a6a2592f1c3865",
       "path": "modules/assistant/src/actions.ts"
     },
     {
       "repo": "scriptorium",
-      "revision": "95a66c2c985a66bc2d535392dcc450d8c9df18d5",
+      "revision": "1a05a0f10b33acca3fcfc544a5a6a2592f1c3865",
       "path": "modules/diagnostics/src/index.ts"
     },
     {
       "repo": "scriptorium",
-      "revision": "95a66c2c985a66bc2d535392dcc450d8c9df18d5",
+      "revision": "1a05a0f10b33acca3fcfc544a5a6a2592f1c3865",
       "path": "modules/speaker/src/index.ts"
     },
     {
       "repo": "scriptorium",
-      "revision": "95a66c2c985a66bc2d535392dcc450d8c9df18d5",
+      "revision": "1a05a0f10b33acca3fcfc544a5a6a2592f1c3865",
       "path": "modules/semantic/src/actions.ts"
     },
     {
       "repo": "scriptorium",
-      "revision": "95a66c2c985a66bc2d535392dcc450d8c9df18d5",
+      "revision": "1a05a0f10b33acca3fcfc544a5a6a2592f1c3865",
       "path": "modules/publishing/src/actions.ts"
     }
   ],
@@ -2117,6 +2117,428 @@
       "source": "modules/mcp/src/tools.ts",
       "owner": "proprium.diagnostics",
       "via": "plugin_call"
+    }
+  ],
+  "source_ui_contributions": [
+    {
+      "id": "story.navigator",
+      "source": "modules/story/src/index.ts",
+      "module": "story",
+      "slot": "dock",
+      "title": "Story navigator",
+      "action": "story.volumes.tree",
+      "owner": "proprium.narrative",
+      "feature_id": "NAR-02"
+    },
+    {
+      "id": "story.inspector",
+      "source": "modules/story/src/index.ts",
+      "module": "story",
+      "slot": "inspection",
+      "title": "Story inspector",
+      "action": "story.entities.get",
+      "owner": "proprium.knowledge",
+      "feature_id": "KNO-01"
+    },
+    {
+      "id": "story.continuity",
+      "source": "modules/story/src/index.ts",
+      "module": "story",
+      "slot": "review",
+      "title": "Continuity",
+      "action": "story.threads.lifecycle",
+      "owner": "proprium.knowledge",
+      "feature_id": "KNO-11"
+    },
+    {
+      "id": "story.world-state",
+      "source": "modules/story/src/index.ts",
+      "module": "story",
+      "slot": "review",
+      "title": "World state",
+      "action": "story.world-state.workbench",
+      "owner": "proprium.knowledge",
+      "feature_id": "KNO-18"
+    },
+    {
+      "id": "story.zukan-review",
+      "source": "modules/story/src/index.ts",
+      "module": "story",
+      "slot": "review",
+      "title": "Zukan suggestions",
+      "action": "story.zukan-suggestions.list",
+      "owner": "proprium.knowledge",
+      "feature_id": "KNO-05"
+    },
+    {
+      "id": "story.series",
+      "source": "modules/story/src/index.ts",
+      "module": "story",
+      "slot": "settings",
+      "title": "Series",
+      "action": "story.series.list",
+      "owner": "proprium.knowledge",
+      "feature_id": "KNO-19"
+    },
+    {
+      "id": "search.panel",
+      "source": "modules/search/src/actions.ts",
+      "module": "search",
+      "slot": "dock",
+      "title": "全文検索",
+      "action": "search.query",
+      "owner": "proprium.research",
+      "feature_id": "RES-001"
+    },
+    {
+      "id": "search.terms",
+      "source": "modules/search/src/actions.ts",
+      "module": "search",
+      "slot": "inspection",
+      "title": "用語辞典",
+      "action": "search.terms.list",
+      "owner": "proprium.research",
+      "feature_id": "RES-003"
+    },
+    {
+      "id": "search.terms.adornment",
+      "source": "modules/search/src/actions.ts",
+      "module": "search",
+      "slot": "editor",
+      "title": "用語リンク",
+      "action": "search.terms.resolve",
+      "owner": "proprium.research",
+      "feature_id": "RES-004"
+    },
+    {
+      "id": "nlp.analyzer",
+      "source": "modules/nlp/src/index.ts",
+      "module": "nlp",
+      "slot": "dock",
+      "title": "日本語解析",
+      "action": "nlp.analyze",
+      "owner": "proprium.research",
+      "feature_id": "RES-005"
+    },
+    {
+      "id": "nlp.candidates",
+      "source": "modules/nlp/src/index.ts",
+      "module": "nlp",
+      "slot": "review",
+      "title": "語句候補",
+      "action": "nlp.discoverCandidates",
+      "owner": "proprium.research",
+      "feature_id": "RES-006"
+    },
+    {
+      "id": "nlp.dictionary",
+      "source": "modules/nlp/src/index.ts",
+      "module": "nlp",
+      "slot": "settings",
+      "title": "同義語辞書",
+      "action": "nlp.dictionary",
+      "owner": "proprium.research",
+      "feature_id": "RES-008"
+    },
+    {
+      "id": "nlp.privacy",
+      "source": "modules/nlp/src/index.ts",
+      "module": "nlp",
+      "slot": "settings",
+      "title": "外部送信の同意",
+      "action": "nlp.features",
+      "owner": "proprium.research",
+      "feature_id": "RES-012"
+    },
+    {
+      "id": "semantic.search",
+      "source": "modules/semantic/src/index.ts",
+      "module": "semantic",
+      "slot": "dock",
+      "title": "意味検索",
+      "action": "semantic.search",
+      "owner": "proprium.semantic",
+      "feature_id": "SEM-02"
+    },
+    {
+      "id": "semantic.expressions",
+      "source": "modules/semantic/src/index.ts",
+      "module": "semantic",
+      "slot": "dock",
+      "title": "表現の在庫",
+      "action": "semantic.expressions.search",
+      "owner": "proprium.semantic",
+      "feature_id": "SEM-03"
+    },
+    {
+      "id": "semantic.contradictions",
+      "source": "modules/semantic/src/index.ts",
+      "module": "semantic",
+      "slot": "review",
+      "title": "矛盾候補",
+      "action": "semantic.contradictions.rebuild",
+      "owner": "proprium.semantic",
+      "feature_id": "SEM-05"
+    },
+    {
+      "id": "semantic.index",
+      "source": "modules/semantic/src/index.ts",
+      "module": "semantic",
+      "slot": "settings",
+      "title": "意味インデックスとプライバシー",
+      "action": "semantic.index.status",
+      "owner": "proprium.semantic",
+      "feature_id": "SEM-01"
+    },
+    {
+      "id": "diagnostics.consistency",
+      "source": "modules/diagnostics/src/index.ts",
+      "module": "diagnostics",
+      "slot": "review",
+      "title": "設定整合性",
+      "action": "diagnostics.checkConsistency",
+      "owner": "proprium.diagnostics",
+      "feature_id": "DIA-02"
+    },
+    {
+      "id": "diagnostics.continuity",
+      "source": "modules/diagnostics/src/index.ts",
+      "module": "diagnostics",
+      "slot": "review",
+      "title": "連続性チェック",
+      "action": "diagnostics.checkContinuity",
+      "owner": "proprium.diagnostics",
+      "feature_id": "DIA-03"
+    },
+    {
+      "id": "diagnostics.analysis",
+      "source": "modules/diagnostics/src/index.ts",
+      "module": "diagnostics",
+      "slot": "dock",
+      "title": "文章診断",
+      "action": "diagnostics.analyze",
+      "owner": "proprium.diagnostics",
+      "feature_id": "DIA-06"
+    },
+    {
+      "id": "diagnostics.scene",
+      "source": "modules/diagnostics/src/index.ts",
+      "module": "diagnostics",
+      "slot": "dock",
+      "title": "シーン統合診断",
+      "action": "diagnostics.scene",
+      "owner": "proprium.diagnostics",
+      "feature_id": "DIA-01"
+    },
+    {
+      "id": "diagnostics.lint",
+      "source": "modules/diagnostics/src/index.ts",
+      "module": "diagnostics",
+      "slot": "review",
+      "title": "組版チェック",
+      "action": "diagnostics.lint",
+      "owner": "proprium.diagnostics",
+      "feature_id": "DIA-04"
+    },
+    {
+      "id": "diagnostics.voice",
+      "source": "modules/diagnostics/src/index.ts",
+      "module": "diagnostics",
+      "slot": "inspection",
+      "title": "文体プロファイル",
+      "action": "diagnostics.voiceProfiles",
+      "owner": "proprium.diagnostics",
+      "feature_id": "DIA-08"
+    },
+    {
+      "id": "speaker.attribution",
+      "source": "modules/speaker/src/index.ts",
+      "module": "speaker",
+      "slot": "dock",
+      "title": "話者帰属",
+      "action": "speaker.attribute",
+      "owner": "proprium.speaker",
+      "feature_id": "SPK-02"
+    },
+    {
+      "id": "speaker.review",
+      "source": "modules/speaker/src/index.ts",
+      "module": "speaker",
+      "slot": "review",
+      "title": "話者確認キュー",
+      "action": "speaker.review.queue",
+      "owner": "proprium.speaker",
+      "feature_id": "SPK-05"
+    },
+    {
+      "id": "speaker.dialogue",
+      "source": "modules/speaker/src/index.ts",
+      "module": "speaker",
+      "slot": "inspection",
+      "title": "キャラクター別セリフ",
+      "action": "speaker.dialogue.list",
+      "owner": "proprium.speaker",
+      "feature_id": "SPK-06"
+    },
+    {
+      "id": "speaker.voice.profiles",
+      "source": "modules/speaker/src/index.ts",
+      "module": "speaker",
+      "slot": "inspection",
+      "title": "キャラクター声紋",
+      "action": "speaker.voice.profiles",
+      "owner": "proprium.speaker",
+      "feature_id": "SPK-07"
+    },
+    {
+      "id": "speaker.evaluation",
+      "source": "modules/speaker/src/index.ts",
+      "module": "speaker",
+      "slot": "settings",
+      "title": "話者評価・モデル",
+      "action": "speaker.evaluation.run",
+      "owner": "proprium.speaker",
+      "feature_id": "SPK-09"
+    },
+    {
+      "id": "assistant.settings",
+      "source": "modules/assistant/src/index.ts",
+      "module": "assistant",
+      "slot": "settings",
+      "title": "LLM モデル・利用状況",
+      "action": "assistant.settings.read",
+      "owner": "proprium.paired-writing",
+      "feature_id": "PW-01"
+    },
+    {
+      "id": "assistant.rewrite",
+      "source": "modules/assistant/src/index.ts",
+      "module": "assistant",
+      "slot": "dock",
+      "title": "ストリーミング言い換え",
+      "action": "assistant.rewrite",
+      "owner": "proprium.paired-writing",
+      "feature_id": "PW-02"
+    },
+    {
+      "id": "assistant.summaries",
+      "source": "modules/assistant/src/index.ts",
+      "module": "assistant",
+      "slot": "dock",
+      "title": "シーン・章の要約",
+      "action": "assistant.summary.scene",
+      "owner": "proprium.paired-writing",
+      "feature_id": "PW-05"
+    },
+    {
+      "id": "assistant.qa",
+      "source": "modules/assistant/src/index.ts",
+      "module": "assistant",
+      "slot": "dock",
+      "title": "作品設定への質問",
+      "action": "assistant.qa",
+      "owner": "proprium.paired-writing",
+      "feature_id": "PW-04"
+    },
+    {
+      "id": "assistant.continuation",
+      "source": "modules/assistant/src/index.ts",
+      "module": "assistant",
+      "slot": "dock",
+      "title": "続きを考える",
+      "action": "assistant.continuation",
+      "owner": "proprium.paired-writing",
+      "feature_id": "PW-03"
+    },
+    {
+      "id": "assistant.aspect-review",
+      "source": "modules/assistant/src/index.ts",
+      "module": "assistant",
+      "slot": "review",
+      "title": "章の観点レビュー",
+      "action": "assistant.aspect.review",
+      "owner": "proprium.paired-writing",
+      "feature_id": "PW-07"
+    },
+    {
+      "id": "assistant.dialogue",
+      "source": "modules/assistant/src/index.ts",
+      "module": "assistant",
+      "slot": "dock",
+      "title": "対話スケッチ",
+      "action": "assistant.dialogue.topics",
+      "owner": "proprium.paired-writing",
+      "feature_id": "PW-06"
+    },
+    {
+      "id": "assistant.reader-reaction",
+      "source": "modules/assistant/src/index.ts",
+      "module": "assistant",
+      "slot": "review",
+      "title": "初読レポート",
+      "action": "assistant.reader.reaction",
+      "owner": "proprium.paired-writing",
+      "feature_id": "PW-05"
+    },
+    {
+      "id": "assistant.proposals",
+      "source": "modules/assistant/src/index.ts",
+      "module": "assistant",
+      "slot": "review",
+      "title": "執筆支援の変更案",
+      "action": "assistant.stateEvents.draft",
+      "owner": "proprium.paired-writing",
+      "feature_id": "PW-11"
+    },
+    {
+      "id": "publishing.export.plaintext",
+      "source": "modules/publishing/src/index.ts",
+      "module": "publishing",
+      "slot": "settings",
+      "title": "プレーンテキスト書き出し",
+      "action": "publishing.export.plaintext",
+      "owner": "proprium.publishing",
+      "feature_id": "PUB-02"
+    },
+    {
+      "id": "publishing.export.epub",
+      "source": "modules/publishing/src/index.ts",
+      "module": "publishing",
+      "slot": "settings",
+      "title": "EPUB 書き出し",
+      "action": "publishing.export.epub",
+      "owner": "proprium.publishing",
+      "feature_id": "PUB-03"
+    },
+    {
+      "id": "publishing.export.vertical-print",
+      "source": "modules/publishing/src/index.ts",
+      "module": "publishing",
+      "slot": "settings",
+      "title": "縦書き PDF",
+      "action": "publishing.export.vertical-print",
+      "owner": "proprium.publishing",
+      "feature_id": "PUB-04"
+    },
+    {
+      "id": "publishing.episode-map",
+      "source": "modules/publishing/src/index.ts",
+      "module": "publishing",
+      "slot": "settings",
+      "title": "公開回マッピング",
+      "action": "publishing.episodes.read",
+      "owner": "proprium.publishing",
+      "feature_id": "PUB-06"
+    },
+    {
+      "id": "publishing.share-links",
+      "source": "modules/publishing/src/index.ts",
+      "module": "publishing",
+      "slot": "settings",
+      "title": "読み取り専用共有リンク",
+      "action": "publishing.shares.list",
+      "owner": "proprium.publishing",
+      "feature_id": "PUB-07"
     }
   ]
 }

@@ -26,6 +26,21 @@ const content = new Map(docs.map(path => [path, read(path)]));
 const inventory = content.get('docs/canon/RECOVERY-INVENTORY.md');
 let featureCount = 0; let linkCount = 0; let sourceLinks = 0; let checkedSourcePaths = 0;
 const actionRows = config.source_actions;
+const uiRows = config.source_ui_contributions ?? [];
+check(uiRows.length > 0, 'Missing UI registration inventory');
+check(new Set(uiRows.map(u => u.id)).size === uiRows.length, 'Duplicate legacy UI ID');
+for (const ui of uiRows) {
+  const owner = config.plugins.find(p => p.id === ui.owner);
+  check(!!owner, 'UI owner missing: ' + ui.id);
+  check(ui.source.startsWith('modules/' + ui.module + '/'), 'UI source module mismatch: ' + ui.id);
+  check(!!ui.slot && !!ui.action && !!ui.title, 'Incomplete UI metadata: ' + ui.id);
+  if (owner) {
+    const canon = content.get(owner.canon);
+    check(canon.includes('<a id="feature-' + ui.feature_id.toLowerCase() + '">'), 'Missing UI target feature: ' + ui.id);
+    check(canon.includes('`' + ui.id + '`'), 'Canon missing legacy UI: ' + ui.id);
+  }
+  check(inventory.includes('`' + ui.id + '`'), 'Inventory missing legacy UI: ' + ui.id);
+}
 for (const action of actionRows) {
   check(action.owners.length > 0 && action.owners.every(id => config.plugins.some(p => p.id === id)), `Invalid owner for ${action.id}`);
   check(action.owners.length === 1 || !!action.partition, `Missing ownership partition for ${action.id}`);
@@ -103,6 +118,26 @@ if (sourceRoot) {
     check(registeredTools.includes(tool.id), `Fabricated legacy MCP tool ${tool.id}`);
     check(inventory.includes('`' + tool.id + '`'), `Inventory lacks legacy MCP tool ${tool.id}`);
   }
+  const uiSources = [...new Set(uiRows.map(ui => ui.source))];
+  for (const path of uiSources) {
+    let body;
+    try {
+      body = execFileSync('git', ['show', config.sources[0].revision + ':' + path], {
+        cwd: join(sourceRoot, 'scriptorium'), encoding: 'utf8', stdio: 'pipe',
+      });
+    } catch { errors.push('Missing original source UI registration: ' + path); continue; }
+    const registered = [...body.matchAll(/\{\s*id:\s*["']([^"']+)["']\s*,\s*module:\s*["']([^"']+)["']\s*,\s*slot:\s*["']([^"']+)["']\s*,\s*title:\s*["']([^"']+)["']\s*,\s*action:\s*["']([^"']+)["']/gu)]
+      .map(m => ({id:m[1],module:m[2],slot:m[3],title:m[4],action:m[5]}));
+    const mapped = uiRows.filter(ui => ui.source === path);
+    for (const entry of registered) {
+      const target = mapped.find(ui => ui.id === entry.id);
+      check(!!target, 'Unmapped original UI contribution: ' + path + ':' + entry.id);
+      if (target) for (const field of ['module','slot','title','action']) {
+        check(target[field] === entry[field], 'UI registration metadata mismatch: ' + path + ':' + entry.id + '.' + field);
+      }
+    }
+    for (const ui of mapped) check(registered.some(entry => entry.id === ui.id), 'Fabricated UI contribution: ' + path + ':' + ui.id);
+  }
   const sourceCache = new Map();
   const sourceTrees = [['scriptorium', config.sources[0].revision], ['arcadia-loom', 'edc033c2c9466274a334299dadfa426661d957d9']].map(([repo, revision]) => {
     try { return new Set(execFileSync('git', ['ls-tree', '-r', '--name-only', revision], { cwd: join(sourceRoot, repo), encoding: 'utf8', stdio: 'pipe' }).trim().split('\n')); }
@@ -140,4 +175,4 @@ if (sourceRoot) {
   }
 }
 if (errors.length) { process.stderr.write(errors.join('\n') + '\n'); process.exitCode = 1; }
-else process.stdout.write(`Authoring canon verified: ${config.plugins.length} plugins, ${featureCount} features, ${actionRows.length} source actions, ${config.source_tools.length} legacy MCP tools, acyclic required dependencies, ${linkCount} links (${sourceLinks} pinned source links checked${sourceRoot ? `; source registrations and ${checkedSourcePaths} source paths checked` : '; external source verification omitted: pass --sources'}).\n`);
+else process.stdout.write(`Authoring canon verified: ${config.plugins.length} plugins, ${featureCount} features, ${actionRows.length} source actions, ${config.source_tools.length} legacy MCP tools, ${uiRows.length} UI contributions, acyclic required dependencies, ${linkCount} links (${sourceLinks} pinned source links checked${sourceRoot ? `; source registrations and ${checkedSourcePaths} source paths checked` : '; external source verification omitted: pass --sources'}).\n`);

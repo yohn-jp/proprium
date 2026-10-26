@@ -12,7 +12,16 @@ export async function showPanel(page: Page, panel: "outline" | "editor" | "inspe
 }
 export async function expectEditorText(page: Page, text: string): Promise<void> {
   await showPanel(page, "editor");
-  await expect.poll(async () => page.locator(".cm-content .cm-line").evaluateAll(lines => lines.map(line => line.textContent ?? "").join("\n"))).toBe(text);
+  // The DOM line projection is not the CodeMirror document: a final empty line
+  // can be omitted by WebKit rendering even when the document ends in a newline.
+  // Assert real editor-state bytes, including the trailing LF, instead.
+  await expect.poll(async () => page.getByRole("textbox", { name: "原稿 Markdown" }).evaluate(node => {
+    for (let element: Element | null = node; element; element = element.parentElement) {
+      const cm = (element as Element & { cmView?: { view?: { state?: { doc?: { toString(): string } } } } }).cmView;
+      if (cm?.view?.state?.doc) return cm.view.state.doc.toString();
+    }
+    return null;
+  })).toBe(text);
 }
 export async function chooseFile(page: Page, path: string): Promise<void> {
   await showPanel(page, "outline");

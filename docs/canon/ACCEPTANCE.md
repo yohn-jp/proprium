@@ -112,3 +112,9 @@ An implementation report supplies one record per feature ID: owning canon/accept
 ### First usable slice and full recovery
 
 P0 is usable only when H0 and Narrative local scenarios plus R03–R06 pass with signed discovery/install, actual chapter/scene creation/reorder and recovery; a build alone is insufficient. P1 then certifies the long-work loop R07–R09 with optional providers absent and available. Basic text/EPUB export is scheduled immediately after Narrative as data portability, independent of Reader/sharing service. Full recovery still requires all eight product ledgers, P2 scenarios and R01–R14; independent high-memory Semantic unavailability on unsupported devices must match its explicit supported-platform contract, never block local writing.
+
+## Source delta and UI parity
+
+The [Scriptorium source delta](SCRIPTORIUM-LATEST-DELTA.md) adds DELTA-01 through DELTA-06 to the Host, Narrative and Research implementation gates, including page lifecycle recovery and mobile editor-byte fidelity.
+
+All 42 registered legacy UI contribution IDs listed in `traceability.json.source_ui_contributions` must map to a specific owning plugin feature. The source-aware validator checks that none has been added, omitted or renamed. User-facing acceptance additionally requires an interactive Host UI and a real action result; a module label alone does not count.

@@ -284,3 +284,7 @@ The old server's recent-device cursor store is not restored. Its user-visible co
 ### NAR-A12 — Portable resume markers
 
 Use two browser profiles bound to one synthetic repository/branch. Publish a marker from a saved scene through proposal → Host review → local apply → explicit checkpoint/publish; before remote confirmation label it local-only. Synchronize the confirmed Git snapshot on the second profile: the correct device-labeled scene and sentence become an optional Continue candidate. Another repository, branch or device's unsaved text cannot be rebound. Modify the manuscript after marking: the old position is stale and cannot move the caret; local recoverable draft wins over a remote candidate for the same scene. Offline/missing marker leaves local resume usable. Repeated proposal returns one receipt, stale marker/body revisions fail, rejection writes nothing, unknown YAML entries survive, and Mobile selection/return keeps IME/undo/draft intact. No server cursor store, hidden publication or cross-device journal promise is permitted.
+
+## Latest Scriptorium lifecycle recovery addendum
+
+[Source delta](../SCRIPTORIUM-LATEST-DELTA.md) DELTA-01/02/03/06 is binding for NAR-03, NAR-07, NAR-08 and NAR-12: stale browser/scene reads must be fenced by document generation; interrupted scene activation must resume safely after page restoration; provider credential failures must not log the author out; restored manuscript bytes, including terminal LF and Japanese UTF-16 positions, must be preserved.

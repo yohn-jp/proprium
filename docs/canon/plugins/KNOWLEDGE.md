@@ -245,3 +245,17 @@ Primary Scriptorium source: `modules/story/src/{actions.ts,browser.tsx,snapshot.
 Narrow Arcadia Loom backfill: `app/src/features/zukan/{BibleView,CharactersView,CharacterDetailModal,ThreadsView,GraphView}.tsx`, `app/src/features/zukan/bible/{BibleView,BibleListPane,BibleDetailPane,NotesDisplay,CandidatePanel}.tsx`, `app/src/features/continuity/{MapView,TimelineView}.tsx`, `app/src/features/editor/{WorldStatePanel.tsx,SceneCharacterList.tsx,AppearsPickerModal.tsx,worldStateApi.ts}`, `app/src/features/ai/{DialogueSketchView.tsx,DialogueSketchEditor.tsx,DialogueSketchDetails.tsx,DialogueSketchLines.tsx,dialogueSketchViewUtils.tsx,dialogueSketchApi.ts}`, `packages/core-shared/src/worldState/{types,extractRuleEvents,fold,query}.ts`, `packages/api/src/routes/worldState{,.test}.ts`, `packages/schema/src/worldState.ts`, and `docs/plans/2026-07-29-narrative-ide-ux-plan.md` at `edc033c2c9466274a334299dadfa426661d957d9`. The Arcadia UI and SQLite persistence are provenance, not dependencies for the Proprium component.
 
 Related contracts: [shared recovery architecture](../ARCHITECTURE.md), [Host/Plugin contract](../HOST-PLUGIN-CONTRACT.md), [recovery inventory](../RECOVERY-INVENTORY.md), [acceptance plan](../ACCEPTANCE.md), [WASM Plugin ABI](../../architecture/WASM-PLUGIN-ABI.md), [Git/storage](../../architecture/GIT-AND-STORAGE.md), [Workspace UX](../../architecture/WORKSPACE-UX.md), [plugin distribution](../../architecture/PLUGIN-DISTRIBUTION.md), [Research](RESEARCH.md), [Speaker](SPEAKER.md), [Semantic](SEMANTIC.md), and [Paired Writing](PAIRED-WRITING.md).
+
+## Legacy Scriptorium browser UI registration parity
+
+The following exact historical registration IDs are required to map to **functioning Host-rendered controls**, not merely shown as labels. The target feature and its linked Acceptance own the user-visible interaction, cancellation and actual action result. Legacy slots do not mandate an additional top-level tab.
+
+| Source UI ID | Target feature |
+| --- | --- |
+| `story.inspector` | [KNO-01](#feature-kno-01) |
+| `story.continuity` | [KNO-11](#feature-kno-11) |
+| `story.world-state` | [KNO-18](#feature-kno-18) |
+| `story.zukan-review` | [KNO-05](#feature-kno-05) |
+| `story.series` | [KNO-19](#feature-kno-19) |
+
+All registrations are checked against the pinned Scriptorium source by `scripts/verify-authoring-canon.mjs --sources`. A missing action, disabled control without explanation or inert panel is not feature parity.
