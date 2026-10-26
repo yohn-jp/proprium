@@ -118,6 +118,7 @@ export function MobileShell({ header, documentTitle, documentContext, desktopDur
   const [openingReference, setOpeningReference] = useState(false);
   const openingReferenceRef = useRef(false);
   const referenceTriggerRef = useRef<HTMLButtonElement | null>(null);
+  const workspaceNavigationRef = useRef<HTMLDetailsElement | null>(null);
   const referenceOriginRef = useRef("");
   const routeIdentityRef = useRef(location.pathname + location.search);
   routeIdentityRef.current = location.pathname + location.search;
@@ -520,32 +521,58 @@ export function MobileShell({ header, documentTitle, documentContext, desktopDur
             <div className="mobile-shell-writing-accessories" aria-label="執筆中の参照">
               <span className="mobile-shell-accessories-label" aria-hidden="true">REFERENCES</span>
               <button type="button" className="mobile-shell-accessory-button" disabled={openingReference}
-                onClick={(event) => { void openReferenceSheet("outline", event.currentTarget); }}>
-                <span aria-hidden="true">☷</span> 構成を参照
-              </button>
-              <button type="button" className="mobile-shell-accessory-button" disabled={openingReference}
-                onClick={(event) => { void openReferenceSheet("inspector", event.currentTarget); }}>
-                <span aria-hidden="true">◎</span> 保存状態を参照
+                aria-label="構成または保存状態を参照" onClick={(event) => { void openReferenceSheet("outline", event.currentTarget); }}>
+                <span aria-hidden="true">☷</span> 構成・保存状態を参照
               </button>
             </div>
           ) : null}
-          <nav className="mobile-shell-navigation" aria-label="モバイル画面">
-            {VIEWS.map((view) => (
-              <IonButton
-                key={view.id}
-                type="button"
-                className="mobile-shell-nav-button"
-                fill={activeView === view.id ? "solid" : "clear"}
-                aria-current={activeView === view.id ? "page" : undefined}
-                onClick={() => navigate(view.id)}
-              >
-                <span className="mobile-shell-nav-content">
-                  <span className="mobile-shell-nav-mark" aria-hidden="true">{view.mark}</span>
-                  <span>{view.label}</span>
-                </span>
-              </IonButton>
-            ))}
-          </nav>
+          {hasWorkspace ? (
+            <details className="mobile-shell-navigation-menu" ref={workspaceNavigationRef}>
+              <summary aria-label="別の画面へ移動">
+                <span>画面を移動</span>
+                <span className="mobile-shell-navigation-current">{VIEWS.find((view) => view.id === activeView)?.label}</span>
+              </summary>
+              <nav className="mobile-shell-navigation" aria-label="モバイル画面">
+                {VIEWS.map((view) => (
+                  <IonButton
+                    key={view.id}
+                    type="button"
+                    className="mobile-shell-nav-button"
+                    fill={activeView === view.id ? "solid" : "clear"}
+                    aria-current={activeView === view.id ? "page" : undefined}
+                    onClick={() => {
+                      void navigate(view.id).finally(() => {
+                        if (workspaceNavigationRef.current) workspaceNavigationRef.current.open = false;
+                      });
+                    }}
+                  >
+                    <span className="mobile-shell-nav-content">
+                      <span className="mobile-shell-nav-mark" aria-hidden="true">{view.mark}</span>
+                      <span>{view.label}</span>
+                    </span>
+                  </IonButton>
+                ))}
+              </nav>
+            </details>
+          ) : (
+            <nav className="mobile-shell-navigation" aria-label="モバイル画面">
+              {VIEWS.map((view) => (
+                <IonButton
+                  key={view.id}
+                  type="button"
+                  className="mobile-shell-nav-button"
+                  fill={activeView === view.id ? "solid" : "clear"}
+                  aria-current={activeView === view.id ? "page" : undefined}
+                  onClick={() => navigate(view.id)}
+                >
+                  <span className="mobile-shell-nav-content">
+                    <span className="mobile-shell-nav-mark" aria-hidden="true">{view.mark}</span>
+                    <span>{view.label}</span>
+                  </span>
+                </IonButton>
+              ))}
+            </nav>
+          )}
         </IonFooter>
       </IonPage>
       <IonModal

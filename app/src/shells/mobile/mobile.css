@@ -217,6 +217,47 @@
 }
 
 .mobile-shell-navigation ion-button[aria-current="page"] { font-weight: 700; }
+.mobile-shell-navigation-menu {
+  position: relative;
+  z-index: 40;
+  min-width: 0;
+  padding: 0.25rem 0.65rem;
+  background: var(--mobile-paper);
+}
+.mobile-shell-navigation-menu > summary {
+  display: flex;
+  min-height: 2.75rem;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.75rem;
+  padding: 0.3rem 0.8rem;
+  border: 1px solid var(--mobile-line);
+  border-radius: 0.55rem;
+  color: var(--mobile-ink);
+  background: var(--mobile-stage);
+  cursor: pointer;
+  list-style: none;
+}
+.mobile-shell-navigation-menu > summary::-webkit-details-marker { display: none; }
+.mobile-shell-navigation-menu > summary::after { content: "⌄"; color: var(--mobile-muted); }
+.mobile-shell-navigation-menu[open] > summary::after { content: "⌃"; }
+.mobile-shell-navigation-current { margin-left: auto; color: var(--mobile-muted); font-size: 0.8rem; }
+.mobile-shell-navigation-menu .mobile-shell-navigation {
+  position: absolute;
+  right: 0.65rem;
+  bottom: calc(100% + 0.4rem);
+  width: min(24rem, calc(100vw - 1.3rem));
+  min-height: 0;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 0.3rem;
+  padding: 0.45rem;
+  border: 1px solid var(--mobile-line);
+  border-radius: 0.65rem;
+  background: var(--mobile-paper);
+  box-shadow: 0 0.7rem 1.7rem rgb(0 0 0 / 18%);
+}
+.mobile-shell-navigation-menu .mobile-shell-navigation ion-button { min-height: 2.75rem; }
+.mobile-shell-navigation-menu .mobile-shell-navigation ion-button:last-child { grid-column: 1 / -1; }
 .mobile-shell ion-button:focus-visible { outline: 3px solid var(--focus-ring); outline-offset: 2px; }
 .mobile-shell ion-button::part(native):focus-visible { outline: 3px solid var(--focus-ring); outline-offset: 2px; }
 .mobile-shell :is(button, a, input, select, textarea, summary, [tabindex]):focus-visible { outline: 3px solid var(--focus-ring); outline-offset: 2px; }
@@ -426,7 +467,7 @@
 
 /* Writing reference sheet: native Ionic drag/snapping, no gesture handling on manuscript text. */
 .mobile-shell-writing-accessories {
-  display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr);
+  display:grid;grid-template-columns:minmax(0,1fr);
   gap:8px;padding:8px max(12px,env(safe-area-inset-right,0px)) 7px max(12px,env(safe-area-inset-left,0px));
   border-bottom:1px solid var(--mobile-line);background:var(--mobile-paper);
 }
