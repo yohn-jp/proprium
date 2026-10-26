@@ -71,7 +71,7 @@ test("a protected uncommitted draft can be recovered explicitly without replacin
   await page.evaluate(async workspace => window.propriumHostTest!.openWorkspace(workspace, { "chapter.md": "保存済みの本文\n" }), workspace);
   await chooseFile(page, "chapter.md");
   await page.getByRole("textbox", { name: "原稿 Markdown" }).fill("回復する未保存の本文\n");
-  await expect(page.getByLabel("原稿の保護範囲を確認")).toContainText("Draft · このブラウザーに保護済み");
+  await expect(page.getByLabel("原稿の保護範囲を確認")).toContainText("自動回復記録 · 保存済み");
   page.once("dialog", dialog => dialog.accept());
   await page.getByRole("button", { name: "Workspaces", exact: true }).click();
   await page.getByRole("button", { name: /proprium-test\/ui-restoration/u }).click();

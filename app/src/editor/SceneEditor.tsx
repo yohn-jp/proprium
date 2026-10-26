@@ -62,13 +62,13 @@ const EditorDurabilityBadges = memo(function EditorDurabilityBadges({
   const currentDurability = pendingEditorText ? "draft" : durability;
   return <span className="durability-row" aria-label="保存状態">
     <span className="durability-badge is-current" data-state={currentDurability}>{
-      currentDurability === "draft" ? journalError ? "Draft · 保存要確認" : pendingEditorText || !draftStored ? "Draft · 記録中" : "Draft · このブラウザーに保護済み"
-        : currentDurability === "checkpointing" ? "Checkpoint · 結果確認中"
-        : currentDurability === "checkpointed" ? "Checkpoint · GitHub未保存"
-        : currentDurability === "publication_unknown" ? "GitHub保存 · 結果未確認"
-        : "Saved to GitHub"
+      currentDurability === "draft" ? journalError ? "自動回復記録 · 保存要確認" : pendingEditorText || !draftStored ? "自動回復記録 · 記録中" : "自動回復記録 · 保存済み"
+        : currentDurability === "checkpointing" ? "ローカルGit · コミット確認中"
+        : currentDurability === "checkpointed" ? "ローカルGitコミット済み · GitHub未公開"
+        : currentDurability === "publication_unknown" ? "GitHub公開 · 結果未確認"
+        : "GitHub公開済み · revision確認済み"
     }</span>
-    {pendingCount > 0 && <span className="pending-count">未公開 {pendingCount} 件</span>}
+    {pendingCount > 0 && <span className="pending-count">ローカルworktree未保存 {pendingCount} 件</span>}
   </span>;
 });
 
@@ -85,14 +85,14 @@ const EditorDurabilityMessage = memo(function EditorDurabilityMessage({
   const currentDurability = pendingEditorText ? "draft" : durability;
   const currentDraftStored = pendingEditorText ? false : draftStored;
   const statusText = currentDurability === "draft"
-    ? currentDraftStored ? "下書きはこのブラウザーに保護されています。" : "この下書きのブラウザー保存を確認できていません。"
+    ? currentDraftStored ? "入力本文の自動回復記録はこのブラウザーに保存されています。ローカルGit worktreeへの保存とは別です。" : "入力本文を自動回復記録へ保存できたか確認できていません。ローカルGit worktreeにも未保存です。"
     : currentDurability === "checkpointing"
-      ? "チェックポイントの結果を確認しています。再試行では同じ操作 ID を使います。"
+      ? "この端末のローカルGitコミット結果を確認しています。"
       : currentDurability === "checkpointed"
-        ? "ローカルチェックポイントです。GitHub へ保存するまでブラウザーの記録を保持します。"
+        ? "この端末のローカルGitにコミット済みです。GitHubへ公開するまでは他の端末から見えません。"
         : currentDurability === "publication_unknown"
-          ? "GitHub への保存結果は未確認です。同じバッチで状態を再確認できます。"
-          : "確認済みの GitHub 版を表示しています。";
+          ? "GitHubへの公開結果は未確認です。ブランチのrevisionを再確認してください。"
+          : "GitHubの対象ブランチで公開revisionを確認済みです。";
 
   return <>
     <p className="durability-message" role="status" aria-live="polite">{statusText}</p>
@@ -321,10 +321,10 @@ export function SceneEditor({
         </div>
         <div className="editor-actions" aria-label="保存と表示">
           <button type="button" onClick={onCheckpoint} disabled={!canCheckpoint || checkpointBusy}>
-            {checkpointBusy || durability === "checkpointing" ? "確認中…" : "Checkpoint"}
+            {checkpointBusy || durability === "checkpointing" ? "確認中…" : "ローカル変更を確認"}
           </button>
           <button type="button" className="quiet-button" onClick={onPublish} disabled={!canPublish || publishBusy}>
-            {publishBusy ? "GitHub に保存中…" : "Save to GitHub"}
+            {publishBusy ? "GitHubへ公開中…" : "GitHubへ公開"}
           </button>
           <button type="button" className="quiet-button" onClick={onHistory} aria-expanded={historyOpen}>
             履歴
@@ -338,7 +338,7 @@ export function SceneEditor({
         <div className="editor-protection-detail">
           <EditorDurabilityMessage durability={durability} draftStored={draftStored} journalError={journalError} />
           {journalError && <button type="button" onClick={onRetryDraft}>ブラウザーへの記録を再試行</button>}
-          <p>Draftは同じブラウザー・作者・origin内の回復用です。Checkpointはこのブラウザーのlocal Git、GitHubへの保存は確認したrevisionだけが対象です。</p>
+          <p>入力本文の自動回復記録は、同じブラウザー・作者・originで再開するための記録です。ローカルworktreeへの保存、ローカルGitコミット、GitHubへの公開はそれぞれ別の操作です。</p>
           <p>原稿 <code>{path}</code></p>
           <p>読込revision <code>{snapshot.overlayCommit ?? snapshot.remoteCommit}</code></p>
         </div>
