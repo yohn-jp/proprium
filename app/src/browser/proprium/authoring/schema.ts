@@ -45,6 +45,7 @@ const nav = closed({ target: jsonObject, intent: { enum: ["open", "reveal"] } })
 const column = closed({ key: text(), label: text() });
 const fieldProperties = {
   id: text(), label: text(), required: { type: "boolean" },
+  initial_value: true,
   options: array(closed({ value: text(), label: text() })), placeholder: text(4096, 0),
   min_length: { type: "integer", minimum: 0, maximum: 1048576 },
   max_length: { type: "integer", minimum: 0, maximum: 1048576 }, validation_message: text(4096),
@@ -73,7 +74,9 @@ export const surfaceSchema = {
     widget("list", { items: template, primary: text(), secondary: text(), item_action: binding, item_navigation: nav, ...paging }, ["items", "primary"]),
     widget("table", { rows: template, columns: array(column, 64), ...paging }, ["rows", "columns"]),
     widget("detail", { value: template, fields: array(column, 64) }, ["value"]),
-    widget("form", { fields: array(field, 64), submit: binding, cancel_action: binding }, ["fields", "submit"]),
+    widget("form", { fields: array(field, 64), submit: binding, cancel_action: binding,
+      confirmation: closed({ title: text(), message: text(4096), continue_label: text(), cancel_label: text() }, ["title", "message"]),
+    }, ["fields", "submit"]),
     widget("tabs", { tabs: array(closed({ id: text(), title: text(), body: { $ref: "#/$defs/widget" } }), 32) }, ["tabs"]),
     widget("status", { state: template, messages: { type: "object", additionalProperties: text(4096) } }, ["state"]),
     widget("progress", { value: template, maximum: { type: "number", exclusiveMinimum: 0 }, label: text() }, ["value"]),
