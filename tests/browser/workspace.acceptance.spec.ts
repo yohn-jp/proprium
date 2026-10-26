@@ -89,7 +89,7 @@ test("local start creates and reopens a generic browser-only workspace without c
     if (url.origin !== hostOrigin) remoteRequests.push(url.href);
   });
 
-  await expect(page.getByRole("heading", { name: "Start or open a workspace" })).toBeVisible();
+  await expect(page.getByRole("heading", { name: "作品を作る・開く" })).toBeVisible();
   await page.getByLabel("作品名", { exact: true }).fill("A local draft");
   await page.getByRole("button", { name: "ローカル作品を作成", exact: true }).click();
   await showPanel(page, "outline");

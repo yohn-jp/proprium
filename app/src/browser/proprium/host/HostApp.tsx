@@ -804,11 +804,11 @@ export function HostApp(): ReactElement {
 
   const recentCard = <section className="picker-card recent-card" aria-labelledby="recent-heading">
           <div className="card-heading"><div><p className="eyebrow">この端末</p><h2 id="recent-heading">最近開いた作品</h2></div><span className="card-icon">◷</span></div>
-          <p className="field-help">Saved in this browser. GitHub workspaces can be reopened offline after their files have been loaded here.</p>
-          {recent.length ? <ul className="recent-list">{recent.map(entry => <li key={entry.identity.localWorkspaceId}><button type="button" className="recent-workspace" disabled={busy} onClick={() => void selectRecent(entry)}><span><strong>{entry.title}</strong><small>{entry.identity.branch} · {isGitHubWorkspaceIdentity(entry.identity) ? "GitHub" : "Local only"} · opened {new Date(entry.lastOpened).toLocaleDateString()}</small></span><span aria-hidden="true">→</span></button></li>)}</ul> : <div className="empty-state"><span>◇</span><p>まだ作品を開いていません</p></div>}
+          <p className="field-help">このブラウザーに保存されます。GitHubの作品は、ファイルを読み込んだ後であればオフラインでも開けます。</p>
+          {recent.length ? <ul className="recent-list">{recent.map(entry => <li key={entry.identity.localWorkspaceId}><button type="button" className="recent-workspace" disabled={busy} onClick={() => void selectRecent(entry)}><span><strong>{entry.title}</strong><small>{entry.identity.branch} · {isGitHubWorkspaceIdentity(entry.identity) ? "GitHub" : "ローカルのみ"} · {new Date(entry.lastOpened).toLocaleDateString()}に開きました</small></span><span aria-hidden="true">→</span></button></li>)}</ul> : <div className="empty-state"><span>◇</span><p>まだ作品を開いていません</p></div>}
         </section>;
   const picker = <section className="workspace-picker" aria-labelledby="picker-heading">
-      <div className="welcome-copy"><p className="eyebrow">文書と履歴を手元に</p><h1 id="picker-heading">Start or open a workspace</h1><p>Create a local workspace and start editing right away, or open a GitHub repository to sync with a remote.</p></div>
+      <div className="welcome-copy"><p className="eyebrow">文書と履歴を手元に</p><h1 id="picker-heading">作品を作る・開く</h1><p>この端末で作品を作成して、すぐに編集を始められます。GitHubのリポジトリを開けば、リモートと同期できます。</p></div>
       <div className="picker-grid">
         <section className="picker-card local-start-card" aria-labelledby="local-start-heading">
           <div className="card-heading"><div><p className="eyebrow">ローカルの作品</p><h2 id="local-start-heading">この端末で書き始める</h2></div><span className="card-icon">✎</span></div>
@@ -852,7 +852,7 @@ export function HostApp(): ReactElement {
             transfer={<WorkspaceTransferPanel git={git!} files={files} busy={busy} canImport={!currentFile?.dirty} onBusyChange={setBusy} onImportBusyChange={setFileOperationBusy} beforeApply={beforeFileMutation} onImported={async paths => { const targetGit = git!, targetWorkspace = workspace; await refresh(targetGit, targetWorkspace); if (gitRef.current === targetGit && paths[0]) await loadFile(paths[0]); }} />}
           />
           <section className="sidebar-section sync-sidebar-section">
-            <div className="section-title-row"><h2>{isGitHubWorkspaceIdentity(workspace.identity) ? "GitHub" : "Remote sync"}</h2><span className={`connection-indicator ${syncClient ? "connected" : "local-only"}`} aria-label={syncClient ? "Connected to GitHub" : "Local workspace only"}>{syncClient ? "GitHub接続済み" : "このブラウザーのみ"}</span></div>
+            <div className="section-title-row"><h2>{isGitHubWorkspaceIdentity(workspace.identity) ? "GitHub" : "リモート同期"}</h2><span className={`connection-indicator ${syncClient ? "connected" : "local-only"}`} aria-label={syncClient ? "Connected to GitHub" : "Local workspace only"}>{syncClient ? "GitHub接続済み" : "このブラウザーのみ"}</span></div>
             {syncClient ? <div className="sync-actions"><button type="button" onClick={() => void fetchRemote()} disabled={busy}>更新を確認</button><button type="button" onClick={() => void pullRemote()} disabled={busy}>変更を取得</button><button type="button" className="publish-button" onClick={() => void publishRemote()} disabled={busy || status.localState !== "local-committed"}>GitHubへ公開</button></div> : isGitHubWorkspaceIdentity(workspace.identity)
               ? <p className="sidebar-empty">ローカル編集はこのまま利用できます。GitHubには画面上部から接続できます。</p>
               : <p className="sidebar-empty">このWorkspaceはこのブラウザー内だけに保存されます。GitHub同期は設定されていません。</p>}

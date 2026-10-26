@@ -6,7 +6,7 @@ test("workspace picker text stays readable in every appearance mode", async ({ p
   await page.goto("/");
   for (const theme of ["light", "dark", "paper"]) {
     await page.getByLabel("外観", { exact: true }).selectOption(theme);
-    for (const target of [page.getByRole("heading", { name: "Start or open a workspace" }), page.locator(".welcome-copy > p").last()]) {
+    for (const target of [page.getByRole("heading", { name: "作品を作る・開く" }), page.locator(".welcome-copy > p").last()]) {
       const contrast = await target.evaluate(element => {
         const rgb = (value: string) => (value.match(/[\d.]+/gu) ?? []).slice(0, 3).map(Number);
         const luminance = (values: number[]) => values.map(value => { const x = value / 255; return x <= .04045 ? x / 12.92 : ((x + .055) / 1.055) ** 2.4; }).reduce((sum, value, index) => sum + value * [.2126, .7152, .0722][index]!, 0);

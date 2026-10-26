@@ -185,7 +185,7 @@ test("static Host imports a GitHub REST commit, reloads offline, and edits with 
 
   await context.setOffline(true);
   await page.reload();
-  await expect(page.getByRole("heading", { name: "Start or open a workspace" })).toBeVisible();
+  await expect(page.getByRole("heading", { name: "作品を作る・開く" })).toBeVisible();
   await expect.poll(() => page.evaluate(() => navigator.serviceWorker.controller !== null)).toBe(true);
   const recentWorkspace = page.getByRole("button")
     .filter({ hasText: workspaceTitle });
