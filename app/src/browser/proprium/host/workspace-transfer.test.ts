@@ -30,3 +30,14 @@ test("document names default to Markdown without imposing a narrative hierarchy"
   assert.throws(() => documentPath(""));
   assert.throws(() => documentPath("../escape"));
 });
+
+test("a workspace at the 64 MiB content limit can import its own exported ZIP", () => {
+  const bytes = new Uint8Array(64 * 1024 * 1024);
+  bytes[0] = 17; bytes[bytes.length - 1] = 29;
+  const archive = createWorkspaceArchive([{ path: "at-limit.bin", data: bytes }]);
+  assert.ok(archive.byteLength > bytes.byteLength);
+  const [restored] = readWorkspaceArchive(archive);
+  assert.equal(restored!.data.byteLength, bytes.byteLength);
+  assert.equal(restored!.data[0], 17);
+  assert.equal(restored!.data[restored!.data.length - 1], 29);
+});

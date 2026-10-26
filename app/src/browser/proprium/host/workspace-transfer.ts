@@ -1,6 +1,9 @@
 import { unzipSync, zipSync } from "fflate";
 import { MAX_WORKSPACE_CHANGE_BYTES, MAX_WORKSPACE_CHANGE_COUNT, validateGitPath } from "../git/protocol.js";
 
+// ZIP central/local headers and UTF-8 names add bytes beyond the expanded contents.
+export const MAX_WORKSPACE_ARCHIVE_BYTES = MAX_WORKSPACE_CHANGE_BYTES + 4 * 1024 * 1024;
+
 export interface TransferFile { path: string; data: Uint8Array; }
 
 export function validateTransferFiles(files: readonly TransferFile[]): void {
@@ -21,11 +24,13 @@ export function createWorkspaceArchive(files: readonly TransferFile[]): Uint8Arr
   validateTransferFiles(files);
   const entries: Record<string, Uint8Array> = Object.create(null);
   for (const file of files) entries[file.path] = file.data;
-  return zipSync(entries, { level: 0 });
+  const archive = zipSync(entries, { level: 0 });
+  if (archive.byteLength > MAX_WORKSPACE_ARCHIVE_BYTES) throw new Error("ZIPの管理情報が大きすぎます。ファイルを分けて書き出してください。");
+  return archive;
 }
 
 export function readWorkspaceArchive(archive: Uint8Array): TransferFile[] {
-  if (archive.byteLength > MAX_WORKSPACE_CHANGE_BYTES) throw new Error("ZIPファイルは64 MiB以内にしてください。");
+  if (archive.byteLength > MAX_WORKSPACE_ARCHIVE_BYTES) throw new Error("ZIPファイルは68 MiB以内（展開後64 MiB以内）にしてください。");
   let total = 0;
   const seen = new Set<string>();
   const entries = unzipSync(archive, { filter(file) {

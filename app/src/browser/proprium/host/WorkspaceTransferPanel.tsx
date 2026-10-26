@@ -1,7 +1,7 @@
 import { useRef, useState, type ChangeEvent } from "react";
 import type { BrowserLocalGit, WorkspaceFile } from "../git/index.js";
 import { MAX_WORKSPACE_CHANGE_BYTES, MAX_WORKSPACE_CHANGE_COUNT } from "../git/protocol.js";
-import { createWorkspaceArchive, readWorkspaceArchive, validateTransferFiles, type TransferFile } from "./workspace-transfer.js";
+import { createWorkspaceArchive, readWorkspaceArchive, validateTransferFiles, MAX_WORKSPACE_ARCHIVE_BYTES, type TransferFile } from "./workspace-transfer.js";
 
 export function downloadWorkspaceFile(name: string, data: Uint8Array, type = "application/octet-stream"): void {
   const url = URL.createObjectURL(new Blob([new Uint8Array(data)], { type }));
@@ -31,7 +31,7 @@ export function WorkspaceTransferPanel({ git, files, busy, canImport, onBusyChan
     if (!selected.length || busy || !canImport) return;
     setWorking(true); onBusyChange(true); setNotice("");
     try {
-      if (selected.length > MAX_WORKSPACE_CHANGE_COUNT || selected.reduce((sum, file) => sum + file.size, 0) > MAX_WORKSPACE_CHANGE_BYTES) throw new Error("一度の取込は256ファイル・合計64 MiB以内にしてください。");
+      if (selected.length > MAX_WORKSPACE_CHANGE_COUNT || selected.reduce((sum, file) => sum + file.size, 0) > MAX_WORKSPACE_ARCHIVE_BYTES) throw new Error("一度の取込は256ファイル・ZIPを含め68 MiB以内（展開後64 MiB以内）にしてください。");
       const imported: TransferFile[] = [];
       for (const file of selected) {
         const data = new Uint8Array(await file.arrayBuffer());
