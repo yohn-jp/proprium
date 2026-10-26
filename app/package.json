@@ -15,6 +15,7 @@
     "@bytecodealliance/jco-transpile": "0.20.0",
     "@isomorphic-git/lightning-fs": "4.10.3",
     "buffer": "6.0.3",
+    "fflate": "0.8.3",
     "isomorphic-git": "1.44.4",
     "react": "^19.1.0",
     "react-dom": "^19.1.0",
