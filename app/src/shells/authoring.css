@@ -48,6 +48,11 @@
 .st-studio-shell .st-workspace .editor-header { padding: 0.5rem 0.25rem; margin: 0; }
 .st-studio-shell .st-workspace .editor-header h1 { font-size: clamp(1.4rem, 2vw, 1.9rem); }
 .st-studio-shell .st-workspace .typography-toolbar { margin: 0; }
+.st-studio-shell .st-workspace .durability-badge.is-current {
+  color: var(--studio-ink);
+  background: var(--studio-tint-strong);
+  border-color: var(--studio-border);
+}
 .st-studio-shell .st-workspace-configuration > summary { display: none; }
 .st-workspace-configuration { flex: 0 0 auto; }
 .st-workspace-configuration > summary { padding: 0.4rem 0.7rem; cursor: pointer; color: var(--muted); font-size: 0.8rem; }
