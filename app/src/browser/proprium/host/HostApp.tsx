@@ -12,6 +12,7 @@ import type { WorkspaceFile } from "../git/index.js";
 import { GitHubDeviceAuthorization, GitHubAuthorizationError } from "./GitHubDeviceAuthorization.js";
 import { GitHubRepositoryPicker } from "./GitHubRepositoryPicker.js";
 import { GatewayAccessLink } from "./GatewayAccessLink.js";
+import { GitHistoryPanel } from "./GitHistoryPanel.js";
 import { ChangedFilesReview } from "./ChangedFilesReview.js";
 import { PluginPanel } from "./PluginPanel.js";
 import { LiveMcpPanel } from "./LiveMcpPanel.js";
@@ -871,11 +872,9 @@ export function HostApp(): ReactElement {
             <p className="local-commit-note">A local commit stays on this device until you explicitly publish it.</p>
           </section>
 </div>;
-  const historyPanel = <div className="host-controls"><section className="history-panel" aria-labelledby="history-heading">
-            <div className="dock-heading"><div><p className="eyebrow">REPOSITORY</p><h2 id="history-heading">History</h2></div><button type="button" className="text-button" disabled={busy} onClick={() => git && void git.log(40).then(setHistory).catch(error => setMessage({ tone: "error", text: errorMessage(error) }))}>Refresh</button></div>
-            {history.length ? <ol className="history-list">{history.map(commit => <li key={commit.oid}><span className="commit-rail" aria-hidden="true" /><div><strong>{commit.message.split("\n")[0]}</strong><code>{commit.oid.slice(0, 10)}</code><small>{commit.author.name} · {new Date(commit.timestamp * 1000).toLocaleString()}</small></div></li>)}</ol> : <p className="sidebar-empty">No commits in this local workspace.</p>}
-          </section>
-</div>;
+  const historyPanel = <div className="host-controls">{git && <GitHistoryPanel key={workspaceGeneration} git={git} history={history} busy={busy} canRestore={!currentFile?.dirty}
+    onRefresh={() => { void git.log(40).then(setHistory).catch(error => setMessage({ tone: "error", text: errorMessage(error) })); }}
+    onRestored={refreshAfterPlugin} />}</div>;
   const hostFileActions = <div className="host-file-action-group" role="group" aria-label="Current file actions">
     <button type="button" disabled={busy || !currentFile?.dirty || currentFile?.binary} onClick={() => void saveDraft()}>Save draft</button>
     <button type="button" disabled={busy} onClick={() => void deleteFile()}>Delete file</button>
