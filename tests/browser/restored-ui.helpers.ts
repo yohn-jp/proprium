@@ -17,8 +17,9 @@ export async function expectEditorText(page: Page, text: string): Promise<void> 
   // Assert real editor-state bytes, including the trailing LF, instead.
   await expect.poll(async () => page.getByRole("textbox", { name: "原稿 Markdown" }).evaluate(node => {
     for (let element: Element | null = node; element; element = element.parentElement) {
-      const cm = (element as Element & { cmView?: { view?: { state?: { doc?: { toString(): string } } } } }).cmView;
-      if (cm?.view?.state?.doc) return cm.view.state.doc.toString();
+      const contentView = (element as Element & { cmView?: { rootView?: { view?: { state?: { doc?: { toString(): string } } } } } }).cmView;
+      const view = contentView?.rootView?.view;
+      if (view?.state?.doc) return view.state.doc.toString();
     }
     return null;
   })).toBe(text);
