@@ -6,6 +6,7 @@ import {
   cosineSimilarityDense,
   embeddingContradictions,
   nearestPassages,
+  rerankResults,
   shouldClusterByString,
   type CandidateTerm,
   type SemanticAnchor,
@@ -64,6 +65,21 @@ test("nearest results exclude requested scenes and tie-break by stable source id
     { entityId: "b", sceneId: "excluded", sentenceIndex: 0, sourcePath: "manuscript/b.md", sourceRevision: "c", quote: "b", vector: vector(1) },
   ], 2, ["excluded"]);
   assert.deepEqual(hits.map(({ entityId }) => entityId), ["a", "z"]);
+});
+
+test("reranker scores use sigmoid(logit), stable tie order, and bounded unique candidates", () => {
+  const candidates = [
+    { candidateId: "first", entityId: "a", sourcePath: "a.md", sourceRevision: "r1", text: "a", evidence: [] },
+    { candidateId: "second", entityId: "b", sourcePath: "b.md", sourceRevision: "r1", text: "b", evidence: [] },
+    { candidateId: "third", entityId: "c", sourcePath: "c.md", sourceRevision: "r1", text: "c", evidence: [] },
+  ];
+  assert.deepEqual(rerankResults(candidates, [0, 4, 4], 3), [
+    { candidateId: "second", score: 1 / (1 + Math.exp(-4)), rank: 1 },
+    { candidateId: "third", score: 1 / (1 + Math.exp(-4)), rank: 2 },
+    { candidateId: "first", score: 0.5, rank: 3 },
+  ]);
+  assert.equal(rerankResults([candidates[0]!], [1000], 1)[0]!.score, 1);
+  assert.throws(() => rerankResults([candidates[0]!, candidates[0]!], [0, 1], 2), /unique/);
 });
 
 function anchor(sceneId: string, sentenceIndex: number, vector: number[], quote: string): SemanticAnchor {

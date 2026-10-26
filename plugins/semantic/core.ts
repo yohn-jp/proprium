@@ -76,6 +76,21 @@ export interface IndexedPassage {
   readonly vector: readonly number[];
 }
 
+export interface RerankCandidate {
+  readonly candidateId: string;
+  readonly entityId: string;
+  readonly sourcePath: string;
+  readonly sourceRevision: string;
+  readonly text: string;
+  readonly evidence: readonly SourceSpan[];
+}
+
+export interface RerankResult {
+  readonly candidateId: string;
+  readonly score: number;
+  readonly rank: number;
+}
+
 export interface NamedEntity {
   readonly id: string;
   readonly type: string;
@@ -387,4 +402,24 @@ export function nearestPassages(
     .map((passage) => ({ ...passage, cosineScore: cosineSimilarityDense(queryVector, passage.vector) }))
     .sort((a, b) => b.cosineScore - a.cosineScore || compareText(a.entityId, b.entityId) || a.sentenceIndex - b.sentenceIndex)
     .slice(0, limit);
+}
+
+/** Match BGE's sigmoid-logit score and stable original-order tie behavior. */
+export function rerankResults(candidates: readonly RerankCandidate[], logits: readonly number[], limit: number): RerankResult[] {
+  if (!Number.isInteger(limit) || limit < 1 || limit > 30 || candidates.length > 30 || candidates.length !== logits.length) {
+    throw new RangeError("Reranker candidate count or output limit is invalid");
+  }
+  const seen = new Set<string>();
+  const ranked = candidates.map((candidate, index) => {
+    if (!candidate.candidateId || candidate.candidateId.length > 128 || seen.has(candidate.candidateId)) {
+      throw new TypeError("Reranker candidate IDs must be unique nonempty strings up to 128 characters");
+    }
+    seen.add(candidate.candidateId);
+    const logit = logits[index]!;
+    if (!Number.isFinite(logit)) throw new TypeError("Reranker logits must be finite");
+    const score = logit >= 0 ? 1 / (1 + Math.exp(-logit)) : Math.exp(logit) / (1 + Math.exp(logit));
+    return { candidateId: candidate.candidateId, score, originalIndex: index };
+  });
+  ranked.sort((a, b) => b.score - a.score || a.originalIndex - b.originalIndex);
+  return ranked.slice(0, limit).map(({ candidateId, score }, index) => ({ candidateId, score, rank: index + 1 }));
 }
