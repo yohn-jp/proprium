@@ -360,9 +360,13 @@ export function SceneEditor({
       )}
 
       <div className="editor-display-controls">
-      <nav className="writing-toolbar" aria-label="執筆と閲覧">
+      <nav className="editor-reading-controls" aria-label="読書表示">
         <button type="button" className="quiet-button" onClick={() => { flushPendingReactPublish(); setReading((current) => !current); }} aria-pressed={reading}>{reading ? "編集に戻る" : "読書モード"}</button>
         <button type="button" className="quiet-button" onClick={() => setVertical((current) => !current)} aria-pressed={vertical}>{vertical ? "横書き" : "縦書き"}</button>
+      </nav>
+      <details className="editor-display-options">
+      <summary>プレビュー・集中・印刷</summary>
+      <nav className="writing-toolbar" aria-label="編集画面の表示設定">
         <button type="button" className="quiet-button" onClick={() => setPreview((current) => !current)} aria-pressed={preview}>プレビュー</button>
         <button type="button" className="quiet-button" onClick={() => setZen((current) => !current)} aria-pressed={zen}>{zen ? "集中を終了" : "集中"}</button>
         <button type="button" className="quiet-button" onClick={printManuscript}>印刷</button>
@@ -399,6 +403,7 @@ export function SceneEditor({
         </div>
         {zen && <button type="button" className="quiet-button" onClick={() => setTypewriterDim((current) => !current)} aria-pressed={typewriterDim}>現在行以外を減光</button>}
       </nav>
+      </details>
       </details>
       </div>
 

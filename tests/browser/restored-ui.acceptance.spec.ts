@@ -9,6 +9,7 @@ test("recovered shells retain CodeMirror, typography, reading, theme and unsaved
   await expect(page.locator(".cm-editor")).toBeVisible();
   const editor = page.getByRole("textbox", { name: "原稿 Markdown" });
   await editor.fill("未保存の原稿。|漢字《かんじ》\n");
+  await page.getByText("プレビュー・集中・印刷", { exact: true }).click();
   await page.getByRole("button", { name: "プレビュー", exact: true }).click();
   await expect(page.getByRole("document", { name: "ルビ付き読み取り専用プレビュー" }).locator("ruby")).toHaveCount(1);
   await page.getByRole("button", { name: "縦書き", exact: true }).click();
