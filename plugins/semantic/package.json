@@ -1,0 +1,8 @@
+{
+  "name": "@proprium/plugin-semantic-domain",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "test": "node --experimental-strip-types --test core.test.ts"
+  }
+}
