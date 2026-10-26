@@ -1,0 +1,3313 @@
+{
+  "schema": "proprium.plugin/v2",
+  "id": "proprium.narrative",
+  "version": "0.1.0",
+  "abi": "proprium.component/v2",
+  "capabilities": [
+    "workspace.change.propose",
+    "workspace.change.timestamp",
+    "workspace.file.read",
+    "workspace.identity.read"
+  ],
+  "actions": [
+    {
+      "plugin_id": "proprium.narrative",
+      "action_id": "proprium.narrative.work.detect",
+      "schema_version": 1,
+      "effect": "read",
+      "input_schema": {
+        "type": "object",
+        "properties": {},
+        "required": [],
+        "additionalProperties": false
+      },
+      "output_schema": {
+        "type": "object",
+        "properties": {
+          "status": {
+            "enum": [
+              "recognized",
+              "unrecognized",
+              "malformed"
+            ]
+          },
+          "work_id": {
+            "type": "string"
+          },
+          "tree_revision": {
+            "type": "string"
+          },
+          "health": {
+            "enum": [
+              "clean",
+              "partial"
+            ]
+          },
+          "diagnostics": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "code": {
+                  "type": "string"
+                },
+                "path": {
+                  "type": "string"
+                },
+                "message": {
+                  "type": "string"
+                },
+                "severity": {
+                  "enum": [
+                    "warning",
+                    "error"
+                  ]
+                },
+                "index": {
+                  "type": "integer",
+                  "minimum": 0
+                }
+              },
+              "required": [
+                "code",
+                "message",
+                "severity"
+              ],
+              "additionalProperties": false
+            }
+          }
+        },
+        "required": [
+          "status",
+          "work_id",
+          "tree_revision",
+          "diagnostics"
+        ],
+        "additionalProperties": false
+      },
+      "required_capabilities": [
+        "workspace.file.read"
+      ],
+      "callers": [
+        "ui",
+        "mcp",
+        "plugin"
+      ],
+      "requires_user_gesture": false
+    },
+    {
+      "plugin_id": "proprium.narrative",
+      "action_id": "proprium.narrative.hierarchy.tree",
+      "schema_version": 1,
+      "effect": "read",
+      "input_schema": {
+        "type": "object",
+        "properties": {
+          "parent_id": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "cursor": {
+            "type": "string"
+          },
+          "limit": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 200
+          },
+          "expected_tree_revision": {
+            "type": "string"
+          }
+        },
+        "required": [],
+        "additionalProperties": false
+      },
+      "output_schema": {
+        "type": "object",
+        "properties": {
+          "parent_id": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "items": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "id": {
+                  "type": "string"
+                },
+                "kind": {
+                  "enum": [
+                    "volume",
+                    "chapter",
+                    "scene"
+                  ]
+                },
+                "title": {
+                  "type": "string"
+                },
+                "order": {
+                  "type": "integer"
+                },
+                "parent_id": {
+                  "type": [
+                    "string",
+                    "null"
+                  ]
+                },
+                "metadata_path": {
+                  "type": "string"
+                },
+                "metadata_revision": {
+                  "type": "string"
+                },
+                "manuscript_path": {
+                  "type": "string"
+                }
+              },
+              "required": [
+                "id",
+                "kind",
+                "title",
+                "parent_id",
+                "metadata_path",
+                "metadata_revision"
+              ],
+              "additionalProperties": false
+            }
+          },
+          "next_cursor": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "tree_revision": {
+            "type": "string"
+          },
+          "diagnostics": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "code": {
+                  "type": "string"
+                },
+                "path": {
+                  "type": "string"
+                },
+                "message": {
+                  "type": "string"
+                },
+                "severity": {
+                  "enum": [
+                    "warning",
+                    "error"
+                  ]
+                },
+                "index": {
+                  "type": "integer",
+                  "minimum": 0
+                }
+              },
+              "required": [
+                "code",
+                "message",
+                "severity"
+              ],
+              "additionalProperties": false
+            }
+          }
+        },
+        "required": [
+          "parent_id",
+          "items",
+          "next_cursor",
+          "tree_revision",
+          "diagnostics"
+        ],
+        "additionalProperties": false
+      },
+      "required_capabilities": [
+        "workspace.file.read"
+      ],
+      "callers": [
+        "ui",
+        "mcp",
+        "plugin"
+      ],
+      "requires_user_gesture": false
+    },
+    {
+      "plugin_id": "proprium.narrative",
+      "action_id": "proprium.narrative.scene.open",
+      "schema_version": 1,
+      "effect": "read",
+      "input_schema": {
+        "type": "object",
+        "properties": {
+          "scene_id": {
+            "type": "string",
+            "minLength": 1
+          },
+          "expected_tree_revision": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "scene_id"
+        ],
+        "additionalProperties": false
+      },
+      "output_schema": {
+        "type": "object",
+        "properties": {
+          "scene": {
+            "type": "object",
+            "properties": {
+              "id": {
+                "type": "string"
+              },
+              "title": {
+                "type": "string"
+              },
+              "order": {
+                "type": "integer"
+              },
+              "metadata_path": {
+                "type": "string"
+              },
+              "metadata_revision": {
+                "type": "string"
+              }
+            },
+            "required": [
+              "id",
+              "title",
+              "metadata_path",
+              "metadata_revision"
+            ],
+            "additionalProperties": false
+          },
+          "volume": {
+            "type": "object",
+            "properties": {
+              "id": {
+                "type": "string"
+              },
+              "title": {
+                "type": "string"
+              }
+            },
+            "required": [
+              "id",
+              "title"
+            ],
+            "additionalProperties": false
+          },
+          "chapter": {
+            "type": "object",
+            "properties": {
+              "id": {
+                "type": "string"
+              },
+              "title": {
+                "type": "string"
+              }
+            },
+            "required": [
+              "id",
+              "title"
+            ],
+            "additionalProperties": false
+          },
+          "manuscript_path": {
+            "type": "string"
+          },
+          "manuscript_revision": {
+            "type": "string"
+          },
+          "navigation": {
+            "type": "object",
+            "properties": {
+              "target": {
+                "type": "object",
+                "properties": {
+                  "path": {
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "path"
+                ],
+                "additionalProperties": false
+              },
+              "expected_context": {
+                "type": "object",
+                "properties": {
+                  "scope": {
+                    "type": "object",
+                    "properties": {
+                      "workspace_id": {
+                        "type": "string"
+                      },
+                      "repository_id": {
+                        "anyOf": [
+                          {
+                            "type": "integer",
+                            "minimum": 1
+                          },
+                          {
+                            "type": "null"
+                          }
+                        ]
+                      },
+                      "branch": {
+                        "type": "string"
+                      },
+                      "generation": {
+                        "type": "string"
+                      }
+                    },
+                    "required": [
+                      "workspace_id",
+                      "repository_id",
+                      "branch",
+                      "generation"
+                    ],
+                    "additionalProperties": false
+                  },
+                  "snapshot": {
+                    "type": "object",
+                    "properties": {
+                      "id": {
+                        "type": "string"
+                      },
+                      "local_commit": {
+                        "anyOf": [
+                          {
+                            "type": "string"
+                          },
+                          {
+                            "type": "null"
+                          }
+                        ]
+                      },
+                      "worktree_generation": {
+                        "type": "string"
+                      },
+                      "draft_generation": {
+                        "anyOf": [
+                          {
+                            "type": "string"
+                          },
+                          {
+                            "type": "null"
+                          }
+                        ]
+                      }
+                    },
+                    "required": [
+                      "id",
+                      "local_commit",
+                      "worktree_generation",
+                      "draft_generation"
+                    ],
+                    "additionalProperties": false
+                  },
+                  "draft_generation": {
+                    "anyOf": [
+                      {
+                        "type": "string"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ]
+                  }
+                },
+                "required": [
+                  "scope",
+                  "snapshot",
+                  "draft_generation"
+                ],
+                "additionalProperties": false
+              },
+              "intent": {
+                "const": "open"
+              }
+            },
+            "required": [
+              "target",
+              "expected_context",
+              "intent"
+            ],
+            "additionalProperties": false
+          }
+        },
+        "required": [
+          "scene",
+          "volume",
+          "chapter",
+          "manuscript_path",
+          "manuscript_revision",
+          "navigation"
+        ],
+        "additionalProperties": false
+      },
+      "required_capabilities": [
+        "workspace.file.read"
+      ],
+      "callers": [
+        "ui",
+        "mcp",
+        "plugin"
+      ],
+      "requires_user_gesture": false
+    },
+    {
+      "plugin_id": "proprium.narrative",
+      "action_id": "proprium.narrative.scene.continue",
+      "schema_version": 1,
+      "effect": "read",
+      "input_schema": {
+        "type": "object",
+        "properties": {
+          "resume_position": {
+            "oneOf": [
+              {
+                "type": "null"
+              },
+              {
+                "type": "object",
+                "properties": {
+                  "scene_id": {
+                    "type": "string"
+                  },
+                  "manuscript_path": {
+                    "type": "string"
+                  },
+                  "metadata_revision": {
+                    "type": "string"
+                  },
+                  "manuscript_revision": {
+                    "type": "string"
+                  },
+                  "draft_generation": {
+                    "type": [
+                      "string",
+                      "null"
+                    ]
+                  },
+                  "sentence_index": {
+                    "anyOf": [
+                      {
+                        "type": "integer",
+                        "minimum": 1,
+                        "maximum": 9007199254740991
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ]
+                  },
+                  "scroll_top": {
+                    "type": "number",
+                    "minimum": 0
+                  }
+                },
+                "required": [
+                  "scene_id",
+                  "manuscript_path",
+                  "metadata_revision",
+                  "manuscript_revision",
+                  "draft_generation",
+                  "sentence_index",
+                  "scroll_top"
+                ],
+                "additionalProperties": false
+              }
+            ]
+          }
+        },
+        "required": [],
+        "additionalProperties": false
+      },
+      "output_schema": {
+        "type": "object",
+        "properties": {
+          "status": {
+            "enum": [
+              "ready",
+              "no_position",
+              "stale_position",
+              "unavailable"
+            ]
+          },
+          "candidate": {
+            "oneOf": [
+              {
+                "type": "null"
+              },
+              {
+                "type": "object",
+                "properties": {
+                  "scene_id": {
+                    "type": "string"
+                  },
+                  "title": {
+                    "type": "string"
+                  },
+                  "manuscript_path": {
+                    "type": "string"
+                  },
+                  "metadata_revision": {
+                    "type": "string"
+                  },
+                  "manuscript_revision": {
+                    "type": "string"
+                  },
+                  "draft_generation": {
+                    "type": [
+                      "string",
+                      "null"
+                    ]
+                  },
+                  "sentence_index": {
+                    "type": [
+                      "integer",
+                      "null"
+                    ],
+                    "minimum": 1
+                  },
+                  "scroll_top": {
+                    "type": "number",
+                    "minimum": 0
+                  }
+                },
+                "required": [
+                  "scene_id",
+                  "title",
+                  "manuscript_path",
+                  "metadata_revision",
+                  "manuscript_revision",
+                  "draft_generation",
+                  "sentence_index",
+                  "scroll_top"
+                ],
+                "additionalProperties": false
+              }
+            ]
+          },
+          "diagnostics": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "code": {
+                  "type": "string"
+                },
+                "path": {
+                  "type": "string"
+                },
+                "message": {
+                  "type": "string"
+                },
+                "severity": {
+                  "enum": [
+                    "warning",
+                    "error"
+                  ]
+                },
+                "index": {
+                  "type": "integer",
+                  "minimum": 0
+                }
+              },
+              "required": [
+                "code",
+                "message",
+                "severity"
+              ],
+              "additionalProperties": false
+            }
+          }
+        },
+        "required": [
+          "status",
+          "candidate",
+          "diagnostics"
+        ],
+        "additionalProperties": false
+      },
+      "required_capabilities": [
+        "workspace.file.read"
+      ],
+      "callers": [
+        "ui",
+        "mcp",
+        "plugin"
+      ],
+      "requires_user_gesture": false
+    },
+    {
+      "plugin_id": "proprium.narrative",
+      "action_id": "proprium.narrative.scene.context",
+      "schema_version": 1,
+      "effect": "read",
+      "input_schema": {
+        "type": "object",
+        "properties": {
+          "scene_id": {
+            "type": "string",
+            "minLength": 1
+          },
+          "expected_tree_revision": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "scene_id"
+        ],
+        "additionalProperties": false
+      },
+      "output_schema": {
+        "type": "object",
+        "properties": {
+          "scene_id": {
+            "type": "string"
+          },
+          "title": {
+            "type": "string"
+          },
+          "volume": {
+            "type": "object",
+            "properties": {
+              "id": {
+                "type": "string"
+              },
+              "title": {
+                "type": "string"
+              }
+            },
+            "required": [
+              "id",
+              "title"
+            ],
+            "additionalProperties": false
+          },
+          "chapter": {
+            "type": "object",
+            "properties": {
+              "id": {
+                "type": "string"
+              },
+              "title": {
+                "type": "string"
+              }
+            },
+            "required": [
+              "id",
+              "title"
+            ],
+            "additionalProperties": false
+          },
+          "manuscript_path": {
+            "type": "string"
+          },
+          "metadata_revision": {
+            "type": "string"
+          },
+          "manuscript_revision": {
+            "type": "string"
+          },
+          "diagnostics": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "code": {
+                  "type": "string"
+                },
+                "path": {
+                  "type": "string"
+                },
+                "message": {
+                  "type": "string"
+                },
+                "severity": {
+                  "enum": [
+                    "warning",
+                    "error"
+                  ]
+                },
+                "index": {
+                  "type": "integer",
+                  "minimum": 0
+                }
+              },
+              "required": [
+                "code",
+                "message",
+                "severity"
+              ],
+              "additionalProperties": false
+            }
+          }
+        },
+        "required": [
+          "scene_id",
+          "title",
+          "volume",
+          "chapter",
+          "manuscript_path",
+          "metadata_revision",
+          "manuscript_revision",
+          "diagnostics"
+        ],
+        "additionalProperties": false
+      },
+      "required_capabilities": [
+        "workspace.file.read"
+      ],
+      "callers": [
+        "ui",
+        "mcp",
+        "plugin"
+      ],
+      "requires_user_gesture": false
+    },
+    {
+      "plugin_id": "proprium.narrative",
+      "action_id": "proprium.narrative.structure.create",
+      "schema_version": 1,
+      "effect": "propose",
+      "input_schema": {
+        "oneOf": [
+          {
+            "type": "object",
+            "properties": {
+              "kind": {
+                "const": "volume"
+              },
+              "title": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 500
+              },
+              "id": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 128,
+                "pattern": "^[A-Za-z0-9_-]+$"
+              },
+              "order": {
+                "type": "integer",
+                "minimum": 1,
+                "maximum": 2147483647
+              },
+              "expected_tree_revision": {
+                "type": "string"
+              }
+            },
+            "required": [
+              "kind",
+              "title",
+              "expected_tree_revision"
+            ],
+            "additionalProperties": false
+          },
+          {
+            "type": "object",
+            "properties": {
+              "kind": {
+                "const": "chapter"
+              },
+              "title": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 500
+              },
+              "volume_id": {
+                "type": "string",
+                "minLength": 1
+              },
+              "id": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 128,
+                "pattern": "^[A-Za-z0-9_-]+$"
+              },
+              "order": {
+                "type": "integer",
+                "minimum": 1,
+                "maximum": 2147483647
+              },
+              "expected_tree_revision": {
+                "type": "string"
+              }
+            },
+            "required": [
+              "kind",
+              "title",
+              "volume_id",
+              "expected_tree_revision"
+            ],
+            "additionalProperties": false
+          },
+          {
+            "type": "object",
+            "properties": {
+              "kind": {
+                "const": "scene"
+              },
+              "title": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 500
+              },
+              "volume_id": {
+                "type": "string",
+                "minLength": 1
+              },
+              "chapter_id": {
+                "type": "string",
+                "minLength": 1
+              },
+              "id": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 128,
+                "pattern": "^[A-Za-z0-9_-]+$"
+              },
+              "position": {
+                "type": "integer",
+                "minimum": 1,
+                "maximum": 9007199254740991
+              },
+              "expected_tree_revision": {
+                "type": "string"
+              }
+            },
+            "required": [
+              "kind",
+              "title",
+              "volume_id",
+              "chapter_id",
+              "expected_tree_revision"
+            ],
+            "additionalProperties": false
+          }
+        ]
+      },
+      "output_schema": {
+        "type": "object",
+        "properties": {
+          "proposal_id": {
+            "type": "string"
+          },
+          "preview": {
+            "type": "object",
+            "properties": {
+              "title": {
+                "type": "string"
+              },
+              "read_paths": {
+                "type": "array",
+                "items": {
+                  "type": "string"
+                }
+              },
+              "units": {
+                "type": "array",
+                "items": {
+                  "type": "object",
+                  "properties": {
+                    "id": {
+                      "type": "string"
+                    },
+                    "label": {
+                      "type": "string"
+                    },
+                    "depends_on": {
+                      "type": "array",
+                      "items": {
+                        "type": "string"
+                      }
+                    },
+                    "operation_paths": {
+                      "type": "array",
+                      "items": {
+                        "type": "string"
+                      }
+                    }
+                  },
+                  "required": [
+                    "id",
+                    "label",
+                    "depends_on",
+                    "operation_paths"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            },
+            "required": [
+              "title",
+              "read_paths",
+              "units"
+            ],
+            "additionalProperties": false
+          }
+        },
+        "required": [
+          "proposal_id",
+          "preview"
+        ],
+        "additionalProperties": false
+      },
+      "required_capabilities": [
+        "workspace.change.propose",
+        "workspace.file.read"
+      ],
+      "callers": [
+        "ui",
+        "mcp",
+        "plugin"
+      ],
+      "requires_user_gesture": false
+    },
+    {
+      "plugin_id": "proprium.narrative",
+      "action_id": "proprium.narrative.structure.update",
+      "schema_version": 1,
+      "effect": "propose",
+      "input_schema": {
+        "type": "object",
+        "properties": {
+          "kind": {
+            "enum": [
+              "volume",
+              "chapter",
+              "scene"
+            ]
+          },
+          "id": {
+            "type": "string",
+            "minLength": 1
+          },
+          "patch": {
+            "type": "object",
+            "properties": {
+              "title": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 500
+              },
+              "manuscript": {
+                "type": "string",
+                "minLength": 1
+              }
+            },
+            "additionalProperties": false,
+            "minProperties": 1
+          },
+          "expected_metadata_revision": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "kind",
+          "id",
+          "patch",
+          "expected_metadata_revision"
+        ],
+        "additionalProperties": false
+      },
+      "output_schema": {
+        "type": "object",
+        "properties": {
+          "proposal_id": {
+            "type": "string"
+          },
+          "preview": {
+            "type": "object",
+            "properties": {
+              "title": {
+                "type": "string"
+              },
+              "read_paths": {
+                "type": "array",
+                "items": {
+                  "type": "string"
+                }
+              },
+              "units": {
+                "type": "array",
+                "items": {
+                  "type": "object",
+                  "properties": {
+                    "id": {
+                      "type": "string"
+                    },
+                    "label": {
+                      "type": "string"
+                    },
+                    "depends_on": {
+                      "type": "array",
+                      "items": {
+                        "type": "string"
+                      }
+                    },
+                    "operation_paths": {
+                      "type": "array",
+                      "items": {
+                        "type": "string"
+                      }
+                    }
+                  },
+                  "required": [
+                    "id",
+                    "label",
+                    "depends_on",
+                    "operation_paths"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            },
+            "required": [
+              "title",
+              "read_paths",
+              "units"
+            ],
+            "additionalProperties": false
+          }
+        },
+        "required": [
+          "proposal_id",
+          "preview"
+        ],
+        "additionalProperties": false
+      },
+      "required_capabilities": [
+        "workspace.change.propose",
+        "workspace.file.read"
+      ],
+      "callers": [
+        "ui",
+        "mcp",
+        "plugin"
+      ],
+      "requires_user_gesture": false
+    },
+    {
+      "plugin_id": "proprium.narrative",
+      "action_id": "proprium.narrative.structure.reorder",
+      "schema_version": 1,
+      "effect": "propose",
+      "input_schema": {
+        "type": "object",
+        "properties": {
+          "kind": {
+            "enum": [
+              "chapter",
+              "scene"
+            ]
+          },
+          "parent_id": {
+            "type": "string",
+            "minLength": 1
+          },
+          "ordered_ids": {
+            "type": "array",
+            "items": {
+              "type": "string",
+              "minLength": 1
+            },
+            "uniqueItems": true
+          },
+          "expected_tree_revision": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "kind",
+          "parent_id",
+          "ordered_ids",
+          "expected_tree_revision"
+        ],
+        "additionalProperties": false
+      },
+      "output_schema": {
+        "type": "object",
+        "properties": {
+          "proposal_id": {
+            "type": "string"
+          },
+          "preview": {
+            "type": "object",
+            "properties": {
+              "title": {
+                "type": "string"
+              },
+              "read_paths": {
+                "type": "array",
+                "items": {
+                  "type": "string"
+                }
+              },
+              "units": {
+                "type": "array",
+                "items": {
+                  "type": "object",
+                  "properties": {
+                    "id": {
+                      "type": "string"
+                    },
+                    "label": {
+                      "type": "string"
+                    },
+                    "depends_on": {
+                      "type": "array",
+                      "items": {
+                        "type": "string"
+                      }
+                    },
+                    "operation_paths": {
+                      "type": "array",
+                      "items": {
+                        "type": "string"
+                      }
+                    }
+                  },
+                  "required": [
+                    "id",
+                    "label",
+                    "depends_on",
+                    "operation_paths"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            },
+            "required": [
+              "title",
+              "read_paths",
+              "units"
+            ],
+            "additionalProperties": false
+          }
+        },
+        "required": [
+          "proposal_id",
+          "preview"
+        ],
+        "additionalProperties": false
+      },
+      "required_capabilities": [
+        "workspace.change.propose",
+        "workspace.file.read"
+      ],
+      "callers": [
+        "ui",
+        "mcp",
+        "plugin"
+      ],
+      "requires_user_gesture": false
+    },
+    {
+      "plugin_id": "proprium.narrative",
+      "action_id": "proprium.narrative.reading-marks.list",
+      "schema_version": 1,
+      "effect": "read",
+      "input_schema": {
+        "type": "object",
+        "properties": {
+          "scene_id": {
+            "type": "string",
+            "minLength": 1
+          },
+          "expected_tree_revision": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "scene_id"
+        ],
+        "additionalProperties": false
+      },
+      "output_schema": {
+        "type": "object",
+        "properties": {
+          "scene_id": {
+            "type": "string"
+          },
+          "metadata_revision": {
+            "type": "string"
+          },
+          "manuscript_revision": {
+            "type": "string"
+          },
+          "marks": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "id": {
+                  "type": "string"
+                },
+                "offset": {
+                  "type": "integer",
+                  "minimum": 0
+                },
+                "length": {
+                  "type": "integer",
+                  "minimum": 1
+                },
+                "snippet": {
+                  "type": "string"
+                },
+                "comment": {
+                  "type": "string",
+                  "maxLength": 200
+                },
+                "createdAt": {
+                  "type": "string",
+                  "format": "date-time"
+                },
+                "position_status": {
+                  "enum": [
+                    "current",
+                    "stale"
+                  ]
+                }
+              },
+              "required": [
+                "id",
+                "offset",
+                "length",
+                "snippet",
+                "createdAt",
+                "position_status"
+              ],
+              "additionalProperties": false
+            }
+          },
+          "diagnostics": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "code": {
+                  "type": "string"
+                },
+                "path": {
+                  "type": "string"
+                },
+                "message": {
+                  "type": "string"
+                },
+                "severity": {
+                  "enum": [
+                    "warning",
+                    "error"
+                  ]
+                },
+                "index": {
+                  "type": "integer",
+                  "minimum": 0
+                }
+              },
+              "required": [
+                "code",
+                "message",
+                "severity"
+              ],
+              "additionalProperties": false
+            }
+          }
+        },
+        "required": [
+          "scene_id",
+          "metadata_revision",
+          "manuscript_revision",
+          "marks",
+          "diagnostics"
+        ],
+        "additionalProperties": false
+      },
+      "required_capabilities": [
+        "workspace.file.read"
+      ],
+      "callers": [
+        "ui",
+        "mcp",
+        "plugin"
+      ],
+      "requires_user_gesture": false
+    },
+    {
+      "plugin_id": "proprium.narrative",
+      "action_id": "proprium.narrative.reading-marks.create",
+      "schema_version": 1,
+      "effect": "propose",
+      "input_schema": {
+        "type": "object",
+        "properties": {
+          "scene_id": {
+            "type": "string",
+            "minLength": 1
+          },
+          "mark": {
+            "type": "object",
+            "properties": {
+              "id": {
+                "type": "string",
+                "minLength": 1
+              },
+              "offset": {
+                "type": "integer",
+                "minimum": 0,
+                "maximum": 9007199254740991
+              },
+              "length": {
+                "type": "integer",
+                "minimum": 1,
+                "maximum": 9007199254740991
+              },
+              "snippet": {
+                "type": "string"
+              },
+              "comment": {
+                "type": "string",
+                "maxLength": 200
+              },
+              "createdAt": {
+                "type": "string",
+                "format": "date-time"
+              }
+            },
+            "required": [
+              "id",
+              "offset",
+              "length",
+              "snippet",
+              "createdAt"
+            ],
+            "additionalProperties": false
+          },
+          "expected_metadata_revision": {
+            "type": "string"
+          },
+          "expected_manuscript_revision": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "scene_id",
+          "mark",
+          "expected_metadata_revision",
+          "expected_manuscript_revision"
+        ],
+        "additionalProperties": false
+      },
+      "output_schema": {
+        "type": "object",
+        "properties": {
+          "proposal_id": {
+            "type": "string"
+          },
+          "preview": {
+            "type": "object",
+            "properties": {
+              "title": {
+                "type": "string"
+              },
+              "read_paths": {
+                "type": "array",
+                "items": {
+                  "type": "string"
+                }
+              },
+              "units": {
+                "type": "array",
+                "items": {
+                  "type": "object",
+                  "properties": {
+                    "id": {
+                      "type": "string"
+                    },
+                    "label": {
+                      "type": "string"
+                    },
+                    "depends_on": {
+                      "type": "array",
+                      "items": {
+                        "type": "string"
+                      }
+                    },
+                    "operation_paths": {
+                      "type": "array",
+                      "items": {
+                        "type": "string"
+                      }
+                    }
+                  },
+                  "required": [
+                    "id",
+                    "label",
+                    "depends_on",
+                    "operation_paths"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            },
+            "required": [
+              "title",
+              "read_paths",
+              "units"
+            ],
+            "additionalProperties": false
+          }
+        },
+        "required": [
+          "proposal_id",
+          "preview"
+        ],
+        "additionalProperties": false
+      },
+      "required_capabilities": [
+        "workspace.change.propose",
+        "workspace.file.read"
+      ],
+      "callers": [
+        "ui",
+        "mcp",
+        "plugin"
+      ],
+      "requires_user_gesture": false
+    },
+    {
+      "plugin_id": "proprium.narrative",
+      "action_id": "proprium.narrative.reading-marks.delete",
+      "schema_version": 1,
+      "effect": "propose",
+      "input_schema": {
+        "type": "object",
+        "properties": {
+          "scene_id": {
+            "type": "string",
+            "minLength": 1
+          },
+          "mark_id": {
+            "type": "string",
+            "minLength": 1
+          },
+          "expected_metadata_revision": {
+            "type": "string"
+          },
+          "expected_manuscript_revision": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "scene_id",
+          "mark_id",
+          "expected_metadata_revision",
+          "expected_manuscript_revision"
+        ],
+        "additionalProperties": false
+      },
+      "output_schema": {
+        "type": "object",
+        "properties": {
+          "proposal_id": {
+            "type": "string"
+          },
+          "preview": {
+            "type": "object",
+            "properties": {
+              "title": {
+                "type": "string"
+              },
+              "read_paths": {
+                "type": "array",
+                "items": {
+                  "type": "string"
+                }
+              },
+              "units": {
+                "type": "array",
+                "items": {
+                  "type": "object",
+                  "properties": {
+                    "id": {
+                      "type": "string"
+                    },
+                    "label": {
+                      "type": "string"
+                    },
+                    "depends_on": {
+                      "type": "array",
+                      "items": {
+                        "type": "string"
+                      }
+                    },
+                    "operation_paths": {
+                      "type": "array",
+                      "items": {
+                        "type": "string"
+                      }
+                    }
+                  },
+                  "required": [
+                    "id",
+                    "label",
+                    "depends_on",
+                    "operation_paths"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            },
+            "required": [
+              "title",
+              "read_paths",
+              "units"
+            ],
+            "additionalProperties": false
+          }
+        },
+        "required": [
+          "proposal_id",
+          "preview"
+        ],
+        "additionalProperties": false
+      },
+      "required_capabilities": [
+        "workspace.change.propose",
+        "workspace.file.read"
+      ],
+      "callers": [
+        "ui",
+        "mcp",
+        "plugin"
+      ],
+      "requires_user_gesture": false
+    },
+    {
+      "plugin_id": "proprium.narrative",
+      "action_id": "proprium.narrative.changes.compile",
+      "schema_version": 1,
+      "effect": "read",
+      "input_schema": {
+        "type": "object",
+        "properties": {
+          "operations": {
+            "type": "array",
+            "minItems": 1,
+            "maxItems": 64,
+            "items": {
+              "oneOf": [
+                {
+                  "type": "object",
+                  "properties": {
+                    "id": {
+                      "type": "string"
+                    },
+                    "kind": {
+                      "const": "manuscript.replace-range"
+                    },
+                    "evidenceIds": {
+                      "type": "array",
+                      "items": {
+                        "type": "string"
+                      },
+                      "maxItems": 64
+                    },
+                    "assessment": {
+                      "type": "object",
+                      "properties": {
+                        "confidence": {
+                          "type": "number",
+                          "minimum": 0,
+                          "maximum": 1
+                        },
+                        "risk": {
+                          "enum": [
+                            "low",
+                            "medium",
+                            "high"
+                          ]
+                        }
+                      },
+                      "required": [
+                        "confidence",
+                        "risk"
+                      ],
+                      "additionalProperties": false
+                    },
+                    "precondition": {
+                      "oneOf": [
+                        {
+                          "type": "object",
+                          "properties": {
+                            "kind": {
+                              "const": "revision"
+                            },
+                            "value": {
+                              "type": "string"
+                            }
+                          },
+                          "required": [
+                            "kind",
+                            "value"
+                          ],
+                          "additionalProperties": false
+                        },
+                        {
+                          "type": "object",
+                          "properties": {
+                            "kind": {
+                              "const": "content-hash"
+                            },
+                            "value": {
+                              "type": "string"
+                            }
+                          },
+                          "required": [
+                            "kind",
+                            "value"
+                          ],
+                          "additionalProperties": false
+                        }
+                      ]
+                    },
+                    "target": {
+                      "type": "object",
+                      "properties": {
+                        "manuscriptId": {
+                          "type": "string"
+                        },
+                        "sceneId": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "manuscriptId",
+                        "sceneId"
+                      ],
+                      "additionalProperties": false
+                    },
+                    "range": {
+                      "type": "object",
+                      "properties": {
+                        "start": {
+                          "type": "integer",
+                          "minimum": 0
+                        },
+                        "end": {
+                          "type": "integer",
+                          "minimum": 0
+                        }
+                      },
+                      "required": [
+                        "start",
+                        "end"
+                      ],
+                      "additionalProperties": false
+                    },
+                    "replacement": {
+                      "type": "string",
+                      "maxLength": 100000
+                    }
+                  },
+                  "required": [
+                    "id",
+                    "kind",
+                    "evidenceIds",
+                    "assessment",
+                    "precondition",
+                    "target",
+                    "range",
+                    "replacement"
+                  ],
+                  "additionalProperties": false
+                },
+                {
+                  "type": "object",
+                  "properties": {
+                    "id": {
+                      "type": "string"
+                    },
+                    "kind": {
+                      "const": "entity.create"
+                    },
+                    "evidenceIds": {
+                      "type": "array",
+                      "items": {
+                        "type": "string"
+                      },
+                      "maxItems": 64
+                    },
+                    "assessment": {
+                      "type": "object",
+                      "properties": {
+                        "confidence": {
+                          "type": "number",
+                          "minimum": 0,
+                          "maximum": 1
+                        },
+                        "risk": {
+                          "enum": [
+                            "low",
+                            "medium",
+                            "high"
+                          ]
+                        }
+                      },
+                      "required": [
+                        "confidence",
+                        "risk"
+                      ],
+                      "additionalProperties": false
+                    },
+                    "precondition": {
+                      "oneOf": [
+                        {
+                          "type": "object",
+                          "properties": {
+                            "kind": {
+                              "const": "absent"
+                            }
+                          },
+                          "required": [
+                            "kind"
+                          ],
+                          "additionalProperties": false
+                        },
+                        {
+                          "type": "object",
+                          "properties": {
+                            "kind": {
+                              "const": "revision"
+                            },
+                            "value": {
+                              "type": "string"
+                            }
+                          },
+                          "required": [
+                            "kind",
+                            "value"
+                          ],
+                          "additionalProperties": false
+                        },
+                        {
+                          "type": "object",
+                          "properties": {
+                            "kind": {
+                              "const": "content-hash"
+                            },
+                            "value": {
+                              "type": "string"
+                            }
+                          },
+                          "required": [
+                            "kind",
+                            "value"
+                          ],
+                          "additionalProperties": false
+                        }
+                      ]
+                    },
+                    "target": {
+                      "type": "object",
+                      "properties": {
+                        "entityId": {
+                          "type": "string"
+                        },
+                        "entityType": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "entityId",
+                        "entityType"
+                      ],
+                      "additionalProperties": false
+                    },
+                    "values": {
+                      "type": "object",
+                      "additionalProperties": true
+                    }
+                  },
+                  "required": [
+                    "id",
+                    "kind",
+                    "evidenceIds",
+                    "assessment",
+                    "precondition",
+                    "target",
+                    "values"
+                  ],
+                  "additionalProperties": false
+                },
+                {
+                  "type": "object",
+                  "properties": {
+                    "id": {
+                      "type": "string"
+                    },
+                    "kind": {
+                      "const": "entity.update"
+                    },
+                    "evidenceIds": {
+                      "type": "array",
+                      "items": {
+                        "type": "string"
+                      },
+                      "maxItems": 64
+                    },
+                    "assessment": {
+                      "type": "object",
+                      "properties": {
+                        "confidence": {
+                          "type": "number",
+                          "minimum": 0,
+                          "maximum": 1
+                        },
+                        "risk": {
+                          "enum": [
+                            "low",
+                            "medium",
+                            "high"
+                          ]
+                        }
+                      },
+                      "required": [
+                        "confidence",
+                        "risk"
+                      ],
+                      "additionalProperties": false
+                    },
+                    "precondition": {
+                      "oneOf": [
+                        {
+                          "type": "object",
+                          "properties": {
+                            "kind": {
+                              "const": "revision"
+                            },
+                            "value": {
+                              "type": "string"
+                            }
+                          },
+                          "required": [
+                            "kind",
+                            "value"
+                          ],
+                          "additionalProperties": false
+                        },
+                        {
+                          "type": "object",
+                          "properties": {
+                            "kind": {
+                              "const": "content-hash"
+                            },
+                            "value": {
+                              "type": "string"
+                            }
+                          },
+                          "required": [
+                            "kind",
+                            "value"
+                          ],
+                          "additionalProperties": false
+                        }
+                      ]
+                    },
+                    "target": {
+                      "type": "object",
+                      "properties": {
+                        "entityId": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "entityId"
+                      ],
+                      "additionalProperties": false
+                    },
+                    "changes": {
+                      "type": "object",
+                      "additionalProperties": true
+                    }
+                  },
+                  "required": [
+                    "id",
+                    "kind",
+                    "evidenceIds",
+                    "assessment",
+                    "precondition",
+                    "target",
+                    "changes"
+                  ],
+                  "additionalProperties": false
+                },
+                {
+                  "type": "object",
+                  "properties": {
+                    "id": {
+                      "type": "string"
+                    },
+                    "kind": {
+                      "const": "scene.create"
+                    },
+                    "evidenceIds": {
+                      "type": "array",
+                      "items": {
+                        "type": "string"
+                      },
+                      "maxItems": 64
+                    },
+                    "assessment": {
+                      "type": "object",
+                      "properties": {
+                        "confidence": {
+                          "type": "number",
+                          "minimum": 0,
+                          "maximum": 1
+                        },
+                        "risk": {
+                          "enum": [
+                            "low",
+                            "medium",
+                            "high"
+                          ]
+                        }
+                      },
+                      "required": [
+                        "confidence",
+                        "risk"
+                      ],
+                      "additionalProperties": false
+                    },
+                    "precondition": {
+                      "oneOf": [
+                        {
+                          "type": "object",
+                          "properties": {
+                            "kind": {
+                              "const": "absent"
+                            }
+                          },
+                          "required": [
+                            "kind"
+                          ],
+                          "additionalProperties": false
+                        },
+                        {
+                          "type": "object",
+                          "properties": {
+                            "kind": {
+                              "const": "revision"
+                            },
+                            "value": {
+                              "type": "string"
+                            }
+                          },
+                          "required": [
+                            "kind",
+                            "value"
+                          ],
+                          "additionalProperties": false
+                        },
+                        {
+                          "type": "object",
+                          "properties": {
+                            "kind": {
+                              "const": "content-hash"
+                            },
+                            "value": {
+                              "type": "string"
+                            }
+                          },
+                          "required": [
+                            "kind",
+                            "value"
+                          ],
+                          "additionalProperties": false
+                        }
+                      ]
+                    },
+                    "target": {
+                      "type": "object",
+                      "properties": {
+                        "sceneId": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "sceneId"
+                      ],
+                      "additionalProperties": false
+                    },
+                    "collectionRevision": {
+                      "type": "string"
+                    },
+                    "values": {
+                      "type": "object",
+                      "additionalProperties": true
+                    }
+                  },
+                  "required": [
+                    "id",
+                    "kind",
+                    "evidenceIds",
+                    "assessment",
+                    "precondition",
+                    "target",
+                    "values"
+                  ],
+                  "additionalProperties": false
+                },
+                {
+                  "type": "object",
+                  "properties": {
+                    "id": {
+                      "type": "string"
+                    },
+                    "kind": {
+                      "const": "scene.insert"
+                    },
+                    "evidenceIds": {
+                      "type": "array",
+                      "items": {
+                        "type": "string"
+                      },
+                      "maxItems": 64
+                    },
+                    "assessment": {
+                      "type": "object",
+                      "properties": {
+                        "confidence": {
+                          "type": "number",
+                          "minimum": 0,
+                          "maximum": 1
+                        },
+                        "risk": {
+                          "enum": [
+                            "low",
+                            "medium",
+                            "high"
+                          ]
+                        }
+                      },
+                      "required": [
+                        "confidence",
+                        "risk"
+                      ],
+                      "additionalProperties": false
+                    },
+                    "precondition": {
+                      "oneOf": [
+                        {
+                          "type": "object",
+                          "properties": {
+                            "kind": {
+                              "const": "revision"
+                            },
+                            "value": {
+                              "type": "string"
+                            }
+                          },
+                          "required": [
+                            "kind",
+                            "value"
+                          ],
+                          "additionalProperties": false
+                        },
+                        {
+                          "type": "object",
+                          "properties": {
+                            "kind": {
+                              "const": "content-hash"
+                            },
+                            "value": {
+                              "type": "string"
+                            }
+                          },
+                          "required": [
+                            "kind",
+                            "value"
+                          ],
+                          "additionalProperties": false
+                        }
+                      ]
+                    },
+                    "target": {
+                      "type": "object",
+                      "properties": {
+                        "sceneId": {
+                          "type": "string"
+                        },
+                        "chapterId": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "sceneId",
+                        "chapterId"
+                      ],
+                      "additionalProperties": false
+                    },
+                    "position": {
+                      "type": "integer",
+                      "minimum": 1
+                    },
+                    "expectedSiblings": {
+                      "type": "array",
+                      "maxItems": 1000,
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "id": {
+                            "type": "string"
+                          },
+                          "revision": {
+                            "type": "string"
+                          }
+                        },
+                        "required": [
+                          "id",
+                          "revision"
+                        ],
+                        "additionalProperties": false
+                      }
+                    }
+                  },
+                  "required": [
+                    "id",
+                    "kind",
+                    "evidenceIds",
+                    "assessment",
+                    "precondition",
+                    "target",
+                    "position",
+                    "expectedSiblings"
+                  ],
+                  "additionalProperties": false
+                },
+                {
+                  "type": "object",
+                  "properties": {
+                    "id": {
+                      "type": "string"
+                    },
+                    "kind": {
+                      "const": "scene.update"
+                    },
+                    "evidenceIds": {
+                      "type": "array",
+                      "items": {
+                        "type": "string"
+                      },
+                      "maxItems": 64
+                    },
+                    "assessment": {
+                      "type": "object",
+                      "properties": {
+                        "confidence": {
+                          "type": "number",
+                          "minimum": 0,
+                          "maximum": 1
+                        },
+                        "risk": {
+                          "enum": [
+                            "low",
+                            "medium",
+                            "high"
+                          ]
+                        }
+                      },
+                      "required": [
+                        "confidence",
+                        "risk"
+                      ],
+                      "additionalProperties": false
+                    },
+                    "precondition": {
+                      "oneOf": [
+                        {
+                          "type": "object",
+                          "properties": {
+                            "kind": {
+                              "const": "revision"
+                            },
+                            "value": {
+                              "type": "string"
+                            }
+                          },
+                          "required": [
+                            "kind",
+                            "value"
+                          ],
+                          "additionalProperties": false
+                        },
+                        {
+                          "type": "object",
+                          "properties": {
+                            "kind": {
+                              "const": "content-hash"
+                            },
+                            "value": {
+                              "type": "string"
+                            }
+                          },
+                          "required": [
+                            "kind",
+                            "value"
+                          ],
+                          "additionalProperties": false
+                        }
+                      ]
+                    },
+                    "target": {
+                      "type": "object",
+                      "properties": {
+                        "sceneId": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "sceneId"
+                      ],
+                      "additionalProperties": false
+                    },
+                    "changes": {
+                      "type": "object",
+                      "additionalProperties": true
+                    }
+                  },
+                  "required": [
+                    "id",
+                    "kind",
+                    "evidenceIds",
+                    "assessment",
+                    "precondition",
+                    "target",
+                    "changes"
+                  ],
+                  "additionalProperties": false
+                },
+                {
+                  "type": "object",
+                  "properties": {
+                    "id": {
+                      "type": "string"
+                    },
+                    "kind": {
+                      "const": "state.append-event"
+                    },
+                    "evidenceIds": {
+                      "type": "array",
+                      "items": {
+                        "type": "string"
+                      },
+                      "maxItems": 64
+                    },
+                    "assessment": {
+                      "type": "object",
+                      "properties": {
+                        "confidence": {
+                          "type": "number",
+                          "minimum": 0,
+                          "maximum": 1
+                        },
+                        "risk": {
+                          "enum": [
+                            "low",
+                            "medium",
+                            "high"
+                          ]
+                        }
+                      },
+                      "required": [
+                        "confidence",
+                        "risk"
+                      ],
+                      "additionalProperties": false
+                    },
+                    "precondition": {
+                      "oneOf": [
+                        {
+                          "type": "object",
+                          "properties": {
+                            "kind": {
+                              "const": "revision"
+                            },
+                            "value": {
+                              "type": "string"
+                            }
+                          },
+                          "required": [
+                            "kind",
+                            "value"
+                          ],
+                          "additionalProperties": false
+                        },
+                        {
+                          "type": "object",
+                          "properties": {
+                            "kind": {
+                              "const": "content-hash"
+                            },
+                            "value": {
+                              "type": "string"
+                            }
+                          },
+                          "required": [
+                            "kind",
+                            "value"
+                          ],
+                          "additionalProperties": false
+                        }
+                      ]
+                    },
+                    "target": {
+                      "type": "object",
+                      "properties": {
+                        "sceneId": {
+                          "type": "string"
+                        },
+                        "eventId": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "sceneId",
+                        "eventId"
+                      ],
+                      "additionalProperties": false
+                    },
+                    "event": {
+                      "type": "object",
+                      "properties": {
+                        "sceneId": {
+                          "type": "string"
+                        },
+                        "order": {
+                          "type": "integer"
+                        },
+                        "kind": {
+                          "enum": [
+                            "location",
+                            "acquaintance",
+                            "ownership",
+                            "knowledge"
+                          ]
+                        },
+                        "subject": {
+                          "type": "string"
+                        },
+                        "object": {
+                          "type": [
+                            "string",
+                            "null"
+                          ]
+                        },
+                        "payload": {
+                          "type": "object",
+                          "additionalProperties": true
+                        },
+                        "source": {
+                          "enum": [
+                            "rule",
+                            "llm-draft",
+                            "manual"
+                          ]
+                        },
+                        "eventId": {
+                          "type": "string"
+                        },
+                        "propositionId": {
+                          "type": "string"
+                        },
+                        "replacesEventId": {
+                          "type": "string"
+                        },
+                        "evidence": {
+                          "type": "array",
+                          "maxItems": 64,
+                          "items": {
+                            "type": "object",
+                            "properties": {
+                              "sceneId": {
+                                "type": "string"
+                              },
+                              "excerpt": {
+                                "type": "string"
+                              },
+                              "startOffset": {
+                                "type": "integer",
+                                "minimum": 0
+                              },
+                              "endOffset": {
+                                "type": "integer",
+                                "minimum": 0
+                              }
+                            },
+                            "required": [
+                              "sceneId"
+                            ],
+                            "additionalProperties": false
+                          }
+                        },
+                        "confidence": {
+                          "type": "number",
+                          "minimum": 0,
+                          "maximum": 1
+                        },
+                        "createdAt": {
+                          "type": "string"
+                        },
+                        "status": {
+                          "const": "confirmed"
+                        }
+                      },
+                      "required": [
+                        "sceneId",
+                        "order",
+                        "kind",
+                        "subject",
+                        "object",
+                        "payload",
+                        "source",
+                        "eventId",
+                        "status"
+                      ],
+                      "additionalProperties": false
+                    },
+                    "sourceProposal": {
+                      "type": "object",
+                      "properties": {
+                        "id": {
+                          "type": "string"
+                        },
+                        "manuscriptHash": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "id",
+                        "manuscriptHash"
+                      ],
+                      "additionalProperties": false
+                    }
+                  },
+                  "required": [
+                    "id",
+                    "kind",
+                    "evidenceIds",
+                    "assessment",
+                    "precondition",
+                    "target",
+                    "event"
+                  ],
+                  "additionalProperties": false
+                },
+                {
+                  "type": "object",
+                  "properties": {
+                    "id": {
+                      "type": "string"
+                    },
+                    "kind": {
+                      "const": "thread.link-scene"
+                    },
+                    "evidenceIds": {
+                      "type": "array",
+                      "items": {
+                        "type": "string"
+                      },
+                      "maxItems": 64
+                    },
+                    "assessment": {
+                      "type": "object",
+                      "properties": {
+                        "confidence": {
+                          "type": "number",
+                          "minimum": 0,
+                          "maximum": 1
+                        },
+                        "risk": {
+                          "enum": [
+                            "low",
+                            "medium",
+                            "high"
+                          ]
+                        }
+                      },
+                      "required": [
+                        "confidence",
+                        "risk"
+                      ],
+                      "additionalProperties": false
+                    },
+                    "precondition": {
+                      "oneOf": [
+                        {
+                          "type": "object",
+                          "properties": {
+                            "kind": {
+                              "const": "revision"
+                            },
+                            "value": {
+                              "type": "string"
+                            }
+                          },
+                          "required": [
+                            "kind",
+                            "value"
+                          ],
+                          "additionalProperties": false
+                        },
+                        {
+                          "type": "object",
+                          "properties": {
+                            "kind": {
+                              "const": "content-hash"
+                            },
+                            "value": {
+                              "type": "string"
+                            }
+                          },
+                          "required": [
+                            "kind",
+                            "value"
+                          ],
+                          "additionalProperties": false
+                        }
+                      ]
+                    },
+                    "target": {
+                      "type": "object",
+                      "properties": {
+                        "threadId": {
+                          "type": "string"
+                        },
+                        "sceneId": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "threadId",
+                        "sceneId"
+                      ],
+                      "additionalProperties": false
+                    },
+                    "relation": {
+                      "enum": [
+                        "planted",
+                        "advanced",
+                        "payoff"
+                      ]
+                    },
+                    "note": {
+                      "type": "string",
+                      "maxLength": 10000
+                    }
+                  },
+                  "required": [
+                    "id",
+                    "kind",
+                    "evidenceIds",
+                    "assessment",
+                    "precondition",
+                    "target",
+                    "relation"
+                  ],
+                  "additionalProperties": false
+                },
+                {
+                  "type": "object",
+                  "properties": {
+                    "id": {
+                      "type": "string"
+                    },
+                    "kind": {
+                      "const": "reference.link"
+                    },
+                    "evidenceIds": {
+                      "type": "array",
+                      "items": {
+                        "type": "string"
+                      },
+                      "maxItems": 64
+                    },
+                    "assessment": {
+                      "type": "object",
+                      "properties": {
+                        "confidence": {
+                          "type": "number",
+                          "minimum": 0,
+                          "maximum": 1
+                        },
+                        "risk": {
+                          "enum": [
+                            "low",
+                            "medium",
+                            "high"
+                          ]
+                        }
+                      },
+                      "required": [
+                        "confidence",
+                        "risk"
+                      ],
+                      "additionalProperties": false
+                    },
+                    "precondition": {
+                      "oneOf": [
+                        {
+                          "type": "object",
+                          "properties": {
+                            "kind": {
+                              "const": "revision"
+                            },
+                            "value": {
+                              "type": "string"
+                            }
+                          },
+                          "required": [
+                            "kind",
+                            "value"
+                          ],
+                          "additionalProperties": false
+                        },
+                        {
+                          "type": "object",
+                          "properties": {
+                            "kind": {
+                              "const": "content-hash"
+                            },
+                            "value": {
+                              "type": "string"
+                            }
+                          },
+                          "required": [
+                            "kind",
+                            "value"
+                          ],
+                          "additionalProperties": false
+                        }
+                      ]
+                    },
+                    "target": {
+                      "type": "object",
+                      "properties": {
+                        "from": {
+                          "type": "string"
+                        },
+                        "to": {
+                          "type": "string"
+                        },
+                        "kind": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "from",
+                        "to",
+                        "kind"
+                      ],
+                      "additionalProperties": false
+                    },
+                    "note": {
+                      "type": "string",
+                      "maxLength": 10000
+                    }
+                  },
+                  "required": [
+                    "id",
+                    "kind",
+                    "evidenceIds",
+                    "assessment",
+                    "precondition",
+                    "target"
+                  ],
+                  "additionalProperties": false
+                }
+              ]
+            }
+          },
+          "evidence": {
+            "type": "array",
+            "maxItems": 256,
+            "items": {
+              "type": "object",
+              "properties": {
+                "id": {
+                  "type": "string"
+                },
+                "sourceKind": {
+                  "enum": [
+                    "manuscript",
+                    "entity",
+                    "scene",
+                    "diagnostic",
+                    "state-proposal",
+                    "external"
+                  ]
+                },
+                "sourceId": {
+                  "type": "string"
+                },
+                "revision": {
+                  "type": "string"
+                },
+                "range": {
+                  "type": "object",
+                  "properties": {
+                    "start": {
+                      "type": "integer",
+                      "minimum": 0
+                    },
+                    "end": {
+                      "type": "integer",
+                      "minimum": 0
+                    }
+                  },
+                  "required": [
+                    "start",
+                    "end"
+                  ],
+                  "additionalProperties": false
+                }
+              },
+              "required": [
+                "id",
+                "sourceKind",
+                "sourceId",
+                "revision"
+              ],
+              "additionalProperties": false
+            }
+          },
+          "staging_snapshot": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "operations",
+          "evidence"
+        ],
+        "additionalProperties": false
+      },
+      "output_schema": {
+        "type": "object",
+        "properties": {
+          "read_set": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "path": {
+                  "type": "string"
+                },
+                "revision": {
+                  "anyOf": [
+                    {
+                      "type": "string"
+                    },
+                    {
+                      "type": "null"
+                    }
+                  ]
+                }
+              },
+              "required": [
+                "path",
+                "revision"
+              ],
+              "additionalProperties": false
+            }
+          },
+          "units": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "id": {
+                  "type": "string"
+                },
+                "label": {
+                  "type": "string"
+                },
+                "depends_on": {
+                  "type": "array",
+                  "items": {
+                    "type": "string"
+                  }
+                },
+                "operations": {
+                  "type": "array",
+                  "items": {
+                    "type": "object",
+                    "properties": {
+                      "id": {
+                        "type": "string"
+                      },
+                      "kind": {
+                        "enum": [
+                          "create",
+                          "replace",
+                          "delete"
+                        ]
+                      },
+                      "path": {
+                        "type": "string"
+                      },
+                      "expected_revision": {
+                        "anyOf": [
+                          {
+                            "type": "string"
+                          },
+                          {
+                            "type": "null"
+                          }
+                        ]
+                      },
+                      "content": {
+                        "type": "array",
+                        "items": {
+                          "type": "integer",
+                          "minimum": 0,
+                          "maximum": 255
+                        }
+                      }
+                    },
+                    "required": [
+                      "id",
+                      "kind",
+                      "path",
+                      "expected_revision"
+                    ],
+                    "additionalProperties": false
+                  }
+                },
+                "source_operation_ids": {
+                  "type": "array",
+                  "items": {
+                    "type": "string"
+                  }
+                }
+              },
+              "required": [
+                "id",
+                "label",
+                "depends_on",
+                "operations"
+              ],
+              "additionalProperties": false
+            }
+          },
+          "operation_map": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "source_operation_id": {
+                  "type": "string"
+                },
+                "unit_id": {
+                  "type": "string"
+                },
+                "operation_ids": {
+                  "type": "array",
+                  "items": {
+                    "type": "string"
+                  }
+                }
+              },
+              "required": [
+                "source_operation_id",
+                "unit_id",
+                "operation_ids"
+              ],
+              "additionalProperties": false
+            }
+          },
+          "diagnostics": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "code": {
+                  "type": "string"
+                },
+                "path": {
+                  "type": "string"
+                },
+                "message": {
+                  "type": "string"
+                },
+                "severity": {
+                  "enum": [
+                    "warning",
+                    "error"
+                  ]
+                }
+              },
+              "required": [
+                "code",
+                "message",
+                "severity"
+              ],
+              "additionalProperties": false
+            }
+          }
+        },
+        "required": [
+          "read_set",
+          "units",
+          "operation_map",
+          "diagnostics"
+        ],
+        "additionalProperties": false
+      },
+      "required_capabilities": [
+        "workspace.file.read"
+      ],
+      "callers": [
+        "plugin"
+      ],
+      "caller_plugins": [
+        "proprium.paired-writing"
+      ],
+      "requires_user_gesture": false
+    },
+    {
+      "plugin_id": "proprium.narrative",
+      "action_id": "proprium.narrative.resume.marks.list",
+      "schema_version": 1,
+      "effect": "read",
+      "input_schema": {
+        "type": "object",
+        "properties": {
+          "cursor": {
+            "type": "string"
+          },
+          "limit": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 100
+          }
+        },
+        "required": [],
+        "additionalProperties": false
+      },
+      "output_schema": {
+        "type": "object",
+        "properties": {
+          "items": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "device_id": {
+                  "type": "string"
+                },
+                "scene_id": {
+                  "type": "string"
+                },
+                "title": {
+                  "type": "string"
+                },
+                "manuscript_path": {
+                  "type": "string"
+                },
+                "manuscript_revision": {
+                  "type": "string"
+                },
+                "sentence_index": {
+                  "anyOf": [
+                    {
+                      "type": "integer",
+                      "minimum": 1
+                    },
+                    {
+                      "type": "null"
+                    }
+                  ]
+                },
+                "scroll_top": {
+                  "type": "number",
+                  "minimum": 0
+                },
+                "updated_at": {
+                  "type": "string"
+                },
+                "availability": {
+                  "enum": [
+                    "ready",
+                    "stale",
+                    "missing"
+                  ]
+                },
+                "publication": {
+                  "enum": [
+                    "local_only",
+                    "remote_confirmed"
+                  ]
+                }
+              },
+              "required": [
+                "device_id",
+                "scene_id",
+                "title",
+                "manuscript_path",
+                "manuscript_revision",
+                "sentence_index",
+                "scroll_top",
+                "updated_at",
+                "availability",
+                "publication"
+              ],
+              "additionalProperties": false
+            }
+          },
+          "next_cursor": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "source_revision": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          }
+        },
+        "required": [
+          "items",
+          "next_cursor",
+          "source_revision"
+        ],
+        "additionalProperties": false
+      },
+      "required_capabilities": [
+        "workspace.file.read",
+        "workspace.identity.read"
+      ],
+      "callers": [
+        "ui",
+        "mcp",
+        "plugin"
+      ],
+      "requires_user_gesture": false
+    },
+    {
+      "plugin_id": "proprium.narrative",
+      "action_id": "proprium.narrative.resume.mark.propose",
+      "schema_version": 1,
+      "effect": "propose",
+      "input_schema": {
+        "type": "object",
+        "properties": {
+          "scene_id": {
+            "type": "string",
+            "minLength": 1
+          },
+          "expected_manuscript_revision": {
+            "type": "string"
+          },
+          "expected_marker_revision": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "sentence_index": {
+            "anyOf": [
+              {
+                "type": "integer",
+                "minimum": 1,
+                "maximum": 9007199254740991
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "scroll_top": {
+            "type": "number",
+            "minimum": 0
+          }
+        },
+        "required": [
+          "scene_id",
+          "expected_manuscript_revision",
+          "expected_marker_revision",
+          "sentence_index",
+          "scroll_top"
+        ],
+        "additionalProperties": false
+      },
+      "output_schema": {
+        "type": "object",
+        "properties": {
+          "proposal_id": {
+            "type": "string"
+          },
+          "preview": {
+            "type": "object",
+            "properties": {
+              "title": {
+                "type": "string"
+              },
+              "read_paths": {
+                "type": "array",
+                "items": {
+                  "type": "string"
+                }
+              },
+              "units": {
+                "type": "array",
+                "items": {
+                  "type": "object",
+                  "properties": {
+                    "id": {
+                      "type": "string"
+                    },
+                    "label": {
+                      "type": "string"
+                    },
+                    "depends_on": {
+                      "type": "array",
+                      "items": {
+                        "type": "string"
+                      }
+                    },
+                    "operation_paths": {
+                      "type": "array",
+                      "items": {
+                        "type": "string"
+                      }
+                    }
+                  },
+                  "required": [
+                    "id",
+                    "label",
+                    "depends_on",
+                    "operation_paths"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            },
+            "required": [
+              "title",
+              "read_paths",
+              "units"
+            ],
+            "additionalProperties": false
+          }
+        },
+        "required": [
+          "proposal_id",
+          "preview"
+        ],
+        "additionalProperties": false
+      },
+      "required_capabilities": [
+        "workspace.change.propose",
+        "workspace.change.timestamp",
+        "workspace.file.read",
+        "workspace.identity.read"
+      ],
+      "callers": [
+        "ui"
+      ],
+      "requires_user_gesture": true
+    }
+  ],
+  "ui": [
+    {
+      "id": "proprium.narrative.work-outline",
+      "kind": "panel",
+      "title": "Work outline",
+      "context": {
+        "workspace": true
+      },
+      "body": {
+        "widget": "outline",
+        "work_detect_action": {
+          "action_id": "proprium.narrative.work.detect",
+          "input_template": {}
+        },
+        "tree_action": {
+          "action_id": "proprium.narrative.hierarchy.tree",
+          "input_template": {
+            "limit": 128
+          }
+        },
+        "open_action": {
+          "action_id": "proprium.narrative.scene.open",
+          "input_template": {
+            "scene_id": "$selected.id"
+          }
+        },
+        "create_action": {
+          "action_id": "proprium.narrative.structure.create",
+          "input_template": {
+            "expected_tree_revision": "$tree_revision"
+          }
+        },
+        "reorder_action": {
+          "action_id": "proprium.narrative.structure.reorder",
+          "input_template": {
+            "expected_tree_revision": "$tree_revision"
+          }
+        }
+      }
+    },
+    {
+      "id": "proprium.narrative.continue-writing",
+      "kind": "command",
+      "title": "Continue writing",
+      "context": {
+        "workspace": true
+      },
+      "body": {
+        "widget": "command",
+        "action": {
+          "action_id": "proprium.narrative.scene.continue",
+          "input_template": {}
+        }
+      }
+    }
+  ],
+  "asset_groups": [],
+  "dependencies": []
+}
