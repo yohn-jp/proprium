@@ -1,4 +1,14 @@
 import { expect, test } from "@playwright/test";
+import { chooseFile, reviewChangedFiles, showPanel } from "./restored-ui.helpers.js";
+import type { WorkspaceIdentity } from "../../app/src/browser/proprium/git/protocol.js";
+
+declare global {
+  interface Window {
+    propriumHostTest?: {
+      openWorkspace(identity: WorkspaceIdentity, files?: Record<string, string>): Promise<void>;
+    };
+  }
+}
 
 test("Mobile WebKit library keeps GitHub access visible without a neutral status overlay", async ({ page }, testInfo) => {
   test.skip(testInfo.project.name !== "mobile-webkit", "This acceptance check targets the Mobile WebKit shell.");
@@ -11,8 +21,9 @@ test("Mobile WebKit library keeps GitHub access visible without a neutral status
   await expect(libraryHeading).toHaveClass(/\bsr-only\b/u);
   await expect(page.locator(".mobile-shell-status")).toHaveCount(0);
 
-  const connect = page.getByRole("button", { name: "Connect GitHub", exact: true });
+  const connect = page.getByRole("button", { name: "GitHubに接続", exact: true });
   await expect(connect).toBeVisible();
+  await connect.scrollIntoViewIfNeeded();
   await expect(connect).toBeInViewport();
 
   const gatewaySettings = page.locator("details.gateway-settings");
@@ -20,16 +31,66 @@ test("Mobile WebKit library keeps GitHub access visible without a neutral status
   await page.getByLabel("Proprium Gateway URL", { exact: true }).fill("");
   await connect.click();
 
-  const error = page.getByRole("alert");
+  const error = page.locator(".github-authorization-error");
   await expect(error).toContainText("Enter the Proprium Gateway URL");
   await expect(error).toBeVisible();
   const status = page.locator(".mobile-shell-status");
   await expect(status).toBeVisible();
   expect(await status.evaluate(element => getComputedStyle(element).position)).toBe("relative");
-  await connect.scrollIntoViewIfNeeded();
   const buttonBounds = await connect.boundingBox();
   const statusBounds = await status.boundingBox();
   expect(buttonBounds).not.toBeNull();
   expect(statusBounds).not.toBeNull();
   expect(buttonBounds!.y + buttonBounds!.height).toBeLessThanOrEqual(statusBounds!.y + 1);
+});
+
+test("Mobile WebKit keeps workspace panels, routes Settings separately, and reviews local Git diffs by touch navigation", async ({ page }, testInfo) => {
+  test.skip(testInfo.project.name !== "mobile-webkit", "This acceptance check targets the Mobile WebKit shell.");
+  await page.setViewportSize({ width: 390, height: 430 });
+
+  const workspace: WorkspaceIdentity = {
+    origin: "https://github.com",
+    repositoryId: 923456792,
+    owner: "proprium-test",
+    repository: "mobile-shell-navigation",
+    branch: "main",
+    localWorkspaceId: `mobile-shell-${crypto.randomUUID()}`,
+  };
+  await page.goto("/mobile?view=writing");
+  await page.waitForFunction(() => typeof window.propriumHostTest?.openWorkspace === "function");
+  await page.evaluate(async workspace => {
+    await window.propriumHostTest!.openWorkspace(workspace, { "chapter.md": "最初の本文です。\n" });
+  }, workspace);
+
+  await expect(page.locator("summary[aria-label='別の画面へ移動']")).toBeVisible();
+  await expect(page.locator(".mobile-shell-navigation-menu")).not.toHaveAttribute("open", "");
+  await expect(page.getByRole("navigation", { name: "モバイル画面" })).not.toBeVisible();
+  await expect(page.locator(".st-workspace-mobile-tabs [role='tab']").first()).toBeVisible();
+
+  const screenNavigation = page.getByRole("navigation", { name: "モバイル画面" });
+  await page.locator("summary[aria-label='別の画面へ移動']").click();
+  await screenNavigation.getByRole("button", { name: "設定", exact: true }).click();
+  await expect(page.locator(".mobile-shell-workspace-view[data-active-view='settings'] .mobile-shell-settings-card")).toBeVisible();
+  await expect(page.locator(".mobile-shell-workspace-panel")).toHaveAttribute("hidden", "");
+  await expect(page.locator(".commit-panel")).not.toBeVisible();
+
+  await page.locator("summary[aria-label='別の画面へ移動']").click();
+  await screenNavigation.getByRole("button", { name: "書く", exact: true }).click();
+  await expect(page.locator(".mobile-shell-workspace-panel")).not.toHaveAttribute("hidden", "");
+  await chooseFile(page, "chapter.md");
+  await expect(page.getByRole("textbox", { name: "原稿 Markdown" })).toBeVisible();
+  const manuscriptBounds = await page.locator(".cm-editor").boundingBox();
+  expect(manuscriptBounds).not.toBeNull();
+  const visibleManuscriptHeight = Math.max(0, Math.min(manuscriptBounds!.y + manuscriptBounds!.height, 430) - Math.max(manuscriptBounds!.y, 0));
+  expect(visibleManuscriptHeight).toBeGreaterThan(120);
+
+  await page.getByRole("textbox", { name: "原稿 Markdown" }).fill("変更後の本文です。\n");
+  const saveDraft = page.getByRole("button", { name: "端末に保存", exact: true });
+  await expect(saveDraft).toBeEnabled();
+  await saveDraft.click();
+  await reviewChangedFiles(page);
+  await expect(page.locator(".git-review-files .git-review-checked")).toHaveCount(1);
+
+  await showPanel(page, "history");
+  await expect(page.locator("#git-history-heading")).toBeVisible();
 });
