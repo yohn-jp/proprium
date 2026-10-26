@@ -22,6 +22,7 @@ interface Props {
   repositories: Array<{ identity: WorkspaceIdentity; title: string }>;
   git: BrowserLocalGit;
   canApply: boolean;
+  onPendingProposalsChange?(count: number): void;
   onWorkspaceChanged(): Promise<void>;
   onExecutePlugin(args: Record<string, unknown>, signal: AbortSignal): Promise<unknown>;
 }
@@ -70,7 +71,17 @@ async function readSse(reader: ReadableStreamDefaultReader<Uint8Array>, onEvent:
   }
 }
 
-export function LiveMcpPanel({ gatewayUrl, workspaceId, identity, repositories, git, canApply, onWorkspaceChanged, onExecutePlugin }: Props): ReactElement {
+export function LiveMcpPanel({
+  gatewayUrl,
+  workspaceId,
+  identity,
+  repositories,
+  git,
+  canApply,
+  onPendingProposalsChange,
+  onWorkspaceChanged,
+  onExecutePlugin,
+}: Props): ReactElement {
   const [state, setState] = useState<State>("disabled");
   const [error, setError] = useState("");
   const [endpoint, setEndpoint] = useState("");
@@ -80,6 +91,13 @@ export function LiveMcpPanel({ gatewayUrl, workspaceId, identity, repositories, 
   const liveSessionRef = useRef("");
   const connectAttemptRef = useRef("");
   const mountedRef = useRef(true);
+  const onPendingProposalsChangeRef = useRef(onPendingProposalsChange);
+
+  useEffect(() => {
+    onPendingProposalsChangeRef.current = onPendingProposalsChange;
+  }, [onPendingProposalsChange]);
+
+  useEffect(() => () => onPendingProposalsChangeRef.current?.(0), []);
 
   useEffect(() => {
     mountedRef.current = true;
@@ -345,6 +363,10 @@ export function LiveMcpPanel({ gatewayUrl, workspaceId, identity, repositories, 
   }
 
   const [proposals, setProposals] = useState<LiveWorkspaceProposal[]>([]);
+
+  useEffect(() => {
+    onPendingProposalsChangeRef.current?.(proposals.length);
+  }, [proposals.length]);
 
   return <section className="live-mcp-panel" aria-label="MCP connection">
     <div className="live-mcp-content">
