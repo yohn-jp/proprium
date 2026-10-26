@@ -69,7 +69,7 @@ export function GitHubDeviceAuthorization({
     {copyMessage && <p className="field-help" role="status">{copyMessage}</p>}
     <p className="field-help" role="status" aria-live="polite">{status}</p>
     {expired && onRetry && <button type="button" className="quiet-button" disabled={retryDisabled} onClick={onRetry}>新しい認証コードを取得</button>}
-    {onCancel && <button type="button" className="quiet-button" disabled={retryDisabled} onClick={onCancel}>GitHub接続をキャンセル</button>}
+    {onCancel && <button type="button" className="quiet-button" onClick={onCancel}>GitHub接続をキャンセル</button>}
   </section>;
 }
 

@@ -315,6 +315,7 @@ export function HostApp(): ReactElement {
       sessionRef.current = accountSession;
       setSession(accountSession);
       setDevicePrompt(prompt); setAuthStage("waiting");
+      if (!target) { setAccount(null); setRepositories([]); setSelectedRepository(null); setSelectedBranch(""); }
       setMessage({ tone: "info", text: `Enter code ${prompt.userCode} at GitHub, then return here. This page will finish sign-in automatically.` });
       const signedIn = await accountSession.completeAuthorization(controller.signal);
       if (controller.signal.aborted || authorizationRef.current !== controller) return;
