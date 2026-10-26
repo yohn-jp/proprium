@@ -96,6 +96,7 @@ test("integer form values become safe JSON numbers and invalid values fail befor
   assert.deepEqual(formValuesToJson(fields, { limit: "" }), {});
   assert.throws(() => formValuesToJson(fields, { limit: "1.2" }), /整数/u);
   assert.throws(() => formValuesToJson(fields, { limit: "9007199254740992" }), /範囲外/u);
+  assert.deepEqual(formValuesToJson([{ id: "scene_ids", label: "話", type: "ordered-list" }], { scene_ids: [] }), { scene_ids: [] });
 });
 
 test("form fields initialize from declared data keys while untouched optional fields stay sparse", () => {
@@ -170,6 +171,42 @@ test("forms render Host-owned fields and inaccessible UI markup is not accepted 
   assert.match(html, /シーン名/u);
   assert.match(html, /送信/u);
   assert.doesNotMatch(html, /<script/u);
+});
+
+test("form confirmation is a bounded Host-owned confirmation declaration", () => {
+  const surface: AuthoringSurfaceDeclaration = {
+    id: "share-create", kind: "panel", title: "共有リンク", context: {},
+    body: {
+      id: "create", type: "form", fields: [{ id: "scope", label: "範囲", type: "enum", options: [{ value: "chapter", label: "章" }] }],
+      submit: { action_id: "proprium.publishing.shares.create", input_template: { scope: { data_key: "form.scope" } } },
+      confirmation: { title: "共有リンクを作成しますか", message: "選択範囲を外部サービスへ登録します。", continue_label: "確認して続ける" },
+    },
+  };
+  const html = renderToStaticMarkup(createElement(AuthoringSurface, { surface, onInvoke: async () => ({}), onRead: async () => ({ ok: true }) }));
+  assert.match(html, /class="authoring-form-confirmation"/u);
+  assert.match(html, /選択範囲を外部サービスへ登録します/u);
+  assert.match(html, /確認して続ける/u);
+  assert.throws(() => validateAuthoringSurfaceDeclaration({ ...surface, body: { ...surface.body, confirmation: { title: "a", message: "b", html: "<script/>" } } }), /unsupported fields/u);
+});
+
+test("enum options can bind to current declared action data and availability can disable submission", () => {
+  const value = {
+    id: "episode-scope", kind: "panel", title: "公開回", context: {},
+    body: {
+      id: "scope-form", type: "form", fields: [{ id: "scope_id", label: "章", type: "enum", required: true,
+        options: { data_key: "last_action_result.items" }, option_value_key: "id", option_label_key: "title" }],
+      submit: { action_id: "proprium.publishing.export.txt", input_template: { scope_id: { data_key: "form.scope_id" } } },
+      submit_when: { data_key: "load.capabilities.export_available" }, unavailable_message: "現在の公開範囲を取得できません。",
+    },
+  };
+  const surface = validateAuthoringSurfaceDeclaration(value);
+  const html = renderToStaticMarkup(createElement(AuthoringSurface, {
+    surface, data: { load: { capabilities: { export_available: false } }, last_action_result: { items: [{ id: "ch-1", title: "第一章" }] } },
+    onInvoke: async () => ({}), onRead: async () => ({ ok: true }),
+  }));
+  assert.match(html, /<option value="ch-1">第一章<\/option>/u);
+  assert.match(html, /現在の公開範囲を取得できません/u);
+  assert.match(html, /<button type="submit" disabled="">送信<\/button>/u);
 });
 
 test("declared panel read is an explicit Host action with an accessible refresh control", () => {

@@ -59,7 +59,9 @@ interface AuthoringFieldBase {
   readonly id: string;
   readonly label: string;
   readonly required?: boolean;
-  readonly options?: readonly { readonly value: string; readonly label: string }[];
+  readonly options?: readonly { readonly value: string; readonly label: string }[] | AuthoringDataKey;
+  readonly option_value_key?: string;
+  readonly option_label_key?: string;
   readonly placeholder?: string;
   readonly min_length?: number;
   readonly max_length?: number;
@@ -96,6 +98,13 @@ export interface AuthoringColumn {
   readonly label: string;
 }
 
+export interface AuthoringFormConfirmation {
+  readonly title: string;
+  readonly message: string;
+  readonly continue_label?: string;
+  readonly cancel_label?: string;
+}
+
 export type AuthoringPrintPreset = "bunko" | "web-novel" | "genko";
 export interface AuthoringArtifactMetadata {
   readonly filename: string;
@@ -122,7 +131,7 @@ export type AuthoringWidget =
   | (AuthoringWidgetBase & { readonly type: "list"; readonly items: AuthoringTemplate; readonly primary: string; readonly secondary?: string; readonly item_action?: AuthoringActionBinding; readonly item_navigation?: AuthoringNavigationTemplate; readonly next_action?: AuthoringActionBinding; readonly previous_action?: AuthoringActionBinding; readonly next_action_when?: AuthoringDataKey; readonly previous_action_when?: AuthoringDataKey })
   | (AuthoringWidgetBase & { readonly type: "table"; readonly rows: AuthoringTemplate; readonly columns: readonly AuthoringColumn[]; readonly next_action?: AuthoringActionBinding; readonly previous_action?: AuthoringActionBinding; readonly next_action_when?: AuthoringDataKey; readonly previous_action_when?: AuthoringDataKey })
   | (AuthoringWidgetBase & { readonly type: "detail"; readonly value: AuthoringTemplate; readonly fields?: readonly { readonly key: string; readonly label: string }[] })
-  | (AuthoringWidgetBase & { readonly type: "form"; readonly fields: readonly AuthoringField[]; readonly submit: AuthoringActionBinding; readonly cancel_action?: AuthoringActionBinding })
+  | (AuthoringWidgetBase & { readonly type: "form"; readonly fields: readonly AuthoringField[]; readonly submit: AuthoringActionBinding; readonly cancel_action?: AuthoringActionBinding; readonly confirmation?: AuthoringFormConfirmation; readonly submit_when?: AuthoringDataKey; readonly unavailable_message?: string })
   | (AuthoringWidgetBase & { readonly type: "tabs"; readonly tabs: readonly { readonly id: string; readonly title: string; readonly body: AuthoringWidget }[] })
   | (AuthoringWidgetBase & { readonly type: "status"; readonly state: AuthoringTemplate; readonly messages?: Readonly<Record<string, string>> })
   | (AuthoringWidgetBase & { readonly type: "progress"; readonly value: AuthoringTemplate; readonly maximum?: number; readonly label?: string })

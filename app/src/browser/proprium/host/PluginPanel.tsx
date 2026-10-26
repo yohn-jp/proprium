@@ -13,6 +13,7 @@ const MAX_SNAPSHOT_BYTES = 2 * 1024 * 1024;
 type InstallIntent = "install" | "update";
 
 interface PluginPanelProps {
+  manager: BrowserPluginManager;
   workspaceId: string;
   git: BrowserLocalGit;
   revisionKey: string;
@@ -33,6 +34,14 @@ function registryConfig(): { url: string; publicKey: Uint8Array; artifactOrigins
     const publicKey = decodeRegistryBytes(encodedKey, 32, "registry public key");
     return { url, publicKey, artifactOrigins };
   } catch { return null; }
+}
+
+/** Shared by HostApp's authoring service and the normal PluginPanel lifecycle. */
+export function createHostPluginManager(): BrowserPluginManager {
+  const config = registryConfig();
+  return new BrowserPluginManager({
+    registries: config ? [{ url: config.url, publicKey: config.publicKey, artifactOrigins: config.artifactOrigins }] : [],
+  });
 }
 function isPlainRecord(value: unknown): value is Record<string, unknown> {
   return !!value && typeof value === "object" && !Array.isArray(value);
@@ -79,11 +88,8 @@ function snapshotForPlugin(plugin: InstalledPlugin, git: BrowserLocalGit, worksp
   return needsWorkspaceSnapshot(plugin) ? takeSnapshot(git, workspaceId) : Promise.resolve(emptySnapshot(workspaceId));
 }
 
-export function PluginPanel({ workspaceId, git, revisionKey, canApplyChanges, hostBusy, onBusyChange, onWorkspaceChanged, onRegisterLiveInvoker }: PluginPanelProps): ReactElement {
+export function PluginPanel({ manager, workspaceId, git, revisionKey, canApplyChanges, hostBusy, onBusyChange, onWorkspaceChanged, onRegisterLiveInvoker }: PluginPanelProps): ReactElement {
   const config = useMemo(registryConfig, []);
-  const manager = useMemo(() => new BrowserPluginManager({
-    registries: config ? [{ url: config.url, publicKey: config.publicKey, artifactOrigins: config.artifactOrigins }] : [],
-  }), [config]);
   const [plugins, setPlugins] = useState<InstalledPlugin[]>([]);
   const [registryCatalog, setRegistryCatalog] = useState<readonly RegistryCatalogEntry[]>([]);
   const [catalogLoaded, setCatalogLoaded] = useState(false);
@@ -151,8 +157,6 @@ export function PluginPanel({ workspaceId, git, revisionKey, canApplyChanges, ho
     })();
     return () => { cancelled = true; };
   }, [manager, workspaceId]);
-  useEffect(() => () => { void manager.dispose(); }, [manager]);
-
   async function loadRegistryCatalog(): Promise<void> {
     if (!config) return;
     setRegistryCatalog([]);

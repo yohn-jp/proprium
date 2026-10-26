@@ -14,7 +14,7 @@ import { GitHubRepositoryPicker } from "./GitHubRepositoryPicker.js";
 import { GatewayAccessLink } from "./GatewayAccessLink.js";
 import { GitHistoryPanel } from "./GitHistoryPanel.js";
 import { ChangedFilesReview } from "./ChangedFilesReview.js";
-import { PluginPanel } from "./PluginPanel.js";
+import { createHostPluginManager, PluginPanel } from "./PluginPanel.js";
 import { LiveMcpPanel } from "./LiveMcpPanel.js";
 import "./authoring/authoring-surface.css";
 
@@ -132,6 +132,7 @@ function asText(data: Uint8Array): string | null {
 
 export function HostApp(): ReactElement {
   const navigate = useNavigate();
+  const [pluginManager] = useState(createHostPluginManager);
   const [editorNode] = useState(() => document.createElement("div"));
   const [toolsNode] = useState(() => document.createElement("div"));
   const [recent, setRecent] = useState<RecentWorkspace[]>(readRecentWorkspaces);
@@ -204,6 +205,7 @@ export function HostApp(): ReactElement {
   const currentFileRef = useRef<OpenFile | null>(currentFile);
   const livePluginInvoker = useRef<((args: Record<string, unknown>, signal: AbortSignal) => Promise<unknown>) | null>(null);
   currentFileRef.current = currentFile;
+  useEffect(() => () => { void pluginManager.dispose(); }, [pluginManager]);
   workspaceRef.current = workspace;
   workspaceGenerationRef.current = workspaceGeneration;
   const activeWorkspaceId = workspace?.identity.localWorkspaceId ?? null;
@@ -867,6 +869,7 @@ export function HostApp(): ReactElement {
           </section>
 </div> : mode === "desktop" ? <div className="host-controls">{recentCard}</div> : picker;
   const tools = <div className="host-controls">{git && workspace && <PluginPanel
+            manager={pluginManager}
             workspaceId={activeWorkspaceId!}
             git={git}
             revisionKey={pluginRevisionKey}

@@ -13,7 +13,7 @@ export function TermAwareRubyText({
 }: {
   text: string;
   resolveTerms?: ResolveEditorTerms;
-  onTermNavigate?: (targetPath: string, termId: string) => void;
+  onTermNavigate?: (targetPath: string, termId: string, event: Event) => void;
 }) {
   const containerRef = useRef<HTMLDivElement>(null);
   const generationRef = useRef(0);

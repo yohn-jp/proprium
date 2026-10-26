@@ -124,20 +124,28 @@ function field(value: unknown, nested = false): asserts value is AuthoringField 
   if (nested && value.type === "record-list") throw new Error("Nested UI record lists are unsupported.");
   if (!["string", "integer", "boolean", "enum", "multi-reference", "ordered-list"].includes(String(value.type))) throw new Error("UI form field type is unsupported.");
   const scalar = value as AuthoringScalarField & Record<string, unknown>;
-  exact(scalar, ["id", "label", "type"], ["id", "label", "type", "required", "options", "placeholder", "min_length", "max_length", "validation_message", "initial_value"], "UI form field");
+  exact(scalar, ["id", "label", "type"], ["id", "label", "type", "required", "options", "option_value_key", "option_label_key", "placeholder", "min_length", "max_length", "validation_message", "initial_value"], "UI form field");
   if (scalar.initial_value !== undefined) template(scalar.initial_value);
   if (scalar.type === "enum" || scalar.type === "multi-reference") {
-    if (!Array.isArray(scalar.options) || !scalar.options.length || scalar.options.length > 256) throw new Error("UI form options must be bounded and non-empty.");
-    const seen = new Set<string>();
-    for (const option of scalar.options) {
-      if (!record(option)) throw new Error("UI form option must be an object.");
-      exact(option, ["value", "label"], ["value", "label"], "UI form option");
-      text(option.value, "UI form option value", 256);
-      text(option.label, "UI form option label", 100);
-      if (seen.has(option.value)) throw new Error("UI form option values must be unique.");
-      seen.add(option.value);
+    if (Array.isArray(scalar.options)) {
+      if (!scalar.options.length || scalar.options.length > 1000 || scalar.option_value_key !== undefined || scalar.option_label_key !== undefined) throw new Error("UI form options must be bounded and cannot mix literal and data-bound options.");
+      const seen = new Set<string>();
+      for (const option of scalar.options) {
+        if (!record(option)) throw new Error("UI form option must be an object.");
+        exact(option, ["value", "label"], ["value", "label"], "UI form option");
+        text(option.value, "UI form option value", 256);
+        text(option.label, "UI form option label", 100);
+        if (seen.has(option.value)) throw new Error("UI form option values must be unique.");
+        seen.add(option.value);
+      }
+    } else {
+      if (scalar.options === undefined || !record(scalar.options) || scalar.option_value_key === undefined || scalar.option_label_key === undefined) throw new Error("UI data-bound options require a data key and value/label keys.");
+      dataKey(scalar.options);
+      for (const key of [scalar.option_value_key, scalar.option_label_key]) {
+        if (typeof key !== "string" || !key.split(".").every(part => DATA_KEY_PART.test(part) && !UNSAFE_KEYS.has(part))) throw new Error("UI data-bound option key is invalid.");
+      }
     }
-  } else if (scalar.options !== undefined) throw new Error("Only enum fields may declare options.");
+  } else if (scalar.options !== undefined || scalar.option_value_key !== undefined || scalar.option_label_key !== undefined) throw new Error("Only enum and multi-reference fields may declare options.");
 }
 
 interface WidgetVisit { count: number; ids: Set<string> }
@@ -199,7 +207,7 @@ function widget(value: unknown, visit: WidgetVisit, depth = 0): asserts value is
       }
       break;
     case "form":
-      exact(value, ["id", "type", "fields", "submit"], [...common, "fields", "submit", "cancel_action"], "UI form");
+      exact(value, ["id", "type", "fields", "submit"], [...common, "fields", "submit", "cancel_action", "confirmation", "submit_when", "unavailable_message"], "UI form");
       if (!Array.isArray(value.fields) || value.fields.length > 32) throw new Error("UI form fields must be bounded.");
       {
         const fieldIds = new Set<string>();
@@ -211,6 +219,16 @@ function widget(value: unknown, visit: WidgetVisit, depth = 0): asserts value is
       }
       action(value.submit);
       if (value.cancel_action !== undefined) action(value.cancel_action);
+      if (value.submit_when !== undefined) dataKey(value.submit_when);
+      text(value.unavailable_message, "UI form unavailable message", 512, true);
+      if (value.confirmation !== undefined) {
+        if (!record(value.confirmation)) throw new Error("UI form confirmation must be an object.");
+        exact(value.confirmation, ["title", "message"], ["title", "message", "continue_label", "cancel_label"], "UI form confirmation");
+        text(value.confirmation.title, "UI form confirmation title", 120);
+        text(value.confirmation.message, "UI form confirmation message", 1024);
+        text(value.confirmation.continue_label, "UI form confirmation continue label", 100, true);
+        text(value.confirmation.cancel_label, "UI form confirmation cancel label", 100, true);
+      }
       break;
     case "tabs":
       exact(value, ["id", "type", "tabs"], [...common, "tabs"], "UI tabs");

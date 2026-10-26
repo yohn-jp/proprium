@@ -256,6 +256,21 @@ function blankValue(field: AuthoringScalarField): string | boolean | string[] {
   return "";
 }
 
+function optionsForField(field: AuthoringScalarField, data: AuthoringJson): readonly { readonly value: string; readonly label: string }[] {
+  if (Array.isArray(field.options)) return field.options;
+  if (!isDataKey(field.options) || !field.option_value_key || !field.option_label_key) return [];
+  const seen = new Set<string>();
+  return recordRows(dataAtPath(data, field.options.data_key)).slice(0, 1000).flatMap(row => {
+    const rawValue = readPath(row, field.option_value_key!);
+    const rawLabel = readPath(row, field.option_label_key!);
+    const value = typeof rawValue === "string" ? rawValue : typeof rawValue === "number" && Number.isFinite(rawValue) ? String(rawValue) : "";
+    const label = plainText(rawLabel);
+    if (!value || !label || seen.has(value)) return [];
+    seen.add(value);
+    return [{ value, label }];
+  });
+}
+
 function initialScalarValue(field: AuthoringScalarField, value: unknown): unknown {
   if (field.type === "boolean") return typeof value === "boolean" ? value : undefined;
   if (field.type === "integer") return typeof value === "number" && Number.isSafeInteger(value) ? value : undefined;
@@ -282,23 +297,25 @@ function initialFormValues(fields: readonly AuthoringField[], data: AuthoringJso
   return values;
 }
 
-function FormScalarInput({ field, value, disabled, onChange }: {
+function FormScalarInput({ field, value, disabled, options = [], onChange }: {
   readonly field: AuthoringScalarField;
   readonly value: unknown;
   readonly disabled: boolean;
+  readonly options?: readonly { readonly value: string; readonly label: string }[];
   onChange(value: unknown): void;
 }): ReactElement {
   if (field.type === "boolean") return <input type="checkbox" disabled={disabled} checked={Boolean(value)} onChange={event => onChange(event.currentTarget.checked)} />;
-  if (field.type === "enum") return <select disabled={disabled} required={field.required} value={plainText(value)} onChange={event => onChange(event.currentTarget.value)}><option value="">選択してください</option>{(field.options ?? []).map(option => <option key={option.value} value={option.value}>{option.label}</option>)}</select>;
-  if (field.type === "multi-reference") return <select multiple disabled={disabled} required={field.required} value={Array.isArray(value) ? value.filter((item): item is string => typeof item === "string") : []} onChange={event => onChange(Array.from(event.currentTarget.selectedOptions, option => option.value))}>{(field.options ?? []).map(option => <option key={option.value} value={option.value}>{option.label}</option>)}</select>;
-  if (field.type === "ordered-list") return <textarea rows={4} disabled={disabled} required={field.required} placeholder={field.placeholder} value={Array.isArray(value) ? value.filter((item): item is string => typeof item === "string").join("\n") : ""} onChange={event => onChange(event.currentTarget.value.split("\n"))} />;
+  if (field.type === "enum") return <select disabled={disabled} required={field.required} value={plainText(value)} onChange={event => onChange(event.currentTarget.value)}><option value="">選択してください</option>{options.map(option => <option key={option.value} value={option.value}>{option.label}</option>)}</select>;
+  if (field.type === "multi-reference") return <select multiple disabled={disabled} required={field.required} value={Array.isArray(value) ? value.filter((item): item is string => typeof item === "string") : []} onChange={event => onChange(Array.from(event.currentTarget.selectedOptions, option => option.value))}>{options.map(option => <option key={option.value} value={option.value}>{option.label}</option>)}</select>;
+  if (field.type === "ordered-list") return <textarea rows={4} disabled={disabled} required={field.required} placeholder={field.placeholder} value={Array.isArray(value) ? value.filter((item): item is string => typeof item === "string").join("\n") : ""} onChange={event => onChange(event.currentTarget.value === "" ? [] : event.currentTarget.value.split("\n"))} />;
   return <input type={field.type === "integer" ? "number" : "text"} disabled={disabled} required={field.required} minLength={field.min_length} maxLength={field.max_length} placeholder={field.placeholder} value={plainText(value)} onChange={event => onChange(event.currentTarget.value)} />;
 }
 
-function RecordListField({ field, value, disabled, onChange }: {
+function RecordListField({ field, value, data, disabled, onChange }: {
   readonly field: Extract<AuthoringField, { type: "record-list" }>;
   readonly value: unknown;
   readonly disabled: boolean;
+  readonly data: AuthoringJson;
   onChange(value: AuthoringJson[]): void;
 }): ReactElement {
   const rows = recordRows(value);
@@ -326,7 +343,7 @@ function RecordListField({ field, value, disabled, onChange }: {
     <legend>{field.label}{field.required && <span aria-hidden="true"> *</span>}</legend>
     {rows.map((row, index) => <fieldset className="authoring-record-row" key={plainText(field.key_field ? readPath(row, field.key_field) : row.id) || `${field.id}-${index}`}>
       <legend>{field.label} {index + 1}</legend>
-      {field.fields.map(child => <label className="authoring-field" key={child.id}><span>{child.label}{child.required && <span aria-hidden="true"> *</span>}</span><FormScalarInput field={child} value={row[child.id]} disabled={disabled} onChange={next => changeRow(index, child.id, next)} /></label>)}
+      {field.fields.map(child => <label className="authoring-field" key={child.id}><span>{child.label}{child.required && <span aria-hidden="true"> *</span>}</span><FormScalarInput field={child} value={row[child.id]} options={optionsForField(child, data)} disabled={disabled} onChange={next => changeRow(index, child.id, next)} /></label>)}
       <div className="authoring-record-actions"><button type="button" disabled={index === 0} aria-label={`${field.label} ${index + 1}を上へ`} onClick={() => moveRow(index, -1)}>上へ</button><button type="button" disabled={index === rows.length - 1} aria-label={`${field.label} ${index + 1}を下へ`} onClick={() => moveRow(index, 1)}>下へ</button><button type="button" disabled={rows.length <= minItems} aria-label={`${field.label} ${index + 1}を削除`} onClick={() => removeRow(index)}>削除</button></div>
     </fieldset>)}
     {rows.length < maxItems && <button type="button" onClick={addRow}>項目を追加</button>}
@@ -342,7 +359,27 @@ function FormWidget({ node, data, invoke, busy }: {
 }): ReactElement {
   const initialValues = useMemo(() => initialFormValues(node.fields, data), [node.fields, data]);
   const [values, setValues] = useState<FormValues>(initialValues);
-  useEffect(() => setValues(initialValues), [initialValues]);
+  const baselineValues = useRef(initialValues);
+  useEffect(() => {
+    const previous = baselineValues.current;
+    setValues(current => {
+      const next = { ...current };
+      for (const field of node.fields) {
+        if (JSON.stringify(current[field.id]) !== JSON.stringify(previous[field.id])) continue;
+        if (Object.hasOwn(initialValues, field.id)) next[field.id] = initialValues[field.id];
+        else delete next[field.id];
+      }
+      return next;
+    });
+    baselineValues.current = initialValues;
+  }, [initialValues, node.fields]);
+  const [pendingContext, setPendingContext] = useState<AuthoringJson | null>(null);
+  const confirmationDialog = useRef<HTMLDialogElement>(null);
+  useEffect(() => {
+    const dialog = confirmationDialog.current;
+    if (pendingContext !== null && dialog && !dialog.open) dialog.showModal();
+    else if (pendingContext === null && dialog?.open) dialog.close();
+  }, [pendingContext]);
   const [error, setError] = useState("");
   const update = (field: AuthoringField, value: unknown) => setValues(current => ({ ...current, [field.id]: value }));
   const submit = (event: FormEvent<HTMLFormElement>) => {
@@ -359,10 +396,14 @@ function FormWidget({ node, data, invoke, busy }: {
           const childEmpty = childValue === undefined || childValue === "" || (Array.isArray(childValue) && !childValue.length);
           if (child.required && childEmpty) { setError(`${field.label} ${index + 1}: ${child.validation_message || `${child.label}を入力してください。`}`); return true; }
           if (typeof childValue === "string" && ((child.min_length !== undefined && childValue.length < child.min_length) || (child.max_length !== undefined && childValue.length > child.max_length))) { setError(`${field.label} ${index + 1}: ${child.validation_message || `${child.label}の入力を確認してください。`}`); return true; }
+          if (child.type === "enum" && typeof childValue === "string" && childValue && !optionsForField(child, data).some(option => option.value === childValue)) { setError(`${field.label} ${index + 1}: ${child.label}の選択肢を更新してください。`); return true; }
+          if (child.type === "multi-reference" && Array.isArray(childValue) && childValue.some(item => typeof item !== "string" || !optionsForField(child, data).some(option => option.value === item))) { setError(`${field.label} ${index + 1}: ${child.label}の選択肢を更新してください。`); return true; }
           return false;
         }));
         if (invalid) return true;
       }
+      if (field.type === "enum" && typeof value === "string" && value && !optionsForField(field, data).some(option => option.value === value)) { setError(`${field.label}の選択肢を更新してください。`); return true; }
+      if (field.type === "multi-reference" && Array.isArray(value) && value.some(item => typeof item !== "string" || !optionsForField(field, data).some(option => option.value === item))) { setError(`${field.label}の選択肢を更新してください。`); return true; }
       if (typeof value === "string" && ((field.min_length !== undefined && value.length < field.min_length) || (field.max_length !== undefined && value.length > field.max_length))) {
         setError(field.validation_message || `${field.label}の入力を確認してください。`); return true;
       }
@@ -371,19 +412,35 @@ function FormWidget({ node, data, invoke, busy }: {
     if (validation) return;
     setError("");
     try {
-      invoke(node.submit, event.nativeEvent, { ...asRecord(data), form: formValuesToJson(node.fields, values) });
+      const context: AuthoringJson = { ...asRecord(data), form: formValuesToJson(node.fields, values) };
+      if (node.confirmation) setPendingContext(context);
+      else invoke(node.submit, event.nativeEvent, context);
     } catch (cause) {
       setError(cause instanceof Error ? cause.message : "入力内容を確認してください。");
     }
+  };
+  const submitAllowed = !node.submit_when || conditionMatches(node.submit_when, data);
+  const cancelConfirmation = () => setPendingContext(null);
+  const confirmSubmit = (event: React.MouseEvent<HTMLButtonElement>) => {
+    if (pendingContext === null || busy) return;
+    const context = pendingContext;
+    setPendingContext(null);
+    invoke(node.submit, event.nativeEvent, context);
   };
   const labelId = `authoring-form-${node.id}`;
   return <form className="authoring-form" aria-labelledby={labelId} onSubmit={submit}>
     {node.title && <h3 id={labelId}>{node.title}</h3>}{node.description && <p>{node.description}</p>}
     {node.fields.map(field => field.type === "record-list"
-      ? <RecordListField key={field.id} field={field} value={values[field.id]} disabled={busy} onChange={value => update(field, value)} />
-      : <label className="authoring-field" key={field.id}><span>{field.label}{field.required && <span aria-hidden="true"> *</span>}</span><FormScalarInput field={field} value={values[field.id]} disabled={busy} onChange={value => update(field, value)} /></label>)}
+      ? <RecordListField key={field.id} field={field} value={values[field.id]} data={data} disabled={busy} onChange={value => update(field, value)} />
+      : <label className="authoring-field" key={field.id}><span>{field.label}{field.required && <span aria-hidden="true"> *</span>}</span><FormScalarInput field={field} value={values[field.id]} options={optionsForField(field, data)} disabled={busy} onChange={value => update(field, value)} /></label>)}
     {error && <p className="authoring-error" role="alert">{error}</p>}
-    <div className="authoring-form-actions"><button type="submit" disabled={busy || !validBinding(node.submit)}>送信</button>{node.cancel_action && <button type="button" disabled={busy} onClick={event => invoke(node.cancel_action!, event.nativeEvent)}>キャンセル</button>}</div>
+    {!submitAllowed && node.unavailable_message && <p className="authoring-unavailable" role="status">{node.unavailable_message}</p>}
+    <div className="authoring-form-actions"><button type="submit" disabled={busy || !submitAllowed || !validBinding(node.submit)}>送信</button>{node.cancel_action && <button type="button" disabled={busy} onClick={event => invoke(node.cancel_action!, event.nativeEvent)}>キャンセル</button>}</div>
+    {node.confirmation && <dialog ref={confirmationDialog} className="authoring-form-confirmation" aria-labelledby={`authoring-confirmation-${node.id}`} onCancel={event => { event.preventDefault(); cancelConfirmation(); }}>
+      <h2 id={`authoring-confirmation-${node.id}`}>{node.confirmation.title}</h2>
+      <p>{node.confirmation.message}</p>
+      <div className="authoring-form-actions"><button type="button" disabled={busy} onClick={cancelConfirmation}>{node.confirmation.cancel_label || "キャンセル"}</button><button type="button" disabled={busy} onClick={confirmSubmit}>{node.confirmation.continue_label || "続ける"}</button></div>
+    </dialog>}
   </form>;
 }
 
