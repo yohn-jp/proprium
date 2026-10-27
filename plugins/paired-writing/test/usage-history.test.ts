@@ -20,3 +20,11 @@ test('history cursor binds the result and month; changed input is rejected', () 
   assert.notEqual(next.events[0]?.id,first.events[0]?.id);
   assert.throws(()=>readUsagePage({legacyText:text+'\n',legacyRevision:'r2',limit:1,month:'2026-10',cursor:first.nextCursor!}),/cursor/i);
 });
+test('resolver reads only requested preserved source through pinned list and read, without implicit archive merge', async () => {
+ const {resolveUsageHistory}=await import('../src/usage-history.js'); const snapshot={id:'s',local_commit:null,worktree_generation:'g',draft_generation:null};
+ const request={snapshot} as any;const host:any={request(operation:string,payload:any){return(function*(){return yield {operation,payload};})();}};
+ const run=resolveUsageHistory(host,request,{limit:10});let step=run.next();assert.equal(step.value.operation,'workspace.file.list');assert.equal(step.value.payload.prefix,'meta/scriptorium/modules/assistant/');
+ const path='meta/scriptorium/modules/assistant/usage.jsonl',rev='a'.repeat(64);const text='{"ts":"2026-10-01T00:00:00Z","feature":"rewrite","model":"m","unknown":true}\n';const bytes=[...new TextEncoder().encode(text)];
+ step=run.next({entries:[{path,revision:rev,byte_length:bytes.length}],next_cursor:null});assert.equal(step.value.operation,'workspace.file.read');assert.equal(step.value.payload.path,path);
+ step=run.next({revision:rev,offset:0,total_bytes:bytes.length,bytes,next_offset:null});assert.equal(step.done,true);assert.equal((step.value as any).total,1);assert.equal((step.value as any).historyWarning,'host_usage_store_unavailable');assert.equal((step.value as any).legacyRevision,rev);
+});

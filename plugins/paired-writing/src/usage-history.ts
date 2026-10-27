@@ -1,5 +1,6 @@
 import { sha256 } from './sha256.js';
 import { PairedError } from './types.js';
+import { readText } from './host.js';
 
 export interface UsageRow {
   id: string; feature: string; provider: string; model: string; startedAt: string; completedAt: string;
@@ -52,4 +53,39 @@ export function readUsagePage(input: UsageInput) {
   if (input.cursor !== undefined) { const m=/^usage1\.([a-f0-9]{64})\.(0|[1-9]\d*)$/u.exec(input.cursor); if (!m || m[1]!==binding || !Number.isSafeInteger(Number(m[2])) || Number(m[2])>events.length) throw new PairedError('invalid_input','Usage history cursor is invalid or stale'); offset=Number(m[2]); }
   const page=events.slice(offset,offset+input.limit), next=offset+page.length;
   return {events:page, nextCursor:next<events.length?`usage1.${binding}.${next}`:null, aggregates, total:events.length, legacyRevision:input.legacyRevision, hasHostHistory:input.hostAvailable===true, ...(input.hostAvailable===true?{}:{historyWarning:'host_usage_store_unavailable'})};
+}
+
+export interface UsageHistoryQuery { month?: string; limit: number; cursor?: string; source?: 'canonical' | 'archive' }
+export type HostUsageReader = (query: { month?: string }) => Generator<import('../../shared/guest.js').HostCall, { events: readonly unknown[]; complete: boolean }, unknown>;
+/** Read exactly the selected legacy source at the Host-pinned snapshot; archives require explicit selection. */
+export function* resolveUsageHistory(
+  host: import('../../shared/guest.js').GuestHost,
+  request: import('../../../app/src/browser/proprium/authoring/types.js').ActionRequest,
+  query: UsageHistoryQuery,
+  readHost?: HostUsageReader,
+): Generator<import('../../shared/guest.js').HostCall, ReturnType<typeof readUsagePage> & { legacyPath:string; hostHistoryComplete:boolean }, unknown> {
+  const source = query.source ?? 'canonical';
+  if (source !== 'canonical' && source !== 'archive') throw new PairedError('invalid_input','Unknown usage history source');
+  const path = source === 'canonical' ? 'meta/scriptorium/modules/assistant/usage.jsonl' : '.arcadia/llm-usage.jsonl';
+  const prefix = path.slice(0,path.lastIndexOf('/')+1);
+  let cursor:string|null=null; const seen=new Set<string>(); let entry:{path:string;revision:string;byte_length:number}|undefined;
+  for (let pages=0;pages<64;pages++) {
+    const page:{entries:Array<{path:string;revision:string;byte_length:number}>;next_cursor:string|null} = yield* host.request('workspace.file.list',{snapshot:request.snapshot,prefix,limit:256,...(cursor ? {cursor} : {})});
+    if (!page || !Array.isArray(page.entries) || page.entries.length>256 || !(page.next_cursor===null || typeof page.next_cursor==='string')) throw new PairedError('invalid_input','Host returned an invalid usage file page');
+    for (const item of page.entries) if (item.path===path) { if (entry) throw new PairedError('invalid_input','Host returned duplicate usage source'); entry=item; }
+    if (page.next_cursor===null) break;
+    if (seen.has(page.next_cursor)) throw new PairedError('invalid_input','Host usage file cursor did not advance');
+    seen.add(page.next_cursor); cursor=page.next_cursor;
+    if (pages===63) throw new PairedError('capacity','Usage source listing exceeds page limit');
+  }
+  let legacyText='', legacyRevision:string|null=null;
+  if (entry) {
+    if (typeof entry.revision !== 'string' || !entry.revision || !Number.isSafeInteger(entry.byte_length) || entry.byte_length < 0 || entry.byte_length > 16*1024*1024) throw new PairedError('invalid_input','Usage source metadata is invalid');
+    const file = yield* readText(host,request,path);
+    if (file.revision!==entry.revision || file.total_bytes!==entry.byte_length) throw new PairedError('snapshot_stale','Usage source changed during reading');
+    legacyText=file.text; legacyRevision=file.revision;
+  }
+  let hostEvents:readonly unknown[]=[]; let hostAvailable=false; let hostHistoryComplete=false;
+  if (readHost) { const result=yield* readHost({ ...(query.month ? {month:query.month} : {}) }); if (!result || !Array.isArray(result.events) || typeof result.complete!=='boolean') throw new PairedError('invalid_input','Host usage history response is malformed'); hostEvents=result.events; hostAvailable=true; hostHistoryComplete=result.complete; }
+  return {...readUsagePage({legacyText,legacyRevision,hostEvents,hostAvailable,limit:query.limit,...(query.month === undefined ? {} : {month:query.month}),...(query.cursor === undefined ? {} : {cursor:query.cursor})}),legacyPath:path,hostHistoryComplete};
 }
