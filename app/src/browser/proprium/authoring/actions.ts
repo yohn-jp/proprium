@@ -1,6 +1,7 @@
 import type { ActionDescriptor, ActionError, ActionRequest, ActionResult, Caller, JsonSchema, Scope, Snapshot } from "./types.js";
 import { assertActionRequest, assertDescriptor, assertResult, assertValue, scopeSchema, snapshotSchema } from "./schema.js";
 import { capabilityForHostOperation } from "./capabilities.js";
+import { isCanonOptionalEnrichment } from "./optional-enrichments.js";
 
 export type ActionAvailability = "ready" | "disabled" | "dependency_unavailable" | "capability_denied" | "incompatible";
 export interface VerifiedActionSet {
@@ -369,7 +370,9 @@ export class AuthoringActionDispatcher {
     if (typeof payload.plugin_id !== "string" || typeof payload.action_id !== "string" || !isRecord(payload.input)) {
       throw new ActionDispatchError("invalid_input", "Nested action is malformed");
     }
-    if (!source.dependencies.includes(payload.plugin_id)) throw new ActionDispatchError("dependency_unavailable", "Target is not a declared dependency");
+    if (!source.dependencies.includes(payload.plugin_id) && !isCanonOptionalEnrichment(source.plugin_id, payload.plugin_id)) {
+      throw new ActionDispatchError("dependency_unavailable", "Target is outside the declared dependencies and Canon optional enrichments");
+    }
     const target = await this.options.installed(payload.plugin_id);
     if (!target || !target.enabled) throw new ActionDispatchError("dependency_unavailable", "Dependency is unavailable");
     this.assertInstalled(target, target.plugin_id);
@@ -400,7 +403,8 @@ export class AuthoringActionDispatcher {
   }
   private async listDependency(payload: Record<string, unknown>, source: VerifiedActionSet): Promise<ActionListResult> {
     exactKeys(payload, ["plugin_id", "cursor", "limit"], "Action metadata");
-    if (typeof payload.plugin_id !== "string" || !source.dependencies.includes(payload.plugin_id)) throw new ActionDispatchError("dependency_unavailable", "Metadata is limited to dependencies");
+    if (typeof payload.plugin_id !== "string" || (!source.dependencies.includes(payload.plugin_id) &&
+        !isCanonOptionalEnrichment(source.plugin_id, payload.plugin_id))) throw new ActionDispatchError("dependency_unavailable", "Metadata is limited to dependencies and Canon optional enrichments");
     const target = await this.options.installed(payload.plugin_id);
     if (!target) throw new ActionDispatchError("dependency_unavailable", "Dependency is not installed");
     this.assertInstalled(target, target.plugin_id);

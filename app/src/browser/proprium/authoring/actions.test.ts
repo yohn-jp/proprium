@@ -145,6 +145,29 @@ test("dependency calls preserve the full typed result envelope consumed by offic
   assert.deepEqual(result.ok && result.value, { hits: 2 });
 });
 
+test("Canon optional enrichment uses an enabled target without making it an activation dependency", async () => {
+  const paired="proprium.paired-writing", pairedAction="paired.qa.answer", invokeCap="workspace.plugin.invoke";
+  const h=createHarness({
+    authority:{issue:async p=>context(p,{grants:[cap,invokeCap],host_capabilities:[cap,invokeCap]}),
+      issueChild:async(parent,caller_plugin_id)=>context(principal("ui",parent.request_id+"-child"),{caller:"plugin",caller_plugin_id,user_gesture_verified:false,signal:parent.signal}),
+      assertCurrent:async()=>{},isSnapshotCurrent:()=>true},
+    runtime:{invoke:async options=>{
+      const value=options.request.plugin_id===plugin_id ? {hits:3} : (await options.resolve_host_call({call_id:"optional",operation:invokeCap,
+        payload:{plugin_id,action_id,input:{query:"x"}}}) as {ok:true;value:unknown}).value;
+      return{request_id:options.request.request_id,scope,snapshot,ok:true,value,warnings:[]};
+    }},
+  });
+  h.entries.set(paired,installed({plugin_id:paired,descriptors:[descriptor({plugin_id:paired,action_id:pairedAction,required_capabilities:[invokeCap]})],
+    dependencies:[],grants:[cap,invokeCap],host_capabilities:[cap,invokeCap]}));
+  const result=await h.dispatcher.invoke({plugin_id:paired,action_id:pairedAction,input:{query:"x"}},principal());
+  assert.equal(result.ok,true);
+  assert.deepEqual(result.ok&&result.value,{hits:3});
+  h.entries.set(plugin_id,installed({enabled:false}));
+  const unavailable=await h.dispatcher.invoke({plugin_id:paired,action_id:pairedAction,input:{query:"x"}},principal("ui","optional-disabled"));
+  assert.equal(unavailable.ok,false);
+  if(!unavailable.ok)assert.equal(unavailable.error.code,"dependency_unavailable");
+});
+
 test("artifact creation accepts its declared bound context and rejects a foreign one", async () => {
   let created = 0;
   const make = (foreign = false) => createHarness({
