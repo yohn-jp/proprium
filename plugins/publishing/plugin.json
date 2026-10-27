@@ -1022,6 +1022,15 @@
         "additionalProperties": false
       },
       "output_schema": {
+        "type": "object",
+        "properties": {
+          "change_set_id": true,
+          "proposal_id": true,
+          "status": true,
+          "preview": true,
+          "id": true
+        },
+        "additionalProperties": false,
         "oneOf": [
           {
             "type": "object",
@@ -1093,7 +1102,7 @@
       "requires_user_gesture": true
     }
   ],
-  "ui":   [
+  "ui": [
     {
       "id": "publishing.scope",
       "kind": "panel",

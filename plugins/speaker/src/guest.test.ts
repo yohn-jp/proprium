@@ -322,3 +322,10 @@ test("evaluation and gate caches are snapshot-keyed and latest reads only valida
   assert.equal(latest.exists, true);
   assert.equal((latest.report as Record<string, unknown>).counts && typeof (latest.report as Record<string, unknown>).counts, "object");
 });
+
+test("Speaker manifest passes the release registry declaration validator", async () => {
+  const validatorPath: string = "../../../scripts/authoring-manifest-schema.mjs";
+  const { assertAuthoringDeclarations } = await import(validatorPath);
+  const manifest = JSON.parse(readFileSync(new URL("../plugin.json", import.meta.url), "utf8"));
+  await assertAuthoringDeclarations(manifest.id, manifest.capabilities, manifest.actions, manifest.ui ?? []);
+});

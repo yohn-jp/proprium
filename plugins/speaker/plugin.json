@@ -1310,6 +1310,18 @@
       "schema_version": 1,
       "effect": "propose",
       "input_schema": {
+        "type": "object",
+        "properties": {
+          "mode": true,
+          "scene_id": true,
+          "sentence_index": true,
+          "dialogue_text": true,
+          "text_hash": true,
+          "speaker_entity_id": true,
+          "items": true,
+          "idempotency_key": true
+        },
+        "additionalProperties": false,
         "anyOf": [
           {
             "type": "object",
@@ -1476,6 +1488,16 @@
         ]
       },
       "output_schema": {
+        "type": "object",
+        "properties": {
+          "affected_lines": true,
+          "expected_revisions": true,
+          "provenance": true,
+          "proposal_id": true,
+          "status": true,
+          "preview": true
+        },
+        "additionalProperties": false,
         "anyOf": [
           {
             "type": "object",
