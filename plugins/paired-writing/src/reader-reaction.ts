@@ -7,7 +7,7 @@ import { exactKeys, identity, record } from "./validation.js";
 import { parse } from "yaml";
 import { sha256 } from "./sha256.js";
 
-export interface ReaderSummary {chapterId:string;summaryLines:readonly string[];path:string;revision:string;source_files:readonly {path:string;revision:string}[]}
+export interface ReaderSummary {chapterId:string;summaryLines:readonly string[];path:string;revision:string;source_files:readonly {path:string;revision:string}[];context_files:readonly {path:string;revision:string}[];child_summary_files:readonly {path:string;revision:string}[]}
 const COMMON="あなたは小説執筆支援アシスタントです。\n主張には根拠の引用を付けてください。引用できない内容は断言しないでください。\n出力は日本語で行ってください。";
 /** Port of the pinned first-read-reaction-v3 template; callers supply verified accepted summaries. */
 export function renderReaderReactionPrompt(chapterId:string,summaries:readonly Pick<ReaderSummary,"chapterId"|"summaryLines">[]):string {
@@ -19,18 +19,18 @@ export function* generateReaderReaction(host:GuestHost,request:ActionRequest,cha
  if(!chapterId||chapterId.length>256||summaries.length>256)throw new PairedError("invalid_input","Reader reaction context is invalid");
  const prompt=renderReaderReactionPrompt(chapterId,summaries);
  if(new TextEncoder().encode(prompt).byteLength>512*1024)throw new PairedError("capacity","Reader reaction context is too large");
- const response=yield* generateProvider(host,request,{feature:"first-read-reaction",prompt,promptVersion:"first-read-reaction-v3",maxOutputTokens:1024,sourceManifest:summaries.map(({chapterId,path,revision,source_files})=>({chapterId,path,revision,source_files}))});
+ const response=yield* generateProvider(host,request,{feature:"first-read-reaction",prompt,promptVersion:"first-read-reaction-v3",maxOutputTokens:1024,sourceManifest:summaries.map(({chapterId,path,revision,source_files,context_files,child_summary_files})=>({chapterId,path,revision,source_files,context_files,child_summary_files}))});
  let raw:unknown;try{raw=JSON.parse(response.text);}catch{throw new PairedError("invalid_input","Reader reaction provider returned invalid JSON");}
  if(!raw||typeof raw!=="object"||Array.isArray(raw)||Object.keys(raw).some(key=>!["questions","expectations","confusions"].includes(key)))throw new PairedError("invalid_input","Reader reaction provider response is invalid");
  const value=raw as Record<string,unknown>;
  for(const key of ["questions","expectations","confusions"]) if(!Array.isArray(value[key])||(value[key] as unknown[]).length>32||(value[key] as unknown[]).some(item=>typeof item!=="string"||item.length>4000))throw new PairedError("invalid_input",`Reader reaction ${key} is invalid`);
- return {...value,sources:summaries.map(({chapterId,path,revision,source_files})=>({chapterId,path,revision,source_files})),provenance:response.provenance};
+ return {...value,sources:summaries.map(({chapterId,path,revision,source_files,context_files,child_summary_files})=>({chapterId,path,revision,source_files,context_files,child_summary_files})),provenance:response.provenance};
 }
 
 interface TreeItem {id:string;kind:string;metadata_path:string;metadata_revision?:string;manuscript_path?:string}
 interface TreePage {items:TreeItem[];next_cursor:string|null;tree_revision:string}
 interface FileItem {path:string;revision:string}
-interface ChildSource {id:string;metadata_path:string;metadata_revision:string;manuscript_path:string;manuscript_revision:string}
+interface ChildSource {id:string;metadata_path:string;metadata_revision:string;manuscript_path:string;manuscript_revision:string;summary_path:string;summary_revision:string}
 
 /** Use only Narrative hierarchy and Host file metadata; never read manuscripts for reaction. */
 export function* prepareReaderReaction(input:unknown,host:GuestHost,request:ActionRequest):Generator<HostCall,unknown,unknown> {
@@ -67,23 +67,33 @@ export function* prepareReaderReaction(input:unknown,host:GuestHost,request:Acti
   if(!raw||typeof raw!=="object"||Array.isArray(raw)){diagnostics.push({chapterId:chapter.id,code:"summary_invalid"});continue;}
   const data=raw as Record<string,unknown>;
   if(data.id!==chapter.id||!Array.isArray(data.summaryLines)||!data.summaryLines.length||data.summaryLines.length>12||data.summaryLines.some(line=>typeof line!=="string"||line.length>4000)){diagnostics.push({chapterId:chapter.id,code:"summary_invalid"});continue;}
-  if(!Array.isArray(data.children)||!Array.isArray(data.source_files)){diagnostics.push({chapterId:chapter.id,code:"summary_unverified"});continue;}
+  if(!Array.isArray(data.children)||!Array.isArray(data.source_files)||!Array.isArray(data.context_files)){diagnostics.push({chapterId:chapter.id,code:"summary_unverified"});continue;}
   const current=(yield* children(chapter.id)).filter(item=>item.kind==="scene");const listed=data.children as ChildSource[];
-  const valid=listed.length===current.length && listed.every((child,index)=>{const scene=current[index];return child&&scene&&child.id===scene.id&&child.metadata_path===scene.metadata_path&&child.metadata_revision===scene.metadata_revision&&child.manuscript_path===scene.manuscript_path&&files.get(child.metadata_path)===child.metadata_revision&&files.get(child.manuscript_path)===child.manuscript_revision;});
+  if(listed.some(child=>!child || typeof child.summary_path!=="string" || typeof child.summary_revision!=="string")){diagnostics.push({chapterId:chapter.id,code:"summary_unverified"});continue;}
+  const valid=listed.length===current.length && listed.every((child,index)=>{const scene=current[index];return child&&scene&&child.id===scene.id&&child.metadata_path===scene.metadata_path&&child.metadata_revision===scene.metadata_revision&&child.manuscript_path===scene.manuscript_path&&files.get(child.metadata_path)===child.metadata_revision&&files.get(child.manuscript_path)===child.manuscript_revision&&files.get(child.summary_path)===child.summary_revision;});
   if(!valid){diagnostics.push({chapterId:chapter.id,code:"summary_stale"});continue;}
-  const expected=listed.flatMap(child=>[{path:child.metadata_path,revision:child.metadata_revision},{path:child.manuscript_path,revision:child.manuscript_revision}]);
+  const expected=listed.flatMap(child=>[{path:child.metadata_path,revision:child.metadata_revision},{path:child.manuscript_path,revision:child.manuscript_revision},{path:child.summary_path,revision:child.summary_revision}]);
   const sourceFiles=data.source_files as unknown[];
   const sourcesValid=sourceFiles.length===expected.length && sourceFiles.every((item,index)=>{
    if(!item||typeof item!=="object"||Array.isArray(item))return false;
    const row=item as Record<string,unknown>, wanted=expected[index]!;
    return Object.keys(row).length===2 && row.path===wanted.path && row.revision===wanted.revision;
   });
-  const hash=sha256(new TextEncoder().encode(JSON.stringify(listed.map(child=>[child.id,child.manuscript_revision]))));
-  if(!sourcesValid || data.sourceHash!==hash){diagnostics.push({chapterId:chapter.id,code:"summary_stale"});continue;}
-  summaries.push({chapterId:chapter.id,summaryLines:data.summaryLines as string[],path,revision,source_files:expected});
+  const hash=sha256(new TextEncoder().encode(JSON.stringify(listed.map(child=>[child.id,child.manuscript_revision,child.summary_revision]))));
+  const seenContext=new Set<string>();
+  const contextValid=data.context_files.length<=1000 && data.context_files.every(item=>{
+   if(!item||typeof item!=="object"||Array.isArray(item))return false;
+   const row=item as Record<string,unknown>;
+   if(Object.keys(row).length!==2||typeof row.path!=="string"||typeof row.revision!=="string"||seenContext.has(row.path)||files.get(row.path)!==row.revision)return false;
+   seenContext.add(row.path);return true;
+  });
+  if(!sourcesValid || !contextValid || data.sourceHash!==hash){diagnostics.push({chapterId:chapter.id,code:"summary_stale"});continue;}
+  summaries.push({chapterId:chapter.id,summaryLines:data.summaryLines as string[],path,revision,source_files:expected,context_files:data.context_files as {path:string;revision:string}[],child_summary_files:listed.map(child=>({path:child.summary_path,revision:child.summary_revision}))});
  }
  const prompt=renderReaderReactionPrompt(target,summaries);if(new TextEncoder().encode(prompt).byteLength>512*1024)throw new PairedError("capacity","Reader reaction context is too large");
- return {prompt,promptVersion:"first-read-reaction-v3",provider_invoked:false,snapshot:request.snapshot,summaries,diagnostics};
+ const result={prompt,promptVersion:"first-read-reaction-v3",provider_invoked:false,snapshot:request.snapshot,summaries,diagnostics};
+ if(new TextEncoder().encode(JSON.stringify(result)).byteLength>768*1024)throw new PairedError("capacity","Reader reaction preview exceeds its output limit");
+ return result;
 }
 
 /** Public preview and suggest resolve trusted workspace context themselves. */
@@ -92,5 +102,7 @@ export function* suggestReaderReaction(input:unknown,host:GuestHost,request:Acti
  const prepared=(yield* prepareReaderReaction(input,host,request)) as {summaries:ReaderSummary[];diagnostics:unknown[]};
  const target=identity(record(input,"input").chapterId,"chapterId");
  const value=(yield* generateReaderReaction(host,request,target,prepared.summaries,provider)) as Record<string,unknown>;
- return {...value,snapshot:request.snapshot,diagnostics:prepared.diagnostics};
+ const result={...value,snapshot:request.snapshot,diagnostics:prepared.diagnostics};
+ if(new TextEncoder().encode(JSON.stringify(result)).byteLength>768*1024)throw new PairedError("capacity","Reader reaction result exceeds its output limit");
+ return result;
 }

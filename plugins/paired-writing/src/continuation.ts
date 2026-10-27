@@ -166,7 +166,7 @@ export function* previewContinuation(input:unknown,host:GuestHost,request:Action
  if(chapterId){
   const chapterResult=(yield* prepareReaderReaction({chapterId},host,request)) as {summaries:ReaderSummary[];diagnostics:Array<{chapterId:string;code:string}>};
   const summary=chapterResult.summaries.find(item=>item.chapterId===chapterId);
-  if(summary){chapterSummary={chapterId,text:summary.summaryLines.join("\n")};sources.push({path:summary.path,revision:summary.revision},...summary.source_files);}
+  if(summary){chapterSummary={chapterId,text:summary.summaryLines.join("\n")};sources.push({path:summary.path,revision:summary.revision},...summary.source_files,...summary.context_files,...summary.child_summary_files);}
   for(const entry of chapterResult.diagnostics.filter(item=>item.chapterId===chapterId))diagnostics.push(entry.code);
  }
  const retrievalHits:Array<{entityId:string;text:string}>=[];const query=recent.slice(-3).join(" ").trim();
