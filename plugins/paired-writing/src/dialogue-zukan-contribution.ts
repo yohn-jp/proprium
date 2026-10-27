@@ -32,7 +32,7 @@ const zukanInput={...obj({source:{enum:['manuscript','sandbox']},entityId:id,blo
 const suggestion=obj({targetEntityId:id,targetEntityRevision:revision,kind:{enum:['fact','dynamic','habit']},blockPath:str(128),proposedText:str(4000),evidence:array(span,1,64),confidence:{enum:['low','high']}});
 const zukanBase={source:{enum:['manuscript','sandbox']},entityId:id,targetRevision:revision,blockPath:str(128),sourceSessionId:id,turnRange,participants,prompt,promptVersion:id,evidence:array(span,0,80),sourceRevisions:array(sourceRevision,0,160),coverage:{enum:['partial','complete']},provider_invoked:{type:'boolean'},snapshot};
 const zukanOutput=obj({...zukanBase,suggestion,suggestions:array(obj({suggestion}),0,32),diagnostics:array(str(512),0,32),model:id,provider:id,provenance},['source','prompt','promptVersion','evidence','sourceRevisions','coverage','provider_invoked','snapshot']);
-const synonymEntry=obj({original:str(256),sentence:short,reason:str(512)},['original','sentence']);
+const synonymEntry=obj({original:str(256),sentence:short,reason:str(512,0)},['original','sentence']);
 const synonymInput=obj({suggestions:array(synonymEntry,1,8)});
 const synonymResult=obj({term:str(256),sentence:short,reason:str(512),candidates:array(str(256),3,5),prompt,model:id,provider:id,promptVersion:id,citations:array(source,0,0),provenance},['term','sentence','candidates','prompt','model','provider','promptVersion','citations','provenance']);
 const synonymOutput=obj({suggestions:array(synonymResult,1,8)});
@@ -49,6 +49,7 @@ export const descriptors:ActionDescriptor[]=[
  descriptor('paired.synonyms.suggest',synonymInput,synonymOutput,generateCaps),descriptor('paired.zukan.propose',proposalInput,proposalOutput,[...readCaps,'workspace.change.propose'],'propose'),
 ];
 function normalizeTurn(input: Record<string,unknown>):Record<string,unknown> { return Array.isArray(input.precedingLines) ? {...input,precedingLines:input.precedingLines.map(value=>{ if (!value || typeof value !== 'object' || Array.isArray(value)) return value; const row=value as Record<string,unknown>; return 'speaker_id' in row ? {speakerEntityId:row.speaker_id,text:row.text} : row; })} : input; }
+function normalizeSynonyms(input: Record<string,unknown>):Record<string,unknown> { return Array.isArray(input.suggestions) ? {...input,suggestions:input.suggestions.map(value=>{ if (!value || typeof value !== 'object' || Array.isArray(value)) return value; const row=value as Record<string,unknown>; if (row.reason !== '') return row; const {reason: _empty,...rest}=row; return rest; })} : input; }
 export function handlers(generate:DialogueGenerate):Record<string,Handler> { return {
  'paired.dialogue.topics.preview':(input,request,host)=>previewDialogueTopics(input,host,request),
  'paired.dialogue.topics.suggest':(input,request,host)=>suggestDialogueTopics(input,host,request,generate),
@@ -58,7 +59,7 @@ export function handlers(generate:DialogueGenerate):Record<string,Handler> { ret
  'paired.zukan.sandbox.preview':function*(input,request,host) { const result=yield* previewZukan({source:'sandbox',sourceSessionId:input.sketchId,...(input.turnRange === undefined ? {} : {turnRange:input.turnRange})},host,request); const {participantRevisions: _internal,...output}=result; return output; },
  'paired.zukan.preview':function*(input,request,host) { const result=yield* previewZukan(input,host,request); const {participantRevisions: _internal,...output}=result; return output; },
  'paired.zukan.suggest':function*(input,request,host) { const result=yield* suggestZukan(input,host,request,generate); const {participantRevisions: _internal,...output}=result; return output; },
- 'paired.synonyms.suggest':(input,request,host)=>suggestSynonyms(input,host,request,generate),
+ 'paired.synonyms.suggest':(input,request,host)=>suggestSynonyms(normalizeSynonyms(input),host,request,generate),
  'paired.zukan.propose':function*(input,request,host) { const result=(yield* proposeZukanSuggestion(input,host,request)) as Record<string,unknown>;if(typeof result.suggestionId!=='string'||typeof result.proposalId!=='string'||typeof result.proposalStatus!=='string')throw new PairedError('unsupported_format','Knowledge proposal receipt is malformed');return {suggestionId:result.suggestionId,proposalId:result.proposalId,proposalStatus:result.proposalStatus}; },
 }; }
 
