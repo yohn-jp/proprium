@@ -227,17 +227,17 @@ function yamlParts(path: string, content: string): { raw: Record<string, unknown
   return { raw: parsed.raw, parts };
 }
 
-export function parseSemanticSourceFile(path: string, revision: string, content: string): SemanticSourceEntity | null {
-  if (!isSemanticSourcePath(path)) return null;
+export function parseSemanticSourceFile(path: string, revision: string, content: string, linked?: { entityId: string; type: "manuscript" }): SemanticSourceEntity | null {
+  if (!linked && !isSemanticSourcePath(path)) return null;
   const isMarkdown = /\.md$/iu.test(path);
   const parsed = isMarkdown ? markdownParts(path, content) : yamlParts(path, content);
   if (!parsed) return null;
   const { raw, parts } = parsed;
-  const id = isMarkdown
+  const id = linked?.entityId ?? (isMarkdown
     ? `ms-${path.slice("manuscript/".length).replaceAll("/", "-").replace(/\.md$/iu, "")}`
-    : typeof raw.id === "string" ? raw.id : "";
+    : typeof raw.id === "string" ? raw.id : "");
   if (!id) return null;
-  const type = inferredType(path, raw);
+  const type = linked?.type ?? inferredType(path, raw);
   if (!EMBEDDABLE_TYPES.has(type)) return { id, type, path, revision, aliases: [], passages: [] };
   const name = typeof raw.name === "string" ? raw.name : typeof raw.title === "string" && isMarkdown ? raw.title : undefined;
   const aliases = Array.isArray(raw.aliases) ? raw.aliases.filter((alias): alias is string => typeof alias === "string") : [];

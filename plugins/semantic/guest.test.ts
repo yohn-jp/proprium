@@ -16,6 +16,7 @@ function startInvoke(actionId: string, input: Record<string, unknown>) {
     snapshot,
     input,
     deadline_ms: 30_000,
+    idempotency_key: "test-key",
   }));
 }
 
@@ -39,7 +40,9 @@ test("guest routes term candidates through the canonical snapshot and determinis
 });
 
 test("index and model actions report their unavailable state without loading or fabricating data", () => {
-  const status = JSON.parse(startInvoke("proprium.semantic.index.status", {})) as Record<string, any>;
+  let status = JSON.parse(startInvoke("proprium.semantic.index.status", {})) as Record<string, any>;
+  assert.equal(status.operation, "workspace.derived.cache.get");
+  status = JSON.parse(guest.invoke(JSON.stringify({ kind: "host_response", call_id: status.call_id, ok: true, value: { found: false } })));
   assert.equal(status.ok, true);
   assert.equal(status.value.index.state, "missing");
   assert.equal(status.value.resources.modelLoaded, false);
@@ -51,16 +54,19 @@ test("index and model actions report their unavailable state without loading or 
   assert.deepEqual(empty.value.results, []);
   guest.dispose();
 
-  const query = JSON.parse(startInvoke("proprium.semantic.passages.query", { query: "旅", granularity: "sentence", limit: 10 })) as Record<string, any>;
+  let query = JSON.parse(startInvoke("proprium.semantic.passages.query", { query: "旅", granularity: "sentence", limit: 10 })) as Record<string, any>;
+  query = JSON.parse(guest.invoke(JSON.stringify({ kind: "host_response", call_id: query.call_id, ok: true, value: { found: false } })));
   assert.equal(query.ok, false);
   assert.equal(query.error.code, "index_missing");
   assert.doesNotMatch(query.error.message, /asset is unavailable/i);
   guest.dispose();
 
-  const rebuild = JSON.parse(startInvoke("proprium.semantic.index.rebuild", { taskId: "build-1" })) as Record<string, any>;
+  let rebuild = JSON.parse(startInvoke("proprium.semantic.index.rebuild", { taskId: "build-1" })) as Record<string, any>;
+  rebuild = JSON.parse(guest.invoke(JSON.stringify({ kind: "host_response", call_id: rebuild.call_id, ok: true, value: { found: false } })));
+  assert.equal(rebuild.operation, "workspace.file.list");
+  rebuild = JSON.parse(guest.invoke(JSON.stringify({ kind: "host_response", call_id: rebuild.call_id, ok: true, value: { entries: [], next_cursor: null } })));
   assert.equal(rebuild.ok, false);
-  assert.equal(rebuild.error.code, "dependency_unavailable");
-  assert.match(rebuild.error.message, /index rebuild/i);
+  assert.equal(rebuild.error.code, "provider_unavailable");
   guest.dispose();
 });
 
