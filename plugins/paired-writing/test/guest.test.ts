@@ -243,3 +243,12 @@ test("proposal receipt actions are scoped read-only Host calls", async () => {
   assert.deepEqual(harness.calls.at(-1)?.payload, { proposal_id: "proposal-1", ref: "source-1", offset: 0, length: 65_536 });
   assert.equal(harness.calls.some((call) => ["workspace.change.approve", "workspace.change.apply", "workspace.change.reject"].includes(call.operation)), false);
 });
+
+test("rewrite panel binds its proposal to the exact manuscript citation", async () => {
+  const { readFile } = await import("node:fs/promises");
+  const manifest = JSON.parse(await readFile(new URL("../plugin.json", import.meta.url), "utf8"));
+  const panel = manifest.ui.find((entry: { id: string }) => entry.id === "paired-writing");
+  const candidates = panel.body.tabs.find((tab: { id: string }) => tab.id === "rewrite-candidates-tab").body;
+  assert.equal(candidates.item_action.input_template.manuscriptPath.data_key, "last_action_result.citations.0.path");
+  assert.equal(candidates.item_action.input_template.manuscriptRevision.data_key, "last_action_result.citations.0.revision");
+});

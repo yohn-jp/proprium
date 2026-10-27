@@ -13789,10 +13789,10 @@
                     "data_key": "last_action_result.sceneId"
                   },
                   "manuscriptPath": {
-                    "data_key": "last_action_result.sourceRevisions.1.path"
+                    "data_key": "last_action_result.citations.0.path"
                   },
                   "manuscriptRevision": {
-                    "data_key": "last_action_result.sourceRevisions.1.revision"
+                    "data_key": "last_action_result.citations.0.revision"
                   },
                   "selection": {
                     "data_key": "last_action_result.selection"
