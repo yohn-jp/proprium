@@ -62,6 +62,9 @@ test("index and model actions report their unavailable state without loading or 
   guest.dispose();
 
   let rebuild = JSON.parse(startInvoke("proprium.semantic.index.rebuild", { taskId: "build-1" })) as Record<string, any>;
+  assert.equal(rebuild.operation, "workspace.derived.cache.put");
+  rebuild = JSON.parse(guest.invoke(JSON.stringify({ kind: "host_response", call_id: rebuild.call_id, ok: true, value: { stored: true } })));
+  assert.equal(rebuild.operation, "workspace.derived.cache.get");
   rebuild = JSON.parse(guest.invoke(JSON.stringify({ kind: "host_response", call_id: rebuild.call_id, ok: true, value: { found: false } })));
   assert.equal(rebuild.operation, "workspace.file.list");
   rebuild = JSON.parse(guest.invoke(JSON.stringify({ kind: "host_response", call_id: rebuild.call_id, ok: true, value: { entries: [], next_cursor: null } })));

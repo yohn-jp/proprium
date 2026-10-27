@@ -7,6 +7,7 @@ import { E5_MODEL } from './inference.ts';
 import { makeIndex, rankedIndex, validateIndex, decodeVector, type SemanticIndex } from './index.ts';
 import { sha256Text } from './sha256.ts';
 import { parseSemanticSourceFile } from './source.ts';
+import { assertSemanticTaskActive, beginSemanticTask, endSemanticTask, updateSemanticTask, type SemanticTaskPhase } from './tasks.ts';
 
 export interface SemanticEngine { ensure(host: GuestHost): Generator<HostCall, void, unknown>; embed(texts: readonly string[]): number[][]; model(): Record<string, unknown> }
 function failure(code: string, message: string): Error { return Object.assign(new Error(message), { code, retryable: false }); }
@@ -18,22 +19,46 @@ export function* loadIndex(request: ActionRequest, host: GuestHost): Generator<H
 }
 export function* rebuildIndex(input: { taskId: string }, request: ActionRequest, host: GuestHost, engine: SemanticEngine): Generator<HostCall, unknown, unknown> {
  if (!request.idempotency_key) throw failure('invalid_input', 'Host idempotency key is required for indexing');
+ beginSemanticTask(input.taskId);
+ try {
+ let lastProgress = 0;
+ function* progress(phase: SemanticTaskPhase, completed: number, total: number): Generator<HostCall, void, unknown> {
+   assertSemanticTaskActive();
+   const value = updateSemanticTask(phase, completed, total);
+   const now = Date.now();
+   if (now - lastProgress < 100) return;
+   lastProgress = now;
+   const response = yield* host.request<{ stored: boolean }>(HOST_OPERATIONS.cachePut, { key: { ...key(request), key: 'semantic-task-progress-v1' }, value });
+   if (!response || response.stored !== true) throw failure('storage_unknown', 'Host did not confirm Semantic task progress');
+   assertSemanticTaskActive();
+ }
+ yield* progress('cache_validation', 0, 1);
  let existing: SemanticIndex | undefined;
  try { existing = yield* loadIndex(request, host); }
  catch (error) { if (!["cache_corrupt", "index_stale"].includes(String((error as { code?: string })?.code))) throw error; }
  if (existing) return { snapshot: request.snapshot, taskId: input.taskId, scanned: 0, embedded: 0, reused: existing.passages.length, removed: 0, indexedGeneration: request.snapshot.worktree_generation };
+ yield* progress('source_scan', 0, 0);
  const corpus = yield* collectSemanticCorpus(host, request);
  // A single atomic record preserves the previous generation on cancellation;
  // the Host continuation limit bounds this implementation to small corpora.
  if (corpus.passages.length > 256) throw failure('capacity', 'Semantic index exceeds the current 256-passage atomic cache limit');
+ yield* progress('embedding', 0, corpus.passages.length);
  yield* engine.ensure(host);
+ assertSemanticTaskActive();
  const vectors: number[][] = [];
- for (let offset = 0; offset < corpus.passages.length; offset += 32) vectors.push(...engine.embed(corpus.passages.slice(offset, offset + 32).map(item => item.text)));
+ for (let offset = 0; offset < corpus.passages.length; offset += 32) {
+   assertSemanticTaskActive();
+   vectors.push(...engine.embed(corpus.passages.slice(offset, offset + 32).map(item => item.text)));
+   yield* progress('embedding', Math.min(offset + 32, corpus.passages.length), corpus.passages.length);
+ }
  const index = makeIndex(request, corpus, vectors);
  if (new TextEncoder().encode(JSON.stringify(index)).length > 700_000) throw failure('capacity', 'Semantic index exceeds the bounded Host continuation limit');
+ yield* progress('cache_publish', 0, 1);
+ assertSemanticTaskActive();
  const result = yield* host.request<{ stored: boolean }>(HOST_OPERATIONS.cachePut, { key: key(request), value: index });
  if (!result || result.stored !== true) throw failure('storage_unknown', 'Host did not confirm Semantic index storage');
  return { snapshot: request.snapshot, taskId: input.taskId, scanned: corpus.scanned, embedded: corpus.passages.length, reused: 0, removed: 0, indexedGeneration: request.snapshot.worktree_generation };
+ } finally { endSemanticTask(); }
 }
 export function* queryIndex(input: { query: string; granularity: 'scene' | 'sentence'; limit: number; excludeSceneIds?: string[] }, request: ActionRequest, host: GuestHost, engine: SemanticEngine): Generator<HostCall, unknown, unknown> {
  if (!input.query.trim()) return { snapshot: request.snapshot, model: engine.model(), results: [] };

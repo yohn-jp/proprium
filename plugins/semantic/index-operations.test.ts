@@ -15,7 +15,7 @@ function run(generator: Generator<any,any,any>) {
  while (!state.done) {
    const { operation, payload } = state.value; let value: any;
    if (operation === 'workspace.derived.cache.get') value = stored ? { found: true, value: stored } : { found: false };
-   else if (operation === 'workspace.derived.cache.put') { stored = payload.value; value = { stored: true }; }
+   else if (operation === 'workspace.derived.cache.put') { if (payload.key.key === 'semantic-index-v2') stored = payload.value; value = { stored: true }; }
    else if (operation === 'workspace.file.list') value = { entries: Object.entries(files).map(([path,text]) => ({path, revision, byte_length: new TextEncoder().encode(text).length, media_type:'text/plain'})), next_cursor:null };
    else if (operation === 'workspace.file.read') { const bytes=[...new TextEncoder().encode(files[payload.path]!)]; value={revision,total_bytes:bytes.length,offset:0,bytes,next_offset:null}; }
    else throw new Error(operation);
@@ -94,4 +94,30 @@ test('a 120-passage work fits in the atomic index without caching prose', () => 
    assert.ok(new TextEncoder().encode(JSON.stringify(stored)).length < 700_000);
    assert.equal(JSON.stringify(stored).includes('星を見る。'), false);
  } finally { files['manuscript/custom.md'] = previous!; }
+});
+test('active rebuild reports progress, supports cooperative cancellation and leaves the complete index alone', async () => {
+ const { semanticTasks, cancelSemanticTask } = await import('./tasks.ts');
+ const previous = { sentinel: 'previous complete index' }; stored = previous;
+ const generator = rebuildIndex({ taskId: 'cancel-me' }, context, host, engine);
+ const first = generator.next();
+ assert.equal(first.value.operation, 'workspace.derived.cache.put');
+ assert.deepEqual(first.value.payload.value, { taskId: 'cancel-me', phase: 'cache_validation', completed: 0, total: 1 });
+ assert.deepEqual(semanticTasks(), [first.value.payload.value]);
+ assert.equal(cancelSemanticTask('other'), false);
+ assert.equal(cancelSemanticTask('cancel-me'), true);
+ assert.equal(cancelSemanticTask('cancel-me'), false);
+ assert.throws(() => generator.next({ stored: true }), (error: any) => error.code === 'cancelled');
+ assert.equal(stored, previous);
+ assert.deepEqual(semanticTasks(), []);
+ assert.equal(cancelSemanticTask('cancel-me'), false);
+});
+test('a second active task is rejected and disposing a generator clears its task', async () => {
+ const { semanticTasks } = await import('./tasks.ts');
+ const first = rebuildIndex({ taskId: 'first' }, context, host, engine);
+ first.next();
+ const second = rebuildIndex({ taskId: 'second' }, context, host, engine);
+ assert.throws(() => second.next(), (error: any) => error.code === 'capacity');
+ assert.equal(semanticTasks()[0]?.taskId, 'first');
+ first.return(undefined);
+ assert.deepEqual(semanticTasks(), []);
 });

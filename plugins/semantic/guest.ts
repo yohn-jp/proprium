@@ -4,6 +4,7 @@ import type { ActionRequest } from "../../app/src/browser/proprium/authoring/typ
 import { clusterTerms, EMBEDDING_MODEL, RERANKER_MODEL, type CandidateTerm } from "./core.ts";
 import { E5_MODEL, embedPassages, embeddingLoaded, ensureEmbedding, releaseEmbedding } from "./inference.ts";
 import { loadIndex, rebuildIndex, queryIndex, contradictionPage } from "./index-operations.ts";
+import { cancelSemanticTask, endSemanticTask, semanticTasks } from "./tasks.ts";
 
 function fail(code: string, message: string): Error {
   return Object.assign(new Error(message), { code, retryable: false });
@@ -50,9 +51,9 @@ const indexStatus: Handler = function* (raw, context, host) {
   try { index = yield* loadIndex(context as ActionRequest, host); }
   catch (error) {
     if ((error as { code?: string })?.code !== "cache_corrupt" && (error as { code?: string })?.code !== "index_stale") throw error;
-    return { snapshot: context.snapshot, model: unavailableModel("embedding"), index: { state: "stale", passageCount: 0, sourceGeneration: context.snapshot.worktree_generation, indexedAt: null }, resources: { modelLoaded: embeddingLoaded(), rerankerLoaded: false, locality: "local", downloadRequired: !embeddingLoaded() }, activeTasks: [] };
+    return { snapshot: context.snapshot, model: unavailableModel("embedding"), index: { state: "stale", passageCount: 0, sourceGeneration: context.snapshot.worktree_generation, indexedAt: null }, resources: { modelLoaded: embeddingLoaded(), rerankerLoaded: false, locality: "local", downloadRequired: !embeddingLoaded() }, activeTasks: semanticTasks() };
   }
-  return { snapshot: context.snapshot, model: unavailableModel("embedding"), index: { state: index ? "ready" : "missing", passageCount: index?.passages.length ?? 0, sourceGeneration: context.snapshot.worktree_generation, indexedAt: null }, resources: { modelLoaded: embeddingLoaded(), rerankerLoaded: false, locality: "local", downloadRequired: !embeddingLoaded() }, activeTasks: [] };
+  return { snapshot: context.snapshot, model: unavailableModel("embedding"), index: { state: index ? "ready" : "missing", passageCount: index?.passages.length ?? 0, sourceGeneration: context.snapshot.worktree_generation, indexedAt: null }, resources: { modelLoaded: embeddingLoaded(), rerankerLoaded: false, locality: "local", downloadRequired: !embeddingLoaded() }, activeTasks: semanticTasks() };
 };
 const indexRebuild: Handler = function* (raw, context, host) {
   const input = exactObject(raw, ["taskId"], "input");
@@ -199,12 +200,13 @@ const settingsUpdate: Handler = (raw, context) => {
 
 const taskStatus: Handler = (raw, context) => {
   parseEmpty(raw);
-  return { snapshot: context.snapshot, activeTasks: [] };
+  return { snapshot: context.snapshot, activeTasks: semanticTasks() };
 };
 
 const taskCancel: Handler = (raw, context) => {
   const input = exactObject(raw, ["taskId"], "input");
-  return { snapshot: context.snapshot, taskId: safeTaskId(input.taskId), cancelled: false };
+  const taskId = safeTaskId(input.taskId);
+  return { snapshot: context.snapshot, taskId, cancelled: cancelSemanticTask(taskId) };
 };
 
 const implementation = createGuest("proprium.semantic", {
@@ -224,6 +226,7 @@ export const guest = {
   initialize: implementation.initialize,
   invoke: implementation.invoke,
   dispose(): void {
+    endSemanticTask();
     releaseEmbedding();
     implementation.dispose();
   },
