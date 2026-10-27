@@ -8821,7 +8821,10 @@
                   "label": "Scene ID",
                   "type": "string",
                   "min_length": 1,
-                  "max_length": 256
+                  "max_length": 256,
+                  "initial_value": {
+                    "data_key": "host_context.scene_id"
+                  }
                 },
                 {
                   "id": "speaker_count",
@@ -8865,7 +8868,10 @@
                   "label": "Scene ID",
                   "type": "string",
                   "min_length": 1,
-                  "max_length": 256
+                  "max_length": 256,
+                  "initial_value": {
+                    "data_key": "host_context.scene_id"
+                  }
                 },
                 {
                   "id": "idempotency_key",
@@ -8908,7 +8914,10 @@
             "type": "string",
             "required": true,
             "min_length": 1,
-            "max_length": 256
+            "max_length": 256,
+            "initial_value": {
+              "data_key": "host_context.scene_id"
+            }
           },
           {
             "id": "sentence_index",
@@ -8980,7 +8989,10 @@
                   "label": "Optional scene ID",
                   "type": "string",
                   "min_length": 1,
-                  "max_length": 256
+                  "max_length": 256,
+                  "initial_value": {
+                    "data_key": "host_context.scene_id"
+                  }
                 },
                 {
                   "id": "min_confidence",
@@ -9120,7 +9132,10 @@
                         "type": "string",
                         "required": true,
                         "min_length": 1,
-                        "max_length": 256
+                        "max_length": 256,
+                        "initial_value": {
+                          "data_key": "host_context.scene_id"
+                        }
                       }
                     ],
                     "submit": {
@@ -9147,7 +9162,10 @@
                         "type": "string",
                         "required": true,
                         "min_length": 1,
-                        "max_length": 256
+                        "max_length": 256,
+                        "initial_value": {
+                          "data_key": "host_context.scene_id"
+                        }
                       },
                       {
                         "id": "text",

@@ -2714,7 +2714,10 @@
                   "label": "Scene ID",
                   "type": "string",
                   "required": true,
-                  "max_length": 256
+                  "max_length": 256,
+                  "initial_value": {
+                    "data_key": "host_context.scene_id"
+                  }
                 }
               ],
               "submit": {
@@ -2885,7 +2888,10 @@
                   "label": "Scene ID",
                   "type": "string",
                   "required": true,
-                  "max_length": 256
+                  "max_length": 256,
+                  "initial_value": {
+                    "data_key": "host_context.scene_id"
+                  }
                 }
               ],
               "submit": {
@@ -3165,7 +3171,10 @@
                   "label": "Scene ID",
                   "type": "string",
                   "required": true,
-                  "max_length": 256
+                  "max_length": 256,
+                  "initial_value": {
+                    "data_key": "host_context.scene_id"
+                  }
                 }
               ],
               "submit": {
@@ -3251,7 +3260,10 @@
                   "id": "scene_id",
                   "label": "Scene ID (optional)",
                   "type": "string",
-                  "max_length": 256
+                  "max_length": 256,
+                  "initial_value": {
+                    "data_key": "host_context.scene_id"
+                  }
                 },
                 {
                   "id": "proposal_status",
