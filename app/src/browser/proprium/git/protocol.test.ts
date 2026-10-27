@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { isGitHubWorkspaceIdentity, validateWorkspaceIdentity, type LocalWorkspaceIdentity, type WorkspaceIdentity } from "./protocol.js";
+import { isGitHubWorkspaceIdentity, isValidGitBranchName, validateWorkspaceIdentity, type LocalWorkspaceIdentity, type WorkspaceIdentity } from "./protocol.js";
 
 const localIdentity: LocalWorkspaceIdentity = {
   provider: "local",
@@ -33,4 +33,15 @@ test("rejects local identities that try to claim GitHub identity fields", () => 
     ...localIdentity,
     repositoryId: 823456789,
   } as WorkspaceIdentity));
+});
+
+test("accepts legal plus branch names but blocks unsafe Git refnames", () => {
+  for (const branch of ["feature+draft", "fix/topic.v2", "release_01"]) {
+    assert.equal(isValidGitBranchName(branch), true);
+    assert.doesNotThrow(() => validateWorkspaceIdentity({ ...localIdentity, branch }));
+  }
+  for (const branch of ["../token", "x//y", "x.lock/y", "name@{0", "a:secret", "ends.", "-option"]) {
+    assert.equal(isValidGitBranchName(branch), false);
+    assert.throws(() => validateWorkspaceIdentity({ ...localIdentity, branch }));
+  }
 });

@@ -1,5 +1,5 @@
 import type { AppliedWorkspaceChange, FileRevisionExpectation, WorkspaceChange } from "../git/index.js";
-import { validateGitPath } from "../git/index.js";
+import { validateGitPath, isValidGitBranchName } from "../git/index.js";
 import type { ChangeSet as WireChangeSet, ChangeUnit, FileOperation, ReadPrecondition, Scope, Snapshot, SourceSpan } from "./types.js";
 
 /** The canonical H0 authoring scope. These identifiers are issued by the Host. */
@@ -296,8 +296,7 @@ function isCanonicalJson(value: unknown): boolean {
 }
 
 function validateScope(scope: WriterScope): void {
-  if (!record(scope) || !onlyKeys(scope, ["workspace_id", "repository_id", "branch", "generation"]) || !text(scope.workspace_id, 256) || /[\u0000-\u001f\u007f]/u.test(scope.workspace_id) || !text(scope.branch, 1024) ||
-      !/^[A-Za-z0-9._/-]+$/u.test(scope.branch) || scope.branch.startsWith("/") || scope.branch.endsWith("/") || scope.branch.includes("..") || scope.branch.includes("//") ||
+  if (!record(scope) || !onlyKeys(scope, ["workspace_id", "repository_id", "branch", "generation"]) || !text(scope.workspace_id, 256) || /[\u0000-\u001f\u007f]/u.test(scope.workspace_id) || !isValidGitBranchName(scope.branch) ||
       !text(scope.generation, 256) || /[\u0000-\u001f\u007f]/u.test(scope.generation) ||
       !(scope.repository_id === null || Number.isSafeInteger(scope.repository_id) && scope.repository_id > 0)) fail("invalid_input", "ChangeSet scope is invalid.");
 }

@@ -1,3 +1,4 @@
+import { isValidGitBranchName } from "./protocol.js";
 export type GitHubSyncErrorCode =
   | "authentication_required"
   | "authentication_expired"
@@ -224,9 +225,7 @@ export function createGitHubAccountSession(
               typeof owner !== "string" || !/^[A-Za-z0-9-]+$/u.test(owner) ||
               typeof repository.name !== "string" || !/^[A-Za-z0-9._-]+$/u.test(repository.name) ||
               typeof repository.full_name !== "string" || repository.full_name.toLowerCase() !== `${owner}/${repository.name}`.toLowerCase() ||
-              typeof repository.default_branch !== "string" || !/^[A-Za-z0-9._/-]+$/u.test(repository.default_branch) ||
-              repository.default_branch.startsWith("/") || repository.default_branch.endsWith("/") ||
-              repository.default_branch.includes("..") || repository.default_branch.includes("//") ||
+              !isValidGitBranchName(repository.default_branch) ||
               typeof repository.private !== "boolean") {
             throw new GitHubSyncError("git_error", "GitHub returned malformed repository metadata.");
           }
@@ -307,9 +306,7 @@ export function createGitHubAccountSession(
         }
         for (const raw of payload) {
           const branch = object(raw).name;
-          if (typeof branch !== "string" || branch.length > 255 || !/^[A-Za-z0-9._/-]+$/u.test(branch) ||
-              branch.startsWith("/") || branch.endsWith("/") || branch.includes("..") || branch.includes("//") ||
-              branch.includes("@{") || branch.split("/").some(part => part.startsWith(".") || part.endsWith(".") || part.toLowerCase().endsWith(".lock")) ||
+          if (!isValidGitBranchName(branch) ||
               seen.has(branch)) {
             throw new GitHubSyncError("git_error", "GitHub returned malformed or duplicate branch metadata.");
           }

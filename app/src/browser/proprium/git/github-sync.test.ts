@@ -130,7 +130,7 @@ test("account sessions list repositories and bind a workspace sync client withou
       full_name: "writer/notes",
       name: "notes",
       owner: { login: "writer" },
-      default_branch: "main",
+      default_branch: "feature+draft",
       private: true,
       permissions: { pull: true, push: true },
     }]);
@@ -144,7 +144,7 @@ test("account sessions list repositories and bind a workspace sync client withou
     fullName: "writer/notes",
     owner: "writer",
     name: "notes",
-    defaultBranch: "main",
+    defaultBranch: "feature+draft",
     private: true,
     permissions: { pull: true, push: true },
   }]);
