@@ -49,6 +49,8 @@ async function openSceneA(page: Page) {
   if (await menu.getAttribute('open') === null) await menu.locator(':scope > summary').click();
   await page.getByRole('button', { name: 'Work outlineを表示する', exact: true }).click();
   if (await configuration.getAttribute('open') !== null) await configuration.locator(':scope > summary').click();
+  const tab = page.getByRole('tab', { name: 'Work outline', exact: true }).first();
+  if (await tab.isVisible() && await tab.getAttribute('aria-selected') !== 'true') await tab.click();
   const outline = page.getByRole('tabpanel', { name: 'Work outline', exact: true }).first();
   await outline.getByRole('button', { name: '読み込む', exact: true }).click();
   await outline.getByText('第一巻', { exact: true }).click();
@@ -80,7 +82,7 @@ test('dirty draft prevents navigation without losing editor text', async ({ page
 
 test('portable marker validates its saved body and opens the scene', async ({ page }) => {
   await setup(page);
-  await showPanel(page, 'tools');
+  await showPanel(page, 'review');
   const portable = page.getByRole('region', { name: '端末別の保存位置' });
   await portable.getByRole('button', { name: '端末別の保存位置を確認' }).click();
   await expect(portable).toContainText('portable-test-device');
