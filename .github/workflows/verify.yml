@@ -119,14 +119,22 @@ jobs:
           PROPRIUM_E2E_GITHUB_REPOSITORY_ID: ${{ vars.PROPRIUM_E2E_GITHUB_REPOSITORY_ID }}
           PROPRIUM_E2E_GITHUB_BRANCH: ${{ vars.PROPRIUM_E2E_GITHUB_BRANCH }}
         run: pnpm test:browser:e2e
+      # Explicit environment ports are required: the imported shared
+      # Playwright base config populates PROPRIUM_E2E_PORT=4173 before the
+      # specialized config chooses its own fallback port. Never rely on
+      # fallback defaults when parallelizing suites.
       # Both use separate browser ports and output directories. Limit
       # concurrency to two resource-intensive Playwright invocations.
       - parallel:
           - name: Exercise Knowledge and Research authoring surfaces
             if: ${{ !cancelled() && steps.browser_engines.outcome == 'success' }}
+            env:
+              PROPRIUM_E2E_PORT: "4237"
             run: pnpm exec playwright test --config tests/browser/authoring-knowledge.playwright.config.ts
           - name: Preserve source BOM through Core editing and export
             if: ${{ !cancelled() && steps.browser_engines.outcome == 'success' }}
+            env:
+              PROPRIUM_E2E_PORT: "4282"
             run: pnpm exec playwright test --config tests/browser/authoring-bom-core.playwright.config.ts
       - name: Exercise signed v2 transport with its fixture setup
         if: ${{ !cancelled() && steps.browser_engines.outcome == 'success' }}
