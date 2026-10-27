@@ -24,5 +24,12 @@ export function* previewQa(input:unknown,host:GuestHost,request:ActionRequest):G
   }))) throw new PairedError("invalid_input","messages are invalid");
   if (!row.question && !(row.messages as Array<{role:string}>|undefined)?.some(item=>item.role==="user")) throw new PairedError("invalid_input","A user question is required");
   const file = row.sceneId === undefined ? undefined : yield* sceneText(host,request,identity(row.sceneId,"sceneId"));
-  return {prompt:`${COMMON}\n\n${QA}\n\n本文:\n${file?.text || "（関連シーンは指定されていません）"}\n\n読み取り専用ツールだけで事実を確認してください。回答はJSONオブジェクト1つで、answer、citations、confidenceを含めてください。citationsはツールが返した kind/id/quote の値をそのまま使い、根拠が無い回答は断定せず citations を空にしてください。confidenceは high / medium / low のいずれかです。`,promptVersion:"setting-qa.v1",provider_invoked:false,snapshot:request.snapshot,sources:file?[{path:file.path,revision:file.revision}]:[]};
+  const messages = [...((row.messages ?? []) as Array<{role:"user" | "assistant";content:string}>),
+    ...(typeof row.question === "string" ? [{role:"user" as const,content:row.question}] : [])];
+  const system = `${COMMON}\n\n${QA}\n\n本文:\n${file?.text || "（関連シーンは指定されていません）"}\n\n読み取り専用ツールだけで事実を確認してください。回答はJSONオブジェクト1つで、answer、citations、confidenceを含めてください。citationsはツールが返した kind/id/quote の値をそのまま使い、根拠が無い回答は断定せず citations を空にしてください。confidenceは high / medium / low のいずれかです。`;
+  const prompt = `${system}\n\n会話:\n${messages.map(message => `${message.role}: ${message.content}`).join("\n")}`;
+  const result = {prompt,system,messages,promptVersion:"setting-qa.v1",provider_invoked:false,snapshot:request.snapshot,sources:file?[{path:file.path,revision:file.revision}]:[]};
+  // Bound the serialized result including both the system prompt and displayed conversation.
+  if (new TextEncoder().encode(JSON.stringify(result)).byteLength > 768 * 1024) throw new PairedError("capacity", "QA preview exceeds its bounded output size");
+  return result;
 }

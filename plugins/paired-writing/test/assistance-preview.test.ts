@@ -37,3 +37,25 @@ test("QA preview rejects missing user input and unknown fields", () => {
   assert.throws(()=>run(previewQa({messages:[{role:"assistant",content:"hello"}]},host,request)),{code:"invalid_input"});
   assert.throws(()=>run(previewQa({question:"Q",extra:true},host,request)),{code:"invalid_input"});
 });
+test("QA preview includes each conversation turn and the current question", () => {
+  const first=run(previewQa({messages:[{role:"user",content:"古い質問"},{role:"assistant",content:"先の回答"}],question:"新しい質問"},host,request)).value;
+  const second=run(previewQa({messages:[{role:"user",content:"古い質問"},{role:"assistant",content:"先の回答"}],question:"別の質問"},host,request)).value;
+  assert.match(first.prompt,/古い質問/u); assert.match(first.prompt,/先の回答/u); assert.match(first.prompt,/新しい質問/u);
+  assert.notEqual(first.prompt,second.prompt);
+  assert.deepEqual(first.messages,[{role:"user",content:"古い質問"},{role:"assistant",content:"先の回答"},{role:"user",content:"新しい質問"}]);
+});
+test("QA preview rejects an oversized assembled request without truncation", () => {
+  const largeHost: GuestHost = { request(operation, payload) { return (function* () { return yield {operation,payload}; })() as never; } };
+  const generator=previewQa({question:"質問",sceneId:"s1"},largeHost,request);
+  let next=generator.next();
+  while(!next.done) {
+    const call=next.value;
+    if(call.operation === "workspace.plugin.invoke") next=generator.next({ok:true,scope,snapshot,value:call.payload.action_id === "proprium.narrative.scene.open" ? {scene:{id:"s1",metadata_path:"scene.yaml",metadata_revision:"meta"},manuscript_path:"scene.md",manuscript_revision:"rev"} : {scene_id:"s1",title:"Scene",metadata_revision:"meta",manuscript_path:"scene.md",manuscript_revision:"rev"}});
+    else if(call.operation === "workspace.file.read") {
+      const text="文".repeat(300000), bytes=[...new TextEncoder().encode(text)];
+      assert.throws(()=>generator.next({revision:"rev",total_bytes:bytes.length,offset:0,bytes,next_offset:null}),{code:"capacity"});
+      return;
+    } else throw new Error(`unexpected operation ${call.operation}`);
+  }
+  assert.fail("Expected oversized prompt to be rejected");
+});
