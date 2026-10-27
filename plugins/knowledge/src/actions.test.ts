@@ -631,3 +631,32 @@ test("Knowledge compiler rejects a state proposal with changed event meaning", (
   assert.equal((result.error as Record<string, unknown>).code, "snapshot_stale");
   guest.dispose();
 });
+
+test("reader projections use only current approved scene summary state changes", () => {
+  guest.initialize({ pluginId: "proprium.knowledge", version: "0.1.0", workspaceId: "workspace-1" });
+  const host = new HostFixture();
+  const put = (path: string, content: string) => { const bytes = encode.encode(content); host.files.set(path, { content, bytes, revision: createHash("sha256").update(bytes).digest("hex") }); };
+  const scenePath = "plot/volumes/v1/chapters/c1/scenes/s1.yaml", manuscript = "manuscript/v1/c1/s1.md", summaryPath = "plot/volumes/v1/chapters/c1/scene-summaries/scene-1.yaml";
+  put(scenePath, inputFiles[scenePath] + `manuscript: ${manuscript}\n`);
+  put(manuscript, "---\ntitle: scene\n---\n静かな朝。\n");
+  put("bible/items/item-crown.yaml", "id: item-crown\nname: 王冠\n");
+  const summary = { sceneId: "scene-1", summaryLines: ["一", "二", "三"], characters: [], stateChanges: ["王冠を隠した。"], sourceHash: host.files.get(manuscript)!.revision, promptVersion: "scene-summary@3", model: "model", knowledge_available: false, source_files: [{ path: scenePath, revision: host.files.get(scenePath)!.revision }, { path: manuscript, revision: host.files.get(manuscript)!.revision }], context_files: [] };
+  put(summaryPath, JSON.stringify(summary));
+  for (const [action, input, property] of [["knowledge.world-state.at-scene", { sceneId: "scene-1" }, "readerDisclosures"], ["knowledge.reader-model.build", { chapterId: "ch-1" }, "disclosures"]] as const) {
+    const result = request(host, input, action);
+    assert.equal(result.ok, true, JSON.stringify(result));
+    const value = result.value as Record<string, unknown>;
+    assert.ok((value[property] as Array<Record<string, unknown>>).some((event) => event.entityId === "item-crown" && event.source === "scene_summary"));
+    assert.ok((value.sourceFiles as Array<Record<string, unknown>>).some((source) => source.path === summaryPath && source.revision === host.files.get(summaryPath)!.revision));
+    assert.deepEqual(value.summaryDiagnostics, []);
+  }
+  guest.dispose();
+  guest.initialize({ pluginId: "proprium.knowledge", version: "0.1.0", workspaceId: "workspace-1" });
+  put(summaryPath, JSON.stringify({ ...summary, sourceHash: "stale" }));
+  const stale = request(host, { chapterId: "ch-1" }, "knowledge.reader-model.build");
+  assert.equal(stale.ok, true, JSON.stringify(stale));
+  const value = stale.value as Record<string, unknown>;
+  assert.ok(!(value.disclosures as Array<Record<string, unknown>>).some((event) => event.entityId === "item-crown"));
+  assert.deepEqual(value.summaryDiagnostics, [{ sceneId: "scene-1", path: summaryPath, code: "stale_summary" }]);
+  guest.dispose();
+});

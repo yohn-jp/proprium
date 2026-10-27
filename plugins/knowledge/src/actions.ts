@@ -20,6 +20,7 @@ import { appendProposedTextToNotes, collectNotesPlainTexts, normalizeNotes } fro
 import { stableRecordId, submitProposal, type ProposalRead, type ProposalWrite } from "./changeProposal.js";
 import { compileKnowledgeChanges } from "./changeCompiler.js";
 import YAML from "yaml";
+import { summaryDisclosure } from "./summary-disclosures.js";
 
 const PLUGIN_ID = "proprium.knowledge";
 const ENTITY_TYPES: readonly StoryEntityType[] = ["character", "location", "item", "faction", "event", "thread", "scene", "chapter", "volume", "arc", "lore", "manuscript", "dialogue_sketch"];
@@ -173,6 +174,30 @@ function sceneTextInputs(story: LoadedKnowledgeSnapshot) {
   return orderedScenes(story).map(({ entity, order, volumeId }) => {
     const context = buildSceneContext({ ...story, sceneId: entity.id }).data;
     return { sceneId: entity.id, order, text: context?.manuscriptBody ?? "", volumeId };
+  });
+}
+
+function disclosureEvidence(story: LoadedKnowledgeSnapshot, rows: ReturnType<typeof sceneTextInputs>) {
+  const summaries = rows.map((row) => ({ sceneId: row.sceneId, ...summaryDisclosure(story, story.entities.get(row.sceneId)!) }));
+  const sourceFiles = new Map<string, string>();
+  const add = (path: string | undefined) => { const revision = path && story.revisions.get(path); if (path && revision) sourceFiles.set(path, revision); };
+  for (const row of rows) {
+    const scene = story.entities.get(row.sceneId)!;
+    add(scene.filePath);
+    if (typeof scene.raw.manuscript === "string") add(scene.raw.manuscript);
+  }
+  for (const summary of summaries) add(summary.path);
+  for (const entity of story.entities.values()) if (!["scene", "chapter", "volume", "manuscript"].includes(entity.type)) add(entity.filePath);
+  return { sourceFiles: [...sourceFiles].map(([path, revision]) => ({ path, revision })),
+    summaryDiagnostics: summaries.filter((summary) => summary.diagnostic).map(({ sceneId, path, diagnostic }) => ({ sceneId, path, code: diagnostic })) };
+}
+
+function citeDisclosures(story: LoadedKnowledgeSnapshot, disclosures: ReturnType<typeof extractReaderDisclosures>["data"]) {
+  return disclosures.map((event) => {
+    const scene = story.entities.get(event.sceneId)!;
+    const path = event.source === "scene_summary" ? summaryDisclosure(story, scene).path : typeof scene.raw.manuscript === "string" ? scene.raw.manuscript : undefined;
+    const revision = path && story.revisions.get(path);
+    return { ...event, ...(path && revision ? { sourcePath: path, sourceRevision: revision } : {}) };
   });
 }
 
@@ -488,12 +513,11 @@ function* worldStateAtScene(input: Record<string, unknown>, context: ActionReque
   const storyWithText = yield* storyWithScenes(context, host, new Set(orderedScenes(story).filter((row) => row.order <= position.order).map((row) => row.entity.id)));
   const disclosureScenes = sceneTextInputs(storyWithText).filter((row) => row.order <= position.order).map((row) => {
     const entity = storyWithText.entities.get(row.sceneId)!;
-    return { sceneId: row.sceneId, order: row.order, text: row.text, characterIds: getLinkedEntities({ ...storyWithText, fromId: row.sceneId, kind: "appears" }).data.filter((item) => item.type === "character").map((item) => item.id), stateChanges: [] };
+    return { sceneId: row.sceneId, order: row.order, text: row.text, characterIds: getLinkedEntities({ ...storyWithText, fromId: row.sceneId, kind: "appears" }).data.filter((item) => item.type === "character").map((item) => item.id), stateChanges: summaryDisclosure(storyWithText, entity).changes };
   });
   const disclosures = extractReaderDisclosures({ ...storyWithText, scenes: disclosureScenes }).data;
   if (!state) throw error("scene_not_found", `Scene ${sceneId} has no resolvable ordered state`, { sceneId });
-  const revisions = new Map([[scene.filePath, story.revisions.get(scene.filePath)!], ...(typeof scene.raw.manuscript === "string" && storyWithText.revisions.has(scene.raw.manuscript) ? [[scene.raw.manuscript, storyWithText.revisions.get(scene.raw.manuscript)!] as [string, string]] : [])]);
-  return { ...state, confirmedEvents: events, readerDisclosures: disclosures, characterBeliefs: { availability: "unavailable", reason: "not_implemented" }, sourceFiles: [...revisions].map(([path, revision]) => ({ path, revision })) };
+  return { ...state, confirmedEvents: events, readerDisclosures: citeDisclosures(storyWithText, disclosures), characterBeliefs: { availability: "unavailable", reason: "not_implemented" }, ...disclosureEvidence(storyWithText, sceneTextInputs(storyWithText).filter((row) => row.order <= position.order)) };
 }
 
 function* worldStateHistory(input: Record<string, unknown>, context: ActionRequest, host: GuestHost) {
@@ -520,14 +544,14 @@ function* readerModelBuild(input: Record<string, unknown>, context: ActionReques
   const story = yield* storyWithScenes(context, host, selectedIds);
   const allScenes = sceneTextInputs(story).filter((row) => row.order <= chapterOrder);
   const disclosureScenes = allScenes.map((row) => ({ sceneId: row.sceneId, order: row.order, text: row.text,
-    characterIds: getLinkedEntities({ ...story, fromId: row.sceneId, kind: "appears" }).data.filter((entity) => entity.type === "character").map((entity) => entity.id), stateChanges: [] }));
+    characterIds: getLinkedEntities({ ...story, fromId: row.sceneId, kind: "appears" }).data.filter((entity) => entity.type === "character").map((entity) => entity.id), stateChanges: summaryDisclosure(story, story.entities.get(row.sceneId)!).changes }));
   const disclosures = extractReaderDisclosures({ ...story, scenes: disclosureScenes }).data;
   const knowledgeEvents = listRuleStateEvents(story).data.filter((event) => event.kind === "knowledge" && (!event.status || event.status === "confirmed"));
   const knowledgeGaps = diffReaderAndCharacterKnowledge({ ...story, disclosures, knowledgeEvents, scenes: disclosureScenes, upToOrder: chapterOrder }).data;
   const lifecycle = threadProjection(story);
   const orderBySceneId = new Map(allScenes.map((scene) => [scene.sceneId, scene.order]));
   const forgetRisks = computeThreadForgetRisks({ snapshot: context.snapshot, snapshots: lifecycle.snapshots, disclosures, orderBySceneId }).data;
-  return { chapterId, disclosures: disclosures.filter((event) => event.order <= chapterOrder), knowledgeGaps, forgetRisks, firstReadReaction: null, snapshot: context.snapshot };
+  return { chapterId, disclosures: citeDisclosures(story, disclosures.filter((event) => event.order <= chapterOrder)), knowledgeGaps, forgetRisks, firstReadReaction: null, snapshot: context.snapshot, ...disclosureEvidence(story, allScenes) };
 }
 
 function* tagsSuggested(input: Record<string, unknown>, context: ActionRequest, host: GuestHost) {
