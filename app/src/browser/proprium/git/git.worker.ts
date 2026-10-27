@@ -1546,6 +1546,31 @@ async function operation(request: LocalGitRequest): Promise<unknown> {
     })));
     return request.operation === "review-diff" ? { head: await currentHead(paths.dir), changes } : changes;
   }
+  if (request.operation === "rename-file") {
+    validateGitPath(request.from);
+    validateGitPath(request.to);
+    if (request.from === request.to || request.from.startsWith(`${request.to}/`) || request.to.startsWith(`${request.from}/`)) {
+      failure("invalid_path", "The rename paths collide.");
+    }
+    await assertNoSymlinkParents(paths.dir, request.from, true);
+    await assertNoSymlinkParents(paths.dir, request.to, true);
+    const sourcePath = `${paths.dir}/${request.from}`;
+    if (!(await exists(sourcePath))) failure("revision_conflict", "Rename source has disappeared.");
+    const info = await fs.lstat(sourcePath);
+    if (!info.isFile()) failure("invalid_path", "Only regular workspace files can be moved.");
+    if ((info.mode & 0o111) !== 0) failure("invalid_input", "Executable file mode cannot be preserved by this rename operation.");
+    const head = await currentHead(paths.dir);
+    if (head) {
+      const { commit } = await git.readCommit({ fs, dir: paths.dir, oid: head });
+      const original = (await commitTreeFiles(paths.dir, commit.tree)).get(request.from);
+      if (original?.mode === "100755") failure("invalid_input", "Executable Git files cannot be renamed without preserving mode.");
+    }
+    const content = new Uint8Array(await fs.readFile(sourcePath));
+    return operation({ ...request, operation: "apply-changes", readSet: [], changes: [
+      { path: request.from, content: null, expectedRevision: request.source },
+      { path: request.to, content, expectedRevision: request.destination },
+    ] });
+  }
   if (request.operation === "scratch-checkpoint") {
     // This entire sequence executes while holding the sole workspace Web Lock.
     // No other tab can insert a worktree change between review, apply and commit.
@@ -1700,7 +1725,7 @@ scope.addEventListener("message", async (event: MessageEvent<LocalGitRequest>) =
   const workspaceId = request.workspace?.localWorkspaceId ?? "";
   try {
     if (!scope.navigator.locks) failure("lock_unavailable", "This browser does not provide Web Locks; local Git workspace access is disabled.");
-    const write = ["init", "write", "delete", "apply-changes", "add", "commit", "commit-reviewed", "scratch-checkpoint", "create-branch", "verify", "remote-fetch", "remote-pull", "remote-publish"].includes(request.operation);
+    const write = ["init", "write", "delete", "apply-changes", "add", "commit", "commit-reviewed", "scratch-checkpoint", "rename-file", "create-branch", "verify", "remote-fetch", "remote-pull", "remote-publish"].includes(request.operation);
     const paths = await workspacePaths(request.workspace);
     const result = await operationQueue.run(paths.lock, () => scope.navigator.locks.request(paths.lock, { mode: write ? "exclusive" : "shared", ifAvailable: true }, async (lock) => {
       if (!lock) failure("workspace_busy", "Another tab is using this local workspace. Retry when its operation finishes.");
@@ -1708,7 +1733,7 @@ scope.addEventListener("message", async (event: MessageEvent<LocalGitRequest>) =
         failure("storage_unknown", "A previous local Git operation had an uncertain result; reopen and verify this workspace before continuing.");
       }
       const result = await operation(request);
-      if (["write", "delete", "apply-changes", "commit-reviewed", "scratch-checkpoint", "remote-pull"].includes(request.operation)) {
+      if (["write", "delete", "apply-changes", "commit-reviewed", "scratch-checkpoint", "rename-file", "remote-pull"].includes(request.operation)) {
         authoringMutationGenerations.set(paths.lock, (authoringMutationGenerations.get(paths.lock) ?? 0) + 1);
       }
       return result;

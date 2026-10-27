@@ -260,6 +260,13 @@ export class BrowserLocalGit {
     return this.call({ operation: "scratch-checkpoint", changes: [...changes], expectedHead, message, author });
   }
 
+  /** Atomic fail-closed move: executable files cannot silently lose Git mode. */
+  renameFile(from: string, to: string, source: FileRevision, destination: FileRevision): Promise<void> {
+    validateGitPath(from); validateGitPath(to);
+    if (from === to) return Promise.reject(new BrowserLocalGitError("invalid_path", "Source and destination must differ."));
+    return this.call({ operation: "rename-file", from, to, source, destination });
+  }
+
   status(): Promise<LocalGitStatus> { return this.call({ operation: "status" }); }
 
   diff(): Promise<DiffChange[]> {

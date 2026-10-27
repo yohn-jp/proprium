@@ -61,7 +61,7 @@ export function WorkspaceFileBrowser(props: Props) {
       if (!source.data) throw new Error("元のファイルを読み込めません。一覧を更新してください。");
       if (destination.data !== null) throw new Error("その保存先には既にファイルがあります。別の名前を選んでください。");
       if (!(await props.beforeApply())) throw new Error("編集中の本文または作品が変わりました。端末に保存してから再試行してください。");
-      await props.git.applyChanges([{ path: from, content: null, expectedRevision: source.revision }, { path: to, content: source.data, expectedRevision: destination.revision }]);
+      await props.git.renameFile(from, to, source.revision, destination.revision);
       await props.onMoved(from, to);
       setNewPath(""); setNotice("名前・保存先を変更しました。GitHubにはまだ公開されていません。");
     } catch (error) { setNotice(error instanceof Error ? error.message : "ファイルを移動できませんでした。"); }

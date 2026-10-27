@@ -191,6 +191,7 @@ export type LocalGitRequest =
   | { id: string; workspace: WorkspaceIdentity; operation: "review-diff" }
   | { id: string; workspace: WorkspaceIdentity; operation: "commit-reviewed"; snapshot: CommitReviewSnapshot; message: string; author: CommitAuthor }
   | { id: string; workspace: WorkspaceIdentity; operation: "scratch-checkpoint"; changes: WorkspaceChange[]; expectedHead: string | null; message: string; author: CommitAuthor }
+  | { id: string; workspace: WorkspaceIdentity; operation: "rename-file"; from: string; to: string; source: FileRevision; destination: FileRevision }
   | { id: string; workspace: WorkspaceIdentity; operation: "commit-diff"; oid: string }
   | { id: string; workspace: WorkspaceIdentity; operation: "remote-confirmed-files"; paths: string[] }
   | { id: string; workspace: WorkspaceIdentity; operation: "add"; paths: string[]; expectedHead: string | null }
