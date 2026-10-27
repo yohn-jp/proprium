@@ -1,0 +1,12 @@
+[WebServer] (node:108623) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+[WebServer] (Use `node --trace-warnings ...` to show where the warning was created)
+
+Running 3 tests using 1 worker
+
+(node:108643) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+  ✓  1 [desktop-chromium] › tests/browser/authoring-official.acceptance.spec.ts:65:5 › signed Narrative proposes and applies a reviewed volume (19.0s)
+  ✓  2 [desktop-chromium] › tests/browser/authoring-official.acceptance.spec.ts:140:5 › signed Narrative reviews and applies a scene title (19.5s)
+  ✓  3 [desktop-chromium] › tests/browser/authoring-official.acceptance.spec.ts:210:5 › signed Narrative reviews and applies a scene manuscript link (16.0s)
+
+  3 passed (56.8s)

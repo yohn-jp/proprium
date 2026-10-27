@@ -1,0 +1,378 @@
+{
+  "schema": "proprium.git-publication-tree-map/v1",
+  "reason": "Expired CLI credential; GitHub connector published the same source trees as incremental commits. Each original/published pair was checked for exact tree equality before the branch ref advanced. Local test source SHAs remain unchanged in their proof records.",
+  "commits": [
+    {
+      "original": "232bec96abe2b091cb59ea9dfd34be0dc9c21793",
+      "published": "9a3dae89aadd47b0d3eb5ec6bc729e14057f002f",
+      "tree": "67f60f9fa1342f6f836575c65095873925ff5e38",
+      "round": "publication-map"
+    },
+    {
+      "original": "1ef29186ea91b810c3434e291255eebc65e1ebf2",
+      "published": "855aba0a8aa02a9ef72303bdc7dbdbbf137a8322",
+      "tree": "0ec93f05c8a9503343dfa02ca1ca09d074e9c007",
+      "round": "publication-map"
+    },
+    {
+      "original": "dda61bbbba076768a9f007c2fa75d9dafed2044a",
+      "published": "d4a188cfffd0cc1c7591d6bc0d0215c3d8cd583c",
+      "tree": "03d179e7b729fc5b3464e9d12814d3eb3e601705",
+      "round": "publication-map"
+    },
+    {
+      "original": "6d2c2e369cce2aa1e4336542faceb8984a7bee47",
+      "published": "026993d2d31dc78eda03841e633f62f00f62e936",
+      "tree": "15c861ea07d21ccd3fd7fead3eed706b8312e8ba",
+      "round": "publication-map"
+    },
+    {
+      "original": "1f742d4d8c5ded15cdbed6e43d418330deb3a13f",
+      "published": "4706e82721de036f395b515ba4e8e4c90091f76c",
+      "tree": "e2e52d981c8f1468b7c627992398b45ca093c3d8",
+      "round": "publication-map"
+    },
+    {
+      "original": "57731134fef0cf9d7013493826b780c5c832f3bd",
+      "published": "19d1b7aa151fcb26f7906efcf04e420bf89ab808",
+      "tree": "da2e6786ddc4dd7048fb108253dbb38da8a75ef8",
+      "round": "publication-map"
+    },
+    {
+      "original": "1763291685c25507874faae8d90a1291de130ad0",
+      "published": "7d23b75031e5e21edc7239d59319668a233c23bb",
+      "tree": "9b192e88ee06902a1bb6402cf8d9b5b7a049f4c1",
+      "round": "publication-map"
+    },
+    {
+      "original": "0e4d56fba5c7990098d433037293ed8cc819cb2f",
+      "published": "c683eded28636cc00f4efb2efee1c2a481e0dced",
+      "tree": "1247d8dbf4b4300aaba2a81f2e1907bc011af85a",
+      "round": "publication-map"
+    },
+    {
+      "original": "3a8d4e19314ef785f82a63d3d42fad59e4186336",
+      "published": "09522b1d04006088edfe92316c9053ae5d2d0c5c",
+      "tree": "407ebb91fab1dca9675d4a7e290a7deb87c0a960",
+      "round": "publication-map"
+    },
+    {
+      "original": "669cb0f5b09a187a29d5f0559faacb318e8a5431",
+      "published": "8119facd0574764852e6a3911008e19e93e24de1",
+      "tree": "222212eb1c273a4c1eb7a085b15a3fda551fbbed",
+      "round": "publication-map"
+    },
+    {
+      "original": "d922d9df2c89b2a185f1217dab57f04351580d13",
+      "published": "8de164412f01df4dc536362348eeb36df848b342",
+      "tree": "4137189147edf6bf09a621fea33e6bf45b4a6510",
+      "round": "publication-next-map"
+    },
+    {
+      "original": "53825e81577d1d2c8a55c4b2c45421e0665238cb",
+      "published": "11ec15ed5a2138be04f446b5f9bfac6188d1a1fb",
+      "tree": "f0ea570d84e9929f0ed07099ce9fe38902a60567",
+      "round": "publication-next-map"
+    },
+    {
+      "original": "206f66e90f419b2e6d0124b32354f35694afea95",
+      "published": "1037cec470d582bc80e7cced07f21493a0494063",
+      "tree": "154c326d3d437b7f02827713673ae13a72ea4fb6",
+      "round": "publication-next-map"
+    },
+    {
+      "original": "d27dcd292ebe19be223ddf981c00cc3e1f5e5b76",
+      "published": "6b922c2c6851cd7e9caf6c255856b332406bbbc3",
+      "tree": "0d5c8d49ab99a8789dd423cb9956b202ec91a33b",
+      "round": "publication-next-map"
+    },
+    {
+      "original": "1caa6af13ad324f78ebb4805a44d083482a0e43b",
+      "published": "83434b944b7683bc9d777277a5312d6d38db46f5",
+      "tree": "90755be6fe0af6da4ae41afa1081aa9ef025aa82",
+      "round": "publication-next-map"
+    },
+    {
+      "original": "e34dc956594816dba5d52b06ab60aed8e1a7e8e7",
+      "published": "c2883d56c249a403d0b51ba8e25506d6343e65cd",
+      "tree": "835ba8325331381e0de5e129147c1e6ddfb67028",
+      "round": "publication-next-map"
+    },
+    {
+      "original": "546d8a4508d131862e5e9fd007cb1fc32f41e2ae",
+      "published": "a88310ba969623eba39dc1390da0601852b2870c",
+      "tree": "59e475b9314e7a2373cebaccda3c82cc6ee12c20",
+      "round": "publication-next-map"
+    },
+    {
+      "original": "e34d5a547b7470a7eb6ae4dfc25be9dedc022c80",
+      "published": "8e45276676481c54582a92a7c71a28795373acde",
+      "tree": "b142b997bfae9ba4fc7e719805b87c5071491696",
+      "round": "publication-next-map"
+    },
+    {
+      "original": "dc03fe75c430250a7bc7ac1773c4f43d56b97202",
+      "published": "0e5225e88b53c01672bbb4dd264ba5671f8d9a2a",
+      "tree": "e2f55de76d61e2677c27cbb4adb04d9ab9d3cfcd",
+      "round": "publication-next-map"
+    },
+    {
+      "original": "cfe3b403265bea03dcf7edeaa33e053a7774095c",
+      "published": "6a211137a7f20feedc08c6e6cf00e6e6b84608b4",
+      "tree": "40564ac338e98248f2c211c923f669025d636315",
+      "round": "publication-next-map"
+    },
+    {
+      "original": "c45aec34daa1d8f6854f74b342d1eaad3ee3bebc",
+      "published": "135b1f0c793dcc42e198bb8a7826a49ec48415dd",
+      "tree": "a133ce90d434e890c76a862928c61785ada446cc",
+      "round": "publication-next-map"
+    },
+    {
+      "original": "ab1b461dcd32b383cf6f17589e66596d8dd07201",
+      "published": "5720f5c063291123f8424d384c10d672197d6b7f",
+      "tree": "6da51891253243c0341cf5572a5ebc92edf124b0",
+      "round": "publication-next-map"
+    },
+    {
+      "original": "4fb8dd509b87f3ce138f143303bf91cb57135385",
+      "published": "a635dcd6568b9565b703930370f3a4d7f615134a",
+      "tree": "f086f86f8f0603b32364c15cd6eb145711d81b6f",
+      "round": "publication-next-map"
+    },
+    {
+      "original": "34623e32b94c713bb23bf0dc12e01b10ab391090",
+      "published": "ada8ffd887bfdc8056dbdf80a3fb9f39ba1f7426",
+      "tree": "5da839f25ff384c12b4a6446a6da3f824cddbbb5",
+      "round": "publication-next-map"
+    },
+    {
+      "original": "2e210babe7921a9d7790eb26dcb5107ff98c6708",
+      "published": "0e43b79c22b8d24ed271c3c474732979c9f09cf6",
+      "tree": "0458b6f58d69c4eff3367b4ba55c217e8cb8aa7f",
+      "round": "publication-next-map"
+    },
+    {
+      "original": "3d75077de30dff01a014a7e15f33ccd61e237eb2",
+      "published": "6ce5722ade005e013282752f80f4aa9a14709bd6",
+      "tree": "89e129ed14e691e4bcc8d9826ddd7e79a5b008f7",
+      "round": "publication-third-map"
+    },
+    {
+      "original": "7ee87c4d1217554c7caaad81ad39491c69829c72",
+      "published": "42ca87314698a2732bbe5fb4fcf0b95a13b39db9",
+      "tree": "1052b821cd2bfce064c8d7a82e07baaf1dc7976a",
+      "round": "publication-third-map"
+    },
+    {
+      "original": "2ba2f62d1972a13d7a5554830ddc7b856d4336bd",
+      "published": "384cd6209ca213bf90d396afa5a3e498dab5fb27",
+      "tree": "dbb22468ef5917609bdef4e762cb7ce84912a715",
+      "round": "publication-third-map"
+    },
+    {
+      "original": "98aa2b72acb2ffba422031fe1d38d6e1a83c469e",
+      "published": "da703ac7a8b2864036a4268d4df36054cede4680",
+      "tree": "b96063b73565090f5143e0428986c1a7fb4e94cf",
+      "round": "publication-third-map"
+    },
+    {
+      "original": "115e9e7f718a1f021a64c526387a5c6114555113",
+      "published": "0423a349418853f3d008aa3718f6d57ca7fd13ba",
+      "tree": "cc63457c37d31ddd80c5c2b0e8c71ea83c5250ec",
+      "round": "publication-third-map"
+    },
+    {
+      "original": "8f09182bd8bddf83bb83edebc66e2afb433f3368",
+      "published": "8a93b80f92c442935cadc9ca551c61988cf74e11",
+      "tree": "8e87f3016e74398a37d934fdcd1f92abe17b927d",
+      "round": "publication-third-map"
+    },
+    {
+      "original": "80d5c43a7306b21e7f6f9c33482c575044856f37",
+      "published": "7e53eb7a1167e2739cd79c632bab2c129a067259",
+      "tree": "2901ba0eb71135802a1cb6942cd02427a17f2863",
+      "round": "publication-third-map"
+    },
+    {
+      "original": "43963c35b1dac8f74c8cb35d30e46c188edbe326",
+      "published": "ee3aac58f0440a80491df5183e12d63b7d5e300d",
+      "tree": "743efff9445cf0aad825d3204339c0a5cf061254",
+      "round": "publication-third-map"
+    },
+    {
+      "original": "88b44658aad04c85a3720e5997980b4f8f393075",
+      "published": "ea2be038e735c571b6fd82bc15ba26c407e59940",
+      "tree": "34bf9e891637dff17085d079492e617528ac591e",
+      "round": "publication-third-map"
+    },
+    {
+      "original": "ebd2ab8f86c457763f8263c527133916dea99be3",
+      "published": "3982284c995819fc274d2b411d3733671934dfb1",
+      "tree": "9ed70f40039b8a8437f167266688bd912f9df133",
+      "round": "publication-third-map"
+    },
+    {
+      "original": "d07288b029232b1ee0dc1658d9f74a3c19b172d6",
+      "published": "6223b008a351ddb5e4b2db409eff45d374fbaed4",
+      "tree": "94140036b17cfd51d65f6b7c66f68fa38c43482c",
+      "round": "publication-third-map"
+    },
+    {
+      "original": "444cc88fef9ccfc107407753f289e66e93cbddf9",
+      "published": "2e4a2b690c4dcf188fea3065e2b983a962a0ff69",
+      "tree": "308aaad1c1760adaec0ae600803466afb5bc02df",
+      "round": "publication-third-map"
+    },
+    {
+      "original": "f735c526f5a5bccc561036d1e95a8a9045acd118",
+      "published": "383ce2ebae34d81b2dc0e81c8140cf87e771aa31",
+      "tree": "9cfc726ad2997f50e3da16e34fd86b468cd56008",
+      "round": "publication-third-map"
+    },
+    {
+      "original": "9ebdccaca7b6bf5d0eebfa3cbfd9d6de28b4d071",
+      "published": "0ee8cdf044ba6a6e76421a90edc5073ba5954856",
+      "tree": "744896103470b3434c74261de0ced007e6a2b94b",
+      "round": "publication-third-map"
+    },
+    {
+      "original": "4fa942f46f685df6597493d753be6fab653ce42d",
+      "published": "82f80535889e8d47d338f98868b60a49bb7b015e",
+      "tree": "e0b3cae7cad289b7daa858513e702867f6e178cc",
+      "round": "publication-third-map"
+    },
+    {
+      "original": "7a94f39acd2a896b56e8725aa75805c1350813d8",
+      "published": "d7ccd7398565664defa28268c1a1b8786b08d4f7",
+      "tree": "2a144e71b87283a63f68dc8b3ea1ec4c098483c9",
+      "round": "publication-third-map"
+    },
+    {
+      "original": "fbfe9f3f1d26925061b993280779c77f0767e279",
+      "published": "4002af1bb5dc7b5d3d0955aedcf4a0939e3e2c70",
+      "tree": "26284ff9f166cde3ed4cda9bc8b451dd2bbae55f",
+      "round": "publication-third-map"
+    },
+    {
+      "original": "25d09b720750f54cc59b919dcb36d0e07bec2224",
+      "published": "2850db2019b2ea179048ae525f42fe728d41cb08",
+      "tree": "804645b639a4352334476cb7cfcb198d83c9b2ab",
+      "round": "publication-third-map"
+    },
+    {
+      "original": "447d205e29d25d17fa43036659c7f82e0b06b5e9",
+      "published": "454ab7436f88f4c92c0158dc8539f25667cf994e",
+      "tree": "38e1674059c75f4776a872b59c25e9469ce05916",
+      "round": "publication-third-map"
+    },
+    {
+      "original": "0c5bd1f79136f3bda527e15aeb0df9971f9c17b5",
+      "published": "ce12815b4dfad83f97ed58585b42a8705d01352d",
+      "tree": "74a056d3e51386eef7d9189b4783cd73c5893596",
+      "round": "publication-third-map"
+    },
+    {
+      "original": "8e1f0815d9e6681a45c2cb390620d8ca279d896d",
+      "published": "cfe07ea9941a9deb07fe874f7c619d96e315e345",
+      "tree": "566a5b44f7322cdf77f593e7f2a26b73886c4201",
+      "round": "publication-third-map"
+    },
+    {
+      "original": "a3196b9f9e80d575ebfef8ecf0d3e51e694aac45",
+      "published": "ce23409955c1b1ef56eb7dc3eddd56b9ed175920",
+      "tree": "a6d9a45696bd21f688f3a7a69383acf4909cf507",
+      "round": "publication-fourth-map"
+    },
+    {
+      "original": "994d3943ab390e6fcd31aa2752f28fecda9c08dd",
+      "published": "aedae5f3ef2dd3cdfcd1decca0bd8a82c8323886",
+      "tree": "6a8b941c0112c51d299bbd9f01033a2f093b4504",
+      "round": "publication-fourth-map"
+    },
+    {
+      "original": "e6c67313746d07ab2effc6dab336befb8160f170",
+      "published": "2f87ce425c22a658336cd1aa40af32e9c028526f",
+      "tree": "a3f741c690a8cc6a3c6e73abbdbab0e64447e657",
+      "round": "publication-fourth-map"
+    },
+    {
+      "original": "316f1783a4c6d28d5a7f3423a557ca695eeff161",
+      "published": "77388a97a59e23c93d0bcf93101be71b40636a61",
+      "tree": "16ebfdc94143cf97bf0f68169ceda21e0087c4e7",
+      "round": "publication-fourth-map"
+    },
+    {
+      "original": "01e76b8512c04e0f6d3c330e070b472d63be585d",
+      "published": "e7e62603fb43555b5af9b73f58ea97328cb4b911",
+      "tree": "7be1f9c5f73b498e054e3d5bbca6c94793abea3c",
+      "round": "publication-fourth-map"
+    },
+    {
+      "original": "7bf247ac1857c134f37e5a22ba60e7f15ff3372e",
+      "published": "2a134468288e879b6691923d8e2a4a4936b978e3",
+      "tree": "bece2acd43eb4912b3aa0cb90e0f41671d62ff07",
+      "round": "publication-fourth-map"
+    },
+    {
+      "original": "52cb45ca328dfdf9ce22ff1966d0e87508b0c420",
+      "published": "25f9fa2412a58804b5784efe916955bbf55ab3b0",
+      "tree": "36b08f46f05601d771f85f577420ff575fa89520",
+      "round": "publication-fourth-map"
+    },
+    {
+      "original": "a0b705d282c5c66ef93b96bdd6a1b3acb1b52a03",
+      "published": "abb0380adb633665d7f55edba23971e8cf7c3d01",
+      "tree": "d34b56c7290b7f67fef21706d47cbe7739cadbf5",
+      "round": "publication-fourth-map"
+    },
+    {
+      "original": "1526654a7dab37b9fed295fc238f5dbe088c9ba9",
+      "published": "8b543f68a1a11112784a5db98a5cdb6c52e8b1b2",
+      "tree": "dd11eddad3928ba20feeaac84904395ca76015f4",
+      "round": "publication-fourth-map"
+    },
+    {
+      "original": "8f0c58edf004f47b33435434bfe85cd6e39330aa",
+      "published": "265abc101ef136b8f55bb6485eda30d125faf76d",
+      "tree": "bc01b72f550a3b4aa64101692ad052263b50ed36",
+      "round": "publication-fourth-map"
+    },
+    {
+      "original": "4f2767e9586865d82d15ccbf365ef7ee7a60e0d5",
+      "published": "ba7cc5d5cc0dd59cabe29574fb664dc4afba200d",
+      "tree": "b7b4e58e7f04979dbc65bcd4e5629d712d777f84",
+      "round": "publication-fourth-map"
+    },
+    {
+      "original": "dd38252356c3d84181473a716f989411526e0548",
+      "published": "c7eb585a8b85d1a0198e7d2c1757f375c1d5ce8e",
+      "tree": "995dcc4e4585b10773bd32f1873ecd3dad50bbb1",
+      "round": "publication-fourth-map"
+    },
+    {
+      "original": "9d4d91ab8d60868f29f4d124e906aefc7d850d0c",
+      "published": "f3ec4ed9c7b118233e5447e3723b65fe9d1af4e1",
+      "tree": "49a36258717e3bd9d9c9aef487d31b0b3160496c",
+      "round": "publication-fourth-map"
+    },
+    {
+      "original": "7c7de977b5e2ee1d7054538415286dc99bf293de",
+      "published": "88a17e69e6ed8c9a5934984a844e6832d25fce21",
+      "tree": "0584561d4ac21836e21ae8e6eb6716a266c5fadf",
+      "round": "publication-fourth-map"
+    },
+    {
+      "original": "59d0354053150aba2e4a5d225517a97025831e39",
+      "published": "0fb112e69f25d190379fdbe47067462072b1ff8c",
+      "tree": "2ff0aecaa5c9e045f1e182629e116f39815b21df",
+      "round": "publication-fourth-map"
+    },
+    {
+      "original": "187d8058bf5c7681be3bc2df7b1bc5649959ef12",
+      "published": "465c344bdbb854b959832c90b7edab464f064596",
+      "tree": "ad4f4de1d6f29dcd822477c426b41ef3eb77a945",
+      "round": "publication-fourth-map"
+    }
+  ]
+}

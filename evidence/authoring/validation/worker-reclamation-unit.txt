@@ -1,0 +1,25 @@
+✔ registry catalog discovers signed IDs and versions without installing or fetching plugin artifacts (94.881691ms)
+✔ signed v2 actions and Host UI remain available while disabled, with no Worker activation (91.267416ms)
+✔ asset group resolution uses freshly admitted metadata and the pinned registry fetch policy (59.088216ms)
+✔ asset group resolution fails closed when cached manifest bytes or registry artifact base are tampered (48.302317ms)
+✔ registry catalog rejects invalid signatures and unapproved artifact origins (10.950918ms)
+✔ plugin distribution pins signed versions and resolves dependencies (151.658741ms)
+✔ registry signatures, publisher keys, manifest hashes and artifact digests fail closed (43.047237ms)
+✔ dependency version ranges are deterministic and reject unsupported syntax (0.361393ms)
+✔ a failed update keeps the current pin, while the latest signed index can revoke an old version (99.679496ms)
+✔ observed revocations cannot be undone by replaying an older signed registry (87.992424ms)
+✔ dependency cycles fail closed and revoked transitive dependencies block activation (51.166007ms)
+✔ rotating the Host-pinned registry key revokes cached code and leaves it removable (26.462267ms)
+✔ rotating the registry root at the same URL starts a separate monotonic index and revokes old installs (49.829273ms)
+✔ a missing latest proof is rejected within the same pinned registry root (10.824818ms)
+✔ the default fetch adapter preserves the browser global receiver (9.326011ms)
+✔ overlapping calls reserve the same runtime until both have settled (1.513397ms)
+✔ nested callers remain reserved and rejection releases only the failed callee (0.958662ms)
+ℹ tests 17
+ℹ suites 0
+ℹ pass 17
+ℹ fail 0
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 1273.313887

@@ -1,0 +1,13 @@
+[WebServer] (node:131764) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+[WebServer] (Use `node --trace-warnings ...` to show where the warning was created)
+[WebServer] 2026/10/27 07:18:48 Proprium Gateway listening on 127.0.0.1:4292
+
+Running 1 test using 1 worker
+
+(node:131836) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+[WebServer] 2026/10/27 07:20:12 Live Workspace stream connected
+  ✓  1 [desktop-chromium] › tests/browser/authoring-mcp-timeout.acceptance.spec.ts:6:5 › real Narrative work detects Host timeout without changing files (2.7m)
+[WebServer] 2026/10/27 07:21:34 Live Workspace stream disconnected
+
+  1 passed (2.8m)

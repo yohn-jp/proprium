@@ -1,7 +1,7 @@
 {
   "schema": "proprium.authoring.evidence/v1",
-  "release_sha": "2d1bc8fbfe4c314edc4ed485eb7fc0ca65b18852",
-  "registry_digest": "0b29e79f3e91bca46c3ffc83b48d689b9d6a70ba18fc28c80d813948005554e8",
+  "release_sha": "2e210babe7921a9d7790eb26dcb5107ff98c6708",
+  "registry_digest": "8a12c2fdfb35d57ce753113d1047a4796396834068821cc8430aacf3f18ef822",
   "generated_from": {
     "acceptance": "docs/canon/ACCEPTANCE.md",
     "inventory": "docs/canon/RECOVERY-INVENTORY.md",
@@ -28,11 +28,11 @@
       "git_sha": "731e574c5393c1a3b06e75965ede00fef820ce5f",
       "browser_platform": null,
       "input": null,
-      "output": null,
+      "output": "Full mandatory acceptance scenario and failure dimensions have not been certified; see local partial evidence.",
       "receipt": null,
       "artifact": null,
       "evidence_ref": "evidence/authoring/validation/results.json",
-      "blocker": "Full mandatory acceptance scenario and failure dimensions have not been certified; see local partial evidence."
+      "blocker": null
     },
     {
       "id": "R02",
@@ -44,11 +44,11 @@
       "git_sha": "731e574c5393c1a3b06e75965ede00fef820ce5f",
       "browser_platform": null,
       "input": null,
-      "output": "All eight actual components and registry signature/dependency integrity PASS with ephemeral keys. Full install/update/rollback/uninstall/browser lifecycle is not certified.",
+      "output": "Eight independent real component builds/signatures/dependencies verified at source2e210ba; latest corrected declarations and complete lifecycle still require fresh-build verification. Production publication is BLOCKED.",
       "receipt": null,
       "artifact": "evidence/authoring/validation/components.json",
       "evidence_ref": "evidence/authoring/validation/results.json",
-      "blocker": "Full mandatory acceptance scenario and failure dimensions have not been certified; see local partial evidence."
+      "blocker": null
     },
     {
       "id": "R03",
@@ -60,11 +60,11 @@
       "git_sha": "731e574c5393c1a3b06e75965ede00fef820ce5f",
       "browser_platform": null,
       "input": null,
-      "output": "Actual signed Narrative small Chromium navigation passed diagnostically; final 301-scene and mobile navigation validation pending.",
+      "output": "Real signed Narrative navigation and complete local writing flow passed on both engines with 301 scenes/604 files/2292659 bytes. Automatic reading-position resume and full isolation/failure matrix are not certified.",
       "receipt": null,
       "artifact": null,
       "evidence_ref": "evidence/authoring/validation/results.json",
-      "blocker": "Full mandatory acceptance scenario and failure dimensions have not been certified; see local partial evidence."
+      "blocker": null
     },
     {
       "id": "R04",
@@ -76,11 +76,11 @@
       "git_sha": "731e574c5393c1a3b06e75965ede00fef820ce5f",
       "browser_platform": null,
       "input": null,
-      "output": null,
+      "output": "Exact 150040-byte CRLF/Japanese manuscript edits/save/commit/reload exercised in both engines. Physical Japanese IME and physical-device/caret/scroll matrix remain NOT_CHECKED.",
       "receipt": null,
       "artifact": null,
       "evidence_ref": "evidence/authoring/validation/results.json",
-      "blocker": "Full mandatory acceptance scenario and failure dimensions have not been certified; see local partial evidence."
+      "blocker": null
     },
     {
       "id": "R05",
@@ -92,27 +92,27 @@
       "git_sha": "731e574c5393c1a3b06e75965ede00fef820ce5f",
       "browser_platform": null,
       "input": null,
-      "output": null,
+      "output": "Full mandatory acceptance scenario and failure dimensions have not been certified; see local partial evidence.",
       "receipt": null,
       "artifact": null,
       "evidence_ref": "evidence/authoring/validation/results.json",
-      "blocker": "Full mandatory acceptance scenario and failure dimensions have not been certified; see local partial evidence."
+      "blocker": null
     },
     {
       "id": "R06",
       "canon_title": "Semantic structure edits",
       "required_proof": "Create/edit/reorder chapter/scene and semantic metadata through reviewed multi-file preconditions, preserve unrelated YAML/frontmatter",
-      "status": "FAIL",
+      "status": "NOT_CHECKED",
       "fixture": null,
       "command": null,
       "git_sha": "731e574c5393c1a3b06e75965ede00fef820ce5f",
       "browser_platform": null,
       "input": null,
-      "output": null,
+      "output": "Selected-row create/rename/relink proposals, real diff/unit approval and local apply passed in Chromium; large-work volume proposal passed on both engines. Full reorder/accessibility/conflict/partial-dependency failure matrix is not certified.",
       "receipt": null,
       "artifact": null,
       "evidence_ref": "evidence/authoring/validation/results.json",
-      "blocker": "Creation/reorder command forms require manual domain IDs; complete selected-row rename/relink and accessible structural editing flow not delivered."
+      "blocker": null
     },
     {
       "id": "R07",
@@ -124,11 +124,11 @@
       "git_sha": "731e574c5393c1a3b06e75965ede00fef820ce5f",
       "browser_platform": null,
       "input": null,
-      "output": null,
+      "output": "Full mandatory acceptance scenario and failure dimensions have not been certified; see local partial evidence.",
       "receipt": null,
       "artifact": null,
       "evidence_ref": "evidence/authoring/validation/results.json",
-      "blocker": "Full mandatory acceptance scenario and failure dimensions have not been certified; see local partial evidence."
+      "blocker": null
     },
     {
       "id": "R08",
@@ -140,11 +140,11 @@
       "git_sha": "731e574c5393c1a3b06e75965ede00fef820ce5f",
       "browser_platform": null,
       "input": null,
-      "output": null,
+      "output": "Full mandatory acceptance scenario and failure dimensions have not been certified; see local partial evidence.",
       "receipt": null,
       "artifact": null,
       "evidence_ref": "evidence/authoring/validation/results.json",
-      "blocker": "Full mandatory acceptance scenario and failure dimensions have not been certified; see local partial evidence."
+      "blocker": null
     },
     {
       "id": "R09",
@@ -156,11 +156,11 @@
       "git_sha": "731e574c5393c1a3b06e75965ede00fef820ce5f",
       "browser_platform": null,
       "input": null,
-      "output": null,
+      "output": "Actual fixed-eight-tool Go Gateway/active Browser Host typed Narrative action, stale/capability denial, proposal/human approval, disconnect/reopen and real timeout tested. Paired Writing canon workflows and provider.request production wiring remain incomplete.",
       "receipt": null,
       "artifact": null,
       "evidence_ref": "evidence/authoring/validation/results.json",
-      "blocker": "Paired Writing canon actions and provider.request Host route remain incomplete; real typed MCP proposal approval E2E not executed."
+      "blocker": null
     },
     {
       "id": "R10",
@@ -172,11 +172,11 @@
       "git_sha": "731e574c5393c1a3b06e75965ede00fef820ce5f",
       "browser_platform": null,
       "input": null,
-      "output": null,
+      "output": "Bounded E5 index/retrieval/candidate code and real native inference component exist. Real model inference/browser admission are not certified; task progress/cancel, cross-snapshot incremental reuse and BGE rerank are incomplete.",
       "receipt": null,
       "artifact": null,
       "evidence_ref": "evidence/authoring/validation/results.json",
-      "blocker": "Semantic index rebuild/candidate generation/task lifecycle is unimplemented, not merely a missing model."
+      "blocker": null
     },
     {
       "id": "R11",
@@ -188,11 +188,11 @@
       "git_sha": "731e574c5393c1a3b06e75965ede00fef820ce5f",
       "browser_platform": null,
       "input": null,
-      "output": null,
+      "output": "Full mandatory acceptance scenario and failure dimensions have not been certified; see local partial evidence.",
       "receipt": null,
       "artifact": null,
       "evidence_ref": "evidence/authoring/validation/results.json",
-      "blocker": "Full mandatory acceptance scenario and failure dimensions have not been certified; see local partial evidence."
+      "blocker": null
     },
     {
       "id": "R12",
@@ -204,11 +204,11 @@
       "git_sha": "731e574c5393c1a3b06e75965ede00fef820ce5f",
       "browser_platform": null,
       "input": null,
-      "output": null,
+      "output": "Full mandatory acceptance scenario and failure dimensions have not been certified; see local partial evidence.",
       "receipt": null,
       "artifact": null,
       "evidence_ref": "evidence/authoring/validation/results.json",
-      "blocker": "Full mandatory acceptance scenario and failure dimensions have not been certified; see local partial evidence."
+      "blocker": null
     },
     {
       "id": "R13",
@@ -220,11 +220,11 @@
       "git_sha": "731e574c5393c1a3b06e75965ede00fef820ce5f",
       "browser_platform": null,
       "input": null,
-      "output": null,
+      "output": "Same-SHA official distribution, all author UI jobs and final remote CI not yet established. Production credentials unavailable.",
       "receipt": null,
       "artifact": null,
       "evidence_ref": "evidence/authoring/validation/results.json",
-      "blocker": "Same-SHA official distribution, all author UI jobs and final remote CI not yet established. Production credentials unavailable."
+      "blocker": null
     },
     {
       "id": "R14",
@@ -236,11 +236,11 @@
       "git_sha": "731e574c5393c1a3b06e75965ede00fef820ce5f",
       "browser_platform": null,
       "input": null,
-      "output": null,
+      "output": "Full mandatory acceptance scenario and failure dimensions have not been certified; see local partial evidence.",
       "receipt": null,
       "artifact": null,
       "evidence_ref": "evidence/authoring/validation/results.json",
-      "blocker": "Full mandatory acceptance scenario and failure dimensions have not been certified; see local partial evidence."
+      "blocker": null
     }
   ],
   "plugins": [
@@ -4697,11 +4697,11 @@
           "git_sha": "731e574c5393c1a3b06e75965ede00fef820ce5f",
           "browser_platform": null,
           "input": null,
-          "output": null,
+          "output": "Required Paired Writing behavior remains incomplete; see owning feature records.",
           "receipt": null,
           "artifact": null,
           "evidence_ref": "evidence/authoring/validation/results.json",
-          "blocker": "Required Paired Writing behavior remains incomplete; see owning feature records."
+          "blocker": null
         },
         {
           "id": "accept-pw-02",
@@ -4749,11 +4749,11 @@
           "git_sha": "731e574c5393c1a3b06e75965ede00fef820ce5f",
           "browser_platform": null,
           "input": null,
-          "output": null,
+          "output": "Required Paired Writing behavior remains incomplete; see owning feature records.",
           "receipt": null,
           "artifact": null,
           "evidence_ref": "evidence/authoring/validation/results.json",
-          "blocker": "Required Paired Writing behavior remains incomplete; see owning feature records."
+          "blocker": null
         },
         {
           "id": "accept-pw-03",
@@ -4800,11 +4800,11 @@
           "git_sha": "731e574c5393c1a3b06e75965ede00fef820ce5f",
           "browser_platform": null,
           "input": null,
-          "output": null,
+          "output": "Required Paired Writing behavior remains incomplete; see owning feature records.",
           "receipt": null,
           "artifact": null,
           "evidence_ref": "evidence/authoring/validation/results.json",
-          "blocker": "Required Paired Writing behavior remains incomplete; see owning feature records."
+          "blocker": null
         },
         {
           "id": "accept-pw-04",
@@ -4851,11 +4851,11 @@
           "git_sha": "731e574c5393c1a3b06e75965ede00fef820ce5f",
           "browser_platform": null,
           "input": null,
-          "output": null,
+          "output": "Required Paired Writing behavior remains incomplete; see owning feature records.",
           "receipt": null,
           "artifact": null,
           "evidence_ref": "evidence/authoring/validation/results.json",
-          "blocker": "Required Paired Writing behavior remains incomplete; see owning feature records."
+          "blocker": null
         },
         {
           "id": "accept-pw-05",
@@ -4936,11 +4936,11 @@
           "git_sha": "731e574c5393c1a3b06e75965ede00fef820ce5f",
           "browser_platform": null,
           "input": null,
-          "output": null,
+          "output": "Required Paired Writing behavior remains incomplete; see owning feature records.",
           "receipt": null,
           "artifact": null,
           "evidence_ref": "evidence/authoring/validation/results.json",
-          "blocker": "Required Paired Writing behavior remains incomplete; see owning feature records."
+          "blocker": null
         },
         {
           "id": "accept-pw-06",
@@ -5009,11 +5009,11 @@
           "git_sha": "731e574c5393c1a3b06e75965ede00fef820ce5f",
           "browser_platform": null,
           "input": null,
-          "output": null,
+          "output": "Required Paired Writing behavior remains incomplete; see owning feature records.",
           "receipt": null,
           "artifact": null,
           "evidence_ref": "evidence/authoring/validation/results.json",
-          "blocker": "Required Paired Writing behavior remains incomplete; see owning feature records."
+          "blocker": null
         },
         {
           "id": "accept-pw-07",
@@ -5107,11 +5107,11 @@
           "git_sha": "731e574c5393c1a3b06e75965ede00fef820ce5f",
           "browser_platform": null,
           "input": null,
-          "output": null,
+          "output": "Required Paired Writing behavior remains incomplete; see owning feature records.",
           "receipt": null,
           "artifact": null,
           "evidence_ref": "evidence/authoring/validation/results.json",
-          "blocker": "Required Paired Writing behavior remains incomplete; see owning feature records."
+          "blocker": null
         },
         {
           "id": "accept-pw-08",
@@ -5135,11 +5135,11 @@
           "git_sha": "731e574c5393c1a3b06e75965ede00fef820ce5f",
           "browser_platform": null,
           "input": null,
-          "output": null,
+          "output": "Required Paired Writing behavior remains incomplete; see owning feature records.",
           "receipt": null,
           "artifact": null,
           "evidence_ref": "evidence/authoring/validation/results.json",
-          "blocker": "Required Paired Writing behavior remains incomplete; see owning feature records."
+          "blocker": null
         },
         {
           "id": "accept-pw-09",
@@ -5161,11 +5161,11 @@
           "git_sha": "731e574c5393c1a3b06e75965ede00fef820ce5f",
           "browser_platform": null,
           "input": null,
-          "output": null,
+          "output": "Required Paired Writing behavior remains incomplete; see owning feature records.",
           "receipt": null,
           "artifact": null,
           "evidence_ref": "evidence/authoring/validation/results.json",
-          "blocker": "Required Paired Writing behavior remains incomplete; see owning feature records."
+          "blocker": null
         },
         {
           "id": "accept-pw-10",
@@ -5200,11 +5200,11 @@
           "git_sha": "731e574c5393c1a3b06e75965ede00fef820ce5f",
           "browser_platform": null,
           "input": null,
-          "output": null,
+          "output": "Required Paired Writing behavior remains incomplete; see owning feature records.",
           "receipt": null,
           "artifact": null,
           "evidence_ref": "evidence/authoring/validation/results.json",
-          "blocker": "Required Paired Writing behavior remains incomplete; see owning feature records."
+          "blocker": null
         },
         {
           "id": "accept-pw-11",
@@ -5272,11 +5272,11 @@
           "git_sha": "731e574c5393c1a3b06e75965ede00fef820ce5f",
           "browser_platform": null,
           "input": null,
-          "output": null,
+          "output": "Required Paired Writing behavior remains incomplete; see owning feature records.",
           "receipt": null,
           "artifact": null,
           "evidence_ref": "evidence/authoring/validation/results.json",
-          "blocker": "Required Paired Writing behavior remains incomplete; see owning feature records."
+          "blocker": null
         },
         {
           "id": "accept-pw-21",
@@ -5392,11 +5392,11 @@
           "git_sha": "731e574c5393c1a3b06e75965ede00fef820ce5f",
           "browser_platform": null,
           "input": null,
-          "output": null,
+          "output": "Required canon action/UI/provider or migration behavior remains unimplemented or only partially delivered; settings/synonym preview additions do not complete this feature.",
           "receipt": null,
           "artifact": null,
           "evidence_ref": "evidence/authoring/validation/results.json",
-          "blocker": "Required canon action/UI/provider or migration behavior remains unimplemented or only partially delivered; settings/synonym preview additions do not complete this feature."
+          "blocker": null
         },
         {
           "feature_id": "PW-02",
@@ -5506,11 +5506,11 @@
           "git_sha": "731e574c5393c1a3b06e75965ede00fef820ce5f",
           "browser_platform": null,
           "input": null,
-          "output": null,
+          "output": "Required canon action/UI/provider or migration behavior remains unimplemented or only partially delivered; settings/synonym preview additions do not complete this feature.",
           "receipt": null,
           "artifact": null,
           "evidence_ref": "evidence/authoring/validation/results.json",
-          "blocker": "Required canon action/UI/provider or migration behavior remains unimplemented or only partially delivered; settings/synonym preview additions do not complete this feature."
+          "blocker": null
         },
         {
           "feature_id": "PW-04",
@@ -5563,11 +5563,11 @@
           "git_sha": "731e574c5393c1a3b06e75965ede00fef820ce5f",
           "browser_platform": null,
           "input": null,
-          "output": null,
+          "output": "Required canon action/UI/provider or migration behavior remains unimplemented or only partially delivered; settings/synonym preview additions do not complete this feature.",
           "receipt": null,
           "artifact": null,
           "evidence_ref": "evidence/authoring/validation/results.json",
-          "blocker": "Required canon action/UI/provider or migration behavior remains unimplemented or only partially delivered; settings/synonym preview additions do not complete this feature."
+          "blocker": null
         },
         {
           "feature_id": "PW-05",
@@ -5660,11 +5660,11 @@
           "git_sha": "731e574c5393c1a3b06e75965ede00fef820ce5f",
           "browser_platform": null,
           "input": null,
-          "output": null,
+          "output": "Required canon action/UI/provider or migration behavior remains unimplemented or only partially delivered; settings/synonym preview additions do not complete this feature.",
           "receipt": null,
           "artifact": null,
           "evidence_ref": "evidence/authoring/validation/results.json",
-          "blocker": "Required canon action/UI/provider or migration behavior remains unimplemented or only partially delivered; settings/synonym preview additions do not complete this feature."
+          "blocker": null
         },
         {
           "feature_id": "PW-06",
@@ -5741,11 +5741,11 @@
           "git_sha": "731e574c5393c1a3b06e75965ede00fef820ce5f",
           "browser_platform": null,
           "input": null,
-          "output": null,
+          "output": "Required canon action/UI/provider or migration behavior remains unimplemented or only partially delivered; settings/synonym preview additions do not complete this feature.",
           "receipt": null,
           "artifact": null,
           "evidence_ref": "evidence/authoring/validation/results.json",
-          "blocker": "Required canon action/UI/provider or migration behavior remains unimplemented or only partially delivered; settings/synonym preview additions do not complete this feature."
+          "blocker": null
         },
         {
           "feature_id": "PW-07",
@@ -5781,11 +5781,11 @@
           "git_sha": "731e574c5393c1a3b06e75965ede00fef820ce5f",
           "browser_platform": null,
           "input": null,
-          "output": null,
+          "output": "Required canon action/UI/provider or migration behavior remains unimplemented or only partially delivered; settings/synonym preview additions do not complete this feature.",
           "receipt": null,
           "artifact": null,
           "evidence_ref": "evidence/authoring/validation/results.json",
-          "blocker": "Required canon action/UI/provider or migration behavior remains unimplemented or only partially delivered; settings/synonym preview additions do not complete this feature."
+          "blocker": null
         },
         {
           "feature_id": "PW-08",
@@ -5829,11 +5829,11 @@
           "git_sha": "731e574c5393c1a3b06e75965ede00fef820ce5f",
           "browser_platform": null,
           "input": null,
-          "output": null,
+          "output": "Required canon action/UI/provider or migration behavior remains unimplemented or only partially delivered; settings/synonym preview additions do not complete this feature.",
           "receipt": null,
           "artifact": null,
           "evidence_ref": "evidence/authoring/validation/results.json",
-          "blocker": "Required canon action/UI/provider or migration behavior remains unimplemented or only partially delivered; settings/synonym preview additions do not complete this feature."
+          "blocker": null
         },
         {
           "feature_id": "PW-09",
@@ -5869,11 +5869,11 @@
           "git_sha": "731e574c5393c1a3b06e75965ede00fef820ce5f",
           "browser_platform": null,
           "input": null,
-          "output": null,
+          "output": "Required canon action/UI/provider or migration behavior remains unimplemented or only partially delivered; settings/synonym preview additions do not complete this feature.",
           "receipt": null,
           "artifact": null,
           "evidence_ref": "evidence/authoring/validation/results.json",
-          "blocker": "Required canon action/UI/provider or migration behavior remains unimplemented or only partially delivered; settings/synonym preview additions do not complete this feature."
+          "blocker": null
         },
         {
           "feature_id": "PW-10",
@@ -5909,11 +5909,11 @@
           "git_sha": "731e574c5393c1a3b06e75965ede00fef820ce5f",
           "browser_platform": null,
           "input": null,
-          "output": null,
+          "output": "Required canon action/UI/provider or migration behavior remains unimplemented or only partially delivered; settings/synonym preview additions do not complete this feature.",
           "receipt": null,
           "artifact": null,
           "evidence_ref": "evidence/authoring/validation/results.json",
-          "blocker": "Required canon action/UI/provider or migration behavior remains unimplemented or only partially delivered; settings/synonym preview additions do not complete this feature."
+          "blocker": null
         },
         {
           "feature_id": "PW-11",
@@ -5974,11 +5974,11 @@
           "git_sha": "731e574c5393c1a3b06e75965ede00fef820ce5f",
           "browser_platform": null,
           "input": null,
-          "output": null,
+          "output": "Required canon action/UI/provider or migration behavior remains unimplemented or only partially delivered; settings/synonym preview additions do not complete this feature.",
           "receipt": null,
           "artifact": null,
           "evidence_ref": "evidence/authoring/validation/results.json",
-          "blocker": "Required canon action/UI/provider or migration behavior remains unimplemented or only partially delivered; settings/synonym preview additions do not complete this feature."
+          "blocker": null
         },
         {
           "feature_id": "PW-12",
@@ -6006,11 +6006,11 @@
           "git_sha": "731e574c5393c1a3b06e75965ede00fef820ce5f",
           "browser_platform": null,
           "input": null,
-          "output": null,
+          "output": "Required canon action/UI/provider or migration behavior remains unimplemented or only partially delivered; settings/synonym preview additions do not complete this feature.",
           "receipt": null,
           "artifact": null,
           "evidence_ref": "evidence/authoring/validation/results.json",
-          "blocker": "Required canon action/UI/provider or migration behavior remains unimplemented or only partially delivered; settings/synonym preview additions do not complete this feature."
+          "blocker": null
         },
         {
           "feature_id": "PW-13",
@@ -6034,11 +6034,11 @@
           "git_sha": "731e574c5393c1a3b06e75965ede00fef820ce5f",
           "browser_platform": null,
           "input": null,
-          "output": null,
+          "output": "Required canon action/UI/provider or migration behavior remains unimplemented or only partially delivered; settings/synonym preview additions do not complete this feature.",
           "receipt": null,
           "artifact": null,
           "evidence_ref": "evidence/authoring/validation/results.json",
-          "blocker": "Required canon action/UI/provider or migration behavior remains unimplemented or only partially delivered; settings/synonym preview additions do not complete this feature."
+          "blocker": null
         },
         {
           "feature_id": "PW-14",
@@ -6062,11 +6062,11 @@
           "git_sha": "731e574c5393c1a3b06e75965ede00fef820ce5f",
           "browser_platform": null,
           "input": null,
-          "output": null,
+          "output": "Required canon action/UI/provider or migration behavior remains unimplemented or only partially delivered; settings/synonym preview additions do not complete this feature.",
           "receipt": null,
           "artifact": null,
           "evidence_ref": "evidence/authoring/validation/results.json",
-          "blocker": "Required canon action/UI/provider or migration behavior remains unimplemented or only partially delivered; settings/synonym preview additions do not complete this feature."
+          "blocker": null
         },
         {
           "feature_id": "PW-15",
@@ -6119,11 +6119,11 @@
           "git_sha": "731e574c5393c1a3b06e75965ede00fef820ce5f",
           "browser_platform": null,
           "input": null,
-          "output": null,
+          "output": "Required canon action/UI/provider or migration behavior remains unimplemented or only partially delivered; settings/synonym preview additions do not complete this feature.",
           "receipt": null,
           "artifact": null,
           "evidence_ref": "evidence/authoring/validation/results.json",
-          "blocker": "Required canon action/UI/provider or migration behavior remains unimplemented or only partially delivered; settings/synonym preview additions do not complete this feature."
+          "blocker": null
         },
         {
           "feature_id": "PW-17",
@@ -6148,11 +6148,11 @@
           "git_sha": "731e574c5393c1a3b06e75965ede00fef820ce5f",
           "browser_platform": null,
           "input": null,
-          "output": null,
+          "output": "Required canon action/UI/provider or migration behavior remains unimplemented or only partially delivered; settings/synonym preview additions do not complete this feature.",
           "receipt": null,
           "artifact": null,
           "evidence_ref": "evidence/authoring/validation/results.json",
-          "blocker": "Required canon action/UI/provider or migration behavior remains unimplemented or only partially delivered; settings/synonym preview additions do not complete this feature."
+          "blocker": null
         },
         {
           "feature_id": "PW-18",
@@ -6177,11 +6177,11 @@
           "git_sha": "731e574c5393c1a3b06e75965ede00fef820ce5f",
           "browser_platform": null,
           "input": null,
-          "output": null,
+          "output": "Required canon action/UI/provider or migration behavior remains unimplemented or only partially delivered; settings/synonym preview additions do not complete this feature.",
           "receipt": null,
           "artifact": null,
           "evidence_ref": "evidence/authoring/validation/results.json",
-          "blocker": "Required canon action/UI/provider or migration behavior remains unimplemented or only partially delivered; settings/synonym preview additions do not complete this feature."
+          "blocker": null
         },
         {
           "feature_id": "PW-19",
@@ -6205,11 +6205,11 @@
           "git_sha": "731e574c5393c1a3b06e75965ede00fef820ce5f",
           "browser_platform": null,
           "input": null,
-          "output": null,
+          "output": "Required canon action/UI/provider or migration behavior remains unimplemented or only partially delivered; settings/synonym preview additions do not complete this feature.",
           "receipt": null,
           "artifact": null,
           "evidence_ref": "evidence/authoring/validation/results.json",
-          "blocker": "Required canon action/UI/provider or migration behavior remains unimplemented or only partially delivered; settings/synonym preview additions do not complete this feature."
+          "blocker": null
         },
         {
           "feature_id": "PW-20",
@@ -8681,11 +8681,11 @@
           "git_sha": "731e574c5393c1a3b06e75965ede00fef820ce5f",
           "browser_platform": null,
           "input": null,
-          "output": null,
+          "output": "Bounded E5 index/retrieval/candidate code and real native inference component exist. Real model inference/browser admission are not certified; task progress/cancel, cross-snapshot incremental reuse and BGE rerank are incomplete.",
           "receipt": null,
           "artifact": null,
           "evidence_ref": "evidence/authoring/validation/results.json",
-          "blocker": "Required Semantic implementation is absent; see feature records."
+          "blocker": null
         },
         {
           "id": "accept-sem-a2",
@@ -8726,11 +8726,11 @@
           "git_sha": "731e574c5393c1a3b06e75965ede00fef820ce5f",
           "browser_platform": null,
           "input": null,
-          "output": null,
+          "output": "Bounded E5 index/retrieval/candidate code and real native inference component exist. Real model inference/browser admission are not certified; task progress/cancel, cross-snapshot incremental reuse and BGE rerank are incomplete.",
           "receipt": null,
           "artifact": null,
           "evidence_ref": "evidence/authoring/validation/results.json",
-          "blocker": "Required Semantic implementation is absent; see feature records."
+          "blocker": null
         },
         {
           "id": "accept-sem-a3",
@@ -8771,11 +8771,11 @@
           "git_sha": "731e574c5393c1a3b06e75965ede00fef820ce5f",
           "browser_platform": null,
           "input": null,
-          "output": null,
+          "output": "Bounded E5 index/retrieval/candidate code and real native inference component exist. Real model inference/browser admission are not certified; task progress/cancel, cross-snapshot incremental reuse and BGE rerank are incomplete.",
           "receipt": null,
           "artifact": null,
           "evidence_ref": "evidence/authoring/validation/results.json",
-          "blocker": "Required Semantic implementation is absent; see feature records."
+          "blocker": null
         },
         {
           "id": "accept-sem-a4",
@@ -8810,11 +8810,11 @@
           "git_sha": "731e574c5393c1a3b06e75965ede00fef820ce5f",
           "browser_platform": null,
           "input": null,
-          "output": null,
+          "output": "Bounded E5 index/retrieval/candidate code and real native inference component exist. Real model inference/browser admission are not certified; task progress/cancel, cross-snapshot incremental reuse and BGE rerank are incomplete.",
           "receipt": null,
           "artifact": null,
           "evidence_ref": "evidence/authoring/validation/results.json",
-          "blocker": "Required Semantic implementation is absent; see feature records."
+          "blocker": null
         },
         {
           "id": "accept-sem-a5",
@@ -8857,11 +8857,11 @@
           "git_sha": "731e574c5393c1a3b06e75965ede00fef820ce5f",
           "browser_platform": null,
           "input": null,
-          "output": null,
+          "output": "Bounded E5 index/retrieval/candidate code and real native inference component exist. Real model inference/browser admission are not certified; task progress/cancel, cross-snapshot incremental reuse and BGE rerank are incomplete.",
           "receipt": null,
           "artifact": null,
           "evidence_ref": "evidence/authoring/validation/results.json",
-          "blocker": "Required Semantic implementation is absent; see feature records."
+          "blocker": null
         },
         {
           "id": "accept-sem-a6",
@@ -9007,11 +9007,11 @@
           "git_sha": "731e574c5393c1a3b06e75965ede00fef820ce5f",
           "browser_platform": null,
           "input": null,
-          "output": null,
+          "output": "Implementation exists for bounded E5 indexing and source-grounded candidates; full feature requirements and real model execution are not certified. Bounded E5 index/retrieval/candidate code and real native inference component exist. Real model inference/browser admission are not certified; task progress/cancel, cross-snapshot incremental reuse and BGE rerank are incomplete.",
           "receipt": null,
           "artifact": null,
           "evidence_ref": "evidence/authoring/validation/results.json",
-          "blocker": "Actual Semantic index rebuild, retrieval and candidate generation are not implemented; unavailable status UI is not feature completion."
+          "blocker": null
         },
         {
           "feature_id": "SEM-02",
@@ -9058,11 +9058,11 @@
           "git_sha": "731e574c5393c1a3b06e75965ede00fef820ce5f",
           "browser_platform": null,
           "input": null,
-          "output": null,
+          "output": "Implementation exists for bounded E5 indexing and source-grounded candidates; full feature requirements and real model execution are not certified. Bounded E5 index/retrieval/candidate code and real native inference component exist. Real model inference/browser admission are not certified; task progress/cancel, cross-snapshot incremental reuse and BGE rerank are incomplete.",
           "receipt": null,
           "artifact": null,
           "evidence_ref": "evidence/authoring/validation/results.json",
-          "blocker": "Actual Semantic index rebuild, retrieval and candidate generation are not implemented; unavailable status UI is not feature completion."
+          "blocker": null
         },
         {
           "feature_id": "SEM-03",
@@ -9109,11 +9109,11 @@
           "git_sha": "731e574c5393c1a3b06e75965ede00fef820ce5f",
           "browser_platform": null,
           "input": null,
-          "output": null,
+          "output": "Implementation exists for bounded E5 indexing and source-grounded candidates; full feature requirements and real model execution are not certified. Bounded E5 index/retrieval/candidate code and real native inference component exist. Real model inference/browser admission are not certified; task progress/cancel, cross-snapshot incremental reuse and BGE rerank are incomplete.",
           "receipt": null,
           "artifact": null,
           "evidence_ref": "evidence/authoring/validation/results.json",
-          "blocker": "Actual Semantic index rebuild, retrieval and candidate generation are not implemented; unavailable status UI is not feature completion."
+          "blocker": null
         },
         {
           "feature_id": "SEM-04",
@@ -9151,11 +9151,11 @@
           "git_sha": "731e574c5393c1a3b06e75965ede00fef820ce5f",
           "browser_platform": null,
           "input": null,
-          "output": null,
+          "output": "Implementation exists for bounded E5 indexing and source-grounded candidates; full feature requirements and real model execution are not certified. Bounded E5 index/retrieval/candidate code and real native inference component exist. Real model inference/browser admission are not certified; task progress/cancel, cross-snapshot incremental reuse and BGE rerank are incomplete.",
           "receipt": null,
           "artifact": null,
           "evidence_ref": "evidence/authoring/validation/results.json",
-          "blocker": "Actual Semantic index rebuild, retrieval and candidate generation are not implemented; unavailable status UI is not feature completion."
+          "blocker": null
         },
         {
           "feature_id": "SEM-05",
@@ -9202,11 +9202,11 @@
           "git_sha": "731e574c5393c1a3b06e75965ede00fef820ce5f",
           "browser_platform": null,
           "input": null,
-          "output": null,
+          "output": "Implementation exists for bounded E5 indexing and source-grounded candidates; full feature requirements and real model execution are not certified. Bounded E5 index/retrieval/candidate code and real native inference component exist. Real model inference/browser admission are not certified; task progress/cancel, cross-snapshot incremental reuse and BGE rerank are incomplete.",
           "receipt": null,
           "artifact": null,
           "evidence_ref": "evidence/authoring/validation/results.json",
-          "blocker": "Actual Semantic index rebuild, retrieval and candidate generation are not implemented; unavailable status UI is not feature completion."
+          "blocker": null
         },
         {
           "feature_id": "SEM-06",
@@ -15355,7 +15355,7 @@
   },
   "execution": {
     "base_sha": "cf286eea88d9ef7c809463ff0e339a140e87abb4",
-    "candidate_sha": "d9e92b24655165b66e63142e8946c6f3aa1378ed",
+    "candidate_sha": "465c344bdbb854b959832c90b7edab464f064596",
     "certified": false,
     "pr": "https://github.com/yohn-jp/proprium/pull/16",
     "note": "Candidate source SHA, not a certified release. Full acceptance and live deployment are incomplete. Unit tests do not certify feature or R-ID completion.",
@@ -15427,11 +15427,63 @@
         "git_sha": "2d1bc8fbfe4c314edc4ed485eb7fc0ca65b18852",
         "evidence_ref": "evidence/authoring/validation/components.json",
         "scope": "Ephemeral test keys; browser lifecycle and production release not certified."
+      },
+      {
+        "name": "Core actual Desktop Chromium and Mobile WebKit",
+        "status": "PASS",
+        "git_sha": "9d4d91a",
+        "command": "node node_modules/@playwright/test/cli.js test --config tests/browser/full-base-diagnostic.config.ts",
+        "evidence_ref": "evidence/authoring/validation/core-desktop-mobile.txt",
+        "scope": "67 PASS, 5 SKIP, 0 FAIL. Synthetic local fixtures; skipped dimensions not certified."
+      },
+      {
+        "name": "Large-work signed Narrative local writing chain",
+        "status": "PASS",
+        "git_sha": "0c5bd1f (Mobile), 88b4465 (Desktop)",
+        "evidence_ref": "evidence/authoring/validation/local-browser-record.json",
+        "scope": "301 scenes, 604 files, 2292659 bytes; select scene, edit/save, proposal/unit approval/local apply/commit/reopen; physical IME and full R-ID failure matrix excluded."
+      },
+      {
+        "name": "Writer guards and pinned Snapshot actual adapters",
+        "status": "PASS",
+        "git_sha": "2e210ba",
+        "evidence_ref": "evidence/authoring/validation/local-browser-record.json",
+        "scope": "5 tests each Desktop/Mobile, 10 total; exact scenarios in record."
+      },
+      {
+        "name": "Knowledge and model-free Research actual UI",
+        "status": "PASS",
+        "evidence_ref": "evidence/authoring/validation/knowledge-research-mobile.txt",
+        "scope": "Both engines: Bible/list/detail/source navigation and Japanese lexical search. Diagnostic re-signed corrected Research schema with source2e component bytes; not fresh eight-component build.",
+        "source_note": "Host source revision was not captured in raw result; do not infer it. Both-engine result is local partial evidence only."
+      },
+      {
+        "name": "Publishing actual downloads and print UI",
+        "status": "PASS",
+        "git_sha": "a3196b9",
+        "evidence_ref": "evidence/authoring/validation/publishing-registry-record.json",
+        "scope": "Both engines TXT bytes/ruby, EPUB ZIP/CRC/XHTML, vertical preview and safe print popup; no physical printer or remote publish."
+      },
+      {
+        "name": "Source-aware Canon recovery provenance",
+        "status": "PASS",
+        "git_sha": "1f742d4",
+        "command": "node scripts/verify-authoring-canon.mjs --sources /tmp/proprium-canon-sources",
+        "evidence_ref": "evidence/authoring/validation/canon-provenance.txt",
+        "scope": "114 features,136 source actions,33 MCP tools,42 UI contributions,931 links,31 pinned links,229 paths across readonly source checkouts; provenance only, not feature certification."
+      },
+      {
+        "name": "Idle Worker concurrent reservation regression",
+        "status": "PASS",
+        "git_sha": "187d805",
+        "command": "node --import tsx --test 'app/src/browser/proprium/plugins/*.test.ts'",
+        "evidence_ref": "evidence/authoring/validation/worker-reclamation-unit.txt",
+        "scope": "17 tests, including overlapping/nested reservations. Actual five-plugin UI rerun pending; unit result alone does not certify pool lifecycle."
       }
     ],
     "same_release_sha_certification": {
       "status": "NOT_CHECKED",
-      "reason": "All-eight registry build is pinned to 2d1bc8f; final Host lease-validation optimization is d9e92b2. No same-SHA full product acceptance or production publication is certified."
+      "reason": "Actual all-eight build source2e210ba predates the current Host and corrected guest payloads/declarations. A fresh complete build and same-source full product acceptance remain required."
     }
   }
 }

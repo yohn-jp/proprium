@@ -1,0 +1,15 @@
+[WebServer] (node:143827) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+[WebServer] (Use `node --trace-warnings ...` to show where the warning was created)
+
+Running 2 tests using 1 worker
+
+(node:143851) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+[WebServer] [BABEL] Note: The code generator has deoptimised the styling of /tmp/proprium-publishing-cache-143809/deps/react-dom_client.js?v=f413374e as it exceeds the max of 500KB.
+  ✓  1 [desktop-chromium] › tests/browser/authoring-publishing.acceptance.ts:96:5 › signed Publishing locally exports TXT and EPUB and opens vertical print with source text (33.7s)
+(node:144023) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+Skipping host requirements validation logic because `PLAYWRIGHT_SKIP_VALIDATE_HOST_REQUIREMENTS` env variable is set.
+  ✓  2 [mobile-webkit] › tests/browser/authoring-publishing.acceptance.ts:96:5 › signed Publishing locally exports TXT and EPUB and opens vertical print with source text (36.2s)
+
+  2 passed (1.2m)

@@ -1,0 +1,103 @@
+{
+  "schema": "proprium.acceptance-evidence/v1",
+  "scope": "Synthetic local authoring browser diagnostics; partial implementation evidence only",
+  "registry": {
+    "source_sha": "2e210babe7921a9d7790eb26dcb5107ff98c6708",
+    "registry_sha256": "8a12c2fdfb35d57ce753113d1047a4796396834068821cc8430aacf3f18ef822",
+    "registry_signature_sha256": "16d0ec379cb666240497c5649ff8f1c8219a0d9daa7c8b1e0cc9c3714206c381",
+    "narrative_manifest_sha256": "bd159449d8277dd00f90915e38fa7f680abd0b35701fcb2b525f8adce5943793",
+    "narrative_component_sha256": "baf02d79d23a7cc2410a547c05904e09f5da2fc61c96eb71dca00468ed3f4b9e",
+    "transport": "Playwright intercepted the registry and artifact URLs and served the verified retained bytes; no production endpoint was contacted"
+  },
+  "fixture": {
+    "scenes": 301,
+    "files": 604,
+    "bytes": 2292659,
+    "selected_manuscript_utf8_bytes": 150040,
+    "features": [
+      "Japanese text",
+      "ruby notation",
+      "CRLF"
+    ]
+  },
+  "p0": [
+    {
+      "host_source_sha": "88b4465",
+      "test_source_commits": [
+        "69d0242",
+        "ee7d064"
+      ],
+      "project": "desktop-chromium",
+      "result": "PASS",
+      "duration": "1.9m",
+      "command": "PROPRIUM_E2E_PORT=4229 PROPRIUM_E2E_CHROMIUM=/usr/bin/chromium PLAYWRIGHT_SKIP_VALIDATE_HOST_REQUIREMENTS=1 node node_modules/@playwright/test/cli.js test --project desktop-chromium --grep 'local authoring edits' --config tests/browser/p0-diagnostic.config.ts",
+      "log": "/tmp/proprium-p0-full-88-chromium.log"
+    },
+    {
+      "host_source_sha": "0c5bd1f",
+      "test_source_commits": [
+        "69d0242",
+        "ee7d064"
+      ],
+      "project": "mobile-webkit",
+      "result": "PASS",
+      "duration": "1.7m",
+      "command": "PROPRIUM_E2E_PORT=4229 PLAYWRIGHT_SKIP_VALIDATE_HOST_REQUIREMENTS=1 node node_modules/@playwright/test/cli.js test --project mobile-webkit --grep 'local authoring edits' --config tests/browser/p0-diagnostic.config.ts",
+      "log": "/tmp/proprium-p0-full-0c5-mobile.log"
+    }
+  ],
+  "writer_snapshot": [
+    {
+      "host_source_sha": "2e210babe7921a9d7790eb26dcb5107ff98c6708",
+      "project": "chromium",
+      "result": "5 passed",
+      "log": "/tmp/proprium-writer-snapshot-chromium.log",
+      "command": "PROPRIUM_E2E_PORT=4228 PLAYWRIGHT_SKIP_VALIDATE_HOST_REQUIREMENTS=1 node node_modules/@playwright/test/cli.js test --project chromium --config tests/browser/writer-snapshot-diagnostic.config.ts"
+    },
+    {
+      "host_source_sha": "2e210babe7921a9d7790eb26dcb5107ff98c6708",
+      "project": "webkit-mobile",
+      "result": "5 passed",
+      "log": "/tmp/proprium-writer-snapshot-webkit.log",
+      "command": "PROPRIUM_E2E_PORT=4228 PLAYWRIGHT_SKIP_VALIDATE_HOST_REQUIREMENTS=1 node node_modules/@playwright/test/cli.js test --project webkit-mobile --config tests/browser/writer-snapshot-diagnostic.config.ts"
+    }
+  ],
+  "limits": [
+    "Headless Linux Chromium and mobile WebKit emulation, not physical iOS or Android devices",
+    "No physical IME or composition claim",
+    "No production Cloudflare or deployed-service claim",
+    "P0 browser runs used a synthetic committed baseline; only later editing, proposal review and approval, local commit and recovery were exercised through the Host UI",
+    "These focused passes do not certify the complete R01–R14 matrix or R13"
+  ],
+  "base_browser": {
+    "host_source_sha": "9d4d91a",
+    "result": "67 passed, 5 skipped, 0 failed",
+    "duration": "7.8m",
+    "projects": [
+      "desktop-chromium",
+      "mobile-webkit"
+    ],
+    "command": "PROPRIUM_E2E_PORT=4228 PROPRIUM_E2E_GATEWAY_PORT=4230 PROPRIUM_E2E_CHROMIUM=/usr/bin/chromium PLAYWRIGHT_SKIP_VALIDATE_HOST_REQUIREMENTS=1 node node_modules/@playwright/test/cli.js test --config tests/browser/full-base-diagnostic.config.ts",
+    "log": "/tmp/proprium-full-base-9d.log",
+    "config": "/workspace/terra-acceptance/tests/browser/full-base-diagnostic.config.ts",
+    "limits": [
+      "Five skips include platform-specific and live GitHub test cases; not evidence for those skipped operations",
+      "Vite development server and local test Gateway, not deployed service"
+    ]
+  },
+  "mobile_cached_auth_instrumented": {
+    "host_source_sha": "9d4d91a",
+    "result": "6 passed (two cases repeated three times)",
+    "log": "/tmp/proprium-cached-auth-instrumented-9d.log",
+    "instrumentation": "/tmp/proprium-cached-auth-instrumented.spec.ts",
+    "observed_pending": [
+      "list-files",
+      "log",
+      "verify"
+    ],
+    "limits": [
+      "Only operation names and request IDs observed; no payloads"
+    ]
+  },
+  "archive_note": "Original /tmp paths identify local execution artifacts; selected raw outputs are archived alongside this record. Local intercepted fixtures and ephemeral signing keys do not certify production distribution."
+}

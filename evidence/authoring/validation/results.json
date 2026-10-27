@@ -1,40 +1,62 @@
 {
-  "candidate_sha": "d9e92b24655165b66e63142e8946c6f3aa1378ed",
+  "candidate_sha": "465c344bdbb854b959832c90b7edab464f064596",
   "overall": "INCOMPLETE",
-  "browser_suite": {
-    "status": "NOT_CHECKED",
-    "reason": "Earlier runs invalidated by shared-contract rebuild/HMR; targeted stable checks include actual failures and passes; no complete final suite PASS."
+  "core_browser_suite": {
+    "status": "PASS",
+    "source_sha": "9d4d91a",
+    "result": "67 passed, 5 skipped, 0 failed on Desktop Chromium and Mobile WebKit",
+    "evidence_ref": "evidence/authoring/validation/core-desktop-mobile.txt",
+    "scope": "Local Core suite, not all official-plugin acceptance. Skips remain unverified."
   },
   "official_registry": {
     "status": "PASS",
-    "source_sha": "2d1bc8fbfe4c314edc4ed485eb7fc0ca65b18852",
-    "registry_digest": "0b29e79f3e91bca46c3ffc83b48d689b9d6a70ba18fc28c80d813948005554e8",
+    "source_sha": "2e210babe7921a9d7790eb26dcb5107ff98c6708",
+    "registry_digest": "8a12c2fdfb35d57ce753113d1047a4796396834068821cc8430aacf3f18ef822",
     "evidence_ref": "evidence/authoring/validation/components.json",
-    "signing": "Ephemeral test keys; not production"
+    "scope": "Eight actual independent component builds and signature/dependency integrity with ephemeral test keys. Predates corrected guest payloads/declarations; fresh build required."
   },
-  "official_narrative_e2e": {
-    "status": "NOT_CHECKED",
-    "observations": [
-      "Small signed Narrative Chromium navigation passed.",
-      "Earlier 301-scene action timed out at actual 30-second budget.",
-      "Subsequent exact lease validation removes redundant unrelated page fetches; final large/mobile reruns pending."
+  "official_narrative_local_chain": {
+    "status": "PASS",
+    "evidence_ref": "evidence/authoring/validation/local-browser-record.json",
+    "scope": "Both engines, 301 scenes, 604 files, 2292659 bytes; install/select/edit/save/proposal/human unit approval/apply/local commit/reopen. Full resume/failure/physical IME matrix is not certified."
+  },
+  "typed_mcp": {
+    "status": "PASS",
+    "source_sha": "2e210ba",
+    "scope": "Actual Go Gateway and active Browser Host, typed Narrative discovery/invocation/stale and capability denial/proposal/human approval, disconnect/reopen, real 3000-scene timeout. Initial six-test run has terminal output only; no raw archive is invented.",
+    "evidence_refs": [
+      "evidence/authoring/validation/mcp-reopen.txt",
+      "evidence/authoring/validation/mcp-real-timeout.txt"
     ]
   },
-  "h0_read": {
+  "source_provenance": {
     "status": "PASS",
-    "command": "PROPRIUM_E2E_CHROMIUM=/usr/bin/chromium PLAYWRIGHT_SKIP_VALIDATE_HOST_REQUIREMENTS=1 pnpm test:browser:adapters",
-    "scope": "Only authoring-snapshot.acceptance.spec.ts sub-suite: 2 actual Chromium/Mobile WebKit tests passed; complete adapter command had another failing suite."
+    "evidence_ref": "evidence/authoring/validation/canon-provenance.txt",
+    "scope": "Source-aware links and pinned revisions checked; does not certify feature behavior."
   },
   "remaining": [
-    "Semantic index rebuild and model inference lifecycle",
-    "Paired Writing remaining canon actions/provider Host bridge",
-    "All R01–R14 mandatory failure dimensions",
-    "Live Cloudflare publish and acquisition",
-    "Physical-device tests and source-aware sibling provenance checks"
+    "Full R01–R14 and 104 individual acceptance gates, including mandatory failure dimensions",
+    "Fresh all-eight build using corrected payloads and declarations, same-source Host/Gateway/browser validation",
+    "Semantic actual E5 model execution and measured admission, progress/task cancellation/incremental reuse, BGE rerank",
+    "Paired Writing remaining canon workflows and Host provider broker production wiring",
+    "Complete update/rollback/uninstall/reinstall lifecycle, currently under actual browser test",
+    "Live Cloudflare publication/acquisition is BLOCKED: signing/R2 credentials not available",
+    "Physical devices and real Japanese IME remain NOT_CHECKED"
   ],
   "ci": {
-    "gateway": "PENDING after test race fix",
-    "browser": "PENDING",
-    "production_publish": "BLOCKED"
+    "source_sha": "465c344bdbb854b959832c90b7edab464f064596",
+    "gateway": {
+      "status": "PASS",
+      "url": "https://github.com/yohn-jp/proprium/actions/runs/40479271482"
+    },
+    "browser": {
+      "status": "NOT_CHECKED",
+      "state": "in_progress",
+      "url": "https://github.com/yohn-jp/proprium/actions/runs/40479271442"
+    },
+    "production_publish": {
+      "status": "BLOCKED",
+      "reason": "No configured production signing/R2 credentials; metadata API access denied. No production publication attempted."
+    }
   }
 }

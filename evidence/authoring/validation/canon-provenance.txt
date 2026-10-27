@@ -1,0 +1,2 @@
+1f742d4d8c5ded15cdbed6e43d418330deb3a13f
+Authoring canon verified: 8 plugins, 114 features, 136 source actions, 33 legacy MCP tools, 42 UI contributions, acyclic required dependencies, 931 links (31 pinned source links checked; source registrations and 229 source paths checked).
