@@ -29,3 +29,13 @@ test('corpus rejects two scenes that claim the same manuscript', () => {
 test('malformed recognized YAML cannot become a falsely complete corpus', () => {
   assert.throws(() => run({ 'bible/characters/a.yaml': 'id: [\n' }), (error: any) => error.code === 'unsupported_format');
 });
+test('corpus can consume component sentence boundaries without browser Intl', async () => {
+  const { setInferenceBindings } = await import('./inference.ts');
+  setInferenceBindings({ beginAsset() {}, appendAsset() {}, finishAsset() {}, loadEmbedding() {}, embedPassages() { return []; }, release() {}, splitSentenceEnds(text: string) { return [text.length]; } });
+  const original = globalThis.Intl;
+  try {
+    Object.defineProperty(globalThis, 'Intl', { value: undefined, configurable: true });
+    const corpus = run({ 'plot/scenes/a.yaml': 'id: scene-a\ntype: scene\nmanuscript: manuscript/custom.md\n', 'manuscript/custom.md': '星が見える。' });
+    assert.equal(corpus.passages[0]?.evidence.quote, '星が見える。');
+  } finally { Object.defineProperty(globalThis, 'Intl', { value: original, configurable: true, writable: true }); }
+});

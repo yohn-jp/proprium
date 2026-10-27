@@ -32,6 +32,7 @@ export interface InferenceBindings {
   loadEmbedding(): void;
   embedPassages(texts: string[]): number[][];
   release(): void;
+  splitSentenceEnds(text: string): number[] | Uint32Array;
 }
 
 const ASSET_READ = "workspace.asset.read";
@@ -168,4 +169,16 @@ export function releaseEmbedding(): void {
   if (bindings) bindings.release();
   ready = false;
   loading = false;
+}
+
+/** UAX #29 sentence breaks from the component's pinned Unicode implementation. */
+export function componentSentenceEnds(text: string): number[] {
+  if (!bindings) throw failure("dependency_unavailable", "This runtime does not provide the pinned Japanese sentence segmenter");
+  const raw = bindings.splitSentenceEnds(text);
+  if (!Array.isArray(raw) && !(raw instanceof Uint32Array)) throw failure("dependency_unavailable", "The component returned invalid sentence boundaries");
+  const ends = Array.from(raw);
+  if (ends.length > text.length || ends.some((end, index) => !Number.isSafeInteger(end) || end <= (index ? ends[index - 1]! : 0) || end > text.length) || (text.length > 0 && ends[ends.length - 1] !== text.length)) {
+    throw failure("dependency_unavailable", "The component returned invalid sentence boundaries");
+  }
+  return ends;
 }
