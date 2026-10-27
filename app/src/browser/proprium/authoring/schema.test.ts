@@ -44,3 +44,10 @@ test("interpreted schema validation preserves frozen signed declarations and rej
   assert.throws(() => assertValue({ type: "invented" } as never, {}));
   assert.throws(() => assertValue({ type: "object", properties: { x: { type: "invented" } }, additionalProperties: false } as never, {}));
 });
+
+ test("non-finite numbers cannot cross a JSON action boundary", () => {
+  for (const value of [NaN, Infinity, -Infinity]) {
+    assert.throws(() => assertValue({ type: "number" }, value));
+    assert.throws(() => assertValue(true, { nested: [value] }));
+  }
+});

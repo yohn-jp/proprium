@@ -106,7 +106,10 @@ function invalid(phase: string): never {
 }
 function assertSize(value: unknown, limit = 1024 * 1024): void {
   let serialized: string | undefined;
-  try { serialized = JSON.stringify(value); } catch { invalid("JSON value"); }
+  try { serialized = JSON.stringify(value, (_key, item: unknown) => {
+    if (typeof item === "number" && !Number.isFinite(item)) invalid("JSON number");
+    return item;
+  }); } catch { invalid("JSON value"); }
   if (typeof serialized !== "string" || new TextEncoder().encode(serialized).length > limit) invalid("JSON size");
 }
 /** Schema safety is checked at admission, before an untrusted declaration compiles. */
