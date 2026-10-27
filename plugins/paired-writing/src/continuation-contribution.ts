@@ -15,7 +15,8 @@ const continuationInput={type:"object",additionalProperties:false,properties:{
 },required:[]};
 const reactionInput={type:"object",additionalProperties:false,properties:{chapterId:str(256,1)},required:["chapterId"]};
 const baseCapabilities=["workspace.file.read","workspace.plugin.invoke"];
-const continuationCapabilities=[...baseCapabilities,"workspace.derived.cache"];
+// Draft capture may use cache, but saved-scene actions do not require that optional grant.
+const continuationCapabilities=[...baseCapabilities];
 const providerCapabilities=["plugin.preferences","workspace.capabilities.query","provider.request"];
 function descriptor(action_id:string,input_schema:ActionDescriptor["input_schema"],output_schema:ActionDescriptor["output_schema"],required_capabilities:string[]):ActionDescriptor {
  return {plugin_id:"proprium.paired-writing",action_id,schema_version:1,effect:"read",input_schema,output_schema,required_capabilities,callers:["ui","mcp","plugin"],requires_user_gesture:false};
