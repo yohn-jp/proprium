@@ -78,7 +78,7 @@ function* topicContext(input: unknown, host: GuestHost, request: ActionRequest) 
 export function* previewDialogueTopics(input: unknown, host: GuestHost, request: ActionRequest) { return yield* topicContext(input, host, request); }
 export function* suggestDialogueTopics(input: unknown, host: GuestHost, request: ActionRequest, generate: DialogueGenerate) {
   const prepared = yield* topicContext(input, host, request);
-  const result = yield* generate(host, request, { feature: 'dialogue-sketch', prompt: prepared.prompt, promptVersion: prepared.promptVersion, maxOutputTokens: 4096, sourceManifest: prepared.citations });
+  const result = yield* generate(host, request, { feature: 'dialogue-sketch', prompt: prepared.prompt, promptVersion: prepared.promptVersion, maxOutputTokens: 4096, sourceManifest: {scope:request.scope,snapshot:request.snapshot,sources:prepared.citations} });
   const parsed = jsonOutput(result.text); outputKeys(parsed, ['topics']);
   if (!Array.isArray(parsed.topics) || parsed.topics.length < 3 || parsed.topics.length > 5) throw new PairedError('unsupported_format', 'Provider must return 3–5 topics');
   const topics = parsed.topics.map(raw => { const row = record(raw, 'topic'); outputKeys(row, ['title','situation']); return { title: outputText(row.title,'title',512), situation: outputText(row.situation,'situation',2000) }; });
@@ -132,7 +132,7 @@ function* turnContext(input: unknown, host: GuestHost, request: ActionRequest) {
 }
 export function* previewDialogueTurns(input: unknown, host: GuestHost, request: ActionRequest) { return yield* turnContext(input,host,request); }
 export function* suggestDialogueTurns(input: unknown, host: GuestHost, request: ActionRequest, generate: DialogueGenerate) {
-  const prepared = yield* turnContext(input,host,request); const generated = yield* generate(host,request,{ feature:'dialogue-sketch-turn',prompt:prepared.prompt,promptVersion:prepared.promptVersion,maxOutputTokens:prepared.speakerEntityId ? 256 : 4096,sourceManifest:prepared.citations });
+  const prepared = yield* turnContext(input,host,request); const generated = yield* generate(host,request,{ feature:'dialogue-sketch-turn',prompt:prepared.prompt,promptVersion:prepared.promptVersion,maxOutputTokens:prepared.speakerEntityId ? 256 : 4096,sourceManifest:{scope:request.scope,snapshot:request.snapshot,sources:prepared.citations} });
   const parsed = jsonOutput(generated.text); let lines: Array<{speakerEntityId:string;text:string}>;
   if (prepared.speakerEntityId) { outputKeys(parsed,['text']); lines = [{speakerEntityId:prepared.speakerEntityId,text:cleanLine(parsed.text)}]; }
   else { outputKeys(parsed,['lines']); if (!Array.isArray(parsed.lines) || parsed.lines.length !== prepared.lineCount) throw new PairedError('unsupported_format','Provider returned the wrong number of lines'); lines = parsed.lines.map(raw => {const line=record(raw,'line');outputKeys(line,['speakerEntityId','text']);return {speakerEntityId:outputText(line.speakerEntityId,'speakerEntityId',256),text:cleanLine(line.text)};}); }
