@@ -3,11 +3,14 @@ import { execFileSync } from "node:child_process";
 import { tmpdir } from "node:os";
 import { basename, dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
+import { createReadStream } from "node:fs";
+import { generatePinnedAssets } from "./asset-build.mjs";
 
 const packageDirectory = dirname(fileURLToPath(import.meta.url));
 const repositoryRoot = resolve(packageDirectory, "../..");
 const sourceDirectory = resolve(process.env.PROPRIUM_PLUGIN_SOURCE_DIR ?? packageDirectory);
 const output = resolve(process.env.PROPRIUM_PLUGIN_BUILD_OUTPUT ?? join(packageDirectory, "dist/plugin.component.wasm"));
+const assetOutput = resolve(process.env.PROPRIUM_PLUGIN_ASSET_OUTPUT_DIR ?? join(packageDirectory, "dist/plugin-assets"));
 const declaredWorld = process.env.PROPRIUM_PLUGIN_V2_WORLD ?? "proprium:plugin/plugin@2.0.0";
 if (declaredWorld !== "proprium:plugin/plugin@2.0.0") throw new Error(`Unsupported Semantic world: ${declaredWorld}`);
 
@@ -39,6 +42,21 @@ async function findModelComponent(directory) {
 }
 
 try {
+  const metadata = JSON.parse(await readFile(join(sourceDirectory, "plugin.json"), "utf8"));
+  const group = metadata.asset_groups?.find(item => item.id === "proprium.semantic.embedding.e5-small");
+  if (!group || typeof group.manifest_path !== "string" || !/^proprium\/semantic\/assets\/manifests\/[a-f0-9]{64}\/manifest\.json$/u.test(group.manifest_path)) throw new Error("Pinned Semantic asset group is missing");
+  const manifestBytes = await readFile(join(sourceDirectory, group.manifest_path.slice("proprium/semantic/".length)));
+  const sourcePrefix = "proprium/semantic/embedding/e5-small/";
+  const upstream = "https://huggingface.co/Xenova/multilingual-e5-small/resolve/761b726dd34fb83930e26aab4e9ac3899aa1fa78/";
+  await generatePinnedAssets({ manifestBytes, group, outputDirectory: assetOutput, openFile: async path => {
+    const relativePath = path.slice(sourcePrefix.length);
+    if (relativePath === "provenance.json") return createReadStream(join(sourceDirectory, "embedding/e5-small/provenance.json"));
+    const allowed = new Set(["onnx/model.onnx", "tokenizer.json", "sentencepiece.bpe.model", "config.json", "tokenizer_config.json", "special_tokens_map.json"]);
+    if (!path.startsWith(sourcePrefix) || !allowed.has(relativePath)) throw new Error(`Unsupported Semantic asset source: ${path}`);
+    const response = await fetch(new URL(relativePath, upstream));
+    if (!response.ok || !response.body) throw new Error(`Semantic asset download failed (${response.status}): ${relativePath}`);
+    return response.body;
+  } });
   await mkdir(dirname(output), { recursive: true });
   await mkdir(dirname(cargoTargetDirectory), { recursive: true });
 

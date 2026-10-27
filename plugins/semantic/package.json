@@ -5,7 +5,7 @@
   "type": "module",
   "scripts": {
     "build": "node build.mjs",
-    "test": "node --experimental-strip-types --test core.test.ts guest.test.ts sentences.test.ts source.test.ts"
+    "test": "node --experimental-strip-types --test core.test.ts guest.test.ts sentences.test.ts source.test.ts && node --test asset-build.test.mjs"
   },
   "dependencies": {
     "yaml": "2.9.1"
