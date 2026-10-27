@@ -404,6 +404,29 @@ test("stale workspace and dirty draft are rejected before worktree changes", asy
   assert.equal(cleanWorkspace.text("chapters/one.md"), null);
 });
 
+test("reopening a workspace retains review and safely recovers old-generation write-ahead", async () => {
+  const { writer, workspace, journal } = await makeWriter();
+  const next: WriterScope = { ...scope, generation: "generation-2" };
+  const set = changeSet({ paths: ["chapters/one.md", "chapters/two.md"] });
+  const proposal = await writer.propose(set, caller(), set.read_set);
+  assert.equal((await writer.list(next)).items[0]?.proposal_id, proposal.proposal_id);
+  workspace.failAfter(1);
+  await assert.rejects(writer.apply(scope, proposal.proposal_id, ["unit-1"], "ui", true),
+    (error: unknown) => error instanceof ChangeWriterError && error.code === "storage_unknown");
+  assert.ok((await journal.read(next)).write_ahead);
+  assert.equal(workspace.blocked, true);
+  const recovered = await writer.recover(next);
+  assert.equal(recovered?.proposal_id, proposal.proposal_id);
+  assert.equal(recovered?.status, "proposed");
+  assert.equal(workspace.text("chapters/one.md"), null);
+  assert.equal(workspace.text("chapters/two.md"), null);
+  assert.equal(workspace.blocked, false);
+  const another: WriterScope = { ...scope, workspace_id: "other-workspace" };
+  await assert.rejects(writer.status(another, proposal.proposal_id),
+    (error: unknown) => error instanceof ChangeWriterError && error.code === "file_not_found");
+  assert.equal((await writer.list(next)).items[0]?.proposal_id, proposal.proposal_id);
+});
+
 test("write-ahead recovery restores a partially persisted unit before another writer runs", async () => {
   const { writer, workspace, journal } = await makeWriter();
   const set = changeSet({ paths: ["chapters/one.md", "chapters/two.md"] });

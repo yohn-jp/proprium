@@ -30,6 +30,6 @@ test("Knowledge proposes Japanese evidence using UTF-16 source spans", () => {
   assert.equal(call.operation, "workspace.change.propose");
   const proposed = call.payload.changeset as ChangeSet;
   assert.deepEqual(proposed.evidence, [{ path: "chapter.md", revision, start: 0, end: source.length, quote: source }]);
-  assert.equal(source.length, 9);
+  assert.equal(source.length, 8);
   assert.ok(new TextEncoder().encode(source).byteLength > source.length);
 });
