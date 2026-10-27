@@ -23,3 +23,13 @@ test('free-text contradiction evidence uses bounded Research and verifies its ex
  step=iter.next({ok:true,scope,snapshot,value:{hits:[{kind:'document',path:'manuscript/a.md',title:'a',fileRevision:rev,matchRanges:[{start:0,end:1}]}],indexSnapshot:'s',nextCursor:null,query:'駅',mode:'lexical',coverage:{documents:1,bytes:9}}});
  const bytes=[...new TextEncoder().encode('駅は北')];step=iter.next({revision:rev,offset:0,total_bytes:bytes.length,bytes,next_offset:null});assert.equal(step.done,true);assert.equal((step.value as any).citations[0].quote,'駅');
 });
+test('contradiction verdict never invokes provider without evidence', async()=>{
+ const {judgeContradiction}=await import('../src/assistance-adapters.js');let called=false;
+ const provider:any=function*(){called=true;return {text:'{}',provenance:{}};};const iter=judgeContradiction(host,request,{candidateText:'駅'},[],{source:'local.lexical'},provider);const step=iter.next();assert.equal(step.done,true);assert.equal((step.value as any).verdict,'insufficient');assert.deepEqual((step.value as any).citations,[]);assert.equal(called,false);
+});
+test('contradiction verdict accepts only exact supplied quotes from provider JSON', async()=>{
+ const {judgeContradiction}=await import('../src/assistance-adapters.js');const evidence=[{path:'a.md',revision:'a'.repeat(64),quote:'北へ',id:'a',kind:'document'}];
+ const provider:any=function*(_h:any,_r:any,opts:any){assert.equal(opts.feature,'contradiction-check');return {text:JSON.stringify({verdict:'contradiction',reason:'異なる',quotes:['北へ']}),provenance:{provider:'p',model:'m',promptVersion:'v',requestId:'r',untrusted:true}};};
+ const iter=judgeContradiction(host,request,{candidateText:'南へ'},evidence,{source:'research.query'},provider);const result=iter.next();assert.equal(result.done,true);assert.equal((result.value as any).verdict,'contradiction');assert.equal((result.value as any).citations[0].quote,'北へ');
+ const bad:any=function*(){return {text:JSON.stringify({verdict:'compatible',reason:'x',quotes:['偽造']}),provenance:{}}};assert.throws(()=>judgeContradiction(host,request,{candidateText:'南へ'},evidence,{},bad).next(),/quote/i);
+});
