@@ -19,3 +19,8 @@ test('derived index is rejected after snapshot changes or vector corruption', ()
  const changed = [...index.passages[0]!.vector]; changed[0] = 0.25;
  assert.throws(() => validateIndex({ ...index, passages: [{ ...index.passages[0], vector: changed }] }, context), /corrupt/i);
 });
+test('cosine scores stay within the public schema after floating point rounding', () => {
+ const v = Array(384).fill(0); for (let i = 0; i < 11; i++) v[i] = 0.1;
+ const index = makeIndex(context, corpus, [v]);
+ assert.equal(rankedIndex(index, v, 1)[0]!.cosineScore, 1);
+});

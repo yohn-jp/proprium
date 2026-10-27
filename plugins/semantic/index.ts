@@ -35,6 +35,6 @@ export function validateIndex(raw: unknown, request: ActionRequest): SemanticInd
 export function rankedIndex(index: SemanticIndex, query: number[], limit: number, exclude: string[] = []): Array<IndexedReference & { cosineScore: number }> {
   if (query.length !== 384 || query.some(value => !Number.isFinite(value))) throw failure('model_unavailable', 'Invalid query embedding');
   const excluded = new Set(exclude);
-  return index.passages.filter(item => !excluded.has(item.entityId)).map(item => ({ ...item, cosineScore: cosineSimilarityDense(query, item.vector) }))
+  return index.passages.filter(item => !excluded.has(item.entityId)).map(item => ({ ...item, cosineScore: Math.max(-1, Math.min(1, cosineSimilarityDense(query, item.vector))) }))
     .sort((a, b) => b.cosineScore - a.cosineScore || (a.entityId < b.entityId ? -1 : a.entityId > b.entityId ? 1 : 0) || a.sentenceIndex - b.sentenceIndex).slice(0, limit);
 }
