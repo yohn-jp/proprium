@@ -56,7 +56,7 @@ export function readUsagePage(input: UsageInput) {
 }
 
 export interface UsageHistoryQuery { month?: string; limit: number; cursor?: string; source?: 'canonical' | 'archive' }
-export type HostUsageReader = (query: { month?: string }) => Generator<import('../../shared/guest.js').HostCall, { events: readonly unknown[]; complete: boolean }, unknown>;
+export type HostUsageReader = (query: { month?: string }) => Generator<import('../../shared/guest.js').HostCall, { events: readonly unknown[]; complete: boolean; available?: boolean }, unknown>;
 /** Read exactly the selected legacy source at the Host-pinned snapshot; archives require explicit selection. */
 export function* resolveUsageHistory(
   host: import('../../shared/guest.js').GuestHost,
@@ -86,6 +86,22 @@ export function* resolveUsageHistory(
     legacyText=file.text; legacyRevision=file.revision;
   }
   let hostEvents:readonly unknown[]=[]; let hostAvailable=false; let hostHistoryComplete=false;
-  if (readHost) { const result=yield* readHost({ ...(query.month ? {month:query.month} : {}) }); if (!result || !Array.isArray(result.events) || typeof result.complete!=='boolean') throw new PairedError('invalid_input','Host usage history response is malformed'); hostEvents=result.events; hostAvailable=true; hostHistoryComplete=result.complete; }
+  if (readHost) { const result=yield* readHost({ ...(query.month ? {month:query.month} : {}) }); if (!result || !Array.isArray(result.events) || typeof result.complete!=='boolean') throw new PairedError('invalid_input','Host usage history response is malformed'); hostEvents=result.events; hostAvailable=result.available !== false; hostHistoryComplete=hostAvailable && result.complete; }
   return {...readUsagePage({legacyText,legacyRevision,hostEvents,hostAvailable,limit:query.limit,...(query.month === undefined ? {} : {month:query.month}),...(query.cursor === undefined ? {} : {cursor:query.cursor})}),legacyPath:path,hostHistoryComplete};
+}
+
+/** Query the Host-owned, scope-bound provider usage authority. Month filtering stays local. */
+export function* readHostUsage(host: import('../../shared/guest.js').GuestHost, _query: { month?: string }): Generator<import('../../shared/guest.js').HostCall, { events: readonly unknown[]; complete: boolean; available: boolean }, unknown> {
+  let value:unknown;
+  try { value = yield* host.request('workspace.capabilities.query', { capability_id: 'provider.usage.v1' }); }
+  catch (error) {
+    const code = error && typeof error === 'object' && 'code' in error ? error.code : undefined;
+    if (code === 'missing_capability' || code === 'capability_denied' || code === 'dependency_unavailable') return { events: [], complete: false, available: false };
+    throw error;
+  }
+  if (!value || typeof value !== 'object' || Array.isArray(value) || typeof (value as {available?:unknown}).available !== 'boolean') throw new PairedError('invalid_input','Host usage capability response is malformed');
+  const status = value as {available:boolean;events?:unknown;complete?:unknown};
+  if (!status.available) return { events: [], complete: false, available: false };
+  if (!Array.isArray(status.events) || status.events.length > 1000 || typeof status.complete !== 'boolean') throw new PairedError('invalid_input','Host usage capability response is malformed');
+  return {events:status.events,complete:status.complete,available:true};
 }
