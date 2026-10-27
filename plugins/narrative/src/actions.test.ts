@@ -251,7 +251,13 @@ class MemoryHost {
     if (operation === "workspace.change.propose") {
       const change = payload.changeset as ChangeSet;
       this.changeset = change;
-      return { proposal_id: "proposal-1", preview: { title: change.title, read_paths: [], units: [] } };
+      return { proposal_id: "proposal-1", status: "proposed", preview: {
+        title: change.title, reason: change.reason, scope: change.scope, snapshot: change.snapshot,
+        read_set: change.read_set, units: change.units.map(unit => ({ ...unit, operations: unit.operations.map(op => ({
+          id: op.id, kind: op.kind, path: op.path, expected_revision: op.expected_revision,
+          before_hash: op.expected_revision, after_hash: "a".repeat(64), content_ref: `content:${unit.id}:${op.id}`,
+        })) })), evidence: [], source_payload_digest: "b".repeat(64),
+      } };
     }
     if (operation === "workspace.identity.read") return this.identity;
     if (operation === "workspace.change.timestamp") return { timestamp: this.timestamp };
@@ -379,6 +385,17 @@ test("outline selects a scene for revision-guarded rename and relink", () => {
   const result = run(host, request("proprium.narrative.structure.update", { kind: selected.selected.kind, id: selected.selected.id, patch: { manuscript: "manuscript/custom/new.md" }, expected_metadata_revision: selected.selected.metadata_revision }, "selected-relink"));
   assertDeclaredOutput("proprium.narrative.structure.update", result);
   assert.deepEqual(host.changeset!.units[0]!.operations.map(op => op.path), ["plot/volumes/folder-not-id/chapters/directory-not-id/scenes/file-scene-1.yaml"]);
+});
+
+test("proposal output projects the durable Host preview to the declared compact schema", () => {
+  const host = new MemoryHost();
+  const tree = run(host, request("proprium.narrative.work.detect", {})) as { tree_revision: string };
+  const result = run(host, request("proprium.narrative.structure.create", {
+    kind: "volume", title: "First volume", expected_tree_revision: tree.tree_revision,
+  }, "real-preview")) as any;
+  assertDeclaredOutput("proprium.narrative.structure.create", result);
+  assert.deepEqual(result.preview.read_paths, host.changeset!.read_set.map(item => item.path));
+  assert.deepEqual(result.preview.units[0].operation_paths, host.changeset!.units[0]!.operations.map(item => item.path));
 });
 
 test("scene creation proposes body, metadata and reordered siblings in one unit", () => {

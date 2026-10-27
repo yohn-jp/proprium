@@ -341,7 +341,12 @@ export function* propose(
   if (!isRecord(result) || typeof result.proposal_id !== "string" || !result.proposal_id || !isRecord(result.preview)) {
     fail("invalid_input", "Host returned an invalid proposal review reference");
   }
-  return { proposal_id: result.proposal_id, preview: result.preview as ProposalValue["preview"] };
+  return { proposal_id: result.proposal_id, preview: {
+    title: change.title,
+    read_paths: change.read_set.map(item => item.path),
+    units: change.units.map(unit => ({ id: unit.id, label: unit.label, depends_on: [...unit.depends_on],
+      operation_paths: unit.operations.map(operation => operation.path) })),
+  } };
 }
 
 function snapshotReads(snapshot: ReadSnapshot): Array<{ path: string; revision: string | null }> {
