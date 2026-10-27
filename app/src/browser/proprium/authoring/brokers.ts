@@ -301,7 +301,7 @@ export class ArtifactBroker {
   create(pluginId: string, input: { media_type: string; filename: string; scope: Scope; snapshot: Snapshot }): Promise<{ artifact_id: string; max_bytes: number; max_chunk_bytes: number }> {
     return this.serial(async () => {
       validateIdentifier(pluginId, "plugin");
-      if (!input || !/^[\w.+-]+\/[\w.+-]+$/u.test(input.media_type) || !input.filename || input.filename.length > 255 || /[\\/\0-\x1f]/u.test(input.filename) || !validScopeSnapshot(input.scope, input.snapshot)) throw new BrokerError("invalid_input", "Artifact declaration is invalid");
+      if (!input || !/^[a-z0-9.+-]+\/[a-z0-9.+-]+(?:;[ ]*charset=(?:utf-8|"utf-8"))?$/iu.test(input.media_type) || !input.filename || input.filename.length > 255 || /[\\/\0-\x1f]/u.test(input.filename) || !validScopeSnapshot(input.scope, input.snapshot)) throw new BrokerError("invalid_input", "Artifact declaration is invalid");
       const artifact_id = this.id();
       const record: ArtifactRecord = { artifact_id, plugin_id: pluginId, filename: input.filename, media_type: input.media_type, scope: structuredClone(input.scope), snapshot: structuredClone(input.snapshot), max_bytes: ARTIFACT_LIMIT, state: "writing", next_sequence: 0, received_bytes: 0, created_at: this.now() };
       if (!await this.store.reserveArtifact(record)) throw new BrokerError("capacity", "Only one artifact may be in flight per plugin");
