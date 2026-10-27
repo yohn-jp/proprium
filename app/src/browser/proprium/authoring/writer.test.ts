@@ -130,9 +130,19 @@ function caller(key = "request-1", digest = "a".repeat(64)) {
   return { caller: "plugin" as const, producer_plugin_id: "proprium.narrative", action_id: "proprium.narrative.structure.create", scope, idempotency_key: key, source_payload: new TextEncoder().encode(JSON.stringify({ idempotency_key: key })), request_digest: digest };
 }
 
+const allowedActions = new Set([
+  "proprium.narrative:proprium.narrative.structure.create",
+  "proprium.research:proprium.research.terms.propose",
+  "proprium.knowledge:proprium.knowledge.state.append-event",
+  "proprium.knowledge:knowledge.entities.update",
+]);
+async function allowTestAction(pluginId: string, actionId: string): Promise<void> {
+  if (!allowedActions.has(`${pluginId}:${actionId}`)) throw new ChangeWriterError("capability_denied", "The verified manifest does not own this action.");
+}
+
 async function makeWriter(workspace = new MemoryWriterWorkspace(), journal = new MemoryJournal()) {
   let proposal = 0;
-  const writer = new ChangeWriter({ journal, workspace, new_proposal_id: () => `host-proposal-${++proposal}` });
+  const writer = new ChangeWriter({ journal, workspace, new_proposal_id: () => `host-proposal-${++proposal}`, assert_action: allowTestAction });
   return { writer, workspace, journal };
 }
 
@@ -140,6 +150,19 @@ async function sha(bytes: Uint8Array): Promise<string> {
   const hash = new Uint8Array(await crypto.subtle.digest("SHA-256", bytes));
   return [...hash].map(byte => byte.toString(16).padStart(2, "0")).join("");
 }
+
+test("verified signed action ownership accepts non-prefixed IDs and rejects cross-plugin IDs", async () => {
+  const { writer } = await makeWriter();
+  const set = changeSet({ key: "knowledge-action" });
+  const accepted = { ...caller("knowledge-action"), producer_plugin_id: "proprium.knowledge", action_id: "knowledge.entities.update" };
+  assert.equal((await writer.propose(set, accepted, set.read_set)).status, "proposed");
+  const rejected = changeSet({ key: "cross-plugin-action" });
+  const spoof = { ...caller("cross-plugin-action"), producer_plugin_id: "proprium.knowledge", action_id: "research.terms.propose" };
+  await assert.rejects(writer.propose(rejected, spoof, rejected.read_set),
+    (error: unknown) => error instanceof ChangeWriterError && error.code === "capability_denied");
+  await assert.rejects(writer.timestamp(scope, "proprium.knowledge", "research.terms.propose", "unknown-action"),
+    (error: unknown) => error instanceof ChangeWriterError && error.code === "capability_denied");
+});
 
 test("proposal admission persists a Host ID and returns the same receipt for an idempotent retry", async () => {
   const { writer } = await makeWriter();
@@ -160,6 +183,7 @@ test("lost proposal response is recovered from the journal even after its tempor
     workspace,
     journal,
     new_proposal_id: () => "host-artifact-proposal",
+    assert_action: allowTestAction,
     resolve_artifact: async () => {
       if (!artifactAvailable) throw new ChangeWriterError("dependency_unavailable", "Temporary artifact lease expired.");
       return new TextEncoder().encode("sealed bytes");
@@ -221,6 +245,7 @@ test("proposal receipt takes exact sealed bytes before the ArtifactBroker marks 
     workspace,
     journal,
     new_proposal_id: () => "host-broker-proposal",
+    assert_action: allowTestAction,
     resolve_artifact: async (requestedScope, requestedSnapshot, artifactId, ownerPluginId) => {
       assert.equal(ownerPluginId, pluginId);
       const artifact = await broker.hostMetadata(ownerPluginId, artifactId, requestedScope, requestedSnapshot);
@@ -291,7 +316,7 @@ test("Host timestamp persists before return and stays stable for the action idem
   const workspace = new MemoryWriterWorkspace();
   const journal = new MemoryJournal();
   let call = 0;
-  const writer = new ChangeWriter({ workspace, journal, new_proposal_id: () => "unused", now: () => `2026-01-01T00:00:0${++call}.000Z` });
+  const writer = new ChangeWriter({ workspace, journal, new_proposal_id: () => "unused", assert_action: allowTestAction, now: () => `2026-01-01T00:00:0${++call}.000Z` });
   const first = await writer.timestamp(scope, "proprium.knowledge", "proprium.knowledge.state.append-event", "stable-request");
   const retry = await writer.timestamp(scope, "proprium.knowledge", "proprium.knowledge.state.append-event", "stable-request");
   const next = await writer.timestamp(scope, "proprium.knowledge", "proprium.knowledge.state.append-event", "next-request");

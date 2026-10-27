@@ -164,6 +164,8 @@ export interface WriterDependencies {
   /** Host resolves exact sealed bytes after checking artifact owner and scope. */
   readonly resolve_artifact?: (scope: WriterScope, snapshot: WriterSnapshot, artifact_id: string, producer_plugin_id: string) => Promise<Uint8Array>;
   readonly new_proposal_id: () => string;
+  /** Verify that the admitted, signed manifest owns the action ID. */
+  readonly assert_action: (pluginId: string, actionId: string) => Promise<void>;
   readonly now?: () => string;
 }
 
@@ -343,7 +345,7 @@ function validateChangeSet(set: ChangeSet, caller: WriterCaller, observedReads: 
     fail("invalid_input", "ChangeSet envelope is incomplete or exceeds Host limits.");
   }
   if (!onlyKeys(caller as unknown as Record<string, unknown>, ["caller", "producer_plugin_id", "action_id", "scope", "idempotency_key", "source_payload", "request_digest", "submitted_at"]) || !text(caller.producer_plugin_id, 128) || !/^[a-z][a-z0-9.-]{2,127}$/u.test(caller.producer_plugin_id) ||
-      !text(caller.action_id, 256) || !caller.action_id.startsWith(`${caller.producer_plugin_id}.`) || caller.caller !== "ui" && caller.caller !== "mcp" && caller.caller !== "plugin" ||
+      !text(caller.action_id, 256) || !/^[a-z][a-z0-9._-]*$/u.test(caller.action_id) || caller.caller !== "ui" && caller.caller !== "mcp" && caller.caller !== "plugin" ||
       !text(caller.idempotency_key, 256) || !(caller.source_payload instanceof Uint8Array) || caller.source_payload.byteLength > MAX_SOURCE_PAYLOAD_BYTES ||
       !REVISION.test(caller.request_digest) || !text(caller.submitted_at, 64)) {
     fail("invalid_input", "Host action identity is invalid.");
@@ -521,18 +523,21 @@ export class ChangeWriter {
   /** Stable action timestamp persisted before it can be returned to a guest. */
   async timestamp(scope: WriterScope, pluginId: string, actionId: string, idempotencyKey: string): Promise<{ readonly timestamp: string }> {
     validateScope(scope);
-    if (!text(pluginId, 128) || !/^[a-z][a-z0-9.-]{2,127}$/u.test(pluginId) || !text(actionId, 256) || !actionId.startsWith(`${pluginId}.`) || !text(idempotencyKey, 256)) {
+    if (!text(pluginId, 128) || !/^[a-z][a-z0-9.-]{2,127}$/u.test(pluginId) || !text(actionId, 256) || !/^[a-z][a-z0-9._-]*$/u.test(actionId) || !text(idempotencyKey, 256)) {
       fail("invalid_input", "Timestamp request identity is invalid.");
     }
     const key = `${scopeKey(scope)}\u0000${pluginId}\u0000${actionId}\u0000${idempotencyKey}`;
-    return this.dependencies.workspace.with_exclusive_writer(scope, () => this.dependencies.journal.transact(scope, currentValue => {
+    return this.dependencies.workspace.with_exclusive_writer(scope, async () => {
+      await this.dependencies.assert_action(pluginId, actionId);
+      return this.dependencies.journal.transact(scope, currentValue => {
       const current = defaultState(currentValue);
       const existing = current.timestamps[key];
       if (existing) return { next: current, value: Object.freeze({ timestamp: existing }) };
       const timestamp = this.now();
       if (!text(timestamp, 64) || Number.isNaN(Date.parse(timestamp))) fail("storage_unknown", "Host clock returned an invalid timestamp.");
       return { next: Object.freeze({ ...current, timestamps: Object.freeze({ ...current.timestamps, [key]: timestamp }) }), value: Object.freeze({ timestamp }) };
-    }));
+      });
+    });
   }
 
   async propose(set: ChangeSet, hostCaller: Omit<WriterCaller, "submitted_at">, observedReads: readonly WriterReadRevision[]): Promise<ProposalAdmission> {
@@ -541,6 +546,7 @@ export class ChangeWriter {
     if (!sameScope(set.scope, hostCaller.scope)) fail("invalid_input", "Proposal scope must equal the Host selected workspace scope.");
     const key = idemKey(caller, set.scope);
     return this.dependencies.workspace.with_exclusive_writer(set.scope, async () => {
+      await this.dependencies.assert_action(caller.producer_plugin_id, caller.action_id);
       // Resolve a lost-response retry before consulting an ephemeral artifact lease.
       const existing = defaultState(await this.dependencies.journal.read(set.scope)).idempotency[key];
       if (existing) {
