@@ -112,7 +112,11 @@ export function* proposeWorkspaceSettings(input: unknown, host: GuestHost, reque
   if (Array.isArray(updates.presets) && Array.isArray(raw.presets)) {
     updates.presets = updates.presets.map((preset: Record<string, unknown>) => {
       const prior = (raw.presets as Array<Record<string, unknown>>).find(item => item && item.id === preset.id);
-      return { ...prior, ...preset };
+      const result = { ...prior, ...preset };
+      if (prior?.sampling && typeof prior.sampling === "object" && !Array.isArray(prior.sampling) && preset.sampling && typeof preset.sampling === "object" && !Array.isArray(preset.sampling)) {
+        result.sampling = { ...prior.sampling as Record<string, unknown>, ...preset.sampling as Record<string, unknown> };
+      }
+      return result;
     });
   }
   const content = new TextEncoder().encode(source ? patchJson(source, updates) : `${JSON.stringify(next, null, 2)}\n`);

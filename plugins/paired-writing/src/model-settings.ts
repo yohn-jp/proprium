@@ -93,7 +93,6 @@ function clampSampling(value: unknown): AssistantSampling | undefined {
   const bounds: Record<keyof AssistantSampling, [number, number]> = {
     temperature: [0, 2], topP: [0, 1], minP: [0, 1], presencePenalty: [-2, 2], frequencyPenalty: [-2, 2], repetitionPenalty: [0, 2],
   };
-  if (Object.keys(value).some(key => !Object.hasOwn(bounds, key))) throw new TypeError("Unsupported sampling key");
   for (const [key, [minimum, maximum]] of Object.entries(bounds) as Array<[keyof AssistantSampling, [number, number]]>) {
     const candidate = value[key];
     if (candidate === undefined) continue;

@@ -57,10 +57,10 @@ test("absent settings use declared defaults with default provenance", async () =
 });
 
 test("settings proposal keeps unknown source bytes and submits a revision-guarded change", async () => {
-  const source = '{\n  "defaultPresetId": "a",\n  "presets": [{"id":"a","label":"A","model":"vendor/model","future":true}],\n  "featurePresetIds": {},\n  "futureField"  : { "untouched" : [ 1, 2 ] }\n}\n';
+  const source = '{\n  "defaultPresetId": "a",\n  "presets": [{"id":"a","label":"A","model":"vendor/model","future":true,"sampling":{"temperature":0.5,"futureKnob":7}}],\n  "featurePresetIds": {},\n  "futureField"  : { "untouched" : [ 1, 2 ] }\n}\n';
   const revision = "b".repeat(64);
   guest.initialize({ pluginId: "proprium.paired-writing", version: "0.1.0", workspaceId: scope.workspace_id });
-  let result = JSON.parse(guest.invoke(JSON.stringify({ schema_version: 1, request_id: "settings-propose", plugin_id: "proprium.paired-writing", action_id: "paired.workspace-settings.propose", scope, snapshot, input: { patch: { totalCuBudget: 7 }, expectedRevision: revision }, idempotency_key: "change-1", deadline_ms: 30000 })));
+  let result = JSON.parse(guest.invoke(JSON.stringify({ schema_version: 1, request_id: "settings-propose", plugin_id: "proprium.paired-writing", action_id: "paired.workspace-settings.propose", scope, snapshot, input: { patch: { totalCuBudget: 7, presets: [{ id: "a", label: "A", model: "vendor/model", sampling: { temperature: 0.7 } }] }, expectedRevision: revision }, idempotency_key: "change-1", deadline_ms: 30000 })));
   let changeset: any;
   while (result.kind === "host_call") {
     let value: unknown;
@@ -84,6 +84,7 @@ test("settings proposal keeps unknown source bytes and submits a revision-guarde
   assert.match(output, /"futureField"  : \{ "untouched" : \[ 1, 2 \] \}/u);
   assert.match(output, /"future":true/u);
   assert.equal(JSON.parse(output).totalCuBudget, 7);
+  assert.equal(JSON.parse(output).presets[0].sampling.futureKnob, 7);
 });
 
 test("settings proposal rejects secret fields before any Host operation", () => {
@@ -104,4 +105,11 @@ test("settings proposal stops on a stale revision without registering a change",
   guest.dispose();
   assert.equal(result.ok, false);
   assert.equal(result.error.code, "snapshot_stale");
+});
+
+test("settings read tolerates and omits future nested sampling fields", async () => {
+  const source = JSON.stringify({ defaultPresetId: "a", presets: [{ id: "a", label: "A", model: "safe", sampling: { temperature: 0.5, futureKnob: 7 } }], featurePresetIds: {} });
+  const result = await invoke(source);
+  assert.equal(result.ok, true);
+  assert.deepEqual(result.value.effective.presets[0].sampling, { temperature: 0.5 });
 });
