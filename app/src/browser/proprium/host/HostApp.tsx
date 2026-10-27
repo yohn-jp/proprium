@@ -989,6 +989,14 @@ export function HostApp(): ReactElement {
   const researchScopeKey=JSON.stringify([workspaceGeneration,status.head,status.entries.map(entry=>[entry.path,entry.worktree,entry.stage]),preferences.email,
     authoringRegistrations.filter(row=>row.pluginId==="proprium.research").map(row=>[row.manifestDigest,row.status])]);
   const researchScopeRef=useRef(researchScopeKey);researchScopeRef.current=researchScopeKey;
+  const selectedScene=selectedNarrativeScene.current;
+  const sceneContext=selectedScene&&selectedScene.path===currentFile?.path&&selectedScene.generation===workspaceGeneration ? {
+    scene_id:selectedScene.id,manuscript_path:selectedScene.path,metadata_revision:selectedScene.metadataRevision,manuscript_revision:selectedScene.manuscriptRevision,
+  } : {};
+  // Nonsecret identifiers only; never copy the editor or Draft into a plugin form.
+  const contextualAuthoringRegistrations=authoringRegistrations.map(row=>row.pluginId==="proprium.speaker"||row.pluginId==="proprium.knowledge" ? {
+    ...row,data:{...(row.data&&typeof row.data==="object"&&!Array.isArray(row.data)?row.data:{}),host_context:sceneContext},
+  } : row);
 
   const revealPanel = (id: string): void => setRequestedPanel(value => ({ id, sequence: value.sequence + 1 }));
   const beforeLayoutChange = async (): Promise<boolean> => {
@@ -1087,7 +1095,7 @@ export function HostApp(): ReactElement {
         const value=result.value as unknown as PairedPreferenceSnapshot;
         return {...value,local:local.found?local.value as Record<string,unknown>:{}};
       }} save={(event,expectedScope,value)=>authoring.writeLocalPreference(event,expectedScope,"proprium.paired-writing","model-settings",1,value)} onChanged={refreshAuthoring} /></details>}
-    <AuthoringReview key={workspaceGeneration} service={authoring} epoch={authoringEpoch} onApplied={refreshAfterPlugin} /><AuthoringAssets key={`assets:${workspaceGeneration}`} manager={pluginManager} service={authoring} epoch={authoringEpoch} /></>}<AuthoringCommandMenu registrations={authoringRegistrations} invoke={invokeAuthoring} read={readAuthoring} navigate={navigateAuthoring} />{git && workspace && <PluginPanel
+    <AuthoringReview key={workspaceGeneration} service={authoring} epoch={authoringEpoch} onApplied={refreshAfterPlugin} /><AuthoringAssets key={`assets:${workspaceGeneration}`} manager={pluginManager} service={authoring} epoch={authoringEpoch} /></>}<AuthoringCommandMenu registrations={contextualAuthoringRegistrations} invoke={invokeAuthoring} read={readAuthoring} navigate={navigateAuthoring} />{git && workspace && <PluginPanel
             manager={pluginManager}
             workspaceId={activeWorkspaceId!}
             activationScope={{ workspace_id: workspace.identity.localWorkspaceId,
@@ -1153,7 +1161,7 @@ export function HostApp(): ReactElement {
       onHistory={() => revealPanel("history")} onRegisterFlush={registerEditorFlush} onScratchApplied={refreshAfterPlugin} />}
   </section> : workspace ? syncState === "syncing" ? <section className="host-controls" role="status"><h2>Workspaceを取得しています</h2><p>GitHubからGit履歴とファイルを読み込んでいます。完了後にファイル一覧を表示します。</p></section> : <p>文書を選ぶか、新しい文書を作成してください。</p> : mode === "desktop" ? picker : <p>作品ライブラリからWorkspaceを開いてください。</p>;
   const panels: WorkspacePanel[] = [
-    ...createAuthoringWorkspacePanels(authoringRegistrations, invokeAuthoring, readAuthoring, undefined, navigateAuthoring),
+    ...createAuthoringWorkspacePanels(contextualAuthoringRegistrations, invokeAuthoring, readAuthoring, undefined, navigateAuthoring),
     { id: "editor", title: "原稿", render: () => <RetainedPanelSlot node={editorNode} /> },
     { id: "outline", title: "作品と構成", render: () => library },
     { id: "inspector", title: "文書と保存状態", render: () => inspector },
