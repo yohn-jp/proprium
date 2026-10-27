@@ -165,6 +165,32 @@ test("account sessions list repositories and bind a workspace sync client withou
   await assert.rejects(sync.remoteHead(), (error: unknown) => error instanceof GitHubSyncError && error.code === "authentication_required");
 });
 
+test("repository picker isolates an invalid entry without hiding healthy repositories", async () => {
+  const valid = (id: number, name: string, branch = "feature+draft") => ({
+    id, full_name: `writer/${name}`, name, owner: { login: "writer" },
+    default_branch: branch, private: false, permissions: { pull: true, push: true },
+  });
+  const responses: unknown[] = [
+    valid(100, "first"),
+    { ...valid(101, "broken"), default_branch: "../bad" },
+    null,
+    valid(102, "second", "main"),
+  ];
+  const session = createGitHubAccountSession("https://oauth.example.test", async input => {
+    const url = String(input);
+    if (url.endsWith("/oauth/device/code")) return response(pendingDevice);
+    if (url.endsWith("/oauth/token")) return response({ access_token: "gho_mixed_picker", token_type: "bearer" });
+    if (url.endsWith("/user")) return response({ id: 44, login: "writer" });
+    if (url.includes("/user/repos?")) return response(responses);
+    throw new Error("unexpected request");
+  });
+  await session.beginAuthorization();
+  await session.completeAuthorization();
+  assert.deepEqual((await session.repositories()).map(repo => [repo.id, repo.defaultBranch]),
+    [[100, "feature+draft"], [102, "main"]]);
+  assert.deepEqual(session.account(), { id: 44, login: "writer" });
+});
+
 test("repository picker rejects malformed metadata and clears an expired session", async () => {
   let expired = false;
   const session = createGitHubAccountSession("https://oauth.example.test", async (input) => {
