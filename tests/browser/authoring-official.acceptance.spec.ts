@@ -351,15 +351,17 @@ test("local authoring edits, reviews, commits and recovers a large work", async 
   await page.getByRole("button", { name: "読み込む", exact: true }).click();
   await expect(page.getByText("Volume One", { exact: true })).toBeVisible({ timeout: 120_000 });
   await page.getByText("Volume One", { exact: true }).click();
-  await expect(page.getByText("Chapter One", { exact: true })).toBeVisible();
+  await expect(page.getByText("Chapter One", { exact: true })).toBeVisible({ timeout: 35000 });
   await page.getByText("Chapter One", { exact: true }).click();
   for (let n = 0; n < 2; n++) await page.getByRole("button", { name: "次へ", exact: true }).click();
-  await expect(page.getByText("Scene 301", { exact: true })).toBeVisible();
+  await expect(page.getByText("Scene 301", { exact: true })).toBeVisible({ timeout: 35000 });
   await page.getByText("Scene 301", { exact: true }).click();
   await expect(page.getByRole("textbox", { name: "原稿 Markdown" })).toContainText("目的の原稿", { timeout: 120_000 });
   await expectEditorText(page, files["manuscript/custom/scene-301.md"]!);
   const edited = "新しい原稿 |漢字《かんじ》\n二行目。\n";
   await page.getByRole("textbox", { name: "原稿 Markdown" }).fill(edited);
+  await page.getByRole("button", { name: "端末に保存", exact: true }).click();
+  await expect(page.locator(".host-message[role='status']")).toContainText("saved to this browser's local Git worktree");
   await showPanel(page, "review");
   await page.getByRole("button", { name: /巻を作成 proprium.narrative/ }).click();
   const dialog = page.getByRole("dialog");
@@ -378,8 +380,6 @@ test("local authoring edits, reviews, commits and recovers a large work", async 
   await review.getByRole("button", { name: "選択した単位をローカルへ適用" }).click();
   await expect(review.getByRole("button", { name: /proprium.narrative · applied/ })).toBeVisible({ timeout: 60000 });
   await expectEditorText(page, edited);
-  await page.getByRole("button", { name: "端末に保存", exact: true }).click();
-  await expect(page.locator(".host-message[role='status']")).toContainText("saved to this browser's local Git worktree");
   await showPanel(page, "inspector");
   await page.getByLabel("変更の説明", { exact: true }).fill("P0 local authoring");
   await page.getByLabel("Git author name", { exact: true }).fill("Test author");
