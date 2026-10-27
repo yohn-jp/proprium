@@ -312,7 +312,7 @@ export class AuthoringActionDispatcher {
       throw new ActionDispatchError("capability_denied", "Navigation requires a Host UI gesture");
     }
     this.validateHostPayload(call.operation, call.payload);
-    if (call.operation === "workspace.plugin.invoke") return this.invokeDependency(call.payload, source, context, stack);
+    if (call.operation === "workspace.plugin.invoke") return this.invokeDependency(call.payload, source, context, stack, request, descriptor, markProposalSubmitted);
     if (call.operation === "actions.list") return this.listDependency(call.payload, source);
     const foreignLease = call.operation === "workspace.file.list" || call.operation === "workspace.file.read"
       ? this.findForeignLease(context.invocation_id ?? context.request_id, call.payload.snapshot, source.plugin_id, descriptor.action_id) : undefined;
@@ -365,7 +365,8 @@ export class AuthoringActionDispatcher {
   }
 
   private async invokeDependency(payload: Record<string, unknown>, source: VerifiedActionSet,
-    context: InvocationContext, ancestors: readonly string[]): Promise<unknown> {
+    context: InvocationContext, ancestors: readonly string[], parentRequest: ActionRequest,
+    parentDescriptor: ActionDescriptor, markProposalSubmitted: () => void): Promise<unknown> {
     exactKeys(payload, ["plugin_id", "action_id", "input"], "Nested action");
     if (typeof payload.plugin_id !== "string" || typeof payload.action_id !== "string" || !isRecord(payload.input)) {
       throw new ActionDispatchError("invalid_input", "Nested action is malformed");
@@ -378,6 +379,12 @@ export class AuthoringActionDispatcher {
     this.assertInstalled(target, target.plugin_id);
     const descriptor = target.descriptors.find(item => item.action_id === payload.action_id);
     if (!descriptor) throw new ActionDispatchError("dependency_unavailable", "Dependency action is undeclared");
+    if (descriptor.effect === "propose" && parentDescriptor.effect !== "propose") {
+      throw new ActionDispatchError("capability_denied", "Read actions cannot delegate proposal effects");
+    }
+    if (descriptor.effect === "propose" && !parentRequest.idempotency_key) {
+      throw new ActionDispatchError("invalid_input", "A dependent proposal requires the parent's stable Host idempotency key");
+    }
     if (!descriptor.callers.includes("plugin") || (descriptor.caller_plugins && !descriptor.caller_plugins.includes(source.plugin_id))) {
       throw new ActionDispatchError("capability_denied", "Dependency action does not admit this caller");
     }
@@ -394,9 +401,14 @@ export class AuthoringActionDispatcher {
         !sameJson(child.snapshot, context.snapshot) || child.staging_snapshot !== staged) {
       throw new ActionDispatchError("capability_denied", "Dependency call changed the Host-issued scope, revision or staging lease");
     }
-    const result = await this.dispatchAuthorized({ plugin_id: target.plugin_id, action_id: descriptor.action_id, input: payload.input },
+    const childKey = descriptor.effect === "propose" ? await digest({ source: source.plugin_id, action: parentDescriptor.action_id,
+      key: parentRequest.idempotency_key, target: target.plugin_id, target_action: descriptor.action_id, input: payload.input,
+      workspace: context.scope.workspace_id, repository: context.scope.repository_id, branch: context.scope.branch }) : undefined;
+    const result = await this.dispatchAuthorized({ plugin_id: target.plugin_id, action_id: descriptor.action_id, input: payload.input,
+      ...(childKey ? { idempotency_key: childKey } : {}) },
       descriptor, target, child, ancestors);
     if (!result.ok) throw result.error;
+    if (descriptor.effect === "propose") markProposalSubmitted();
     // Official guest adapters validate the child scope/snapshot and unwrap value.
     // Stripping the envelope here turns every dependency result into a guest trap.
     return result;
