@@ -52,6 +52,8 @@ export class ProviderSettingsStore {
   }
   remove(providerId:string):void {const old=this.#providers.get(providerId);if(!old)return;this.#providers.delete(providerId);this.#secrets.delete(old.credential_handle);for(const listener of this.#listeners)listener();}
   clear():void {if(!this.#providers.size)return;this.#providers.clear();this.#secrets.clear();for(const listener of this.#listeners)listener();}
-  /** Create a new broker for each configuration change; retain the Host consent callback. */
-  brokerOptions(gestures:GestureAuthority):ProviderBrokerOptions {return {gestures,providers:[...this.#providers.values()].map(p=>({...p,models:p.models.map(m=>({...m}))})),credentials:this.#credentials};}
+  /** Supply to the Host service; it adds its own trusted gesture authority. */
+  brokerConfiguration():Omit<ProviderBrokerOptions,'gestures'> {return {providers:[...this.#providers.values()].map(p=>({...p,models:p.models.map(m=>({...m}))})),credentials:this.#credentials};}
+  /** A standalone broker can use the same configuration with a Host gesture authority. */
+  brokerOptions(gestures:GestureAuthority):ProviderBrokerOptions {return {...this.brokerConfiguration(),gestures};}
 }
