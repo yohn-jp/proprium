@@ -204,7 +204,7 @@ setup() {
   tmp=$(mktemp "$CONFIG/tunnel.yml.XXXXXX")
   printf '{}\n' > "$tmp"; chmod 600 "$tmp"; mv -fT "$tmp" "$yml"
  fi
- info "Configuration saved in $CONFIG; existing secrets retained. Owner Key stays in gateway.env (enter privately in Host Live MCP settings)."
+ info "Configuration saved in $CONFIG; existing secrets retained. Legacy Owner Key is not used by the current Gateway."
 }
 lock() {
  private_dir "$DATA"; [[ ! -L $DATA/.lock ]] || fail 'Refusing symbolic lock file.'
