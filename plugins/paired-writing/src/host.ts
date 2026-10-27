@@ -134,9 +134,14 @@ function cacheAddress(request: ActionRequest, key: string): Record<string, unkno
 }
 
 export function* cacheGet<T>(host: GuestHost, request: ActionRequest, key: string): Generator<HostCall, T | undefined, unknown> {
-  return yield* host.request<T | undefined>(HOST_OPERATIONS.cacheGet, cacheAddress(request, key));
+  const receipt = yield* host.request<unknown>(HOST_OPERATIONS.cacheGet, { key: cacheAddress(request, key) });
+  if (!receipt || typeof receipt !== "object" || !("found" in receipt) || typeof receipt.found !== "boolean" ||
+      (receipt.found && !("value" in receipt)) || (!receipt.found && "value" in receipt)) {
+    throw new PairedError("invalid_input", "Host returned a malformed derived cache receipt");
+  }
+  return receipt.found ? (receipt as { value: T }).value : undefined;
 }
 
 export function* cachePut(host: GuestHost, request: ActionRequest, key: string, value: unknown): Generator<HostCall, void, unknown> {
-  yield* host.request(HOST_OPERATIONS.cachePut, { ...cacheAddress(request, key), value });
+  yield* host.request(HOST_OPERATIONS.cachePut, { key: cacheAddress(request, key), value });
 }

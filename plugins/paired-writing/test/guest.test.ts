@@ -53,10 +53,21 @@ class HostHarness {
       };
     }
     if (operation === "workspace.derived.cache.put") {
-      this.cache.set(String(payload.key), payload.value);
-      return null;
+      assert.deepEqual(Object.keys(payload).sort(), ["key", "value"]);
+      const key = payload.key as Record<string, unknown>;
+      assert.equal(key.plugin_id, "proprium.paired-writing");
+      assert.ok([snapshot.id, "draft-snapshot-1"].includes((key.snapshot as typeof snapshot).id));
+      this.cache.set(String(key.key), payload.value);
+      return { stored: true };
     }
-    if (operation === "workspace.derived.cache.get") return this.cache.get(String(payload.key));
+    if (operation === "workspace.derived.cache.get") {
+      assert.deepEqual(Object.keys(payload), ["key"]);
+      const key = payload.key as Record<string, unknown>;
+      assert.equal(key.plugin_id, "proprium.paired-writing");
+      assert.ok([snapshot.id, "draft-snapshot-1"].includes((key.snapshot as typeof snapshot).id));
+      const value = this.cache.get(String(key.key));
+      return value === undefined ? { found: false } : { found: true, value };
+    }
     if (operation === "workspace.change.propose") {
       this.proposal = payload.changeset as ChangeSet;
       return { proposal_id: "proposal-1", preview: { title: this.proposal.title, read_paths: this.proposal.read_set.map((item) => item.path) } };
@@ -158,7 +169,7 @@ test("explicit draft capture reads the Host-issued saved and draft snapshots wit
   assert.equal(saved?.included, false);
   assert.equal(saved?.content, "");
   assert.equal(sharedDraft?.content, draftText);
-  assert.deepEqual(harness.calls.filter((call) => call.operation === "workspace.file.read").map((call) => (call.payload.snapshot as Snapshot).id), [snapshot.id, draftSnapshot.id]);
+  assert.deepEqual(harness.calls.filter((call) => call.operation === "workspace.file.read").map((call) => (call.payload.snapshot as Snapshot).id), [snapshot.id, "draft-snapshot-1"]);
   assert.equal(harness.calls.some((call) => call.operation === "workspace.draft.read"), false);
 });
 
