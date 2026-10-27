@@ -21,7 +21,8 @@ test('missing Intl reports an explicit unavailable dependency', () => {
 
 test('a component-provided sentence engine is used when Intl is absent', async () => {
   const { setInferenceBindings } = await import('./inference.ts');
-  setInferenceBindings({ beginAsset() {}, appendAsset() {}, finishAsset() {}, loadEmbedding() {}, embedPassages() { return []; }, release() {}, splitSentenceEnds(text: string) { assert.equal(text, '駅。🌸海。'); return new Uint32Array([2, 6]); } });
+  const { runInNewContext } = await import('node:vm');
+  setInferenceBindings({ beginAsset() {}, appendAsset() {}, finishAsset() {}, loadEmbedding() {}, embedPassages() { return []; }, release() {}, splitSentenceEnds(text: string) { assert.equal(text, '駅。🌸海。'); return runInNewContext("new Uint32Array([2, 6])"); } });
   const intl = globalThis.Intl;
   try {
     Object.defineProperty(globalThis, 'Intl', { value: undefined, configurable: true });
