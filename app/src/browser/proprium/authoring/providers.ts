@@ -275,6 +275,17 @@ export class ProviderRequestBroker {
         models: [...provider.models.values()].map(model => ({ model_id: model.model_id, label: model.label })) })) };
   }
 
+  /** Replay only an already-known exact attempt; never issues consent, credentials or network. */
+  async replay(input: ProviderRequestInput, context: ProviderRequestContext): Promise<ProviderRequestResult | undefined> {
+    const preview=await this.prepare(input,context),state=this.prepared.get(preview as object)!;
+    const previous=this.attempts.get(state.namespace);
+    if(!previous)return undefined;
+    if(previous.fingerprint!==state.fingerprint)throw new ProviderRequestError("idempotency_conflict","Provider input changed for this request ID.");
+    if(previous.state==="complete")return structuredClone(previous.result);
+    if(previous.state==="failed")throw previous.error;
+    return previous.promise;
+  }
+
   /** Shared UI/MCP/plugin route. Caller identity never substitutes for request consent. */
   async requestWithConsent(input: ProviderRequestInput, context: ProviderRequestContext,
     approve: ProviderConsentRequest | undefined, assertCurrent: () => Promise<void>, signal?: AbortSignal): Promise<ProviderRequestResult> {

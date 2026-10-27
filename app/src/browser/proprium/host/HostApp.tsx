@@ -275,6 +275,7 @@ export function HostApp(): ReactElement {
     if (!git || !workspace) { setAuthoring(null); setAuthoringRegistrations([]); return; }
     const service = createBrowserAuthoringService({ manager: pluginManager, git, workspace: workspace.identity,
       onProviderConsent: providerConsent.request,
+      actorId: () => preferencesRef.current.email || "local",
       generation: workspaceGeneration,
       measureAssetCapacity: async input => {
         const estimate = await navigator.storage?.estimate().catch(() => undefined);

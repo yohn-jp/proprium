@@ -21,6 +21,8 @@ import { IndexedDbWriterJournalStore } from "./store.js";
 import { BrowserGitWriterWorkspace } from "./writer-browser.js";
 import { ChangeStageStore, type ChangeStageContext, type ChangeStageRead } from "./stages.js";
 import { ProviderRequestBroker, type ProviderBrokerOptions, type ProviderConsentRequest, type ProviderRequestInput } from "./providers.js";
+import { ProviderUsageHistory } from "./provider-usage.js";
+import { AuthoringTaskRegistry, SEMANTIC_PROGRESS_KEY } from "./tasks.js";
 
 export interface AuthoringWorkspaceSelection {
   readonly git: BrowserLocalGit;
@@ -227,6 +229,7 @@ export class BrowserAuthoringService {
   private actionSnapshotQueue: Promise<unknown> = Promise.resolve();
   private disposed = false;
   private retainedActionSnapshot: AuthoringSnapshotContext | null = null;
+  private readonly tasks = new AuthoringTaskRegistry();
 
   constructor(private readonly options: BrowserAuthoringServiceOptions) {
     this.nextRequestId = options.createRequestId ?? ID;
@@ -234,6 +237,17 @@ export class BrowserAuthoringService {
       installed: pluginId => options.manager.verifiedActionSet(pluginId),
       authority: this.authority,
       runtime: { invoke: invoke => {
+        if (invoke.request.plugin_id === "proprium.semantic") {
+          const request=invoke.request, epoch=invoke.activation_epoch;
+          if(request.action_id==="proprium.semantic.task.status")return Promise.resolve({request_id:request.request_id,scope:request.scope,snapshot:request.snapshot,ok:true as const,
+            value:{snapshot:request.snapshot,activeTasks:this.tasks.status(request.scope,request.snapshot,epoch)},warnings:[]});
+          if(request.action_id==="proprium.semantic.task.cancel")return Promise.resolve({request_id:request.request_id,scope:request.scope,snapshot:request.snapshot,ok:true as const,
+            value:{snapshot:request.snapshot,taskId:request.input.taskId,cancelled:this.tasks.cancel(request.scope,epoch,String(request.input.taskId))},warnings:[]});
+          if(request.action_id==="proprium.semantic.index.rebuild"){
+            this.tasks.begin(request.request_id,epoch,request.scope,request.snapshot,String(request.input.taskId),()=>this.controllers.get(request.request_id)?.abort());
+            return options.manager.authoringRuntime(request.plugin_id).invoke(invoke).finally(()=>this.tasks.finish(request.request_id));
+          }
+        }
         if (invoke.request.plugin_id === "proprium.narrative" && invoke.request.action_id === "proprium.narrative.resume.mark.propose") {
           const editor = options.editorState(), position = editor.resume_position, input = invoke.request.input;
           if (editor.dirty || editor.composing) throw Object.assign(new Error("Save locally and finish composition before capturing a portable position"), { code: "dirty_draft" });
@@ -245,6 +259,7 @@ export class BrowserAuthoringService {
       } },
       capabilities: this.capabilityPorts(),
       idempotency: options.idempotency,
+      hostControlAction: (pluginId,actionId) => pluginId==="proprium.semantic" && ["proprium.semantic.task.status","proprium.semantic.task.cancel"].includes(actionId),
     });
   }
 
@@ -402,6 +417,7 @@ export class BrowserAuthoringService {
 
   /** Release ephemeral reader leases and abort outstanding UI reads. The shared manager is Host-owned. */
   async dispose(): Promise<void> {
+    this.tasks.dispose();
     if (this.disposed) return;
     this.disposed = true;
     for (const controller of this.controllers.values()) controller.abort();
@@ -512,7 +528,12 @@ export class BrowserAuthoringService {
           return value as T;
         }
       case "workspace.derived.cache.get": return await this.requireBackend(operation, this.options.backends.cacheGet)(pluginId, payload) as T;
-      case "workspace.derived.cache.put": return await this.requireBackend(operation, this.options.backends.cachePut)(pluginId, payload) as T;
+      case "workspace.derived.cache.put":
+        if(pluginId==="proprium.semantic"&&isRecord(payload.key)&&payload.key.key===SEMANTIC_PROGRESS_KEY){
+          if(!operationContext)throw invalid("Task progress needs an active Host invocation");
+          return this.tasks.update(operationContext.request.request_id,operationContext.activation_epoch,operationContext.request.scope,payload.value) as T;
+        }
+        return await this.requireBackend(operation, this.options.backends.cachePut)(pluginId, payload) as T;
       case "workspace.derived.cache.evict": return await this.requireBackend(operation, this.options.backends.cacheEvict)(pluginId, payload) as T;
       case "plugin.preferences.read": return await this.requireBackend(operation, this.options.backends.preferenceRead)(pluginId, payload) as T;
       case "artifact.create": return await this.requireBackend(operation, this.options.backends.artifactCreate)(pluginId, request, payload) as T;
@@ -844,6 +865,7 @@ export function createBrowserAuthoringService(options: CreateBrowserAuthoringSer
       typeof options.onMutationBusy !== "function") throw invalid("Browser authoring Host dependencies are incomplete");
 
   const brokerStore = new IndexedDbBrokerStore();
+  const providerUsage = new ProviderUsageHistory(brokerStore);
   const hostIdentity = new IndexedDbHostIdentityStore();
   const freshGestures = new FreshGestureAuthority();
   const claimedEvents = new WeakSet<Event>();
@@ -1039,13 +1061,22 @@ export function createBrowserAuthoringService(options: CreateBrowserAuthoringSer
         default: throw missing(operation);
       }
     },
-    capabilitiesQuery: options.queryCapabilities ?? (async payload => payload.capability_id === "provider.request"
-      ? { ...providerBroker.status(), ...(!providerBroker.status().available ? { reason: "No Host provider is configured" } : {}) }
-      : { available: false, reason: "Optional Host capability is not configured" }),
-    providerRequest: (payload, context) => providerBroker.requestWithConsent(payload as unknown as ProviderRequestInput, {
-      plugin_id: context.plugin_id, action_id: context.descriptor.action_id,
-      scope: context.request.scope, snapshot: context.request.snapshot,
-    }, options.onProviderConsent, () => service.authority.assertCurrent(context), context.signal),
+    capabilitiesQuery: async (payload,context) => {
+      if(payload.capability_id==="provider.request")return { ...providerBroker.status(), ...(!providerBroker.status().available ? { reason: "No Host provider is configured" } : {}) };
+      if(payload.capability_id==="provider.usage.v1")return providerUsage.read(context.plugin_id,context.actor_id,context.request.scope);
+      return options.queryCapabilities ? options.queryCapabilities(payload,context) : {available:false,reason:"Optional Host capability is not configured"};
+    },
+    providerRequest: async (payload, context) => {
+      const input=payload as unknown as ProviderRequestInput;
+      const identity={plugin_id:context.plugin_id,action_id:context.descriptor.action_id,scope:context.request.scope,snapshot:context.request.snapshot};
+      const previous=await providerBroker.replay(input,identity);
+      if(previous)return previous;
+      const receipt=await providerUsage.begin(context.plugin_id,context.actor_id,context.request.scope,input);
+      try {
+        const output=await providerBroker.requestWithConsent(input,identity,options.onProviderConsent,()=>service.authority.assertCurrent(context),context.signal);
+        await providerUsage.finish(receipt);return output;
+      } catch(error) { await providerUsage.finish(receipt,error);throw error; }
+    },
     changeTimestamp: request => {
       if (!request.idempotency_key) throw invalid("Stable idempotency key is required for a timestamp");
       return writer.timestamp(request.scope, request.plugin_id, request.action_id, request.idempotency_key);
