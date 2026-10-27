@@ -92,3 +92,19 @@ test("scene manuscript reader rejects unsafe paths before Host access", () => {
   assert.throws(() => drain(readSceneManuscript(reader, "manuscript/../secrets.md")), /invalid_path/u);
   assert.equal(reader.listedPrefixes.length, 0);
 });
+
+test("approved scene and chapter summaries remain auxiliary snapshot files", () => {
+  const reader = new FixtureReader();
+  for (const path of ["plot/volumes/v1/chapters/c1/scene-summaries/scene-1.yaml", "plot/volumes/v1/chapters/c1/chapter-summary.yaml"]) {
+    const bytes = encoder.encode("summaryLines: [one, two, three]\n");
+    reader.contents.set(path, bytes);
+    reader.entries.set(path, { path, revision: createHash("sha256").update(bytes).digest("hex"), byte_length: bytes.length, media_type: "application/yaml" });
+  }
+  const story = drain(readKnowledgeSnapshot(reader));
+  for (const path of ["plot/volumes/v1/chapters/c1/scene-summaries/scene-1.yaml", "plot/volumes/v1/chapters/c1/chapter-summary.yaml"]) {
+    assert.ok(story.files.has(path));
+    assert.ok(story.revisions.has(path));
+    assert.ok(!story.diagnostics.some((diagnostic) => diagnostic.path === path));
+  }
+  assert.ok(story.diagnostics.some((diagnostic) => diagnostic.path === "bible/locations/bad.yaml"));
+});
