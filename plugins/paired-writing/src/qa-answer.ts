@@ -32,7 +32,9 @@ export function* answerQa(input:unknown, host:GuestHost, request:ActionRequest):
       hits.push(...result.hits); incomplete ||= result.nextCursor !== null;
     }
   } catch(error) {
-    if (!(error instanceof PairedError) || !["dependency_unavailable","plugin_unavailable"].includes(error.code)) throw error;
+    // Host continuation errors cross WIT as plain ActionError values, not class instances.
+    const code=error && typeof error === "object" && "code" in error ? error.code : undefined;
+    if (typeof code !== "string" || !["dependency_unavailable","plugin_unavailable"].includes(code)) throw error;
     source="local.lexical"; incomplete=true; hits.length=0;
     // The local fallback follows the pinned Research search roots and bounded file reads.
     const roots=["manuscript/", "bible/", "plot/", "meta/scratch/"];

@@ -6,10 +6,12 @@ import { changeSetObservations, changeSetStatus, inspectChangeSet, listChangeSet
 import { previewSynonyms } from "./src/synonym-preview.js";
 import { previewQa } from "./src/assistance-preview.js";
 import { readProviderStatus } from "./src/provider-status.js";
+import { answerQa } from "./src/qa-answer.js";
 import { proposeWorkspaceSettings, readWorkspaceSettings } from "./src/settings.js";
 import { proposeChangeSet, validateChangeSet } from "./src/changeset-workflow.js";
 
 export const guest = createGuest("proprium.paired-writing", {
+  "paired.qa.answer": (input, context, host) => answerQa(input, host, context as ActionRequest),
   "paired.provider.status": (input, _context, host) => readProviderStatus(input, host),
   "paired.qa.preview": (input, context, host) => previewQa(input, host, context as ActionRequest),
   "paired.synonyms.preview": (input, context, host) => previewSynonyms(input, host, context as ActionRequest),

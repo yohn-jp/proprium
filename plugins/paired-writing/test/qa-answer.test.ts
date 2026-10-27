@@ -1,12 +1,28 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { answerQa, QA_ANSWER_OUTPUT_SCHEMA } from "../src/qa-answer.js";
+import { guest } from "../guest.js";
 import type { ActionRequest } from "../../../app/src/browser/proprium/authoring/types.js";
 import type { GuestHost, HostCall } from "../../shared/guest.js";
 const scope={workspace_id:"w",repository_id:1,branch:"main",generation:"g"};
 const snapshot={id:"s",local_commit:null,worktree_generation:"v",draft_generation:null};
 const request={schema_version:1,request_id:"r",plugin_id:"proprium.paired-writing",action_id:"paired.qa.answer",scope,snapshot,input:{},deadline_ms:30000} as ActionRequest;
 const host:GuestHost={request(operation,payload){return (function*(){return yield {operation,payload};})() as never;}};
+test("registered QA action reaches a real local fallback and its declared output",async()=>{
+ guest.initialize({pluginId:request.plugin_id,version:"0.1.0",workspaceId:scope.workspace_id});
+ try {
+  let result=JSON.parse(guest.invoke(JSON.stringify({...request,input:{question:"駅"}})));
+  assert.equal(result.operation,"workspace.plugin.invoke");
+  result=JSON.parse(guest.invoke(JSON.stringify({kind:"host_response",call_id:result.call_id,ok:false,error:{code:"dependency_unavailable",message:"Research absent",retryable:false}})));
+  assert.equal(result.operation,"workspace.file.list");
+  result=JSON.parse(guest.invoke(JSON.stringify({kind:"host_response",call_id:result.call_id,ok:true,value:{entries:[],next_cursor:null}})));
+  assert.equal(result.ok,true);
+  const {readFile}=await import("node:fs/promises");const{assertValue}=await import("../../../app/src/browser/proprium/authoring/schema.js");
+  const manifest=JSON.parse(await readFile(new URL("../plugin.json",import.meta.url),"utf8"));
+  assertValue(manifest.actions.find((a:{action_id:string})=>a.action_id==="paired.qa.answer").output_schema,result.value);
+  assert.equal(result.value.confidence,"low");assert.equal(result.value.provenance.source,"local.lexical");
+ }finally{guest.dispose();}
+});
 const revision="a".repeat(64);
 function run(input:unknown, hits:unknown[], actual="駅は北にある。",rev=revision) {
   const iter=answerQa(input,host,request); let step=iter.next(); const calls:string[]=[];

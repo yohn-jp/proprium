@@ -14866,6 +14866,211 @@
         "plugin"
       ],
       "requires_user_gesture": false
+    },
+    {
+      "plugin_id": "proprium.paired-writing",
+      "action_id": "paired.qa.answer",
+      "schema_version": 1,
+      "effect": "read",
+      "input_schema": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "question": {
+            "type": "string",
+            "maxLength": 8000,
+            "minLength": 1
+          },
+          "sceneId": {
+            "type": "string",
+            "maxLength": 256,
+            "minLength": 1
+          },
+          "messages": {
+            "type": "array",
+            "minItems": 1,
+            "maxItems": 20,
+            "items": {
+              "type": "object",
+              "additionalProperties": false,
+              "properties": {
+                "role": {
+                  "enum": [
+                    "user",
+                    "assistant"
+                  ]
+                },
+                "content": {
+                  "type": "string",
+                  "maxLength": 8000
+                }
+              },
+              "required": [
+                "role",
+                "content"
+              ]
+            }
+          }
+        },
+        "required": [],
+        "anyOf": [
+          {
+            "required": [
+              "question"
+            ]
+          },
+          {
+            "required": [
+              "messages"
+            ]
+          }
+        ]
+      },
+      "output_schema": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "answer",
+          "citations",
+          "confidence",
+          "snapshot",
+          "provenance"
+        ],
+        "properties": {
+          "answer": {
+            "type": "string",
+            "maxLength": 30000
+          },
+          "confidence": {
+            "const": "low"
+          },
+          "citations": {
+            "type": "array",
+            "maxItems": 24,
+            "items": {
+              "type": "object",
+              "additionalProperties": false,
+              "required": [
+                "kind",
+                "id",
+                "quote",
+                "path",
+                "revision"
+              ],
+              "properties": {
+                "kind": {
+                  "const": "document"
+                },
+                "id": {
+                  "type": "string",
+                  "maxLength": 1024
+                },
+                "quote": {
+                  "type": "string",
+                  "maxLength": 1024
+                },
+                "path": {
+                  "type": "string",
+                  "maxLength": 1024
+                },
+                "revision": {
+                  "type": "string",
+                  "maxLength": 256
+                }
+              }
+            }
+          },
+          "snapshot": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+              "id",
+              "local_commit",
+              "worktree_generation",
+              "draft_generation"
+            ],
+            "properties": {
+              "id": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 256
+              },
+              "local_commit": {
+                "type": [
+                  "string",
+                  "null"
+                ],
+                "maxLength": 256
+              },
+              "worktree_generation": {
+                "type": "string",
+                "maxLength": 256
+              },
+              "draft_generation": {
+                "type": [
+                  "string",
+                  "null"
+                ],
+                "maxLength": 256
+              },
+              "remote_commit": {
+                "type": [
+                  "string",
+                  "null"
+                ],
+                "maxLength": 256
+              }
+            }
+          },
+          "provenance": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+              "provider",
+              "source",
+              "query",
+              "segments",
+              "coverage"
+            ],
+            "properties": {
+              "provider": {
+                "const": "local"
+              },
+              "source": {
+                "enum": [
+                  "research.query",
+                  "local.lexical"
+                ]
+              },
+              "query": {
+                "type": "string",
+                "maxLength": 8000
+              },
+              "segments": {
+                "type": "integer",
+                "minimum": 1,
+                "maximum": 16
+              },
+              "coverage": {
+                "enum": [
+                  "partial",
+                  "complete"
+                ]
+              }
+            }
+          }
+        }
+      },
+      "required_capabilities": [
+        "workspace.file.read",
+        "workspace.plugin.invoke"
+      ],
+      "callers": [
+        "ui",
+        "mcp",
+        "plugin"
+      ],
+      "requires_user_gesture": false
     }
   ],
   "ui": [
@@ -15247,69 +15452,6 @@
             }
           },
           {
-            "id": "qa-preview-tab",
-            "title": "QA prompt",
-            "body": {
-              "id": "qa-preview-form",
-              "type": "form",
-              "title": "Preview setting question",
-              "description": "Review the exact conversation and saved scene context locally. This does not send a provider request.",
-              "fields": [
-                {
-                  "id": "question",
-                  "type": "string",
-                  "label": "Question",
-                  "required": true,
-                  "max_length": 8000
-                },
-                {
-                  "id": "scene_id",
-                  "type": "string",
-                  "label": "Scene ID (optional)",
-                  "required": false,
-                  "max_length": 256
-                }
-              ],
-              "submit": {
-                "action_id": "paired.qa.preview",
-                "input_template": {
-                  "question": {
-                    "data_key": "form.question"
-                  },
-                  "sceneId": {
-                    "data_key": "form.scene_id"
-                  }
-                }
-              }
-            }
-          },
-          {
-            "id": "qa-preview-result-tab",
-            "title": "QA prompt result",
-            "body": {
-              "id": "qa-preview-result",
-              "type": "detail",
-              "title": "Exact local question preview",
-              "value": {
-                "data_key": "last_action_result"
-              },
-              "fields": [
-                {
-                  "key": "prompt",
-                  "label": "Prompt and conversation"
-                },
-                {
-                  "key": "promptVersion",
-                  "label": "Prompt version"
-                },
-                {
-                  "key": "provider_invoked",
-                  "label": "Provider invoked"
-                }
-              ]
-            }
-          },
-          {
             "id": "provider-status-tab",
             "title": "Provider availability",
             "body": {
@@ -15340,6 +15482,169 @@
                 {
                   "key": "local_features.qa_preview",
                   "label": "Local QA preview"
+                }
+              ]
+            }
+          },
+          {
+            "id": "questions-tab",
+            "title": "Questions",
+            "body": {
+              "id": "paired-questions-tabs",
+              "type": "tabs",
+              "title": "Questions and local previews",
+              "tabs": [
+                {
+                  "id": "qa-preview-tab",
+                  "title": "QA prompt",
+                  "body": {
+                    "id": "qa-preview-form",
+                    "type": "form",
+                    "title": "Preview setting question",
+                    "description": "Review the exact conversation and saved scene context locally. This does not send a provider request.",
+                    "fields": [
+                      {
+                        "id": "question",
+                        "type": "string",
+                        "label": "Question",
+                        "required": true,
+                        "max_length": 8000
+                      },
+                      {
+                        "id": "scene_id",
+                        "type": "string",
+                        "label": "Scene ID (optional)",
+                        "required": false,
+                        "max_length": 256
+                      }
+                    ],
+                    "submit": {
+                      "action_id": "paired.qa.preview",
+                      "input_template": {
+                        "question": {
+                          "data_key": "form.question"
+                        },
+                        "sceneId": {
+                          "data_key": "form.scene_id"
+                        }
+                      }
+                    }
+                  }
+                },
+                {
+                  "id": "qa-preview-result-tab",
+                  "title": "QA prompt result",
+                  "body": {
+                    "id": "qa-preview-result",
+                    "type": "detail",
+                    "title": "Exact local question preview",
+                    "value": {
+                      "data_key": "last_action_result"
+                    },
+                    "fields": [
+                      {
+                        "key": "prompt",
+                        "label": "Prompt and conversation"
+                      },
+                      {
+                        "key": "promptVersion",
+                        "label": "Prompt version"
+                      },
+                      {
+                        "key": "provider_invoked",
+                        "label": "Provider invoked"
+                      }
+                    ]
+                  }
+                },
+                {
+                  "id": "qa-answer-tab",
+                  "title": "Setting question",
+                  "body": {
+                    "id": "qa-answer-form",
+                    "type": "form",
+                    "title": "Find saved evidence for a question",
+                    "description": "Search saved sources locally and show exact verified excerpts with low confidence. This is not a generated model answer.",
+                    "fields": [
+                      {
+                        "id": "question",
+                        "type": "string",
+                        "label": "Question",
+                        "required": true,
+                        "max_length": 8000
+                      },
+                      {
+                        "id": "scene_id",
+                        "type": "string",
+                        "label": "Scene ID (optional)",
+                        "required": false,
+                        "max_length": 256
+                      }
+                    ],
+                    "submit": {
+                      "action_id": "paired.qa.answer",
+                      "input_template": {
+                        "question": {
+                          "data_key": "form.question"
+                        },
+                        "sceneId": {
+                          "data_key": "form.scene_id"
+                        }
+                      }
+                    }
+                  }
+                },
+                {
+                  "id": "qa-answer-result-tab",
+                  "title": "Question result",
+                  "body": {
+                    "id": "qa-answer-result",
+                    "type": "detail",
+                    "title": "Local evidence result",
+                    "value": {
+                      "data_key": "last_action_result"
+                    },
+                    "fields": [
+                      {
+                        "key": "answer",
+                        "label": "Evidence"
+                      },
+                      {
+                        "key": "confidence",
+                        "label": "Confidence"
+                      },
+                      {
+                        "key": "provenance.source",
+                        "label": "Search source"
+                      },
+                      {
+                        "key": "provenance.coverage",
+                        "label": "Search coverage"
+                      }
+                    ]
+                  }
+                },
+                {
+                  "id": "qa-answer-sources-tab",
+                  "title": "Question sources",
+                  "body": {
+                    "id": "qa-answer-sources",
+                    "type": "list",
+                    "title": "Verified source excerpts",
+                    "items": {
+                      "data_key": "last_action_result.citations"
+                    },
+                    "primary": "quote",
+                    "secondary": "path",
+                    "item_navigation": {
+                      "intent": "open",
+                      "target": {
+                        "path": {
+                          "data_key": "item.path"
+                        }
+                      }
+                    }
+                  }
                 }
               ]
             }
