@@ -37,6 +37,7 @@ export const NARRATIVE_ACTIONS = [
   "proprium.narrative.structure.update",
   "proprium.narrative.structure.reorder",
   "proprium.narrative.reading-marks.list",
+  "proprium.narrative.reading-marks.open-ui",
   "proprium.narrative.reading-marks.create",
   "proprium.narrative.reading-marks.create-ui",
   "proprium.narrative.reading-marks.delete",
@@ -676,6 +677,24 @@ function* executeAction(host: NarrativeHost, request: ActionRequest): Generator<
       return yield* updateStructure(host, request, input);
     case "proprium.narrative.structure.reorder":
       return yield* reorderStructure(host, request, input);
+    case "proprium.narrative.reading-marks.open-ui": {
+      const row = strictObject(input, ["scene_id", "mark_id"]);
+      const sceneId = nonEmptyString(row.scene_id, "scene_id");
+      const markId = nonEmptyString(row.mark_id, "mark_id");
+      const work = yield* readWorkSnapshot(host, request);
+      const { scene, metadata } = sceneFor(work, sceneId);
+      const path = validateManuscriptPath(scene.manuscript_path);
+      const body = yield* readMarkBody(host, request, path);
+      const { rows } = getMarks(metadata.raw, metadata.path);
+      const matches = rows.filter(value => (value as Record<string, unknown>).id === markId) as Array<Record<string, unknown>>;
+      if (!matches.length) fail("file_not_found", "Reading mark was not found");
+      if (matches.length > 1) fail("ambiguous_identity", "Reading mark ID is duplicated");
+      const mark = matches[0]!;
+      const start = mark.offset as number, length = mark.length as number, quote = mark.snippet as string;
+      if (body.text.slice(start, start + length) !== quote) fail("snapshot_stale", "Reading mark no longer matches the saved manuscript");
+      if (length > 4096) fail("capacity", "Reading mark exceeds the supported navigation span");
+      return { navigation: { target: { path, span: { path, revision: body.revision, start, end: start + length, quote } }, expected_context: { scope: request.scope, snapshot: request.snapshot, draft_generation: request.snapshot.draft_generation }, intent: "open" } };
+    }
     case "proprium.narrative.reading-marks.list":
       return yield* listReadingMarks(host, request, input);
     case "proprium.narrative.reading-marks.create-ui": {

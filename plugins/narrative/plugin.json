@@ -1931,6 +1931,235 @@
     },
     {
       "plugin_id": "proprium.narrative",
+      "action_id": "proprium.narrative.reading-marks.open-ui",
+      "schema_version": 1,
+      "effect": "read",
+      "input_schema": {
+        "type": "object",
+        "properties": {
+          "scene_id": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 256
+          },
+          "mark_id": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 256
+          }
+        },
+        "required": [
+          "scene_id",
+          "mark_id"
+        ],
+        "additionalProperties": false
+      },
+      "output_schema": {
+        "type": "object",
+        "properties": {
+          "navigation": {
+            "type": "object",
+            "properties": {
+              "target": {
+                "type": "object",
+                "properties": {
+                  "path": {
+                    "type": "string",
+                    "maxLength": 4096,
+                    "minLength": 0
+                  },
+                  "span": {
+                    "type": "object",
+                    "properties": {
+                      "path": {
+                        "type": "string",
+                        "maxLength": 4096
+                      },
+                      "revision": {
+                        "type": "string",
+                        "minLength": 64,
+                        "maxLength": 64,
+                        "pattern": "^[a-f0-9]{64}$"
+                      },
+                      "start": {
+                        "type": "integer",
+                        "minimum": 0,
+                        "maximum": 9007199254740991
+                      },
+                      "end": {
+                        "type": "integer",
+                        "minimum": 0,
+                        "maximum": 9007199254740991
+                      },
+                      "quote": {
+                        "type": "string",
+                        "maxLength": 1048576
+                      }
+                    },
+                    "required": [
+                      "path",
+                      "revision",
+                      "start",
+                      "end",
+                      "quote"
+                    ],
+                    "additionalProperties": false
+                  }
+                },
+                "required": [
+                  "path",
+                  "span"
+                ],
+                "additionalProperties": false
+              },
+              "expected_context": {
+                "type": "object",
+                "properties": {
+                  "scope": {
+                    "type": "object",
+                    "properties": {
+                      "workspace_id": {
+                        "type": "string",
+                        "maxLength": 256,
+                        "minLength": 0
+                      },
+                      "repository_id": {
+                        "anyOf": [
+                          {
+                            "type": "integer",
+                            "minimum": 1
+                          },
+                          {
+                            "type": "null"
+                          }
+                        ]
+                      },
+                      "branch": {
+                        "type": "string",
+                        "maxLength": 1024,
+                        "minLength": 0
+                      },
+                      "generation": {
+                        "type": "string",
+                        "maxLength": 256,
+                        "minLength": 0
+                      }
+                    },
+                    "required": [
+                      "workspace_id",
+                      "repository_id",
+                      "branch",
+                      "generation"
+                    ],
+                    "additionalProperties": false
+                  },
+                  "snapshot": {
+                    "type": "object",
+                    "properties": {
+                      "id": {
+                        "type": "string",
+                        "maxLength": 256,
+                        "minLength": 0
+                      },
+                      "local_commit": {
+                        "anyOf": [
+                          {
+                            "type": "string",
+                            "minLength": 40,
+                            "maxLength": 64,
+                            "pattern": "^(?:[a-f0-9]{40}|[a-f0-9]{64})$"
+                          },
+                          {
+                            "type": "null"
+                          }
+                        ]
+                      },
+                      "worktree_generation": {
+                        "type": "string",
+                        "maxLength": 256,
+                        "minLength": 0
+                      },
+                      "draft_generation": {
+                        "anyOf": [
+                          {
+                            "type": "string",
+                            "maxLength": 256,
+                            "minLength": 0
+                          },
+                          {
+                            "type": "null"
+                          }
+                        ]
+                      },
+                      "remote_commit": {
+                        "anyOf": [
+                          {
+                            "type": "string",
+                            "minLength": 40,
+                            "maxLength": 64,
+                            "pattern": "^(?:[a-f0-9]{40}|[a-f0-9]{64})$"
+                          },
+                          {
+                            "type": "null"
+                          }
+                        ]
+                      }
+                    },
+                    "required": [
+                      "id",
+                      "local_commit",
+                      "worktree_generation",
+                      "draft_generation"
+                    ],
+                    "additionalProperties": false
+                  },
+                  "draft_generation": {
+                    "anyOf": [
+                      {
+                        "type": "string",
+                        "maxLength": 256,
+                        "minLength": 0
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ]
+                  }
+                },
+                "required": [
+                  "scope",
+                  "snapshot",
+                  "draft_generation"
+                ],
+                "additionalProperties": false
+              },
+              "intent": {
+                "const": "open"
+              }
+            },
+            "required": [
+              "target",
+              "expected_context",
+              "intent"
+            ],
+            "additionalProperties": false
+          }
+        },
+        "required": [
+          "navigation"
+        ],
+        "additionalProperties": false
+      },
+      "required_capabilities": [
+        "workspace.file.read"
+      ],
+      "callers": [
+        "ui"
+      ],
+      "requires_user_gesture": true
+    },
+    {
+      "plugin_id": "proprium.narrative",
       "action_id": "proprium.narrative.reading-marks.create",
       "schema_version": 1,
       "effect": "propose",
@@ -5724,6 +5953,40 @@
         "type": "tabs",
         "title": "読書マーク",
         "tabs": [
+          {
+            "id": "marks-open",
+            "title": "本文を表示",
+            "body": {
+              "id": "narrative-reading-mark-open",
+              "type": "list",
+              "title": "本文で読書マークを開く",
+              "description": "現在の本文に一致するマークを選択すると、本文を開いて範囲を表示します。",
+              "load_action": {
+                "action_id": "proprium.narrative.reading-marks.list",
+                "input_template": {
+                  "scene_id": {
+                    "data_key": "host_context.scene_id"
+                  }
+                }
+              },
+              "items": {
+                "data_key": "last_action_result.marks"
+              },
+              "primary": "snippet",
+              "secondary": "position_status",
+              "item_action": {
+                "action_id": "proprium.narrative.reading-marks.open-ui",
+                "input_template": {
+                  "scene_id": {
+                    "data_key": "last_action_result.scene_id"
+                  },
+                  "mark_id": {
+                    "data_key": "item.id"
+                  }
+                }
+              }
+            }
+          },
           {
             "id": "marks-list",
             "title": "一覧・削除",

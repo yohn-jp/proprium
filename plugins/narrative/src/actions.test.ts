@@ -511,6 +511,18 @@ test("reading marks preserve malformed rows, YAML comments and unknown fields wi
   }
 });
 
+test("reading mark navigation validates saved UTF-16 range and rejects stale marks", () => {
+  const host = new MemoryHost(); addWork(host, 1);
+  const path = "plot/volumes/folder-not-id/chapters/directory-not-id/scenes/file-scene-1.yaml";
+  host.add(path, "id: scene-1\ntype: scene\ntitle: Scene 1\nvolume: work-volume\nchapter: work-chapter\norder: 1\nmanuscript: manuscript/custom/scene-1.md\nreadingMarks:\n  - id: selected\n    offset: 2\n    length: 2\n    snippet: 🙂\n    createdAt: '2026-10-26T00:00:00Z'\n");
+  const bodyPath = "manuscript/custom/scene-1.md";
+  const revision = host.add(bodyPath, "\ufeff漢🙂\n");
+  const result = run(host, request("proprium.narrative.reading-marks.open-ui", { scene_id: "scene-1", mark_id: "selected" })) as { navigation: { target: { path: string; span: unknown } } };
+  assert.deepEqual(result.navigation.target, { path: bodyPath, span: { path: bodyPath, revision, start: 2, end: 4, quote: "🙂" } });
+  host.add(bodyPath, "\ufeff漢違う\n");
+  assert.throws(() => run(host, request("proprium.narrative.reading-marks.open-ui", { scene_id: "scene-1", mark_id: "selected" })), { code: "snapshot_stale" });
+});
+
 test("reading mark UI proposal uses Host timestamp and stable idempotency-derived ID", () => {
   const host = new MemoryHost();
   addWork(host, 1);
