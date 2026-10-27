@@ -9278,7 +9278,7 @@
                     "description": "Scene IDを入力して保存済み原稿を読みます。編集中のDraftは自動では読み込みません。",
                     "fields": [
                       {
-                        "id": "sceneId",
+                        "id": "scene_id",
                         "label": "Scene ID",
                         "type": "string",
                         "required": true,
@@ -9289,7 +9289,7 @@
                       "action_id": "proprium.diagnostics.scene.run.v1",
                       "input_template": {
                         "sceneId": {
-                          "data_key": "form.sceneId"
+                          "data_key": "form.scene_id"
                         },
                         "sections": [
                           "prose",
@@ -9400,7 +9400,7 @@
                     "description": "Semantic の保存済みインデックスから候補を読みます。候補は矛盾の確定ではありません。",
                     "fields": [
                       {
-                        "id": "sceneId",
+                        "id": "scene_id",
                         "label": "Scene ID",
                         "type": "string",
                         "required": true,
@@ -9411,7 +9411,7 @@
                       "action_id": "proprium.diagnostics.scene.run.v1",
                       "input_template": {
                         "sceneId": {
-                          "data_key": "form.sceneId"
+                          "data_key": "form.scene_id"
                         },
                         "sections": [
                           "semanticHypotheses"
@@ -9446,7 +9446,7 @@
               "type": "tabs",
               "tabs": [
                 {
-                  "id": "run",
+                  "id": "lint-run",
                   "title": "実行",
                   "body": {
                     "id": "lint-run-form",
@@ -9459,7 +9459,7 @@
                         "label": "文章",
                         "type": "string",
                         "required": true,
-                        "max_length": 500000
+                        "max_length": 100000
                       }
                     ],
                     "submit": {
@@ -9473,7 +9473,7 @@
                   }
                 },
                 {
-                  "id": "findings",
+                  "id": "lint-findings-tab",
                   "title": "所見",
                   "body": {
                     "id": "lint-findings",
@@ -9526,7 +9526,7 @@
               "description": "Speakerが有効な場合、帰属・宣言済みの声・統計的所見を表示します。DiagnosticsはSpeakerの状態を変更しません。",
               "fields": [
                 {
-                  "id": "sceneId",
+                  "id": "scene_id",
                   "label": "Scene ID",
                   "type": "string",
                   "required": true,
@@ -9537,7 +9537,7 @@
                 "action_id": "proprium.diagnostics.scene.run.v1",
                 "input_template": {
                   "sceneId": {
-                    "data_key": "form.sceneId"
+                    "data_key": "form.scene_id"
                   },
                   "sections": [
                     "declaredVoice",

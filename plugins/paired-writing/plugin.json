@@ -14884,7 +14884,7 @@
               },
               "fields": [
                 {
-                  "id": "totalCuBudget",
+                  "id": "total_cu_budget",
                   "type": "integer",
                   "label": "Compute budget (1–64)",
                   "required": true
@@ -14895,7 +14895,7 @@
                 "input_template": {
                   "patch": {
                     "totalCuBudget": {
-                      "data_key": "form.totalCuBudget"
+                      "data_key": "form.total_cu_budget"
                     }
                   },
                   "expectedRevision": {
