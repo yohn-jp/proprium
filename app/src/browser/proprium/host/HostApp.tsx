@@ -26,6 +26,7 @@ import { NarrativeNavigation } from "./authoring/NarrativeNavigation.js";
 import { NarrativePortableResume } from "./authoring/NarrativePortableResume.js";
 import { NarrativeReadingMarkCapture, savedSelectionRange } from "./authoring/NarrativeReadingMarkCapture.js";
 import { SemanticTaskControls } from "./authoring/SemanticTaskControls.js";
+import { SemanticPreferences, type SemanticSettingsValue } from "./authoring/SemanticPreferences.js";
 import { ResearchCandidateControls } from "../authoring/ResearchCandidateControls.js";
 import { sourceTextDecoder } from "../authoring/source-text.js";
 import { useProviderConsent } from "./use-provider-consent.js";
@@ -1094,6 +1095,10 @@ export function HostApp(): ReactElement {
           </section>
 </div> : mode === "desktop" ? <div className="host-controls">{recentCard}</div> : picker;
   const tools = <div className="host-controls">{authoring && <>
+    {authoringRegistrations.some(row=>row.pluginId==="proprium.semantic"&&row.status==="ready") && <details><summary>Semantic のローカル設定</summary><SemanticPreferences key={`semantic-prefs:${workspaceGeneration}:${preferences.email}`} scopeKey={authoring.localPreferenceScope()}
+      readLocal={async(signal)=>{if(signal.aborted)throw new Error("cancelled");const value=await authoring.readLocalPreference(authoring.localPreferenceScope(),"proprium.semantic","reranker.enabled",1);if(signal.aborted)throw new Error("cancelled");return value;}}
+      read={async(signal)=>{const result=await authoring.invokeRead("proprium.semantic","proprium.semantic.settings.read",{},signal);if(!result.ok)throw new Error(result.error.message);return result.value as unknown as SemanticSettingsValue;}}
+      save={(event,expectedScope,value)=>authoring.writeLocalPreference(event,expectedScope,"proprium.semantic","reranker.enabled",1,value)} /></details>}
     {authoringRegistrations.some(row=>row.pluginId==="proprium.research"&&row.status==="ready") && <details><summary>文章から用語候補を抽出</summary><ResearchCandidateControls key={`research:${workspaceGeneration}`} scopeKey={researchScopeKey}
       invokeRead={async(expectedScope,actionId,input,signal)=>{if(expectedScope!==researchScopeRef.current)throw new Error("snapshot_stale");const result=await authoring.invokeRead("proprium.research",actionId,input,signal);if(expectedScope!==researchScopeRef.current)throw new Error("snapshot_stale");return result;}} /></details>}
     {authoringRegistrations.some(row=>row.pluginId==="proprium.narrative"&&row.status==="ready") && <NarrativePortableResume key={`portable:${workspaceGeneration}`} scopeKey={JSON.stringify([workspaceGeneration,status.head,status.entries.map(entry=>[entry.path,entry.worktree,entry.stage]),preferences.email,authoringRegistrations.filter(row=>row.pluginId==="proprium.narrative").map(row=>row.manifestDigest)])} localSceneId={loadLocalResume()?.position.scene_id}

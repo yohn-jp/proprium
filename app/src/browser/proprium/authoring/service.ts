@@ -955,6 +955,10 @@ export function createBrowserAuthoringService(options: CreateBrowserAuthoringSer
       const properties=descriptor&&typeof descriptor.input_schema==="object" ? descriptor.input_schema.properties as Record<string,JsonSchema>|undefined : undefined;
       if(properties?.patch)preferenceSchemas.set(`${pluginId}:${key}:${version}`,properties.patch);
     }
+    if(pluginId==="proprium.semantic"&&key==="reranker.enabled"&&version===1){
+      const descriptor=installed.descriptors.find(row=>row.action_id==="proprium.semantic.settings.update");
+      if(descriptor)preferenceSchemas.set(`${pluginId}:${key}:${version}`,descriptor.input_schema);
+    }
   };
   const preferences = new PluginPreferencesBroker(brokerStore, freshGestures,
     (pluginId, key, schemaVersion, value) => {
