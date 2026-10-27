@@ -1,0 +1,43 @@
+✔ streaming SHA-256 matches standard empty and multi-chunk vectors (1.723629ms)
+✔ artifact sink appends bounded chunks and seals the exact hash and byte count (26.930698ms)
+✔ artifact sink rejects negotiated size overflow before appending and supports discard (4.511933ms)
+✔ artifact sink discards a Host artifact when its negotiated limit is malformed (0.280353ms)
+✔ streamed stored-ZIP artifact is byte-identical to the deterministic EPUB ZIP writer (3.910449ms)
+✔ artifact sink honors a smaller Host chunk limit for streamed exports (0.595783ms)
+✔ artifact sink discards a reservation with an invalid Host chunk limit (0.341707ms)
+✔ publication scope follows explicit scene links and preserves Narrative page order (3.412524ms)
+✔ TXT raw, stripped, Kakuyomu and Narou modes preserve Unicode, order and source text safely (1.807395ms)
+✔ EPUB output is a real deterministic EPUB3 ZIP with escaped XHTML, ruby, appendix and exact cover bytes (6.056783ms)
+✔ EPUB rejects traversal covers and keeps unsupported image types out of the manifest (1.074223ms)
+✔ vertical print preserves canonical scene order and preflight stays non-blocking (0.589674ms)
+✔ incomplete ruby markup does not consume text across lines during export (0.190981ms)
+✔ export action reads only its pinned linked manuscript and seals Host artifact bytes (12.13426ms)
+✔ all-work export preserves Narrative's multi-volume page order despite order metadata (2.749201ms)
+✔ volume export includes only the selected volume (2.803228ms)
+✔ vertical print action seals ordered text for the Host-only preview (2.298919ms)
+✔ unknown scope IDs fail before an artifact is created (1.071481ms)
+✔ a missing linked manuscript reports its exact path and discards its incomplete artifact (1.833275ms)
+✔ invalid Markdown frontmatter reports the linked source path and discards output (2.526811ms)
+✔ unsafe Narrative manuscript paths are rejected before reading or creating artifacts (0.748801ms)
+✔ duplicate Narrative identities are rejected instead of selecting an arbitrary page (0.970822ms)
+✔ EPUB action streams a real EPUB3 package through the artifact continuation (7.867856ms)
+✔ unsupported optional cover is a non-blocking ActionResult warning, not extra value data (3.938609ms)
+✔ episode proposal preserves unknown YAML fields and proposes one guarded metadata write (6.437537ms)
+✔ episode form blanks clear only publication dates and scene annotations (1.64836ms)
+✔ episode read presents records by episode number then ID (1.728059ms)
+✔ project tree action forwards one page without eager reordering (0.503121ms)
+✔ share creation without a configured provider produces no secret, proposal, URL or network request (1.580783ms)
+✔ share list uses only Host-local provider configuration and never calls the provider (0.706445ms)
+✔ share list marks active only when the exact grant metadata revision is remotely confirmed (1.014495ms)
+✔ share revocation stays pending until Host confirms that exact grants revision (0.626625ms)
+✔ configured share creation proposes only a hashed descriptor and never returns the Host handle (1.086965ms)
+✔ share revocation uses the Host's stable operation timestamp and proposes only the grants file (1.220046ms)
+✔ Publishing manifest passes release registry declaration validation (60.261771ms)
+ℹ tests 35
+ℹ suites 0
+ℹ pass 35
+ℹ fail 0
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 375.095786

@@ -19,7 +19,8 @@
       "tests": 28,
       "failures": 0,
       "log_sha256": "977669eae81f7b3e9825ddf76ccd4ff09288854b88d027dbc887666470ce1688",
-      "log_path": "/workspace/distribution-runtime/seven-checks/narrative.log"
+      "log_path": "/workspace/distribution-runtime/seven-checks/narrative.log",
+      "artifact": "evidence/authoring/validation/seven-plugin-checks/01-narrative.txt"
     },
     {
       "name": "knowledge plugin tests",
@@ -29,7 +30,8 @@
       "tests": 53,
       "failures": 0,
       "log_sha256": "10081dddc1cce9dfddcb9990638084cf31cda55d90d401aed605f288ebf19806",
-      "log_path": "/workspace/distribution-runtime/seven-checks/knowledge.log"
+      "log_path": "/workspace/distribution-runtime/seven-checks/knowledge.log",
+      "artifact": "evidence/authoring/validation/seven-plugin-checks/02-knowledge.txt"
     },
     {
       "name": "research plugin tests",
@@ -39,7 +41,8 @@
       "tests": 21,
       "failures": 0,
       "log_sha256": "f558da20aac19c711e816d6280866bc5ba25787474a361ee48a0047e0deff5ca",
-      "log_path": "/workspace/distribution-runtime/seven-checks/research.log"
+      "log_path": "/workspace/distribution-runtime/seven-checks/research.log",
+      "artifact": "evidence/authoring/validation/seven-plugin-checks/03-research.txt"
     },
     {
       "name": "speaker plugin tests",
@@ -49,7 +52,8 @@
       "tests": 20,
       "failures": 0,
       "log_sha256": "8a3c9fc27257a47579d589cd7b698aea2f77057effa213cfa0073831a7f9a836",
-      "log_path": "/workspace/distribution-runtime/seven-checks/speaker.log"
+      "log_path": "/workspace/distribution-runtime/seven-checks/speaker.log",
+      "artifact": "evidence/authoring/validation/seven-plugin-checks/04-speaker.txt"
     },
     {
       "name": "semantic plugin tests",
@@ -59,7 +63,8 @@
       "tests": 42,
       "failures": 0,
       "log_sha256": "fea8c066a15e4c8ce691b20bb552c5af512110780bf5fee174563ccc9040c684",
-      "log_path": "/workspace/distribution-runtime/seven-checks/semantic.log"
+      "log_path": "/workspace/distribution-runtime/seven-checks/semantic.log",
+      "artifact": "evidence/authoring/validation/seven-plugin-checks/05-semantic.txt"
     },
     {
       "name": "publishing plugin tests",
@@ -69,7 +74,8 @@
       "tests": 35,
       "failures": 0,
       "log_sha256": "240831852f08fcce031bc46fa8d6ac10b596c781908a6ebfbe73361979ba79b8",
-      "log_path": "/workspace/distribution-runtime/seven-checks/publishing.log"
+      "log_path": "/workspace/distribution-runtime/seven-checks/publishing.log",
+      "artifact": "evidence/authoring/validation/seven-plugin-checks/06-publishing.txt"
     },
     {
       "name": "diagnostics plugin tests",
@@ -79,7 +85,8 @@
       "tests": 42,
       "failures": 0,
       "log_sha256": "e702773b4bd99978c8a13942b546f329c27bebdfc8369b0b086f9b4e6fa5c3fc",
-      "log_path": "/workspace/distribution-runtime/seven-checks/diagnostics.log"
+      "log_path": "/workspace/distribution-runtime/seven-checks/diagnostics.log",
+      "artifact": "evidence/authoring/validation/seven-plugin-checks/07-diagnostics.txt"
     },
     {
       "name": "narrative package typecheck",
@@ -87,7 +94,8 @@
       "command": "cd plugins/narrative && ../../node_modules/.bin/tsc --noEmit",
       "status": "PASS",
       "log_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
-      "log_path": "/workspace/distribution-runtime/seven-checks/narrative-typecheck.log"
+      "log_path": "/workspace/distribution-runtime/seven-checks/narrative-typecheck.log",
+      "artifact": "evidence/authoring/validation/seven-plugin-checks/08-narrative-typecheck.txt"
     },
     {
       "name": "knowledge package typecheck",
@@ -95,7 +103,8 @@
       "command": "cd plugins/knowledge && ../../node_modules/.bin/tsc --noEmit -p tsconfig.json",
       "status": "PASS",
       "log_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
-      "log_path": "/workspace/distribution-runtime/seven-checks/knowledge-typecheck.log"
+      "log_path": "/workspace/distribution-runtime/seven-checks/knowledge-typecheck.log",
+      "artifact": "evidence/authoring/validation/seven-plugin-checks/09-knowledge-typecheck.txt"
     },
     {
       "name": "speaker package typecheck",
@@ -103,7 +112,8 @@
       "command": "cd plugins/speaker && ../../node_modules/.bin/tsc --noEmit -p tsconfig.json",
       "status": "PASS",
       "log_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
-      "log_path": "/workspace/distribution-runtime/seven-checks/speaker-typecheck.log"
+      "log_path": "/workspace/distribution-runtime/seven-checks/speaker-typecheck.log",
+      "artifact": "evidence/authoring/validation/seven-plugin-checks/10-speaker-typecheck.txt"
     },
     {
       "name": "publishing package typecheck",
@@ -111,7 +121,8 @@
       "command": "cd plugins/publishing && ../../node_modules/.bin/tsc --noEmit --target ES2023 --module NodeNext --moduleResolution NodeNext --strict --skipLibCheck --types node guest.ts domain.ts artifacts.ts domain.test.ts artifacts.test.ts guest.test.ts",
       "status": "PASS",
       "log_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
-      "log_path": "/workspace/distribution-runtime/seven-checks/publishing-typecheck.log"
+      "log_path": "/workspace/distribution-runtime/seven-checks/publishing-typecheck.log",
+      "artifact": "evidence/authoring/validation/seven-plugin-checks/11-publishing-typecheck.txt"
     },
     {
       "name": "Shared Host authoring units",
@@ -121,7 +132,8 @@
       "tests": 130,
       "failures": 0,
       "log_sha256": "85d1f4c91305e4de48529dff5ed10139c02daf6eab47d5d55dfc95f34e63ffa6",
-      "log_path": "/tmp/proprium-seven-shared-checks.log"
+      "log_path": "/tmp/proprium-seven-shared-checks.log",
+      "artifact": "evidence/authoring/validation/seven-plugin-checks/12-proprium-seven-shared-checks.txt"
     },
     {
       "name": "Host controls units",
@@ -131,7 +143,8 @@
       "tests": 16,
       "failures": 0,
       "log_sha256": "8ef3e1eab30685db5986280482033383cdf30030150028a5b405ebd82690f928",
-      "log_path": "/tmp/proprium-seven-controls.log"
+      "log_path": "/tmp/proprium-seven-controls.log",
+      "artifact": "evidence/authoring/validation/seven-plugin-checks/13-proprium-seven-controls.txt"
     }
   ],
   "limitations": [
@@ -140,5 +153,6 @@
     "Real remote provider and Semantic cold BGE scenarios remain NOT_CHECKED.",
     "Production registry publication remains BLOCKED: signing/R2 credentials and production access are not established.",
     "Paired Writing was frozen for this wave; no Paired tests or feature records were changed."
-  ]
+  ],
+  "evidence_boundary": "Archived logs prove only the listed local checks, not browser acceptance or release certification."
 }

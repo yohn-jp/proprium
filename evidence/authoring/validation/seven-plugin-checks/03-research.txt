@@ -1,0 +1,29 @@
+✔ search filters roots and hidden paths, indexes Japanese pairs, and returns source ranges (13.787741ms)
+✔ search modes rank deterministically and paginate with snapshot-bound cursors (118.066531ms)
+✔ term resolution maps compatibility graphemes to UTF-16 and keeps collisions ambiguous (5.89229ms)
+✔ normalization span map stays exact across combining marks, expansions and following text (0.848661ms)
+✔ index and query reject unsafe, oversized, duplicate, malformed, or stale inputs (5.52116ms)
+✔ official Research guest exports the cooperative v2 lifecycle and returns a Host continuation (1.980786ms)
+✔ search values match the signed schema with and without envelope warnings (56.849685ms)
+✔ Research guest pages a 300-file Host snapshot and binds cursors to its exact revision (124.190148ms)
+✔ query scope supports an exact file and excludes same-prefix siblings (1.537225ms)
+✔ search and terminology cursors are bound to the workspace scope as well as snapshot and query (7.302646ms)
+✔ index status reads Host metadata and a new guest verifies cached source revisions (2.477088ms)
+✔ token counting labels an explicitly selected approximation and rejects unavailable or unsafe models (2.02578ms)
+✔ chunked cached sources survive multi-chunk files and corrupt cache is rebuilt from pinned Host bytes (1202.66015ms)
+✔ term proposal uses exact Host revisions and retains unknown registry fields (1.989244ms)
+✔ terminology reads resolve target availability across the full workspace namespace (2.571226ms)
+✔ synonym and candidate preference proposals preserve YAML comments and extensions (14.69988ms)
+✔ large registry proposals seal a scoped artifact before referencing its bytes (5.995813ms)
+✔ failed artifact transfer discards its incomplete Host artifact (4.509434ms)
+✔ Research official manifest declares every implemented action and only actionable Host surfaces (56.753229ms)
+✔ analyzer exposes local literal analysis and its results (3.447653ms)
+✔ WASI-safe SHA-256 matches standard empty, short and Unicode vectors (1.966644ms)
+ℹ tests 21
+ℹ suites 0
+ℹ pass 21
+ℹ fail 0
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 1745.287815

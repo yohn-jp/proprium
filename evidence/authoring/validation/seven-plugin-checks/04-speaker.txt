@@ -1,0 +1,28 @@
+✔ Japanese dialogue attribution keeps source text and reserves high confidence for calibrated evidence (18.537204ms)
+✔ source sentence offsets use UTF-16 indices and keep original Japanese text (1.457203ms)
+✔ a unique line hash reanchors after insertion, while duplicate text stays stale (1.240256ms)
+✔ same pinned scene and text produce deterministic clusters and preserve manual unknown (15.182701ms)
+✔ dialogue hashes remain lowercase eight-digit UTF-16 FNV-1a values (0.448488ms)
+✔ rule gates enforce sample and precision boundaries without changing manual confirmations (0.553449ms)
+✔ all Speaker action descriptors pass the adopted bounded-schema validator (28.111232ms)
+✔ scene, queue, preview, count, dialogue, profile, and gate actions return schema-valid values (82.167967ms)
+✔ retraining emits a bounded held-out model candidate without proposing during dry run (30.847967ms)
+✔ guest attribution uses explicit Narrative and Knowledge contracts and returns exact UTF-16 evidence (3.390834ms)
+✔ voice check reports reduced-tokenizer availability and keeps source-bound attribution rows (8.053048ms)
+✔ correction proposal preserves unknown YAML and appends correction bytes without rewriting the old log (7.837854ms)
+✔ evaluation and gate caches are snapshot-keyed and latest reads only validated report shapes (11.875448ms)
+✔ Speaker manifest passes the release registry declaration validator (38.3683ms)
+✔ direct correction derives prediction and refuses stale selected text (21.757629ms)
+✔ Speaker recovery inventories and compiles exact legacy bytes into absent-only reviewed creates (25.109066ms)
+✔ identical targets are unchanged and conflicting targets are reported without overwriting them (1.60999ms)
+✔ missing, disabled, and over-limit recovery is visible and produces no unsafe proposal (0.799667ms)
+✔ component sentence boundaries retain Japanese quotes and UTF-16 offsets (1.908082ms)
+✔ component sentence boundaries fail closed on invalid offsets (0.45801ms)
+ℹ tests 20
+ℹ suites 0
+ℹ pass 20
+ℹ fail 0
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 1065.378472
