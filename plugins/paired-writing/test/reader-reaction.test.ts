@@ -1,4 +1,6 @@
 import {test} from "node:test";
+import {assertValue} from "../../../app/src/browser/proprium/authoring/schema.js";
+import {READER_REACTION_PREVIEW_OUTPUT_SCHEMA} from "../src/continuation-schemas.js";
 import assert from "node:assert/strict";
 import {renderReaderReactionPrompt,generateReaderReaction} from "../src/reader-reaction.js";
 test("reader reaction prompt preserves supplied chapter order and exact summary text",()=>{
@@ -21,7 +23,7 @@ test("reaction preview verifies accepted source revision metadata without readin
   else if(call.operation==="workspace.file.read"){const path=String(call.payload.path);reads.push(path);const bytes=[...new TextEncoder().encode(yaml)];value={revision:summary,offset:0,total_bytes:bytes.length,bytes,next_offset:null};}
   else throw new Error(`Unexpected ${call.operation}`);step=iter.next(value);
  }
- assert.deepEqual(reads,["plot/v/chapter-summary.yaml"]);assert.match((step.value as any).prompt,/要約/u);
+ assert.deepEqual(reads,["plot/v/chapter-summary.yaml"]);assert.match((step.value as any).prompt,/要約/u);assertValue(READER_REACTION_PREVIEW_OUTPUT_SCHEMA,step.value);
 });
 test("legacy FNV-only summary is reported unverified and never used as context",()=>{
  const rev="a".repeat(64),body="id: c1\nsummaryLines:\n  - 不明な要約\nsourceHash: deadbeef\n";
