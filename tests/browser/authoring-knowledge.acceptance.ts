@@ -69,6 +69,7 @@ test("signed Knowledge and Research surfaces read and navigate real workspace da
   await expect(bible.getByRole("button", { name: /char-aの原文を開く/ })).toBeVisible({ timeout: 60_000 });
   await bible.getByRole("button", { name: /char-aの原文を開く/ }).click();
   await expect(page.getByRole("textbox", { name: "原稿 Markdown" })).toContainText("aliases: [あかり]", { timeout: 60_000 });
+  await expect(page.getByRole("textbox", { name: "原稿 Markdown" })).toContainText("target: loc-a");
 
   await showAuthoringPanel(page, "検索");
   const search = page.locator(".authoring-surface").filter({ hasText: "検索条件" });
