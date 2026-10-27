@@ -82,6 +82,39 @@ function createHarness(overrides: Partial<ActionDispatcherOptions> = {}) {
   return { dispatcher: new AuthoringActionDispatcher({ ...defaults, ...overrides }), entries, executed, hostCalls };
 }
 
+test("dependency calls preserve the full typed result envelope consumed by official guests", async () => {
+  const dependency = "proprium.narrative";
+  const invokeCap = "workspace.plugin.invoke";
+  const h = createHarness({
+    authority: {
+      issue: async p => context(p, { grants: [cap, invokeCap], host_capabilities: [cap, invokeCap] }),
+      issueChild: async (parent, caller_plugin_id) => context(principal("ui", `${parent.request_id}-child`), {
+        caller: "plugin", caller_plugin_id, user_gesture_verified: false, signal: parent.signal,
+      }),
+      assertCurrent: async () => {}, isSnapshotCurrent: () => true,
+    },
+    runtime: { invoke: async options => {
+      if (options.request.plugin_id === dependency) return { request_id: options.request.request_id,
+        scope: options.request.scope, snapshot: options.request.snapshot, ok: true, value: { hits: 2 }, warnings: ["source warning"] };
+      const result = await options.resolve_host_call({ call_id: "nested:1", operation: invokeCap,
+        payload: { plugin_id: dependency, action_id: "narrative.read", input: { query: "x" } } }) as ActionResult<{ hits: number }>;
+      assert.equal(result.ok, true);
+      assert.deepEqual(result.scope, scope);
+      assert.deepEqual(result.snapshot, snapshot);
+      assert.deepEqual(result.ok && result.warnings, ["source warning"]);
+      return { request_id: options.request.request_id, scope: options.request.scope, snapshot: options.request.snapshot,
+        ok: true, value: result.ok ? result.value : {}, warnings: [] };
+    } },
+  });
+  h.entries.set(plugin_id, installed({ descriptors: [descriptor({ required_capabilities: [invokeCap] })],
+    dependencies: [dependency], grants: [cap, invokeCap], host_capabilities: [cap, invokeCap] }));
+  h.entries.set(dependency, installed({ plugin_id: dependency,
+    descriptors: [descriptor({ plugin_id: dependency, action_id: "narrative.read" })] }));
+  const result = await h.dispatcher.invoke({ plugin_id, action_id, input: { query: "x" } }, principal());
+  assert.equal(result.ok, true);
+  assert.deepEqual(result.ok && result.value, { hits: 2 });
+});
+
 test("metadata paging returns signed action descriptors without invoking a plugin Worker", async () => {
   const { dispatcher, executed } = createHarness({
     installed: async () => installed({ descriptors: [

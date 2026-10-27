@@ -392,7 +392,9 @@ export class AuthoringActionDispatcher {
     const result = await this.dispatchAuthorized({ plugin_id: target.plugin_id, action_id: descriptor.action_id, input: payload.input },
       descriptor, target, child, ancestors);
     if (!result.ok) throw result.error;
-    return result.value;
+    // Official guest adapters validate the child scope/snapshot and unwrap value.
+    // Stripping the envelope here turns every dependency result into a guest trap.
+    return result;
   }
   private async listDependency(payload: Record<string, unknown>, source: VerifiedActionSet): Promise<ActionListResult> {
     exactKeys(payload, ["plugin_id", "cursor", "limit"], "Action metadata");
