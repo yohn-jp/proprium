@@ -70,6 +70,8 @@ jobs:
         run: pnpm typecheck:browser
       - name: Test browser Git and plugin security units
         run: pnpm test:browser:unit
+      - name: Test official authoring plugin domains
+        run: node scripts/test-authoring-plugin-units.mjs
       - name: Test recovered editor, appearance and workspace layouts
         run: pnpm test:ui:unit
       - name: Build the static Proprium Host
@@ -77,6 +79,7 @@ jobs:
       - name: Validate Workers Static Assets packaging without deployment
         run: pnpm exec wrangler deploy --dry-run --config wrangler.jsonc
       - name: Install desktop and mobile browser engines
+        id: browser_engines
         run: pnpm exec playwright install --with-deps chromium webkit
       - name: Exercise browser acceptance scenarios
         env:
@@ -87,12 +90,16 @@ jobs:
           PROPRIUM_E2E_GITHUB_BRANCH: ${{ vars.PROPRIUM_E2E_GITHUB_BRANCH }}
         run: pnpm test:browser:e2e
       - name: Exercise signed v2 transport with its fixture setup
+        if: ${{ !cancelled() && steps.browser_engines.outcome == 'success' }}
         run: pnpm exec playwright test --config tests/browser/plugin-runtime-v2.playwright.config.ts
       - name: Exercise actual signed official plugins through the Host
+        if: ${{ !cancelled() && steps.browser_engines.outcome == 'success' }}
         run: pnpm exec playwright test --config tests/browser/authoring-official.playwright.config.ts
       - name: Exercise official typed actions through the live Gateway
+        if: ${{ !cancelled() && steps.browser_engines.outcome == 'success' }}
         run: pnpm exec playwright test --config tests/browser/authoring-mcp.playwright.config.ts
       - name: Exercise the production static shell offline
+        if: ${{ !cancelled() && steps.browser_engines.outcome == 'success' }}
         env:
           PROPRIUM_E2E_GITHUB_TOKEN: ${{ secrets.PROPRIUM_E2E_GITHUB_TOKEN }}
           PROPRIUM_E2E_GITHUB_OWNER: ${{ vars.PROPRIUM_E2E_GITHUB_OWNER }}
@@ -101,6 +108,7 @@ jobs:
           PROPRIUM_E2E_GITHUB_BRANCH: ${{ vars.PROPRIUM_E2E_GITHUB_BRANCH }}
         run: pnpm test:browser:static:e2e
       - name: Exercise existing Browser Git and Component Worker adapter scenarios
+        if: ${{ !cancelled() && steps.browser_engines.outcome == 'success' }}
         env:
           SCRIPTORIUM_GITHUB_LIVE_TEST_TOKEN: ${{ secrets.PROPRIUM_E2E_GITHUB_TOKEN }}
           SCRIPTORIUM_GITHUB_LIVE_TEST_OWNER: ${{ vars.PROPRIUM_E2E_GITHUB_OWNER }}
