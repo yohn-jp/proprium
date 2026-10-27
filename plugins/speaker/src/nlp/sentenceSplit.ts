@@ -42,12 +42,27 @@ function splitAtClosingBrackets(line: string, lineStart: number, seg: SentenceSe
   return out.length > 0 ? out : [seg];
 }
 
+type SentenceEnds = (text: string) => ArrayLike<number>;
+let sentenceEnds: SentenceEnds | undefined;
+/** The composed component supplies the pinned Unicode segmentation implementation. */
+export function setSentenceEnds(segmenter: SentenceEnds): void { sentenceEnds = segmenter; }
+
 function splitLineWithSegmenter(line: string, lineStart: number): SentenceSegment[] {
   if (line.length === 0) return [{ text: "", start: lineStart, end: lineStart }];
-  const segmenter = new Intl.Segmenter("ja", { granularity: "sentence" });
   const raw: SentenceSegment[] = [];
-  for (const { segment, index } of segmenter.segment(line)) {
-    raw.push({ text: segment, start: lineStart + index, end: lineStart + index + segment.length });
+  if (sentenceEnds) {
+    let start = 0;
+    for (const end of Array.from(sentenceEnds(line))) {
+      if (!Number.isSafeInteger(end) || end <= start || end > line.length) throw new Error("Invalid Unicode sentence boundary");
+      raw.push({ text: line.slice(start, end), start: lineStart + start, end: lineStart + end });
+      start = end;
+    }
+    if (start !== line.length) throw new Error("Incomplete Unicode sentence boundaries");
+  } else {
+    const segmenter = new Intl.Segmenter("ja", { granularity: "sentence" });
+    for (const { segment, index } of segmenter.segment(line)) {
+      raw.push({ text: segment, start: lineStart + index, end: lineStart + index + segment.length });
+    }
   }
   if (raw.length === 0) return splitAtClosingBrackets(line, lineStart, { text: line, start: lineStart, end: lineStart + line.length });
   const merged: SentenceSegment[] = [];
