@@ -511,6 +511,22 @@ test("reading marks preserve malformed rows, YAML comments and unknown fields wi
   }
 });
 
+test("reading mark UI proposal uses Host timestamp and stable idempotency-derived ID", () => {
+  const host = new MemoryHost();
+  addWork(host, 1);
+  const path = "plot/volumes/folder-not-id/chapters/directory-not-id/scenes/file-scene-1.yaml";
+  const metadata = host.files.get(path)!.revision;
+  const body = host.add("manuscript/custom/scene-1.md", "A漢🙂\n");
+  const input = { scene_id: "scene-1", offset: 1, length: 3, snippet: "漢🙂", comment: "note", expected_metadata_revision: metadata, expected_manuscript_revision: body };
+  run(host, request("proprium.narrative.reading-marks.create-ui", input, "stable-mark"));
+  const changed = new TextDecoder().decode(new Uint8Array(host.changeset!.units[0]!.operations[0]!.content!));
+  assert.ok(changed.includes(`mark-${sha256Hex("stable-mark")}`));
+  assert.ok(changed.includes(host.timestamp));
+  assert.ok(changed.includes("漢🙂"));
+  assert.equal(host.calls.get("workspace.change.timestamp"), 1);
+  assert.throws(() => run(host, request("proprium.narrative.reading-marks.create-ui", { ...input, snippet: "違う" }, "another")), { code: "invalid_input" });
+});
+
 test("changes.compile emits a source-mapped scene metadata/body unit and complete sibling insert", () => {
   const host = new MemoryHost();
   addWork(host, 2);

@@ -38,6 +38,7 @@ export const NARRATIVE_ACTIONS = [
   "proprium.narrative.structure.reorder",
   "proprium.narrative.reading-marks.list",
   "proprium.narrative.reading-marks.create",
+  "proprium.narrative.reading-marks.create-ui",
   "proprium.narrative.reading-marks.delete",
   "proprium.narrative.changes.compile",
   "proprium.narrative.resume.marks.list",
@@ -677,6 +678,13 @@ function* executeAction(host: NarrativeHost, request: ActionRequest): Generator<
       return yield* reorderStructure(host, request, input);
     case "proprium.narrative.reading-marks.list":
       return yield* listReadingMarks(host, request, input);
+    case "proprium.narrative.reading-marks.create-ui": {
+      const row = strictObject(input, ["scene_id", "offset", "length", "snippet", "expected_metadata_revision", "expected_manuscript_revision"], ["comment"]);
+      const key = nonEmptyString(request.idempotency_key, "idempotency_key");
+      const time = yield* host.request<unknown>("workspace.change.timestamp", {});
+      if (!isRecord(time) || typeof time.timestamp !== "string" || !isRfc3339Utc(time.timestamp)) fail("invalid_input", "Host returned an invalid timestamp");
+      return yield* createReadingMark(host, request, { scene_id: row.scene_id, mark: { id: `mark-${sha256Hex(key)}`, offset: row.offset, length: row.length, snippet: row.snippet, ...(row.comment === undefined ? {} : { comment: row.comment }), createdAt: time.timestamp }, expected_metadata_revision: row.expected_metadata_revision, expected_manuscript_revision: row.expected_manuscript_revision });
+    }
     case "proprium.narrative.reading-marks.create":
       return yield* createReadingMark(host, request, input);
     case "proprium.narrative.reading-marks.delete":

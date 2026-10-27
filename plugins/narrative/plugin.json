@@ -2108,6 +2108,160 @@
     },
     {
       "plugin_id": "proprium.narrative",
+      "action_id": "proprium.narrative.reading-marks.create-ui",
+      "schema_version": 1,
+      "effect": "propose",
+      "input_schema": {
+        "type": "object",
+        "properties": {
+          "scene_id": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 256
+          },
+          "offset": {
+            "type": "integer",
+            "minimum": 0,
+            "maximum": 9007199254740991
+          },
+          "length": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 9007199254740991
+          },
+          "snippet": {
+            "type": "string",
+            "maxLength": 1048576,
+            "minLength": 0
+          },
+          "comment": {
+            "type": "string",
+            "maxLength": 200,
+            "minLength": 0
+          },
+          "expected_metadata_revision": {
+            "type": "string",
+            "minLength": 64,
+            "maxLength": 64,
+            "pattern": "^[a-f0-9]{64}$"
+          },
+          "expected_manuscript_revision": {
+            "type": "string",
+            "minLength": 64,
+            "maxLength": 64,
+            "pattern": "^[a-f0-9]{64}$"
+          }
+        },
+        "required": [
+          "scene_id",
+          "offset",
+          "length",
+          "snippet",
+          "expected_metadata_revision",
+          "expected_manuscript_revision"
+        ],
+        "additionalProperties": false
+      },
+      "output_schema": {
+        "type": "object",
+        "properties": {
+          "proposal_id": {
+            "type": "string",
+            "maxLength": 256,
+            "minLength": 0
+          },
+          "preview": {
+            "type": "object",
+            "properties": {
+              "title": {
+                "type": "string",
+                "maxLength": 1024,
+                "minLength": 0
+              },
+              "read_paths": {
+                "type": "array",
+                "items": {
+                  "type": "string",
+                  "maxLength": 256,
+                  "minLength": 0
+                },
+                "maxItems": 262144,
+                "minItems": 0
+              },
+              "units": {
+                "type": "array",
+                "items": {
+                  "type": "object",
+                  "properties": {
+                    "id": {
+                      "type": "string",
+                      "maxLength": 1048576,
+                      "minLength": 0
+                    },
+                    "label": {
+                      "type": "string",
+                      "maxLength": 256,
+                      "minLength": 0
+                    },
+                    "depends_on": {
+                      "type": "array",
+                      "items": {
+                        "type": "string",
+                        "maxLength": 256,
+                        "minLength": 0
+                      },
+                      "maxItems": 64,
+                      "minItems": 0
+                    },
+                    "operation_paths": {
+                      "type": "array",
+                      "items": {
+                        "type": "string",
+                        "maxLength": 256,
+                        "minLength": 0
+                      },
+                      "maxItems": 262144,
+                      "minItems": 0
+                    }
+                  },
+                  "required": [
+                    "id",
+                    "label",
+                    "depends_on",
+                    "operation_paths"
+                  ],
+                  "additionalProperties": false
+                },
+                "maxItems": 64,
+                "minItems": 0
+              }
+            },
+            "required": [
+              "title",
+              "read_paths",
+              "units"
+            ],
+            "additionalProperties": false
+          }
+        },
+        "required": [
+          "proposal_id",
+          "preview"
+        ],
+        "additionalProperties": false
+      },
+      "required_capabilities": [
+        "workspace.change.propose",
+        "workspace.file.read",
+        "workspace.change.timestamp"
+      ],
+      "callers": [
+        "ui"
+      ],
+      "requires_user_gesture": true
+    },
+    {
+      "plugin_id": "proprium.narrative",
       "action_id": "proprium.narrative.reading-marks.delete",
       "schema_version": 1,
       "effect": "propose",
@@ -5556,6 +5710,159 @@
           "data_key": "last_action_result.tree_revision"
         },
         "unavailable_message": "先に構成を読み込んでください。"
+      }
+    },
+    {
+      "id": "proprium.narrative.reading-marks",
+      "kind": "panel",
+      "title": "読書マーク",
+      "context": {
+        "workspace": true
+      },
+      "body": {
+        "id": "narrative-reading-mark-tabs",
+        "type": "tabs",
+        "title": "読書マーク",
+        "tabs": [
+          {
+            "id": "marks-list",
+            "title": "一覧・削除",
+            "body": {
+              "id": "narrative-reading-mark-list",
+              "type": "list",
+              "title": "読書マーク（選択すると削除を提案）",
+              "description": "current は現在の本文に一致し、stale は本文と一致しない位置です。削除にはレビューが必要です。",
+              "load_action": {
+                "action_id": "proprium.narrative.reading-marks.list",
+                "input_template": {
+                  "scene_id": {
+                    "data_key": "host_context.scene_id"
+                  }
+                }
+              },
+              "items": {
+                "data_key": "last_action_result.marks"
+              },
+              "primary": "snippet",
+              "secondary": "position_status",
+              "item_action": {
+                "action_id": "proprium.narrative.reading-marks.delete",
+                "input_template": {
+                  "scene_id": {
+                    "data_key": "last_action_result.scene_id"
+                  },
+                  "mark_id": {
+                    "data_key": "item.id"
+                  },
+                  "expected_metadata_revision": {
+                    "data_key": "last_action_result.metadata_revision"
+                  },
+                  "expected_manuscript_revision": {
+                    "data_key": "last_action_result.manuscript_revision"
+                  }
+                }
+              }
+            }
+          },
+          {
+            "id": "marks-comments",
+            "title": "コメント",
+            "body": {
+              "id": "narrative-reading-mark-comments",
+              "type": "list",
+              "title": "読書マークのコメント",
+              "load_action": {
+                "action_id": "proprium.narrative.reading-marks.list",
+                "input_template": {
+                  "scene_id": {
+                    "data_key": "host_context.scene_id"
+                  }
+                }
+              },
+              "items": {
+                "data_key": "last_action_result.marks"
+              },
+              "primary": "snippet",
+              "secondary": "comment"
+            }
+          },
+          {
+            "id": "marks-create",
+            "title": "追加",
+            "body": {
+              "id": "narrative-reading-mark-create",
+              "type": "form",
+              "title": "読書マークを追加",
+              "description": "本文を保存してから、選択範囲の UTF-16 位置と抜粋を入力します。変更はレビュー後に適用します。",
+              "load_action": {
+                "action_id": "proprium.narrative.reading-marks.list",
+                "input_template": {
+                  "scene_id": {
+                    "data_key": "host_context.scene_id"
+                  }
+                }
+              },
+              "fields": [
+                {
+                  "id": "offset",
+                  "label": "開始位置（UTF-16）",
+                  "type": "integer",
+                  "required": true
+                },
+                {
+                  "id": "length",
+                  "label": "文字数（UTF-16）",
+                  "type": "integer",
+                  "required": true
+                },
+                {
+                  "id": "snippet",
+                  "label": "保存済み本文の抜粋",
+                  "type": "string",
+                  "required": true,
+                  "min_length": 1,
+                  "max_length": 4096
+                },
+                {
+                  "id": "comment",
+                  "label": "コメント",
+                  "type": "string",
+                  "max_length": 200
+                }
+              ],
+              "submit": {
+                "action_id": "proprium.narrative.reading-marks.create-ui",
+                "input_template": {
+                  "scene_id": {
+                    "data_key": "last_action_result.scene_id"
+                  },
+                  "offset": {
+                    "data_key": "form.offset"
+                  },
+                  "length": {
+                    "data_key": "form.length"
+                  },
+                  "snippet": {
+                    "data_key": "form.snippet"
+                  },
+                  "comment": {
+                    "data_key": "form.comment"
+                  },
+                  "expected_metadata_revision": {
+                    "data_key": "last_action_result.metadata_revision"
+                  },
+                  "expected_manuscript_revision": {
+                    "data_key": "last_action_result.manuscript_revision"
+                  }
+                }
+              },
+              "submit_when": {
+                "data_key": "last_action_result.metadata_revision"
+              },
+              "unavailable_message": "シーンを開いて保存済みのマークを読み込んでください。"
+            }
+          }
+        ]
       }
     }
   ],
