@@ -1,4 +1,4 @@
-import { Inflate, zipSync } from "fflate";
+import { Inflate } from "fflate";
 import { MAX_WORKSPACE_CHANGE_BYTES, MAX_WORKSPACE_CHANGE_COUNT, validateGitPath } from "../git/protocol.js";
 
 // ZIP central/local headers and UTF-8 names add bytes beyond the expanded contents.
@@ -19,13 +19,63 @@ export function validateTransferFiles(files: readonly TransferFile[]): void {
   }
 }
 
-/** File-only archive: Git history, authentication and browser preferences are not included. */
+/** File-only archive: Git history, authentication and browser preferences are not included.
+ * Write a bounded STORE-only ZIP directly. The fflate zipSync writer flattens
+ * entries into a prototype-bearing map and cannot represent "__proto__".
+ */
 export function createWorkspaceArchive(files: readonly TransferFile[]): Uint8Array<ArrayBuffer> {
   validateTransferFiles(files);
-  const entries: Record<string, Uint8Array> = Object.create(null);
-  for (const file of files) entries[file.path] = file.data;
-  const archive = zipSync(entries, { level: 0 });
-  if (archive.byteLength > MAX_WORKSPACE_ARCHIVE_BYTES) throw new Error("ZIPの管理情報が大きすぎます。ファイルを分けて書き出してください。");
+  const encoder = new TextEncoder();
+  const entries = files.map(({ path, data }) => {
+    const name = encoder.encode(path);
+    if (name.length > 0xffff || new TextDecoder("utf-8", { fatal: true }).decode(name) !== path) {
+      throw new Error("ZIPのファイル名をUTF-8で保存できません。");
+    }
+    return { name, data, checksum: crc32(data) };
+  });
+  const localSize = entries.reduce((sum, item) => sum + 30 + item.name.length + item.data.length, 0);
+  const centralSize = entries.reduce((sum, item) => sum + 46 + item.name.length, 0);
+  const archiveSize = localSize + centralSize + 22;
+  if (archiveSize > MAX_WORKSPACE_ARCHIVE_BYTES) throw new Error("ZIPの管理情報が大きすぎます。ファイルを分けて書き出してください。");
+  const archive = new Uint8Array(archiveSize);
+  const view = new DataView(archive.buffer);
+  const put16 = (offset: number, value: number): void => view.setUint16(offset, value, true);
+  const put32 = (offset: number, value: number): void => view.setUint32(offset, value, true);
+  let offset = 0;
+  const starts: number[] = [];
+  for (const entry of entries) {
+    starts.push(offset);
+    put32(offset, 0x04034b50);
+    put16(offset + 4, 20); // ZIP 2.0
+    put16(offset + 6, 0x0800); // UTF-8 filename
+    put16(offset + 8, 0); // stored, no compression
+    put32(offset + 14, entry.checksum);
+    put32(offset + 18, entry.data.length);
+    put32(offset + 22, entry.data.length);
+    put16(offset + 26, entry.name.length);
+    archive.set(entry.name, offset + 30);
+    archive.set(entry.data, offset + 30 + entry.name.length);
+    offset += 30 + entry.name.length + entry.data.length;
+  }
+  for (const [index, entry] of entries.entries()) {
+    put32(offset, 0x02014b50);
+    put16(offset + 4, 20);
+    put16(offset + 6, 20);
+    put16(offset + 8, 0x0800);
+    put16(offset + 10, 0);
+    put32(offset + 16, entry.checksum);
+    put32(offset + 20, entry.data.length);
+    put32(offset + 24, entry.data.length);
+    put16(offset + 28, entry.name.length);
+    put32(offset + 42, starts[index]!);
+    archive.set(entry.name, offset + 46);
+    offset += 46 + entry.name.length;
+  }
+  put32(offset, 0x06054b50);
+  put16(offset + 8, entries.length);
+  put16(offset + 10, entries.length);
+  put32(offset + 12, centralSize);
+  put32(offset + 16, localSize);
   return archive;
 }
 
