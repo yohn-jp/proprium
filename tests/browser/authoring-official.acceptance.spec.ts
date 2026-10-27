@@ -123,6 +123,8 @@ test("signed Narrative proposes and applies a reviewed volume", async ({ page })
   await dialog.getByLabel("タイトル").fill("新しい巻");
   await expect(dialog.getByRole("button", { name: "送信" })).toBeEnabled({ timeout: 60000 });
   await dialog.getByRole("button", { name: "送信" }).click();
+  await expect(dialog.locator(".authoring-surface-body")).toHaveAttribute("aria-busy", "false", { timeout: 60000 });
+  await expect(dialog.getByRole("alert")).toHaveCount(0);
   await expect(page.getByRole("region", { name: "Authoring proposals" }).getByRole("button").first()).toBeVisible({ timeout: 60000 });
   await dialog.getByRole("button", { name: "巻を作成を閉じる" }).click();
   const review = page.getByRole("region", { name: "Authoring proposals" });
@@ -192,6 +194,9 @@ test("signed Narrative reviews and applies a scene title", async ({ page }) => {
   await expect(title).toHaveValue("Scene 3", { timeout: 60000 });
   await title.fill("新しい場面名");
   await page.getByRole("button", { name: "送信", exact: true }).click();
+  const surface = page.locator(".authoring-workspace-panel");
+  await expect(surface.locator(".authoring-surface-body")).toHaveAttribute("aria-busy", "false", { timeout: 60000 });
+  await expect(surface.getByRole("alert")).toHaveCount(0);
   await showPanel(page, "review");
   const review = page.getByRole("region", { name: "Authoring proposals" });
   await expect(review.getByRole("button").first()).toBeVisible({ timeout: 60000 });
@@ -259,6 +264,9 @@ test("signed Narrative reviews and applies a scene manuscript link", async ({ pa
   await expect(title).toHaveValue("manuscript/custom/scene-3.md", { timeout: 60000 });
   await title.fill("manuscript/custom/scene-1.md");
   await page.getByRole("button", { name: "送信", exact: true }).click();
+  const surface = page.locator(".authoring-workspace-panel");
+  await expect(surface.locator(".authoring-surface-body")).toHaveAttribute("aria-busy", "false", { timeout: 60000 });
+  await expect(surface.getByRole("alert")).toHaveCount(0);
   await showPanel(page, "review");
   const review = page.getByRole("region", { name: "Authoring proposals" });
   await expect(review.getByRole("button").first()).toBeVisible({ timeout: 60000 });
