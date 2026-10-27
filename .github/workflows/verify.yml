@@ -45,10 +45,26 @@ jobs:
           target: wasm32-unknown-unknown
       - name: Install Research pinned Rust toolchain
         run: rustup toolchain install 1.99.1 --profile minimal --target wasm32-unknown-unknown
+      # Cache built CLI executables, not the entire Cargo registry/target tree.
+      # The tool versions and pinned Rust compiler determine the cache key.
+      - name: Restore pinned Rust component CLI tools
+        id: rust_cli_cache
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cargo/bin/cargo-component
+            ~/.cargo/bin/wasm-tools
+          key: rust-component-cli-${{ runner.os }}-${{ runner.arch }}-rust-1.99.0-component-0.21.1-wasm-tools-1.262.0
       - name: Install pinned cargo-component
+        if: steps.rust_cli_cache.outputs.cache-hit != 'true'
         run: cargo install cargo-component --version 0.21.1 --locked
       - name: Install pinned wasm-tools composer
+        if: steps.rust_cli_cache.outputs.cache-hit != 'true'
         run: cargo install wasm-tools --version 1.262.0 --locked
+      - name: Verify pinned component tool versions
+        run: |
+          cargo component --version | grep -F '0.21.1'
+          wasm-tools --version | grep -F '1.262.0'
       - name: Install locked dependencies
         run: pnpm install --frozen-lockfile
       - name: Verify signed v1 and authoring registry fixtures
@@ -64,8 +80,12 @@ jobs:
           path: ${{ runner.temp }}/authoring-plugin-build-evidence.json
           if-no-files-found: ignore
           retention-days: 14
-      # All five checks consume the completed component build but do not
-      # mutate one another's fixtures. Keep the artifact upload above them.
+      # The TypeScript contracts are a shared output: build once rather than
+      # letting three parallel test commands rebuild the same directory.
+      - name: Build shared TypeScript contracts once
+        run: pnpm --filter @scriptorium/contracts build
+      # All five checks consume the completed component build and contract
+      # output but no longer write each other's build artifacts.
       - parallel:
           - name: Verify Unicode normalization in an actual WASM component
             env:
@@ -74,13 +94,13 @@ jobs:
               curl --fail --location --silent --show-error https://www.unicode.org/Public/17.0.0/ucd/NormalizationTest.txt -o "$PROPRIUM_UNICODE_NORMALIZATION_TEST"
               node --test plugins/shared/unicode.component.test.mjs
           - name: Typecheck the Browser Host and adapters
-            run: pnpm typecheck:browser
+            run: pnpm --filter @proprium/host typecheck:proprium
           - name: Test browser Git and plugin security units
-            run: pnpm test:browser:unit
+            run: pnpm --filter @proprium/host test:proprium
           - name: Test official authoring plugin domains
             run: node scripts/test-authoring-plugin-units.mjs
           - name: Test recovered editor, appearance and workspace layouts
-            run: pnpm test:ui:unit
+            run: pnpm --dir app exec node --import tsx --test 'src/workspace/*.test.ts' 'src/editor/cm/*.test.ts' 'src/theme.test.ts' 'src/editor.test.ts' 'src/editor/terms.test.ts' 'src/journal.test.ts' 'src/continueCandidates.test.ts'
       - name: Build the static Proprium Host
         run: pnpm build:browser
       - name: Validate Workers Static Assets packaging without deployment
@@ -88,21 +108,25 @@ jobs:
       - name: Install desktop and mobile browser engines
         id: browser_engines
         run: pnpm exec playwright install --with-deps chromium webkit
-      # Independent Playwright servers and output directories: core Host
-      # uses 4173, Knowledge 4237 and BOM 4282. Shared registry builds
-      # are complete before any of these suites starts.
+      # Core acceptance runs on its own: it operates a Vite Host and a live
+      # Gateway and is the highest-contention browser suite. Never share its
+      # runner with other browser processes.
+      - name: Exercise browser acceptance scenarios
+        env:
+          PROPRIUM_E2E_GITHUB_TOKEN: ${{ secrets.PROPRIUM_E2E_GITHUB_TOKEN }}
+          PROPRIUM_E2E_GITHUB_OWNER: ${{ vars.PROPRIUM_E2E_GITHUB_OWNER }}
+          PROPRIUM_E2E_GITHUB_REPOSITORY: ${{ vars.PROPRIUM_E2E_GITHUB_REPOSITORY }}
+          PROPRIUM_E2E_GITHUB_REPOSITORY_ID: ${{ vars.PROPRIUM_E2E_GITHUB_REPOSITORY_ID }}
+          PROPRIUM_E2E_GITHUB_BRANCH: ${{ vars.PROPRIUM_E2E_GITHUB_BRANCH }}
+        run: pnpm test:browser:e2e
+      # Both use separate browser ports and output directories. Limit
+      # concurrency to two resource-intensive Playwright invocations.
       - parallel:
-          - name: Exercise browser acceptance scenarios
-            env:
-              PROPRIUM_E2E_GITHUB_TOKEN: ${{ secrets.PROPRIUM_E2E_GITHUB_TOKEN }}
-              PROPRIUM_E2E_GITHUB_OWNER: ${{ vars.PROPRIUM_E2E_GITHUB_OWNER }}
-              PROPRIUM_E2E_GITHUB_REPOSITORY: ${{ vars.PROPRIUM_E2E_GITHUB_REPOSITORY }}
-              PROPRIUM_E2E_GITHUB_REPOSITORY_ID: ${{ vars.PROPRIUM_E2E_GITHUB_REPOSITORY_ID }}
-              PROPRIUM_E2E_GITHUB_BRANCH: ${{ vars.PROPRIUM_E2E_GITHUB_BRANCH }}
-            run: pnpm test:browser:e2e
           - name: Exercise Knowledge and Research authoring surfaces
+            if: ${{ !cancelled() && steps.browser_engines.outcome == 'success' }}
             run: pnpm exec playwright test --config tests/browser/authoring-knowledge.playwright.config.ts
           - name: Preserve source BOM through Core editing and export
+            if: ${{ !cancelled() && steps.browser_engines.outcome == 'success' }}
             run: pnpm exec playwright test --config tests/browser/authoring-bom-core.playwright.config.ts
       - name: Exercise signed v2 transport with its fixture setup
         if: ${{ !cancelled() && steps.browser_engines.outcome == 'success' }}
@@ -118,14 +142,17 @@ jobs:
       # uses a unique temp directory and its own test-result directory.
       - parallel:
           - name: Exercise Narrative next scene and portable positions
+            if: ${{ !cancelled() && steps.browser_engines.outcome == 'success' }}
             env:
               PROPRIUM_E2E_PORT: "4311"
             run: pnpm exec playwright test --config tests/browser/authoring-navigation.playwright.config.ts
           - name: Exercise repeated reading mark approval and source navigation
+            if: ${{ !cancelled() && steps.browser_engines.outcome == 'success' }}
             env:
               PROPRIUM_E2E_PORT: "4312"
             run: pnpm exec playwright test --config tests/browser/authoring-readingmarks.playwright.config.ts
           - name: Persist local Semantic preferences without model admission
+            if: ${{ !cancelled() && steps.browser_engines.outcome == 'success' }}
             env:
               PROPRIUM_E2E_PORT: "4313"
             run: pnpm exec playwright test --config tests/browser/semantic-preferences.playwright.config.ts
@@ -139,10 +166,12 @@ jobs:
       # Both suites use independent signed fixtures and different Vite ports.
       - parallel:
           - name: Exercise signed Publishing downloads and print
+            if: ${{ !cancelled() && steps.browser_engines.outcome == 'success' }}
             env:
               PROPRIUM_E2E_PORT: "4314"
             run: pnpm exec playwright test --config tests/browser/authoring-publishing.playwright.config.ts
           - name: Exercise signed Diagnostics, Paired Writing and Speaker workflows
+            if: ${{ !cancelled() && steps.browser_engines.outcome == 'success' }}
             env:
               PROPRIUM_E2E_PORT: "4315"
             run: pnpm exec playwright test --config tests/browser/authoring-tools.playwright.config.ts
