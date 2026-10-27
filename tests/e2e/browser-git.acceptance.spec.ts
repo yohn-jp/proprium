@@ -6,6 +6,7 @@ declare global {
   interface Window {
     browserGitTest: {
       open(localWorkspaceId: string, changes?: Partial<WorkspaceIdentity>): BrowserLocalGit;
+      openRegistryStore(): import("../../app/src/browser/proprium/plugins/store.js").IndexedDbPluginStore;
       holdLock(localWorkspaceId: string): Promise<boolean>;
       releaseLock(): void;
     };
@@ -13,6 +14,46 @@ declare global {
 }
 
 const workspaceId = () => `pw-${crypto.randomUUID()}`;
+
+test("separate browser tabs cannot roll back an observed signed registry pointer", async ({ page, context }) => {
+  const second = await context.newPage();
+  try {
+    await Promise.all([page.goto("/browser-git-test.html"), second.goto("/browser-git-test.html")]);
+    await Promise.all([expect(page.locator("#ready")).toHaveText("ready"), expect(second.locator("#ready")).toHaveText("ready")]);
+    const id = crypto.randomUUID();
+    const url = `https://registry.example.test/${id}/registry.json`;
+    const stateKey = `latest-observed-${id}`;
+    // This exercises the real IndexedDB transaction after signed admission.
+    // Signature admission itself is covered by manager tests, not mocked here.
+    const advance = (target: typeof page, version: string, key: string) =>
+      target.evaluate(async ({ url, version, key }) => {
+        const store = window.browserGitTest.openRegistryStore();
+        const document = { schema: "proprium.registry/v1" as const, id: "fixture.registry", version,
+          artifactBase: "https://assets.example.test/", plugins: [] };
+        const bytes = new TextEncoder().encode(JSON.stringify(document));
+        const hash = new Uint8Array(await crypto.subtle.digest("SHA-256", bytes));
+        const digest = Array.from(hash, byte => byte.toString(16).padStart(2, "0")).join("");
+        await store.advanceRegistry({ url, bytes, signature: new Uint8Array(64), digest, document }, key);
+        return digest;
+      }, { url, version, key });
+    const latest = await advance(page, "1.0.2", stateKey);
+    await expect(advance(second, "1.0.1", stateKey)).rejects.toThrow(/rollback/i);
+    const observed = await second.evaluate(async key => window.browserGitTest.openRegistryStore().getState(key), stateKey);
+    expect(observed).toBe(latest);
+
+    const concurrentKey = `${stateKey}-concurrent`;
+    const [older, newer] = await Promise.allSettled([
+      advance(page, "1.0.1", concurrentKey),
+      advance(second, "1.0.2", concurrentKey),
+    ]);
+    expect(newer.status).toBe("fulfilled");
+    expect(older.status === "fulfilled" || older.reason instanceof Error).toBe(true);
+    const raced = await page.evaluate(async key => window.browserGitTest.openRegistryStore().getState(key), concurrentKey);
+    expect(raced).toBe(latest);
+  } finally {
+    await second.close();
+  }
+});
 
 test("Worker Git commits preserve exact SHAs and binary bytes across a page restart", async ({ page }) => {
   const id = workspaceId();

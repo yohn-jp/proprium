@@ -4,6 +4,7 @@ import { BrowserGitSnapshotPort } from "./authoring-snapshot-port.js";
 import { AuthoringSnapshotReader, type AuthoringScope } from "../authoring/snapshots.js";
 import { ChangeWriter, ChangeWriterError, type WriterScope } from "../authoring/writer.js";
 import { IndexedDbWriterJournalStore } from "../authoring/store.js";
+import { IndexedDbPluginStore } from "../plugins/store.js";
 import { BrowserGitWriterWorkspace } from "../authoring/writer-browser.js";
 
 declare global {
@@ -21,6 +22,7 @@ declare global {
         writer_workspace: BrowserGitWriterWorkspace;
         scope: WriterScope;
       };
+      openRegistryStore(): IndexedDbPluginStore;
       holdLock(localWorkspaceId: string): Promise<boolean>;
       releaseLock(): void;
     };
@@ -92,6 +94,9 @@ window.browserGitTest = {
       },
     });
     return { git, writer, writer_workspace, scope };
+  },
+  openRegistryStore() {
+    return new IndexedDbPluginStore();
   },
   async holdLock(localWorkspaceId) {
     const input = new TextEncoder().encode(localWorkspaceId);
