@@ -23,6 +23,7 @@ test("a local manuscript can be saved, renamed, reviewed, committed and inspecte
   await page.locator(".file-rename-panel > summary").click();
   await page.getByLabel("新しい名前・保存先", { exact: true }).fill("chapters/序章.md");
   await page.getByRole("button", { name: "変更する", exact: true }).click();
+  await showPanel(page, "outline");
   await expect(files.getByRole("button", { name: "chapters/序章.md", exact: true })).toBeVisible();
   await expect(files.getByRole("button", { name: "序章.md", exact: true })).toHaveCount(0);
 
