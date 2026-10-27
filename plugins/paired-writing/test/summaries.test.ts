@@ -95,6 +95,11 @@ test("chapter summary proposes ordered children and parent in one guarded unit",
   assert.deepEqual(change.read_set, expected.sort((a, b) => a.path.localeCompare(b.path)));
   const yaml = await import("yaml"); const stored = yaml.parse(new TextDecoder().decode(Uint8Array.from(change.units[0].operations[2].content)));
   assert.deepEqual(stored.children.map((row: any) => row.id), ["s1", "s2"]);
+  const { sha256 } = await import("../src/sha256.js");
+  for (let i = 0; i < 2; i++) {
+    assert.equal(stored.children[i].summary_path, change.units[0].operations[i].path);
+    assert.equal(stored.children[i].summary_revision, sha256(Uint8Array.from(change.units[0].operations[i].content)));
+  }
   assert.deepEqual(stored.source_files, children.flatMap(c => [{ path: c.meta, revision: c.metaRevision }, { path: c.body, revision: c.bodyRevision }]));
 });
 

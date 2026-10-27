@@ -188,7 +188,9 @@ export function* suggestSummary(input: unknown, host: GuestHost, request: Action
   if (isFreshSummary(prepared.parent_existing, sourceHash, prepared.promptVersion) && prepared.parent_existing?.id === prepared.targetId &&
       JSON.stringify(prepared.parent_existing?.source_files) === JSON.stringify(prepared.sources.flatMap(source => [{ path: source.metadata_path, revision: source.metadata_revision }, { path: source.manuscript_path, revision: source.manuscript_revision }])) &&
       JSON.stringify(prepared.parent_existing?.context_files) === JSON.stringify([...new Map(prepared.sources.flatMap(source => source.context_files).map(file => [file.path, file])).values()]) &&
-      prepared.parent_existing?.knowledge_available === prepared.sources.every(source => source.knowledge_available) && children.every(child => child.cached)) {
+      prepared.parent_existing?.knowledge_available === prepared.sources.every(source => source.knowledge_available) &&
+      JSON.stringify(prepared.parent_existing?.children) === JSON.stringify(prepared.sources.map(source => ({ id: source.id, metadata_path: source.metadata_path, metadata_revision: source.metadata_revision,
+        manuscript_path: source.manuscript_path, manuscript_revision: source.manuscript_revision, summary_path: source.summary_path, summary_revision: source.summary_revision }))) && children.every(child => child.cached)) {
     return { scope: "chapter", targetId: prepared.targetId, summary: parseSummaryOutput(JSON.stringify(prepared.parent_existing), "chapter"), sourceHash, children, cached: true, citations, diagnostics, expectedFileRevisions, provenance: prepared.parent_existing };
   }
   const generated = yield* generate(host, request, { feature: "chapter-summary", prompt: chapterSummaryPrompt(prepared.targetId, children.map(child => ({ id: child.id, summaryLines: child.summary.summaryLines }))),
@@ -259,7 +261,8 @@ export function* proposeSummary(input: unknown, host: GuestHost, request: Action
   if (!timestamp || typeof timestamp.timestamp !== "string" || !/^\d{4}-\d\d-\d\dT\d\d:\d\d:\d\d(?:\.\d+)?Z$/u.test(timestamp.timestamp) || !Number.isFinite(Date.parse(timestamp.timestamp))) throw new PairedError("invalid_input", "Host returned invalid summary timestamp");
   const sourceFiles = prepared.sources.flatMap(source => [{ path: source.metadata_path, revision: source.metadata_revision }, { path: source.manuscript_path, revision: source.manuscript_revision }]);
   const orderedChildren = prepared.sources.map(source => ({ id: source.id, metadata_path: source.metadata_path, metadata_revision: source.metadata_revision,
-    manuscript_path: source.manuscript_path, manuscript_revision: source.manuscript_revision }));
+    manuscript_path: source.manuscript_path, manuscript_revision: source.manuscript_revision, summary_path: source.summary_path,
+    summary_revision: source.summary_revision }));
   const writes: Array<{ path: string; revision: string | null; text: string }> = [];
   if (prepared.scope === "scene") {
     const source = prepared.sources[0]!;
@@ -285,6 +288,13 @@ export function* proposeSummary(input: unknown, host: GuestHost, request: Action
         provider: childProvenance.provider, model: childProvenance.model, promptVersion: "scene-summary@3", snapshot: request.snapshot,
         source_files: [{ path: source.metadata_path, revision: source.metadata_revision }, { path: source.manuscript_path, revision: source.manuscript_revision }], context_files: source.context_files, knowledge_available: source.knowledge_available,
       }) });
+    }
+    for (let i = 0; i < prepared.sources.length; i++) {
+      const source = prepared.sources[i]!;
+      const pending = writes.find(write => write.path === source.summary_path);
+      const revision = pending ? sha256(new TextEncoder().encode(pending.text)) : source.summary_revision;
+      if (!revision) throw new PairedError("snapshot_stale", "Child summary has no exact resulting revision");
+      orderedChildren[i]!.summary_revision = revision;
     }
     writes.push({ path: prepared.parent_path!, revision: prepared.parent_revision, text: updateSummaryYaml(prepared.parent_existing_text, {
       scope: "chapter", id: prepared.targetId, ...summary, sourceHash: expectedHash, generatedAt: timestamp.timestamp,
