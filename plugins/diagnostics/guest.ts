@@ -1473,6 +1473,7 @@ function* feedbackPropose(raw: unknown, context: Parameters<Handler>[1], host: P
   const readSet: ReadPrecondition[] = [];
   const spans: SourceSpan[] = [];
   const seenPaths = new Map<string, string>();
+  const sourceTexts = new Map<string, string | null>();
   for (const [index, rawSource] of identity.sources.entries()) {
     const source = object(rawSource, `sourceIdentity.sources[${index}]`);
     closed(source, ["path", "fileRevision", "entityId", "textHash", "span", "quote"], `sourceIdentity.sources[${index}]`);
@@ -1495,9 +1496,22 @@ function* feedbackPropose(raw: unknown, context: Parameters<Handler>[1], host: P
       const file = yield* readFileVersioned(host, context.snapshot, source.path, revision);
       if (file.bytes.byteLength > MAX_PROPOSAL_BYTES) throw new DiagnosticActionError("capacity", "Finding evidence file exceeds the feedback verification limit", true);
       readSet.push({ path: source.path, revision });
+      // A structural finding can be backed by a file revision without containing
+      // any textual span. Preserve that provenance in the read set instead of
+      // inventing a [0,0) quote the Writer would reject.
+      let decoded: string | null;
+      try { decoded = new TextDecoder("utf-8", { fatal: true, ignoreBOM: true }).decode(file.bytes); }
+      catch { decoded = null; }
+      sourceTexts.set(source.path, decoded);
     }
     sourceRows.push(source);
-    spans.push({ path: source.path, revision, start, end, quote: typeof source.quote === "string" ? source.quote : "" });
+    if (typeof source.quote === "string" && source.quote.length > 0 && source.span !== undefined) {
+      const sourceText = sourceTexts.get(source.path);
+      if (sourceText === null || sourceText === undefined || sourceText.slice(start, end) !== source.quote) {
+        throw new DiagnosticActionError("snapshot_stale", "Finding quotation no longer matches pinned source bytes", true);
+      }
+      spans.push({ path: source.path, revision, start, end, quote: source.quote });
+    }
   }
 
   let before = "";
