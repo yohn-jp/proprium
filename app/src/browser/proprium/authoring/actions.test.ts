@@ -48,7 +48,7 @@ function createHarness(overrides: Partial<ActionDispatcherOptions> = {}) {
     async invoke(options) {
       executed.push(options.request);
       const value = await options.resolve_host_call({ call_id: options.request.request_id + ":1",
-        operation: "workspace.file.list", payload: { snapshot: options.request.snapshot, prefix: "manuscript/" } });
+        operation: "workspace.file.list", payload: { snapshot: options.request.snapshot, prefix: "manuscript/", cursor: null } });
       return { request_id: options.request.request_id, scope: options.request.scope, snapshot: options.request.snapshot,
         ok: true, value: { hits: (value as { entries: unknown[] }).entries.length }, warnings: [] };
     },

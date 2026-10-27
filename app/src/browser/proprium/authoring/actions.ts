@@ -499,7 +499,7 @@ export class AuthoringActionDispatcher {
     const allowed = shapes[operation];
     if (!allowed) throw new ActionDispatchError("capability_denied", "Host operation is outside v2 registry");
     exactKeys(payload, allowed, "Host operation " + operation);
-    const str = (key: string, max = 1024) => { const value = payload[key]; if (value !== undefined && (typeof value !== "string" || value.length > max)) throw new ActionDispatchError("invalid_input", operation + " " + key + " is invalid"); };
+    const str = (key: string, max = 1024) => { const value = payload[key]; if (value !== undefined && !(key === "cursor" && value === null) && (typeof value !== "string" || value.length > max)) throw new ActionDispatchError("invalid_input", operation + " " + key + " is invalid"); };
     const num = (key: string, min: number, max: number) => { const value = payload[key]; if (value !== undefined && (!Number.isSafeInteger(value) || (value as number) < min || (value as number) > max)) throw new ActionDispatchError("invalid_input", operation + " " + key + " is out of range"); };
     if (operation === "workspace.identity.read" && payload.paths !== undefined &&
         (!Array.isArray(payload.paths) || payload.paths.length > 100 ||
