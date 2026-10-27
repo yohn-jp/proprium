@@ -269,8 +269,10 @@ export class ProviderRequestBroker {
   }
 
   /** Static capability status; this never resolves credentials or contacts a provider. */
-  status(): { available: boolean; provider_ids: string[] } {
-    return { available: this.providers.size > 0 && Boolean(this.options.credentials && this.fetcher), provider_ids: [...this.providers.keys()].sort() };
+  status(): { available: boolean; provider_ids: string[]; providers: Array<{provider_id:string;models:Array<{model_id:string;label:string}>}> } {
+    return { available: this.providers.size > 0 && Boolean(this.options.credentials && this.fetcher), provider_ids: [...this.providers.keys()].sort(),
+      providers: [...this.providers.values()].map(provider => ({ provider_id: provider.provider_id,
+        models: [...provider.models.values()].map(model => ({ model_id: model.model_id, label: model.label })) })) };
   }
 
   /** Shared UI/MCP/plugin route. Caller identity never substitutes for request consent. */
@@ -380,7 +382,7 @@ function normalizeProvider(candidate: ProviderConfiguration): NormalizedProvider
       !Array.isArray(candidate.models) || candidate.models.length < 1 || candidate.models.length > 128) return undefined;
     const models = new Map<string, ProviderModelConfiguration>();
     for (const model of candidate.models) {
-      if (!model || !ID.test(model.model_id) || !boundedLabel(model.label, 128) ||
+      if (!model || !MODEL_ID.test(model.model_id) || !boundedLabel(model.label, 128) ||
         (model.estimated_cost !== undefined && !boundedLabel(model.estimated_cost, 256)) || models.has(model.model_id)) return undefined;
       models.set(model.model_id, Object.freeze({ ...model }));
     }
@@ -401,7 +403,7 @@ function normalizeRequest(input: ProviderRequestInput): ProviderRequestInput {
   const value = cloneJson(input) as Record<string, unknown>;
   if (typeof value.request_id !== "string" || !REQUEST_ID.test(value.request_id) ||
       typeof value.provider_id !== "string" || !ID.test(value.provider_id) ||
-      typeof value.model_id !== "string" || !ID.test(value.model_id) ||
+      typeof value.model_id !== "string" || !MODEL_ID.test(value.model_id) ||
       typeof value.purpose !== "string" || value.purpose.trim().length === 0 || value.purpose.length > 512 ||
       !isJsonContainer(value.payload) || !isPlainObject(value.source_manifest) ||
       !Number.isSafeInteger(value.max_output_bytes) || (value.max_output_bytes as number) < 1 || (value.max_output_bytes as number) > PROVIDER_OUTPUT_LIMIT) {
@@ -432,6 +434,7 @@ function normalizeContext(context: ProviderRequestContext): ProviderRequestConte
 }
 
 const ID = /^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$/u;
+const MODEL_ID = /^[A-Za-z0-9][A-Za-z0-9._:/-]{0,511}$/u;
 const REQUEST_ID = /^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$/u;
 const TOKEN_HANDLE = /^[A-Za-z0-9._:-]{1,256}$/u;
 const CREDENTIAL_FIELD = /^(?:authorization|api[_-]?key|access[_-]?token|refresh[_-]?token|client[_-]?secret|credentials?|password|bearer)$/iu;

@@ -162,7 +162,7 @@ test("default-deny reports provider_unavailable without resolving credentials or
     gestures: new FreshGestureAuthority(),
     fetcher: async () => { networkCalls += 1; return new Response("{}"); },
   });
-  assert.deepEqual(instance.status(), { available: false, provider_ids: [] });
+  assert.deepEqual(instance.status(), { available: false, provider_ids: [], providers: [] });
   await assert.rejects(instance.prepare(input(), context), error => error instanceof ProviderRequestError && error.code === "provider_unavailable");
   assert.equal(credentialLookups, 0);
   assert.equal(networkCalls, 0);
