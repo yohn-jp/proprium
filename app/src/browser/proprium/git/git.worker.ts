@@ -1,4 +1,5 @@
 /// <reference lib="webworker" />
+import { createIgnoreReadCache } from "./ignore-read-cache.js";
 import { Buffer } from "buffer";
 import LightningFS from "@isomorphic-git/lightning-fs";
 import * as git from "isomorphic-git";
@@ -656,6 +657,7 @@ function mediaType(path: string): string {
 
 async function captureAuthoringFiles(dir: string): Promise<PinnedFileMetadata[]> {
   const files: PinnedFileMetadata[] = [];
+  const ignoreFs = createIgnoreReadCache(fs);
   const pending = [""];
   while (pending.length) {
     const parent = pending.pop()!;
@@ -671,7 +673,7 @@ async function captureAuthoringFiles(dir: string): Promise<PinnedFileMetadata[]>
       const absolute = `${dir}/${path}`;
       const stats = await fs.lstat(absolute);
       if (stats.isSymbolicLink()) failure("invalid_path", "Symbolic links are not followed by the Browser Git adapter.");
-      const ignored = await git.isIgnored({ fs, dir, filepath: path });
+      const ignored = await git.isIgnored({ fs: ignoreFs, dir, filepath: path });
       if (ignored) continue;
       if (stats.isDirectory()) { pending.push(path); continue; }
       if (!stats.isFile()) continue;
