@@ -1,3 +1,4 @@
+import { normalizeUnicode } from "../../shared/unicode.js";
 /** Pure source-preserving diagnostics primitives ported from the pinned Scriptorium source.
  * This module has no access to workspace storage, browser state or the network. */
 
@@ -124,7 +125,7 @@ function ending(text: string): string | undefined {
   return body ? body.slice(-1) : undefined;
 }
 function normalizedEnding(value: string): string {
-  return value.normalize("NFD").replace(/[゙゚]/gu, "").normalize("NFC");
+  return normalizeUnicode(normalizeUnicode(value, "NFD").replace(/[゙゚]/gu, ""), "NFC");
 }
 function globalRegex(pattern: string, flags = ""): RegExp {
   if (/[gy]/u.test(flags.replace(/g/gu, ""))) throw new TypeError("Lint regex flags may not contain sticky mode");

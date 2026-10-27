@@ -1,3 +1,4 @@
+import { normalizeUnicode } from "../../shared/unicode.js";
 import { buildLocationMap } from "./domain/locationMap.js";
 import { mergeSeriesOverlay } from "./domain/seriesOverlay.js";
 import {
@@ -1240,7 +1241,7 @@ function* seriesGet(input: Record<string, unknown>, context: ActionRequest, host
 }
 
 function seriesIdHint(name: string): string {
-  return name.normalize("NFKC").toLowerCase().replace(/[^a-z0-9]+/gu, "-").replace(/^-+|-+$/gu, "").slice(0, 48);
+  return normalizeUnicode(name, "NFKC").toLowerCase().replace(/[^a-z0-9]+/gu, "-").replace(/^-+|-+$/gu, "").slice(0, 48);
 }
 
 function allocateSeriesId(name: string, rows: readonly Record<string, unknown>[]): string {
@@ -1679,7 +1680,7 @@ function entityFilePath(type: StoryEntityType, id: string): string {
 function allocateEntityId(type: StoryEntityType, story: LoadedKnowledgeSnapshot, hint?: string): string {
   const prefix = ENTITY_PREFIX[type];
   if (!prefix) throw error("unsupported_schema", `Knowledge cannot create ${type} records`);
-  const slug = hint?.trim().normalize("NFKC").toLowerCase().replace(/[^a-z0-9]+/gu, "-").replace(/^-+|-+$/gu, "").slice(0, 48) ?? "";
+  const slug = (hint === undefined ? "" : normalizeUnicode(hint.trim(), "NFKC").toLowerCase()).replace(/[^a-z0-9]+/gu, "-").replace(/^-+|-+$/gu, "").slice(0, 48);
   const base = slug ? `${prefix}${slug}` : `${prefix}1`;
   const used = (id: string) => story.entities.has(id) || story.duplicateIds.has(id);
   if (!used(base)) return base;

@@ -60,6 +60,12 @@ jobs:
           path: ${{ runner.temp }}/authoring-plugin-build-evidence.json
           if-no-files-found: ignore
           retention-days: 14
+      - name: Verify Unicode normalization in an actual WASM component
+        env:
+          PROPRIUM_UNICODE_NORMALIZATION_TEST: ${{ runner.temp }}/NormalizationTest.txt
+        run: |
+          curl --fail --location --silent --show-error https://www.unicode.org/Public/17.0.0/ucd/NormalizationTest.txt -o "$PROPRIUM_UNICODE_NORMALIZATION_TEST"
+          node --test plugins/shared/unicode.component.test.mjs
       - name: Typecheck the Browser Host and adapters
         run: pnpm typecheck:browser
       - name: Test browser Git and plugin security units

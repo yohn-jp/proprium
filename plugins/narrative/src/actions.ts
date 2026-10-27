@@ -1,3 +1,4 @@
+import { normalizeUnicode } from "../../shared/unicode.js";
 import { stringify } from "yaml";
 import type {
   ActionRequest,
@@ -365,7 +366,7 @@ function idPrefix(kind: StructureKind): string {
 
 export function narrativeIdForTitle(kind: StructureKind, title: string, existingIds: Iterable<string>): string {
   const ids = new Set(existingIds);
-  const slug = title.normalize("NFKC").toLowerCase().replace(/[^a-z0-9]+/gu, "-").replace(/^-+|-+$/gu, "").slice(0, 48).replace(/-+$/gu, "");
+  const slug = normalizeUnicode(title, "NFKC").toLowerCase().replace(/[^a-z0-9]+/gu, "-").replace(/^-+|-+$/gu, "").slice(0, 48).replace(/-+$/gu, "");
   const prefix = idPrefix(kind);
   const base = slug ? `${prefix}${slug}` : prefix;
   let candidate = base;
