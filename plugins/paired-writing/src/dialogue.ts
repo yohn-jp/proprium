@@ -13,7 +13,7 @@ function render(template: string, values: Record<string,string>): string { retur
 type Generated = { text: string; provenance: { provider: string; model: string; promptVersion: string; requestId: string; untrusted: true } };
 export type DialogueGenerate = (host: GuestHost, request: ActionRequest, input: { feature: string; prompt: string; promptVersion: string; maxOutputTokens: number; sourceManifest?: unknown }) => Generator<HostCall, Generated, unknown>;
 type Source = { path: string; revision: string; quote: string };
-type Profile = { id: string; name: string; raw: Record<string, unknown>; source?: Source };
+type Profile = { id: string; name: string; raw: Record<string, unknown>; sources?: Source[] };
 const optional = (error: unknown) => !!error && typeof error === 'object' && 'code' in error && ['dependency_unavailable','plugin_unavailable'].includes(String(error.code));
 function text(value: unknown, label: string, max: number): string { if (typeof value !== 'string' || !value.trim() || value.length > max) throw new PairedError('invalid_input', `${label} must be nonempty and at most ${max} characters`); return value; }
 function ids(value: unknown, minimum: number): string[] {
@@ -23,13 +23,21 @@ function ids(value: unknown, minimum: number): string[] {
   return result;
 }
 function* entity(host: GuestHost, request: ActionRequest, id: string, expected: string): Generator<HostCall, Profile, unknown> {
-  const result = yield* invokeAction<{ entity: unknown }>(host, request, 'proprium.knowledge', 'knowledge.entities.get', { id });
+  const result = yield* invokeAction<{ entity: unknown; sourceFiles: unknown }>(host, request, 'proprium.knowledge', 'knowledge.entities.get', { id });
   const row = record(result?.entity, 'Knowledge entity');
   if (row.id !== id || row.type !== expected) throw new PairedError('invalid_input', `Entity ${id} is not a ${expected}`);
   const path = identity(row.filePath, 'entity file path', 4096), revision = identity(row.fileRevision, 'entity revision');
-  const file = yield* readText(host, request, path);
-  if (file.revision !== revision) throw new PairedError('snapshot_stale', 'Knowledge entity revision changed');
-  return { id, name: typeof row.name === 'string' ? row.name : id, raw: record(row.raw, 'entity source'), source: { path, revision, quote: file.text.slice(0, 300) } };
+  if (!Array.isArray(result.sourceFiles) || result.sourceFiles.length < 1 || result.sourceFiles.length > 16) throw new PairedError('unsupported_format', 'Knowledge source list is malformed');
+  const sources: Source[] = [];
+  for (const item of result.sourceFiles) {
+    const source = record(item, 'Knowledge source'), sourcePath = identity(source.path, 'source path', 4096), sourceRevision = identity(source.revision, 'source revision');
+    if (sources.some(existing => existing.path === sourcePath)) throw new PairedError('unsupported_format', 'Knowledge source list repeats a path');
+    const file = yield* readText(host, request, sourcePath);
+    if (file.revision !== sourceRevision) throw new PairedError('snapshot_stale', 'Knowledge entity revision changed');
+    sources.push({path:sourcePath, revision:sourceRevision, quote:file.text.slice(0,300)});
+  }
+  if (!sources.some(source => source.path === path && source.revision === revision)) throw new PairedError('snapshot_stale', 'Knowledge entity source is absent');
+  return { id, name: typeof row.name === 'string' ? row.name : id, raw: record(row.raw, 'entity source'), sources };
 }
 function* profiles(host: GuestHost, request: ActionRequest, participantIds: string[]): Generator<HostCall, { profiles: Profile[]; unavailable: boolean }, unknown> {
   const profiles: Profile[] = [];
@@ -65,7 +73,7 @@ function* topicContext(input: unknown, host: GuestHost, request: ActionRequest) 
     }
   }
   const prompt = `${COMMON}\n\n${['あなたは小説のセリフ問答（SS）用お題の提案者です。','参加キャラの関係性ラベルを種に、対比・緊張・親密さが際立つお題を3〜5個提案してください。','各お題は title（タイトル）と situation（場面設定）の組で構成してください。','title は名詞で終わる体言止めの短いタイトル（例:「エレベーター閉じ込め」「すれ違う本音」）。','title の文末を「〜する」「〜られる」のような用言で終わらせないこと。','situation は場所・時間・状況を1文で具体的に（例:「停電した夜のオフィスビル、二人きりのエレベーターの中」）。','セリフ・地の文・説明文は禁止。',`参加者: ${result.profiles.map(p => `${p.name} (${p.id})`).join('、')}`,`関係種:\n${relations.length ? [...new Set(relations)].map(x => `- ${x}`).join('\n') : '（関係ラベル未登録 — 参加者の対比・緊張を想像してよい）'}`,'\n\nJSONのみを返してください。スキーマ: {"topics":[{"title":"...","situation":"..."},{"title":"...","situation":"..."},{"title":"...","situation":"..."}]}'].join('\n')}`;
-  const prepared = { prompt, promptVersion: 'v4', participantEntityIds, citations: result.profiles.flatMap(p => p.source ? [p.source] : []), knowledge: result.unavailable ? 'unavailable' : 'available', provider_invoked: false, snapshot: request.snapshot }; bounded(prepared); return prepared;
+  const prepared = { prompt, promptVersion: 'v4', participantEntityIds, citations: result.profiles.flatMap(p => p.sources ?? []), knowledge: result.unavailable ? 'unavailable' : 'available', provider_invoked: false, snapshot: request.snapshot }; bounded(prepared); return prepared;
 }
 export function* previewDialogueTopics(input: unknown, host: GuestHost, request: ActionRequest) { return yield* topicContext(input, host, request); }
 export function* suggestDialogueTopics(input: unknown, host: GuestHost, request: ActionRequest, generate: DialogueGenerate) {
@@ -120,7 +128,7 @@ function* turnContext(input: unknown, host: GuestHost, request: ActionRequest) {
     const rows = Array.from({length:lineCount},()=>'{"speakerEntityId":"participant-id","text":"..."}').join(',');
     prompt = `${COMMON}\n\n${body}\n\nJSONのみを返してください。スキーマ: {"lines":[${rows}]}`; promptVersion = 'dialogue-sketch-lines@1';
   }
-  const prepared = { prompt, promptVersion, participantEntityIds, lineCount, ...(speakerEntityId ? {speakerEntityId} : {}), ...(sketch ? {sketchId: sketch.id} : {}), citations: [...result.profiles, ...(sketch ? [sketch] : [])].flatMap(p => p.source ? [p.source] : []).concat(dialogueSources), knowledge: result.unavailable ? 'unavailable' : 'available', provider_invoked: false, snapshot: request.snapshot }; bounded(prepared); return prepared;
+  const prepared = { prompt, promptVersion, participantEntityIds, lineCount, ...(speakerEntityId ? {speakerEntityId} : {}), ...(sketch ? {sketchId: sketch.id} : {}), citations: [...result.profiles, ...(sketch ? [sketch] : [])].flatMap(p => p.sources ?? []).concat(dialogueSources), knowledge: result.unavailable ? 'unavailable' : 'available', provider_invoked: false, snapshot: request.snapshot }; bounded(prepared); return prepared;
 }
 export function* previewDialogueTurns(input: unknown, host: GuestHost, request: ActionRequest) { return yield* turnContext(input,host,request); }
 export function* suggestDialogueTurns(input: unknown, host: GuestHost, request: ActionRequest, generate: DialogueGenerate) {
