@@ -2,6 +2,7 @@ import type { ActionRequest } from "../../../app/src/browser/proprium/authoring/
 import type { GuestHost, HostCall } from "../../shared/guest.js";
 import { invokeAction, readNarrativeScene, readText } from "./host.js";
 import { PairedError } from "./types.js";
+import { sha256 } from "./sha256.js";
 import { exactKeys, identity, record } from "./validation.js";
 
 export type Generated = { text: string; provenance: { provider: string; model: string; promptVersion: string; requestId: string; untrusted: true } };
@@ -15,6 +16,15 @@ const obj = (value: unknown): value is Record<string, unknown> => !!value && typ
 const nonempty = (v: unknown): v is string => typeof v === "string" && v.trim().length > 0 && v.length <= 4096;
 
 /** Validate provider JSON and retain only unique exact source quotes with UTF-16 offsets. */
+function manuscriptBodyOffset(text: string): number {
+  const opening = /^---[ \t]*\r?\n/u.exec(text);
+  if (!opening) return 0;
+  const delimiter = /^---[ \t]*\r?$/gmu; delimiter.lastIndex = opening[0].length;
+  const closing = delimiter.exec(text);
+  if (!closing) throw new PairedError("unsupported_format", "Manuscript frontmatter has no closing delimiter");
+  const end = closing.index + closing[0].length;
+  return end + (text.startsWith("\r\n", end) ? 2 : text.startsWith("\n", end) ? 1 : 0);
+}
 export function parseStateEventCandidates(output: string, source: { path: string; revision: string; text: string }): {
   events: StateEventCandidate[]; diagnostics: Array<{ code: string; index: number; message: string }>;
 } {
@@ -22,6 +32,7 @@ export function parseStateEventCandidates(output: string, source: { path: string
   try { parsed = JSON.parse(output); } catch { throw new PairedError("invalid_input", "Provider did not return valid state-event JSON"); }
   if (!obj(parsed) || !Array.isArray(parsed.events)) throw new PairedError("invalid_input", "Provider state events must be an array");
   if (parsed.events.length > 20) throw new PairedError("capacity", "At most 20 state events are accepted");
+  const bodyOffset = manuscriptBodyOffset(source.text);
   const events: StateEventCandidate[] = [], diagnostics: Array<{ code: string; index: number; message: string }> = [];
   parsed.events.forEach((value, index) => {
     if (!obj(value) || !["location", "acquaintance", "ownership", "knowledge"].includes(String(value.kind)) ||
@@ -31,7 +42,7 @@ export function parseStateEventCandidates(output: string, source: { path: string
       throw new PairedError("invalid_input", `Provider state event ${index + 1} is malformed`);
     }
     const quote = value.evidenceQuote, start = source.text.indexOf(quote);
-    if (start < 0 || source.text.indexOf(quote, start + 1) >= 0) {
+    if (start < bodyOffset || source.text.indexOf(quote, start + 1) >= 0) {
       diagnostics.push({ code: "unverified_evidence", index, message: "Quote is missing or occurs more than once in the manuscript" }); return;
     }
     events.push({ kind: value.kind as StateEventCandidate["kind"], target: value.target, operation: value.operation,
@@ -70,4 +81,29 @@ export function* suggestStateEvents(input: unknown, host: GuestHost, request: Ac
     promptVersion: preview.promptVersion, maxOutputTokens: 1024, sourceManifest: preview.sources });
   return { sceneId: (input as { sceneId: string }).sceneId, ...parseStateEventCandidates(generated.text, preview.manuscript),
     citations: preview.sources, provenance: generated.provenance };
+}
+
+/** Hand the author's selected, revalidated candidate to Knowledge; Paired does not write state files. */
+export function* proposeStateEvent(input: unknown, host: GuestHost, request: ActionRequest): Generator<HostCall, unknown, unknown> {
+  const args = record(input, "input"); exactKeys(args, ["sceneId", "candidate"], "input");
+  const sceneId = identity(args.sceneId, "sceneId");
+  const candidate = record(args.candidate, "candidate");
+  exactKeys(candidate, ["kind", "target", "operation", "before", "after", "object", "payload", "evidence", "confidence"], "candidate");
+  if (candidate.confidence !== 0.5) throw new PairedError("invalid_input", "State event confidence must be 0.5");
+  const evidence = record(candidate.evidence, "candidate.evidence");
+  exactKeys(evidence, ["path", "revision", "start", "end", "quote"], "candidate.evidence");
+  const scene = yield* readNarrativeScene(host, request, sceneId);
+  const file = yield* readText(host, request, scene.manuscript_path);
+  if (file.revision !== scene.manuscript_revision || evidence.path !== file.path || evidence.revision !== file.revision) throw new PairedError("snapshot_stale", "State evidence source changed");
+  const verified = parseStateEventCandidates(JSON.stringify({ events: [{ ...candidate, evidence: undefined, confidence: undefined, evidenceQuote: evidence.quote }] }), file);
+  const event = verified.events[0];
+  if (!event || verified.diagnostics.length || event.evidence.start !== evidence.start || event.evidence.end !== evidence.end) throw new PairedError("snapshot_stale", "State evidence no longer matches the unique manuscript span");
+  const bodyOffset = manuscriptBodyOffset(file.text); const body = file.text.slice(bodyOffset);
+  const manuscriptHash = sha256(new TextEncoder().encode(body));
+  return yield* invokeAction(host, request, "proprium.knowledge", "knowledge.state-proposals.create", {
+    sceneId, expectedSceneRevision: scene.metadata_revision, manuscriptHash,
+    event: { kind: event.kind, subject: event.target, object: event.object,
+      payload: { ...event.payload, operation: event.operation, before: event.before, after: event.after }, confidence: 0.5,
+      evidence: [{ sceneId, excerpt: event.evidence.quote, startOffset: event.evidence.start - bodyOffset, endOffset: event.evidence.end - bodyOffset }] },
+  });
 }
