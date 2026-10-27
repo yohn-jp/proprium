@@ -5,6 +5,7 @@ import { AuthoringSnapshotReader, type SnapshotLease, type SnapshotPort, type Sn
 import { BrowserGitSnapshotPort } from "../git/authoring-snapshot-port.js";
 import { BrowserLocalGit } from "../git/index.js";
 import type { RemoteConfirmedFiles, WorkspaceIdentity } from "../git/protocol.js";
+import { validateGitPath } from "../git/protocol.js";
 import { BrowserPluginManager, type InstalledPlugin, type ResolvedAssetGroup } from "../plugins/manager.js";
 import { AuthoringActionDispatcher, type ActionIdempotencyStore, type IdempotencyKey, type IdempotencyClaim,
   type HostOperationContext, type InvocationContext, type TrustedActionPrincipal, type StageLeaseInvocation } from "./actions.js";
@@ -841,7 +842,12 @@ export function createBrowserAuthoringService(options: CreateBrowserAuthoringSer
     generation: selection.generation,
   });
   let remoteHead: string | null = null;
-  const readRemote = options.getRemoteConfirmed ?? ((paths: readonly string[]) => options.git.readConfirmedRemoteFiles(paths));
+  const readRemote = async (paths: readonly string[]): Promise<RemoteConfirmedFiles> => {
+    for (const path of paths) validateGitPath(path);
+    if (options.workspace.provider === "local") return { remote_commit: null,
+      files: paths.map(path => ({ path, revision: null, remote_confirmed: false })) };
+    return options.getRemoteConfirmed ? options.getRemoteConfirmed(paths) : options.git.readConfirmedRemoteFiles(paths);
+  };
   const writerWorkspace = new BrowserGitWriterWorkspace(options.git, options.workspace, {
     selected_scope: () => scopeFor(),
     remote_commit: () => remoteHead,
