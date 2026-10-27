@@ -2427,6 +2427,68 @@
                 "data_key": "last_action_result.nextCursor"
               }
             }
+          },
+          {
+            "id": "search-index-status",
+            "title": "索引状態",
+            "body": {
+              "id": "research-index-status-detail",
+              "type": "detail",
+              "title": "索引状態",
+              "load_action": {
+                "action_id": "research.index.status",
+                "input_template": {}
+              },
+              "value": {
+                "data_key": "last_action_result"
+              },
+              "fields": [
+                {
+                  "key": "state",
+                  "label": "状態"
+                },
+                {
+                  "key": "indexSnapshot",
+                  "label": "索引 snapshot"
+                },
+                {
+                  "key": "coverage.documents",
+                  "label": "文書数"
+                },
+                {
+                  "key": "coverage.bytes",
+                  "label": "バイト数"
+                },
+                {
+                  "key": "lastError.message",
+                  "label": "エラー"
+                }
+              ]
+            }
+          },
+          {
+            "id": "search-index-rebuild",
+            "title": "索引を再構築",
+            "body": {
+              "id": "research-index-rebuild-form",
+              "type": "form",
+              "title": "索引を再構築",
+              "fields": [
+                {
+                  "id": "force",
+                  "label": "保存済み索引を破棄して再構築",
+                  "type": "boolean"
+                }
+              ],
+              "submit": {
+                "action_id": "research.index.rebuild",
+                "input_template": {
+                  "force": {
+                    "data_key": "form.force"
+                  }
+                }
+              }
+            }
           }
         ]
       }
