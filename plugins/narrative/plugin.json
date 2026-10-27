@@ -4867,6 +4867,279 @@
           "unavailable": "The saved scene or manuscript is unavailable."
         }
       }
+    },
+    {
+      "id": "proprium.narrative.create-volume",
+      "kind": "command",
+      "title": "巻を作成",
+      "context": {
+        "workspace": true
+      },
+      "body": {
+        "id": "narrative-create-volume",
+        "type": "form",
+        "title": "巻を作成",
+        "description": "「読み込む」で現在の構成を確認し、内容を入力して変更提案を作成します。適用前に内容を確認できます。",
+        "load_action": {
+          "action_id": "proprium.narrative.work.detect",
+          "input_template": {}
+        },
+        "fields": [
+          {
+            "id": "title",
+            "label": "タイトル",
+            "type": "string",
+            "required": true,
+            "min_length": 1,
+            "max_length": 500
+          }
+        ],
+        "submit": {
+          "action_id": "proprium.narrative.structure.create",
+          "input_template": {
+            "kind": "volume",
+            "title": {
+              "data_key": "form.title"
+            },
+            "expected_tree_revision": {
+              "data_key": "last_action_result.tree_revision"
+            }
+          }
+        },
+        "submit_when": {
+          "data_key": "last_action_result.tree_revision"
+        },
+        "unavailable_message": "先に構成を読み込んでください。"
+      }
+    },
+    {
+      "id": "proprium.narrative.create-chapter",
+      "kind": "command",
+      "title": "章を作成",
+      "context": {
+        "workspace": true
+      },
+      "body": {
+        "id": "narrative-create-chapter",
+        "type": "form",
+        "title": "章を作成",
+        "description": "「読み込む」で現在の構成を確認し、内容を入力して変更提案を作成します。適用前に内容を確認できます。",
+        "load_action": {
+          "action_id": "proprium.narrative.work.detect",
+          "input_template": {}
+        },
+        "fields": [
+          {
+            "id": "title",
+            "label": "タイトル",
+            "type": "string",
+            "required": true,
+            "min_length": 1,
+            "max_length": 500
+          },
+          {
+            "id": "volume_id",
+            "label": "親の巻 ID",
+            "type": "string",
+            "required": true,
+            "min_length": 1,
+            "max_length": 256
+          }
+        ],
+        "submit": {
+          "action_id": "proprium.narrative.structure.create",
+          "input_template": {
+            "kind": "chapter",
+            "title": {
+              "data_key": "form.title"
+            },
+            "expected_tree_revision": {
+              "data_key": "last_action_result.tree_revision"
+            },
+            "volume_id": {
+              "data_key": "form.volume_id"
+            }
+          }
+        },
+        "submit_when": {
+          "data_key": "last_action_result.tree_revision"
+        },
+        "unavailable_message": "先に構成を読み込んでください。"
+      }
+    },
+    {
+      "id": "proprium.narrative.create-scene",
+      "kind": "command",
+      "title": "シーンを作成",
+      "context": {
+        "workspace": true
+      },
+      "body": {
+        "id": "narrative-create-scene",
+        "type": "form",
+        "title": "シーンを作成",
+        "description": "「読み込む」で現在の構成を確認し、内容を入力して変更提案を作成します。適用前に内容を確認できます。",
+        "load_action": {
+          "action_id": "proprium.narrative.work.detect",
+          "input_template": {}
+        },
+        "fields": [
+          {
+            "id": "title",
+            "label": "タイトル",
+            "type": "string",
+            "required": true,
+            "min_length": 1,
+            "max_length": 500
+          },
+          {
+            "id": "volume_id",
+            "label": "親の巻 ID",
+            "type": "string",
+            "required": true,
+            "min_length": 1,
+            "max_length": 256
+          },
+          {
+            "id": "chapter_id",
+            "label": "親の章 ID",
+            "type": "string",
+            "required": true,
+            "min_length": 1,
+            "max_length": 256
+          }
+        ],
+        "submit": {
+          "action_id": "proprium.narrative.structure.create",
+          "input_template": {
+            "kind": "scene",
+            "title": {
+              "data_key": "form.title"
+            },
+            "expected_tree_revision": {
+              "data_key": "last_action_result.tree_revision"
+            },
+            "volume_id": {
+              "data_key": "form.volume_id"
+            },
+            "chapter_id": {
+              "data_key": "form.chapter_id"
+            }
+          }
+        },
+        "submit_when": {
+          "data_key": "last_action_result.tree_revision"
+        },
+        "unavailable_message": "先に構成を読み込んでください。"
+      }
+    },
+    {
+      "id": "proprium.narrative.reorder-chapters",
+      "kind": "command",
+      "title": "章を並べ替え",
+      "context": {
+        "workspace": true
+      },
+      "body": {
+        "id": "narrative-reorder-chapters",
+        "type": "form",
+        "title": "章を並べ替え",
+        "description": "同じ親に属するすべての ID を、希望する順に 1 行ずつ入力します。変更は提案の確認後に適用されます。",
+        "load_action": {
+          "action_id": "proprium.narrative.work.detect",
+          "input_template": {}
+        },
+        "fields": [
+          {
+            "id": "parent_id",
+            "label": "親の巻 ID",
+            "type": "string",
+            "required": true,
+            "min_length": 1,
+            "max_length": 256
+          },
+          {
+            "id": "ordered_ids",
+            "label": "並べ替え後の ID",
+            "type": "ordered-list",
+            "required": true,
+            "placeholder": "1 行に 1 件の ID"
+          }
+        ],
+        "submit": {
+          "action_id": "proprium.narrative.structure.reorder",
+          "input_template": {
+            "kind": "chapter",
+            "parent_id": {
+              "data_key": "form.parent_id"
+            },
+            "ordered_ids": {
+              "data_key": "form.ordered_ids"
+            },
+            "expected_tree_revision": {
+              "data_key": "last_action_result.tree_revision"
+            }
+          }
+        },
+        "submit_when": {
+          "data_key": "last_action_result.tree_revision"
+        },
+        "unavailable_message": "先に構成を読み込んでください。"
+      }
+    },
+    {
+      "id": "proprium.narrative.reorder-scenes",
+      "kind": "command",
+      "title": "シーンを並べ替え",
+      "context": {
+        "workspace": true
+      },
+      "body": {
+        "id": "narrative-reorder-scenes",
+        "type": "form",
+        "title": "シーンを並べ替え",
+        "description": "同じ親に属するすべての ID を、希望する順に 1 行ずつ入力します。変更は提案の確認後に適用されます。",
+        "load_action": {
+          "action_id": "proprium.narrative.work.detect",
+          "input_template": {}
+        },
+        "fields": [
+          {
+            "id": "parent_id",
+            "label": "親の章 ID",
+            "type": "string",
+            "required": true,
+            "min_length": 1,
+            "max_length": 256
+          },
+          {
+            "id": "ordered_ids",
+            "label": "並べ替え後の ID",
+            "type": "ordered-list",
+            "required": true,
+            "placeholder": "1 行に 1 件の ID"
+          }
+        ],
+        "submit": {
+          "action_id": "proprium.narrative.structure.reorder",
+          "input_template": {
+            "kind": "scene",
+            "parent_id": {
+              "data_key": "form.parent_id"
+            },
+            "ordered_ids": {
+              "data_key": "form.ordered_ids"
+            },
+            "expected_tree_revision": {
+              "data_key": "last_action_result.tree_revision"
+            }
+          }
+        },
+        "submit_when": {
+          "data_key": "last_action_result.tree_revision"
+        },
+        "unavailable_message": "先に構成を読み込んでください。"
+      }
     }
   ],
   "asset_groups": [],

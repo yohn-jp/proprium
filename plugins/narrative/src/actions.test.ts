@@ -81,6 +81,19 @@ test("manifest action inventory and closed output schemas match the guest contra
   assert.deepEqual(Object.keys((marks.marks.items as Record<string, any>).properties), ["id", "offset", "length", "snippet", "comment", "createdAt", "position_status"]);
 });
 
+test("structural commands expose guarded creation and reorder forms", () => {
+  const surfaces = manifest.ui as Array<any>;
+  for (const id of ["create-volume", "create-chapter", "create-scene", "reorder-chapters", "reorder-scenes"]) {
+    const surface = surfaces.find(row => row.id === `proprium.narrative.${id}`);
+    assert.ok(surface, `missing ${id}`);
+    assert.equal(surface.kind, "command");
+    assert.equal(surface.body.type, "form");
+    assert.equal(surface.body.load_action.action_id, "proprium.narrative.work.detect");
+    assert.deepEqual(surface.body.submit.input_template.expected_tree_revision, { data_key: "last_action_result.tree_revision" });
+    assert.deepEqual(surface.body.submit_when, { data_key: "last_action_result.tree_revision" });
+  }
+});
+
 test("adopted Host validator accepts every Narrative descriptor and canonical surface", { skip: !adoptedSchema }, () => {
   for (const action of manifest.actions) adoptedSchema!.assertDescriptor(action);
   for (const surface of manifest.ui) adoptedSchema!.assertSurface(surface);
