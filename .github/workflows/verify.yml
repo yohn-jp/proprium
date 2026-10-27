@@ -123,6 +123,10 @@ jobs:
       # Playwright base config populates PROPRIUM_E2E_PORT=4173 before the
       # specialized config chooses its own fallback port. Never rely on
       # fallback defaults when parallelizing suites.
+      # The retained signed component manifests pin their artifact URL to
+      # 127.0.0.1:4173. The browser acceptance fixtures explicitly intercept
+      # only the expected pinned artifact origin plus the isolated registry
+      # origin, so port isolation does not rewrite or weaken signatures.
       # Both use separate browser ports and output directories. Limit
       # concurrency to two resource-intensive Playwright invocations.
       - parallel:
